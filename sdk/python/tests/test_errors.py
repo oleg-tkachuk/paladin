@@ -7,6 +7,7 @@ import asyncio
 import io
 import json
 import threading
+import warnings
 from collections.abc import Iterator
 from dataclasses import dataclass
 from wsgiref.simple_server import WSGIRequestHandler, make_server
@@ -210,8 +211,8 @@ def test_retries_see_the_connect_error_and_the_caller_the_typed_one(serve) -> No
 
 @pytest.mark.parametrize("retry", [None, FAST], ids=["without retries", "with retries"])
 def test_a_callers_response_metadata_still_sees_the_headers(serve, retry) -> None:  # type: ignore[no-untyped-def]
-    # Guards errors.relayed, which reaches into connect-python: the SDK's own
-    # ResponseMetadata must hand the headers on to the caller's.
+    # The SDK reads headers at the transport and opens no ResponseMetadata of
+    # its own, so the caller's is the one connect-python fills.
     url = serve(Failing(ConnectError(Code.UNAVAILABLE, "down"), failures=0))
     client = Client(url, retry=retry)
     health = HealthServiceClientSync(client.base_url, interceptors=client.interceptors())
@@ -234,3 +235,52 @@ def test_async_errors_are_typed(serve) -> None:  # type: ignore[no-untyped-def]
 
 def test_reason_of_another_error() -> None:
     assert reason(ValueError("plain")) == _UNSPECIFIED
+
+
+def test_a_generated_client_on_the_relay_carries_the_server_version(serve) -> None:  # type: ignore[no-untyped-def]
+    url = serve(Failing(ConnectError(Code.NOT_FOUND, "gone")))
+    client = Client(url)
+    health = HealthServiceClientSync(
+        client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+    )
+    with pytest.raises(NotFoundError) as err, warnings.catch_warnings():
+        warnings.simplefilter("error")
+        health.get_version(health_service_pb2.GetVersionRequest())
+    assert err.value.server_version == SERVER_VERSION
+
+
+def test_connect_relays_with_transport_options_of_its_own(serve) -> None:  # type: ignore[no-untyped-def]
+    url = serve(Failing(ConnectError(Code.NOT_FOUND, "gone")))
+    p = connect(Endpoints(iam=url), transport={"timeout_ms": 5000})
+    assert p.iam is not None
+    with pytest.raises(NotFoundError) as err:
+        p.iam.health.get_version(health_service_pb2.GetVersionRequest())
+    assert err.value.server_version == SERVER_VERSION
+
+
+def test_an_http_client_that_does_not_relay_is_warned_about(serve) -> None:  # type: ignore[no-untyped-def]
+    url = serve(Failing(ConnectError(Code.NOT_FOUND, "gone")))
+    client = Client(url)
+    health = HealthServiceClientSync(client.base_url, interceptors=client.interceptors())
+    with pytest.raises(NotFoundError) as err, pytest.warns(RuntimeWarning, match="relay"):
+        health.get_version(health_service_pb2.GetVersionRequest())
+    assert err.value.server_version == ""
+
+
+def test_async_generated_client_on_the_relay_carries_the_server_version(serve) -> None:  # type: ignore[no-untyped-def]
+    from paladin.iam.v1.health_service_connect import HealthServiceClient
+
+    url = serve(Failing(ConnectError(Code.NOT_FOUND, "gone")))
+    client = Client(url)
+
+    async def call() -> None:
+        health = HealthServiceClient(
+            client.base_url,
+            interceptors=client.async_interceptors(),
+            http_client=client.async_http_client(),
+        )
+        await health.get_version(health_service_pb2.GetVersionRequest())
+
+    with pytest.raises(NotFoundError) as err:
+        asyncio.run(call())
+    assert err.value.server_version == SERVER_VERSION

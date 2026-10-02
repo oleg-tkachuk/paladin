@@ -11,11 +11,9 @@ releases.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Mapping
 from typing import Any
 
-from connectrpc.client import ResponseMetadata
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
 from google.rpc import error_details_pb2
@@ -171,24 +169,3 @@ def convert(
         sdk_version=sdk_version,
         decoded_details=decoded,
     )
-
-
-# connect-python offers no public way to chain ResponseMetadata: the
-# innermost one active receives a response's headers, and any around it gets
-# nothing. relayed() opens one for the SDK's own use and hands what it got to
-# the one that was active before it — the caller's, or another of the SDK's —
-# so a caller's ResponseMetadata still sees the headers. It reads the
-# connect-python version pinned in pyproject.toml; tests/test_errors.py fails
-# when that internal changes.
-@contextmanager
-def relayed() -> Iterator[ResponseMetadata]:
-    from connectrpc._response_metadata import _current_response  # see above
-
-    outer = _current_response.get(None)
-    with ResponseMetadata() as meta:
-        try:
-            yield meta
-        finally:
-            if outer is not None:
-                outer._headers = meta._headers
-                outer._trailers = meta._trailers

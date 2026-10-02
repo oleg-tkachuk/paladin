@@ -204,7 +204,9 @@ def test_session_mints_once_for_concurrent_callers(iam: Served) -> None:
 def test_a_refused_token_is_retried_once(iam: Served) -> None:
     s = Session.sign_in(iam.url, "admin", "secret")
     client = Client(iam.url, token_source=s, audience=AUDIENCE_IAM)
-    health = HealthServiceClientSync(client.base_url, interceptors=client.interceptors())
+    health = HealthServiceClientSync(
+        client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+    )
 
     iam.iam.refuse_next_calls = 1
     health.get_version(health_service_pb2.GetVersionRequest())
@@ -220,9 +222,9 @@ def test_a_refused_token_is_retried_once(iam: Served) -> None:
 
 def test_static_token(iam: Served) -> None:
     client = Client(iam.url, token_source=StaticToken("paladin_pat_abc"), audience=AUDIENCE_DATA)
-    HealthServiceClientSync(client.base_url, interceptors=client.interceptors()).get_version(
-        health_service_pb2.GetVersionRequest()
-    )
+    HealthServiceClientSync(
+        client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+    ).get_version(health_service_pb2.GetVersionRequest())
     assert iam.iam.seen_tokens == ["Bearer paladin_pat_abc"]
     with pytest.raises(ValueError):
         StaticToken("")
@@ -239,7 +241,9 @@ def test_async_session(iam: Served) -> None:
         client = Client(iam.url, token_source=s, audience=AUDIENCE_IAM)
         iam.iam.refuse_next_calls = 1
         async with HealthServiceClient(
-            client.base_url, interceptors=client.async_interceptors()
+            client.base_url,
+            interceptors=client.async_interceptors(),
+            http_client=client.async_http_client(),
         ) as health:
             await health.get_version(health_service_pb2.GetVersionRequest())
         await asyncio.gather(*(s.token(AUDIENCE_DATA) for _ in range(PARALLEL_CALLERS)))

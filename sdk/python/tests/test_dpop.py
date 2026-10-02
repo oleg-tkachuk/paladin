@@ -76,9 +76,9 @@ def test_each_attempt_carries_its_own_proof(server) -> None:  # type: ignore[no-
     server.recorder.failures = 1
     key = ed25519.Ed25519PrivateKey.generate()
     client = Client(server.url, capability="cap-token", dpop_key=key, retry=FAST)
-    HealthServiceClientSync(client.base_url, interceptors=client.interceptors()).get_version(
-        health_service_pb2.GetVersionRequest()
-    )
+    HealthServiceClientSync(
+        client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+    ).get_version(health_service_pb2.GetVersionRequest())
 
     proofs = [h[HEADER_DPOP.lower()] for h in server.recorder.headers]
     assert len(proofs) == 2 and proofs[0] != proofs[1], (
@@ -91,7 +91,7 @@ def test_each_attempt_carries_its_own_proof(server) -> None:  # type: ignore[no-
 
 def test_no_proof_without_a_capability(server) -> None:  # type: ignore[no-untyped-def]
     client = Client(server.url, bearer_token="t", dpop_key=ed25519.Ed25519PrivateKey.generate())
-    HealthServiceClientSync(client.base_url, interceptors=client.interceptors()).get_version(
-        health_service_pb2.GetVersionRequest()
-    )
+    HealthServiceClientSync(
+        client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+    ).get_version(health_service_pb2.GetVersionRequest())
     assert HEADER_DPOP.lower() not in server.recorder.last
