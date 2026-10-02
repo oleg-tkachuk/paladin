@@ -126,6 +126,12 @@ func TestIssueMintsAToken(t *testing.T) {
 	if resp.Msg.GetCapability() == nil {
 		t.Error("want the capability echoed back")
 	}
+	// The same capability as a Biscuit, which its holder can attenuate.
+	if b := resp.Msg.GetBiscuit(); !capability.IsBiscuit(b) {
+		t.Errorf("want a Biscuit beside the token, got %q", b)
+	} else if _, err := capability.Attenuate(b, capability.Attenuation{Ops: []capability.Op{capability.OpGet}}); err != nil {
+		t.Errorf("the returned Biscuit does not attenuate: %v", err)
+	}
 }
 
 func TestIssueIsCedarGated(t *testing.T) {
