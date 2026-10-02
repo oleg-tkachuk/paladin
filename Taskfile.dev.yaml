@@ -384,6 +384,12 @@ tasks:
     cmds:
       - ./scripts/release-sign.test.sh
 
+  verify:go-build-cache:
+    desc: "The backend image's go build cache round-trips through scripts/go-build-cache.sh"
+    # Not part of verify-all: it needs Docker and a throwaway buildx builder.
+    cmds:
+      - ./scripts/go-build-cache.test.sh
+
   verify:portable-shell:
     desc: "The tracked shell scripts use no form only BSD or only GNU accepts"
     cmds:
