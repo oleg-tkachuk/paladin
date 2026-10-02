@@ -219,6 +219,36 @@ type Postgres struct {
 	Pool              PostgresPool     `yaml:"pool" json:"pool"`
 	Timeouts          PostgresTimeouts `yaml:"timeouts" json:"timeouts"`
 	HealthcheckPeriod time.Duration    `yaml:"healthcheck_period" json:"healthcheck_period"`
+
+	// Replica is an optional read replica, off by default. See
+	// PostgresReplica.
+	Replica PostgresReplica `yaml:"replica" json:"replica"`
+}
+
+// PostgresReplica is an opt-in read replica for lag-tolerant reads: listing,
+// counting and searching objects. Authorization and read-after-write paths
+// always stay on the primary. With Enabled false (the default) no replica pool
+// is opened and every read goes to the primary, exactly as without this block.
+//
+// The replica must be a physical (streaming) standby of the primary, or a
+// managed reader endpoint over one: the RLS policies and the runtime role have
+// to exist there unchanged. A logical replica does not qualify.
+type PostgresReplica struct {
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// DSN of the replica. Empty derives it from `dsn` by the CloudNativePG
+	// convention (`<cluster>-rw` → `<cluster>-ro`, see Postgres.ReplicaDSN),
+	// so on CNPG enabling the replica needs nothing else. Connects as the
+	// same runtime role as `dsn` (`paladin_app`, NOBYPASSRLS).
+	DSN string `yaml:"dsn" json:"dsn"`
+	// Password and PasswordSecret default to the primary's: a physical
+	// standby has the same roles. Set them only for a different role.
+	Password       string     `yaml:"password" json:"password"`
+	PasswordSecret *SecretRef `yaml:"password_secret" json:"password_secret"`
+	// MaxLag is how far behind the replica may fall before reads move back
+	// to the primary. 0 disables the bound (reachability is still checked).
+	MaxLag time.Duration `yaml:"max_lag" json:"max_lag"`
+	// LagCheckPeriod is how often the lag is measured.
+	LagCheckPeriod time.Duration `yaml:"lag_check_period" json:"lag_check_period"`
 }
 
 type PostgresPool struct {

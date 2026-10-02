@@ -134,6 +134,7 @@ func validateNoWeakSecrets(c *Config) error {
 		"datastores.postgres.password":         c.Datastores.Postgres.Password,
 		"datastores.postgres.migrate_password": c.Datastores.Postgres.MigratePassword,
 		"datastores.postgres.reaper_password":  c.Datastores.Postgres.ReaperPassword,
+		"datastores.postgres.replica.password": c.Datastores.Postgres.Replica.Password,
 		"runtime.health_snapshot_token":        c.Runtime.HealthSnapshotToken,
 		"ingest.webhook.shared_secret":         c.Ingest.Webhook.SharedSecret,
 	}

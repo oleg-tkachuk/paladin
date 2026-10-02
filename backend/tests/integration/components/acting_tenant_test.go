@@ -129,6 +129,8 @@ func rlsPool(t *testing.T, ctx context.Context, admin *pgxpool.Pool) *pgxpool.Po
 	END $$`)
 	mustExec(t, ctx, admin, `GRANT USAGE ON SCHEMA public TO `+ident)
 	mustExec(t, ctx, admin, `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO `+ident)
+	// What migration 029 grants paladin_app: ListObjects reads through it.
+	mustExec(t, ctx, admin, `GRANT EXECUTE ON FUNCTION search_object_ids TO `+ident)
 
 	cfg := admin.Config().Copy()
 	cfg.ConnConfig.User = role

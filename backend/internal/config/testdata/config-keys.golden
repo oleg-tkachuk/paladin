@@ -152,6 +152,16 @@ datastores.postgres.reaper_password_secret
 datastores.postgres.reaper_password_secret.key
 datastores.postgres.reaper_password_secret.name
 datastores.postgres.reaper_password_secret.namespace
+datastores.postgres.replica
+datastores.postgres.replica.dsn
+datastores.postgres.replica.enabled
+datastores.postgres.replica.lag_check_period
+datastores.postgres.replica.max_lag
+datastores.postgres.replica.password
+datastores.postgres.replica.password_secret
+datastores.postgres.replica.password_secret.key
+datastores.postgres.replica.password_secret.name
+datastores.postgres.replica.password_secret.namespace
 datastores.postgres.timeouts
 datastores.postgres.timeouts.connect
 datastores.postgres.timeouts.statement
