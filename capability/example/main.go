@@ -55,6 +55,8 @@ func main() {
 	// 3. Issue to an orchestrator agent. Everything the authority permits is
 	//    described by the token itself — no role, no long-lived secret.
 	parent, parentToken, err := issuer.Issue(ctx, capability.IssueRequest{
+		// Who asked for it — distinct from who it authorises, and required.
+		IssuedBy: capability.Principal{Type: capability.PrincipalUser, TenantID: tenantID, Subject: "operator@example.com"},
 		Subject: capability.Principal{
 			Type:     capability.PrincipalAgent,
 			TenantID: tenantID,
