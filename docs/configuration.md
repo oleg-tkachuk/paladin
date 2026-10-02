@@ -169,8 +169,17 @@ the plane does. Leaving `public_endpoint` empty reuses `endpoint`.
 
 The console's BFF takes its upstreams from environment variables the chart
 sets: `PALADIN_DATA_URL`, `PALADIN_IAM_URL` and `PALADIN_ADMIN_URL`, plus
-`PALADIN_HEALTH_SNAPSHOT_TOKEN` (the backend's `runtime.health_snapshot_token`)
-and `PALADIN_BFF_MAX_CONNECTIONS`.
+`PALADIN_BFF_MAX_CONNECTIONS` and the health snapshot token (the backend's
+`runtime.health_snapshot_token`). The chart mounts that token from
+`healthSnapshotTokenSecret` as a file and names it in
+`PALADIN_HEALTH_SNAPSHOT_TOKEN_FILE`, so it is not in the pod's environment;
+`PALADIN_HEALTH_SNAPSHOT_TOKEN` carries it inline for local development.
+
+In production both charts read the token from one Secret: the backend through
+`runtime.health_snapshot_token_secret`, resolved at boot like every other
+`*_secret` reference, and the console through `healthSnapshotTokenSecret`.
+`scripts/health-token-secret.test.sh` checks the rendered production manifests
+agree.
 
 `frontend/configs/config.yaml`, read at boot from `/app/configs/config.yaml`
 or `configs/config.yaml` and validated with zod (`frontend/src/config.ts`),

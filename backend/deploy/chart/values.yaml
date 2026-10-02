@@ -1011,7 +1011,9 @@ config:
       # HMAC key the publisher signs bodies with. Inline shared_secret for
       # dev; in prod set shared_secret_ref to resolve it from a (Sealed)Secret
       # at boot (add its `name` to rbac.secretReader.secretNames). Set only one.
-      shared_secret: ""
+      # Absent here on purpose: schema.cue defaults it to "", and an empty
+      # secret key rendered into the ConfigMap is still a secret-shaped key.
+      # shared_secret: ""
       # shared_secret_ref:
       #   name: paladin-ingest-hmac
       #   key: secret

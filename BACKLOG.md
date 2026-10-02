@@ -1110,18 +1110,6 @@ finding moving from "packages you import" to "your code is affected".
   names for the same subsystem is how this drift starts.
 - **Blockers:** none — gated on semantic search becoming a committed feature.
 
-### health_snapshot_token is read from the ConfigMap
-
-- **Status:** Deferred.
-- **Reason:** `runtime.health_snapshot_token` has no Secret reference, unlike
-  `signing_key_secret` or `shared_secret_ref`, so a prod token lives in the
-  config ConfigMap; values-prod.yaml ships a placeholder there. trivy's
-  KSV-0109 is accepted in .trivyignore.yaml until this lands.
-- **Definition of Done:** a `health_snapshot_token_secret` reference resolved
-  at boot, the chart and values-prod.yaml using it — the console already reads
-  its copy from `healthSnapshotTokenSecret` — and the KSV-0109 entry removed.
-- **Blockers:** none.
-
 ### Something inside the api pod speaks plain HTTP to its own TLS port
 
 - **Status:** Deferred (cosmetic today; the client was not identified).

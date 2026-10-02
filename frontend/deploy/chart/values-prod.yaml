@@ -5,6 +5,13 @@
 
 replicaCount: 3
 
+# The backends gate /system/health.json in prod (backend values-prod.yaml,
+# runtime.health_snapshot_token_secret); the BFF forwards this token, from the
+# same Secret, or the console's health page gets 401s.
+healthSnapshotTokenSecret:
+  name: paladin-health-token
+  key: token
+
 # Multi-replica BFF needs session affinity so token-rotation dedup works
 # (see templates/service.yaml). Required because replicaCount > 1.
 service:

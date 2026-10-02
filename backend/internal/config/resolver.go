@@ -221,6 +221,18 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.APIToken.HMACKeySecret = nil
 	}
 
+	// Health snapshot token — gates /system/health.json. From a SecretRef so
+	// a production token stays out of the config ConfigMap; Validate()
+	// rejects setting both runtime.health_snapshot_token and the reference.
+	if cfg.Runtime.HealthSnapshotTokenSecret != nil {
+		tok, err := r.resolveSecret(ctx, cfg.Runtime.HealthSnapshotTokenSecret)
+		if err != nil {
+			return fmt.Errorf("runtime.health_snapshot_token_secret: %w", err)
+		}
+		cfg.Runtime.HealthSnapshotToken = tok
+		cfg.Runtime.HealthSnapshotTokenSecret = nil
+	}
+
 	// Ingest webhook HMAC shared secret — the key the storage-event publisher
 	// signs bodies with. SharedSecretRef is a value type, so an empty Name is
 	// "not set" (the inline shared_secret, or dev's empty-passes-check, is used

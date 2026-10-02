@@ -344,6 +344,7 @@ var unsetKnobAllowlist = map[string]string{
 	"auth.signing_key_secret":                    "secret ref; the env overlay or external-secrets fills it",
 	"api_token.hmac_key":                         "secret; per-deploy",
 	"api_token.hmac_key_secret":                  "secret ref; per-deploy",
+	"runtime.health_snapshot_token_secret":       "secret ref; per-deploy",
 	"bootstrap.admin.password":                   "secret; per-deploy",
 	"datastores.postgres.password":               "secret; per-deploy",
 	"datastores.postgres.migrate_password":       "secret; per-deploy",

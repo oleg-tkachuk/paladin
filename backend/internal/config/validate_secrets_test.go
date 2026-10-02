@@ -67,6 +67,13 @@ func TestValidate_SecretMutex_AuthSigningKey(t *testing.T) {
 	mustReject(t, c, "auth: cannot specify both signing_key and signing_key_secret")
 }
 
+func TestValidate_SecretMutex_HealthSnapshotToken(t *testing.T) {
+	c := minimalValidConfig()
+	c.Runtime.HealthSnapshotToken = "inline"
+	c.Runtime.HealthSnapshotTokenSecret = &SecretRef{Name: "x", Key: "k"}
+	mustReject(t, c, "runtime: cannot specify both health_snapshot_token and health_snapshot_token_secret")
+}
+
 func TestValidate_SecretMutex_BootstrapAdminPassword(t *testing.T) {
 	c := minimalValidConfig()
 	c.Bootstrap.Admin.Enabled = true

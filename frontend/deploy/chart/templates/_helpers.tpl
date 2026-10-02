@@ -103,3 +103,11 @@ is on. Fails without a caSecret: Node rejects the internal CA otherwise.
 {{- define "chart.backendCAPath" -}}
 /etc/paladin-backend-ca
 {{- end -}}
+
+{{/*
+chart.healthTokenPath — where the health snapshot token Secret is mounted,
+when healthSnapshotTokenSecret is set. The file inside is named by its key.
+*/}}
+{{- define "chart.healthTokenPath" -}}
+/etc/paladin-health-token
+{{- end -}}
