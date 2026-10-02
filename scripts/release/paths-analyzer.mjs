@@ -12,6 +12,12 @@
 // with `modules.releaseRules` added: a break in the API of a module the
 // product compiles in — the Go SDK, the capability module — is that module's
 // break, not the product's, and must not cut a product major.
+//
+// `documentation` names the files a commit's place is not decided by: a
+// commit that changes code and its upgrade notes belongs where its code
+// does. Without it, a breaking SDK commit that also wrote docs/upgrading.md
+// read as touching the product, and cut a product major. A commit of
+// documentation alone keeps its files.
 
 import { execFileSync } from "node:child_process";
 import { analyzeCommits as analyze } from "@semantic-release/commit-analyzer";
@@ -31,6 +37,18 @@ export function within(files, prefixes = []) {
 
 const RELEASES = [null, "patch", "minor", "major"];
 
+/** Whether `file` is documentation: under one of `prefixes`, or ending in one of `suffixes`. */
+export function isDocumentation(file, { prefixes = [], suffixes = [] } = {}) {
+  return prefixes.some((p) => file.startsWith(p)) || suffixes.some((x) => file.endsWith(x));
+}
+
+/** The files that decide a commit's place: its code, or all of them when it changed only documentation. */
+export function deciding(files, documentation) {
+  if (!documentation) return files;
+  const code = files.filter((f) => !isDocumentation(f, documentation));
+  return code.length > 0 ? code : files;
+}
+
 /** The larger of two releases; null is none. */
 const larger = (a, b) => (RELEASES.indexOf(a ?? null) >= RELEASES.indexOf(b ?? null) ? (a ?? null) : (b ?? null));
 
@@ -48,8 +66,9 @@ export async function analyzeCommits(pluginConfig, context) {
 }
 
 /** analyzeCommits with the files of each commit from `files`, for tests. */
-export async function analyzeWith(pluginConfig, context, files) {
-  const { include, exclude, modules, ...analyzerConfig } = pluginConfig;
+export async function analyzeWith(pluginConfig, context, allFiles) {
+  const { include, exclude, modules, documentation, ...analyzerConfig } = pluginConfig;
+  const files = (hash) => deciding(allFiles(hash), documentation);
   const commits = context.commits.filter((c) => belongs(files(c.hash), { include, exclude }));
   context.logger.log(`${commits.length} of ${context.commits.length} commits touch this release stream`);
   if (!modules) {
