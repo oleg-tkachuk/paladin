@@ -73,6 +73,10 @@ type config struct {
 	tokens     *tokenAuth
 	extra      []connect.ClientOption
 	transfer   *Transfer
+	tls        *TLS
+	// httpClientSet is whether WithHTTPClient was given, which WithTLS
+	// cannot be combined with.
+	httpClientSet bool
 	// anyPlaneTokens and audience: WithTokens, and the plane Connect builds.
 	anyPlaneTokens TokenSource
 	audience       string
@@ -86,7 +90,7 @@ func WithTransfer(t *Transfer) Option {
 
 // WithHTTPClient replaces http.DefaultClient.
 func WithHTTPClient(c connect.HTTPClient) Option {
-	return func(cfg *config) { cfg.httpClient = c }
+	return func(cfg *config) { cfg.httpClient, cfg.httpClientSet = c, true }
 }
 
 // WithBearerToken sends token as `Authorization: Bearer <token>`. An API token
@@ -151,6 +155,16 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	}
 	if cfg.retry != nil && cfg.retry.attempts < 1 {
 		return nil, ErrInvalidRetries
+	}
+	if cfg.tls != nil {
+		if cfg.httpClientSet {
+			return nil, ErrTLSAndHTTP
+		}
+		t, err := cfg.tls.Transport()
+		if err != nil {
+			return nil, err
+		}
+		cfg.httpClient = &http.Client{Transport: t}
 	}
 	if cfg.anyPlaneTokens != nil && cfg.tokens == nil {
 		if cfg.audience == "" {
