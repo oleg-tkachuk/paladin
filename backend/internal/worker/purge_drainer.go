@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -150,26 +152,27 @@ func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePu
 		zap.Int32("attempts", r.Attempts),
 	)
 
-	if err := w.Storage.DeleteObject(ctx, r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path); err != nil {
-		backoff := w.backoffFor(r.Attempts)
-		if rerr := w.Q.WithTx(tx).ReschedulePendingPurge(ctx, r.ID, ptrTo(err.Error()),
-			pgtype.Interval{Microseconds: backoff.Microseconds(), Valid: true}); rerr != nil {
-			// nil, not rerr: nothing was settled for this row, so the tick
-			// may still commit whatever the other rows achieved.
-			logger.Warn("purge drainer: reschedule failed", zap.Error(rerr))
-			return nil
+	verdict, err := objectpath.Check(ctx, w.Q.WithTx(tx), tenantID, r.CollectionName, r.Path)
+	if err != nil {
+		// A failed statement aborts the transaction; nothing in this tick
+		// can commit.
+		logger.Warn("purge drainer: path check failed", zap.Error(err))
+		return err
+	}
+	if verdict == objectpath.Defer {
+		return w.reschedule(ctx, tx, r, logger, errPathInUse)
+	}
+	if verdict == objectpath.Delete {
+		if err := w.Storage.DeleteObject(ctx, r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path); err != nil {
+			return w.reschedule(ctx, tx, r, logger, err)
 		}
-		logger.Warn("purge drainer: storage delete failed; will retry",
-			zap.Duration("retry_in", backoff), zap.Error(err))
-		// nil on purpose: the attempts/last_error write above MUST survive,
-		// and the debt row is untouched.
-		return nil
 	}
 
 	// Settle and announce on the same tx. paladin.object.purged is emitted ONLY
 	// here and on the equivalent path in LifecycleHardDeleter — never on a
 	// state transition — so a consumer that sees it can rely on the bytes
-	// being gone.
+	// being gone. A superseded debt counts: the new object's write replaced
+	// them.
 	if _, err := w.Q.WithTx(tx).DeletePendingPurge(ctx, r.ID); err != nil {
 		logger.Warn("purge drainer: settle failed", zap.Error(err))
 		return err
@@ -181,7 +184,25 @@ func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePu
 		logger.Warn("purge drainer: emit paladin.object.purged failed", zap.Error(err))
 		return err
 	}
-	logger.Info("purged")
+	logger.Info("purged", zap.Bool("superseded", verdict == objectpath.Superseded))
+	return nil
+}
+
+// errPathInUse is recorded on a debt deferred because an upload holds its path.
+var errPathInUse = errors.New("a new object is being written at this path; retrying later")
+
+// reschedule records a failed or deferred attempt and pushes the debt out by
+// the backoff. It returns nil: the attempts/last_error write MUST survive, and
+// nothing was settled for this row, so the tick may still commit.
+func (w *PurgeDrainer) reschedule(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePurgesRow, logger *zap.Logger, cause error) error {
+	backoff := w.backoffFor(r.Attempts)
+	if err := w.Q.WithTx(tx).ReschedulePendingPurge(ctx, r.ID, ptrTo(cause.Error()),
+		pgtype.Interval{Microseconds: backoff.Microseconds(), Valid: true}); err != nil {
+		logger.Warn("purge drainer: reschedule failed", zap.Error(err))
+		return nil
+	}
+	logger.Warn("purge drainer: bytes not deleted; will retry",
+		zap.Duration("retry_in", backoff), zap.Error(cause))
 	return nil
 }
 

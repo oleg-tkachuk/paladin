@@ -288,6 +288,12 @@ type Repository interface {
 	// paladin.object.purged, so "bytes are gone" and "we told anyone" commit
 	// together or not at all.
 	SettlePurgeTx(ctx context.Context, tx pgx.Tx, purgeID uuid.UUID) error
+	// PurgeBytesTx calls deleteBytes for the bytes at (tenant, collection,
+	// key) unless an object uploaded there since owns them, and reports
+	// whether the debt is paid — by the delete, or by that object's write
+	// replacing them. False leaves the debt for the purge drainer. Run on a
+	// tx of its own: it holds the path lock until that tx ends.
+	PurgeBytesTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, collection, key string, deleteBytes func() error) (bool, error)
 	// LiveCollision reports whether a non-DELETED row already occupies
 	// (tenant, collection, key); used to refuse RestoreObject when the
 	// slot has been reused by a fresh upload.
@@ -1517,7 +1523,16 @@ func (h *Handler) PermanentDelete(
 	// Fast path: reclaim the bytes now, so the common case stays synchronous
 	// and the debt table stays empty. A failure here is no longer terminal —
 	// the debt row survives and worker.PurgeDrainer retries it with backoff.
-	if err := h.storage.DeleteObject(ctx, backendID, bucket, tenantID, collection, obj.Key); err != nil {
+	// Under the path lock: an object uploaded at this key since owns the
+	// bytes there.
+	var paid bool
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var perr error
+		paid, perr = h.repo.PurgeBytesTx(ctx, tx, tenantID, collection, obj.Key, func() error {
+			return h.storage.DeleteObject(ctx, backendID, bucket, tenantID, collection, obj.Key)
+		})
+		return perr
+	}); err != nil {
 		logger.FromContext(ctx).Warn("permanent delete: storage delete failed; queued for retry",
 			zap.String("tenant_id", tenantID.String()),
 			zap.String("collection", collection),
@@ -1532,6 +1547,11 @@ func (h *Handler) PermanentDelete(
 		// the client to retry a delete that already succeeded, and its retry
 		// would get NotFound. paladin.object.purged is what signals the bytes
 		// actually went; it fires from the drainer instead of here.
+		return nil
+	}
+	if !paid {
+		// A new object is being written at this key; the drainer settles the
+		// debt once it can tell whose bytes are there.
 		return nil
 	}
 

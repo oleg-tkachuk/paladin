@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -44,6 +45,10 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.Ini
 	if args.SizeHint > 0 {
 		s := args.SizeHint
 		sizePtr = &s
+	}
+	// Under the path lock, as every object insert (package objectpath).
+	if err := objectpath.Lock(ctx, qtx, args.TenantID, args.Collection, args.Key); err != nil {
+		return multiparth.Session{}, fmt.Errorf("lock object path: %w", err)
 	}
 	collectionID, err := qtx.ResolveCollectionID(ctx, pgUUID(args.TenantID), args.Collection)
 	if err != nil {

@@ -474,6 +474,9 @@ type Querier interface {
 	// Valid:false} → SQL NULL, so the guard is the contract callers
 	// rely on.
 	ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, subjectEq *string, subjectLike *string, displayNameEq *string, displayNameLike *string, disabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]User, error)
+	// Waits for the object-path lock (see package objectpath); held until the
+	// transaction ends.
+	LockObjectPath(ctx context.Context, lockKey int64) error
 	// Reads an object by id alone. Used by background workers (reconciler,
 	// replicator) that don't carry a tenant context. Joins collections to
 	// materialize the bucket binding so the caller can call S3 in one trip.
@@ -506,6 +509,8 @@ type Querier interface {
 	// worker restart resumes mid-prefix instead of rescanning from the top.
 	// size_bytes feeds the physical (HEAD size) verify after copy.
 	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
+	// The state of the row that owns a storage path now, if any.
+	ObjectStateAtPath(ctx context.Context, tenantID pgtype.UUID, name string, path string) (ObjectState, error)
 	// Deletes audit_log rows older than the cutoff in batches of 10k. The
 	// worker calls this in a loop until it returns 0 — keeps each statement
 	// bounded so a long-overdue first-run doesn't lock the table for minutes
@@ -775,6 +780,8 @@ type Querier interface {
 	// ReclaimStaleOperations would fail it while it was still working.
 	TouchOperation(ctx context.Context, id pgtype.UUID) (int64, error)
 	TouchUserLogin(ctx context.Context, iD pgtype.UUID, lastLoginAt pgtype.Timestamptz) error
+	// Takes the object-path lock if it is free; held until the transaction ends.
+	TryLockObjectPath(ctx context.Context, lockKey int64) (bool, error)
 	// expected_version=0 disables the OCC guard (force update).
 	UpdateBucket(ctx context.Context, name string, name_2 string, displayName *string, labels []byte, expectedVersion int64) (int64, error)
 	UpdateBucketBasic(ctx context.Context, name string, name_2 string, displayName *string, labels []byte, ownerTenantID pgtype.UUID, expectedVersion int64) (int64, error)

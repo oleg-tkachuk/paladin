@@ -15,6 +15,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -38,14 +39,25 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 		s := args.SizeHint
 		sizePtr = &s
 	}
+	// Under the path lock, so a purge of bytes a deleted object left at this
+	// path cannot delete this one's (package objectpath).
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return objecth.Object{}, fmt.Errorf("begin create object: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := r.q.WithTx(tx)
+	if err := objectpath.Lock(ctx, qtx, args.TenantID, args.Collection, args.Key); err != nil {
+		return objecth.Object{}, fmt.Errorf("lock object path: %w", err)
+	}
 	// The collection is known by name here; CreateObject stores its id.
 	// Resolved rather than joined because sqlc rejects a parameter used only
 	// inside a subquery in VALUES.
-	collectionID, err := r.q.ResolveCollectionID(ctx, pgUUID(args.TenantID), args.Collection)
+	collectionID, err := qtx.ResolveCollectionID(ctx, pgUUID(args.TenantID), args.Collection)
 	if err != nil {
 		return objecth.Object{}, fmt.Errorf("resolve collection %q: %w", args.Collection, err)
 	}
-	if err := r.q.CreateObject(ctx,
+	if err := qtx.CreateObject(ctx,
 		pgUUID(objectID),
 		pgUUID(args.TenantID),
 		collectionID,
@@ -61,6 +73,9 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 		pgTS(args.PresignExpiresAt),
 	); err != nil {
 		return objecth.Object{}, fmt.Errorf("create object: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return objecth.Object{}, fmt.Errorf("commit create object: %w", err)
 	}
 	return r.getByID(ctx, args.TenantID, objectID)
 }
@@ -540,6 +555,25 @@ func (r *ObjectRepo) SettlePurgeTx(ctx context.Context, tx pgx.Tx, purgeID uuid.
 		return fmt.Errorf("settle purge: %w", err)
 	}
 	return nil
+}
+
+// PurgeBytesTx decides the purge under the path lock (package objectpath).
+func (r *ObjectRepo) PurgeBytesTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, collection, key string, deleteBytes func() error) (bool, error) {
+	verdict, err := objectpath.Check(ctx, r.q.WithTx(tx), tenantID, collection, key)
+	if err != nil {
+		return false, fmt.Errorf("purge path check: %w", err)
+	}
+	switch verdict {
+	case objectpath.Delete:
+		if err := deleteBytes(); err != nil {
+			return false, err
+		}
+		return true, nil
+	case objectpath.Superseded:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func hardDeleteObject(ctx context.Context, q *sqlc.Queries, tenantID, objectID uuid.UUID, expectedVersion int64) error {

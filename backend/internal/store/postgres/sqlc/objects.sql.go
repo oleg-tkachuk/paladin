@@ -426,6 +426,17 @@ func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, name st
 	return items, nil
 }
 
+const lockObjectPath = `-- name: LockObjectPath :exec
+SELECT pg_advisory_xact_lock($1::bigint)
+`
+
+// Waits for the object-path lock (see package objectpath); held until the
+// transaction ends.
+func (q *Queries) LockObjectPath(ctx context.Context, lockKey int64) error {
+	_, err := q.db.Exec(ctx, lockObjectPath, lockKey)
+	return err
+}
+
 const lookupObjectByID = `-- name: LookupObjectByID :one
 SELECT o.id, o.tenant_id, o.path, o.state,
        c.name  AS collection_name,
@@ -510,6 +521,21 @@ func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, n
 		&i.CollectionName,
 	)
 	return i, err
+}
+
+const objectStateAtPath = `-- name: ObjectStateAtPath :one
+SELECT o.state
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1 AND c.name = $2 AND o.path = $3
+`
+
+// The state of the row that owns a storage path now, if any.
+func (q *Queries) ObjectStateAtPath(ctx context.Context, tenantID pgtype.UUID, name string, path string) (ObjectState, error) {
+	row := q.db.QueryRow(ctx, objectStateAtPath, tenantID, name, path)
+	var state ObjectState
+	err := row.Scan(&state)
+	return state, err
 }
 
 const resolveCollectionID = `-- name: ResolveCollectionID :one
@@ -599,6 +625,18 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 		return nil, err
 	}
 	return items, nil
+}
+
+const tryLockObjectPath = `-- name: TryLockObjectPath :one
+SELECT pg_try_advisory_xact_lock($1::bigint)::bool AS locked
+`
+
+// Takes the object-path lock if it is free; held until the transaction ends.
+func (q *Queries) TryLockObjectPath(ctx context.Context, lockKey int64) (bool, error) {
+	row := q.db.QueryRow(ctx, tryLockObjectPath, lockKey)
+	var locked bool
+	err := row.Scan(&locked)
+	return locked, err
 }
 
 const updateObjectMetadata = `-- name: UpdateObjectMetadata :execrows
