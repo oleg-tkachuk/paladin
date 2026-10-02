@@ -2,8 +2,6 @@
 
 import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { create } from "@bufbuild/protobuf";
-import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { objectClient, presignClient } from "@/lib/connect/client";
@@ -15,6 +13,8 @@ import { useRefreshSignal, useBumpRefresh } from "@/context/RefreshContext";
 import { useNotification } from "@/components/ui/Notification";
 import { normalizeError } from "@/lib/connect/error";
 import { DEFAULT_OBJECT_KEY } from "@/constants";
+import { fieldMask } from "@/lib/connect/fieldMask";
+import { UpdateObjectRequestSchema } from "@/gen/paladin/data/v1/object_service_pb";
 
 /**
  * useObject — singular variant for the inspector / detail page. Loads one
@@ -110,7 +110,7 @@ export function useObject(
         await objectClient.updateObject({
           name: object.name,
           resourceVersion: object.resourceVersion,
-          updateMask: create(FieldMaskSchema, { paths: ["tags"] }),
+          updateMask: fieldMask(UpdateObjectRequestSchema, "tags"),
           tags,
           metadata: {},
           contentType: "",

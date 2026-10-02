@@ -3,8 +3,6 @@
 import { useMemo, useState } from "react";
 import { PlayIcon } from "@heroicons/react/24/outline";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { create } from "@bufbuild/protobuf";
-import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +34,8 @@ import {
 } from "./_form";
 import { Field, ToggleRow, TestResultDisplay } from "./_components";
 import { errorMessage } from "@/hooks/errorContract";
+import { fieldMask } from "@/lib/connect/fieldMask";
+import { EventSubscriptionSchema } from "@/gen/paladin/admin/v1/types_pb";
 
 /**
  * Create/edit dialog for an event subscription, extracted from the page. Owns
@@ -114,9 +114,12 @@ export function SubscriptionEditorDialog({
         const updated = await eventSubscriptionClient.updateSubscription({
           name: editing.name,
           resourceVersion: editing.resourceVersion,
-          updateMask: create(FieldMaskSchema, {
-            paths: ["filter", "sink", "disabled"],
-          }),
+          updateMask: fieldMask(
+            EventSubscriptionSchema,
+            "filter",
+            "sink",
+            "disabled",
+          ),
           subscription: {
             $typeName: "paladin.admin.v1.EventSubscription",
             name: editing.name,

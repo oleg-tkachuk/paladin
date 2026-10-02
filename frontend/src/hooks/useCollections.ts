@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from "react";
 import { create } from "@bufbuild/protobuf";
-import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 
 import { collectionClient } from "@/lib/connect/client";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
@@ -11,6 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 import { errorMessage } from "@/hooks/errorContract";
+import { fieldMask, type MaskField } from "@/lib/connect/fieldMask";
 
 // Ceiling on how many pages one exhaustive fetch will follow — a backstop, not
 // a limit anyone should reach.
@@ -221,7 +221,7 @@ export function useCollections() {
     async (
       collection: string,
       resourceVersion: string,
-      updatePaths: string[],
+      updatePaths: MaskField<typeof CollectionSchema>[],
       fields: { displayName?: string; cedarPolicy?: string } = {},
     ): Promise<Collection> => {
       try {
@@ -238,7 +238,7 @@ export function useCollections() {
         const updated = await collectionClient.updateCollection({
           name: collectionResourceName(tenantId, collection),
           resourceVersion,
-          updateMask: create(FieldMaskSchema, { paths: updatePaths }),
+          updateMask: fieldMask(CollectionSchema, ...updatePaths),
           collectionResource,
         });
         setCollections((prev) =>

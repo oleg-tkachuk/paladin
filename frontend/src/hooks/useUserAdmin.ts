@@ -15,12 +15,12 @@
  */
 
 import { useCallback, useState } from "react";
-import { create } from "@bufbuild/protobuf";
-import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 
 import { userClient } from "@/lib/connect/client";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { errorMessage } from "@/hooks/errorContract";
+import { fieldMask, type MaskField } from "@/lib/connect/fieldMask";
+import { UpdateUserRequestSchema } from "@/gen/paladin/iam/v1/user_service_pb";
 
 /** Resource name for a user: "users/{subject}" or, when tenant-scoped,
  *  "tenants/{tenant}/users/{subject}". The server accepts the name the
@@ -88,15 +88,15 @@ export function useUserAdmin() {
       disabled?: boolean;
       roles?: string[];
     }) => {
-      const paths: string[] = [];
-      if (args.displayName !== undefined) paths.push("display_name");
+      const paths: MaskField<typeof UpdateUserRequestSchema>[] = [];
+      if (args.displayName !== undefined) paths.push("displayName");
       if (args.disabled !== undefined) paths.push("disabled");
       if (args.roles !== undefined) paths.push("roles");
       return run(() =>
         userClient.updateUser({
           name: args.name,
           resourceVersion: args.resourceVersion,
-          updateMask: create(FieldMaskSchema, { paths }),
+          updateMask: fieldMask(UpdateUserRequestSchema, ...paths),
           displayName: args.displayName ?? "",
           disabled: args.disabled ?? false,
           roles: args.roles ?? [],

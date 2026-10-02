@@ -12,8 +12,6 @@ import {
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { create } from "@bufbuild/protobuf";
-import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +38,8 @@ import { sinkSummary, truncate, type TestResult } from "./_form";
 import { TestResultDisplay } from "./_components";
 import { SubscriptionEditorDialog } from "./SubscriptionEditorDialog";
 import { ListLoadError } from "@/components/ui/ListLoadError";
+import { fieldMask } from "@/lib/connect/fieldMask";
+import { EventSubscriptionSchema } from "@/gen/paladin/admin/v1/types_pb";
 
 // ─── Page ─────────────────────────────────────────────────────────────
 export default function EventsPage() {
@@ -180,7 +180,7 @@ export default function EventsPage() {
       const updated = await eventSubscriptionClient.updateSubscription({
         name: sub.name,
         resourceVersion: sub.resourceVersion,
-        updateMask: create(FieldMaskSchema, { paths: ["disabled"] }),
+        updateMask: fieldMask(EventSubscriptionSchema, "disabled"),
         subscription: {
           $typeName: "paladin.admin.v1.EventSubscription",
           name: sub.name,

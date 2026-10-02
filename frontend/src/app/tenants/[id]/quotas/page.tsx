@@ -21,7 +21,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
-import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
   ArrowPathIcon,
@@ -47,6 +46,7 @@ import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { useTenant } from "../tenant-context";
 import { formatCount } from "@/lib/format/locale";
 import { ListLoadError } from "@/components/ui/ListLoadError";
+import { fieldMask } from "@/lib/connect/fieldMask";
 
 function bigIntFromInput(s: string): bigint {
   const n = s.trim();
@@ -157,14 +157,13 @@ export default function TenantQuotasPage() {
       await quotaClient.setQuota({
         name: quotaName,
         resourceVersion: quota?.resourceVersion || "0",
-        updateMask: create(FieldMaskSchema, {
-          paths: [
-            "max_total_bytes",
-            "max_object_count",
-            "max_bytes_per_day",
-            "max_objects_per_day",
-          ],
-        }),
+        updateMask: fieldMask(
+          QuotaSchema,
+          "maxTotalBytes",
+          "maxObjectCount",
+          "maxBytesPerDay",
+          "maxObjectsPerDay",
+        ),
         quota: next,
       });
       await fetchQuota();

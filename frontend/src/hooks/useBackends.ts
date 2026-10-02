@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { create } from "@bufbuild/protobuf";
-import { DurationSchema, FieldMaskSchema } from "@bufbuild/protobuf/wkt";
+import { DurationSchema } from "@bufbuild/protobuf/wkt";
 
 import { backendClient } from "@/lib/connect/client";
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
@@ -18,6 +18,7 @@ import type { TestBackendResponse } from "@/gen/paladin/admin/v1/backend_service
 import { useBumpRefresh, useRefreshSignal } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 import { errorMessage } from "@/hooks/errorContract";
+import { fieldMask, type MaskField } from "@/lib/connect/fieldMask";
 
 // Ceiling on how many pages one fetch will follow — a backstop against paging
 // forever if a token ever fails to terminate, not a limit anyone should reach.
@@ -72,12 +73,12 @@ export interface UpdateBackendInput {
 // The flat metadata fields are always sent with a matching mask. The dialog
 // pre-fills current values, so re-sending an unchanged one is a harmless
 // same-value write, and a fixed mask keeps that request deterministic.
-const UPDATE_BACKEND_MASK = [
-  "display_name",
+const UPDATE_BACKEND_MASK: MaskField<typeof StorageBackendSchema>[] = [
+  "displayName",
   "endpoint",
-  "public_endpoint",
+  "publicEndpoint",
   "region",
-  "force_path_style",
+  "forcePathStyle",
 ];
 
 // The advanced fields are NOT in that list, and adding them there would be a
@@ -95,11 +96,13 @@ const UPDATE_BACKEND_MASK = [
 //
 // Hence: a group is named in the mask only when the caller supplies it, and
 // the dialog supplies it only when its section was actually edited.
-function updateMaskFor(input: UpdateBackendInput): string[] {
+function updateMaskFor(
+  input: UpdateBackendInput,
+): MaskField<typeof StorageBackendSchema>[] {
   const paths = [...UPDATE_BACKEND_MASK];
   if (input.sse !== undefined) paths.push("sse");
   if (input.events !== undefined) paths.push("events");
-  if (input.cedarPolicy !== undefined) paths.push("cedar_policy");
+  if (input.cedarPolicy !== undefined) paths.push("cedarPolicy");
   return paths;
 }
 
@@ -322,7 +325,7 @@ export function useBackends(autoFetch: boolean = true) {
         const updated = await backendClient.updateBackend({
           name: `storageBackends/${backendId}`,
           resourceVersion,
-          updateMask: create(FieldMaskSchema, { paths: updateMaskFor(input) }),
+          updateMask: fieldMask(StorageBackendSchema, ...updateMaskFor(input)),
           backend,
         });
         setBackends((prev) =>

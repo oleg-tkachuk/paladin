@@ -1614,18 +1614,6 @@ finding moving from "packages you import" to "your code is affected".
 Defects the review behind `backend/docs/diagrams.md` found and confirmed in
 the code. Not fixed in the documentation change that recorded them.
 
-### The console spells update masks by hand
-
-- **Status:** Open — the server half is done.
-- **Reason:** Update RPCs now refuse an unknown mask path, so a misspelled or
-  renamed field fails loudly instead of saving nothing. The console still
-  builds its masks from string literals in ten places
-  (`create(FieldMaskSchema, { paths: [...] })`), which `tsc` cannot check, so
-  that failure surfaces at run time rather than at build.
-- **Definition of Done:** the console derives mask paths from the generated
-  message schemas, so a proto rename breaks the build.
-- **Blockers:** none.
-
 ### Delivered and failed event rows are kept forever
 
 - **Status:** Deferred.
