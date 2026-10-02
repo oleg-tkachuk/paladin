@@ -88,7 +88,7 @@ const QUICK_LINKS: Array<{
 // UNIT case (no suffix), so a metering-only tenant looked like
 // "0 / 1,000" — same digits the cap had. The shared formatter
 // emits "0 units / 1,000 units" for that case.
-import { formatMoney } from "@/lib/format/money";
+import { formatMoney, fromMicros } from "@/lib/format/money";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { formatCount } from "@/lib/format/locale";
 import { errorMessage } from "@/hooks/errorContract";
@@ -445,8 +445,8 @@ function BudgetTile({
   budget: TenantBudget | null;
   missing: boolean;
 }) {
-  const cap = budget?.maxBudgetAmount ?? 0;
-  const spent = budget?.spentAmount ?? 0;
+  const cap = fromMicros(budget?.maxBudgetMicros);
+  const spent = fromMicros(budget?.spentMicros);
   // Default to "UNIT" (abstract metering sentinel) when the
   // budget row has no unit_code — covers freshly-created budgets
   // and tenants doing non-currency metering. Avoids a misleading

@@ -3,7 +3,9 @@ package capabilityh
 import (
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -159,7 +161,7 @@ func TestProtoToPrincipalIgnoresAgentFieldsForUser(t *testing.T) {
 // ─── protoToCaveats ────────────────────────────────────────────────────────
 
 func TestProtoToCaveatsNil(t *testing.T) {
-	got := protoToCaveats(nil)
+	got := mustCaveats(t, nil)
 	if got.UnitCode != "" {
 		t.Errorf("a nil caveats message must yield the zero value, got %+v", got)
 	}
@@ -168,25 +170,25 @@ func TestProtoToCaveatsNil(t *testing.T) {
 // Pre-currency-rename clients never set unit_code; the server must fill the
 // default rather than minting a capability with a blank currency.
 func TestProtoToCaveatsDefaultsUnitCode(t *testing.T) {
-	got := protoToCaveats(&adminv1.CapabilityCaveats{})
+	got := mustCaveats(t, &adminv1.CapabilityCaveats{})
 	if got.UnitCode != capability.DefaultUnitCode {
 		t.Errorf("UnitCode = %q, want the %q default", got.UnitCode, capability.DefaultUnitCode)
 	}
 }
 
 func TestProtoToCaveatsKeepsExplicitUnitCode(t *testing.T) {
-	got := protoToCaveats(&adminv1.CapabilityCaveats{UnitCode: "EUR"})
+	got := mustCaveats(t, &adminv1.CapabilityCaveats{UnitCode: "EUR"})
 	if got.UnitCode != "EUR" {
 		t.Errorf("UnitCode = %q, want EUR", got.UnitCode)
 	}
 }
 
 func TestProtoToCaveatsProjectsEveryField(t *testing.T) {
-	got := protoToCaveats(&adminv1.CapabilityCaveats{
+	got := mustCaveats(t, &adminv1.CapabilityCaveats{
 		ResourcePrefixes:       []string{"tenants/a/"},
 		ResourceUris:           []string{"paladin://x"},
 		MaxRequests:            10,
-		MaxBudgetAmount:        250,
+		MaxBudgetMicros:        proto.Int64(250_000_000),
 		UnitCode:               "UAH",
 		AllowTaintedRead:       true,
 		IdempotencyKeyRequired: true,
@@ -216,8 +218,42 @@ func TestProtoToCaveatsProjectsEveryField(t *testing.T) {
 	}
 }
 
+func mustCaveats(t *testing.T, c *adminv1.CapabilityCaveats) capability.Caveats {
+	t.Helper()
+	got, err := protoToCaveats(c)
+	if err != nil {
+		t.Fatalf("protoToCaveats: %v", err)
+	}
+	return got
+}
+
+// The budget arrives in micros from a current client, as a double from an
+// old one, and both from a client in transition: they must then agree.
+func TestProtoToCaveatsBudgetMicros(t *testing.T) {
+	got := mustCaveats(t, &adminv1.CapabilityCaveats{MaxBudgetMicros: proto.Int64(19_990_000)})
+	if got.MaxBudgetAmount != 19.99 {
+		t.Errorf("micros only: budget = %v, want 19.99", got.MaxBudgetAmount)
+	}
+	got = mustCaveats(t, &adminv1.CapabilityCaveats{MaxBudgetAmount: 19.99, MaxBudgetMicros: proto.Int64(19_990_000)}) //nolint:staticcheck // the transition case
+	if got.MaxBudgetAmount != 19.99 {
+		t.Errorf("both, agreeing: budget = %v", got.MaxBudgetAmount)
+	}
+	_, err := protoToCaveats(&adminv1.CapabilityCaveats{MaxBudgetAmount: 20, MaxBudgetMicros: proto.Int64(19_990_000)}) //nolint:staticcheck // the transition case
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("both, disagreeing: err = %v, want InvalidArgument", err)
+	}
+}
+
+func TestCaveatsToProtoFillsBothBudgetFields(t *testing.T) {
+	out := caveatsToProto(capability.Caveats{MaxBudgetAmount: 0.3})
+	//nolint:staticcheck // the deprecated double is still filled for old clients
+	if out.GetMaxBudgetMicros() != 300_000 || out.GetMaxBudgetAmount() != 0.3 {
+		t.Errorf("budget = %d micros / %v", out.GetMaxBudgetMicros(), out.GetMaxBudgetAmount()) //nolint:staticcheck // as above
+	}
+}
+
 func TestProtoToCaveatsNoOps(t *testing.T) {
-	got := protoToCaveats(&adminv1.CapabilityCaveats{})
+	got := mustCaveats(t, &adminv1.CapabilityCaveats{})
 	if len(got.Ops) != 0 {
 		t.Errorf("Ops = %v, want none", got.Ops)
 	}

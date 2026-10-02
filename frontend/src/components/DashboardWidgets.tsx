@@ -35,7 +35,7 @@ import type { AuditLogEntry } from "@/gen/paladin/admin/v1/types_pb";
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
 import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 import type { TenantBudgetSummary } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
-import { formatMoney } from "@/lib/format/money";
+import { formatMoney, fromMicros } from "@/lib/format/money";
 
 // Operation.result is a oneof — case "error" carries google.rpc.Status.
 function opError(o: Operation): string {
@@ -323,8 +323,8 @@ function BudgetAlertsWidget() {
 function BudgetAlertRow({ row }: { row: TenantBudgetSummary }) {
   const pct = Math.round(row.utilisationPct);
   const over = pct >= 100;
-  const spent = row.budget?.spentAmount ?? 0;
-  const cap = row.budget?.maxBudgetAmount ?? 0;
+  const spent = fromMicros(row.budget?.spentMicros);
+  const cap = fromMicros(row.budget?.maxBudgetMicros);
   const unit = row.budget?.unitCode || "UNIT";
   const handle = row.slug || row.tenantId;
   return (
