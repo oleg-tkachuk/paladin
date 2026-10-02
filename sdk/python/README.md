@@ -303,6 +303,26 @@ checksum an upload completes with — so a download verifies — and answers
 range requests. `put` stores an object directly; `tenant` and `collection()`
 name the fake's tenant and its collections, all of which exist.
 
+### Concurrency and asyncio
+
+A `Paladin` from `connect`, a `Transfer` and a `Session` are safe to share
+between threads, and meant to be: build one at start-up. An `AsyncPaladin`
+from `connect_async` and an `AsyncSession` belong to one event loop. The
+connection pools are what make many calls cheap — a `Transfer` keeps
+`DEFAULT_TRANSFER_POOL_MAX_IDLE_PER_HOST` connections to each storage host.
+
+Every workflow has an async form for the clients of `connect_async`:
+`aupload`, `adownload_stream` (an `AsyncObjectReader`: `await read()`,
+`async for` over `chunks()`, `async with`), `adownload`, `alookup_object`,
+`adownload_uri`, alongside `apages` and `await_operation`. `aupload` reads
+the body in a worker thread, so a file read does not block the loop.
+
+| Name | Does |
+| --- | --- |
+| `upload(…, part_concurrency=3)` | Parts of one multipart upload in flight at once. |
+| `download_many(p.data, names, concurrency=8)` | Downloads many objects, `concurrency` at a time (`DEFAULT_BULK_CONCURRENCY`), and yields `(name, content)` as each finishes — or `(name, error)`, so one bad object does not stop the rest. Each is held whole; for large ones, `download_stream` per object. |
+| `adownload_many(p.data, names, concurrency=8)` | The same for the async clients, as an async iterator. |
+
 ### Constants
 
 `HEADER_AUTHORIZATION`, `HEADER_API_TOKEN`, `HEADER_CAPABILITY` and

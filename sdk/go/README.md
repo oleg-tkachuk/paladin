@@ -294,6 +294,19 @@ checksum an upload completes with — so `Download` verifies — and answers
 range requests. `Put` stores an object directly; `Tenant` and `Collection`
 name the fake's tenant and its collections, all of which exist.
 
+### Concurrency
+
+A `*Paladin`, its planes, a `Transfer` and a `Session` are safe for
+concurrent use, and meant to be shared: build one at start-up and use it
+from every goroutine. The generated clients hold no per-call state, and the
+connection pools are what make many calls cheap — a `Transfer` keeps
+`DefaultTransferMaxIdleConnsPerHost` connections to each storage host.
+
+| Name | Does |
+| --- | --- |
+| `UploadOptions.PartConcurrency` | Parts of one multipart upload in flight at once (default 3). |
+| `DownloadMany(ctx, p.Data, names, concurrency, fn)` | Downloads many objects, `concurrency` at a time (`DefaultBulkConcurrency`, 8), handing each reader to `fn` — which runs concurrently and reads it. Returns the names that failed, with their errors; one bad object does not stop the rest. |
+
 ### Header names
 
 `HeaderAuthorization`, `HeaderAPIToken`, `HeaderCapability` and
