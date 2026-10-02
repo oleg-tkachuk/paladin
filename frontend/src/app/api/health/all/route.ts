@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { resolveHealthToken } from "./token";
+
 // Health aggregator — fans out to /system/health.json on each backend
 // role and returns a merged response the /health UI page renders. Each
 // upstream is independent: a single role being unreachable degrades
@@ -93,9 +95,8 @@ type Component = {
 // Shared secret gating /system/health.json on the backends. When set
 // (prod), the backends reject an unauthenticated snapshot fetch with 401;
 // we forward it as X-Health-Token. Unset (dev) → backends leave the
-// endpoint open and the header is simply absent. Mirrors
-// config.Runtime.HealthSnapshotToken on the backend side.
-const HEALTH_TOKEN = process.env.PALADIN_HEALTH_SNAPSHOT_TOKEN || "";
+// endpoint open and the header is simply absent. See ./token.
+const HEALTH_TOKEN = resolveHealthToken(process.env);
 
 async function fetchSnapshot(role: string, baseUrl: string): Promise<Snapshot> {
   const ctrl = new AbortController();
