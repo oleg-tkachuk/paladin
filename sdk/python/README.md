@@ -105,7 +105,7 @@ under [`proto/paladin`](../../proto/paladin).
 | `CELService` | `validate` |
 | `CapabilityService` | `issue`, `delegate`, `revoke`, `list`, `get_usage` |
 | `CollectionService` | `create_collection`, `get_collection`, `update_collection`, `delete_collection`, `list_collections`, `set_collection_policy`, `bind_collection_to_bucket` |
-| `EventSubscriptionService` | `create_subscription`, `get_subscription`, `update_subscription`, `delete_subscription`, `list_subscriptions`, `test_subscription` |
+| `EventSubscriptionService` | `create_subscription`, `get_subscription`, `update_subscription`, `delete_subscription`, `list_subscriptions`, `test_subscription`, `redrive_failed_deliveries` |
 | `MCPInspectService` | `inspect`, `list_sessions`, `get_bridge_status` |
 | `PlatformOperationService` | `get_operation`, `list_operations`, `cancel_operation` |
 | `PolicyService` | `validate`, `simulate_authz`, `get_effective_policy` |
