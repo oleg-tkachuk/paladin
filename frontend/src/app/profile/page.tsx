@@ -10,8 +10,6 @@ import {
   PaintBrushIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
-import { create } from "@bufbuild/protobuf";
-import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
@@ -50,6 +48,8 @@ import {
   USER_SETTINGS_QUERY_KEY,
 } from "@/lib/theme";
 import { ListLoadError } from "@/components/ui/ListLoadError";
+import { fieldMask } from "@/lib/connect/fieldMask";
+import { UpdateMineRequestSchema } from "@/gen/paladin/iam/v1/user_settings_service_pb";
 
 // /profile — self-service editor backed by iam/v1.UserSettingsService.
 // Tenant comes from the JWT, so the page always operates on the calling
@@ -155,9 +155,12 @@ export default function ProfilePage() {
     setSaving(true);
     try {
       await userSettingsClient.updateMine({
-        updateMask: create(FieldMaskSchema, {
-          paths: ["timezone", "locale", "theme"],
-        }),
+        updateMask: fieldMask(
+          UpdateMineRequestSchema,
+          "timezone",
+          "locale",
+          "theme",
+        ),
         timezone,
         locale,
         theme,

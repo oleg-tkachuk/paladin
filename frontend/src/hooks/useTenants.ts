@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from "react";
 import { create } from "@bufbuild/protobuf";
-import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { tenantClient } from "@/lib/connect/client";
@@ -12,6 +11,7 @@ import type { StorageMigrationStatus } from "@/gen/paladin/admin/v1/tenant_servi
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 import { errorMessage } from "@/hooks/errorContract";
+import { fieldMask } from "@/lib/connect/fieldMask";
 
 /**
  * useTenants — wrapper around admin/v1.TenantService.
@@ -139,9 +139,7 @@ export function useTenants() {
         const updated = await tenantClient.updateTenant({
           name: tenantResourceName(tenantId),
           resourceVersion,
-          updateMask: create(FieldMaskSchema, {
-            paths: ["display_name", "labels"],
-          }),
+          updateMask: fieldMask(TenantSchema, "displayName", "labels"),
           tenant,
         });
         setTenants((prev) =>
