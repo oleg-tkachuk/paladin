@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -35,6 +36,8 @@ const (
 	serverID     = "spiffe://test.example/ns/paladin/sa/paladin-core"
 	// reloadNow re-reads the TLS files on every connection.
 	reloadNow = time.Nanosecond
+	// unknownTLSVersion is a version number no TLS release has.
+	unknownTLSVersion = 0x0399
 )
 
 var serial = struct {
@@ -150,6 +153,12 @@ func (h *mtlsHealth) GetVersion(_ context.Context, req *connect.Request[iamv1.Ge
 
 func serveMTLS(t *testing.T, ca *authority, server leaf) (*mtlsHealth, string) {
 	t.Helper()
+	return serveMTLSWith(t, ca, server, func(*httptest.Server) {})
+}
+
+// serveMTLSWith is serveMTLS with the server adjusted before it starts.
+func serveMTLSWith(t *testing.T, ca *authority, server leaf, adjust func(*httptest.Server)) (*mtlsHealth, string) {
+	t.Helper()
 	h := &mtlsHealth{}
 	mux := http.NewServeMux()
 	path, handler := paladiniamv1connect.NewHealthServiceHandler(h)
@@ -169,6 +178,7 @@ func serveMTLS(t *testing.T, ca *authority, server leaf) (*mtlsHealth, string) {
 		MinVersion:   tls.VersionTLS12,
 	}
 	srv.Config.SetKeepAlivesEnabled(false)
+	adjust(srv)
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	return h, srv.URL
@@ -317,6 +327,8 @@ func TestTLSConfigErrors(t *testing.T) {
 		{"a missing file", paladin.TLS{CAFile: filepath.Join(t.TempDir(), "absent.pem")}, os.ErrNotExist},
 		{"a server ID without its bundle", paladin.TLS{ServerID: serverID}, paladin.ErrServerIDNeedsCA},
 		{"a server ID that is not a SPIFFE ID", paladin.TLS{CAFile: f.ca, ServerID: "https://paladin.example"}, paladin.ErrServerID},
+		{"a minimum below TLS 1.2", paladin.TLS{MinVersion: tls.VersionTLS11}, paladin.ErrTLSMinVersion},
+		{"a minimum crypto/tls does not know", paladin.TLS{MinVersion: unknownTLSVersion}, paladin.ErrTLSMinVersion},
 	}
 	for _, tc := range cases {
 		if _, err := tc.cfg.Transport(); !errors.Is(err, tc.want) {
@@ -385,5 +397,92 @@ func TestTLSPicksUpARotatedCABundle(t *testing.T) {
 	_ = os.Chtimes(f.ca, later, later)
 	if err := call(); err != nil {
 		t.Fatalf("the rotated bundle was not picked up: %v", err)
+	}
+}
+
+func TestTLSMinVersion(t *testing.T) {
+	ca := newAuthority(t)
+	f := writeFiles(t, t.TempDir(), ca.pem, ca.issue(t, true, nil, nil))
+	tls12Only := func(srv *httptest.Server) { srv.TLS.MaxVersion = tls.VersionTLS12 }
+	cases := []struct {
+		name string
+		min  uint16
+		ok   bool
+	}{
+		{"the default reaches a TLS 1.2 server", 0, true},
+		{"1.2 reaches a TLS 1.2 server", tls.VersionTLS12, true},
+		{"1.3 refuses a TLS 1.2 server", tls.VersionTLS13, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, url := serveMTLSWith(t, ca, ca.issue(t, false, loopback, nil), tls12Only)
+			err := getVersion(t, url, paladin.TLS{CAFile: f.ca, CertFile: f.cert, KeyFile: f.key, MinVersion: tc.min})
+			if (err == nil) != tc.ok {
+				t.Fatalf("err = %v, want ok=%v", err, tc.ok)
+			}
+		})
+	}
+}
+
+// A connection kept alive across a rotation is closed once idle, so the next
+// call presents the new certificate rather than reusing the old handshake.
+func TestTLSRetiresAKeptAliveConnectionAfterARotation(t *testing.T) {
+	for _, h2 := range []bool{false, true} {
+		t.Run(map[bool]string{false: "HTTP/1.1", true: "HTTP/2"}[h2], func(t *testing.T) {
+			testRetiresAfterARotation(t, h2)
+		})
+	}
+}
+
+func testRetiresAfterARotation(t *testing.T, h2 bool) {
+	ca := newAuthority(t)
+	first, second := ca.issue(t, true, nil, nil), ca.issue(t, true, nil, nil)
+	dir := t.TempDir()
+	f := writeFiles(t, dir, ca.pem, first)
+	var (
+		mu     sync.Mutex
+		protos []string
+	)
+	keepAlive := func(srv *httptest.Server) {
+		srv.Config.SetKeepAlivesEnabled(true)
+		srv.EnableHTTP2 = h2
+		srv.Config.ConnState = func(c net.Conn, state http.ConnState) {
+			if tc, ok := c.(*tls.Conn); ok && state == http.StateActive {
+				mu.Lock()
+				protos = append(protos, tc.ConnectionState().NegotiatedProtocol)
+				mu.Unlock()
+			}
+		}
+	}
+	h, url := serveMTLSWith(t, ca, ca.issue(t, false, loopback, nil), keepAlive)
+	p, err := paladin.Connect(paladin.Endpoints{IAM: url},
+		paladin.WithTLS(paladin.TLS{CAFile: f.ca, CertFile: f.cert, KeyFile: f.key, ReloadInterval: reloadNow}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func() {
+		t.Helper()
+		if _, err := p.IAM.Health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	call()
+	call() // the same connection, kept alive
+	writeFiles(t, dir, ca.pem, second)
+	later := time.Now().Add(time.Minute)
+	for _, path := range []string{f.cert, f.key} {
+		if err := os.Chtimes(path, later, later); err != nil {
+			t.Fatal(err)
+		}
+	}
+	call()
+	want := []string{first.serial.String(), first.serial.String(), second.serial.String()}
+	if !slices.Equal(h.serials, want) {
+		t.Errorf("server saw %v, want %v: the connection from before the rotation was reused", h.serials, want)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if h2 && (len(protos) == 0 || protos[0] != "h2") {
+		t.Errorf("negotiated %v, want h2: the test did not exercise HTTP/2", protos)
 	}
 }

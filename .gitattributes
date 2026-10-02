@@ -87,3 +87,8 @@ Brewfile -linguist-detectable
 #
 # migrations/*.sql likewise: hand-written, and the schema is the thing a
 # reviewer most needs to read line by line.
+
+# ─── Version for a source archive ────────────────────────────────────────
+# git archive (and a GitHub tarball of a tag) fills in .git_archival.txt, so
+# the Python SDK built from it without git still knows its sdk/go/v* version.
+.git_archival.txt export-subst

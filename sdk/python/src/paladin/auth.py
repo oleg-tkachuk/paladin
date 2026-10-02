@@ -254,9 +254,15 @@ class AsyncSession:
 
 def _auth_client(iam_url: str) -> AuthServiceClientSync:
     client = Client(iam_url)
-    return AuthServiceClientSync(client.base_url, interceptors=client.interceptors())
+    return AuthServiceClientSync(
+        client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+    )
 
 
 def _async_auth_client(iam_url: str) -> AuthServiceClient:
     client = Client(iam_url)
-    return AuthServiceClient(client.base_url, interceptors=client.async_interceptors())
+    return AuthServiceClient(
+        client.base_url,
+        interceptors=client.async_interceptors(),
+        http_client=client.async_http_client(),
+    )

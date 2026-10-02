@@ -60,6 +60,7 @@ from paladin.names import (
     TenantName,
 )
 from paladin.observe import LOGGER_NAME, Hooks, RetryEvent, TransferEvent
+from paladin.relay import RelaySyncTransport, RelayTransport
 from paladin.tls import DEFAULT_TLS_RELOAD_INTERVAL, TLS
 from paladin.transfer import (
     CHECKSUM_CRC32C,
@@ -154,6 +155,8 @@ __all__ = [
     "PaladinError",
     "PermissionDeniedError",
     "RangeIgnoredError",
+    "RelaySyncTransport",
+    "RelayTransport",
     "ResourceExhaustedError",
     "Retry",
     "RetryEvent",

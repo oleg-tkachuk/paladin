@@ -5,12 +5,16 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
+	"slices"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladintest"
 )
@@ -139,5 +143,106 @@ func TestTheFakeRefusesWhatTheServerRefuses(t *testing.T) {
 	_, err = p.Data.Object.CompleteObject(context.Background(), connect.NewRequest(&datav1.CompleteObjectRequest{Name: up.Msg.GetObject().GetName(), Etag: "x"}))
 	if !errors.Is(err, paladin.ErrFailedPrecondition) {
 		t.Errorf("err = %v, want FailedPrecondition", err)
+	}
+}
+
+func TestCompleteMatchesTheServer(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	ctx := context.Background()
+	body := []byte("no etag")
+	up, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{Parent: srv.Collection().String(), Key: "k"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, up.Msg.GetUploadUrl().GetUrl(), bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	name := up.Msg.GetObject().GetName()
+
+	// The ETag is optional, as on the server.
+	obj, err := p.Data.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{Name: name}))
+	if err != nil {
+		t.Fatalf("complete without an ETag: %v", err)
+	}
+	if obj.Msg.GetState() != datav1.ObjectState_OBJECT_STATE_AVAILABLE {
+		t.Errorf("state = %v, want AVAILABLE", obj.Msg.GetState())
+	}
+	// Completing it again returns it, whatever the ETag.
+	again, err := p.Data.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{Name: name, Etag: "stale"}))
+	if err != nil || again.Msg.GetEtag() != obj.Msg.GetEtag() {
+		t.Errorf("second complete: %v, etag %q; want the object as completed", err, again.Msg.GetEtag())
+	}
+	if got, _ := srv.Content(name); !bytes.Equal(got, body) {
+		t.Errorf("content = %q, want %q", got, body)
+	}
+}
+
+func TestEnsureTenantStorage(t *testing.T) {
+	const (
+		backend = "seaweedfs"
+		bucket  = "paladin-shared"
+	)
+	p := paladintest.New(t).Connect()
+	ensure := func(collections ...string) (*datav1.EnsureTenantStorageResponse, error) {
+		resp, err := p.Data.StorageBootstrap.EnsureTenantStorage(context.Background(), connect.NewRequest(
+			&datav1.EnsureTenantStorageRequest{BackendId: backend, Bucket: bucket, Collections: collections}))
+		if err != nil {
+			return nil, err
+		}
+		return resp.Msg, nil
+	}
+	first, err := ensure("a", "b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first.GetBucketCreated() || !slices.Equal(first.GetCollectionsCreated(), []string{"a", "b"}) || len(first.GetCollectionsExisting()) != 0 {
+		t.Errorf("first ensure = %v, want the bucket and both collections created", first)
+	}
+	second, err := ensure("b", "c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.GetBucketCreated() || !slices.Equal(second.GetCollectionsCreated(), []string{"c"}) || !slices.Equal(second.GetCollectionsExisting(), []string{"b"}) {
+		t.Errorf("second ensure = %v, want only c created", second)
+	}
+	_, err = p.Data.StorageBootstrap.EnsureTenantStorage(context.Background(), connect.NewRequest(
+		&datav1.EnsureTenantStorageRequest{BackendId: backend, Bucket: "ab"}))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("a two-character bucket: err = %v, want InvalidArgument", err)
+	}
+}
+
+func TestRequestsShowWhatTheClientSent(t *testing.T) {
+	const token = "test-token"
+	srv := paladintest.New(t)
+	p := srv.Connect(paladin.WithBearerToken(token))
+	if _, err := p.Data.Object.UploadObject(context.Background(), connect.NewRequest(&datav1.UploadObjectRequest{
+		Parent: srv.Collection().String(), Key: "k",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	reqs := srv.Requests()
+	if len(reqs) != 1 {
+		t.Fatalf("requests = %d, want 1", len(reqs))
+	}
+	r := reqs[0]
+	if r.Procedure != paladindatav1connect.ObjectServiceUploadObjectProcedure {
+		t.Errorf("procedure = %q", r.Procedure)
+	}
+	if got := r.Header.Get(paladin.HeaderAuthorization); got != "Bearer "+token {
+		t.Errorf("Authorization = %q", got)
+	}
+	if r.Header.Get(paladin.HeaderIdempotencyKey) == "" {
+		t.Error("no idempotency key recorded")
+	}
+	if !strings.HasPrefix(r.Header.Get(paladin.HeaderUserAgent), "paladin-sdk-go/") {
+		t.Errorf("User-Agent = %q", r.Header.Get(paladin.HeaderUserAgent))
 	}
 }
