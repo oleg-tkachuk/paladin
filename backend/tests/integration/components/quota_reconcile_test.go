@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 // TestReconcileQuotaUsage_DrivesCountersToLiveTruth is the regression test
@@ -194,6 +195,63 @@ func TestRollDailyCounters(t *testing.T) {
 	}
 	if bytesToday != 250 {
 		t.Errorf("usage_bytes_today = %d after same-day tick, want 250 preserved", bytesToday)
+	}
+}
+
+// A quota idle since an earlier day keeps that day's reset stamp: the roll
+// skips rows with nothing to clear. Its first charge of today used to add to
+// that stale row, and the roll's next tick then saw an old stamp and nonzero
+// usage and zeroed today's admissions, letting the day's cap be exceeded.
+func TestFirstChargeOfTheDayIsKeptByTheRoll(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	f := seedFixture(t, ctx, pool)
+	quotas := adapters.NewQuotaRepoV2(sqlc.New(pool), pool)
+	roll := adapters.NewQuotaReconcileRepo(pool)
+	const charged = 300
+
+	idle := uuid.New()
+	mustExec(t, ctx, pool,
+		`INSERT INTO quotas (id, tenant_id, max_bytes_per_day,
+		                     usage_bytes_today, usage_objects_today, last_reset_at)
+		 VALUES ($1, $2, 1000, 0, 0, now() - interval '3 days')`, idle, f.tenantID)
+
+	if err := quotas.IncrementUsage(ctx, idle, charged, 1); err != nil {
+		t.Fatalf("charge: %v", err)
+	}
+	dayStart := time.Now().UTC().Truncate(24 * time.Hour)
+	if _, err := roll.RollDailyCounters(ctx, dayStart); err != nil {
+		t.Fatalf("roll: %v", err)
+	}
+	var bytesToday, objectsToday int64
+	if err := pool.QueryRow(ctx,
+		`SELECT usage_bytes_today, usage_objects_today FROM quotas WHERE id = $1`, idle).
+		Scan(&bytesToday, &objectsToday); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if bytesToday != charged || objectsToday != 1 {
+		t.Errorf("today's usage = %d bytes / %d objects after the roll, want %d / 1",
+			bytesToday, objectsToday, charged)
+	}
+
+	// A row not yet rolled from yesterday restarts at today's charge rather
+	// than adding to yesterday's.
+	unrolled := uuid.New()
+	other, _ := mkTenant(t, ctx, pool, "shared")
+	mustExec(t, ctx, pool,
+		`INSERT INTO quotas (id, tenant_id, max_bytes_per_day,
+		                     usage_bytes_today, usage_objects_today, last_reset_at)
+		 VALUES ($1, $2, 1000, 900, 9, now() - interval '1 day')`, unrolled, other)
+	if err := quotas.IncrementUsage(ctx, unrolled, charged, 1); err != nil {
+		t.Fatalf("charge unrolled: %v", err)
+	}
+	if err := pool.QueryRow(ctx,
+		`SELECT usage_bytes_today FROM quotas WHERE id = $1`, unrolled).Scan(&bytesToday); err != nil {
+		t.Fatalf("read unrolled: %v", err)
+	}
+	if bytesToday != charged {
+		t.Errorf("usage_bytes_today = %d, want %d: yesterday's usage counted against today", bytesToday, charged)
 	}
 }
 

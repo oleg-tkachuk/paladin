@@ -121,7 +121,8 @@ func (r *QuotaReconcileRepo) ReconcileUsage(ctx context.Context) (int64, error) 
 // so a pod that was down at midnight catches up on its next tick, and a
 // second pod running the same tick finds nothing left to do. Rows with no
 // accumulated usage are skipped so an idle fleet does not take a daily
-// resource_version bump on every quota row.
+// resource_version bump on every quota row; such a row's stamp is brought to
+// the day by its first charge instead (IncrementQuotaUsage).
 const rollDailySQL = `
 UPDATE quotas
    SET usage_bytes_today   = 0,

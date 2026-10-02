@@ -289,6 +289,10 @@ type Querier interface {
 	// expected_version=0 → no OCC guard; non-zero → strict match.
 	HardDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	// Atomic add. tenant_id-scoped quota when bucket fields are NULL.
+	// The first charge of a UTC day restarts the per-day counters and stamps the
+	// day. The daily roll skips rows with nothing to clear, so an idle row keeps
+	// an older stamp, and the roll's next tick would otherwise zero what this day
+	// had already admitted.
 	IncrementQuotaUsage(ctx context.Context, iD pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error
 	InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID) error
 	// ObjectVersion queries — immutable history rows. Populated by the
