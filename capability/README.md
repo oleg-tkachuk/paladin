@@ -218,24 +218,16 @@ any drift.
 **The Go API is pre-1.0 and may change.** Signatures, type names and struct
 fields can move between minor versions. Read the diff before bumping.
 
-**There is no version stream to pin.** One tag exists, `capability/v0.1.0`,
-and no more are cut: the release pipeline versions Paladin, and Go resolves a
-subdirectory module from tags carrying that subdirectory as a prefix, so a
-Paladin release publishes nothing this module can be fetched by. An outside
-consumer gets a commit pseudo-version, not `@v0.1.1`.
+**The version stream is `capability/vX.Y.Z`.** The release workflow cuts it
+from the commits that touch `capability/`, independently of Paladin's own
+version: `feat` a minor, `fix` a patch, and — while the module is pre-1.0 — a
+breaking change a minor too. Pin `go get …/capability@vX.Y.Z`.
 
-That is a deliberate stop, not an oversight. Mirroring Paladin's tag under the
-`capability/` prefix does not work — Paladin is past v1, and Go requires a
-matching major-version suffix in the module path from v2 onward, so
-`capability/v4.0.0` would be created and then refused at `go get`. Running a
-second, independently-versioned release pipeline does work, and is the right
-answer the moment someone outside this repository actually depends on the
-module. Until then it is machinery maintained for nobody.
-
-So: this is an in-tree library with an enforced boundary, not a published
-package. Paladin consumes it through a `replace` directive; the lone tag is
-hygiene. If you want to build on it, vendor it or pin a commit — and open an
-issue, because a real consumer is exactly what would justify the pipeline.
+Paladin's own tag cannot be mirrored here: Paladin is past v1, and Go requires
+a matching major-version suffix in the module path from v2 onward, so
+`capability/v4.0.0` would be created and then refused at `go get`. Paladin
+itself consumes the module through a `replace` directive, so its releases do
+not wait on these tags.
 
 ## Status
 

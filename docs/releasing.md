@@ -1,13 +1,20 @@
 # Releasing
 
-Three tag families, three version streams. Each tracks what its consumers
-actually depend on.
+Three release streams and one baseline. Each stream tracks what its
+consumers actually depend on, and each is cut automatically from the commits
+that touch it ([`release.config.cjs`](../release.config.cjs)).
 
 | Tag | Cut by | Publishes | Versioned by |
 | --- | --- | --- | --- |
-| `vX.Y.Z` | semantic-release, after a green push to `main` | both images and both Helm charts, plus the GitHub release | the product: Conventional Commit types since the last tag |
-| `api/vX.Y.Z` | a maintainer, by hand | the proto baseline; `sdk/go/vX.Y.Z` on the same commit | the API contract |
-| `capability/vX.Y.Z` | nobody for now | — | — |
+| `vX.Y.Z` | semantic-release, after a green push to `main` | both images and both Helm charts, plus the GitHub release | the commits that touch anything but `sdk/` and `capability/` |
+| `sdk/go/vX.Y.Z` | semantic-release, in the same run | the tag: the Go proxy and pip resolve it | the commits that touch `sdk/` or `proto/` |
+| `capability/vX.Y.Z` | semantic-release, in the same run | the tag, for `go get` | the commits that touch `capability/` |
+| `api/vX.Y.Z` | a maintainer, by hand | nothing; the baseline `buf breaking` compares against | the API contract |
+
+A commit counts for every stream whose files it touches, and its type
+decides the bump on each — `feat` a minor, `fix`/`perf`/`security` a patch.
+The SDK and the capability module are pre-1.0, so a breaking change is a
+minor on their streams until they reach 1.0.
 
 ## The product: `vX.Y.Z`
 
@@ -86,24 +93,23 @@ cosign verify-attestation "${image%:*}@${digest}" --type spdxjson \
   jq -r '.payload | @base64d | fromjson | .predicate.packages | length'
 ```
 
-## The SDKs: `api/vX.Y.Z`
+## The SDKs: `sdk/go/vX.Y.Z`
 
-The Go SDK is generated from the proto, so it follows the contract, not the
-product. A client cares whether the RPCs it calls have changed, not whether
-the server shipped a fix. Cutting a contract baseline, described in
-[upgrading.md](upgrading.md#changing-the-api-contract), is also what releases
-the SDK. [`sdk.yaml`](../.github/workflows/sdk.yaml) tags `sdk/go/vX.Y.Z`
-on the same commit, which is the tag the Go proxy resolves for the
-`sdk/go` module path. Never push `sdk/go/…` by hand.
+The SDKs version on their own, from the commits that touch `sdk/` or
+`proto/` — a contract change regenerates the stubs, whatever its commit's
+scope. One version covers both languages: the Go module resolves
+`sdk/go/vX.Y.Z`, and the Python package reads the same tag at build time
+through hatch-vcs, so neither carries a version to edit. A release is the
+tag; nothing else is published, and the Python package is not on PyPI yet.
 
-The Python SDK carries the same contract version in
-`sdk/python/pyproject.toml` and is not published anywhere yet.
+`api/vX.Y.Z` is no longer a release. It is the baseline `buf breaking`
+compares against, cut by hand when a deliberate contract change has landed —
+see [upgrading.md](upgrading.md#changing-the-api-contract).
 
-## The capability module
+## The capability module: `capability/vX.Y.Z`
 
-`capability/` is its own Go module, but it has no release stream. Paladin
-uses it through a `replace` directive, so no Paladin release depends on a
-capability tag. The one existing tag, `capability/v0.1.0`, is there for
-hygiene. Why mirroring the product tag cannot work, and what would justify
-a pipeline of its own, is in
+`capability/` is its own Go module with its own stream, cut from the commits
+that touch it. Paladin still uses it through a `replace` directive, so its
+releases do not wait on these tags; they are for `go get` from outside. The
+wire-format promise, and why the product's tag cannot be mirrored, are in
 [capability/README.md](../capability/README.md#versioning).

@@ -154,21 +154,6 @@ the same commit. Treat this file like a runtime invariant.
   the first one (likely a `WatchEvents` for the agentic event bus)
   before this becomes load-bearing.
 
-### Release stream for the `capability/` module
-
-- **Status:** Deferred
-- **Reason:** No consumer outside this repository depends on the module, and
-  Paladin takes it through a `replace` directive, so an independent
-  `capability/vX.Y.Z` pipeline would be maintained for nobody. See
-  [capability/README.md](capability/README.md#versioning) and
-  [docs/releasing.md](docs/releasing.md).
-- **Definition of Done:** a workflow that cuts `capability/v0.x.y` only when
-  the module changed, versioned independently of the product tag (a mirrored
-  `capability/v4…` is refused at `go get`), gated on the module's own tests
-  and its wire-format golden fixture; `capability/README.md` §Versioning and
-  `docs/releasing.md` rewritten to match.
-- **Blockers:** a real outside consumer asking for `go get …@vX.Y.Z`.
-
 ### KMS-wrapped capability signing key
 
 - **Status:** Deferred
@@ -742,9 +727,9 @@ finding moving from "packages you import" to "your code is affected".
 - **Reason:** there are no users outside the owner, so the SDK is installed
   from the repository. The distribution name `paladin-sdk` is provisional and
   follows the product name if that changes.
-- **Definition of Done:** a publish job in `.github/workflows/sdk.yaml` on
-  `api/v*` (PyPI trusted publishing, a `pypi` environment), and the version in
-  `sdk/python/pyproject.toml` checked against the tag.
+- **Definition of Done:** a publish step in `.github/workflows/release.yaml`
+  after the SDK tag is cut (PyPI trusted publishing, a `pypi` environment);
+  the version already comes from the `sdk/go/v*` tag through hatch-vcs.
 - **Blockers:** the decision to publish.
 
 ### Terminal tenant events are observed by query, not by subscription

@@ -2,9 +2,10 @@ name: Release
 
 # Dispatched by ci.yaml once the checks on a push to main have passed.
 #
-# A release is a tag, both components published to GHCR at that tag (a
-# multi-arch image and a Helm chart each), and the GitHub release that
-# announces them. The announcement comes last and only when every component
+# A product release is a tag, both components published to GHCR at that tag
+# (a multi-arch image and a Helm chart each), and the GitHub release that
+# announces them. The SDK and the capability module release too, as tags of
+# their own (sdk/go/v*, capability/v*), when a commit touched them. The announcement comes last and only when every component
 # published: a release whose charts are missing is not announced. Nothing is
 # published when no tag was due.
 #
@@ -129,6 +130,25 @@ jobs:
         run: npx semantic-release --no-ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_STREAM: product
+
+      # The SDK and the capability module version on their own, from the
+      # commits that touch them (release.config.cjs). Their tag is the
+      # release: the Go proxy and pip read the tag, so nothing is published
+      # here, and the product's publish below keys on its own tag alone.
+      - name: Compute and push the SDK tag
+        if: steps.head.outputs.release == 'true'
+        run: npx semantic-release --no-ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_STREAM: sdk
+
+      - name: Compute and push the capability tag
+        if: steps.head.outputs.release == 'true'
+        run: npx semantic-release --no-ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_STREAM: capability
 
       # Read from git rather than parsing semantic-release's prose: it tags the
       # commit that was checked out, so no new tag here means no release was
