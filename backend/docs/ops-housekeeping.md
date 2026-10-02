@@ -14,7 +14,7 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 | `multipart_abort_drainer` | retries aborts S3 refused (`pending_multipart_aborts`) | `purge_drain.interval` | `1m` |
 | `purge_drainer` | deletes the bytes of permanently deleted objects (`pending_purges`) | `purge_drain.interval` | `1m` |
 | `lifecycle` | applies per-bucket CEL expiration rules | `lifecycle.enabled`, `.interval` | `true`, `30m` |
-| `lifecycle_hard_delete` | after the cooling-off window, deletes the bytes and the row | `housekeeping.hard_delete_after` | `0` (off) |
+| `lifecycle_hard_delete` | after the cooling-off window, deletes the row, then the bytes (a failure stays queued for `purge_drainer`) | `housekeeping.hard_delete_after` | `0` (off) |
 | `quota_reconciler` | recomputes quota usage from live objects; resets daily counters | `quota_reconcile.interval` | `15m` |
 | `audit_purger` | deletes `audit_log` rows older than the TTL | `housekeeping.audit_log_ttl` | `8760h` |
 | `operations_purger` | deletes terminal `operations` rows older than the TTL | `housekeeping.operations_ttl` | `336h` |

@@ -11,6 +11,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -40,6 +41,7 @@ func TestHardDelete_FullSweep(t *testing.T) {
 	storage := &recordingStorage{}
 	w := &worker.LifecycleHardDeleter{
 		Q:         sqlc.New(h.PoolMigrate),
+		Pool:      h.PoolMigrate,
 		Storage:   storage,
 		TTL:       1 * time.Hour, // anything < 24h triggers the row
 		BatchSize: 100,
@@ -56,9 +58,12 @@ func TestHardDelete_FullSweep(t *testing.T) {
 		t.Errorf("storage call = %+v", calls[0])
 	}
 
-	// DB row must be gone.
+	// DB row must be gone, and the bytes' debt settled.
 	if exists := mustObjectExists(t, h.PoolMigrate, objectID); exists {
 		t.Errorf("DB row still present after hard-delete")
+	}
+	if n := pendingPurges(t, h.PoolMigrate, objectID); n != 0 {
+		t.Errorf("pending_purges rows = %d, want 0 once the bytes are gone", n)
 	}
 }
 
@@ -81,7 +86,7 @@ func TestHardDelete_RLSPoolFindsNothing(t *testing.T) {
 
 	sweptCount := func(pool *pgxpool.Pool) int {
 		st := &recordingStorage{}
-		w := &worker.LifecycleHardDeleter{Q: sqlc.New(pool), Storage: st, TTL: time.Hour, BatchSize: 100}
+		w := &worker.LifecycleHardDeleter{Q: sqlc.New(pool), Pool: pool, Storage: st, TTL: time.Hour, BatchSize: 100}
 		w.Sweep(context.Background()) // bare ctx → no paladin.tenant_id GUC
 		st.mu.Lock()
 		defer st.mu.Unlock()
@@ -101,12 +106,10 @@ func TestHardDelete_RLSPoolFindsNothing(t *testing.T) {
 	}
 }
 
-// TestHardDelete_RestoreWinsRace: a row gets Restored mid-sweep
-// (after ListHardDeletable runs but before HardDeleteObjectIfStillDeleted
-// fires). The OCC guard makes the DB DELETE no-op; the row stays
-// AVAILABLE. The S3 DELETE we issued is the race-loss case the
-// worker contract documents — this test pins that we don't ALSO
-// drop the DB row.
+// TestHardDelete_RestoreWinsRace: the row is Restored after the sweep listed
+// it. The version-gated delete then finds nothing, and the bytes must be left
+// alone: deleting them first, as the worker used to, stranded the restored
+// object with no bytes.
 func TestHardDelete_RestoreWinsRace(t *testing.T) {
 	h := pgharness.Setup(t)
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "hd-restore")
@@ -114,32 +117,53 @@ func TestHardDelete_RestoreWinsRace(t *testing.T) {
 	objectID := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "racy")
 	mustSoftDeleteWithBackdate(t, h.PoolMigrate, objectID, 24*time.Hour)
 
-	// Hand-roll the race: read the row via ListHardDeletable to
-	// capture resource_version, then Restore (bumps version), then
-	// call HardDeleteObjectIfStillDeleted with the stale version.
 	q := sqlc.New(h.PoolMigrate)
-	cutoff := pgxTimestamp(time.Now().Add(-1 * time.Hour))
-	rows, err := q.ListHardDeletable(context.Background(), cutoff, 10)
+	rows, err := q.ListHardDeletable(context.Background(), pgxTimestamp(time.Now().Add(-1*time.Hour)), 10)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("seed list: rows=%d err=%v", len(rows), err)
 	}
-	staleVersion := rows[0].ResourceVersion
-
-	tr := statemachine.New(h.PoolMigrate)
-	if err := tr.Restore(context.Background(), objectID); err != nil {
+	if err := statemachine.New(h.PoolMigrate).Restore(context.Background(), objectID); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
 
-	// Now run with the stale version — DELETE must affect 0 rows.
-	n, err := q.HardDeleteObjectIfStillDeleted(context.Background(), rows[0].ID, staleVersion)
-	if err != nil {
-		t.Fatalf("HardDeleteObjectIfStillDeleted: %v", err)
-	}
-	if n != 0 {
-		t.Errorf("rows affected = %d, want 0 (Restore should have bumped version)", n)
-	}
+	storage := &recordingStorage{}
+	w := &worker.LifecycleHardDeleter{Q: q, Pool: h.PoolMigrate, Storage: storage}
+	w.Reclaim(context.Background(), rows[0]) // the row as listed, before the restore
+
 	if !mustObjectExists(t, h.PoolMigrate, objectID) {
-		t.Error("row should still exist (Restored)")
+		t.Error("the restored row was deleted")
+	}
+	storage.mu.Lock()
+	defer storage.mu.Unlock()
+	if len(storage.calls) != 0 {
+		t.Errorf("storage DELETE calls = %d, want 0: the restored object's bytes were deleted", len(storage.calls))
+	}
+	if n := pendingPurges(t, h.PoolMigrate, objectID); n != 0 {
+		t.Errorf("pending_purges rows = %d, want 0 for a restored object", n)
+	}
+}
+
+// TestHardDelete_StorageFailureLeavesADebt: S3 refuses the delete. The row is
+// already gone, so the bytes must stay recorded for PurgeDrainer to retry.
+func TestHardDelete_StorageFailureLeavesADebt(t *testing.T) {
+	h := pgharness.Setup(t)
+	tenantID := mustCreateTenant(t, h.PoolMigrate, "hd-s3-down")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "docs")
+	objectID := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "stuck")
+	mustSoftDeleteWithBackdate(t, h.PoolMigrate, objectID, 24*time.Hour)
+
+	storage := &recordingStorage{err: errors.New("simulated S3 outage")}
+	w := &worker.LifecycleHardDeleter{
+		Q: sqlc.New(h.PoolMigrate), Pool: h.PoolMigrate, Storage: storage,
+		TTL: time.Hour, BatchSize: 100,
+	}
+	w.Sweep(context.Background())
+
+	if mustObjectExists(t, h.PoolMigrate, objectID) {
+		t.Error("row still present: the row goes first, the bytes after")
+	}
+	if n := pendingPurges(t, h.PoolMigrate, objectID); n != 1 {
+		t.Errorf("pending_purges rows = %d, want 1 so the bytes are retried", n)
 	}
 }
 
@@ -152,13 +176,25 @@ type recordedDelete struct {
 type recordingStorage struct {
 	mu    sync.Mutex
 	calls []recordedDelete
+	err   error // returned by every DeleteObject when set
 }
 
 func (s *recordingStorage) DeleteObject(_ context.Context, _ string, bucket string, _ uuid.UUID, collection, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls = append(s.calls, recordedDelete{bucket: bucket, collection: collection, key: key})
-	return nil
+	return s.err
+}
+
+// pendingPurges counts the byte-reclaim debts recorded for objectID.
+func pendingPurges(t *testing.T, pool *pgxpool.Pool, objectID uuid.UUID) int {
+	t.Helper()
+	var n int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM pending_purges WHERE object_id = $1`, objectID).Scan(&n); err != nil {
+		t.Fatalf("count pending_purges: %v", err)
+	}
+	return n
 }
 
 // mustSoftDeleteWithBackdate flips the row to DELETED with a

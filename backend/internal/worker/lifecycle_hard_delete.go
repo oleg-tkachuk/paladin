@@ -17,10 +17,10 @@ import (
 // LifecycleHardDeleter walks DELETED rows past their cooling-off
 // window and:
 //
-//  1. Issues storage.DeleteObject against the S3 backend so the
-//     bytes actually go away (soft-delete leaves them in S3).
-//  2. Removes the Paladin row, freeing the (tenant, collection, key)
-//     slot for a fresh PUT.
+//  1. Removes the Paladin row, freeing the (tenant, collection, key)
+//     slot for a fresh PUT, and records the bytes as a purge debt.
+//  2. Deletes the bytes from the S3 backend (soft-delete leaves them
+//     there) and settles the debt; PurgeDrainer retries a failure.
 //
 // Why the cooling-off matters:
 //
@@ -36,12 +36,8 @@ import (
 //     HardDeleteObjectIfStillDeleted catches the case where the row
 //     was Restored mid-flight.
 //
-// Storage path failures: per-row failures are logged and the row is
-// NOT DB-deleted on the first try. The next sweep retries — S3 DELETE
-// is idempotent, so eventual success cleans up. If the storage error
-// persists (orphaned bucket, missing credentials), an operator
-// intervenes via direct DB query / S3 console; we don't auto-orphan
-// rows.
+// Storage path failures: the row is already gone, and its bytes stay
+// recorded in pending_purges, which PurgeDrainer retries with backoff.
 //
 // Disabled when TTL (the cooling-off period) is 0; the typical pattern
 // is to leave hard-delete off in dev, on with a 7d window in prod.
@@ -125,25 +121,24 @@ func (w *LifecycleHardDeleter) Sweep(ctx context.Context) {
 	}
 }
 
-// deleteOne is the per-row critical path:
+// Reclaim hard-deletes one listed row. Exported so integration tests can drive
+// a row they listed before changing it, which is the race Sweep cannot stage.
+func (w *LifecycleHardDeleter) Reclaim(ctx context.Context, r sqlc.ListHardDeletableRow) {
+	w.deleteOne(ctx, r)
+}
+
+// deleteOne removes the row before the bytes, never the other way round:
 //
-//  1. storage.DeleteObject — idempotent on the S3 side; success or
-//     a missing-key error are both fine ("already gone" is the
-//     desired terminal state).
-//  2. HardDeleteObjectIfStillDeleted — DB DELETE gated by
-//     resource_version. A concurrent Restore between steps 1 and
-//     2 bumps the version and the DB DELETE no-ops; the row stays
-//     AVAILABLE with bytes in S3 (operator's restore intent wins).
+//  1. One transaction deletes the row — gated on state DELETED and the
+//     resource_version that was listed — and records the bytes as a debt in
+//     pending_purges. A Restore that won the race leaves the row at another
+//     version: nothing is deleted and S3 is never asked.
+//  2. Only then the bytes go. Success settles the debt and announces
+//     paladin.object.purged on one transaction; failure leaves the debt for
+//     PurgeDrainer, so the bytes are retried rather than forgotten.
 //
-// Failure modes:
-//
-//   - Storage DELETE error → log + skip; next sweep retries (S3
-//     DELETE is idempotent, so a partial-failure-then-retry doesn't
-//     cause harm).
-//
-//   - DB DELETE returns 0 rows → either the row was Restored (good —
-//     we Want the live S3 object) or another worker beat us to it.
-//     Log at debug; nothing to do.
+// Deleting the bytes first, as this used to, stranded a Restore that landed
+// between the two steps: an AVAILABLE row whose bytes were gone.
 func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDeletableRow) {
 	tenantID := uuid.UUID(r.TenantID.Bytes)
 	objectID := uuid.UUID(r.ID.Bytes)
@@ -154,58 +149,81 @@ func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDel
 		zap.String("key", r.Path),
 	)
 
-	if err := w.Storage.DeleteObject(ctx, r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path); err != nil {
-		// We don't fail the whole sweep — log and try the next row.
-		// Storage-side missing-key errors should be tolerated by
-		// the adapter (S3 DELETE on absent key is a 204; SeaweedFS
-		// behaves the same), but if the adapter surfaces a real
-		// failure (network, auth) we'll retry on the next sweep.
-		logger.Warn("storage delete failed; will retry", zap.Error(err))
+	purgeID, err := uuid.NewV7()
+	if err != nil {
+		logger.Warn("purge id", zap.Error(err))
 		return
 	}
-
-	n, err := w.rowDeleteAndAnnounce(ctx, r, tenantID)
+	deleted, err := w.deleteRowRecordingDebt(ctx, r, tenantID, purgeID)
 	if err != nil {
 		logger.Warn("db hard-delete failed", zap.Error(err))
 		return
 	}
-	if n == 0 {
-		// Row was Restored or already deleted by another worker —
-		// either way the objects table no longer carries the row at
-		// our version; nothing to do. The S3 DELETE we issued IS the
-		// race-loss case; logged at debug because it's non-fatal but
-		// worth seeing if it ever spikes.
+	if !deleted {
+		// Restored, or another worker got there first: the row is no
+		// longer DELETED at the version we listed, and the bytes are
+		// untouched.
 		logger.Debug("row no longer DELETED at our version; skipped")
+		return
+	}
+
+	if err := w.Storage.DeleteObject(ctx, r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path); err != nil {
+		logger.Warn("storage delete failed; the purge drainer retries it", zap.Error(err))
+		return
+	}
+	if err := w.settleAndAnnounce(ctx, r, tenantID, purgeID); err != nil {
+		logger.Warn("settling the purge failed; the purge drainer retries it", zap.Error(err))
 		return
 	}
 	logger.Info("hard-deleted")
 }
 
-// rowDeleteAndAnnounce removes the row and enqueues paladin.object.purged in one
-// transaction, so a consumer never sees the announcement without the deletion
-// or vice versa. When no dispatcher is wired it degrades to the plain
-// autocommit delete this used to do.
-//
-// The zero-row case (a concurrent Restore bumped the version) deliberately
-// emits nothing: the operator's restore intent won, the row is live again, and
-// the bytes we already deleted are the race-loss the existing comment
-// describes — announcing a purge there would be wrong.
-func (w *LifecycleHardDeleter) rowDeleteAndAnnounce(ctx context.Context, r sqlc.ListHardDeletableRow, tenantID uuid.UUID) (int64, error) {
-	if w.Events == nil || w.Pool == nil {
-		return w.Q.HardDeleteObjectIfStillDeleted(ctx, r.ID, r.ResourceVersion)
+// deleteRowRecordingDebt deletes the row and records its bytes in
+// pending_purges on one transaction, so the bytes are never orphaned and never
+// deleted under a row that is still live. Reports whether the row was deleted.
+func (w *LifecycleHardDeleter) deleteRowRecordingDebt(ctx context.Context, r sqlc.ListHardDeletableRow, tenantID, purgeID uuid.UUID) (bool, error) {
+	if w.Pool == nil {
+		return false, errors.New("hard-deleter has no pool for its transaction")
 	}
 	tx, err := w.Pool.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	n, err := w.Q.WithTx(tx).HardDeleteObjectIfStillDeleted(ctx, r.ID, r.ResourceVersion)
+	q := w.Q.WithTx(tx)
+	n, err := q.HardDeleteObjectIfStillDeleted(ctx, r.ID, r.ResourceVersion)
 	if err != nil {
-		return 0, err
+		return false, err
 	}
 	if n == 0 {
-		return 0, tx.Commit(ctx)
+		return false, tx.Commit(ctx)
+	}
+	if err := q.InsertPendingPurge(ctx,
+		pgtype.UUID{Bytes: purgeID, Valid: true}, r.TenantID, r.ID,
+		r.BackendName, r.BucketName, r.CollectionName, r.Path,
+	); err != nil {
+		return false, fmt.Errorf("record purge debt: %w", err)
+	}
+	return true, tx.Commit(ctx)
+}
+
+// settleAndAnnounce clears the debt the bytes' removal paid, and emits
+// paladin.object.purged on the same transaction — but only if this call
+// settled it: PurgeDrainer may have paid the same debt first and announced it.
+func (w *LifecycleHardDeleter) settleAndAnnounce(ctx context.Context, r sqlc.ListHardDeletableRow, tenantID, purgeID uuid.UUID) error {
+	tx, err := w.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	n, err := w.Q.WithTx(tx).DeletePendingPurge(ctx, pgtype.UUID{Bytes: purgeID, Valid: true})
+	if err != nil {
+		return err
+	}
+	if n == 0 || w.Events == nil {
+		return tx.Commit(ctx)
 	}
 	objectID := uuid.UUID(r.ID.Bytes)
 	if _, err := w.Events.DispatchTx(ctx, tx, tenantID.String(), Event{
@@ -225,9 +243,9 @@ func (w *LifecycleHardDeleter) rowDeleteAndAnnounce(ctx context.Context, r sqlc.
 			"source":     "lifecycle",
 		},
 	}); err != nil {
-		return 0, err
+		return err
 	}
-	return n, tx.Commit(ctx)
+	return tx.Commit(ctx)
 }
 
 func (w *LifecycleHardDeleter) log() *zap.Logger {
