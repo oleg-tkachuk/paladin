@@ -5,6 +5,9 @@ import { z } from "zod";
 export interface ViewFilters {
   search?: string;
   status?: string;
+  tag?: string;
+  type?: string;
+  meta?: string;
   recursive?: boolean;
 }
 
@@ -19,9 +22,14 @@ export interface SavedView {
 // the effect with a TypeError on the next `.map`.
 export const SavedViewSchema = z.object({
   name: z.string(),
+  // tag / type / meta arrived later; views saved before them parse as they
+  // were, with those facets unset.
   filters: z.object({
     search: z.string().optional(),
     status: z.string().optional(),
+    tag: z.string().optional(),
+    type: z.string().optional(),
+    meta: z.string().optional(),
     recursive: z.boolean().optional(),
   }),
 });

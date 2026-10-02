@@ -148,9 +148,25 @@ func NewHealthHandler(db *postgres.DB, cfg config.Runtime, l *zap.Logger) *healt
 		Logger:        l.Named("health"),
 		LogSuccesses:  cfg.LogProbes,
 		SnapshotToken: cfg.HealthSnapshotToken,
-		Ready:         []health.Check{dbPing},
+		Ready:         []health.Check{dbPing, replicaCheck(db)},
 		Startup:       []health.Check{dbPing},
 	}
+}
+
+// replicaCheck shows the read replica on the health page. Never critical: a
+// replica that is down or behind slows nothing, because the reads it would
+// serve go to the primary — failing readiness for it would turn an
+// optimisation into an outage. With no replica it is an informational
+// "disabled" row.
+func replicaCheck(db *postgres.DB) health.Check {
+	c := health.Check{Name: "postgres-replica", Category: health.CategoryDatabase}
+	if db == nil || !db.Reads.HasReplica() {
+		c.Note = "disabled"
+		c.Func = func(context.Context) error { return nil }
+		return c
+	}
+	c.Func = func(context.Context) error { return db.Reads.HealthErr() }
+	return c
 }
 
 // AddSubsystemCheck appends a Category=subsystem check (capability,

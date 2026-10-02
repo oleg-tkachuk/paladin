@@ -37,11 +37,14 @@ type LifecycleObjectIter interface {
 // LifecycleObjectRow is the minimal projection per object the worker reads.
 type LifecycleObjectRow struct {
 	ObjectID    uuid.UUID
+	Key         string
 	State       string
 	CreatedAt   time.Time
+	UpdatedAt   time.Time
 	CommittedAt *time.Time
 	SizeBytes   int64
 	ContentType string
+	ExternalRef string
 	Tags        map[string]string
 	Metadata    map[string]string
 }
@@ -250,32 +253,22 @@ func buildExpirers(rules []admindomain.LifecycleRule, now time.Time, eval *cel.E
 	return out
 }
 
-// lifecycleRowToCELVars projects a LifecycleObjectRow into the variable
-// map shape expected by cel.ObjectSchema. Mirrors the projection used by
-// the data-plane ListObjects filter so policies behave identically.
+// lifecycleRowToCELVars projects a LifecycleObjectRow through
+// cel.ObjectVars, the projection the data plane's ListObjects filter uses, so
+// a rule matches exactly the objects the same expression lists. It used to be
+// a copy that lacked `key`: every `key.startsWith(...)` rule failed to
+// evaluate on every object and expired nothing.
 func lifecycleRowToCELVars(row LifecycleObjectRow) map[string]any {
-	vars := map[string]any{
-		"state":        row.State,
-		"size_bytes":   row.SizeBytes,
-		"content_type": row.ContentType,
-		"tags":         coalesceMap(row.Tags),
-		"metadata":     coalesceMap(row.Metadata),
-	}
-	if !row.CreatedAt.IsZero() {
-		vars["created_at"] = row.CreatedAt
-	}
-	if row.CommittedAt != nil && !row.CommittedAt.IsZero() {
-		vars["committed_at"] = *row.CommittedAt
-	}
-	return vars
-}
-
-// coalesceMap returns m unchanged when non-nil; an empty map otherwise.
-// CEL's `tags["foo"]` semantics differ between nil-map and empty-map —
-// always present an empty map to keep policies portable.
-func coalesceMap(m map[string]string) map[string]string {
-	if m != nil {
-		return m
-	}
-	return map[string]string{}
+	return cel.ObjectVars(cel.ObjectRow{
+		Key:         row.Key,
+		State:       row.State,
+		ContentType: row.ContentType,
+		SizeBytes:   row.SizeBytes,
+		Tags:        row.Tags,
+		Metadata:    row.Metadata,
+		ExternalRef: row.ExternalRef,
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
+		CommittedAt: row.CommittedAt,
+	})
 }

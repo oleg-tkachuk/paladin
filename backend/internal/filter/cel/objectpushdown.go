@@ -29,42 +29,20 @@ type ObjectPushdown struct {
 	MetadataEq map[string]string
 }
 
-// ExtractObjectPushdown parses expr against ObjectSchema and walks the
-// top-level `&&` chain for predicates the objects query can express
-// (state and content-type equality, key and content-type prefix, key
-// substring, tag and metadata equality). A parse error is non-fatal —
-// the caller falls back to a pure in-memory CEL scan with the same
-// expression — so callers may ignore the error and treat a zero
-// ObjectPushdown as "push nothing down".
+// ExtractObjectPushdown is ExtractObjectBranches for a caller that can run
+// only one query: the single branch when there is one, nothing otherwise. A
+// parse error is non-fatal — the caller falls back to a pure in-memory CEL
+// scan with the same expression — so callers may ignore the error and treat a
+// zero ObjectPushdown as "push nothing down".
 func ExtractObjectPushdown(expr string) (ObjectPushdown, error) {
-	if expr == "" {
+	branches, err := ExtractObjectBranches(expr)
+	if err != nil {
+		return ObjectPushdown{}, err
+	}
+	if len(branches) != 1 {
 		return ObjectPushdown{}, nil
 	}
-	env, err := buildEnv(ObjectSchema)
-	if err != nil {
-		return ObjectPushdown{}, fmt.Errorf("cel: build env: %w", err)
-	}
-	ast, iss := env.Parse(expr)
-	if iss != nil && iss.Err() != nil {
-		return ObjectPushdown{}, fmt.Errorf("cel: parse %q: %w", expr, iss.Err())
-	}
-	var out ObjectPushdown
-	walkObjectConjuncts(ast.NativeRep().Expr(), &out)
-	return out, nil
-}
-
-func walkObjectConjuncts(e celast.Expr, out *ObjectPushdown) {
-	if e == nil || e.Kind() != celast.CallKind {
-		return
-	}
-	c := e.AsCall()
-	if c.FunctionName() == "_&&_" {
-		for _, a := range c.Args() {
-			walkObjectConjuncts(a, out)
-		}
-		return
-	}
-	recogniseObjectLeaf(c, out)
+	return branches[0], nil
 }
 
 func recogniseObjectLeaf(c celast.CallExpr, out *ObjectPushdown) {
@@ -193,4 +171,148 @@ func setFirst(m *map[string]string, k, v string) {
 		return
 	}
 	(*m)[k] = v
+}
+
+// maxObjectBranches caps how many disjuncts a filter is split into. Each
+// branch is one indexed query, so a filter that expands past this is
+// cheaper to scan than to fan out; it then pushes nothing down, which is
+// always correct.
+const maxObjectBranches = 8
+
+// ExtractObjectBranches is ExtractObjectPushdown for filters with `||`.
+//
+// It rewrites the SQL-expressible part of expr in disjunctive normal form:
+// one ObjectPushdown per disjunct, the union of whose matches contains every
+// object the full expression accepts. Anything it does not recognise — a
+// negation, a comparison on size, a function — is taken as "true", which only
+// widens a branch. `x in ["a", "b"]` over a pushable field becomes one branch
+// per value.
+//
+// A single empty branch means nothing can be pushed down: either nothing was
+// recognised, or some disjunct is unconstrained (which makes the whole OR
+// unconstrained), or the expansion passed maxObjectBranches. Callers query
+// once per branch and merge; the compiled program stays authoritative.
+func ExtractObjectBranches(expr string) ([]ObjectPushdown, error) {
+	if expr == "" {
+		return []ObjectPushdown{{}}, nil
+	}
+	env, err := buildEnv(ObjectSchema)
+	if err != nil {
+		return nil, fmt.Errorf("cel: build env: %w", err)
+	}
+	ast, iss := env.Parse(expr)
+	if iss != nil && iss.Err() != nil {
+		return nil, fmt.Errorf("cel: parse %q: %w", expr, iss.Err())
+	}
+	return objectDNF(ast.NativeRep().Expr()), nil
+}
+
+// unconstrained is the DNF of "true": one branch that narrows nothing.
+func unconstrained() []ObjectPushdown { return []ObjectPushdown{{}} }
+
+func objectDNF(e celast.Expr) []ObjectPushdown {
+	if e == nil || e.Kind() != celast.CallKind {
+		return unconstrained()
+	}
+	c := e.AsCall()
+	args := c.Args()
+	switch c.FunctionName() {
+	case "_&&_":
+		out := unconstrained()
+		for _, a := range args {
+			sub := objectDNF(a)
+			next := make([]ObjectPushdown, 0, len(out)*len(sub))
+			for _, x := range out {
+				for _, y := range sub {
+					next = append(next, mergePushdown(x, y))
+				}
+			}
+			if len(next) > maxObjectBranches {
+				return unconstrained()
+			}
+			out = next
+		}
+		return out
+
+	case "_||_":
+		var out []ObjectPushdown
+		for _, a := range args {
+			for _, b := range objectDNF(a) {
+				if b.empty() {
+					return unconstrained()
+				}
+				out = append(out, b)
+			}
+		}
+		if len(out) == 0 || len(out) > maxObjectBranches {
+			return unconstrained()
+		}
+		return out
+
+	case "@in":
+		if len(args) != 2 || args[1].Kind() != celast.ListKind {
+			return unconstrained()
+		}
+		elems := args[1].AsList().Elements()
+		if len(elems) == 0 || len(elems) > maxObjectBranches {
+			return unconstrained()
+		}
+		out := make([]ObjectPushdown, 0, len(elems))
+		for _, el := range elems {
+			var pd ObjectPushdown
+			recogniseObjectEq(args[0], el, &pd)
+			if pd.empty() {
+				return unconstrained()
+			}
+			out = append(out, pd)
+		}
+		return out
+	}
+
+	var pd ObjectPushdown
+	recogniseObjectLeaf(c, &pd)
+	return []ObjectPushdown{pd}
+}
+
+func (p ObjectPushdown) empty() bool {
+	return p.StateEq == "" && p.KeyPrefix == "" && p.KeyContains == "" &&
+		p.ContentTypeEq == "" && p.ContentTypePrefix == "" &&
+		len(p.TagsEq) == 0 && len(p.MetadataEq) == 0
+}
+
+// mergePushdown is the conjunction of two branches. A field set on both keeps
+// a's value — the same first-wins rule the && walk uses, and a superset
+// either way.
+func mergePushdown(a, b ObjectPushdown) ObjectPushdown {
+	out := a
+	pick := func(dst *string, v string) {
+		if *dst == "" {
+			*dst = v
+		}
+	}
+	pick(&out.StateEq, b.StateEq)
+	pick(&out.KeyPrefix, b.KeyPrefix)
+	pick(&out.KeyContains, b.KeyContains)
+	pick(&out.ContentTypeEq, b.ContentTypeEq)
+	pick(&out.ContentTypePrefix, b.ContentTypePrefix)
+	out.TagsEq = mergeMap(a.TagsEq, b.TagsEq)
+	out.MetadataEq = mergeMap(a.MetadataEq, b.MetadataEq)
+	return out
+}
+
+// mergeMap returns a new map so branches sharing a parent never alias.
+func mergeMap(a, b map[string]string) map[string]string {
+	if len(a) == 0 && len(b) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(a)+len(b))
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		if _, seen := out[k]; !seen {
+			out[k] = v
+		}
+	}
+	return out
 }
