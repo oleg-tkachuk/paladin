@@ -384,6 +384,14 @@ tasks:
     cmds:
       - ./scripts/release-sign.test.sh
 
+  verify:live:
+    desc: "Check the deployed release's contracts end to end against the cluster (KUBE_CONTEXT, NAMESPACE)"
+    # Not part of verify-all: it needs a running cluster with the release
+    # deployed. It cleans up after itself; the tenant ends in the trash,
+    # kept there by the charges its capability calls recorded.
+    cmds:
+      - ./scripts/live-smoke.sh
+
   verify:go-build-cache:
     desc: "The backend image's go build cache round-trips through scripts/go-build-cache.sh"
     # Not part of verify-all: it needs Docker and a throwaway buildx builder.
