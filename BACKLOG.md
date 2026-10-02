@@ -1110,58 +1110,6 @@ finding moving from "packages you import" to "your code is affected".
   names for the same subsystem is how this drift starts.
 - **Blockers:** none — gated on semantic search becoming a committed feature.
 
-### Something inside the api pod speaks plain HTTP to its own TLS port
-
-- **Status:** Deferred (cosmetic today; the client was not identified).
-- **Reason:** The api pod logs `http: TLS handshake error from 127.0.0.1:
-  client sent an HTTP request to an HTTPS server` — 14 of them inside a
-  21-second burst, 18 minutes into the pod's life, during an e2e run. No other
-  pod logs it. It is not the kubelet probes: liveness, readiness and startup on
-  api and admin all carry `scheme: HTTPS`, their periods (20s / 10s / 5s) do
-  not fit a 14-in-21-seconds burst, and a probe would not come from 127.0.0.1.
-  Whatever the client is, it is inside the pod and it is wrong about the
-  scheme. Harmless so far — the connections fail and something evidently
-  retries or ignores them — but it is noise in exactly the log an operator
-  greps when chasing a real handshake failure, which is how a genuine one
-  (the console BFF's, from a different IP) nearly got lost in the count.
-  The burst has not recurred since — two full e2e runs on later builds logged
-  none — so it cannot currently be caught in the act.
-- **Definition of Done:** The client is identified and either corrected or
-  documented. The message carries `listen_addr`, so the next occurrence says
-  whether it arrived on data (8080) or iam (8085).
-- **Suspects eliminated 2026-08-28**, without waiting for a recurrence:
-  - *The MCP loader's `http://localhost:8085` default.* Cleared, and the code
-    is gone. `config.LoadMCP` / `config.MCPDefaults` were never called by
-    anything — `serve mcp` reads `cfg.MCP.Upstreams` through the main
-    CUE-validated loader — so the default could not have dialled anything.
-    Its own tests were what made it look alive.
-  - *The readiness self-dial* (`dialLocalListener`). It is TLS-aware: it uses
-    a `tls.Dialer` whenever the listener it probes has TLS enabled. Its
-    historical failure mode was the OTHER message ("EOF"), already fixed.
-  - *`kubectl port-forward`*, whose traffic does arrive from 127.0.0.1 and
-    would fit the burst shape. `scripts/e2e-cluster.sh` uses ingress
-    hostnames over https and forwards no ports, so it is not the e2e run —
-    though a hand-run port-forward during that window remains possible and
-    would explain everything.
-- **Narrowed 2026-10-02:**
-  - *The message names a plain-HTTP client, nothing else.* A Go TLS server
-    answering `curl http://127.0.0.1:<port>` logs exactly this line, per
-    request, with the client's own address. A connection that opens and sends
-    nothing logs `EOF` instead — the readiness self-dial's old failure, not
-    this one. So each of the 14 lines was one HTTP request, and the burst was a
-    loop or a retrying client.
-  - *It cannot recur on the local cluster as it runs now.* Internal TLS is off
-    there (the planes serve plain HTTP inside the cluster), so a plain-HTTP
-    client gets an answer rather than this error. Catching it needs internal
-    TLS back on.
-  - *Not verified:* that `kubectl port-forward` traffic reaches the pod from
-    127.0.0.1. That is how port-forward is documented to work, and it would
-    make a hand-run `curl http://localhost:8080` loop through a forward the
-    whole explanation, but the check was not run on the cluster.
-- **Blockers:** it stopped happening. What remains is a client that leaves no
-  trace in the tree, so `ss -tnp` inside the pod during a burst is still the
-  step that finishes this — and there is no burst to catch.
-
 ## UI / Admin Console
 
 ### Option: Inter and IBM Plex Mono as the console's typefaces
