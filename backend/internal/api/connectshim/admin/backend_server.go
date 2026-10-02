@@ -59,6 +59,12 @@ func (s *BackendServer) ListBackends(ctx context.Context, req *connect.Request[p
 	return connect.NewResponse(out), nil
 }
 
+// updateBackendPaths are the StorageBackend fields UpdateBackend applies.
+var updateBackendPaths = []string{
+	"display_name", "endpoint", "public_endpoint", "region", "force_path_style",
+	"credentials_secret_ref", "sse", "events", "cedar_policy",
+}
+
 func (s *BackendServer) UpdateBackend(ctx context.Context, req *connect.Request[pb.UpdateBackendRequest]) (*connect.Response[pb.StorageBackend], error) {
 	m := req.Msg
 	id, err := backendIDFromName(m.GetName())
@@ -69,6 +75,9 @@ func (s *BackendServer) UpdateBackend(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
+	}
+	if err := convx.CheckMask(m.GetUpdateMask().GetPaths(), updateBackendPaths); err != nil {
+		return nil, err
 	}
 	b := backendFromProto(m.GetBackend())
 	b.BackendID = id

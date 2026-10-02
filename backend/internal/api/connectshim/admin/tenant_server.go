@@ -133,6 +133,10 @@ func (s *TenantServer) GetTenantStorageMigration(ctx context.Context, req *conne
 	return connect.NewResponse(storageMigrationToProto(m)), nil
 }
 
+// updateTenantPaths are the Tenant fields UpdateTenant applies; tenant_id and
+// slug are refused above with their own messages.
+var updateTenantPaths = []string{"display_name", "labels", "inherited_cedar_policy"}
+
 func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb.UpdateTenantRequest]) (*connect.Response[pb.Tenant], error) {
 	if err := requireCompilablePolicy(req.Msg.GetTenant().GetInheritedCedarPolicy()); err != nil {
 		return nil, err
@@ -161,6 +165,9 @@ func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb
 			return nil, connect.NewError(connect.CodeInvalidArgument,
 				fmt.Errorf("slug is immutable; use RenameTenantSlug"))
 		}
+	}
+	if err := convx.CheckMask(mask, updateTenantPaths); err != nil {
+		return nil, err
 	}
 	src := m.GetTenant()
 	if slices.Contains(mask, "display_name") {

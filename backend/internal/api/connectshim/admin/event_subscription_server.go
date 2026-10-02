@@ -99,6 +99,14 @@ func (s *EventSubscriptionServer) GetSubscription(ctx context.Context, req *conn
 	return connect.NewResponse(eventSubToProto(out)), nil
 }
 
+// updateEventSubscriptionPaths are the EventSubscription fields
+// UpdateSubscription applies.
+var updateEventSubscriptionPaths = []string{
+	admindomain.EventSubscriptionPathFilter,
+	admindomain.EventSubscriptionPathSink,
+	admindomain.EventSubscriptionPathDisabled,
+}
+
 func (s *EventSubscriptionServer) UpdateSubscription(ctx context.Context, req *connect.Request[pb.UpdateSubscriptionRequest]) (*connect.Response[pb.EventSubscription], error) {
 	m := req.Msg
 	tenantID, id, err := s.resolveSubscriptionName(ctx, m.GetName())
@@ -109,6 +117,9 @@ func (s *EventSubscriptionServer) UpdateSubscription(ctx context.Context, req *c
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
+	}
+	if err := convx.CheckMask(m.GetUpdateMask().GetPaths(), updateEventSubscriptionPaths); err != nil {
+		return nil, err
 	}
 	src := m.GetSubscription()
 	kind, cfg := sinkToConfig(src.GetSink())

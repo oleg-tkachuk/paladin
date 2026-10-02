@@ -111,6 +111,9 @@ func (s *UserServer) GetUser(ctx context.Context, req *connect.Request[pb.GetUse
 	return connect.NewResponse(userToProto(u)), nil
 }
 
+// updateUserPaths are the UpdateUserRequest fields UpdateUser applies.
+var updateUserPaths = []string{"display_name", "disabled", "roles"}
+
 func (s *UserServer) UpdateUser(ctx context.Context, req *connect.Request[pb.UpdateUserRequest]) (*connect.Response[pb.User], error) {
 	m := req.Msg
 	id, err := userIDFromName(m.GetName())
@@ -121,6 +124,9 @@ func (s *UserServer) UpdateUser(ctx context.Context, req *connect.Request[pb.Upd
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
+	}
+	if err := convx.CheckMask(m.GetUpdateMask().GetPaths(), updateUserPaths); err != nil {
+		return nil, err
 	}
 	out, err := s.H.UpdateUser(ctx, userh.UpdateUserInput{
 		UserID:          id,

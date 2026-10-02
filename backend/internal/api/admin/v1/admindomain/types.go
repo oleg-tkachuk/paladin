@@ -225,6 +225,17 @@ type Quota struct {
 
 // ─── Event subscription ─────────────────────────────────────────────────────
 
+// The update_mask paths UpdateSubscription applies: the EventSubscription
+// message's proto field names, which the shim checks and the repository reads.
+// They differ from the column names (cel_filter, sink_kind, sink_config); the
+// repository once read those instead, and every filter or sink edit was
+// silently dropped.
+const (
+	EventSubscriptionPathFilter   = "filter"
+	EventSubscriptionPathSink     = "sink"
+	EventSubscriptionPathDisabled = "disabled"
+)
+
 type EventSubscription struct {
 	SubscriptionID  uuid.UUID
 	TenantID        uuid.UUID

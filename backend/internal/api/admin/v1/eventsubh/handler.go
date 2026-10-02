@@ -128,7 +128,7 @@ func (h *Handler) Update(ctx context.Context, tenantID uuid.UUID, s admindomain.
 	// an empty mask means full replace (AIP), otherwise the "filter" path
 	// must be present. Skips false-rejecting a stale filter the caller isn't
 	// applying (e.g. a sink-only update).
-	if len(mask) == 0 || slices.Contains(mask, "filter") {
+	if len(mask) == 0 || slices.Contains(mask, admindomain.EventSubscriptionPathFilter) {
 		if err := celpkg.Validate(celpkg.EventEnvelopeSchema, s.CELFilter); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 		}
