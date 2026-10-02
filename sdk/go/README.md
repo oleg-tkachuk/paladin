@@ -187,7 +187,7 @@ p, err := paladin.Connect(endpoints, paladin.WithTokens(session), paladin.WithTL
 client of your own; `WithTLS` with `WithHTTPClient` is `ErrTLSAndHTTP`.
 These connections are made directly: a proxy from the environment would
 make the TLS connection itself, without the files.
-||||||| parent of 24044e2c (feat(sdk): give go callers typed errors with the server's reason)
+
 ### Errors
 
 Every failed call through a client from `New` or `Connect` returns an

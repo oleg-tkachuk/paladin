@@ -5,12 +5,16 @@ from __future__ import annotations
 import importlib
 import inspect
 import pkgutil
+import re
 from pathlib import Path
 
 README = Path(__file__).resolve().parents[1] / "README.md"
 PLANES = ("admin", "data", "iam")
 CLIENT_SUFFIX = "ClientSync"
 CONNECT_MODULE_SUFFIX = "_connect"
+# The lines git writes into a file it could not merge, diff3's base marker
+# included: seven of the same character at line start.
+CONFLICT_MARKER = re.compile(r"^(<{7}|\|{7}|={7}|>{7})( |$)", re.MULTILINE)
 
 
 def _rows() -> dict[str, str]:
@@ -55,3 +59,9 @@ def test_readme_lists_every_method() -> None:
             continue
         missing += [f"{svc}.{m}" for m in methods if f"`{m}`" not in rows[svc]]
     assert not missing, f"README.md does not list: {', '.join(missing)}"
+
+
+def test_readme_has_no_conflict_markers() -> None:
+    # A release tag publishes the README as it is.
+    found = CONFLICT_MARKER.findall(README.read_text())
+    assert not found, f"README.md holds merge-conflict markers: {found}"

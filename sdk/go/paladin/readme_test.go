@@ -2,6 +2,7 @@ package paladin_test
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -20,6 +21,22 @@ const (
 	// registry holds (google.*, buf.validate, …).
 	contractPackagePrefix = "paladin."
 )
+
+// conflictMarker matches the lines git writes into a file it could not merge,
+// diff3's base marker included: seven of the same character at line start.
+var conflictMarker = regexp.MustCompile(`(?m)^(<{7}|\|{7}|={7}|>{7})( |$)`)
+
+// TestReadmeHasNoConflictMarkers keeps an unresolved merge out of the README,
+// which a release tag publishes as it is.
+func TestReadmeHasNoConflictMarkers(t *testing.T) {
+	raw, err := os.ReadFile(readmePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range conflictMarker.FindAll(raw, -1) {
+		t.Errorf("README.md holds a merge-conflict marker: %q", m)
+	}
+}
 
 // TestReadmeListsEveryMethod keeps the method tables in README.md in step with
 // the generated services: a table row is `| \`Service\` | \`A\`, \`B\` |`.
