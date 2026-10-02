@@ -17,8 +17,9 @@
 //      as the row is committed; the worker absorbs the throughput.
 //
 // All actions are idempotent: backend CreateBucket already swallows
-// "already-owned-by-you", and MarkProvisionReady is a state-guarded
-// UPDATE that is safe to call concurrently from multiple replicas.
+// "already-owned-by-you", and each state write applies only to a row still in
+// the state the worker listed it in, so a deletion requested mid-provision is
+// not undone and a bucket created again under the same name is not deleted.
 
 package worker
 
@@ -259,8 +260,7 @@ func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindoma
 	// Backend confirms the bucket is gone — drop the row AND enqueue the
 	// terminal paladin.bucket.deleted in one tx (ADR-0003), so a subscriber sees
 	// the bucket actually disappear (the handler only fired `.deleting` when
-	// the row flipped). expectedVersion is 0 because the OCC check was
-	// enforced at MarkDeleting time; the row hasn't been touched since.
+	// the row flipped).
 	if err := r.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		// Read the owner (fan-out target) on the tx before removing the row.
 		// A missing row means a concurrent replica already finished — treat
@@ -272,7 +272,16 @@ func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindoma
 		if gErr != nil {
 			return gErr
 		}
-		if dErr := r.repo.DeleteTx(ctx, tx, row.BackendID, row.BucketName, 0); dErr != nil {
+		if !markedForDeletion(b.ProvisionState) {
+			// Deleted and created again under the same name since it was
+			// listed: this row is a new bucket, not the one being removed.
+			log.Warn("bucket is no longer marked for deletion; row kept",
+				zap.String("provision_state", b.ProvisionState))
+			return nil
+		}
+		// At the version read on this tx, so a concurrent change refuses the
+		// delete rather than being removed with it.
+		if dErr := r.repo.DeleteTx(ctx, tx, row.BackendID, row.BucketName, b.ResourceVersion); dErr != nil {
 			return dErr
 		}
 		return r.emitBucketDeleted(ctx, tx, b)
@@ -281,6 +290,12 @@ func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindoma
 		return
 	}
 	log.Info("bucket deleted")
+}
+
+// markedForDeletion reports whether a row is in the deletion outbox.
+func markedForDeletion(state string) bool {
+	return state == admindomain.BucketProvisionStateDeleting ||
+		state == admindomain.BucketProvisionStateDeletionFailed
 }
 
 // emitBucketDeleted enqueues the terminal paladin.bucket.deleted on the row-

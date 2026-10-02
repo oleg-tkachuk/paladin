@@ -310,6 +310,7 @@ func TestBucketReconciler_DeleteAnnouncesTheTerminalEvent(t *testing.T) {
 	owner := uuid.New()
 	repo := &fakeBucketRepo{getResult: admindomain.Bucket{
 		BackendID: "primary", BucketName: "b1", OwnerTenantID: owner,
+		ProvisionState: admindomain.BucketProvisionStateDeleting,
 	}}
 	events := &fakeBucketEvents{}
 	r := newReconciler(repo, &fakeProvisioner{})
@@ -344,7 +345,9 @@ func TestBucketReconciler_DeleteAnnouncesTheTerminalEvent(t *testing.T) {
 // makes the removal roll back. Swallowed inside the closure it would commit
 // the delete and the bucket would vanish with nobody told.
 func TestBucketReconciler_EventFailureReachesTheTxBoundary(t *testing.T) {
-	repo := &fakeBucketRepo{}
+	repo := &fakeBucketRepo{getResult: admindomain.Bucket{
+		ProvisionState: admindomain.BucketProvisionStateDeleting,
+	}}
 	events := &fakeBucketEvents{err: errBackend}
 	r := newReconciler(repo, &fakeProvisioner{})
 	r.SetEventProducer(events)
@@ -472,4 +475,27 @@ func messages(entries []observer.LoggedEntry) []string {
 		out[i] = e.Message
 	}
 	return out
+}
+
+// A bucket deleted and created again under the same name between the listing
+// and the row removal is a new bucket: its row is not the deletion's to
+// remove, nor is it announced as deleted.
+func TestBucketReconciler_RecreatedBucketKeepsItsRow(t *testing.T) {
+	owner := uuid.New()
+	repo := &fakeBucketRepo{getResult: admindomain.Bucket{
+		BackendID: "primary", BucketName: "b1", OwnerTenantID: owner,
+		ProvisionState: "pending",
+	}}
+	events := &fakeBucketEvents{}
+	r := newReconciler(repo, &fakeProvisioner{})
+	r.SetEventProducer(events)
+
+	r.reconcileDeleteOne(context.Background(), provisionRow(owner))
+
+	if repo.deleteTxN != 0 {
+		t.Error("the row of a bucket created again under the same name was deleted")
+	}
+	if len(events.dispatched) != 0 {
+		t.Errorf("a live bucket was announced as deleted: %v", events.dispatched)
+	}
 }

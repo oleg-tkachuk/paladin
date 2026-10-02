@@ -492,6 +492,7 @@ SET provision_state    = CASE WHEN $3::bool THEN 'deletion_failed' ELSE 'deletin
 WHERE id = (SELECT b.id FROM buckets b
               JOIN storage_backends sb ON sb.id = b.backend_id
              WHERE sb.name = $1 AND b.name = $2)
+  AND provision_state IN ('deleting', 'deletion_failed')
 `
 
 // Mirror of MarkBucketProvisionFailed for the delete side. terminal=true
@@ -519,6 +520,7 @@ SET provision_state    = CASE WHEN $3::bool THEN 'failed' ELSE 'pending' END,
 WHERE id = (SELECT b.id FROM buckets b
               JOIN storage_backends sb ON sb.id = b.backend_id
              WHERE sb.name = $1 AND b.name = $2)
+  AND provision_state IN ('pending', 'failed')
 `
 
 // terminal=true → the worker hit a non-retryable error (auth denied,
@@ -547,8 +549,11 @@ SET provision_state    = 'ready',
 WHERE id = (SELECT b.id FROM buckets b
               JOIN storage_backends sb ON sb.id = b.backend_id
              WHERE sb.name = $1 AND b.name = $2)
+  AND provision_state IN ('pending', 'failed')
 `
 
+// Only a row still being provisioned: a bucket marked for deletion while its
+// creation was in flight stays marked, rather than coming back as ready.
 func (q *Queries) MarkBucketProvisionReady(ctx context.Context, name string, name_2 string) (int64, error) {
 	result, err := q.db.Exec(ctx, markBucketProvisionReady, name, name_2)
 	if err != nil {

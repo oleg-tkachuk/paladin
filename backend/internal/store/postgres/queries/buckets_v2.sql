@@ -38,6 +38,8 @@ ORDER BY b.last_provision_at NULLS FIRST, sb.name, b.name
 LIMIT sqlc.arg('limit_count')::int;
 
 -- name: MarkBucketProvisionReady :execrows
+-- Only a row still being provisioned: a bucket marked for deletion while its
+-- creation was in flight stays marked, rather than coming back as ready.
 UPDATE buckets
 SET provision_state    = 'ready',
     provision_error    = '',
@@ -45,7 +47,8 @@ SET provision_state    = 'ready',
     last_provision_at  = now()
 WHERE id = (SELECT b.id FROM buckets b
               JOIN storage_backends sb ON sb.id = b.backend_id
-             WHERE sb.name = $1 AND b.name = $2);
+             WHERE sb.name = $1 AND b.name = $2)
+  AND provision_state IN ('pending', 'failed');
 
 -- name: MarkBucketProvisionFailed :execrows
 -- terminal=true → the worker hit a non-retryable error (auth denied,
@@ -59,7 +62,8 @@ SET provision_state    = CASE WHEN sqlc.arg('terminal')::bool THEN 'failed' ELSE
     last_provision_at  = now()
 WHERE id = (SELECT b.id FROM buckets b
               JOIN storage_backends sb ON sb.id = b.backend_id
-             WHERE sb.name = $1 AND b.name = $2);
+             WHERE sb.name = $1 AND b.name = $2)
+  AND provision_state IN ('pending', 'failed');
 
 -- name: ListBucketsV2 :many
 -- owner_tenant_id is an optional filter (nullable arg → skipped).
@@ -251,4 +255,5 @@ SET provision_state    = CASE WHEN sqlc.arg('terminal')::bool THEN 'deletion_fai
     last_provision_at  = now()
 WHERE id = (SELECT b.id FROM buckets b
               JOIN storage_backends sb ON sb.id = b.backend_id
-             WHERE sb.name = $1 AND b.name = $2);
+             WHERE sb.name = $1 AND b.name = $2)
+  AND provision_state IN ('deleting', 'deletion_failed');
