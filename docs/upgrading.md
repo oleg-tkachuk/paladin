@@ -42,6 +42,26 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## Unreleased — the SDKs answer a consumer's review
+
+The contract does not change. What a caller may notice:
+
+- **Python: a generated client takes `http_client=client.http_client()`.**
+  The SDK reads the server's release and `Retry-After` at the transport now,
+  not from connect-python's internals. `connect()` builds such a client
+  itself; one built without it raises errors with no `server_version` and
+  warns once. An `http_client` of your own wraps its transport in
+  `paladin.RelaySyncTransport`.
+- **Go: an RPC through `WithTLS` has no response-header timeout**, as without
+  TLS; its context bounds it. Transfers keep theirs.
+- **Go: `TLS.MinVersion`** raises the floor from TLS 1.2. After a rotation,
+  connections on the old files close once idle.
+- **The fakes complete without an ETag**, return a completed object on a
+  repeat, and serve `EnsureTenantStorage`, as the server does.
+- **A Python build without git** reads its version from a tag's source
+  archive, or reports `0.0.0+unknown` instead of `0.0.0`.
+
+
 ## v0.14.0 — the Python SDK's transfers are declared once, stream and verify
 
 The contract does not change. The Python SDK's `upload` and `download` now
