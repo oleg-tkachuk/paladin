@@ -1,10 +1,15 @@
 # Paladin Python SDK
 
-Not published to PyPI. Install from the repository:
+Not published to PyPI. Install from the repository, pinned to an SDK release
+— a `sdk/go/vX.Y.Z` tag from the
+[releases](https://github.com/oleg-tkachuk/paladin/releases):
 
 ```bash
-pip install "git+https://github.com/oleg-tkachuk/paladin#subdirectory=sdk/python"
+pip install "paladin-sdk @ git+https://github.com/oleg-tkachuk/paladin@sdk/go/vX.Y.Z#subdirectory=sdk/python"
 ```
+
+In a `requirements.txt` or `pyproject.toml`, the same `paladin-sdk @ git+…`
+line. Pin the tag: a branch moves under a lock file.
 
 Two parts, both imported as `paladin`:
 
@@ -18,8 +23,9 @@ Two parts, both imported as `paladin`:
   And what takes more than one call (`paladin.workflows`): paging, waiting on
   an operation, update masks, uploads and downloads.
 
-Built on [connect-python](https://github.com/connectrpc/connect-python),
-pinned to `0.9.0`. Requires Python 3.10+.
+Built on [connect-python](https://github.com/connectrpc/connect-python).
+See [Compatibility](#compatibility) for the Python, protobuf and
+connect-python versions it supports.
 
 ## Quick start
 
@@ -201,6 +207,27 @@ uv run ruff check src tests
 
 The stubs are committed; `task -t Taskfile.dev.yaml verify-py-sdk` fails when
 they no longer match the contract.
+
+## Compatibility
+
+| | Supported | Why the bound |
+| --- | --- | --- |
+| Python | 3.10–3.14 | `requires-python`; each is tested |
+| `protobuf` | `>=6.33.5,<8` | the stubs' gencode version is the floor; 6.x and 7.x are tested |
+| `connect-python` | `>=0.9.0,<0.10` | pre-1.0: a minor may change the API the generated clients call |
+| `googleapis-common-protos` | `>=1.75.5,<2` | the first release that accepts protobuf 7 |
+
+Both protobuf majors are supported so the SDK can share an environment with
+libraries still on protobuf 6 — `grpcio-tools`, and workflow engines built on
+it such as `hatchet-sdk`. CI installs the built wheel beside each protobuf
+major on every Python, and beside `hatchet-sdk`, and runs the tests there
+([`compat.json`](compat.json); locally,
+`task -t Taskfile.dev.yaml verify-py-sdk-compat`).
+
+The stubs are generated with an older `grpcio-tools` on purpose: a stub
+refuses a protobuf runtime older than the protoc that generated it, so the
+generator's version *is* the floor. `scripts/py-sdk-compat.test.sh` fails when
+the stubs, the declared floor and the matrix disagree.
 
 ## Versioning
 
