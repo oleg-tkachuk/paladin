@@ -51,11 +51,14 @@ config:
 
   runtime:
     # Gates /system/health.json (component tree + subsystem + Postgres
-    # reachability). MUST come from a SealedSecret / ExternalSecret — same
-    # posture as signing_key. The frontend BFF aggregator receives the same
-    # value via PALADIN_HEALTH_SNAPSHOT_TOKEN (frontend chart). Empty would
-    # leave the snapshot open; never do that in prod.
-    health_snapshot_token: "<prod-health-token-from-sealed-secret>"
+    # reachability). Resolved at boot from the Secret below, which a
+    # SealedSecret / ExternalSecret provides — same posture as signing_key —
+    # so the token never sits in the config ConfigMap. The console chart's
+    # healthSnapshotTokenSecret names the same Secret and key; the Secret must
+    # also appear in rbac.secretReader.secretNames.
+    health_snapshot_token_secret:
+      name: paladin-health-token
+      key: token
 
   logger:
     level: info
@@ -259,6 +262,7 @@ rbac:
       - paladin-bootstrap-admin
       - paladin-auth-signing-key
       - paladin-ingest-hmac
+      - paladin-health-token
 
 # TLS between the planes, from the certificate cert-manager issues into the
 # release namespace.

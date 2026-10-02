@@ -263,6 +263,7 @@ tasks:
       # the shell inside RUN.
       - task: sec:dockerfile
       - task: verify:chart-scan
+      - task: verify:health-token-secret
       # Last on purpose: toolchain drift is the least urgent thing in this
       # list, and running it earlier would mask a real test failure behind it.
       - task: verify:brewfile
@@ -537,6 +538,11 @@ tasks:
     cmds:
       - ./scripts/checkov-config.test.sh
       - task: checkov:scan
+
+  verify:health-token-secret:
+    desc: "In production both charts read the health snapshot token from one Secret, none of it inline"
+    cmds:
+      - ./scripts/health-token-secret.test.sh
 
   verify:chart-scan:
     desc: "Policy-scan the manifests both charts render, per values file, with checkov and trivy"

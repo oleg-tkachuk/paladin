@@ -33,9 +33,3 @@ misconfigurations:
       `*_secret: {name, key}` references, and access_key, secret_key and dsn,
       which the chart leaves empty or renders without a password; the values
       come from Secrets at boot.
-  - id: KSV-0109
-    statement: >-
-      Matches shared_secret, which the chart renders empty and resolves
-      through shared_secret_ref, and health_snapshot_token, which has no Secret
-      reference yet — tracked in BACKLOG.md under "health_snapshot_token is
-      read from the ConfigMap"; drop this entry with that one.
