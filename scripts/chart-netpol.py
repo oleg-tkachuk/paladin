@@ -324,6 +324,19 @@ def console_problems(root: Path) -> list[str]:
     if not any(port in {p.get("port") for p in rule.get("ports") or []}
                for rule in policy["spec"].get("ingress") or []):
         problems.append(f"console: nothing may reach its port {port}")
+    # Only the ingress controller: the backend trusts the console's forwarded
+    # client address, and the console passes on whatever X-Forwarded-For it
+    # receives, so any other peer could name its own address.
+    controller = json.loads(subprocess.run(
+        ["yq", "-o=json", ".networkPolicies.ingressController.podLabels",
+         str(root / CONSOLE_CHART / "values.yaml")],
+        capture_output=True, text=True, check=True).stdout)
+    for rule in policy["spec"].get("ingress") or []:
+        peers = rule.get("from") or []
+        if not peers or any(((peer.get("podSelector") or {}).get("matchLabels") or {}) != controller
+                            or "ipBlock" in peer for peer in peers):
+            problems.append(f"console: admits {peers or 'every peer'}, not only the ingress "
+                            f"controller {controller} — a client could name its own address")
     ui_labels = json.loads(subprocess.run(
         ["yq", "-o=json", ".networkPolicies.ui.podLabels", str(root / BACKEND_CHART / "values.yaml")],
         capture_output=True, text=True, check=True).stdout)

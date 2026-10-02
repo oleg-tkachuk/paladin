@@ -35,7 +35,9 @@ let iamClientCache: Client<typeof AuthService> | null = null;
  * Copies the browser request's X-Forwarded-For onto every IAM call, so the
  * plane resolves the client's address rather than this pod's: the login rate
  * limiter keys on it and the audit trail records it. Outside a request (no
- * headers to read) the call goes out without one.
+ * headers to read) the call goes out without one. The chain is only as good
+ * as the proxy in front: Next.js keeps a client-sent header rather than the
+ * socket peer, so the chart admits traffic from the ingress controller alone.
  */
 export const forwardClientChain: Interceptor = (next) => async (req) => {
   let chain: string | null = null;
