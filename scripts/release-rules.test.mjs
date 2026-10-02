@@ -109,5 +109,33 @@ for (const name of Object.keys(streams)) {
   }
 }
 
+// package.json replaces @semantic-release/npm with a stub that throws: it
+// bundles the npm CLI and a dependency with an unfixed advisory, and this
+// repository publishes nothing to npm. That holds only while every stream
+// names its plugins — semantic-release falls back to a default list holding
+// the npm plugin when none are given — and none of them is the npm plugin.
+const NPM_PLUGIN = "@semantic-release/npm";
+for (const name of Object.keys(streams)) {
+  process.env.RELEASE_STREAM = name;
+  delete require.cache[require.resolve("../release.config.cjs")];
+  const { plugins } = require("../release.config.cjs");
+  const names = (plugins ?? []).map((p) => (Array.isArray(p) ? p[0] : p));
+  if (!plugins || names.length === 0) {
+    console.log(`FAIL [${name}] names no plugins, so semantic-release would load its defaults`);
+    failed = 1;
+  }
+  if (names.includes(NPM_PLUGIN)) {
+    console.log(`FAIL [${name}] loads ${NPM_PLUGIN}, which package.json stubs out`);
+    failed = 1;
+  }
+}
+try {
+  require(NPM_PLUGIN);
+  console.log(`FAIL ${NPM_PLUGIN} loaded: the stub that replaces it must refuse`);
+  failed = 1;
+} catch {
+  // the stub refused, as it should
+}
+
 if (failed) process.exit(1);
 console.log("release rules: every commit cuts the release it should, on every stream");
