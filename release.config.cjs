@@ -35,13 +35,21 @@ const BREAKING_IS_A_MINOR_BEFORE_1_0 = { breaking: true, release: "minor" };
 
 const SDK_PATHS = ["sdk/", "proto/"];
 const CAPABILITY_PATHS = ["capability/"];
+// The Go modules the backend compiles in: their API is theirs, not the product's.
+const MODULE_PATHS = ["sdk/go/", ...CAPABILITY_PATHS];
 
 const streams = {
   product: {
     tagFormat: "v${version}",
     // Only sdk/python/ is in no image. capability/ and sdk/go/ are in the
-    // backend's, and proto/ is the server's contract.
-    analyzer: { releaseRules: [SECURITY_IS_A_PATCH], exclude: ["sdk/python/"] },
+    // backend's, and proto/ is the server's contract. A breaking change to a
+    // module's own API alone is not the product's: it releases the product
+    // as a minor, the way it releases the module.
+    analyzer: {
+      releaseRules: [SECURITY_IS_A_PATCH],
+      exclude: ["sdk/python/"],
+      modules: { paths: MODULE_PATHS, releaseRules: [BREAKING_IS_A_MINOR_BEFORE_1_0] },
+    },
   },
   sdk: {
     tagFormat: "sdk/go/v${version}",

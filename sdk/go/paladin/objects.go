@@ -1,9 +1,11 @@
 package paladin
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -27,64 +29,59 @@ const (
 	headerContentType = "Content-Type"
 	headerETag        = "ETag"
 	etagQuote         = `"`
-	// errorBodyLimit bounds how much of a refused transfer's body an error quotes.
-	errorBodyLimit = 512
 )
 
-// Errors from Upload and Download.
+// Errors from Upload.
 var (
 	ErrNoUploadURL = errors.New("paladin: the server returned no upload URL")
 	ErrNoETag      = errors.New("paladin: storage returned no ETag for a part; it must expose the ETag header")
 	ErrUploadSize  = errors.New("paladin: upload size must be positive")
+	ErrUploadBody  = errors.New("paladin: an upload needs exactly one of Body and Stream")
 )
 
-// TransferError is a presigned request that storage refused.
-type TransferError struct {
-	Method string
-	Status int
-	Body   string
-}
-
-func (e *TransferError) Error() string {
-	return fmt.Sprintf("paladin: storage refused %s: %d %s", e.Method, e.Status, e.Body)
-}
-
-// UploadInput describes one object to upload. Body is read at offsets, so a
-// multipart upload can send parts in parallel: an *os.File, *bytes.Reader or
-// io.NewSectionReader all fit.
+// UploadInput describes one object to upload, from exactly one of Body and
+// Stream; neither is read into memory whole.
 type UploadInput struct {
 	Parent      string // tenants/{tenant}/collections/{collection}
 	Key         string // empty: the server names the object by its id
 	ContentType string
 	Size        int64
-	Body        io.ReaderAt
-	Metadata    map[string]string
-	Tags        map[string]string
+	// Body is read at offsets, so a multipart upload sends its parts in
+	// parallel: an *os.File, *bytes.Reader or io.NewSectionReader all fit.
+	Body io.ReaderAt
+	// Stream is read once, front to back — a pipe, a response body. Multipart
+	// holds the parts in flight in memory, PartConcurrency+1 of them at most.
+	Stream   io.Reader
+	Metadata map[string]string
+	Tags     map[string]string
 }
 
-// UploadOptions tune Upload; the zero value takes the defaults.
+// UploadOptions tune Upload; the zero value takes the defaults. The presigned
+// requests go through the client's Transfer (WithTransfer).
 type UploadOptions struct {
-	// HTTPClient sends the presigned requests to storage; nil means
-	// http.DefaultClient. These go to the storage backend, not to Paladin,
-	// so the Paladin client's credentials are not on them.
-	HTTPClient         *http.Client
 	MultipartThreshold int64
 	PartConcurrency    int
 }
 
-func (o UploadOptions) client() *http.Client {
-	if o.HTTPClient != nil {
-		return o.HTTPClient
+// Transfer is what sends this plane's presigned requests: the client's
+// WithTransfer, else a default shared by every client without one.
+func (d *DataPlane) Transfer() *Transfer {
+	if d == nil || d.transfer == nil {
+		return defaultTransfer()
 	}
-	return http.DefaultClient
+	return d.transfer
 }
 
-// Upload stores in.Body as a new object and returns it once complete: one
+// Upload stores the input as a new object and returns it once complete: one
 // presigned PUT up to the multipart threshold, multipart above it. A failed
-// multipart upload is aborted.
+// multipart upload is aborted. A single PUT records the content's SHA-256 on
+// the object, which Download then verifies.
 func Upload(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOptions) (*datav1.Object, error) {
 	if in.Size <= 0 {
 		return nil, ErrUploadSize
+	}
+	if (in.Body == nil) == (in.Stream == nil) {
+		return nil, ErrUploadBody
 	}
 	threshold := opts.MultipartThreshold
 	if threshold <= 0 {
@@ -93,10 +90,19 @@ func Upload(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOpt
 	if in.Size > threshold {
 		return uploadMultipart(ctx, data, in, opts)
 	}
-	return uploadSingle(ctx, data, in, opts)
+	return uploadSingle(ctx, data, in)
 }
 
-func uploadSingle(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOptions) (*datav1.Object, error) {
+// content reads length bytes at offset: from Body directly, from Stream in
+// order. Only multipart asks for anything but the whole.
+func (in UploadInput) content(offset, length int64) io.Reader {
+	if in.Body != nil {
+		return io.NewSectionReader(in.Body, offset, length)
+	}
+	return io.LimitReader(in.Stream, length)
+}
+
+func uploadSingle(ctx context.Context, data *DataPlane, in UploadInput) (*datav1.Object, error) {
 	allocated, err := data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
 		Parent:            in.Parent,
 		Key:               in.Key,
@@ -114,12 +120,13 @@ func uploadSingle(ctx context.Context, data *DataPlane, in UploadInput, opts Upl
 	if url.GetUrl() == "" || object == nil {
 		return nil, ErrNoUploadURL
 	}
-	etag, err := put(ctx, opts.client(), url, in.ContentType, io.NewSectionReader(in.Body, 0, in.Size), in.Size)
+	sum := sha256.New()
+	etag, err := put(ctx, data.Transfer(), url, in.ContentType, io.TeeReader(in.content(0, in.Size), sum), in.Size)
 	if err != nil {
 		return nil, err
 	}
 	done, err := data.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{
-		Name: object.GetName(), Etag: etag,
+		Name: object.GetName(), Etag: etag, ChecksumValue: base64.StdEncoding.EncodeToString(sum.Sum(nil)),
 	}))
 	if err != nil {
 		return nil, err
@@ -172,6 +179,13 @@ func uploadMultipart(ctx context.Context, data *DataPlane, in UploadInput, opts 
 	return done.Msg, nil
 }
 
+// part is one part to send: its index, and its bytes.
+type part struct {
+	index  int
+	body   io.Reader
+	length int64
+}
+
 // sendParts presigns and PUTs every part, PartConcurrency at a time, and
 // returns their ETags in part order. The first failure stops the rest.
 func sendParts(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOptions,
@@ -185,7 +199,7 @@ func sendParts(ctx context.Context, data *DataPlane, in UploadInput, opts Upload
 	defer cancel()
 
 	etags := make([]string, parts)
-	next := make(chan int)
+	next := make(chan part)
 	var (
 		wg       sync.WaitGroup
 		once     sync.Once
@@ -196,20 +210,35 @@ func sendParts(ctx context.Context, data *DataPlane, in UploadInput, opts Upload
 	}
 	for range min(workers, parts) {
 		wg.Go(func() {
-			for i := range next {
-				etag, err := sendPart(ctx, data, in, opts, name, uploadID, partSize, i)
+			for p := range next {
+				etag, err := sendPart(ctx, data, name, uploadID, p)
 				if err != nil {
 					fail(err)
 					continue
 				}
-				etags[i] = etag
+				etags[p.index] = etag
 			}
 		})
 	}
 feed:
 	for i := range parts {
+		offset := int64(i) * partSize
+		p := part{index: i, length: min(partSize, in.Size-offset)}
+		if in.Body != nil {
+			p.body = in.content(offset, p.length)
+		} else {
+			// A stream is read in order, so each part is read here, before it
+			// is handed to a worker; the unbuffered channel bounds how many
+			// are held.
+			buf := make([]byte, p.length)
+			if _, err := io.ReadFull(in.Stream, buf); err != nil {
+				fail(err)
+				break feed
+			}
+			p.body = bytes.NewReader(buf)
+		}
 		select {
-		case next <- i:
+		case next <- p:
 		case <-ctx.Done():
 			break feed
 		}
@@ -225,11 +254,9 @@ feed:
 	return etags, nil
 }
 
-func sendPart(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOptions,
-	name, uploadID string, partSize int64, index int,
-) (string, error) {
+func sendPart(ctx context.Context, data *DataPlane, name, uploadID string, p part) (string, error) {
 	signed, err := data.MultipartUpload.PresignPart(ctx, connect.NewRequest(&datav1.PresignPartRequest{
-		ObjectName: name, UploadId: uploadID, PartNumber: int32(index + 1), //nolint:gosec // parts ≤ 10000 by the contract
+		ObjectName: name, UploadId: uploadID, PartNumber: int32(p.index + 1), //nolint:gosec // parts ≤ 10000 by the contract
 	}))
 	if err != nil {
 		return "", err
@@ -237,9 +264,7 @@ func sendPart(ctx context.Context, data *DataPlane, in UploadInput, opts UploadO
 	if signed.Msg.GetUploadUrl().GetUrl() == "" {
 		return "", ErrNoUploadURL
 	}
-	offset := int64(index) * partSize
-	length := min(partSize, in.Size-offset)
-	etag, err := put(ctx, opts.client(), signed.Msg.GetUploadUrl(), "", io.NewSectionReader(in.Body, offset, length), length)
+	etag, err := put(ctx, data.Transfer(), signed.Msg.GetUploadUrl(), "", p.body, p.length)
 	if err != nil {
 		return "", err
 	}
@@ -250,75 +275,16 @@ func sendPart(ctx context.Context, data *DataPlane, in UploadInput, opts UploadO
 }
 
 // put sends body to a presigned URL and returns the ETag storage answered with.
-func put(ctx context.Context, c *http.Client, url *commonv1.PresignedUrl, contentType string, body io.Reader, size int64) (string, error) {
-	method := url.GetMethod()
-	if method == "" {
-		method = http.MethodPut
-	}
-	req, err := http.NewRequestWithContext(ctx, method, url.GetUrl(), body)
-	if err != nil {
-		return "", err
-	}
-	req.ContentLength = size
+func put(ctx context.Context, t *Transfer, signed *commonv1.PresignedUrl, contentType string, body io.Reader, size int64) (string, error) {
+	header := http.Header{}
 	if contentType != "" {
-		req.Header.Set(headerContentType, contentType)
+		header.Set(headerContentType, contentType)
 	}
-	// Covered by the signature: storage refuses the request without them.
-	for k, v := range url.GetRequiredHeaders() {
-		req.Header.Set(k, v)
-	}
-	resp, err := c.Do(req)
+	resp, err := t.do(ctx, http.MethodPut, signed, header, body, size)
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if err := refused(method, resp); err != nil {
-		return "", err
-	}
+	_, _ = io.Copy(io.Discard, resp.Body) // so the connection is reused
 	return strings.Trim(resp.Header.Get(headerETag), etagQuote), nil
-}
-
-func refused(method string, resp *http.Response) error {
-	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
-		return nil
-	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodyLimit))
-	return &TransferError{Method: method, Status: resp.StatusCode, Body: string(body)}
-}
-
-// Download opens the object's content through a presigned URL. The caller
-// closes the reader. httpClient sends that request; nil means
-// http.DefaultClient.
-func Download(ctx context.Context, data *DataPlane, name string, httpClient *http.Client) (io.ReadCloser, *datav1.Object, error) {
-	resp, err := data.Object.DownloadObject(ctx, connect.NewRequest(&datav1.DownloadObjectRequest{Name: name}))
-	if err != nil {
-		return nil, nil, err
-	}
-	url := resp.Msg.GetDownloadUrl()
-	if url.GetUrl() == "" {
-		return nil, nil, ErrNoUploadURL
-	}
-	method := url.GetMethod()
-	if method == "" {
-		method = http.MethodGet
-	}
-	req, err := http.NewRequestWithContext(ctx, method, url.GetUrl(), nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	for k, v := range url.GetRequiredHeaders() {
-		req.Header.Set(k, v)
-	}
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
-	got, err := httpClient.Do(req)
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := refused(method, got); err != nil {
-		_ = got.Body.Close()
-		return nil, nil, err
-	}
-	return got.Body, resp.Msg.GetObject(), nil
 }

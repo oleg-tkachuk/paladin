@@ -7,6 +7,11 @@
 // `exclude` drops one whose every file is under them. So the SDK releases for
 // a change to proto/ whatever its commit's scope, and the product does not
 // release for a commit that only touched the SDK.
+//
+// `modules` re-reads the commits whose every file is under `modules.paths`
+// with `modules.releaseRules` added: a break in the API of a module the
+// product compiles in — the Go SDK, the capability module — is that module's
+// break, not the product's, and must not cut a product major.
 
 import { execFileSync } from "node:child_process";
 import { analyzeCommits as analyze } from "@semantic-release/commit-analyzer";
@@ -18,6 +23,16 @@ export function belongs(files, { include = [], exclude = [] } = {}) {
   if (exclude.length > 0 && files.length > 0 && files.every(under(exclude))) return false;
   return true;
 }
+
+/** Whether every file of a commit is under one of `prefixes`. */
+export function within(files, prefixes = []) {
+  return prefixes.length > 0 && files.length > 0 && files.every((f) => prefixes.some((p) => f.startsWith(p)));
+}
+
+const RELEASES = [null, "patch", "minor", "major"];
+
+/** The larger of two releases; null is none. */
+const larger = (a, b) => (RELEASES.indexOf(a ?? null) >= RELEASES.indexOf(b ?? null) ? (a ?? null) : (b ?? null));
 
 /** The files a commit changed. A merge changed none of its own. */
 export function filesOf(hash, cwd) {
@@ -34,8 +49,18 @@ export async function analyzeCommits(pluginConfig, context) {
 
 /** analyzeCommits with the files of each commit from `files`, for tests. */
 export async function analyzeWith(pluginConfig, context, files) {
-  const { include, exclude, ...analyzerConfig } = pluginConfig;
+  const { include, exclude, modules, ...analyzerConfig } = pluginConfig;
   const commits = context.commits.filter((c) => belongs(files(c.hash), { include, exclude }));
   context.logger.log(`${commits.length} of ${context.commits.length} commits touch this release stream`);
-  return analyze(analyzerConfig, { ...context, commits });
+  if (!modules) {
+    return analyze(analyzerConfig, { ...context, commits });
+  }
+  const inModules = (c) => within(files(c.hash), modules.paths);
+  const own = await analyze(analyzerConfig, { ...context, commits: commits.filter((c) => !inModules(c)) });
+  const moduleConfig = {
+    ...analyzerConfig,
+    releaseRules: [...(analyzerConfig.releaseRules ?? []), ...modules.releaseRules],
+  };
+  const fromModules = await analyze(moduleConfig, { ...context, commits: commits.filter(inModules) });
+  return larger(own, fromModules) ?? undefined;
 }
