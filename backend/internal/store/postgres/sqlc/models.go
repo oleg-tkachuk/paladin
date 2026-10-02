@@ -406,6 +406,14 @@ type Charge struct {
 	ActorSubject string             `json:"actor_subject"`
 }
 
+type ChargeRefund struct {
+	ID         pgtype.UUID        `json:"id"`
+	ChargeID   pgtype.UUID        `json:"charge_id"`
+	TenantID   pgtype.UUID        `json:"tenant_id"`
+	Amount     pgtype.Numeric     `json:"amount"`
+	RefundedAt pgtype.Timestamptz `json:"refunded_at"`
+}
+
 type Collection struct {
 	ID              pgtype.UUID        `json:"id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
