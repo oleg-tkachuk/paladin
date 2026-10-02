@@ -152,6 +152,7 @@ p, err := paladin.Connect(endpoints, paladin.WithTokens(session), paladin.WithTr
 | `WithSplitHorizon(signedOrigin, internalOrigin)` | A URL signed for `signedOrigin` is sent to `internalOrigin`, keeping `Host: <signed host>`: the signature covers the header, not the address. Other origins go as signed. `ErrInvalidOrigin` for anything but `scheme://host[:port]`. |
 | `WithTransferRewrite(func(*url.URL) *url.URL)` | The general form: any mapping, the signed Host still kept. |
 | `WithTransferHTTPClient(c)` | Sends through `c` — a proxy, a TLS configuration, instrumentation. Redirects are still refused. |
+| `(*Transfer).Put(ctx, signed, body, size)` | Sends one presigned PUT you drive yourself — a part of a multipart upload — and returns the ETag. |
 | `*TransferError` | A request storage refused, or answered with a redirect: `Method`, `Host` (the URL's query is the signature and is not kept), `Status`, and the first 512 bytes of the `Body`. |
 
 ### TLS and workload identity
@@ -306,6 +307,38 @@ connection pools are what make many calls cheap — a `Transfer` keeps
 | --- | --- |
 | `UploadOptions.PartConcurrency` | Parts of one multipart upload in flight at once (default 3). |
 | `DownloadMany(ctx, p.Data, names, concurrency, fn)` | Downloads many objects, `concurrency` at a time (`DefaultBulkConcurrency`, 8), handing each reader to `fn` — which runs concurrently and reads it. Returns the names that failed, with their errors; one bad object does not stop the rest. |
+
+### Parity with the Python SDK
+
+Both SDKs run the same scenarios against a live server
+([`sdk/testdata/scenarios.json`](../testdata/scenarios.json), in CI's stack
+gate) and parse names against the same table
+([`sdk/testdata/names.json`](../testdata/names.json)). Where they differ, it is
+on purpose:
+
+| | Go | Python | Why |
+| --- | --- | --- | --- |
+| Typed errors | `errors.Is(err, paladin.ErrNotFound)`, `*paladin.Error` | `except paladin.NotFoundError`, `PaladinError` | Each language's idiom; the same kinds, fields and reasons. |
+| Server identity over TLS | `TLS.ServerID`: the SPIFFE ID, checked by `go-spiffe` | Not available: the CA bundle and the host name only | `pyqwest` has no peer-verification hook. |
+| CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
+| OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0 (BACKLOG). |
+| Bulk downloads | `DownloadMany`, a callback per reader | `download_many` / `adownload_many`, an iterator of results | Each language's idiom. |
+| asyncio | — | An `a…` form of every workflow | Go has goroutines. |
+
+### Cookbook
+
+Runnable examples, in [`paladin/example_cookbook_test.go`](paladin/example_cookbook_test.go);
+`go test` compiles every one and runs those with output against `paladintest`:
+
+| Example | Shows |
+| --- | --- |
+| `Example_splitHorizonPresign` | URLs signed for a public storage host, sent in-cluster with the signed `Host`. |
+| `Example_mutualTLSWithSPIFFE` | mTLS from a rotating workload identity, the server checked by its SPIFFE ID. |
+| `Example_rotatingToken` | A token read from the store operators rotate it in, on every call. |
+| `Example_bulkIngestion` | Many documents through `DownloadMany` at a bounded concurrency. |
+| `Example_resumableMultipart` | A multipart upload resumed from `ListParts` after a crash, through `Transfer.Put`. |
+| `Example_streamingLargeObjects` | Upload from a stream, download into a consumer, verified at the end. |
+| `Example_migratingFromConnectJSON` | A hand-written Connect-JSON call and its SDK form. |
 
 ### Header names
 

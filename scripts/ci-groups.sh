@@ -31,9 +31,11 @@ fi
 # backend, so a change either of them reaches is one it can break.
 readonly E2E_GROUPS='["backend","frontend"]'
 # --needs-deep: the same question for verify-deep — the Postgres-backed
-# integration suites and the stack gate. Backend code only: capability, the Go
-# SDK and the contract reach it through the backend group already.
-readonly DEEP_GROUPS='["backend"]'
+# integration suites and the stack gate. Backend code, and the SDKs: the stack
+# gate runs both SDKs' scenarios against the server (phase sdk), so a change to
+# either can break it. Capability and the contract reach it through the
+# backend group.
+readonly DEEP_GROUPS='["backend","sdk"]'
 needs() {
     jq -r --argjson want "$1" 'any(.[]; . as $g | $want | index($g) != null)'
 }

@@ -32,7 +32,7 @@
 
 set -euo pipefail
 
-ALL_PHASES=(rpc-surface e2e-go conformance dev-bootstrap)
+ALL_PHASES=(rpc-surface e2e-go conformance dev-bootstrap sdk)
 
 requested=("$@")
 [[ ${#requested[@]} -eq 0 ]] && requested=("${ALL_PHASES[@]}")
@@ -169,6 +169,41 @@ phase_dev_bootstrap() {
     export BUCKET_ID=paladin-e2e
     bash frontend/scripts/dev-bootstrap.sh
     bash frontend/scripts/dev-bootstrap.sh
+}
+
+# The SDK scenarios (sdk/testdata/scenarios.json), driven by both SDKs against
+# the stack: the Go and Python runners must agree with the server, not just
+# with their own fakes. Runs dev-bootstrap first — idempotent, as its phase
+# proves — for the tenant and collection the scenarios write to, with a
+# data-plane token bound to that tenant.
+phase_sdk() {
+    echo ">>> [stack] SDK conformance (Go and Python)"
+    local dev_tenant=3a823fd4-0b3d-4ce2-a280-93b8d75cc07b claims log
+    claims=$(jq -nc --arg t "$dev_tenant" \
+        '{roles: ["platform.admin"], tenant: $t, tenant_slug: "ui-dev"}')
+    JWT=$(task -s -t "$root/Taskfile.dev.yaml" backend:auth:mint-token \
+        JWT_SECRET="$PALADIN_JWT_SECRET" JWT_ISS="$PALADIN_JWT_ISSUER" \
+        JWT_AUD=paladin-admin JWT_SUB=verify-deep JWT_CLAIMS="$claims")
+    TENANT_ID="$dev_tenant" PALADIN_HOST="$stack_data_url" PALADIN_ADMIN_HOST="$stack_admin_url" \
+        BUCKET_ID=paladin-e2e JWT="$JWT" bash frontend/scripts/dev-bootstrap.sh >/dev/null
+    PALADIN_SDK_TOKEN=$(task -s -t "$root/Taskfile.dev.yaml" backend:auth:mint-token \
+        JWT_SECRET="$PALADIN_JWT_SECRET" JWT_ISS="$PALADIN_JWT_ISSUER" \
+        JWT_AUD=paladin-data JWT_SUB=verify-deep-sdk JWT_CLAIMS="$claims")
+    export PALADIN_SDK_TOKEN
+    export PALADIN_SDK_DATA_URL="$stack_data_url"
+    export PALADIN_SDK_COLLECTION="tenants/$dev_tenant/collections/default"
+    log=$(mktemp "${TMPDIR:-/tmp}/paladin-sdk.XXXXXX")
+    (cd sdk/go && go test -tags=sdkconformance -count=1 -timeout=10m -v ./conformance/...) | tee "$log"
+    if grep -q -- '--- SKIP' "$log" || ! grep -q -- '--- PASS: TestScenarios' "$log"; then
+        echo "!!! the Go SDK scenarios did not all run and pass" >&2
+        return 1
+    fi
+    (cd sdk/python && PALADIN_SDK_CONFORMANCE=1 uv run --quiet pytest -q -rs tests/conformance) | tee "$log"
+    if grep -qi 'skipped' "$log" || ! grep -qE '[0-9]+ passed' "$log"; then
+        echo "!!! the Python SDK scenarios did not all run and pass" >&2
+        return 1
+    fi
+    rm -f "$log"
 }
 
 # ─── the stack ───────────────────────────────────────────────────────────────
