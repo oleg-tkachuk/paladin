@@ -279,12 +279,16 @@ def test_the_given_transfer_is_used(fake: Fake) -> None:
 
 
 def _crc32c_of(body: bytes) -> str:
-    google_crc32c = pytest.importorskip("google_crc32c")
+    import google_crc32c
+
     return _b64(google_crc32c.Checksum(body).digest())
 
 
 @pytest.mark.parametrize(("value", "ok"), [(None, True), ("wrong", False)])
 def test_download_verifies_crc32c(fake: Fake, value: str | None, ok: bool) -> None:
+    # Both cases need the extra: without it CRC32C is not verified at all,
+    # which test_crc32c_is_not_verified_without_the_extra pins.
+    pytest.importorskip("google_crc32c")
     data = _data(fake)
     obj = _upload(data)
     fake.described = types_pb2.Object(name=obj.name, size_bytes=len(BODY))
