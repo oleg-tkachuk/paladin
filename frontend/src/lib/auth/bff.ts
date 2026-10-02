@@ -9,6 +9,7 @@ import type { NextResponse } from "next/server";
 
 import { AUDIENCES, FORWARDED_FOR_HEADER, type Audience } from "@/constants";
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
+import { planeBackendUrls, upstreamFetch } from "@/lib/server/upstream";
 import { refreshCookieName } from "./cookies";
 
 export { refreshCookieName };
@@ -25,9 +26,6 @@ export { refreshCookieName };
  * One cookie keeps the BFF state minimal — the data/admin chains the v1
  * design carried as separate cookies are gone.
  */
-
-const IAM_BACKEND_URL =
-  process.env.PALADIN_IAM_URL || "http://paladin-core:8085";
 
 let iamClientCache: Client<typeof AuthService> | null = null;
 
@@ -54,8 +52,11 @@ export const forwardClientChain: Interceptor = (next) => async (req) => {
 
 export function iamAuthClient(): Client<typeof AuthService> {
   if (iamClientCache) return iamClientCache;
+  // Over the BFF's shared, capped pool: the token exchange is the call every
+  // page needs first, and a pool of its own would handshake beside the RPCs.
   const transport = createGrpcWebTransport({
-    baseUrl: IAM_BACKEND_URL,
+    baseUrl: planeBackendUrls.iam,
+    fetch: upstreamFetch,
     interceptors: [forwardClientChain],
   });
   iamClientCache = createClient(AuthService, transport);

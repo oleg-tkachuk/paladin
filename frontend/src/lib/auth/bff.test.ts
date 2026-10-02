@@ -89,6 +89,7 @@ describe("iamAuthClient", () => {
 
     expect(createGrpcWebTransport).toHaveBeenCalledWith({
       baseUrl: "http://iam.test:8085",
+      fetch: (await import("@/lib/server/upstream")).upstreamFetch,
       interceptors: [expect.any(Function)],
     });
   });
@@ -101,6 +102,7 @@ describe("iamAuthClient", () => {
 
     expect(createGrpcWebTransport).toHaveBeenCalledWith({
       baseUrl: "http://paladin-core:8085",
+      fetch: (await import("@/lib/server/upstream")).upstreamFetch,
       interceptors: [expect.any(Function)],
     });
   });
