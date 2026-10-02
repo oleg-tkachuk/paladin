@@ -42,9 +42,9 @@ CREATE OR REPLACE FUNCTION search_object_ids(
     SET search_path TO 'pg_catalog', 'pg_temp'
     AS $$
 DECLARE
+    v_collection_id uuid;
     q text := 'SELECT o.id FROM public.objects o'
-           || ' JOIN public.collections c ON c.id = o.collection_id'
-           || ' WHERE o.tenant_id = $1 AND c.tenant_id = $1 AND c.name = $2';
+           || ' WHERE o.tenant_id = $1 AND o.collection_id = $12';
 BEGIN
     IF p_tenant_id IS NULL
        OR NOT (p_tenant_id IS NOT DISTINCT FROM public.paladin_session_tenant_id()
@@ -52,6 +52,17 @@ BEGIN
         RETURN;
     END IF;
     IF p_limit IS NULL OR p_limit < 1 THEN
+        RETURN;
+    END IF;
+    -- Resolved first rather than joined, so the query below names one known
+    -- collection id and can walk idx_objects_keyset_state (030) in id order.
+    -- Joined by name, the planner could not size the collection and sorted
+    -- all of it for every page: 13 ms against 4 ms for a page of 500 out of
+    -- 5000, growing with the collection.
+    SELECT c.id INTO v_collection_id
+      FROM public.collections c
+     WHERE c.tenant_id = p_tenant_id AND c.name = p_collection;
+    IF NOT FOUND THEN
         RETURN;
     END IF;
     -- LIKE patterns arrive escaped by the caller (backslash, the default).
@@ -83,7 +94,7 @@ BEGIN
     RETURN QUERY EXECUTE q
         USING p_tenant_id, p_collection, p_state, p_prefix, p_substr,
               p_content_type, p_content_type_prefix, p_tags, p_metadata,
-              p_after_id, p_limit;
+              p_after_id, p_limit, v_collection_id;
 END
 $$;
 -- +goose StatementEnd

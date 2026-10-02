@@ -411,7 +411,12 @@ type Querier interface {
 	// out of the plan; this query then reads those rows under the caller's RLS,
 	// which still decides what is returned. The page is the function's LIMIT;
 	// keyset on id (UUIDv7, monotonic-by-time).
-	ListObjects(ctx context.Context, tenantID pgtype.UUID, collection string, state *ObjectState, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
+	//
+	// No join to collections: the name is the argument, and joining cost a
+	// collections scan per returned row (the planner cannot size the id array).
+	// The collection is resolved once, by its unique (tenant_id, name), and
+	// still checked against every row.
+	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *ObjectState, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
 	// Oldest first. The cursor compares `>`, so paging walks forward in time.
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
 	// Newest first, for a caller showing current activity. A separate query

@@ -224,8 +224,8 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args objecth.ListObjectsAr
 	err := r.read(ctx, func(q sqlc.Querier, _ sqlc.DBTX) error {
 		var err error
 		rows, err = q.ListObjects(ctx,
-			pgUUID(args.TenantID),
 			args.Collection,
+			pgUUID(args.TenantID),
 			h.state, h.prefix, h.substr,
 			h.contentType, h.contentTypePrefix,
 			h.tags, h.metadata,
@@ -301,8 +301,8 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 		err := r.read(ctx, func(q sqlc.Querier, _ sqlc.DBTX) error {
 			var err error
 			rows, err = q.ListObjects(ctx,
-				pgUUID(args.TenantID),
 				args.Collection,
+				pgUUID(args.TenantID),
 				h.state, h.prefix, h.substr,
 				h.contentType, h.contentTypePrefix,
 				h.tags, h.metadata,

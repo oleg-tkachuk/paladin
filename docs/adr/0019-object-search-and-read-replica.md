@@ -33,8 +33,17 @@
      `tags[k] == v` / `metadata[k] == v`; LIKE literals are escaped rather
      than dropped. The CEL program stays authoritative over every fetched
      row, as before: a hint only narrows. No API or filter-grammar change.
-  2. **Indexes** (migrations 025–028): `pg_trgm` on `objects.path`,
-     `jsonb_path_ops` GIN on `tags` and `metadata`.
+  2. **Indexes** (migrations 025–028, 030–031): `pg_trgm` on
+     `objects.path`, `jsonb_path_ops` GIN on `tags` and `metadata`; and the
+     keyset index rebuilt as `(tenant_id, collection_id, id) INCLUDE (state)`,
+     so a status-filtered page (the console's status dropdown, the trash
+     view) is an index-only scan. It replaces `idx_objects_keyset` rather
+     than joining it, so uploads maintain no extra B-tree. Considered and left
+     out: a prefix index on `path` (no client sends `key.startsWith`, and the
+     trigram index already serves it), `content_type` in the keyset index
+     (no console filter uses it), extended statistics on
+     `(tenant_id, collection_id)` (no plan changed for the better once the
+     collection is resolved up front).
   3. **Candidate ids from a SECURITY DEFINER function** (029,
      `search_object_ids`). It runs as the migrate role (BYPASSRLS), so the
      indexes are usable, and returns **ids only**. `ListObjects` reads the
@@ -46,7 +55,10 @@
      says anything about another tenant. EXECUTE is revoked from PUBLIC and
      granted to `paladin_app`. The query inside is built from fixed fragments
      with every value passed through `USING`, so each call is planned for the
-     predicates it actually has.
+     predicates it actually has. The collection is resolved to its id before
+     that query, and `ListObjects` reads the returned rows without joining
+     `collections`: both joins misled the planner into scanning or sorting
+     the whole collection per page.
 
      Rejected: marking `jsonb_contains`/`textlike` LEAKPROOF (superuser-only,
      unavailable on managed Postgres, and not true of `textlike`, whose
@@ -63,7 +75,9 @@
 
 - **Consequences.**
   - Measured at 200k objects per tenant, under RLS: tag equality 96 → 3 ms,
-    key substring 64 → 10 ms. A filter matching few objects now returns them
+    key substring 64 → 10 ms. At 1M objects (40 tenants × 5 collections,
+    UUIDv7 ids), a page of 500: no filter 4 ms, status filter 4 ms, tag 2–3
+    ms, key substring 3 ms, content type 14 ms. A filter matching few objects now returns them
     on the first page instead of an empty page with a cursor, and a filtered
     `CountObjects` is exact far more often (its scan cap counts rows read).
   - The tenant check exists in one more place, though it calls the policy's

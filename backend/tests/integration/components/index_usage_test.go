@@ -47,7 +47,8 @@ func assertPlanAvoidsSeqScan(t *testing.T, plan, table, what string) {
 	}
 }
 
-// TestIndexUsage_ObjectsKeysetPagination covers the schema baseline (001_initial_schema.sql). ListObjects is
+// TestIndexUsage_ObjectsKeysetPagination covers the keyset index — from the
+// schema baseline, carrying state since 030. ListObjects is
 // the console's object browser: equality on (tenant_id, collection), a keyset
 // cursor on id, ordered by object_id.
 //
@@ -80,7 +81,7 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 		 ORDER BY id
 		 LIMIT 50`, f.tenantID, probeCollectionID, uuid.Nil)
 
-	assertPlanUses(t, plan, "idx_objects_keyset", "ListObjects keyset page")
+	assertPlanUses(t, plan, "idx_objects_keyset_state", "ListObjects keyset page")
 	assertPlanAvoidsSeqScan(t, plan, "objects", "ListObjects keyset page")
 	if strings.Contains(plan, "Sort") {
 		t.Errorf("ListObjects still sorts — the index should supply the ordering.\n\nPlan:\n%s", plan)
@@ -101,7 +102,7 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 		 ORDER BY id
 		 LIMIT 50`, f.tenantID, empty, uuid.Nil)
 
-	assertPlanUses(t, plan, "idx_objects_keyset", "ListObjects on an empty Collection")
+	assertPlanUses(t, plan, "idx_objects_keyset_state", "ListObjects on an empty Collection")
 	assertPlanAvoidsSeqScan(t, plan, "objects", "ListObjects on an empty Collection")
 }
 

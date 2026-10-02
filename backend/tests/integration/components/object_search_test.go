@@ -207,17 +207,18 @@ func TestIndexUsage_ObjectSearch(t *testing.T) {
 	analyze(t, ctx, pool, "objects")
 
 	const base = `SELECT o.id FROM public.objects o
-		JOIN public.collections c ON c.id = o.collection_id
-		WHERE o.tenant_id = $1 AND c.tenant_id = $1 AND c.name = $2`
+		WHERE o.tenant_id = $1 AND o.collection_id = $2`
 	for _, tc := range []struct {
 		what, pred, index string
 		arg               any
 	}{
+		// The status filter reads state from the keyset index (030).
+		{"state page", ` AND o.state = $3::object_state`, "idx_objects_keyset_state", "AVAILABLE"},
 		{"tag equality", ` AND o.tags @> $3`, "idx_objects_tags_gin", `{"env":"prod"}`},
 		{"metadata equality", ` AND o.metadata @> $3`, "idx_objects_metadata_gin", `{"owner":"team7"}`},
 		{"key substring", ` AND o.path LIKE '%' || $3 || '%'`, "idx_objects_path_trgm", `report\_1234`},
 	} {
-		plan := explain(t, ctx, pool, base+tc.pred+` ORDER BY o.id LIMIT 100`, f.tenantID, f.collection, tc.arg)
+		plan := explain(t, ctx, pool, base+tc.pred+` ORDER BY o.id LIMIT 100`, f.tenantID, f.collectionID, tc.arg)
 		assertPlanUses(t, plan, tc.index, tc.what)
 		assertPlanAvoidsSeqScan(t, plan, "objects", tc.what)
 	}
