@@ -371,8 +371,38 @@ jobs:
           sudo chmod +x /usr/local/bin/yq
           yq --version
 
+      # The backend image's go build cache (scripts/go-build-cache.sh): restored
+      # here, imported into BuildKit, and saved from main like the Go caches.
+      # A miss or a failed import only means a cold build.
+      - name: Restore the image build cache
+        id: image-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/go-docker
+          key: go-docker-e2e-${{ hashFiles('backend/go.sum', 'backend/deploy/Dockerfile') }}-${{ github.sha }}
+          restore-keys: |
+            go-docker-e2e-${{ hashFiles('backend/go.sum', 'backend/deploy/Dockerfile') }}-
+            go-docker-e2e-
+
+      - name: Import the image build cache
+        continue-on-error: true
+        run: ./scripts/go-build-cache.sh import "${RUNNER_TEMP}/go-docker"
+
       - name: task verify-e2e:images
         run: task --yes -t Taskfile.dev.yaml verify-e2e:images
+
+      - name: Export the image build cache
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        run: ./scripts/go-build-cache.sh export "${RUNNER_TEMP}/go-docker"
+
+      - name: Save the image build cache
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/go-docker
+          key: ${{ steps.image-cache.outputs.cache-primary-key }}
 
       - name: Save the images
         run: ./scripts/e2e-images.sh save "${RUNNER_TEMP}/e2e-images"
@@ -546,6 +576,25 @@ jobs:
           sudo dpkg -i "$deb"
           step version
 
+      # The backend image's go build cache (scripts/go-build-cache.sh): restored
+      # here, imported into BuildKit, and saved from main like the Go caches.
+      # A miss or a failed import only means a cold build.
+      - name: Restore the image build cache
+        id: image-cache
+        if: matrix.half == 'stack'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/go-docker
+          key: go-docker-deep-${{ hashFiles('backend/go.sum', 'backend/deploy/Dockerfile') }}-${{ github.sha }}
+          restore-keys: |
+            go-docker-deep-${{ hashFiles('backend/go.sum', 'backend/deploy/Dockerfile') }}-
+            go-docker-deep-
+
+      - name: Import the image build cache
+        if: matrix.half == 'stack'
+        continue-on-error: true
+        run: ./scripts/go-build-cache.sh import "${RUNNER_TEMP}/go-docker"
+
       - name: task verify-deep:${{ matrix.half }}
         env:
           HALF: ${{ matrix.half }}
@@ -560,6 +609,19 @@ jobs:
             ~/go/pkg/mod
             ~/.cache/golangci-lint
           key: ${{ steps.go-cache.outputs.cache-primary-key }}
+
+      - name: Export the image build cache
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.half == 'stack'
+        continue-on-error: true
+        run: ./scripts/go-build-cache.sh export "${RUNNER_TEMP}/go-docker"
+
+      - name: Save the image build cache
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.half == 'stack'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/go-docker
+          key: ${{ steps.image-cache.outputs.cache-primary-key }}
 
   # Two jobs over the same files, and the halves do not overlap. actionlint
   # covers whether a workflow is correct at all — schema, expression syntax,

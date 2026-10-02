@@ -97,6 +97,38 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
         -o /out/paladin-core ./cmd/server
 
 # -----------------------------------------------------------------------------
+# CI cache hand-off — never part of the image. A fresh CI runner starts with
+# an empty build cache, so the builder's `go build` ran cold every time.
+# scripts/go-build-cache.sh builds cache-import to fill the build cache mount
+# from an archive actions/cache restored, and cache-export to write it out as
+# one archive for the next run: one archive, because moving the cache file by
+# file through BuildKit is slower than the build it saves. Only the build cache
+# travels — the module cache is larger than the download it would save. The
+# mount target must match the builder's exactly, because BuildKit keys a cache
+# mount by its target. These stages sit before runtime, which stays the
+# default target.
+# -----------------------------------------------------------------------------
+FROM gobase AS cache-import
+# Changes every run, so BuildKit never skips the copy as already done.
+ARG CACHE_RUN
+# The build context holds only the archive cache-export wrote. Its go-build/
+# lands on the cache mount, which sits at that path.
+RUN --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
+    --mount=type=bind,source=cache.tar,target=/tmp/cache.tar \
+    echo "cache import ${CACHE_RUN}" && \
+    tar -xf /tmp/cache.tar -C /go_workspace/cache
+
+FROM gobase AS cache-collect
+ARG CACHE_RUN
+RUN --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
+    echo "cache export ${CACHE_RUN}" && \
+    mkdir -p /export/go-build && \
+    cp -a /go_workspace/cache/go-build/. /export/go-build/
+
+FROM scratch AS cache-export
+COPY --from=cache-collect /export /
+
+# -----------------------------------------------------------------------------
 # Runtime stage — distroless static. No shell, no curl, no package manager.
 # Health checks are kubelet-side (httpGet probes); compose drops its
 # in-container healthcheck for the same reason.
