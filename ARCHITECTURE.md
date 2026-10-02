@@ -123,10 +123,13 @@ Four mechanisms, applied in order, each answering a different question.
    in [`backend/policies/`](backend/policies/). The console can simulate a
    decision against a policy before it is saved.
 
-3. **Scope — does this credential reach this resource?** CEL expressions
-   narrow a credential to a bucket prefix, an operation set, an IP range.
-   A capability delegated to a sub-agent may only ever narrow, never
-   widen.
+3. **Scope — does this credential reach this resource?** A scoped API
+   token or capability names the tenant, backend, bucket or collection it
+   reaches, and a built-in Cedar `forbid` denies everything outside it,
+   whatever the tenant's policies permit. A capability also narrows the
+   operations and source addresses it may be used for, and a capability
+   delegated to a sub-agent may only ever narrow, never widen. (CEL is used
+   elsewhere: it filters list results, it does not authorise.)
 
 4. **Isolation — can the query even see it?** Postgres row-level
    security, with the tenant set on the connection. This is a primary
@@ -225,8 +228,11 @@ should be one commit.
 
 ## Diagrams
 
-The context, request sequence, schema and deployment diagrams are in
-[`backend/docs/diagrams.md`](backend/docs/diagrams.md).
+[`backend/docs/diagrams.md`](backend/docs/diagrams.md) has the rest: context,
+code layout, the request path through the interceptors, upload, events,
+background work, the console session, the contract fan-out, the schema and the
+deployment. The path from a pull request to a signed release is in
+[`docs/how-changes-land.md`](docs/how-changes-land.md).
 
 ## Repository layout
 
