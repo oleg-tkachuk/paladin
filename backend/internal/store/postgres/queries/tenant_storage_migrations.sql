@@ -39,45 +39,51 @@ WHERE m.state NOT IN ('cleaned', 'failed')
 ORDER BY m.updated_at
 LIMIT sqlc.arg('limit_count')::int;
 
+-- Every transition names the state the worker read the migration in
+-- (from_state) and applies only while it still holds: a worker resumed after a
+-- pause past its lease must not drag a migration its successor moved on.
+
 -- name: SetStorageMigrationState :execrows
 UPDATE tenant_storage_migrations
-SET state = $2, error = '', updated_at = now()
-WHERE tenant_id = $1;
+SET state = sqlc.arg('to_state'), error = '', updated_at = now()
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state');
 
 -- name: SetStorageMigrationTotal :execrows
 -- Records the object count and moves provisioning -> copying.
 UPDATE tenant_storage_migrations
-SET objects_total = $2, state = 'copying', updated_at = now()
-WHERE tenant_id = $1;
+SET objects_total = sqlc.arg('objects_total'), state = sqlc.arg('to_state'), updated_at = now()
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state');
 
 -- name: AdvanceStorageMigrationCopy :execrows
--- Records copy progress + the resume cursor after a batch.
+-- Records copy progress + the resume cursor after a batch. Progress only moves
+-- forward: a stale batch reporting less than is recorded changes nothing.
 UPDATE tenant_storage_migrations
-SET objects_copied    = $2,
-    cursor_collection = $3,
-    cursor_path        = $4,
+SET objects_copied    = sqlc.arg('objects_copied'),
+    cursor_collection = sqlc.arg('cursor_collection'),
+    cursor_path       = sqlc.arg('cursor_path'),
     updated_at        = now()
-WHERE tenant_id = $1;
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND objects_copied <= sqlc.arg('objects_copied');
 
 -- name: CompleteStorageMigration :execrows
 -- Rebind verified: serve from the dedicated bucket. The old copies are kept
 -- until cleanup_after (now + the row's retention) so a bad migration is still
 -- rollback-able within the window.
 UPDATE tenant_storage_migrations
-SET state = 'completed', error = '', completed_at = now(),
+SET state = sqlc.arg('to_state'), error = '', completed_at = now(),
     cleanup_after = now() + make_interval(secs => cleanup_retention_seconds),
     updated_at = now()
-WHERE tenant_id = $1;
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state');
 
 -- name: MarkStorageMigrationCleaned :execrows
 UPDATE tenant_storage_migrations
-SET state = 'cleaned', cleaned_at = now(), updated_at = now()
-WHERE tenant_id = $1;
+SET state = sqlc.arg('to_state'), cleaned_at = now(), updated_at = now()
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state');
 
 -- name: FailStorageMigration :execrows
 UPDATE tenant_storage_migrations
-SET state = 'failed', error = $2, attempts = attempts + 1, updated_at = now()
-WHERE tenant_id = $1;
+SET state = sqlc.arg('to_state'), error = sqlc.arg('error'), attempts = attempts + 1, updated_at = now()
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state');
 
 -- name: MigrationListTenantObjects :many
 -- Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a

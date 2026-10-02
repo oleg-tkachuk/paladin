@@ -13,20 +13,23 @@ import (
 
 const advanceStorageMigrationCopy = `-- name: AdvanceStorageMigrationCopy :execrows
 UPDATE tenant_storage_migrations
-SET objects_copied    = $2,
-    cursor_collection = $3,
-    cursor_path        = $4,
+SET objects_copied    = $1,
+    cursor_collection = $2,
+    cursor_path       = $3,
     updated_at        = now()
-WHERE tenant_id = $1
+WHERE tenant_id = $4 AND state = $5
+  AND objects_copied <= $1
 `
 
-// Records copy progress + the resume cursor after a batch.
-func (q *Queries) AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorCollection string, cursorPath string) (int64, error) {
+// Records copy progress + the resume cursor after a batch. Progress only moves
+// forward: a stale batch reporting less than is recorded changes nothing.
+func (q *Queries) AdvanceStorageMigrationCopy(ctx context.Context, objectsCopied int64, cursorCollection string, cursorPath string, tenantID pgtype.UUID, fromState string) (int64, error) {
 	result, err := q.db.Exec(ctx, advanceStorageMigrationCopy,
-		tenantID,
 		objectsCopied,
 		cursorCollection,
 		cursorPath,
+		tenantID,
+		fromState,
 	)
 	if err != nil {
 		return 0, err
@@ -36,17 +39,17 @@ func (q *Queries) AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgty
 
 const completeStorageMigration = `-- name: CompleteStorageMigration :execrows
 UPDATE tenant_storage_migrations
-SET state = 'completed', error = '', completed_at = now(),
+SET state = $1, error = '', completed_at = now(),
     cleanup_after = now() + make_interval(secs => cleanup_retention_seconds),
     updated_at = now()
-WHERE tenant_id = $1
+WHERE tenant_id = $2 AND state = $3
 `
 
 // Rebind verified: serve from the dedicated bucket. The old copies are kept
 // until cleanup_after (now + the row's retention) so a bad migration is still
 // rollback-able within the window.
-func (q *Queries) CompleteStorageMigration(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, completeStorageMigration, tenantID)
+func (q *Queries) CompleteStorageMigration(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error) {
+	result, err := q.db.Exec(ctx, completeStorageMigration, toState, tenantID, fromState)
 	if err != nil {
 		return 0, err
 	}
@@ -103,12 +106,17 @@ func (q *Queries) CreateStorageMigration(ctx context.Context, tenantID pgtype.UU
 
 const failStorageMigration = `-- name: FailStorageMigration :execrows
 UPDATE tenant_storage_migrations
-SET state = 'failed', error = $2, attempts = attempts + 1, updated_at = now()
-WHERE tenant_id = $1
+SET state = $1, error = $2, attempts = attempts + 1, updated_at = now()
+WHERE tenant_id = $3 AND state = $4
 `
 
-func (q *Queries) FailStorageMigration(ctx context.Context, tenantID pgtype.UUID, error *string) (int64, error) {
-	result, err := q.db.Exec(ctx, failStorageMigration, tenantID, error)
+func (q *Queries) FailStorageMigration(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string) (int64, error) {
+	result, err := q.db.Exec(ctx, failStorageMigration,
+		toState,
+		error,
+		tenantID,
+		fromState,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -232,12 +240,12 @@ func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount in
 
 const markStorageMigrationCleaned = `-- name: MarkStorageMigrationCleaned :execrows
 UPDATE tenant_storage_migrations
-SET state = 'cleaned', cleaned_at = now(), updated_at = now()
-WHERE tenant_id = $1
+SET state = $1, cleaned_at = now(), updated_at = now()
+WHERE tenant_id = $2 AND state = $3
 `
 
-func (q *Queries) MarkStorageMigrationCleaned(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, markStorageMigrationCleaned, tenantID)
+func (q *Queries) MarkStorageMigrationCleaned(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error) {
+	result, err := q.db.Exec(ctx, markStorageMigrationCleaned, toState, tenantID, fromState)
 	if err != nil {
 		return 0, err
 	}
@@ -327,13 +335,17 @@ func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtyp
 }
 
 const setStorageMigrationState = `-- name: SetStorageMigrationState :execrows
+
 UPDATE tenant_storage_migrations
-SET state = $2, error = '', updated_at = now()
-WHERE tenant_id = $1
+SET state = $1, error = '', updated_at = now()
+WHERE tenant_id = $2 AND state = $3
 `
 
-func (q *Queries) SetStorageMigrationState(ctx context.Context, tenantID pgtype.UUID, state string) (int64, error) {
-	result, err := q.db.Exec(ctx, setStorageMigrationState, tenantID, state)
+// Every transition names the state the worker read the migration in
+// (from_state) and applies only while it still holds: a worker resumed after a
+// pause past its lease must not drag a migration its successor moved on.
+func (q *Queries) SetStorageMigrationState(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error) {
+	result, err := q.db.Exec(ctx, setStorageMigrationState, toState, tenantID, fromState)
 	if err != nil {
 		return 0, err
 	}
@@ -342,13 +354,18 @@ func (q *Queries) SetStorageMigrationState(ctx context.Context, tenantID pgtype.
 
 const setStorageMigrationTotal = `-- name: SetStorageMigrationTotal :execrows
 UPDATE tenant_storage_migrations
-SET objects_total = $2, state = 'copying', updated_at = now()
-WHERE tenant_id = $1
+SET objects_total = $1, state = $2, updated_at = now()
+WHERE tenant_id = $3 AND state = $4
 `
 
 // Records the object count and moves provisioning -> copying.
-func (q *Queries) SetStorageMigrationTotal(ctx context.Context, tenantID pgtype.UUID, objectsTotal int64) (int64, error) {
-	result, err := q.db.Exec(ctx, setStorageMigrationTotal, tenantID, objectsTotal)
+func (q *Queries) SetStorageMigrationTotal(ctx context.Context, objectsTotal int64, toState string, tenantID pgtype.UUID, fromState string) (int64, error) {
+	result, err := q.db.Exec(ctx, setStorageMigrationTotal,
+		objectsTotal,
+		toState,
+		tenantID,
+		fromState,
+	)
 	if err != nil {
 		return 0, err
 	}
