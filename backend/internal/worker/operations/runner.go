@@ -77,6 +77,9 @@ type Runner struct {
 // operation.Repository so existing implementations (and tests) that do not
 // need it are unaffected.
 type OperationToucher interface {
+	// Touch returns operationh.ErrOperationFinished once the operation is no
+	// longer RUNNING — cancelled, or reclaimed — and the heartbeat then stops
+	// the executor.
 	Touch(ctx context.Context, opID uuid.UUID) error
 }
 
@@ -163,13 +166,24 @@ func (r *Runner) runOne(ctx context.Context, op operationh.Operation) {
 	// with failed == total. The tenant is not caller-supplied: it comes off
 	// the claimed operation row, which the RPC wrote under the caller's own
 	// tenant scope.
-	execCtx := auth.WithActingTenant(r.withProgress(ctx, op), op.TenantID)
+	execCtx, stopExec := context.WithCancel(auth.WithActingTenant(r.withProgress(ctx, op), op.TenantID))
+	defer stopExec()
 	stopHeartbeat := make(chan struct{})
-	go r.heartbeat(ctx, op, stopHeartbeat)
+	finished := make(chan struct{})
+	go r.heartbeat(ctx, op, stopHeartbeat, func() { close(finished); stopExec() })
 	response, err := exec.Execute(execCtx, op)
 	close(stopHeartbeat)
 	duration := time.Since(start)
 
+	select {
+	case <-finished:
+		// Cancelled or reclaimed while it ran: the row already holds the
+		// outcome, and whatever the executor returned would be dropped.
+		logger.Info("operation finished elsewhere; executor stopped",
+			zap.Duration("duration", duration))
+		return
+	default:
+	}
 	if err != nil {
 		logger.Warn("executor failed",
 			zap.Duration("duration", duration),
@@ -210,7 +224,9 @@ func terminalCtx(ctx context.Context) (context.Context, context.CancelFunc) {
 
 // heartbeat refreshes the operation's updated_at until stop is closed. See
 // Runner.Heartbeat for why liveness cannot be left to progress reporting.
-func (r *Runner) heartbeat(ctx context.Context, op operationh.Operation, stop <-chan struct{}) {
+// Once the row is no longer RUNNING — the operation was cancelled, or
+// reclaimed as lost — it calls onFinished, which stops the executor.
+func (r *Runner) heartbeat(ctx context.Context, op operationh.Operation, stop <-chan struct{}, onFinished func()) {
 	if r.Toucher == nil {
 		return
 	}
@@ -227,7 +243,12 @@ func (r *Runner) heartbeat(ctx context.Context, op operationh.Operation, stop <-
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if err := r.Toucher.Touch(ctx, op.OperationID); err != nil {
+			err := r.Toucher.Touch(ctx, op.OperationID)
+			if errors.Is(err, operationh.ErrOperationFinished) {
+				onFinished()
+				return
+			}
+			if err != nil {
 				r.log().Debug("operation heartbeat failed",
 					zap.String("operation_id", op.OperationID.String()), zap.Error(err))
 			}

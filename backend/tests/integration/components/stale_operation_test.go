@@ -283,3 +283,27 @@ func TestOperationStateWritesKeepTerminalStates(t *testing.T) {
 		t.Errorf("a running operation's result left it %s", got)
 	}
 }
+
+// The heartbeat is how a running executor learns it was cancelled: Touch
+// reports the operation finished once it is no longer RUNNING.
+func TestTouchReportsAnOperationNoLongerRunning(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	tenant, _ := mkTenant(t, ctx, pool, "shared")
+	repo := adapters.NewOperationRepo(sqlc.New(pool), pool)
+
+	id := uuid.New()
+	mustExec(t, ctx, pool,
+		`INSERT INTO operations (id, tenant_id, type, state) VALUES ($1, $2, 'BatchUpdateTags', 'RUNNING')`,
+		id, tenant)
+	if err := repo.Touch(ctx, id); err != nil {
+		t.Fatalf("touch a running operation: %v", err)
+	}
+	if err := repo.Cancel(ctx, id, tenant); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if err := repo.Touch(ctx, id); !errors.Is(err, operationh.ErrOperationFinished) {
+		t.Errorf("touch after a cancel returned %v, want ErrOperationFinished", err)
+	}
+}
