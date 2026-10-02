@@ -58,14 +58,14 @@ type BucketProvisionRepo interface {
 
 	// Delete-side outbox.
 	ListPendingDeletions(ctx context.Context, maxAttempts, limit int32) ([]admindomain.BucketProvisionRow, error)
-	// Terminal removal + paladin.bucket.deleted, atomic (ADR-0003). Called
-	// AFTER the backend confirms the bucket is gone. GetTx resolves the
-	// owner tenant_id (the fan-out target lives only on the row); DeleteTx
-	// removes the row; the closure enqueues the event — all on one tx via
-	// RunInTx. expectedVersion=0: the OCC was enforced when the handler
-	// flipped the row to 'deleting'; an intervening UPDATE is a bug to
-	// surface, not race against.
+	// Terminal removal + paladin.bucket.deleted, atomic (ADR-0003), on one
+	// tx via RunInTx. GetTx resolves the state and the owner tenant_id (the
+	// fan-out target lives only on the row); DeleteTx removes the row at the
+	// version GetTx read; the closure enqueues the event.
 	RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
+	// LockTx row-locks the bucket for the rest of tx, so the state read after
+	// it is the state the backend delete runs under. ErrNotFound when gone.
+	LockTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string) error
 	GetTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string) (admindomain.Bucket, error)
 	DeleteTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string, expectedVersion int64) error
 	MarkDeletionFailed(ctx context.Context, backendID, bucketName string, terminal bool, errMsg string) error
@@ -221,11 +221,10 @@ func (r *BucketReconciler) reconcileOne(ctx context.Context, row admindomain.Buc
 	}
 }
 
-// reconcileDeleteOne is the delete-path twin of reconcileOne. The flow
-// is: backend.DeleteBucket → physical row delete. Both halves are
-// idempotent: backend swallows NoSuchBucket, and Delete is a guarded
-// SQL statement that returns ErrVersionMismatch (treated as "already
-// gone") if the row vanished out from under us.
+// reconcileDeleteOne is the delete-path twin of reconcileOne. On one tx,
+// with the row locked: re-check it is still marked for deletion, delete the
+// backend bucket, then the row. Both deletes are idempotent: the backend
+// swallows NoSuchBucket, and a row already gone is a replica that finished.
 func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindomain.BucketProvisionRow) {
 	log := r.log.With(
 		zap.String("backend_id", row.BackendID),
@@ -242,29 +241,20 @@ func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindoma
 		return
 	}
 
-	if err := r.prov.DeleteBucket(ctx, row.BackendID, row.BucketName); err != nil {
-		terminal := isTerminalDeletionError(err)
-		if mErr := r.repo.MarkDeletionFailed(ctx, row.BackendID, row.BucketName, terminal, err.Error()); mErr != nil {
-			log.Warn("mark-deletion-failed write failed",
-				zap.Bool("terminal", terminal), zap.Error(mErr), zap.NamedError("backend_err", err))
-			return
-		}
-		if terminal {
-			log.Error("bucket deletion failed permanently", zap.Error(err))
-		} else {
-			log.Warn("bucket deletion failed (transient)", zap.Error(err))
-		}
-		return
-	}
-
-	// Backend confirms the bucket is gone — drop the row AND enqueue the
-	// terminal paladin.bucket.deleted in one tx (ADR-0003), so a subscriber sees
-	// the bucket actually disappear (the handler only fired `.deleting` when
-	// the row flipped).
+	// The backend delete runs under the row lock, after re-reading the state:
+	// a bucket deleted and created again under the same name since it was
+	// listed is a new bucket, and its backend bucket is not ours to remove.
+	// The row removal and paladin.bucket.deleted share the same tx (ADR-0003).
+	var backendErr error
+	deleted := false
 	if err := r.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		// Read the owner (fan-out target) on the tx before removing the row.
 		// A missing row means a concurrent replica already finished — treat
 		// as done, no event.
+		if lErr := r.repo.LockTx(ctx, tx, row.BackendID, row.BucketName); errors.Is(lErr, admindomain.ErrNotFound) {
+			return nil
+		} else if lErr != nil {
+			return lErr
+		}
 		b, gErr := r.repo.GetTx(ctx, tx, row.BackendID, row.BucketName)
 		if errors.Is(gErr, admindomain.ErrNotFound) {
 			return nil
@@ -273,10 +263,12 @@ func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindoma
 			return gErr
 		}
 		if !markedForDeletion(b.ProvisionState) {
-			// Deleted and created again under the same name since it was
-			// listed: this row is a new bucket, not the one being removed.
-			log.Warn("bucket is no longer marked for deletion; row kept",
+			log.Warn("bucket is no longer marked for deletion; left alone",
 				zap.String("provision_state", b.ProvisionState))
+			return nil
+		}
+		if err := r.prov.DeleteBucket(ctx, row.BackendID, row.BucketName); err != nil {
+			backendErr = err
 			return nil
 		}
 		// At the version read on this tx, so a concurrent change refuses the
@@ -284,9 +276,27 @@ func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindoma
 		if dErr := r.repo.DeleteTx(ctx, tx, row.BackendID, row.BucketName, b.ResourceVersion); dErr != nil {
 			return dErr
 		}
+		deleted = true
 		return r.emitBucketDeleted(ctx, tx, b)
 	}); err != nil {
-		log.Warn("backend deleted but row delete/event failed", zap.Error(err))
+		log.Warn("bucket delete transaction failed", zap.Error(err))
+		return
+	}
+	if backendErr != nil {
+		terminal := isTerminalDeletionError(backendErr)
+		if mErr := r.repo.MarkDeletionFailed(ctx, row.BackendID, row.BucketName, terminal, backendErr.Error()); mErr != nil {
+			log.Warn("mark-deletion-failed write failed",
+				zap.Bool("terminal", terminal), zap.Error(mErr), zap.NamedError("backend_err", backendErr))
+			return
+		}
+		if terminal {
+			log.Error("bucket deletion failed permanently", zap.Error(backendErr))
+		} else {
+			log.Warn("bucket deletion failed (transient)", zap.Error(backendErr))
+		}
+		return
+	}
+	if !deleted {
 		return
 	}
 	log.Info("bucket deleted")

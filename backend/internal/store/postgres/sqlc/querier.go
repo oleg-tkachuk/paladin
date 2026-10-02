@@ -479,6 +479,9 @@ type Querier interface {
 	// Valid:false} → SQL NULL, so the guard is the contract callers
 	// rely on.
 	ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, subjectEq *string, subjectLike *string, displayNameEq *string, displayNameLike *string, disabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]User, error)
+	// The bucket reconciler holds this row lock across the backend delete, so the
+	// state it checks is the state the delete runs under.
+	LockBucketForDeletion(ctx context.Context, name string, name_2 string) (LockBucketForDeletionRow, error)
 	// Waits for the object-path lock (see package objectpath); held until the
 	// transaction ends.
 	LockObjectPath(ctx context.Context, lockKey int64) error

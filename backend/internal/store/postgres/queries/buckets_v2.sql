@@ -257,3 +257,12 @@ WHERE id = (SELECT b.id FROM buckets b
               JOIN storage_backends sb ON sb.id = b.backend_id
              WHERE sb.name = $1 AND b.name = $2)
   AND provision_state IN ('deleting', 'deletion_failed');
+
+-- name: LockBucketForDeletion :one
+-- The bucket reconciler holds this row lock across the backend delete, so the
+-- state it checks is the state the delete runs under.
+SELECT b.provision_state, b.resource_version
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = $1 AND b.name = $2
+FOR UPDATE OF b;

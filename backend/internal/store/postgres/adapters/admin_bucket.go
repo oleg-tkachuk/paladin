@@ -243,6 +243,17 @@ func (r *BucketRepoV2) Get(ctx context.Context, backendID, bucketName string) (a
 
 // GetTx reads a bucket on the caller's tx so the handler can resolve the
 // owner tenant_id (the fan-out target) inside the mutation tx (ADR-0003).
+// LockTx row-locks the bucket for the rest of tx.
+func (r *BucketRepoV2) LockTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string) error {
+	if _, err := r.q.WithTx(tx).LockBucketForDeletion(ctx, backendID, bucketName); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return admindomain.ErrNotFound
+		}
+		return err
+	}
+	return nil
+}
+
 func (r *BucketRepoV2) GetTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string) (admindomain.Bucket, error) {
 	return r.getWith(ctx, r.q.WithTx(tx), backendID, bucketName)
 }

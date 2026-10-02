@@ -458,6 +458,28 @@ func (q *Queries) ListPendingBucketProvisions(ctx context.Context, maxAttempts i
 	return items, nil
 }
 
+const lockBucketForDeletion = `-- name: LockBucketForDeletion :one
+SELECT b.provision_state, b.resource_version
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = $1 AND b.name = $2
+FOR UPDATE OF b
+`
+
+type LockBucketForDeletionRow struct {
+	ProvisionState  string `json:"provision_state"`
+	ResourceVersion int64  `json:"resource_version"`
+}
+
+// The bucket reconciler holds this row lock across the backend delete, so the
+// state it checks is the state the delete runs under.
+func (q *Queries) LockBucketForDeletion(ctx context.Context, name string, name_2 string) (LockBucketForDeletionRow, error) {
+	row := q.db.QueryRow(ctx, lockBucketForDeletion, name, name_2)
+	var i LockBucketForDeletionRow
+	err := row.Scan(&i.ProvisionState, &i.ResourceVersion)
+	return i, err
+}
+
 const markBucketDeleting = `-- name: MarkBucketDeleting :execrows
 UPDATE buckets
 SET provision_state    = 'deleting',
