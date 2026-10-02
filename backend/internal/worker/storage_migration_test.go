@@ -25,9 +25,18 @@ func (f *fakeMigRepo) ListActive(context.Context, int) ([]StorageMigration, erro
 	return []StorageMigration{f.mig}, nil
 }
 
-func (f *fakeMigRepo) MarkCleaned(_ context.Context, _ uuid.UUID) error {
-	f.mig.State = MigStateCleaned
+// moveFrom applies a transition the way the SQL does: only from the state
+// the caller read.
+func (f *fakeMigRepo) moveFrom(from, to string) error {
+	if f.mig.State != from {
+		return ErrMigrationMoved
+	}
+	f.mig.State = to
 	return nil
+}
+
+func (f *fakeMigRepo) MarkCleaned(_ context.Context, _ uuid.UUID, from string) error {
+	return f.moveFrom(from, MigStateCleaned)
 }
 
 func (f *fakeMigRepo) BucketProvisionState(context.Context, string, string) (string, error) {
@@ -38,9 +47,11 @@ func (f *fakeMigRepo) CountObjects(context.Context, uuid.UUID) (int64, error) {
 	return int64(len(f.objects)), nil
 }
 
-func (f *fakeMigRepo) SetCopying(_ context.Context, _ uuid.UUID, total int64) error {
+func (f *fakeMigRepo) SetCopying(_ context.Context, _ uuid.UUID, from string, total int64) error {
+	if err := f.moveFrom(from, MigStateCopying); err != nil {
+		return err
+	}
 	f.mig.ObjectsTotal = total
-	f.mig.State = MigStateCopying
 	return nil
 }
 
@@ -57,16 +68,18 @@ func (f *fakeMigRepo) ListObjects(_ context.Context, _ uuid.UUID, afterCollectio
 	return out, nil
 }
 
-func (f *fakeMigRepo) AdvanceCopy(_ context.Context, _ uuid.UUID, copied int64, cursorCollection, cursorKey string) error {
+func (f *fakeMigRepo) AdvanceCopy(_ context.Context, _ uuid.UUID, from string, copied int64, cursorCollection, cursorKey string) error {
+	if f.mig.State != from || copied < f.mig.ObjectsCopied {
+		return ErrMigrationMoved
+	}
 	f.mig.ObjectsCopied = copied
 	f.mig.CursorCollection = cursorCollection
 	f.mig.CursorKey = cursorKey
 	return nil
 }
 
-func (f *fakeMigRepo) SetState(_ context.Context, _ uuid.UUID, state string) error {
-	f.mig.State = state
-	return nil
+func (f *fakeMigRepo) SetState(_ context.Context, _ uuid.UUID, from, to string) error {
+	return f.moveFrom(from, to)
 }
 
 func (f *fakeMigRepo) RebindTenant(context.Context, uuid.UUID, string, string) error {
@@ -74,14 +87,12 @@ func (f *fakeMigRepo) RebindTenant(context.Context, uuid.UUID, string, string) e
 	return nil
 }
 
-func (f *fakeMigRepo) Complete(_ context.Context, _ uuid.UUID) error {
-	f.mig.State = MigStateCompleted
-	return nil
+func (f *fakeMigRepo) Complete(_ context.Context, _ uuid.UUID, from string) error {
+	return f.moveFrom(from, MigStateCompleted)
 }
 
-func (f *fakeMigRepo) Fail(_ context.Context, _ uuid.UUID, _ string) error {
-	f.mig.State = MigStateFailed
-	return nil
+func (f *fakeMigRepo) Fail(_ context.Context, _ uuid.UUID, from, _ string) error {
+	return f.moveFrom(from, MigStateFailed)
 }
 
 // fakeCopier records every copy.
@@ -318,4 +329,38 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// A worker paused past its lease resumes with the migration as it read it.
+// Its successor has since finished the copy, rebound the tenant and moved to
+// verifying. The stale copy step used to write its smaller count and older
+// cursor over that, leaving verify failing on "copied < total" for good.
+func TestStorageMigration_StaleStepDoesNotDragItBack(t *testing.T) {
+	objects := []ObjectRef{{Collection: "c", Key: "a"}, {Collection: "c", Key: "b"}, {Collection: "c", Key: "d"}}
+	stale := StorageMigration{
+		TenantID: uuid.New(), State: MigStateCopying,
+		SourceBucketName: "shared", TargetBucketName: "dedicated",
+		ObjectsTotal: int64(len(objects)), ObjectsCopied: 1, CursorCollection: "c", CursorKey: "a",
+	}
+	current := stale
+	current.State = MigStateVerifying
+	current.ObjectsCopied = int64(len(objects))
+	current.CursorKey = "d"
+	repo := &fakeMigRepo{mig: current, objects: objects, rebound: true}
+	w := newWorker(repo, &fakeCopier{})
+
+	if err := w.advance(context.Background(), stale); !errors.Is(err, ErrMigrationMoved) {
+		t.Fatalf("stale step returned %v, want ErrMigrationMoved", err)
+	}
+	if repo.mig.State != MigStateVerifying || repo.mig.ObjectsCopied != current.ObjectsCopied || repo.mig.CursorKey != "d" {
+		t.Errorf("stale step moved the migration to %s, %d copied, cursor %q; want it left at %s, %d, %q",
+			repo.mig.State, repo.mig.ObjectsCopied, repo.mig.CursorKey,
+			MigStateVerifying, current.ObjectsCopied, "d")
+	}
+
+	// Its successor's next tick still completes it.
+	w.tick(context.Background())
+	if repo.mig.State != MigStateCompleted {
+		t.Errorf("state = %s after the successor's tick, want %s", repo.mig.State, MigStateCompleted)
+	}
 }

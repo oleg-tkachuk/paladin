@@ -11,8 +11,9 @@ import (
 )
 
 type Querier interface {
-	// Records copy progress + the resume cursor after a batch.
-	AdvanceStorageMigrationCopy(ctx context.Context, tenantID pgtype.UUID, objectsCopied int64, cursorCollection string, cursorPath string) (int64, error)
+	// Records copy progress + the resume cursor after a batch. Progress only moves
+	// forward: a stale batch reporting less than is recorded changes nothing.
+	AdvanceStorageMigrationCopy(ctx context.Context, objectsCopied int64, cursorCollection string, cursorPath string, tenantID pgtype.UUID, fromState string) (int64, error)
 	// Puts a freshly promoted version under the parent bucket's default retention
 	// (ADR-0013). Skipped entirely when the bucket has no default, and never
 	// overwrites an existing row — an explicit SetObjectRetention that arrived
@@ -83,7 +84,7 @@ type Querier interface {
 	// Rebind verified: serve from the dedicated bucket. The old copies are kept
 	// until cleanup_after (now + the row's retention) so a bad migration is still
 	// rollback-able within the window.
-	CompleteStorageMigration(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	CompleteStorageMigration(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error)
 	//
 	// Every relation that holds a bucket under ON DELETE RESTRICT, counted in one
 	// round trip. The list is not a guess: it is the RESTRICT set as the schema
@@ -170,7 +171,7 @@ type Querier interface {
 	DeleteStorageBackend(ctx context.Context, name string, expectedVersion int64) (int64, error)
 	DeleteUser(ctx context.Context, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
-	FailStorageMigration(ctx context.Context, tenantID pgtype.UUID, error *string) (int64, error)
+	FailStorageMigration(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string) (int64, error)
 	// Cross-tenant subject lookup for AuthService.Login when the caller supplied
 	// no tenant hint. The handler checks the password against every row this
 	// returns, so the cap is not just a scan guard: it is the set of memberships
@@ -507,7 +508,7 @@ type Querier interface {
 	// Record the first presentation. Once set, this token is no longer a lost
 	// successor its parent's holder may recover.
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) error
-	MarkStorageMigrationCleaned(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	MarkStorageMigrationCleaned(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error)
 	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// All collections of a tenant, for the transactional rebind.
 	MigrationListTenantCollections(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
@@ -715,9 +716,12 @@ type Querier interface {
 	// Flip the read-only (drain) state. Same OCC + operator-managed contract as
 	// SetStorageBackendEnabled; also not part of the bootstrap config-mirror.
 	SetStorageBackendReadOnly(ctx context.Context, readOnly bool, name string, expectedVersion int64) (int64, error)
-	SetStorageMigrationState(ctx context.Context, tenantID pgtype.UUID, state string) (int64, error)
+	// Every transition names the state the worker read the migration in
+	// (from_state) and applies only while it still holds: a worker resumed after a
+	// pause past its lease must not drag a migration its successor moved on.
+	SetStorageMigrationState(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error)
 	// Records the object count and moves provisioning -> copying.
-	SetStorageMigrationTotal(ctx context.Context, tenantID pgtype.UUID, objectsTotal int64) (int64, error)
+	SetStorageMigrationTotal(ctx context.Context, objectsTotal int64, toState string, tenantID pgtype.UUID, fromState string) (int64, error)
 	// Tenant aggregate budget queries.
 	//
 	// Naming dichotomy: SQL columns retain `_usd` suffixes for historical

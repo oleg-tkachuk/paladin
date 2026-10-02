@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -94,20 +95,30 @@ type MigrationRepo interface {
 	// ("pending" | "ready" | "failed").
 	BucketProvisionState(ctx context.Context, backendID, bucketName string) (string, error)
 	CountObjects(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	// The writes below name the state the migration was read in (from) and
+	// apply only while it still holds; otherwise they change nothing and
+	// return ErrMigrationMoved. A worker resumed after a pause past its lease
+	// thereby cannot drag back a migration its successor moved on.
+
 	// SetCopying records the total and moves provisioning -> copying.
-	SetCopying(ctx context.Context, tenantID uuid.UUID, total int64) error
+	SetCopying(ctx context.Context, tenantID uuid.UUID, from string, total int64) error
 	ListObjects(ctx context.Context, tenantID uuid.UUID, afterCollection, afterKey string, limit int) ([]ObjectRef, error)
-	AdvanceCopy(ctx context.Context, tenantID uuid.UUID, copied int64, cursorCollection, cursorKey string) error
-	SetState(ctx context.Context, tenantID uuid.UUID, state string) error
+	// AdvanceCopy only moves progress forward.
+	AdvanceCopy(ctx context.Context, tenantID uuid.UUID, from string, copied int64, cursorCollection, cursorKey string) error
+	SetState(ctx context.Context, tenantID uuid.UUID, from, to string) error
 	// RebindTenant, in ONE transaction, rebinds every collection of the tenant
 	// to (targetBackendID, targetBucketName) and flips storage_layout to
 	// 'dedicated'. The FK is DEFERRABLE INITIALLY DEFERRED.
 	RebindTenant(ctx context.Context, tenantID uuid.UUID, targetBackendID, targetBucketName string) error
-	Complete(ctx context.Context, tenantID uuid.UUID) error
+	Complete(ctx context.Context, tenantID uuid.UUID, from string) error
 	// MarkCleaned is the terminal transition after the old copies are deleted.
-	MarkCleaned(ctx context.Context, tenantID uuid.UUID) error
-	Fail(ctx context.Context, tenantID uuid.UUID, reason string) error
+	MarkCleaned(ctx context.Context, tenantID uuid.UUID, from string) error
+	Fail(ctx context.Context, tenantID uuid.UUID, from, reason string) error
 }
+
+// ErrMigrationMoved reports a transition that did not apply because the
+// migration is no longer in the state it was read in.
+var ErrMigrationMoved = errors.New("storage migration moved on since it was read")
 
 // StorageMigrationWorker drives active migrations to completion.
 type StorageMigrationWorker struct {
@@ -157,7 +168,10 @@ func (w *StorageMigrationWorker) tick(ctx context.Context) {
 		}
 		// A step error is transient — log and retry on the next tick. Terminal
 		// failures set state='failed' inside the step and return nil.
-		if err := w.advance(ctx, m); err != nil {
+		if err := w.advance(ctx, m); errors.Is(err, ErrMigrationMoved) {
+			w.log().Info("migration moved on since it was listed; step dropped",
+				zap.String("tenant_id", m.TenantID.String()), zap.String("state", m.State))
+		} else if err != nil {
 			w.log().Warn("migration step failed; will retry",
 				zap.String("tenant_id", m.TenantID.String()),
 				zap.String("state", m.State), zap.Error(err))
@@ -195,7 +209,7 @@ func (w *StorageMigrationWorker) stepProvisioning(ctx context.Context, m Storage
 	case "ready":
 		// proceed below
 	case "failed":
-		return w.Repo.Fail(ctx, m.TenantID, "target bucket provisioning failed")
+		return w.Repo.Fail(ctx, m.TenantID, m.State, "target bucket provisioning failed")
 	default:
 		return nil // still pending; wait for the bucket reconciler
 	}
@@ -205,7 +219,7 @@ func (w *StorageMigrationWorker) stepProvisioning(ctx context.Context, m Storage
 	}
 	w.log().Info("migration entering copy phase",
 		zap.String("tenant_id", m.TenantID.String()), zap.Int64("objects", total))
-	return w.Repo.SetCopying(ctx, m.TenantID, total)
+	return w.Repo.SetCopying(ctx, m.TenantID, m.State, total)
 }
 
 // stepCopying copies one batch of objects (server-side, identical key) and
@@ -224,10 +238,10 @@ func (w *StorageMigrationWorker) stepCopying(ctx context.Context, m StorageMigra
 			w.log().Error("copy ended short of the count; refusing to rebind",
 				zap.String("tenant_id", m.TenantID.String()),
 				zap.Int64("copied", m.ObjectsCopied), zap.Int64("total", m.ObjectsTotal))
-			return w.Repo.Fail(ctx, m.TenantID,
+			return w.Repo.Fail(ctx, m.TenantID, m.State,
 				fmt.Sprintf("copy incomplete: %d of %d objects copied; not rebinding", m.ObjectsCopied, m.ObjectsTotal))
 		}
-		return w.Repo.SetState(ctx, m.TenantID, MigStateRebinding)
+		return w.Repo.SetState(ctx, m.TenantID, m.State, MigStateRebinding)
 	}
 	copied := m.ObjectsCopied
 	curOK, curKey := m.CursorCollection, m.CursorKey
@@ -239,13 +253,13 @@ func (w *StorageMigrationWorker) stepCopying(ctx context.Context, m StorageMigra
 		dst := CopyLocation{BackendID: m.TargetBackendID, TenantID: m.TenantID, Bucket: m.TargetBucketName, Collection: o.Collection, Key: o.Key}
 		if err := w.Copier.CopyObject(ctx, src, dst); err != nil {
 			// Persist progress so far, then bubble — the batch retries from here.
-			_ = w.Repo.AdvanceCopy(ctx, m.TenantID, copied, curOK, curKey)
+			_ = w.Repo.AdvanceCopy(ctx, m.TenantID, m.State, copied, curOK, curKey)
 			return fmt.Errorf("copy %s/%s: %w", o.Collection, o.Key, err)
 		}
 		copied++
 		curOK, curKey = o.Collection, o.Key
 	}
-	return w.Repo.AdvanceCopy(ctx, m.TenantID, copied, curOK, curKey)
+	return w.Repo.AdvanceCopy(ctx, m.TenantID, m.State, copied, curOK, curKey)
 }
 
 // stepRebinding atomically repoints the tenant's collections at the dedicated
@@ -254,7 +268,7 @@ func (w *StorageMigrationWorker) stepRebinding(ctx context.Context, m StorageMig
 	if err := w.Repo.RebindTenant(ctx, m.TenantID, m.TargetBackendID, m.TargetBucketName); err != nil {
 		return fmt.Errorf("rebind collections: %w", err)
 	}
-	return w.Repo.SetState(ctx, m.TenantID, MigStateVerifying)
+	return w.Repo.SetState(ctx, m.TenantID, m.State, MigStateVerifying)
 }
 
 // stepVerifying confirms the migration is sound before serving from the
@@ -273,12 +287,12 @@ func (w *StorageMigrationWorker) stepVerifying(ctx context.Context, m StorageMig
 		if err := w.verifyPhysical(ctx, m); err != nil {
 			w.log().Error("physical verify failed; not completing",
 				zap.String("tenant_id", m.TenantID.String()), zap.Error(err))
-			return w.Repo.Fail(ctx, m.TenantID, "physical verify: "+err.Error())
+			return w.Repo.Fail(ctx, m.TenantID, m.State, "physical verify: "+err.Error())
 		}
 	}
 	w.log().Info("migration completed",
 		zap.String("tenant_id", m.TenantID.String()), zap.Int64("objects", m.ObjectsCopied))
-	return w.Repo.Complete(ctx, m.TenantID)
+	return w.Repo.Complete(ctx, m.TenantID, m.State)
 }
 
 // verifyPhysical HEADs every object in the TARGET bucket and checks its size
@@ -351,7 +365,7 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 	w.log().Info("migration source cleaned",
 		zap.String("tenant_id", m.TenantID.String()),
 		zap.String("source", m.SourceBackendID+"/"+m.SourceBucketName))
-	return w.Repo.MarkCleaned(ctx, m.TenantID)
+	return w.Repo.MarkCleaned(ctx, m.TenantID, m.State)
 }
 
 func (w *StorageMigrationWorker) log() *zap.Logger {
