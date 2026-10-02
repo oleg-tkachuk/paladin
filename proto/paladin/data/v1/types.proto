@@ -42,6 +42,22 @@ message Object {
   ObjectLockState lock = 21 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Optional — physical placement; populated only for privileged callers.
   PhysicalPlacement placement = 22;
+  // Signals the content has been flagged with. Empty for a clean object. A
+  // capability without allow_tainted_read cannot read a tainted object.
+  // Populated by GetObject and LookupObject; set with SetObjectTaint.
+  repeated TaintSignal taint = 23 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// TaintSignal is a reason an object's content must not reach an agent that
+// has not been allowed to read flagged content.
+enum TaintSignal {
+  TAINT_SIGNAL_UNSPECIFIED = 0;
+  // Text that tries to instruct the model reading it.
+  TAINT_SIGNAL_PROMPT_INJECTION = 1;
+  // Personal data.
+  TAINT_SIGNAL_PII = 2;
+  // A credential, key or token.
+  TAINT_SIGNAL_SECRETS = 3;
 }
 
 enum ObjectState {

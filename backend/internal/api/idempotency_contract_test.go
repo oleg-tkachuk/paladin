@@ -379,6 +379,8 @@ var idempotentByArgument = map[string]string{
 	// is what made RotateCredentials look safe.
 	"SetObjectLegalHold": "ON CONFLICT DO UPDATE SET legal_hold = EXCLUDED.legal_hold — " +
 		"an upsert of one flag to the value supplied",
+	"SetObjectTaint": "UPDATE objects SET taint = $signals — replaces the whole " +
+		"signal set with the one supplied, normalised and sorted first",
 	"SetObjectRetention": "the same upsert; a repeat of the same retain_until satisfies " +
 		"the `EXCLUDED.retain_until >= ol.retain_until` guard by equality",
 	"GrantScopes": "mergeScopes dedups by Scope.String(), so this is a set union — " +

@@ -345,6 +345,10 @@ type Object struct {
 	// the hot pagination path for a field most deployments never set. Callers
 	// that need it for a list read it per object, or use GetObjectLock.
 	Lock ObjectLock
+
+	// Taint is the signals the content has been flagged with (taint_handler.go).
+	// Empty for a clean object.
+	Taint []string
 }
 
 type CreateObjectArgs struct {

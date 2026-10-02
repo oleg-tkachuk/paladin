@@ -19,7 +19,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_types: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "ChtwYWxhZGluL2RhdGEvdjEvdHlwZXMucHJvdG8SD3BhbGFkaW4uZGF0YS52MSK5BwoGT2JqZWN0EhEKBG5hbWUYASABKAlCA+BBCBIWCglvYmplY3RfaWQYAiABKAlCA+BBAxIWCgl0ZW5hbnRfaWQYAyABKAlCA+BBAxIXCgpjb2xsZWN0aW9uGAQgASgJQgPgQQMSEAoDa2V5GAUgASgJQgPgQQMSMAoFc3RhdGUYBiABKA4yHC5wYWxhZGluLmRhdGEudjEuT2JqZWN0U3RhdGVCA+BBAxIUCgxjb250ZW50X3R5cGUYByABKAkSFwoKc2l6ZV9ieXRlcxgIIAEoA0ID4EEDEhEKBGV0YWcYCSABKAlCA+BBAxI2CghjaGVja3N1bRgKIAEoCzIfLnBhbGFkaW4uZGF0YS52MS5DaGVja3N1bURpZ2VzdEID4EEDEhYKCXNlcXVlbmNlchgLIAEoCUID4EEDEjcKCG1ldGFkYXRhGAwgAygLMiUucGFsYWRpbi5kYXRhLnYxLk9iamVjdC5NZXRhZGF0YUVudHJ5Ei8KBHRhZ3MYDSADKAsyIS5wYWxhZGluLmRhdGEudjEuT2JqZWN0LlRhZ3NFbnRyeRIUCgxleHRlcm5hbF9yZWYYDiABKAkSHQoQcmVzb3VyY2VfdmVyc2lvbhgPIAEoCUID4EEDEjMKCmNyZWF0ZWRfYXQYECABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKdXBkYXRlZF9hdBgRIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxI1Cgxjb21taXR0ZWRfYXQYEiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSNgoNdGVybWluYXRlZF9hdBgTIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxI7ChJwcmVzaWduX2V4cGlyZXNfYXQYFCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoEbG9jaxgVIAEoCzIgLnBhbGFkaW4uZGF0YS52MS5PYmplY3RMb2NrU3RhdGVCA+BBAxI1CglwbGFjZW1lbnQYFiABKAsyIi5wYWxhZGluLmRhdGEudjEuUGh5c2ljYWxQbGFjZW1lbnQaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGisKCVRhZ3NFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjIKDkNoZWNrc3VtRGlnZXN0EhEKCWFsZ29yaXRobRgBIAEoCRINCgV2YWx1ZRgCIAEoCSJqCg9PYmplY3RMb2NrU3RhdGUSDAoEbW9kZRgBIAEoCRI1CgxyZXRhaW5fdW50aWwYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSEgoKbGVnYWxfaG9sZBgDIAEoCCJQChFQaHlzaWNhbFBsYWNlbWVudBISCgpiYWNrZW5kX2lkGAEgASgJEhEKCWJ1Y2tldF9pZBgCIAEoCRIUCgxzdG9yYWdlX3BhdGgYAyABKAkiSgoNQ29tcGxldGVkUGFydBITCgtwYXJ0X251bWJlchgBIAEoBRIMCgRldGFnGAIgASgJEhYKDmNoZWNrc3VtX3ZhbHVlGAMgASgJIncKCFBhcnRJbmZvEhMKC3BhcnRfbnVtYmVyGAEgASgFEhIKCnNpemVfYnl0ZXMYAiABKAMSDAoEZXRhZxgDIAEoCRI0Cgt1cGxvYWRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAyqUAQoLT2JqZWN0U3RhdGUSHAoYT0JKRUNUX1NUQVRFX1VOU1BFQ0lGSUVEEAASGAoUT0JKRUNUX1NUQVRFX1BFTkRJTkcQARIaChZPQkpFQ1RfU1RBVEVfQVZBSUxBQkxFEAISFwoTT0JKRUNUX1NUQVRFX0ZBSUxFRBADEhgKFE9CSkVDVF9TVEFURV9ERUxFVEVEEARCSlpIZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vZGF0YS92MTtwYWxhZGluZGF0YXYxYgZwcm90bzM",
+    "ChtwYWxhZGluL2RhdGEvdjEvdHlwZXMucHJvdG8SD3BhbGFkaW4uZGF0YS52MSLrBwoGT2JqZWN0EhEKBG5hbWUYASABKAlCA+BBCBIWCglvYmplY3RfaWQYAiABKAlCA+BBAxIWCgl0ZW5hbnRfaWQYAyABKAlCA+BBAxIXCgpjb2xsZWN0aW9uGAQgASgJQgPgQQMSEAoDa2V5GAUgASgJQgPgQQMSMAoFc3RhdGUYBiABKA4yHC5wYWxhZGluLmRhdGEudjEuT2JqZWN0U3RhdGVCA+BBAxIUCgxjb250ZW50X3R5cGUYByABKAkSFwoKc2l6ZV9ieXRlcxgIIAEoA0ID4EEDEhEKBGV0YWcYCSABKAlCA+BBAxI2CghjaGVja3N1bRgKIAEoCzIfLnBhbGFkaW4uZGF0YS52MS5DaGVja3N1bURpZ2VzdEID4EEDEhYKCXNlcXVlbmNlchgLIAEoCUID4EEDEjcKCG1ldGFkYXRhGAwgAygLMiUucGFsYWRpbi5kYXRhLnYxLk9iamVjdC5NZXRhZGF0YUVudHJ5Ei8KBHRhZ3MYDSADKAsyIS5wYWxhZGluLmRhdGEudjEuT2JqZWN0LlRhZ3NFbnRyeRIUCgxleHRlcm5hbF9yZWYYDiABKAkSHQoQcmVzb3VyY2VfdmVyc2lvbhgPIAEoCUID4EEDEjMKCmNyZWF0ZWRfYXQYECABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKdXBkYXRlZF9hdBgRIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxI1Cgxjb21taXR0ZWRfYXQYEiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSNgoNdGVybWluYXRlZF9hdBgTIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxI7ChJwcmVzaWduX2V4cGlyZXNfYXQYFCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoEbG9jaxgVIAEoCzIgLnBhbGFkaW4uZGF0YS52MS5PYmplY3RMb2NrU3RhdGVCA+BBAxI1CglwbGFjZW1lbnQYFiABKAsyIi5wYWxhZGluLmRhdGEudjEuUGh5c2ljYWxQbGFjZW1lbnQSMAoFdGFpbnQYFyADKA4yHC5wYWxhZGluLmRhdGEudjEuVGFpbnRTaWduYWxCA+BBAxovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaKwoJVGFnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiMgoOQ2hlY2tzdW1EaWdlc3QSEQoJYWxnb3JpdGhtGAEgASgJEg0KBXZhbHVlGAIgASgJImoKD09iamVjdExvY2tTdGF0ZRIMCgRtb2RlGAEgASgJEjUKDHJldGFpbl91bnRpbBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxISCgpsZWdhbF9ob2xkGAMgASgIIlAKEVBoeXNpY2FsUGxhY2VtZW50EhIKCmJhY2tlbmRfaWQYASABKAkSEQoJYnVja2V0X2lkGAIgASgJEhQKDHN0b3JhZ2VfcGF0aBgDIAEoCSJKCg1Db21wbGV0ZWRQYXJ0EhMKC3BhcnRfbnVtYmVyGAEgASgFEgwKBGV0YWcYAiABKAkSFgoOY2hlY2tzdW1fdmFsdWUYAyABKAkidwoIUGFydEluZm8SEwoLcGFydF9udW1iZXIYASABKAUSEgoKc2l6ZV9ieXRlcxgCIAEoAxIMCgRldGFnGAMgASgJEjQKC3VwbG9hZGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDKn4KC1RhaW50U2lnbmFsEhwKGFRBSU5UX1NJR05BTF9VTlNQRUNJRklFRBAAEiEKHVRBSU5UX1NJR05BTF9QUk9NUFRfSU5KRUNUSU9OEAESFAoQVEFJTlRfU0lHTkFMX1BJSRACEhgKFFRBSU5UX1NJR05BTF9TRUNSRVRTEAMqlAEKC09iamVjdFN0YXRlEhwKGE9CSkVDVF9TVEFURV9VTlNQRUNJRklFRBAAEhgKFE9CSkVDVF9TVEFURV9QRU5ESU5HEAESGgoWT0JKRUNUX1NUQVRFX0FWQUlMQUJMRRACEhcKE09CSkVDVF9TVEFURV9GQUlMRUQQAxIYChRPQkpFQ1RfU1RBVEVfREVMRVRFRBAEQkpaSGdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2RhdGEvdjE7cGFsYWRpbmRhdGF2MWIGcHJvdG8z",
     [file_google_protobuf_timestamp, file_google_api_field_behavior],
   );
 
@@ -154,6 +154,15 @@ export type Object$ = Message<"paladin.data.v1.Object"> & {
    * @generated from field: paladin.data.v1.PhysicalPlacement placement = 22;
    */
   placement?: PhysicalPlacement | undefined;
+
+  /**
+   * Signals the content has been flagged with. Empty for a clean object. A
+   * capability without allow_tainted_read cannot read a tainted object.
+   * Populated by GetObject and LookupObject; set with SetObjectTaint.
+   *
+   * @generated from field: repeated paladin.data.v1.TaintSignal taint = 23;
+   */
+  taint: TaintSignal[];
 };
 
 /**
@@ -317,6 +326,47 @@ export const PartInfoSchema: GenMessage<PartInfo> =
   messageDesc(file_paladin_data_v1_types, 5);
 
 /**
+ * TaintSignal is a reason an object's content must not reach an agent that
+ * has not been allowed to read flagged content.
+ *
+ * @generated from enum paladin.data.v1.TaintSignal
+ */
+export enum TaintSignal {
+  /**
+   * @generated from enum value: TAINT_SIGNAL_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Text that tries to instruct the model reading it.
+   *
+   * @generated from enum value: TAINT_SIGNAL_PROMPT_INJECTION = 1;
+   */
+  PROMPT_INJECTION = 1,
+
+  /**
+   * Personal data.
+   *
+   * @generated from enum value: TAINT_SIGNAL_PII = 2;
+   */
+  PII = 2,
+
+  /**
+   * A credential, key or token.
+   *
+   * @generated from enum value: TAINT_SIGNAL_SECRETS = 3;
+   */
+  SECRETS = 3,
+}
+
+/**
+ * Describes the enum paladin.data.v1.TaintSignal.
+ */
+export const TaintSignalSchema: GenEnum<TaintSignal> =
+  /*@__PURE__*/
+  enumDesc(file_paladin_data_v1_types, 0);
+
+/**
  * @generated from enum paladin.data.v1.ObjectState
  */
 export enum ObjectState {
@@ -351,4 +401,4 @@ export enum ObjectState {
  */
 export const ObjectStateSchema: GenEnum<ObjectState> =
   /*@__PURE__*/
-  enumDesc(file_paladin_data_v1_types, 0);
+  enumDesc(file_paladin_data_v1_types, 1);

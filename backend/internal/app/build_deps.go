@@ -173,6 +173,7 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		IAMRefresh:    adapters.NewRefreshTokenRepo(db.Queries),
 		ObjectVersion: adapters.NewObjectVersionRepo(db.Queries),
 		ObjectLock:    adapters.NewObjectLockRepo(db.Queries),
+		ObjectTaint:   adapters.NewObjectTaintRepo(db.Queries),
 		Idempotency:   adapters.NewIdempotencyRepo(db.Queries),
 	}
 	storage := wire.Storage{

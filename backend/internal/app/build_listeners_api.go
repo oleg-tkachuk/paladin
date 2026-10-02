@@ -65,6 +65,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	mpH := wire.ProvideMultipartHandler(repos, storage, polEngine, deps.SM)
 	versionH := wire.ProvideVersionHandler(repos, polEngine)
 	lockH := wire.ProvideLockHandler(repos, polEngine)
+	taintH := wire.ProvideTaintHandler(repos, polEngine)
 	quotaUpdater := adapters.NewQuotaRepoV2(deps.DB.Queries, deps.Pool)
 	objH.SetVersionHandler(versionH)
 	objH.SetQuotaUpdater(quotaUpdater)
@@ -163,6 +164,12 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// lets a consumer reach a tenant without holding a long-lived
 		// credential for it. A capability presented alongside a JWT or API
 		// token stays additive — the existing principal wins.
+		// The taint lookup is what gives AllowTaintedRead something to act
+		// on: a capability without it is refused reads of flagged objects.
+		var capOpts []auth.CapabilityOption
+		if taintH != nil {
+			capOpts = append(capOpts, auth.WithTaintLookup(taintH.Tainted))
+		}
 		capData = auth.CapabilityEstablishingInterceptor(
 			deps.Capability.Verifier,
 			capability.AudiencePlaneData,
@@ -170,6 +177,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			cfg.Capability.ChargePerRequestAmount,
 			cfg.Capability.ChargePerRequestUnit,
 			chargeEm,
+			capOpts...,
 		)
 	} else {
 		capData = auth.CapabilityInterceptor(nil, "", nil, 0, "")
@@ -413,7 +421,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	dataMux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(dataMux)
 	dataMux.Handle(paladindatav1connect.NewObjectServiceHandler(
-		connectdata.NewObjectServer(objH, versionH).WithLocks(lockH), dataOpts))
+		connectdata.NewObjectServer(objH, versionH).WithLocks(lockH).WithTaints(taintH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(connectdata.NewMultipartServer(mpH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewPresignServiceHandler(connectdata.NewPresignServer(presignH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewObjectTagServiceHandler(connectdata.NewObjectTagServer(objH), dataOpts))
