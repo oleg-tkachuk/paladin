@@ -188,7 +188,9 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	if cfg.headers.Get(HeaderUserAgent) == "" {
 		cfg.headers.Set(HeaderUserAgent, userAgent())
 	}
-	interceptors := []connect.Interceptor{&headerInterceptor{headers: cfg.headers}}
+	// Outermost: every failure reaches the caller as an *Error, while the
+	// interceptors inside see the Connect error they act on.
+	interceptors := []connect.Interceptor{errorInterceptor{}, &headerInterceptor{headers: cfg.headers}}
 	if cfg.tokens != nil {
 		interceptors = append(interceptors, cfg.tokens)
 	}
