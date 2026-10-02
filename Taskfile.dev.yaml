@@ -250,6 +250,7 @@ tasks:
       - task: verify:taskfile-drift
       - task: verify:publish-target
       - task: verify:new-release-tag
+      - task: verify:release-head
       - task: verify:release-rules
       - task: verify:go-module-paths
       - task: verify:image-uid
@@ -490,6 +491,12 @@ tasks:
     # already existed, and fail.
     cmds:
       - ./scripts/new-release-tag.test.sh
+
+  verify:release-head:
+    desc: "Fail when release.yaml would tag a main head newer than the commit CI passed"
+    # v4.12.0 was tagged on a merge whose own CI was still running.
+    cmds:
+      - ./scripts/release-head-check.test.sh
 
   verify:publish-target:
     desc: "Fail when release.yaml, Taskfile.yaml and the charts name different image paths"

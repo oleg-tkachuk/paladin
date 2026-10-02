@@ -93,7 +93,17 @@ jobs:
           CI_RUN: ${{ github.event.client_payload.ci_run_id }}
         run: printf 'dispatched by CI run %s for commit %s\n' "${CI_RUN:-unknown}" "${SHA:-unknown}"
 
+      # The checkout above is main's head, which can be newer than the commit
+      # whose CI dispatched this run. Only that commit is released; a newer
+      # head is released by its own CI run. See scripts/release-head-check.sh.
+      - name: Release only the commit CI passed
+        id: head
+        env:
+          SHA: ${{ github.event.client_payload.sha }}
+        run: ./scripts/release-head-check.sh "$SHA" >>"$GITHUB_OUTPUT"
+
       - name: Set up Node
+        if: steps.head.outputs.release == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
@@ -105,14 +115,17 @@ jobs:
       # installs the versions committed here rather than a marketplace
       # action's own.
       - name: Install semantic-release
+        if: steps.head.outputs.release == 'true'
         run: npm ci
 
       # What HEAD carried before this run, so the step after it can tell a tag
       # it pushed from one an earlier dispatch to the same commit pushed.
       - name: Note the tags already on HEAD
+        if: steps.head.outputs.release == 'true'
         run: git tag --points-at HEAD >"$RUNNER_TEMP/tags-before"
 
       - name: Compute and push the tag
+        if: steps.head.outputs.release == 'true'
         run: npx semantic-release --no-ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -124,6 +137,7 @@ jobs:
       # enough.
       - name: Read the tag it just pushed
         id: tag
+        if: steps.head.outputs.release == 'true'
         run: |
           set -euo pipefail
 
