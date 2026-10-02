@@ -24,8 +24,11 @@ set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
-# The published API contract this tree must stay wire-compatible with.
-API_BASELINE_TAG=api/v0.10.0
+# The published API contract this tree must stay wire-compatible with, and
+# where that tag keeps its protos. Baselines up to api/v0.10.0 kept them in
+# backend/proto; from api/v0.11.0 the contract lives at the repository root.
+API_BASELINE_TAG=api/v0.11.0
+API_BASELINE_SUBDIR=proto
 
 if ! command -v buf >/dev/null 2>&1; then
     {
@@ -49,6 +52,5 @@ if ! git rev-parse --verify --quiet "refs/tags/$API_BASELINE_TAG" >/dev/null; th
 fi
 
 echo ">>> [proto] buf breaking against $API_BASELINE_TAG"
-# Baselines up to api/v0.10.0 were cut while the contract lived in backend/.
-buf breaking proto --against ".git#tag=$API_BASELINE_TAG,subdir=backend/proto"
+buf breaking proto --against ".git#tag=$API_BASELINE_TAG,subdir=$API_BASELINE_SUBDIR"
 echo ">>> [proto] wire contract unchanged since $API_BASELINE_TAG"
