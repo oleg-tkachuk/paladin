@@ -180,6 +180,13 @@ type Capability struct {
 	// until it expires or is revoked. Revocation is the mechanism that
 	// stops a superseded capability.
 	Generation int64
+
+	// ConfirmationJKT, when set, binds the capability to a key: the RFC 7638
+	// thumbprint of the public key whose holder alone may present it. Every
+	// request must then carry a DPoP proof signed by that key (dpop.go). A
+	// delegated child of a bound capability is bound too. Carried in the
+	// token as `cnf.jkt`, and absent from tokens that are not bound.
+	ConfirmationJKT string
 }
 
 // Caveats is a typed bag of restrictions. Empty values are interpreted

@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -92,9 +94,21 @@ func CapabilityInterceptor(
 	usage capability.UsageStore[pgx.Tx],
 	chargePerRequestAmount float64,
 	chargePerRequestUnit string,
+	opts ...CapabilityOption,
 ) connect.Interceptor {
 	return CapabilityInterceptorWithEvents(verifier, audience, usage,
-		chargePerRequestAmount, chargePerRequestUnit, nil)
+		chargePerRequestAmount, chargePerRequestUnit, nil, opts...)
+}
+
+// CapabilityOption configures a capability interceptor.
+type CapabilityOption func(*capabilityInterceptor)
+
+// WithDPoP checks proof of possession for key-bound capabilities. Without
+// it, a key-bound capability is refused outright on this plane: there is
+// nothing to check its proof with, and accepting it as a bearer token would
+// throw the binding away.
+func WithDPoP(v *capability.DPoPVerifier) CapabilityOption {
+	return func(i *capabilityInterceptor) { i.dpop = v }
 }
 
 // CapabilityInterceptorWithEvents is the events-aware variant. The
@@ -109,11 +123,12 @@ func CapabilityInterceptorWithEvents(
 	chargePerRequestAmount float64,
 	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
+	opts ...CapabilityOption,
 ) connect.Interceptor {
 	if verifier == nil {
 		return passthroughInterceptor{}
 	}
-	return &capabilityInterceptor{
+	ci := &capabilityInterceptor{
 		verifier:               verifier,
 		audience:               audience,
 		usage:                  usage,
@@ -121,6 +136,10 @@ func CapabilityInterceptorWithEvents(
 		chargePerRequestUnit:   chargePerRequestUnit,
 		emitter:                emitter,
 	}
+	for _, o := range opts {
+		o(ci)
+	}
+	return ci
 }
 
 // CapabilityEstablishingInterceptor is the data-plane variant, in which a
@@ -140,9 +159,10 @@ func CapabilityEstablishingInterceptor(
 	chargePerRequestAmount float64,
 	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
+	opts ...CapabilityOption,
 ) connect.Interceptor {
 	i := CapabilityInterceptorWithEvents(verifier, audience, usage,
-		chargePerRequestAmount, chargePerRequestUnit, emitter)
+		chargePerRequestAmount, chargePerRequestUnit, emitter, opts...)
 	if ci, ok := i.(*capabilityInterceptor); ok {
 		ci.establishPrincipal = true
 	}
@@ -171,6 +191,7 @@ type capabilityInterceptor struct {
 	chargePerRequestAmount float64
 	chargePerRequestUnit   string
 	emitter                ChargeEventEmitter
+	dpop                   *capability.DPoPVerifier
 }
 
 func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -185,6 +206,10 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 			// this as PermissionDenied — the caller chose to present
 			// a capability and it didn't pass; falling through to JWT
 			// silently would mask the misconfiguration.
+			return nil, connect.NewError(connect.CodePermissionDenied, err)
+		}
+		if err := i.checkPossession(cap, token, req.Header().Get(paladin.HeaderDPoP),
+			req.HTTPMethod(), req.Spec().Procedure); err != nil {
 			return nil, connect.NewError(connect.CodePermissionDenied, err)
 		}
 		if err := i.enforceCaveats(ctx, cap); err != nil {
@@ -218,6 +243,10 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		if err != nil {
 			return connect.NewError(connect.CodePermissionDenied, err)
 		}
+		if err := i.checkPossession(cap, token, conn.RequestHeader().Get(paladin.HeaderDPoP),
+			http.MethodPost, conn.Spec().Procedure); err != nil {
+			return connect.NewError(connect.CodePermissionDenied, err)
+		}
 		if err := i.enforceCaveats(ctx, cap); err != nil {
 			return err
 		}
@@ -233,6 +262,29 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		ctx = withIdempotencyKeyPresent(ctx, conn.RequestHeader().Get(paladin.HeaderIdempotencyKey) != "")
 		return next(ctx, conn)
 	}
+}
+
+// checkPossession enforces a key-bound capability's DPoP proof. An unbound
+// capability passes. The URL compared is the procedure path: behind a proxy
+// the server cannot know the scheme and host its clients address it by, and
+// the paths of different services never coincide.
+func (i *capabilityInterceptor) checkPossession(cap *capability.Capability, token, proof, method, procedure string) error {
+	if cap.ConfirmationJKT == "" {
+		return nil
+	}
+	if i.dpop == nil {
+		return fmt.Errorf("%w: this plane cannot check proof of possession", capability.ErrDPoPRequired)
+	}
+	if method == "" {
+		method = http.MethodPost
+	}
+	return i.dpop.Check(cap, capability.DPoPRequest{
+		Proof:         proof,
+		Method:        method,
+		URL:           procedure,
+		MatchPathOnly: true,
+		Token:         token,
+	})
 }
 
 // withCapabilityPrincipal derives a Principal from a verified capability and

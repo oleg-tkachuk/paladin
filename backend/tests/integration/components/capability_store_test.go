@@ -111,6 +111,25 @@ func TestCapabilityRoundTrip(t *testing.T) {
 		t.Errorf("times: nbf %v exp %v", got.NotBefore, got.ExpiresAt)
 	}
 
+	if got.ConfirmationJKT != "" {
+		t.Errorf("unbound capability read back bound to %q", got.ConfirmationJKT)
+	}
+
+	// A key binding survives the store: the admin plane's Get and List
+	// report it, and losing it would show a bound capability as a bearer one.
+	bound := mkCap(tenant, "user:alice", time.Now().Add(time.Hour))
+	bound.ConfirmationJKT = "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k"
+	if err := store.Insert(ctx, bound, seedIssuer); err != nil {
+		t.Fatalf("insert bound: %v", err)
+	}
+	got, err = store.Get(ctx, bound.ID)
+	if err != nil {
+		t.Fatalf("get bound: %v", err)
+	}
+	if got.ConfirmationJKT != bound.ConfirmationJKT {
+		t.Errorf("bound capability: jkt %q, want %q", got.ConfirmationJKT, bound.ConfirmationJKT)
+	}
+
 	if _, err := store.Get(ctx, uuid.New()); !errors.Is(err, capability.ErrNotFound) {
 		t.Errorf("missing capability: want ErrNotFound, got %v", err)
 	}

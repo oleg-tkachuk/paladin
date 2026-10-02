@@ -1594,21 +1594,31 @@ finding moving from "packages you import" to "your code is affected".
     control is proven rather than assumed.
 - **Blockers:** none. A judgment call, currently made as "not yet".
 
-### Capability tokens are bearer tokens: no proof of possession
+### The MCP bridge cannot forward a key-bound capability
 
-- **Status:** Deferred — needs a client-side protocol, not only a server change.
-- **Reason:** whoever holds a capability token can use it. For agents that is
-  the main threat: a token pasted into a prompt, echoed by a tool or written to
-  a log is fully usable by whoever reads it, until it expires or is revoked.
-  Binding the token to a key the agent holds (a DPoP-style `cnf` claim, with a
-  per-request signed proof) closes that, but every client — both SDKs, the MCP
-  bridge — has to generate and keep a key and sign each request.
-- **Definition of Done:** an optional `cnf` claim (added with `omitempty`, so
-  the golden fixture and existing tokens are unchanged); the verifier requires
-  a valid proof when it is present, with replay protection (`jti` + time
-  window); both SDKs sign proofs; a test shows a stolen bound token is refused.
-- **Blockers:** the proof format and the SDK key storage are decisions to make
-  first.
+- **Status:** Deferred — follows from DPoP binding.
+- **Reason:** the bridge forwards the capability it was handed to the plane
+  behind it. A key-bound capability also needs a proof signed by the agent's
+  key for *that* request, and the agent signs for the MCP request, not for the
+  Connect call the bridge makes, so the plane refuses it. That fails closed;
+  agents behind MCP use unbound capabilities until it is solved.
+- **Definition of Done:** either the bridge verifies the agent's proof on the
+  MCP request and the plane trusts a bridge attestation in its place, or the
+  bridge holds its own key and receives capabilities delegated to it.
+- **Blockers:** choosing between the two.
+
+### DPoP replay cache is per replica
+
+- **Status:** Deferred — the window keeps the gap narrow.
+- **Reason:** `MemoryReplayCache` remembers proof ids in one process. A proof
+  replayed against another replica within the one-minute window is accepted
+  there. The proof is still bound to the same method, path and token, so the
+  replay can only repeat the request it was made for.
+- **Definition of Done:** a shared `ReplayCache` (Postgres `INSERT … ON
+  CONFLICT DO NOTHING` with a TTL purge, or Redis `SET NX EX`) wired in
+  `BuildCapabilityBundle`, with a test that a proof used on one replica is
+  refused on another.
+- **Blockers:** none; a per-request write is the cost to weigh.
 
 ### Offline attenuation: an agent cannot narrow its own capability
 

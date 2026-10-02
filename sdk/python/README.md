@@ -81,7 +81,7 @@ with TenantServiceClientSync(client.base_url, interceptors=client.interceptors()
 
 | Member | Does |
 | --- | --- |
-| `Client(base_url, *, bearer_token=None, api_token=None, capability=None, retry=None, headers=None, token_source=None, audience=None)` | A client for the plane at `base_url`. Raises `ValueError` unless it is an absolute `http`/`https` URL. A trailing `/` is dropped. `bearer_token` is sent as `Authorization: Bearer <token>` — an API token (`paladin_pat_…`) and an OIDC JWT are both accepted. `api_token` is sent in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. `capability` is sent in `X-Paladin-Capability`. `headers` are sent on every call and replace what the SDK would send there — `User-Agent` included, which is `paladin-sdk-python/<version>` by default. |
+| `Client(base_url, *, bearer_token=None, api_token=None, capability=None, retry=None, headers=None, token_source=None, audience=None, dpop_key=None)` | A client for the plane at `base_url`. Raises `ValueError` unless it is an absolute `http`/`https` URL. A trailing `/` is dropped. `bearer_token` is sent as `Authorization: Bearer <token>` — an API token (`paladin_pat_…`) and an OIDC JWT are both accepted. `api_token` is sent in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. `capability` is sent in `X-Paladin-Capability`. `dpop_key` — a `cryptography` Ed25519 or P-256 private key, with the `dpop` extra installed — proves possession of the key a capability is bound to: each call, each retry included, carries a fresh RFC 9449 proof in `DPoP`; issue the capability with `confirmation_jkt=dpop_thumbprint(key.public_key())`. `headers` are sent on every call and replace what the SDK would send there — `User-Agent` included, which is `paladin-sdk-python/<version>` by default. |
 | `base_url` | First argument of every generated client. |
 | `interceptors()` | Interceptors for a generated `…ClientSync`. |
 | `async_interceptors()` | Interceptors for a generated async `…Client`. |
@@ -357,8 +357,8 @@ against `paladin.testing`:
 
 ### Constants
 
-`HEADER_AUTHORIZATION`, `HEADER_API_TOKEN`, `HEADER_CAPABILITY` and
-`HEADER_IDEMPOTENCY_KEY` are the header names the server reads, and
+`HEADER_AUTHORIZATION`, `HEADER_API_TOKEN`, `HEADER_CAPABILITY`, `HEADER_DPOP`
+and `HEADER_IDEMPOTENCY_KEY` are the header names the server reads, and
 `HEADER_USER_AGENT` and `HEADER_RETRY_AFTER` the two the SDK sends and reads
 besides; `tests/test_headers.py` keeps them equal to the Go SDK's, which the
 server imports. `user_agent()` is the `User-Agent` the client sends. `DEFAULT_RETRY_BASE_DELAY` and `DEFAULT_RETRY_MAX_DELAY` are

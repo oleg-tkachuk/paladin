@@ -313,19 +313,24 @@ func (x *CapabilityCaveats) GetUnitCode() string {
 // capability. Returned by every RPC; the compact JWT is delivered
 // separately as `token` so handlers can choose whether to surface it.
 type Capability struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Issuer        string                 `protobuf:"bytes,2,opt,name=issuer,proto3" json:"issuer,omitempty"`
-	Subject       *CapabilityPrincipal   `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
-	Audience      []string               `protobuf:"bytes,4,rep,name=audience,proto3" json:"audience,omitempty"`
-	Caveats       *CapabilityCaveats     `protobuf:"bytes,5,opt,name=caveats,proto3" json:"caveats,omitempty"`
-	IssuedAt      *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
-	NotBefore     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	ParentId      string                 `protobuf:"bytes,9,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
-	Generation    int64                  `protobuf:"varint,10,opt,name=generation,proto3" json:"generation,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Issuer     string                 `protobuf:"bytes,2,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	Subject    *CapabilityPrincipal   `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
+	Audience   []string               `protobuf:"bytes,4,rep,name=audience,proto3" json:"audience,omitempty"`
+	Caveats    *CapabilityCaveats     `protobuf:"bytes,5,opt,name=caveats,proto3" json:"caveats,omitempty"`
+	IssuedAt   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
+	NotBefore  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
+	ExpiresAt  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	ParentId   string                 `protobuf:"bytes,9,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
+	Generation int64                  `protobuf:"varint,10,opt,name=generation,proto3" json:"generation,omitempty"`
+	// confirmation_jkt binds the capability to a key (RFC 9449 DPoP): the
+	// base64url SHA-256 JWK thumbprint (RFC 7638) of the public key whose
+	// holder alone may present it. Every request must then carry a DPoP
+	// proof signed by that key. Empty = an unbound bearer capability.
+	ConfirmationJkt string `protobuf:"bytes,11,opt,name=confirmation_jkt,json=confirmationJkt,proto3" json:"confirmation_jkt,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Capability) Reset() {
@@ -428,16 +433,28 @@ func (x *Capability) GetGeneration() int64 {
 	return 0
 }
 
+func (x *Capability) GetConfirmationJkt() string {
+	if x != nil {
+		return x.ConfirmationJkt
+	}
+	return ""
+}
+
 type CapabilityServiceIssueRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Subject  *CapabilityPrincipal   `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
 	Audience []string               `protobuf:"bytes,2,rep,name=audience,proto3" json:"audience,omitempty"`
 	Caveats  *CapabilityCaveats     `protobuf:"bytes,3,opt,name=caveats,proto3" json:"caveats,omitempty"`
 	// ttl_seconds caps the capability lifetime. 0 → server default.
-	TtlSeconds    int64                  `protobuf:"varint,4,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
-	NotBefore     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	TtlSeconds int64                  `protobuf:"varint,4,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	NotBefore  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
+	// confirmation_jkt binds the capability to a key (RFC 9449 DPoP): the
+	// base64url SHA-256 JWK thumbprint (RFC 7638) of the public key whose
+	// holder alone may present it. Every request must then carry a DPoP
+	// proof signed by that key. Empty = an unbound bearer capability.
+	ConfirmationJkt string `protobuf:"bytes,6,opt,name=confirmation_jkt,json=confirmationJkt,proto3" json:"confirmation_jkt,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CapabilityServiceIssueRequest) Reset() {
@@ -505,6 +522,13 @@ func (x *CapabilityServiceIssueRequest) GetNotBefore() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *CapabilityServiceIssueRequest) GetConfirmationJkt() string {
+	if x != nil {
+		return x.ConfirmationJkt
+	}
+	return ""
+}
+
 type CapabilityServiceIssueResponse struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Capability *Capability            `protobuf:"bytes,1,opt,name=capability,proto3" json:"capability,omitempty"`
@@ -563,14 +587,18 @@ type CapabilityServiceDelegateRequest struct {
 	// parent_id is the capability the caller is narrowing under. The
 	// server fetches it from the store; the caller need not keep the
 	// full token around to delegate.
-	ParentId      string                 `protobuf:"bytes,1,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
-	Subject       *CapabilityPrincipal   `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	Audience      []string               `protobuf:"bytes,3,rep,name=audience,proto3" json:"audience,omitempty"`
-	Caveats       *CapabilityCaveats     `protobuf:"bytes,4,opt,name=caveats,proto3" json:"caveats,omitempty"`
-	TtlSeconds    int64                  `protobuf:"varint,5,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
-	NotBefore     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ParentId   string                 `protobuf:"bytes,1,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
+	Subject    *CapabilityPrincipal   `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	Audience   []string               `protobuf:"bytes,3,rep,name=audience,proto3" json:"audience,omitempty"`
+	Caveats    *CapabilityCaveats     `protobuf:"bytes,4,opt,name=caveats,proto3" json:"caveats,omitempty"`
+	TtlSeconds int64                  `protobuf:"varint,5,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	NotBefore  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
+	// confirmation_jkt binds the child to a key of its own — the sub-agent's.
+	// Empty inherits the parent's binding; an unbound parent may gain one,
+	// a bound parent's child can never shed it.
+	ConfirmationJkt string `protobuf:"bytes,7,opt,name=confirmation_jkt,json=confirmationJkt,proto3" json:"confirmation_jkt,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CapabilityServiceDelegateRequest) Reset() {
@@ -643,6 +671,13 @@ func (x *CapabilityServiceDelegateRequest) GetNotBefore() *timestamppb.Timestamp
 		return x.NotBefore
 	}
 	return nil
+}
+
+func (x *CapabilityServiceDelegateRequest) GetConfirmationJkt() string {
+	if x != nil {
+		return x.ConfirmationJkt
+	}
+	return ""
 }
 
 type CapabilityServiceRevokeRequest struct {
@@ -1037,7 +1072,7 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\x12allow_tainted_read\x18\x06 \x01(\bR\x10allowTaintedRead\x128\n" +
 	"\x18idempotency_key_required\x18\a \x01(\bR\x16idempotencyKeyRequired\x12$\n" +
 	"\x0esource_ip_cidr\x18\b \x03(\tR\fsourceIpCidr\x12\x1b\n" +
-	"\tunit_code\x18\t \x01(\tR\bunitCode\"\xd5\x03\n" +
+	"\tunit_code\x18\t \x01(\tR\bunitCode\"\x80\x04\n" +
 	"\n" +
 	"Capability\x12\x13\n" +
 	"\x02id\x18\x01 \x01(\tB\x03\xe0A\x03R\x02id\x12\x1b\n" +
@@ -1054,7 +1089,8 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\n" +
 	"generation\x18\n" +
 	" \x01(\x03R\n" +
-	"generation\"\xba\x02\n" +
+	"generation\x12)\n" +
+	"\x10confirmation_jkt\x18\v \x01(\tR\x0fconfirmationJkt\"\x84\x03\n" +
 	"\x1dCapabilityServiceIssueRequest\x12G\n" +
 	"\asubject\x18\x01 \x01(\v2%.paladin.admin.v1.CapabilityPrincipalB\x06\xbaH\x03\xc8\x01\x01R\asubject\x12$\n" +
 	"\baudience\x18\x02 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\baudience\x12E\n" +
@@ -1062,12 +1098,13 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\vttl_seconds\x18\x04 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\n" +
 	"ttlSeconds\x129\n" +
 	"\n" +
-	"not_before\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\"y\n" +
+	"not_before\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\x12H\n" +
+	"\x10confirmation_jkt\x18\x06 \x01(\tB\x1d\xbaH\x1a\xd8\x01\x01r\x152\x13^[A-Za-z0-9_-]{43}$R\x0fconfirmationJkt\"y\n" +
 	"\x1eCapabilityServiceIssueResponse\x12<\n" +
 	"\n" +
 	"capability\x18\x01 \x01(\v2\x1c.paladin.admin.v1.CapabilityR\n" +
 	"capability\x12\x19\n" +
-	"\x05token\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05token\"\xca\x02\n" +
+	"\x05token\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05token\"\x94\x03\n" +
 	" CapabilityServiceDelegateRequest\x12%\n" +
 	"\tparent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bparentId\x12?\n" +
 	"\asubject\x18\x02 \x01(\v2%.paladin.admin.v1.CapabilityPrincipalR\asubject\x12\x1a\n" +
@@ -1076,7 +1113,8 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\vttl_seconds\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\n" +
 	"ttlSeconds\x129\n" +
 	"\n" +
-	"not_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\"}\n" +
+	"not_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\x12H\n" +
+	"\x10confirmation_jkt\x18\a \x01(\tB\x1d\xbaH\x1a\xd8\x01\x01r\x152\x13^[A-Za-z0-9_-]{43}$R\x0fconfirmationJkt\"}\n" +
 	"\x1eCapabilityServiceRevokeRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12)\n" +
