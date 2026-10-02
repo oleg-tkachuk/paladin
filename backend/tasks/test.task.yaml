@@ -40,11 +40,10 @@ tasks:
   integration:
     desc: "Run Postgres-backed integration tests (needs Docker; testcontainers)"
     vars:
-      # Named rather than left to Go's 10m default: tests/integration/components takes
-      # ~622s on a developer machine, so the default failed `verify-deep`
-      # on a suite that passes. This used to be read out of the integration
-      # workflow; that workflow is gone and this task is the only place the
-      # suites run, so the number lives here.
+      # Named rather than left to Go's 10m default, which once killed a
+      # passing suite at 601s. Both packages now share one Postgres per test
+      # binary and run in about a minute, so this is headroom for a loaded CI
+      # runner, not a budget anything is close to.
       INTEGRATION_TIMEOUT: 20m
     cmds:
       # Both levels: the assembled application and components/.
