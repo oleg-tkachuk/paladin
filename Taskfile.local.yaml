@@ -25,7 +25,7 @@ vars:
   K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
   # Shared task library — github.com/oleg-tkachuk/taskfiles, pinned. Another
   # copy of the pin in Taskfile.yaml, for the reason given in Taskfile.dev.yaml.
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.1.1'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.1.2'
   # Status marker, the same vocabulary as the shared library.
   _OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
 

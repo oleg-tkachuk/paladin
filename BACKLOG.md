@@ -1650,15 +1650,3 @@ finding moving from "packages you import" to "your code is affected".
   observability stack. Nothing in the Alloy config needs changing for a real
   cluster: the same scrape returns full `container_*` data on a normal
   kubelet.
-
-### A proto change cannot pass the gate before it is committed
-
-- **Status:** Deferred.
-- **Reason:** the codegen module's stub check fails on any uncommitted file
-  under the stub directories (`git status --porcelain`), so a contract change
-  with its regenerated stubs is red until committed — against this
-  repository's gate-before-commit rule.
-- **Definition of Done:** the check compares the regenerated stubs with the
-  working tree's sources, not with HEAD, so a staged change with fresh stubs
-  passes and a stale stub still fails.
-- **Blockers:** the check lives in the shared task library.

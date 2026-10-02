@@ -12,7 +12,7 @@ vars:
   # Working on the library itself: point this at a checkout beside the
   # repository instead, keeping the %s:
   #   TASKLIB: '../../taskfiles/%s'
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.1.1'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.1.2'
   PROJECT_NAME: paladin-console
   K8S_NAMESPACE: paladin
   K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
