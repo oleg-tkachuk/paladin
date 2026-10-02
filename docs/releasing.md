@@ -20,7 +20,10 @@ decides the bump on each. The backend compiles `capability/` and `sdk/go/`
 through `replace` and its image copies both, so a change there releases the
 product as well as its own module — `feat` a minor, `fix`/`perf`/`security` a patch.
 The SDK and the capability module are pre-1.0, so a breaking change is a
-minor on their streams until they reach 1.0.
+minor on their streams until they reach 1.0. A breaking change confined to
+`sdk/go/` or `capability/` breaks that module's API, not the product's, so it
+releases the product as a minor too; one that also touches the server is the
+product's major.
 
 ## The product: `vX.Y.Z`
 

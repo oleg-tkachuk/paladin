@@ -10,7 +10,7 @@
 // Runs from `task -t Taskfile.dev.yaml verify-repo` after `npm ci`.
 
 import { createRequire } from "node:module";
-import { analyzeWith, belongs } from "./release/paths-analyzer.mjs";
+import { analyzeWith, belongs, within } from "./release/paths-analyzer.mjs";
 
 const require = createRequire(import.meta.url);
 const { streams, analyzerFor } = require("../release.config.cjs");
@@ -38,6 +38,11 @@ const cases = [
   ["product", "feat(sdk): the Go SDK is compiled into the backend", SDK, "minor"],
   ["product", "feat(sdk): only the Python SDK", PYTHON_SDK, null],
   ["product", "feat(sdk): the Python SDK and the server", [...PYTHON_SDK, ...BACKEND], "minor"],
+  // A module's own breaking change is not a product major.
+  ["product", "feat(sdk)!: the Go SDK's API breaks", SDK, "minor"],
+  ["product", "feat(capability)!: the module's API breaks", CAPABILITY, "minor"],
+  ["product", "feat(sdk)!: the SDK and the server break together", [...SDK, ...BACKEND], "major"],
+  ["product", "feat(api)!: a contract break is the server's", PROTO, "major"],
 
   ["sdk", "feat(sdk): add a helper", SDK, "minor"],
   ["sdk", "fix(sdk): a Python fix", PYTHON_SDK, "patch"],
@@ -77,6 +82,8 @@ for (const [name, ok] of [
   ["a merge is not excluded", belongs([], { exclude: ["sdk/"] }) === true],
   ["include matches a prefix", belongs(["sdk/go/x.go"], { include: ["sdk/"] }) === true],
   ["exclude needs every file", belongs(["sdk/x", "backend/y"], { exclude: ["sdk/"] }) === true],
+  ["within needs every file", within(["sdk/go/x", "backend/y"], ["sdk/go/"]) === false],
+  ["a merge is within nothing", within([], ["sdk/go/"]) === false],
 ]) {
   if (!ok) {
     console.log(`FAIL ${name}`);
