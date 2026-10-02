@@ -76,7 +76,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
-
 ## MCP bridge
 
 ### Tool-coverage gaps vs the Paladin RPC surface
@@ -333,7 +332,6 @@ the same commit. Treat this file like a runtime invariant.
   (see *Federated IdP via JWKS* below). Until such an ask, this is not on
   the roadmap.
 
-
 ---
 
 ## Production-readiness audit (2026-06-12)
@@ -346,7 +344,6 @@ ListObjects pagination, frontend CSP/HSTS/CSRF + liveness, MCP PDB,
 sticky sessions, ingest dedup pool, tenant-delete precheck, AsyncWriter
 shutdown, composeKey guard). The entries that remain below were kept
 open deliberately — each notes why._
-
 
 ### Federated IdP via JWKS
 
@@ -737,6 +734,83 @@ finding moving from "packages you import" to "your code is affected".
   raison d'être of the ingest plane), or production at-least-
   once requirement that needs JetStream.
 
+### The Python SDK is not published
+
+- **Status:** Deferred (owner decision, 2026-09-30).
+- **Reason:** there are no users outside the owner, so the SDK is installed
+  from the repository. The distribution name `paladin-sdk` is provisional and
+  follows the product name if that changes.
+- **Definition of Done:** a publish job in `.github/workflows/sdk.yaml` on
+  `api/v*` (PyPI trusted publishing, a `pypi` environment), and the version in
+  `sdk/python/pyproject.toml` checked against the tag.
+- **Blockers:** the decision to publish.
+
+### Terminal tenant events are observed by query, not by subscription
+
+- **Status:** Documented 2026-08-28, not a gap. Supersedes an entry that asked
+  for platform-scoped subscriptions.
+- **Reason:** PurgeTenant no longer attempts a `paladin.tenant.purged` fan-out;
+  the outbox cannot carry it, since the delivery row and the subscription that
+  would receive it both cascade from the tenant being removed. The earlier
+  entry read that as a missing capability and proposed a new one — platform-
+  scoped subscriptions, or a nullable tenant reference on deliveries.
+  Both solve the wrong problem. `audit_log` has NO foreign key to `tenants`,
+  survives the purge, and already records it: 522 `PurgeTenant` entries in the
+  dev cluster at the time of writing, alongside 1809 `DeleteTenant`. The
+  platform-level record exists, outlives the tenant, and has an access model.
+  The event system is tenant-scoped by design — subject and audience are the
+  same tenant — and a terminal event has no tenant audience by definition.
+  Adding a platform subscription class would be a SECOND platform-observation
+  mechanism beside a working one, and an expensive one: subscribing across
+  tenants is the right to watch every tenant's lifecycle, with its own authz,
+  filters, retries and audit.
+- **Definition of Done:** nothing here. One mechanism per concern — tenant-level
+  push is events, platform-level observation is the audit log.
+- **If a consumer genuinely needs push** rather than a query, the ask is
+  "stream the audit log", which is a general capability and a different item.
+  It is not a special case of tenant events, and should not be built as one.
+
+### Streaming RPCs are charged one rate-limit token at open
+
+- **Status:** Not reachable today, re-checked 2026-08-30. The API declares
+  ZERO server-streaming RPCs — `rpc … returns (stream …)` appears in no proto
+  — so WrapStreamingHandler never runs for a real method. Event subscriptions,
+  which the reason below cites as "the streams Paladin has", are delivered by
+  the dispatcher over webhook and NATS, not over a streaming RPC; the SSE
+  audit feed is a plain handler on the admin mux and never passes through the
+  Connect interceptor chain at all. Keep the entry: the hole is real the day a
+  streaming RPC is added, and the interceptor will still charge one token.
+- **Reason:** `TenantRateLimitInterceptor.WrapStreamingHandler` bumps the
+  tenant's window once when the stream opens and never per message. That fits the streams
+  Paladin has — event subscriptions, whose cost is the subscription rather than
+  the frame — but a tenant can hold a stream open and push messages through it
+  at any rate without the limiter noticing, so the ceiling covers unary traffic
+  only.
+- **Definition of Done:** Per-message accounting inside the message loop for
+  any stream whose per-frame cost is non-trivial, or a documented statement
+  that streams are governed by their own concurrency limit instead.
+- **Blockers:** none. No stream in the API today carries enough per-frame work
+  to be worth the accounting.
+
+### A reclaimed operation records a count, not which items landed
+
+- **Status:** Deferred (needs per-executor progress semantics).
+- **Reason:** `StaleOperationReclaimer` now copies the runner's last
+  `{processed, total}` snapshot into the failure payload as `last_progress`,
+  so a caller learns the batch reached at least item N. That is a count, not
+  an identity: the batch executors are not transactional across their items
+  and process them in argument order, so "7 of 9" only implies which items
+  landed as long as the executor never reorders. Nothing enforces that today,
+  and the snapshot is throttled to ~1/s, so the true figure is at least N.
+- **Definition of Done:** A reclaimed operation's response carries the
+  per-item outcomes the successful path already returns, so a caller can
+  reissue exactly the remainder rather than inferring it from a count.
+- **Blockers:** none technical. Still deferred because retrying the whole
+  batch is correct for the idempotent executors (tags, restore) and only
+  wasteful, and the two where it is not (copy, permanent delete) deserve a
+  design pass — most likely per-item rows the executor writes as it goes —
+  rather than a partial record bolted onto the reclaim.
+
 ---
 
 ## Database
@@ -958,6 +1032,39 @@ finding moving from "packages you import" to "your code is affected".
   prints the plan that replaced it.
 - **Blockers:** none.
 
+### List filters push down only the conjuncts SQL can express
+
+- **Status:** Deferred, narrowed 2026-08-28 — timestamps are done.
+- **Reason:** The filterable list RPCs extract the SQL-expressible subset of
+  the caller's CEL (`cel.ExtractPushdown`) and hand it to the query, so
+  `filter` selects from the table rather than from whichever page the cursor
+  landed on. The walk understands the top-level `&&` chain of string equality,
+  `startsWith`, `contains`, booleans, and — as of 2026-08-28 — `created_at`
+  ranges, threaded into all seven list queries. Strict `>` / `<` are widened
+  to their inclusive forms deliberately: the pushdown may only narrow, so an
+  extra boundary row is free and a missing one is a wrong answer.
+  What still reaches only the in-memory pass: disjunctions, `labels[…]`,
+  functions, and `updated_at` — which is left out on purpose rather than
+  forgotten, since a mutable column pushed into the query can exclude a row
+  that the CEL pass, running microseconds later against a row someone just
+  touched, would have accepted. A filter made entirely of those reads the
+  whole table one page at a time: correct (paging continues, no row is
+  dropped) and slow.
+  Two paths are narrower still and worth naming: `ListCollections` has a
+  hand-written branch for the (backend, bucket) browser that takes no hints at
+  all, and `operations.state` is deliberately not pushed from a filter because
+  the column is an enum and casting an arbitrary literal to it makes Postgres
+  reject the whole query rather than return no rows.
+- **Definition of Done:** Either the walk covers the rest of the CEL surface
+  each schema exposes, or the schemas stop exposing what no query can answer.
+  Whatever is added must hold the invariant
+  `TestPushdownNeverExcludesARowTheFilterAccepts` states: SQL may over-fetch,
+  never under-fetch.
+- **Blockers:** none. Deliberately not solved by rejecting un-pushable filters
+  with InvalidArgument: that would make a legal CEL expression an error
+  because of an implementation detail of one storage engine, and the shape the
+  object and audit paths established is narrow-only for exactly that reason.
+
 ## Configuration
 
 ### MCP `allow_write` was a dead knob that read as a security control
@@ -1002,6 +1109,55 @@ finding moving from "packages you import" to "your code is affected".
   reconcile the naming with that entry's `cfg.Indexer` block — two different
   names for the same subsystem is how this drift starts.
 - **Blockers:** none — gated on semantic search becoming a committed feature.
+
+### health_snapshot_token is read from the ConfigMap
+
+- **Status:** Deferred.
+- **Reason:** `runtime.health_snapshot_token` has no Secret reference, unlike
+  `signing_key_secret` or `shared_secret_ref`, so a prod token lives in the
+  config ConfigMap; values-prod.yaml ships a placeholder there. trivy's
+  KSV-0109 is accepted in .trivyignore.yaml until this lands.
+- **Definition of Done:** a `health_snapshot_token_secret` reference resolved
+  at boot, the chart and values-prod.yaml using it — the console already reads
+  its copy from `healthSnapshotTokenSecret` — and the KSV-0109 entry removed.
+- **Blockers:** none.
+
+### Something inside the api pod speaks plain HTTP to its own TLS port
+
+- **Status:** Deferred (cosmetic today; the client was not identified).
+- **Reason:** The api pod logs `http: TLS handshake error from 127.0.0.1:
+  client sent an HTTP request to an HTTPS server` — 14 of them inside a
+  21-second burst, 18 minutes into the pod's life, during an e2e run. No other
+  pod logs it. It is not the kubelet probes: liveness, readiness and startup on
+  api and admin all carry `scheme: HTTPS`, their periods (20s / 10s / 5s) do
+  not fit a 14-in-21-seconds burst, and a probe would not come from 127.0.0.1.
+  Whatever the client is, it is inside the pod and it is wrong about the
+  scheme. Harmless so far — the connections fail and something evidently
+  retries or ignores them — but it is noise in exactly the log an operator
+  greps when chasing a real handshake failure, which is how a genuine one
+  (the console BFF's, from a different IP) nearly got lost in the count.
+  The burst has not recurred since — two full e2e runs on later builds logged
+  none — so it cannot currently be caught in the act.
+- **Definition of Done:** The client is identified and either corrected or
+  documented. The message carries `listen_addr`, so the next occurrence says
+  whether it arrived on data (8080) or iam (8085).
+- **Suspects eliminated 2026-08-28**, without waiting for a recurrence:
+  - *The MCP loader's `http://localhost:8085` default.* Cleared, and the code
+    is gone. `config.LoadMCP` / `config.MCPDefaults` were never called by
+    anything — `serve mcp` reads `cfg.MCP.Upstreams` through the main
+    CUE-validated loader — so the default could not have dialled anything.
+    Its own tests were what made it look alive.
+  - *The readiness self-dial* (`dialLocalListener`). It is TLS-aware: it uses
+    a `tls.Dialer` whenever the listener it probes has TLS enabled. Its
+    historical failure mode was the OTHER message ("EOF"), already fixed.
+  - *`kubectl port-forward`*, whose traffic does arrive from 127.0.0.1 and
+    would fit the burst shape. `scripts/e2e-cluster.sh` uses ingress
+    hostnames over https and forwards no ports, so it is not the e2e run —
+    though a hand-run port-forward during that window remains possible and
+    would explain everything.
+- **Blockers:** it stopped happening. What remains is a client that leaves no
+  trace in the tree, so `ss -tnp` inside the pod during a burst is still the
+  step that finishes this — and there is no burst to catch.
 
 ## UI / Admin Console
 
@@ -1127,7 +1283,6 @@ finding moving from "packages you import" to "your code is affected".
   - The "N smaller tenant(s) omitted" note becomes a link that pages rather
     than a dead end.
 - **Blockers:** none.
-
 
 ### UI/UX refactor (2026-07-24): flatten the deep tenant→bucket→surface URLs
 
@@ -1336,7 +1491,6 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Architecture (post-review 2026-05)
 
-
 ### Audit form (B): staging table + projector (latency mitigation only)
 
 - **Status:** Deferred — crash-durability is DONE via form (A)
@@ -1480,8 +1634,6 @@ finding moving from "packages you import" to "your code is affected".
     unreachable.
 - **Blockers:** none.
 
-## Documentation
-
 ## Capability module
 
 ### Capability module CI: deny network egress in the standalone job
@@ -1506,65 +1658,9 @@ finding moving from "packages you import" to "your code is affected".
 
 ---
 
-## List filters push down only the conjuncts SQL can express
+## Tooling and observability
 
-- **Status:** Deferred, narrowed 2026-08-28 — timestamps are done.
-- **Reason:** The filterable list RPCs extract the SQL-expressible subset of
-  the caller's CEL (`cel.ExtractPushdown`) and hand it to the query, so
-  `filter` selects from the table rather than from whichever page the cursor
-  landed on. The walk understands the top-level `&&` chain of string equality,
-  `startsWith`, `contains`, booleans, and — as of 2026-08-28 — `created_at`
-  ranges, threaded into all seven list queries. Strict `>` / `<` are widened
-  to their inclusive forms deliberately: the pushdown may only narrow, so an
-  extra boundary row is free and a missing one is a wrong answer.
-  What still reaches only the in-memory pass: disjunctions, `labels[…]`,
-  functions, and `updated_at` — which is left out on purpose rather than
-  forgotten, since a mutable column pushed into the query can exclude a row
-  that the CEL pass, running microseconds later against a row someone just
-  touched, would have accepted. A filter made entirely of those reads the
-  whole table one page at a time: correct (paging continues, no row is
-  dropped) and slow.
-  Two paths are narrower still and worth naming: `ListCollections` has a
-  hand-written branch for the (backend, bucket) browser that takes no hints at
-  all, and `operations.state` is deliberately not pushed from a filter because
-  the column is an enum and casting an arbitrary literal to it makes Postgres
-  reject the whole query rather than return no rows.
-- **Definition of Done:** Either the walk covers the rest of the CEL surface
-  each schema exposes, or the schemas stop exposing what no query can answer.
-  Whatever is added must hold the invariant
-  `TestPushdownNeverExcludesARowTheFilterAccepts` states: SQL may over-fetch,
-  never under-fetch.
-- **Blockers:** none. Deliberately not solved by rejecting un-pushable filters
-  with InvalidArgument: that would make a legal CEL expression an error
-  because of an implementation detail of one storage engine, and the shape the
-  object and audit paths established is narrow-only for exactly that reason.
-
----
-
-## The Python SDK is not published
-
-- **Status:** Deferred (owner decision, 2026-09-30).
-- **Reason:** there are no users outside the owner, so the SDK is installed
-  from the repository. The distribution name `paladin-sdk` is provisional and
-  follows the product name if that changes.
-- **Definition of Done:** a publish job in `.github/workflows/sdk.yaml` on
-  `api/v*` (PyPI trusted publishing, a `pypi` environment), and the version in
-  `sdk/python/pyproject.toml` checked against the tag.
-- **Blockers:** the decision to publish.
-
-## health_snapshot_token is read from the ConfigMap
-
-- **Status:** Deferred.
-- **Reason:** `runtime.health_snapshot_token` has no Secret reference, unlike
-  `signing_key_secret` or `shared_secret_ref`, so a prod token lives in the
-  config ConfigMap; values-prod.yaml ships a placeholder there. trivy's
-  KSV-0109 is accepted in .trivyignore.yaml until this lands.
-- **Definition of Done:** a `health_snapshot_token_secret` reference resolved
-  at boot, the chart and values-prod.yaml using it — the console already reads
-  its copy from `healthSnapshotTokenSecret` — and the KSV-0109 entry removed.
-- **Blockers:** none.
-
-## Include-level `vars:` do not reach a var the component declares
+### Include-level `vars:` do not reach a var the component declares
 
 - **Status:** Deferred.
 - **Reason:** Task 3.53.1 evaluates an included Taskfile's own `vars:` before
@@ -1578,80 +1674,8 @@ finding moving from "packages you import" to "your code is affected".
   required by the tasks that talk to a cluster, or a test proves an entry
   point's value reaches them.
 - **Blockers:** none.
----
 
-## Terminal tenant events are observed by query, not by subscription
-
-- **Status:** Documented 2026-08-28, not a gap. Supersedes an entry that asked
-  for platform-scoped subscriptions.
-- **Reason:** PurgeTenant no longer attempts a `paladin.tenant.purged` fan-out;
-  the outbox cannot carry it, since the delivery row and the subscription that
-  would receive it both cascade from the tenant being removed. The earlier
-  entry read that as a missing capability and proposed a new one — platform-
-  scoped subscriptions, or a nullable tenant reference on deliveries.
-  Both solve the wrong problem. `audit_log` has NO foreign key to `tenants`,
-  survives the purge, and already records it: 522 `PurgeTenant` entries in the
-  dev cluster at the time of writing, alongside 1809 `DeleteTenant`. The
-  platform-level record exists, outlives the tenant, and has an access model.
-  The event system is tenant-scoped by design — subject and audience are the
-  same tenant — and a terminal event has no tenant audience by definition.
-  Adding a platform subscription class would be a SECOND platform-observation
-  mechanism beside a working one, and an expensive one: subscribing across
-  tenants is the right to watch every tenant's lifecycle, with its own authz,
-  filters, retries and audit.
-- **Definition of Done:** nothing here. One mechanism per concern — tenant-level
-  push is events, platform-level observation is the audit log.
-- **If a consumer genuinely needs push** rather than a query, the ask is
-  "stream the audit log", which is a general capability and a different item.
-  It is not a special case of tenant events, and should not be built as one.
-
----
-
-## Streaming RPCs are charged one rate-limit token at open
-
-- **Status:** Not reachable today, re-checked 2026-08-30. The API declares
-  ZERO server-streaming RPCs — `rpc … returns (stream …)` appears in no proto
-  — so WrapStreamingHandler never runs for a real method. Event subscriptions,
-  which the reason below cites as "the streams Paladin has", are delivered by
-  the dispatcher over webhook and NATS, not over a streaming RPC; the SSE
-  audit feed is a plain handler on the admin mux and never passes through the
-  Connect interceptor chain at all. Keep the entry: the hole is real the day a
-  streaming RPC is added, and the interceptor will still charge one token.
-- **Reason:** `TenantRateLimitInterceptor.WrapStreamingHandler` bumps the
-  tenant's window once when the stream opens and never per message. That fits the streams
-  Paladin has — event subscriptions, whose cost is the subscription rather than
-  the frame — but a tenant can hold a stream open and push messages through it
-  at any rate without the limiter noticing, so the ceiling covers unary traffic
-  only.
-- **Definition of Done:** Per-message accounting inside the message loop for
-  any stream whose per-frame cost is non-trivial, or a documented statement
-  that streams are governed by their own concurrency limit instead.
-- **Blockers:** none. No stream in the API today carries enough per-frame work
-  to be worth the accounting.
-
----
-## A reclaimed operation records a count, not which items landed
-
-- **Status:** Deferred (needs per-executor progress semantics).
-- **Reason:** `StaleOperationReclaimer` now copies the runner's last
-  `{processed, total}` snapshot into the failure payload as `last_progress`,
-  so a caller learns the batch reached at least item N. That is a count, not
-  an identity: the batch executors are not transactional across their items
-  and process them in argument order, so "7 of 9" only implies which items
-  landed as long as the executor never reorders. Nothing enforces that today,
-  and the snapshot is throttled to ~1/s, so the true figure is at least N.
-- **Definition of Done:** A reclaimed operation's response carries the
-  per-item outcomes the successful path already returns, so a caller can
-  reissue exactly the remainder rather than inferring it from a count.
-- **Blockers:** none technical. Still deferred because retrying the whole
-  batch is correct for the idempotent executors (tags, restore) and only
-  wasteful, and the two where it is not (copy, permanent delete) deserve a
-  design pass — most likely per-item rows the executor writes as it goes —
-  rather than a partial record bolted onto the reclaim.
-
----
-
-## `container_*` metrics do not exist on this cluster, and the scrape says otherwise
+### `container_*` metrics do not exist on this cluster, and the scrape says otherwise
 
 - **Status:** Blocked (OrbStack's kubelet, not our configuration).
 - **Reason:** Alloy scrapes the node's cAdvisor endpoint and reports success —
@@ -1676,46 +1700,7 @@ finding moving from "packages you import" to "your code is affected".
   cluster: the same scrape returns full `container_*` data on a normal
   kubelet.
 
----
-
-## Something inside the api pod speaks plain HTTP to its own TLS port
-
-- **Status:** Deferred (cosmetic today; the client was not identified).
-- **Reason:** The api pod logs `http: TLS handshake error from 127.0.0.1:
-  client sent an HTTP request to an HTTPS server` — 14 of them inside a
-  21-second burst, 18 minutes into the pod's life, during an e2e run. No other
-  pod logs it. It is not the kubelet probes: liveness, readiness and startup on
-  api and admin all carry `scheme: HTTPS`, their periods (20s / 10s / 5s) do
-  not fit a 14-in-21-seconds burst, and a probe would not come from 127.0.0.1.
-  Whatever the client is, it is inside the pod and it is wrong about the
-  scheme. Harmless so far — the connections fail and something evidently
-  retries or ignores them — but it is noise in exactly the log an operator
-  greps when chasing a real handshake failure, which is how a genuine one
-  (the console BFF's, from a different IP) nearly got lost in the count.
-  The burst has not recurred since — two full e2e runs on later builds logged
-  none — so it cannot currently be caught in the act.
-- **Definition of Done:** The client is identified and either corrected or
-  documented. The message carries `listen_addr`, so the next occurrence says
-  whether it arrived on data (8080) or iam (8085).
-- **Suspects eliminated 2026-08-28**, without waiting for a recurrence:
-  - *The MCP loader's `http://localhost:8085` default.* Cleared, and the code
-    is gone. `config.LoadMCP` / `config.MCPDefaults` were never called by
-    anything — `serve mcp` reads `cfg.MCP.Upstreams` through the main
-    CUE-validated loader — so the default could not have dialled anything.
-    Its own tests were what made it look alive.
-  - *The readiness self-dial* (`dialLocalListener`). It is TLS-aware: it uses
-    a `tls.Dialer` whenever the listener it probes has TLS enabled. Its
-    historical failure mode was the OTHER message ("EOF"), already fixed.
-  - *`kubectl port-forward`*, whose traffic does arrive from 127.0.0.1 and
-    would fit the burst shape. `scripts/e2e-cluster.sh` uses ingress
-    hostnames over https and forwards no ports, so it is not the e2e run —
-    though a hand-run port-forward during that window remains possible and
-    would explain everything.
-- **Blockers:** it stopped happening. What remains is a client that leaves no
-  trace in the tree, so `ss -tnp` inside the pod during a burst is still the
-  step that finishes this — and there is no burst to catch.
-
-## A proto change cannot pass the gate before it is committed
+### A proto change cannot pass the gate before it is committed
 
 - **Status:** Deferred.
 - **Reason:** the codegen module's stub check fails on any uncommitted file
