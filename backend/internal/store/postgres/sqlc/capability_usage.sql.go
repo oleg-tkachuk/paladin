@@ -42,19 +42,28 @@ func (q *Queries) BumpCapabilityRequestCount(ctx context.Context, capabilityID p
 
 const chargeCapability = `-- name: ChargeCapability :one
 INSERT INTO capability_usage (capability_id, request_count, spent_usd, unit_code, updated_at)
-VALUES ($1, 0, $2::numeric, $3::text, now())
+SELECT $1, 0, $2::numeric, $3::text, now()
+WHERE $4::numeric = 0
+   OR $2::numeric <= $4::numeric
 ON CONFLICT (capability_id) DO UPDATE
 SET spent_usd  = capability_usage.spent_usd + $2::numeric,
     updated_at = now()
 WHERE
     $4::numeric = 0
-    OR capability_usage.spent_usd + $2::numeric <= $4::numeric
+    OR capability_usage.spent_usd + capability_usage.reserved_usd + $2::numeric
+       <= $4::numeric
 RETURNING spent_usd
 `
 
-// Adds amount to spent_usd and rejects when over the supplied cap.
-// max_budget=0 means unlimited. unit_code is set on insert and
-// preserved on conflict (an existing row owns its currency).
+// Adds amount to spent_usd and rejects when spend plus open holds
+// (reserved_usd) would pass the supplied cap. max_budget=0 means
+// unlimited. unit_code is set on insert and preserved on conflict (an
+// existing row owns its currency).
+//
+// The ceiling is checked on BOTH paths. The INSERT is a SELECT filtered by
+// it, so a first charge above the cap inserts nothing, conflicts with
+// nothing and returns no row; a VALUES insert used to accept any first
+// charge, whatever the cap.
 func (q *Queries) ChargeCapability(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string, maxBudgetUsd pgtype.Numeric) (pgtype.Numeric, error) {
 	row := q.db.QueryRow(ctx, chargeCapability,
 		capabilityID,
@@ -81,7 +90,7 @@ func (q *Queries) DeleteCapabilityUsage(ctx context.Context, capabilityID pgtype
 }
 
 const getCapabilityUsage = `-- name: GetCapabilityUsage :one
-SELECT capability_id, request_count, spent_usd, unit_code, updated_at
+SELECT capability_id, request_count, spent_usd, reserved_usd, unit_code, updated_at
 FROM capability_usage
 WHERE capability_id = $1
 `
@@ -90,6 +99,7 @@ type GetCapabilityUsageRow struct {
 	CapabilityID pgtype.UUID        `json:"capability_id"`
 	RequestCount int64              `json:"request_count"`
 	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
+	ReservedUsd  pgtype.Numeric     `json:"reserved_usd"`
 	UnitCode     string             `json:"unit_code"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
@@ -101,6 +111,7 @@ func (q *Queries) GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UU
 		&i.CapabilityID,
 		&i.RequestCount,
 		&i.SpentUsd,
+		&i.ReservedUsd,
 		&i.UnitCode,
 		&i.UpdatedAt,
 	)

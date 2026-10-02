@@ -77,6 +77,36 @@ func (s *MeteringStore[TX]) Refund(ctx context.Context, req RefundRequest) (floa
 	return refunded, err
 }
 
+// Reserve emits paladin.capability.reservation.decisions.
+func (s *MeteringStore[TX]) Reserve(ctx context.Context, req ReserveRequest) (Reservation, error) {
+	r, err := s.Inner.Reserve(ctx, req)
+	switch {
+	case err == nil:
+		recordReservation(ctx, req.TenantID, "allowed")
+	case errors.Is(err, ErrBudgetExceeded):
+		recordReservation(ctx, req.TenantID, "cap_exceeded")
+	case errors.Is(err, ErrTenantBudgetExceeded):
+		recordReservation(ctx, req.TenantID, "tenant_exceeded")
+	}
+	return r, err
+}
+
+// Settle is a charge as far as the charge metrics are concerned. The
+// request names only the reservation, so tenant and unit are not known
+// here; the charge is recorded without them.
+func (s *MeteringStore[TX]) Settle(ctx context.Context, req SettleRequest, onCharged func(ctx context.Context, tx TX) error) (ChargeReceipt, error) {
+	receipt, err := s.Inner.Settle(ctx, req, onCharged)
+	switch {
+	case err == nil:
+		recordChargeAttempt(ctx, uuid.Nil, "", req.Amount, receipt.Spent, "allowed")
+	case errors.Is(err, ErrBudgetExceeded):
+		recordChargeAttempt(ctx, uuid.Nil, "", req.Amount, 0, "cap_exceeded")
+	case errors.Is(err, ErrTenantBudgetExceeded):
+		recordChargeAttempt(ctx, uuid.Nil, "", req.Amount, 0, "tenant_exceeded")
+	}
+	return receipt, err
+}
+
 // Pure pass-throughs — reads and admin writes don't move counters, no metric.
 
 func (s *MeteringStore[TX]) Get(ctx context.Context, capID uuid.UUID) (Usage, error) {
@@ -101,4 +131,12 @@ func (s *MeteringStore[TX]) Delete(ctx context.Context, capID uuid.UUID) error {
 
 func (s *MeteringStore[TX]) PurgeOrphans(ctx context.Context) (int64, error) {
 	return s.Inner.PurgeOrphans(ctx)
+}
+
+func (s *MeteringStore[TX]) Release(ctx context.Context, reservationID uuid.UUID) error {
+	return s.Inner.Release(ctx, reservationID)
+}
+
+func (s *MeteringStore[TX]) ReleaseExpired(ctx context.Context) (int64, error) {
+	return s.Inner.ReleaseExpired(ctx)
 }

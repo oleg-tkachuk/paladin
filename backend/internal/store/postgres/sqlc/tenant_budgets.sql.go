@@ -19,7 +19,8 @@ SET spent_usd  = tenant_budgets.spent_usd + $2::numeric,
     updated_at = now()
 WHERE
     tenant_budgets.max_budget_usd = 0
-    OR tenant_budgets.spent_usd + $2::numeric <= tenant_budgets.max_budget_usd
+    OR tenant_budgets.spent_usd + tenant_budgets.reserved_usd + $2::numeric
+       <= tenant_budgets.max_budget_usd
 RETURNING spent_usd
 `
 
@@ -36,7 +37,7 @@ func (q *Queries) ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, 
 }
 
 const getTenantBudget = `-- name: GetTenantBudget :one
-SELECT tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version
+SELECT tenant_id, max_budget_usd, spent_usd, reserved_usd, unit_code, period_start, period_end, updated_at, resource_version
 FROM tenant_budgets
 WHERE tenant_id = $1
 `
@@ -45,6 +46,7 @@ type GetTenantBudgetRow struct {
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	MaxBudgetUsd    pgtype.Numeric     `json:"max_budget_usd"`
 	SpentUsd        pgtype.Numeric     `json:"spent_usd"`
+	ReservedUsd     pgtype.Numeric     `json:"reserved_usd"`
 	UnitCode        string             `json:"unit_code"`
 	PeriodStart     pgtype.Timestamptz `json:"period_start"`
 	PeriodEnd       pgtype.Timestamptz `json:"period_end"`
@@ -59,6 +61,7 @@ func (q *Queries) GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (Ge
 		&i.TenantID,
 		&i.MaxBudgetUsd,
 		&i.SpentUsd,
+		&i.ReservedUsd,
 		&i.UnitCode,
 		&i.PeriodStart,
 		&i.PeriodEnd,
