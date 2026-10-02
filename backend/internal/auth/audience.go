@@ -5,14 +5,18 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect"
+
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // Standard audiences. Each Connect mux is wrapped with RequireAudience to
-// reject tokens issued for a different plane.
+// reject tokens issued for a different plane. Defined in the Go SDK, whose
+// sessions ask for them, so a client and the server cannot spell one
+// differently.
 const (
-	AudienceData  = "paladin-data"
-	AudienceAdmin = "paladin-admin"
-	AudienceIAM   = "paladin-iam"
+	AudienceData  = paladin.AudienceData
+	AudienceAdmin = paladin.AudienceAdmin
+	AudienceIAM   = paladin.AudienceIAM
 )
 
 // RequireAudience is a Connect interceptor that asserts the principal in the

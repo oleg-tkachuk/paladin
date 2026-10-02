@@ -34,4 +34,9 @@ uv run python -m grpc_tools.protoc \
     --connect-python_out="$OUT" \
     "${files[@]}"
 
+# The facade's per-plane classes come from the services just generated. It
+# imports them, so it must not leave bytecode beside them: the drift check
+# reads every file under the generated directories.
+PYTHONDONTWRITEBYTECODE=1 uv run python scripts/gen_facade.py
+
 echo "python sdk: generated $(find "${GENERATED[@]}" -name '*.py' | wc -l | tr -d ' ') modules"
