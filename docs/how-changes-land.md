@@ -29,10 +29,10 @@ notes is created once all of them are. The SDK and API-contract tags follow thei
 stream; see [releasing.md](releasing.md).
 
 `ci.yaml` pushes no image and deploys nothing. Images and charts are published
-only by `release.yaml`, for a release tag. Its two End-to-end jobs run
-`verify-e2e` — Playwright against a stack built from the change — each on half
-the suite (`PALADIN_E2E_SHARD`), when the change reaches the console or the
-backend, and its two Deep jobs run the halves of
+only by `release.yaml`, for a release tag. Its End-to-end images job builds
+both images once, and its two End-to-end jobs run `verify-e2e:run` —
+Playwright against a stack booted from those images — each on half the suite
+(`PALADIN_E2E_SHARD`), when the change reaches the console or the backend, and its two Deep jobs run the halves of
 `verify-deep` side by side — `verify-deep:integration`, the Postgres-backed
 suites, and `verify-deep:stack`, the stack gate — when the change reaches the
 backend. The `All checks passed` check that `main` requires waits for all of them;
