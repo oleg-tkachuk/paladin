@@ -108,7 +108,7 @@ conventions they enforce.
 | Task | Does |
 |------|------|
 | `task -t Taskfile.dev.yaml verify-all` | the commit gate: every tree's tests and lint, the proto compatibility check, the chart and Taskfile contract checks, the console build; no Docker |
-| `task -t Taskfile.dev.yaml verify-deep` | the Postgres-backed integration suites and the gates that need a live stack; Docker, ~15 min |
+| `task -t Taskfile.dev.yaml verify-deep` | the Postgres-backed integration suites and the gates that need a live stack; Docker, ~3 min |
 | `task -t Taskfile.dev.yaml verify-e2e` | Playwright against images built from the current branch; Docker, ~10 min |
 
 Per half, from any entry point: `task backend:test`,
