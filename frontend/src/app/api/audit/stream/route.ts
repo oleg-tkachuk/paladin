@@ -45,6 +45,9 @@ export async function GET(req: Request): Promise<Response> {
 
   let upstream: Response;
   try {
+    // Not over the shared upstream pool: a stream holds its connection for as
+    // long as the page is open, and enough of them would starve the RPCs of
+    // the pool's capped slots.
     upstream = await fetch(`${ADMIN_URL}/audit/stream`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
