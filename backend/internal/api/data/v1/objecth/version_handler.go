@@ -11,6 +11,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // VersionHandler implements the data-plane versioning RPCs. It is a sibling
@@ -25,7 +28,14 @@ type VersionHandler struct {
 	// SetObjectLock mean anything. Without it the default is stored and never
 	// applied, which is the state this field was added to end.
 	locks LockRepository
+	// policy authorises the versioning RPCs. Without it they refuse rather
+	// than run unchecked — which is how they ran before it existed.
+	policy cedar.Authorizer
 }
+
+// errNoVersionAuthorizer is what a versioning RPC returns when the handler was
+// built without an authorizer: refusing beats serving an unchecked call.
+var errNoVersionAuthorizer = errors.New("versioning RPCs have no authorizer wired")
 
 func NewVersionHandler(objects Repository, versions VersionRepository) *VersionHandler {
 	return &VersionHandler{objects: objects, versions: versions}
@@ -35,6 +45,57 @@ func NewVersionHandler(objects Repository, versions VersionRepository) *VersionH
 // how the object handler takes its optional collaborators. Nil is valid and
 // means "this deployment does not do object lock".
 func (h *VersionHandler) SetLockRepository(locks LockRepository) { h.locks = locks }
+
+// SetAuthorizer wires the Cedar authorizer the versioning RPCs check against.
+func (h *VersionHandler) SetAuthorizer(pe cedar.Authorizer) { h.policy = pe }
+
+// authorizeParent applies the object RPCs' double gate to a version call on
+// parent: the caller's capability (if any) must allow op on the object, and
+// Cedar must allow action on it. Reading a version is reading the object;
+// restoring one rewrites what the object is.
+func (h *VersionHandler) authorizeParent(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	principal *auth.Principal,
+	parent Object,
+	op capability.Op,
+	action string,
+) error {
+	if err := auth.AssertCapabilityOp(ctx, op, capabilityObjectURI(tenantID, parent.Collection, parent.Key)); err != nil {
+		return err
+	}
+	if h.policy == nil {
+		return connect.NewError(connect.CodePermissionDenied, errNoVersionAuthorizer)
+	}
+	write := action != cedar.ActionGetObject
+	// Best-effort, as in GetObject: an unbound collection emits no bucket
+	// scope key, which leaves scoped principals fail-closed.
+	backendID, bucket, _ := h.objects.LookupBucket(ctx, tenantID, parent.Collection, write)
+	decision, err := h.policy.IsAuthorized(ctx,
+		apiutil.CedarPrincipalFor(principal, tenantID),
+		action,
+		&cedar.Resource{
+			TenantID: tenantID, Collection: parent.Collection, Key: parent.Key,
+			ObjectID: parent.ObjectID, State: string(parent.State),
+			BackendID: backendID, BucketName: bucket,
+			ContentType: parent.ContentType, SizeBytes: parent.SizeBytes, Tags: parent.Tags,
+		},
+		cedar.RequestContext{SizeBytes: parent.SizeBytes, ContentType: parent.ContentType, Now: time.Now()},
+	)
+	if err != nil {
+		return apiutil.MapError(fmt.Errorf("authz: %w", err))
+	}
+	if decision != cedar.DecisionAllow {
+		return connect.NewError(connect.CodePermissionDenied,
+			fmt.Errorf("policy denied %s on %s/%s", action, parent.Collection, parent.Key))
+	}
+	return nil
+}
+
+// capabilityObjectURI is the resource a capability names an object by.
+func capabilityObjectURI(tenantID uuid.UUID, collection, key string) string {
+	return "object://" + tenantID.String() + "/" + collection + "/" + key
+}
 
 // ─── List ───────────────────────────────────────────────────────────────────
 
@@ -46,7 +107,7 @@ type ListVersionsInput struct {
 }
 
 func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput) ([]ObjectVersion, string, error) {
-	tenantID, _, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -58,8 +119,12 @@ func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput)
 		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
 	// Confirm the parent object exists + the caller's tenant owns it.
-	if _, err := h.objects.FindByName(ctx, tenantID, in.Collection, in.ObjectID); err != nil {
+	parent, err := h.objects.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
+	if err != nil {
 		return nil, "", connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := h.authorizeParent(ctx, tenantID, principal, parent, capability.OpGet, cedar.ActionGetObject); err != nil {
+		return nil, "", err
 	}
 	out, next, err := h.versions.List(ctx, objectID, in.PageSize, in.PageToken)
 	if err != nil {
@@ -71,7 +136,7 @@ func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput)
 // ─── Get ────────────────────────────────────────────────────────────────────
 
 func (h *VersionHandler) GetVersion(ctx context.Context, name string) (*ObjectVersion, error) {
-	tenantID, _, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +148,9 @@ func (h *VersionHandler) GetVersion(ctx context.Context, name string) (*ObjectVe
 	parent, err := h.objects.FindByName(ctx, tenantID, parsed.collection, parsed.objectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := h.authorizeParent(ctx, tenantID, principal, parent, capability.OpGet, cedar.ActionGetObject); err != nil {
+		return nil, err
 	}
 	v, err := h.versions.Get(ctx, parsed.versionID)
 	if err != nil {
@@ -122,7 +190,7 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersi
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
-	tenantID, _, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +201,9 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersi
 	parent, err := h.objects.FindByName(ctx, tenantID, parsed.collection, parsed.objectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	if err := h.authorizeParent(ctx, tenantID, principal, parent, capability.OpPut, cedar.ActionPutObject); err != nil {
+		return nil, err
 	}
 	if expected != parent.ResourceVersion {
 		return nil, connect.NewError(connect.CodeAborted,

@@ -26,7 +26,7 @@ import (
 func TestRestoreVersionRequiresOCC(t *testing.T) {
 	t.Parallel()
 
-	h := &VersionHandler{}
+	h := &VersionHandler{policy: allowAll{}}
 
 	t.Run("empty guard is refused", func(t *testing.T) {
 		_, err := h.RestoreVersion(context.Background(),
@@ -93,6 +93,7 @@ func TestRestoreVersionComparesAgainstParent(t *testing.T) {
 	tenantID := uuid.New()
 	objectID := uuid.Must(uuid.NewV7())
 	h := &VersionHandler{
+		policy: allowAll{},
 		objects: &restoreParentStub{
 			obj: Object{ObjectID: objectID, TenantID: tenantID, Collection: "docs", ResourceVersion: 7},
 		},

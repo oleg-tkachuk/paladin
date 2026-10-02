@@ -44,7 +44,9 @@ func versionName(tenantID, objectID, versionID uuid.UUID) string {
 func versionHandler(parent Object, versions *fakeVersionRepo) (*VersionHandler, context.Context, uuid.UUID) {
 	tenantID := uuid.New()
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
-	return NewVersionHandler(&parentRepo{parent: parent}, versions), ctx, tenantID
+	h := NewVersionHandler(&parentRepo{parent: parent}, versions)
+	h.SetAuthorizer(allowAll{})
+	return h, ctx, tenantID
 }
 
 func TestGetVersionReturnsTheVersionAndMarksTheCurrentOne(t *testing.T) {
@@ -134,6 +136,7 @@ func TestGetVersionUnknownParentIsNotFound(t *testing.T) {
 	tenantID := uuid.New()
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
 	h := NewVersionHandler(&parentRepo{findErr: errors.New("no rows")}, versions)
+	h.SetAuthorizer(allowAll{})
 
 	_, err := h.GetVersion(ctx, versionName(tenantID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())))
 	if connect.CodeOf(err) != connect.CodeNotFound {

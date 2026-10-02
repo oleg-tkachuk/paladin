@@ -247,11 +247,12 @@ func ProvidePolicyHandler(engine *policy.Engine, store policy.Store) *policyh.Ha
 	return policyh.NewHandler(engine, store)
 }
 
-func ProvideVersionHandler(repos Repos) *objecth.VersionHandler {
+func ProvideVersionHandler(repos Repos, pe policy.Authorizer) *objecth.VersionHandler {
 	if repos.ObjectVersion == nil {
 		return nil
 	}
 	h := objecth.NewVersionHandler(repos.Object, repos.ObjectVersion)
+	h.SetAuthorizer(pe)
 	// The lock port rides on the version handler because bucket default
 	// retention is applied at promote time, which is where versions are
 	// written. Nil is fine — a deployment without object lock promotes
