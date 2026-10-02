@@ -1,19 +1,17 @@
 package capability
 
 import (
-	"errors"
 	"fmt"
+	"net/netip"
 	"slices"
-	"strings"
-	"time"
 )
 
-// Narrows reports whether `child` is a strict narrowing of `parent`. A
-// narrowing means: every operation child allows is allowed by parent;
-// every resource child can touch is reachable by parent; the budget /
-// request count / TTL are no larger; the audience is a subset; tainted-
-// read is no broader. Issuer.Delegate runs this check before signing
-// the child token, so a misuse fails at issue time, not later.
+// Narrows reports whether `child` is a narrowing of `parent`: every operation
+// child allows is allowed by parent; every resource child can touch is
+// reachable by parent; the budget / request count / lifetime are no larger;
+// the audience is a subset; tainted-read is no broader. Issuer.Delegate runs
+// this check before signing the child token, so a misuse fails at issue time,
+// not later.
 //
 // The function is exposed at package level so external tooling
 // (`paladin cap delegate --check ...`) can dry-run without going through
@@ -39,10 +37,7 @@ func Narrows(parent, child Capability) error {
 		return fmt.Errorf("%w: tenant_id mismatch", ErrDelegationTooWide)
 	}
 
-	if err := narrowsCaveats(parent.Caveats, child.Caveats); err != nil {
-		return err
-	}
-	return nil
+	return narrowsCaveats(parent.Caveats, child.Caveats)
 }
 
 // narrowsCaveats compares the typed caveat bag. Every restriction in
@@ -56,52 +51,8 @@ func narrowsCaveats(parent, child Caveats) error {
 		}
 	}
 
-	// ResourcePrefixes: every child prefix must be matched (or extended)
-	// by some parent prefix. Empty parent = unrestricted, so any child
-	// prefix is valid; non-empty parent demands child prefix start with
-	// or extend a parent prefix.
-	if len(parent.ResourcePrefixes) > 0 {
-		if len(child.ResourcePrefixes) == 0 {
-			return fmt.Errorf("%w: parent restricts to %v, child unrestricted",
-				ErrDelegationTooWide, parent.ResourcePrefixes)
-		}
-		for _, c := range child.ResourcePrefixes {
-			ok := false
-			for _, p := range parent.ResourcePrefixes {
-				if strings.HasPrefix(c, p) {
-					ok = true
-					break
-				}
-			}
-			if !ok {
-				return fmt.Errorf("%w: child prefix %q not under any parent prefix %v",
-					ErrDelegationTooWide, c, parent.ResourcePrefixes)
-			}
-		}
-	}
-
-	// ResourceURIs: every child URI must be in parent URIs or covered
-	// by a parent prefix. Empty parent = no exact-URI restriction.
-	if len(parent.ResourceURIs) > 0 {
-		if len(child.ResourceURIs) == 0 {
-			return fmt.Errorf("%w: parent restricts to URIs, child unrestricted",
-				ErrDelegationTooWide)
-		}
-		for _, c := range child.ResourceURIs {
-			ok := slices.Contains(parent.ResourceURIs, c)
-			if !ok {
-				for _, p := range parent.ResourcePrefixes {
-					if strings.HasPrefix(c, p) {
-						ok = true
-						break
-					}
-				}
-			}
-			if !ok {
-				return fmt.Errorf("%w: child URI %q not in parent allowance",
-					ErrDelegationTooWide, c)
-			}
-		}
+	if err := narrowsResources(parent, child); err != nil {
+		return err
 	}
 
 	// MaxRequests: 0 = unlimited. Child 0 with parent>0 is invalid
@@ -136,7 +87,7 @@ func narrowsCaveats(parent, child Caveats) error {
 	// Budget: same rule. Compared in the shared unit_code (validated
 	// just above) so we don't need an FX rate.
 	if parent.MaxBudgetAmount > 0 {
-		if child.MaxBudgetAmount == 0 || child.MaxBudgetAmount > parent.MaxBudgetAmount {
+		if child.MaxBudgetAmount <= 0 || child.MaxBudgetAmount > parent.MaxBudgetAmount {
 			return fmt.Errorf("%w: child budget %.4f exceeds parent %.4f",
 				ErrDelegationTooWide, child.MaxBudgetAmount, parent.MaxBudgetAmount)
 		}
@@ -149,31 +100,86 @@ func narrowsCaveats(parent, child Caveats) error {
 	}
 
 	// IdempotencyKeyRequired: enforcement-tightening only — child may
-	// raise the bar but not lower it. If parent requires key, child
-	// must also require key.
+	// raise the bar but not lower it.
 	if parent.IdempotencyKeyRequired && !child.IdempotencyKeyRequired {
 		return fmt.Errorf("%w: child relaxes idempotency_key requirement",
 			ErrDelegationTooWide)
 	}
 
-	// SourceIPCIDR: similar — non-empty parent forces child to also
-	// constrain. Subset matching of CIDRs is non-trivial; for now we
-	// require the slices match exactly so a renderer change on the
-	// caller side is detectable. Looser semantics land when an actual
-	// caller needs them.
-	if len(parent.SourceIPCIDR) > 0 {
-		if len(child.SourceIPCIDR) == 0 {
-			return errors.New("capability: parent restricts source IP, child unrestricted")
-		}
-		for _, c := range child.SourceIPCIDR {
-			if !slices.Contains(parent.SourceIPCIDR, c) {
-				return fmt.Errorf("%w: child CIDR %q not in parent set",
-					ErrDelegationTooWide, c)
-			}
+	return narrowsSourceIP(parent.SourceIPCIDR, child.SourceIPCIDR)
+}
+
+// narrowsResources requires every resource the child can reach to be
+// reachable by the parent. A parent that restricts resources in ANY form
+// forces the child to restrict too, and each child entry is checked against
+// the whole parent allowance:
+//
+//   - a child URI must equal a parent URI or sit under a parent prefix;
+//   - a child prefix must sit under a parent prefix. A parent that lists only
+//     exact URIs admits no child prefix at all — a prefix names an open-ended
+//     set, which no finite list of URIs covers.
+//
+// The second rule is the one an earlier version missed: it checked child
+// prefixes only when the parent itself had prefixes, so a parent pinned to a
+// single URI could delegate a child with any prefix it liked.
+func narrowsResources(parent, child Caveats) error {
+	if !parent.RestrictsResources() {
+		return nil
+	}
+	if !child.RestrictsResources() {
+		return fmt.Errorf("%w: parent restricts resources (prefixes %v, URIs %v), child unrestricted",
+			ErrDelegationTooWide, parent.ResourcePrefixes, parent.ResourceURIs)
+	}
+	for _, c := range child.ResourcePrefixes {
+		if !parent.coversPrefix(c) {
+			return fmt.Errorf("%w: child prefix %q not under any parent prefix %v",
+				ErrDelegationTooWide, c, parent.ResourcePrefixes)
 		}
 	}
-
+	for _, c := range child.ResourceURIs {
+		if !parent.AllowsResource(c) {
+			return fmt.Errorf("%w: child URI %q not in parent allowance",
+				ErrDelegationTooWide, c)
+		}
+	}
 	return nil
+}
+
+// narrowsSourceIP requires every child network to lie inside some parent
+// network. A non-empty parent forces the child to constrain as well.
+// Unparsable entries never satisfy the check — Validate rejects them at
+// issuance, and a parent minted before validation existed must not let a
+// malformed entry wave a child through.
+func narrowsSourceIP(parent, child []string) error {
+	if len(parent) == 0 {
+		return nil
+	}
+	if len(child) == 0 {
+		return fmt.Errorf("%w: parent restricts source IP, child unrestricted",
+			ErrDelegationTooWide)
+	}
+	for _, c := range child {
+		cp, err := netip.ParsePrefix(c)
+		if err != nil {
+			return fmt.Errorf("%w: child CIDR %q: %w", ErrDelegationTooWide, c, err)
+		}
+		if !slices.ContainsFunc(parent, func(p string) bool {
+			pp, err := netip.ParsePrefix(p)
+			return err == nil && prefixContains(pp, cp)
+		}) {
+			return fmt.Errorf("%w: child CIDR %q not inside any parent CIDR %v",
+				ErrDelegationTooWide, c, parent)
+		}
+	}
+	return nil
+}
+
+// prefixContains reports whether network inner lies entirely within outer.
+func prefixContains(outer, inner netip.Prefix) bool {
+	outer, inner = outer.Masked(), inner.Masked()
+	return outer.Addr().Is4() == inner.Addr().Is4() &&
+		outer.Bits() <= inner.Bits() &&
+		outer.Contains(inner.Addr())
 }
 
 // subset reports whether every element of a is in b. Empty a is a
@@ -185,14 +191,4 @@ func subset(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-// SuggestExpiry caps the supplied desired expiry to `parent.ExpiresAt`.
-// Helper for issuer code that wants to default child TTL to "min(req,
-// parent expiry)" without re-implementing the logic.
-func SuggestExpiry(parent Capability, desired time.Time) time.Time {
-	if desired.After(parent.ExpiresAt) {
-		return parent.ExpiresAt
-	}
-	return desired
 }

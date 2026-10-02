@@ -1594,6 +1594,96 @@ finding moving from "packages you import" to "your code is affected".
     control is proven rather than assumed.
 - **Blockers:** none. A judgment call, currently made as "not yet".
 
+### Capability tokens are bearer tokens: no proof of possession
+
+- **Status:** Deferred — needs a client-side protocol, not only a server change.
+- **Reason:** whoever holds a capability token can use it. For agents that is
+  the main threat: a token pasted into a prompt, echoed by a tool or written to
+  a log is fully usable by whoever reads it, until it expires or is revoked.
+  Binding the token to a key the agent holds (a DPoP-style `cnf` claim, with a
+  per-request signed proof) closes that, but every client — both SDKs, the MCP
+  bridge — has to generate and keep a key and sign each request.
+- **Definition of Done:** an optional `cnf` claim (added with `omitempty`, so
+  the golden fixture and existing tokens are unchanged); the verifier requires
+  a valid proof when it is present, with replay protection (`jti` + time
+  window); both SDKs sign proofs; a test shows a stolen bound token is refused.
+- **Blockers:** the proof format and the SDK key storage are decisions to make
+  first.
+
+### Offline attenuation: an agent cannot narrow its own capability
+
+- **Status:** Deferred — a new token format.
+- **Reason:** delegation needs the Issuer, which holds the signing key and the
+  Store, so a sub-agent cannot hand a narrower capability to its own worker
+  without calling back. Chained signatures (Biscuit- or macaroon-style
+  attenuation blocks) would let any holder narrow offline. That is a new wire
+  format, and the current one is frozen (capability/README.md, Versioning).
+- **Definition of Done:** a versioned second format, verified alongside the
+  current one for a stated compatibility window; narrowing blocks checked with
+  the same `Narrows` semantics; the existing fuzz property extended to chains.
+- **Blockers:** the format migration decision itself.
+
+### Amounts are float64 at the capability API boundary
+
+- **Status:** Deferred — crosses the proto, both SDKs and the frontend.
+- **Reason:** Postgres stores numeric(14,6) exactly, but every amount crosses
+  the Go API, the proto and the SDKs as a float, so a value can drift by a last
+  bit on the way. Refund of "the rest" is computed in numeric and is exact;
+  partial amounts are not.
+- **Definition of Done:** amounts carried as integer minor units (or a decimal
+  string) end to end; the float fields deprecated for a release, then removed.
+- **Blockers:** a breaking proto change, which needs its own deprecation
+  window.
+
+### No explicit budget reservations
+
+- **Status:** Deferred — charge-then-refund covers the need today.
+- **Reason:** a cost known only after the call (an LLM completion) is handled
+  by charging an estimate and refunding the difference against the charge ID
+  (`Meter.Refund`, `auth.RefundLastCharge`). What that does not give is a
+  hold that lapses on its own if the caller dies between the two steps — the
+  estimate then stays charged.
+- **Definition of Done:** `Reserve` / `Settle` / `Release` on `Meter`, with
+  holds that expire, counted against every ceiling the way charges are.
+- **Blockers:** none.
+
+### Revocation reaches other replicas only by cache expiry
+
+- **Status:** Deferred.
+- **Reason:** each verifier caches revocation answers for up to
+  `revocation_cache_ttl` (2s). The replica that revoked invalidates its own
+  entry; the others wait out the TTL. Push invalidation (LISTEN/NOTIFY on
+  revocations) would make it immediate.
+- **Definition of Done:** a revocation is visible on every replica within
+  one notify round trip; the TTL stays as the fallback when the listener is
+  down.
+- **Blockers:** none.
+
+### `AllowTaintedRead` restricts nothing in Paladin
+
+- **Status:** Deferred — there is no taint signal to act on.
+- **Reason:** the caveat is enforced by `Caveats.Check` from
+  `CheckRequest.ResourceTainted`, but Paladin flags no object as tainted, so
+  `AssertCapabilityOp` always passes false and every capability can read every
+  object, whatever the caveat says.
+- **Definition of Done:** objects carry a taint flag set by the ingest scanners;
+  the data handlers pass it to the check; a test shows a capability without
+  `AllowTaintedRead` refused on a flagged object.
+- **Blockers:** the scanner that would set the flag.
+
+### Resource-restricted capabilities cannot run batch or tag operations
+
+- **Status:** Deferred.
+- **Reason:** batch operations name their objects by ID and tag operations
+  touch tenant-level tag definitions, so neither can pass a resource URI to
+  `AssertCapabilityOp`. They used to pass an empty URI, which skipped the
+  resource check — a capability confined to one prefix could batch-delete
+  anywhere in its tenant. They now fail closed for any resource-restricted
+  capability, which is safe but means such a capability cannot use them.
+- **Definition of Done:** the batch handlers resolve each object ID to its URI
+  and assert every one; tag operations get a resource form of their own.
+- **Blockers:** none.
+
 ---
 
 ## SDK

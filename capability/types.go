@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// Errors exposed to callers. Mapped to MCP / Connect errors at the seam
-// (interceptor) — not here. Verifier returns these so callers can switch.
+// Errors exposed to callers. Mapped to transport errors by the consumer —
+// not here. Verifier returns these so callers can switch.
 var (
 	ErrInvalidSignature  = errors.New("capability: invalid signature")
 	ErrExpired           = errors.New("capability: expired")
@@ -64,11 +64,11 @@ func NormaliseUnitCode(u string) (string, error) {
 	return u, nil
 }
 
-// Op is a coarse-grained operation an agent may perform. The set is
-// intentionally small — fine-grained method gating goes through Cedar
-// (admin-authored policy) on top of these. Capabilities are the
-// authentication-and-coarse-authorisation primitive; Cedar is the
-// fine-grained admin-policy primitive.
+// Op is an operation an agent may perform. The package defines a small
+// built-in set (below); a consumer adds its own as namespaced names of the
+// form "<namespace>:<name>" — "tool:search", "mcp:github/create_issue" —
+// which Op.Validate accepts and Op.Mutating treats as state-changing.
+// Fine-grained method gating can still layer admin-authored policy on top.
 type Op string
 
 const (
@@ -163,15 +163,22 @@ type Capability struct {
 	ExpiresAt time.Time
 
 	// ParentID, if non-zero, points at the parent capability whose
-	// holder delegated this one. The verifier walks the chain on
-	// every request to validate caveat narrowing.
+	// holder delegated this one. Narrowing is checked once, at
+	// delegation. At use, the lineage matters twice: revoking any
+	// ancestor revokes this capability (Store.IsRevoked answers for the
+	// whole chain), and every charge also debits each ancestor, so a
+	// parent's budget bounds the spend of everything delegated from it.
 	ParentID uuid.UUID
 
-	// Generation is a monotone counter the issuer increments whenever
-	// it rotates the capability identity (e.g. soft-revoke + reissue
-	// during a credential rotation). Worker writes thread it through
-	// fence-token checks so a stale capability cannot mutate state
-	// after a rotation.
+	// Generation is an issuer-assigned counter (1 for a fresh root, 1 for
+	// every delegated child) carried in the token for audit. A consumer
+	// that rotates a capability may reissue with Generation+1 and revoke
+	// the previous one, and compare generations in its own records.
+	//
+	// It is NOT a fence token: nothing in this package compares it
+	// against a stored current value, so an older generation stays usable
+	// until it expires or is revoked. Revocation is the mechanism that
+	// stops a superseded capability.
 	Generation int64
 }
 
@@ -183,16 +190,15 @@ type Capability struct {
 // at delegation time, not just at use time, so attempts to widen are
 // detected at issue and rejected.
 type Caveats struct {
-	// Ops is the set of operations the capability authorises. Empty =
-	// no operation allowed (a capability with no ops is meaningless;
-	// the issuer rejects it). Subsets can be expressed as multiple Ops
-	// joined by repetition.
+	// Ops is the set of operations the capability authorises. The
+	// issuer rejects an empty set: a capability that allows nothing is
+	// a mistake, not a credential.
 	Ops []Op
 
-	// ResourcePrefixes restricts the capability to URIs starting with
-	// any prefix in the slice. Empty = unrestricted within the tenant.
-	// The prefix is matched as a string operation; backends translate
-	// it into native filters.
+	// ResourcePrefixes restricts the capability to URIs under any prefix
+	// in the slice, matched at a "/" segment boundary (MatchResource):
+	// "a/b" covers "a/b" and "a/b/c" but not "a/bc". Empty slice =
+	// unrestricted within the tenant; an empty ENTRY is invalid.
 	ResourcePrefixes []string
 
 	// ResourceURIs pins the capability to specific URIs. Used by
@@ -218,17 +224,22 @@ type Caveats struct {
 	// shape is happy to carry either form.
 	UnitCode string
 
-	// AllowTaintedRead permits read of objects flagged with prompt-
-	// injection / PII / secrets signals. Off by default — a deliberate
-	// elicit-and-confirm flow flips it for one-off cases.
+	// AllowTaintedRead permits non-mutating operations on resources the
+	// consumer has flagged with prompt-injection / PII / secrets signals.
+	// Off by default. Enforced by Caveats.Check, which can only act on a
+	// taint signal the consumer supplies in CheckRequest.ResourceTainted
+	// — a consumer that tracks no taint flags gets no protection from
+	// this caveat, and should say so rather than imply it.
 	AllowTaintedRead bool
 
 	// IdempotencyKeyRequired forces the bearer to send an explicit
-	// idempotency key on mutating ops. Mostly for `share` / batch
-	// destructive flows.
+	// idempotency key on mutating ops (Op.Mutating). Enforced by
+	// Caveats.Check from CheckRequest.HasIdempotencyKey.
 	IdempotencyKeyRequired bool
 
 	// SourceIPCIDR optionally pins the capability to clients whose
 	// observed IP is in the listed CIDRs. Empty = unconstrained.
+	// Enforced by Caveats.CheckSource; delegation requires each child
+	// network to lie inside a parent network.
 	SourceIPCIDR []string
 }

@@ -3,111 +3,102 @@ package capability
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-// UsageStore tracks per-capability runtime counters used to enforce
-// the MaxRequests and MaxBudgetAmount caveats. Separated from Store
-// so the issuance / revocation surface stays focused on identity,
-// not runtime state.
-//
-// All methods are concurrency-safe — implementations atomic-UPSERT
-// per capability row in a single round-trip. Two callers may race
-// to bump the counter; whichever loses sees the post-increment value
-// the other wrote.
+// UsageStore is everything a consumer implements for runtime accounting. It
+// is the union of three narrower contracts so that code which only meters
+// (an interceptor, a handler) can depend on Meter alone, and code which only
+// administers tenant ceilings can depend on TenantBudgets alone.
 type UsageStore[TX any] interface {
-	// BumpRequest increments the request counter and returns the new
-	// value. When maxRequests > 0 and the post-increment would
-	// exceed it, returns ErrRequestLimitExceeded without mutating
-	// the row.
-	BumpRequest(ctx context.Context, capID uuid.UUID, maxRequests int64) (newCount int64, err error)
+	Meter[TX]
+	TenantBudgets
+	UsageHousekeeping
+}
 
-	// Charge adds amount to the per-capability spend counter AND
-	// to the tenant aggregate (when tenantID is non-zero), writes the
-	// charges-ledger row, and (via onCharged) enqueues the fan-out
-	// outbox rows — ALL in a single transaction. Either the whole
-	// charge commits or nothing does; there is no cross-counter,
-	// ledger, or event dual-write window (ADR-0003). Order of checks:
-	//
-	//   1. Capability cap (cap.Caveats.MaxBudgetAmount)
-	//   2. Tenant aggregate cap (tenant_budgets.max_budget_usd; the
-	//      column name retains the historical _usd suffix but is
-	//      currency-tagged via tenant_budgets.unit_code).
-	//
-	// If either rejects, returns the matching sentinel
-	// (ErrBudgetExceeded for the capability, ErrTenantBudgetExceeded
-	// for the tenant) and the transaction rolls back, so NEITHER
-	// counter is mutated — the tenant-side rollback compensates the
-	// capability bump implicitly (no explicit refund needed). A retry
-	// after any rejection is safe: nothing was committed.
-	//
-	// unitCode pins the currency for the new row when the row is
-	// missing (capability_usage / tenant_budgets DEFAULT 'USD').
-	// Empty value is treated as DefaultUnitCode. There is no FX
-	// rate handling: a charge in EUR against a USD-denominated
-	// tenant budget is a configuration error and should fail at
-	// the handler layer before reaching the store.
-	//
-	// tenantID == uuid.Nil disables the tenant-aggregate path (and,
-	// with it, the ledger row and the fan-out — the charges table
-	// requires a tenant_id).
-	//
-	// op + actor are stamped onto the charges-ledger row (migration
-	// 027). Both are best-effort — empty strings are accepted when
-	// the caller cannot derive them (e.g. ChargeRequest at the
-	// interceptor layer doesn't know the per-handler op). They are
-	// NOT used for any enforcement decision; they only enrich the
-	// time-series surface that BillingService renders.
-	//
-	// onCharged, when non-nil, runs inside the charge transaction
-	// after the ledger row is written and before commit — the event
-	// producer enqueues its outbox rows on `tx` (dispatcher.DispatchTx)
-	// so the fan-out is atomic with the charge. An error from onCharged
-	// rolls the whole charge back. Pass nil to skip fan-out.
-	Charge(
-		ctx context.Context,
-		capID uuid.UUID,
-		amount, maxBudget float64,
-		unitCode string,
-		tenantID uuid.UUID,
-		op string,
-		actor string,
-		onCharged func(ctx context.Context, tx TX) error,
-	) (newSpent float64, err error)
+// Meter enforces the MaxRequests and MaxBudgetAmount caveats and keeps the
+// charges ledger. Separated from Store so the issuance / revocation surface
+// stays focused on identity, not runtime state.
+//
+// # Delegation trees
+//
+// A capability's counters cover its whole subtree: BumpRequest and Charge
+// apply to the capability AND to every ancestor in its delegation chain, and
+// each ancestor's own ceiling — read from its stored record, not from the
+// caller — must admit the increment. So an orchestrator holding 25.00 that
+// delegates 2.00 to each of a hundred workers can still spend 25.00 in total,
+// not 200.00. Narrowing at delegation bounds each child; this bounds the sum.
+// An ancestor whose record is gone (purged after expiry) no longer bounds
+// anything — its children expired with it, since a child cannot outlive its
+// parent.
+//
+// All methods are concurrency-safe. A rejected call mutates nothing, so a
+// retry after rejection is safe.
+type Meter[TX any] interface {
+	// BumpRequest increments the request counter of the capability and of
+	// each ancestor, and returns the capability's new count. When any
+	// ceiling in the chain would be crossed it returns
+	// ErrRequestLimitExceeded and nothing is mutated.
+	BumpRequest(ctx context.Context, req RequestBump) (newCount int64, err error)
 
-	// RefundCapability subtracts amount from the per-capability
-	// spend counter (floored at 0). Idempotent: a refund applied to
-	// a row that doesn't exist is a no-op.
-	RefundCapability(ctx context.Context, capID uuid.UUID, amount float64) error
+	// Charge adds req.Amount to the spend counters of the capability, of
+	// each ancestor and of the tenant aggregate, writes one charges-ledger
+	// row, and runs onCharged — ALL atomically. Checks, in order:
+	//
+	//   1. The capability's own ceiling (req.MaxBudget, from the verified
+	//      token) → ErrBudgetExceeded.
+	//   2. Each ancestor's ceiling → ErrBudgetExceeded.
+	//   3. The tenant aggregate ceiling → ErrTenantBudgetExceeded.
+	//
+	// Any rejection, or an error from onCharged, leaves every counter and
+	// the ledger untouched. onCharged runs inside the charge after the
+	// ledger row is written and receives the consumer's transaction handle,
+	// so a side effect such as an outbox write commits with the spend.
+	// Pass nil to skip it.
+	//
+	// The returned receipt carries the ledger row's ID; Refund takes it.
+	Charge(ctx context.Context, req ChargeRequest, onCharged func(ctx context.Context, tx TX) error) (ChargeReceipt, error)
 
-	// RefundTenant subtracts amount from the tenant aggregate
-	// counter (floored at 0). Used when a charge succeeded against
-	// the capability but failed on the tenant cap, or when a handler
-	// detects a partial-failure post-charge.
-	RefundTenant(ctx context.Context, tenantID uuid.UUID, amount float64) error
+	// Refund returns spend from one recorded charge to every counter that
+	// charge debited (capability, ancestors, tenant aggregate), and records
+	// the refund against the charge. req.Amount = 0 refunds whatever
+	// remains, which makes a full refund idempotent; a partial refund that
+	// would take the total refunded past the charge returns
+	// ErrRefundExceedsCharge and changes nothing. An unknown charge ID
+	// returns ErrChargeNotFound. Returns the amount actually refunded.
+	//
+	// Charge-then-refund is also how a consumer settles a cost it only
+	// learns afterwards: charge the estimate up front, refund the
+	// difference once the actual cost is known.
+	Refund(ctx context.Context, req RefundRequest) (refunded float64, err error)
 
-	// Get returns the current snapshot. Returns ErrUsageNotFound when
-	// no row exists for the capability — typically means it's never
-	// been used (no requests, no charges).
+	// Get returns the current snapshot. Returns ErrUsageNotFound when no
+	// row exists for the capability — typically means it's never been
+	// used (no requests, no charges). For a capability with delegated
+	// children the counters include the children's usage.
 	Get(ctx context.Context, capID uuid.UUID) (Usage, error)
+}
 
+// TenantBudgets administers the tenant-aggregate ceilings Charge enforces.
+type TenantBudgets interface {
 	// GetTenantBudget returns the tenant-aggregate snapshot. Returns
 	// ErrTenantBudgetNotFound when no row exists (tenant has no cap
 	// configured AND has never been charged).
 	GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (TenantBudget, error)
 
-	// SetTenantBudget upserts the tenant cap. resetSpend=true rolls
-	// the accounting period and zeroes spent_usd — operators call
-	// this on each billing close. resetSpend=false adjusts the cap
+	// SetTenantBudget upserts the tenant cap. ResetSpend=true rolls
+	// the accounting period and zeroes the spend — operators call
+	// this on each billing close. ResetSpend=false adjusts the cap
 	// mid-cycle without affecting accumulated spend.
 	SetTenantBudget(ctx context.Context, args SetTenantBudgetArgs) (TenantBudget, error)
 
-	// ListTenantBudgets returns every tenant's budget row joined with
-	// the tenants table so callers can render slug + display_name
-	// without a follow-up read. Filters at the SQL layer:
-	//   - excludeInactive: skip soft-deleted tenants.
+	// ListTenantBudgets returns tenant budget rows, with the consumer's
+	// display fields where it has them. Filters:
+	//   - excludeInactive: skip tenants the consumer considers inactive.
 	//   - thresholdPct > 0: include only rows where
 	//     spent / max * 100 >= thresholdPct (and max > 0).
 	//   - unlimitedOnly: include only rows where max == 0.
@@ -116,18 +107,73 @@ type UsageStore[TX any] interface {
 	// Rows are returned in descending utilisation order so the most
 	// at-risk tenants surface first.
 	ListTenantBudgets(ctx context.Context, args ListTenantBudgetsArgs) ([]TenantBudgetSummary, error)
+}
 
-	// Delete drops the row. Called by CapabilityPurger when the parent
-	// capability is reaped.
+// UsageHousekeeping reclaims usage rows of capabilities that are gone.
+type UsageHousekeeping interface {
+	// Delete drops the row. Called when the capability is reaped.
 	Delete(ctx context.Context, capID uuid.UUID) error
 
-	// PurgeOrphans deletes usage rows whose capability_id is no longer
-	// in capability_records. Bounded per-call (10k rows) so the
-	// reaper sweep doesn't pin a single statement; caller loops.
+	// PurgeOrphans deletes usage rows whose capability record no longer
+	// exists. Implementations may bound the work per call; the caller
+	// loops until it returns 0.
 	PurgeOrphans(ctx context.Context) (int64, error)
 }
 
+// RequestBump is the input to Meter.BumpRequest.
+type RequestBump struct {
+	CapabilityID uuid.UUID
+	// TenantID is the capability's tenant. Used for attribution (metrics);
+	// it is not an authorisation input.
+	TenantID uuid.UUID
+	// MaxRequests is the capability's own ceiling, from the verified
+	// token. 0 = unlimited. Ancestors' ceilings come from their records.
+	MaxRequests int64
+}
+
+// ChargeRequest is the input to Meter.Charge.
+type ChargeRequest struct {
+	CapabilityID uuid.UUID
+	// TenantID is the capability's tenant: its aggregate ceiling applies
+	// and the ledger row is filed under it. Required.
+	TenantID uuid.UUID
+	// Amount is the cost, in UnitCode. Must be finite and ≥ 0.
+	Amount float64
+	// MaxBudget is the capability's own ceiling, from the verified token.
+	// 0 = unlimited.
+	MaxBudget float64
+	// UnitCode is the currency or unit; empty means DefaultUnitCode. No
+	// conversion happens: a charge in a unit other than the counter's is a
+	// configuration error the caller must prevent.
+	UnitCode string
+	// Op and Actor are stamped on the ledger row for attribution only;
+	// both may be empty and neither affects enforcement.
+	Op    string
+	Actor string
+}
+
+// ChargeReceipt is the result of a committed charge.
+type ChargeReceipt struct {
+	// ChargeID identifies the ledger row; pass it to Meter.Refund.
+	ChargeID uuid.UUID
+	// Spent is the capability's spend after the charge (its subtree's,
+	// when it has delegated children).
+	Spent float64
+}
+
+// RefundRequest is the input to Meter.Refund.
+type RefundRequest struct {
+	ChargeID uuid.UUID
+	// Amount to refund; 0 = everything not yet refunded from this charge.
+	Amount float64
+}
+
 // TenantBudget is the snapshot view of the tenant aggregate cap.
+//
+// Amounts here and throughout the package are float64 at the API boundary.
+// Implementations should store them exactly (a decimal column, integer minor
+// units) so that sums do not drift; the boundary type is a known limitation
+// tracked for a format change, not an invitation to store floats.
 type TenantBudget struct {
 	TenantID        uuid.UUID
 	MaxBudgetAmount float64
@@ -152,7 +198,7 @@ type SetTenantBudgetArgs struct {
 	// window. Nil = open-ended (typical for "just set the cap, I'll
 	// roll later").
 	PeriodEnd *time.Time
-	// ResetSpend=true zeroes spent_amount and rolls period_start to
+	// ResetSpend=true zeroes the spend and rolls period_start to
 	// now. false leaves the counter alone — the cap changes mid-
 	// window.
 	ResetSpend bool
@@ -163,9 +209,8 @@ type SetTenantBudgetArgs struct {
 	ExpectedVersion int64
 }
 
-// TenantBudgetSummary joins TenantBudget with the tenant's slug +
-// display_name so dashboard widgets don't need a second round-trip.
-// Returned by ListTenantBudgets.
+// TenantBudgetSummary is a TenantBudget with the consumer's display fields
+// (empty when the consumer keeps none). Returned by ListTenantBudgets.
 type TenantBudgetSummary struct {
 	TenantID    uuid.UUID
 	Slug        string
@@ -196,6 +241,17 @@ type Usage struct {
 // Usage-related sentinels. ErrBudgetExceeded already lives in types.go
 // (declared before the runtime enforcement landed); reused here.
 var (
+	// ErrInvalidAmount — a charge or refund amount that is negative, NaN
+	// or infinite. Refunds are explicit; a negative charge is not one.
+	ErrInvalidAmount = errors.New("capability: invalid amount")
+
+	// ErrChargeNotFound — Refund named a charge with no ledger row.
+	ErrChargeNotFound = errors.New("capability: charge not found")
+
+	// ErrRefundExceedsCharge — Refund would return more than the charge
+	// took, counting earlier refunds of the same charge.
+	ErrRefundExceedsCharge = errors.New("capability: refund exceeds charge")
+
 	// ErrRequestLimitExceeded — capability used MaxRequests times,
 	// next attempt was blocked.
 	ErrRequestLimitExceeded = errors.New("capability: request limit exceeded")
@@ -223,3 +279,12 @@ var (
 	// rather than silently overwriting a change it never saw.
 	ErrTenantBudgetVersionMismatch = errors.New("capability: tenant budget resource_version mismatch")
 )
+
+// ValidateAmount reports whether a charge or refund amount is usable:
+// finite and not negative. Implementations call it before touching state.
+func ValidateAmount(amount float64) error {
+	if math.IsNaN(amount) || math.IsInf(amount, 0) || amount < 0 {
+		return fmt.Errorf("%w: %v", ErrInvalidAmount, amount)
+	}
+	return nil
+}

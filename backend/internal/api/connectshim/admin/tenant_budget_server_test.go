@@ -7,35 +7,16 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/capability"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
-// fakeUsageStore is a minimal in-memory capability.UsageStore[pgx.Tx] that
-// covers just the methods TenantBudgetServer touches. The full
-// interface lives across many call sites; we mock only what's
-// reached in this test file.
+// fakeUsageStore is a minimal in-memory capability.TenantBudgets — the
+// only part of the usage store TenantBudgetServer depends on.
 type fakeUsageStore struct {
 	budgets map[uuid.UUID]capability.TenantBudget
 	getErr  error
-}
-
-func (f *fakeUsageStore) BumpRequest(context.Context, uuid.UUID, int64) (int64, error) {
-	return 0, errors.New("not used")
-}
-func (f *fakeUsageStore) Charge(context.Context, uuid.UUID, float64, float64, string, uuid.UUID, string, string, func(context.Context, pgx.Tx) error) (float64, error) {
-	return 0, errors.New("not used")
-}
-func (f *fakeUsageStore) RefundCapability(context.Context, uuid.UUID, float64) error {
-	return errors.New("not used")
-}
-func (f *fakeUsageStore) RefundTenant(context.Context, uuid.UUID, float64) error {
-	return errors.New("not used")
-}
-func (f *fakeUsageStore) Get(context.Context, uuid.UUID) (capability.Usage, error) {
-	return capability.Usage{}, errors.New("not used")
 }
 
 func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (capability.TenantBudget, error) {
@@ -86,12 +67,6 @@ func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetT
 	return tb, nil
 }
 
-func (f *fakeUsageStore) Delete(context.Context, uuid.UUID) error {
-	return errors.New("not used")
-}
-func (f *fakeUsageStore) PurgeOrphans(context.Context) (int64, error) {
-	return 0, errors.New("not used")
-}
 func (f *fakeUsageStore) ListTenantBudgets(context.Context, capability.ListTenantBudgetsArgs) ([]capability.TenantBudgetSummary, error) {
 	return nil, nil
 }
