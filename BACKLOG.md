@@ -1628,18 +1628,7 @@ the code. Not fixed in the documentation change that recorded them.
   with a test that a cancelled batch stops short.
 - **Blockers:** none.
 
-### A worker paused past its lease can still overwrite its successor
-
-- **Status:** Deferred.
-- **Reason:** the lease's `generation` is logged but no job writes with it, so
-  a worker that is paused past its lease and resumes keeps writing. Most jobs
-  are safe anyway: their claims use SKIP LOCKED and their updates match the
-  state they read. One is not: a resumed bucket reconciler can delete, at the
-  backend, a bucket created again under the same name since it listed the
-  deletion; the row is safe, the bytes are not.
-- **Definition of Done:** the bucket delete re-reads the row's state under a
-  lock before calling the backend, with a test of the overlap.
-- **Blockers:** none.
+## Tooling and observability
 
 ### Include-level `vars:` do not reach a var the component declares
 
