@@ -28,7 +28,18 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 | `stale_operation_reclaimer` | fails operations no worker has touched for `stale_after` | `operations.stale_after` | `15m` |
 | `replication` | cross-backend replication; dry-run | `replication.enabled`, `.interval` | `false`, `5m` |
 
-`housekeeping.interval` also paces the audit and operations purgers. Alerts on
+`housekeeping.interval` also paces the audit and operations purgers, and the
+hard-deleter: its first sweep runs one interval after the worker starts. A
+sweep with nothing past the window logs nothing; each object it removes logs
+`hard-deleted`.
+
+`hard_delete_after` is a retention decision, so the default stays `0`: a
+soft-deleted object keeps its bytes until someone chooses how long. Production
+should set 7–30 days, long enough to undo a mistaken delete and short enough
+not to pay for bytes nobody can read. A test environment can use a day. The
+first sweep after enabling it drains the whole backlog at once, and each
+object it removes also emits `paladin.object.purged`, so a consumer counting
+those events sees a burst. Alerts on
 these metrics: [deploy/grafana](../../deploy/grafana/README.md); a stalled job:
 [runbooks/worker-stalled.md](../../docs/runbooks/worker-stalled.md).
 

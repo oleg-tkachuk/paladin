@@ -739,34 +739,6 @@ finding moving from "packages you import" to "your code is affected".
 
 ---
 
-## Storage
-
-### LifecycleHardDeleter is off in this deployment — 21 DELETED objects hold their bytes
-
-- **Status:** Blocked (operator decision — a coding session cannot make the
-  call, and the default is deliberate).
-- **Reason:** `build_jobs.go` registers the hard-deleter only when
-  `worker.jobs.housekeeping.hard_delete_after > 0`. The shipped default is
-  `"0s"`, documented in `configs/config.yaml` as "0 disables (audit-only, dev
-  default) — 7d-30d in prod is the typical setting". So this is working as
-  designed for dev, not a bug. The consequence is still real: soft-deleted
-  objects keep their bytes forever, and the deployment currently has 21 rows
-  in `DELETED` doing exactly that.
-  Unrelated to the permanent-delete leak fixed by migration 069 — that path
-  now carries its own durable debt. This is the *soft*-delete cascade, and
-  turning it on is a data-retention decision, not a correctness one.
-- **Definition of Done:**
-  - A decision per environment on the cooling-off window, written down: dev
-    stays 0 or gets a short window; prod gets the 7d-30d the config already
-    recommends.
-  - When it is enabled, the existing 21 rows drain on the first sweep — check
-    the count and the `hard-deleted` log lines before and after, because that
-    first sweep reclaims a backlog rather than a trickle.
-  - Note that enabling it also starts emitting `paladin.object.purged` from the
-    lifecycle path; any consumer counting those events sees a burst.
-- **Blockers:** needs the retention answer for each environment.
-
-
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)
