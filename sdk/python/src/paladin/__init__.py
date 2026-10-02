@@ -12,10 +12,13 @@ from paladin.client import (
     HEADER_AUTHORIZATION,
     HEADER_CAPABILITY,
     HEADER_IDEMPOTENCY_KEY,
+    HEADER_RETRY_AFTER,
+    HEADER_USER_AGENT,
     Client,
     Retry,
     current_idempotency_key,
     idempotency_key,
+    user_agent,
 )
 
 __all__ = [
@@ -25,8 +28,11 @@ __all__ = [
     "HEADER_AUTHORIZATION",
     "HEADER_CAPABILITY",
     "HEADER_IDEMPOTENCY_KEY",
+    "HEADER_RETRY_AFTER",
+    "HEADER_USER_AGENT",
     "Client",
     "Retry",
     "current_idempotency_key",
     "idempotency_key",
+    "user_agent",
 ]

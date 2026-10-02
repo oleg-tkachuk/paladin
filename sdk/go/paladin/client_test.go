@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -33,6 +34,8 @@ type recorder struct {
 	headers  []http.Header
 	failures int
 	failCode connect.Code
+	// retryAfter, when set, rides on each injected failure as Retry-After.
+	retryAfter string
 }
 
 func (r *recorder) record(h http.Header) error {
@@ -41,7 +44,11 @@ func (r *recorder) record(h http.Header) error {
 	r.headers = append(r.headers, h.Clone())
 	if r.failures > 0 {
 		r.failures--
-		return connect.NewError(r.failCode, errors.New("injected"))
+		err := connect.NewError(r.failCode, errors.New("injected"))
+		if r.retryAfter != "" {
+			err.Meta().Set(paladin.HeaderRetryAfter, r.retryAfter)
+		}
+		return err
 	}
 	return nil
 }
@@ -187,7 +194,7 @@ func TestRetries(t *testing.T) {
 		{"side-effect free, gives up after attempts", "GetVersion", false, 5, connect.CodeUnavailable, attempts, true},
 		{"rate limited is transient", "GetVersion", false, 1, connect.CodeResourceExhausted, 2, false},
 		{"permanent error is not retried", "GetVersion", false, 1, connect.CodeInvalidArgument, 1, true},
-		{"mutating call without a key is not retried", "Login", false, 1, connect.CodeUnavailable, 1, true},
+		{"mutating call carries its own key and is retried", "Login", false, 1, connect.CodeUnavailable, 2, false},
 		{"mutating call with a key is retried", "Login", true, 1, connect.CodeUnavailable, 2, false},
 	}
 	for _, tc := range cases {
@@ -216,18 +223,105 @@ func TestRetries(t *testing.T) {
 	}
 }
 
-func TestRetryStopsWhenContextEnds(t *testing.T) {
+// A retry that could not start before the deadline is not attempted: the
+// caller gets the server's answer, not a deadline error that hides it.
+func TestRetryNotAttemptedPastTheDeadline(t *testing.T) {
 	rec := &recorder{failures: 10, failCode: connect.CodeUnavailable}
 	health, _ := clients(t, serve(t, rec), paladin.WithRetries(10, time.Hour))
 
 	ctx, cancel := context.WithTimeout(context.Background(), testCallDeadline)
 	defer cancel()
 	_, err := health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{}))
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
+	if connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("err = %v, want the server's Unavailable", err)
 	}
 	if got := rec.calls(); got != 1 {
 		t.Fatalf("server saw %d calls, want 1", got)
+	}
+}
+
+func TestRetryStopsWhenContextIsCancelled(t *testing.T) {
+	rec := &recorder{failures: 1000, failCode: connect.CodeUnavailable}
+	health, _ := clients(t, serve(t, rec), paladin.WithRetries(1000, testRetryDelay))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(testCallDeadline, cancel)
+	_, err := health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{}))
+	if !errors.Is(err, context.Canceled) && connect.CodeOf(err) != connect.CodeCanceled {
+		t.Fatalf("err = %v, want the cancellation", err)
+	}
+}
+
+// The server's Retry-After is a floor on the wait: an hour does not fit in
+// the deadline, so the retry is not made, where the 1ms jitter alone would.
+func TestRetryHonoursRetryAfter(t *testing.T) {
+	const anHour = "3600"
+	rec := &recorder{failures: 1, failCode: connect.CodeResourceExhausted, retryAfter: anHour}
+	health, _ := clients(t, serve(t, rec), paladin.WithRetries(3, testRetryDelay))
+
+	ctx, cancel := context.WithTimeout(context.Background(), testCallDeadline)
+	defer cancel()
+	if _, err := health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{})); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("err = %v, want ResourceExhausted", err)
+	}
+	if got := rec.calls(); got != 1 {
+		t.Fatalf("server saw %d calls, want 1: Retry-After was ignored", got)
+	}
+}
+
+// A call with side effects gets a key of its own, and every retry of it
+// carries the same one, so the server can recognise the repeat.
+func TestMutatingCallKeepsOneKeyAcrossRetries(t *testing.T) {
+	rec := &recorder{failures: 2, failCode: connect.CodeUnavailable}
+	_, auth := clients(t, serve(t, rec), paladin.WithRetries(3, testRetryDelay))
+
+	if _, err := auth.Login(context.Background(), connect.NewRequest(&iamv1.LoginRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	first := rec.headers[0].Get(paladin.HeaderIdempotencyKey)
+	if first == "" {
+		t.Fatal("a call with side effects went out without an idempotency key")
+	}
+	for i, h := range rec.headers {
+		if got := h.Get(paladin.HeaderIdempotencyKey); got != first {
+			t.Errorf("attempt %d sent key %q, want %q", i+1, got, first)
+		}
+	}
+}
+
+func TestEachMutatingCallGetsItsOwnKey(t *testing.T) {
+	rec := &recorder{}
+	_, auth := clients(t, serve(t, rec))
+	keys := map[string]bool{}
+	for range 2 {
+		if _, err := auth.Login(context.Background(), connect.NewRequest(&iamv1.LoginRequest{})); err != nil {
+			t.Fatal(err)
+		}
+		keys[rec.last().Get(paladin.HeaderIdempotencyKey)] = true
+	}
+	if len(keys) != 2 {
+		t.Errorf("two separate calls shared a key: %v", keys)
+	}
+}
+
+func TestOptionsReachTheServer(t *testing.T) {
+	const custom = "X-Custom"
+	rec := &recorder{}
+	health, _ := clients(t, serve(t, rec), paladin.WithAPIToken("paladin_pat_xyz"), paladin.WithHeader(custom, "v"))
+	if _, err := health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	h := rec.last()
+	if got := h.Get(paladin.HeaderAPIToken); got != "paladin_pat_xyz" {
+		t.Errorf("%s = %q", paladin.HeaderAPIToken, got)
+	}
+	if got := h.Get(custom); got != "v" {
+		t.Errorf("%s = %q", custom, got)
+	}
+	if got := h.Get(paladin.HeaderUserAgent); !strings.HasPrefix(got, "paladin-sdk-go/") {
+		t.Errorf("%s = %q, want the SDK named", paladin.HeaderUserAgent, got)
 	}
 }
 
