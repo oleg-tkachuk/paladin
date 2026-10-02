@@ -310,13 +310,20 @@ jobs:
   # compose stack and names any test that passed only on its retry. Only for a
   # change the console or the backend reaches (ci-groups.sh --needs-e2e).
   e2e:
-    name: End-to-end
+    name: End-to-end (${{ matrix.shard }})
     needs: [changes]
     if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     permissions:
       contents: read
+    # The suite in two slices on two runners. Each builds both images and
+    # boots its own stack, which costs runner minutes and saves wall-clock: the
+    # browser half was the longest part of the job.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/2", "2/2"]
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -363,6 +370,8 @@ jobs:
         run: pnpm exec playwright install chromium --with-deps
 
       - name: task verify-e2e
+        env:
+          PALADIN_E2E_SHARD: ${{ matrix.shard }}
         run: task --yes -t Taskfile.dev.yaml verify-e2e
 
       # The stack's logs are printed by verify-e2e itself before it tears the
@@ -371,7 +380,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: playwright-report
+          name: playwright-report-${{ strategy.job-index }}
           path: |
             frontend/tests/e2e/test-results/
             frontend/test-results/
