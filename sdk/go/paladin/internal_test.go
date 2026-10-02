@@ -78,3 +78,22 @@ func TestParseRetryAfter(t *testing.T) {
 		}
 	}
 }
+
+// An RPC is bounded by its context, as without TLS; a transfer keeps its
+// response-header timeout.
+func TestTLSResponseHeaderTimeouts(t *testing.T) {
+	c, err := TLS{}.rpcClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Transport.(*rotatingTransport).ResponseHeaderTimeout; got != 0 {
+		t.Errorf("WithTLS response-header timeout = %v, want none", got)
+	}
+	var cfg transferConfig
+	if err := WithTransferTLS(TLS{})(&cfg); err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.client.Transport.(*rotatingTransport).ResponseHeaderTimeout; got != DefaultTransferResponseHeaderTimeout {
+		t.Errorf("WithTransferTLS response-header timeout = %v, want %v", got, DefaultTransferResponseHeaderTimeout)
+	}
+}

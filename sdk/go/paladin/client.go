@@ -184,11 +184,11 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 		if cfg.httpClientSet {
 			return nil, ErrTLSAndHTTP
 		}
-		t, err := cfg.tls.Transport()
+		c, err := cfg.tls.rpcClient()
 		if err != nil {
 			return nil, err
 		}
-		cfg.httpClient = &http.Client{Transport: t}
+		cfg.httpClient = c
 	}
 	if cfg.anyPlaneTokens != nil && cfg.tokens == nil {
 		if cfg.audience == "" {

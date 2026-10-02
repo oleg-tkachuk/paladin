@@ -182,11 +182,20 @@ p, err := paladin.Connect(endpoints, paladin.WithTokens(session), paladin.WithTL
 | `ServerID` | The SPIFFE ID the server must present. Its certificate is verified as an X.509-SVID against `CAFile` as that trust domain's bundle, by the SPIFFE project's `go-spiffe`, instead of against the host name, which an SVID does not carry. `ErrServerID` on a mismatch or a malformed ID; `ErrServerIDNeedsCA` without `CAFile`. |
 | `VerifyPeer` | Runs on the server's leaf certificate after the built-in checks; its error refuses the connection. |
 | `ReloadInterval` | How often the files are checked for a change (`DefaultTLSReloadInterval`, 30s). A rotation caught half-written — a new certificate beside the old key — keeps the last good pair until the next check. |
+| `MinVersion` | The lowest TLS version offered, a `crypto/tls` constant; zero is `DefaultTLSMinVersion`, TLS 1.2. Lower, or unknown, is `ErrTLSMinVersion`. |
 
-`(TLS).Transport()` returns the `*http.Transport` both options build, for a
-client of your own; `WithTLS` with `WithHTTPClient` is `ErrTLSAndHTTP`.
-These connections are made directly: a proxy from the environment would
-make the TLS connection itself, without the files.
+After a rotation, a connection made with the old files is closed as soon
+as it is idle, so the next request dials with the new ones; a request in
+flight finishes where it started. An RPC through `WithTLS` has no
+response-header timeout — its context bounds it, as without TLS — while a
+transfer keeps `DefaultTransferResponseHeaderTimeout`.
+
+`(TLS).Transport()` returns an `*http.Transport` with the same files, bounded
+like a transfer's, for a client of your own: its fields are yours to change,
+and a rotation reaches its new connections only. `WithTLS` with
+`WithHTTPClient` is `ErrTLSAndHTTP`. These connections are made directly: a
+proxy from the environment would make the TLS connection itself, without the
+files.
 
 ### Errors
 
