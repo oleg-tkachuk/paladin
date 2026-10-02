@@ -1625,18 +1625,6 @@ the code. Not fixed in the documentation change that recorded them.
   `/api/health/live` stays public for the kubelet), with a test.
 - **Blockers:** none.
 
-### Ingest claims an event before handling it
-
-- **Status:** Open — can lose events.
-- **Reason:** `eventingest.Worker.Deliver` commits the `ingested_events` dedup
-  row, then runs the handler. If the handler fails, the broker's retry finds
-  the row and is acked as a duplicate, so the object never leaves `PENDING`
-  through ingest (the reconciler is the fallback).
-- **Definition of Done:** the claim and the promotion commit together, or the
-  claim is released on failure, with a test that fails a handler once and sees
-  the retry promote.
-- **Blockers:** none.
-
 ### Hard delete removes the bytes before it re-checks the row
 
 - **Status:** Open — data loss on a race.
