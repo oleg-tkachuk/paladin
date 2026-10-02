@@ -71,7 +71,10 @@ func (*copyFakeRepo) RunInTx(context.Context, func(context.Context, pgx.Tx) erro
 // covered end-to-end in tests/integration/components, where a real pending_purges
 // row is the assertion.
 func (*copyFakeRepo) EnqueuePurgeTx(context.Context, pgx.Tx, objecth.PurgeDebt) error { return nil }
-func (*copyFakeRepo) SettlePurgeTx(context.Context, pgx.Tx, uuid.UUID) error          { return nil }
+func (*copyFakeRepo) PurgeBytesTx(context.Context, pgx.Tx, uuid.UUID, string, string, func() error) (bool, error) {
+	panic("unused")
+}
+func (*copyFakeRepo) SettlePurgeTx(context.Context, pgx.Tx, uuid.UUID) error { return nil }
 func (*copyFakeRepo) LiveCollision(context.Context, uuid.UUID, string, string) (bool, error) {
 	panic("unused")
 }

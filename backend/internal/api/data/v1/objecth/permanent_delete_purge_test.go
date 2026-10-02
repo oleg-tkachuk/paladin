@@ -64,6 +64,14 @@ func (r *purgeRepo) EnqueuePurgeTx(_ context.Context, _ pgx.Tx, p PurgeDebt) err
 	return nil
 }
 
+// PurgeBytesTx stands in for an unused path: the bytes are always deleted.
+func (r *purgeRepo) PurgeBytesTx(_ context.Context, _ pgx.Tx, _ uuid.UUID, _, _ string, deleteBytes func() error) (bool, error) {
+	if err := deleteBytes(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (r *purgeRepo) SettlePurgeTx(_ context.Context, _ pgx.Tx, id uuid.UUID) error {
 	r.settled = append(r.settled, id)
 	return nil

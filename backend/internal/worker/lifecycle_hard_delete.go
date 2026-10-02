@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -167,8 +168,13 @@ func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDel
 		return
 	}
 
-	if err := w.Storage.DeleteObject(ctx, r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path); err != nil {
+	verdict, err := w.deleteBytes(ctx, r, tenantID)
+	if err != nil {
 		logger.Warn("storage delete failed; the purge drainer retries it", zap.Error(err))
+		return
+	}
+	if verdict == objectpath.Defer {
+		logger.Info("a new object is being written at this path; the purge drainer retries it")
 		return
 	}
 	if err := w.settleAndAnnounce(ctx, r, tenantID, purgeID); err != nil {
@@ -206,6 +212,26 @@ func (w *LifecycleHardDeleter) deleteRowRecordingDebt(ctx context.Context, r sql
 		return false, fmt.Errorf("record purge debt: %w", err)
 	}
 	return true, tx.Commit(ctx)
+}
+
+// deleteBytes deletes the row's bytes unless an object uploaded at the same
+// path since owns them (package objectpath), holding the path lock across the
+// storage call. Superseded and Delete both pay the debt.
+func (w *LifecycleHardDeleter) deleteBytes(ctx context.Context, r sqlc.ListHardDeletableRow, tenantID uuid.UUID) (objectpath.Verdict, error) {
+	tx, err := w.Pool.Begin(ctx)
+	if err != nil {
+		return objectpath.Defer, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	verdict, err := objectpath.Check(ctx, w.Q.WithTx(tx), tenantID, r.CollectionName, r.Path)
+	if err != nil || verdict != objectpath.Delete {
+		return verdict, err
+	}
+	if err := w.Storage.DeleteObject(ctx, r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path); err != nil {
+		return objectpath.Defer, err
+	}
+	return verdict, tx.Commit(ctx)
 }
 
 // settleAndAnnounce clears the debt the bytes' removal paid, and emits

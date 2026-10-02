@@ -219,3 +219,19 @@ SET metadata     = COALESCE(sqlc.narg('metadata'), metadata),
 WHERE tenant_id = $1 AND id = $2
   AND state = 'AVAILABLE'
   AND resource_version = sqlc.arg('expected_version');
+
+-- name: LockObjectPath :exec
+-- Waits for the object-path lock (see package objectpath); held until the
+-- transaction ends.
+SELECT pg_advisory_xact_lock(sqlc.arg('lock_key')::bigint);
+
+-- name: TryLockObjectPath :one
+-- Takes the object-path lock if it is free; held until the transaction ends.
+SELECT pg_try_advisory_xact_lock(sqlc.arg('lock_key')::bigint)::bool AS locked;
+
+-- name: ObjectStateAtPath :one
+-- The state of the row that owns a storage path now, if any.
+SELECT o.state
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1 AND c.name = $2 AND o.path = $3;
