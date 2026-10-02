@@ -17,6 +17,7 @@ from paladin.facade import (
     DataPlane,
     IAMPlane,
 )
+from paladin.relay import RelaySyncTransport, RelayTransport
 from paladin.tls import TLS
 from paladin.transfer import Transfer
 
@@ -53,12 +54,17 @@ class AsyncPaladin:
 _HTTP_CLIENT = "http_client"
 
 
-def _with_tls(transport: dict[str, Any] | None, tls: TLS | None, client: Any) -> dict[str, Any]:
+def _transport_options(
+    transport: dict[str, Any] | None, tls: TLS | None, client: Any
+) -> dict[str, Any]:
+    """The options for every generated client: the caller's, with an
+    ``http_client`` that relays response headers unless the caller gave one —
+    over the TLS transport when ``tls`` is given."""
     extra = dict(transport or {})
-    if tls is None:
-        return extra
     if _HTTP_CLIENT in extra:
-        raise ValueError("tls builds the http_client; give one or the other")
+        if tls is not None:
+            raise ValueError("tls builds the http_client; give one or the other")
+        return extra
     extra[_HTTP_CLIENT] = client(tls)
     return extra
 
@@ -87,7 +93,11 @@ def connect(
     client certificate that may rotate on disk; it builds the ``http_client``,
     so the two cannot both be given. For storage, give the ``Transfer`` its own.
     """
-    extra = _with_tls(transport, tls, lambda t: pyqwest.SyncClient(t.sync_transport()))
+    extra = _transport_options(
+        transport,
+        tls,
+        lambda t: pyqwest.SyncClient(RelaySyncTransport(t.sync_transport() if t else None)),
+    )
 
     def plane(url: str | None, audience: str, kind: Any, **more: Any) -> Any:
         if not url:
@@ -112,7 +122,11 @@ def connect_async(
 ) -> AsyncPaladin:
     """``connect`` for asyncio: the generated async clients, and an
     ``AsyncSession`` as the token source."""
-    extra = _with_tls(transport, tls, lambda t: pyqwest.Client(t.async_transport()))
+    extra = _transport_options(
+        transport,
+        tls,
+        lambda t: pyqwest.Client(RelayTransport(t.async_transport() if t else None)),
+    )
 
     def plane(url: str | None, audience: str, kind: Any, **more: Any) -> Any:
         if not url:

@@ -11,6 +11,13 @@ pip install "paladin-sdk @ git+https://github.com/oleg-tkachuk/paladin@sdk/go/vX
 In a `requirements.txt` or `pyproject.toml`, the same `paladin-sdk @ git+…`
 line. Pin the tag: a branch moves under a lock file.
 
+Where the build has no git — a slim image, a vendored copy — install the
+tag's source archive instead; `git archive` records the version in it:
+
+```bash
+pip install "paladin-sdk @ https://github.com/oleg-tkachuk/paladin/archive/refs/tags/sdk/go/vX.Y.Z.tar.gz#subdirectory=sdk/python"
+```
+
 Two parts, both imported as `paladin`:
 
 - `paladin.admin.v1`, `paladin.data.v1`, `paladin.iam.v1`, `paladin.common.v1` —
@@ -71,9 +78,18 @@ For one plane alone, a `Client` supplies what a generated client takes:
 from paladin.admin.v1.tenant_service_connect import TenantServiceClientSync
 
 client = paladin.Client(admin_url, token_source=session, audience=paladin.AUDIENCE_ADMIN)
-with TenantServiceClientSync(client.base_url, interceptors=client.interceptors()) as tenants:
+with TenantServiceClientSync(
+    client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+) as tenants:
     ...
 ```
+
+The `http_client` relays each response's headers to the SDK, which reads the
+server's release and `Retry-After` from them: connect-python shows an
+interceptor no response headers. An HTTP client of your own does the same with
+its transport wrapped, `pyqwest.SyncClient(paladin.RelaySyncTransport(t))`;
+without that, typed errors carry no `server_version` or `retry_after`, retries
+ignore `Retry-After`, and the first such error warns with a `RuntimeWarning`.
 
 ## `paladin` package
 
@@ -85,6 +101,8 @@ with TenantServiceClientSync(client.base_url, interceptors=client.interceptors()
 | `base_url` | First argument of every generated client. |
 | `interceptors()` | Interceptors for a generated `…ClientSync`. |
 | `async_interceptors()` | Interceptors for a generated async `…Client`. |
+| `http_client(transport=None)`, `async_http_client(transport=None)` | The `http_client` for a generated client: a `pyqwest` client over `RelaySyncTransport` / `RelayTransport`, wrapping `transport` or pyqwest's shared one. |
+| `RelaySyncTransport(inner=None)`, `RelayTransport(inner=None)` | A `pyqwest` transport that relays response headers to the SDK's interceptors. `connect`, `connect_async` and `http_client` build on them. |
 
 ### `Retry`
 
@@ -160,6 +178,7 @@ p = paladin.connect(endpoints, token_source=session, transfer=transfer)
 | `rewrite=fn` | The general form: any URL to any URL, the signed Host still kept. Not with `split_horizon`. |
 | `transport=` | A `pyqwest.SyncHTTPTransport` of your own — a proxy, TLS settings. Build it with `follow_redirects=False`: one that follows them cannot be stopped from here. |
 | `connect(…, transfer=t)` | Every `upload` and `download` through that data plane uses `t`; without it, a shared default. |
+| `stream(method, signed, headers=None, content=None)`, `astream(…)` | One presigned request of your own — a URL the server signed that the workflows do not send, such as a PUT minted for another service. A context manager yielding storage's 2xx `pyqwest` response, unread; `method` applies when `signed.method` is empty. The signed Host and `signed.required_headers` are sent, and the rewrite applied. Any other status is a `TransferError`, reported to the hooks; on success report it yourself with `ended(method, host_of(signed), moved, started, None)`, `started` from `time.monotonic()` before the call. |
 | `TransferError` | A request storage refused, or answered with a redirect: `method`, `host` (the URL's query is the signature and is not kept), `status`, and the first 512 bytes of the `body`. |
 
 ### TLS
@@ -270,7 +289,9 @@ package.
 context:
 
 ```python
-http = pyqwest.SyncClient(pyqwest.SyncHTTPTransport(tracer_provider=provider))
+http = pyqwest.SyncClient(
+    paladin.RelaySyncTransport(pyqwest.SyncHTTPTransport(tracer_provider=provider))
+)
 p = paladin.connect(endpoints, transport={"http_client": http},
                     transfer=paladin.Transfer(otel=True, tracer_provider=provider))
 ```
@@ -296,12 +317,17 @@ with FakePaladin() as fake:
 ```
 
 It serves `ObjectService` (upload, complete, get, lookup, list, download,
-delete) and `MultipartUploadService`; every other RPC answers
-`UNIMPLEMENTED`. Like the server it refuses a collection named by the
-tenant's slug and a completion whose ETag is not the content's, records the
+delete), `MultipartUploadService` and `StorageBootstrapService`; every
+other RPC answers `UNIMPLEMENTED`. Like the server it refuses a collection
+named by the tenant's slug and a completion whose ETag, when given, is not
+the content's; completing a completed object returns it. It records the
 checksum an upload completes with — so a download verifies — and answers
-range requests. `put` stores an object directly; `tenant` and `collection()`
-name the fake's tenant and its collections, all of which exist.
+range requests. `ensure_tenant_storage` reports a bucket and collections
+created the first time and existing after, for any backend id. `put` stores
+an object directly; `tenant` and `collection()` name the fake's tenant and
+its collections, all of which exist; `requests()` lists the RPCs received,
+each a `Request` with its `procedure` and `headers` by lower-case name, for a
+test of what the client sent.
 
 ### Concurrency and asyncio
 
@@ -335,6 +361,7 @@ on purpose:
 | --- | --- | --- | --- |
 | Typed errors | `errors.Is(err, paladin.ErrNotFound)`, `*paladin.Error` | `except paladin.NotFoundError`, `PaladinError` | Each language's idiom; the same kinds, fields and reasons. |
 | Server identity over TLS | `TLS.ServerID`: the SPIFFE ID, checked by `go-spiffe` | Not available: the CA bundle and the host name only | `pyqwest` has no peer-verification hook. |
+| Minimum TLS version | `TLS.MinVersion`, 1.2 by default | pyqwest's own floor | `pyqwest` has no option for it. |
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0 (BACKLOG). |
 | Bulk downloads | `DownloadMany`, a callback per reader | `download_many` / `adownload_many`, an iterator of results | Each language's idiom. |
@@ -453,7 +480,8 @@ the stubs, the declared floor and the matrix disagree.
 
 The package version is the SDK's tag, `sdk/go/vX.Y.Z`, cut automatically from
 the commits that touch `sdk/` or `proto/`; hatch-vcs reads it at build time
-(a checkout without the tags builds as `0.0.0`). Pre-1.0, a minor version may break the contract or this
+(a source archive of a tag reads it from `.git_archival.txt`; a tree with
+neither builds as `0.0.0+unknown`). Pre-1.0, a minor version may break the contract or this
 package's own API; see [`docs/upgrading.md`](../../docs/upgrading.md). The buf.validate module the contract's descriptors depend
 on ships inside the wheel as `buf.validate`, because no PyPI package provides
 it for the `protobuf` runtime.

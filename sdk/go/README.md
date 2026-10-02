@@ -182,12 +182,21 @@ p, err := paladin.Connect(endpoints, paladin.WithTokens(session), paladin.WithTL
 | `ServerID` | The SPIFFE ID the server must present. Its certificate is verified as an X.509-SVID against `CAFile` as that trust domain's bundle, by the SPIFFE project's `go-spiffe`, instead of against the host name, which an SVID does not carry. `ErrServerID` on a mismatch or a malformed ID; `ErrServerIDNeedsCA` without `CAFile`. |
 | `VerifyPeer` | Runs on the server's leaf certificate after the built-in checks; its error refuses the connection. |
 | `ReloadInterval` | How often the files are checked for a change (`DefaultTLSReloadInterval`, 30s). A rotation caught half-written — a new certificate beside the old key — keeps the last good pair until the next check. |
+| `MinVersion` | The lowest TLS version offered, a `crypto/tls` constant; zero is `DefaultTLSMinVersion`, TLS 1.2. Lower, or unknown, is `ErrTLSMinVersion`. |
 
-`(TLS).Transport()` returns the `*http.Transport` both options build, for a
-client of your own; `WithTLS` with `WithHTTPClient` is `ErrTLSAndHTTP`.
-These connections are made directly: a proxy from the environment would
-make the TLS connection itself, without the files.
-||||||| parent of 24044e2c (feat(sdk): give go callers typed errors with the server's reason)
+After a rotation, a connection made with the old files is closed as soon
+as it is idle, so the next request dials with the new ones; a request in
+flight finishes where it started. An RPC through `WithTLS` has no
+response-header timeout — its context bounds it, as without TLS — while a
+transfer keeps `DefaultTransferResponseHeaderTimeout`.
+
+`(TLS).Transport()` returns an `*http.Transport` with the same files, bounded
+like a transfer's, for a client of your own: its fields are yours to change,
+and a rotation reaches its new connections only. `WithTLS` with
+`WithHTTPClient` is `ErrTLSAndHTTP`. These connections are made directly: a
+proxy from the environment would make the TLS connection itself, without the
+files.
+
 ### Errors
 
 Every failed call through a client from `New` or `Connect` returns an
@@ -289,12 +298,16 @@ data, _ := srv.Content(obj.GetName())
 ```
 
 It serves `ObjectService` (upload, complete, get, lookup, list, download,
-delete) and `MultipartUploadService`; every other RPC answers
-`Unimplemented`. Like the server it refuses a collection named by the
-tenant's slug and a completion whose ETag is not the content's, records the
+delete), `MultipartUploadService` and `StorageBootstrapService`; every
+other RPC answers `Unimplemented`. Like the server it refuses a collection
+named by the tenant's slug and a completion whose ETag, when given, is not
+the content's; completing a completed object returns it. It records the
 checksum an upload completes with — so `Download` verifies — and answers
-range requests. `Put` stores an object directly; `Tenant` and `Collection`
-name the fake's tenant and its collections, all of which exist.
+range requests. `EnsureTenantStorage` reports a bucket and collections
+created the first time and existing after, for any backend id. `Put` stores
+an object directly; `Tenant` and `Collection` name the fake's tenant and its
+collections, all of which exist; `Requests` lists the RPCs received, each
+with its `Procedure` and `Header`, for a test of what the client sent.
 
 ### Concurrency
 
@@ -321,6 +334,7 @@ on purpose:
 | --- | --- | --- | --- |
 | Typed errors | `errors.Is(err, paladin.ErrNotFound)`, `*paladin.Error` | `except paladin.NotFoundError`, `PaladinError` | Each language's idiom; the same kinds, fields and reasons. |
 | Server identity over TLS | `TLS.ServerID`: the SPIFFE ID, checked by `go-spiffe` | Not available: the CA bundle and the host name only | `pyqwest` has no peer-verification hook. |
+| Minimum TLS version | `TLS.MinVersion`, 1.2 by default | pyqwest's own floor | `pyqwest` has no option for it. |
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0 (BACKLOG). |
 | Bulk downloads | `DownloadMany`, a callback per reader | `download_many` / `adownload_many`, an iterator of results | Each language's idiom. |

@@ -36,11 +36,15 @@ CALL_TIMEOUT_MS = 2000
 
 
 def _health(client: Client) -> HealthServiceClientSync:
-    return HealthServiceClientSync(client.base_url, interceptors=client.interceptors())
+    return HealthServiceClientSync(
+        client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+    )
 
 
 def _auth(client: Client) -> AuthServiceClientSync:
-    return AuthServiceClientSync(client.base_url, interceptors=client.interceptors())
+    return AuthServiceClientSync(
+        client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+    )
 
 
 @pytest.mark.parametrize(
@@ -157,7 +161,9 @@ def test_async_client_sends_credentials_and_retries(server) -> None:  # type: ig
 
     async def call() -> None:
         async with HealthServiceClient(
-            client.base_url, interceptors=client.async_interceptors()
+            client.base_url,
+            interceptors=client.async_interceptors(),
+            http_client=client.async_http_client(),
         ) as health:
             await health.get_version(health_service_pb2.GetVersionRequest())
 
@@ -190,6 +196,7 @@ def test_retry_honours_retry_after(server) -> None:  # type: ignore[no-untyped-d
     health = HealthServiceClientSync(
         server.url,
         interceptors=Client(server.url, retry=FAST).interceptors(),
+        http_client=Client(server.url).http_client(),
         timeout_ms=CALL_TIMEOUT_MS,
     )
     with pytest.raises(ConnectError) as err:
@@ -204,6 +211,7 @@ def test_retry_not_attempted_past_the_timeout(server) -> None:  # type: ignore[n
     health = HealthServiceClientSync(
         server.url,
         interceptors=Client(server.url, retry=slow).interceptors(),
+        http_client=Client(server.url).http_client(),
         timeout_ms=CALL_TIMEOUT_MS,
     )
     with pytest.raises(ConnectError) as err:
@@ -248,6 +256,7 @@ def test_retry_honours_a_retry_after_date(server) -> None:  # type: ignore[no-un
     health = HealthServiceClientSync(
         server.url,
         interceptors=Client(server.url, retry=FAST).interceptors(),
+        http_client=Client(server.url).http_client(),
         timeout_ms=CALL_TIMEOUT_MS,
     )
     with pytest.raises(ConnectError):

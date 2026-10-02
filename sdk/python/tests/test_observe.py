@@ -36,7 +36,9 @@ PARENT = "tenants/t/collections/c"
 
 
 def _health(client: Client) -> HealthServiceClientSync:
-    return HealthServiceClientSync(client.base_url, interceptors=client.interceptors())
+    return HealthServiceClientSync(
+        client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+    )
 
 
 def test_user_agent_suffix(server) -> None:  # type: ignore[no-untyped-def]
