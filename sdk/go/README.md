@@ -271,6 +271,29 @@ To create a bucket and bind collections to it at every boot, call
 `p.Data.StorageBootstrap.EnsureTenantStorage`: it is idempotent on the
 server, and reports which collections it created and which already existed.
 
+### Testing with a fake: `paladintest`
+
+`paladintest.New(t)` starts an in-memory data plane for the tests of a
+program built on the SDK, stopped when the test ends. Uploads and downloads
+go through presigned URLs on its own storage, as against the real server.
+
+```go
+srv := paladintest.New(t)
+p := srv.Connect()
+obj, err := paladin.Upload(ctx, p.Data, paladin.UploadInput{
+	Parent: srv.Collection().String(), Key: "a.pdf", Size: n, Body: body,
+}, paladin.UploadOptions{})
+data, _ := srv.Content(obj.GetName())
+```
+
+It serves `ObjectService` (upload, complete, get, lookup, list, download,
+delete) and `MultipartUploadService`; every other RPC answers
+`Unimplemented`. Like the server it refuses a collection named by the
+tenant's slug and a completion whose ETag is not the content's, records the
+checksum an upload completes with — so `Download` verifies — and answers
+range requests. `Put` stores an object directly; `Tenant` and `Collection`
+name the fake's tenant and its collections, all of which exist.
+
 ### Header names
 
 `HeaderAuthorization`, `HeaderAPIToken`, `HeaderCapability` and
