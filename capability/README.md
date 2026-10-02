@@ -10,9 +10,8 @@ You are not taking on a database driver or a storage SDK. This module ships
 contracts; you supply storage. A bundled in-memory implementation is enough to
 get started.
 
-It is a separate Go module, but an **in-tree** one, and it does not publish
-versions you can `go get` — see [Versioning](#versioning) before you depend
-on it from outside this repository.
+It is a separate Go module with its own version stream — see
+[Versioning](#versioning) before you depend on it.
 
 [docs/diagrams.md](docs/diagrams.md) draws the module: the contract boundary,
 a capability's lifecycle, the verification gates, delegation, the charge and
@@ -366,13 +365,3 @@ a matching major-version suffix in the module path from v2 onward, so
 `capability/v4.0.0` would be created and then refused at `go get`. Paladin
 itself consumes the module through a `replace` directive, so its releases do
 not wait on these tags.
-
-## Status
-
-v0.1.0 — an **internal library** of [Paladin](../README.md),
-extracted so the primitive is clean, self-contained and reusable, not to ship
-it as a separate product. Paladin is its reference consumer: a deployment with
-relational storage, policy evaluation and an admin API on top of it. It stays
-in-tree, consumed via a `replace` directive; the tag exists as hygiene, not as
-a promise of external support. The Go API is pre-1.0 — read the diff before
-bumping.
