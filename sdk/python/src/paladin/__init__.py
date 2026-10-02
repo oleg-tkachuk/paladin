@@ -49,6 +49,7 @@ from paladin.errors import (
     VersionConflictError,
     reason,
 )
+from paladin.observe import LOGGER_NAME, Hooks, RetryEvent, TransferEvent
 from paladin.tls import DEFAULT_TLS_RELOAD_INTERVAL, TLS
 from paladin.transfer import (
     CHECKSUM_CRC32C,
@@ -104,6 +105,7 @@ __all__ = [
     "HEADER_RETRY_AFTER",
     "HEADER_SERVER_VERSION",
     "HEADER_USER_AGENT",
+    "LOGGER_NAME",
     "TLS",
     "TOKEN_REFRESH_MARGIN",
     "AlreadyExistsError",
@@ -113,6 +115,7 @@ __all__ = [
     "ContractSkewError",
     "Endpoints",
     "FailedPreconditionError",
+    "Hooks",
     "IntegrityError",
     "NotFoundError",
     "ObjectReader",
@@ -123,10 +126,12 @@ __all__ = [
     "RangeIgnoredError",
     "ResourceExhaustedError",
     "Retry",
+    "RetryEvent",
     "Session",
     "StaticToken",
     "Transfer",
     "TransferError",
+    "TransferEvent",
     "UnauthenticatedError",
     "VersionConflictError",
     "apages",

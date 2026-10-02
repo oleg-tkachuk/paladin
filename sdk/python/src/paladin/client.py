@@ -14,7 +14,7 @@ import asyncio
 import random
 import secrets
 import time
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -32,6 +32,7 @@ from connectrpc.method import IdempotencyLevel
 from connectrpc.request import RequestContext
 
 from paladin.errors import convert, relayed
+from paladin.observe import Hooks, RetryEvent, report_retry
 
 REQ = TypeVar("REQ")
 RES = TypeVar("RES")
@@ -177,6 +178,9 @@ class Client:
         headers: dict[str, str] | None = None,
         token_source: Any = None,
         audience: str | None = None,
+        user_agent_suffix: str | None = None,
+        hooks: Hooks | None = None,
+        interceptors: Sequence[Any] = (),
     ) -> None:
         """Validate ``base_url`` and hold the credentials and retry policy.
 
@@ -191,6 +195,12 @@ class Client:
         — supplies the bearer token for ``audience``, this plane's; a call the
         server refuses as unauthenticated is made once more with a fresh one.
         ``connect`` sets ``audience`` for each plane.
+
+        ``user_agent_suffix`` — ``"worker/2.1"`` — is appended to the SDK's
+        User-Agent. ``hooks`` are told of every retry. ``interceptors`` run
+        outside the SDK's own, so one that times or traces a call — such as
+        connectrpc-otel's ``OpenTelemetryInterceptor(client=True)`` — covers
+        its retries; give sync or async ones to match the clients.
         """
         if token_source is not None and not audience:
             raise ValueError("token_source needs the plane's audience; or use paladin.connect")
@@ -200,7 +210,8 @@ class Client:
         if parts.scheme not in _URL_SCHEMES or not parts.netloc:
             raise ValueError(f"base URL must be an absolute http or https URL: {base_url!r}")
         self._base_url = base_url.rstrip("/")
-        sent: dict[str, str] = {HEADER_USER_AGENT: user_agent()}
+        agent = f"{user_agent()} {user_agent_suffix}" if user_agent_suffix else user_agent()
+        sent: dict[str, str] = {HEADER_USER_AGENT: agent}
         if bearer_token:
             sent[HEADER_AUTHORIZATION] = f"{_BEARER_SCHEME} {bearer_token}"
         if api_token:
@@ -212,6 +223,8 @@ class Client:
         self._retry = retry
         self._token_source = token_source
         self._audience = audience or ""
+        self._hooks = hooks
+        self._extra = list(interceptors)
 
     @property
     def base_url(self) -> str:
@@ -221,6 +234,7 @@ class Client:
     def interceptors(self) -> list[InterceptorSync]:
         """Interceptors for a generated ``…ClientSync``."""
         result: list[InterceptorSync] = [
+            *self._extra,
             _ErrorsSync(),
             _HeadersSync(self._headers),
             _IdempotencySync(),
@@ -228,12 +242,13 @@ class Client:
         if self._token_source is not None:
             result.append(_TokensSync(self._token_source, self._audience))
         if self._retry is not None:
-            result.append(_RetrySync(self._retry))
+            result.append(_RetrySync(self._retry, self._hooks))
         return result
 
     def async_interceptors(self) -> list[Interceptor]:
         """Interceptors for a generated async ``…Client``."""
         result: list[Interceptor] = [
+            *self._extra,
             _ErrorsAsync(),
             _HeadersAsync(self._headers),
             _IdempotencyAsync(),
@@ -241,7 +256,7 @@ class Client:
         if self._token_source is not None:
             result.append(_TokensAsync(self._token_source, self._audience))
         if self._retry is not None:
-            result.append(_RetryAsync(self._retry))
+            result.append(_RetryAsync(self._retry, self._hooks))
         return result
 
 
@@ -420,12 +435,14 @@ class _TokensAsync:
 
 
 class _RetrySync:
-    def __init__(self, retry: Retry) -> None:
+    def __init__(self, retry: Retry, hooks: Hooks | None) -> None:
         self._retry = retry
+        self._hooks = hooks
 
     def intercept_unary_sync(
         self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
     ) -> RES:
+        attempt = 0
         for ceiling in self._retry.delays():
             try:
                 with relayed() as meta:
@@ -436,13 +453,16 @@ class _RetrySync:
                 wait = self._retry.wait(ceiling, _retry_after(meta))
                 if not _fits(wait, ctx):
                     raise
+                attempt += 1
+                report_retry(self._hooks, RetryEvent(_procedure(ctx), attempt, wait, err))
             time.sleep(wait)
         return call_next(request, ctx)
 
 
 class _RetryAsync:
-    def __init__(self, retry: Retry) -> None:
+    def __init__(self, retry: Retry, hooks: Hooks | None) -> None:
         self._retry = retry
+        self._hooks = hooks
 
     async def intercept_unary(
         self,
@@ -450,6 +470,7 @@ class _RetryAsync:
         request: REQ,
         ctx: RequestContext,
     ) -> RES:
+        attempt = 0
         for ceiling in self._retry.delays():
             try:
                 with relayed() as meta:
@@ -460,6 +481,8 @@ class _RetryAsync:
                 wait = self._retry.wait(ceiling, _retry_after(meta))
                 if not _fits(wait, ctx):
                     raise
+                attempt += 1
+                report_retry(self._hooks, RetryEvent(_procedure(ctx), attempt, wait, err))
             await asyncio.sleep(wait)
         return await call_next(request, ctx)
 
