@@ -25,6 +25,13 @@ type CapabilityBundle struct {
 	Verifier *capability.StandardVerifier
 	Keys     *capability.StaticKeyResolver
 
+	// DPoP checks the RFC 9449 proof a key-bound capability must arrive
+	// with. Its replay cache is per replica: a proof replayed against
+	// another replica inside the acceptance window is not caught, which
+	// the window (a minute) and the proof's method+path+token binding
+	// keep narrow.
+	DPoP *capability.DPoPVerifier
+
 	// PublicKeys is the kid → public key map exposed via the JWKS
 	// endpoint. Refreshed in place when rotation lands; today it
 	// holds the single boot-time signer key.
@@ -142,6 +149,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Issuer:       issuer,
 		Verifier:     verifier,
 		Keys:         keys,
+		DPoP:         &capability.DPoPVerifier{Replay: capability.NewMemoryReplayCache(0)},
 		PublicKeys:   map[string]ed25519.PublicKey{kid: pub},
 		IssuerName:   cfg.IssuerName,
 		EphemeralKey: generated,

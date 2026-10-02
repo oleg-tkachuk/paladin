@@ -170,6 +170,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			cfg.Capability.ChargePerRequestAmount,
 			cfg.Capability.ChargePerRequestUnit,
 			chargeEm,
+			auth.WithDPoP(deps.Capability.DPoP),
 		)
 	} else {
 		capData = auth.CapabilityInterceptor(nil, "", nil, 0, "")

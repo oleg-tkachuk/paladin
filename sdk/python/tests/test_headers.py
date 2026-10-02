@@ -18,6 +18,7 @@ PAIRS = {
     "HeaderAuthorization": "HEADER_AUTHORIZATION",
     "HeaderAPIToken": "HEADER_API_TOKEN",
     "HeaderCapability": "HEADER_CAPABILITY",
+    "HeaderDPoP": "HEADER_DPOP",
     "HeaderIdempotencyKey": "HEADER_IDEMPOTENCY_KEY",
     "HeaderUserAgent": "HEADER_USER_AGENT",
     "HeaderRetryAfter": "HEADER_RETRY_AFTER",

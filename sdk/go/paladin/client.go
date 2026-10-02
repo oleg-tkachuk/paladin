@@ -9,6 +9,7 @@
 package paladin
 
 import (
+	"crypto"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -30,6 +31,9 @@ const (
 	HeaderAPIToken = "X-Paladin-API-Token" // #nosec G101 -- a header name, not a credential
 	// HeaderCapability carries a capability token.
 	HeaderCapability = "X-Paladin-Capability"
+	// HeaderDPoP carries the RFC 9449 proof that the caller holds the key a
+	// capability is bound to; see WithDPoP.
+	HeaderDPoP = "DPoP"
 	// HeaderIdempotencyKey makes a mutating call safe to repeat: the server
 	// replays the first response for a key it has already seen.
 	HeaderIdempotencyKey = "Idempotency-Key"
@@ -90,6 +94,8 @@ type config struct {
 	// anyPlaneTokens and audience: WithTokens, and the plane Connect builds.
 	anyPlaneTokens TokenSource
 	audience       string
+	// dpopKey: WithDPoP.
+	dpopKey crypto.Signer
 }
 
 // WithTransfer sends the presigned requests of Upload and Download through t:
@@ -208,6 +214,14 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 		cfg.retry.transient = cfg.retryable
 		cfg.retry.observe = observer{hooks: cfg.hooks, logger: cfg.logger}
 		interceptors = append(interceptors, cfg.retry)
+	}
+	if cfg.dpopKey != nil {
+		if _, err := DPoPThumbprint(cfg.dpopKey.Public()); err != nil {
+			return nil, err
+		}
+		interceptors = append(interceptors, &dpopAuth{
+			key: cfg.dpopKey, baseURL: strings.TrimRight(baseURL, "/"), now: time.Now,
+		})
 	}
 	options := append([]connect.ClientOption{connect.WithInterceptors(interceptors...)}, cfg.extra...)
 

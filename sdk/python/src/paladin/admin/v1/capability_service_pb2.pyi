@@ -68,7 +68,7 @@ class CapabilityCaveats(_message.Message):
     def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., max_budget_amount: _Optional[float] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., unit_code: _Optional[str] = ...) -> None: ...
 
 class Capability(_message.Message):
-    __slots__ = ("id", "issuer", "subject", "audience", "caveats", "issued_at", "not_before", "expires_at", "parent_id", "generation")
+    __slots__ = ("id", "issuer", "subject", "audience", "caveats", "issued_at", "not_before", "expires_at", "parent_id", "generation", "confirmation_jkt")
     ID_FIELD_NUMBER: _ClassVar[int]
     ISSUER_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
@@ -79,6 +79,7 @@ class Capability(_message.Message):
     EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
     PARENT_ID_FIELD_NUMBER: _ClassVar[int]
     GENERATION_FIELD_NUMBER: _ClassVar[int]
+    CONFIRMATION_JKT_FIELD_NUMBER: _ClassVar[int]
     id: str
     issuer: str
     subject: CapabilityPrincipal
@@ -89,21 +90,24 @@ class Capability(_message.Message):
     expires_at: _timestamp_pb2.Timestamp
     parent_id: str
     generation: int
-    def __init__(self, id: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., parent_id: _Optional[str] = ..., generation: _Optional[int] = ...) -> None: ...
+    confirmation_jkt: str
+    def __init__(self, id: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., parent_id: _Optional[str] = ..., generation: _Optional[int] = ..., confirmation_jkt: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceIssueRequest(_message.Message):
-    __slots__ = ("subject", "audience", "caveats", "ttl_seconds", "not_before")
+    __slots__ = ("subject", "audience", "caveats", "ttl_seconds", "not_before", "confirmation_jkt")
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     AUDIENCE_FIELD_NUMBER: _ClassVar[int]
     CAVEATS_FIELD_NUMBER: _ClassVar[int]
     TTL_SECONDS_FIELD_NUMBER: _ClassVar[int]
     NOT_BEFORE_FIELD_NUMBER: _ClassVar[int]
+    CONFIRMATION_JKT_FIELD_NUMBER: _ClassVar[int]
     subject: CapabilityPrincipal
     audience: _containers.RepeatedScalarFieldContainer[str]
     caveats: CapabilityCaveats
     ttl_seconds: int
     not_before: _timestamp_pb2.Timestamp
-    def __init__(self, subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., ttl_seconds: _Optional[int] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    confirmation_jkt: str
+    def __init__(self, subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., ttl_seconds: _Optional[int] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., confirmation_jkt: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceIssueResponse(_message.Message):
     __slots__ = ("capability", "token")
@@ -114,20 +118,22 @@ class CapabilityServiceIssueResponse(_message.Message):
     def __init__(self, capability: _Optional[_Union[Capability, _Mapping]] = ..., token: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceDelegateRequest(_message.Message):
-    __slots__ = ("parent_id", "subject", "audience", "caveats", "ttl_seconds", "not_before")
+    __slots__ = ("parent_id", "subject", "audience", "caveats", "ttl_seconds", "not_before", "confirmation_jkt")
     PARENT_ID_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     AUDIENCE_FIELD_NUMBER: _ClassVar[int]
     CAVEATS_FIELD_NUMBER: _ClassVar[int]
     TTL_SECONDS_FIELD_NUMBER: _ClassVar[int]
     NOT_BEFORE_FIELD_NUMBER: _ClassVar[int]
+    CONFIRMATION_JKT_FIELD_NUMBER: _ClassVar[int]
     parent_id: str
     subject: CapabilityPrincipal
     audience: _containers.RepeatedScalarFieldContainer[str]
     caveats: CapabilityCaveats
     ttl_seconds: int
     not_before: _timestamp_pb2.Timestamp
-    def __init__(self, parent_id: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., ttl_seconds: _Optional[int] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    confirmation_jkt: str
+    def __init__(self, parent_id: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., ttl_seconds: _Optional[int] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., confirmation_jkt: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceRevokeRequest(_message.Message):
     __slots__ = ("id", "reason", "cascade_children")

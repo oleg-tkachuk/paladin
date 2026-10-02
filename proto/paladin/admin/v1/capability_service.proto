@@ -118,6 +118,11 @@ message Capability {
   google.protobuf.Timestamp expires_at = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
   string parent_id = 9;
   int64 generation = 10;
+  // confirmation_jkt binds the capability to a key (RFC 9449 DPoP): the
+  // base64url SHA-256 JWK thumbprint (RFC 7638) of the public key whose
+  // holder alone may present it. Every request must then carry a DPoP
+  // proof signed by that key. Empty = an unbound bearer capability.
+  string confirmation_jkt = 11;
 }
 
 message CapabilityServiceIssueRequest {
@@ -127,6 +132,14 @@ message CapabilityServiceIssueRequest {
   // ttl_seconds caps the capability lifetime. 0 → server default.
   int64 ttl_seconds = 4 [(buf.validate.field).int64.gte = 0];
   google.protobuf.Timestamp not_before = 5;
+  // confirmation_jkt binds the capability to a key (RFC 9449 DPoP): the
+  // base64url SHA-256 JWK thumbprint (RFC 7638) of the public key whose
+  // holder alone may present it. Every request must then carry a DPoP
+  // proof signed by that key. Empty = an unbound bearer capability.
+  string confirmation_jkt = 6 [
+    (buf.validate.field).string.pattern = "^[A-Za-z0-9_-]{43}$",
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
 }
 
 message CapabilityServiceIssueResponse {
@@ -145,6 +158,13 @@ message CapabilityServiceDelegateRequest {
   CapabilityCaveats caveats = 4;
   int64 ttl_seconds = 5 [(buf.validate.field).int64.gte = 0];
   google.protobuf.Timestamp not_before = 6;
+  // confirmation_jkt binds the child to a key of its own — the sub-agent's.
+  // Empty inherits the parent's binding; an unbound parent may gain one,
+  // a bound parent's child can never shed it.
+  string confirmation_jkt = 7 [
+    (buf.validate.field).string.pattern = "^[A-Za-z0-9_-]{43}$",
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
 }
 
 message CapabilityServiceRevokeRequest {
