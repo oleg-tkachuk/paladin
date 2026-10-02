@@ -111,11 +111,12 @@ RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
 FROM gobase AS cache-import
 # Changes every run, so BuildKit never skips the copy as already done.
 ARG CACHE_RUN
-# The build context holds only the archive cache-export wrote; ADD unpacks it.
-ADD cache.tar /import/
+# The build context holds only the archive cache-export wrote. Its go-build/
+# lands on the cache mount, which sits at that path.
 RUN --mount=type=cache,target=/go_workspace/cache/go-build,sharing=locked \
+    --mount=type=bind,source=cache.tar,target=/tmp/cache.tar \
     echo "cache import ${CACHE_RUN}" && \
-    cp -a /import/go-build/. /go_workspace/cache/go-build/
+    tar -xf /tmp/cache.tar -C /go_workspace/cache
 
 FROM gobase AS cache-collect
 ARG CACHE_RUN
