@@ -11,6 +11,13 @@ pip install "paladin-sdk @ git+https://github.com/oleg-tkachuk/paladin@sdk/go/vX
 In a `requirements.txt` or `pyproject.toml`, the same `paladin-sdk @ git+…`
 line. Pin the tag: a branch moves under a lock file.
 
+Where the build has no git — a slim image, a vendored copy — install the
+tag's source archive instead; `git archive` records the version in it:
+
+```bash
+pip install "paladin-sdk @ https://github.com/oleg-tkachuk/paladin/archive/refs/tags/sdk/go/vX.Y.Z.tar.gz#subdirectory=sdk/python"
+```
+
 Two parts, both imported as `paladin`:
 
 - `paladin.admin.v1`, `paladin.data.v1`, `paladin.iam.v1`, `paladin.common.v1` —
@@ -466,7 +473,8 @@ the stubs, the declared floor and the matrix disagree.
 
 The package version is the SDK's tag, `sdk/go/vX.Y.Z`, cut automatically from
 the commits that touch `sdk/` or `proto/`; hatch-vcs reads it at build time
-(a checkout without the tags builds as `0.0.0`). Pre-1.0, a minor version may break the contract or this
+(a source archive of a tag reads it from `.git_archival.txt`; a tree with
+neither builds as `0.0.0+unknown`). Pre-1.0, a minor version may break the contract or this
 package's own API; see [`docs/upgrading.md`](../../docs/upgrading.md). The buf.validate module the contract's descriptors depend
 on ships inside the wheel as `buf.validate`, because no PyPI package provides
 it for the `protobuf` runtime.
