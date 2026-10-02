@@ -35,8 +35,8 @@ require (
 	// standalone CI job build it with no Paladin checkout and assert that no
 	// database driver and no storage SDK reach its resolved dependency graph
 	// (research R-004 — without that job, `replace` would mask a broken module).
-	// It is NOT published: no version stream is cut for it, and consumption is
-	// in-tree through the replace below. See capability/README.md §Versioning.
+	// Paladin consumes it in-tree through the replace below, so its releases do
+	// not wait on the module's own tags. See capability/README.md §Versioning.
 	github.com/oleg-tkachuk/paladin/capability v0.1.0
 	github.com/oleg-tkachuk/paladin/sdk/go v0.0.0
 	github.com/pressly/goose/v3 v3.28.0
