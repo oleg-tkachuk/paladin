@@ -583,6 +583,9 @@ type Querier interface {
 	// spend doesn't go negative (which would silently grant the
 	// difference back as future budget).
 	RefundTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric) error
+	// Undoes a claim whose handling failed, so the broker's redelivery is
+	// handled rather than skipped as a duplicate.
+	ReleaseIngestedEvent(ctx context.Context, source string, eventID string) error
 	// ReschedulePendingPurge records a failed attempt and pushes the row out by
 	// the caller-computed backoff. Attempts is bumped here rather than in the
 	// worker so a crash between the storage call and this update cannot lose the

@@ -55,3 +55,15 @@ func (q *Queries) PurgeIngestedEventsBefore(ctx context.Context, ingestedAt pgty
 	}
 	return result.RowsAffected(), nil
 }
+
+const releaseIngestedEvent = `-- name: ReleaseIngestedEvent :exec
+DELETE FROM ingested_events
+WHERE source = $1 AND event_id = $2
+`
+
+// Undoes a claim whose handling failed, so the broker's redelivery is
+// handled rather than skipped as a duplicate.
+func (q *Queries) ReleaseIngestedEvent(ctx context.Context, source string, eventID string) error {
+	_, err := q.db.Exec(ctx, releaseIngestedEvent, source, eventID)
+	return err
+}

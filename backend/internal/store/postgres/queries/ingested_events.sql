@@ -9,6 +9,12 @@ VALUES ($1, $2, $3, sqlc.narg('subject')::text)
 ON CONFLICT (source, event_id) DO NOTHING
 RETURNING event_id;
 
+-- name: ReleaseIngestedEvent :exec
+-- Undoes a claim whose handling failed, so the broker's redelivery is
+-- handled rather than skipped as a duplicate.
+DELETE FROM ingested_events
+WHERE source = $1 AND event_id = $2;
+
 -- name: PurgeIngestedEventsBefore :execrows
 -- Drops rows older than the cutoff in batches of 10k. Reaper loops
 -- until 0 rows so a long-overdue first sweep doesn't pin a single

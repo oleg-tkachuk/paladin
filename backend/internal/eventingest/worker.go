@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
@@ -20,7 +21,14 @@ type DedupStore interface {
 		eventID, source, eventType string,
 		subject *string,
 	) (string, error)
+	// ReleaseIngestedEvent undoes a claim whose handling failed.
+	ReleaseIngestedEvent(ctx context.Context, eventID, source string) error
 }
+
+// releaseTimeout bounds giving a claim back after a failed handler. It runs
+// detached from the delivery's context, which may be what failed: a webhook
+// publisher that disconnected mid-promote cancels it.
+const releaseTimeout = 5 * time.Second
 
 // Handler is the business-logic seam. Implementations decide what to
 // do with a deduplicated event — typically resolve the Paladin object and
@@ -136,6 +144,14 @@ func (w *Worker) Deliver(ctx context.Context, ev CloudEvent) error {
 
 	if err := w.Handler.Handle(ctx, ev); err != nil {
 		logger.Warn("handler failed", zap.Error(err))
+		// Give the claim back, or the redelivery the error asks for would
+		// be skipped as a duplicate and the event lost.
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+		defer cancel()
+		if rerr := w.Dedup.ReleaseIngestedEvent(rctx, ev.ID, ev.Source); rerr != nil {
+			logger.Error("releasing the dedup claim failed; a redelivery will be skipped",
+				zap.Error(rerr))
+		}
 		return err
 	}
 	logger.Info("event processed")
@@ -161,4 +177,8 @@ func (p *PgxDedupStore) ClaimIngestedEvent(
 	subject *string,
 ) (string, error) {
 	return p.Q.ClaimIngestedEvent(ctx, eventID, source, eventType, subject)
+}
+
+func (p *PgxDedupStore) ReleaseIngestedEvent(ctx context.Context, eventID, source string) error {
+	return p.Q.ReleaseIngestedEvent(ctx, source, eventID)
 }
