@@ -398,7 +398,9 @@ type natsBatchItem struct {
 // — NOT the subject: every row on one connection shares a single Flush
 // regardless of subject, so distinct-subject rows to the same server still
 // batch. Malformed rows return ok=false and take the per-row deliver path,
-// failing with the same error text as before batching.
+// failing with the same error text as before batching. So do JetStream rows:
+// the batch is a core publish, which the stream neither acknowledges nor
+// deduplicates.
 func natsGroupTarget(sub admindomain.EventSubscription) (key string, ok bool) {
 	if sub.SinkKind != "nats" {
 		return "", false
@@ -407,7 +409,7 @@ func natsGroupTarget(sub admindomain.EventSubscription) (key string, ok bool) {
 	if err := json.Unmarshal(sub.SinkConfig, &cfg); err != nil {
 		return "", false
 	}
-	if cfg.URL == "" || cfg.Subject == "" {
+	if cfg.URL == "" || cfg.Subject == "" || cfg.JetStream {
 		return "", false
 	}
 	return poolKey(cfg.URL, cfg.CredentialsRef), true

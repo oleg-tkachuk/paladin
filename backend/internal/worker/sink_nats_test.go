@@ -88,6 +88,12 @@ func TestNatsGroupTarget_RefusesIncompleteConfigs(t *testing.T) {
 		t.Error("a subscription with no subject was grouped; there is nowhere " +
 			"to publish it")
 	}
+	jetStream := natsSub(t, "nats", url, "events", "")
+	jetStream.SinkConfig, _ = json.Marshal(natsSinkConfig{URL: url, Subject: "events", JetStream: true})
+	if _, ok := natsGroupTarget(jetStream); ok {
+		t.Error("a jetstream subscription was grouped; the batch publishes with " +
+			"core NATS, which the stream neither acknowledges nor deduplicates")
+	}
 	unparseable := admindomain.EventSubscription{
 		SubscriptionID: uuid.New(), SinkKind: "nats", SinkConfig: []byte("{not json"),
 	}
