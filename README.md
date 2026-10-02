@@ -3,14 +3,14 @@
 [![ci](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml)
 [![release](https://img.shields.io/github/v/release/oleg-tkachuk/paladin?sort=semver)](https://github.com/oleg-tkachuk/paladin/releases/latest)
 [![sdk](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fproxy.golang.org%2Fgithub.com%2Foleg-tkachuk%2Fpaladin%2Fsdk%2Fgo%2F%40latest&query=%24.Version&label=sdk)](sdk/go/README.md)
-[![go](https://img.shields.io/github/go-mod/go-version/oleg-tkachuk/paladin?filename=backend%2Fgo.mod&logo=go&logoColor=white)](backend/go.mod)
 [![license](https://img.shields.io/github/license/oleg-tkachuk/paladin)](LICENSE)
 
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
-[![Connect RPC](https://img.shields.io/badge/Connect%20RPC-1D4ED8)](https://connectrpc.com)
-[![Cedar](https://img.shields.io/badge/Cedar-FF9900)](https://www.cedarpolicy.com)
-[![MCP](https://img.shields.io/badge/MCP-000000?logo=modelcontextprotocol&logoColor=white)](https://modelcontextprotocol.io)
-[![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![Go](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Foleg-tkachuk%2Fpaladin%2Fbadges%2Fversions.json&query=%24.go&label=Go&color=00ADD8&logo=go&logoColor=white)](backend/go.mod)
+[![PostgreSQL](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Foleg-tkachuk%2Fpaladin%2Fbadges%2Fversions.json&query=%24.postgresql&label=PostgreSQL&color=4169E1&logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![Connect RPC](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Foleg-tkachuk%2Fpaladin%2Fbadges%2Fversions.json&query=%24.connect&label=Connect%20RPC&color=1D4ED8)](https://connectrpc.com)
+[![Cedar](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Foleg-tkachuk%2Fpaladin%2Fbadges%2Fversions.json&query=%24.cedar&label=Cedar&color=FF9900)](https://www.cedarpolicy.com)
+[![MCP](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Foleg-tkachuk%2Fpaladin%2Fbadges%2Fversions.json&query=%24.mcp&label=MCP&color=000000&logo=modelcontextprotocol&logoColor=white)](https://modelcontextprotocol.io)
+[![Next.js](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Foleg-tkachuk%2Fpaladin%2Fbadges%2Fversions.json&query=%24.nextjs&label=Next.js&color=000000&logo=nextdotjs&logoColor=white)](https://nextjs.org)
 
 A multi-tenant control plane for S3-compatible object storage. Applications
 authenticate with a Paladin credential scoped to a tenant instead of holding
