@@ -150,12 +150,23 @@ func (c *CachedRevocationChecker) makeRoomLocked() {
 	}
 }
 
-// Invalidate drops a single entry — call it from the path that revoked the
-// capability so the local cache reflects the new truth immediately. Other
-// processes catch up within the TTL.
+// Invalidate drops a single entry. Other processes catch up within the TTL
+// unless they are told — see Clear, which a consumer wires to a revocation
+// notification so they are.
 func (c *CachedRevocationChecker) Invalidate(id uuid.UUID) {
 	c.mu.Lock()
 	delete(c.entries, id)
+	c.mu.Unlock()
+}
+
+// Clear drops every entry. A consumer that learns of a revocation from
+// elsewhere — a database notification, a message bus — calls it so the next
+// check goes upstream at once instead of waiting out the TTL. It drops
+// everything, not only the revoked id, because an answer cached for a
+// descendant is also an answer about the revoked ancestor.
+func (c *CachedRevocationChecker) Clear() {
+	c.mu.Lock()
+	clear(c.entries)
 	c.mu.Unlock()
 }
 

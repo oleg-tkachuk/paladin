@@ -27,8 +27,9 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0015](0015-per-tenant-bucket-layout.md) | Per-tenant bucket layout | Accepted |
 | [0016](0016-cedar-tenant-membership-isolation.md) | Cedar tenant-membership isolation | Accepted |
 | [0017](0017-single-identity-model-and-naming.md) | One identity model, one naming convention | Accepted |
-| [0018](0018-sdk-layers.md) | The SDKs as three layers over the generated clients | Accepted (client side); Proposed (contract side) |
+| [0018](0018-sdk-layers.md) | The SDKs as three layers over the generated clients | Accepted |
 | [0019](0019-object-search-and-read-replica.md) | Object search under RLS, and an opt-in read replica | Accepted |
+| [0020](0020-sdk-integration-grade.md) | The SDKs to integration grade | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
