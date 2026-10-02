@@ -4,7 +4,7 @@ import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { formatMoney } from "@/lib/format/money";
+import { formatMoney, fromMicros } from "@/lib/format/money";
 import { PRINCIPAL_KIND_OPTIONS, isExpired } from "./_constants";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
 
@@ -182,8 +182,8 @@ export function DetailsBody({
         <DetailRow
           label="Max budget"
           value={
-            (cap.caveats?.maxBudgetAmount ?? 0) > 0
-              ? formatMoney(cap.caveats!.maxBudgetAmount, unit)
+            (cap.caveats?.maxBudgetMicros ?? 0n) > 0n
+              ? formatMoney(fromMicros(cap.caveats?.maxBudgetMicros), unit)
               : "unlimited"
           }
           mono
