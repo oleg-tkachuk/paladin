@@ -58,11 +58,18 @@ WHERE bucket_id = (SELECT b.id FROM buckets b
 
 -- name: IncrementQuotaUsage :exec
 -- Atomic add. tenant_id-scoped quota when bucket fields are NULL.
+-- The first charge of a UTC day restarts the per-day counters and stamps the
+-- day. The daily roll skips rows with nothing to clear, so an idle row keeps
+-- an older stamp, and the roll's next tick would otherwise zero what this day
+-- had already admitted.
 UPDATE quotas
 SET usage_total_bytes   = usage_total_bytes + $2,
     usage_object_count  = usage_object_count + $3,
-    usage_bytes_today   = usage_bytes_today + $2,
-    usage_objects_today = usage_objects_today + $3
+    usage_bytes_today   = CASE WHEN last_reset_at >= date_trunc('day', now(), 'UTC')
+                               THEN usage_bytes_today + $2 ELSE $2 END,
+    usage_objects_today = CASE WHEN last_reset_at >= date_trunc('day', now(), 'UTC')
+                               THEN usage_objects_today + $3 ELSE $3 END,
+    last_reset_at       = GREATEST(last_reset_at, date_trunc('day', now(), 'UTC'))
 WHERE id = $1;
 
 -- name: ResetQuotaDaily :exec
