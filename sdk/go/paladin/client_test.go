@@ -336,3 +336,77 @@ func TestClientOptionsIsACopy(t *testing.T) {
 		t.Fatal("mutating the returned slice changed the client")
 	}
 }
+
+// A call made WithoutIdempotencyKey goes out with none, and so is not
+// retried: repeating it would run the operation twice.
+func TestWithoutIdempotencyKey(t *testing.T) {
+	rec := &recorder{failures: 1, failCode: connect.CodeUnavailable}
+	_, auth := clients(t, serve(t, rec), paladin.WithRetries(3, testRetryDelay))
+	ctx := paladin.WithoutIdempotencyKey(paladin.WithIdempotencyKey(context.Background(), "overridden"))
+	if _, err := auth.Login(ctx, connect.NewRequest(&iamv1.LoginRequest{})); connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("err = %v, want the first failure: the call must not be retried", err)
+	}
+	if rec.calls() != 1 || rec.last().Get(paladin.HeaderIdempotencyKey) != "" {
+		t.Errorf("calls %d, key %q; want one call with no key", rec.calls(), rec.last().Get(paladin.HeaderIdempotencyKey))
+	}
+	if _, ok := paladin.IdempotencyKey(ctx); ok {
+		t.Error("IdempotencyKey reports a key under WithoutIdempotencyKey")
+	}
+	// The last choice wins: a key set after the opt-out is sent.
+	again := paladin.WithIdempotencyKey(ctx, "k2")
+	if key, ok := paladin.IdempotencyKey(again); !ok || key != "k2" {
+		t.Errorf("IdempotencyKey = %q, %v after re-keying; want k2", key, ok)
+	}
+}
+
+// A Retry-After given as an HTTP date an hour ahead is a floor on the wait,
+// as the seconds form is.
+func TestRetryHonoursARetryAfterDate(t *testing.T) {
+	rec := &recorder{failures: 1, failCode: connect.CodeResourceExhausted,
+		retryAfter: time.Now().Add(time.Hour).UTC().Format(http.TimeFormat)}
+	health, _ := clients(t, serve(t, rec), paladin.WithRetries(3, testRetryDelay))
+	ctx, cancel := context.WithTimeout(context.Background(), testCallDeadline)
+	defer cancel()
+	if _, err := health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{})); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("err = %v, want ResourceExhausted", err)
+	}
+	if got := rec.calls(); got != 1 {
+		t.Fatalf("server saw %d calls, want 1: the Retry-After date was ignored", got)
+	}
+}
+
+func TestWithRetryableReplacesTheClassifier(t *testing.T) {
+	retryInternal := func(err error) bool { return connect.CodeOf(err) == connect.CodeInternal }
+	cases := []struct {
+		name      string
+		call      string
+		code      connect.Code
+		wantCalls int
+	}{
+		{"its code is retried", "GetVersion", connect.CodeInternal, 2},
+		{"the default's code no longer is", "GetVersion", connect.CodeUnavailable, 1},
+		{"a call the server may have run is retried only with its key", "Login", connect.CodeInternal, 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &recorder{failures: 1, failCode: tc.code}
+			health, auth := clients(t, serve(t, rec), paladin.WithRetries(3, testRetryDelay), paladin.WithRetryable(retryInternal))
+			if tc.call == "GetVersion" {
+				_, _ = health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{}))
+			} else {
+				_, _ = auth.Login(context.Background(), connect.NewRequest(&iamv1.LoginRequest{}))
+			}
+			if got := rec.calls(); got != tc.wantCalls {
+				t.Errorf("server saw %d calls, want %d", got, tc.wantCalls)
+			}
+		})
+	}
+	// The safety rule is not the classifier's: an unkeyed mutating call is
+	// not retried, whatever it says.
+	rec := &recorder{failures: 1, failCode: connect.CodeInternal}
+	_, auth := clients(t, serve(t, rec), paladin.WithRetries(3, testRetryDelay), paladin.WithRetryable(retryInternal))
+	_, _ = auth.Login(paladin.WithoutIdempotencyKey(context.Background()), connect.NewRequest(&iamv1.LoginRequest{}))
+	if got := rec.calls(); got != 1 {
+		t.Errorf("an unkeyed mutating call was retried: %d calls", got)
+	}
+}

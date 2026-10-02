@@ -14,6 +14,13 @@ import (
 
 type idempotencyKeyCtx struct{}
 
+// idempotencyChoice is what the context says of a call's key: a key, or none
+// at all. The last WithIdempotencyKey or WithoutIdempotencyKey wins.
+type idempotencyChoice struct {
+	key  string
+	none bool
+}
+
 // WithIdempotencyKey attaches key to every call made with the returned
 // context. Reuse the same key when repeating the same logical operation.
 //
@@ -23,13 +30,29 @@ type idempotencyKeyCtx struct{}
 // requires a key on Create* and Issue* calls and uses it on every call to
 // answer a repeat with the first response.
 func WithIdempotencyKey(ctx context.Context, key string) context.Context {
-	return context.WithValue(ctx, idempotencyKeyCtx{}, key)
+	return context.WithValue(ctx, idempotencyKeyCtx{}, idempotencyChoice{key: key})
+}
+
+// WithoutIdempotencyKey sends every call made with the returned context
+// without an idempotency key: not the default fresh one, not the request's
+// own field. Such a call is never retried, unless the contract declares it
+// free of side effects or idempotent — for an operation that must run again
+// when repeated rather than be answered with the first response. The server
+// refuses a Create* or Issue* call without a key.
+func WithoutIdempotencyKey(ctx context.Context) context.Context {
+	return context.WithValue(ctx, idempotencyKeyCtx{}, idempotencyChoice{none: true})
 }
 
 // IdempotencyKey returns the key WithIdempotencyKey attached, if any.
 func IdempotencyKey(ctx context.Context) (string, bool) {
-	key, ok := ctx.Value(idempotencyKeyCtx{}).(string)
-	return key, ok && key != ""
+	choice, _ := ctx.Value(idempotencyKeyCtx{}).(idempotencyChoice)
+	return choice.key, !choice.none && choice.key != ""
+}
+
+// withoutKey reports whether WithoutIdempotencyKey is in force.
+func withoutKey(ctx context.Context) bool {
+	choice, _ := ctx.Value(idempotencyKeyCtx{}).(idempotencyChoice)
+	return choice.none
 }
 
 // headerInterceptor sets the credentials on every request, and the
@@ -52,6 +75,9 @@ type bodyIdempotencyKey interface{ GetIdempotencyKey() string }
 // request's own field, else a fresh one when the call has side effects the
 // contract makes no promise about. ok is false when the call needs none.
 func idempotencyKeyFor(ctx context.Context, req connect.AnyRequest) (string, bool) {
+	if withoutKey(ctx) {
+		return "", false
+	}
 	if key, ok := IdempotencyKey(ctx); ok {
 		return key, true
 	}
@@ -96,6 +122,9 @@ type retryPolicy struct {
 	attempts  int
 	baseDelay time.Duration
 	maxDelay  time.Duration
+	// transient decides which failures are worth another attempt; nil is
+	// DefaultRetryable.
+	transient func(error) bool
 }
 
 func (r *retryPolicy) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -103,7 +132,7 @@ func (r *retryPolicy) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		ceiling := r.baseDelay
 		for attempt := 1; ; attempt++ {
 			resp, err := next(ctx, req)
-			if err == nil || attempt >= r.attempts || !retryable(req, err) {
+			if err == nil || attempt >= r.attempts || !r.retryable(req, err) {
 				return resp, err
 			}
 			wait := r.wait(ceiling, err)
@@ -135,17 +164,31 @@ func (r *retryPolicy) wait(ceiling time.Duration, err error) time.Duration {
 	return wait
 }
 
-// retryAfter reads a Retry-After given in seconds from a Connect error.
+// retryAfter reads the server's Retry-After from a Connect error: a number of
+// seconds, or an HTTP date (RFC 9110), which waits until then.
 func retryAfter(err error) (time.Duration, bool) {
 	var cerr *connect.Error
 	if !errors.As(err, &cerr) {
 		return 0, false
 	}
-	seconds, perr := strconv.Atoi(cerr.Meta().Get(HeaderRetryAfter))
-	if perr != nil || seconds < 0 {
+	return parseRetryAfter(cerr.Meta().Get(HeaderRetryAfter), time.Now())
+}
+
+func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
+	if value == "" {
 		return 0, false
 	}
-	return time.Duration(seconds) * time.Second, true
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds < 0 {
+			return 0, false
+		}
+		return time.Duration(seconds) * time.Second, true
+	}
+	at, err := http.ParseTime(value)
+	if err != nil {
+		return 0, false
+	}
+	return max(at.Sub(now), 0), true
 }
 
 func (r *retryPolicy) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
@@ -156,16 +199,31 @@ func (r *retryPolicy) WrapStreamingHandler(next connect.StreamingHandlerFunc) co
 	return next
 }
 
+// DefaultRetryable is the failures retried unless WithRetryable says
+// otherwise: Unavailable and ResourceExhausted, the two a server sends for a
+// condition that passes.
+func DefaultRetryable(err error) bool {
+	switch connect.CodeOf(err) {
+	case connect.CodeUnavailable, connect.CodeResourceExhausted:
+		return true
+	default:
+		return false
+	}
+}
+
 // retryable reports whether err is transient and the call safe to repeat:
 // declared free of side effects or idempotent, or carrying an idempotency key.
-func retryable(req connect.AnyRequest, err error) bool {
+// The second half is not the classifier's to decide.
+func (r *retryPolicy) retryable(req connect.AnyRequest, err error) bool {
 	var cerr *connect.Error
 	if !errors.As(err, &cerr) {
 		return false
 	}
-	switch cerr.Code() {
-	case connect.CodeUnavailable, connect.CodeResourceExhausted:
-	default:
+	transient := r.transient
+	if transient == nil {
+		transient = DefaultRetryable
+	}
+	if !transient(err) {
 		return false
 	}
 	if req.Spec().IdempotencyLevel != connect.IdempotencyUnknown {
