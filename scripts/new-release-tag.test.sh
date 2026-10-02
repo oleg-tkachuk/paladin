@@ -42,6 +42,15 @@ check "a tag an earlier run pushed" "" "$("$script" "$before")"
 git tag v4.2.1
 check "a new tag beside an old one" "v4.2.1" "$("$script" "$before")"
 
+git tag sdk/go/v0.3.0
+git tag capability/v0.2.0
+check "a module tag is not the product's" "v4.2.1" "$("$script" "$before")"
+check "every new module tag" "$(printf 'capability/v0.2.0\nsdk/go/v0.3.0')" "$("$script" "$before" streams)"
+check "the product is no module" "" "$("$script" "$before" streams | grep -E '^v' || true)"
+
+git tag --points-at HEAD >"$before"
+check "module tags an earlier run pushed" "" "$("$script" "$before" streams)"
+
 if [ "$failures" -gt 0 ]; then
     exit 1
 fi

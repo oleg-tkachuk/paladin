@@ -150,6 +150,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_STREAM: capability
 
+      # A GitHub release beside each module tag this run cut, with notes of
+      # the stream's own commits (scripts/stream-release-notes.sh). Never the
+      # latest release: that stays the product's.
+      - name: Publish the SDK and capability releases
+        if: steps.head.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for tag in $(./scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before" streams); do
+            notes="$(./scripts/stream-release-notes.sh "$tag")"
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag --latest=false \
+              --title "$(head -1 <<<"$notes")" --notes "$(tail -n +2 <<<"$notes")"
+          done
+
       # Read from git rather than parsing semantic-release's prose: it tags the
       # commit that was checked out, so no new tag here means no release was
       # due and there is nothing to publish. "New" is against the list taken
