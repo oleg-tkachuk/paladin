@@ -279,6 +279,30 @@ connect-python's own `connectrpc-otel` 0.2.0 does not work with
 connect-python 0.9.0 — it reads `RequestContext.method` as an attribute,
 which 0.9.0 has as a method — so it is not used here.
 
+### Testing with a fake: `paladin.testing`
+
+`FakePaladin` is an in-memory data plane for the tests of a program built on
+the SDK. Uploads and downloads go through presigned URLs on its own storage,
+as against the real server.
+
+```python
+from paladin.testing import FakePaladin
+
+with FakePaladin() as fake:
+    p = fake.connect()
+    obj = paladin.upload(p.data, parent=str(fake.collection()), key="a.pdf",
+                         content_type="application/pdf", body=body, size=len(body))
+    assert fake.content(obj.name) == body
+```
+
+It serves `ObjectService` (upload, complete, get, lookup, list, download,
+delete) and `MultipartUploadService`; every other RPC answers
+`UNIMPLEMENTED`. Like the server it refuses a collection named by the
+tenant's slug and a completion whose ETag is not the content's, records the
+checksum an upload completes with — so a download verifies — and answers
+range requests. `put` stores an object directly; `tenant` and `collection()`
+name the fake's tenant and its collections, all of which exist.
+
 ### Constants
 
 `HEADER_AUTHORIZATION`, `HEADER_API_TOKEN`, `HEADER_CAPABILITY` and
