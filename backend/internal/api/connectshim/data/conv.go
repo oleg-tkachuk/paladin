@@ -194,8 +194,48 @@ func objectToProto(o *objecth.Object) *pb.Object {
 			LegalHold:   o.Lock.LegalHold,
 		}
 	}
+	out.Taint = taintToProto(o.Taint)
 	// PhysicalPlacement only surfaced for privileged callers — slice 4 wires
 	// the role check; for now we leave it unset.
+	return out
+}
+
+// taintSignals maps the stored signal names to the proto enum and back.
+var taintSignals = map[string]pb.TaintSignal{
+	objecth.TaintPromptInjection: pb.TaintSignal_TAINT_SIGNAL_PROMPT_INJECTION,
+	objecth.TaintPII:             pb.TaintSignal_TAINT_SIGNAL_PII,
+	objecth.TaintSecrets:         pb.TaintSignal_TAINT_SIGNAL_SECRETS,
+}
+
+func taintToProto(signals []string) []pb.TaintSignal {
+	if len(signals) == 0 {
+		return nil
+	}
+	out := make([]pb.TaintSignal, 0, len(signals))
+	for _, s := range signals {
+		if v, ok := taintSignals[s]; ok {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// taintFromProto maps request signals to their stored names. An enum value
+// with no stored name — UNSPECIFIED, or one this server does not know —
+// passes through as its proto name, so the handler's validation rejects it
+// by name instead of the signal being silently dropped.
+func taintFromProto(signals []pb.TaintSignal) []string {
+	out := make([]string, 0, len(signals))
+	for _, v := range signals {
+		name := v.String()
+		for stored, pv := range taintSignals {
+			if pv == v {
+				name = stored
+				break
+			}
+		}
+		out = append(out, name)
+	}
 	return out
 }
 

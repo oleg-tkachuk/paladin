@@ -84,6 +84,9 @@ const (
 	// ObjectServiceGetObjectLockProcedure is the fully-qualified name of the ObjectService's
 	// GetObjectLock RPC.
 	ObjectServiceGetObjectLockProcedure = "/paladin.data.v1.ObjectService/GetObjectLock"
+	// ObjectServiceSetObjectTaintProcedure is the fully-qualified name of the ObjectService's
+	// SetObjectTaint RPC.
+	ObjectServiceSetObjectTaintProcedure = "/paladin.data.v1.ObjectService/SetObjectTaint"
 )
 
 // ObjectServiceClient is a client for the paladin.data.v1.ObjectService service.
@@ -157,6 +160,12 @@ type ObjectServiceClient interface {
 	// NOT_FOUND — for an object with no lock, so callers can render "unlocked"
 	// without special-casing an error.
 	GetObjectLock(context.Context, *connect.Request[v1.GetObjectLockRequest]) (*connect.Response[v1.ObjectLockState], error)
+	// SetObjectTaint replaces the taint signals on an object; an empty list
+	// clears them. A capability without allow_tainted_read is refused any read
+	// of a tainted object. Gated by its own Cedar action, SetObjectTaint:
+	// clearing a flag re-opens content to agents, which write access to a
+	// collection should not imply.
+	SetObjectTaint(context.Context, *connect.Request[v1.SetObjectTaintRequest]) (*connect.Response[v1.Object], error)
 }
 
 // NewObjectServiceClient constructs a client for the paladin.data.v1.ObjectService service. By
@@ -285,6 +294,13 @@ func NewObjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		setObjectTaint: connect.NewClient[v1.SetObjectTaintRequest, v1.Object](
+			httpClient,
+			baseURL+ObjectServiceSetObjectTaintProcedure,
+			connect.WithSchema(objectServiceMethods.ByName("SetObjectTaint")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -307,6 +323,7 @@ type objectServiceClient struct {
 	setObjectRetention   *connect.Client[v1.SetObjectRetentionRequest, v1.ObjectLockState]
 	setObjectLegalHold   *connect.Client[v1.SetObjectLegalHoldRequest, v1.ObjectLockState]
 	getObjectLock        *connect.Client[v1.GetObjectLockRequest, v1.ObjectLockState]
+	setObjectTaint       *connect.Client[v1.SetObjectTaintRequest, v1.Object]
 }
 
 // UploadObject calls paladin.data.v1.ObjectService.UploadObject.
@@ -394,6 +411,11 @@ func (c *objectServiceClient) GetObjectLock(ctx context.Context, req *connect.Re
 	return c.getObjectLock.CallUnary(ctx, req)
 }
 
+// SetObjectTaint calls paladin.data.v1.ObjectService.SetObjectTaint.
+func (c *objectServiceClient) SetObjectTaint(ctx context.Context, req *connect.Request[v1.SetObjectTaintRequest]) (*connect.Response[v1.Object], error) {
+	return c.setObjectTaint.CallUnary(ctx, req)
+}
+
 // ObjectServiceHandler is an implementation of the paladin.data.v1.ObjectService service.
 type ObjectServiceHandler interface {
 	// UploadObject is the presigned-URL handshake, not a byte pipe: it records
@@ -465,6 +487,12 @@ type ObjectServiceHandler interface {
 	// NOT_FOUND — for an object with no lock, so callers can render "unlocked"
 	// without special-casing an error.
 	GetObjectLock(context.Context, *connect.Request[v1.GetObjectLockRequest]) (*connect.Response[v1.ObjectLockState], error)
+	// SetObjectTaint replaces the taint signals on an object; an empty list
+	// clears them. A capability without allow_tainted_read is refused any read
+	// of a tainted object. Gated by its own Cedar action, SetObjectTaint:
+	// clearing a flag re-opens content to agents, which write access to a
+	// collection should not imply.
+	SetObjectTaint(context.Context, *connect.Request[v1.SetObjectTaintRequest]) (*connect.Response[v1.Object], error)
 }
 
 // NewObjectServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -589,6 +617,13 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	objectServiceSetObjectTaintHandler := connect.NewUnaryHandler(
+		ObjectServiceSetObjectTaintProcedure,
+		svc.SetObjectTaint,
+		connect.WithSchema(objectServiceMethods.ByName("SetObjectTaint")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.data.v1.ObjectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ObjectServiceUploadObjectProcedure:
@@ -625,6 +660,8 @@ func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOp
 			objectServiceSetObjectLegalHoldHandler.ServeHTTP(w, r)
 		case ObjectServiceGetObjectLockProcedure:
 			objectServiceGetObjectLockHandler.ServeHTTP(w, r)
+		case ObjectServiceSetObjectTaintProcedure:
+			objectServiceSetObjectTaintHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -700,4 +737,8 @@ func (UnimplementedObjectServiceHandler) SetObjectLegalHold(context.Context, *co
 
 func (UnimplementedObjectServiceHandler) GetObjectLock(context.Context, *connect.Request[v1.GetObjectLockRequest]) (*connect.Response[v1.ObjectLockState], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.GetObjectLock is not implemented"))
+}
+
+func (UnimplementedObjectServiceHandler) SetObjectTaint(context.Context, *connect.Request[v1.SetObjectTaintRequest]) (*connect.Response[v1.Object], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.SetObjectTaint is not implemented"))
 }

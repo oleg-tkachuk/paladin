@@ -555,6 +555,7 @@ type Object struct {
 	CommittedAt       pgtype.Timestamptz `json:"committed_at"`
 	TerminatedAt      pgtype.Timestamptz `json:"terminated_at"`
 	PresignExpiresAt  pgtype.Timestamptz `json:"presign_expires_at"`
+	Taint             []string           `json:"taint"`
 }
 
 type ObjectLock struct {

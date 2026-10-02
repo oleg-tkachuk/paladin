@@ -61,7 +61,12 @@ type lockHandler interface {
 	GetLock(ctx context.Context, collection, objectID string) (objecth.ObjectLock, error)
 }
 
+type taintHandler interface {
+	SetTaint(ctx context.Context, collection, objectID string, signals []string) (*objecth.Object, error)
+}
+
 var (
 	_ versionHandler = (*objecth.VersionHandler)(nil)
 	_ lockHandler    = (*objecth.LockHandler)(nil)
+	_ taintHandler   = (*objecth.TaintHandler)(nil)
 )

@@ -18,6 +18,7 @@ type ObjectServer struct {
 	H        objectHandler
 	Versions versionHandler // optional; nil → versioning RPCs return Unimplemented
 	Locks    lockHandler    // optional; nil → object-lock RPCs return Unimplemented
+	Taints   taintHandler   // optional; nil → SetObjectTaint returns Unimplemented
 }
 
 // The CONSTRUCTOR takes concrete types while the FIELDS are interfaces, and
@@ -50,6 +51,31 @@ func (s *ObjectServer) WithLocks(locks *objecth.LockHandler) *ObjectServer {
 		s.Locks = locks
 	}
 	return s
+}
+
+// WithTaints wires the taint handler. Concrete parameter, guarded
+// assignment, for the typed-nil reason NewObjectServer gives.
+func (s *ObjectServer) WithTaints(taints *objecth.TaintHandler) *ObjectServer {
+	if taints != nil {
+		s.Taints = taints
+	}
+	return s
+}
+
+// SetObjectTaint replaces an object's taint signals.
+func (s *ObjectServer) SetObjectTaint(ctx context.Context, req *connect.Request[pb.SetObjectTaintRequest]) (*connect.Response[pb.Object], error) {
+	if s.Taints == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("object taint not wired"))
+	}
+	collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
+	if err != nil {
+		return nil, badName(err)
+	}
+	out, err := s.Taints.SetTaint(ctx, collection, objectID, taintFromProto(req.Msg.GetSignals()))
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(objectToProto(out)), nil
 }
 
 func (s *ObjectServer) UploadObject(ctx context.Context, req *connect.Request[pb.UploadObjectRequest]) (*connect.Response[pb.UploadObjectResponse], error) {
