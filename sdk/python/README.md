@@ -90,7 +90,7 @@ with TenantServiceClientSync(client.base_url, interceptors=client.interceptors()
 
 | Member | Does |
 | --- | --- |
-| `Retry(attempts, base_delay=0.1, max_delay=5.0, retryable=None)` | Retries a unary call that failed with an error `retryable` accepts — by default `default_retryable`: `UNAVAILABLE` or `RESOURCE_EXHAUSTED` — up to `attempts` calls in total. The wait (seconds) is drawn at random up to a ceiling that doubles from `base_delay` to `max_delay`, and is never shorter than the server's `Retry-After`, in seconds or an HTTP date (`parse_retry_after`). A retry that could not start before the call's `timeout_ms` is not made, and the server's error is raised. Only calls safe to repeat are retried: RPCs the contract declares side-effect free or idempotent, and calls that carry an idempotency key — which every other call does, see below. Streams are never retried. Each attempt reads its headers through its own `connectrpc.client.ResponseMetadata`, so one wrapped around a retried call sees nothing. Raises `ValueError` for `attempts < 1` or delays outside `0 < base_delay <= max_delay`. |
+| `Retry(attempts, base_delay=0.1, max_delay=5.0, retryable=None)` | Retries a unary call that failed with an error `retryable` accepts — by default `default_retryable`: `UNAVAILABLE` or `RESOURCE_EXHAUSTED` — up to `attempts` calls in total. The wait (seconds) is drawn at random up to a ceiling that doubles from `base_delay` to `max_delay`, and is never shorter than the server's `Retry-After`, in seconds or an HTTP date (`parse_retry_after`). A retry that could not start before the call's `timeout_ms` is not made, and the server's error is raised. Only calls safe to repeat are retried: RPCs the contract declares side-effect free or idempotent, and calls that carry an idempotency key — which every other call does, see below. Streams are never retried. A `connectrpc.client.ResponseMetadata` around a retried call sees the last attempt's headers. Raises `ValueError` for `attempts < 1` or delays outside `0 < base_delay <= max_delay`. |
 | `delays()` | The ceiling of the pause before each retry. |
 | `wait(ceiling, retry_after)` | The pause before one retry: a random share of `ceiling`, at least `retry_after`. |
 
@@ -191,6 +191,45 @@ p = paladin.connect(endpoints, token_source=session, tls=identity,
 HTTP stack connect-python runs on (`pyqwest`, over Rust's `reqwest`) offers
 no hook into peer verification, so here the server's certificate is verified
 against the bundle and the host name, and must name the host it is reached at.
+
+### Errors
+
+Every failed call through a `Client`'s interceptors — so through `connect` —
+raises a `PaladinError` subclass for its code. Each is still a
+`ConnectError`, so an `except ConnectError` keeps working. Catch these, not
+codes or messages:
+
+| Exception | Code | Means |
+| --- | --- | --- |
+| `NotFoundError` | `NOT_FOUND` | |
+| `AlreadyExistsError` | `ALREADY_EXISTS` | |
+| `PermissionDeniedError` | `PERMISSION_DENIED` | |
+| `FailedPreconditionError` | `FAILED_PRECONDITION` | |
+| `VersionConflictError` | `ABORTED` | The resource changed since it was read: read it again and retry the change. |
+| `ResourceExhaustedError` | `RESOURCE_EXHAUSTED` | `retry_after` is how long the server asked to wait, in seconds. |
+| `UnauthenticatedError` | `UNAUTHENTICATED` | |
+| `ContractSkewError` | `UNIMPLEMENTED` | The server does not implement the call: it is older than the SDK. The message names the procedure, the server's release (`HEADER_SERVER_VERSION`) and the SDK's. |
+
+Each carries `procedure`, the server's `reason` (a
+`paladin.common.v1.error_reason_pb2.ErrorReason` value, from the
+`google.rpc.ErrorInfo` in domain `ERROR_DOMAIN`; `reason_name` is its name),
+`retry_after`, `server_version`, `sdk_version` and the `decoded_details`.
+`reason(err)` returns the reason of any exception,
+`ERROR_REASON_UNSPECIFIED` when there is none — or one newer than this SDK,
+which a caller treats as the kind alone. A code with no kind (`INTERNAL`,
+`UNAVAILABLE`, …) stays a plain `ConnectError`.
+
+```python
+from paladin.common.v1 import error_reason_pb2
+
+try:
+    p.admin.collection.delete_collection(req)
+except paladin.NotFoundError:
+    pass  # already gone
+except paladin.FailedPreconditionError as err:
+    if err.reason == error_reason_pb2.ERROR_REASON_COLLECTION_NOT_EMPTY:
+        ...  # empty it first
+```
 
 ### Constants
 

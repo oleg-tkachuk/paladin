@@ -1613,17 +1613,6 @@ The contract-side half of ADR-0018. The client-side layers are in both SDKs.
   annotations; a test round-trips every pattern.
 - **Blockers:** none.
 
-### Errors carry no machine-readable reason
-
-- **Status:** Deferred.
-- **Reason:** the server returns a Connect code and a message. A client that
-  must tell a version conflict from a quota refusal, or a missing object from
-  a missing collection, can only match message text.
-- **Definition of Done:** `apiutil.MapError` attaches a `google.rpc.ErrorInfo`
-  with a stable reason per registered sentinel; both SDKs expose
-  `Reason(err)`; a test pins the reason of each sentinel.
-- **Blockers:** none.
-
 ### Webhook deliveries can be replayed, and the SDKs cannot verify them
 
 - **Status:** Deferred.
