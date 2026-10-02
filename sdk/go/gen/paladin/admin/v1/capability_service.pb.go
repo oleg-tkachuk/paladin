@@ -550,7 +550,13 @@ type CapabilityServiceIssueResponse struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Capability *Capability            `protobuf:"bytes,1,opt,name=capability,proto3" json:"capability,omitempty"`
 	// Compact JWT — return to the caller exactly once; never persisted.
-	Token         string `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	Token string `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	// biscuit is the same capability as a Biscuit v3 token, which its holder
+	// can narrow offline — fewer operations, resources or planes, an earlier
+	// expiry, a key binding — with no call to the issuer. Present it like
+	// token. Empty when the server does not issue Biscuits. Returned once,
+	// never persisted.
+	Biscuit       string `protobuf:"bytes,3,opt,name=biscuit,proto3" json:"biscuit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -595,6 +601,13 @@ func (x *CapabilityServiceIssueResponse) GetCapability() *Capability {
 func (x *CapabilityServiceIssueResponse) GetToken() string {
 	if x != nil {
 		return x.Token
+	}
+	return ""
+}
+
+func (x *CapabilityServiceIssueResponse) GetBiscuit() string {
+	if x != nil {
+		return x.Biscuit
 	}
 	return ""
 }
@@ -1134,12 +1147,13 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"ttlSeconds\x129\n" +
 	"\n" +
 	"not_before\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\x12H\n" +
-	"\x10confirmation_jkt\x18\x06 \x01(\tB\x1d\xbaH\x1a\xd8\x01\x01r\x152\x13^[A-Za-z0-9_-]{43}$R\x0fconfirmationJkt\"y\n" +
+	"\x10confirmation_jkt\x18\x06 \x01(\tB\x1d\xbaH\x1a\xd8\x01\x01r\x152\x13^[A-Za-z0-9_-]{43}$R\x0fconfirmationJkt\"\x98\x01\n" +
 	"\x1eCapabilityServiceIssueResponse\x12<\n" +
 	"\n" +
 	"capability\x18\x01 \x01(\v2\x1c.paladin.admin.v1.CapabilityR\n" +
 	"capability\x12\x19\n" +
-	"\x05token\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05token\"\x94\x03\n" +
+	"\x05token\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05token\x12\x1d\n" +
+	"\abiscuit\x18\x03 \x01(\tB\x03\x80\x01\x01R\abiscuit\"\x94\x03\n" +
 	" CapabilityServiceDelegateRequest\x12%\n" +
 	"\tparent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bparentId\x12?\n" +
 	"\asubject\x18\x02 \x01(\v2%.paladin.admin.v1.CapabilityPrincipalR\asubject\x12\x1a\n" +

@@ -1620,18 +1620,44 @@ finding moving from "packages you import" to "your code is affected".
   refused on another.
 - **Blockers:** none; a per-request write is the cost to weigh.
 
-### Offline attenuation: an agent cannot narrow its own capability
+### Offline attenuation covers a fixed vocabulary, not arbitrary Datalog
 
-- **Status:** Deferred — a new token format.
-- **Reason:** delegation needs the Issuer, which holds the signing key and the
-  Store, so a sub-agent cannot hand a narrower capability to its own worker
-  without calling back. Chained signatures (Biscuit- or macaroon-style
-  attenuation blocks) would let any holder narrow offline. That is a new wire
-  format, and the current one is frozen (capability/README.md, Versioning).
-- **Definition of Done:** a versioned second format, verified alongside the
-  current one for a stated compatibility window; narrowing blocks checked with
-  the same `Narrows` semantics; the existing fuzz property extended to chains.
-- **Blockers:** the format migration decision itself.
+- **Status:** Deferred — the vocabulary covers what Paladin enforces.
+- **Reason:** a Biscuit holder narrows it with `paladin_op`,
+  `paladin_resource_prefix` / `_uri`, `paladin_plane`, `paladin_expires` and
+  `paladin_bind` facts, which the verifier folds into a Capability through
+  `Narrows`. A block with Datalog rules or checks is refused rather than
+  half-enforced: a check that reads `operation` or `resource` can only be
+  evaluated where a handler names them (`AssertCapabilityOp`), and an RPC that
+  never asserts would skip it silently. Counters (`MaxRequests`, budget)
+  cannot be narrowed offline either: an attenuated copy shares its
+  capability's ledger row.
+- **Definition of Done:** Datalog checks evaluated by the Biscuit authorizer
+  with `operation`, `resource`, `time` and `plane` facts on every capability
+  RPC, with a gate proving that every RPC a capability reaches asserts its
+  operation; per-copy counters keyed by the Biscuit's revocation id.
+- **Blockers:** the every-RPC-asserts gate, which does not exist today.
+
+### Attenuated Biscuits cannot be revoked one by one
+
+- **Status:** Deferred.
+- **Reason:** every Biscuit of a capability, attenuated or not, carries its
+  capability's ID, so revocation is all or nothing: revoking the capability
+  revokes every copy, and no single copy can be revoked alone.
+- **Definition of Done:** a revocation list keyed by Biscuit block revocation
+  ids, checked by the verifier beside the capability's own revocation.
+- **Blockers:** none.
+
+### The SDKs cannot attenuate a Biscuit
+
+- **Status:** Deferred.
+- **Reason:** `capability.Attenuate` is Go, in the module. An agent written
+  against the Python SDK or the console has no helper and would have to
+  append the `paladin_*` facts with a Biscuit library itself.
+- **Definition of Done:** `attenuate(token, …)` in the Python SDK (on
+  `biscuit-python`, an optional extra) and the Go SDK, each tested against the
+  server, with the vocabulary in one shared spec file.
+- **Blockers:** none.
 
 ### Deprecated double money fields still on the wire
 
