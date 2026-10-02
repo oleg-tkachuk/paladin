@@ -21,7 +21,10 @@ Nothing is tagged by hand. `ci.yaml` dispatches
 [`release.yaml`](../.github/workflows/release.yaml) once every check on
 `main` has passed. semantic-release computes the next version from the commit
 types (see [`release.config.cjs`](../release.config.cjs)), and the workflow
-publishes an image and a chart for each component at that tag. The GitHub
+publishes an image and a chart for each component at that tag. Only the
+commit whose checks dispatched the run is released: if `main` has moved on in
+the meantime, that run releases nothing, and the newer commit's own checks
+release both. The GitHub
 release is created last, and only when every image and chart was pushed; if a
 push fails, the tag stays without a release until the failed jobs are re-run.
 `feat` is a minor release, `fix`, `perf` and `security` a patch, a breaking
