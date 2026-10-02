@@ -204,8 +204,9 @@ they no longer match the contract.
 
 ## Versioning
 
-The package version is the API contract's: version X.Y.Z is generated from
-`api/vX.Y.Z`. Pre-1.0, a minor version may break the contract or this
+The package version is the SDK's tag, `sdk/go/vX.Y.Z`, cut automatically from
+the commits that touch `sdk/` or `proto/`; hatch-vcs reads it at build time
+(a checkout without the tags builds as `0.0.0`). Pre-1.0, a minor version may break the contract or this
 package's own API; see [`docs/upgrading.md`](../../docs/upgrading.md). The buf.validate module the contract's descriptors depend
 on ships inside the wheel as `buf.validate`, because no PyPI package provides
 it for the `protobuf` runtime.

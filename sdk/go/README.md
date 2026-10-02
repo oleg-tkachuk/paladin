@@ -188,7 +188,7 @@ from the tables above.
 
 ## Versioning
 
-The SDK is versioned with the API contract: `sdk/go/vX.Y.Z` is tagged beside
-`api/vX.Y.Z`. Pre-1.0, a minor version may break the contract or this
-package's own API; see
+The SDK has its own version, `sdk/go/vX.Y.Z`, cut automatically from the
+commits that touch `sdk/` or `proto/` ([docs/releasing.md](../../docs/releasing.md)).
+Pre-1.0, a minor version may break the contract or this package's own API; see
 [`docs/upgrading.md`](../../docs/upgrading.md).
