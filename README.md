@@ -2,6 +2,7 @@
 
 [![ci](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml)
 [![release](https://img.shields.io/github/v/release/oleg-tkachuk/paladin?sort=semver)](https://github.com/oleg-tkachuk/paladin/releases/latest)
+[![sdk](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Foleg-tkachuk%2Fpaladin%2Fmain%2Fsdk%2Fpython%2Fpyproject.toml&query=%24.project.version&prefix=v&label=sdk)](sdk/go/README.md)
 [![go](https://img.shields.io/github/go-mod/go-version/oleg-tkachuk/paladin?filename=backend%2Fgo.mod&logo=go&logoColor=white)](backend/go.mod)
 [![license](https://img.shields.io/github/license/oleg-tkachuk/paladin)](LICENSE)
 
