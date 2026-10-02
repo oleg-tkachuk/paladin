@@ -5,7 +5,9 @@ credentials, the idempotency key, and retries for calls that are safe to
 repeat. The service clients are the generated ones::
 
     client = Client("https://admin.example.com", bearer_token=token)
-    tenants = TenantServiceClientSync(client.base_url, interceptors=client.interceptors())
+    tenants = TenantServiceClientSync(
+        client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+    )
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from importlib import metadata
 from typing import Any, TypeVar
 from urllib.parse import urlsplit
 
-from connectrpc.client import ResponseMetadata
+import pyqwest
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
 from connectrpc.interceptor import Interceptor, InterceptorSync
@@ -32,8 +34,9 @@ from connectrpc.method import IdempotencyLevel
 from connectrpc.request import RequestContext
 
 from paladin.dpop import DPoPAsync, DPoPSync
-from paladin.errors import convert, relayed
+from paladin.errors import convert
 from paladin.observe import Hooks, RetryEvent, report_retry
+from paladin.relay import Captured, RelaySyncTransport, RelayTransport, captured
 
 REQ = TypeVar("REQ")
 RES = TypeVar("RES")
@@ -244,6 +247,17 @@ class Client:
         """The first argument of every generated service client."""
         return self._base_url
 
+    def http_client(self, transport: Any = None) -> pyqwest.SyncClient:
+        """The ``http_client`` for a generated ``…ClientSync``: it relays the
+        response headers that typed errors and retries read. ``transport`` is
+        a ``pyqwest.SyncTransport`` to send through, pyqwest's shared one by
+        default."""
+        return pyqwest.SyncClient(RelaySyncTransport(transport))
+
+    def async_http_client(self, transport: Any = None) -> pyqwest.Client:
+        """``http_client`` for a generated async ``…Client``."""
+        return pyqwest.Client(RelayTransport(transport))
+
     def interceptors(self) -> list[InterceptorSync]:
         """Interceptors for a generated ``…ClientSync``."""
         result: list[InterceptorSync] = [
@@ -305,9 +319,9 @@ def _stamp(request: object, ctx: RequestContext) -> None:
         ctx.request_headers()[HEADER_IDEMPOTENCY_KEY] = key
 
 
-def _retry_after(meta: ResponseMetadata) -> float | None:
+def _retry_after(meta: Captured) -> float | None:
     """A Retry-After the server sent, in seconds."""
-    value = meta.headers().get(HEADER_RETRY_AFTER)
+    value = meta.get(HEADER_RETRY_AFTER)
     return None if value is None else parse_retry_after(value)
 
 
@@ -462,7 +476,7 @@ class _RetrySync:
         attempt = 0
         for ceiling in self._retry.delays():
             try:
-                with relayed() as meta:
+                with captured() as meta:
                     return call_next(request, ctx)
             except ConnectError as err:
                 if not _retryable(self._retry, err, ctx):
@@ -490,7 +504,7 @@ class _RetryAsync:
         attempt = 0
         for ceiling in self._retry.delays():
             try:
-                with relayed() as meta:
+                with captured() as meta:
                     return await call_next(request, ctx)
             except ConnectError as err:
                 if not _retryable(self._retry, err, ctx):
@@ -509,8 +523,8 @@ def _procedure(ctx: RequestContext) -> str:
     return f"/{method.service_name}/{method.name}"
 
 
-def _typed(err: ConnectError, ctx: RequestContext, meta: Any) -> ConnectError:
-    return convert(err, _procedure(ctx), meta.headers(), sdk_version(), parse_retry_after)
+def _typed(err: ConnectError, ctx: RequestContext, meta: Captured) -> ConnectError:
+    return convert(err, _procedure(ctx), meta, sdk_version(), parse_retry_after)
 
 
 class _ErrorsSync:
@@ -520,10 +534,11 @@ class _ErrorsSync:
     def intercept_unary_sync(
         self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
     ) -> RES:
-        with relayed() as meta:
+        with captured() as meta:
             try:
                 return call_next(request, ctx)
             except ConnectError as err:
+                meta.warn_unless_relayed()
                 typed = _typed(err, ctx, meta)
                 if typed is err:
                     raise
@@ -537,10 +552,11 @@ class _ErrorsAsync:
         request: REQ,
         ctx: RequestContext,
     ) -> RES:
-        with relayed() as meta:
+        with captured() as meta:
             try:
                 return await call_next(request, ctx)
             except ConnectError as err:
+                meta.warn_unless_relayed()
                 typed = _typed(err, ctx, meta)
                 if typed is err:
                     raise

@@ -71,9 +71,18 @@ For one plane alone, a `Client` supplies what a generated client takes:
 from paladin.admin.v1.tenant_service_connect import TenantServiceClientSync
 
 client = paladin.Client(admin_url, token_source=session, audience=paladin.AUDIENCE_ADMIN)
-with TenantServiceClientSync(client.base_url, interceptors=client.interceptors()) as tenants:
+with TenantServiceClientSync(
+    client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+) as tenants:
     ...
 ```
+
+The `http_client` relays each response's headers to the SDK, which reads the
+server's release and `Retry-After` from them: connect-python shows an
+interceptor no response headers. An HTTP client of your own does the same with
+its transport wrapped, `pyqwest.SyncClient(paladin.RelaySyncTransport(t))`;
+without that, typed errors carry no `server_version` or `retry_after`, retries
+ignore `Retry-After`, and the first such error warns with a `RuntimeWarning`.
 
 ## `paladin` package
 
@@ -85,6 +94,8 @@ with TenantServiceClientSync(client.base_url, interceptors=client.interceptors()
 | `base_url` | First argument of every generated client. |
 | `interceptors()` | Interceptors for a generated `…ClientSync`. |
 | `async_interceptors()` | Interceptors for a generated async `…Client`. |
+| `http_client(transport=None)`, `async_http_client(transport=None)` | The `http_client` for a generated client: a `pyqwest` client over `RelaySyncTransport` / `RelayTransport`, wrapping `transport` or pyqwest's shared one. |
+| `RelaySyncTransport(inner=None)`, `RelayTransport(inner=None)` | A `pyqwest` transport that relays response headers to the SDK's interceptors. `connect`, `connect_async` and `http_client` build on them. |
 
 ### `Retry`
 
@@ -270,7 +281,9 @@ package.
 context:
 
 ```python
-http = pyqwest.SyncClient(pyqwest.SyncHTTPTransport(tracer_provider=provider))
+http = pyqwest.SyncClient(
+    paladin.RelaySyncTransport(pyqwest.SyncHTTPTransport(tracer_provider=provider))
+)
 p = paladin.connect(endpoints, transport={"http_client": http},
                     transfer=paladin.Transfer(otel=True, tracer_provider=provider))
 ```
