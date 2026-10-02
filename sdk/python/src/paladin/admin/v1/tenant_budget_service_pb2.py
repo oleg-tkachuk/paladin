@@ -27,7 +27,7 @@ from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__
 from google.api import field_behavior_pb2 as google_dot_api_dot_field__behavior__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n,paladin/admin/v1/tenant_budget_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xba\x02\n\x0cTenantBudget\x12\x1b\n\ttenant_id\x18\x01 \x01(\tB\x08\xbaH\x05r\x03\xb0\x01\x01\x12\x18\n\x10resource_version\x18\x08 \x01(\t\x12)\n\x11max_budget_amount\x18\x02 \x01(\x01\x42\x0e\xbaH\x0b\x12\t)\x00\x00\x00\x00\x00\x00\x00\x00\x12\x14\n\x0cspent_amount\x18\x03 \x01(\x01\x12\x35\n\x0cperiod_start\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\nperiod_end\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\nupdated_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x11\n\tunit_code\x18\x07 \x01(\t\"<\n\x1dTenantBudgetServiceGetRequest\x12\x1b\n\ttenant_id\x18\x01 \x01(\tB\x08\xbaH\x05r\x03\xb0\x01\x01\"P\n\x1eTenantBudgetServiceGetResponse\x12.\n\x06\x62udget\x18\x01 \x01(\x0b\x32\x1e.paladin.admin.v1.TenantBudget\"\xe2\x01\n\x1dTenantBudgetServiceSetRequest\x12\x1b\n\ttenant_id\x18\x01 \x01(\tB\x08\xbaH\x05r\x03\xb0\x01\x01\x12!\n\x10resource_version\x18\x06 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12)\n\x11max_budget_amount\x18\x02 \x01(\x01\x42\x0e\xbaH\x0b\x12\t)\x00\x00\x00\x00\x00\x00\x00\x00\x12\x13\n\x0breset_spend\x18\x03 \x01(\x08\x12.\n\nperiod_end\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x11\n\tunit_code\x18\x05 \x01(\t\"P\n\x1eTenantBudgetServiceSetResponse\x12.\n\x06\x62udget\x18\x01 \x01(\x0b\x32\x1e.paladin.admin.v1.TenantBudget\"\x95\x01\n\x13TenantBudgetSummary\x12\x11\n\ttenant_id\x18\x01 \x01(\t\x12\x0c\n\x04slug\x18\x02 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x03 \x01(\t\x12.\n\x06\x62udget\x18\x04 \x01(\x0b\x32\x1e.paladin.admin.v1.TenantBudget\x12\x17\n\x0futilisation_pct\x18\x05 \x01(\x01\"\xa2\x01\n#TenantBudgetServiceSummarizeRequest\x12.\n\rthreshold_pct\x18\x01 \x01(\x01\x42\x17\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00Y@)\x00\x00\x00\x00\x00\x00\x00\x00\x12\x16\n\x0eunlimited_only\x18\x02 \x01(\x08\x12\x18\n\x10\x65xclude_inactive\x18\x03 \x01(\x08\x12\x19\n\x05limit\x18\x04 \x01(\x05\x42\n\xbaH\x07\x1a\x05\x18\xf4\x03(\x00\"`\n$TenantBudgetServiceSummarizeResponse\x12\x38\n\tsummaries\x18\x01 \x03(\x0b\x32%.paladin.admin.v1.TenantBudgetSummary2\xf4\x02\n\x13TenantBudgetService\x12m\n\x03Get\x12/.paladin.admin.v1.TenantBudgetServiceGetRequest\x1a\x30.paladin.admin.v1.TenantBudgetServiceGetResponse\"\x03\x90\x02\x01\x12m\n\x03Set\x12/.paladin.admin.v1.TenantBudgetServiceSetRequest\x1a\x30.paladin.admin.v1.TenantBudgetServiceSetResponse\"\x03\x90\x02\x02\x12\x7f\n\tSummarize\x12\x35.paladin.admin.v1.TenantBudgetServiceSummarizeRequest\x1a\x36.paladin.admin.v1.TenantBudgetServiceSummarizeResponse\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n,paladin/admin/v1/tenant_budget_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xfb\x02\n\x0cTenantBudget\x12\x1b\n\ttenant_id\x18\x01 \x01(\tB\x08\xbaH\x05r\x03\xb0\x01\x01\x12\x18\n\x10resource_version\x18\x08 \x01(\t\x12+\n\x11max_budget_amount\x18\x02 \x01(\x01\x42\x10\x18\x01\xbaH\x0b\x12\t)\x00\x00\x00\x00\x00\x00\x00\x00\x12\x18\n\x0cspent_amount\x18\x03 \x01(\x01\x42\x02\x18\x01\x12\x35\n\x0cperiod_start\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\nperiod_end\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\nupdated_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x11\n\tunit_code\x18\x07 \x01(\t\x12\x1e\n\x11max_budget_micros\x18\t \x01(\x03\x42\x03\xe0\x41\x03\x12\x19\n\x0cspent_micros\x18\n \x01(\x03\x42\x03\xe0\x41\x03\"<\n\x1dTenantBudgetServiceGetRequest\x12\x1b\n\ttenant_id\x18\x01 \x01(\tB\x08\xbaH\x05r\x03\xb0\x01\x01\"P\n\x1eTenantBudgetServiceGetResponse\x12.\n\x06\x62udget\x18\x01 \x01(\x0b\x32\x1e.paladin.admin.v1.TenantBudget\"\xa3\x02\n\x1dTenantBudgetServiceSetRequest\x12\x1b\n\ttenant_id\x18\x01 \x01(\tB\x08\xbaH\x05r\x03\xb0\x01\x01\x12!\n\x10resource_version\x18\x06 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12+\n\x11max_budget_amount\x18\x02 \x01(\x01\x42\x10\x18\x01\xbaH\x0b\x12\t)\x00\x00\x00\x00\x00\x00\x00\x00\x12\x13\n\x0breset_spend\x18\x03 \x01(\x08\x12.\n\nperiod_end\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x11\n\tunit_code\x18\x05 \x01(\t\x12\'\n\x11max_budget_micros\x18\x07 \x01(\x03\x42\x07\xbaH\x04\"\x02(\x00H\x00\x88\x01\x01\x42\x14\n\x12_max_budget_micros\"P\n\x1eTenantBudgetServiceSetResponse\x12.\n\x06\x62udget\x18\x01 \x01(\x0b\x32\x1e.paladin.admin.v1.TenantBudget\"\x95\x01\n\x13TenantBudgetSummary\x12\x11\n\ttenant_id\x18\x01 \x01(\t\x12\x0c\n\x04slug\x18\x02 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x03 \x01(\t\x12.\n\x06\x62udget\x18\x04 \x01(\x0b\x32\x1e.paladin.admin.v1.TenantBudget\x12\x17\n\x0futilisation_pct\x18\x05 \x01(\x01\"\xa2\x01\n#TenantBudgetServiceSummarizeRequest\x12.\n\rthreshold_pct\x18\x01 \x01(\x01\x42\x17\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00Y@)\x00\x00\x00\x00\x00\x00\x00\x00\x12\x16\n\x0eunlimited_only\x18\x02 \x01(\x08\x12\x18\n\x10\x65xclude_inactive\x18\x03 \x01(\x08\x12\x19\n\x05limit\x18\x04 \x01(\x05\x42\n\xbaH\x07\x1a\x05\x18\xf4\x03(\x00\"`\n$TenantBudgetServiceSummarizeResponse\x12\x38\n\tsummaries\x18\x01 \x03(\x0b\x32%.paladin.admin.v1.TenantBudgetSummary2\xf4\x02\n\x13TenantBudgetService\x12m\n\x03Get\x12/.paladin.admin.v1.TenantBudgetServiceGetRequest\x1a\x30.paladin.admin.v1.TenantBudgetServiceGetResponse\"\x03\x90\x02\x01\x12m\n\x03Set\x12/.paladin.admin.v1.TenantBudgetServiceSetRequest\x1a\x30.paladin.admin.v1.TenantBudgetServiceSetResponse\"\x03\x90\x02\x02\x12\x7f\n\tSummarize\x12\x35.paladin.admin.v1.TenantBudgetServiceSummarizeRequest\x1a\x36.paladin.admin.v1.TenantBudgetServiceSummarizeResponse\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -38,13 +38,19 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TENANTBUDGET'].fields_by_name['tenant_id']._loaded_options = None
   _globals['_TENANTBUDGET'].fields_by_name['tenant_id']._serialized_options = b'\272H\005r\003\260\001\001'
   _globals['_TENANTBUDGET'].fields_by_name['max_budget_amount']._loaded_options = None
-  _globals['_TENANTBUDGET'].fields_by_name['max_budget_amount']._serialized_options = b'\272H\013\022\t)\000\000\000\000\000\000\000\000'
+  _globals['_TENANTBUDGET'].fields_by_name['max_budget_amount']._serialized_options = b'\030\001\272H\013\022\t)\000\000\000\000\000\000\000\000'
+  _globals['_TENANTBUDGET'].fields_by_name['spent_amount']._loaded_options = None
+  _globals['_TENANTBUDGET'].fields_by_name['spent_amount']._serialized_options = b'\030\001'
   _globals['_TENANTBUDGET'].fields_by_name['period_start']._loaded_options = None
   _globals['_TENANTBUDGET'].fields_by_name['period_start']._serialized_options = b'\340A\003'
   _globals['_TENANTBUDGET'].fields_by_name['period_end']._loaded_options = None
   _globals['_TENANTBUDGET'].fields_by_name['period_end']._serialized_options = b'\340A\003'
   _globals['_TENANTBUDGET'].fields_by_name['updated_at']._loaded_options = None
   _globals['_TENANTBUDGET'].fields_by_name['updated_at']._serialized_options = b'\340A\003'
+  _globals['_TENANTBUDGET'].fields_by_name['max_budget_micros']._loaded_options = None
+  _globals['_TENANTBUDGET'].fields_by_name['max_budget_micros']._serialized_options = b'\340A\003'
+  _globals['_TENANTBUDGET'].fields_by_name['spent_micros']._loaded_options = None
+  _globals['_TENANTBUDGET'].fields_by_name['spent_micros']._serialized_options = b'\340A\003'
   _globals['_TENANTBUDGETSERVICEGETREQUEST'].fields_by_name['tenant_id']._loaded_options = None
   _globals['_TENANTBUDGETSERVICEGETREQUEST'].fields_by_name['tenant_id']._serialized_options = b'\272H\005r\003\260\001\001'
   _globals['_TENANTBUDGETSERVICESETREQUEST'].fields_by_name['tenant_id']._loaded_options = None
@@ -52,7 +58,9 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TENANTBUDGETSERVICESETREQUEST'].fields_by_name['resource_version']._loaded_options = None
   _globals['_TENANTBUDGETSERVICESETREQUEST'].fields_by_name['resource_version']._serialized_options = b'\272H\004r\002\020\001'
   _globals['_TENANTBUDGETSERVICESETREQUEST'].fields_by_name['max_budget_amount']._loaded_options = None
-  _globals['_TENANTBUDGETSERVICESETREQUEST'].fields_by_name['max_budget_amount']._serialized_options = b'\272H\013\022\t)\000\000\000\000\000\000\000\000'
+  _globals['_TENANTBUDGETSERVICESETREQUEST'].fields_by_name['max_budget_amount']._serialized_options = b'\030\001\272H\013\022\t)\000\000\000\000\000\000\000\000'
+  _globals['_TENANTBUDGETSERVICESETREQUEST'].fields_by_name['max_budget_micros']._loaded_options = None
+  _globals['_TENANTBUDGETSERVICESETREQUEST'].fields_by_name['max_budget_micros']._serialized_options = b'\272H\004\"\002(\000'
   _globals['_TENANTBUDGETSERVICESUMMARIZEREQUEST'].fields_by_name['threshold_pct']._loaded_options = None
   _globals['_TENANTBUDGETSERVICESUMMARIZEREQUEST'].fields_by_name['threshold_pct']._serialized_options = b'\272H\024\022\022\031\000\000\000\000\000\000Y@)\000\000\000\000\000\000\000\000'
   _globals['_TENANTBUDGETSERVICESUMMARIZEREQUEST'].fields_by_name['limit']._loaded_options = None
@@ -64,21 +72,21 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TENANTBUDGETSERVICE'].methods_by_name['Summarize']._loaded_options = None
   _globals['_TENANTBUDGETSERVICE'].methods_by_name['Summarize']._serialized_options = b'\220\002\001'
   _globals['_TENANTBUDGET']._serialized_start=162
-  _globals['_TENANTBUDGET']._serialized_end=476
-  _globals['_TENANTBUDGETSERVICEGETREQUEST']._serialized_start=478
-  _globals['_TENANTBUDGETSERVICEGETREQUEST']._serialized_end=538
-  _globals['_TENANTBUDGETSERVICEGETRESPONSE']._serialized_start=540
-  _globals['_TENANTBUDGETSERVICEGETRESPONSE']._serialized_end=620
-  _globals['_TENANTBUDGETSERVICESETREQUEST']._serialized_start=623
-  _globals['_TENANTBUDGETSERVICESETREQUEST']._serialized_end=849
-  _globals['_TENANTBUDGETSERVICESETRESPONSE']._serialized_start=851
-  _globals['_TENANTBUDGETSERVICESETRESPONSE']._serialized_end=931
-  _globals['_TENANTBUDGETSUMMARY']._serialized_start=934
-  _globals['_TENANTBUDGETSUMMARY']._serialized_end=1083
-  _globals['_TENANTBUDGETSERVICESUMMARIZEREQUEST']._serialized_start=1086
-  _globals['_TENANTBUDGETSERVICESUMMARIZEREQUEST']._serialized_end=1248
-  _globals['_TENANTBUDGETSERVICESUMMARIZERESPONSE']._serialized_start=1250
-  _globals['_TENANTBUDGETSERVICESUMMARIZERESPONSE']._serialized_end=1346
-  _globals['_TENANTBUDGETSERVICE']._serialized_start=1349
-  _globals['_TENANTBUDGETSERVICE']._serialized_end=1721
+  _globals['_TENANTBUDGET']._serialized_end=541
+  _globals['_TENANTBUDGETSERVICEGETREQUEST']._serialized_start=543
+  _globals['_TENANTBUDGETSERVICEGETREQUEST']._serialized_end=603
+  _globals['_TENANTBUDGETSERVICEGETRESPONSE']._serialized_start=605
+  _globals['_TENANTBUDGETSERVICEGETRESPONSE']._serialized_end=685
+  _globals['_TENANTBUDGETSERVICESETREQUEST']._serialized_start=688
+  _globals['_TENANTBUDGETSERVICESETREQUEST']._serialized_end=979
+  _globals['_TENANTBUDGETSERVICESETRESPONSE']._serialized_start=981
+  _globals['_TENANTBUDGETSERVICESETRESPONSE']._serialized_end=1061
+  _globals['_TENANTBUDGETSUMMARY']._serialized_start=1064
+  _globals['_TENANTBUDGETSUMMARY']._serialized_end=1213
+  _globals['_TENANTBUDGETSERVICESUMMARIZEREQUEST']._serialized_start=1216
+  _globals['_TENANTBUDGETSERVICESUMMARIZEREQUEST']._serialized_end=1378
+  _globals['_TENANTBUDGETSERVICESUMMARIZERESPONSE']._serialized_start=1380
+  _globals['_TENANTBUDGETSERVICESUMMARIZERESPONSE']._serialized_end=1476
+  _globals['_TENANTBUDGETSERVICE']._serialized_start=1479
+  _globals['_TENANTBUDGETSERVICE']._serialized_end=1851
 # @@protoc_insertion_point(module_scope)

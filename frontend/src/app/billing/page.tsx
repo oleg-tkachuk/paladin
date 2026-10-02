@@ -24,7 +24,7 @@ import { useScope } from "@/context/ScopeContext";
 import { billingClient } from "@/lib/connect/client";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
-import { formatMoney } from "@/lib/format/money";
+import { formatMoney, fromMicros } from "@/lib/format/money";
 import type {
   GetTenantSummaryResponse,
   GetTenantTimeSeriesResponse,
@@ -157,7 +157,7 @@ function BreakdownCard({
                 label.length > 24
                   ? `${label.slice(0, 8)}…${label.slice(-6)}`
                   : label;
-              const spend = formatMoney(e.amount, unitCode);
+              const spend = formatMoney(fromMicros(e.amountMicros), unitCode);
               const cell = linkBuilder ? (
                 <Link
                   href={linkBuilder(label)}
@@ -269,13 +269,13 @@ export default function BillingPage() {
 
   // Derived KPI stats. Pulled from the summary; safe to compute
   // even when the response is sparse — formatters handle 0.
-  const total = summary?.totalAmount ?? 0;
+  const total = fromMicros(summary?.totalMicros);
   // Default to "UNIT" (abstract metering sentinel) instead of
   // "USD" when the summary doesn't carry a unit_code yet —
   // operators using non-currency metering or freshly-created
   // tenants don't see a misleading dollar sign on a zero total.
   const unit = summary?.unitCode || "UNIT";
-  const max = summary?.maxBudgetAmount ?? 0;
+  const max = fromMicros(summary?.maxBudgetMicros);
   const chargeCount = summary?.chargeCount ? Number(summary.chargeCount) : 0;
   const remaining = Math.max(0, max - total);
   const pctOfBudget = max > 0 ? Math.min(100, (total / max) * 100) : 0;
@@ -289,18 +289,21 @@ export default function BillingPage() {
   // stays empty, which is what the hooks were written assuming.
   const buckets = useMemo(() => timeseries?.buckets ?? [], [timeseries]);
   const tsUnit = timeseries?.unitCode || unit;
-  const tsValues = useMemo(() => buckets.map((b) => b.amount), [buckets]);
+  const tsValues = useMemo(
+    () => buckets.map((b) => fromMicros(b.amountMicros)),
+    [buckets],
+  );
   const peak = useMemo(() => {
     if (buckets.length === 0) return null;
     return buckets.reduce(
-      (acc, b) => (b.amount > acc.amount ? b : acc),
+      (acc, b) => (b.amountMicros > acc.amountMicros ? b : acc),
       buckets[0],
     );
   }, [buckets]);
   const avg = useMemo(() => {
     if (buckets.length === 0) return 0;
-    const sum = buckets.reduce((acc, b) => acc + b.amount, 0);
-    return sum / buckets.length;
+    const sum = buckets.reduce((acc, b) => acc + b.amountMicros, 0n);
+    return fromMicros(sum) / buckets.length;
   }, [buckets]);
 
   return (
@@ -452,7 +455,8 @@ export default function BillingPage() {
                 <div className={cn(T.hint, "flex flex-wrap gap-x-6 gap-y-1")}>
                   {peak && (
                     <span>
-                      Peak: {formatMoney(peak.amount, tsUnit)} on{" "}
+                      Peak: {formatMoney(fromMicros(peak.amountMicros), tsUnit)}{" "}
+                      on{" "}
                       {tsToDate(peak.start)?.toISOString().slice(0, 10) ?? "—"}
                     </span>
                   )}

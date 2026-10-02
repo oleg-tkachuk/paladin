@@ -24,7 +24,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_tenant_budget_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CixwYWxhZGluL2FkbWluL3YxL3RlbmFudF9idWRnZXRfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSK6AgoMVGVuYW50QnVkZ2V0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQESGAoQcmVzb3VyY2VfdmVyc2lvbhgIIAEoCRIpChFtYXhfYnVkZ2V0X2Ftb3VudBgCIAEoAUIOukgLEgkpAAAAAAAAAAASFAoMc3BlbnRfYW1vdW50GAMgASgBEjUKDHBlcmlvZF9zdGFydBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgpwZXJpb2RfZW5kGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCnVwZGF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSEQoJdW5pdF9jb2RlGAcgASgJIjwKHVRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXF1ZXN0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQEiUAoeVGVuYW50QnVkZ2V0U2VydmljZUdldFJlc3BvbnNlEi4KBmJ1ZGdldBgBIAEoCzIeLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0IuIBCh1UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEiEKEHJlc291cmNlX3ZlcnNpb24YBiABKAlCB7pIBHICEAESKQoRbWF4X2J1ZGdldF9hbW91bnQYAiABKAFCDrpICxIJKQAAAAAAAAAAEhMKC3Jlc2V0X3NwZW5kGAMgASgIEi4KCnBlcmlvZF9lbmQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhEKCXVuaXRfY29kZRgFIAEoCSJQCh5UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVzcG9uc2USLgoGYnVkZ2V0GAEgASgLMh4ucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXQilQEKE1RlbmFudEJ1ZGdldFN1bW1hcnkSEQoJdGVuYW50X2lkGAEgASgJEgwKBHNsdWcYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEi4KBmJ1ZGdldBgEIAEoCzIeLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0EhcKD3V0aWxpc2F0aW9uX3BjdBgFIAEoASKiAQojVGVuYW50QnVkZ2V0U2VydmljZVN1bW1hcml6ZVJlcXVlc3QSLgoNdGhyZXNob2xkX3BjdBgBIAEoAUIXukgUEhIZAAAAAAAAWUApAAAAAAAAAAASFgoOdW5saW1pdGVkX29ubHkYAiABKAgSGAoQZXhjbHVkZV9pbmFjdGl2ZRgDIAEoCBIZCgVsaW1pdBgEIAEoBUIKukgHGgUY9AMoACJgCiRUZW5hbnRCdWRnZXRTZXJ2aWNlU3VtbWFyaXplUmVzcG9uc2USOAoJc3VtbWFyaWVzGAEgAygLMiUucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXRTdW1tYXJ5MvQCChNUZW5hbnRCdWRnZXRTZXJ2aWNlEm0KA0dldBIvLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZUdldFJlcXVlc3QaMC5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXNwb25zZSIDkAIBEm0KA1NldBIvLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZVNldFJlcXVlc3QaMC5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXNwb25zZSIDkAICEn8KCVN1bW1hcml6ZRI1LnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZVN1bW1hcml6ZVJlcXVlc3QaNi5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTdW1tYXJpemVSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
+    "CixwYWxhZGluL2FkbWluL3YxL3RlbmFudF9idWRnZXRfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSL7AgoMVGVuYW50QnVkZ2V0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQESGAoQcmVzb3VyY2VfdmVyc2lvbhgIIAEoCRIrChFtYXhfYnVkZ2V0X2Ftb3VudBgCIAEoAUIQGAG6SAsSCSkAAAAAAAAAABIYCgxzcGVudF9hbW91bnQYAyABKAFCAhgBEjUKDHBlcmlvZF9zdGFydBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgpwZXJpb2RfZW5kGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCnVwZGF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSEQoJdW5pdF9jb2RlGAcgASgJEh4KEW1heF9idWRnZXRfbWljcm9zGAkgASgDQgPgQQMSGQoMc3BlbnRfbWljcm9zGAogASgDQgPgQQMiPAodVGVuYW50QnVkZ2V0U2VydmljZUdldFJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABASJQCh5UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVzcG9uc2USLgoGYnVkZ2V0GAEgASgLMh4ucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXQiowIKHVRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXF1ZXN0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQESIQoQcmVzb3VyY2VfdmVyc2lvbhgGIAEoCUIHukgEcgIQARIrChFtYXhfYnVkZ2V0X2Ftb3VudBgCIAEoAUIQGAG6SAsSCSkAAAAAAAAAABITCgtyZXNldF9zcGVuZBgDIAEoCBIuCgpwZXJpb2RfZW5kGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgl1bml0X2NvZGUYBSABKAkSJwoRbWF4X2J1ZGdldF9taWNyb3MYByABKANCB7pIBCICKABIAIgBAUIUChJfbWF4X2J1ZGdldF9taWNyb3MiUAoeVGVuYW50QnVkZ2V0U2VydmljZVNldFJlc3BvbnNlEi4KBmJ1ZGdldBgBIAEoCzIeLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0IpUBChNUZW5hbnRCdWRnZXRTdW1tYXJ5EhEKCXRlbmFudF9pZBgBIAEoCRIMCgRzbHVnGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRIuCgZidWRnZXQYBCABKAsyHi5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldBIXCg91dGlsaXNhdGlvbl9wY3QYBSABKAEiogEKI1RlbmFudEJ1ZGdldFNlcnZpY2VTdW1tYXJpemVSZXF1ZXN0Ei4KDXRocmVzaG9sZF9wY3QYASABKAFCF7pIFBISGQAAAAAAAFlAKQAAAAAAAAAAEhYKDnVubGltaXRlZF9vbmx5GAIgASgIEhgKEGV4Y2x1ZGVfaW5hY3RpdmUYAyABKAgSGQoFbGltaXQYBCABKAVCCrpIBxoFGPQDKAAiYAokVGVuYW50QnVkZ2V0U2VydmljZVN1bW1hcml6ZVJlc3BvbnNlEjgKCXN1bW1hcmllcxgBIAMoCzIlLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U3VtbWFyeTL0AgoTVGVuYW50QnVkZ2V0U2VydmljZRJtCgNHZXQSLy5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXF1ZXN0GjAucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVzcG9uc2UiA5ACARJtCgNTZXQSLy5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXF1ZXN0GjAucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVzcG9uc2UiA5ACAhJ/CglTdW1tYXJpemUSNS5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTdW1tYXJpemVSZXF1ZXN0GjYucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlU3VtbWFyaXplUmVzcG9uc2UiA5ACAUJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
       file_google_protobuf_timestamp,
@@ -57,7 +57,11 @@ export type TenantBudget = Message<"paladin.admin.v1.TenantBudget"> & {
    * number unchanged (wire-compatible with the previous
    * max_budget_usd name). Currency given by unit_code.
    *
-   * @generated from field: double max_budget_amount = 2;
+   * Deprecated: use max_budget_micros, an exact integer count of millionths. Kept
+   * for one release; the server fills both.
+   *
+   * @generated from field: double max_budget_amount = 2 [deprecated = true];
+   * @deprecated
    */
   maxBudgetAmount: number;
 
@@ -65,7 +69,11 @@ export type TenantBudget = Message<"paladin.admin.v1.TenantBudget"> & {
    * spent_amount is the accumulated spend within the current period.
    * Field number unchanged (wire-compatible with previous spent_usd).
    *
-   * @generated from field: double spent_amount = 3;
+   * Deprecated: use spent_micros, an exact integer count of millionths. Kept
+   * for one release; the server fills both.
+   *
+   * @generated from field: double spent_amount = 3 [deprecated = true];
+   * @deprecated
    */
   spentAmount: number;
 
@@ -93,6 +101,20 @@ export type TenantBudget = Message<"paladin.admin.v1.TenantBudget"> & {
    * @generated from field: string unit_code = 7;
    */
   unitCode: string;
+
+  /**
+   * max_budget_micros is the cap in millionths of unit_code; 0 = unlimited.
+   *
+   * @generated from field: int64 max_budget_micros = 9;
+   */
+  maxBudgetMicros: bigint;
+
+  /**
+   * spent_micros is the spend in the current period, in millionths.
+   *
+   * @generated from field: int64 spent_micros = 10;
+   */
+  spentMicros: bigint;
 };
 
 /**
@@ -165,7 +187,11 @@ export type TenantBudgetServiceSetRequest =
      * max_budget_amount is the new cap. 0 = unlimited. Field number
      * unchanged (wire-compatible with previous max_budget_usd).
      *
-     * @generated from field: double max_budget_amount = 2;
+     * Deprecated: use max_budget_micros, an exact integer count of millionths. Kept
+     * for one release; the server fills both.
+     *
+     * @generated from field: double max_budget_amount = 2 [deprecated = true];
+     * @deprecated
      */
     maxBudgetAmount: number;
 
@@ -193,6 +219,15 @@ export type TenantBudgetServiceSetRequest =
      * @generated from field: string unit_code = 5;
      */
     unitCode: string;
+
+    /**
+     * max_budget_micros is the new cap in millionths of unit_code (1000 USD
+     * = 1000000000); 0 = unlimited. When set it wins over
+     * max_budget_amount, and a request carrying both must agree.
+     *
+     * @generated from field: optional int64 max_budget_micros = 7;
+     */
+    maxBudgetMicros?: bigint | undefined;
   };
 
 /**

@@ -20,14 +20,17 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
+	connectshim "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 	"github.com/oleg-tkachuk/paladin/capability"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // allowAuth is the permit-everything Cedar authorizer used by the
@@ -483,5 +486,45 @@ func TestBilling_PeriodFiltering_ExcludesOutsideRange(t *testing.T) {
 	}
 	if got, want := s.TotalAmount, 10.0; got < want-0.01 || got > want+0.01 {
 		t.Errorf("total = %v, want 10.0", got)
+	}
+}
+
+// TestBilling_MicrosAreExact drives the Connect adapter over real charges
+// whose amounts are not float64 values (0.1, 0.2): the ledger sums them in
+// numeric, and the *_micros fields must carry that sum exactly — 0.1 + 0.2
+// is 300000 micros, not 300000.00000000006 units rounded somewhere later.
+func TestBilling_MicrosAreExact(t *testing.T) {
+	t.Parallel()
+	f := setupBilling(t)
+	tenant := mustCreateTenant(t, f.h.PoolMigrate, "bil-micros")
+	f.seedBudget(t, tenant, 19.99, "USD")
+	capID := f.seedCapability(t, tenant, "agent-M")
+	for range 3 {
+		f.charge(t, capID, 0.1, "USD", "get", "agent-M", tenant)
+	}
+	f.charge(t, capID, 0.2, "USD", "put", "agent-M", tenant)
+
+	srv := connectshim.NewBillingServer(f.handler)
+	end := time.Now().UTC().Add(time.Hour)
+	resp, err := srv.GetTenantSummary(ctxAdmin(t, tenant), connect.NewRequest(&pb.GetTenantSummaryRequest{
+		TenantId:    tenant.String(),
+		PeriodStart: timestamppb.New(end.Add(-24 * time.Hour)),
+		PeriodEnd:   timestamppb.New(end),
+	}))
+	if err != nil {
+		t.Fatalf("GetTenantSummary: %v", err)
+	}
+	if got := resp.Msg.GetTotalMicros(); got != 500_000 {
+		t.Errorf("total_micros = %d, want 500000", got)
+	}
+	if got := resp.Msg.GetMaxBudgetMicros(); got != 19_990_000 {
+		t.Errorf("max_budget_micros = %d, want 19990000", got)
+	}
+	var top int64
+	for _, e := range resp.Msg.GetTopOps() {
+		top += e.GetAmountMicros()
+	}
+	if top != 500_000 {
+		t.Errorf("top ops sum to %d micros, want 500000", top)
 	}
 }

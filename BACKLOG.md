@@ -1633,17 +1633,32 @@ finding moving from "packages you import" to "your code is affected".
   the same `Narrows` semantics; the existing fuzz property extended to chains.
 - **Blockers:** the format migration decision itself.
 
-### Amounts are float64 at the capability API boundary
+### Deprecated double money fields still on the wire
 
-- **Status:** Deferred — crosses the proto, both SDKs and the frontend.
-- **Reason:** Postgres stores numeric(14,6) exactly, but every amount crosses
-  the Go API, the proto and the SDKs as a float, so a value can drift by a last
-  bit on the way. Refund of "the rest" is computed in numeric and is exact;
-  partial amounts are not.
-- **Definition of Done:** amounts carried as integer minor units (or a decimal
-  string) end to end; the float fields deprecated for a release, then removed.
-- **Blockers:** a breaking proto change, which needs its own deprecation
-  window.
+- **Status:** Deferred — the deprecation window is one release.
+- **Reason:** every money field now has an exact `*_micros` int64 twin, which
+  the console uses, and the server fills both and accepts either (a request
+  carrying both must agree). The doubles stay for one release so older
+  clients keep working.
+- **Definition of Done:** in the release after the one that adds `*_micros`,
+  the double fields are removed and their numbers and names `reserved` in
+  `billing_service.proto`, `capability_service.proto` and
+  `tenant_budget_service.proto`; the `nolint:staticcheck` markers that fill
+  them go with them.
+- **Blockers:** the release that ships the micros fields.
+
+### The capability module's Go API still takes float64 amounts
+
+- **Status:** Deferred — a breaking change to the module's public API.
+- **Reason:** `Caveats.MaxBudgetAmount`, `ChargeRequest.Amount` and the
+  usage types are float64. Storage is exact (`numeric(14,6)`) and every
+  conversion rounds to the nearest micro (`AmountToMicros`), which is exact
+  below `MaxMicros` (fifteen digits), so nothing drifts today; but the type
+  invites float arithmetic in a consumer's own code. The token claim is a
+  JSON number under the frozen wire format, so it cannot change on its own.
+- **Definition of Done:** int64 micros in the module's API, with the token
+  carrying the budget the same way in a new format version.
+- **Blockers:** the token format version that offline attenuation also needs.
 
 ### No scanner sets object taint flags
 

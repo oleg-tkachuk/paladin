@@ -25,6 +25,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -156,7 +157,10 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 			errors.New("issuing a capability for another tenant requires platform.admin or platform.capability-issuer"))
 	}
 
-	caveats := protoToCaveats(req.Msg.GetCaveats())
+	caveats, err := protoToCaveats(req.Msg.GetCaveats())
+	if err != nil {
+		return nil, err
+	}
 
 	ttl := time.Duration(req.Msg.GetTtlSeconds()) * time.Second
 	var nbf time.Time
@@ -243,7 +247,9 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 	var caveats capability.Caveats
 	inherit := req.Msg.GetCaveats() == nil
 	if !inherit {
-		caveats = protoToCaveats(req.Msg.GetCaveats())
+		if caveats, err = protoToCaveats(req.Msg.GetCaveats()); err != nil {
+			return nil, err
+		}
 	}
 	audience := parent.Audience
 	if a := req.Msg.GetAudience(); len(a) > 0 {
@@ -412,7 +418,8 @@ func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.Cap
 	return connect.NewResponse(&adminv1.CapabilityServiceGetUsageResponse{
 		CapabilityId: u.CapabilityID.String(),
 		RequestCount: u.RequestCount,
-		SpentAmount:  u.SpentAmount,
+		SpentAmount:  u.SpentAmount, //nolint:staticcheck // deprecated, still filled for one release
+		SpentMicros:  apiutil.Micros(u.SpentAmount),
 		UnitCode:     unit,
 		// updated_at not surfaced today — the UsageStore.Get value
 		// doesn't carry it consistently across the postgres /
@@ -473,9 +480,15 @@ func protoToPrincipalKind(k adminv1.PrincipalKind) capability.PrincipalType {
 	}
 }
 
-func protoToCaveats(c *adminv1.CapabilityCaveats) capability.Caveats {
+func protoToCaveats(c *adminv1.CapabilityCaveats) (capability.Caveats, error) {
 	if c == nil {
-		return capability.Caveats{}
+		return capability.Caveats{}, nil
+	}
+	//nolint:staticcheck // the deprecated double is still accepted for one release
+	budget, err := apiutil.AmountFromRequest("max_budget",
+		c.GetMaxBudgetAmount(), c.GetMaxBudgetMicros(), c.MaxBudgetMicros != nil)
+	if err != nil {
+		return capability.Caveats{}, err
 	}
 	// Empty unit_code on the wire ⇒ default to USD server-side.
 	// Old clients (pre-currency rename) never set the field; new
@@ -488,7 +501,7 @@ func protoToCaveats(c *adminv1.CapabilityCaveats) capability.Caveats {
 		ResourcePrefixes:       c.GetResourcePrefixes(),
 		ResourceURIs:           c.GetResourceUris(),
 		MaxRequests:            int(c.GetMaxRequests()),
-		MaxBudgetAmount:        c.GetMaxBudgetAmount(),
+		MaxBudgetAmount:        budget,
 		UnitCode:               unit,
 		AllowTaintedRead:       c.GetAllowTaintedRead(),
 		IdempotencyKeyRequired: c.GetIdempotencyKeyRequired(),
@@ -497,7 +510,7 @@ func protoToCaveats(c *adminv1.CapabilityCaveats) capability.Caveats {
 	for _, op := range c.GetOps() {
 		out.Ops = append(out.Ops, capability.Op(op))
 	}
-	return out
+	return out, nil
 }
 
 func principalToProto(p capability.Principal) *adminv1.CapabilityPrincipal {
@@ -543,7 +556,8 @@ func caveatsToProto(c capability.Caveats) *adminv1.CapabilityCaveats {
 		ResourcePrefixes:       c.ResourcePrefixes,
 		ResourceUris:           c.ResourceURIs,
 		MaxRequests:            safecast.Int32(c.MaxRequests),
-		MaxBudgetAmount:        c.MaxBudgetAmount,
+		MaxBudgetAmount:        c.MaxBudgetAmount, //nolint:staticcheck // deprecated, still filled for one release
+		MaxBudgetMicros:        proto.Int64(apiutil.Micros(c.MaxBudgetAmount)),
 		UnitCode:               unit,
 		AllowTaintedRead:       c.AllowTaintedRead,
 		IdempotencyKeyRequired: c.IdempotencyKeyRequired,

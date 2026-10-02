@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/capability"
@@ -97,9 +98,15 @@ func (s *TenantBudgetServer) Set(
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("resource_version: %w", err))
 	}
+	//nolint:staticcheck // the deprecated double is still accepted for one release
+	budget, err := apiutil.AmountFromRequest("max_budget",
+		m.GetMaxBudgetAmount(), m.GetMaxBudgetMicros(), m.MaxBudgetMicros != nil)
+	if err != nil {
+		return nil, err
+	}
 	args := capability.SetTenantBudgetArgs{
 		TenantID:        tenantID,
-		MaxBudgetAmount: m.GetMaxBudgetAmount(),
+		MaxBudgetAmount: budget,
 		UnitCode:        unit,
 		ResetSpend:      m.GetResetSpend(),
 		ExpectedVersion: expected,
@@ -183,8 +190,10 @@ func tenantBudgetToProto(tb capability.TenantBudget) *pb.TenantBudget {
 	}
 	out := &pb.TenantBudget{
 		TenantId:        tb.TenantID.String(),
-		MaxBudgetAmount: tb.MaxBudgetAmount,
-		SpentAmount:     tb.SpentAmount,
+		MaxBudgetAmount: tb.MaxBudgetAmount, //nolint:staticcheck // deprecated, still filled for one release
+		SpentAmount:     tb.SpentAmount,     //nolint:staticcheck // deprecated, still filled for one release
+		MaxBudgetMicros: apiutil.Micros(tb.MaxBudgetAmount),
+		SpentMicros:     apiutil.Micros(tb.SpentAmount),
 		UnitCode:        unit,
 		ResourceVersion: convx.ResourceVersion(tb.ResourceVersion),
 	}
