@@ -151,8 +151,9 @@ jobs:
           RELEASE_STREAM: capability
 
       # A GitHub release beside each module tag this run cut, with notes of
-      # the stream's own commits (scripts/stream-release-notes.sh). Never the
-      # latest release: that stays the product's.
+      # the stream's own commits (scripts/stream-release-notes.sh), and the Go
+      # proxy told of the tag. Never the latest release: that stays the
+      # product's.
       - name: Publish the SDK and capability releases
         if: steps.head.outputs.release == 'true'
         env:
@@ -163,6 +164,11 @@ jobs:
             notes="$(./scripts/stream-release-notes.sh "$tag")"
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag --latest=false \
               --title "$(head -1 <<<"$notes")" --notes "$(tail -n +2 <<<"$notes")"
+            # So `go get …@latest`, and the README's SDK badge, see it now
+            # rather than whenever the proxy next refreshes. The release
+            # stands without it.
+            ./scripts/warm-go-proxy.sh "$tag" ||
+              echo "::warning::the Go proxy did not take $tag yet; it will on its own"
           done
 
       # Read from git rather than parsing semantic-release's prose: it tags the
