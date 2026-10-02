@@ -200,7 +200,13 @@ class Transfer:
         content: bytes | Iterable[bytes] | None = None,
     ) -> Iterator[Any]:
         """Send one presigned request and yield storage's 2xx response,
-        unread; any other status is a ``TransferError``."""
+        unread; any other status is a ``TransferError``.
+
+        For a presigned URL the workflows do not send themselves. ``method``
+        applies when ``signed.method`` is empty. A failure is reported to the
+        hooks here; a success is the caller's to report, with ``ended``, once
+        it knows how many bytes moved.
+        """
         method = signed.method or method
         url, host = self._target(signed.url)
         sent = dict(headers or {})

@@ -178,6 +178,7 @@ p = paladin.connect(endpoints, token_source=session, transfer=transfer)
 | `rewrite=fn` | The general form: any URL to any URL, the signed Host still kept. Not with `split_horizon`. |
 | `transport=` | A `pyqwest.SyncHTTPTransport` of your own — a proxy, TLS settings. Build it with `follow_redirects=False`: one that follows them cannot be stopped from here. |
 | `connect(…, transfer=t)` | Every `upload` and `download` through that data plane uses `t`; without it, a shared default. |
+| `stream(method, signed, headers=None, content=None)`, `astream(…)` | One presigned request of your own — a URL the server signed that the workflows do not send, such as a PUT minted for another service. A context manager yielding storage's 2xx `pyqwest` response, unread; `method` applies when `signed.method` is empty. The signed Host and `signed.required_headers` are sent, and the rewrite applied. Any other status is a `TransferError`, reported to the hooks; on success report it yourself with `ended(method, host_of(signed), moved, started, None)`, `started` from `time.monotonic()` before the call. |
 | `TransferError` | A request storage refused, or answered with a redirect: `method`, `host` (the URL's query is the signature and is not kept), `status`, and the first 512 bytes of the `body`. |
 
 ### TLS
