@@ -12,17 +12,46 @@ Two parts, both imported as `paladin`:
   protobuf messages and Connect clients generated from
   [`proto/`](../../proto). The service clients are these, unwrapped: a
   synchronous `…ClientSync` and an asynchronous `…Client` for every service.
-- `paladin.client` — a thin client that holds what every call needs: one
-  plane's base URL, credentials, the idempotency key, and retries for calls
-  that are safe to repeat.
+- Three layers over them. What every call needs (`paladin.client`,
+  `paladin.auth`): credentials and sessions, idempotency keys, retries.
+  `connect` (`paladin.connect`), a client for every service of each plane.
+  And what takes more than one call (`paladin.workflows`): paging, waiting on
+  an operation, update masks, uploads and downloads.
 
 Built on [connect-python](https://github.com/connectrpc/connect-python),
 pinned to `0.9.0`. Requires Python 3.10+.
 
+## Quick start
+
+```python
+import paladin
+from paladin.admin.v1 import tenant_service_pb2
+
+session = paladin.Session.sign_in(iam_url, subject, password)
+p = paladin.connect(
+    paladin.Endpoints(data=data_url, admin=admin_url, iam=iam_url),
+    token_source=session,
+    retry=paladin.Retry(attempts=3),
+)
+# Every service of every plane; each call carries the token for its plane
+# and, when it has side effects, an idempotency key.
+tenant = p.admin.tenant.create_tenant(tenant_service_pb2.CreateTenantRequest(...))
+```
+
+With an API token instead of a session, pass
+`token_source=paladin.StaticToken(api_token)`. For asyncio,
+`paladin.connect_async(...)` with an `AsyncSession` returns the async clients.
+
 ## Planes
 
-Paladin serves three planes on separate listeners. Create one `Client` per
-plane you talk to, and build that plane's service clients from it.
+Paladin serves three planes on separate listeners, and a token is issued for
+one of them. `connect` builds a client for every service of each plane you
+give a URL — `p.data`, `p.admin`, `p.iam`, `None` for a plane left out — and
+sends each the token for its own audience. The attributes are the services'
+names in snake case without `Service`: `p.data.object`,
+`p.admin.event_subscription`, `p.iam.auth`. They are generated from the
+contract (`scripts/gen_facade.py`, run by `generate.sh`), and a test fails
+when they fall behind it.
 
 | Plane | Package | Services |
 | --- | --- | --- |
@@ -30,27 +59,14 @@ plane you talk to, and build that plane's service clients from it.
 | Data | `paladin.data.v1` | objects, multipart uploads, tags, batches, presigning |
 | IAM | `paladin.iam.v1` | login, tokens, users, health |
 
-## Example
+For one plane alone, a `Client` supplies what a generated client takes:
 
 ```python
-from paladin import Client, Retry, idempotency_key
-from paladin.admin.v1 import tenant_service_pb2
 from paladin.admin.v1.tenant_service_connect import TenantServiceClientSync
 
-client = Client("https://admin.paladin.example", bearer_token=api_token, retry=Retry(attempts=3))
-
+client = paladin.Client(admin_url, token_source=session, audience=paladin.AUDIENCE_ADMIN)
 with TenantServiceClientSync(client.base_url, interceptors=client.interceptors()) as tenants:
-    with idempotency_key(request_id):
-        tenant = tenants.create_tenant(tenant_service_pb2.CreateTenantRequest(...))
-```
-
-Asynchronously, the same client supplies `async_interceptors()`:
-
-```python
-from paladin.admin.v1.tenant_service_connect import TenantServiceClient
-
-async with TenantServiceClient(client.base_url, interceptors=client.async_interceptors()) as tenants:
-    tenant = await tenants.get_tenant(tenant_service_pb2.GetTenantRequest(name=name))
+    ...
 ```
 
 ## `paladin` package
@@ -59,7 +75,7 @@ async with TenantServiceClient(client.base_url, interceptors=client.async_interc
 
 | Member | Does |
 | --- | --- |
-| `Client(base_url, *, bearer_token=None, api_token=None, capability=None, retry=None, headers=None)` | A client for the plane at `base_url`. Raises `ValueError` unless it is an absolute `http`/`https` URL. A trailing `/` is dropped. `bearer_token` is sent as `Authorization: Bearer <token>` — an API token (`paladin_pat_…`) and an OIDC JWT are both accepted. `api_token` is sent in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. `capability` is sent in `X-Paladin-Capability`. `headers` are sent on every call and replace what the SDK would send there — `User-Agent` included, which is `paladin-sdk-python/<version>` by default. |
+| `Client(base_url, *, bearer_token=None, api_token=None, capability=None, retry=None, headers=None, token_source=None, audience=None)` | A client for the plane at `base_url`. Raises `ValueError` unless it is an absolute `http`/`https` URL. A trailing `/` is dropped. `bearer_token` is sent as `Authorization: Bearer <token>` — an API token (`paladin_pat_…`) and an OIDC JWT are both accepted. `api_token` is sent in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. `capability` is sent in `X-Paladin-Capability`. `headers` are sent on every call and replace what the SDK would send there — `User-Agent` included, which is `paladin-sdk-python/<version>` by default. |
 | `base_url` | First argument of every generated client. |
 | `interceptors()` | Interceptors for a generated `…ClientSync`. |
 | `async_interceptors()` | Interceptors for a generated async `…Client`. |
@@ -84,6 +100,34 @@ requires one on `Create*` and `Issue*` calls.
 | --- | --- |
 | `idempotency_key(key)` | A context manager: every call inside the block sends `Idempotency-Key: <key>`. The server replays the first response for a key it has seen, so repeating a mutating call with the same key is safe. Reuse a key only for the same logical operation. Scoped with `contextvars`, so it follows `asyncio` tasks. |
 | `current_idempotency_key()` | The key set for the current context; an empty key counts as none. |
+
+### Tokens
+
+| Name | Does |
+| --- | --- |
+| `Session.sign_in(iam_url, subject, password, *, clock=time.monotonic)` | Signs in at the IAM plane and keeps the refresh token. `token(audience)` returns that plane's access token: the IAM one by refreshing, the others by `ExchangeAudience`. Each is cached until `TOKEN_REFRESH_MARGIN` (30s) before it expires. When the refresh token itself is refused, the session signs in again. Thread-safe; concurrent callers wait for one mint. |
+| `Session.from_refresh_token(iam_url, refresh_token)` | Resumes from a stored refresh token; cannot sign in again when it expires. `refresh_token` is the current one to store — refreshing rotates it. |
+| `AsyncSession` | The same for asyncio: `await AsyncSession.sign_in(...)`, `await session.token(audience)`. |
+| `StaticToken(token)` | The same token for every plane: an API token, or a JWT from elsewhere. |
+| `Client(..., token_source=…, audience=…)` | Sends `token_source`'s token for `audience` on every call. A call refused as unauthenticated is made once more with a fresh one — the server authenticates before anything else, so the first attempt changed nothing. `connect` sets `audience` per plane. |
+| `AUDIENCE_DATA`, `AUDIENCE_ADMIN`, `AUDIENCE_IAM` | The audience names; `tests/test_headers.py` keeps them equal to the Go SDK's, which the server imports. |
+
+### `connect`
+
+| Name | Does |
+| --- | --- |
+| `connect(Endpoints(data=…, admin=…, iam=…), *, transport=None, **client_options)` | A `Paladin` with a synchronous client for every service of each plane given. `client_options` are `Client`'s; `transport` goes to every generated client — `timeout_ms`, `http_client`, `proto_json`. `Endpoints()` with no URL raises `ValueError`. |
+| `connect_async(...)` | The same with the async clients, as an `AsyncPaladin`. |
+
+### Workflows
+
+| Name | Does |
+| --- | --- |
+| `pages(call, request, items)` | Calls a List RPC page by page, following `next_page_token`, and yields every element of the repeated field `items`, e.g. `pages(p.data.object.list_objects, ListObjectsRequest(parent=c), "objects")`. Stopping early makes no further calls. `TypeError` for a message without `page`. `apages` is the async form. |
+| `wait(get, *, poll=0.5, max_poll=10.0, timeout=None)` | Calls `get` until the operation it returns is done, the pause doubling from `poll` to `max_poll` seconds. Raises `OperationFailed` (with `operation` and the Connect `code`) for one that failed, `TimeoutError` past `timeout`. `await_operation` is the async form; bound it with `asyncio.timeout`. |
+| `mask(MessageClass, *paths)` | An update mask from proto field names, nested ones with `.`, each checked against the descriptor: `ValueError` for one it lacks. |
+| `upload(p.data, *, parent, content_type, body, size, key="", metadata=None, tags=None, multipart_threshold=8 MiB, part_concurrency=3)` | Uploads `body` (bytes, or a seekable binary file) and completes it: one presigned PUT up to the threshold, multipart above it, aborted if any part fails. A refused transfer raises `TransferError`. Synchronous; from asyncio, run it with `asyncio.to_thread`. |
+| `download(p.data, name)` | The object's content, fetched through a presigned URL. |
 
 ### Constants
 
@@ -161,6 +205,7 @@ they no longer match the contract.
 ## Versioning
 
 The package version is the API contract's: version X.Y.Z is generated from
-`api/vX.Y.Z`. The buf.validate module the contract's descriptors depend
+`api/vX.Y.Z`. Pre-1.0, a minor version may break the contract or this
+package's own API; see [`docs/upgrading.md`](../../docs/upgrading.md). The buf.validate module the contract's descriptors depend
 on ships inside the wheel as `buf.validate`, because no PyPI package provides
 it for the `protobuf` runtime.

@@ -1611,6 +1611,71 @@ finding moving from "packages you import" to "your code is affected".
 
 ---
 
+## SDK
+
+The contract-side half of ADR-0018. The client-side layers are in both SDKs.
+
+### Resource names are strings each side assembles by hand
+
+- **Status:** Deferred.
+- **Reason:** names such as `tenants/{t}/collections/{c}/objects/{id}` carry
+  no `google.api.resource` annotation, so the SDKs cannot generate builders
+  or parsers for them and callers format them by hand; the server parses
+  them in `connectshim/convx`, by hand too. A typo reaches the server as
+  NotFound or InvalidArgument.
+- **Definition of Done:** the resources are annotated in `proto/`; name
+  helpers for Go and Python, and the server's parsers, are generated from the
+  annotations; a test round-trips every pattern.
+- **Blockers:** none.
+
+### Errors carry no machine-readable reason
+
+- **Status:** Deferred.
+- **Reason:** the server returns a Connect code and a message. A client that
+  must tell a version conflict from a quota refusal, or a missing object from
+  a missing collection, can only match message text.
+- **Definition of Done:** `apiutil.MapError` attaches a `google.rpc.ErrorInfo`
+  with a stable reason per registered sentinel; both SDKs expose
+  `Reason(err)`; a test pins the reason of each sentinel.
+- **Blockers:** none.
+
+### Webhook deliveries can be replayed, and the SDKs cannot verify them
+
+- **Status:** Deferred.
+- **Reason:** `X-Paladin-Signature` is an HMAC of the body alone
+  (`worker/event_dispatcher.go`), so a captured delivery verifies forever.
+  The SDKs offer no verifier, so each subscriber writes its own comparison.
+- **Definition of Done:** the dispatcher signs `t=<unix>,v1=<hmac(t.body)>`
+  in a versioned header, sending the old one alongside for a release; both
+  SDKs verify it with a tolerance window and a constant-time compare, with
+  tests for a replayed, tampered and stale delivery.
+- **Blockers:** subscribers verifying the old header must be told before it
+  goes.
+
+### SDK users have no fake server, and the SDKs no shared scenarios
+
+- **Status:** Deferred.
+- **Reason:** a program built on the SDK can only be tested against a
+  running stack. And each SDK tests its workflows against its own fakes, so
+  the two could disagree about the server and both pass.
+- **Definition of Done:** `paladintest` (Go) and `paladin.testing` (Python)
+  serve the generated handlers in memory, Unimplemented by default; one set
+  of scenarios, the ones `verify:live` runs, is driven by both SDKs against
+  the compose stack in CI.
+- **Blockers:** none.
+
+### The MCP bridge carries its own copy of what the SDK now does
+
+- **Status:** Deferred.
+- **Reason:** `internal/mcp/bridge.go` builds its own three-plane client set
+  and stamps idempotency keys in its own interceptor, from before the SDK did
+  either.
+- **Definition of Done:** the bridge builds its clients with `paladin.Connect`
+  and drops its interceptor; its tests still pass.
+- **Blockers:** the bridge takes credentials per call from the MCP request,
+  which `Connect` does not; that needs a per-call `TokenSource` reading the
+  context.
+
 ## Tooling and observability
 
 ### Include-level `vars:` do not reach a var the component declares
