@@ -408,6 +408,9 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// on PutObject / Presign rather than as /readyz failures.
 
 	dataMux = http.NewServeMux()
+	// A procedure this release lacks is a Connect Unimplemented, which
+	// carries the release header (see middleware.ServerVersion).
+	dataMux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(dataMux)
 	dataMux.Handle(paladindatav1connect.NewObjectServiceHandler(
 		connectdata.NewObjectServer(objH, versionH).WithLocks(lockH), dataOpts))
@@ -422,6 +425,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	dataMux.Handle(paladindatav1connect.NewStorageBootstrapServiceHandler(connectdata.NewStorageBootstrapServer(storageBootstrapH), dataOpts))
 
 	iamMux = http.NewServeMux()
+	iamMux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(iamMux)
 	iamMux.Handle(paladiniamv1connect.NewAuthServiceHandler(connectiam.NewAuthServer(authH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewUserServiceHandler(connectiam.NewUserServer(userH, repos.Tenant), iamOpts))
@@ -475,11 +479,13 @@ func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([
 		return nil, nil, err
 	}
 	cfg := deps.Cfg
-	dataSrv, err := BuildHTTPServer(cfg.API.Server.Data, dataMux, deps.Logger)
+	// Every response names the release, a 404 for a procedure this release
+	// lacks included: that is how a client tells a contract skew.
+	dataSrv, err := BuildHTTPServer(cfg.API.Server.Data, middleware.ServerVersion(meta.Version, dataMux), deps.Logger)
 	if err != nil {
 		return nil, nil, err
 	}
-	iamSrv, err := BuildHTTPServer(cfg.API.Server.IAM, iamMux, deps.Logger)
+	iamSrv, err := BuildHTTPServer(cfg.API.Server.IAM, middleware.ServerVersion(meta.Version, iamMux), deps.Logger)
 	if err != nil {
 		return nil, nil, err
 	}

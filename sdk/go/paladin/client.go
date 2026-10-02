@@ -38,6 +38,9 @@ const (
 	HeaderUserAgent = "User-Agent"
 	// HeaderRetryAfter is how the server asks a client to wait, in seconds.
 	HeaderRetryAfter = "Retry-After"
+	// HeaderServerVersion is the server's release on every response, an
+	// error included, so a client can name both sides of a contract skew.
+	HeaderServerVersion = "X-Paladin-Version"
 
 	bearerScheme = "Bearer"
 )

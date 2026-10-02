@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -103,7 +105,8 @@ func routed(t *testing.T, mux *http.ServeMux, path string) bool {
 	t.Helper()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, nil)
 	_, pattern := mux.Handler(req)
-	return pattern != ""
+	// The catch-all answers what is not mounted; it does not count.
+	return pattern != "" && pattern != middleware.UnknownProcedurePattern
 }
 
 func TestAdminMux_MountsEveryAdminService(t *testing.T) {

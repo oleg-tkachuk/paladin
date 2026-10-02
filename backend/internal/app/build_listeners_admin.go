@@ -261,6 +261,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	}
 
 	mux := http.NewServeMux()
+	// See AssembleAPIMuxes.
+	mux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(mux)
 	mux.Handle(paladinadminv1connect.NewBackendServiceHandler(admin.NewBackendServer(backendH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewBucketServiceHandler(admin.NewBucketServer(bucketV2H), adminOpts))
@@ -379,7 +381,8 @@ func BuildAdminListener(ctx context.Context, deps *SharedDeps, meta BuildMeta) (
 		return HTTPListener{}, nil, err
 	}
 	cfg := deps.Cfg
-	srv, err := BuildHTTPServer(cfg.Admin.Server, mux, deps.Logger)
+	// See BuildAPIListeners: every response names the release.
+	srv, err := BuildHTTPServer(cfg.Admin.Server, middleware.ServerVersion(meta.Version, mux), deps.Logger)
 	if err != nil {
 		return HTTPListener{}, nil, err
 	}
