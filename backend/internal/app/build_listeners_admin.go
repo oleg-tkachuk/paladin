@@ -137,6 +137,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			cfg.Capability.ChargePerRequestAmount,
 			cfg.Capability.ChargePerRequestUnit,
 			chargeEm,
+			auth.WithDPoP(deps.Capability.DPoP),
 		)
 	} else {
 		capAdmin = auth.CapabilityInterceptor(nil, "", nil, 0, "")

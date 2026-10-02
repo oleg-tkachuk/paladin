@@ -166,7 +166,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// token stays additive — the existing principal wins.
 		// The taint lookup is what gives AllowTaintedRead something to act
 		// on: a capability without it is refused reads of flagged objects.
-		var capOpts []auth.CapabilityOption
+		// DPoP binds a capability to the key that presents it.
+		capOpts := []auth.CapabilityOption{auth.WithDPoP(deps.Capability.DPoP)}
 		if taintH != nil {
 			capOpts = append(capOpts, auth.WithTaintLookup(taintH.Tainted))
 		}

@@ -95,6 +95,9 @@ type IssueRequest struct {
 	TTL        time.Duration // 0 → DefaultTTL
 	NotBefore  time.Time     // zero → now
 	Generation int64         // 0 → 1
+	// ConfirmationJKT binds the capability to the key with this RFC 7638
+	// thumbprint (KeyThumbprint); empty issues a bearer capability.
+	ConfirmationJKT string
 }
 
 // Issue mints a top-level capability. Generation defaults to 1; see
@@ -119,6 +122,9 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Capability, stri
 	if err := req.Caveats.Validate(); err != nil {
 		return nil, "", err
 	}
+	if err := validateThumbprint(req.ConfirmationJKT); err != nil {
+		return nil, "", err
+	}
 
 	now := i.clock().UTC()
 	expires, err := i.expiry(now, req.TTL)
@@ -126,14 +132,15 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Capability, stri
 		return nil, "", err
 	}
 	cap := Capability{
-		ID:         uuid.New(),
-		Issuer:     i.issuerName,
-		Subject:    req.Subject,
-		Audience:   req.Audience,
-		Caveats:    req.Caveats,
-		IssuedAt:   now,
-		ExpiresAt:  expires,
-		Generation: req.Generation,
+		ID:              uuid.New(),
+		Issuer:          i.issuerName,
+		Subject:         req.Subject,
+		Audience:        req.Audience,
+		Caveats:         req.Caveats,
+		IssuedAt:        now,
+		ExpiresAt:       expires,
+		Generation:      req.Generation,
+		ConfirmationJKT: req.ConfirmationJKT,
 	}
 	if cap.Generation == 0 {
 		cap.Generation = 1
@@ -206,6 +213,10 @@ type DelegateRequest struct {
 	InheritCaveats bool
 	TTL            time.Duration
 	NotBefore      time.Time
+	// ConfirmationJKT binds the child to a key — typically the sub-agent's.
+	// Empty keeps the parent's binding, if it has one: a bound parent's
+	// child is always bound.
+	ConfirmationJKT string
 }
 
 // Delegate mints a child capability narrower than the supplied parent.
@@ -233,6 +244,9 @@ func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (*Capability
 	if err := req.Caveats.Validate(); err != nil {
 		return nil, "", err
 	}
+	if err := validateThumbprint(req.ConfirmationJKT); err != nil {
+		return nil, "", err
+	}
 
 	now := i.clock().UTC()
 	if !now.Before(req.Parent.ExpiresAt) {
@@ -255,15 +269,19 @@ func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (*Capability
 	}
 
 	child := Capability{
-		ID:         uuid.New(),
-		Issuer:     i.issuerName,
-		Subject:    req.Subject,
-		Audience:   req.Audience,
-		Caveats:    req.Caveats,
-		IssuedAt:   now,
-		ExpiresAt:  expires,
-		ParentID:   req.Parent.ID,
-		Generation: 1,
+		ID:              uuid.New(),
+		Issuer:          i.issuerName,
+		Subject:         req.Subject,
+		Audience:        req.Audience,
+		Caveats:         req.Caveats,
+		IssuedAt:        now,
+		ExpiresAt:       expires,
+		ParentID:        req.Parent.ID,
+		Generation:      1,
+		ConfirmationJKT: req.ConfirmationJKT,
+	}
+	if child.ConfirmationJKT == "" {
+		child.ConfirmationJKT = req.Parent.ConfirmationJKT
 	}
 	if err := setNotBefore(&child, req.NotBefore); err != nil {
 		return nil, "", err

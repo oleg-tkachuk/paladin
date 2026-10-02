@@ -177,10 +177,11 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 			Subject:  caller.Subject,
 			Type:     capability.PrincipalUser,
 		},
-		Audience:  req.Msg.GetAudience(),
-		Caveats:   caveats,
-		TTL:       ttl,
-		NotBefore: nbf,
+		Audience:        req.Msg.GetAudience(),
+		Caveats:         caveats,
+		TTL:             ttl,
+		NotBefore:       nbf,
+		ConfirmationJKT: req.Msg.GetConfirmationJkt(),
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -265,13 +266,14 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 	}
 
 	cap, token, err := h.issuer.Delegate(ctx, capability.DelegateRequest{
-		Parent:         *parent,
-		Subject:        delegSubj,
-		Audience:       audience,
-		Caveats:        caveats,
-		InheritCaveats: inherit,
-		TTL:            ttl,
-		NotBefore:      nbf,
+		Parent:          *parent,
+		Subject:         delegSubj,
+		Audience:        audience,
+		Caveats:         caveats,
+		InheritCaveats:  inherit,
+		TTL:             ttl,
+		NotBefore:       nbf,
+		ConfirmationJKT: req.Msg.GetConfirmationJkt(),
 	})
 	if err != nil {
 		switch {
@@ -555,14 +557,15 @@ func caveatsToProto(c capability.Caveats) *adminv1.CapabilityCaveats {
 
 func capabilityToProto(c *capability.Capability) *adminv1.Capability {
 	out := &adminv1.Capability{
-		Id:         c.ID.String(),
-		Issuer:     c.Issuer,
-		Subject:    principalToProto(c.Subject),
-		Audience:   c.Audience,
-		Caveats:    caveatsToProto(c.Caveats),
-		IssuedAt:   timestamppb.New(c.IssuedAt),
-		ExpiresAt:  timestamppb.New(c.ExpiresAt),
-		Generation: c.Generation,
+		Id:              c.ID.String(),
+		Issuer:          c.Issuer,
+		Subject:         principalToProto(c.Subject),
+		Audience:        c.Audience,
+		Caveats:         caveatsToProto(c.Caveats),
+		IssuedAt:        timestamppb.New(c.IssuedAt),
+		ExpiresAt:       timestamppb.New(c.ExpiresAt),
+		Generation:      c.Generation,
+		ConfirmationJkt: c.ConfirmationJKT,
 	}
 	if !c.NotBefore.IsZero() {
 		out.NotBefore = timestamppb.New(c.NotBefore)

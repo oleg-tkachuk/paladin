@@ -170,6 +170,35 @@ total, not 40.00.
 This is the property that makes the model safe to hand to an agent: it can
 attenuate itself, but never escalate.
 
+## Bind a capability to a key (DPoP)
+
+A capability is a bearer token unless it is bound: whoever holds it can use
+it, and an agent's tokens end up in prompts, tool output and logs. Binding it
+to a key the agent keeps — RFC 9449 DPoP — makes a copy useless without the
+key:
+
+```go
+jkt, _ := capability.KeyThumbprint(agentKey.Public()) // Ed25519 or P-256
+cap, token, _ := issuer.Issue(ctx, capability.IssueRequest{ /* … */ ConfirmationJKT: jkt})
+
+// Client: a fresh proof per request, signed over its method, URL and token.
+proof, _ := capability.NewDPoPProof(agentKey, "POST", url, token, time.Now())
+
+// Server, after Verify:
+dpop := &capability.DPoPVerifier{Replay: capability.NewMemoryReplayCache(0)}
+err := dpop.Check(cap, capability.DPoPRequest{Proof: proof, Method: "POST", URL: url, Token: token})
+```
+
+The token carries the thumbprint as `cnf.jkt` (RFC 7800), omitted when
+unbound, so unbound tokens are byte-for-byte what they were. A delegated
+child inherits its parent's binding or takes the sub-agent's own key, and
+`Narrows` refuses a child that drops it. `Check` refuses a proof from another
+key, for another method, URL or token, outside a minute of the verifier's
+clock, or seen before; every refusal matches `ErrInvalidSignature`. The
+replay cache is in-process: behind several replicas, a proof replayed to a
+different one inside the window is not caught — share a `ReplayCache` to
+close that.
+
 ## Charge against the budget
 
 ```go
@@ -294,6 +323,8 @@ the default posture.
   wire-format drift, because tokens outlive deployments.
 - **Charges are atomic.** A failed side effect, or a rejection by any
   ceiling, leaves every counter *and* the ledger untouched.
+- **A bound token needs its key.** A key-bound capability is refused without
+  a fresh DPoP proof from that key, and its children stay bound.
 - **Delegation never widens.** A fuzz test (`FuzzNarrowsNeverWidens`) checks
   that whatever `Narrows` accepts reaches no resource the parent cannot.
 - **No hidden dependencies.** The resolved dependency graph contains no

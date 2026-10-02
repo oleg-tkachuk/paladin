@@ -24,6 +24,8 @@ dependencies = [
 # Verifies downloads whose recorded checksum is CRC32C; without it they are
 # not verified. Google's own implementation: the standard library has none.
 crc32c = ["google-crc32c>=1.9.0,<2"]
+# Signs DPoP proofs for key-bound capabilities (paladin.dpop).
+dpop = ["cryptography>=41"]
 
 [dependency-groups]
 dev = [
