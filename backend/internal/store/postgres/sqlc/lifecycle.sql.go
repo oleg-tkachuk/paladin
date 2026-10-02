@@ -12,8 +12,8 @@ import (
 )
 
 const iterateObjectsForLifecycle = `-- name: IterateObjectsForLifecycle :many
-SELECT o.id, o.state, o.content_type, o.size_bytes,
-       o.metadata, o.tags, o.created_at, o.committed_at
+SELECT o.id, o.path, o.state, o.content_type, o.size_bytes, o.external_ref,
+       o.metadata, o.tags, o.created_at, o.updated_at, o.committed_at
 FROM objects o
 WHERE o.tenant_id = $1
   AND o.collection_id = (SELECT c.id FROM collections c
@@ -26,18 +26,23 @@ LIMIT $4
 
 type IterateObjectsForLifecycleRow struct {
 	ID          pgtype.UUID        `json:"id"`
+	Path        string             `json:"path"`
 	State       ObjectState        `json:"state"`
 	ContentType string             `json:"content_type"`
 	SizeBytes   *int64             `json:"size_bytes"`
+	ExternalRef *string            `json:"external_ref"`
 	Metadata    []byte             `json:"metadata"`
 	Tags        []byte             `json:"tags"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	CommittedAt pgtype.Timestamptz `json:"committed_at"`
 }
 
 // Streams a window of AVAILABLE-only objects under (tenant, collection)
 // newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
 // Lifecycle worker walks via repeated calls until empty page.
+// Every column cel.ObjectVars projects, so a rule's match sees what a
+// ListObjects filter sees.
 func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, name string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error) {
 	rows, err := q.db.Query(ctx, iterateObjectsForLifecycle,
 		tenantID,
@@ -54,12 +59,15 @@ func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtyp
 		var i IterateObjectsForLifecycleRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.Path,
 			&i.State,
 			&i.ContentType,
 			&i.SizeBytes,
+			&i.ExternalRef,
 			&i.Metadata,
 			&i.Tags,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 			&i.CommittedAt,
 		); err != nil {
 			return nil, err
