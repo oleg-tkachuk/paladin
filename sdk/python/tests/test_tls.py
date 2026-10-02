@@ -71,6 +71,7 @@ def serve(tmp_path: Path) -> Iterator[Any]:
         ca_file = tmp_path / f"ca-{server.serial}.pem"
         ca_file.write_bytes(ca.pem)
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(cert, key)
         context.load_verify_locations(ca_file)
         context.verify_mode = ssl.CERT_REQUIRED
