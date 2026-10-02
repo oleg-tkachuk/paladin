@@ -152,6 +152,38 @@ p, err := paladin.Connect(endpoints, paladin.WithTokens(session), paladin.WithTr
 | `WithTransferHTTPClient(c)` | Sends through `c` — a proxy, a TLS configuration, instrumentation. Redirects are still refused. |
 | `*TransferError` | A request storage refused, or answered with a redirect: `Method`, `Host` (the URL's query is the signature and is not kept), `Status`, and the first 512 bytes of the `Body`. |
 
+### TLS and workload identity
+
+`WithTLS` makes the client's connections to Paladin, and `WithTransferTLS` a
+`Transfer`'s connections to storage, with a CA bundle, a client certificate
+and an expected server identity. The files are read when the client is built
+and again whenever they change on disk, so certificates a workload-identity
+agent rotates are picked up without a restart; a connection already open
+keeps the one it was made with.
+
+```go
+id := paladin.TLS{
+	CAFile:   "/var/run/secrets/spiffe/bundle.pem",
+	CertFile: "/var/run/secrets/spiffe/svid.pem",
+	KeyFile:  "/var/run/secrets/spiffe/svid-key.pem",
+	ServerID: "spiffe://cluster.local/ns/paladin/sa/paladin-core",
+}
+p, err := paladin.Connect(endpoints, paladin.WithTokens(session), paladin.WithTLS(id))
+```
+
+| `TLS` field | Does |
+| --- | --- |
+| `CAFile` | PEM bundle the server's chain must reach; empty trusts the system roots. `ErrNoCA` when it holds no certificate. |
+| `CertFile`, `KeyFile` | The client certificate for mutual TLS; both or neither (`ErrTLSKeyPair`). |
+| `ServerID` | The SPIFFE ID the server must present. Its certificate is verified as an X.509-SVID against `CAFile` as that trust domain's bundle, by the SPIFFE project's `go-spiffe`, instead of against the host name, which an SVID does not carry. `ErrServerID` on a mismatch or a malformed ID; `ErrServerIDNeedsCA` without `CAFile`. |
+| `VerifyPeer` | Runs on the server's leaf certificate after the built-in checks; its error refuses the connection. |
+| `ReloadInterval` | How often the files are checked for a change (`DefaultTLSReloadInterval`, 30s). A rotation caught half-written — a new certificate beside the old key — keeps the last good pair until the next check. |
+
+`(TLS).Transport()` returns the `*http.Transport` both options build, for a
+client of your own; `WithTLS` with `WithHTTPClient` is `ErrTLSAndHTTP`.
+These connections are made directly: a proxy from the environment would
+make the TLS connection itself, without the files.
+
 ### Header names
 
 `HeaderAuthorization`, `HeaderAPIToken`, `HeaderCapability` and

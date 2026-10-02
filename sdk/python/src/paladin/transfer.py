@@ -19,6 +19,8 @@ from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import pyqwest
 
+from paladin.tls import TLS
+
 DEFAULT_TRANSFER_CONNECT_TIMEOUT = 10.0
 """Seconds to open a connection to storage."""
 DEFAULT_TRANSFER_READ_TIMEOUT = 30.0
@@ -111,6 +113,9 @@ class Transfer:
     ``scheme://host[:port]``; other origins go as signed. ``rewrite`` is the
     general form, any URL to any URL, the signed Host still kept.
 
+    ``tls`` makes the connections to storage with a CA bundle and a client
+    certificate that may rotate on disk (see ``TLS``).
+
     ``transport`` replaces the ``pyqwest.SyncHTTPTransport`` built here — for a
     proxy or TLS settings. Build it with ``follow_redirects=False``: a
     transport that follows them cannot be stopped from here.
@@ -127,6 +132,7 @@ class Transfer:
         connect_timeout: float = DEFAULT_TRANSFER_CONNECT_TIMEOUT,
         read_timeout: float = DEFAULT_TRANSFER_READ_TIMEOUT,
         pool_max_idle_per_host: int = DEFAULT_TRANSFER_POOL_MAX_IDLE_PER_HOST,
+        tls: TLS | None = None,
         transport: Any = None,
     ) -> None:
         if split_horizon is not None and rewrite is not None:
@@ -134,13 +140,20 @@ class Transfer:
         if split_horizon is not None:
             rewrite = _split_horizon(*split_horizon)
         self._rewrite = rewrite
+        if tls is not None and transport is not None:
+            raise ValueError("tls builds the transport; give one or the other")
         if transport is None:
-            transport = pyqwest.SyncHTTPTransport(
-                connect_timeout=connect_timeout,
-                read_timeout=read_timeout,
-                pool_max_idle_per_host=pool_max_idle_per_host,
-                follow_redirects=False,
-                enable_otel=False,
+            settings: dict[str, Any] = {
+                "connect_timeout": connect_timeout,
+                "read_timeout": read_timeout,
+                "pool_max_idle_per_host": pool_max_idle_per_host,
+                "follow_redirects": False,
+                "enable_otel": False,
+            }
+            transport = (
+                tls.sync_transport(**settings)
+                if tls is not None
+                else pyqwest.SyncHTTPTransport(**settings)
             )
         self._client = pyqwest.SyncClient(transport)
 

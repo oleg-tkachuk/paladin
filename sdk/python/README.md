@@ -161,6 +161,36 @@ p = paladin.connect(endpoints, token_source=session, transfer=transfer)
 | `connect(…, transfer=t)` | Every `upload` and `download` through that data plane uses `t`; without it, a shared default. |
 | `TransferError` | A request storage refused, or answered with a redirect: `method`, `host` (the URL's query is the signature and is not kept), `status`, and the first 512 bytes of the `body`. |
 
+### TLS
+
+`TLS` makes connections with a CA bundle and a client certificate, re-read
+whenever they change on disk, so certificates a workload-identity agent
+rotates are picked up without a restart. Give it to `connect` for the
+connections to Paladin, and to a `Transfer` for those to storage:
+
+```python
+identity = paladin.TLS(
+    ca_file="/var/run/secrets/spiffe/bundle.pem",
+    cert_file="/var/run/secrets/spiffe/svid.pem",
+    key_file="/var/run/secrets/spiffe/svid-key.pem",
+)
+p = paladin.connect(endpoints, token_source=session, tls=identity,
+                    transfer=paladin.Transfer(tls=identity))
+```
+
+| Name | Does |
+| --- | --- |
+| `TLS(*, ca_file=None, cert_file=None, key_file=None, reload_interval=30.0)` | `ca_file` is the only trust when given; without it the system roots. `cert_file` and `key_file` are both or neither (`ValueError`). The files are checked for a change at most every `reload_interval` seconds (`DEFAULT_TLS_RELOAD_INTERVAL`); a rotation caught half-written keeps the last good files. |
+| `connect(…, tls=t)`, `connect_async(…, tls=t)` | The connections to Paladin. `tls` builds the `http_client`; giving both is a `ValueError`. |
+| `Transfer(tls=t)` | The connections to storage. Not with `transport=`. |
+| `t.sync_transport(**settings)`, `t.async_transport(**settings)` | The `pyqwest` transports these build, for a client of your own; `settings` reach each `pyqwest` transport built. |
+
+**Not in the Python SDK: a check of the server's SPIFFE ID.** The Go SDK's
+`TLS.ServerID` verifies the server by a URI SAN instead of its host name. The
+HTTP stack connect-python runs on (`pyqwest`, over Rust's `reqwest`) offers
+no hook into peer verification, so here the server's certificate is verified
+against the bundle and the host name, and must name the host it is reached at.
+
 ### Constants
 
 `HEADER_AUTHORIZATION`, `HEADER_API_TOKEN`, `HEADER_CAPABILITY` and

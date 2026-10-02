@@ -27,6 +27,7 @@ crc32c = ["google-crc32c>=1.9.0,<2"]
 
 [dependency-groups]
 dev = [
+    "cryptography==50.0.2",
     "google-crc32c==1.9.0",
     # Deliberately not the latest: its protoc's version is the oldest protobuf
     # runtime the stubs accept (ValidateProtobufRuntimeVersion), so it is the
