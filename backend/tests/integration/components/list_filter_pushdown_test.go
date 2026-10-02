@@ -28,6 +28,7 @@ import (
 // page rather than an error or a wrong row.
 
 func TestPushdown_Backends(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
@@ -88,6 +89,7 @@ func names(bs []admindomain.StorageBackend) []string {
 }
 
 func TestPushdown_Tenants(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
@@ -134,6 +136,7 @@ func TestPushdown_Tenants(t *testing.T) {
 }
 
 func TestPushdown_Operations(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	tenantID, _ := mkTenant(t, ctx, pool, "shared")
@@ -165,6 +168,7 @@ func TestPushdown_Operations(t *testing.T) {
 }
 
 func TestPushdown_Collections(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	tenantID, _ := mkTenant(t, ctx, pool, "shared")
@@ -204,6 +208,7 @@ func TestPushdown_Collections(t *testing.T) {
 }
 
 func TestPushdown_Users(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	tenantID, _ := mkTenant(t, ctx, pool, "shared")

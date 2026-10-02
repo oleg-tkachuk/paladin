@@ -31,6 +31,7 @@ import (
 // the release-on-stop guarantee, the AcquiredConns / Close assertions below
 // time out — exactly the production failure.
 func TestShutdownReleasesWatcherConns(t *testing.T) {
+	t.Parallel()
 	pool := startPostgres(t)
 	log := zap.NewNop()
 

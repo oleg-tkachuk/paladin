@@ -19,6 +19,7 @@ import (
 // the reaper only terminal states. One sat RUNNING for two days while the
 // identical operation, retried nine minutes later, finished in 2.5 seconds.
 func TestReclaimStaleOperations(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
@@ -72,6 +73,7 @@ func TestReclaimStaleOperations(t *testing.T) {
 // so it has to actually move updated_at — and touch nothing else, because
 // metadata carries progress counters the executor writes concurrently.
 func TestTouchOperationKeepsItOutOfReclaim(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
@@ -106,6 +108,7 @@ func TestTouchOperationKeepsItOutOfReclaim(t *testing.T) {
 // A terminal operation must never be resurrected by the reclaim, whatever its
 // age — the query keys on state, and getting that wrong would rewrite history.
 func TestReclaimLeavesTerminalOperationsAlone(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
@@ -136,6 +139,7 @@ func TestReclaimLeavesTerminalOperationsAlone(t *testing.T) {
 // survive metadata that is not a progress snapshot at all, which is what an
 // operation that died before its first report leaves behind.
 func TestReclaimCarriesLastProgress(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, pool, "shared")

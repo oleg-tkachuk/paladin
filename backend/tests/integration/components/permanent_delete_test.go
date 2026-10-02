@@ -97,6 +97,7 @@ func permanentDeleteHandler(pool *pgxpool.Pool, st objecth.Storage) *objecth.Han
 }
 
 func TestPermanentDeleteRemovesRowBytesAndDebtInOrder(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -129,6 +130,7 @@ func TestPermanentDeleteRemovesRowBytesAndDebtInOrder(t *testing.T) {
 }
 
 func TestPermanentDeleteKeepsTheDebtWhenStorageFails(t *testing.T) {
+	t.Parallel()
 	// The delete IS committed — row gone, event enqueued — and the bytes are
 	// owed rather than lost. Returning an error here would tell the client to
 	// retry a delete that already succeeded, and the retry would get NotFound.
@@ -163,6 +165,7 @@ func TestPermanentDeleteKeepsTheDebtWhenStorageFails(t *testing.T) {
 }
 
 func TestPermanentDeleteRefusesAVersionMismatch(t *testing.T) {
+	t.Parallel()
 	// Optimistic concurrency: a stale resource_version must leave everything
 	// alone — no row removal, no debt, no event, and no storage call.
 	ctx := context.Background()

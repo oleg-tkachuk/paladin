@@ -20,6 +20,7 @@ import (
 // (write=true) resolution returns ErrBucketProvisioning; reads still resolve;
 // and once the reconciler marks it 'ready' writes resolve too.
 func TestBucketProvisioningGate(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 

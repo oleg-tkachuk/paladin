@@ -19,6 +19,7 @@ import (
 // SQL: comparing the version in Go before writing would be a TOCTOU with extra
 // steps.
 func TestTenantBudgetSetOCC(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	t.Run("first write creates at version 0", func(t *testing.T) {

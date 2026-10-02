@@ -229,6 +229,7 @@ func subtestBackendPastThePage(ctx context.Context, pool *pgxpool.Pool) func(*te
 // under its own backend name or uuid-derived prefix, and each asserts only
 // over rows it created.
 func TestSearchPushdownContract(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 
@@ -241,6 +242,7 @@ func TestSearchPushdownContract(t *testing.T) {
 // The other half: a match that sorts past the page, which only a SQL predicate
 // can reach.
 func TestSearchFindsAMatchPastThePage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 

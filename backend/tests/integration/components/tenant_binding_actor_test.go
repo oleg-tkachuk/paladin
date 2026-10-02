@@ -26,6 +26,7 @@ import (
 // The unit test pins the extraction; this pins the column, which is the thing
 // an operator reads.
 func TestTenantCreate_RecordsBindingActor(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 

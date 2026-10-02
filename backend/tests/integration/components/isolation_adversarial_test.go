@@ -37,6 +37,7 @@ func mkTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, layout stri
 // direct INSERT that bypasses the application layer. Without this, a bug or a
 // compromised app role could route B's writes into A's dedicated bucket.
 func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 
@@ -88,6 +89,7 @@ func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
 // none (closed-by-default). Guards the last-line-of-defense that a missing or
 // wrong GUC cannot leak another tenant's rows.
 func TestAdversarial_RLSFiltersCrossTenantObjects(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 
@@ -161,6 +163,7 @@ func TestAdversarial_RLSFiltersCrossTenantObjects(t *testing.T) {
 // presign LookupBucket — otherwise a dedicated tenant could push a
 // multipart/streaming upload into a bucket S3 doesn't have yet.
 func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 
@@ -206,6 +209,7 @@ func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
 // claiming A's slug in its principal. Verifies the slug genuinely flows from
 // the tenants row, not the request.
 func TestAdversarial_CedarAuthoritativeSlugIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 

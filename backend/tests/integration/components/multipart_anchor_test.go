@@ -20,6 +20,7 @@ import (
 // reaper) targeting where the parts actually live after an operator rebinds
 // the collection to another backend mid-upload.
 func TestMultipartSessionAnchorsBackend(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)

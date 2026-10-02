@@ -33,6 +33,7 @@ import (
 // `>=` differs only for a row expiring in the exact microsecond the census
 // reads the clock, and no test can place a row there. See BACKLOG.
 func TestCredentialCensuses_ClassifyEachRowExactlyOnce(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 

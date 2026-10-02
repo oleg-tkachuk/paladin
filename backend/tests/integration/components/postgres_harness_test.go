@@ -4,13 +4,17 @@ package components
 
 import (
 	"context"
+	"fmt"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Each startPostgres is its own database: what one test writes, another does
 // not see, and both carry the full schema. The shared server must not turn
 // into shared state.
 func TestStartPostgresIsolatesEachCall(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	a, b := startPostgres(t), startPostgres(t)
 
@@ -46,5 +50,30 @@ func TestStartPostgresIsolatesEachCall(t *testing.T) {
 	}
 	if verA == 0 || verA != verB {
 		t.Errorf("migration versions %d and %d: want the same, non-zero", verA, verB)
+	}
+}
+
+// parallelClones is more tests than `go test` runs at once on most machines,
+// so the clones below overlap the way a parallel package run does.
+const parallelClones = 24
+
+// Parallel tests clone the template at the same time and each hold pools
+// open. Neither may fail for the other: not the clone ("source database is
+// being accessed by other users"), not the connection limit.
+func TestStartPostgresClonesInParallel(t *testing.T) {
+	t.Parallel()
+	for i := range parallelClones {
+		t.Run(fmt.Sprintf("clone-%d", i), func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			pool := startPostgres(t)
+			admin := startPostgres(t)
+			rls := rlsPool(t, ctx, admin)
+			for _, p := range []*pgxpool.Pool{pool, admin, rls} {
+				if err := p.Ping(ctx); err != nil {
+					t.Fatalf("ping: %v", err)
+				}
+			}
+		})
 	}
 }

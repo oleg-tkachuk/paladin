@@ -84,6 +84,7 @@ func assertEnvelope(t *testing.T, body []byte, wantType string) {
 // ─── Kafka (redpanda, SASL/SCRAM-SHA-256) ────────────────────────────────────
 
 func TestKafkaSinkDelivery_SCRAM(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration")
 	}
@@ -159,6 +160,7 @@ func TestKafkaSinkDelivery_SCRAM(t *testing.T) {
 // ─── RabbitMQ ────────────────────────────────────────────────────────────────
 
 func TestRabbitMQSinkDelivery(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration")
 	}
@@ -232,6 +234,7 @@ func TestRabbitMQSinkDelivery(t *testing.T) {
 // ─── SQS (elasticmq) ─────────────────────────────────────────────────────────
 
 func TestSQSSinkDelivery(t *testing.T) {
+	// Not parallel: t.Setenv and t.Parallel cannot be combined.
 	if testing.Short() {
 		t.Skip("integration")
 	}
@@ -344,6 +347,7 @@ func genServerCert(t *testing.T) (certPEM, keyPEM string) {
 // can't validate it). Closes the "TLS handshake against a certs-mounted
 // broker" tail.
 func TestKafkaSinkDelivery_SASL_SSL(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration")
 	}
@@ -488,6 +492,7 @@ func genLeaf(t *testing.T, ca *x509.Certificate, caKey *ecdsa.PrivateKey, cn str
 // keypair must fail the handshake. Closes the "AMQPS with TLS client certs"
 // tail.
 func TestRabbitMQSinkDelivery_AMQPSClientCert(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration")
 	}
@@ -602,6 +607,7 @@ ssl_options.fail_if_no_peer_cert = true
 // the sink delivers using tls_client_cert/key. Negative: the same transport
 // minus the client keypair is refused at the handshake.
 func TestKafkaSinkDelivery_MTLSRequireClientAuth(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration")
 	}
@@ -750,6 +756,7 @@ redpanda:
 // confirms guarantee no silent losses: every reported success is on the
 // queue afterwards.
 func TestRabbitMQSinkDelivery_ConnectionDropRedial(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("integration")
 	}

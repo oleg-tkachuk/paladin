@@ -15,6 +15,7 @@ import (
 // bucket text and names the bucket for a collection scope, and a write to the
 // column notifies every listener to drop its cache.
 func TestBucketPolicyLayer(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	pool := startPostgres(t)

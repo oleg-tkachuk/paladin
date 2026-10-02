@@ -58,6 +58,7 @@ func newTokenStore(t *testing.T, pool *pgxpool.Pool) *tokenstore.Store {
 // Insert → FindByDigest, and that a miss is the sentinel rather than a
 // wrapped pgx error the caller cannot branch on.
 func TestAPITokenRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
@@ -119,6 +120,7 @@ func TestAPITokenRoundTrip(t *testing.T) {
 // destinations, every List call errored and the console showed no tokens over
 // a populated table.
 func TestAPITokenListByTenant(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
@@ -225,6 +227,7 @@ func TestAPITokenListByTenant(t *testing.T) {
 // Insert: revocation is recorded and idempotent, and TouchLastUsed writes
 // through the tenant GUC it sets for itself.
 func TestAPITokenRevokeAndTouch(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
@@ -277,6 +280,7 @@ func TestAPITokenRevokeAndTouch(t *testing.T) {
 // grace argument would delete tokens the operator can still see in the
 // console, so the assertion is on both sides of the line.
 func TestAPITokenPurgeExpired(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
@@ -313,6 +317,7 @@ func TestAPITokenPurgeExpired(t *testing.T) {
 // inherit whatever the request principal set, so a token belonging to another
 // tenant must be invisible even when its id or digest is known exactly.
 func TestAPITokenRLSIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
 	tenantA, _ := mkTenant(t, ctx, admin, "shared")

@@ -38,6 +38,7 @@ import (
 )
 
 func TestIdempotencyReplayAgainstPartitionedTable(t *testing.T) {
+	// Not parallel: sets goose's package-level dialect and filesystem.
 	ctx := context.Background()
 
 	pgC, err := tcpostgres.Run(ctx,

@@ -80,6 +80,7 @@ func purgedEventCount(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ten
 // — the objects row was deleted in the same transaction that wrote it — so
 // dropping a row here re-creates the leak this fixes.
 func TestPurgeDrainerKeepsDebtWhenStorageFails(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -117,6 +118,7 @@ func TestPurgeDrainerKeepsDebtWhenStorageFails(t *testing.T) {
 // TestPurgeDrainerSettlesAndAnnouncesOnSuccess covers the terminal path: the
 // debt clears and paladin.object.purged fires, in that order and atomically.
 func TestPurgeDrainerSettlesAndAnnouncesOnSuccess(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -153,6 +155,7 @@ func TestPurgeDrainerSettlesAndAnnouncesOnSuccess(t *testing.T) {
 // second sweep has to be forced past next_attempt_at, which is what the manual
 // reset below stands in for — a real deployment just waits.
 func TestPurgeDrainerRetriesUntilSuccess(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -208,6 +211,7 @@ func (failingSubscriptionStore) Get(context.Context, uuid.UUID) (admindomain.Eve
 // the bytes being gone" — the inverse, silently settling, breaks a promise the
 // API makes.
 func TestPurgeDrainerKeepsDebtWhenTheAnnouncementFails(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)

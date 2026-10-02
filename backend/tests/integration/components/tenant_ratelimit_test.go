@@ -19,6 +19,7 @@ import (
 // and the read of the previous bucket happen in one statement, so two callers
 // cannot both read a count that neither has incremented yet.
 func TestTenantRateBucketsAreSharedAcrossCallers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
@@ -53,6 +54,7 @@ func TestTenantRateBucketsAreSharedAcrossCallers(t *testing.T) {
 
 // One tenant's traffic must not spend another's budget.
 func TestTenantRateBucketsAreIsolatedPerTenant(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	noisy, _ := mkTenant(t, ctx, pool, "shared")
@@ -77,6 +79,7 @@ func TestTenantRateBucketsAreIsolatedPerTenant(t *testing.T) {
 // The sweeper has to leave the working set alone: the window reads the current
 // and previous bucket, so deleting either would reset a live tenant's count.
 func TestTenantRateBucketSweepKeepsTheLiveWindow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
@@ -103,6 +106,7 @@ func TestTenantRateBucketSweepKeepsTheLiveWindow(t *testing.T) {
 // A row must not outlive its tenant: the counters are keyed by tenant id and
 // nothing else would ever clean them up after a purge.
 func TestTenantRateBucketsCascadeOnTenantDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	tenant, _ := mkTenant(t, ctx, pool, "shared")

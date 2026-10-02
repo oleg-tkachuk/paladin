@@ -58,6 +58,7 @@ func assertPlanAvoidsSeqScan(t *testing.T, plan, table, what string) {
 // PK scan has to skip ~19 rows for every one it keeps, which is the shape a
 // real tenant has.
 func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -108,6 +109,7 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 // looks for a small set of soft-deleted rows inside a large live table — the
 // case a partial index is for. Before it, this was a full scan of `objects`.
 func TestIndexUsage_ObjectsHardDeletable(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -133,6 +135,7 @@ func TestIndexUsage_ObjectsHardDeletable(t *testing.T) {
 // TestIndexUsage_MultipartReaper covers the schema baseline (001_initial_schema.sql) — an age predicate that
 // had no index at all on multipart_uploads.
 func TestIndexUsage_MultipartReaper(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -179,6 +182,7 @@ func TestIndexUsage_MultipartReaper(t *testing.T) {
 // reads the table to the end. That is a quiet tenant paying for everyone
 // else's volume, and it gets worse as the fleet grows.
 func TestIndexUsage_OperationsKeysetPagination(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -219,6 +223,7 @@ func TestIndexUsage_OperationsKeysetPagination(t *testing.T) {
 // pending deliveries by tenant; without tenant_id in a partial index the
 // grouping had to visit the heap for every pending row.
 func TestIndexUsage_OutboxDepthGauge(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)

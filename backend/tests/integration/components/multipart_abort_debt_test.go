@@ -16,6 +16,7 @@ import (
 // exactly that leak. The bucket FK was RESTRICT, so the hazard was understood
 // on one path and missed on the other two.
 func TestMultipartAbortDebt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 

@@ -103,6 +103,7 @@ func closeEnough(got, want float64) bool { return math.Abs(got-want) < 1e-9 }
 // refuses the call that would cross the cap, and a refused call does not
 // consume quota it then reports as spent.
 func TestBumpRequestEnforcesCap(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	for want := int64(1); want <= 3; want++ {
@@ -133,6 +134,7 @@ func TestBumpRequestEnforcesCap(t *testing.T) {
 // "reject everything" — the sense of the zero value is easy to invert and the
 // consequence is every capability without an explicit cap being unusable.
 func TestBumpRequestUnlimited(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 	for i := 0; i < 5; i++ {
 		if _, err := f.usage.BumpRequest(ctx, f.capID, 0); err != nil {
@@ -145,6 +147,7 @@ func TestBumpRequestUnlimited(t *testing.T) {
 // writes: the capability counter, the tenant aggregate, and the ledger row
 // that the billing surface reads.
 func TestChargeWritesLedgerAtomically(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	spent, err := f.usage.Charge(ctx, f.capID, 2.50, 0, "USD", f.tenant, "objects.put", "user:alice", nil)
@@ -184,6 +187,7 @@ func TestChargeWritesLedgerAtomically(t *testing.T) {
 // negative charge, which would bypass the floor-at-zero rule the explicit
 // refund paths enforce.
 func TestChargeRejectsNegative(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 	if _, err := f.usage.Charge(ctx, f.capID, -1, 0, "USD", f.tenant, "op", "actor", nil); err == nil {
 		t.Fatal("negative charge accepted")
@@ -196,6 +200,7 @@ func TestChargeRejectsNegative(t *testing.T) {
 // TestChargeCapExceededLeavesNothingBehind pins the per-capability cap and,
 // more importantly, that crossing it writes nothing at all.
 func TestChargeCapExceededLeavesNothingBehind(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	if _, err := f.usage.Charge(ctx, f.capID, 8, 10, "USD", f.tenant, "op", "actor", nil); err != nil {
@@ -222,6 +227,7 @@ func TestChargeCapExceededLeavesNothingBehind(t *testing.T) {
 // survive. Before the two shared a transaction this needed a compensating
 // refund, which is exactly the kind of thing that drifts.
 func TestChargeTenantBudgetExceededRollsBackCapability(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
@@ -249,6 +255,7 @@ func TestChargeTenantBudgetExceededRollsBackCapability(t *testing.T) {
 // the other side: if the outbox enqueue fails, the spend it describes must
 // not commit either.
 func TestChargeFanOutFailureRollsBackEverything(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	boom := errors.New("outbox unavailable")
@@ -273,6 +280,7 @@ func TestChargeFanOutFailureRollsBackEverything(t *testing.T) {
 // same tx as the counters, not a fresh connection — otherwise the outbox rows
 // would commit independently and ADR-0003's atomicity would be nominal only.
 func TestChargeFanOutRunsOnTheChargeTransaction(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	var sawSpend float64
@@ -295,6 +303,7 @@ func TestChargeFanOutRunsOnTheChargeTransaction(t *testing.T) {
 // TestChargeWithoutTenantSkipsLedger pins the documented shape of the
 // no-tenant path: the capability counter still moves, but nothing bills.
 func TestChargeWithoutTenantSkipsLedger(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	if _, err := f.usage.Charge(ctx, f.capID, 1.25, 0, "USD", uuid.Nil, "op", "actor", nil); err != nil {
@@ -312,6 +321,7 @@ func TestChargeWithoutTenantSkipsLedger(t *testing.T) {
 // anything is written — a ledger denominated in a unit nothing can convert is
 // unusable for invoicing.
 func TestChargeRejectsUnknownUnitCode(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 	if _, err := f.usage.Charge(ctx, f.capID, 1, 0, "XYZ", f.tenant, "op", "actor", nil); err == nil {
 		t.Fatal("unknown unit code accepted")
@@ -322,6 +332,7 @@ func TestChargeRejectsUnknownUnitCode(t *testing.T) {
 // rather than go negative: a negative counter is future budget granted for
 // free, and it compounds silently.
 func TestRefundsFloorAtZero(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	if _, err := f.usage.Charge(ctx, f.capID, 5, 0, "USD", f.tenant, "op", "actor", nil); err != nil {
@@ -365,6 +376,7 @@ func TestRefundsFloorAtZero(t *testing.T) {
 // actually use: a mid-cycle cap change that preserves spend, and a monthly
 // close that resets it.
 func TestTenantBudgetLifecycle(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	if _, err := f.usage.GetTenantBudget(ctx, f.tenant); !errors.Is(err, capability.ErrTenantBudgetNotFound) {
@@ -447,6 +459,7 @@ func TestTenantBudgetLifecycle(t *testing.T) {
 // threshold predicate wrong shows operators an empty alert list over tenants
 // that are actually near their cap.
 func TestListTenantBudgets(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	nearCap := f.tenant // will sit at 90%
@@ -526,6 +539,7 @@ func TestListTenantBudgets(t *testing.T) {
 // only; if it deleted live rows instead, running counters would silently reset
 // and callers would get their caps back.
 func TestUsageGetDeleteAndPurgeOrphans(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	if _, err := f.usage.Get(ctx, uuid.New()); !errors.Is(err, capability.ErrUsageNotFound) {
@@ -582,6 +596,7 @@ func TestUsageGetDeleteAndPurgeOrphans(t *testing.T) {
 // 005 makes the column NOT NULL DEFAULT 0 and rejects NaN, so both are now
 // unrepresentable rather than merely unlikely.
 func TestTenantBudgetCapCannotBeNullOrNaN(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
@@ -647,6 +662,7 @@ func TestTenantBudgetCapCannotBeNullOrNaN(t *testing.T) {
 // remains: every successful charge leaves a ledger row behind, and a store
 // cannot be built without the pool that makes that possible.
 func TestChargeAlwaysWritesTheLedger(t *testing.T) {
+	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
 	for i, amount := range []float64{1, 2.5, 0.001} {
@@ -665,6 +681,7 @@ func TestChargeAlwaysWritesTheLedger(t *testing.T) {
 // data-integrity change into a startup crash, which is the right trade for a
 // dependency the type cannot work correctly without.
 func TestUsageStoreRefusesANilPool(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		if recover() == nil {
 			t.Error("NewUsageStore accepted a nil pool")

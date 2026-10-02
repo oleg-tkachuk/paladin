@@ -119,6 +119,7 @@ func objectExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid
 // the state transition and its outbox rows commit (or roll back) as one
 // unit, so there is no committed-but-unenqueued window a crash could leak.
 func TestOutboxCrashWindow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -316,6 +317,7 @@ func objectEtag(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.U
 // overwrite an already-AVAILABLE row that a storage event promoted first,
 // nor re-fire on a second call (which would double-charge quota).
 func TestPromoteSequencerRace(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)

@@ -124,6 +124,7 @@ func (f lockFixture) deleteObject(ctx context.Context, bypass bool) error {
 // exists for. Every one of these is a different way of asking "can I get out
 // of this early", and the answer has to be no to all of them.
 func TestComplianceRetentionCannotBeWeakened(t *testing.T) {
+	t.Parallel()
 	ctx, f := newLockFixture(t)
 	far := time.Now().Add(365 * 24 * time.Hour).UTC().Truncate(time.Millisecond)
 
@@ -201,6 +202,7 @@ func TestComplianceRetentionCannotBeWeakened(t *testing.T) {
 // TestGovernanceRetentionYieldsToTheBypass pins the other mode: the same
 // protections, and one documented way out for a caller who holds the role.
 func TestGovernanceRetentionYieldsToTheBypass(t *testing.T) {
+	t.Parallel()
 	ctx, f := newLockFixture(t)
 	far := time.Now().Add(90 * 24 * time.Hour).UTC().Truncate(time.Millisecond)
 
@@ -238,6 +240,7 @@ func TestGovernanceRetentionYieldsToTheBypass(t *testing.T) {
 // the switch was never on — and nobody noticed, because no lock row had ever
 // been written for the trigger to fire on.
 func TestGovernanceBypassActuallyReachesTheTrigger(t *testing.T) {
+	t.Parallel()
 	ctx, f := newLockFixture(t)
 	if _, err := f.retain(t, ctx, "GOVERNANCE", time.Now().Add(30*24*time.Hour), false); err != nil {
 		t.Fatalf("set retention: %v", err)
@@ -264,6 +267,7 @@ func TestGovernanceBypassActuallyReachesTheTrigger(t *testing.T) {
 // expiry and no bypass, and it can be lifted — that combination is what makes
 // it the right answer to "preserve this until the matter closes".
 func TestLegalHoldIsAbsoluteAndReversible(t *testing.T) {
+	t.Parallel()
 	ctx, f := newLockFixture(t)
 
 	got, err := f.locks.SetLegalHold(ctx, f.tenant, f.versionID, true)
@@ -297,6 +301,7 @@ func TestLegalHoldIsAbsoluteAndReversible(t *testing.T) {
 // release the other. Both are reasons to keep the object; either one alone is
 // enough.
 func TestLegalHoldAndRetentionAreIndependent(t *testing.T) {
+	t.Parallel()
 	ctx, f := newLockFixture(t)
 	until := time.Now().Add(24 * time.Hour)
 
@@ -333,6 +338,7 @@ func TestLegalHoldAndRetentionAreIndependent(t *testing.T) {
 // retention control that never releases is a storage leak with a compliance
 // story attached.
 func TestExpiredRetentionStopsBlocking(t *testing.T) {
+	t.Parallel()
 	ctx, f := newLockFixture(t)
 	mustExec(t, ctx, f.pool,
 		`INSERT INTO object_locks (tenant_id, version_id, mode, retain_until, legal_hold)
@@ -348,6 +354,7 @@ func TestExpiredRetentionStopsBlocking(t *testing.T) {
 // expired COMPLIANCE lock permanently un-relockable, which is the opposite of
 // the intent.
 func TestExpiredWindowMayBeReplaced(t *testing.T) {
+	t.Parallel()
 	ctx, f := newLockFixture(t)
 	mustExec(t, ctx, f.pool,
 		`INSERT INTO object_locks (tenant_id, version_id, mode, retain_until, legal_hold)
@@ -366,6 +373,7 @@ func TestExpiredWindowMayBeReplaced(t *testing.T) {
 // TestGetLockReportsUnlockedRatherThanMissing pins the read contract: an
 // object with no lock is unlocked, which is an answer, not an error.
 func TestGetLockReportsUnlockedRatherThanMissing(t *testing.T) {
+	t.Parallel()
 	ctx, f := newLockFixture(t)
 
 	got, err := f.locks.GetByVersion(ctx, f.versionID)
@@ -394,6 +402,7 @@ func TestGetLockReportsUnlockedRatherThanMissing(t *testing.T) {
 // explicit retention that got there first. A default that clobbers an
 // explicit choice is worse than no default.
 func TestBucketDefaultAppliesOnceAndDoesNotOverwrite(t *testing.T) {
+	t.Parallel()
 	ctx, f := newLockFixture(t)
 
 	if err := f.locks.ApplyBucketDefault(ctx, f.tenant, f.versionID, "GOVERNANCE", 48*time.Hour); err != nil {
@@ -444,6 +453,7 @@ func TestBucketDefaultAppliesOnceAndDoesNotOverwrite(t *testing.T) {
 // whose current version that row covers, and they are separate defences
 // because a DELETE on objects does not pass through object_locks.
 func TestLockedObjectSurvivesHardDelete(t *testing.T) {
+	t.Parallel()
 	ctx, f := newLockFixture(t)
 	if _, err := f.retain(t, ctx, "COMPLIANCE", time.Now().Add(72*time.Hour), false); err != nil {
 		t.Fatalf("set retention: %v", err)

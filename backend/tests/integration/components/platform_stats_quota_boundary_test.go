@@ -34,6 +34,7 @@ import (
 // Each row below sits exactly ON a boundary, because a row comfortably
 // inside one proves nothing about which way the comparison points.
 func TestCollectQuotas_CountsExactlyOnEachBoundary(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 

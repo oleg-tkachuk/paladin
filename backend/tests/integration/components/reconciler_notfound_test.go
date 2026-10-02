@@ -68,6 +68,7 @@ func runOneTick(t *testing.T, probe worker.StorageProbe, sm *statemachine.Transi
 // TestReconcilerMarksFailedWhenBytesAreAbsent is the regression test: a HEAD
 // that says "no such object" must reach MarkFailed, not the error branch.
 func TestReconcilerMarksFailedWhenBytesAreAbsent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -102,6 +103,7 @@ func TestReconcilerMarksFailedWhenBytesAreAbsent(t *testing.T) {
 // object PENDING for the next tick: FAILED is terminal, and marking a live
 // object FAILED takes it out of service.
 func TestReconcilerLeavesPendingWhenBackendIsUnreachable(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
@@ -134,6 +136,7 @@ func TestReconcilerLeavesPendingWhenBackendIsUnreachable(t *testing.T) {
 // FAILED. This is the path that already worked in production (2 of 31 objects
 // promoted after the pool fix landed).
 func TestReconcilerPromotesWhenBytesArePresent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)

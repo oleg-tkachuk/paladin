@@ -22,6 +22,7 @@ import (
 // reconnect the goroutine would exit and invalidation would silently degrade
 // to the TTL for the rest of the process.
 func TestPolicyWatchReconnect(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	pool := startPostgres(t)
@@ -87,11 +88,14 @@ func killListenBackend(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		var killed int
+		// Only this test's database: the server is shared, and a parallel
+		// test's watcher would otherwise be killed and count as ours.
 		err := pool.QueryRow(ctx, `
 			SELECT count(*) FROM (
 				SELECT pg_terminate_backend(pid)
 				FROM pg_stat_activity
 				WHERE query = 'LISTEN policy_changed' AND pid <> pg_backend_pid()
+				  AND datname = current_database()
 			) t`).Scan(&killed)
 		if err != nil {
 			t.Fatalf("terminate LISTEN backend: %v", err)
