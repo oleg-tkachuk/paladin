@@ -82,8 +82,13 @@ flowchart LR
 
 ## Request path
 
-One data-plane call, outermost interceptor first
-(`internal/app/build_listeners_api.go`). The iam plane lets `Login`,
+One data-plane call, outermost first (`internal/app/build_listeners_api.go`).
+Every response carries the release in `X-Paladin-Version`, and a procedure the
+release does not serve is answered with a Connect `Unimplemented` rather than a
+bare 404, so a client can name both sides of a contract skew
+(`middleware.ServerVersion`, `middleware.UnknownProcedure`). An error the
+handler returns from a domain sentinel goes out with a `google.rpc.ErrorInfo`
+whose reason is a `paladin.common.v1.ErrorReason` (`apiutil.MapError`). The iam plane lets `Login`,
 `RefreshToken` and `ExchangeAudience` through anonymously and adds a login rate
 limit and an audit of mutations; the admin plane accepts API tokens only when
 they carry roles, and audits its mutations too.
@@ -91,6 +96,7 @@ they carry roles, and audits its mutations too.
 ```mermaid
 flowchart TB
     req(["Connect RPC"])
+    ver["<b>HTTP</b><br/>X-Paladin-Version · unknown procedure → Unimplemented"]
     subgraph ic ["interceptors"]
         direction TB
         obs["otel · outcome log"]
@@ -106,10 +112,13 @@ flowchart TB
     pool["RLS pool<br/>paladin.tenant_id set on acquire"]
     pg[("<b>PostgreSQL</b><br/>row-level security")]
 
-    req --> obs --> authn --> aud --> lim --> val --> h
+    err["<b>MapError</b><br/>Connect code + ErrorInfo reason"]
+
+    req --> ver --> obs --> authn --> aud --> lim --> val --> h
     h --> cedar
     h --> cap
     h --> adp --> pool --> pg
+    h -. "a domain error" .-> err
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
@@ -118,7 +127,7 @@ flowchart TB
     classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     class req client
-    class obs,authn,aud,lim,val,h,cedar,cap,adp,pool role
+    class ver,obs,authn,aud,lim,val,h,cedar,cap,adp,pool,err role
     class pg store
     style ic fill:#F8FAFC,stroke:#16A34A
 ```
@@ -133,7 +142,9 @@ The api plane authorises the call, records the object as `PENDING` and returns
 a presigned URL. The object becomes `AVAILABLE` either on `CompleteObject`
 (explicit) or on the storage notification `ingest` receives (implicit); in
 both cases the transition and its outbox event commit together
-(`statemachine.Transitioner.PromoteToAvailableInTx`).
+(`statemachine.Transitioner.PromoteToAvailableInTx`). The SDKs send the
+content's SHA-256 with `CompleteObject`, and verify a whole download against
+it.
 
 ```mermaid
 sequenceDiagram
@@ -152,9 +163,9 @@ sequenceDiagram
     A-->>C: object + presigned PUT URL
     C->>S3: PUT bytes (presigned)
     alt completion_mode EXPLICIT
-        C->>A: CompleteObject
+        C->>A: CompleteObject(etag, SHA-256 of the bytes)
         A->>S3: HeadObject
-        A->>DB: PENDING → AVAILABLE + outbox event, one transaction
+        A->>DB: PENDING → AVAILABLE + checksum + outbox event, one transaction
     else completion_mode IMPLICIT
         S3-)I: storage notification
         I->>DB: PENDING → AVAILABLE + outbox event, one transaction
@@ -266,22 +277,29 @@ sequenceDiagram
 
 ## Contract fan-out
 
-`proto/` is the one contract. Three generators read it, each with a drift gate
-in `verify-all`; `verify:proto-breaking` refuses a wire-incompatible change against the last
-contract tag.
+`proto/` is the one contract. Its generators each have a drift gate in
+`verify-all`; `verify:proto-breaking` refuses a wire-incompatible change
+against the last contract tag. Each SDK also generates a facade — a client for
+every service of each plane — from the stubs, so a new service needs no
+hand-written wiring. The Python stubs are generated with the protoc of
+`grpcio-tools` 1.81.1, whose gencode version is the protobuf floor the package
+declares (6.33.5), so they run on protobuf 6 and 7.
 
 ```mermaid
 flowchart LR
-    proto["<b>proto/</b>"]
+    proto["<b>proto/</b><br/>incl. ErrorReason"]
     es["<b>frontend/src/gen</b><br/>protoc-gen-es"]
     gosdk["<b>sdk/go/gen</b><br/>protoc-gen-go · connect-go"]
-    py["<b>sdk/python</b><br/>connect-python"]
+    gofacade["<b>facade_gen.go</b><br/>internal/facadegen"]
+    py["<b>sdk/python</b> stubs<br/>grpcio-tools protoc · connect-python"]
+    pyfacade["<b>facade.py</b><br/>scripts/gen_facade.py"]
     console["<b>console</b>"]
-    backend["<b>backend</b><br/>go.mod replace → sdk/go"]
+    backend["<b>backend</b><br/>go.mod replace → sdk/go<br/>ErrorInfo reasons"]
 
     proto --> es --> console
     proto --> gosdk --> backend
-    proto --> py
+    gosdk --> gofacade
+    proto --> py --> pyfacade
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
@@ -289,9 +307,67 @@ flowchart LR
     classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
     classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
-    class proto,gosdk,py,backend role
+    class proto,gosdk,gofacade,py,pyfacade,backend role
     class es,console ui
 ```
+
+## SDK layers
+
+Both SDKs are the same stack of layers over the generated clients
+([ADR-0018](../../docs/adr/0018-sdk-layers.md)). The RPCs and the presigned
+transfers are separate legs with separate transports: a presigned request goes
+to storage, not to Paladin, and carries none of the client's credentials.
+
+```mermaid
+flowchart TB
+    app(["Application"])
+
+    subgraph rpc ["RPC leg — to Paladin"]
+        direction TB
+        facade["<b>Connect / connect</b><br/>a client per service per plane"]
+        mw["<b>interceptors</b><br/>typed errors · token per call · idempotency key<br/>retries · User-Agent · hooks"]
+        stubs["generated stubs"]
+        tlsr["<b>HTTP transport</b><br/>TLS: CA bundle · client cert re-read on rotation<br/>SPIFFE ID (Go)"]
+    end
+
+    wf["<b>workflows</b><br/>Upload · Download · DownloadMany · Pages · Wait"]
+
+    subgraph xfer ["presigned leg — to storage"]
+        direction TB
+        tr["<b>Transfer</b><br/>bounded timeouts · no redirects<br/>split horizon · TLS · hooks"]
+        chk["verify size + checksum<br/>ranges"]
+    end
+
+    names["<b>names</b><br/>resource names · paladin:// URIs"]
+    fake["<b>paladintest · paladin.testing</b><br/>in-memory data plane"]
+
+    paladin[["<b>Paladin</b> planes"]]
+    s3[("<b>S3 backend</b>")]
+
+    app --> facade --> mw --> stubs --> tlsr --> paladin
+    app --> wf
+    wf --> facade
+    wf --> tr --> s3
+    tr --- chk
+    app -.-> names
+    fake -. "stands in for" .-> paladin
+
+    classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
+    class app client
+    class facade,mw,tlsr,stubs,wf,tr,chk,names role
+    class fake optional
+    class paladin role
+    class s3 store
+    style rpc fill:#F8FAFC,stroke:#16A34A
+    style xfer fill:#F8FAFC,stroke:#16A34A
+```
+
+Both SDKs run the same scenarios against the stack in CI
+(`sdk/testdata/scenarios.json`), and parse names against the same table
+(`sdk/testdata/names.json`); where they differ on purpose, the READMEs say so.
 
 ## Schema
 

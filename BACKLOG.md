@@ -1647,18 +1647,6 @@ finding moving from "packages you import" to "your code is affected".
   holds that expire, counted against every ceiling the way charges are.
 - **Blockers:** none.
 
-### Revocation reaches other replicas only by cache expiry
-
-- **Status:** Deferred.
-- **Reason:** each verifier caches revocation answers for up to
-  `revocation_cache_ttl` (2s). The replica that revoked invalidates its own
-  entry; the others wait out the TTL. Push invalidation (LISTEN/NOTIFY on
-  revocations) would make it immediate.
-- **Definition of Done:** a revocation is visible on every replica within
-  one notify round trip; the TTL stays as the fallback when the listener is
-  down.
-- **Blockers:** none.
-
 ### No scanner sets object taint flags
 
 - **Status:** Deferred — the flag, its API and its enforcement are in; the
