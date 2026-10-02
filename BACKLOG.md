@@ -1614,17 +1614,6 @@ finding moving from "packages you import" to "your code is affected".
 Defects the review behind `backend/docs/diagrams.md` found and confirmed in
 the code. Not fixed in the documentation change that recorded them.
 
-### The console serves every role's health snapshot without a session
-
-- **Status:** Open — security.
-- **Reason:** `/api/health` is a public prefix in `frontend/src/proxy.ts`, and
-  `/api/health/all` attaches the server-held snapshot token itself, so anyone
-  who reaches the console reads what `runtime.health_snapshot_token` gates on
-  the backends. Confirmed live: an anonymous request returned all five roles.
-- **Definition of Done:** `/api/health/all` requires a session (only
-  `/api/health/live` stays public for the kubelet), with a test.
-- **Blockers:** none.
-
 ### Hard delete removes the bytes before it re-checks the row
 
 - **Status:** Open — data loss on a race.
