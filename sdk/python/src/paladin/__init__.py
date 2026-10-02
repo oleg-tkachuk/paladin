@@ -61,7 +61,17 @@ from paladin.names import (
 )
 from paladin.observe import LOGGER_NAME, Hooks, RetryEvent, TransferEvent
 from paladin.relay import RelaySyncTransport, RelayTransport
-from paladin.tls import DEFAULT_TLS_RELOAD_INTERVAL, TLS
+from paladin.tls import (
+    DEFAULT_TLS_MIN_VERSION,
+    DEFAULT_TLS_RELOAD_INTERVAL,
+    TLS,
+    NoCAError,
+    ServerIDError,
+    ServerIDNeedsCAError,
+    TLSAndHTTPError,
+    TLSKeyPairError,
+    TLSMinVersionError,
+)
 from paladin.transfer import (
     CHECKSUM_CRC32C,
     CHECKSUM_MD5,
@@ -116,6 +126,7 @@ __all__ = [
     "DEFAULT_POLL_INTERVAL",
     "DEFAULT_RETRY_BASE_DELAY",
     "DEFAULT_RETRY_MAX_DELAY",
+    "DEFAULT_TLS_MIN_VERSION",
     "DEFAULT_TLS_RELOAD_INTERVAL",
     "DEFAULT_TRANSFER_CONNECT_TIMEOUT",
     "DEFAULT_TRANSFER_POOL_MAX_IDLE_PER_HOST",
@@ -145,6 +156,7 @@ __all__ = [
     "Hooks",
     "IntegrityError",
     "InvalidNameError",
+    "NoCAError",
     "NotFoundError",
     "ObjectName",
     "ObjectReader",
@@ -160,8 +172,13 @@ __all__ = [
     "ResourceExhaustedError",
     "Retry",
     "RetryEvent",
+    "ServerIDError",
+    "ServerIDNeedsCAError",
     "Session",
     "StaticToken",
+    "TLSAndHTTPError",
+    "TLSKeyPairError",
+    "TLSMinVersionError",
     "TenantName",
     "Transfer",
     "TransferError",

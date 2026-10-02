@@ -228,15 +228,23 @@ def test_tls_argument_errors(tmp_path: Path) -> None:
         connect(Endpoints(iam="https://x"), tls=TLS(ca_file=tmp_path / "absent.pem"))
 
 
-@pytest.mark.parametrize(("with_ca", "system"), [(True, False), (False, True)])
-def test_a_ca_bundle_replaces_the_system_roots(tmp_path: Path, with_ca: bool, system: bool) -> None:
+def test_a_ca_bundle_replaces_the_system_roots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # A server certificate from a public CA cannot be made in a test, so the
-    # pinning is checked on the transport's arguments: a given bundle is the
-    # only trust, not an addition to the system's.
+    # pinning is checked on the context: a given bundle is the only trust, not
+    # an addition to the system's, which are loaded only without one.
+    from paladin.tls import _Files
+
+    loaded: list[bool] = []
+    monkeypatch.setattr(ssl.SSLContext, "load_default_certs", lambda self, *a: loaded.append(True))
     ca = Authority()
     f = write(tmp_path, ca.pem, ca.issue(client=True, ips=False))
-    args, _ = (_tls(f) if with_ca else TLS())._read()
-    assert args["tls_include_system_certs"] is system
+    _, pinned = _Files(_tls(f)).current()
+    assert [int(c["serialNumber"], 16) for c in pinned.get_ca_certs()] == [ca.cert.serial_number]
+    assert not loaded
+    _Files(TLS()).current()
+    assert loaded == [True]
 
 
 class _Counting:

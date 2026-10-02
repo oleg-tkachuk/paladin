@@ -18,6 +18,13 @@ dependencies = [
     "protobuf>=6.33.5,<8",
     # google.api and google.rpc, which the contract imports.
     "googleapis-common-protos>=1.75.5,<2",
+    # TLS: the connections under TLS(...) — ssl under httpcore, HTTP/2 by h2,
+    # asyncio by anyio — because pyqwest has no hook to verify a server's
+    # SPIFFE ID or set a protocol floor (paladin._tls_http).
+    "httpcore[http2,asyncio]>=1.0.9,<2",
+    # Reads the server's certificate as an X.509-SVID for TLS(server_id=...),
+    # and hands verify_peer a certificate it can read.
+    "cryptography>=41",
 ]
 
 [project.optional-dependencies]

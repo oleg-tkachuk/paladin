@@ -50,6 +50,14 @@ tree with itself and passes without checking anything.
   After a rotation every new request, HTTP/2 included, goes on a connection
   with the new files; before, a busy HTTP/2 connection kept taking requests
   on the old certificate. `TLS.Transport()` is unchanged.
+- **Python: `TLS(server_id=…, verify_peer=…, min_version=…)`**, as in Go,
+  with the same errors by name (`ServerIDError` and the rest, each a
+  `ValueError`). The connections under `TLS` now run on the standard
+  library's `ssl` under httpcore, which the SDK depends on: pyqwest cannot
+  check a peer. After a rotation no request goes on an old connection, and the
+  old ones close once idle. A pyqwest-only setting passed to
+  `TLS.sync_transport()` still works, with a `DeprecationWarning`, for one
+  release.
 
 ## Unreleased — the SDKs answer a consumer's review
 
