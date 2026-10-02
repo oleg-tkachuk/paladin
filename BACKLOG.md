@@ -1645,30 +1645,6 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** a breaking proto change, which needs its own deprecation
   window.
 
-### No explicit budget reservations
-
-- **Status:** Deferred — charge-then-refund covers the need today.
-- **Reason:** a cost known only after the call (an LLM completion) is handled
-  by charging an estimate and refunding the difference against the charge ID
-  (`Meter.Refund`, `auth.RefundLastCharge`). What that does not give is a
-  hold that lapses on its own if the caller dies between the two steps — the
-  estimate then stays charged.
-- **Definition of Done:** `Reserve` / `Settle` / `Release` on `Meter`, with
-  holds that expire, counted against every ceiling the way charges are.
-- **Blockers:** none.
-
-### Revocation reaches other replicas only by cache expiry
-
-- **Status:** Deferred.
-- **Reason:** each verifier caches revocation answers for up to
-  `revocation_cache_ttl` (2s). The replica that revoked invalidates its own
-  entry; the others wait out the TTL. Push invalidation (LISTEN/NOTIFY on
-  revocations) would make it immediate.
-- **Definition of Done:** a revocation is visible on every replica within
-  one notify round trip; the TTL stays as the fallback when the listener is
-  down.
-- **Blockers:** none.
-
 ### `AllowTaintedRead` restricts nothing in Paladin
 
 - **Status:** Deferred — there is no taint signal to act on.

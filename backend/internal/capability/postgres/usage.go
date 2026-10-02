@@ -210,6 +210,28 @@ func (s *UsageStore) Charge(
 		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // no-op after a successful commit
+
+	receipt, err := s.chargeInTx(ctx, tx, req, resolvedUnit, amountNumeric, maxBudgetNumeric, onCharged)
+	if err != nil {
+		return capability.ChargeReceipt{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge commit: %w", err)
+	}
+	return receipt, nil
+}
+
+// chargeInTx is Charge's body on a transaction the caller owns: the
+// capability, ancestor and tenant counters, the ledger row and onCharged.
+// The caller commits. Settle runs it after releasing a hold on the same tx.
+func (s *UsageStore) chargeInTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	req capability.ChargeRequest,
+	resolvedUnit string,
+	amountNumeric, maxBudgetNumeric pgtype.Numeric,
+	onCharged func(ctx context.Context, tx pgx.Tx) error,
+) (capability.ChargeReceipt, error) {
 	qtx := s.q.WithTx(tx)
 
 	spent, err := qtx.ChargeCapability(ctx, pgtype.UUID{Bytes: req.CapabilityID, Valid: true},
@@ -288,9 +310,6 @@ func (s *UsageStore) Charge(
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge commit: %w", err)
-	}
 	return capability.ChargeReceipt{ChargeID: ledgerID, Spent: floatFromNumeric(spent)}, nil
 }
 
@@ -401,6 +420,7 @@ func (s *UsageStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (c
 		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: get tenant budget: %w", err)
 	}
 	got := tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt)
+	got.ReservedAmount = floatFromNumeric(row.ReservedUsd)
 	got.ResourceVersion = row.ResourceVersion
 	return got, nil
 }
@@ -529,10 +549,11 @@ func (s *UsageStore) Get(ctx context.Context, capID uuid.UUID) (capability.Usage
 		return capability.Usage{}, fmt.Errorf("capability/postgres: get usage: %w", err)
 	}
 	return capability.Usage{
-		CapabilityID: uuid.UUID(row.CapabilityID.Bytes),
-		RequestCount: row.RequestCount,
-		SpentAmount:  floatFromNumeric(row.SpentUsd),
-		UnitCode:     row.UnitCode,
+		CapabilityID:   uuid.UUID(row.CapabilityID.Bytes),
+		RequestCount:   row.RequestCount,
+		SpentAmount:    floatFromNumeric(row.SpentUsd),
+		ReservedAmount: floatFromNumeric(row.ReservedUsd),
+		UnitCode:       row.UnitCode,
 	}, nil
 }
 

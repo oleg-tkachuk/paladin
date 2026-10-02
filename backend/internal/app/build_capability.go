@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"crypto/ed25519"
 	"errors"
 	"fmt"
@@ -127,6 +128,18 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	}
 
 	cache := capability.NewCachedRevocationChecker(store, cfg.RevocationCacheTTL)
+
+	// Revocations made on any replica clear this one's cache at once; the
+	// TTL above is only the fallback for while the LISTEN connection is
+	// down. The watcher holds a pooled connection for the process lifetime,
+	// so it runs on its own context, which StopWatchers cancels before the
+	// pool is closed — the same arrangement as the Cedar watcher.
+	watchCtx, stopWatch := context.WithCancel(context.Background())
+	if err := capabilitypg.NewRevocationWatcher(deps.Pool, cache.Clear).Start(watchCtx); err != nil {
+		stopWatch()
+		return nil, fmt.Errorf("app: capability revocation watch: %w", err)
+	}
+	deps.RegisterWatcherStop(stopWatch)
 	verifier, err := capability.NewStandardVerifier(capability.VerifierConfig{
 		Keys:           keys,
 		Revocations:    cache,

@@ -21,6 +21,8 @@ type fakeUsage struct {
 	requests map[uuid.UUID]int64
 	spent    map[uuid.UUID]float64
 	charges  map[uuid.UUID]fakeCharge
+	reserved map[uuid.UUID]float64
+	holds    map[uuid.UUID]fakeCharge
 }
 
 type fakeCharge struct {
@@ -33,6 +35,8 @@ func newFakeUsage() *fakeUsage {
 		requests: map[uuid.UUID]int64{},
 		spent:    map[uuid.UUID]float64{},
 		charges:  map[uuid.UUID]fakeCharge{},
+		reserved: map[uuid.UUID]float64{},
+		holds:    map[uuid.UUID]fakeCharge{},
 	}
 }
 
@@ -47,7 +51,7 @@ func (f *fakeUsage) BumpRequest(_ context.Context, req capability.RequestBump) (
 
 func (f *fakeUsage) Charge(_ context.Context, req capability.ChargeRequest, _ func(context.Context, pgx.Tx) error) (capability.ChargeReceipt, error) {
 	next := f.spent[req.CapabilityID] + req.Amount
-	if req.MaxBudget > 0 && next > req.MaxBudget {
+	if req.MaxBudget > 0 && next+f.reserved[req.CapabilityID] > req.MaxBudget {
 		return capability.ChargeReceipt{}, capability.ErrBudgetExceeded
 	}
 	f.spent[req.CapabilityID] = next
@@ -322,3 +326,38 @@ func TestRefundLastCharge_NoCapNoStoreNoCharge_NoOp(t *testing.T) {
 		t.Errorf("no charge yet: %v", err)
 	}
 }
+
+func (f *fakeUsage) Reserve(_ context.Context, req capability.ReserveRequest) (capability.Reservation, error) {
+	if req.MaxBudget > 0 && f.spent[req.CapabilityID]+f.reserved[req.CapabilityID]+req.Amount > req.MaxBudget {
+		return capability.Reservation{}, capability.ErrBudgetExceeded
+	}
+	f.reserved[req.CapabilityID] += req.Amount
+	id := uuid.New()
+	f.holds[id] = fakeCharge{capID: req.CapabilityID, amount: req.Amount}
+	return capability.Reservation{ID: id}, nil
+}
+
+func (f *fakeUsage) Settle(ctx context.Context, req capability.SettleRequest, onCharged func(context.Context, pgx.Tx) error) (capability.ChargeReceipt, error) {
+	h, ok := f.holds[req.ReservationID]
+	if !ok {
+		return capability.ChargeReceipt{}, capability.ErrReservationNotFound
+	}
+	f.reserved[h.capID] -= h.amount
+	receipt, err := f.Charge(ctx, capability.ChargeRequest{CapabilityID: h.capID, Amount: req.Amount, MaxBudget: req.MaxBudget}, onCharged)
+	if err != nil {
+		f.reserved[h.capID] += h.amount
+		return receipt, err
+	}
+	delete(f.holds, req.ReservationID)
+	return receipt, nil
+}
+
+func (f *fakeUsage) Release(_ context.Context, id uuid.UUID) error {
+	if h, ok := f.holds[id]; ok {
+		f.reserved[h.capID] -= h.amount
+		delete(f.holds, id)
+	}
+	return nil
+}
+
+func (f *fakeUsage) ReleaseExpired(context.Context) (int64, error) { return 0, nil }

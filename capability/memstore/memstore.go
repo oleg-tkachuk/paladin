@@ -59,6 +59,7 @@ type UsageStore[TX any] struct {
 	budgets   map[uuid.UUID]capability.TenantBudget
 	ledger    []LedgerEntry
 	records   *Store[TX] // lineage and ceilings of ancestors; nil = none known
+	holds     map[uuid.UUID]hold
 	nowFn     func() time.Time
 	txFactory func() TX
 }
@@ -102,6 +103,7 @@ func NewUsage[TX any](records *Store[TX]) *UsageStore[TX] {
 	return &UsageStore[TX]{
 		usage:   map[uuid.UUID]capability.Usage{},
 		budgets: map[uuid.UUID]capability.TenantBudget{},
+		holds:   map[uuid.UUID]hold{},
 		records: records,
 		nowFn:   time.Now,
 	}
@@ -330,6 +332,17 @@ func (s *UsageStore[TX]) BumpRequest(_ context.Context, req capability.RequestBu
 	return next, nil
 }
 
+// hold is one open reservation and every counter it holds against.
+type hold struct {
+	capID     uuid.UUID
+	ancestors []uuid.UUID
+	tenantID  uuid.UUID
+	amount    float64
+	unit      string
+	op, actor string
+	expires   time.Time
+}
+
 // Charge applies the ceiling chain and commits atomically.
 //
 // The staging semantic is the point of this method: every mutation is computed
@@ -356,31 +369,58 @@ func (s *UsageStore[TX]) Charge(
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.chargeLocked(ctx, req, unit, ancestorIDs(ancestors), ancestors, nil, onCharged)
+}
+
+func ancestorIDs(ancestors []capability.Capability) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(ancestors))
+	for _, a := range ancestors {
+		ids = append(ids, a.ID)
+	}
+	return ids
+}
+
+// chargeLocked checks every ceiling and, if all admit the charge, publishes
+// it together with the release of settling (when non-nil). Held amounts count
+// against each ceiling, except the one being settled. s.mu must be held.
+func (s *UsageStore[TX]) chargeLocked(
+	ctx context.Context,
+	req capability.ChargeRequest,
+	unit string,
+	ids []uuid.UUID,
+	ancestors []capability.Capability,
+	settling *hold,
+	onCharged func(ctx context.Context, tx TX) error,
+) (capability.ChargeReceipt, error) {
+	released := 0.0
+	if settling != nil {
+		released = settling.amount
+	}
 
 	// ── stage: compute, do not publish ──
 	u := s.usage[req.CapabilityID]
 	stagedSpent := u.SpentAmount + req.Amount
 
 	// 1. capability ceiling
-	if req.MaxBudget > 0 && stagedSpent > req.MaxBudget {
+	if req.MaxBudget > 0 && stagedSpent+u.ReservedAmount-released > req.MaxBudget {
 		return capability.ChargeReceipt{Spent: u.SpentAmount}, capability.ErrBudgetExceeded
 	}
 
 	// 2. ancestor ceilings
-	ancestorIDs := make([]uuid.UUID, 0, len(ancestors))
 	for _, a := range ancestors {
-		if limit := a.Caveats.MaxBudgetAmount; limit > 0 && s.usage[a.ID].SpentAmount+req.Amount > limit {
+		au := s.usage[a.ID]
+		if limit := a.Caveats.MaxBudgetAmount; limit > 0 && au.SpentAmount+au.ReservedAmount-released+req.Amount > limit {
 			return capability.ChargeReceipt{Spent: u.SpentAmount},
 				fmt.Errorf("%w: ancestor %s", capability.ErrBudgetExceeded, a.ID)
 		}
-		ancestorIDs = append(ancestorIDs, a.ID)
 	}
 
 	// 3. tenant aggregate ceiling
 	stagedBudget, haveBudget := s.budgets[req.TenantID]
 	if haveBudget {
 		stagedBudget.SpentAmount += req.Amount
-		if stagedBudget.MaxBudgetAmount > 0 && stagedBudget.SpentAmount > stagedBudget.MaxBudgetAmount {
+		stagedBudget.ReservedAmount = max0(stagedBudget.ReservedAmount - released)
+		if stagedBudget.MaxBudgetAmount > 0 && stagedBudget.SpentAmount+stagedBudget.ReservedAmount > stagedBudget.MaxBudgetAmount {
 			return capability.ChargeReceipt{Spent: u.SpentAmount}, capability.ErrTenantBudgetExceeded
 		}
 	}
@@ -400,12 +440,14 @@ func (s *UsageStore[TX]) Charge(
 	// ── commit: publish every staged mutation together ──
 	u.CapabilityID = req.CapabilityID
 	u.SpentAmount = stagedSpent
+	u.ReservedAmount = max0(u.ReservedAmount - released)
 	u.UnitCode = unit
 	s.usage[req.CapabilityID] = u
-	for _, id := range ancestorIDs {
+	for _, id := range ids {
 		au := s.usage[id]
 		au.CapabilityID = id
 		au.SpentAmount += req.Amount
+		au.ReservedAmount = max0(au.ReservedAmount - released)
 		if au.UnitCode == "" {
 			au.UnitCode = unit
 		}
@@ -416,12 +458,134 @@ func (s *UsageStore[TX]) Charge(
 		s.budgets[req.TenantID] = stagedBudget
 	}
 	entry := LedgerEntry{
-		ID: uuid.New(), CapabilityID: req.CapabilityID, Ancestors: ancestorIDs,
+		ID: uuid.New(), CapabilityID: req.CapabilityID, Ancestors: ids,
 		TenantID: req.TenantID, Amount: req.Amount, UnitCode: unit,
 		Op: req.Op, Actor: req.Actor, At: s.nowFn(),
 	}
 	s.ledger = append(s.ledger, entry)
 	return capability.ChargeReceipt{ChargeID: entry.ID, Spent: stagedSpent}, nil
+}
+
+// Reserve holds an amount against every ceiling Charge checks.
+func (s *UsageStore[TX]) Reserve(_ context.Context, req capability.ReserveRequest) (capability.Reservation, error) {
+	if err := capability.ValidateAmount(req.Amount); err != nil {
+		return capability.Reservation{}, err
+	}
+	if req.TenantID == uuid.Nil {
+		return capability.Reservation{}, errors.New("memstore: reserve requires TenantID")
+	}
+	unit, err := capability.NormaliseUnitCode(req.UnitCode)
+	if err != nil {
+		return capability.Reservation{}, err
+	}
+	ttl := req.TTL
+	if ttl <= 0 {
+		ttl = capability.DefaultReservationTTL
+	}
+	ancestors := s.lineage(req.CapabilityID)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	u := s.usage[req.CapabilityID]
+	if req.MaxBudget > 0 && u.SpentAmount+u.ReservedAmount+req.Amount > req.MaxBudget {
+		return capability.Reservation{}, capability.ErrBudgetExceeded
+	}
+	for _, a := range ancestors {
+		au := s.usage[a.ID]
+		if limit := a.Caveats.MaxBudgetAmount; limit > 0 && au.SpentAmount+au.ReservedAmount+req.Amount > limit {
+			return capability.Reservation{}, fmt.Errorf("%w: ancestor %s", capability.ErrBudgetExceeded, a.ID)
+		}
+	}
+	b, haveBudget := s.budgets[req.TenantID]
+	if haveBudget && b.MaxBudgetAmount > 0 && b.SpentAmount+b.ReservedAmount+req.Amount > b.MaxBudgetAmount {
+		return capability.Reservation{}, capability.ErrTenantBudgetExceeded
+	}
+
+	h := hold{
+		capID: req.CapabilityID, ancestors: ancestorIDs(ancestors), tenantID: req.TenantID,
+		amount: req.Amount, unit: unit, op: req.Op, actor: req.Actor,
+		expires: s.nowFn().Add(ttl),
+	}
+	s.applyHoldLocked(h, +1)
+	id := uuid.New()
+	s.holds[id] = h
+	return capability.Reservation{ID: id, ExpiresAt: h.expires}, nil
+}
+
+// applyHoldLocked adds (sign +1) or removes (sign -1) a hold on every counter.
+func (s *UsageStore[TX]) applyHoldLocked(h hold, sign float64) {
+	for _, id := range append([]uuid.UUID{h.capID}, h.ancestors...) {
+		u := s.usage[id]
+		u.CapabilityID = id
+		u.ReservedAmount = max0(u.ReservedAmount + sign*h.amount)
+		if u.UnitCode == "" {
+			u.UnitCode = h.unit
+		}
+		s.usage[id] = u
+	}
+	if b, ok := s.budgets[h.tenantID]; ok {
+		b.ReservedAmount = max0(b.ReservedAmount + sign*h.amount)
+		s.budgets[h.tenantID] = b
+	}
+}
+
+// Settle charges the actual cost in place of a reservation.
+func (s *UsageStore[TX]) Settle(
+	ctx context.Context,
+	req capability.SettleRequest,
+	onCharged func(ctx context.Context, tx TX) error,
+) (capability.ChargeReceipt, error) {
+	if err := capability.ValidateAmount(req.Amount); err != nil {
+		return capability.ChargeReceipt{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	h, ok := s.holds[req.ReservationID]
+	if !ok || !h.expires.After(s.nowFn()) {
+		return capability.ChargeReceipt{}, capability.ErrReservationNotFound
+	}
+	var ancestors []capability.Capability
+	if s.records != nil {
+		ancestors = s.records.ancestors(h.capID)
+	}
+	receipt, err := s.chargeLocked(ctx, capability.ChargeRequest{
+		CapabilityID: h.capID, TenantID: h.tenantID, Amount: req.Amount,
+		MaxBudget: req.MaxBudget, UnitCode: h.unit, Op: h.op, Actor: h.actor,
+	}, h.unit, h.ancestors, ancestors, &h, onCharged)
+	if err != nil {
+		return receipt, err
+	}
+	delete(s.holds, req.ReservationID)
+	return receipt, nil
+}
+
+// Release ends a reservation without charging. Idempotent.
+func (s *UsageStore[TX]) Release(_ context.Context, reservationID uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if h, ok := s.holds[reservationID]; ok {
+		s.applyHoldLocked(h, -1)
+		delete(s.holds, reservationID)
+	}
+	return nil
+}
+
+// ReleaseExpired releases every hold past its expiry.
+func (s *UsageStore[TX]) ReleaseExpired(_ context.Context) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.nowFn()
+	var n int64
+	for id, h := range s.holds {
+		if !h.expires.After(now) {
+			s.applyHoldLocked(h, -1)
+			delete(s.holds, id)
+			n++
+		}
+	}
+	return n, nil
 }
 
 // Refund returns spend from one ledger entry to the counters it debited.
