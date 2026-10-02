@@ -7,7 +7,9 @@
 #
 #   - an SPDX SBOM per platform image, and none for the attestation manifests;
 #   - signatures and SBOM attestations that verify with the signing key;
-#   - and do NOT verify with another key, so the check above is not vacuous.
+#   - and do NOT verify with another key, so the check above is not vacuous;
+#   - the same for a Helm chart pushed to the registry, through
+#     release-sign-chart.sh.
 #
 # Keyless signing needs a CI OIDC token, so release.yaml's own verify step is
 # the only place that path runs; everything else is the same code.
@@ -19,6 +21,7 @@ set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
 script="$root/scripts/release-sign.sh"
+chart_script="$root/scripts/release-sign-chart.sh"
 
 # A released image: multi-arch, with attestation manifests. Pinned by tag; the
 # test reads its structure, not its contents.
@@ -28,8 +31,13 @@ readonly REGISTRY_IMAGE=registry:3
 readonly REGISTRY_PORT=${PALADIN_SIGN_TEST_PORT:-5055}
 readonly TEST_REPO=paladin-sign-test
 readonly SPDX_PREFIX=SPDX-
+# A chart of helm's own scaffold, pushed under the path the release library
+# uses; the test reads its signature, not its contents.
+readonly TEST_CHART=paladin-sign-test-chart
+readonly TEST_CHART_VERSION=0.0.1
+readonly CHART_PATH=charts
 
-for tool in docker jq cosign syft crane; do
+for tool in docker jq cosign syft crane helm; do
     command -v "$tool" >/dev/null 2>&1 || { echo "!!! $tool is not installed" >&2; exit 1; }
 done
 
@@ -81,7 +89,24 @@ if cosign verify-attestation --key "$work/other.pub" --insecure-ignore-tlog=true
     fail "an SBOM attestation verifies with a key that did not sign it"
 fi
 
+(
+    cd "$work"
+    helm create "$TEST_CHART" >/dev/null
+    helm package "$TEST_CHART" --version "$TEST_CHART_VERSION" >/dev/null
+    helm push "${TEST_CHART}-${TEST_CHART_VERSION}.tgz" \
+        "oci://localhost:${REGISTRY_PORT}/${CHART_PATH}" --plain-http >/dev/null 2>&1
+)
+chart="localhost:${REGISTRY_PORT}/${CHART_PATH}/${TEST_CHART}:${TEST_CHART_VERSION}"
+COSIGN_PASSWORD="" COSIGN_KEY="$work/signer.key" COSIGN_PUB="$work/signer.pub" \
+    "$chart_script" "$chart" || fail "release-sign-chart.sh exited non-zero"
+chart_ref="${chart%:*}@$(crane digest "$chart")"
+cosign verify --key "$work/signer.pub" --insecure-ignore-tlog=true "$chart_ref" >/dev/null 2>&1 ||
+    fail "the chart does not verify with its signing key"
+if cosign verify --key "$work/other.pub" --insecure-ignore-tlog=true "$chart_ref" >/dev/null 2>&1; then
+    fail "the chart verifies with a key that did not sign it"
+fi
+
 if [ "$failed" -ne 0 ]; then
     exit 1
 fi
-printf '%s\n' "release signing: signed, SBOM per platform, verifies with its key only"
+printf '%s\n' "release signing: image and chart signed, SBOM per platform, verify with their key only"

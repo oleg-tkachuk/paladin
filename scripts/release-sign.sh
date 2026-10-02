@@ -17,11 +17,7 @@
 #     signature that does not verify fails the release here, not in a user's
 #     admission controller.
 #
-# Signing mode, from the environment:
-#   keyless (default) — Sigstore with the job's OIDC token; verification pins
-#     CERT_IDENTITY (the signing workflow) and CERT_OIDC_ISSUER.
-#   COSIGN_KEY / COSIGN_PUB set — a key pair and no transparency log; what
-#     release-sign.test.sh uses against a throwaway registry.
+# Signing mode (keyless, or a key pair for tests): see release-sign-mode.sh.
 #
 # Requires: docker (buildx), jq, cosign, syft — all on PATH.
 
@@ -43,17 +39,8 @@ readonly SBOM_FORMAT=spdx-json
 # are not images and have nothing to scan.
 readonly ATTESTATION_OS=unknown
 
-if [ -n "${COSIGN_KEY:-}" ]; then
-    : "${COSIGN_PUB:?COSIGN_PUB must be set with COSIGN_KEY}"
-    sign_args=(--key "$COSIGN_KEY" --use-signing-config=false --tlog-upload=false)
-    verify_args=(--key "$COSIGN_PUB" --insecure-ignore-tlog=true)
-else
-    : "${CERT_IDENTITY:?CERT_IDENTITY must name the signing workflow}"
-    : "${CERT_OIDC_ISSUER:?CERT_OIDC_ISSUER must name the token issuer}"
-    sign_args=()
-    verify_args=(--certificate-identity "$CERT_IDENTITY"
-        --certificate-oidc-issuer "$CERT_OIDC_ISSUER")
-fi
+# shellcheck source=SCRIPTDIR/release-sign-mode.sh
+source "$(dirname "$0")/release-sign-mode.sh"
 
 mkdir -p "$sbom_dir"
 ref="${image}@${digest}"

@@ -39,6 +39,8 @@ env:
   COSIGN_VERSION: "v3.1.3"
   # renovate: datasource=github-releases depName=anchore/syft
   SYFT_VERSION: "v1.54.0"
+  # renovate: datasource=github-releases depName=google/go-containerregistry
+  CRANE_VERSION: "v0.22.1"
   # Who issues the OIDC token keyless signing is bound to; verification pins it.
   CERT_OIDC_ISSUER: https://token.actions.githubusercontent.com
   # Where both components publish. Must match image.repository in the charts'
@@ -47,6 +49,9 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAMESPACE: ${{ github.repository_owner }}
   PLATFORMS: linux/amd64,linux/arm64
+  # The path segment the task library pushes charts under
+  # (oci://<registry>/<namespace>/charts); publish-target.test.sh checks the two agree.
+  CHART_PATH: charts
 
 concurrency:
   # Two dispatches close together would both compute "next version" from the
@@ -200,12 +205,15 @@ jobs:
 
           taskfile="${COMPONENT}/Taskfile.yaml"
           name="$(yq -r '.vars.PROJECT_NAME' "$taskfile")"
+          # The library names the chart CHART_NAME, else PROJECT_NAME.
+          chart="$(yq -r '.vars.CHART_NAME // .vars.PROJECT_NAME' "$taskfile")"
           dockerfile="$(yq -r '.vars.DOCKERFILE' "$taskfile")"
           context="$(yq -r '.vars.DOCKER_CONTEXT' "$taskfile")"
 
           {
             printf 'version=%s\n' "$version"
             printf 'image=%s/%s/%s\n' "$REGISTRY" "$IMAGE_NAMESPACE" "$name"
+            printf 'chart=%s/%s/%s/%s\n' "$REGISTRY" "$IMAGE_NAMESPACE" "$CHART_PATH" "$chart"
             printf 'file=%s/%s\n' "$COMPONENT" "$dockerfile"
             printf 'context=%s/%s\n' "$COMPONENT" "$context"
             # The same three values the library's image:build passes.
@@ -274,6 +282,19 @@ jobs:
           export CERT_IDENTITY="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/release.yaml@${GITHUB_REF}"
           ./scripts/release-sign.sh "$IMAGE" "$DIGEST" "${RUNNER_TEMP}/sbom"
 
+      # crane reads a pushed chart's digest; `helm push` reports it only as a
+      # line of text.
+      - name: Set up crane
+        run: |
+          set -euo pipefail
+          base="https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}"
+          tgz="go-containerregistry_Linux_x86_64.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "${base}/${tgz}"
+          curl -fsSL "${base}/checksums.txt" | grep " ${tgz}\$" | sha256sum -c -
+          sudo tar -xzf "$tgz" -C /usr/local/bin crane
+          crane version
+
       - name: Keep the SBOMs for the release
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -296,6 +317,16 @@ jobs:
           printf '%s' "$TOKEN" | helm registry login "$REGISTRY" --username "$ACTOR" --password-stdin
           task --yes "${COMPONENT}:release:chart:push" \
             GLOBAL_REGISTRY="$REGISTRY" IMAGE_NAMESPACE="$IMAGE_NAMESPACE" APP_VERSION="$VERSION"
+
+      # Same identity and the same in-job verification as the image.
+      - name: Sign the chart
+        env:
+          CHART: ${{ steps.resolve.outputs.chart }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          export CERT_IDENTITY="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/release.yaml@${GITHUB_REF}"
+          ./scripts/release-sign-chart.sh "${CHART}:${VERSION}"
 
   # The GitHub release, once every component's image and chart is in GHCR.
   # `needs` alone would skip this when publish fails; the explicit result

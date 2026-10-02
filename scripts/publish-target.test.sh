@@ -7,6 +7,10 @@
 # each chart renders. A chart whose default names a
 # path nothing publishes to installs cleanly and then sits in ImagePullBackOff.
 #
+# Also checks that the chart path the workflow signs under is the one the task
+# library pushes to: a mismatch signs nothing that was pushed, and fails only on
+# release day.
+#
 # Also checks the workflow's component matrix against the components
 # Taskfile.yaml includes, so a third component is not added to the entry points
 # and forgotten by the release.
@@ -90,6 +94,18 @@ for component in $components; do
     [[ "$got" == "$want" ]] ||
         bad "$component: the chart pulls '$(echo $got)', release.yaml publishes '$want'"
 done
+
+# The library's chart repository, from its cached copy: Task fetches remote
+# includes before it runs any task, this one included.
+release_lib=$(find .task/remote -maxdepth 1 -name 'git.github.com.release.*.yaml' 2>/dev/null | head -1)
+if [[ -z "$release_lib" ]]; then
+    bad "the release task library is not cached under .task/remote; run any task first"
+else
+    lib_chart_path=$(yq -r '.vars._REL_CHART_REPO' "$release_lib" | sed 's|.*}}/||')
+    wf_chart_path=$(yq -r '.env.CHART_PATH' "$WORKFLOW")
+    [[ "$lib_chart_path" == "$wf_chart_path" ]] ||
+        bad "release.yaml signs charts under '$wf_chart_path', the task library pushes them under '$lib_chart_path'"
+fi
 
 [[ "$fail" == 0 ]] || exit 1
 

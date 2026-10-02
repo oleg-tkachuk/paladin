@@ -31,9 +31,9 @@ own.
 
 ### Signatures and SBOMs
 
-Every image a release publishes is signed and carries a signed SBOM, so a
-deployment can check what it runs came from this repository's release
-workflow and know what is inside it.
+Every image and chart a release publishes is signed, and every image carries
+a signed SBOM, so a deployment can check what it runs came from this
+repository's release workflow and know what is inside it.
 
 - **Signed by digest, keyless.** [Sigstore](https://www.sigstore.dev/) signs
   each image with a short-lived certificate bound to the release workflow's
@@ -48,9 +48,13 @@ workflow and know what is inside it.
   signatures and attestations it just made, against the identity below, and
   publishes nothing further if they fail.
 
-The logic is [`scripts/release-sign.sh`](../scripts/release-sign.sh);
-`task -t Taskfile.dev.yaml verify:release-signing` runs it with a throwaway
-key against a local registry. Charts are not signed yet; see BACKLOG.md.
+- **Charts too.** Each chart is signed by digest with the same identity, and
+  verified in the same job.
+
+The logic is [`scripts/release-sign.sh`](../scripts/release-sign.sh) and
+[`scripts/release-sign-chart.sh`](../scripts/release-sign-chart.sh);
+`task -t Taskfile.dev.yaml verify:release-signing` runs both with a throwaway
+key against a local registry.
 
 Signing starts with the first release after 4.11.5; earlier images are
 unsigned. To verify an image (cosign v3):
@@ -61,6 +65,10 @@ cosign verify "$image" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp '^https://github.com/oleg-tkachuk/paladin/\.github/workflows/release\.yaml@'
 ```
+
+A chart verifies the same way, by its OCI reference without the `oci://`:
+`cosign verify ghcr.io/oleg-tkachuk/charts/paladin-core:4.12.0` with the two
+certificate flags above.
 
 The SBOM is attested to a platform image, not to the index a tag names, so
 resolve the platform digest first — `cosign verify-attestation` on the tag
