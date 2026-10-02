@@ -1627,18 +1627,6 @@ The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 - **Blockers:** subscribers verifying the old header must be told before it
   goes.
 
-### The SDKs share no scenarios against a real server
-
-- **Status:** Deferred.
-- **Reason:** consumers have a fake now (`paladintest`, `paladin.testing`),
-  and the SDKs share their name rules through `sdk/testdata/names.json`.
-  But each SDK tests its workflows against its own fakes, so the two could
-  disagree with the server and both pass.
-- **Definition of Done:** one set of scenarios — retries, idempotency,
-  token refresh, transfers, errors — is driven by both SDKs against the
-  compose stack in CI.
-- **Blockers:** none.
-
 ### The MCP bridge carries its own copy of what the SDK now does
 
 - **Status:** Deferred.

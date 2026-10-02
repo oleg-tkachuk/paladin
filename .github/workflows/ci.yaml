@@ -636,6 +636,14 @@ jobs:
         continue-on-error: true
         run: ./scripts/go-build-cache.sh import "${RUNNER_TEMP}/go-docker"
 
+      # The stack gate's sdk phase runs the Python SDK's scenarios.
+      - name: Set up uv
+        if: matrix.half == 'stack'
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+
       - name: task verify-deep:${{ matrix.half }}
         env:
           HALF: ${{ matrix.half }}
