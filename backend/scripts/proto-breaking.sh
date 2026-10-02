@@ -27,7 +27,7 @@ cd "$root"
 # The published API contract this tree must stay wire-compatible with, and
 # where that tag keeps its protos. Baselines up to api/v0.10.0 kept them in
 # backend/proto; from api/v0.11.0 the contract lives at the repository root.
-API_BASELINE_TAG=api/v0.11.0
+API_BASELINE_TAG=api/v0.12.0
 API_BASELINE_SUBDIR=proto
 
 if ! command -v buf >/dev/null 2>&1; then
