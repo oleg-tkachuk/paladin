@@ -1,9 +1,9 @@
 package auth
 
-// enforceCaveats is what turns a capability's restrictions into refusals. Its
-// leaf helper ipInAnyCIDR is tested; the function that decides whether to
-// consult it is not. That is the shape of the risk:
-// the check works, and nothing proves it is reached.
+// enforceCaveats is what turns a capability's restrictions into refusals. The
+// match itself (capability.Caveats.CheckSource) is tested in the module; these
+// tests prove the interceptor reaches it. That is the shape of the risk: the
+// check works, and nothing proves it is reached.
 //
 // Both caveats fail silently in the permissive direction. A SourceIPCIDR
 // allow-list that stops being consulted leaves a capability minted for one
@@ -32,11 +32,11 @@ type erroringUsage struct {
 	err error
 }
 
-func (e erroringUsage) BumpRequest(ctx context.Context, id uuid.UUID, max int64) (int64, error) {
+func (e erroringUsage) BumpRequest(ctx context.Context, req capability.RequestBump) (int64, error) {
 	if e.err != nil {
 		return 0, e.err
 	}
-	return e.fakeUsage.BumpRequest(ctx, id, max)
+	return e.fakeUsage.BumpRequest(ctx, req)
 }
 
 func capWithCaveats(c capability.Caveats) *capability.Capability {

@@ -19,6 +19,9 @@ package memstore
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -55,7 +58,7 @@ type UsageStore[TX any] struct {
 	usage     map[uuid.UUID]capability.Usage
 	budgets   map[uuid.UUID]capability.TenantBudget
 	ledger    []LedgerEntry
-	caps      map[uuid.UUID]capability.Capability // shared view, for PurgeOrphans
+	records   *Store[TX] // lineage and ceilings of ancestors; nil = none known
 	nowFn     func() time.Time
 	txFactory func() TX
 }
@@ -63,13 +66,19 @@ type UsageStore[TX any] struct {
 // LedgerEntry records one committed charge. Exposed so tests (and readers)
 // can assert that a rolled-back charge left no trace.
 type LedgerEntry struct {
+	ID           uuid.UUID
 	CapabilityID uuid.UUID
-	TenantID     uuid.UUID
-	Amount       float64
-	UnitCode     string
-	Op           string
-	Actor        string
-	At           time.Time
+	// Ancestors are the capabilities the charge also debited, nearest
+	// first, so a refund returns spend to exactly the same counters.
+	Ancestors []uuid.UUID
+	TenantID  uuid.UUID
+	Amount    float64
+	UnitCode  string
+	Op        string
+	Actor     string
+	At        time.Time
+	// Refunded is the total refunded from this charge so far.
+	Refunded float64
 }
 
 // New returns an empty store. TX is inferred from the call site:
@@ -85,18 +94,17 @@ func New[TX any]() *Store[TX] {
 	}
 }
 
-// NewUsage returns an empty usage store. Pass the record store when
-// PurgeOrphans needs to know which capabilities still exist.
+// NewUsage returns an empty usage store over a record store. The records are
+// how it finds each capability's ancestors and their ceilings, and which
+// capabilities still exist for PurgeOrphans. nil records means no lineage is
+// known: every capability is metered on its own.
 func NewUsage[TX any](records *Store[TX]) *UsageStore[TX] {
-	u := &UsageStore[TX]{
+	return &UsageStore[TX]{
 		usage:   map[uuid.UUID]capability.Usage{},
 		budgets: map[uuid.UUID]capability.TenantBudget{},
+		records: records,
 		nowFn:   time.Now,
 	}
-	if records != nil {
-		u.caps = records.caps
-	}
-	return u
 }
 
 // WithClock pins the clock on the usage store.
@@ -159,11 +167,52 @@ func (s *Store[TX]) Get(_ context.Context, id uuid.UUID) (*capability.Capability
 	return &out, nil
 }
 
+// IsRevoked answers for the whole delegation chain: a capability is revoked
+// when it, or any ancestor still on record, is.
 func (s *Store[TX]) IsRevoked(_ context.Context, id uuid.UUID) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.revoked[id], nil
+	if s.revoked[id] {
+		return true, nil
+	}
+	for _, a := range s.ancestorsLocked(id) {
+		if s.revoked[a.ID] {
+			return true, nil
+		}
+	}
+	return false, nil
 }
+
+// ancestors returns the records of id's ancestors, nearest first, stopping
+// at the first one no longer on record. Bounded so a corrupt cycle cannot
+// spin forever.
+func (s *Store[TX]) ancestors(id uuid.UUID) []capability.Capability {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ancestorsLocked(id)
+}
+
+func (s *Store[TX]) ancestorsLocked(id uuid.UUID) []capability.Capability {
+	var out []capability.Capability
+	c, ok := s.caps[id]
+	for depth := 0; ok && c.ParentID != uuid.Nil && depth < maxLineageDepth; depth++ {
+		c, ok = s.caps[c.ParentID]
+		if ok {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (s *Store[TX]) exists(id uuid.UUID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.caps[id]
+	return ok
+}
+
+// maxLineageDepth matches the depth guard of the relational store.
+const maxLineageDepth = 64
 
 // Revoke is idempotent. CascadeChildren walks the delegation tree by ParentID
 // so revoking an orchestrator takes the sub-agents it spawned with it.
@@ -242,118 +291,177 @@ func (s *Store[TX]) ListByPrincipal(_ context.Context, args capability.ListByPri
 
 // ─── capability.UsageStore[TX] ─────────────────────────────────────────────
 
+// lineage returns the ancestors whose counters move with capID's.
+func (s *UsageStore[TX]) lineage(capID uuid.UUID) []capability.Capability {
+	if s.records == nil {
+		return nil
+	}
+	return s.records.ancestors(capID)
+}
+
 // BumpRequest returns ErrRequestLimitExceeded WITHOUT mutating when the
-// increment would cross the ceiling. A rejected call must be safe to retry.
-func (s *UsageStore[TX]) BumpRequest(_ context.Context, capID uuid.UUID, maxRequests int64) (int64, error) {
+// increment would cross the capability's ceiling or any ancestor's. A
+// rejected call must be safe to retry.
+func (s *UsageStore[TX]) BumpRequest(_ context.Context, req capability.RequestBump) (int64, error) {
+	ancestors := s.lineage(req.CapabilityID)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	u := s.usage[capID]
+	u := s.usage[req.CapabilityID]
 	next := u.RequestCount + 1
-	if maxRequests > 0 && next > maxRequests {
+	if req.MaxRequests > 0 && next > req.MaxRequests {
 		return u.RequestCount, capability.ErrRequestLimitExceeded
 	}
-	u.CapabilityID = capID
+	for _, a := range ancestors {
+		limit := int64(a.Caveats.MaxRequests)
+		if limit > 0 && s.usage[a.ID].RequestCount+1 > limit {
+			return u.RequestCount, fmt.Errorf("%w: ancestor %s", capability.ErrRequestLimitExceeded, a.ID)
+		}
+	}
+	for _, a := range ancestors {
+		au := s.usage[a.ID]
+		au.CapabilityID = a.ID
+		au.RequestCount++
+		s.usage[a.ID] = au
+	}
+	u.CapabilityID = req.CapabilityID
 	u.RequestCount = next
-	s.usage[capID] = u
+	s.usage[req.CapabilityID] = u
 	return next, nil
 }
 
-// Charge applies the two-ceiling rule and commits atomically.
+// Charge applies the ceiling chain and commits atomically.
 //
 // The staging semantic is the point of this method: every mutation is computed
 // into locals, onCharged runs, and only if it succeeds are the counters and the
-// ledger published. A rejection by either ceiling, or an error from onCharged,
-// therefore leaves BOTH counters and the ledger exactly as they were — which
-// is the guarantee FR-011/SC-008 require and which nothing in the repository
-// tested before this store existed.
+// ledger published. A rejection by any ceiling, or an error from onCharged,
+// therefore leaves EVERY counter and the ledger exactly as they were — which
+// is the guarantee FR-011/SC-008 require.
 func (s *UsageStore[TX]) Charge(
 	ctx context.Context,
-	capID uuid.UUID,
-	amount, maxBudget float64,
-	unitCode string,
-	tenantID uuid.UUID,
-	op string,
-	actor string,
+	req capability.ChargeRequest,
 	onCharged func(ctx context.Context, tx TX) error,
-) (float64, error) {
+) (capability.ChargeReceipt, error) {
+	if err := capability.ValidateAmount(req.Amount); err != nil {
+		return capability.ChargeReceipt{}, err
+	}
+	if req.TenantID == uuid.Nil {
+		return capability.ChargeReceipt{}, errors.New("memstore: charge requires TenantID")
+	}
+	unit, err := capability.NormaliseUnitCode(req.UnitCode)
+	if err != nil {
+		return capability.ChargeReceipt{}, err
+	}
+	ancestors := s.lineage(req.CapabilityID)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	unit, err := capability.NormaliseUnitCode(unitCode)
-	if err != nil {
-		return 0, err
-	}
-
 	// ── stage: compute, do not publish ──
-	u := s.usage[capID]
-	stagedSpent := u.SpentAmount + amount
+	u := s.usage[req.CapabilityID]
+	stagedSpent := u.SpentAmount + req.Amount
 
 	// 1. capability ceiling
-	if maxBudget > 0 && stagedSpent > maxBudget {
-		return u.SpentAmount, capability.ErrBudgetExceeded
+	if req.MaxBudget > 0 && stagedSpent > req.MaxBudget {
+		return capability.ChargeReceipt{Spent: u.SpentAmount}, capability.ErrBudgetExceeded
 	}
 
-	// 2. tenant aggregate ceiling
-	var stagedBudget capability.TenantBudget
-	haveBudget := false
-	if tenantID != uuid.Nil {
-		if b, ok := s.budgets[tenantID]; ok {
-			stagedBudget, haveBudget = b, true
-			stagedBudget.SpentAmount = b.SpentAmount + amount
-			if b.MaxBudgetAmount > 0 && stagedBudget.SpentAmount > b.MaxBudgetAmount {
-				return u.SpentAmount, capability.ErrTenantBudgetExceeded
-			}
+	// 2. ancestor ceilings
+	ancestorIDs := make([]uuid.UUID, 0, len(ancestors))
+	for _, a := range ancestors {
+		if limit := a.Caveats.MaxBudgetAmount; limit > 0 && s.usage[a.ID].SpentAmount+req.Amount > limit {
+			return capability.ChargeReceipt{Spent: u.SpentAmount},
+				fmt.Errorf("%w: ancestor %s", capability.ErrBudgetExceeded, a.ID)
+		}
+		ancestorIDs = append(ancestorIDs, a.ID)
+	}
+
+	// 3. tenant aggregate ceiling
+	stagedBudget, haveBudget := s.budgets[req.TenantID]
+	if haveBudget {
+		stagedBudget.SpentAmount += req.Amount
+		if stagedBudget.MaxBudgetAmount > 0 && stagedBudget.SpentAmount > stagedBudget.MaxBudgetAmount {
+			return capability.ChargeReceipt{Spent: u.SpentAmount}, capability.ErrTenantBudgetExceeded
 		}
 	}
 
-	// 3. the caller's side effect, on the caller's handle
+	// 4. the caller's side effect, on the caller's handle
 	if onCharged != nil {
 		var tx TX
 		if s.txFactory != nil {
 			tx = s.txFactory()
 		}
 		if err := onCharged(ctx, tx); err != nil {
-			// Nothing has been published — the counters and ledger are
-			// untouched, so there is nothing to compensate.
-			return u.SpentAmount, err
+			// Nothing has been published — nothing to compensate.
+			return capability.ChargeReceipt{Spent: u.SpentAmount}, err
 		}
 	}
 
 	// ── commit: publish every staged mutation together ──
-	u.CapabilityID = capID
+	u.CapabilityID = req.CapabilityID
 	u.SpentAmount = stagedSpent
 	u.UnitCode = unit
-	s.usage[capID] = u
+	s.usage[req.CapabilityID] = u
+	for _, id := range ancestorIDs {
+		au := s.usage[id]
+		au.CapabilityID = id
+		au.SpentAmount += req.Amount
+		if au.UnitCode == "" {
+			au.UnitCode = unit
+		}
+		s.usage[id] = au
+	}
 	if haveBudget {
 		stagedBudget.UpdatedAt = s.nowFn()
-		s.budgets[tenantID] = stagedBudget
+		s.budgets[req.TenantID] = stagedBudget
 	}
-	s.ledger = append(s.ledger, LedgerEntry{
-		CapabilityID: capID, TenantID: tenantID, Amount: amount,
-		UnitCode: unit, Op: op, Actor: actor, At: s.nowFn(),
-	})
-	return stagedSpent, nil
+	entry := LedgerEntry{
+		ID: uuid.New(), CapabilityID: req.CapabilityID, Ancestors: ancestorIDs,
+		TenantID: req.TenantID, Amount: req.Amount, UnitCode: unit,
+		Op: req.Op, Actor: req.Actor, At: s.nowFn(),
+	}
+	s.ledger = append(s.ledger, entry)
+	return capability.ChargeReceipt{ChargeID: entry.ID, Spent: stagedSpent}, nil
 }
 
-func (s *UsageStore[TX]) RefundCapability(_ context.Context, capID uuid.UUID, amount float64) error {
+// Refund returns spend from one ledger entry to the counters it debited.
+func (s *UsageStore[TX]) Refund(_ context.Context, req capability.RefundRequest) (float64, error) {
+	if err := capability.ValidateAmount(req.Amount); err != nil {
+		return 0, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	u := s.usage[capID]
-	u.CapabilityID = capID
-	u.SpentAmount = max0(u.SpentAmount - amount)
-	s.usage[capID] = u
-	return nil
-}
 
-func (s *UsageStore[TX]) RefundTenant(_ context.Context, tenantID uuid.UUID, amount float64) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if b, ok := s.budgets[tenantID]; ok {
+	i := slices.IndexFunc(s.ledger, func(e LedgerEntry) bool { return e.ID == req.ChargeID })
+	if i < 0 {
+		return 0, capability.ErrChargeNotFound
+	}
+	e := &s.ledger[i]
+	remaining := e.Amount - e.Refunded
+	amount := req.Amount
+	if amount == 0 {
+		amount = remaining
+	}
+	if amount > remaining {
+		return 0, fmt.Errorf("%w: %v requested, %v of %v left",
+			capability.ErrRefundExceedsCharge, amount, remaining, e.Amount)
+	}
+	if amount == 0 {
+		return 0, nil
+	}
+	for _, id := range append([]uuid.UUID{e.CapabilityID}, e.Ancestors...) {
+		if u, ok := s.usage[id]; ok {
+			u.SpentAmount = max0(u.SpentAmount - amount)
+			s.usage[id] = u
+		}
+	}
+	if b, ok := s.budgets[e.TenantID]; ok {
 		b.SpentAmount = max0(b.SpentAmount - amount)
 		b.UpdatedAt = s.nowFn()
-		s.budgets[tenantID] = b
+		s.budgets[e.TenantID] = b
 	}
-	return nil
+	e.Refunded += amount
+	return amount, nil
 }
 
 func (s *UsageStore[TX]) Get(_ context.Context, capID uuid.UUID) (capability.Usage, error) {
@@ -457,7 +565,7 @@ func (s *UsageStore[TX]) PurgeOrphans(_ context.Context) (int64, error) {
 	defer s.mu.Unlock()
 	var n int64
 	for id := range s.usage {
-		if _, ok := s.caps[id]; !ok {
+		if s.records == nil || !s.records.exists(id) {
 			delete(s.usage, id)
 			n++
 		}

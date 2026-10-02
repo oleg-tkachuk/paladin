@@ -49,6 +49,7 @@ verifier, _ := capability.NewStandardVerifier(capability.VerifierConfig{
 })
 
 cap, token, _ := issuer.Issue(ctx, capability.IssueRequest{
+    IssuedBy: capability.Principal{Subject: "operator@example.com"}, // who asked
     Subject: capability.Principal{
         Type: capability.PrincipalAgent, TenantID: tenantID,
         Subject: "research-orchestrator",
@@ -85,9 +86,46 @@ case errors.Is(err, capability.ErrInvalidSignature): // forged
 ```
 
 Verification is **local** — the signature is checked against the resolved key,
-with no round trip to the issuer. Every rejection is a distinct sentinel; map
-each to whatever status your transport uses. This module does not decide your
-HTTP or RPC codes.
+with no round trip to the issuer, and nothing in the claims is read until it
+has. Every rejection is a distinct sentinel; map each to whatever status your
+transport uses. This module does not decide your HTTP or RPC codes.
+
+The token must carry `typ: paladin-cap+jwt` and a tenant, and may be at most
+`MaxTokenBytes` long. When several issuers share a verifier, set
+`KeyIssuers` (kid → issuer) so one issuer's key cannot sign for another.
+Verifiers running apart from the issuer resolve keys with
+`RemoteJWKSResolver`, which caches the issuer's JWKS, picks up a rotated-in
+kid on first sight (rate-limited), and fails closed after `MaxStale`.
+
+## Enforce the caveats on every operation
+
+Verification proves the token is genuine; it does not know what the bearer is
+about to do. Ask the caveats, through the one definition the module ships:
+
+```go
+if err := cap.Caveats.CheckSource(clientAddr); err != nil { /* per connection */ }
+
+err := cap.Caveats.Check(capability.CheckRequest{
+    Op:                capability.OpGet,
+    Resource:          "corpus/public/2026/report.pdf",
+    HasIdempotencyKey: req.Header.Get("Idempotency-Key") != "",
+    ResourceTainted:   object.Flagged, // your taint signal, if you track one
+})
+switch {
+case errors.Is(err, capability.ErrOpNotAllowed):
+case errors.Is(err, capability.ErrResourceNotAllowed):
+case errors.Is(err, capability.ErrIdempotencyKeyRequired):
+case errors.Is(err, capability.ErrTaintedReadNotAllowed):
+}
+// every one of these also matches capability.ErrCaveatViolation
+```
+
+Resource prefixes match at a `/` segment boundary: `corpus/public` covers
+`corpus/public/x` but not `corpus/public-secret`. An operation that cannot name
+its resource (`Resource: ""`) is refused by a resource-restricted capability —
+for an operation over a set, pass the prefix that bounds the set.
+`AllowTaintedRead` can only act on a taint signal you supply; if you track
+none, it protects nothing, and you should say so.
 
 ## Delegate — attenuate, never escalate
 
@@ -111,7 +149,19 @@ child, childToken, err := issuer.Delegate(ctx, capability.DelegateRequest{
 **The rule**: a child may only be narrower. Ask for an operation the parent
 lacks, a wider scope, a bigger budget or a longer life, and you get
 `ErrDelegationTooWide`. Ask for a different `UnitCode` and you get
-`ErrUnitCodeMismatch` — units are never converted.
+`ErrUnitCodeMismatch` — units are never converted. Each child resource must be
+reachable by the parent (a parent pinned to exact URIs admits no child
+prefix), and each child network must lie inside a parent network.
+
+To hand a child exactly the parent's caveats, say so with
+`InheritCaveats: true`; caveats without any `Ops` are rejected rather than
+silently replaced by the parent's. A parent that has expired, or that is
+revoked (itself or any ancestor), cannot delegate.
+
+Narrowing bounds each child. The tree as a whole is bounded at use: every
+charge and request also counts against each ancestor, so a parent holding
+25.00 that delegates 20.00 to each of two workers can still spend 25.00 in
+total, not 40.00.
 
 This is the property that makes the model safe to hand to an agent: it can
 attenuate itself, but never escalate.
@@ -119,22 +169,38 @@ attenuate itself, but never escalate.
 ## Charge against the budget
 
 ```go
-spent, err := usage.Charge(ctx, cap.ID, 0.35, cap.Caveats.MaxBudgetAmount,
-    "USD", tenantID, "search", "orchestrator", nil)
+receipt, err := usage.Charge(ctx, capability.ChargeRequest{
+    CapabilityID: cap.ID, TenantID: tenantID,
+    Amount: 0.35, MaxBudget: cap.Caveats.MaxBudgetAmount, UnitCode: "USD",
+    Op: "search", Actor: "orchestrator",
+}, nil)
 if errors.Is(err, capability.ErrBudgetExceeded) {
     // rejected at the auth boundary — before your business logic ran
 }
 ```
 
-Two ceilings are checked: the capability's own, then the tenant aggregate. If
-**either** rejects, neither counter moves, so a retry after rejection is safe.
+Three ceilings are checked: the capability's own, each ancestor's, then the
+tenant aggregate. If **any** rejects, no counter moves, so a retry after
+rejection is safe.
+
+`receipt.ChargeID` names the ledger row. Refund against it:
+
+```go
+usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: 0.10}) // partial
+usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID})               // the rest
+```
+
+A refund returns spend to every counter the charge took it from, and never
+more than the charge: `Amount: 0` refunds what is left, so a retried full
+refund is a no-op. Charge-then-refund is also how you settle a cost you only
+learn afterwards — charge the estimate, refund the difference.
 
 The trailing `nil` is an optional in-transaction callback. If your store has
 transactions, pass a function and the module threads **your** handle back so
 your side effects commit atomically with the spend:
 
 ```go
-usage.Charge(ctx, /* … */, func(ctx context.Context, tx MyTx) error {
+usage.Charge(ctx, req, func(ctx context.Context, tx MyTx) error {
     return myOutbox.Enqueue(ctx, tx, chargeEvent)   // commits with the charge
 })
 ```
@@ -151,8 +217,10 @@ records.Revoke(ctx, capability.RevokeArgs{
 })
 ```
 
-Idempotent. Cascade is what you want once an orchestrator has spawned workers
-— revoking the parent alone would leave them running.
+Idempotent. Revoking a capability revokes everything delegated from it, with or
+without the flag: `IsRevoked` answers for the whole chain. `CascadeChildren`
+also writes a revocation entry per descendant, so the audit trail names each
+capability that was stopped.
 
 ## Bring your own storage
 
@@ -161,8 +229,14 @@ Implement these and you are done:
 | Interface | Stores | Transactions needed? |
 |---|---|---|
 | `Store` | Capability records + revocations | No |
-| `UsageStore[TX]` | Request and spend counters | Only for atomic side effects |
+| `UsageStore[TX]` = `Meter[TX]` + `TenantBudgets` + `UsageHousekeeping` | Request and spend counters, the charges ledger, tenant ceilings | Only for atomic side effects |
 | `KeyResolver` | Public verification keys | No |
+
+Two obligations are easy to miss. `Store.IsRevoked` answers for the
+capability's whole delegation chain, and `Meter` applies every charge and
+request to each ancestor as well, reading the ancestor's ceilings from its
+record. Code that only meters can depend on `Meter` alone; code that only
+administers tenant ceilings on `TenantBudgets` alone.
 
 `Store` and `UsageStore` are **separate types**: both declare a method named
 `Get` with different signatures, so one type cannot satisfy both. `memstore`
@@ -175,9 +249,11 @@ guarantee.
 
 ## Key rotation
 
-1. Publish the new public key alongside the old (`SetKey`).
+1. Publish the new public key alongside the old (`SetKey`, or add it to the
+   served JWKS — `MarshalJWKS` output is sorted by kid, so it is stable).
 2. Switch the issuer to sign with the new key.
-3. Withdraw the old key only after the **longest outstanding TTL** has elapsed.
+3. Withdraw the old key (`RemoveKey`) only after the **longest outstanding
+   TTL** has elapsed.
 
 Skipping the wait in step 3 invalidates tokens agents are still holding. Since
 TTLs here are minutes, the wait is short — which is part of why short TTLs are
@@ -187,8 +263,10 @@ the default posture.
 
 - **Token format is stable.** A golden fixture in `testdata/` fails CI on any
   wire-format drift, because tokens outlive deployments.
-- **Charges are atomic.** A failed side effect, or a rejection by either
-  ceiling, leaves both counters *and* the ledger untouched.
+- **Charges are atomic.** A failed side effect, or a rejection by any
+  ceiling, leaves every counter *and* the ledger untouched.
+- **Delegation never widens.** A fuzz test (`FuzzNarrowsNeverWidens`) checks
+  that whatever `Narrows` accepts reaches no resource the parent cannot.
 - **No hidden dependencies.** The resolved dependency graph contains no
   database driver and no storage SDK; `isolation_test.go` asserts it, so
   `task -t Taskfile.dev.yaml verify-capability` and CI fail if one appears.

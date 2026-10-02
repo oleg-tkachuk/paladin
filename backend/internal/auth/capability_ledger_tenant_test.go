@@ -31,24 +31,19 @@ func (u *tenantRecordingUsage) record(ctx context.Context, call string) {
 	u.seen[call] = tid
 }
 
-func (u *tenantRecordingUsage) BumpRequest(ctx context.Context, id uuid.UUID, max int64) (int64, error) {
+func (u *tenantRecordingUsage) BumpRequest(ctx context.Context, req capability.RequestBump) (int64, error) {
 	u.record(ctx, "BumpRequest")
-	return u.fakeUsage.BumpRequest(ctx, id, max)
+	return u.fakeUsage.BumpRequest(ctx, req)
 }
 
-func (u *tenantRecordingUsage) Charge(ctx context.Context, id uuid.UUID, amount, max float64, unit string, tenant uuid.UUID, op, actor string, onCharged func(context.Context, pgx.Tx) error) (float64, error) {
+func (u *tenantRecordingUsage) Charge(ctx context.Context, req capability.ChargeRequest, onCharged func(context.Context, pgx.Tx) error) (capability.ChargeReceipt, error) {
 	u.record(ctx, "Charge")
-	return u.fakeUsage.Charge(ctx, id, amount, max, unit, tenant, op, actor, onCharged)
+	return u.fakeUsage.Charge(ctx, req, onCharged)
 }
 
-func (u *tenantRecordingUsage) RefundCapability(ctx context.Context, id uuid.UUID, amount float64) error {
-	u.record(ctx, "RefundCapability")
-	return u.fakeUsage.RefundCapability(ctx, id, amount)
-}
-
-func (u *tenantRecordingUsage) RefundTenant(ctx context.Context, tenant uuid.UUID, amount float64) error {
-	u.record(ctx, "RefundTenant")
-	return u.fakeUsage.RefundTenant(ctx, tenant, amount)
+func (u *tenantRecordingUsage) Refund(ctx context.Context, req capability.RefundRequest) (float64, error) {
+	u.record(ctx, "Refund")
+	return u.fakeUsage.Refund(ctx, req)
 }
 
 // Every write to a capability's ledger runs on that capability's tenant. The
@@ -78,15 +73,15 @@ func TestCapabilityLedgerWritesRunOnTheCapabilitysTenant(t *testing.T) {
 			if err := i.enforceCaveats(base, c); err != nil {
 				t.Fatalf("enforceCaveats: %v", err)
 			}
-			ctx := WithChargeStore(WithCapability(base, c), usage)
+			ctx := withLastOpHolder(WithChargeStore(WithCapability(base, c), usage))
 			if err := ChargeCapability(ctx, chargeAmount, ""); err != nil {
 				t.Fatalf("ChargeCapability: %v", err)
 			}
-			if err := RefundCapability(ctx, chargeAmount); err != nil {
-				t.Fatalf("RefundCapability: %v", err)
+			if err := RefundLastCharge(ctx, chargeAmount); err != nil {
+				t.Fatalf("RefundLastCharge: %v", err)
 			}
 
-			for _, call := range []string{"BumpRequest", "Charge", "RefundCapability", "RefundTenant"} {
+			for _, call := range []string{"BumpRequest", "Charge", "Refund"} {
 				got, ok := usage.seen[call]
 				if !ok {
 					t.Errorf("%s was not called", call)

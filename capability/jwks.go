@@ -4,7 +4,9 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
+	"fmt"
+	"maps"
+	"slices"
 )
 
 // JWKSDocument is the on-the-wire shape served at the issuer's JWKS
@@ -15,13 +17,10 @@ import (
 //
 // Format: RFC 7517 with kty=OKP and crv=Ed25519 (RFC 8037).
 //
-// Why this lives in the capability package rather than next to the
-// existing internal/auth/jwks: that JWKS verifier consumes external
-// IdP keys (RS256 / ES256). Capability tokens use a distinct cipher,
-// distinct issuer set, distinct rotation cadence — sharing one
-// document would conflate two trust roots and surprise auditors.
-// Capability planes serve their own document; auth planes serve
-// theirs (or proxy a customer IdP's).
+// Serve capability keys from their own document, separate from any IdP
+// JWKS: capability tokens use a distinct algorithm, issuer set and
+// rotation cadence, and one shared document would conflate two trust
+// roots.
 type JWKSDocument struct {
 	Keys []JWK `json:"keys"`
 }
@@ -38,14 +37,14 @@ type JWK struct {
 }
 
 // MarshalJWKS produces a JWKS document for the supplied kid → public key
-// map. Iteration order is intentionally unstable (it's a map): callers
-// who need stable output sort the result themselves. Most consumers
-// (lookup-by-kid) don't care.
+// map, with entries sorted by kid so the same key set always serialises to
+// the same bytes (cacheable, diffable, ETag-able).
 func MarshalJWKS(keys map[string]ed25519.PublicKey) ([]byte, error) {
 	doc := JWKSDocument{Keys: make([]JWK, 0, len(keys))}
-	for kid, pub := range keys {
+	for _, kid := range slices.Sorted(maps.Keys(keys)) {
+		pub := keys[kid]
 		if len(pub) != ed25519.PublicKeySize {
-			return nil, errors.New("capability: public key wrong size for Ed25519")
+			return nil, fmt.Errorf("capability: public key %q wrong size for Ed25519", kid)
 		}
 		doc.Keys = append(doc.Keys, JWK{
 			Kty: "OKP",
@@ -58,26 +57,28 @@ func MarshalJWKS(keys map[string]ed25519.PublicKey) ([]byte, error) {
 	return json.Marshal(doc)
 }
 
-// ParseJWKS decodes a JWKS document into a kid → public key map. Used
-// by remote verifiers that fetch the document from the issuer's
-// endpoint. Unknown / non-Ed25519 entries are skipped silently —
-// future kty values land here without breaking older verifiers.
+// ParseJWKS decodes a JWKS document into a kid → public key map. Entries
+// that are not Ed25519 (a future kty), that lack a kid, or whose key does
+// not decode to an Ed25519 public key are skipped rather than failing the
+// document: one malformed or foreign entry must not take every other key —
+// and so every token signed with them — out of service during a rotation.
+// A document that is not JSON at all is an error.
 func ParseJWKS(raw []byte) (map[string]ed25519.PublicKey, error) {
 	var doc JWKSDocument
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("capability: parse JWKS: %w", err)
 	}
 	out := make(map[string]ed25519.PublicKey, len(doc.Keys))
 	for _, k := range doc.Keys {
-		if k.Kty != "OKP" || k.Crv != "Ed25519" {
+		if k.Kty != "OKP" || k.Crv != "Ed25519" || k.Kid == "" {
+			continue
+		}
+		if k.Alg != "" && k.Alg != "EdDSA" {
 			continue
 		}
 		decoded, err := base64.RawURLEncoding.DecodeString(k.X)
-		if err != nil {
-			return nil, err
-		}
-		if len(decoded) != ed25519.PublicKeySize {
-			return nil, errors.New("capability: invalid Ed25519 public key length")
+		if err != nil || len(decoded) != ed25519.PublicKeySize {
+			continue
 		}
 		out[k.Kid] = ed25519.PublicKey(decoded)
 	}

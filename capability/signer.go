@@ -14,10 +14,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// Signer mints capability tokens. Production wiring uses an Ed25519
-// keypair held by the cap-issuer service (split out at compliance
-// scale per BACKLOG); the verifier picks up public keys from the JWKS
-// endpoint and validates locally — no RPC per request.
+// Signer mints capability tokens with an Ed25519 key; verifiers pick up
+// the public keys (statically or from a JWKS endpoint) and validate
+// locally — no RPC per request. Implement it over a KMS to keep the
+// private key out of process memory.
 //
 // Signer is intentionally narrow: callers populate a Capability struct
 // and ask Sign to encode + sign. The compact JWT format is the wire
@@ -35,10 +35,10 @@ type Signer interface {
 	Sign(c Capability) (string, error)
 }
 
-// Verifier validates tokens. Production verifiers cache the JWKS for
-// the configured issuer and check the revocation list with a small
-// in-memory TTL (≤2s) so revocation propagates quickly without
-// hammering the store.
+// Verifier validates tokens. A deployment typically resolves keys through
+// a cached JWKS (RemoteJWKSResolver) and checks the revocation list through
+// a short-TTL cache (CachedRevocationChecker) so revocation propagates
+// quickly without hammering the store.
 type Verifier interface {
 	// Verify decodes the token, checks the signature against the
 	// known JWKS, applies time / audience / revocation gates, and
@@ -50,11 +50,8 @@ type Verifier interface {
 	Verify(ctx context.Context, token string, audience string) (*Capability, error)
 }
 
-// AudiencePlane* constants pin verifier expectations and capability
-// claims. Mirrors the existing internal/auth audiences but lives
-// alongside the capability types so cap-aware code never needs to
-// import internal/auth (avoiding a circular dependency once the
-// interceptor swap lands).
+// AudiencePlane* constants are the audiences Paladin, the reference
+// consumer, mounts its verifiers on. Other consumers choose their own.
 const (
 	AudiencePlaneData  = "data"
 	AudiencePlaneAdmin = "admin"
@@ -91,8 +88,9 @@ type jwtHeader struct {
 }
 
 // jwtClaims is the payload. We follow JWT conventions for standard
-// claims (iss/sub/aud/iat/nbf/exp/jti) and namespace capability-specific
-// claims under `paladin:`. The unmarshal path tolerates unknown fields.
+// claims (iss/sub/aud/iat/nbf/exp/jti) and prefix capability-specific
+// claims with `paladin_` (part of the frozen wire format; see README).
+// The unmarshal path tolerates unknown fields.
 type jwtClaims struct {
 	// Standard JWT claims.
 	Issuer    string   `json:"iss"`
@@ -129,7 +127,7 @@ func (s *ed25519Signer) Sign(c Capability) (string, error) {
 		return "", errors.New("capability: ExpiresAt must be after IssuedAt")
 	}
 
-	header := jwtHeader{Alg: "EdDSA", Kid: s.keyID, Typ: "paladin-cap+jwt"}
+	header := jwtHeader{Alg: "EdDSA", Kid: s.keyID, Typ: TokenType}
 	claims := jwtClaims{
 		Issuer:           c.Issuer,
 		Subject:          c.Subject.Subject,
@@ -171,33 +169,50 @@ func (s *ed25519Signer) Sign(c Capability) (string, error) {
 	return signingInput + "." + base64.RawURLEncoding.EncodeToString(sig), nil
 }
 
-// Decode parses a compact-form token without verifying the signature
-// or applying time / audience / revocation gates. Use only for tooling
-// (`paladin cap show`); production code goes through Verifier.Verify.
-func Decode(token string) (*Capability, error) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return nil, errors.New("capability: token must have 3 segments")
-	}
+// TokenType is the JWT "typ" header every capability token carries. The
+// verifier requires it, so a different kind of EdDSA JWT signed by the same
+// key — an ID token, another product's token — cannot be presented as a
+// capability.
+const TokenType = "paladin-cap+jwt" //nolint:gosec // G101: a JWT type label, not a credential
 
-	var header jwtHeader
-	headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+// tokenParts is a compact token split into its three segments.
+type tokenParts struct {
+	header, claims, sig string
+}
+
+func splitToken(token string) (tokenParts, error) {
+	h, rest, ok1 := strings.Cut(token, ".")
+	c, sig, ok2 := strings.Cut(rest, ".")
+	if !ok1 || !ok2 || strings.Contains(sig, ".") {
+		return tokenParts{}, errors.New("capability: token must have 3 segments")
+	}
+	return tokenParts{header: h, claims: c, sig: sig}, nil
+}
+
+func (p tokenParts) signingInput() string { return p.header + "." + p.claims }
+
+func parseHeader(seg string) (jwtHeader, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(seg)
 	if err != nil {
-		return nil, fmt.Errorf("capability: decode header: %w", err)
+		return jwtHeader{}, fmt.Errorf("capability: decode header: %w", err)
 	}
-	if err := json.Unmarshal(headerJSON, &header); err != nil {
-		return nil, fmt.Errorf("capability: parse header: %w", err)
+	var h jwtHeader
+	if err := json.Unmarshal(raw, &h); err != nil {
+		return jwtHeader{}, fmt.Errorf("capability: parse header: %w", err)
 	}
-	if header.Alg != "EdDSA" {
-		return nil, fmt.Errorf("capability: unexpected alg %q (want EdDSA)", header.Alg)
+	if h.Alg != "EdDSA" {
+		return jwtHeader{}, fmt.Errorf("capability: unexpected alg %q (want EdDSA)", h.Alg)
 	}
+	return h, nil
+}
 
-	claimsJSON, err := base64.RawURLEncoding.DecodeString(parts[1])
+func parseClaims(seg string) (*Capability, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(seg)
 	if err != nil {
 		return nil, fmt.Errorf("capability: decode claims: %w", err)
 	}
 	var claims jwtClaims
-	if err := json.Unmarshal(claimsJSON, &claims); err != nil {
+	if err := json.Unmarshal(raw, &claims); err != nil {
 		return nil, fmt.Errorf("capability: parse claims: %w", err)
 	}
 
@@ -232,22 +247,19 @@ func Decode(token string) (*Capability, error) {
 	return cap, nil
 }
 
-// decodeHeader decodes only the JWT protected header. Used by Verify
-// to read the kid without paying for full claim parsing on every call.
-func decodeHeader(token string) (jwtHeader, error) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return jwtHeader{}, errors.New("capability: token must have 3 segments")
-	}
-	headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+// Decode parses a compact-form token without verifying the signature
+// or applying time / audience / revocation gates. Use only for tooling
+// (`paladin cap show`); production code goes through Verifier.Verify,
+// which never reads a claim before the signature has checked out.
+func Decode(token string) (*Capability, error) {
+	parts, err := splitToken(token)
 	if err != nil {
-		return jwtHeader{}, fmt.Errorf("capability: decode header: %w", err)
+		return nil, err
 	}
-	var h jwtHeader
-	if err := json.Unmarshal(headerJSON, &h); err != nil {
-		return jwtHeader{}, fmt.Errorf("capability: parse header: %w", err)
+	if _, err := parseHeader(parts.header); err != nil {
+		return nil, err
 	}
-	return h, nil
+	return parseClaims(parts.claims)
 }
 
 // VerifySignature checks the Ed25519 signature on a compact token
@@ -255,16 +267,22 @@ func decodeHeader(token string) (jwtHeader, error) {
 // are NOT applied here — Verify in the production verifier wraps this
 // call with the full check chain.
 func VerifySignature(token string, pub ed25519.PublicKey) error {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return errors.New("capability: token must have 3 segments")
-	}
-	signingInput := parts[0] + "." + parts[1]
-	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
+	parts, err := splitToken(token)
 	if err != nil {
-		return fmt.Errorf("capability: decode sig: %w", err)
+		return err
 	}
-	if !ed25519.Verify(pub, []byte(signingInput), sig) {
+	return verifyParts(parts, pub)
+}
+
+func verifyParts(parts tokenParts, pub ed25519.PublicKey) error {
+	if len(pub) != ed25519.PublicKeySize {
+		return fmt.Errorf("%w: public key wrong length %d", ErrInvalidSignature, len(pub))
+	}
+	sig, err := base64.RawURLEncoding.DecodeString(parts.sig)
+	if err != nil {
+		return fmt.Errorf("%w: decode sig: %w", ErrInvalidSignature, err)
+	}
+	if !ed25519.Verify(pub, []byte(parts.signingInput()), sig) {
 		return ErrInvalidSignature
 	}
 	return nil

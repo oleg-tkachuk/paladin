@@ -342,7 +342,8 @@ func TestCopyObjectReportsBothFailuresWhenCompensationAlsoFails(t *testing.T) {
 func budgetedCtx(t *testing.T, tenantID uuid.UUID, maxBudget float64) (context.Context, *capability.Capability, *memstore.UsageStore[pgx.Tx]) {
 	t.Helper()
 	cap := &capability.Capability{
-		ID: uuid.New(),
+		ID:      uuid.New(),
+		Subject: capability.Principal{TenantID: tenantID, Subject: "agent:a"},
 		// Ops must name put or the gate refuses before the charge is
 		// reached; no prefixes means every URI is in scope.
 		Caveats: capability.Caveats{

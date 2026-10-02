@@ -80,8 +80,9 @@ func NewIssuer(cfg IssuerConfig) (*Issuer, error) {
 }
 
 // IssueRequest is the input shape for Issuer.Issue. All fields except
-// TTL / NotBefore are required; the issuer fills in ID, IssuedAt,
-// ExpiresAt, Issuer, Generation when not supplied.
+// TTL / NotBefore / Generation are required; the issuer fills in ID,
+// IssuedAt, ExpiresAt, Issuer, Generation when not supplied. Caveats are
+// validated (Caveats.Validate) before anything is persisted.
 type IssueRequest struct {
 	Subject Principal
 	// IssuedBy is the principal REQUESTING the capability — an operator for a
@@ -96,8 +97,8 @@ type IssueRequest struct {
 	Generation int64         // 0 → 1
 }
 
-// Issue mints a top-level capability. Generation defaults to 1 (rotation
-// follows by reissuing with Generation+1 + revoking the previous row).
+// Issue mints a top-level capability. Generation defaults to 1; see
+// Capability.Generation for what it does and does not promise.
 //
 // Returns the typed Capability and the compact-form token in one call —
 // callers usually need both: the token to ship to the agent, the struct
@@ -106,17 +107,23 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Capability, stri
 	if req.Subject.TenantID == uuid.Nil {
 		return nil, "", errors.New("capability: Issue requires Subject.TenantID")
 	}
-	if len(req.Caveats.Ops) == 0 {
-		return nil, "", errors.New("capability: Issue requires at least one Op")
+	if req.IssuedBy.Subject == "" {
+		return nil, "", errors.New("capability: IssuedBy is required")
 	}
-	if len(req.Audience) == 0 {
-		return nil, "", errors.New("capability: Issue requires non-empty Audience")
+	if req.Generation < 0 {
+		return nil, "", fmt.Errorf("capability: Generation %d is negative", req.Generation)
+	}
+	if err := validateAudience(req.Audience); err != nil {
+		return nil, "", err
+	}
+	if err := req.Caveats.Validate(); err != nil {
+		return nil, "", err
 	}
 
 	now := i.clock().UTC()
-	ttl := req.TTL
-	if ttl == 0 {
-		ttl = i.defaultTTL
+	expires, err := i.expiry(now, req.TTL)
+	if err != nil {
+		return nil, "", err
 	}
 	cap := Capability{
 		ID:         uuid.New(),
@@ -125,18 +132,14 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Capability, stri
 		Audience:   req.Audience,
 		Caveats:    req.Caveats,
 		IssuedAt:   now,
-		ExpiresAt:  now.Add(ttl),
+		ExpiresAt:  expires,
 		Generation: req.Generation,
 	}
 	if cap.Generation == 0 {
 		cap.Generation = 1
 	}
-	if !req.NotBefore.IsZero() {
-		cap.NotBefore = req.NotBefore.UTC()
-	}
-
-	if req.IssuedBy.Subject == "" {
-		return nil, "", errors.New("capability: IssuedBy is required")
+	if err := setNotBefore(&cap, req.NotBefore); err != nil {
+		return nil, "", err
 	}
 
 	if err := i.store.Insert(ctx, cap, req.IssuedBy); err != nil {
@@ -149,21 +152,68 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Capability, stri
 	return &cap, token, nil
 }
 
+// expiry resolves a requested TTL against the default. A negative TTL is a
+// request error rather than an already-expired capability.
+func (i *Issuer) expiry(now time.Time, ttl time.Duration) (time.Time, error) {
+	if ttl < 0 {
+		return time.Time{}, fmt.Errorf("capability: TTL %s is negative", ttl)
+	}
+	if ttl == 0 {
+		ttl = i.defaultTTL
+	}
+	return now.Add(ttl), nil
+}
+
+// setNotBefore applies a requested not-before time, refusing one at or after
+// the expiry: such a capability could never be used.
+func setNotBefore(c *Capability, nbf time.Time) error {
+	if nbf.IsZero() {
+		return nil
+	}
+	nbf = nbf.UTC()
+	if !nbf.Before(c.ExpiresAt) {
+		return fmt.Errorf("capability: NotBefore %s is not before ExpiresAt %s", nbf, c.ExpiresAt)
+	}
+	c.NotBefore = nbf
+	return nil
+}
+
+// validateAudience requires a non-empty audience of non-empty entries.
+func validateAudience(aud []string) error {
+	if len(aud) == 0 {
+		return errors.New("capability: non-empty Audience required")
+	}
+	for _, a := range aud {
+		if a == "" {
+			return errors.New("capability: Audience contains an empty entry")
+		}
+	}
+	return nil
+}
+
 // DelegateRequest narrows from a parent capability the caller already
-// holds. The issuer enforces strict narrowing (Narrows) before persisting
-// so a runtime widening attempt fails before any token is emitted.
+// holds. The issuer enforces narrowing (Narrows) before persisting so a
+// runtime widening attempt fails before any token is emitted.
 type DelegateRequest struct {
-	Parent    Capability
-	Subject   Principal
-	Audience  []string
-	Caveats   Caveats
-	TTL       time.Duration
-	NotBefore time.Time
+	Parent   Capability
+	Subject  Principal
+	Audience []string
+	Caveats  Caveats
+	// InheritCaveats copies the parent's caveats verbatim and ignores
+	// Caveats. It must be asked for: an earlier version inherited silently
+	// whenever Caveats.Ops was empty, which replaced every other field the
+	// caller HAD set — a budget of 2 became the parent's 25 without a word.
+	InheritCaveats bool
+	TTL            time.Duration
+	NotBefore      time.Time
 }
 
 // Delegate mints a child capability narrower than the supplied parent.
 // The parent must already be a verified Capability — callers run it
-// through Verifier.Verify first; the Issuer trusts the in-memory shape.
+// through Verifier.Verify first; the Issuer trusts its in-memory shape.
+// It does not trust it to be current, though: a parent that has expired,
+// or that the store reports revoked (itself or any ancestor), delegates
+// nothing.
 func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (*Capability, string, error) {
 	if req.Parent.ID == uuid.Nil {
 		return nil, "", errors.New("capability: Delegate requires Parent.ID")
@@ -174,18 +224,32 @@ func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (*Capability
 	if len(req.Audience) == 0 {
 		req.Audience = append([]string(nil), req.Parent.Audience...)
 	}
-	if len(req.Caveats.Ops) == 0 {
-		// Default to parent ops; the caller must explicitly drop ops to
-		// narrow, not implicitly inherit then narrow elsewhere.
+	if req.InheritCaveats {
 		req.Caveats = req.Parent.Caveats
+	}
+	if err := validateAudience(req.Audience); err != nil {
+		return nil, "", err
+	}
+	if err := req.Caveats.Validate(); err != nil {
+		return nil, "", err
 	}
 
 	now := i.clock().UTC()
-	ttl := req.TTL
-	if ttl == 0 {
-		ttl = i.defaultTTL
+	if !now.Before(req.Parent.ExpiresAt) {
+		return nil, "", fmt.Errorf("capability: delegate from parent %s: %w", req.Parent.ID, ErrExpired)
 	}
-	expires := now.Add(ttl)
+	revoked, err := i.store.IsRevoked(ctx, req.Parent.ID)
+	if err != nil {
+		return nil, "", fmt.Errorf("capability: delegate revocation lookup: %w", err)
+	}
+	if revoked {
+		return nil, "", fmt.Errorf("capability: delegate from parent %s: %w", req.Parent.ID, ErrRevoked)
+	}
+
+	expires, err := i.expiry(now, req.TTL)
+	if err != nil {
+		return nil, "", err
+	}
 	if expires.After(req.Parent.ExpiresAt) {
 		expires = req.Parent.ExpiresAt
 	}
@@ -201,8 +265,8 @@ func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (*Capability
 		ParentID:   req.Parent.ID,
 		Generation: 1,
 	}
-	if !req.NotBefore.IsZero() {
-		child.NotBefore = req.NotBefore.UTC()
+	if err := setNotBefore(&child, req.NotBefore); err != nil {
+		return nil, "", err
 	}
 
 	if err := Narrows(req.Parent, child); err != nil {
