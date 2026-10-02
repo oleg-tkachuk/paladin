@@ -250,6 +250,7 @@ tasks:
       - task: verify:taskfile-drift
       - task: verify:publish-target
       - task: verify:new-release-tag
+      - task: verify:stream-release-notes
       - task: verify:release-head
       - task: verify:release-rules
       - task: verify:go-module-paths
@@ -520,6 +521,11 @@ tasks:
     # already existed, and fail.
     cmds:
       - ./scripts/new-release-tag.test.sh
+
+  verify:stream-release-notes:
+    desc: "Fail when an SDK or capability release lists commits that are not its own"
+    cmds:
+      - ./scripts/stream-release-notes.test.sh
 
   verify:release-head:
     desc: "Fail when release.yaml would tag a main head newer than the commit CI passed"
