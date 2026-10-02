@@ -1609,6 +1609,72 @@ finding moving from "packages you import" to "your code is affected".
 
 ---
 
+## Architecture review (2026-10-02)
+
+Defects the review behind `backend/docs/diagrams.md` found and confirmed in
+the code. Not fixed in the documentation change that recorded them.
+
+### Object version RPCs skip authorisation
+
+- **Status:** Open — security, highest priority here.
+- **Reason:** `ListObjectVersions`, `GetObjectVersion` and
+  `RestoreObjectVersion` reach `objecth.VersionHandler` with no Cedar check and
+  no capability-op check: `wire.ProvideVersionHandler` takes no authorizer and
+  `RestoreVersion` goes from `CallerContext` straight to
+  `SetCurrentVersionID`. RLS still confines a caller to its own tenant, but
+  within it a read-only capability or a scoped token can repoint an object's
+  current version.
+- **Definition of Done:** all three call the same authorisation as the object
+  RPCs (Cedar action, scope forbid, `AssertCapabilityOp`), with tests showing a
+  read-only principal refused.
+- **Blockers:** none.
+
+### The console serves every role's health snapshot without a session
+
+- **Status:** Open — security.
+- **Reason:** `/api/health` is a public prefix in `frontend/src/proxy.ts`, and
+  `/api/health/all` attaches the server-held snapshot token itself, so anyone
+  who reaches the console reads what `runtime.health_snapshot_token` gates on
+  the backends. Confirmed live: an anonymous request returned all five roles.
+- **Definition of Done:** `/api/health/all` requires a session (only
+  `/api/health/live` stays public for the kubelet), with a test.
+- **Blockers:** none.
+
+### Ingest claims an event before handling it
+
+- **Status:** Open — can lose events.
+- **Reason:** `eventingest.Worker.Deliver` commits the `ingested_events` dedup
+  row, then runs the handler. If the handler fails, the broker's retry finds
+  the row and is acked as a duplicate, so the object never leaves `PENDING`
+  through ingest (the reconciler is the fallback).
+- **Definition of Done:** the claim and the promotion commit together, or the
+  claim is released on failure, with a test that fails a handler once and sees
+  the retry promote.
+- **Blockers:** none.
+
+### Hard delete removes the bytes before it re-checks the row
+
+- **Status:** Open — data loss on a race.
+- **Reason:** `LifecycleHardDeleter.deleteOne` deletes from S3, then runs the
+  version-gated DB delete. A `Restore` in between keeps the row `AVAILABLE`
+  with its bytes already gone; the comment above it says the opposite.
+- **Definition of Done:** the row is claimed (or re-checked under a lock)
+  before the S3 delete, with a test for the restore race, and the comment
+  corrected.
+- **Blockers:** none.
+
+### The dispatcher holds row locks across sink I/O
+
+- **Status:** Deferred.
+- **Reason:** `OutboxRunner.tick` selects a batch `FOR UPDATE SKIP LOCKED` and
+  keeps that transaction open while it delivers every row, HTTP retries and
+  their sleeps included. A slow sink stretches the transaction; a failed
+  status update rolls the batch back and redelivers rows that already
+  succeeded. `failed` rows are never redriven or purged.
+- **Definition of Done:** delivery happens outside the locking transaction
+  (claim, deliver, record), with a retention and redrive path for `failed`.
+- **Blockers:** none.
+
 ## Tooling and observability
 
 ### Include-level `vars:` do not reach a var the component declares
