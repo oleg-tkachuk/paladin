@@ -125,6 +125,7 @@ type retryPolicy struct {
 	// transient decides which failures are worth another attempt; nil is
 	// DefaultRetryable.
 	transient func(error) bool
+	observe   observer
 }
 
 func (r *retryPolicy) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -141,6 +142,7 @@ func (r *retryPolicy) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 				// server's answer rather than a deadline error.
 				return resp, err
 			}
+			r.observe.retry(ctx, RetryEvent{Procedure: req.Spec().Procedure, Attempt: attempt, Wait: wait, Err: err})
 			timer := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():

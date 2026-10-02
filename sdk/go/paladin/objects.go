@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -280,11 +281,13 @@ func put(ctx context.Context, t *Transfer, signed *commonv1.PresignedUrl, conten
 	if contentType != "" {
 		header.Set(headerContentType, contentType)
 	}
+	start := time.Now()
 	resp, err := t.do(ctx, http.MethodPut, signed, header, body, size)
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body) // so the connection is reused
+	t.ended(ctx, resp.Request.Method, resp.Request.URL.Host, size, start, nil)
 	return strings.Trim(resp.Header.Get(headerETag), etagQuote), nil
 }
