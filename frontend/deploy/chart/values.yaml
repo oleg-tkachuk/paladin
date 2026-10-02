@@ -174,6 +174,13 @@ tls:
 # backend.namespace). On by default: inert on a CNI that does not enforce
 # policies, and on one that does, the namespaces below must be this
 # cluster's — a wrong one cuts the console off.
+#
+# It also keeps clients from naming their own address. The backend trusts the
+# console as a proxy, but the console cannot append the address it was reached
+# from: Next.js keeps a client-sent X-Forwarded-For and drops the socket peer.
+# So the console must be reached only through a proxy that replaces a
+# client-sent X-Forwarded-For (Traefik, Caddy and ingress-nginx do by default),
+# never directly — which this policy enforces.
 networkPolicies:
   enabled: true
   # Ingress controller pods allowed to reach the console.
