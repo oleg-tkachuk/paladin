@@ -124,6 +124,11 @@ func (s *ObjectServer) LookupObject(ctx context.Context, req *connect.Request[pb
 	return connect.NewResponse(objectToProto(out)), nil
 }
 
+// updateObjectPaths are the UpdateObjectRequest fields UpdateObject applies.
+// content_type is on the request but nothing applies it, so it is refused
+// rather than reported as updated.
+var updateObjectPaths = []string{"metadata", "tags", "external_ref"}
+
 func (s *ObjectServer) UpdateObject(ctx context.Context, req *connect.Request[pb.UpdateObjectRequest]) (*connect.Response[pb.Object], error) {
 	m := req.Msg
 	collection, objectID, err := objectNameParts(ctx, m.GetName())
@@ -134,6 +139,9 @@ func (s *ObjectServer) UpdateObject(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
+	}
+	if err := convx.CheckMask(m.GetUpdateMask().GetPaths(), updateObjectPaths); err != nil {
+		return nil, err
 	}
 	out, err := s.H.UpdateObject(ctx, objecth.UpdateObjectInput{
 		Collection:      collection,

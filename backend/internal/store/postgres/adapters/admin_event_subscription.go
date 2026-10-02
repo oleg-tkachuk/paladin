@@ -78,22 +78,22 @@ func (r *EventSubscriptionRepoV2) List(ctx context.Context, args admindomain.Lis
 }
 
 func (r *EventSubscriptionRepoV2) Update(ctx context.Context, s admindomain.EventSubscription, expectedVersion int64, mask []string) error {
-	has := func(f string) bool { return slices.Contains(mask, f) }
+	// An empty mask replaces every field (AIP-134), as the handler's filter
+	// validation already assumes.
+	has := func(f string) bool { return len(mask) == 0 || slices.Contains(mask, f) }
 	var celFilter, sinkKind *string
 	var sinkConfig []byte
 	var disabled *bool
-	if has("cel_filter") {
+	if has(admindomain.EventSubscriptionPathFilter) {
 		v := s.CELFilter
 		celFilter = &v
 	}
-	if has("sink_kind") {
+	if has(admindomain.EventSubscriptionPathSink) {
 		v := s.SinkKind
 		sinkKind = &v
-	}
-	if has("sink_config") {
 		sinkConfig = s.SinkConfig
 	}
-	if has("disabled") {
+	if has(admindomain.EventSubscriptionPathDisabled) {
 		v := s.Disabled
 		disabled = &v
 	}

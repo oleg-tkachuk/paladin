@@ -148,3 +148,85 @@ func TestEventSubscriptionRepoV2_Create_AcceptsNATSSinkKind(t *testing.T) {
 		t.Errorf("sink_kind round-trip: got %q want %q", sinkKind, "nats")
 	}
 }
+
+// TestEventSubscriptionRepoV2_Update_AppliesTheProtoPaths pins the mask the
+// console sends — the EventSubscription's proto field names. The repository
+// read the column names (cel_filter, sink_kind, sink_config) instead, so a
+// filter or sink edit returned success and changed nothing, and an empty mask
+// changed nothing at all.
+func TestEventSubscriptionRepoV2_Update_AppliesTheProtoPaths(t *testing.T) {
+	h := pgharness.Setup(t)
+	ctx := context.Background()
+	tenantID := uuid.New()
+	if _, err := h.PoolMigrate.Exec(ctx,
+		`INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
+		tenantID, "update-mask-paths", "Update Mask Paths",
+	); err != nil {
+		t.Fatalf("seed tenant: %v", err)
+	}
+	repo := adapters.NewEventSubscriptionRepoV2(sqlc.New(h.PoolMigrate))
+
+	before, _ := json.Marshal(map[string]string{"url": "https://before.test/hook"})
+	after, _ := json.Marshal(map[string]string{"subject": "paladin.after"})
+	newSub := func() admindomain.EventSubscription {
+		sub := admindomain.EventSubscription{TenantID: tenantID, SinkKind: "http", SinkConfig: before}
+		if err := repo.Create(ctx, &sub); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		got, err := repo.Get(ctx, sub.SubscriptionID)
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		return got
+	}
+	update := func(cur admindomain.EventSubscription, mask []string) admindomain.EventSubscription {
+		t.Helper()
+		next := cur
+		next.CELFilter = `event.type == "paladin.object.uploaded"`
+		next.SinkKind = "nats"
+		next.SinkConfig = after
+		next.Disabled = true
+		if err := repo.Update(ctx, next, cur.ResourceVersion, mask); err != nil {
+			t.Fatalf("Update(%v): %v", mask, err)
+		}
+		got, err := repo.Get(ctx, cur.SubscriptionID)
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		return got
+	}
+
+	got := update(newSub(), []string{admindomain.EventSubscriptionPathFilter})
+	if got.CELFilter == "" || got.SinkKind != "http" || got.Disabled {
+		t.Errorf("mask [filter]: got filter=%q sink=%s disabled=%v, want only the filter changed",
+			got.CELFilter, got.SinkKind, got.Disabled)
+	}
+
+	got = update(newSub(), []string{admindomain.EventSubscriptionPathSink})
+	if got.SinkKind != "nats" || !jsonEqual(t, got.SinkConfig, after) || got.CELFilter != "" {
+		t.Errorf("mask [sink]: got sink=%s config=%s filter=%q, want only the sink changed",
+			got.SinkKind, got.SinkConfig, got.CELFilter)
+	}
+
+	got = update(newSub(), nil)
+	if got.CELFilter == "" || got.SinkKind != "nats" || !got.Disabled {
+		t.Errorf("empty mask: got filter=%q sink=%s disabled=%v, want every field replaced",
+			got.CELFilter, got.SinkKind, got.Disabled)
+	}
+}
+
+// jsonEqual compares two JSON documents by value, not by bytes: jsonb
+// re-serialises what it stores.
+func jsonEqual(t *testing.T, a, b []byte) bool {
+	t.Helper()
+	var x, y any
+	if err := json.Unmarshal(a, &x); err != nil {
+		t.Fatalf("decode %s: %v", a, err)
+	}
+	if err := json.Unmarshal(b, &y); err != nil {
+		t.Fatalf("decode %s: %v", b, err)
+	}
+	xb, _ := json.Marshal(x)
+	yb, _ := json.Marshal(y)
+	return string(xb) == string(yb)
+}

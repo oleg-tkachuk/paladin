@@ -125,6 +125,9 @@ func (s *CollectionServer) GetCollection(ctx context.Context, req *connect.Reque
 	return connect.NewResponse(collectionDomainToProto(out)), nil
 }
 
+// updateCollectionPaths are the Collection fields UpdateCollection applies.
+var updateCollectionPaths = []string{"display_name", "cedar_policy"}
+
 func (s *CollectionServer) UpdateCollection(ctx context.Context, req *connect.Request[pb.UpdateCollectionRequest]) (*connect.Response[pb.Collection], error) {
 	if err := requireCompilablePolicy(req.Msg.GetCollectionResource().GetCedarPolicy()); err != nil {
 		return nil, err
@@ -146,6 +149,9 @@ func (s *CollectionServer) UpdateCollection(ctx context.Context, req *connect.Re
 		ExpectedVersion: rv,
 	}
 	mask := m.GetUpdateMask().GetPaths()
+	if err := convx.CheckMask(mask, updateCollectionPaths); err != nil {
+		return nil, err
+	}
 	if slices.Contains(mask, "display_name") {
 		v := src.GetDisplayName()
 		args.DisplayName = &v

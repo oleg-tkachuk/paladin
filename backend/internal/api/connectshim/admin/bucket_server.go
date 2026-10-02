@@ -129,6 +129,9 @@ func (s *BucketServer) ListAccessibleBuckets(ctx context.Context, req *connect.R
 	return connect.NewResponse(out), nil
 }
 
+// updateBucketPaths are the Bucket fields UpdateBucket applies.
+var updateBucketPaths = []string{"display_name", "labels", "owner_tenant_id"}
+
 func (s *BucketServer) UpdateBucket(ctx context.Context, req *connect.Request[pb.UpdateBucketRequest]) (*connect.Response[pb.Bucket], error) {
 	if err := requireCompilablePolicy(req.Msg.GetBucket().GetCedarPolicy()); err != nil {
 		return nil, err
@@ -142,6 +145,9 @@ func (s *BucketServer) UpdateBucket(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
+	}
+	if err := convx.CheckMask(m.GetUpdateMask().GetPaths(), updateBucketPaths); err != nil {
+		return nil, err
 	}
 	b := admindomain.Bucket{
 		BackendID:   backend,
