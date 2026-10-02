@@ -1,17 +1,22 @@
 //go:build integration
 
-// Package pgharness spins up a Postgres container for integration
-// tests, applies the embedded migrations, and hands back the pool
-// connections plus role DSNs the tests need.
+// Package pgharness gives each integration test its own migrated Postgres
+// database, and hands back the pool connections plus role DSNs the tests
+// need.
 //
-// Cost: container start ≈ 2-3s on a warm cache, ≈ 8-10s cold. The
-// `integration` build tag keeps it out of the default `go test ./...`
-// path.
+// One container serves the whole test binary. The first Setup starts it,
+// migrates a template database and configures the roles; every Setup then
+// clones the template (CREATE DATABASE ... TEMPLATE, a fraction of a second
+// against the 2-10s a container start costs) and drops the clone when the
+// test ends. Tables, sequences, LISTEN/NOTIFY channels and advisory locks are
+// per database, so a test sees nothing another wrote. Roles are server-wide:
+// the harness sets them up once, and a test must not alter them.
 //
-// Lifecycle: Setup() returns a *Harness with t.Cleanup wired so the
-// container terminates when the test (or the parent test in a
-// subtests-with-shared-harness setup) finishes. Tests do NOT call
-// Close manually.
+// Lifecycle: Setup() returns a *Harness with t.Cleanup wired, so tests do
+// NOT close anything. A package's TestMain calls Main so the container stops
+// with the binary; without it, the testcontainers reaper removes it.
+//
+// The `integration` build tag keeps it out of the default `go test ./...`.
 //
 // Two pool roles are exposed:
 //
@@ -35,9 +40,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver for goose
 	"github.com/pressly/goose/v3"
@@ -49,8 +58,35 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
 
-// Harness is the per-test (or per-suite) Postgres environment.
+const (
+	postgresImage = "postgres:16-alpine"
+	// migrateRole is the container's bootstrap superuser, and the role goose
+	// applies DDL as.
+	migrateRole     = "paladin_migrate"
+	migratePassword = "paladin"
+	// appRole is created NOLOGIN by the migrations; promoteAppRole gives it
+	// this password.
+	appRole     = "paladin_app"
+	appPassword = "paladin_app"
+	// templateDB is migrated once and cloned per test. Nothing stays
+	// connected to it: CREATE DATABASE ... TEMPLATE refuses a template that
+	// has a session.
+	templateDB = "paladin_template"
+	// maintenanceDB is where the clones are created and dropped from.
+	maintenanceDB = "postgres"
+	cloneDBPrefix = "t_"
+
+	readyLog       = "database system is ready to accept connections"
+	readyLogCount  = 2 // once for the init run, once for the real server
+	startupTimeout = 60 * time.Second
+	sslDisabled    = "sslmode=disable"
+)
+
+// Harness is one test's Postgres environment: a database of its own on the
+// binary's shared server.
 type Harness struct {
+	// Container is the shared server. Stopping it stops every test's
+	// database, so a test must not.
 	Container testcontainers.Container
 
 	// PoolMigrate runs as `paladin_migrate` (BYPASSRLS). Use for seeding
@@ -69,58 +105,64 @@ type Harness struct {
 	// principal). Use AssertRLSHidesCrossTenant.
 	PoolAppNoGUC *pgxpool.Pool
 
-	// DSN strings for either role, in case a test needs to open its
-	// own connection (e.g. to verify connection-time GUC behaviour).
+	// DSN strings for either role on this test's database, in case a test
+	// needs to open its own connection (e.g. to verify connection-time GUC
+	// behaviour).
 	MigrateDSN string
 	AppDSN     string
 }
 
-// Setup launches Postgres, applies migrations, creates the
-// `paladin_app` runtime role, and returns the harness. Failures here
-// fail the test up-front (t.Fatalf).
+var shared struct {
+	once        sync.Once
+	err         error
+	container   *tcpostgres.PostgresContainer
+	maintenance *pgxpool.Pool
+	// dsn is the superuser DSN of the template; per-test DSNs swap the
+	// database and, for the app role, the user.
+	dsn  *url.URL
+	next atomic.Uint64
+}
+
+// Main runs the package's tests and stops the shared container afterwards.
+// Call it from TestMain: os.Exit(pgharness.Main(m)).
+func Main(m *testing.M) int {
+	code := m.Run()
+	if shared.maintenance != nil {
+		shared.maintenance.Close()
+	}
+	if shared.container != nil {
+		_ = shared.container.Terminate(context.Background())
+	}
+	return code
+}
+
+// Setup clones the migrated template into a database of this test's own and
+// returns pools on it. Failures here fail the test up-front (t.Fatalf).
 func Setup(t *testing.T) *Harness {
 	t.Helper()
+	shared.once.Do(func() { shared.err = startShared() })
+	if shared.err != nil {
+		t.Fatalf("shared postgres: %v", shared.err)
+	}
 	ctx := context.Background()
 
-	pgC, err := tcpostgres.Run(ctx,
-		"postgres:16-alpine",
-		tcpostgres.WithDatabase("paladin"),
-		tcpostgres.WithUsername("paladin_migrate"),
-		tcpostgres.WithPassword("paladin"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second),
-		),
-	)
-	if err != nil {
-		t.Fatalf("postgres container start: %v", err)
+	name := fmt.Sprintf("%s%d", cloneDBPrefix, shared.next.Add(1))
+	ident := pgx.Identifier{name}.Sanitize()
+	if _, err := shared.maintenance.Exec(ctx,
+		"CREATE DATABASE "+ident+" TEMPLATE "+pgx.Identifier{templateDB}.Sanitize()); err != nil {
+		t.Fatalf("clone %s: %v", templateDB, err)
 	}
+	// Registered before the pools' Close, so it runs after them (cleanups
+	// are LIFO). FORCE ends sessions a test's own components still hold.
 	t.Cleanup(func() {
-		// Use a fresh ctx — the test ctx may already be cancelled.
-		_ = pgC.Terminate(context.Background())
+		if _, err := shared.maintenance.Exec(context.Background(),
+			"DROP DATABASE IF EXISTS "+ident+" WITH (FORCE)"); err != nil {
+			t.Errorf("drop %s: %v", name, err)
+		}
 	})
 
-	// Tier the migrate role up to BYPASSRLS so the RLS baseline (002_roles_and_rls.sql) can
-	// re-set the same property idempotently. testcontainers/postgres
-	// creates the configured user without it.
-	migrateDSN, err := pgC.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("connection string: %v", err)
-	}
-
-	if err := preconfigureMigrateRole(ctx, migrateDSN); err != nil {
-		t.Fatalf("preconfigure migrate role: %v", err)
-	}
-
-	// Run all migrations. Migration 011 creates paladin_app NOLOGIN; we
-	// promote it post-migration so the test pool can connect.
-	if err := applyMigrations(migrateDSN); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
-	if err := promoteAppRole(ctx, migrateDSN); err != nil {
-		t.Fatalf("promote app role: %v", err)
-	}
+	migrateDSN := dsnFor(name, url.UserPassword(migrateRole, migratePassword))
+	appDSN := dsnFor(name, url.UserPassword(appRole, appPassword))
 
 	// Build the migrate-role pool (BYPASSRLS). Used for seed data.
 	poolMigrate, err := pgxpool.New(ctx, migrateDSN)
@@ -130,10 +172,6 @@ func Setup(t *testing.T) *Harness {
 	t.Cleanup(poolMigrate.Close)
 
 	// Build the app-role pool with the RLS BeforeAcquire hook.
-	host, _ := pgC.Host(ctx)
-	port, _ := pgC.MappedPort(ctx, "5432/tcp")
-	appDSN := fmt.Sprintf("postgres://paladin_app:paladin_app@%s:%s/paladin?sslmode=disable", host, port.Port())
-
 	appCfg, err := pgxpool.ParseConfig(appDSN)
 	if err != nil {
 		t.Fatalf("app pool parse: %v", err)
@@ -154,13 +192,70 @@ func Setup(t *testing.T) *Harness {
 	t.Cleanup(poolAppNoGUC.Close)
 
 	return &Harness{
-		Container:    pgC,
+		Container:    shared.container,
 		PoolMigrate:  poolMigrate,
 		PoolApp:      poolApp,
 		PoolAppNoGUC: poolAppNoGUC,
 		MigrateDSN:   migrateDSN,
 		AppDSN:       appDSN,
 	}
+}
+
+// startShared launches the server, configures the roles and migrates the
+// template. Runs once per test binary.
+func startShared() error {
+	ctx := context.Background()
+	ctr, err := tcpostgres.Run(ctx, postgresImage,
+		tcpostgres.WithDatabase(templateDB),
+		tcpostgres.WithUsername(migrateRole),
+		tcpostgres.WithPassword(migratePassword),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog(readyLog).
+				WithOccurrence(readyLogCount).
+				WithStartupTimeout(startupTimeout),
+		),
+	)
+	if err != nil {
+		return fmt.Errorf("postgres container start: %w", err)
+	}
+	shared.container = ctr
+
+	raw, err := ctr.ConnectionString(ctx, sslDisabled)
+	if err != nil {
+		return fmt.Errorf("connection string: %w", err)
+	}
+	if shared.dsn, err = url.Parse(raw); err != nil {
+		return fmt.Errorf("parse connection string: %w", err)
+	}
+
+	// Tier the migrate role up to BYPASSRLS so the RLS baseline
+	// (002_roles_and_rls.sql) can re-set the same property idempotently.
+	// testcontainers/postgres creates the configured user without it.
+	if err := preconfigureMigrateRole(ctx, raw); err != nil {
+		return fmt.Errorf("preconfigure migrate role: %w", err)
+	}
+	// Run all migrations. The migrations create paladin_app NOLOGIN; it is
+	// promoted afterwards so the test pools can connect.
+	if err := applyMigrations(raw); err != nil {
+		return fmt.Errorf("apply migrations: %w", err)
+	}
+	if err := promoteAppRole(ctx, raw); err != nil {
+		return fmt.Errorf("promote app role: %w", err)
+	}
+
+	shared.maintenance, err = pgxpool.New(ctx, dsnFor(maintenanceDB, shared.dsn.User))
+	if err != nil {
+		return fmt.Errorf("maintenance pool: %w", err)
+	}
+	return nil
+}
+
+// dsnFor is the shared server's DSN for database db as user.
+func dsnFor(db string, user *url.Userinfo) string {
+	u := *shared.dsn
+	u.User = user
+	u.Path = "/" + db
+	return u.String()
 }
 
 // AssertRLSHidesCrossTenant proves the production failure mode the reaper +
@@ -197,7 +292,7 @@ func preconfigureMigrateRole(ctx context.Context, dsn string) error {
 		return err
 	}
 	defer pool.Close()
-	_, err = pool.Exec(ctx, `ALTER ROLE paladin_migrate BYPASSRLS`)
+	_, err = pool.Exec(ctx, "ALTER ROLE "+migrateRole+" BYPASSRLS")
 	return err
 }
 
@@ -211,7 +306,7 @@ func promoteAppRole(ctx context.Context, dsn string) error {
 		return err
 	}
 	defer pool.Close()
-	_, err = pool.Exec(ctx, `ALTER ROLE paladin_app WITH LOGIN PASSWORD 'paladin_app'`)
+	_, err = pool.Exec(ctx, "ALTER ROLE "+appRole+" WITH LOGIN PASSWORD '"+appPassword+"'")
 	return err
 }
 

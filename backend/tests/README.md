@@ -19,3 +19,25 @@ Everything that needs Docker or a stack is collected by
 
 The `integration`, `conformance` and `e2e` suites sit behind build tags of the
 same names, so `go test ./...` and `verify-all` never start a container.
+
+## One Postgres per test binary, one database per test
+
+Both Postgres-backed packages share one container per test binary and give
+every test a database of its own, cloned from a template the migrations ran
+into once: `pgharness.Setup` in `integration/`, `startPostgres` in
+`integration/components/`. A clone takes a fraction of a second where a
+container took seconds, and the clone is dropped when the test ends.
+
+Tables, sequences, LISTEN/NOTIFY channels and advisory locks are per
+database, so a test sees nothing another wrote, and most tests run with
+`t.Parallel`. What the server shares, a test must not disturb:
+
+- **Roles are server-wide.** Configure them in the harness, once. A test that
+  needs a role of its own names it after its database (`rlsPool` does).
+- **`pg_stat_activity` lists every database.** Filter on
+  `datname = current_database()` before terminating or counting backends.
+- **A test that alters a shared role, sets goose's package globals or calls
+  `t.Setenv` stays serial**, with a first-line comment saying which.
+
+A package using `pgharness` calls `os.Exit(pgharness.Main(m))` from its
+`TestMain`, so the container stops with the binary.
