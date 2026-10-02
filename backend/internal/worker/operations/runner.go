@@ -187,7 +187,7 @@ func (r *Runner) runOne(ctx context.Context, op operationh.Operation) {
 	defer cancel()
 	if err := r.Repo.UpdateState(writeCtx, op.OperationID,
 		operationh.StateSucceeded, op.Metadata, response, "", ""); err != nil {
-		logger.Warn("failed to mark SUCCEEDED", zap.Error(err))
+		r.logTerminalWrite(logger, operationh.StateSucceeded, err)
 	}
 }
 
@@ -268,8 +268,21 @@ func (r *Runner) markFailed(ctx context.Context, op operationh.Operation, code, 
 	defer cancel()
 	if err := r.Repo.UpdateState(writeCtx, op.OperationID,
 		operationh.StateFailed, op.Metadata, resp, code, msg); err != nil {
-		r.log().Warn("failed to mark FAILED", zap.Error(err))
+		r.logTerminalWrite(r.log().With(zap.String("operation_id", op.OperationID.String())),
+			operationh.StateFailed, err)
 	}
+}
+
+// logTerminalWrite reports a terminal write that did not land. An operation
+// cancelled or reclaimed while it ran keeps that outcome; its result is
+// dropped, which is expected rather than a failure.
+func (r *Runner) logTerminalWrite(logger *zap.Logger, state operationh.State, err error) {
+	if errors.Is(err, operationh.ErrOperationFinished) {
+		logger.Info("operation finished before its result was written; result dropped",
+			zap.String("result", string(state)))
+		return
+	}
+	logger.Warn("failed to mark "+string(state), zap.Error(err))
 }
 
 func (r *Runner) log() *zap.Logger {

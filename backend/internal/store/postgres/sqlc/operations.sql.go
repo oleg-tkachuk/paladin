@@ -337,6 +337,7 @@ SET state         = $2::operation_state,
                          THEN now() ELSE done_at END,
     updated_at    = now()
 WHERE id = $1
+  AND state IN ('PENDING', 'RUNNING')
 `
 
 // Both uses of $state are cast explicitly. Without them Postgres deduces the
@@ -345,6 +346,8 @@ WHERE id = $1
 // deduced for parameter". Every terminal transition failed on that: the runner
 // logged "operation succeeded" and then "failed to mark SUCCEEDED", leaving
 // every operation RUNNING forever and its response unwritten.
+// A finished operation stays finished: a cancel, or the stale reclaimer's
+// FAILED, is not overwritten by the runner's late progress or result.
 func (q *Queries) UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error) {
 	result, err := q.db.Exec(ctx, updateOperationState,
 		iD,

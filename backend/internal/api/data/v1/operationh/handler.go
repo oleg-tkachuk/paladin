@@ -209,6 +209,11 @@ func (h *Handler) Submit(ctx context.Context, opType string, metadata []byte) (u
 // terminal state and cannot be cancelled.
 var ErrNotCancellable = errors.New("operation not in cancellable state")
 
+// ErrOperationFinished is surfaced by UpdateState when the operation is not
+// found or already in a terminal state — cancelled, or reclaimed as lost —
+// so the write was not applied.
+var ErrOperationFinished = errors.New("operation not found or already finished")
+
 // ErrNoOperationToClaim is the typed sentinel returned by ClaimNext on
 // the worker side when nothing is PENDING. Worker loops gate on it as
 // the cheap "nothing to do; sleep until next tick" signal — distinct

@@ -132,7 +132,7 @@ func (r *OperationRepo) UpdateState(ctx context.Context, opID uuid.UUID, newStat
 		return fmt.Errorf("update operation: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("operation %s not found", opID)
+		return fmt.Errorf("operation %s: %w", opID, operationh.ErrOperationFinished)
 	}
 	return nil
 }
