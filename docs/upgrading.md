@@ -42,6 +42,28 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## v0.23.0 — TLS that a consumer can wrap, verify and close
+
+- **Go: `TLS.RoundTripper()` returns the rotating transport** `WithTLS` and
+  `WithTransferTLS` use, as a `*RotatingTransport`, for a client of your own
+  that wraps it — give it to `WithHTTPClient` or `WithTransferHTTPClient`.
+  After a rotation every new request, HTTP/2 included, goes on a connection
+  with the new files; before, a busy HTTP/2 connection kept taking requests
+  on the old certificate. `TLS.Transport()` is unchanged.
+- **Python: `TLS(server_id=…, verify_peer=…, min_version=…)`**, as in Go,
+  with the same errors by name (`ServerIDError` and the rest, each a
+  `ValueError`). The connections under `TLS` now run on the standard
+  library's `ssl` under httpcore, which the SDK depends on: pyqwest cannot
+  check a peer. After a rotation no request goes on an old connection, and the
+  old ones close once idle. A pyqwest-only setting passed to
+  `TLS.sync_transport()` still works, with a `DeprecationWarning`, for one
+  release.
+- **Python: the exit abort reported against 0.17 did not reproduce.** 200
+  runs each on macOS — 0.17.0, 0.17.0 with grpcio, and this release over
+  mutual TLS — exited cleanly, so nothing changed for it. A stress test now
+  makes and drops clients and transfers in fresh interpreters, 200 times per
+  CI run, and fails on any abort.
+
 ## Unreleased — the SDKs answer a consumer's review
 
 The contract does not change. What a caller may notice:

@@ -1759,19 +1759,6 @@ The contract-side half of ADR-0018. The client-side layers are in both SDKs.
   which `Connect` does not; that needs a per-call `TokenSource` reading the
   context.
 
-### Python TLS checks neither the server's SPIFFE ID nor a minimum version
-
-- **Status:** Blocked (upstream).
-- **Reason:** the Go SDK verifies `TLS.ServerID` as an X.509-SVID and takes
-  `TLS.MinVersion`; the Python `TLS` verifies the CA bundle and the host name
-  only, because pyqwest (0.11.0, the latest), the HTTP stack connect-python
-  runs on, exposes neither a peer-verification hook nor a protocol floor.
-- **Definition of Done:** `TLS(server_id=…, min_version=…)` in Python, with
-  the Go SDK's test cases — another SPIFFE ID, an SVID from another CA, a
-  server below the floor — passing against both.
-- **Blockers:** a verification callback and a minimum-version option in
-  pyqwest, or a decision to run connect-python over another transport.
-
 ### Python reads response headers through a transport of its own
 
 - **Status:** Deferred.
@@ -1786,14 +1773,21 @@ The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 
 ### An occasional abort at interpreter exit with the Python SDK loaded
 
-- **Status:** Blocked (needs a reproduction).
-- **Reason:** a consumer saw `recursive_mutex lock failed` abort the process
-  at exit in 3 of 28 local macOS test runs; the SDK's own suites have not
-  shown it. The message comes from native code — pyqwest's Rust runtime or
-  protobuf's upb — tearing down after the interpreter.
+- **Status:** Blocked (no reproduction).
+- **Reason:** a consumer saw `recursive_mutex lock failed` abort a test process
+  at exit in 3 of 28 local macOS runs with SDK 0.17. It has not reproduced:
+  200 runs each on macOS of 0.17.0 alone, 0.17.0 with grpcio loaded as
+  hatchet-sdk loads it, and 0.23 with mutual TLS, all exited 0. The message
+  is libc++'s, which neither pyqwest (Rust) nor upb (C) links; grpcio, in the
+  consumer's process through hatchet-sdk, does.
+  `sdk/python/tests/test_lifecycle.py` now runs the scenario in fresh
+  interpreters, a few times in every test run and 200 times in CI's
+  `py-sdk-lifecycle` job.
 - **Definition of Done:** a reproduction, its cause, and either a fix here
-  (closing the shared transports at exit) or an upstream issue linked.
-- **Blockers:** a reproducing run.
+  (closing the SDK's transports deterministically at exit) or an upstream
+  issue linked.
+- **Blockers:** a reproducing run — from the consumer, with the process's
+  native libraries listed, or from the lifecycle job.
 
 ## Tooling and observability
 

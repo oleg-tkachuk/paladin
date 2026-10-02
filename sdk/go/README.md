@@ -162,8 +162,7 @@ p, err := paladin.Connect(endpoints, paladin.WithTokens(session), paladin.WithTr
 `Transfer`'s connections to storage, with a CA bundle, a client certificate
 and an expected server identity. The files are read when the client is built
 and again whenever they change on disk, so certificates a workload-identity
-agent rotates are picked up without a restart; a connection already open
-keeps the one it was made with.
+agent rotates are picked up without a restart.
 
 ```go
 id := paladin.TLS{
@@ -184,18 +183,36 @@ p, err := paladin.Connect(endpoints, paladin.WithTokens(session), paladin.WithTL
 | `ReloadInterval` | How often the files are checked for a change (`DefaultTLSReloadInterval`, 30s). A rotation caught half-written — a new certificate beside the old key — keeps the last good pair until the next check. |
 | `MinVersion` | The lowest TLS version offered, a `crypto/tls` constant; zero is `DefaultTLSMinVersion`, TLS 1.2. Lower, or unknown, is `ErrTLSMinVersion`. |
 
-After a rotation, a connection made with the old files is closed as soon
-as it is idle, so the next request dials with the new ones; a request in
-flight finishes where it started. An RPC through `WithTLS` has no
+After a rotation every new request goes out on a connection made with the
+new files, over HTTP/2 as well as HTTP/1.1; a request in flight finishes on
+the connection it started on, and the old connections close once nothing
+uses them. An RPC through `WithTLS` has no
 response-header timeout — its context bounds it, as without TLS — while a
 transfer keeps `DefaultTransferResponseHeaderTimeout`.
 
-`(TLS).Transport()` returns an `*http.Transport` with the same files, bounded
-like a transfer's, for a client of your own: its fields are yours to change,
-and a rotation reaches its new connections only. `WithTLS` with
-`WithHTTPClient` is `ErrTLSAndHTTP`. These connections are made directly: a
-proxy from the environment would make the TLS connection itself, without the
-files.
+To wrap the TLS transport — a circuit breaker, metrics, a peer-identity
+recorder — build the client from `(TLS).RoundTripper()`. It returns the
+`*RotatingTransport` `WithTLS` and `WithTransferTLS` use, rotation included,
+and `WithTLS` with `WithHTTPClient` is `ErrTLSAndHTTP` for that reason:
+
+```go
+rt, err := id.RoundTripper()
+rt.ResponseHeaderTimeout = 0 // an RPC client: the call's context bounds it
+p, err := paladin.Connect(endpoints,
+	paladin.WithHTTPClient(&http.Client{Transport: breaker.Wrap(rt)}))
+storage, err := id.RoundTripper() // its own, keeping a transfer's bounds
+transfer, err := paladin.NewTransfer(paladin.WithTransferHTTPClient(
+	&http.Client{Transport: metrics.Wrap(storage)}))
+```
+
+| Name | Does |
+| --- | --- |
+| `(TLS).RoundTripper()` | A `*RotatingTransport` with the files: each request goes on an `http.Transport` for the files as they are now, cloned from the embedded one, whose fields — bounded like a transfer's — are yours to change before the first request. |
+| `RotatingTransport` | `RoundTrip`, and `CloseIdleConnections` over every generation, as `http.Client` expects. A replaced generation takes no request, and is closed once its last response is read. |
+| `(TLS).Transport()` | A bare `*http.Transport` with the same files. A rotation reaches its new connections only, the old ones staying open: prefer `RoundTripper`. |
+
+These connections are made directly: a proxy from the environment would
+make the TLS connection itself, without the files.
 
 ### Errors
 
@@ -333,8 +350,8 @@ on purpose:
 | | Go | Python | Why |
 | --- | --- | --- | --- |
 | Typed errors | `errors.Is(err, paladin.ErrNotFound)`, `*paladin.Error` | `except paladin.NotFoundError`, `PaladinError` | Each language's idiom; the same kinds, fields and reasons. |
-| Server identity over TLS | `TLS.ServerID`: the SPIFFE ID, checked by `go-spiffe` | Not available: the CA bundle and the host name only | `pyqwest` has no peer-verification hook. |
-| Minimum TLS version | `TLS.MinVersion`, 1.2 by default | pyqwest's own floor | `pyqwest` has no option for it. |
+| Server identity over TLS | `TLS.ServerID`: the SPIFFE ID, checked by `go-spiffe` | `TLS(server_id=…)`: the same check, after the handshake and before any request byte | Python's connections under `TLS` run on `ssl` and httpcore, because `pyqwest` has no peer-verification hook. |
+| Minimum TLS version | `TLS.MinVersion`, 1.2 by default | `TLS(min_version=…)`, `ssl.TLSVersion.TLSv1_2` by default | |
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0 (BACKLOG). |
 | Bulk downloads | `DownloadMany`, a callback per reader | `download_many` / `adownload_many`, an iterator of results | Each language's idiom. |
