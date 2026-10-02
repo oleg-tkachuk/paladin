@@ -2,6 +2,7 @@ package capability
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -9,29 +10,39 @@ import (
 )
 
 // RevocationLookup is the seam the cache wraps. A persistent store
-// implements it; tests substitute a stub. Pulled out of Store so the
-// cache stays decoupled from the persistence package and can sit in
-// front of any storage backend in the future (Redis, pgbouncer-fronted
-// read replica).
+// implements it; tests substitute a stub. Like Store.IsRevoked, it answers
+// for the capability's whole delegation chain.
 type RevocationLookup interface {
 	IsRevoked(ctx context.Context, id uuid.UUID) (bool, error)
 }
 
-// CachedRevocationChecker is a small in-memory cache for
-// IsRevoked answers. Entries TTL out after the configured period —
-// default 2s, matching the BACKLOG SLO for revocation propagation.
-//
-// Concurrency: a sync.RWMutex protects the map. Hits take the read
-// lock; misses upgrade to write to insert. The map is bounded only
-// by the natural cardinality of in-flight capability IDs (≤ a few
-// thousand at typical scale); a hard size cap can be added later if
-// runaway tenants pollute the cache.
-type CachedRevocationChecker struct {
-	upstream RevocationLookup
-	ttl      time.Duration
+// DefaultRevocationCacheTTL bounds how long a cached answer is served. A
+// revocation therefore takes effect within this window on every verifier
+// that did not perform it.
+const DefaultRevocationCacheTTL = 2 * time.Second
 
-	mu      sync.RWMutex
-	entries map[uuid.UUID]cacheEntry
+// DefaultRevocationCacheEntries bounds the cache. Past it, expired entries
+// are dropped and, if that frees nothing, the cache is reset: a flood of
+// distinct ids costs extra lookups, never unbounded memory.
+const DefaultRevocationCacheEntries = 100_000
+
+// CachedRevocationChecker is a small in-memory cache for IsRevoked answers.
+//
+// A cached answer about a capability is also an answer about its ancestors,
+// so revoking a parent reaches a child's cached "live" entry only when that
+// entry expires — within the TTL, like any other revocation seen from
+// another process.
+//
+// Concurrent misses for the same id share one upstream call.
+type CachedRevocationChecker struct {
+	upstream   RevocationLookup
+	ttl        time.Duration
+	maxEntries int
+	now        func() time.Time
+
+	mu       sync.Mutex
+	entries  map[uuid.UUID]cacheEntry
+	inflight map[uuid.UUID]*lookupCall
 }
 
 type cacheEntry struct {
@@ -39,71 +50,125 @@ type cacheEntry struct {
 	expires time.Time
 }
 
-// NewCachedRevocationChecker wires a cache over an upstream lookup. ttl
-// of 0 falls back to 2 seconds; ttl < 0 disables caching (every call
-// hits upstream — useful for tests).
-func NewCachedRevocationChecker(upstream RevocationLookup, ttl time.Duration) *CachedRevocationChecker {
-	if ttl == 0 {
-		ttl = 2 * time.Second
-	}
-	return &CachedRevocationChecker{
-		upstream: upstream,
-		ttl:      ttl,
-		entries:  make(map[uuid.UUID]cacheEntry),
+type lookupCall struct {
+	done    chan struct{}
+	revoked bool
+	err     error
+}
+
+// CacheOption configures a CachedRevocationChecker.
+type CacheOption func(*CachedRevocationChecker)
+
+// WithCacheClock replaces time.Now; tests use it to step through expiry.
+func WithCacheClock(now func() time.Time) CacheOption {
+	return func(c *CachedRevocationChecker) { c.now = now }
+}
+
+// WithMaxEntries bounds the number of cached ids. ≤ 0 keeps the default.
+func WithMaxEntries(n int) CacheOption {
+	return func(c *CachedRevocationChecker) {
+		if n > 0 {
+			c.maxEntries = n
+		}
 	}
 }
 
-// IsRevoked checks the cache, falling through to the upstream on miss
-// or expired entry. Cache writes happen under the write lock; the
-// double-check pattern avoids two goroutines both upgrading on the
-// same key.
+// NewCachedRevocationChecker wires a cache over an upstream lookup. ttl
+// of 0 falls back to DefaultRevocationCacheTTL; ttl < 0 disables caching
+// (every call hits upstream — useful for tests).
+func NewCachedRevocationChecker(upstream RevocationLookup, ttl time.Duration, opts ...CacheOption) *CachedRevocationChecker {
+	if ttl == 0 {
+		ttl = DefaultRevocationCacheTTL
+	}
+	c := &CachedRevocationChecker{
+		upstream:   upstream,
+		ttl:        ttl,
+		maxEntries: DefaultRevocationCacheEntries,
+		now:        time.Now,
+		entries:    make(map[uuid.UUID]cacheEntry),
+		inflight:   make(map[uuid.UUID]*lookupCall),
+	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
+}
+
+// IsRevoked serves a fresh cached answer, or asks upstream once on behalf of
+// every concurrent caller asking about the same id. An upstream error is
+// returned to all of them and is never cached.
 func (c *CachedRevocationChecker) IsRevoked(ctx context.Context, id uuid.UUID) (bool, error) {
 	if c.ttl < 0 {
 		return c.upstream.IsRevoked(ctx, id)
 	}
 
-	now := time.Now()
-
-	c.mu.RLock()
-	if e, ok := c.entries[id]; ok && e.expires.After(now) {
-		c.mu.RUnlock()
+	c.mu.Lock()
+	if e, ok := c.entries[id]; ok && e.expires.After(c.now()) {
+		c.mu.Unlock()
 		return e.revoked, nil
 	}
-	c.mu.RUnlock()
-
-	revoked, err := c.upstream.IsRevoked(ctx, id)
-	if err != nil {
-		return false, err
+	if call, ok := c.inflight[id]; ok {
+		c.mu.Unlock()
+		select {
+		case <-call.done:
+			// The leader's request may have been cancelled or timed out on
+			// its own account. That is no answer about the id, so a waiter
+			// whose own context is still live asks for itself.
+			if call.err != nil && isContextErr(call.err) && ctx.Err() == nil {
+				return c.upstream.IsRevoked(ctx, id)
+			}
+			return call.revoked, call.err
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
 	}
+	call := &lookupCall{done: make(chan struct{})}
+	c.inflight[id] = call
+	c.mu.Unlock()
+
+	call.revoked, call.err = c.upstream.IsRevoked(ctx, id)
 
 	c.mu.Lock()
-	// Re-check under the write lock so concurrent fillers don't
-	// stampede each other's writes (rare but cheap to handle).
-	if e, ok := c.entries[id]; !ok || !e.expires.After(now) {
-		c.entries[id] = cacheEntry{revoked: revoked, expires: now.Add(c.ttl)}
+	delete(c.inflight, id)
+	if call.err == nil {
+		c.makeRoomLocked()
+		c.entries[id] = cacheEntry{revoked: call.revoked, expires: c.now().Add(c.ttl)}
 	}
 	c.mu.Unlock()
-	return revoked, nil
+	close(call.done)
+	return call.revoked, call.err
 }
 
-// Invalidate drops a single entry — call from the issuer/admin path
-// when a capability is revoked through this process so the local cache
-// reflects the new truth immediately. Other pods will catch up at the
-// natural TTL.
+// makeRoomLocked keeps the cache under maxEntries.
+func (c *CachedRevocationChecker) makeRoomLocked() {
+	if len(c.entries) < c.maxEntries {
+		return
+	}
+	c.sweepLocked()
+	if len(c.entries) >= c.maxEntries {
+		clear(c.entries)
+	}
+}
+
+// Invalidate drops a single entry — call it from the path that revoked the
+// capability so the local cache reflects the new truth immediately. Other
+// processes catch up within the TTL.
 func (c *CachedRevocationChecker) Invalidate(id uuid.UUID) {
 	c.mu.Lock()
 	delete(c.entries, id)
 	c.mu.Unlock()
 }
 
-// Sweep drops every expired entry. Optional housekeeping — the cache
-// works fine without it (lookups skip stale entries) but pods with
-// long uptime can accumulate cold IDs. The serve worker's housekeeping
-// loop calls this on the same cadence as the rest of its sweeps.
+// Sweep drops every expired entry and returns how many it dropped.
+// Optional housekeeping — lookups skip stale entries anyway.
 func (c *CachedRevocationChecker) Sweep() int {
-	now := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.sweepLocked()
+}
+
+func (c *CachedRevocationChecker) sweepLocked() int {
+	now := c.now()
 	dropped := 0
 	for id, e := range c.entries {
 		if !e.expires.After(now) {
@@ -112,4 +177,8 @@ func (c *CachedRevocationChecker) Sweep() int {
 		}
 	}
 	return dropped
+}
+
+func isContextErr(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
