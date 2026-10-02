@@ -62,6 +62,8 @@ runtime: {
   log_probes:            bool | *false
   // Shared secret gating /system/health.json. Empty → open (dev).
   health_snapshot_token: string | *""
+  // The same token from a Secret, resolved at boot; exclusive with the above.
+  health_snapshot_token_secret?: #SecretRef
 }
 
 // #LocalDataPort is the data plane's port when the binary runs on the host

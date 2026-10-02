@@ -24,8 +24,8 @@ HTTP with the caller's credential; with `--embedded` it hosts their handlers
 in-process instead.
 
 Every role serves `/livez`, `/readyz` and `/startupz`, plus a
-`/system/health.json` snapshot that `runtime.health_snapshot_token`
-gates. Metrics, traces and logs: [`docs/observability.md`](docs/observability.md).
+`/system/health.json` snapshot that `runtime.health_snapshot_token` gates
+(or `runtime.health_snapshot_token_secret`, from a Secret). Metrics, traces and logs: [`docs/observability.md`](docs/observability.md).
 
 ## Layout
 

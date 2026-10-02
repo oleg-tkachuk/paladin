@@ -336,6 +336,10 @@ otel.resource.deployment.environment
 otel.resource.service.name
 runtime
 runtime.health_snapshot_token
+runtime.health_snapshot_token_secret
+runtime.health_snapshot_token_secret.key
+runtime.health_snapshot_token_secret.name
+runtime.health_snapshot_token_secret.namespace
 runtime.log_probes
 runtime.mode
 runtime.shutdown_timeout

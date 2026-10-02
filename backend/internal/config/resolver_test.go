@@ -165,6 +165,47 @@ func TestResolveConfig_InCluster_SigningKeyAndWebhookSecret(t *testing.T) {
 	}
 }
 
+// The health snapshot token gates /system/health.json; a production token
+// comes from a Secret so it never sits in the config ConfigMap.
+func TestResolveConfig_InCluster_HealthSnapshotToken(t *testing.T) {
+	t.Setenv(DefaultK8sServiceHostEnvKey, "10.0.0.1")
+
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "token")
+	nsPath := filepath.Join(dir, "namespace")
+	if err := os.WriteFile(tokenPath, []byte("fake-token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nsPath, []byte("paladin"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	r := newTestResolver(t, tokenPath, nsPath,
+		secret("paladin", "paladin-health-snapshot", "token", "resolved-health-token"),
+	)
+
+	cfg := &Config{}
+	cfg.Runtime.HealthSnapshotTokenSecret = &SecretRef{Name: "paladin-health-snapshot", Key: "token"}
+
+	if err := r.ResolveConfig(context.Background(), cfg); err != nil {
+		t.Fatalf("ResolveConfig() error = %v, want nil", err)
+	}
+	if got := cfg.Runtime.HealthSnapshotToken; got != "resolved-health-token" {
+		t.Errorf("Runtime.HealthSnapshotToken = %q, want resolved-health-token", got)
+	}
+	if cfg.Runtime.HealthSnapshotTokenSecret != nil {
+		t.Errorf("Runtime.HealthSnapshotTokenSecret = %+v, want cleared", cfg.Runtime.HealthSnapshotTokenSecret)
+	}
+
+	// A reference to a Secret that is not there fails boot rather than
+	// leaving the snapshot open.
+	missing := &Config{}
+	missing.Runtime.HealthSnapshotTokenSecret = &SecretRef{Name: "absent", Key: "token"}
+	if err := r.ResolveConfig(context.Background(), missing); err == nil {
+		t.Error("ResolveConfig() with a missing Secret = nil, want an error")
+	}
+}
+
 // Out-of-cluster (no KUBERNETES_SERVICE_HOST) + no token file →
 // silently no-op; inline values left intact.
 func TestResolveConfig_OutOfCluster_NoToken_NoOp(t *testing.T) {

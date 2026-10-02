@@ -141,6 +141,10 @@ type Runtime struct {
 	// detail is only reachable with the token. The kubelet probe endpoints
 	// (/livez /readyz /startupz) are NEVER gated.
 	HealthSnapshotToken string `yaml:"health_snapshot_token" json:"health_snapshot_token"`
+	// HealthSnapshotTokenSecret resolves HealthSnapshotToken from a Secret at
+	// boot, so a production token never sits in the config ConfigMap. Setting
+	// both is rejected.
+	HealthSnapshotTokenSecret *SecretRef `yaml:"health_snapshot_token_secret" json:"health_snapshot_token_secret"`
 }
 
 type HTTPServer struct {
