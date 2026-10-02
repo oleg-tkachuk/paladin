@@ -494,6 +494,8 @@ type Querier interface {
 	// terminal=false → transient error; row stays 'pending' and gets
 	// retried on the next tick after the configured backoff.
 	MarkBucketProvisionFailed(ctx context.Context, name string, name_2 string, terminal bool, errMsg string) (int64, error)
+	// Only a row still being provisioned: a bucket marked for deletion while its
+	// creation was in flight stays marked, rather than coming back as ready.
 	MarkBucketProvisionReady(ctx context.Context, name string, name_2 string) (int64, error)
 	// Record the first presentation. Once set, this token is no longer a lost
 	// successor its parent's holder may recover.
