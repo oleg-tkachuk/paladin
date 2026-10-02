@@ -23,7 +23,9 @@ The SDK and the capability module are pre-1.0, so a breaking change is a
 minor on their streams until they reach 1.0. A breaking change confined to
 `sdk/go/` or `capability/` breaks that module's API, not the product's, so it
 releases the product as a minor too; one that also touches the server is the
-product's major.
+product's major. Documentation does not decide where a commit belongs:
+a breaking SDK commit that also writes its section of upgrading.md is still
+the SDK's alone.
 
 ## The product: `vX.Y.Z`
 
