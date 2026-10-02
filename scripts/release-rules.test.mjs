@@ -1,46 +1,91 @@
-// release-rules.test.mjs — which release each commit type cuts, through the
-// commit analyzer and the plugin config release.config.cjs gives it.
+// release-rules.test.mjs — which release each commit cuts, on each release
+// stream, through the analyzer and the plugin config release.config.cjs gives
+// it.
 //
-// A type that releases nothing is silent: the release workflow succeeds and no
-// version is cut. That is how a security fix stayed unreleased. Each case
-// below pins one type.
+// A commit that releases nothing is silent: the release workflow succeeds and
+// no version is cut. That is how a security fix stayed unreleased, and how a
+// commit that touched only the SDK republished the product. Each case below
+// pins one.
 //
 // Runs from `task -t Taskfile.dev.yaml verify-repo` after `npm ci`.
 
 import { createRequire } from "node:module";
-import { analyzeCommits } from "@semantic-release/commit-analyzer";
+import { analyzeWith, belongs } from "./release/paths-analyzer.mjs";
 
 const require = createRequire(import.meta.url);
-const config = require("../release.config.cjs");
-const [, pluginConfig] = config.plugins.find(
-  (p) => Array.isArray(p) && p[0] === "@semantic-release/commit-analyzer",
-);
+const { streams, analyzerFor } = require("../release.config.cjs");
 
+const BACKEND = ["backend/internal/api/handler.go"];
+const SDK = ["sdk/go/paladin/client.go"];
+const PROTO = ["proto/paladin/data/v1/object_service.proto"];
+const CAPABILITY = ["capability/mint.go"];
+
+// [stream, commit message, files it changed, release wanted]
 const cases = [
-  ["feat(api): add a thing", "minor"],
-  ["fix(api): repair a thing", "patch"],
-  ["perf(api): speed a thing up", "patch"],
-  ["security(audit): stop storing credentials", "patch"],
-  ["feat(api)!: drop a field", "major"],
-  ["docs: explain a thing", null],
-  ["ci: run a check", null],
-  ["chore: tidy", null],
-  ["refactor(api): move a thing", null],
+  ["product", "feat(api): add a thing", BACKEND, "minor"],
+  ["product", "fix(api): repair a thing", BACKEND, "patch"],
+  ["product", "perf(api): speed a thing up", BACKEND, "patch"],
+  ["product", "security(audit): stop storing credentials", BACKEND, "patch"],
+  ["product", "feat(api)!: drop a field", BACKEND, "major"],
+  ["product", "feat(api): a contract change is a server change", PROTO, "minor"],
+  ["product", "docs: explain a thing", BACKEND, null],
+  ["product", "chore: tidy", BACKEND, null],
+  ["product", "refactor(api): move a thing", BACKEND, null],
+  ["product", "feat(sdk): only the SDK", SDK, null],
+  ["product", "fix(capability): only the module", CAPABILITY, null],
+  ["product", "feat(sdk): the SDK and the server", [...SDK, ...BACKEND], "minor"],
+
+  ["sdk", "feat(sdk): add a helper", SDK, "minor"],
+  ["sdk", "fix(sdk): repair a helper", SDK, "patch"],
+  ["sdk", "security(sdk): stop logging a token", SDK, "patch"],
+  ["sdk", "feat(events): a new RPC changes the stubs", PROTO, "minor"],
+  ["sdk", "feat(sdk)!: before 1.0 a break is a minor", SDK, "minor"],
+  ["sdk", "feat(api): only the server", BACKEND, null],
+  ["sdk", "docs(sdk): explain a helper", SDK, null],
+
+  ["capability", "feat(capability): add a caveat", CAPABILITY, "minor"],
+  ["capability", "fix(capability): repair a check", CAPABILITY, "patch"],
+  ["capability", "feat(capability)!: before 1.0 a break is a minor", CAPABILITY, "minor"],
+  ["capability", "fix(api): only the server", BACKEND, null],
+  ["capability", "feat(sdk): only the SDK", SDK, null],
 ];
 
 const logger = { log() {}, error() {}, warn() {}, success() {} };
 let failed = 0;
-for (const [message, want] of cases) {
-  const got = await analyzeCommits(pluginConfig, {
-    commits: [{ hash: "0", message }],
-    logger,
-    cwd: process.cwd(),
-    options: {},
-  });
+for (const [stream, message, files, want] of cases) {
+  const got = await analyzeWith(
+    analyzerFor(stream),
+    { commits: [{ hash: "0", message }], logger, cwd: process.cwd(), options: {} },
+    () => files,
+  );
   if ((got ?? null) !== want) {
-    console.log(`FAIL ${JSON.stringify(message)}: got ${got ?? null}, want ${want}`);
+    console.log(`FAIL [${stream}] ${JSON.stringify(message)} on ${files.join(",")}: got ${got ?? null}, want ${want}`);
     failed = 1;
   }
 }
+
+// A merge commit changes no files of its own: it belongs to an include
+// stream never, and is left to the analyzer (which ignores its message)
+// otherwise.
+for (const [name, ok] of [
+  ["a merge is in no include stream", belongs([], { include: ["sdk/"] }) === false],
+  ["a merge is not excluded", belongs([], { exclude: ["sdk/"] }) === true],
+  ["include matches a prefix", belongs(["sdk/go/x.go"], { include: ["sdk/"] }) === true],
+  ["exclude needs every file", belongs(["sdk/x", "backend/y"], { exclude: ["sdk/"] }) === true],
+]) {
+  if (!ok) {
+    console.log(`FAIL ${name}`);
+    failed = 1;
+  }
+}
+
+for (const name of Object.keys(streams)) {
+  const tag = streams[name].tagFormat;
+  if (!tag.includes("${version}")) {
+    console.log(`FAIL [${name}] tagFormat ${tag} has no \${version}`);
+    failed = 1;
+  }
+}
+
 if (failed) process.exit(1);
-console.log("release rules: every commit type cuts the release it should");
+console.log("release rules: every commit cuts the release it should, on every stream");
