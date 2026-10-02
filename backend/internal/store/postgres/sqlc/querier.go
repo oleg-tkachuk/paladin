@@ -53,9 +53,15 @@ type Querier interface {
 	// seconds until the bucket rolls, which becomes Retry-After.
 	BumpTenantRateBucket(ctx context.Context, tenantID pgtype.UUID) (BumpTenantRateBucketRow, error)
 	CancelOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (int64, error)
-	// Adds amount to spent_usd and rejects when over the supplied cap.
-	// max_budget=0 means unlimited. unit_code is set on insert and
-	// preserved on conflict (an existing row owns its currency).
+	// Adds amount to spent_usd and rejects when spend plus open holds
+	// (reserved_usd) would pass the supplied cap. max_budget=0 means
+	// unlimited. unit_code is set on insert and preserved on conflict (an
+	// existing row owns its currency).
+	//
+	// The ceiling is checked on BOTH paths. The INSERT is a SELECT filtered by
+	// it, so a first charge above the cap inserts nothing, conflicts with
+	// nothing and returns no row; a VALUES insert used to accept any first
+	// charge, whatever the cap.
 	ChargeCapability(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string, maxBudgetUsd pgtype.Numeric) (pgtype.Numeric, error)
 	// Atomic UPSERT-and-check, same shape as ChargeCapability. When the
 	// row is missing, treats max as 0 (no cap enforced) and inserts a
