@@ -46,6 +46,8 @@ function CollectionObjectsContent() {
     status,
     setStatus,
     tagFilter,
+    typeFilter,
+    metaFilter,
     search,
     setSearch,
     recursive,
@@ -55,6 +57,8 @@ function CollectionObjectsContent() {
     handleSort,
     handleStatusChange,
     handleTagChange,
+    handleTypeChange,
+    handleMetaChange,
     handleSearchChange,
     handleRecursiveChange,
   } = useObjectListState();
@@ -438,7 +442,14 @@ function CollectionObjectsContent() {
     if (!newViewName) return;
     const newView: SavedView = {
       name: newViewName,
-      filters: { search, status, recursive },
+      filters: {
+        search,
+        status,
+        tag: tagFilter,
+        type: typeFilter,
+        meta: metaFilter,
+        recursive,
+      },
     };
     const updated = [...savedViews, newView];
     setSavedViews(updated);
@@ -447,10 +458,15 @@ function CollectionObjectsContent() {
     setNewViewName("");
   };
 
+  // A view is the whole filter: facets it does not name are cleared, so
+  // applying "Images" after a tag filter shows images, not tagged images.
   const applyView = (view: SavedView) => {
     setSearch(view.filters.search || "");
     setStatus(view.filters.status);
     setRecursive(view.filters.recursive ?? false);
+    handleTagChange(view.filters.tag);
+    handleTypeChange(view.filters.type);
+    handleMetaChange(view.filters.meta);
   };
 
   const deleteView = (name: string) => {
@@ -539,11 +555,20 @@ function CollectionObjectsContent() {
       </div>
 
       <ObjectsFilterBar
-        filter={{ search, status, tag: tagFilter, recursive }}
+        filter={{
+          search,
+          status,
+          tag: tagFilter,
+          type: typeFilter,
+          meta: metaFilter,
+          recursive,
+        }}
         onFilterChange={(patch) => {
           if ("search" in patch) handleSearchChange(patch.search!);
           if ("status" in patch) handleStatusChange(patch.status);
           if ("tag" in patch) handleTagChange(patch.tag);
+          if ("type" in patch) handleTypeChange(patch.type);
+          if ("meta" in patch) handleMetaChange(patch.meta);
           if ("recursive" in patch) handleRecursiveChange(patch.recursive!);
         }}
         tagOptions={mergedTagOptions}

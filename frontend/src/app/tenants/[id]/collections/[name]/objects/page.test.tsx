@@ -85,6 +85,8 @@ vi.mock("@/components/features/objects/ObjectsFilterBar", () => ({
       search?: string;
       status?: string | undefined;
       tag?: string | undefined;
+      type?: string | undefined;
+      meta?: string | undefined;
       recursive?: boolean;
     }) => void;
   }) => (
@@ -94,6 +96,10 @@ vi.mock("@/components/features/objects/ObjectsFilterBar", () => ({
       </button>
       <button onClick={() => onFilterChange({ tag: "env=prod" })}>
         set tag
+      </button>
+      <button onClick={() => onFilterChange({ type: "pdf" })}>set type</button>
+      <button onClick={() => onFilterChange({ meta: "owner=ops" })}>
+        set meta
       </button>
       <button onClick={() => onFilterChange({ search: "hello" })}>
         set search
@@ -289,6 +295,18 @@ describe("CollectionObjectsPage", () => {
     await waitFor(() =>
       expect(h.lastOpts?.filter).toContain('tags["env"] == "prod"'),
     );
+  });
+
+  it("applies content type and metadata to the CEL filter, URL-synced", async () => {
+    render(<CollectionObjectsPage />);
+    await userEvent.click(screen.getByText("set type"));
+    await userEvent.click(screen.getByText("set meta"));
+    await waitFor(() =>
+      expect(h.lastOpts?.filter).toBe(
+        'content_type == "application/pdf" && metadata["owner"] == "ops"',
+      ),
+    );
+    expect(h.replace).toHaveBeenCalled();
   });
 
   it("debounces search into the CEL filter", async () => {
