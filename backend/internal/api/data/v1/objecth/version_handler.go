@@ -97,10 +97,35 @@ func capabilityObjectURI(tenantID uuid.UUID, collection, key string) string {
 	return capabilityCollectionURI(tenantID, collection) + key
 }
 
+// capabilityObjectURIPrefix starts every object URI a capability names.
+const capabilityObjectURIPrefix = "object://"
+
+// parseCapabilityObjectURI splits "object://<tenant>/<collection>/<key>".
+// The key may itself contain "/"; the tenant and collection may not.
+func parseCapabilityObjectURI(uri string) (tenantID uuid.UUID, collection, key string, ok bool) {
+	rest, found := strings.CutPrefix(uri, capabilityObjectURIPrefix)
+	if !found {
+		return uuid.Nil, "", "", false
+	}
+	tenant, rest, found := strings.Cut(rest, "/")
+	if !found {
+		return uuid.Nil, "", "", false
+	}
+	collection, key, found = strings.Cut(rest, "/")
+	if !found || collection == "" || key == "" {
+		return uuid.Nil, "", "", false
+	}
+	tenantID, err := uuid.Parse(tenant)
+	if err != nil {
+		return uuid.Nil, "", "", false
+	}
+	return tenantID, collection, key, true
+}
+
 // capabilityCollectionURI is the URI prefix every object in a collection
 // shares — the resource an operation over the whole collection asserts.
 func capabilityCollectionURI(tenantID uuid.UUID, collection string) string {
-	return "object://" + tenantID.String() + "/" + collection + "/"
+	return capabilityObjectURIPrefix + tenantID.String() + "/" + collection + "/"
 }
 
 // ─── List ───────────────────────────────────────────────────────────────────

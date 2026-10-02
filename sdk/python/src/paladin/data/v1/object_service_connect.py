@@ -69,6 +69,9 @@ class ObjectService(Protocol):
     async def get_object_lock(self, request: paladin_dot_data_dot_v1_dot_object__service__pb2.GetObjectLockRequest, ctx: RequestContext) -> paladin_dot_data_dot_v1_dot_types__pb2.ObjectLockState:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
 
+    async def set_object_taint(self, request: paladin_dot_data_dot_v1_dot_object__service__pb2.SetObjectTaintRequest, ctx: RequestContext) -> paladin_dot_data_dot_v1_dot_types__pb2.Object:
+        raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
+
 
 class ObjectServiceASGIApplication(ConnectASGIApplication[ObjectService]):
     def __init__(self, service: ObjectService | AsyncGenerator[ObjectService], *, interceptors: Iterable[Interceptor]=(), read_max_bytes: int | None = None, compressions: Iterable[Compression] | None = None) -> None:
@@ -244,6 +247,16 @@ class ObjectServiceASGIApplication(ConnectASGIApplication[ObjectService]):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=svc.get_object_lock,
+                ),
+                "/paladin.data.v1.ObjectService/SetObjectTaint": Endpoint.unary(
+                    method=MethodInfo(
+                        name="SetObjectTaint",
+                        service_name="paladin.data.v1.ObjectService",
+                        input=paladin_dot_data_dot_v1_dot_object__service__pb2.SetObjectTaintRequest,
+                        output=paladin_dot_data_dot_v1_dot_types__pb2.Object,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=svc.set_object_taint,
                 ),
             },
             interceptors=interceptors,
@@ -612,6 +625,26 @@ class ObjectServiceClient(ConnectClient):
             use_get=use_get,
         )
 
+    async def set_object_taint(
+        self,
+        request: paladin_dot_data_dot_v1_dot_object__service__pb2.SetObjectTaintRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None,
+        timeout_ms: int | None = None,
+    ) -> paladin_dot_data_dot_v1_dot_types__pb2.Object:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="SetObjectTaint",
+                service_name="paladin.data.v1.ObjectService",
+                input=paladin_dot_data_dot_v1_dot_object__service__pb2.SetObjectTaintRequest,
+                output=paladin_dot_data_dot_v1_dot_types__pb2.Object,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
 
 class ObjectServiceSync(Protocol):
     def upload_object(self, request: paladin_dot_data_dot_v1_dot_object__service__pb2.UploadObjectRequest, ctx: RequestContext) -> paladin_dot_data_dot_v1_dot_object__service__pb2.UploadObjectResponse:
@@ -647,6 +680,8 @@ class ObjectServiceSync(Protocol):
     def set_object_legal_hold(self, request: paladin_dot_data_dot_v1_dot_object__service__pb2.SetObjectLegalHoldRequest, ctx: RequestContext) -> paladin_dot_data_dot_v1_dot_types__pb2.ObjectLockState:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
     def get_object_lock(self, request: paladin_dot_data_dot_v1_dot_object__service__pb2.GetObjectLockRequest, ctx: RequestContext) -> paladin_dot_data_dot_v1_dot_types__pb2.ObjectLockState:
+        raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
+    def set_object_taint(self, request: paladin_dot_data_dot_v1_dot_object__service__pb2.SetObjectTaintRequest, ctx: RequestContext) -> paladin_dot_data_dot_v1_dot_types__pb2.Object:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
 
 
@@ -823,6 +858,16 @@ class ObjectServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=service.get_object_lock,
+                ),
+                "/paladin.data.v1.ObjectService/SetObjectTaint": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="SetObjectTaint",
+                        service_name="paladin.data.v1.ObjectService",
+                        input=paladin_dot_data_dot_v1_dot_object__service__pb2.SetObjectTaintRequest,
+                        output=paladin_dot_data_dot_v1_dot_types__pb2.Object,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=service.set_object_taint,
                 ),
             },
             interceptors=interceptors,
@@ -1189,4 +1234,24 @@ class ObjectServiceClientSync(ConnectClientSync):
             headers=headers,
             timeout_ms=timeout_ms,
             use_get=use_get,
+        )
+
+    def set_object_taint(
+        self,
+        request: paladin_dot_data_dot_v1_dot_object__service__pb2.SetObjectTaintRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None,
+        timeout_ms: int | None = None,
+    ) -> paladin_dot_data_dot_v1_dot_types__pb2.Object:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="SetObjectTaint",
+                service_name="paladin.data.v1.ObjectService",
+                input=paladin_dot_data_dot_v1_dot_object__service__pb2.SetObjectTaintRequest,
+                output=paladin_dot_data_dot_v1_dot_types__pb2.Object,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
         )

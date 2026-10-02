@@ -14,6 +14,10 @@ It is a separate Go module, but an **in-tree** one, and it does not publish
 versions you can `go get` — see [Versioning](#versioning) before you depend
 on it from outside this repository.
 
+[docs/diagrams.md](docs/diagrams.md) draws the module: the contract boundary,
+a capability's lifecycle, the verification gates, delegation, the charge and
+reservation path, and how a revocation reaches the verifiers.
+
 ## The problem
 
 You run agents. An orchestrator spawns sub-agents, each calling tools that

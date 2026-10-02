@@ -398,7 +398,7 @@ under [`proto/paladin`](../../proto/paladin).
 | --- | --- |
 | `BatchService` | `batch_delete_objects`, `batch_copy_objects`, `batch_restore_objects`, `batch_update_tags` |
 | `MultipartUploadService` | `initiate_multipart_upload`, `presign_part`, `complete_multipart_upload`, `abort_multipart_upload`, `list_parts` |
-| `ObjectService` | `upload_object`, `download_object`, `get_object`, `lookup_object`, `update_object`, `complete_object`, `delete_object`, `restore_object`, `copy_object`, `list_objects`, `count_objects`, `list_object_versions`, `get_object_version`, `restore_object_version`, `set_object_retention`, `set_object_legal_hold`, `get_object_lock` |
+| `ObjectService` | `upload_object`, `download_object`, `get_object`, `lookup_object`, `update_object`, `complete_object`, `delete_object`, `restore_object`, `copy_object`, `list_objects`, `count_objects`, `list_object_versions`, `get_object_version`, `restore_object_version`, `set_object_retention`, `set_object_legal_hold`, `get_object_lock`, `set_object_taint` |
 | `ObjectTagService` | `get_object_tags`, `put_object_tags`, `delete_object_tags`, `list_distinct_tags` |
 | `OperationService` | `get_operation`, `list_operations`, `cancel_operation` |
 | `PresignService` | `regenerate_upload_url`, `presign_download` |
