@@ -8,14 +8,12 @@ import (
 )
 
 // MeteringStore is a UsageStore decorator that emits OTel metrics on
-// every counter mutation. Sits between the auth interceptor /
-// handler-side helpers and the concrete (postgres) implementation,
-// so the store implementation stays free of metrics concerns and
-// every UsageStore user gets the same observability surface.
+// every counter mutation, so the store implementation stays free of
+// metrics concerns and every UsageStore user gets the same observability
+// surface.
 //
-// All instruments are no-ops until otel.SetMeterProvider runs (default
-// in test paths; the cmd/server boot path wires the real provider
-// before BuildSharedDeps). Cardinality discipline lives in metrics.go.
+// All instruments are no-ops until otel.SetMeterProvider runs.
+// Cardinality discipline lives in metrics.go.
 type MeteringStore[TX any] struct {
 	Inner UsageStore[TX]
 }
@@ -31,68 +29,55 @@ func WithMetering[TX any](inner UsageStore[TX]) UsageStore[TX] {
 
 // BumpRequest emits paladin.capability.request.bumps with outcome=
 // allowed | limit_exceeded.
-func (s *MeteringStore[TX]) BumpRequest(ctx context.Context, capID uuid.UUID, maxRequests int64) (int64, error) {
-	count, err := s.Inner.BumpRequest(ctx, capID, maxRequests)
-	if errors.Is(err, ErrRequestLimitExceeded) {
-		recordRequestBump(ctx, uuid.Nil, "limit_exceeded")
-		return 0, err
-	}
-	if err == nil {
-		recordRequestBump(ctx, uuid.Nil, "allowed")
+func (s *MeteringStore[TX]) BumpRequest(ctx context.Context, req RequestBump) (int64, error) {
+	count, err := s.Inner.BumpRequest(ctx, req)
+	switch {
+	case errors.Is(err, ErrRequestLimitExceeded):
+		recordRequestBump(ctx, req.TenantID, "limit_exceeded")
+	case err == nil:
+		recordRequestBump(ctx, req.TenantID, "allowed")
 	}
 	return count, err
 }
 
-// Charge emits paladin.capability.charge.{amount,decisions,
-// current_spend}.
+// Charge emits paladin.capability.charge.{amount,decisions,current_spend}.
 //
 // Outcome accounting:
 //
-//   - allowed              → both per-cap and per-tenant caps fit
-//   - cap_exceeded         → per-cap cap rejected (tenant counter
-//     never touched)
-//   - tenant_exceeded      → tenant aggregate cap rejected after
-//     the per-cap cap accepted; inner store
-//     already compensated the per-cap row
+//   - allowed         → every ceiling admitted the charge
+//   - cap_exceeded    → the capability's ceiling or an ancestor's rejected
+//   - tenant_exceeded → the tenant aggregate ceiling rejected
 func (s *MeteringStore[TX]) Charge(
 	ctx context.Context,
-	capID uuid.UUID,
-	amount, maxBudget float64,
-	unitCode string,
-	tenantID uuid.UUID,
-	op string,
-	actor string,
+	req ChargeRequest,
 	onCharged func(ctx context.Context, tx TX) error,
-) (float64, error) {
-	spent, err := s.Inner.Charge(ctx, capID, amount, maxBudget, unitCode, tenantID, op, actor, onCharged)
+) (ChargeReceipt, error) {
+	receipt, err := s.Inner.Charge(ctx, req, onCharged)
+	unit := req.UnitCode
+	if unit == "" {
+		unit = DefaultUnitCode
+	}
 	switch {
 	case err == nil:
-		recordChargeAttempt(ctx, tenantID, amount, spent, "allowed")
+		recordChargeAttempt(ctx, req.TenantID, unit, req.Amount, receipt.Spent, "allowed")
 	case errors.Is(err, ErrBudgetExceeded):
-		recordChargeAttempt(ctx, tenantID, amount, 0, "cap_exceeded")
+		recordChargeAttempt(ctx, req.TenantID, unit, req.Amount, 0, "cap_exceeded")
 	case errors.Is(err, ErrTenantBudgetExceeded):
-		recordChargeAttempt(ctx, tenantID, amount, 0, "tenant_exceeded")
+		recordChargeAttempt(ctx, req.TenantID, unit, req.Amount, 0, "tenant_exceeded")
 	}
-	return spent, err
+	return receipt, err
 }
 
-func (s *MeteringStore[TX]) RefundCapability(ctx context.Context, capID uuid.UUID, amount float64) error {
-	if err := s.Inner.RefundCapability(ctx, capID, amount); err != nil {
-		return err
+// Refund emits paladin.capability.refund.amount.
+func (s *MeteringStore[TX]) Refund(ctx context.Context, req RefundRequest) (float64, error) {
+	refunded, err := s.Inner.Refund(ctx, req)
+	if err == nil && refunded > 0 {
+		recordRefund(ctx, refunded)
 	}
-	recordRefund(ctx, uuid.Nil, amount, "capability")
-	return nil
+	return refunded, err
 }
 
-func (s *MeteringStore[TX]) RefundTenant(ctx context.Context, tenantID uuid.UUID, amount float64) error {
-	if err := s.Inner.RefundTenant(ctx, tenantID, amount); err != nil {
-		return err
-	}
-	recordRefund(ctx, tenantID, amount, "tenant")
-	return nil
-}
-
-// Pure pass-throughs — Get/Set don't move counters, no metric.
+// Pure pass-throughs — reads and admin writes don't move counters, no metric.
 
 func (s *MeteringStore[TX]) Get(ctx context.Context, capID uuid.UUID) (Usage, error) {
 	return s.Inner.Get(ctx, capID)

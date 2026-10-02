@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"errors"
-	"net"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -21,43 +20,59 @@ import (
 type fakeUsage struct {
 	requests map[uuid.UUID]int64
 	spent    map[uuid.UUID]float64
+	charges  map[uuid.UUID]fakeCharge
+}
+
+type fakeCharge struct {
+	capID            uuid.UUID
+	amount, refunded float64
 }
 
 func newFakeUsage() *fakeUsage {
 	return &fakeUsage{
 		requests: map[uuid.UUID]int64{},
 		spent:    map[uuid.UUID]float64{},
+		charges:  map[uuid.UUID]fakeCharge{},
 	}
 }
 
-func (f *fakeUsage) BumpRequest(_ context.Context, id uuid.UUID, max int64) (int64, error) {
-	next := f.requests[id] + 1
-	if max > 0 && next > max {
+func (f *fakeUsage) BumpRequest(_ context.Context, req capability.RequestBump) (int64, error) {
+	next := f.requests[req.CapabilityID] + 1
+	if req.MaxRequests > 0 && next > req.MaxRequests {
 		return 0, capability.ErrRequestLimitExceeded
 	}
-	f.requests[id] = next
+	f.requests[req.CapabilityID] = next
 	return next, nil
 }
 
-func (f *fakeUsage) Charge(_ context.Context, id uuid.UUID, amount, max float64, _ string, _ uuid.UUID, _ string, _ string, _ func(context.Context, pgx.Tx) error) (float64, error) {
-	next := f.spent[id] + amount
-	if max > 0 && next > max {
-		return 0, capability.ErrBudgetExceeded
+func (f *fakeUsage) Charge(_ context.Context, req capability.ChargeRequest, _ func(context.Context, pgx.Tx) error) (capability.ChargeReceipt, error) {
+	next := f.spent[req.CapabilityID] + req.Amount
+	if req.MaxBudget > 0 && next > req.MaxBudget {
+		return capability.ChargeReceipt{}, capability.ErrBudgetExceeded
 	}
-	f.spent[id] = next
-	return next, nil
+	f.spent[req.CapabilityID] = next
+	id := uuid.New()
+	f.charges[id] = fakeCharge{capID: req.CapabilityID, amount: req.Amount}
+	return capability.ChargeReceipt{ChargeID: id, Spent: next}, nil
 }
 
-func (f *fakeUsage) RefundCapability(_ context.Context, id uuid.UUID, amount float64) error {
-	v := f.spent[id] - amount
-	if v < 0 {
-		v = 0
+func (f *fakeUsage) Refund(_ context.Context, req capability.RefundRequest) (float64, error) {
+	c, ok := f.charges[req.ChargeID]
+	if !ok {
+		return 0, capability.ErrChargeNotFound
 	}
-	f.spent[id] = v
-	return nil
+	amount := req.Amount
+	if amount == 0 {
+		amount = c.amount - c.refunded
+	}
+	if amount > c.amount-c.refunded {
+		return 0, capability.ErrRefundExceedsCharge
+	}
+	c.refunded += amount
+	f.charges[req.ChargeID] = c
+	f.spent[c.capID] = max(0, f.spent[c.capID]-amount)
+	return amount, nil
 }
-
-func (f *fakeUsage) RefundTenant(_ context.Context, _ uuid.UUID, _ float64) error { return nil }
 
 func (f *fakeUsage) Get(_ context.Context, id uuid.UUID) (capability.Usage, error) {
 	c, ok := f.requests[id]
@@ -87,28 +102,6 @@ func (f *fakeUsage) Delete(_ context.Context, id uuid.UUID) error {
 }
 
 func (f *fakeUsage) PurgeOrphans(_ context.Context) (int64, error) { return 0, nil }
-
-// ─── ipInAnyCIDR ────────────────────────────────────────────────────
-
-func TestIpInAnyCIDR(t *testing.T) {
-	cases := []struct {
-		ip    string
-		cidrs []string
-		want  bool
-	}{
-		{"10.0.0.5", []string{"10.0.0.0/8"}, true},
-		{"192.168.1.5", []string{"10.0.0.0/8"}, false},
-		{"192.168.1.5", []string{"10.0.0.0/8", "192.168.0.0/16"}, true},
-		{"10.0.0.5", []string{"not-a-cidr", "10.0.0.0/8"}, true}, // bad cidr skipped
-		{"10.0.0.5", []string{}, false},                          // empty list = no match
-	}
-	for _, c := range cases {
-		got := ipInAnyCIDR(net.ParseIP(c.ip), c.cidrs)
-		if got != c.want {
-			t.Errorf("ip=%q cidrs=%v got=%v want=%v", c.ip, c.cidrs, got, c.want)
-		}
-	}
-}
 
 // ─── ChargeCapability ───────────────────────────────────────────────
 
@@ -263,49 +256,69 @@ func TestChargeCapability_NonUSDUnit_RecordsUnit(t *testing.T) {
 	}
 }
 
-// ─── RefundCapability ───────────────────────────────────────────────
+// ─── RefundLastCharge ───────────────────────────────────────────────
 
-func TestRefundCapability_AfterCharge_DecrementsSpend(t *testing.T) {
+// chargedContext is a request context as the interceptor builds it: the
+// per-request holders installed, so a charge is remembered for refunding.
+func chargedContext(t *testing.T, cap *capability.Capability, store *fakeUsage, amount float64) context.Context {
+	t.Helper()
+	ctx := withLastOpHolder(WithChargeStore(WithCapability(context.Background(), cap), store))
+	if err := ChargeCapability(ctx, amount, ""); err != nil {
+		t.Fatalf("charge: %v", err)
+	}
+	return ctx
+}
+
+func TestRefundLastCharge_PartialThenRest(t *testing.T) {
 	store := newFakeUsage()
 	cap := &capability.Capability{ID: uuid.New(), Caveats: capability.Caveats{MaxBudgetAmount: 1.0}}
-	ctx := WithChargeStore(WithCapability(context.Background(), cap), store)
+	ctx := chargedContext(t, cap, store, 0.50)
 
-	if err := ChargeCapability(ctx, 0.50, ""); err != nil {
-		t.Fatalf("charge: %v", err)
+	if err := RefundLastCharge(ctx, 0.30); err != nil {
+		t.Fatalf("partial refund: %v", err)
 	}
-	if err := RefundCapability(ctx, 0.30); err != nil {
-		t.Fatalf("refund: %v", err)
+	if u, _ := store.Get(ctx, cap.ID); u.SpentAmount < 0.19 || u.SpentAmount > 0.21 {
+		t.Errorf("spent after partial refund = %v, want ~0.20", u.SpentAmount)
 	}
-	u, _ := store.Get(ctx, cap.ID)
-	if u.SpentAmount < 0.19 || u.SpentAmount > 0.21 {
-		t.Errorf("spent after refund = %v, want ~0.20", u.SpentAmount)
-	}
-}
-
-func TestRefundCapability_FloorsAtZero(t *testing.T) {
-	store := newFakeUsage()
-	cap := &capability.Capability{ID: uuid.New()}
-	ctx := WithChargeStore(WithCapability(context.Background(), cap), store)
-
-	if err := ChargeCapability(ctx, 0.10, ""); err != nil {
-		t.Fatalf("charge: %v", err)
-	}
-	// Refund larger than current spend → floors at 0, never negative.
-	if err := RefundCapability(ctx, 1.00); err != nil {
-		t.Fatalf("refund: %v", err)
+	if err := RefundLastCharge(ctx, 0); err != nil {
+		t.Fatalf("refund of the rest: %v", err)
 	}
 	if u, _ := store.Get(ctx, cap.ID); u.SpentAmount != 0 {
-		t.Errorf("spent must floor at 0, got %v", u.SpentAmount)
+		t.Errorf("spent after full refund = %v, want 0", u.SpentAmount)
 	}
 }
 
-func TestRefundCapability_NoCapNoStore_NoOp(t *testing.T) {
-	if err := RefundCapability(context.Background(), 1.0); err != nil {
+// A refund is tied to the charge it returns, so it can never give back more
+// than was taken — the old counter decrement was clamped at zero, but a
+// repeated refund still credited spend that other charges had made.
+func TestRefundLastCharge_CannotExceedTheCharge(t *testing.T) {
+	store := newFakeUsage()
+	cap := &capability.Capability{ID: uuid.New()}
+	ctx := chargedContext(t, cap, store, 0.10)
+
+	err := RefundLastCharge(ctx, 1.00)
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !errors.Is(err, capability.ErrRefundExceedsCharge) {
+		t.Fatalf("over-refund err = %v, want InvalidArgument wrapping ErrRefundExceedsCharge", err)
+	}
+	if err := RefundLastCharge(ctx, 0); err != nil {
+		t.Fatalf("full refund: %v", err)
+	}
+	if err := RefundLastCharge(ctx, 0); err != nil {
+		t.Fatalf("repeated full refund must be a no-op, got %v", err)
+	}
+}
+
+func TestRefundLastCharge_NoCapNoStoreNoCharge_NoOp(t *testing.T) {
+	if err := RefundLastCharge(context.Background(), 1.0); err != nil {
 		t.Errorf("no cap: %v", err)
 	}
 	cap := &capability.Capability{ID: uuid.New()}
 	ctx := WithCapability(context.Background(), cap)
-	if err := RefundCapability(ctx, 1.0); err != nil {
+	if err := RefundLastCharge(ctx, 1.0); err != nil {
 		t.Errorf("no store: %v", err)
+	}
+	ctx = withLastOpHolder(WithChargeStore(ctx, newFakeUsage()))
+	if err := RefundLastCharge(ctx, 1.0); err != nil {
+		t.Errorf("no charge yet: %v", err)
 	}
 }

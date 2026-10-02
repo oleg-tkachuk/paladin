@@ -94,7 +94,13 @@ func (h *VersionHandler) authorizeParent(
 
 // capabilityObjectURI is the resource a capability names an object by.
 func capabilityObjectURI(tenantID uuid.UUID, collection, key string) string {
-	return "object://" + tenantID.String() + "/" + collection + "/" + key
+	return capabilityCollectionURI(tenantID, collection) + key
+}
+
+// capabilityCollectionURI is the URI prefix every object in a collection
+// shares — the resource an operation over the whole collection asserts.
+func capabilityCollectionURI(tenantID uuid.UUID, collection string) string {
+	return "object://" + tenantID.String() + "/" + collection + "/"
 }
 
 // ─── List ───────────────────────────────────────────────────────────────────

@@ -465,7 +465,10 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	if err := assertSessionMatches(sess, want); err != nil {
 		return nil, "", err
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
+	// The parts all belong to the session's one object, so that object is
+	// the resource the listing touches.
+	if err := auth.AssertCapabilityOp(ctx, capability.OpList,
+		"object://"+tenantID.String()+"/"+sess.Collection+"/"+sess.Key); err != nil {
 		return nil, "", err
 	}
 	// Session-anchored (backend, bucket) → authz enforces bucket:/collection:

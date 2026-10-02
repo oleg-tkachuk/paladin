@@ -133,15 +133,14 @@ func main() {
 	}
 	fmt.Println("widening refused with ErrDelegationTooWide")
 
-	// 6. Charge against the budget. Two ceilings; a rejection by either leaves
-	//    both counters untouched, so a retry is always safe.
-	spent, err := usage.Charge(ctx, parent.ID, 0.35, parent.Caveats.MaxBudgetAmount,
-		"USD", tenantID, "search", "research-orchestrator", nil)
+	// 6. Charge against the budget. The capability's ceiling, each ancestor's
+	//    and the tenant's all apply; a rejection by any leaves every counter
+	//    untouched, so a retry is always safe.
+	receipt, err := usage.Charge(ctx, capability.ChargeRequest{CapabilityID: parent.ID, TenantID: tenantID, Amount: 0.35, MaxBudget: parent.Caveats.MaxBudgetAmount, UnitCode: "USD", Op: "search", Actor: "research-orchestrator"}, nil)
 	must(err, "charge")
-	fmt.Printf("charged  0.35 USD, spent now %.2f\n", spent)
+	fmt.Printf("charged  0.35 USD, spent now %.2f\n", receipt.Spent)
 
-	_, err = usage.Charge(ctx, parent.ID, 999, parent.Caveats.MaxBudgetAmount,
-		"USD", tenantID, "search", "research-orchestrator", nil)
+	_, err = usage.Charge(ctx, capability.ChargeRequest{CapabilityID: parent.ID, TenantID: tenantID, Amount: 999, MaxBudget: parent.Caveats.MaxBudgetAmount, UnitCode: "USD", Op: "search", Actor: "research-orchestrator"}, nil)
 	if !errors.Is(err, capability.ErrBudgetExceeded) {
 		log.Fatalf("over-budget charge should have been refused, got %v", err)
 	}

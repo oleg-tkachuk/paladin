@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
-
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -19,10 +17,10 @@ import (
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
-// TenantBudgetServer is the Connect adapter for capability.UsageStore[pgx.Tx]'s
-// SetTenantBudget / GetTenantBudget. The capability.UsageStore[pgx.Tx] is the
-// authoritative seam for the runtime counters; this handler is a thin
-// pass-through that does shape conversion + error mapping.
+// TenantBudgetServer is the Connect adapter for capability.TenantBudgets —
+// the tenant-ceiling half of the usage store. It depends on nothing that
+// meters, so it cannot charge or refund. A thin pass-through that does shape
+// conversion + error mapping.
 //
 // Authorization: this handler runs on the admin plane behind the
 // standard JWT + Cedar interceptor stack. cfg.Cedar policies gate
@@ -30,14 +28,14 @@ import (
 // platform.admin (cross-tenant) and tenant.admin (own-tenant only).
 type TenantBudgetServer struct {
 	paladinadminv1connect.UnimplementedTenantBudgetServiceHandler
-	Usage capability.UsageStore[pgx.Tx]
+	Usage capability.TenantBudgets
 }
 
 // NewTenantBudgetServer wires the handler. usage may be nil — the
 // capability subsystem is opt-in (cfg.Capability.Enabled). When nil,
 // every RPC returns CodeUnavailable so the operator notices the
 // misconfig immediately rather than getting silent NULL responses.
-func NewTenantBudgetServer(usage capability.UsageStore[pgx.Tx]) *TenantBudgetServer {
+func NewTenantBudgetServer(usage capability.TenantBudgets) *TenantBudgetServer {
 	return &TenantBudgetServer{Usage: usage}
 }
 

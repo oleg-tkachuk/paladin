@@ -3,6 +3,7 @@ package memstore
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 	"time"
 
@@ -73,22 +74,28 @@ func TestRevokeCascadesToDescendants(t *testing.T) {
 	}
 }
 
-// Without the flag, only the named capability goes. A child keeps working
-// until its own TTL expires — that is the documented contract, and quietly
-// cascading would be a surprising over-reach.
-func TestRevokeWithoutCascadeLeavesChildren(t *testing.T) {
+// Revoking a parent revokes its descendants whether or not the revoke
+// cascaded: IsRevoked answers for the whole chain. Before, a non-cascading
+// revoke left every delegated child working until its own TTL, so stopping a
+// misbehaving orchestrator without the flag stopped nothing it had spawned.
+// Revocation still flows only downwards — revoking a child leaves its parent.
+func TestRevokingAParentRevokesItsChildrenWithoutCascade(t *testing.T) {
 	ctx := context.Background()
 	s := New[struct{}]()
 	tenant := uuid.New()
-	root, child := uuid.New(), uuid.New()
+	root, child, grandchild := uuid.New(), uuid.New(), uuid.New()
 	_ = s.Insert(ctx, mkCap(root, uuid.Nil, tenant, "parent"), capability.Principal{Subject: "test-operator"})
 	_ = s.Insert(ctx, mkCap(child, root, tenant, "child"), capability.Principal{Subject: "test-operator"})
+	_ = s.Insert(ctx, mkCap(grandchild, child, tenant, "grandchild"), capability.Principal{Subject: "test-operator"})
 
-	if err := s.Revoke(ctx, capability.RevokeArgs{ID: root}); err != nil {
+	if err := s.Revoke(ctx, capability.RevokeArgs{ID: child}); err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
-	if r, _ := s.IsRevoked(ctx, child); r {
-		t.Error("child revoked without CascadeChildren")
+	if r, _ := s.IsRevoked(ctx, root); r {
+		t.Error("revoking a child revoked its parent")
+	}
+	if r, _ := s.IsRevoked(ctx, grandchild); !r {
+		t.Error("grandchild still live after its parent was revoked without CascadeChildren")
 	}
 }
 
@@ -109,12 +116,12 @@ func TestBumpRequestRejectsWithoutMutating(t *testing.T) {
 	id := uuid.New()
 
 	for i := int64(1); i <= 2; i++ {
-		n, err := u.BumpRequest(ctx, id, 2)
+		n, err := u.BumpRequest(ctx, capability.RequestBump{CapabilityID: id, MaxRequests: 2})
 		if err != nil || n != i {
 			t.Fatalf("bump %d: n=%d err=%v", i, n, err)
 		}
 	}
-	n, err := u.BumpRequest(ctx, id, 2)
+	n, err := u.BumpRequest(ctx, capability.RequestBump{CapabilityID: id, MaxRequests: 2})
 	if !errors.Is(err, capability.ErrRequestLimitExceeded) {
 		t.Fatalf("want ErrRequestLimitExceeded, got %v", err)
 	}
@@ -133,7 +140,7 @@ func TestBumpRequestUnlimited(t *testing.T) {
 	u := NewUsage[struct{}](nil)
 	id := uuid.New()
 	for i := 0; i < 50; i++ {
-		if _, err := u.BumpRequest(ctx, id, 0); err != nil {
+		if _, err := u.BumpRequest(ctx, capability.RequestBump{CapabilityID: id, MaxRequests: 0}); err != nil {
 			t.Fatalf("unlimited bump %d: %v", i, err)
 		}
 	}
@@ -205,27 +212,52 @@ func TestSetTenantBudgetDefaultsUnitCode(t *testing.T) {
 	}
 }
 
-func TestRefundsFloorAtZero(t *testing.T) {
+func TestRefundReturnsSpendToEveryCounterOnce(t *testing.T) {
 	ctx := context.Background()
 	u := NewUsage[struct{}](nil)
 	id, tenant := uuid.New(), uuid.New()
 	_, _ = u.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{TenantID: tenant, MaxBudgetAmount: 100})
-	_, _ = u.Charge(ctx, id, 5, 100, "USD", tenant, "op", "actor", nil)
+	receipt, err := u.Charge(ctx, capability.ChargeRequest{CapabilityID: id, TenantID: tenant, Amount: 5, MaxBudget: 100, UnitCode: "USD"}, nil)
+	if err != nil {
+		t.Fatalf("Charge: %v", err)
+	}
 
-	// Over-refunding must clamp rather than go negative — a negative counter
-	// would read as available budget that was never granted.
-	if err := u.RefundCapability(ctx, id, 999); err != nil {
-		t.Fatalf("RefundCapability: %v", err)
+	// A partial refund, then a refund of "the rest": the second must return
+	// exactly what the first left, and a third must return nothing — a
+	// retried full refund is a no-op, not a second credit.
+	if got, err := u.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: 2}); err != nil || got != 2 {
+		t.Fatalf("partial refund = %v, %v; want 2, nil", got, err)
 	}
-	if err := u.RefundTenant(ctx, tenant, 999); err != nil {
-		t.Fatalf("RefundTenant: %v", err)
+	if got, err := u.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID}); err != nil || got != 3 {
+		t.Fatalf("remainder refund = %v, %v; want 3, nil", got, err)
 	}
+	if got, err := u.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID}); err != nil || got != 0 {
+		t.Fatalf("repeated full refund = %v, %v; want 0, nil", got, err)
+	}
+	if _, err := u.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: 1}); !errors.Is(err, capability.ErrRefundExceedsCharge) {
+		t.Fatalf("over-refund err = %v, want ErrRefundExceedsCharge", err)
+	}
+	if _, err := u.Refund(ctx, capability.RefundRequest{ChargeID: uuid.New()}); !errors.Is(err, capability.ErrChargeNotFound) {
+		t.Fatalf("unknown charge err = %v, want ErrChargeNotFound", err)
+	}
+
 	got, _ := u.Get(ctx, id)
 	if got.SpentAmount != 0 {
-		t.Errorf("capability spend = %v, want floored at 0", got.SpentAmount)
+		t.Errorf("capability spend = %v, want 0", got.SpentAmount)
 	}
 	b, _ := u.GetTenantBudget(ctx, tenant)
 	if b.SpentAmount != 0 {
-		t.Errorf("tenant spend = %v, want floored at 0", b.SpentAmount)
+		t.Errorf("tenant spend = %v, want 0", b.SpentAmount)
+	}
+}
+
+func TestChargeRejectsInvalidAmounts(t *testing.T) {
+	ctx := context.Background()
+	u := NewUsage[struct{}](nil)
+	for _, amt := range []float64{-1, math.NaN(), math.Inf(1)} {
+		_, err := u.Charge(ctx, capability.ChargeRequest{CapabilityID: uuid.New(), TenantID: uuid.New(), Amount: amt}, nil)
+		if !errors.Is(err, capability.ErrInvalidAmount) {
+			t.Errorf("Charge(%v) err = %v, want ErrInvalidAmount", amt, err)
+		}
 	}
 }

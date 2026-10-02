@@ -106,8 +106,10 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
 	}
-	// Capability gate: BatchDelete spans many objects under one collection,
-	// so OpDelete is asserted with an empty URI — the op caveat only.
+	// Capability gate: BatchDelete names its objects by ID, not URI, so it
+	// asserts OpDelete with no resource. A resource-restricted capability is
+	// therefore refused (it cannot be shown to stay in scope); an
+	// unrestricted one needs only the op.
 	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, ""); err != nil {
 		return uuid.Nil, err
 	}

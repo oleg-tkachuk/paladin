@@ -87,20 +87,30 @@ func TestAssertCapabilityOp_DeniedResource(t *testing.T) {
 	}
 }
 
-// TestAssertCapabilityOp_EmptyResourceURI confirms the resource check
-// is skipped when the caller passes empty URI — used by ops that don't
-// target a specific resource (e.g. capability self-introspect).
+// TestAssertCapabilityOp_EmptyResourceURI pins that an operation which
+// cannot name its resource fails closed on a resource-restricted capability.
+// The check used to be skipped for an empty URI, so a capability confined to
+// one prefix could run every batch delete, tag edit and listing in its tenant:
+// the handlers for those pass "" and the caveat never saw them.
 func TestAssertCapabilityOp_EmptyResourceURI(t *testing.T) {
 	t.Parallel()
-	cap := &capability.Capability{
+	restricted := &capability.Capability{
 		Caveats: capability.Caveats{
 			Ops:              []capability.Op{capability.OpManage},
-			ResourcePrefixes: []string{"object://acme/"}, // would NOT match anything but irrelevant
+			ResourcePrefixes: []string{"object://acme/"},
 		},
 	}
-	ctx := WithCapability(context.Background(), cap)
-	if err := AssertCapabilityOp(ctx, capability.OpManage, ""); err != nil {
-		t.Fatalf("expected nil for empty URI, got %v", err)
+	err := AssertCapabilityOp(WithCapability(context.Background(), restricted), capability.OpManage, "")
+	if connect.CodeOf(err) != connect.CodePermissionDenied || !errors.Is(err, capability.ErrResourceNotAllowed) {
+		t.Fatalf("restricted capability, unscoped op: err = %v, want PermissionDenied wrapping ErrResourceNotAllowed", err)
+	}
+
+	// An unrestricted capability may still run unscoped operations.
+	unrestricted := &capability.Capability{
+		Caveats: capability.Caveats{Ops: []capability.Op{capability.OpManage}},
+	}
+	if err := AssertCapabilityOp(WithCapability(context.Background(), unrestricted), capability.OpManage, ""); err != nil {
+		t.Fatalf("unrestricted capability, unscoped op: %v", err)
 	}
 }
 

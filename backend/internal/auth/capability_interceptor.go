@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"errors"
-	"net"
 	"strings"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -200,6 +199,7 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 		ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
 		ctx = WithChargeEventEmitter(ctx, i.emitter)
 		ctx = withLastOpHolder(ctx)
+		ctx = withIdempotencyKeyPresent(ctx, requestHasIdempotencyKey(req))
 		return next(ctx, req)
 	}
 }
@@ -230,6 +230,7 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
 		ctx = WithChargeEventEmitter(ctx, i.emitter)
 		ctx = withLastOpHolder(ctx)
+		ctx = withIdempotencyKeyPresent(ctx, conn.RequestHeader().Get(paladin.HeaderIdempotencyKey) != "")
 		return next(ctx, conn)
 	}
 }
@@ -279,14 +280,18 @@ func (i *capabilityInterceptor) withCapabilityPrincipal(
 	}), nil
 }
 
-// enforceCaveats runs the runtime-bound caveat checks: source-IP CIDR
-// match and per-capability request-count limit. Order:
+// enforceCaveats runs the per-connection caveat checks: source-IP CIDR
+// match and the request-count limit. Order:
 //
 //  1. CIDR check first (cheap; pure in-memory match) — rejects
 //     before we hit the DB.
-//  2. Request-count bump (one round-trip; concurrency-safe via
-//     UPSERT-and-check). When usage store is nil, MaxRequests is a
-//     no-op even if the caveat is set — the operator opted out.
+//  2. Request-count bump for the capability and its ancestors (one
+//     transaction; concurrency-safe via UPSERT-and-check). When the
+//     usage store is nil, MaxRequests is a no-op even if the caveat is
+//     set — the operator opted out.
+//
+// Per-operation caveats (op, resource, idempotency key) are checked by
+// AssertCapabilityOp, where the handler names the operation.
 //
 // Budget enforcement is NOT done here — Charge() is per-handler,
 // called after the cost-emitting work; it lives in this package as
@@ -296,19 +301,23 @@ func (i *capabilityInterceptor) enforceCaveats(
 	cap *capability.Capability,
 ) error {
 	if len(cap.Caveats.SourceIPCIDR) > 0 {
-		addr, ok := clientip.FromContext(ctx)
-		if !ok {
-			return connect.NewError(connect.CodePermissionDenied,
-				errors.New("capability: SourceIPCIDR set but client IP unknown"))
-		}
-		if !ipInAnyCIDR(net.IP(addr.AsSlice()), cap.Caveats.SourceIPCIDR) {
-			return connect.NewError(connect.CodePermissionDenied,
-				errors.New("capability: client IP not in SourceIPCIDR allow-list"))
+		// An address the listener could not resolve is the zero netip.Addr,
+		// which CheckSource refuses: "unknown" is not "inside the range".
+		addr, _ := clientip.FromContext(ctx)
+		if err := cap.Caveats.CheckSource(addr); err != nil {
+			return connect.NewError(connect.CodePermissionDenied, err)
 		}
 	}
 
-	if i.usage != nil && cap.Caveats.MaxRequests > 0 {
-		if _, err := i.usage.BumpRequest(ledgerContext(ctx, cap), cap.ID, int64(cap.Caveats.MaxRequests)); err != nil {
+	// Bumped whenever a delegated capability is presented too, not only when
+	// it carries its own MaxRequests: an ancestor's ceiling bounds the whole
+	// subtree, and the store reads it from the ancestor's record.
+	if i.usage != nil && (cap.Caveats.MaxRequests > 0 || cap.ParentID != uuid.Nil) {
+		if _, err := i.usage.BumpRequest(ledgerContext(ctx, cap), capability.RequestBump{
+			CapabilityID: cap.ID,
+			TenantID:     cap.Subject.TenantID,
+			MaxRequests:  int64(cap.Caveats.MaxRequests),
+		}); err != nil {
 			if errors.Is(err, capability.ErrRequestLimitExceeded) {
 				return connect.NewError(connect.CodeResourceExhausted, err)
 			}
@@ -334,23 +343,6 @@ func (i *capabilityInterceptor) enforceCaveats(
 // the request itself stays scoped to whoever the caller is.
 func ledgerContext(ctx context.Context, cap *capability.Capability) context.Context {
 	return WithActingTenant(ctx, cap.Subject.TenantID)
-}
-
-// ipInAnyCIDR returns true when ip falls inside at least one CIDR
-// from the supplied list. Invalid CIDRs are skipped (delegation
-// narrowing already rejects them at issue time, but the verifier
-// path is defensive).
-func ipInAnyCIDR(ip net.IP, cidrs []string) bool {
-	for _, c := range cidrs {
-		_, network, err := net.ParseCIDR(c)
-		if err != nil {
-			continue
-		}
-		if network.Contains(ip) {
-			return true
-		}
-	}
-	return false
 }
 
 // extractCapabilityToken reads the token from either of the supported
@@ -397,8 +389,8 @@ type lastOpKey struct{}
 // Handler-side: AssertCapabilityOp writes via stampLastOp,
 // ChargeCapability reads via readLastOp.
 func withLastOpHolder(ctx context.Context) context.Context {
-	holder := new(string)
-	return context.WithValue(ctx, lastOpKey{}, holder)
+	ctx = context.WithValue(ctx, lastChargeKey{}, new(uuid.UUID))
+	return context.WithValue(ctx, lastOpKey{}, new(string))
 }
 
 // stampLastOp writes the supplied op into the per-request holder.
@@ -558,7 +550,7 @@ func WithChargeAmount(ctx context.Context, amount float64, unit string) context.
 //     CodeResourceExhausted with ErrTenantBudgetExceeded.
 //   - UsageStore not wired → no-op (operator opted out).
 //
-// Refunds are exposed via auth.RefundCapability for handlers that
+// Refunds are exposed via auth.RefundLastCharge for handlers that
 // detect a partial failure after the charge.
 func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 	cap, ok := CapabilityFromContext(ctx)
@@ -602,7 +594,15 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 			return emitter.EmitChargedTx(ctx, tx, tenantID.String(), cap.ID.String(), op, actor, amount, resolvedUnit)
 		}
 	}
-	_, err := store.Charge(ledgerContext(ctx, cap), cap.ID, amount, cap.Caveats.MaxBudgetAmount, resolvedUnit, tenantID, op, actor, onCharged)
+	receipt, err := store.Charge(ledgerContext(ctx, cap), capability.ChargeRequest{
+		CapabilityID: cap.ID,
+		TenantID:     tenantID,
+		Amount:       amount,
+		MaxBudget:    cap.Caveats.MaxBudgetAmount,
+		UnitCode:     resolvedUnit,
+		Op:           op,
+		Actor:        actor,
+	}, onCharged)
 	if err != nil {
 		// The two exhaustion cases are separated because they need different
 		// answers: a capability at its cap is reissued, a tenant at its cap
@@ -620,6 +620,7 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 		return connect.NewError(connect.CodeUnavailable, err)
 	}
 	metrics.RecordCapabilityCharge(ctx, tenantID.String(), "charged", amount)
+	stampLastCharge(ctx, receipt.ChargeID)
 	return nil
 }
 
@@ -648,20 +649,18 @@ func ChargeRequest(ctx context.Context) error {
 	return ChargeCapability(ctx, amt.Amount, amt.Unit)
 }
 
-// RefundCapability subtracts amount from the per-capability spend
-// AND the tenant aggregate. Use it when a handler detects that an
-// already-charged operation must be rolled back (storage write
-// failed after presign was issued, agent cancelled mid-flow).
+// RefundLastCharge returns spend from the most recent charge this request
+// made (ChargeCapability / ChargeRequest) to every counter that charge
+// debited: the capability's, each ancestor's and the tenant's. Use it when a
+// handler detects that an already-charged operation must be rolled back
+// (storage write failed after presign was issued, agent cancelled
+// mid-flow), or to settle an estimate once the real cost is known.
 //
-// Idempotent on both counters — flooring at 0 means a double-refund
-// doesn't go negative. No-op when no capability is on context, no
-// store wired, or amount <= 0.
-//
-// Currency-naive: refunds the same numeric value off whatever
-// counter exists. Both counters are pinned to the same unit (the
-// capability's UnitCode), so the refund always cancels the right
-// quantity.
-func RefundCapability(ctx context.Context, amount float64) error {
+// amount = 0 refunds whatever the charge has left, which makes a retried
+// full refund a no-op rather than a second credit. A partial refund larger
+// than what is left is refused. No-op when no capability is on context, no
+// store is wired, or this request has made no charge.
+func RefundLastCharge(ctx context.Context, amount float64) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
 		return nil
@@ -670,17 +669,15 @@ func RefundCapability(ctx context.Context, amount float64) error {
 	if !ok || store == nil {
 		return nil
 	}
-	if amount <= 0 {
+	chargeID := readLastCharge(ctx)
+	if chargeID == uuid.Nil {
 		return nil
 	}
-	ledgerCtx := ledgerContext(ctx, cap)
-	if err := store.RefundCapability(ledgerCtx, cap.ID, amount); err != nil {
-		return connect.NewError(connect.CodeUnavailable, err)
-	}
-	if cap.Subject.TenantID != uuid.Nil {
-		if err := store.RefundTenant(ledgerCtx, cap.Subject.TenantID, amount); err != nil {
-			return connect.NewError(connect.CodeUnavailable, err)
+	if _, err := store.Refund(ledgerContext(ctx, cap), capability.RefundRequest{ChargeID: chargeID, Amount: amount}); err != nil {
+		if errors.Is(err, capability.ErrRefundExceedsCharge) || errors.Is(err, capability.ErrInvalidAmount) {
+			return connect.NewError(connect.CodeInvalidArgument, err)
 		}
+		return connect.NewError(connect.CodeUnavailable, err)
 	}
 	return nil
 }
@@ -701,28 +698,34 @@ func RefundCapability(ctx context.Context, amount float64) error {
 //     Handler proceeds; downstream code may also call CapabilityFromContext
 //     to read budget / source-IP / other caveats.
 //
-//   - Capability present but op not in Caveats.Ops, or resource not
-//     under any of Caveats.ResourcePrefixes / ResourceURIs → returns a
-//     CodePermissionDenied connect.Error so the caller sees an
-//     unambiguous "your capability didn't allow this" instead of
-//     falling through to a more generic 403.
+//   - Capability present but a caveat refuses the operation → returns a
+//     CodePermissionDenied connect.Error wrapping the module's sentinel
+//     (capability.ErrOpNotAllowed, ErrResourceNotAllowed, ...), so the
+//     caller sees an unambiguous "your capability didn't allow this"
+//     instead of falling through to a more generic 403.
 //
-// resourceURI is matched as a string against ResourcePrefixes (HasPrefix)
-// and ResourceURIs (exact). Empty resourceURI skips the resource check —
-// useful for ops that don't target a specific URI (e.g. capability self-
-// introspect).
+// The checks are capability.Caveats.Check, so delegation and enforcement
+// share one definition of every caveat. resourceURI is matched against
+// ResourceURIs (exact) and ResourcePrefixes (at a "/" segment boundary).
+// An empty resourceURI is only accepted from a capability that is not
+// resource-restricted: an operation that cannot name what it touches
+// cannot be shown to stay inside a restricted scope, so it fails closed.
+// For an operation over a set (a listing), pass the URI prefix that bounds
+// the set. Mutating ops also need an idempotency key when the capability
+// requires one.
 func AssertCapabilityOp(ctx context.Context, op capability.Op, resourceURI string) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
 		return nil // no capability presented; not our gate
 	}
-	if !containsOp(cap.Caveats.Ops, op) {
-		return connect.NewError(connect.CodePermissionDenied,
-			capabilityOpNotAllowed{op: op, allowed: cap.Caveats.Ops})
-	}
-	if resourceURI != "" && !resourceAllowed(cap.Caveats, resourceURI) {
-		return connect.NewError(connect.CodePermissionDenied,
-			capabilityResourceNotAllowed{uri: resourceURI})
+	// No taint signal exists in this deployment yet, so ResourceTainted is
+	// left false and AllowTaintedRead restricts nothing here (see BACKLOG).
+	if err := cap.Caveats.Check(capability.CheckRequest{
+		Op:                op,
+		Resource:          resourceURI,
+		HasIdempotencyKey: idempotencyKeyPresent(ctx),
+	}); err != nil {
+		return connect.NewError(connect.CodePermissionDenied, err)
 	}
 	// Stamp the op into the per-request holder so a later
 	// ChargeRequest / ChargeCapability call attributes the charges-
@@ -734,55 +737,48 @@ func AssertCapabilityOp(ctx context.Context, op capability.Op, resourceURI strin
 	return nil
 }
 
-// containsOp checks Op set membership without dragging slices.Contains
-// into every call site.
-func containsOp(set []capability.Op, want capability.Op) bool {
-	for _, op := range set {
-		if op == want {
-			return true
-		}
-	}
-	return false
+// idempotencyKeyCarrier is a request message that declares an
+// idempotency_key field. Mirrors middleware's resolution: the header, or
+// failing that the body field.
+type idempotencyKeyCarrier interface {
+	GetIdempotencyKey() string
 }
 
-// resourceAllowed reports whether the supplied URI is reachable under
-// the capability's resource caveats. Empty caveats = unrestricted within
-// tenant scope (the verifier already enforced that).
-func resourceAllowed(c capability.Caveats, uri string) bool {
-	if len(c.ResourcePrefixes) == 0 && len(c.ResourceURIs) == 0 {
+func requestHasIdempotencyKey(req connect.AnyRequest) bool {
+	if req.Header().Get(paladin.HeaderIdempotencyKey) != "" {
 		return true
 	}
-	for _, exact := range c.ResourceURIs {
-		if exact == uri {
-			return true
-		}
+	c, ok := req.Any().(idempotencyKeyCarrier)
+	return ok && c.GetIdempotencyKey() != ""
+}
+
+type idempotencyKeyPresentKey struct{}
+
+func withIdempotencyKeyPresent(ctx context.Context, present bool) context.Context {
+	return context.WithValue(ctx, idempotencyKeyPresentKey{}, present)
+}
+
+func idempotencyKeyPresent(ctx context.Context) bool {
+	present, _ := ctx.Value(idempotencyKeyPresentKey{}).(bool)
+	return present
+}
+
+// lastChargeKey carries a per-request *uuid.UUID holding the ID of the
+// most recent charge, so RefundLastCharge can name it. Installed with the
+// other per-request holders.
+type lastChargeKey struct{}
+
+func stampLastCharge(ctx context.Context, id uuid.UUID) {
+	if holder, ok := ctx.Value(lastChargeKey{}).(*uuid.UUID); ok {
+		*holder = id
 	}
-	for _, prefix := range c.ResourcePrefixes {
-		if len(prefix) > 0 && len(uri) >= len(prefix) && uri[:len(prefix)] == prefix {
-			return true
-		}
+}
+
+func readLastCharge(ctx context.Context) uuid.UUID {
+	if holder, ok := ctx.Value(lastChargeKey{}).(*uuid.UUID); ok && holder != nil {
+		return *holder
 	}
-	return false
-}
-
-// capabilityOpNotAllowed and capabilityResourceNotAllowed are typed
-// errors so callers / tests can branch on the rejection reason without
-// string-matching connect error messages.
-type capabilityOpNotAllowed struct {
-	op      capability.Op
-	allowed []capability.Op
-}
-
-func (e capabilityOpNotAllowed) Error() string {
-	return "capability op " + string(e.op) + " not in allowed set"
-}
-
-type capabilityResourceNotAllowed struct {
-	uri string
-}
-
-func (e capabilityResourceNotAllowed) Error() string {
-	return "capability does not authorise resource " + e.uri
+	return uuid.Nil
 }
 
 // passthroughInterceptor is the no-op variant returned when the

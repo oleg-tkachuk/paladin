@@ -95,13 +95,12 @@ func TestCharge_FanoutCommitsOnSameTx(t *testing.T) {
 	capID := uuid.New()
 	seedCapRecord(t, h, capID, tenantID)
 
-	spent, err := store.Charge(ctx, capID, 2.5, 10.0, "USD", tenantID, "presign.put", "agent-1",
-		insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID)))
+	spent, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: 2.5, MaxBudget: 10.0, UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID)))
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
-	if spent < 2.49 || spent > 2.51 {
-		t.Errorf("spent = %v, want ~2.50", spent)
+	if spent.Spent < 2.49 || spent.Spent > 2.51 {
+		t.Errorf("spent = %v, want ~2.50", spent.Spent)
 	}
 
 	// Counter committed.
@@ -136,8 +135,7 @@ func TestCharge_FanoutErrorRollsBackEverything(t *testing.T) {
 	seedCapRecord(t, h, capID, tenantID)
 
 	boom := errors.New("fan-out down")
-	_, err := store.Charge(ctx, capID, 2.5, 10.0, "USD", tenantID, "presign.put", "agent-1",
-		func(context.Context, pgx.Tx) error { return boom })
+	_, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: 2.5, MaxBudget: 10.0, UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, func(context.Context, pgx.Tx) error { return boom })
 	if !errors.Is(err, boom) {
 		t.Fatalf("charge err = %v, want it to wrap the fan-out error", err)
 	}
