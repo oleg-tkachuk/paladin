@@ -71,10 +71,32 @@ type Meter[TX any] interface {
 	// ErrRefundExceedsCharge and changes nothing. An unknown charge ID
 	// returns ErrChargeNotFound. Returns the amount actually refunded.
 	//
-	// Charge-then-refund is also how a consumer settles a cost it only
-	// learns afterwards: charge the estimate up front, refund the
-	// difference once the actual cost is known.
+	// For a cost only known afterwards, prefer Reserve/Settle: a
+	// reservation lapses on its own if the caller never settles it, where
+	// an estimate charged up front stays charged.
 	Refund(ctx context.Context, req RefundRequest) (refunded float64, err error)
+
+	// Reserve holds req.Amount against the capability, each ancestor and
+	// the tenant aggregate, checking every ceiling against spend plus
+	// what is already held. Holds count against later charges and
+	// reservations exactly as spend does, until the reservation is
+	// settled, released or expires. Rejections return the Charge
+	// sentinels and hold nothing.
+	Reserve(ctx context.Context, req ReserveRequest) (Reservation, error)
+
+	// Settle ends a reservation and charges the actual cost in its place,
+	// atomically: the hold is released and req.Amount is charged as
+	// Charge would, with onCharged run inside. The actual cost may be
+	// below, equal to or above the hold; above it, the excess must fit
+	// every ceiling, or Settle returns the Charge sentinel and the
+	// reservation stays in place for the caller to settle lower or
+	// release. An unknown, settled, released or expired reservation
+	// returns ErrReservationNotFound.
+	Settle(ctx context.Context, req SettleRequest, onCharged func(ctx context.Context, tx TX) error) (ChargeReceipt, error)
+
+	// Release ends a reservation without charging. Idempotent: releasing
+	// one that is gone is a no-op.
+	Release(ctx context.Context, reservationID uuid.UUID) error
 
 	// Get returns the current snapshot. Returns ErrUsageNotFound when no
 	// row exists for the capability — typically means it's never been
@@ -118,6 +140,12 @@ type UsageHousekeeping interface {
 	// exists. Implementations may bound the work per call; the caller
 	// loops until it returns 0.
 	PurgeOrphans(ctx context.Context) (int64, error)
+
+	// ReleaseExpired releases every reservation past its expiry and
+	// returns how many it released. Run on a timer: until it runs, an
+	// expired hold keeps counting against the ceilings, which errs towards
+	// refusing spend, never towards allowing too much.
+	ReleaseExpired(ctx context.Context) (int64, error)
 }
 
 // RequestBump is the input to Meter.BumpRequest.
@@ -161,6 +189,43 @@ type ChargeReceipt struct {
 	Spent float64
 }
 
+// DefaultReservationTTL is how long a reservation lasts when the request
+// does not say.
+const DefaultReservationTTL = 5 * time.Minute
+
+// ReserveRequest is the input to Meter.Reserve.
+type ReserveRequest struct {
+	CapabilityID uuid.UUID
+	// TenantID is the capability's tenant. Required.
+	TenantID uuid.UUID
+	// Amount to hold, in UnitCode. Must be finite and ≥ 0.
+	Amount float64
+	// MaxBudget is the capability's own ceiling, from the verified token.
+	MaxBudget float64
+	UnitCode  string
+	// TTL is how long the hold lasts if never settled or released.
+	// 0 = DefaultReservationTTL.
+	TTL time.Duration
+	// Op and Actor are carried onto the charge Settle records.
+	Op    string
+	Actor string
+}
+
+// Reservation is a committed hold.
+type Reservation struct {
+	ID        uuid.UUID
+	ExpiresAt time.Time
+}
+
+// SettleRequest is the input to Meter.Settle.
+type SettleRequest struct {
+	ReservationID uuid.UUID
+	// Amount is the actual cost to charge. Must be finite and ≥ 0.
+	Amount float64
+	// MaxBudget is the capability's own ceiling, from the verified token.
+	MaxBudget float64
+}
+
 // RefundRequest is the input to Meter.Refund.
 type RefundRequest struct {
 	ChargeID uuid.UUID
@@ -178,10 +243,12 @@ type TenantBudget struct {
 	TenantID        uuid.UUID
 	MaxBudgetAmount float64
 	SpentAmount     float64
-	UnitCode        string
-	PeriodStart     time.Time
-	PeriodEnd       *time.Time
-	UpdatedAt       time.Time
+	// ReservedAmount is held by the tenant's open reservations.
+	ReservedAmount float64
+	UnitCode       string
+	PeriodStart    time.Time
+	PeriodEnd      *time.Time
+	UpdatedAt      time.Time
 	// ResourceVersion is the OCC token a caller passes back to Set. Zero
 	// means the row has never been written.
 	ResourceVersion int64
@@ -235,7 +302,10 @@ type Usage struct {
 	CapabilityID uuid.UUID
 	RequestCount int64
 	SpentAmount  float64
-	UnitCode     string
+	// ReservedAmount is held by open reservations (its subtree's, for a
+	// capability with delegated children).
+	ReservedAmount float64
+	UnitCode       string
 }
 
 // Usage-related sentinels. ErrBudgetExceeded already lives in types.go
@@ -251,6 +321,10 @@ var (
 	// ErrRefundExceedsCharge — Refund would return more than the charge
 	// took, counting earlier refunds of the same charge.
 	ErrRefundExceedsCharge = errors.New("capability: refund exceeds charge")
+
+	// ErrReservationNotFound — Settle named a reservation that does not
+	// exist, was already settled or released, or has expired.
+	ErrReservationNotFound = errors.New("capability: reservation not found")
 
 	// ErrRequestLimitExceeded — capability used MaxRequests times,
 	// next attempt was blocked.
