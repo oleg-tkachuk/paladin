@@ -189,4 +189,16 @@ func (s *EventSubscriptionServer) TestSubscription(ctx context.Context, req *con
 	return connect.NewResponse(&pb.TestSubscriptionResponse{Delivered: true}), nil
 }
 
+func (s *EventSubscriptionServer) RedriveFailedDeliveries(ctx context.Context, req *connect.Request[pb.RedriveFailedDeliveriesRequest]) (*connect.Response[pb.RedriveFailedDeliveriesResponse], error) {
+	tenantID, id, err := s.resolveSubscriptionName(ctx, req.Msg.GetName())
+	if err != nil {
+		return nil, err
+	}
+	n, err := s.H.RedriveFailedDeliveries(ctx, tenantID, id)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&pb.RedriveFailedDeliveriesResponse{Requeued: n}), nil
+}
+
 var _ paladinadminv1connect.EventSubscriptionServiceHandler = (*EventSubscriptionServer)(nil)

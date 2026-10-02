@@ -212,6 +212,9 @@ type EventSubscriptionRepository interface {
 	List(ctx context.Context, args ListEventSubscriptionsArgs) ([]EventSubscription, string, error)
 	Update(ctx context.Context, s EventSubscription, expectedVersion int64, mask []string) error
 	Delete(ctx context.Context, id uuid.UUID, expectedVersion int64) error
+	// RequeueFailedDeliveries queues the subscription's failed deliveries
+	// again and returns how many it queued.
+	RequeueFailedDeliveries(ctx context.Context, id uuid.UUID) (int64, error)
 }
 
 type ListEventSubscriptionsArgs struct {

@@ -40,6 +40,15 @@ service EventSubscriptionService {
 
   // TestSubscription delivers a synthetic event to the configured sink.
   rpc TestSubscription(TestSubscriptionRequest) returns (TestSubscriptionResponse);
+
+  // RedriveFailedDeliveries queues the subscription's failed deliveries —
+  // those that exhausted their attempts — to be sent again, with a fresh
+  // attempt budget. Failed rows are kept until the event-delivery retention
+  // removes them. A disabled subscription is refused: its deliveries would
+  // fail again at once.
+  rpc RedriveFailedDeliveries(RedriveFailedDeliveriesRequest) returns (RedriveFailedDeliveriesResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 message CreateSubscriptionRequest {
@@ -89,4 +98,13 @@ message TestSubscriptionResponse {
   bool delivered = 1;
   int32 status_code = 2;
   string error_message = 3;
+}
+
+message RedriveFailedDeliveriesRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message RedriveFailedDeliveriesResponse {
+  // How many failed deliveries were queued again. 0 when none were failed.
+  int64 requeued = 1;
 }

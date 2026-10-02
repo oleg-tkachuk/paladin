@@ -79,3 +79,15 @@ class TestSubscriptionResponse(_message.Message):
     status_code: int
     error_message: str
     def __init__(self, delivered: _Optional[bool] = ..., status_code: _Optional[int] = ..., error_message: _Optional[str] = ...) -> None: ...
+
+class RedriveFailedDeliveriesRequest(_message.Message):
+    __slots__ = ("name",)
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class RedriveFailedDeliveriesResponse(_message.Message):
+    __slots__ = ("requeued",)
+    REQUEUED_FIELD_NUMBER: _ClassVar[int]
+    requeued: int
+    def __init__(self, requeued: _Optional[int] = ...) -> None: ...

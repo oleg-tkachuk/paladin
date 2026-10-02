@@ -182,6 +182,31 @@ func (h *Handler) SetDispatcher(d Dispatcher) { h.dispatcher = d }
 // TestSubscription delivers a synthetic event ("paladin.test") to the sink.
 // Returns the delivery attempt's status as the connect-level error so the
 // admin UI surfaces it directly to the operator.
+// errRedriveDisabled refuses a redrive the dispatcher would undo: it fails a
+// disabled subscription's deliveries as soon as it reads them.
+var errRedriveDisabled = errors.New("the subscription is disabled; enable it before redriving its deliveries")
+
+// RedriveFailedDeliveries queues the subscription's failed deliveries again
+// and returns how many. It takes the same permission as editing the
+// subscription.
+func (h *Handler) RedriveFailedDeliveries(ctx context.Context, tenantID, id uuid.UUID) (int64, error) {
+	sub, err := h.Get(ctx, tenantID, id)
+	if err != nil {
+		return 0, err
+	}
+	if ctx, err = h.authorize(ctx, cedar.ActionManageSubscription, sub.TenantID); err != nil {
+		return 0, err
+	}
+	if sub.Disabled {
+		return 0, connect.NewError(connect.CodeFailedPrecondition, errRedriveDisabled)
+	}
+	n, err := h.repo.RequeueFailedDeliveries(ctx, sub.SubscriptionID)
+	if err != nil {
+		return 0, apiutil.MapError(err)
+	}
+	return n, nil
+}
+
 func (h *Handler) TestSubscription(ctx context.Context, tenantID, id uuid.UUID) error {
 	sub, err := h.Get(ctx, tenantID, id)
 	if err != nil {

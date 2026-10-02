@@ -36,6 +36,9 @@ class EventSubscriptionService(Protocol):
     async def test_subscription(self, request: paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.TestSubscriptionRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.TestSubscriptionResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
 
+    async def redrive_failed_deliveries(self, request: paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
+
 
 class EventSubscriptionServiceASGIApplication(ConnectASGIApplication[EventSubscriptionService]):
     def __init__(self, service: EventSubscriptionService | AsyncGenerator[EventSubscriptionService], *, interceptors: Iterable[Interceptor]=(), read_max_bytes: int | None = None, compressions: Iterable[Compression] | None = None) -> None:
@@ -101,6 +104,16 @@ class EventSubscriptionServiceASGIApplication(ConnectASGIApplication[EventSubscr
                         idempotency_level=IdempotencyLevel.UNKNOWN,
                     ),
                     function=svc.test_subscription,
+                ),
+                "/paladin.admin.v1.EventSubscriptionService/RedriveFailedDeliveries": Endpoint.unary(
+                    method=MethodInfo(
+                        name="RedriveFailedDeliveries",
+                        service_name="paladin.admin.v1.EventSubscriptionService",
+                        input=paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesRequest,
+                        output=paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=svc.redrive_failed_deliveries,
                 ),
             },
             interceptors=interceptors,
@@ -239,6 +252,26 @@ class EventSubscriptionServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
         )
 
+    async def redrive_failed_deliveries(
+        self,
+        request: paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None,
+        timeout_ms: int | None = None,
+    ) -> paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="RedriveFailedDeliveries",
+                service_name="paladin.admin.v1.EventSubscriptionService",
+                input=paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesRequest,
+                output=paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesResponse,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
 
 class EventSubscriptionServiceSync(Protocol):
     def create_subscription(self, request: paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.CreateSubscriptionRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_types__pb2.EventSubscription:
@@ -252,6 +285,8 @@ class EventSubscriptionServiceSync(Protocol):
     def list_subscriptions(self, request: paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.ListSubscriptionsRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.ListSubscriptionsResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
     def test_subscription(self, request: paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.TestSubscriptionRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.TestSubscriptionResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
+    def redrive_failed_deliveries(self, request: paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
 
 
@@ -318,6 +353,16 @@ class EventSubscriptionServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.UNKNOWN,
                     ),
                     function=service.test_subscription,
+                ),
+                "/paladin.admin.v1.EventSubscriptionService/RedriveFailedDeliveries": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="RedriveFailedDeliveries",
+                        service_name="paladin.admin.v1.EventSubscriptionService",
+                        input=paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesRequest,
+                        output=paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=service.redrive_failed_deliveries,
                 ),
             },
             interceptors=interceptors,
@@ -451,6 +496,26 @@ class EventSubscriptionServiceClientSync(ConnectClientSync):
                 input=paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.TestSubscriptionRequest,
                 output=paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.TestSubscriptionResponse,
                 idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    def redrive_failed_deliveries(
+        self,
+        request: paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None,
+        timeout_ms: int | None = None,
+    ) -> paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="RedriveFailedDeliveries",
+                service_name="paladin.admin.v1.EventSubscriptionService",
+                input=paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesRequest,
+                output=paladin_dot_admin_dot_v1_dot_event__subscription__service__pb2.RedriveFailedDeliveriesResponse,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
             ),
             headers=headers,
             timeout_ms=timeout_ms,

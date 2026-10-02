@@ -392,6 +392,9 @@ var idempotentByArgument = map[string]string{
 		"here and not among the NO_SIDE_EFFECTS",
 	"UpdateMine": "INSERT … ON CONFLICT (user_id) DO UPDATE of one settings row from " +
 		"the masked request",
+	"RedriveFailedDeliveries": "UPDATE … SET status = 'pending' WHERE status = 'failed': " +
+		"a repeat finds none of the rows the first call moved, only ones that failed " +
+		"since — which is what a redrive is for",
 }
 
 var removalVerb = regexp.MustCompile(`^(Delete|Clear|Abort|Cancel|Revoke|Purge|Remove)`)

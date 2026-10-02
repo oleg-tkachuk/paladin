@@ -166,6 +166,9 @@ func (failingEventSubscription) List(context.Context, admindomain.ListEventSubsc
 func (failingEventSubscription) TestSubscription(context.Context, uuid.UUID, uuid.UUID) error {
 	return errBoom
 }
+func (failingEventSubscription) RedriveFailedDeliveries(context.Context, uuid.UUID, uuid.UUID) (int64, error) {
+	return 0, errBoom
+}
 func (failingEventSubscription) Update(context.Context, uuid.UUID, admindomain.EventSubscription, int64, []string) (*admindomain.EventSubscription, error) {
 	return nil, errBoom
 }
@@ -536,6 +539,10 @@ func TestEveryAdminShimPropagatesHandlerErrors(t *testing.T) {
 		}},
 		{"EventSubscription.DeleteSubscription", func() error {
 			_, err := subSrv.DeleteSubscription(ctx, connect.NewRequest(&pb.DeleteSubscriptionRequest{Name: subName}))
+			return err
+		}},
+		{"EventSubscription.RedriveFailedDeliveries", func() error {
+			_, err := subSrv.RedriveFailedDeliveries(ctx, connect.NewRequest(&pb.RedriveFailedDeliveriesRequest{Name: subName}))
 			return err
 		}},
 		{"EventSubscription.TestSubscription", func() error {

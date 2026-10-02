@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 
 	"github.com/google/uuid"
@@ -142,4 +143,13 @@ func sinkKindToSQL(k *string) *sqlc.EventSinkKind {
 	}
 	v := sqlc.EventSinkKind(*k)
 	return &v
+}
+
+// RequeueFailedDeliveries queues the subscription's failed deliveries again.
+func (r *EventSubscriptionRepoV2) RequeueFailedDeliveries(ctx context.Context, id uuid.UUID) (int64, error) {
+	n, err := r.q.RequeueFailedEventDeliveries(ctx, pgUUID(id))
+	if err != nil {
+		return 0, fmt.Errorf("requeue failed deliveries: %w", err)
+	}
+	return n, nil
 }

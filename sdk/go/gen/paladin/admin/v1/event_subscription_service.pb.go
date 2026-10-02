@@ -491,6 +491,95 @@ func (x *TestSubscriptionResponse) GetErrorMessage() string {
 	return ""
 }
 
+type RedriveFailedDeliveriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RedriveFailedDeliveriesRequest) Reset() {
+	*x = RedriveFailedDeliveriesRequest{}
+	mi := &file_paladin_admin_v1_event_subscription_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RedriveFailedDeliveriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RedriveFailedDeliveriesRequest) ProtoMessage() {}
+
+func (x *RedriveFailedDeliveriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_event_subscription_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RedriveFailedDeliveriesRequest.ProtoReflect.Descriptor instead.
+func (*RedriveFailedDeliveriesRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_event_subscription_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RedriveFailedDeliveriesRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type RedriveFailedDeliveriesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// How many failed deliveries were queued again. 0 when none were failed.
+	Requeued      int64 `protobuf:"varint,1,opt,name=requeued,proto3" json:"requeued,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RedriveFailedDeliveriesResponse) Reset() {
+	*x = RedriveFailedDeliveriesResponse{}
+	mi := &file_paladin_admin_v1_event_subscription_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RedriveFailedDeliveriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RedriveFailedDeliveriesResponse) ProtoMessage() {}
+
+func (x *RedriveFailedDeliveriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_event_subscription_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RedriveFailedDeliveriesResponse.ProtoReflect.Descriptor instead.
+func (*RedriveFailedDeliveriesResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_event_subscription_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RedriveFailedDeliveriesResponse) GetRequeued() int64 {
+	if x != nil {
+		return x.Requeued
+	}
+	return 0
+}
+
 var File_paladin_admin_v1_event_subscription_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_event_subscription_service_proto_rawDesc = "" +
@@ -523,14 +612,19 @@ const file_paladin_admin_v1_event_subscription_service_proto_rawDesc = "" +
 	"\tdelivered\x18\x01 \x01(\bR\tdelivered\x12\x1f\n" +
 	"\vstatus_code\x18\x02 \x01(\x05R\n" +
 	"statusCode\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage2\xaa\x05\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"=\n" +
+	"\x1eRedriveFailedDeliveriesRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"=\n" +
+	"\x1fRedriveFailedDeliveriesResponse\x12\x1a\n" +
+	"\brequeued\x18\x01 \x01(\x03R\brequeued2\xb0\x06\n" +
 	"\x18EventSubscriptionService\x12f\n" +
 	"\x12CreateSubscription\x12+.paladin.admin.v1.CreateSubscriptionRequest\x1a#.paladin.admin.v1.EventSubscription\x12e\n" +
 	"\x0fGetSubscription\x12(.paladin.admin.v1.GetSubscriptionRequest\x1a#.paladin.admin.v1.EventSubscription\"\x03\x90\x02\x01\x12k\n" +
 	"\x12UpdateSubscription\x12+.paladin.admin.v1.UpdateSubscriptionRequest\x1a#.paladin.admin.v1.EventSubscription\"\x03\x90\x02\x02\x12t\n" +
 	"\x12DeleteSubscription\x12+.paladin.admin.v1.DeleteSubscriptionRequest\x1a,.paladin.admin.v1.DeleteSubscriptionResponse\"\x03\x90\x02\x02\x12q\n" +
 	"\x11ListSubscriptions\x12*.paladin.admin.v1.ListSubscriptionsRequest\x1a+.paladin.admin.v1.ListSubscriptionsResponse\"\x03\x90\x02\x01\x12i\n" +
-	"\x10TestSubscription\x12).paladin.admin.v1.TestSubscriptionRequest\x1a*.paladin.admin.v1.TestSubscriptionResponseBLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
+	"\x10TestSubscription\x12).paladin.admin.v1.TestSubscriptionRequest\x1a*.paladin.admin.v1.TestSubscriptionResponse\x12\x83\x01\n" +
+	"\x17RedriveFailedDeliveries\x120.paladin.admin.v1.RedriveFailedDeliveriesRequest\x1a1.paladin.admin.v1.RedriveFailedDeliveriesResponse\"\x03\x90\x02\x02BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_event_subscription_service_proto_rawDescOnce sync.Once
@@ -544,43 +638,47 @@ func file_paladin_admin_v1_event_subscription_service_proto_rawDescGZIP() []byte
 	return file_paladin_admin_v1_event_subscription_service_proto_rawDescData
 }
 
-var file_paladin_admin_v1_event_subscription_service_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_paladin_admin_v1_event_subscription_service_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_paladin_admin_v1_event_subscription_service_proto_goTypes = []any{
-	(*CreateSubscriptionRequest)(nil),  // 0: paladin.admin.v1.CreateSubscriptionRequest
-	(*GetSubscriptionRequest)(nil),     // 1: paladin.admin.v1.GetSubscriptionRequest
-	(*UpdateSubscriptionRequest)(nil),  // 2: paladin.admin.v1.UpdateSubscriptionRequest
-	(*DeleteSubscriptionRequest)(nil),  // 3: paladin.admin.v1.DeleteSubscriptionRequest
-	(*DeleteSubscriptionResponse)(nil), // 4: paladin.admin.v1.DeleteSubscriptionResponse
-	(*ListSubscriptionsRequest)(nil),   // 5: paladin.admin.v1.ListSubscriptionsRequest
-	(*ListSubscriptionsResponse)(nil),  // 6: paladin.admin.v1.ListSubscriptionsResponse
-	(*TestSubscriptionRequest)(nil),    // 7: paladin.admin.v1.TestSubscriptionRequest
-	(*TestSubscriptionResponse)(nil),   // 8: paladin.admin.v1.TestSubscriptionResponse
-	(*EventSubscription)(nil),          // 9: paladin.admin.v1.EventSubscription
-	(*fieldmaskpb.FieldMask)(nil),      // 10: google.protobuf.FieldMask
-	(*v1.PageRequest)(nil),             // 11: paladin.common.v1.PageRequest
-	(*v1.PageResponse)(nil),            // 12: paladin.common.v1.PageResponse
+	(*CreateSubscriptionRequest)(nil),       // 0: paladin.admin.v1.CreateSubscriptionRequest
+	(*GetSubscriptionRequest)(nil),          // 1: paladin.admin.v1.GetSubscriptionRequest
+	(*UpdateSubscriptionRequest)(nil),       // 2: paladin.admin.v1.UpdateSubscriptionRequest
+	(*DeleteSubscriptionRequest)(nil),       // 3: paladin.admin.v1.DeleteSubscriptionRequest
+	(*DeleteSubscriptionResponse)(nil),      // 4: paladin.admin.v1.DeleteSubscriptionResponse
+	(*ListSubscriptionsRequest)(nil),        // 5: paladin.admin.v1.ListSubscriptionsRequest
+	(*ListSubscriptionsResponse)(nil),       // 6: paladin.admin.v1.ListSubscriptionsResponse
+	(*TestSubscriptionRequest)(nil),         // 7: paladin.admin.v1.TestSubscriptionRequest
+	(*TestSubscriptionResponse)(nil),        // 8: paladin.admin.v1.TestSubscriptionResponse
+	(*RedriveFailedDeliveriesRequest)(nil),  // 9: paladin.admin.v1.RedriveFailedDeliveriesRequest
+	(*RedriveFailedDeliveriesResponse)(nil), // 10: paladin.admin.v1.RedriveFailedDeliveriesResponse
+	(*EventSubscription)(nil),               // 11: paladin.admin.v1.EventSubscription
+	(*fieldmaskpb.FieldMask)(nil),           // 12: google.protobuf.FieldMask
+	(*v1.PageRequest)(nil),                  // 13: paladin.common.v1.PageRequest
+	(*v1.PageResponse)(nil),                 // 14: paladin.common.v1.PageResponse
 }
 var file_paladin_admin_v1_event_subscription_service_proto_depIdxs = []int32{
-	9,  // 0: paladin.admin.v1.CreateSubscriptionRequest.subscription:type_name -> paladin.admin.v1.EventSubscription
-	10, // 1: paladin.admin.v1.UpdateSubscriptionRequest.update_mask:type_name -> google.protobuf.FieldMask
-	9,  // 2: paladin.admin.v1.UpdateSubscriptionRequest.subscription:type_name -> paladin.admin.v1.EventSubscription
-	11, // 3: paladin.admin.v1.ListSubscriptionsRequest.page:type_name -> paladin.common.v1.PageRequest
-	9,  // 4: paladin.admin.v1.ListSubscriptionsResponse.subscriptions:type_name -> paladin.admin.v1.EventSubscription
-	12, // 5: paladin.admin.v1.ListSubscriptionsResponse.page:type_name -> paladin.common.v1.PageResponse
+	11, // 0: paladin.admin.v1.CreateSubscriptionRequest.subscription:type_name -> paladin.admin.v1.EventSubscription
+	12, // 1: paladin.admin.v1.UpdateSubscriptionRequest.update_mask:type_name -> google.protobuf.FieldMask
+	11, // 2: paladin.admin.v1.UpdateSubscriptionRequest.subscription:type_name -> paladin.admin.v1.EventSubscription
+	13, // 3: paladin.admin.v1.ListSubscriptionsRequest.page:type_name -> paladin.common.v1.PageRequest
+	11, // 4: paladin.admin.v1.ListSubscriptionsResponse.subscriptions:type_name -> paladin.admin.v1.EventSubscription
+	14, // 5: paladin.admin.v1.ListSubscriptionsResponse.page:type_name -> paladin.common.v1.PageResponse
 	0,  // 6: paladin.admin.v1.EventSubscriptionService.CreateSubscription:input_type -> paladin.admin.v1.CreateSubscriptionRequest
 	1,  // 7: paladin.admin.v1.EventSubscriptionService.GetSubscription:input_type -> paladin.admin.v1.GetSubscriptionRequest
 	2,  // 8: paladin.admin.v1.EventSubscriptionService.UpdateSubscription:input_type -> paladin.admin.v1.UpdateSubscriptionRequest
 	3,  // 9: paladin.admin.v1.EventSubscriptionService.DeleteSubscription:input_type -> paladin.admin.v1.DeleteSubscriptionRequest
 	5,  // 10: paladin.admin.v1.EventSubscriptionService.ListSubscriptions:input_type -> paladin.admin.v1.ListSubscriptionsRequest
 	7,  // 11: paladin.admin.v1.EventSubscriptionService.TestSubscription:input_type -> paladin.admin.v1.TestSubscriptionRequest
-	9,  // 12: paladin.admin.v1.EventSubscriptionService.CreateSubscription:output_type -> paladin.admin.v1.EventSubscription
-	9,  // 13: paladin.admin.v1.EventSubscriptionService.GetSubscription:output_type -> paladin.admin.v1.EventSubscription
-	9,  // 14: paladin.admin.v1.EventSubscriptionService.UpdateSubscription:output_type -> paladin.admin.v1.EventSubscription
-	4,  // 15: paladin.admin.v1.EventSubscriptionService.DeleteSubscription:output_type -> paladin.admin.v1.DeleteSubscriptionResponse
-	6,  // 16: paladin.admin.v1.EventSubscriptionService.ListSubscriptions:output_type -> paladin.admin.v1.ListSubscriptionsResponse
-	8,  // 17: paladin.admin.v1.EventSubscriptionService.TestSubscription:output_type -> paladin.admin.v1.TestSubscriptionResponse
-	12, // [12:18] is the sub-list for method output_type
-	6,  // [6:12] is the sub-list for method input_type
+	9,  // 12: paladin.admin.v1.EventSubscriptionService.RedriveFailedDeliveries:input_type -> paladin.admin.v1.RedriveFailedDeliveriesRequest
+	11, // 13: paladin.admin.v1.EventSubscriptionService.CreateSubscription:output_type -> paladin.admin.v1.EventSubscription
+	11, // 14: paladin.admin.v1.EventSubscriptionService.GetSubscription:output_type -> paladin.admin.v1.EventSubscription
+	11, // 15: paladin.admin.v1.EventSubscriptionService.UpdateSubscription:output_type -> paladin.admin.v1.EventSubscription
+	4,  // 16: paladin.admin.v1.EventSubscriptionService.DeleteSubscription:output_type -> paladin.admin.v1.DeleteSubscriptionResponse
+	6,  // 17: paladin.admin.v1.EventSubscriptionService.ListSubscriptions:output_type -> paladin.admin.v1.ListSubscriptionsResponse
+	8,  // 18: paladin.admin.v1.EventSubscriptionService.TestSubscription:output_type -> paladin.admin.v1.TestSubscriptionResponse
+	10, // 19: paladin.admin.v1.EventSubscriptionService.RedriveFailedDeliveries:output_type -> paladin.admin.v1.RedriveFailedDeliveriesResponse
+	13, // [13:20] is the sub-list for method output_type
+	6,  // [6:13] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
 	6,  // [6:6] is the sub-list for extension extendee
 	0,  // [0:6] is the sub-list for field type_name
@@ -598,7 +696,7 @@ func file_paladin_admin_v1_event_subscription_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_event_subscription_service_proto_rawDesc), len(file_paladin_admin_v1_event_subscription_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
