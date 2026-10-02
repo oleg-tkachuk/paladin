@@ -172,8 +172,9 @@ func TestListObjects_SearchUnderRLS(t *testing.T) {
 	if objs, _ := list(`key.contains('q_123')`); len(objs) != 11 {
 		t.Fatalf("key.contains(q_123): %d objects, want 11 (q_123, q_1230..q_1239)", len(objs))
 	}
-	if objs, _ := list(`key.contains('q_123') && content_type == 'application/pdf'`); len(objs) != 6 {
-		t.Fatalf("key + content_type: %d objects, want 6", len(objs))
+	// Of those, the even g are PDFs: q_1230, 1232, 1234, 1236, 1238.
+	if objs, _ := list(`key.contains('q_123') && content_type == 'application/pdf'`); len(objs) != 5 {
+		t.Fatalf("key + content_type: %d objects, want 5", len(objs))
 	}
 	for _, o := range objs {
 		if o.TenantID != tenantA {
