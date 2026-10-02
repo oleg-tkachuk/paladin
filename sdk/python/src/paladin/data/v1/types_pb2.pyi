@@ -6,10 +6,17 @@ from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from collections.abc import Mapping as _Mapping
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
+
+class TaintSignal(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    TAINT_SIGNAL_UNSPECIFIED: _ClassVar[TaintSignal]
+    TAINT_SIGNAL_PROMPT_INJECTION: _ClassVar[TaintSignal]
+    TAINT_SIGNAL_PII: _ClassVar[TaintSignal]
+    TAINT_SIGNAL_SECRETS: _ClassVar[TaintSignal]
 
 class ObjectState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -18,6 +25,10 @@ class ObjectState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     OBJECT_STATE_AVAILABLE: _ClassVar[ObjectState]
     OBJECT_STATE_FAILED: _ClassVar[ObjectState]
     OBJECT_STATE_DELETED: _ClassVar[ObjectState]
+TAINT_SIGNAL_UNSPECIFIED: TaintSignal
+TAINT_SIGNAL_PROMPT_INJECTION: TaintSignal
+TAINT_SIGNAL_PII: TaintSignal
+TAINT_SIGNAL_SECRETS: TaintSignal
 OBJECT_STATE_UNSPECIFIED: ObjectState
 OBJECT_STATE_PENDING: ObjectState
 OBJECT_STATE_AVAILABLE: ObjectState
@@ -25,7 +36,7 @@ OBJECT_STATE_FAILED: ObjectState
 OBJECT_STATE_DELETED: ObjectState
 
 class Object(_message.Message):
-    __slots__ = ("name", "object_id", "tenant_id", "collection", "key", "state", "content_type", "size_bytes", "etag", "checksum", "sequencer", "metadata", "tags", "external_ref", "resource_version", "created_at", "updated_at", "committed_at", "terminated_at", "presign_expires_at", "lock", "placement")
+    __slots__ = ("name", "object_id", "tenant_id", "collection", "key", "state", "content_type", "size_bytes", "etag", "checksum", "sequencer", "metadata", "tags", "external_ref", "resource_version", "created_at", "updated_at", "committed_at", "terminated_at", "presign_expires_at", "lock", "placement", "taint")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -62,6 +73,7 @@ class Object(_message.Message):
     PRESIGN_EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
     LOCK_FIELD_NUMBER: _ClassVar[int]
     PLACEMENT_FIELD_NUMBER: _ClassVar[int]
+    TAINT_FIELD_NUMBER: _ClassVar[int]
     name: str
     object_id: str
     tenant_id: str
@@ -84,7 +96,8 @@ class Object(_message.Message):
     presign_expires_at: _timestamp_pb2.Timestamp
     lock: ObjectLockState
     placement: PhysicalPlacement
-    def __init__(self, name: _Optional[str] = ..., object_id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., collection: _Optional[str] = ..., key: _Optional[str] = ..., state: _Optional[_Union[ObjectState, str]] = ..., content_type: _Optional[str] = ..., size_bytes: _Optional[int] = ..., etag: _Optional[str] = ..., checksum: _Optional[_Union[ChecksumDigest, _Mapping]] = ..., sequencer: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ..., tags: _Optional[_Mapping[str, str]] = ..., external_ref: _Optional[str] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., committed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., terminated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., presign_expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., lock: _Optional[_Union[ObjectLockState, _Mapping]] = ..., placement: _Optional[_Union[PhysicalPlacement, _Mapping]] = ...) -> None: ...
+    taint: _containers.RepeatedScalarFieldContainer[TaintSignal]
+    def __init__(self, name: _Optional[str] = ..., object_id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., collection: _Optional[str] = ..., key: _Optional[str] = ..., state: _Optional[_Union[ObjectState, str]] = ..., content_type: _Optional[str] = ..., size_bytes: _Optional[int] = ..., etag: _Optional[str] = ..., checksum: _Optional[_Union[ChecksumDigest, _Mapping]] = ..., sequencer: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ..., tags: _Optional[_Mapping[str, str]] = ..., external_ref: _Optional[str] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., committed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., terminated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., presign_expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., lock: _Optional[_Union[ObjectLockState, _Mapping]] = ..., placement: _Optional[_Union[PhysicalPlacement, _Mapping]] = ..., taint: _Optional[_Iterable[_Union[TaintSignal, str]]] = ...) -> None: ...
 
 class ChecksumDigest(_message.Message):
     __slots__ = ("algorithm", "value")

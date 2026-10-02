@@ -24,6 +24,63 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// TaintSignal is a reason an object's content must not reach an agent that
+// has not been allowed to read flagged content.
+type TaintSignal int32
+
+const (
+	TaintSignal_TAINT_SIGNAL_UNSPECIFIED TaintSignal = 0
+	// Text that tries to instruct the model reading it.
+	TaintSignal_TAINT_SIGNAL_PROMPT_INJECTION TaintSignal = 1
+	// Personal data.
+	TaintSignal_TAINT_SIGNAL_PII TaintSignal = 2
+	// A credential, key or token.
+	TaintSignal_TAINT_SIGNAL_SECRETS TaintSignal = 3
+)
+
+// Enum value maps for TaintSignal.
+var (
+	TaintSignal_name = map[int32]string{
+		0: "TAINT_SIGNAL_UNSPECIFIED",
+		1: "TAINT_SIGNAL_PROMPT_INJECTION",
+		2: "TAINT_SIGNAL_PII",
+		3: "TAINT_SIGNAL_SECRETS",
+	}
+	TaintSignal_value = map[string]int32{
+		"TAINT_SIGNAL_UNSPECIFIED":      0,
+		"TAINT_SIGNAL_PROMPT_INJECTION": 1,
+		"TAINT_SIGNAL_PII":              2,
+		"TAINT_SIGNAL_SECRETS":          3,
+	}
+)
+
+func (x TaintSignal) Enum() *TaintSignal {
+	p := new(TaintSignal)
+	*p = x
+	return p
+}
+
+func (x TaintSignal) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TaintSignal) Descriptor() protoreflect.EnumDescriptor {
+	return file_paladin_data_v1_types_proto_enumTypes[0].Descriptor()
+}
+
+func (TaintSignal) Type() protoreflect.EnumType {
+	return &file_paladin_data_v1_types_proto_enumTypes[0]
+}
+
+func (x TaintSignal) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TaintSignal.Descriptor instead.
+func (TaintSignal) EnumDescriptor() ([]byte, []int) {
+	return file_paladin_data_v1_types_proto_rawDescGZIP(), []int{0}
+}
+
 type ObjectState int32
 
 const (
@@ -63,11 +120,11 @@ func (x ObjectState) String() string {
 }
 
 func (ObjectState) Descriptor() protoreflect.EnumDescriptor {
-	return file_paladin_data_v1_types_proto_enumTypes[0].Descriptor()
+	return file_paladin_data_v1_types_proto_enumTypes[1].Descriptor()
 }
 
 func (ObjectState) Type() protoreflect.EnumType {
-	return &file_paladin_data_v1_types_proto_enumTypes[0]
+	return &file_paladin_data_v1_types_proto_enumTypes[1]
 }
 
 func (x ObjectState) Number() protoreflect.EnumNumber {
@@ -76,7 +133,7 @@ func (x ObjectState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ObjectState.Descriptor instead.
 func (ObjectState) EnumDescriptor() ([]byte, []int) {
-	return file_paladin_data_v1_types_proto_rawDescGZIP(), []int{0}
+	return file_paladin_data_v1_types_proto_rawDescGZIP(), []int{1}
 }
 
 // Object is the data-plane representation. Hides backend internals;
@@ -114,7 +171,11 @@ type Object struct {
 	// deployments never set — use GetObjectLock for a specific object.
 	Lock *ObjectLockState `protobuf:"bytes,21,opt,name=lock,proto3" json:"lock,omitempty"`
 	// Optional — physical placement; populated only for privileged callers.
-	Placement     *PhysicalPlacement `protobuf:"bytes,22,opt,name=placement,proto3" json:"placement,omitempty"`
+	Placement *PhysicalPlacement `protobuf:"bytes,22,opt,name=placement,proto3" json:"placement,omitempty"`
+	// Signals the content has been flagged with. Empty for a clean object. A
+	// capability without allow_tainted_read cannot read a tainted object.
+	// Populated by GetObject and LookupObject; set with SetObjectTaint.
+	Taint         []TaintSignal `protobuf:"varint,23,rep,packed,name=taint,proto3,enum=paladin.data.v1.TaintSignal" json:"taint,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -299,6 +360,13 @@ func (x *Object) GetLock() *ObjectLockState {
 func (x *Object) GetPlacement() *PhysicalPlacement {
 	if x != nil {
 		return x.Placement
+	}
+	return nil
+}
+
+func (x *Object) GetTaint() []TaintSignal {
+	if x != nil {
+		return x.Taint
 	}
 	return nil
 }
@@ -608,7 +676,7 @@ var File_paladin_data_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpaladin/data/v1/types.proto\x12\x0fpaladin.data.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xb8\t\n" +
+	"\x1bpaladin/data/v1/types.proto\x12\x0fpaladin.data.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xf1\t\n" +
 	"\x06Object\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12 \n" +
 	"\tobject_id\x18\x02 \x01(\tB\x03\xe0A\x03R\bobjectId\x12 \n" +
@@ -637,7 +705,8 @@ const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\rterminated_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\fterminatedAt\x12M\n" +
 	"\x12presign_expires_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x10presignExpiresAt\x129\n" +
 	"\x04lock\x18\x15 \x01(\v2 .paladin.data.v1.ObjectLockStateB\x03\xe0A\x03R\x04lock\x12@\n" +
-	"\tplacement\x18\x16 \x01(\v2\".paladin.data.v1.PhysicalPlacementR\tplacement\x1a;\n" +
+	"\tplacement\x18\x16 \x01(\v2\".paladin.data.v1.PhysicalPlacementR\tplacement\x127\n" +
+	"\x05taint\x18\x17 \x03(\x0e2\x1c.paladin.data.v1.TaintSignalB\x03\xe0A\x03R\x05taint\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a7\n" +
@@ -669,7 +738,12 @@ const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes\x12\x12\n" +
 	"\x04etag\x18\x03 \x01(\tR\x04etag\x12@\n" +
 	"\vuploaded_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\n" +
-	"uploadedAt*\x94\x01\n" +
+	"uploadedAt*~\n" +
+	"\vTaintSignal\x12\x1c\n" +
+	"\x18TAINT_SIGNAL_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dTAINT_SIGNAL_PROMPT_INJECTION\x10\x01\x12\x14\n" +
+	"\x10TAINT_SIGNAL_PII\x10\x02\x12\x18\n" +
+	"\x14TAINT_SIGNAL_SECRETS\x10\x03*\x94\x01\n" +
 	"\vObjectState\x12\x1c\n" +
 	"\x18OBJECT_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14OBJECT_STATE_PENDING\x10\x01\x12\x1a\n" +
@@ -689,39 +763,41 @@ func file_paladin_data_v1_types_proto_rawDescGZIP() []byte {
 	return file_paladin_data_v1_types_proto_rawDescData
 }
 
-var file_paladin_data_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_paladin_data_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_paladin_data_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_paladin_data_v1_types_proto_goTypes = []any{
-	(ObjectState)(0),              // 0: paladin.data.v1.ObjectState
-	(*Object)(nil),                // 1: paladin.data.v1.Object
-	(*ChecksumDigest)(nil),        // 2: paladin.data.v1.ChecksumDigest
-	(*ObjectLockState)(nil),       // 3: paladin.data.v1.ObjectLockState
-	(*PhysicalPlacement)(nil),     // 4: paladin.data.v1.PhysicalPlacement
-	(*CompletedPart)(nil),         // 5: paladin.data.v1.CompletedPart
-	(*PartInfo)(nil),              // 6: paladin.data.v1.PartInfo
-	nil,                           // 7: paladin.data.v1.Object.MetadataEntry
-	nil,                           // 8: paladin.data.v1.Object.TagsEntry
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
+	(TaintSignal)(0),              // 0: paladin.data.v1.TaintSignal
+	(ObjectState)(0),              // 1: paladin.data.v1.ObjectState
+	(*Object)(nil),                // 2: paladin.data.v1.Object
+	(*ChecksumDigest)(nil),        // 3: paladin.data.v1.ChecksumDigest
+	(*ObjectLockState)(nil),       // 4: paladin.data.v1.ObjectLockState
+	(*PhysicalPlacement)(nil),     // 5: paladin.data.v1.PhysicalPlacement
+	(*CompletedPart)(nil),         // 6: paladin.data.v1.CompletedPart
+	(*PartInfo)(nil),              // 7: paladin.data.v1.PartInfo
+	nil,                           // 8: paladin.data.v1.Object.MetadataEntry
+	nil,                           // 9: paladin.data.v1.Object.TagsEntry
+	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
 }
 var file_paladin_data_v1_types_proto_depIdxs = []int32{
-	0,  // 0: paladin.data.v1.Object.state:type_name -> paladin.data.v1.ObjectState
-	2,  // 1: paladin.data.v1.Object.checksum:type_name -> paladin.data.v1.ChecksumDigest
-	7,  // 2: paladin.data.v1.Object.metadata:type_name -> paladin.data.v1.Object.MetadataEntry
-	8,  // 3: paladin.data.v1.Object.tags:type_name -> paladin.data.v1.Object.TagsEntry
-	9,  // 4: paladin.data.v1.Object.created_at:type_name -> google.protobuf.Timestamp
-	9,  // 5: paladin.data.v1.Object.updated_at:type_name -> google.protobuf.Timestamp
-	9,  // 6: paladin.data.v1.Object.committed_at:type_name -> google.protobuf.Timestamp
-	9,  // 7: paladin.data.v1.Object.terminated_at:type_name -> google.protobuf.Timestamp
-	9,  // 8: paladin.data.v1.Object.presign_expires_at:type_name -> google.protobuf.Timestamp
-	3,  // 9: paladin.data.v1.Object.lock:type_name -> paladin.data.v1.ObjectLockState
-	4,  // 10: paladin.data.v1.Object.placement:type_name -> paladin.data.v1.PhysicalPlacement
-	9,  // 11: paladin.data.v1.ObjectLockState.retain_until:type_name -> google.protobuf.Timestamp
-	9,  // 12: paladin.data.v1.PartInfo.uploaded_at:type_name -> google.protobuf.Timestamp
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	1,  // 0: paladin.data.v1.Object.state:type_name -> paladin.data.v1.ObjectState
+	3,  // 1: paladin.data.v1.Object.checksum:type_name -> paladin.data.v1.ChecksumDigest
+	8,  // 2: paladin.data.v1.Object.metadata:type_name -> paladin.data.v1.Object.MetadataEntry
+	9,  // 3: paladin.data.v1.Object.tags:type_name -> paladin.data.v1.Object.TagsEntry
+	10, // 4: paladin.data.v1.Object.created_at:type_name -> google.protobuf.Timestamp
+	10, // 5: paladin.data.v1.Object.updated_at:type_name -> google.protobuf.Timestamp
+	10, // 6: paladin.data.v1.Object.committed_at:type_name -> google.protobuf.Timestamp
+	10, // 7: paladin.data.v1.Object.terminated_at:type_name -> google.protobuf.Timestamp
+	10, // 8: paladin.data.v1.Object.presign_expires_at:type_name -> google.protobuf.Timestamp
+	4,  // 9: paladin.data.v1.Object.lock:type_name -> paladin.data.v1.ObjectLockState
+	5,  // 10: paladin.data.v1.Object.placement:type_name -> paladin.data.v1.PhysicalPlacement
+	0,  // 11: paladin.data.v1.Object.taint:type_name -> paladin.data.v1.TaintSignal
+	10, // 12: paladin.data.v1.ObjectLockState.retain_until:type_name -> google.protobuf.Timestamp
+	10, // 13: paladin.data.v1.PartInfo.uploaded_at:type_name -> google.protobuf.Timestamp
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_paladin_data_v1_types_proto_init() }
@@ -734,7 +810,7 @@ func file_paladin_data_v1_types_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_data_v1_types_proto_rawDesc), len(file_paladin_data_v1_types_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,

@@ -1635,17 +1635,20 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** a breaking proto change, which needs its own deprecation
   window.
 
-### `AllowTaintedRead` restricts nothing in Paladin
+### No scanner sets object taint flags
 
-- **Status:** Deferred — there is no taint signal to act on.
-- **Reason:** the caveat is enforced by `Caveats.Check` from
-  `CheckRequest.ResourceTainted`, but Paladin flags no object as tainted, so
-  `AssertCapabilityOp` always passes false and every capability can read every
-  object, whatever the caveat says.
-- **Definition of Done:** objects carry a taint flag set by the ingest scanners;
-  the data handlers pass it to the check; a test shows a capability without
-  `AllowTaintedRead` refused on a flagged object.
-- **Blockers:** the scanner that would set the flag.
+- **Status:** Deferred — the flag, its API and its enforcement are in; the
+  automation is not.
+- **Reason:** objects carry `taint` signals (prompt injection, PII, secrets),
+  `SetObjectTaint` sets and clears them under their own Cedar action, and a
+  capability without `AllowTaintedRead` is refused reads of a flagged object.
+  But only a person flags anything today, so content nobody looked at is
+  readable by every agent.
+- **Definition of Done:** a scanner runs on promote (and over existing objects
+  once), sets the signals it detects through the same path `SetObjectTaint`
+  writes, records which detector flagged what, and is tested against a corpus
+  with known positives and negatives for each signal.
+- **Blockers:** choosing the detectors, and their cost per object.
 
 ### Resource-restricted capabilities cannot run batch or tag operations
 

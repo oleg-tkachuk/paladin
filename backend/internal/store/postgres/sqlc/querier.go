@@ -540,6 +540,9 @@ type Querier interface {
 	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
 	// The state of the row that owns a storage path now, if any.
 	ObjectStateAtPath(ctx context.Context, tenantID pgtype.UUID, name string, path string) (ObjectState, error)
+	// The taint of the live object at a path, for the capability read gate. No
+	// row means no live object, which the handler reports on its own.
+	ObjectTaintAtPath(ctx context.Context, tenantID pgtype.UUID, name string, path string) ([]string, error)
 	// Deletes audit_log rows older than the cutoff in batches of 10k. The
 	// worker calls this in a loop until it returns 0 — keeps each statement
 	// bounded so a long-overdue first-run doesn't lock the table for minutes
@@ -727,6 +730,9 @@ type Querier interface {
 	// holds nothing, so any new window may replace it. Returns zero rows when the
 	// write is refused, which the adapter maps to ErrRetentionShortened.
 	SetObjectRetention(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, mode ObjectLockMode, retainUntil pgtype.Timestamptz, bypassGovernance bool) (SetObjectRetentionRow, error)
+	// Replaces an object's taint signals. An empty array clears it. Bumps the
+	// resource version: whether a capability may read the object just changed.
+	SetObjectTaint(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, taint []string) ([]string, error)
 	// Flip the enable/disable state. OCC via resource_version (the
 	// trg_storage_backends_bump_rv BEFORE UPDATE trigger bumps the version).
 	// enabled is intentionally NOT part of UpsertStorageBackendV2 — bootstrap

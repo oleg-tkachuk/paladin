@@ -84,6 +84,9 @@ type Repos struct {
 	// the lock RPCs Unimplemented and skips applying bucket default retention
 	// at promote time.
 	ObjectLock objecth.LockRepository
+	// ObjectTaint persists objects.taint. Optional: nil leaves
+	// SetObjectTaint Unimplemented and the capability taint gate off.
+	ObjectTaint objecth.TaintRepository
 
 	// Idempotency is the per-(tenant, method, key) response cache used
 	// by the Create* enforcement gate (see internal/middleware/idempotency.go).
@@ -264,6 +267,14 @@ func ProvideVersionHandler(repos Repos, pe policy.Authorizer) *objecth.VersionHa
 // ProvideLockHandler builds the object-lock RPC handler. Requires both
 // version and lock repositories: a lock has to attach to a version, so
 // object lock without versioning is not a configuration this can serve.
+// ProvideTaintHandler returns nil when the taint repository is not wired.
+func ProvideTaintHandler(repos Repos, pe policy.Authorizer) *objecth.TaintHandler {
+	if repos.ObjectTaint == nil {
+		return nil
+	}
+	return objecth.NewTaintHandler(repos.Object, repos.ObjectTaint, pe)
+}
+
 func ProvideLockHandler(repos Repos, pe policy.Authorizer) *objecth.LockHandler {
 	if repos.ObjectVersion == nil || repos.ObjectLock == nil {
 		return nil
