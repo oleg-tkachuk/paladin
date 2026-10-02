@@ -8,6 +8,8 @@ import (
 	"errors"
 	"time"
 
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
@@ -146,6 +148,6 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 // mapper (ADR-0002) so handlers route through apiutil.MapError for a
 // consistent code instead of a hand-written per-handler if/else.
 func init() {
-	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted)
-	apiutil.RegisterError(ErrObjectTagExists, connect.CodeAlreadyExists)
+	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
+	apiutil.RegisterError(ErrObjectTagExists, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_OBJECT_TAG_EXISTS)
 }

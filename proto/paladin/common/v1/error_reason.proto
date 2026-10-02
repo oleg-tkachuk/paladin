@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package paladin.common.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1";
+
+// ErrorReason is why a call failed, beyond its code: the server attaches a
+// google.rpc.ErrorInfo with `domain` "paladin" and `reason` set to one of
+// these value names to every error it maps from a domain condition. A client
+// tells a version conflict from a quota refusal, or a missing object from a
+// missing bucket, by the reason, never by the message.
+//
+// A reason is never renamed or renumbered; a new one may be added at any
+// time, so a client treats one it does not know as the code alone.
+enum ErrorReason {
+  ERROR_REASON_UNSPECIFIED = 0;
+
+  // The general reasons, one per code the server maps to.
+  ERROR_REASON_NOT_FOUND = 1;
+  // The resource changed since it was read: optimistic concurrency.
+  ERROR_REASON_VERSION_CONFLICT = 2;
+  ERROR_REASON_ALREADY_EXISTS = 3;
+  ERROR_REASON_INVALID_ARGUMENT = 4;
+  ERROR_REASON_PERMISSION_DENIED = 5;
+  ERROR_REASON_FAILED_PRECONDITION = 6;
+  ERROR_REASON_UNAUTHENTICATED = 7;
+
+  // Specific conditions.
+  ERROR_REASON_SUBJECT_TAKEN = 8;
+  ERROR_REASON_COLLECTION_NOT_EMPTY = 9;
+  ERROR_REASON_COLLECTION_EXISTS = 10;
+  ERROR_REASON_BUCKET_NOT_FOUND = 11;
+  ERROR_REASON_POLICY_UNPARSEABLE = 12;
+  ERROR_REASON_SLUG_TAKEN = 13;
+  ERROR_REASON_TENANT_ID_TAKEN = 14;
+  ERROR_REASON_DISPLAY_NAME_TAKEN = 15;
+  ERROR_REASON_TENANT_ALREADY_DELETED = 16;
+  ERROR_REASON_TENANT_NOT_TRASHED = 17;
+  ERROR_REASON_DEFAULT_BINDING_BUCKET_MISSING = 18;
+  ERROR_REASON_TENANT_HAS_CHILDREN = 19;
+  ERROR_REASON_OBJECT_TAG_EXISTS = 20;
+  ERROR_REASON_BACKEND_DISABLED = 21;
+  ERROR_REASON_BACKEND_READ_ONLY = 22;
+  ERROR_REASON_OBJECT_VERSION_NOT_FOUND = 23;
+  // A change another one conflicts with, short of a version mismatch.
+  ERROR_REASON_CONFLICT = 24;
+}
