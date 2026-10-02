@@ -330,10 +330,24 @@ tasks:
     # Both images, because the stack runs the versions this build stamps and
     # compose rebuilds nothing — a Playwright run against yesterday's console is
     # a failure this repo has already had twice.
+    # CI runs the two halves in separate jobs: the images once, then each
+    # Playwright shard against them (scripts/e2e-images.sh carries them over).
     cmds:
-      - ./scripts/require-disk.sh "task -t Taskfile.dev.yaml verify-e2e"
+      - task: verify-e2e:images
+      - task: verify-e2e:run
+
+  verify-e2e:images:
+    desc: "verify-e2e, first half: build both images the stack runs"
+    env: { PALADIN_IMAGE_PREFIX: "{{.GLOBAL_REGISTRY}}/{{.IMAGE_NAMESPACE}}" }
+    cmds:
+      - ./scripts/require-disk.sh "task -t Taskfile.dev.yaml verify-e2e:images"
       - task: backend:release:image:build
       - task: frontend:release:image:build
+
+  verify-e2e:run:
+    desc: "verify-e2e, second half: Playwright against the images the first half built"
+    env: { PALADIN_IMAGE_PREFIX: "{{.GLOBAL_REGISTRY}}/{{.IMAGE_NAMESPACE}}" }
+    cmds:
       - frontend/scripts/verify-e2e.sh
 
   # ─── the individual checks verify-all fans out over ────────────────────────
