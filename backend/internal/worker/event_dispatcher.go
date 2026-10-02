@@ -847,29 +847,30 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 	if batch <= 0 {
 		batch = 50
 	}
-	tx, err := r.Pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return 0, fmt.Errorf("begin tx: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Rollback(ctx)
-		}
-	}()
-
+	// Claim, then deliver, then record — not one transaction around all
+	// three. Holding the row locks across sink I/O stretched a transaction
+	// over every HTTP retry and its sleeps, and a failed status write rolled
+	// back the whole batch, redelivering rows that had already been
+	// delivered. The claim pushes next_attempt_at out by claimLease and
+	// commits at once: other ticks skip the rows while they are in flight,
+	// and a dispatcher that dies mid-batch leaves them due again when the
+	// lease runs out, so delivery stays at-least-once.
 	const q = `
-		SELECT id, tenant_id, subscription_id, event_type, event_at, event_payload, attempts
-		  FROM event_deliveries
-		 WHERE status = 'pending'
-		   AND next_attempt_at <= now()
-		 ORDER BY next_attempt_at
-		 FOR UPDATE SKIP LOCKED
-		 LIMIT $1
+		UPDATE event_deliveries
+		   SET next_attempt_at = now() + make_interval(secs => $2)
+		 WHERE id IN (
+		        SELECT id
+		          FROM event_deliveries
+		         WHERE status = 'pending'
+		           AND next_attempt_at <= now()
+		         ORDER BY next_attempt_at
+		         FOR UPDATE SKIP LOCKED
+		         LIMIT $1)
+		RETURNING id, tenant_id, subscription_id, event_type, event_at, event_payload, attempts
 	`
-	rows, err := tx.Query(ctx, q, batch)
+	rows, err := r.Pool.Query(ctx, q, batch, claimLease.Seconds())
 	if err != nil {
-		return 0, fmt.Errorf("scan ready: %w", err)
+		return 0, fmt.Errorf("claim ready: %w", err)
 	}
 	type pending struct {
 		id, tenantID, subID uuid.UUID
@@ -888,17 +889,16 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 		batchRows = append(batchRows, p)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("claim ready: %w", err)
+	}
 	if len(batchRows) == 0 {
-		if err := tx.Commit(ctx); err != nil {
-			return 0, fmt.Errorf("commit empty: %w", err)
-		}
-		committed = true
 		return 0, nil
 	}
 
-	// Process each row inside the same tx. The row locks live until the
-	// commit at the end — the loop's wallclock budget is bounded by
-	// per-delivery HTTP timeouts.
+	// Each row's outcome is written on its own, straight to the pool: one
+	// row's failed write leaves only that row to be retried after its lease.
+	tx := r.Pool
 	//
 	// Rows targeting the SAME batchable sink are collected and flushed together
 	// after the loop — SQS via SendMessageBatch (≤10/call), NATS via N publishes
@@ -985,9 +985,7 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 
 		status, deliverErr := r.Dispatcher.deliver(ctx, sub, evt)
 		if deliverErr == nil {
-			if err := r.markDelivered(ctx, tx, p.id, status); err != nil {
-				return 0, err
-			}
+			r.recordDelivered(ctx, tx, p.id, status)
 			continue
 		}
 
@@ -1004,9 +1002,7 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 		outcome := r.Dispatcher.deliverSQSBatch(ctx, sqsCfgs[key], items)
 		for _, q := range queued {
 			if derr := outcome[q.row.id]; derr == nil {
-				if err := r.markDelivered(ctx, tx, q.row.id, 0); err != nil {
-					return 0, err
-				}
+				r.recordDelivered(ctx, tx, q.row.id, 0)
 			} else {
 				r.markDeliveryFailed(ctx, tx, q.sub, q.row.id, q.row.attempts, 0, derr)
 			}
@@ -1021,9 +1017,7 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 		outcome := r.Dispatcher.deliverNATSBatch(ctx, items)
 		for _, q := range queued {
 			if derr := outcome[q.row.id]; derr == nil {
-				if err := r.markDelivered(ctx, tx, q.row.id, 0); err != nil {
-					return 0, err
-				}
+				r.recordDelivered(ctx, tx, q.row.id, 0)
 			} else {
 				r.markDeliveryFailed(ctx, tx, q.item.Sub, q.row.id, q.row.attempts, 0, derr)
 			}
@@ -1038,25 +1032,40 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 		outcome := r.Dispatcher.deliverKafkaBatch(ctx, items)
 		for _, q := range queued {
 			if derr := outcome[q.row.id]; derr == nil {
-				if err := r.markDelivered(ctx, tx, q.row.id, 0); err != nil {
-					return 0, err
-				}
+				r.recordDelivered(ctx, tx, q.row.id, 0)
 			} else {
 				r.markDeliveryFailed(ctx, tx, q.item.Sub, q.row.id, q.row.attempts, 0, derr)
 			}
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("commit batch: %w", err)
-	}
-	committed = true
 	return len(batchRows), nil
+}
+
+// claimLease is how long a claimed row stays out of other ticks' reach while
+// its delivery runs. Longer than a batch takes, including the HTTP sink's own
+// retries; a delivery still running when it lapses may be repeated, which the
+// at-least-once contract already allows.
+const claimLease = 5 * time.Minute
+
+// rowExecer writes one row's outcome: the pool, outside any transaction.
+type rowExecer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+// recordDelivered marks a row delivered. A failed write is logged, not fatal:
+// the row stays claimed until its lease lapses and is then delivered again,
+// which at-least-once permits — and no other row of the batch is affected.
+func (r *OutboxRunner) recordDelivered(ctx context.Context, db rowExecer, id uuid.UUID, statusCode int) {
+	if err := r.markDelivered(ctx, db, id, statusCode); err != nil {
+		r.log().Warn("recording a delivery failed; the row is redelivered after its lease",
+			zap.String("delivery_id", id.String()), zap.Error(err))
+	}
 }
 
 // markDelivered stamps a row delivered. Shared by the per-row and the
 // SQS-batched paths so the success bookkeeping can't drift.
-func (r *OutboxRunner) markDelivered(ctx context.Context, tx pgx.Tx, id uuid.UUID, statusCode int) error {
+func (r *OutboxRunner) markDelivered(ctx context.Context, tx rowExecer, id uuid.UUID, statusCode int) error {
 	if _, err := tx.Exec(ctx,
 		`UPDATE event_deliveries
 		    SET status='delivered',
@@ -1084,7 +1093,7 @@ func (r *OutboxRunner) markDelivered(ctx context.Context, tx pgx.Tx, id uuid.UUI
 // test still passing).
 func (r *OutboxRunner) markDeliveryFailed(
 	ctx context.Context,
-	tx pgx.Tx,
+	tx rowExecer,
 	sub admindomain.EventSubscription,
 	id uuid.UUID,
 	attempts, statusCode int,
@@ -1097,7 +1106,7 @@ func (r *OutboxRunner) markDeliveryFailed(
 // markFailed bumps attempts, records the error, and either schedules
 // the next attempt (status='pending', next_attempt_at=now+backoff) or
 // flips to status='failed' when permanent==true.
-func (r *OutboxRunner) markFailed(ctx context.Context, tx pgx.Tx, id uuid.UUID, attempts, statusCode int, errMsg string, permanent bool) {
+func (r *OutboxRunner) markFailed(ctx context.Context, tx rowExecer, id uuid.UUID, attempts, statusCode int, errMsg string, permanent bool) {
 	nextStatus := "pending"
 	var nextAt sql.NullTime
 	if permanent {

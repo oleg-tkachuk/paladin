@@ -476,7 +476,6 @@ func TestDispatcher_MaxAttemptsTransitionsToFailed(t *testing.T) {
 
 	// Attempt 2 → failure, hits cap, flips to failed.
 	f.fastForward(t, rowID)
-	prev := f.deliveryRow(t, rowID).NextAttemptAt
 	f.tickOnce(t, r)
 
 	row := f.deliveryRow(t, rowID)
@@ -486,12 +485,8 @@ func TestDispatcher_MaxAttemptsTransitionsToFailed(t *testing.T) {
 	if row.Attempts != 2 {
 		t.Errorf("attempts = %d, want 2", row.Attempts)
 	}
-	// next_attempt_at should not have been advanced when permanent (the
-	// runner passes a NULL sql.NullTime so the COALESCE keeps the old
-	// value). Use ~ms tolerance for tz round-trip.
-	if !row.NextAttemptAt.Equal(prev) {
-		t.Errorf("next_attempt_at advanced on permanent fail: prev=%v new=%v", prev, row.NextAttemptAt)
-	}
+	// A permanent failure schedules no retry: next_attempt_at keeps only the
+	// claim's lease, and the tick below proves the row is never picked again.
 	if rec.count() != 2 {
 		t.Errorf("recorder requests = %d, want 2", rec.count())
 	}
@@ -923,5 +918,59 @@ func TestDispatcher_SubscriptionStoreOnRLSPoolWithNoGUC_LosesEveryDelivery(t *te
 			"deleted subscription when the subscription is merely invisible, which is "+
 			"what made this look like data loss rather than a wiring bug",
 			rows[0].LastError)
+	}
+}
+
+// TestDispatcher_DeliversOutsideTheRowLock: while a sink is still answering,
+// the row it is delivering is not locked — the claim committed before any
+// I/O — and a second runner does not take the row a first is delivering.
+// Holding the lock across delivery stretched one transaction over every sink
+// round trip and its retries, and a failed status write rolled the whole batch
+// back into redelivery.
+func TestDispatcher_DeliversOutsideTheRowLock(t *testing.T) {
+	t.Parallel()
+	f := setupDispatcher(t)
+
+	inFlight := make(chan struct{})
+	release := make(chan struct{})
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if hits.Add(1) == 1 {
+			close(inFlight)
+		}
+		<-release
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	tenant := mustCreateTenant(t, f.h.PoolMigrate, "disp-unlocked")
+	f.seedSubscription(t, tenant, subOpts{URL: srv.URL})
+	d := f.dispatcher()
+	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	rowID := f.allDeliveryRows(t, tenant)[0].ID
+
+	done := make(chan int, 1)
+	go func() { done <- f.tickOnce(t, f.outboxRunner(d)) }()
+	<-inFlight
+
+	if _, err := f.h.PoolMigrate.Exec(context.Background(),
+		`SELECT 1 FROM event_deliveries WHERE id = $1 FOR UPDATE NOWAIT`, rowID); err != nil {
+		t.Errorf("row is locked while its sink is answering: %v", err)
+	}
+	if n := f.tickOnce(t, f.outboxRunner(d)); n != 0 {
+		t.Errorf("a second runner took %d rows while the first was delivering them", n)
+	}
+
+	close(release)
+	if n := <-done; n != 1 {
+		t.Fatalf("first tick processed %d rows, want 1", n)
+	}
+	if row := f.deliveryRow(t, rowID); row.Status != "delivered" {
+		t.Errorf("status = %q, want delivered", row.Status)
+	}
+	if got := hits.Load(); got != 1 {
+		t.Errorf("sink received %d deliveries, want 1", got)
 	}
 }
