@@ -111,6 +111,27 @@ scope. One version covers both languages: the Go module resolves
 through hatch-vcs, so neither carries a version to edit. A release is the
 tag; nothing else is published, and the Python package is not on PyPI yet.
 
+### Behaviour changes
+
+A change that alters what existing code does — a signature, a default, an
+error a caller handled — is breaking even when no signature changes: its
+commit carries `!` or a `BREAKING CHANGE:` footer, and it gets a section in
+[upgrading.md](upgrading.md) headed `## vX.Y.Z — …` for the release that
+ships it. Pre-1.0 such a release is only a minor, so its notes list these
+commits first, under *Behaviour changes*, with a link to that section
+([`scripts/stream-release-notes.sh`](../scripts/stream-release-notes.sh)).
+
+### Which servers an SDK release works with
+
+An SDK release works with every product release built from the contract it
+was generated from, or a later one. Within a contract major the contract
+only grows — `buf breaking` refuses anything else — so a newer server keeps
+answering an older SDK. An older server answers a call it does not have
+with `Unimplemented`, which both SDKs raise as a contract-skew error naming
+the procedure, the server's release and the SDK's. Only the latest SDK
+minor is maintained: a fix lands in the next release, not in an earlier
+line.
+
 `api/vX.Y.Z` is no longer a release. It is the baseline `buf breaking`
 compares against, cut by hand when a deliberate contract change has landed —
 see [upgrading.md](upgrading.md#changing-the-api-contract).
