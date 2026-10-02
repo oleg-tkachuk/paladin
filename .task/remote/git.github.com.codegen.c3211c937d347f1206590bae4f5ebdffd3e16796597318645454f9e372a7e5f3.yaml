@@ -96,6 +96,9 @@ vars:
   _CG_BUF_FLAGS: '{{.BUF_FLAGS | default ""}}'
   _CG_SQLC_FLAGS: '{{.SQLC_FLAGS | default ""}}'
   _CG_GOIMPORTS_FLAGS: '{{.GOIMPORTS_FLAGS | default ""}}'
+  # Where the checks keep the working tree's state from before they
+  # regenerate. Under .task/, which Task itself owns and repositories ignore.
+  _CG_SNAP_DIR: .task/codegen
   # Status markers. The shape carries the meaning, so a line still reads in
   # a monochrome log; the colour sits on top and drops out under NO_COLOR.
   _CG_RUN: '{{if .NO_COLOR}}◉{{else}}{{"\x1b[36m◉\x1b[0m"}}{{end}}'
@@ -198,45 +201,47 @@ tasks:
       - '{{if ._CG_SQLC_MOD}}go run {{._CG_SQLC_MOD}} generate{{else}}sqlc generate{{end}} {{._CG_SQLC_FLAGS}}'
 
   check:
-    desc: "Fail when any committed generated output is stale"
+    desc: "Fail when any generated output is stale against the working tree"
     cmds:
       - task: mocks:check
       - task: proto:check
       - task: sqlc:check
 
   mocks:check:
-    desc: "Fail when the committed mocks are stale"
+    desc: "Fail when the mocks are stale against the working tree"
+    # Against the working tree, not HEAD: regenerating must change nothing.
+    # Comparing with HEAD failed every change until it was committed, which
+    # left the gate unusable before a commit — the one time it is asked.
     cmds:
+      - task: _cg_snapshot
+        vars: { PATHS: '{{._CG_MOCK_SPEC}}', OUT: '{{._CG_SNAP_DIR}}/mocks' }
       - task: mocks
-      # `git status`, not `git diff`: a newly added interface produces a NEW
-      # file, and an uncommitted new mock is drift that a diff-only check calls
-      # clean.
-      - cmd: |-
-          if [ -n "$(git status --porcelain -- {{._CG_MOCK_SPEC | q}})" ]; then
-            printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · mocks are stale — run the generator and commit:" >&2
-            git status --porcelain -- {{._CG_MOCK_SPEC | q}} >&2
-            exit 1
-          fi
-          printf '%s\n' "{{._CG_OK}} {{._CG_NAME}} · gen · mocks match their interfaces"
+      - task: _cg_compare
+        vars:
+          PATHS: '{{._CG_MOCK_SPEC}}'
+          OUT: '{{._CG_SNAP_DIR}}/mocks'
+          STALE: "mocks are stale — run the generator"
+          FRESH: "mocks match their interfaces"
 
   sqlc:check:
-    desc: "Fail when the committed sqlc output is stale"
+    desc: "Fail when the sqlc output is stale against the working tree"
     preconditions:
       - sh: test -n {{._CG_SQLC_DIR | q}}
         msg: "SQLC_DIR is not set — the gate needs to know which directory holds the generated bindings"
     cmds:
+      - task: _cg_snapshot
+        vars: { PATHS: '{{._CG_SQLC_DIR}}', OUT: '{{._CG_SNAP_DIR}}/sqlc' }
       - task: sqlc
-      - cmd: |-
-          if ! git diff --quiet -- {{._CG_SQLC_DIR | q}}; then
-            printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · sqlc output is stale — run the generator and commit:" >&2
-            git --no-pager diff --stat -- {{._CG_SQLC_DIR | q}} >&2
-            exit 1
-          fi
-          printf '%s\n' "{{._CG_OK}} {{._CG_NAME}} · gen · sqlc bindings match their queries"
+      - task: _cg_compare
+        vars:
+          PATHS: '{{._CG_SQLC_DIR}}'
+          OUT: '{{._CG_SNAP_DIR}}/sqlc'
+          STALE: "sqlc output is stale — run the generator"
+          FRESH: "sqlc bindings match their queries"
 
 
   proto:check:
-    desc: "Fail when the committed protobuf stubs are stale"
+    desc: "Fail when the protobuf stubs are stale against the working tree"
     vars:
       # Which directories to watch is not an input: it is what the templates
       # already declare as `out:`. Derived, the gate moves with the generator —
@@ -257,6 +262,8 @@ tasks:
                  if (v != "") { print v }
                }' {{range $f := ._CG_BUF_TPL}}{{$f | q}} {{end}} 2>/dev/null | sort -u | tr '\n' ' '
     cmds:
+      - task: _cg_snapshot
+        vars: { PATHS: '{{._CG_PROTO_OUT}}', OUT: '{{._CG_SNAP_DIR}}/proto' }
       - task: proto
       - cmd: |-
           set -eu
@@ -293,16 +300,57 @@ tasks:
             printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · every stub directory is untracked — this gate checks nothing" >&2
             exit 1
           fi
-          # `git status`, not `git diff`: a new message or service produces a NEW
-          # file, and an uncommitted new stub is drift a diff-only check calls
-          # clean. Additions inside a gitignored target stay invisible either
-          # way, which is what the skip line above is for.
-          if [ -n "$(git status --porcelain -- $watched)" ]; then
-            printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · protobuf stubs are stale — run the generator and commit:" >&2
-            git status --porcelain -- $watched >&2
+      # Against the working tree, as mocks:check explains. Additions inside a
+      # gitignored target stay invisible, which is what the skip line is for.
+      - task: _cg_compare
+        vars:
+          PATHS: '{{._CG_PROTO_OUT}}'
+          OUT: '{{._CG_SNAP_DIR}}/proto'
+          STALE: "protobuf stubs are stale — run the generator"
+          FRESH: "protobuf stubs match their sources"
+
+  # The state of PATHS in the working tree: every tracked or new, unignored
+  # file with its content hash, and the tracked ones that are gone. New files
+  # count because a new message or interface generates a new file, and stale
+  # output a check misses is the failure it exists to catch.
+  _cg_snapshot:
+    internal: true
+    requires: { vars: [PATHS, OUT] }
+    cmds:
+      - cmd: |-
+          set -eu
+          mkdir -p "$(dirname {{.OUT | q}})"
+          files={{.OUT | q}}.files
+          git ls-files -co --exclude-standard -- {{.PATHS}} | LC_ALL=C sort -u >"$files"
+          : >{{.OUT | q}}
+          while IFS= read -r f; do
+            if [ -e "$f" ]; then
+              printf '%s %s\n' "$(git hash-object -- "$f")" "$f"
+            else
+              printf 'deleted %s\n' "$f"
+            fi
+          done <"$files" >{{.OUT | q}}
+          rm -f "$files"
+
+  # Snapshots PATHS again and fails, naming the files, when regeneration
+  # changed anything since _cg_snapshot.
+  _cg_compare:
+    internal: true
+    requires: { vars: [PATHS, OUT, STALE, FRESH] }
+    cmds:
+      - task: _cg_snapshot
+        vars: { PATHS: '{{.PATHS}}', OUT: '{{.OUT}}.after' }
+      - cmd: |-
+          set -eu
+          if ! cmp -s {{.OUT | q}} {{.OUT | q}}.after; then
+            printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · {{.STALE}}; regenerating changed:" >&2
+            diff {{.OUT | q}} {{.OUT | q}}.after | sed -n 's/^[<>] [^ ]* //p' | LC_ALL=C sort -u | sed 's/^/    /' >&2
+            rm -f {{.OUT | q}} {{.OUT | q}}.after
             exit 1
           fi
-          printf '%s\n' "{{._CG_OK}} {{._CG_NAME}} · gen · protobuf stubs match their sources"
+          rm -f {{.OUT | q}} {{.OUT | q}}.after
+          printf '%s\n' "{{._CG_OK}} {{._CG_NAME}} · gen · {{.FRESH}}"
+
   _normalise:
     internal: true
     # Optional: a component that generates nothing needing import rewriting
