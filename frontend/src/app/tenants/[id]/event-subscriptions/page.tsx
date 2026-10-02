@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowPathIcon,
   BoltIcon,
   EllipsisVerticalIcon,
   PencilSquareIcon,
@@ -162,6 +163,38 @@ export default function EventsPage() {
           const next = new Set(prev);
           next.delete(sub.name);
           return next;
+        });
+      }
+    },
+    [showNotification],
+  );
+
+  // ── Redrive failed deliveries ────────────────────────────────────
+  const handleRedrive = useCallback(
+    async (sub: EventSubscription) => {
+      try {
+        const res = await eventSubscriptionClient.redriveFailedDeliveries({
+          name: sub.name,
+        });
+        const n = Number(res.requeued);
+        showNotification(
+          n > 0
+            ? {
+                type: "success",
+                title: "Deliveries queued again",
+                message: `${n} failed ${n === 1 ? "delivery" : "deliveries"} will be sent again.`,
+              }
+            : {
+                type: "info",
+                title: "Nothing to redrive",
+                message: "This subscription has no failed deliveries.",
+              },
+        );
+      } catch (err) {
+        showNotification({
+          type: "error",
+          title: "Redrive failed",
+          message: errorMessage(err, "Redrive failed"),
         });
       }
     },
@@ -416,6 +449,17 @@ export default function EventsPage() {
                               Test
                             </div>
                           </Dropdown.Item>
+                          {!sub.disabled && (
+                            <Dropdown.Item
+                              className="p-0"
+                              onClick={() => void handleRedrive(sub)}
+                            >
+                              <div className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent">
+                                <ArrowPathIcon className="size-4 text-muted-foreground" />
+                                Redrive failed
+                              </div>
+                            </Dropdown.Item>
+                          )}
                           <Dropdown.Item
                             className="p-0"
                             onClick={() => void handleToggle(sub)}
