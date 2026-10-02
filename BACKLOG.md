@@ -1611,23 +1611,6 @@ finding moving from "packages you import" to "your code is affected".
 
 ---
 
-## Architecture review (2026-10-02)
-
-Defects the review behind `backend/docs/diagrams.md` found and confirmed in
-the code. Not fixed in the documentation change that recorded them.
-
-### Cancelling a running operation does not stop its executor
-
-- **Status:** Deferred.
-- **Reason:** `CancelOperation` marks a RUNNING operation CANCELLED, and the
-  runner now keeps that state, but nothing tells the executor: it works
-  through the rest of the batch and its result is dropped. The contract only
-  promises best effort, so this is wasted work rather than a wrong answer.
-- **Definition of Done:** the runner notices the cancel (its heartbeat already
-  reads the row's neighbourhood every 30s) and cancels the executor's context,
-  with a test that a cancelled batch stops short.
-- **Blockers:** none.
-
 ## Tooling and observability
 
 ### Include-level `vars:` do not reach a var the component declares

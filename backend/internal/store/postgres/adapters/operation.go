@@ -216,8 +216,13 @@ func (r *OperationRepo) PurgeTerminalBefore(ctx context.Context, cutoff time.Tim
 // reclaim can tell "still working" from "worker died". Bumps nothing else —
 // metadata carries progress counters the executor writes concurrently.
 func (r *OperationRepo) Touch(ctx context.Context, opID uuid.UUID) error {
-	if _, err := r.q.TouchOperation(ctx, pgtype.UUID{Bytes: opID, Valid: true}); err != nil {
+	rows, err := r.q.TouchOperation(ctx, pgtype.UUID{Bytes: opID, Valid: true})
+	if err != nil {
 		return fmt.Errorf("operation: touch: %w", err)
+	}
+	if rows == 0 {
+		// No longer RUNNING: cancelled, or reclaimed as lost.
+		return fmt.Errorf("operation %s: %w", opID, operationh.ErrOperationFinished)
 	}
 	return nil
 }
