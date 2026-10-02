@@ -1,0 +1,29 @@
+{
+  "_comment": "SPIFFE IDs both SDKs must judge alike: Go through go-spiffe's spiffeid.FromString, Python through paladin.tls.parse_spiffe_id.",
+  "valid": [
+    "spiffe://example.org",
+    "spiffe://example.org/ns/paladin/sa/paladin-core",
+    "spiffe://cluster.local/a.b_c-d",
+    "spiffe://td-1.example_org/P/Mixed.Case",
+    "spiffe://example.org/..a/.b"
+  ],
+  "invalid": [
+    "",
+    "spiffe://",
+    "spiffe:///path",
+    "https://example.org/ns/x",
+    "SPIFFE://example.org",
+    "spiffe://Example.org",
+    "spiffe://example.org/",
+    "spiffe://example.org//double",
+    "spiffe://example.org/./x",
+    "spiffe://example.org/../x",
+    "spiffe://example.org/x/.",
+    "spiffe://example.org:8443/x",
+    "spiffe://user@example.org/x",
+    "spiffe://example.org/x?q=1",
+    "spiffe://example.org/x#frag",
+    "spiffe://example.org/sp ace",
+    "spiffe://exa mple.org"
+  ]
+}
