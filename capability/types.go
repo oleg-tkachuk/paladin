@@ -187,6 +187,13 @@ type Capability struct {
 	// delegated child of a bound capability is bound too. Carried in the
 	// token as `cnf.jkt`, and absent from tokens that are not bound.
 	ConfirmationJKT string
+
+	// BiscuitRoot is set only on the token sealed inside a Biscuit (see
+	// Issuer.Biscuit): the base64url Ed25519 public key that roots the
+	// Biscuit's signature chain. A token carrying it is refused when
+	// presented on its own, so it cannot be lifted out of an attenuated
+	// Biscuit to shed the attenuation.
+	BiscuitRoot string
 }
 
 // Caveats is a typed bag of restrictions. Empty values are interpreted

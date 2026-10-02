@@ -110,6 +110,10 @@ type jwtClaims struct {
 	// Confirmation is RFC 7800's `cnf`, omitted for an unbound capability so
 	// such tokens keep the frozen format byte for byte.
 	Confirmation *cnfClaim `json:"cnf,omitempty"`
+
+	// BiscuitRoot roots the signature chain of the Biscuit this token is
+	// sealed in; omitted on every ordinary token.
+	BiscuitRoot string `json:"paladin_bsk,omitempty"`
 }
 
 type cnfClaim struct {
@@ -153,6 +157,7 @@ func (s *ed25519Signer) Sign(c Capability) (string, error) {
 	if c.ParentID != uuid.Nil {
 		claims.PaladinParentID = c.ParentID.String()
 	}
+	claims.BiscuitRoot = c.BiscuitRoot
 	if c.ConfirmationJKT != "" {
 		claims.Confirmation = &cnfClaim{JKT: c.ConfirmationJKT}
 	}
@@ -251,6 +256,7 @@ func parseClaims(seg string) (*Capability, error) {
 	if claims.Confirmation != nil {
 		cap.ConfirmationJKT = claims.Confirmation.JKT
 	}
+	cap.BiscuitRoot = claims.BiscuitRoot
 	if claims.PaladinParentID != "" {
 		pid, err := uuid.Parse(claims.PaladinParentID)
 		if err != nil {

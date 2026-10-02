@@ -120,6 +120,10 @@ type VerifierConfig struct {
 	// MaxTokenBytes rejects longer tokens before decoding them. Default
 	// DefaultMaxTokenBytes when zero.
 	MaxTokenBytes int
+
+	// AcceptBiscuit accepts the Biscuit form (Issuer.Biscuit, Attenuate)
+	// beside the JWT. Off, a Biscuit is refused like any malformed token.
+	AcceptBiscuit bool
 }
 
 // StandardVerifier is the production verifier — signature first, then
@@ -170,6 +174,69 @@ func (v *StandardVerifier) Verify(ctx context.Context, token string, audience st
 			ErrInvalidSignature, len(token), v.cfg.MaxTokenBytes)
 	}
 
+	var cap *Capability
+	if IsBiscuit(token) {
+		if !v.cfg.AcceptBiscuit {
+			return nil, fmt.Errorf("%w: Biscuit tokens are not accepted here", ErrInvalidSignature)
+		}
+		inner, attenuate, err := openBiscuit(token)
+		if err != nil {
+			return nil, err
+		}
+		sealed, err := v.verifySigned(ctx, inner)
+		if err != nil {
+			return nil, err
+		}
+		if sealed.BiscuitRoot == "" {
+			return nil, fmt.Errorf("%w: biscuit seals an ordinary token", ErrInvalidSignature)
+		}
+		if cap, err = attenuate(sealed); err != nil {
+			return nil, err
+		}
+	} else {
+		var err error
+		if cap, err = v.verifySigned(ctx, token); err != nil {
+			return nil, err
+		}
+		// The token sealed inside a Biscuit, lifted out to shed the
+		// Biscuit's attenuation.
+		if cap.BiscuitRoot != "" {
+			return nil, fmt.Errorf("%w: token is sealed in a Biscuit; present the Biscuit", ErrInvalidSignature)
+		}
+	}
+
+	// 4) Time window. Leeway absorbs clock skew on both ends.
+	now := v.cfg.Now()
+	if !cap.NotBefore.IsZero() && now.Add(v.cfg.Leeway).Before(cap.NotBefore) {
+		return nil, ErrNotYetValid
+	}
+	if cap.ExpiresAt.IsZero() || now.Add(-v.cfg.Leeway).After(cap.ExpiresAt) {
+		return nil, ErrExpired
+	}
+
+	// 5) Audience match.
+	if !slices.Contains(cap.Audience, audience) {
+		return nil, fmt.Errorf("%w: token audience %v lacks %q",
+			ErrAudienceMismatch, cap.Audience, audience)
+	}
+
+	// 6) Revocation of this capability or any ancestor. Last so cheap
+	// rejections short-circuit before hitting the cache / store.
+	revoked, err := v.cfg.Revocations.IsRevoked(ctx, cap.ID)
+	if err != nil {
+		return nil, fmt.Errorf("capability: revocation lookup: %w", err)
+	}
+	if revoked {
+		return nil, ErrRevoked
+	}
+
+	return cap, nil
+}
+
+// verifySigned checks a compact JWT's header, signature, issuer and tenant —
+// everything about the token itself; the time, audience and revocation gates
+// run in Verify on the capability the token finally grants.
+func (v *StandardVerifier) verifySigned(ctx context.Context, token string) (*Capability, error) {
 	// 1) Header: structure, algorithm, type, key id.
 	parts, err := splitToken(token)
 	if err != nil {
@@ -213,31 +280,6 @@ func (v *StandardVerifier) Verify(ctx context.Context, token string, audience st
 	}
 	if cap.Subject.TenantID == uuid.Nil {
 		return nil, fmt.Errorf("%w: capability has no tenant", ErrInvalidSignature)
-	}
-
-	// 4) Time window. Leeway absorbs clock skew on both ends.
-	now := v.cfg.Now()
-	if !cap.NotBefore.IsZero() && now.Add(v.cfg.Leeway).Before(cap.NotBefore) {
-		return nil, ErrNotYetValid
-	}
-	if cap.ExpiresAt.IsZero() || now.Add(-v.cfg.Leeway).After(cap.ExpiresAt) {
-		return nil, ErrExpired
-	}
-
-	// 5) Audience match.
-	if !slices.Contains(cap.Audience, audience) {
-		return nil, fmt.Errorf("%w: token audience %v lacks %q",
-			ErrAudienceMismatch, cap.Audience, audience)
-	}
-
-	// 6) Revocation of this capability or any ancestor. Last so cheap
-	// rejections short-circuit before hitting the cache / store.
-	revoked, err := v.cfg.Revocations.IsRevoked(ctx, cap.ID)
-	if err != nil {
-		return nil, fmt.Errorf("capability: revocation lookup: %w", err)
-	}
-	if revoked {
-		return nil, ErrRevoked
 	}
 
 	return cap, nil
