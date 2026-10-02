@@ -158,7 +158,7 @@ includes:
   py-sdk:
     taskfile: '{{printf .TASKLIB "python/uv"}}'
     dir: sdk/python
-    vars: { PROJECT_NAME: py-sdk, PY_SRC: src tests }
+    vars: { PROJECT_NAME: py-sdk, PY_SRC: src tests examples }
 
 tasks:
   default:

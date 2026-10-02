@@ -7,7 +7,7 @@
 //	obj, err := paladin.Upload(ctx, p.Data, paladin.UploadInput{Parent: srv.Collection().String(), …}, paladin.UploadOptions{})
 //
 // It serves ObjectService (upload, complete, get, lookup, list, download,
-// delete) and MultipartUploadService; every other RPC of every plane answers
+// delete) and MultipartUploadService, ListParts included; every other RPC of every plane answers
 // Unimplemented, as a server that lacks it does. Like the server it records
 // the checksum an upload completes with, so Download verifies what it
 // reads, and answers Range requests.
@@ -83,6 +83,14 @@ type multipart struct {
 // New starts a fake for the test, stopped when it ends.
 func New(t testing.TB) *Server {
 	t.Helper()
+	s, stop := Start()
+	t.Cleanup(stop)
+	return s
+}
+
+// Start starts a fake outside a test — an example, a local tool — and
+// returns it with the function that stops it.
+func Start() (*Server, func()) {
 	s := &Server{
 		tenant:  uuid.NewString(),
 		objects: map[string]*object{},
@@ -93,9 +101,8 @@ func New(t testing.TB) *Server {
 	mux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(s))
 	mux.Handle(storagePath, http.HandlerFunc(s.storage))
 	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
 	s.URL = srv.URL
-	return s
+	return s, srv.Close
 }
 
 // Tenant is the id of the fake's one tenant.
@@ -344,6 +351,21 @@ func (s *Server) CompleteMultipartUpload(_ context.Context, req *connect.Request
 	s.commit(o, body, "")
 	delete(s.uploads, req.Msg.GetUploadId())
 	return connect.NewResponse(o.msg), nil
+}
+
+func (s *Server) ListParts(_ context.Context, req *connect.Request[datav1.ListPartsRequest]) (*connect.Response[datav1.ListPartsResponse], error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	up, ok := s.uploads[req.Msg.GetUploadId()]
+	if !ok {
+		return nil, notFound("upload " + req.Msg.GetUploadId())
+	}
+	resp := &datav1.ListPartsResponse{Page: &commonv1.PageResponse{}}
+	for n, data := range up.parts {
+		resp.Parts = append(resp.Parts, &datav1.PartInfo{PartNumber: n, SizeBytes: int64(len(data)), Etag: etagOf(data)})
+	}
+	sort.Slice(resp.Parts, func(i, j int) bool { return resp.Parts[i].GetPartNumber() < resp.Parts[j].GetPartNumber() })
+	return connect.NewResponse(resp), nil
 }
 
 func (s *Server) AbortMultipartUpload(_ context.Context, req *connect.Request[datav1.AbortMultipartUploadRequest]) (*connect.Response[datav1.AbortMultipartUploadResponse], error) {
