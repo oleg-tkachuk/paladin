@@ -191,6 +191,78 @@ func TestListObjects_SearchUnderRLS(t *testing.T) {
 	}
 }
 
+// A filter with `||` or `in` runs one indexed query per branch and merges
+// them. Walking every page with a small page size has to return exactly the
+// objects the filter accepts — once each, none skipped where one branch fills
+// its page and another reaches further.
+func TestListObjects_DisjunctionUnderRLS(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	admin := startPostgres(t)
+	tenant, _ := mkTenant(t, ctx, admin, "shared")
+	seedBucketRow(t, ctx, admin)
+	seedCollectionFor(t, ctx, admin, tenant, "docs")
+	mustExec(t, ctx, admin, `
+		INSERT INTO objects (tenant_id, collection_id, path, state, content_type, tags)
+		SELECT $1, c.id, 'k/' || g, 'AVAILABLE',
+		       CASE WHEN g % 7 = 0 THEN 'image/png' ELSE 'text/plain' END,
+		       CASE WHEN g % 50 = 0 THEN '{"env":"prod"}'::jsonb
+		            WHEN g % 11 = 0 THEN '{"env":"stage"}'::jsonb
+		            ELSE '{}'::jsonb END
+		  FROM generate_series(1, 2000) g
+		  JOIN collections c ON c.tenant_id = $1 AND c.name = 'docs'`, tenant)
+	pool := rlsPool(t, ctx, admin)
+	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
+	asT := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenant})
+	ev := cel.NewEvaluator()
+
+	walk := func(filter string) map[string]bool {
+		t.Helper()
+		prog := must(ev.Compile(cel.ObjectSchema, filter))
+		seen := map[string]bool{}
+		token := ""
+		for pages := 0; ; pages++ {
+			if pages > 2000 {
+				t.Fatalf("%s: paging did not terminate", filter)
+			}
+			objs, next, err := repo.ListObjects(asT, objecth.ListObjectsArgs{
+				TenantID: tenant, Collection: "docs", PageSize: 7, PageToken: token,
+				CompiledCEL: prog, Filter: filter,
+			})
+			if err != nil {
+				t.Fatalf("%s: %v", filter, err)
+			}
+			for _, o := range objs {
+				if seen[o.Key] {
+					t.Fatalf("%s: %s returned twice", filter, o.Key)
+				}
+				seen[o.Key] = true
+			}
+			if next == "" {
+				return seen
+			}
+			token = next
+		}
+	}
+
+	// g%50 → 40 prod; g%7 → 285 png; both → g%350 → 5. Union 320.
+	if got := walk(`tags['env'] == 'prod' || content_type == 'image/png'`); len(got) != 320 {
+		t.Errorf("prod || png: %d objects, want 320", len(got))
+	}
+	// prod 40 + stage: g%11 and not g%50 → 181 - 3 (g%550) = 178. 218 total.
+	if got := walk(`tags['env'] in ['prod', 'stage']`); len(got) != 218 {
+		t.Errorf("env in [prod, stage]: %d objects, want 218", len(got))
+	}
+	n, exact, err := repo.CountObjects(asT, objecth.CountObjectsArgs{
+		TenantID: tenant, Collection: "docs",
+		CompiledCEL: must(ev.Compile(cel.ObjectSchema, `tags['env'] == 'prod' || content_type == 'image/png'`)),
+		Filter:      `tags['env'] == 'prod' || content_type == 'image/png'`,
+	})
+	if err != nil || n != 320 || !exact {
+		t.Errorf("count prod || png: %d exact=%v err=%v; want 320 exact", n, exact, err)
+	}
+}
+
 // The function's queries, as its owner runs them, use the indexes 026–028.
 // EXPLAIN cannot see inside a plpgsql call, so this explains the statements
 // it builds — keep them in step with 029.
