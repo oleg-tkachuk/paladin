@@ -24,10 +24,47 @@ import (
 type ObjectRepo struct {
 	q    *sqlc.Queries
 	pool *pgxpool.Pool
+	// reads serves the lag-tolerant reads — ListObjects, CountObjects,
+	// ListDistinctTags — from the read replica when one is enabled. Every
+	// other method, writes and point lookups alike, stays on q/pool.
+	reads Reader
 }
 
+// Reader runs a read on whichever database should serve it;
+// postgres.ReadRouter is the production one.
+type Reader interface {
+	Read(ctx context.Context, fn func(db sqlc.DBTX) error) error
+}
+
+// primaryReader is the Reader for a repo with no replica.
+type primaryReader struct{ db sqlc.DBTX }
+
+func (p primaryReader) Read(_ context.Context, fn func(db sqlc.DBTX) error) error { return fn(p.db) }
+
 func NewObjectRepo(q *sqlc.Queries, pool *pgxpool.Pool) *ObjectRepo {
-	return &ObjectRepo{q: q, pool: pool}
+	r := &ObjectRepo{q: q, pool: pool}
+	if pool != nil {
+		r.reads = primaryReader{db: pool}
+	}
+	return r
+}
+
+// WithReads routes the repo's lag-tolerant reads through rd. A nil rd keeps
+// them on the primary.
+func (r *ObjectRepo) WithReads(rd Reader) *ObjectRepo {
+	if rd != nil {
+		r.reads = rd
+	}
+	return r
+}
+
+// read runs fn through the configured Reader, or on q when the repo was built
+// without a pool (unit tests over a mocked Querier).
+func (r *ObjectRepo) read(ctx context.Context, fn func(q sqlc.Querier, db sqlc.DBTX) error) error {
+	if r.reads == nil {
+		return fn(r.q, r.pool)
+	}
+	return r.reads.Read(ctx, func(db sqlc.DBTX) error { return fn(sqlc.New(db), db) })
 }
 
 var _ objecth.Repository = (*ObjectRepo)(nil)
@@ -182,44 +219,21 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args objecth.ListObjectsAr
 		afterID = id
 	}
 
-	// Pushdown: extract the SQL-expressible subset of the CEL filter
-	// (state equality, key prefix/substring) and let Postgres narrow the
-	// scan instead of streaming the whole namespace into Go. The full
-	// CompiledCEL is still evaluated per row below, so an unrecognised
-	// or partially-pushed filter only over-fetches — it never drops a
-	// matching row. A pushdown parse error is non-fatal (the CompiledCEL
-	// path already validated the same expression).
-	var state *sqlc.ObjectState
-	var prefix, substr *string
-	if args.Filter != "" {
-		if pd, perr := cel.ExtractObjectPushdown(args.Filter); perr == nil {
-			if pd.StateEq != "" {
-				v := sqlc.ObjectState(pd.StateEq)
-				state = &v
-			}
-			// Only push a key literal when it has no LIKE metacharacters
-			// (%, _, \). Otherwise the SQL LIKE would interpret them as
-			// wildcards and broaden the scan; since the CompiledCEL pass
-			// is authoritative that's still correct, but skipping keeps
-			// the hint precise without an ESCAPE clause.
-			if p, ok := likeLiteral(pd.KeyPrefix); ok {
-				prefix = &p
-			}
-			if s, ok := likeLiteral(pd.KeyContains); ok {
-				substr = &s
-			}
-		}
-	}
-
-	rows, err := r.q.ListObjects(ctx,
-		pgUUID(args.TenantID),
-		args.Collection,
-		state,
-		prefix,
-		substr,
-		pgUUID(afterID),
-		pageSize,
-	)
+	h := objectListHints(args.Filter)
+	var rows []sqlc.ListObjectsRow
+	err := r.read(ctx, func(q sqlc.Querier, _ sqlc.DBTX) error {
+		var err error
+		rows, err = q.ListObjects(ctx,
+			pgUUID(args.TenantID),
+			args.Collection,
+			h.state, h.prefix, h.substr,
+			h.contentType, h.contentTypePrefix,
+			h.tags, h.metadata,
+			pgUUID(afterID),
+			pageSize,
+		)
+		return err
+	})
 	if err != nil {
 		return nil, "", fmt.Errorf("list objects: %w", err)
 	}
@@ -260,13 +274,22 @@ const countScanCap = 10000
 // in-process, capped at countScanCap.
 func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjectsArgs) (int64, bool, error) {
 	if args.CompiledCEL == nil {
-		n, err := r.q.CountObjects(ctx, pgUUID(args.TenantID), args.Collection, nil)
+		var n int64
+		err := r.read(ctx, func(q sqlc.Querier, _ sqlc.DBTX) error {
+			var err error
+			n, err = q.CountObjects(ctx, pgUUID(args.TenantID), args.Collection, nil)
+			return err
+		})
 		if err != nil {
 			return 0, false, fmt.Errorf("count objects: %w", err)
 		}
 		return n, true, nil
 	}
 
+	// The same pushdown as ListObjects: the scan cap counts rows READ, so
+	// every row the query drops is headroom for one that might match, and a
+	// selective filter that used to stop at "10000+" is now counted exactly.
+	h := objectListHints(args.Filter)
 	const pageSize int32 = 500
 	var (
 		matched int64
@@ -274,15 +297,20 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 		afterID uuid.UUID
 	)
 	for {
-		rows, err := r.q.ListObjects(ctx,
-			pgUUID(args.TenantID),
-			args.Collection,
-			nil, // state (no filter: count every state)
-			nil, // prefix
-			nil, // substr (CountObjectsArgs carries no raw filter to push down)
-			pgUUID(afterID),
-			pageSize,
-		)
+		var rows []sqlc.ListObjectsRow
+		err := r.read(ctx, func(q sqlc.Querier, _ sqlc.DBTX) error {
+			var err error
+			rows, err = q.ListObjects(ctx,
+				pgUUID(args.TenantID),
+				args.Collection,
+				h.state, h.prefix, h.substr,
+				h.contentType, h.contentTypePrefix,
+				h.tags, h.metadata,
+				pgUUID(afterID),
+				pageSize,
+			)
+			return err
+		})
 		if err != nil {
 			return 0, false, fmt.Errorf("count objects scan: %w", err)
 		}
@@ -333,52 +361,60 @@ func (r *ObjectRepo) ListDistinctTags(
 	if valueLimit <= 0 {
 		valueLimit = 100
 	}
-	rows, err := r.pool.Query(ctx,
-		`WITH ranked AS (
-		   SELECT DISTINCT t.key, t.value,
-		          dense_rank() OVER (PARTITION BY t.key ORDER BY t.value) AS vrank
-		     FROM objects o
-		     JOIN collections c ON c.id = o.collection_id,
-		          LATERAL jsonb_each_text(o.tags) AS t(key, value)
-		    WHERE o.tenant_id = $1
-		      AND c.name      = $2
-		      AND o.state <> 'DELETED'
-		      AND ($3 = '' OR t.key > $3)
-		 ),
-		 keys AS (
-		   SELECT DISTINCT key FROM ranked ORDER BY key LIMIT $4
-		 )
-		 SELECT r.key,
-		        array_agg(r.value ORDER BY r.value) FILTER (WHERE r.vrank <= $5) AS vals,
-		        bool_or(r.vrank > $5) AS more
-		   FROM ranked r
-		   JOIN keys k ON k.key = r.key
-		  GROUP BY r.key
-		  ORDER BY r.key`,
-		pgUUID(tenantID), collection, afterKey, keyLimit+1, valueLimit,
-	)
-	if err != nil {
-		return objecth.DistinctTagPage{}, fmt.Errorf("list distinct tags: %w", err)
-	}
-	defer rows.Close()
-
-	page := objecth.DistinctTagPage{
-		Values:    map[string][]string{},
-		Truncated: map[string]bool{},
-	}
-	for rows.Next() {
-		var key string
-		var values []string
-		var more bool
-		if err := rows.Scan(&key, &values, &more); err != nil {
-			return objecth.DistinctTagPage{}, fmt.Errorf("scan distinct tag: %w", err)
+	var page objecth.DistinctTagPage
+	err := r.read(ctx, func(_ sqlc.Querier, db sqlc.DBTX) error {
+		// Built inside the closure: a replica failure re-runs it on the
+		// primary, which must start from an empty page.
+		page = objecth.DistinctTagPage{
+			Values:    map[string][]string{},
+			Truncated: map[string]bool{},
 		}
-		page.Keys = append(page.Keys, key)
-		page.Values[key] = values
-		page.Truncated[key] = more
-	}
-	if err := rows.Err(); err != nil {
-		return objecth.DistinctTagPage{}, fmt.Errorf("iterate distinct tags: %w", err)
+		rows, err := db.Query(ctx,
+			`WITH ranked AS (
+			   SELECT DISTINCT t.key, t.value,
+			          dense_rank() OVER (PARTITION BY t.key ORDER BY t.value) AS vrank
+			     FROM objects o
+			     JOIN collections c ON c.id = o.collection_id,
+			          LATERAL jsonb_each_text(o.tags) AS t(key, value)
+			    WHERE o.tenant_id = $1
+			      AND c.name      = $2
+			      AND o.state <> 'DELETED'
+			      AND ($3 = '' OR t.key > $3)
+			 ),
+			 keys AS (
+			   SELECT DISTINCT key FROM ranked ORDER BY key LIMIT $4
+			 )
+			 SELECT r.key,
+			        array_agg(r.value ORDER BY r.value) FILTER (WHERE r.vrank <= $5) AS vals,
+			        bool_or(r.vrank > $5) AS more
+			   FROM ranked r
+			   JOIN keys k ON k.key = r.key
+			  GROUP BY r.key
+			  ORDER BY r.key`,
+			pgUUID(tenantID), collection, afterKey, keyLimit+1, valueLimit,
+		)
+		if err != nil {
+			return fmt.Errorf("list distinct tags: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var key string
+			var values []string
+			var more bool
+			if err := rows.Scan(&key, &values, &more); err != nil {
+				return fmt.Errorf("scan distinct tag: %w", err)
+			}
+			page.Keys = append(page.Keys, key)
+			page.Values[key] = values
+			page.Truncated[key] = more
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate distinct tags: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return objecth.DistinctTagPage{}, err
 	}
 
 	// The extra key proves there is another page; drop it and cursor on the
@@ -639,18 +675,79 @@ func objectFromSQLC(o sqlc.Object, collectionName string) objecth.Object {
 
 // celVars surfaces a flat map of attributes CEL programs can reference. Keep
 // the list stable — changes ripple out to every user-defined filter.
-// likeLiteral returns (s, true) when s is a non-empty pushdownable LIKE
-// literal — i.e. contains no LIKE metacharacter (%, _, \) that would be
-// reinterpreted as a wildcard. Empty or metachar-bearing literals return
-// ok=false so the caller leaves the predicate to the in-memory CEL pass.
-func likeLiteral(s string) (string, bool) {
+// likeEscape returns s with the LIKE metacharacters (%, _, \) escaped by a
+// backslash — Postgres' default LIKE escape — so the pattern matches s
+// literally. ok is false for an empty s, which narrows nothing.
+//
+// Escaping rather than dropping matters for search: object keys are full of
+// underscores (`report_2026_q3.pdf`), and a dropped hint sent the console's
+// search to an unfiltered page scan.
+func likeEscape(s string) (string, bool) {
 	if s == "" {
 		return "", false
 	}
-	if strings.ContainsAny(s, `%_\`) {
-		return "", false
+	if !strings.ContainsAny(s, `%_\`) {
+		return s, true
 	}
-	return s, true
+	var b strings.Builder
+	b.Grow(len(s) + 4)
+	for _, r := range s {
+		if r == '%' || r == '_' || r == '\\' {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String(), true
+}
+
+// objectHints is the SQL-expressible subset of an object filter, in the shape
+// the ListObjects query takes. The zero value narrows nothing.
+type objectHints struct {
+	state             *sqlc.ObjectState
+	prefix            *string
+	substr            *string
+	contentType       *string
+	contentTypePrefix *string
+	tags              []byte // jsonb object for `tags @>`; nil = no predicate
+	metadata          []byte // jsonb object for `metadata @>`
+}
+
+// objectListHints extracts the pushdown from a raw CEL filter. The compiled
+// program stays authoritative over every fetched row, so a hint may only
+// narrow; a parse error (reported by the handler's own compile) yields none.
+func objectListHints(filter string) objectHints {
+	var h objectHints
+	if filter == "" {
+		return h
+	}
+	pd, err := cel.ExtractObjectPushdown(filter)
+	if err != nil {
+		return h
+	}
+	if pd.StateEq != "" {
+		v := sqlc.ObjectState(pd.StateEq)
+		h.state = &v
+	}
+	if p, ok := likeEscape(pd.KeyPrefix); ok {
+		h.prefix = &p
+	}
+	if p, ok := likeEscape(pd.KeyContains); ok {
+		h.substr = &p
+	}
+	if pd.ContentTypeEq != "" {
+		v := pd.ContentTypeEq
+		h.contentType = &v
+	}
+	if p, ok := likeEscape(pd.ContentTypePrefix); ok {
+		h.contentTypePrefix = &p
+	}
+	if len(pd.TagsEq) > 0 {
+		h.tags = encodeMap(pd.TagsEq)
+	}
+	if len(pd.MetadataEq) > 0 {
+		h.metadata = encodeMap(pd.MetadataEq)
+	}
+	return h
 }
 
 func celVars(o objecth.Object) map[string]any {

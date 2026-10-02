@@ -376,7 +376,8 @@ type ListObjectsArgs struct {
 	PageToken   string
 	CompiledCEL cel.Program // pre-compiled; nil = no filter
 	// Filter is the raw CEL expression, kept alongside CompiledCEL so the
-	// adapter can extract SQL pushdown predicates (state/key) from it. The
+	// adapter can extract SQL pushdown predicates (state, key, content type,
+	// tag and metadata equality) from it. The
 	// CompiledCEL remains authoritative as a post-load pass.
 	Filter   string
 	OrderBy  string
@@ -391,6 +392,9 @@ type CountObjectsArgs struct {
 	TenantID    uuid.UUID
 	Collection  string
 	CompiledCEL cel.Program
+	// Filter is the raw CEL behind CompiledCEL, for SQL pushdown — see
+	// ListObjectsArgs.Filter. Ignored when CompiledCEL is nil.
+	Filter string
 }
 
 // Handler is the Connect service implementation.
@@ -1000,6 +1004,7 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 	args := CountObjectsArgs{TenantID: tenantID, Collection: in.Collection}
 	if in.Filter != "" {
 		args.CompiledCEL = prog
+		args.Filter = in.Filter
 	}
 	n, exact, err := h.repo.CountObjects(ctx, args)
 	if err != nil {

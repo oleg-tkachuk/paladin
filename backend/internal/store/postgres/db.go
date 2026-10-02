@@ -29,7 +29,13 @@ type PgxPool interface {
 type DB struct {
 	Pool    PgxPool
 	Queries *sqlc.Queries
-	log     *zap.Logger
+	// Replica is the read-replica pool, nil when none is configured.
+	Replica PgxPool
+	// Reads routes lag-tolerant reads to Replica while it keeps up, and to
+	// the primary otherwise. Never nil on a DB built by New. See ReadRouter
+	// for which reads may use it.
+	Reads *ReadRouter
+	log   *zap.Logger
 }
 
 // Option mutates the pool config after parse and before the pool is
@@ -50,11 +56,69 @@ func WithRLS() Option {
 }
 
 func New(ctx context.Context, cfg config.Postgres, log *zap.Logger, opts ...Option) (*DB, error) {
-	poolCfg, err := pgxpool.ParseConfig(cfg.DSN)
+	pool, err := newPool(ctx, cfg.DSN, cfg.Password, cfg, log, "pool initialized", opts...)
+	if err != nil {
+		return nil, err
+	}
+	queries := sqlc.New(pool)
+	return &DB{Pool: pool, Queries: queries, Reads: NewPrimaryOnlyRouter(pool), log: log}, nil
+}
+
+// AttachReplica opens the read-replica pool described by cfg.Replica and
+// points d.Reads at it. A no-op unless replica.enabled is set — the replica
+// is opt-in, and with it off every read stays on the primary. opts should be the
+// ones the primary was opened with: the replica serves the same tenant-scoped
+// reads, so it needs the same RLS hooks — the policies replicate with the
+// schema, the GUC does not.
+//
+// The replica is not pinged and not trusted yet: reads stay on the primary
+// until ReadRouter.Run has measured the lag, so a replica that is down at boot
+// slows nothing and fails nothing, and one still catching up (a standby CNPG
+// has just added) takes reads by itself once it is within max_lag. Long-lived roles call this; the one-shot
+// commands (migrate, bootstrap) never read through the router and do not.
+//
+// The pool keeps no idle connections (min_conns 0): every long-lived role gets
+// one, and only the ones that list objects use more than the probe's.
+func (d *DB) AttachReplica(ctx context.Context, cfg config.Postgres, opts ...Option) error {
+	if !cfg.Replica.Enabled {
+		return nil
+	}
+	dsn, err := cfg.ReplicaDSN()
+	if err != nil {
+		return fmt.Errorf("replica: %w", err)
+	}
+	if d.Replica != nil {
+		return fmt.Errorf("replica already attached")
+	}
+	// The replica is a physical standby of the same cluster, so the runtime
+	// role and its password are the same; a separate password is needed only
+	// when the replica is reached through a different role.
+	password := cfg.Replica.Password
+	if password == "" {
+		password = cfg.Password
+	}
+	rcfg := cfg
+	rcfg.Pool.MinConns = 0
+	replica, err := newPool(ctx, dsn, password, rcfg, d.log, "replica pool initialized", opts...)
+	if err != nil {
+		return fmt.Errorf("replica: %w", err)
+	}
+	d.Replica = replica
+	d.Reads = newReplicaRouter(d.Pool, replica,
+		cfg.Replica.MaxLag, cfg.Replica.LagCheckPeriod, d.log.Named("replica"))
+	return nil
+}
+
+// newPool builds one pgx pool for dsn with the shared pool, timeout and
+// runtime settings from cfg. pgxpool connects lazily, so an unreachable host
+// is not an error here; Ping is.
+func newPool(
+	ctx context.Context, dsn, password string, cfg config.Postgres, log *zap.Logger, msg string, opts ...Option,
+) (*pgxpool.Pool, error) {
+	poolCfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("pgxpool config parse: %w", err)
 	}
-
 	// pgx query tracer → OTel spans (one span per query, with the SQL as
 	// the span name). Uses the global TracerProvider, which is a no-op
 	// when OTel is disabled (InitOTel not called), so this is a cheap
@@ -62,8 +126,8 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger, opts ...Opti
 	// tracing is on.
 	poolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
 
-	if cfg.Password != "" {
-		poolCfg.ConnConfig.Password = cfg.Password
+	if password != "" {
+		poolCfg.ConnConfig.Password = password
 	}
 
 	// Apply config from struct
@@ -122,16 +186,14 @@ func New(ctx context.Context, cfg config.Postgres, log *zap.Logger, opts ...Opti
 		return nil, fmt.Errorf("pgxpool init: %w", err)
 	}
 
-	log.Info("pool initialized",
+	log.Info(msg,
 		zap.String("endpoint", fmt.Sprintf("postgres://%s:****@%s:%d/%s",
 			poolCfg.ConnConfig.User, poolCfg.ConnConfig.Host, poolCfg.ConnConfig.Port, poolCfg.ConnConfig.Database)),
 		zap.Int32("max_conns", poolCfg.MaxConns),
 		zap.Int32("min_conns", poolCfg.MinConns),
 	)
 
-	queries := sqlc.New(pool)
-
-	return &DB{Pool: pool, Queries: queries, log: log}, nil
+	return pool, nil
 }
 
 func (d *DB) Ping(ctx context.Context) error {
@@ -143,7 +205,13 @@ func (d *DB) Ping(ctx context.Context) error {
 }
 
 func (d *DB) Close() {
-	if d != nil && d.Pool != nil {
+	if d == nil {
+		return
+	}
+	if d.Replica != nil {
+		d.Replica.Close()
+	}
+	if d.Pool != nil {
 		d.Pool.Close()
 	}
 }

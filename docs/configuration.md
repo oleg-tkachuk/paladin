@@ -111,7 +111,7 @@ comment. What each top-level block owns:
 | `runtime` | process-wide HTTP flags, shutdown timeout, `health_snapshot_token` |
 | `api` | the data (`:8080`) and iam (`:8085`) listeners |
 | `admin` | the admin listener (`:8090`) |
-| `datastores` | Postgres DSN and the separate migrate / reaper credentials |
+| `datastores` | Postgres DSN, the separate migrate / reaper credentials, the opt-in read replica |
 | `limits` | object and multipart size ceilings, part sizes, content types, presign lifetimes |
 | `auth` | JWT signing, token TTLs, login rate limiting |
 | `security` | `reject_tenant_mismatch` (`log_sensitive` is retired: accepted, ignored, warned about) |
@@ -144,6 +144,47 @@ ingress controller and the console's BFF, which forwards the header unchanged
 on every call it makes to a plane.
 Narrow it to the ingress and pod networks where clients can sit inside the
 private ranges, or such a client can name its own address.
+
+### Read replica
+
+`datastores.postgres.replica` is off by default, and off means no replica pool
+is opened at all. Turned on, listing, counting and searching objects
+(`ListObjects`, `CountObjects`, `ListDistinctTags`) read from it; everything
+else — authorization, capability and token checks, every write and every
+read that follows one — stays on the primary, because a revoked credential
+has to be refused on the very next request.
+
+```yaml
+datastores:
+  postgres:
+    replica:
+      enabled: true      # the only key CloudNativePG needs
+      dsn: ""            # "" → `<cluster>-rw` in `dsn` becomes `<cluster>-ro`
+      max_lag: 2s        # further behind than this → reads go to the primary
+      lag_check_period: 5s
+```
+
+On CloudNativePG nothing else is required. CNPG creates its standbys,
+seeds them from the primary and keeps them streaming; the schema, the RLS
+policies and the roles arrive with the WAL, so `paladin migrate` never runs
+against a replica. The `-ro` service spreads reads over the standbys and is
+in the server certificate, so `sslmode=verify-full` keeps working. The
+password defaults to the primary's — a physical standby has the same roles.
+With a single-instance cluster the `-ro` service has no endpoints, and reads
+simply stay on the primary.
+
+Every long-lived role measures the replica's lag each `lag_check_period`.
+Reads move to it only once it is within `max_lag`, and back to the primary
+whenever it is unreachable, behind, or its lag cannot be told. A replica
+added to a running environment therefore catches up on its own and starts
+taking reads by itself; a query the replica fails (a conflict with WAL
+replay, a restart) is retried on the primary. Lists may trail writes by up
+to `max_lag`; set `0s` to drop the bound and keep only the reachability
+check.
+
+Outside CNPG set `dsn` explicitly. The replica must be a physical standby,
+or a managed reader endpoint over one; a logical replica does not carry the
+roles and policies and is not supported.
 
 ### Storage backend auth modes
 

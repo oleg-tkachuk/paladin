@@ -684,6 +684,18 @@ config:
       #   reaper_dsn: "postgres://paladin_reaper@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=verify-full&sslrootcert=/etc/paladin/pg-ca/ca.crt"
       #   reaper_password_secret: { name: paladin-postgresql-reaper-user, key: password, namespace: database }
       reaper_dsn: ""
+      # Opt-in read replica for listing, counting and searching objects;
+      # authorization and read-after-write paths always use the primary.
+      # On CloudNativePG nothing but `enabled: true` is needed: CNPG seeds
+      # and streams its standbys itself, and an empty dsn is derived from
+      # `dsn` (`<cluster>-rw` → `<cluster>-ro`, same user, password and TLS).
+      # Reads stay on the primary until the replica is within max_lag, and
+      # return to it whenever the replica is unreachable or falls behind.
+      replica:
+        enabled: false
+        dsn: ""
+        max_lag: 2s
+        lag_check_period: 5s
       pool:
         max_conns: 20
         min_conns: 2

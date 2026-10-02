@@ -108,6 +108,13 @@ datastores:
       key: password
       namespace: database
     reaper_dsn: ""                      # optional separate role for housekeeping; "" → reuse `dsn`
+    # Opt-in read replica (listing / counting / searching objects). Empty
+    # dsn derives the CNPG `-ro` service from `dsn`'s `-rw` host.
+    replica:
+      enabled: false
+      dsn: ""
+      max_lag: 2s
+      lag_check_period: 5s
     pool:
       max_conns: 20
       min_conns: 2
