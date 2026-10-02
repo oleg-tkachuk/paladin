@@ -70,6 +70,7 @@ type config struct {
 	httpClient connect.HTTPClient
 	headers    http.Header
 	retry      *retryPolicy
+	retryable  func(error) bool
 	tokens     *tokenAuth
 	extra      []connect.ClientOption
 	transfer   *Transfer
@@ -134,6 +135,14 @@ func WithRetries(attempts int, baseDelay time.Duration) Option {
 	}
 }
 
+// WithRetryable replaces DefaultRetryable: transient decides which failed
+// calls WithRetries tries again. Only that: a call is still retried only when
+// it is safe to repeat — declared free of side effects or idempotent, or
+// carrying an idempotency key. Without WithRetries it does nothing.
+func WithRetryable(transient func(error) bool) Option {
+	return func(cfg *config) { cfg.retryable = transient }
+}
+
 // WithClientOptions passes Connect options through, e.g. connect.WithGRPC().
 func WithClientOptions(opts ...connect.ClientOption) Option {
 	return func(cfg *config) { cfg.extra = append(cfg.extra, opts...) }
@@ -181,6 +190,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 		interceptors = append(interceptors, cfg.tokens)
 	}
 	if cfg.retry != nil {
+		cfg.retry.transient = cfg.retryable
 		interceptors = append(interceptors, cfg.retry)
 	}
 	options := append([]connect.ClientOption{connect.WithInterceptors(interceptors...)}, cfg.extra...)

@@ -90,7 +90,7 @@ with TenantServiceClientSync(client.base_url, interceptors=client.interceptors()
 
 | Member | Does |
 | --- | --- |
-| `Retry(attempts, base_delay=0.1, max_delay=5.0)` | Retries a unary call on `UNAVAILABLE` or `RESOURCE_EXHAUSTED`, up to `attempts` calls in total. The wait (seconds) is drawn at random up to a ceiling that doubles from `base_delay` to `max_delay`, and is never shorter than the server's `Retry-After`. A retry that could not start before the call's `timeout_ms` is not made, and the server's error is raised. Only calls safe to repeat are retried: RPCs the contract declares side-effect free or idempotent, and calls that carry an idempotency key — which every other call does, see below. Streams are never retried. Each attempt reads its headers through its own `connectrpc.client.ResponseMetadata`, so one wrapped around a retried call sees nothing. Raises `ValueError` for `attempts < 1` or delays outside `0 < base_delay <= max_delay`. |
+| `Retry(attempts, base_delay=0.1, max_delay=5.0, retryable=None)` | Retries a unary call that failed with an error `retryable` accepts — by default `default_retryable`: `UNAVAILABLE` or `RESOURCE_EXHAUSTED` — up to `attempts` calls in total. The wait (seconds) is drawn at random up to a ceiling that doubles from `base_delay` to `max_delay`, and is never shorter than the server's `Retry-After`, in seconds or an HTTP date (`parse_retry_after`). A retry that could not start before the call's `timeout_ms` is not made, and the server's error is raised. Only calls safe to repeat are retried: RPCs the contract declares side-effect free or idempotent, and calls that carry an idempotency key — which every other call does, see below. Streams are never retried. Each attempt reads its headers through its own `connectrpc.client.ResponseMetadata`, so one wrapped around a retried call sees nothing. Raises `ValueError` for `attempts < 1` or delays outside `0 < base_delay <= max_delay`. |
 | `delays()` | The ceiling of the pause before each retry. |
 | `wait(ceiling, retry_after)` | The pause before one retry: a random share of `ceiling`, at least `retry_after`. |
 
@@ -106,6 +106,7 @@ requires one on `Create*` and `Issue*` calls.
 | --- | --- |
 | `idempotency_key(key)` | A context manager: every call inside the block sends `Idempotency-Key: <key>`. The server replays the first response for a key it has seen, so repeating a mutating call with the same key is safe. Reuse a key only for the same logical operation. Scoped with `contextvars`, so it follows `asyncio` tasks. |
 | `current_idempotency_key()` | The key set for the current context; an empty key counts as none. |
+| `no_idempotency_key()` | A context manager: every call inside the block goes out with no key — not the default one, not the request's field — and so is never retried, unless the contract declares it side-effect free or idempotent. For an operation that must run again when repeated rather than be answered with the first response. The server refuses `Create*` and `Issue*` without a key. The innermost block wins. |
 
 ### Tokens
 

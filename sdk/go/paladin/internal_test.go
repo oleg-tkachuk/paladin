@@ -2,8 +2,10 @@ package paladin
 
 import (
 	"context"
+	"net/http"
 	"runtime/debug"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -49,5 +51,30 @@ func TestModuleVersion(t *testing.T) {
 				t.Errorf("moduleVersion = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestParseRetryAfter(t *testing.T) {
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		value string
+		want  time.Duration
+		ok    bool
+	}{
+		{"120", 2 * time.Minute, true},
+		{"0", 0, true},
+		{"-5", 0, false},
+		{now.Add(90 * time.Second).Format(http.TimeFormat), 90 * time.Second, true},
+		{"Fri, 02 Oct 2026 12:01:30 GMT", 90 * time.Second, true},
+		{"Friday, 02-Oct-26 12:01:30 GMT", 90 * time.Second, true}, // RFC 850, which RFC 9110 still accepts
+		{now.Add(-time.Hour).Format(http.TimeFormat), 0, true},     // a date past: retry now
+		{"soon", 0, false},
+		{"", 0, false},
+	}
+	for _, tc := range cases {
+		got, ok := parseRetryAfter(tc.value, now)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("parseRetryAfter(%q) = %v, %v; want %v, %v", tc.value, got, ok, tc.want, tc.ok)
+		}
 	}
 }

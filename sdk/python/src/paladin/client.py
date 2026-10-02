@@ -18,6 +18,8 @@ from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from importlib import metadata
 from typing import Any, TypeVar
 from urllib.parse import urlsplit
@@ -60,6 +62,8 @@ DEFAULT_RETRY_MAX_DELAY = 5.0
 """Seconds the doubling delay stops at."""
 
 _idempotency_key: ContextVar[str | None] = ContextVar("paladin_idempotency_key", default=None)
+# Set by no_idempotency_key: calls go out with no key at all.
+_NO_KEY = ""
 
 
 @contextmanager
@@ -82,9 +86,24 @@ def idempotency_key(key: str) -> Iterator[None]:
         _idempotency_key.reset(token)
 
 
+@contextmanager
+def no_idempotency_key() -> Iterator[None]:
+    """Send every call made inside the block without an idempotency key: not
+    the default fresh one, not the request's own field. Such a call is never
+    retried, unless the contract declares it free of side effects or
+    idempotent — for an operation that must run again when repeated rather
+    than be answered with the first response. The server refuses a
+    ``Create*`` or ``Issue*`` call without a key. The innermost block wins."""
+    token = _idempotency_key.set(_NO_KEY)
+    try:
+        yield
+    finally:
+        _idempotency_key.reset(token)
+
+
 def current_idempotency_key() -> str | None:
     """The key ``idempotency_key`` set for the current context, if any."""
-    return _idempotency_key.get()
+    return _idempotency_key.get() or None
 
 
 def user_agent() -> str:
@@ -116,6 +135,9 @@ class Retry:
     attempts: int
     base_delay: float = DEFAULT_RETRY_BASE_DELAY
     max_delay: float = DEFAULT_RETRY_MAX_DELAY
+    retryable: Callable[[ConnectError], bool] | None = None
+    """Which failures are transient; None is ``default_retryable``. Only that:
+    a call is still retried only when it is safe to repeat."""
 
     def __post_init__(self) -> None:
         if self.attempts < 1:
@@ -219,9 +241,11 @@ def _key_for(request: object, ctx: RequestContext) -> str | None:
     """The key a unary call sends: the block's, else the request's own field,
     else a fresh one when the call has side effects the contract makes no
     promise about. None when the call needs none."""
-    key = current_idempotency_key()
-    if key:
-        return key
+    chosen = _idempotency_key.get()
+    if chosen == _NO_KEY:
+        return None
+    if chosen:
+        return chosen
     if ctx.method().idempotency_level != IdempotencyLevel.UNKNOWN:
         return None
     body = getattr(request, "idempotency_key", "")
@@ -239,17 +263,38 @@ def _stamp(request: object, ctx: RequestContext) -> None:
 def _retry_after(meta: ResponseMetadata) -> float | None:
     """A Retry-After the server sent, in seconds."""
     value = meta.headers().get(HEADER_RETRY_AFTER)
-    if value is None:
-        return None
+    return None if value is None else parse_retry_after(value)
+
+
+def parse_retry_after(value: str, now: datetime | None = None) -> float | None:
+    """Seconds to wait for a Retry-After value: a number of seconds, or an HTTP
+    date (RFC 9110), which waits until then. None for anything else."""
     try:
         seconds = int(value)
     except ValueError:
+        pass
+    else:
+        return float(seconds) if seconds >= 0 else None
+    try:
+        at = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
         return None
-    return float(seconds) if seconds >= 0 else None
+    if at.tzinfo is None:
+        return None
+    return max((at - (now or datetime.now(timezone.utc))).total_seconds(), 0.0)
 
 
-def _retryable(err: ConnectError, ctx: RequestContext) -> bool:
-    if err.code not in _TRANSIENT_CODES:
+def default_retryable(err: ConnectError) -> bool:
+    """The failures ``Retry`` retries unless given ``retryable``: Unavailable
+    and ResourceExhausted, the two a server sends for a condition that passes."""
+    return err.code in _TRANSIENT_CODES
+
+
+def _retryable(retry: Retry, err: ConnectError, ctx: RequestContext) -> bool:
+    """Whether err is transient and the call safe to repeat: declared free of
+    side effects or idempotent, or carrying an idempotency key. The second
+    half is not the classifier's to decide."""
+    if not (retry.retryable or default_retryable)(err):
         return False
     if ctx.method().idempotency_level != IdempotencyLevel.UNKNOWN:
         return True
@@ -373,7 +418,7 @@ class _RetrySync:
                 with ResponseMetadata() as meta:
                     return call_next(request, ctx)
             except ConnectError as err:
-                if not _retryable(err, ctx):
+                if not _retryable(self._retry, err, ctx):
                     raise
                 wait = self._retry.wait(ceiling, _retry_after(meta))
                 if not _fits(wait, ctx):
@@ -397,7 +442,7 @@ class _RetryAsync:
                 with ResponseMetadata() as meta:
                     return await call_next(request, ctx)
             except ConnectError as err:
-                if not _retryable(err, ctx):
+                if not _retryable(self._retry, err, ctx):
                     raise
                 wait = self._retry.wait(ceiling, _retry_after(meta))
                 if not _fits(wait, ctx):

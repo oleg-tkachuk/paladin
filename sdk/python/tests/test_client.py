@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 
 import pytest
 from connectrpc.code import Code
@@ -15,7 +18,10 @@ from paladin import (
     Client,
     Retry,
     current_idempotency_key,
+    default_retryable,
     idempotency_key,
+    no_idempotency_key,
+    parse_retry_after,
     user_agent,
 )
 from paladin.iam.v1 import auth_service_pb2, health_service_pb2
@@ -219,3 +225,88 @@ def test_user_agent_names_the_installed_version() -> None:
     from importlib import metadata
 
     assert user_agent() == f"paladin-sdk-python/{metadata.version('paladin-sdk')}"
+
+
+def test_no_idempotency_key_sends_none_and_is_not_retried(server) -> None:  # type: ignore[no-untyped-def]
+    server.recorder.failures = 1
+    with idempotency_key("overridden"), no_idempotency_key(), pytest.raises(ConnectError):
+        assert current_idempotency_key() is None
+        _auth(Client(server.url, retry=FAST)).login(auth_service_pb2.LoginRequest())
+    assert server.recorder.calls == 1, "a call with no key was retried"
+    assert HEADER_IDEMPOTENCY_KEY.lower() not in server.recorder.last
+    # The innermost block wins: a key inside the opt-out is sent.
+    with no_idempotency_key(), idempotency_key("k2"):
+        assert current_idempotency_key() == "k2"
+
+
+def test_retry_honours_a_retry_after_date(server) -> None:  # type: ignore[no-untyped-def]
+    server.recorder.failures = 1
+    server.recorder.fail_code = Code.RESOURCE_EXHAUSTED
+    server.recorder.retry_after = format_datetime(
+        datetime.now(timezone.utc) + timedelta(hours=1), usegmt=True
+    )
+    health = HealthServiceClientSync(
+        server.url,
+        interceptors=Client(server.url, retry=FAST).interceptors(),
+        timeout_ms=CALL_TIMEOUT_MS,
+    )
+    with pytest.raises(ConnectError):
+        health.get_version(health_service_pb2.GetVersionRequest())
+    assert server.recorder.calls == 1, "the Retry-After date was ignored"
+
+
+_NOW = datetime(2026, 10, 2, 12, 0, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize(
+    ("value", "want"),
+    [
+        ("120", 120.0),
+        ("0", 0.0),
+        ("-5", None),
+        ("Fri, 02 Oct 2026 12:01:30 GMT", 90.0),
+        ("Friday, 02-Oct-26 12:01:30 GMT", 90.0),
+        ("Fri, 02 Oct 2026 11:00:00 GMT", 0.0),
+        ("soon", None),
+        ("", None),
+    ],
+)
+def test_parse_retry_after(value: str, want: float | None) -> None:
+    assert parse_retry_after(value, _NOW) == want
+
+
+@pytest.mark.parametrize(
+    ("call", "code", "want_calls"),
+    [
+        ("get_version", Code.INTERNAL, 2),
+        ("get_version", Code.UNAVAILABLE, 1),
+        ("login", Code.INTERNAL, 2),
+    ],
+)
+def test_retryable_replaces_the_classifier(server, call: str, code: Code, want_calls: int) -> None:  # type: ignore[no-untyped-def]
+    server.recorder.failures = 1
+    server.recorder.fail_code = code
+    retry = Retry(
+        attempts=3, base_delay=0.001, max_delay=0.001, retryable=lambda e: e.code == Code.INTERNAL
+    )
+    client = Client(server.url, retry=retry)
+    with contextlib.suppress(ConnectError):
+        if call == "get_version":
+            _health(client).get_version(health_service_pb2.GetVersionRequest())
+        else:
+            _auth(client).login(auth_service_pb2.LoginRequest())
+    assert server.recorder.calls == want_calls
+
+
+def test_the_classifier_cannot_retry_an_unkeyed_mutating_call(server) -> None:  # type: ignore[no-untyped-def]
+    server.recorder.failures = 1
+    retry = Retry(attempts=3, base_delay=0.001, max_delay=0.001, retryable=lambda e: True)
+    with no_idempotency_key(), pytest.raises(ConnectError):
+        _auth(Client(server.url, retry=retry)).login(auth_service_pb2.LoginRequest())
+    assert server.recorder.calls == 1
+
+
+def test_default_retryable() -> None:
+    assert default_retryable(ConnectError(Code.UNAVAILABLE, "x"))
+    assert default_retryable(ConnectError(Code.RESOURCE_EXHAUSTED, "x"))
+    assert not default_retryable(ConnectError(Code.INTERNAL, "x"))
