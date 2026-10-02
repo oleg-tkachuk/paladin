@@ -213,8 +213,6 @@ func TestIndexUsage_ObjectSearch(t *testing.T) {
 		what, pred, index string
 		arg               any
 	}{
-		// The status filter reads state from the keyset index (030).
-		{"state page", ` AND o.state = $3::object_state`, "idx_objects_keyset_state", "AVAILABLE"},
 		{"tag equality", ` AND o.tags @> $3`, "idx_objects_tags_gin", `{"env":"prod"}`},
 		{"metadata equality", ` AND o.metadata @> $3`, "idx_objects_metadata_gin", `{"owner":"team7"}`},
 		{"key substring", ` AND o.path LIKE '%' || $3 || '%'`, "idx_objects_path_trgm", `report\_1234`},
@@ -223,6 +221,34 @@ func TestIndexUsage_ObjectSearch(t *testing.T) {
 		assertPlanUses(t, plan, tc.index, tc.what)
 		assertPlanAvoidsSeqScan(t, plan, "objects", tc.what)
 	}
+}
+
+// A status-filtered page reads state from the keyset index (030), without
+// touching the heap. Seeded across many Collections for the reason
+// TestIndexUsage_ObjectsKeysetPagination gives: with the whole tenant in one
+// Collection the tenant's own (tenant_id, id) index is just as good, and the
+// test would prove nothing.
+func TestIndexUsage_ObjectsStatePage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	f := seedFixture(t, ctx, pool)
+	keys := seedCollections(t, ctx, pool, f, 20)
+	for _, k := range keys {
+		seedObjectsUnder(t, ctx, pool, f, k, 500, "AVAILABLE")
+	}
+	mustExec(t, ctx, pool, "VACUUM ANALYZE objects")
+
+	var probe uuid.UUID
+	if err := pool.QueryRow(ctx,
+		`SELECT id FROM collections WHERE tenant_id = $1 AND name = $2`,
+		f.tenantID, keys[0]).Scan(&probe); err != nil {
+		t.Fatalf("resolve probe collection: %v", err)
+	}
+	plan := explain(t, ctx, pool, `SELECT o.id FROM public.objects o
+		WHERE o.tenant_id = $1 AND o.collection_id = $2 AND o.state = $3::object_state
+		ORDER BY o.id LIMIT 100`, f.tenantID, probe, "AVAILABLE")
+	assertPlanUses(t, plan, "Index Only Scan using idx_objects_keyset_state", "status-filtered page")
 }
 
 func must[T any](v T, err error) T {
