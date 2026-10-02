@@ -175,10 +175,28 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: backend/go.mod
-          cache-dependency-path: |
-            backend/go.sum
-            capability/go.sum
-            sdk/go/go.sum
+          # The cache below replaces setup-go's own. That one is keyed on
+          # go.sum alone and shared by every job, so whichever job finished
+          # first after a go.sum change wrote it, and nothing ever updated it:
+          # the backend compiled nearly from scratch on every run.
+          cache: false
+
+      # Per job, refreshed by every push to main (the key carries the commit),
+      # and restored by a pull request from the newest main entry. Only main
+      # writes, so a pull request cannot seed what main builds from.
+      - name: Restore the Go caches
+        id: go-cache
+        if: matrix.group == 'backend' || matrix.group == 'capability' || matrix.group == 'sdk' || matrix.group == 'repo'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.cache/golangci-lint
+          key: go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'capability/go.sum', 'sdk/go/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'capability/go.sum', 'sdk/go/go.sum') }}-
+            go-${{ runner.os }}-verify-${{ matrix.group }}-
 
       - name: Set up goimports
         if: matrix.group == 'backend' || matrix.group == 'sdk'
@@ -192,6 +210,8 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           install-only: true
+          # Its cache lives in the Go caches above.
+          skip-cache: true
 
       - name: Set up buf
         if: matrix.group == 'sdk' || matrix.group == 'frontend' || matrix.group == 'repo'
@@ -305,6 +325,18 @@ jobs:
           GROUP: ${{ matrix.group }}
         run: task --yes -t Taskfile.dev.yaml "verify-${GROUP}"
 
+      - name: Save the Go caches
+        if: >-
+          success() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          (matrix.group == 'backend' || matrix.group == 'capability' || matrix.group == 'sdk' || matrix.group == 'repo')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.cache/golangci-lint
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
+
   # The Playwright suite against a stack built from this change, through the
   # same task a developer runs: `verify-e2e` builds both images, boots the
   # compose stack and names any test that passed only on its retry. Only for a
@@ -408,10 +440,20 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: backend/go.mod
-          cache-dependency-path: |
-            backend/go.sum
-            capability/go.sum
-            sdk/go/go.sum
+          cache: false # per-job caches below, as in the Verify jobs
+
+      - name: Restore the Go caches
+        id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.cache/golangci-lint
+          key: go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'capability/go.sum', 'sdk/go/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'capability/go.sum', 'sdk/go/go.sum') }}-
+            go-${{ runner.os }}-deep-${{ matrix.half }}-
 
       - name: Set up Task
         uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
@@ -442,6 +484,16 @@ jobs:
         env:
           HALF: ${{ matrix.half }}
         run: task --yes -t Taskfile.dev.yaml "verify-deep:${HALF}"
+
+      - name: Save the Go caches
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.cache/golangci-lint
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
   # Two jobs over the same files, and the halves do not overlap. actionlint
   # covers whether a workflow is correct at all — schema, expression syntax,
