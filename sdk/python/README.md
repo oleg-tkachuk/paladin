@@ -203,7 +203,7 @@ p = paladin.connect(endpoints, token_source=session, tls=identity,
 | `TLS(*, ca_file=None, cert_file=None, key_file=None, reload_interval=30.0)` | `ca_file` is the only trust when given; without it the system roots. `cert_file` and `key_file` are both or neither (`ValueError`). The files are checked for a change at most every `reload_interval` seconds (`DEFAULT_TLS_RELOAD_INTERVAL`); a rotation caught half-written keeps the last good files. |
 | `connect(…, tls=t)`, `connect_async(…, tls=t)` | The connections to Paladin. `tls` builds the `http_client`; giving both is a `ValueError`. |
 | `Transfer(tls=t)` | The connections to storage. Not with `transport=`. |
-| `t.sync_transport(**settings)`, `t.async_transport(**settings)` | The `pyqwest` transports these build, for a client of your own; `settings` reach each `pyqwest` transport built. |
+| `t.sync_transport(**settings)`, `t.async_transport(**settings)` | The rotating `pyqwest` transports these build, for a client of your own — the Go SDK's `TLS.RoundTripper()`; `settings` reach each `pyqwest` transport built. To wrap one (a circuit breaker, metrics), keep the SDK's header relay outermost: `Client.http_client(transport=wrap(t.sync_transport()))`. |
 
 **Not in the Python SDK: a check of the server's SPIFFE ID.** The Go SDK's
 `TLS.ServerID` verifies the server by a URI SAN instead of its host name. The
