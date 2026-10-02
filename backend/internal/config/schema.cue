@@ -151,6 +151,20 @@ datastores: {
       statement: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
     }
     healthcheck_period: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+    // Optional read replica for listing / counting / searching objects.
+    // Off by default; when off no replica pool is opened. Must be a
+    // physical standby (or a managed reader endpoint over one). Empty dsn
+    // derives the CloudNativePG `<cluster>-ro` service from `dsn`'s
+    // `<cluster>-rw` host. Password defaults to the primary's. Reads fall back to the primary while the
+    // replica is unreachable or more than max_lag behind ("0s" = no bound).
+    replica: {
+      enabled:          bool | *false
+      dsn:              string | *""
+      password:         string | *""
+      password_secret?: #SecretRef
+      max_lag:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"2s"
+      lag_check_period: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
+    }
   }
 }
 

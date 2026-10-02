@@ -148,8 +148,14 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		return nil, fmt.Errorf("app: s3 backend registry: %w", err)
 	}
 
+	// Listing, counting and searching objects read through db.Reads: the
+	// replica when one is enabled and in sync, the primary otherwise.
+	objectRepo := adapters.NewObjectRepo(db.Queries, pool)
+	if db.Reads != nil {
+		objectRepo.WithReads(db.Reads)
+	}
 	repos := wire.Repos{
-		Object:     adapters.NewObjectRepo(db.Queries, pool),
+		Object:     objectRepo,
 		Collection: adapters.NewCollectionRepo(db.Queries, pool),
 		Tenant:     adapters.NewTenantRepo(db.Queries, pool),
 		ObjectTag:  adapters.NewObjectTagRepo(db.Queries),
@@ -192,6 +198,11 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		cancelWatchers()
 		return nil, fmt.Errorf("app: policy engine start: %w", err)
 	}
+	// The replica's lag probe: switches reads between it and the primary.
+	// Returns at once when no replica is enabled. On watchCtx for the same
+	// reason as the Cedar watcher — StopWatchers ends it before the pools
+	// close, so an in-flight probe never holds a connection past Close.
+	go db.Reads.Run(watchCtx)
 
 	deps := &SharedDeps{
 		Cfg:       cfg,

@@ -398,14 +398,25 @@ type Querier interface {
 	// Newest first. Cursor: (created_at, id).
 	ListObjectVersions(ctx context.Context, objectID pgtype.UUID, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListObjectVersionsRow, error)
 	// The full CEL filter is still applied by the caller post-load; the
-	// `state` / `prefix` / `substr` nargs are PUSHDOWN narrowing hints
-	// extracted from that CEL (cel.ExtractObjectPushdown) so the DB drops
-	// non-matching rows before they cross the wire instead of fetching the
-	// whole namespace and filtering in Go. The post-load CEL pass stays
-	// authoritative, so over-fetching (a hint that's absent) only costs
-	// throughput, never correctness. `substr` is escaped for LIKE by the
-	// adapter. Keyset page uses id (UUIDv7) which is monotonic-by-time.
-	ListObjects(ctx context.Context, tenantID pgtype.UUID, name string, state *ObjectState, prefix *string, substr *string, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
+	// nargs below are PUSHDOWN narrowing hints extracted from that CEL
+	// (cel.ExtractObjectPushdown) so the DB drops non-matching rows before
+	// they cross the wire instead of fetching the whole namespace and
+	// filtering in Go. The post-load CEL pass stays authoritative, so
+	// over-fetching (a hint that's absent) only costs throughput, never
+	// correctness. `prefix`, `substr` and `content_type_prefix` arrive
+	// LIKE-escaped by the adapter (backslash, Postgres' default escape).
+	//
+	// Two steps in one statement. search_object_ids (029) picks the page's ids
+	// with the trigram and GIN indexes (026–028), which RLS would otherwise keep
+	// out of the plan; this query then reads those rows under the caller's RLS,
+	// which still decides what is returned. The page is the function's LIMIT;
+	// keyset on id (UUIDv7, monotonic-by-time).
+	//
+	// No join to collections: the name is the argument, and joining cost a
+	// collections scan per returned row (the planner cannot size the id array).
+	// The collection is resolved once, by its unique (tenant_id, name), and
+	// still checked against every row.
+	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *ObjectState, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
 	// Oldest first. The cursor compares `>`, so paging walks forward in time.
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
 	// Newest first, for a caller showing current activity. A separate query

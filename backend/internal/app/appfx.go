@@ -82,13 +82,21 @@ func ProvideOTel(cfg config.Config, l *zap.Logger) (observability.ShutdownFunc, 
 	return sh, h
 }
 
-// ProvideDB opens + pings the RLS-scoped pool. *App.Shutdown closes it.
+// ProvideDB opens + pings the RLS-scoped pool, and the read-replica pool when
+// one is enabled. *App.Shutdown closes both.
 func ProvideDB(cfg config.Config, l *zap.Logger) (*postgres.DB, error) {
 	db, err := postgres.New(context.Background(), cfg.Datastores.Postgres, l.Named("postgres"), postgres.WithRLS())
 	if err != nil {
 		return nil, err
 	}
 	if err := db.Ping(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	// Opt-in read replica (datastores.postgres.replica.enabled). It is not
+	// pinged: reads use it only once BuildSharedDeps' lag probe has seen it
+	// in sync, so an unreachable replica never blocks boot.
+	if err := db.AttachReplica(context.Background(), cfg.Datastores.Postgres, postgres.WithRLS()); err != nil {
 		db.Close()
 		return nil, err
 	}

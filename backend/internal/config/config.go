@@ -172,6 +172,17 @@ func (c *Config) Validate() error {
 	if c.Datastores.Postgres.DSN == "" {
 		return fmt.Errorf("postgres DSN is required")
 	}
+	if r := c.Datastores.Postgres.Replica; r.Enabled {
+		if _, err := c.Datastores.Postgres.ReplicaDSN(); err != nil {
+			return fmt.Errorf("postgres: %w", err)
+		}
+		if r.LagCheckPeriod <= 0 {
+			return fmt.Errorf("postgres: replica.lag_check_period must be positive")
+		}
+		if r.MaxLag < 0 {
+			return fmt.Errorf("postgres: replica.max_lag must not be negative")
+		}
+	}
 
 	if c.App.Name == "" {
 		return fmt.Errorf("app name is required")
@@ -191,6 +202,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Datastores.Postgres.ReaperPassword != "" && c.Datastores.Postgres.ReaperPasswordSecret != nil {
 		return fmt.Errorf("postgres: cannot specify both reaper_password and reaper_password_secret")
+	}
+	if r := c.Datastores.Postgres.Replica; r.Password != "" && r.PasswordSecret != nil {
+		return fmt.Errorf("postgres: cannot specify both replica.password and replica.password_secret")
 	}
 	if c.Auth.SigningKey != "" && c.Auth.SigningKeySecret != nil {
 		return fmt.Errorf("auth: cannot specify both signing_key and signing_key_secret")
