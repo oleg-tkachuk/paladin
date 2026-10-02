@@ -1614,17 +1614,6 @@ finding moving from "packages you import" to "your code is affected".
 Defects the review behind `backend/docs/diagrams.md` found and confirmed in
 the code. Not fixed in the documentation change that recorded them.
 
-### Hard delete removes the bytes before it re-checks the row
-
-- **Status:** Open — data loss on a race.
-- **Reason:** `LifecycleHardDeleter.deleteOne` deletes from S3, then runs the
-  version-gated DB delete. A `Restore` in between keeps the row `AVAILABLE`
-  with its bytes already gone; the comment above it says the opposite.
-- **Definition of Done:** the row is claimed (or re-checked under a lock)
-  before the S3 delete, with a test for the restore race, and the comment
-  corrected.
-- **Blockers:** none.
-
 ### The console spells update masks by hand
 
 - **Status:** Open — the server half is done.
