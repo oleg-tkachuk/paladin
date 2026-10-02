@@ -5,7 +5,7 @@
         obj = paladin.upload(p.data, parent=str(fake.collection()), …)
 
 It serves ObjectService (upload, complete, get, lookup, list, download,
-delete) and MultipartUploadService, with presigned URLs on its own storage;
+delete) and MultipartUploadService, ListParts included, with presigned URLs on its own storage;
 every other RPC answers Unimplemented, as a server that lacks it does. Like
 the server it records the checksum an upload completes with, so a download
 verifies what it reads, and it answers Range requests. It runs on the
@@ -314,6 +314,19 @@ class FakePaladin(ObjectServiceSync, MultipartUploadServiceSync):
             self._commit(o, bytes(body), "")
             del self._uploads[request.upload_id]
             return o.msg
+
+    def list_parts(self, request, ctx):  # type: ignore[no-untyped-def]
+        with self._lock:
+            up = self._uploads.get(request.upload_id)
+            if up is None:
+                raise ConnectError(Code.NOT_FOUND, f"upload {request.upload_id} not found")
+            return multipart_service_pb2.ListPartsResponse(
+                parts=[
+                    types_pb2.PartInfo(part_number=n, size_bytes=len(data), etag=_etag(data))
+                    for n, data in sorted(up.parts.items())
+                ],
+                page=pagination_pb2.PageResponse(),
+            )
 
     def abort_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
         with self._lock:

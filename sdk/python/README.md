@@ -340,6 +340,21 @@ on purpose:
 | Bulk downloads | `DownloadMany`, a callback per reader | `download_many` / `adownload_many`, an iterator of results | Each language's idiom. |
 | asyncio | — | An `a…` form of every workflow | Go has goroutines. |
 
+### Cookbook
+
+Runnable recipes in [`examples/`](examples); `tests/test_examples.py` runs each
+against `paladin.testing`:
+
+| Recipe | Shows |
+| --- | --- |
+| [`split_horizon.py`](examples/split_horizon.py) | URLs signed for a public storage host, sent in-cluster with the signed `Host`. |
+| [`mtls.py`](examples/mtls.py) | mTLS from a rotating workload identity, for the RPCs and storage. |
+| [`rotating_token.py`](examples/rotating_token.py) | A token read from the store operators rotate it in, on every call. |
+| [`bulk_ingestion.py`](examples/bulk_ingestion.py) | Many documents through `download_many` and `adownload_many`. |
+| [`resumable_multipart.py`](examples/resumable_multipart.py) | A multipart upload resumed from `list_parts` after a crash. |
+| [`streaming.py`](examples/streaming.py) | Upload from a file, download into a parser, verified at the end. |
+| [`migrating_from_connect_json.py`](examples/migrating_from_connect_json.py) | A hand-written Connect-JSON call and its SDK form. |
+
 ### Constants
 
 `HEADER_AUTHORIZATION`, `HEADER_API_TOKEN`, `HEADER_CAPABILITY` and
