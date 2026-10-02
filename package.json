@@ -5,6 +5,10 @@
   "devDependencies": {
     "semantic-release": "25.0.9",
     "@semantic-release/commit-analyzer": "13.0.1",
-    "conventional-changelog-conventionalcommits": "10.4.0"
+    "conventional-changelog-conventionalcommits": "10.4.0",
+    "@semantic-release/npm": "file:scripts/release/unused-npm-plugin"
+  },
+  "overrides": {
+    "@semantic-release/npm": "$@semantic-release/npm"
   }
 }
