@@ -230,6 +230,28 @@ except paladin.FailedPreconditionError as err:
     if err.reason == error_reason_pb2.ERROR_REASON_COLLECTION_NOT_EMPTY:
         ...  # empty it first
 ```
+### Resource names and object URIs
+
+The server's naming rules, as types (`paladin.names`): a name built here is
+one it accepts, and a name parsed here is one it would. Under a tenant a
+name takes the tenant's **id**, a UUID, not its slug; a collection may
+contain `/`; object and version ids are UUIDs. `InvalidNameError` (a
+`ValueError`) for anything else. `str(name)` prints it; `.parse` reads it.
+
+| Type | Form |
+| --- | --- |
+| `TenantName` | `tenants/{tenant}` — the id or the slug |
+| `CollectionName` | `tenants/{tenant-id}/collections/{collection}` |
+| `ObjectName` | `…/collections/{collection}/objects/{object-id}` |
+| `ObjectVersionName` | `…/objects/{object-id}/versions/{version-id}` |
+| `ObjectURI` | `paladin://tenants/{tenant-id}/collections/{collection}/keys/{key}` — an object by its key; the collection and the key are escaped path segments |
+
+`lookup_object(p.data, uri)` finds the object an `ObjectURI` (or its string)
+names, and `download_uri(p.data, uri, offset=0, length=0)` streams it.
+
+To create a bucket and bind collections to it at every boot, call
+`p.data.storage_bootstrap.ensure_tenant_storage`: it is idempotent on the
+server, and reports which collections it created and which already existed.
 
 ### Observability
 

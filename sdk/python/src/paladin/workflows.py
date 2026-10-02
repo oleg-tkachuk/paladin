@@ -20,6 +20,7 @@ from google.rpc import code_pb2
 from paladin.common.v1 import resource_pb2
 from paladin.data.v1 import multipart_service_pb2, object_service_pb2, types_pb2
 from paladin.facade import DataPlane
+from paladin.names import ObjectURI
 from paladin.transfer import (
     ObjectReader,
     Transfer,
@@ -406,3 +407,18 @@ def download(data: DataPlane, name: str, *, offset: int = 0, length: int = 0) ->
     """``download_stream`` read whole: the content, or the range, as bytes."""
     with download_stream(data, name, offset=offset, length=length) as reader:
         return reader.read()
+
+
+def lookup_object(data: DataPlane, uri: ObjectURI | str) -> types_pb2.Object:
+    """The object a ``paladin://`` URI names, found by its key."""
+    parsed = uri if isinstance(uri, ObjectURI) else ObjectURI.parse(uri)
+    return data.object.lookup_object(
+        object_service_pb2.LookupObjectRequest(parent=parsed.parent, key=parsed.key)
+    )
+
+
+def download_uri(
+    data: DataPlane, uri: ObjectURI | str, *, offset: int = 0, length: int = 0
+) -> ObjectReader:
+    """``download_stream`` for the object a ``paladin://`` URI names."""
+    return download_stream(data, lookup_object(data, uri).name, offset=offset, length=length)

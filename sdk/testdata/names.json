@@ -1,0 +1,149 @@
+{
+  "_comment": "Resource names and object URIs, parsed by both SDKs against the same cases. The rules are the server's (backend/internal/api/connectshim): a tenant name takes the id or the slug; every name under a tenant takes the id, a UUID; a collection may contain '/'; object and version ids are UUIDs.",
+  "tenant": [
+    {
+      "in": "tenants/acme",
+      "ok": true,
+      "tenant": "acme"
+    },
+    {
+      "in": "tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00",
+      "ok": true,
+      "tenant": "0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00"
+    },
+    {
+      "in": "tenants/",
+      "ok": false
+    },
+    {
+      "in": "tenants/a/b",
+      "ok": false
+    },
+    {
+      "in": "collections/x",
+      "ok": false
+    }
+  ],
+  "collection": [
+    {
+      "in": "tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/docs",
+      "ok": true,
+      "tenant": "0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00",
+      "collection": "docs"
+    },
+    {
+      "in": "tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/team/docs",
+      "ok": true,
+      "tenant": "0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00",
+      "collection": "team/docs"
+    },
+    {
+      "in": "tenants/0B6F7C1E-4F6A-4A39-9D55-3A8C2B7E1F00/collections/docs",
+      "ok": true,
+      "tenant": "0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00",
+      "collection": "docs",
+      "out": "tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/docs"
+    },
+    {
+      "in": "tenants/acme/collections/docs",
+      "ok": false
+    },
+    {
+      "in": "tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/",
+      "ok": false
+    },
+    {
+      "in": "tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00",
+      "ok": false
+    }
+  ],
+  "object": [
+    {
+      "in": "tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/docs/objects/7d1e2f3a-0b4c-4d5e-8f60-718293a4b5c6",
+      "ok": true,
+      "tenant": "0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00",
+      "collection": "docs",
+      "object": "7d1e2f3a-0b4c-4d5e-8f60-718293a4b5c6"
+    },
+    {
+      "in": "tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/a/objects/b/objects/7d1e2f3a-0b4c-4d5e-8f60-718293a4b5c6",
+      "ok": true,
+      "tenant": "0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00",
+      "collection": "a/objects/b",
+      "object": "7d1e2f3a-0b4c-4d5e-8f60-718293a4b5c6"
+    },
+    {
+      "in": "tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/docs/objects/report.pdf",
+      "ok": false
+    },
+    {
+      "in": "tenants/acme/collections/docs/objects/7d1e2f3a-0b4c-4d5e-8f60-718293a4b5c6",
+      "ok": false
+    },
+    {
+      "in": "tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/objects/7d1e2f3a-0b4c-4d5e-8f60-718293a4b5c6",
+      "ok": false
+    }
+  ],
+  "version": [
+    {
+      "in": "tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/docs/objects/7d1e2f3a-0b4c-4d5e-8f60-718293a4b5c6/versions/9e8d7c6b-5a49-4382-a170-6f5e4d3c2b1a",
+      "ok": true,
+      "tenant": "0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00",
+      "collection": "docs",
+      "object": "7d1e2f3a-0b4c-4d5e-8f60-718293a4b5c6",
+      "version": "9e8d7c6b-5a49-4382-a170-6f5e4d3c2b1a"
+    },
+    {
+      "in": "tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/docs/objects/7d1e2f3a-0b4c-4d5e-8f60-718293a4b5c6/versions/v1",
+      "ok": false
+    }
+  ],
+  "uri": [
+    {
+      "in": "paladin://tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/docs/keys/report.pdf",
+      "ok": true,
+      "tenant": "0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00",
+      "collection": "docs",
+      "key": "report.pdf"
+    },
+    {
+      "in": "paladin://tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/team%2Fdocs/keys/2026%2F10%2Fa%20b.pdf",
+      "ok": true,
+      "tenant": "0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00",
+      "collection": "team/docs",
+      "key": "2026/10/a b.pdf"
+    },
+    {
+      "in": "paladin://tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/docs/keys/a+b=c:d@e$f&g%21%28x%29",
+      "ok": true,
+      "tenant": "0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00",
+      "collection": "docs",
+      "key": "a+b=c:d@e$f&g!(x)"
+    },
+    {
+      "in": "paladin://tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/docs/keys/",
+      "ok": false
+    },
+    {
+      "in": "paladin://tenants/acme/collections/docs/keys/a",
+      "ok": false
+    },
+    {
+      "in": "paladin://tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/docs/keys/a/b",
+      "ok": false
+    },
+    {
+      "in": "s3://tenants/0b6f7c1e-4f6a-4a39-9d55-3a8c2b7e1f00/collections/docs/keys/a",
+      "ok": false
+    },
+    {
+      "in": "paladin://tenants",
+      "ok": false
+    },
+    {
+      "in": "paladin://docs/report.pdf",
+      "ok": false
+    }
+  ]
+}
