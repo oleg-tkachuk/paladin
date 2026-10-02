@@ -32,3 +32,24 @@ func (q *Queries) PurgeTerminalEventDeliveries(ctx context.Context, cutoff pgtyp
 	}
 	return result.RowsAffected(), nil
 }
+
+const requeueFailedEventDeliveries = `-- name: RequeueFailedEventDeliveries :execrows
+UPDATE event_deliveries
+SET status           = 'pending',
+    attempts         = 0,
+    next_attempt_at  = now(),
+    last_error       = NULL,
+    last_status_code = NULL
+WHERE subscription_id = $1
+  AND status = 'failed'
+`
+
+// Queues a subscription's failed rows again with a fresh attempt budget. Runs
+// under the caller's tenant (RLS), so only that tenant's rows can match.
+func (q *Queries) RequeueFailedEventDeliveries(ctx context.Context, subscriptionID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, requeueFailedEventDeliveries, subscriptionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

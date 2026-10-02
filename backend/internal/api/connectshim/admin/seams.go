@@ -90,6 +90,7 @@ type eventSubscriptionHandler interface {
 	Get(ctx context.Context, tenantID, id uuid.UUID) (*admindomain.EventSubscription, error)
 	List(ctx context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error)
 	TestSubscription(ctx context.Context, tenantID, id uuid.UUID) error
+	RedriveFailedDeliveries(ctx context.Context, tenantID, id uuid.UUID) (int64, error)
 	Update(ctx context.Context, tenantID uuid.UUID, s admindomain.EventSubscription, expectedVersion int64, mask []string) (*admindomain.EventSubscription, error)
 }
 

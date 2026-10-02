@@ -104,6 +104,8 @@ the same commit. Treat this file like a runtime invariant.
   - **Lifecycle writes** on Backend / Bucket / ObjectKey / Tenant
     (create/update/delete) — Tenant lifecycle is intentionally human-only
     (denylist); the others are gaps if agent-driven provisioning is wanted.
+  - **`RedriveFailedDeliveries`** — re-sends a subscription's failed events;
+    an operator's call like the other subscription writes.
 - **Definition of Done:** For each capability decided in-scope, add the tool
   in `registerReadTools`/`registerWriteTools`, append a `DefaultCatalog` row
   (the invariant test enforces this), and gate it into the right
@@ -1613,16 +1615,6 @@ finding moving from "packages you import" to "your code is affected".
 
 Defects the review behind `backend/docs/diagrams.md` found and confirmed in
 the code. Not fixed in the documentation change that recorded them.
-
-### A failed event delivery cannot be sent again
-
-- **Status:** Deferred.
-- **Reason:** a `failed` row — one that exhausted its attempts — stays failed
-  with no way to send it again short of an SQL update, until
-  `event_delivery_purger` removes it after `housekeeping.event_deliveries_ttl`.
-- **Definition of Done:** an admin RPC re-queues a subscription's failed rows,
-  with tests, and the console offers it on the subscription page.
-- **Blockers:** none.
 
 ### Cancelling a running operation does not stop its executor
 

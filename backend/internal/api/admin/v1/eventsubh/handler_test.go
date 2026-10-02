@@ -39,6 +39,11 @@ type fakeRepo struct {
 	stampedID uuid.UUID
 	listArgs  admindomain.ListEventSubscriptionsArgs
 	listCalls int
+	// requeued is what RequeueFailedDeliveries reports; requeueCalls counts
+	// the calls, so a refused redrive can be shown not to have reached it.
+	requeued     int64
+	requeueErr   error
+	requeueCalls int
 }
 
 func (f *fakeRepo) Create(_ context.Context, s *admindomain.EventSubscription) error {
@@ -63,6 +68,10 @@ func (f *fakeRepo) Update(context.Context, admindomain.EventSubscription, int64,
 	return f.updateErr
 }
 func (f *fakeRepo) Delete(context.Context, uuid.UUID, int64) error { return f.deleteErr }
+func (f *fakeRepo) RequeueFailedDeliveries(context.Context, uuid.UUID) (int64, error) {
+	f.requeueCalls++
+	return f.requeued, f.requeueErr
+}
 
 type okDispatcher struct{}
 
@@ -324,6 +333,71 @@ func TestTestSubscription_Success(t *testing.T) {
 	h.SetDispatcher(okDispatcher{})
 	if err := h.TestSubscription(ctxAs(caller, apiutil.RoleTenantAdmin), caller, id); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// ─── RedriveFailedDeliveries ─────────────────────────────────────────────────
+
+// actionRecorder allows everything and remembers the action it was asked.
+type actionRecorder struct{ action string }
+
+func (a *actionRecorder) IsAuthorized(_ context.Context, _ *cedar.Principal, action string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+	a.action = action
+	return cedar.DecisionAllow, nil
+}
+
+func redriveFixture(authz cedar.Authorizer, disabled bool) (*Handler, *fakeRepo, uuid.UUID, uuid.UUID) {
+	caller, id := uuid.New(), uuid.New()
+	repo := &fakeRepo{
+		sub:      admindomain.EventSubscription{SubscriptionID: id, TenantID: caller, Disabled: disabled},
+		requeued: 3,
+	}
+	return NewHandler(repo, authz), repo, caller, id
+}
+
+func TestRedriveFailedDeliveries(t *testing.T) {
+	const requeued = 3
+	cases := []struct {
+		name      string
+		authz     cedar.Authorizer
+		disabled  bool
+		wantCode  connect.Code
+		wantCalls int
+	}{
+		{"queues the failed deliveries", allowAuthorizer{}, false, 0, 1},
+		{"refused by policy", denyAuthorizer{}, false, connect.CodePermissionDenied, 0},
+		{"refused while the subscription is disabled", allowAuthorizer{}, true, connect.CodeFailedPrecondition, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, repo, caller, id := redriveFixture(tc.authz, tc.disabled)
+			n, err := h.RedriveFailedDeliveries(ctxAs(caller, apiutil.RoleTenantAdmin), caller, id)
+			if tc.wantCode != 0 {
+				if code(err) != tc.wantCode {
+					t.Fatalf("code = %v, want %v", code(err), tc.wantCode)
+				}
+			} else if err != nil {
+				t.Fatalf("redrive: %v", err)
+			} else if n != requeued {
+				t.Errorf("requeued = %d, want %d", n, requeued)
+			}
+			if repo.requeueCalls != tc.wantCalls {
+				t.Errorf("requeue calls = %d, want %d", repo.requeueCalls, tc.wantCalls)
+			}
+		})
+	}
+}
+
+// Redriving changes what the subscription delivers, so it takes the
+// permission that editing the subscription takes.
+func TestRedriveFailedDeliveries_AsksToManageTheSubscription(t *testing.T) {
+	rec := &actionRecorder{}
+	h, _, caller, id := redriveFixture(rec, false)
+	if _, err := h.RedriveFailedDeliveries(ctxAs(caller, apiutil.RoleTenantAdmin), caller, id); err != nil {
+		t.Fatalf("redrive: %v", err)
+	}
+	if rec.action != cedar.ActionManageSubscription {
+		t.Errorf("Cedar asked about %q, want %q", rec.action, cedar.ActionManageSubscription)
 	}
 }
 

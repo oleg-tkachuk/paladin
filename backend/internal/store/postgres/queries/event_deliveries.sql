@@ -10,3 +10,15 @@ WHERE ctid IN (
     ORDER BY d.last_attempt_at
     LIMIT sqlc.arg('batch_size')::int
 );
+
+-- name: RequeueFailedEventDeliveries :execrows
+-- Queues a subscription's failed rows again with a fresh attempt budget. Runs
+-- under the caller's tenant (RLS), so only that tenant's rows can match.
+UPDATE event_deliveries
+SET status           = 'pending',
+    attempts         = 0,
+    next_attempt_at  = now(),
+    last_error       = NULL,
+    last_status_code = NULL
+WHERE subscription_id = $1
+  AND status = 'failed';

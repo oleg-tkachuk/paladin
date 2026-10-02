@@ -104,7 +104,7 @@ what each field means, are documented in the `.proto` files under
 | `CapabilityService` | `Issue`, `Delegate`, `Revoke`, `List`, `GetUsage` |
 | `CELService` | `Validate` |
 | `CollectionService` | `CreateCollection`, `GetCollection`, `UpdateCollection`, `DeleteCollection`, `ListCollections`, `SetCollectionPolicy`, `BindCollectionToBucket` |
-| `EventSubscriptionService` | `CreateSubscription`, `GetSubscription`, `UpdateSubscription`, `DeleteSubscription`, `ListSubscriptions`, `TestSubscription` |
+| `EventSubscriptionService` | `CreateSubscription`, `GetSubscription`, `UpdateSubscription`, `DeleteSubscription`, `ListSubscriptions`, `TestSubscription`, `RedriveFailedDeliveries` |
 | `MCPInspectService` | `Inspect`, `ListSessions`, `GetBridgeStatus` |
 | `PlatformOperationService` | `GetOperation`, `ListOperations`, `CancelOperation` |
 | `PolicyService` | `Validate`, `SimulateAuthz`, `GetEffectivePolicy` |

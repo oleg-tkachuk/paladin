@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   update: vi.fn(),
   del: vi.fn(),
   test: vi.fn(),
+  redrive: vi.fn(),
   showNotification: vi.fn(),
 }));
 
@@ -24,6 +25,7 @@ vi.mock("@/lib/connect/client", () => ({
     updateSubscription: h.update,
     deleteSubscription: h.del,
     testSubscription: h.test,
+    redriveFailedDeliveries: h.redrive,
   },
 }));
 vi.mock("../tenant-context", () => ({
@@ -74,6 +76,7 @@ beforeEach(() => {
   h.update.mockReset();
   h.del.mockReset();
   h.test.mockReset();
+  h.redrive.mockReset();
   h.showNotification.mockReset();
 });
 
@@ -174,6 +177,62 @@ describe("EventsPage", () => {
         expect.objectContaining({ name: "sub-1" }),
       ),
     );
+  });
+
+  it.each([
+    [3n, "success", "Deliveries queued again"],
+    [0n, "info", "Nothing to redrive"],
+  ])(
+    "redrives failed deliveries from the row menu (%s queued)",
+    async (requeued, type, title) => {
+      h.list.mockResolvedValue({
+        subscriptions: [makeSub("sub-1", "https://hook.example.com/x")],
+      });
+      h.redrive.mockResolvedValue({ requeued });
+      render(<EventsPage />);
+      await userEvent.click(
+        await screen.findByText("Actions for subscription sub-1"),
+      );
+      await userEvent.click(screen.getByText("Redrive failed"));
+      await waitFor(() =>
+        expect(h.redrive).toHaveBeenCalledWith({ name: "sub-1" }),
+      );
+      expect(h.showNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ type, title }),
+      );
+    },
+  );
+
+  it("reports a refused redrive", async () => {
+    h.list.mockResolvedValue({
+      subscriptions: [makeSub("sub-1", "https://hook.example.com/x")],
+    });
+    h.redrive.mockRejectedValue(new Error("denied by policy"));
+    render(<EventsPage />);
+    await userEvent.click(
+      await screen.findByText("Actions for subscription sub-1"),
+    );
+    await userEvent.click(screen.getByText("Redrive failed"));
+    await waitFor(() =>
+      expect(h.showNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "error", title: "Redrive failed" }),
+      ),
+    );
+  });
+
+  // The dispatcher fails a disabled subscription's deliveries at once, and
+  // the server refuses the redrive, so the menu does not offer it.
+  it("does not offer a redrive on a disabled subscription", async () => {
+    h.list.mockResolvedValue({
+      subscriptions: [
+        { ...makeSub("sub-1", "https://hook.example.com/x"), disabled: true },
+      ],
+    });
+    render(<EventsPage />);
+    await userEvent.click(
+      await screen.findByText("Actions for subscription sub-1"),
+    );
+    expect(screen.queryByText("Redrive failed")).toBeNull();
   });
 
   it("toggles disabled from the row menu", async () => {

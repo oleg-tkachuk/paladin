@@ -601,6 +601,9 @@ type Querier interface {
 	// Undoes a claim whose handling failed, so the broker's redelivery is
 	// handled rather than skipped as a duplicate.
 	ReleaseIngestedEvent(ctx context.Context, source string, eventID string) error
+	// Queues a subscription's failed rows again with a fresh attempt budget. Runs
+	// under the caller's tenant (RLS), so only that tenant's rows can match.
+	RequeueFailedEventDeliveries(ctx context.Context, subscriptionID pgtype.UUID) (int64, error)
 	// ReschedulePendingPurge records a failed attempt and pushes the row out by
 	// the caller-computed backoff. Attempts is bumped here rather than in the
 	// worker so a crash between the storage call and this update cannot lose the

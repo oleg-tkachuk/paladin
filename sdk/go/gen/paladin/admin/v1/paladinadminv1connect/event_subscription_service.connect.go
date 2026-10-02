@@ -52,6 +52,9 @@ const (
 	// EventSubscriptionServiceTestSubscriptionProcedure is the fully-qualified name of the
 	// EventSubscriptionService's TestSubscription RPC.
 	EventSubscriptionServiceTestSubscriptionProcedure = "/paladin.admin.v1.EventSubscriptionService/TestSubscription"
+	// EventSubscriptionServiceRedriveFailedDeliveriesProcedure is the fully-qualified name of the
+	// EventSubscriptionService's RedriveFailedDeliveries RPC.
+	EventSubscriptionServiceRedriveFailedDeliveriesProcedure = "/paladin.admin.v1.EventSubscriptionService/RedriveFailedDeliveries"
 )
 
 // EventSubscriptionServiceClient is a client for the paladin.admin.v1.EventSubscriptionService
@@ -76,6 +79,12 @@ type EventSubscriptionServiceClient interface {
 	ListSubscriptions(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error)
 	// TestSubscription delivers a synthetic event to the configured sink.
 	TestSubscription(context.Context, *connect.Request[v1.TestSubscriptionRequest]) (*connect.Response[v1.TestSubscriptionResponse], error)
+	// RedriveFailedDeliveries queues the subscription's failed deliveries —
+	// those that exhausted their attempts — to be sent again, with a fresh
+	// attempt budget. Failed rows are kept until the event-delivery retention
+	// removes them. A disabled subscription is refused: its deliveries would
+	// fail again at once.
+	RedriveFailedDeliveries(context.Context, *connect.Request[v1.RedriveFailedDeliveriesRequest]) (*connect.Response[v1.RedriveFailedDeliveriesResponse], error)
 }
 
 // NewEventSubscriptionServiceClient constructs a client for the
@@ -129,17 +138,25 @@ func NewEventSubscriptionServiceClient(httpClient connect.HTTPClient, baseURL st
 			connect.WithSchema(eventSubscriptionServiceMethods.ByName("TestSubscription")),
 			connect.WithClientOptions(opts...),
 		),
+		redriveFailedDeliveries: connect.NewClient[v1.RedriveFailedDeliveriesRequest, v1.RedriveFailedDeliveriesResponse](
+			httpClient,
+			baseURL+EventSubscriptionServiceRedriveFailedDeliveriesProcedure,
+			connect.WithSchema(eventSubscriptionServiceMethods.ByName("RedriveFailedDeliveries")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // eventSubscriptionServiceClient implements EventSubscriptionServiceClient.
 type eventSubscriptionServiceClient struct {
-	createSubscription *connect.Client[v1.CreateSubscriptionRequest, v1.EventSubscription]
-	getSubscription    *connect.Client[v1.GetSubscriptionRequest, v1.EventSubscription]
-	updateSubscription *connect.Client[v1.UpdateSubscriptionRequest, v1.EventSubscription]
-	deleteSubscription *connect.Client[v1.DeleteSubscriptionRequest, v1.DeleteSubscriptionResponse]
-	listSubscriptions  *connect.Client[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse]
-	testSubscription   *connect.Client[v1.TestSubscriptionRequest, v1.TestSubscriptionResponse]
+	createSubscription      *connect.Client[v1.CreateSubscriptionRequest, v1.EventSubscription]
+	getSubscription         *connect.Client[v1.GetSubscriptionRequest, v1.EventSubscription]
+	updateSubscription      *connect.Client[v1.UpdateSubscriptionRequest, v1.EventSubscription]
+	deleteSubscription      *connect.Client[v1.DeleteSubscriptionRequest, v1.DeleteSubscriptionResponse]
+	listSubscriptions       *connect.Client[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse]
+	testSubscription        *connect.Client[v1.TestSubscriptionRequest, v1.TestSubscriptionResponse]
+	redriveFailedDeliveries *connect.Client[v1.RedriveFailedDeliveriesRequest, v1.RedriveFailedDeliveriesResponse]
 }
 
 // CreateSubscription calls paladin.admin.v1.EventSubscriptionService.CreateSubscription.
@@ -172,6 +189,11 @@ func (c *eventSubscriptionServiceClient) TestSubscription(ctx context.Context, r
 	return c.testSubscription.CallUnary(ctx, req)
 }
 
+// RedriveFailedDeliveries calls paladin.admin.v1.EventSubscriptionService.RedriveFailedDeliveries.
+func (c *eventSubscriptionServiceClient) RedriveFailedDeliveries(ctx context.Context, req *connect.Request[v1.RedriveFailedDeliveriesRequest]) (*connect.Response[v1.RedriveFailedDeliveriesResponse], error) {
+	return c.redriveFailedDeliveries.CallUnary(ctx, req)
+}
+
 // EventSubscriptionServiceHandler is an implementation of the
 // paladin.admin.v1.EventSubscriptionService service.
 type EventSubscriptionServiceHandler interface {
@@ -194,6 +216,12 @@ type EventSubscriptionServiceHandler interface {
 	ListSubscriptions(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error)
 	// TestSubscription delivers a synthetic event to the configured sink.
 	TestSubscription(context.Context, *connect.Request[v1.TestSubscriptionRequest]) (*connect.Response[v1.TestSubscriptionResponse], error)
+	// RedriveFailedDeliveries queues the subscription's failed deliveries —
+	// those that exhausted their attempts — to be sent again, with a fresh
+	// attempt budget. Failed rows are kept until the event-delivery retention
+	// removes them. A disabled subscription is refused: its deliveries would
+	// fail again at once.
+	RedriveFailedDeliveries(context.Context, *connect.Request[v1.RedriveFailedDeliveriesRequest]) (*connect.Response[v1.RedriveFailedDeliveriesResponse], error)
 }
 
 // NewEventSubscriptionServiceHandler builds an HTTP handler from the service implementation. It
@@ -243,6 +271,13 @@ func NewEventSubscriptionServiceHandler(svc EventSubscriptionServiceHandler, opt
 		connect.WithSchema(eventSubscriptionServiceMethods.ByName("TestSubscription")),
 		connect.WithHandlerOptions(opts...),
 	)
+	eventSubscriptionServiceRedriveFailedDeliveriesHandler := connect.NewUnaryHandler(
+		EventSubscriptionServiceRedriveFailedDeliveriesProcedure,
+		svc.RedriveFailedDeliveries,
+		connect.WithSchema(eventSubscriptionServiceMethods.ByName("RedriveFailedDeliveries")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.EventSubscriptionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EventSubscriptionServiceCreateSubscriptionProcedure:
@@ -257,6 +292,8 @@ func NewEventSubscriptionServiceHandler(svc EventSubscriptionServiceHandler, opt
 			eventSubscriptionServiceListSubscriptionsHandler.ServeHTTP(w, r)
 		case EventSubscriptionServiceTestSubscriptionProcedure:
 			eventSubscriptionServiceTestSubscriptionHandler.ServeHTTP(w, r)
+		case EventSubscriptionServiceRedriveFailedDeliveriesProcedure:
+			eventSubscriptionServiceRedriveFailedDeliveriesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -288,4 +325,8 @@ func (UnimplementedEventSubscriptionServiceHandler) ListSubscriptions(context.Co
 
 func (UnimplementedEventSubscriptionServiceHandler) TestSubscription(context.Context, *connect.Request[v1.TestSubscriptionRequest]) (*connect.Response[v1.TestSubscriptionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.EventSubscriptionService.TestSubscription is not implemented"))
+}
+
+func (UnimplementedEventSubscriptionServiceHandler) RedriveFailedDeliveries(context.Context, *connect.Request[v1.RedriveFailedDeliveriesRequest]) (*connect.Response[v1.RedriveFailedDeliveriesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.EventSubscriptionService.RedriveFailedDeliveries is not implemented"))
 }
