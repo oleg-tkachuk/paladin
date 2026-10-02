@@ -90,12 +90,12 @@ stack_export_urls
 # reason.
 stack_pull_thirdparty "$root/frontend/tests/e2e/docker-compose.test.yaml"
 
-stack_use_built_image "$STACK_CORE_TAG_VAR" "$STACK_CORE_INFO" "${PALADIN_IMAGE_PREFIX}/paladin-core" || exit 1
-stack_use_built_image "$STACK_CONSOLE_TAG_VAR" "$STACK_CONSOLE_INFO" "${PALADIN_IMAGE_PREFIX}/paladin-console" || exit 1
+stack_use_built_image "$STACK_CORE_TAG_VAR" "$STACK_CORE_INFO" "${PALADIN_IMAGE_PREFIX}/${STACK_CORE_IMAGE}" || exit 1
+stack_use_built_image "$STACK_CONSOLE_TAG_VAR" "$STACK_CONSOLE_INFO" "${PALADIN_IMAGE_PREFIX}/${STACK_CONSOLE_IMAGE}" || exit 1
 
 echo ">>> [e2e] images under test"
-for image in "${PALADIN_IMAGE_PREFIX}/paladin-core:${PALADIN_CORE_TAG}" \
-    "${PALADIN_IMAGE_PREFIX}/paladin-console:${PALADIN_CONSOLE_TAG}"; do
+for image in "${PALADIN_IMAGE_PREFIX}/${STACK_CORE_IMAGE}:${PALADIN_CORE_TAG}" \
+    "${PALADIN_IMAGE_PREFIX}/${STACK_CONSOLE_IMAGE}:${PALADIN_CONSOLE_TAG}"; do
     # Printed, not merely built, because "which image did this run actually
     # test" is the question every stale-image incident here turned on. The
     # revision label is stamped from the build's git commit.

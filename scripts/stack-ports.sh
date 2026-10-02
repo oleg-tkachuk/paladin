@@ -202,6 +202,10 @@ readonly STACK_CONSOLE_TAG_VAR=PALADIN_CONSOLE_TAG
 readonly STACK_CORE_INFO=backend/deploy/info.env
 readonly STACK_CONSOLE_INFO=frontend/deploy/info.env
 readonly STACK_VERSION_KEY=APP_VERSION
+# The images the stack runs, under ${PALADIN_IMAGE_PREFIX}. The component
+# Taskfiles' PROJECT_NAME builds them under these names.
+readonly STACK_CORE_IMAGE=paladin-core
+readonly STACK_CONSOLE_IMAGE=paladin-console
 
 # stack_built_version <info.env> — the version the last image build stamped.
 stack_built_version() {

@@ -96,7 +96,18 @@ done
 # image that was only ever built here.
 prefix_var=$(bash -c "source '$lib'; echo \$STACK_IMAGE_PREFIX_VAR")
 prefix_default=$(bash -c "source '$lib'; echo \$STACK_DEFAULT_IMAGE_PREFIX")
-for image in paladin-core paladin-console; do
+# The image names the scripts use are the ones the component builds produce.
+images=$(bash -c "source '$lib'; echo \$STACK_CORE_IMAGE \$STACK_CONSOLE_IMAGE")
+read -r core_image console_image <<<"$images"
+for pair in "backend:$core_image" "frontend:$console_image"; do
+    component=${pair%%:*} image=${pair#*:}
+    built=$(yq -r '.vars.PROJECT_NAME' "$root/$component/Taskfile.yaml")
+    if [ "$built" != "$image" ]; then
+        echo "!!! the stack runs $image, $component/Taskfile.yaml builds $built" >&2
+        exit 1
+    fi
+done
+for image in $images; do
     if ! grep -q "image: \${${prefix_var}:-${prefix_default}}/${image}:" "$compose"; then
         echo "!!! $compose does not run $image from \${${prefix_var}:-${prefix_default}}" >&2
         exit 1
