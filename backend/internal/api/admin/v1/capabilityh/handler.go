@@ -192,10 +192,7 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 	}
 
 	_ = caller // reserved for future audit row attribution
-	return connect.NewResponse(&adminv1.CapabilityServiceIssueResponse{
-		Capability: capabilityToProto(cap),
-		Token:      token,
-	}), nil
+	return h.issued(cap, token)
 }
 
 // Delegate narrows a parent capability. Two authentication paths are
@@ -293,10 +290,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 		}
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	return connect.NewResponse(&adminv1.CapabilityServiceIssueResponse{
-		Capability: capabilityToProto(cap),
-		Token:      token,
-	}), nil
+	return h.issued(cap, token)
 }
 
 // Revoke adds the capability ID to the revocation list. Idempotent for a
@@ -478,6 +472,20 @@ func protoToPrincipalKind(k adminv1.PrincipalKind) capability.PrincipalType {
 	default:
 		return ""
 	}
+}
+
+// issued answers Issue and Delegate: the capability, its JWT, and the same
+// capability as a Biscuit its holder can narrow offline.
+func (h *Handler) issued(cap *capability.Capability, token string) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
+	bisc, err := h.issuer.Biscuit(cap)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&adminv1.CapabilityServiceIssueResponse{
+		Capability: capabilityToProto(cap),
+		Token:      token,
+		Biscuit:    bisc,
+	}), nil
 }
 
 func protoToCaveats(c *adminv1.CapabilityCaveats) (capability.Caveats, error) {

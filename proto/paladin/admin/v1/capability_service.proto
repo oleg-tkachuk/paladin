@@ -153,6 +153,12 @@ message CapabilityServiceIssueResponse {
   Capability capability = 1;
   // Compact JWT — return to the caller exactly once; never persisted.
   string token = 2 [debug_redact = true];
+  // biscuit is the same capability as a Biscuit v3 token, which its holder
+  // can narrow offline — fewer operations, resources or planes, an earlier
+  // expiry, a key binding — with no call to the issuer. Present it like
+  // token. Empty when the server does not issue Biscuits. Returned once,
+  // never persisted.
+  string biscuit = 3 [debug_redact = true];
 }
 
 message CapabilityServiceDelegateRequest {

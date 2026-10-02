@@ -145,6 +145,9 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Revocations:    cache,
 		TrustedIssuers: trusted,
 		Leeway:         cfg.VerifierLeeway,
+		// Every capability is also handed out as a Biscuit its holder can
+		// narrow offline (CapabilityService.Issue), so every plane takes one.
+		AcceptBiscuit: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability verifier: %w", err)

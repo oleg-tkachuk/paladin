@@ -198,6 +198,40 @@ replay cache is in-process: behind several replicas, a proof replayed to a
 different one inside the window is not caught — share a `ReplayCache` to
 close that.
 
+## Narrow offline (Biscuit)
+
+`Delegate` narrows a capability, but it needs the issuer. The Biscuit form
+of the same capability (Biscuit v3) can be narrowed by whoever holds it, with
+no key and no network, and a narrowing can never be undone:
+
+```go
+full, _ := issuer.Biscuit(cap) // same ID, caveats and expiry as cap
+
+// An agent, offline, hands a worker a smaller token:
+worker, _ := capability.Attenuate(full, capability.Attenuation{
+    Ops:              []capability.Op{capability.OpGet},
+    ResourcePrefixes: []string{"corpus/public/"},
+    ExpiresAt:        time.Now().Add(10 * time.Minute),
+})
+
+// A verifier built with AcceptBiscuit: true returns the narrowed Capability.
+c, err := verifier.Verify(ctx, worker, capability.AudiencePlaneData)
+```
+
+An attenuation block may restrict operations, resources, planes, the expiry,
+and (on an unbound token) bind a key. The verifier folds each block in
+through `Narrows`, so an attenuated token is checked exactly like a
+delegated one. A block that asks for more than the token has, or holds
+anything else (Datalog rules and checks included), makes the whole token
+invalid. Counters stay shared: an attenuated copy spends its capability's
+budget and request count, and revoking the capability revokes every copy.
+
+The Biscuit seals an ordinary signed token, so a KMS-held signing key works.
+That token carries the root of the Biscuit's signature chain, whose private
+half is discarded once the Biscuit is built. A sealed token presented on its
+own is refused, so it cannot be lifted out to shed an attenuation, and it
+cannot be re-wrapped in a fresh Biscuit.
+
 ## Charge against the budget
 
 ```go
@@ -330,6 +364,9 @@ the default posture.
   ceiling, leaves every counter *and* the ledger untouched.
 - **A bound token needs its key.** A key-bound capability is refused without
   a fresh DPoP proof from that key, and its children stay bound.
+- **Attenuation never widens.** An offline Biscuit block that asks for more
+  than its token has invalidates the token. Stripping a block or lifting out
+  the sealed token is refused.
 - **Delegation never widens.** A fuzz test (`FuzzNarrowsNeverWidens`) checks
   that whatever `Narrows` accepts reaches no resource the parent cannot.
 - **No hidden dependencies.** The resolved dependency graph contains no
@@ -357,6 +394,9 @@ Tokens are credentials that outlive the process that issued them: a format
 change invalidates capabilities agents are still holding, which no amount of
 "it's pre-1.0" makes acceptable. A golden fixture in `testdata/` fails CI on
 any drift.
+
+The Biscuit form is a second format, not a change to the first: JWTs verify
+exactly as before, and a verifier takes Biscuits only with `AcceptBiscuit`.
 
 **The Go API is pre-1.0 and may change.** Signatures, type names and struct
 fields can move between minor versions. Read the diff before bumping.

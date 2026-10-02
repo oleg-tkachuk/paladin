@@ -112,12 +112,14 @@ class CapabilityServiceIssueRequest(_message.Message):
     def __init__(self, subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., ttl_seconds: _Optional[int] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., confirmation_jkt: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceIssueResponse(_message.Message):
-    __slots__ = ("capability", "token")
+    __slots__ = ("capability", "token", "biscuit")
     CAPABILITY_FIELD_NUMBER: _ClassVar[int]
     TOKEN_FIELD_NUMBER: _ClassVar[int]
+    BISCUIT_FIELD_NUMBER: _ClassVar[int]
     capability: Capability
     token: str
-    def __init__(self, capability: _Optional[_Union[Capability, _Mapping]] = ..., token: _Optional[str] = ...) -> None: ...
+    biscuit: str
+    def __init__(self, capability: _Optional[_Union[Capability, _Mapping]] = ..., token: _Optional[str] = ..., biscuit: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceDelegateRequest(_message.Message):
     __slots__ = ("parent_id", "subject", "audience", "caveats", "ttl_seconds", "not_before", "confirmation_jkt")
