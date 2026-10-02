@@ -256,6 +256,7 @@ type dataPlane struct {
 	// described is what DownloadObject says of the object: size, checksum.
 	described *datav1.Object
 	noURL     bool
+	lookedUp  []string // parent|key of every LookupObject
 }
 
 func (d *dataPlane) signed(path string) *commonv1.PresignedUrl {
@@ -288,6 +289,13 @@ func (d *dataPlane) DownloadObject(_ context.Context, req *connect.Request[datav
 		resp.DownloadUrl = nil
 	}
 	return connect.NewResponse(resp), nil
+}
+
+func (d *dataPlane) LookupObject(_ context.Context, req *connect.Request[datav1.LookupObjectRequest]) (*connect.Response[datav1.Object], error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lookedUp = append(d.lookedUp, req.Msg.GetParent()+"|"+req.Msg.GetKey())
+	return connect.NewResponse(&datav1.Object{Name: req.Msg.GetParent() + "/objects/" + req.Msg.GetKey()}), nil
 }
 
 func (d *dataPlane) InitiateMultipartUpload(_ context.Context, req *connect.Request[datav1.InitiateMultipartUploadRequest]) (*connect.Response[datav1.InitiateMultipartUploadResponse], error) {

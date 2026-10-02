@@ -248,6 +248,29 @@ p, err := paladin.Connect(endpoints,
 	paladin.WithTransfer(transfer))
 ```
 
+### Resource names and object URIs
+
+The server's naming rules, as types: a name built here is one it accepts,
+and a name parsed here is one it would. Under a tenant a name takes the
+tenant's **id**, a UUID, not its slug; a collection may contain `/`; object
+and version ids are UUIDs. `ErrInvalidName` for anything else.
+
+| Type | Form |
+| --- | --- |
+| `TenantName`, `ParseTenantName` | `tenants/{tenant}` — the id or the slug |
+| `CollectionName`, `ParseCollectionName` | `tenants/{tenant-id}/collections/{collection}` |
+| `ObjectName`, `ParseObjectName` | `…/collections/{collection}/objects/{object-id}` |
+| `ObjectVersionName`, `ParseObjectVersionName` | `…/objects/{object-id}/versions/{version-id}` |
+| `ObjectURI`, `ParseObjectURI` | `paladin://tenants/{tenant-id}/collections/{collection}/keys/{key}` — an object by its key; the collection and the key are escaped path segments |
+
+`LookupObject(ctx, p.Data, uri)` finds the object an `ObjectURI` names, and
+`DownloadURI(ctx, p.Data, "paladin://…", opts)` downloads it. The URI extends
+the `paladin://` resource space the MCP bridge serves.
+
+To create a bucket and bind collections to it at every boot, call
+`p.Data.StorageBootstrap.EnsureTenantStorage`: it is idempotent on the
+server, and reports which collections it created and which already existed.
+
 ### Header names
 
 `HeaderAuthorization`, `HeaderAPIToken`, `HeaderCapability` and

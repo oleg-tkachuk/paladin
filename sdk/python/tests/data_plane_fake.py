@@ -64,6 +64,8 @@ class Fake(ObjectServiceSync, MultipartUploadServiceSync):
     # What download_object says of the object; None: its name alone.
     described: types_pb2.Object | None = None
     no_url: bool = False
+    # parent|key of every lookup_object
+    looked_up: list[str] = field(default_factory=list)
     # The origin presigned URLs are signed for; "" is base.
     signed_origin: str = ""
     lock: threading.Lock = field(default_factory=threading.Lock)
@@ -116,6 +118,13 @@ class Fake(ObjectServiceSync, MultipartUploadServiceSync):
         if self.no_url:
             resp.ClearField("download_url")
         return resp
+
+    def lookup_object(
+        self, request: object_service_pb2.LookupObjectRequest, ctx: RequestContext
+    ) -> types_pb2.Object:
+        with self.lock:
+            self.looked_up.append(f"{request.parent}|{request.key}")
+        return types_pb2.Object(name=f"{request.parent}/objects/{request.key}")
 
     def initiate_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
         return multipart_service_pb2.InitiateMultipartUploadResponse(
