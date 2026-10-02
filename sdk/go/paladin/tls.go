@@ -302,11 +302,12 @@ func (f *tlsFiles) closed(gen uint64) {
 	f.mu.Unlock()
 }
 
-// trackedConn is a TLS connection that tells its files when it closes. It
-// embeds *tls.Conn, so net/http still finds ConnectionState and negotiates
-// HTTP/2 over it.
+// trackedConn is the TCP connection under a TLS one, telling its files when
+// it closes. It sits below the *tls.Conn rather than around it: net/http hands
+// HTTP/2 only a connection that is a *tls.Conn itself, and closing the TLS
+// connection closes this one.
 type trackedConn struct {
-	*tls.Conn
+	net.Conn
 	files *tlsFiles
 	gen   uint64
 	once  sync.Once
@@ -353,13 +354,14 @@ func (f *tlsFiles) dial(ctx context.Context, network, addr string) (net.Conn, er
 	if err != nil {
 		return nil, err
 	}
-	conn := tls.Client(raw, cfg)
+	f.opened(gen)
+	tracked := &trackedConn{Conn: raw, files: f, gen: gen}
+	conn := tls.Client(tracked, cfg)
 	if err := conn.HandshakeContext(ctx); err != nil {
-		_ = raw.Close()
+		_ = tracked.Close()
 		return nil, err
 	}
-	f.opened(gen)
-	return &trackedConn{Conn: conn, files: f, gen: gen}, nil
+	return conn, nil
 }
 
 // authorize runs once go-spiffe has verified the server's SVID against the
