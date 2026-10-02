@@ -217,7 +217,10 @@ records.Revoke(ctx, capability.RevokeArgs{
 })
 ```
 
-Idempotent. Revoking a capability revokes everything delegated from it, with or
+Idempotent. Verifiers that cache revocation answers learn of it within the
+cache TTL, or at once if you call `CachedRevocationChecker.Clear` when a
+revocation is announced (Paladin listens on a Postgres channel for that).
+Revoking a capability revokes everything delegated from it, with or
 without the flag: `IsRevoked` answers for the whole chain. `CascadeChildren`
 also writes a revocation entry per descendant, so the audit trail names each
 capability that was stopped.
