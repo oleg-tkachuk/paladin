@@ -63,7 +63,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	batchH := wire.ProvideBatchHandler(repos, opH, polEngine)
 	presignH := wire.ProvidePresignHandler(repos, storage, polEngine, cfg)
 	mpH := wire.ProvideMultipartHandler(repos, storage, polEngine, deps.SM)
-	versionH := wire.ProvideVersionHandler(repos)
+	versionH := wire.ProvideVersionHandler(repos, polEngine)
 	lockH := wire.ProvideLockHandler(repos, polEngine)
 	quotaUpdater := adapters.NewQuotaRepoV2(deps.DB.Queries, deps.Pool)
 	objH.SetVersionHandler(versionH)

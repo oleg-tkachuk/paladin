@@ -35,7 +35,9 @@ func (r *versionListRepo) FindByName(_ context.Context, tenantID uuid.UUID, coll
 func versionListHandler(repo Repository, versions *fakeVersionRepo) (*VersionHandler, context.Context, uuid.UUID) {
 	tenantID := uuid.New()
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
-	return NewVersionHandler(repo, versions), ctx, tenantID
+	h := NewVersionHandler(repo, versions)
+	h.SetAuthorizer(allowAll{})
+	return h, ctx, tenantID
 }
 
 func TestListVersionsReturnsTheHistoryAndItsCursor(t *testing.T) {
@@ -97,6 +99,7 @@ func TestListVersionsRejectsMalformedInput(t *testing.T) {
 func TestListVersionsUnauthenticated(t *testing.T) {
 	versions := newFakeVersionRepo()
 	h := NewVersionHandler(&versionListRepo{}, versions)
+	h.SetAuthorizer(allowAll{})
 
 	_, _, err := h.ListVersions(context.Background(), ListVersionsInput{
 		Collection: "docs", ObjectID: uuid.NewString(),

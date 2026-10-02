@@ -1614,21 +1614,6 @@ finding moving from "packages you import" to "your code is affected".
 Defects the review behind `backend/docs/diagrams.md` found and confirmed in
 the code. Not fixed in the documentation change that recorded them.
 
-### Object version RPCs skip authorisation
-
-- **Status:** Open — security, highest priority here.
-- **Reason:** `ListObjectVersions`, `GetObjectVersion` and
-  `RestoreObjectVersion` reach `objecth.VersionHandler` with no Cedar check and
-  no capability-op check: `wire.ProvideVersionHandler` takes no authorizer and
-  `RestoreVersion` goes from `CallerContext` straight to
-  `SetCurrentVersionID`. RLS still confines a caller to its own tenant, but
-  within it a read-only capability or a scoped token can repoint an object's
-  current version.
-- **Definition of Done:** all three call the same authorisation as the object
-  RPCs (Cedar action, scope forbid, `AssertCapabilityOp`), with tests showing a
-  read-only principal refused.
-- **Blockers:** none.
-
 ### The console serves every role's health snapshot without a session
 
 - **Status:** Open — security.
