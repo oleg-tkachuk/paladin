@@ -62,6 +62,7 @@ Numbered, immutable once accepted, superseded rather than edited. See
 | [0017](adr/0017-single-identity-model-and-naming.md) | One identity model, one naming convention |
 | [0018](adr/0018-sdk-layers.md) | The SDKs as three layers over the generated clients |
 | [0019](adr/0019-object-search-and-read-replica.md) | Object search under RLS, and an opt-in read replica |
+| [0020](adr/0020-sdk-integration-grade.md) | The SDKs to integration grade |
 
 ## Runbooks
 
