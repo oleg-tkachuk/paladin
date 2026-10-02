@@ -401,7 +401,7 @@ type Querier interface {
 	ListObjectVersions(ctx context.Context, objectID pgtype.UUID, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListObjectVersionsRow, error)
 	// The full CEL filter is still applied by the caller post-load; the
 	// nargs below are PUSHDOWN narrowing hints extracted from that CEL
-	// (cel.ExtractObjectPushdown) so the DB drops non-matching rows before
+	// (cel.ExtractObjectBranches; one call per branch) so the DB drops non-matching rows before
 	// they cross the wire instead of fetching the whole namespace and
 	// filtering in Go. The post-load CEL pass stays authoritative, so
 	// over-fetching (a hint that's absent) only costs throughput, never

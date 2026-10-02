@@ -1,9 +1,11 @@
 package adapters
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -219,21 +221,8 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args objecth.ListObjectsAr
 		afterID = id
 	}
 
-	h := objectListHints(args.Filter)
-	var rows []sqlc.ListObjectsRow
-	err := r.read(ctx, func(q sqlc.Querier, _ sqlc.DBTX) error {
-		var err error
-		rows, err = q.ListObjects(ctx,
-			args.Collection,
-			pgUUID(args.TenantID),
-			h.state, h.prefix, h.substr,
-			h.contentType, h.contentTypePrefix,
-			h.tags, h.metadata,
-			pgUUID(afterID),
-			pageSize,
-		)
-		return err
-	})
+	rows, nextID, more, err := r.candidates(ctx, args.TenantID, args.Collection,
+		objectBranchHints(args.Filter), afterID, pageSize)
 	if err != nil {
 		return nil, "", fmt.Errorf("list objects: %w", err)
 	}
@@ -245,15 +234,14 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args objecth.ListObjectsAr
 		}
 		out = append(out, o)
 	}
-	// Page token advances by the last FETCHED row's id, NOT the last
+	// Page token advances by the last FETCHED candidate, NOT the last
 	// matching one. Deriving it from `out` truncated the listing when a
 	// full DB page was entirely CEL-filtered (len(out)==0 → empty token →
 	// caller stops, missing matches further on) and re-scanned the
-	// filtered rows on the next page. A full page (len(rows)==pageSize)
-	// means more may exist; a short page means the keyset is exhausted.
+	// filtered rows on the next page.
 	var next string
-	if len(rows) == int(pageSize) && len(rows) > 0 {
-		next = uuid.UUID(rows[len(rows)-1].Object.ID.Bytes).String()
+	if more {
+		next = nextID.String()
 	}
 	return out, next, nil
 }
@@ -283,7 +271,7 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 	// The same pushdown as ListObjects: the scan cap counts rows READ, so
 	// every row the query drops is headroom for one that might match, and a
 	// selective filter that used to stop at "10000+" is now counted exactly.
-	h := objectListHints(args.Filter)
+	branches := objectBranchHints(args.Filter)
 	const pageSize int32 = 500
 	var (
 		matched int64
@@ -291,25 +279,9 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 		afterID uuid.UUID
 	)
 	for {
-		var rows []sqlc.ListObjectsRow
-		err := r.read(ctx, func(q sqlc.Querier, _ sqlc.DBTX) error {
-			var err error
-			rows, err = q.ListObjects(ctx,
-				args.Collection,
-				pgUUID(args.TenantID),
-				h.state, h.prefix, h.substr,
-				h.contentType, h.contentTypePrefix,
-				h.tags, h.metadata,
-				pgUUID(afterID),
-				pageSize,
-			)
-			return err
-		})
+		rows, nextID, more, err := r.candidates(ctx, args.TenantID, args.Collection, branches, afterID, pageSize)
 		if err != nil {
 			return 0, false, fmt.Errorf("count objects scan: %w", err)
-		}
-		if len(rows) == 0 {
-			return matched, true, nil
 		}
 		for _, row := range rows {
 			o := objectFromSQLC(row.Object, row.CollectionName)
@@ -317,15 +289,89 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 				matched++
 			}
 			scanned++
-			afterID = o.ObjectID
 			if scanned >= countScanCap {
 				return matched, false, nil
 			}
 		}
-		if len(rows) < int(pageSize) {
+		if !more {
 			return matched, true, nil
 		}
+		afterID = nextID
 	}
+}
+
+// candidates returns one keyset page of objects that may match: those
+// after afterID, in id order, admitted by at least one branch.
+//
+// One branch is one query. Several — a filter with `||` or `in` — are one
+// query each, merged by mergeCandidatePages.
+//
+// more reports that rows may follow next; next is the cursor for them.
+func (r *ObjectRepo) candidates(
+	ctx context.Context, tenantID uuid.UUID, collection string,
+	branches []objectHints, afterID uuid.UUID, pageSize int32,
+) (rows []sqlc.ListObjectsRow, next uuid.UUID, more bool, err error) {
+	err = r.read(ctx, func(q sqlc.Querier, _ sqlc.DBTX) error {
+		rows, next, more = nil, uuid.UUID{}, false
+		pages := make([][]sqlc.ListObjectsRow, 0, len(branches))
+		for _, h := range branches {
+			page, err := q.ListObjects(ctx, collection, pgUUID(tenantID),
+				h.state, h.prefix, h.substr,
+				h.contentType, h.contentTypePrefix,
+				h.tags, h.metadata,
+				pgUUID(afterID), pageSize)
+			if err != nil {
+				return err
+			}
+			pages = append(pages, page)
+		}
+		rows, next, more = mergeCandidatePages(pages, int(pageSize))
+		return nil
+	})
+	return rows, next, more, err
+}
+
+// mergeCandidatePages merges per-branch keyset pages (each in id order, each
+// at most pageSize long) into one page: the union, in id order, cut to
+// pageSize.
+//
+// The cut is what keeps the walk from skipping rows. A branch that filled its
+// page may have more after its last id; but its pageSize rows are all in the
+// union, so the union's first pageSize ids never pass that last id, and
+// nothing that branch has not yet returned can sort before the cursor.
+// more is set when any branch filled its page or the union was cut.
+func mergeCandidatePages(pages [][]sqlc.ListObjectsRow, pageSize int) (rows []sqlc.ListObjectsRow, next uuid.UUID, more bool) {
+	idOf := func(r sqlc.ListObjectsRow) uuid.UUID { return uuid.UUID(r.Object.ID.Bytes) }
+	if len(pages) == 1 {
+		rows = pages[0]
+	} else {
+		seen := map[uuid.UUID]bool{}
+		for _, page := range pages {
+			for _, row := range page {
+				if id := idOf(row); !seen[id] {
+					seen[id] = true
+					rows = append(rows, row)
+				}
+			}
+		}
+		// Postgres orders uuid bytewise, as bytes.Compare does.
+		sort.Slice(rows, func(i, j int) bool {
+			a, b := idOf(rows[i]), idOf(rows[j])
+			return bytes.Compare(a[:], b[:]) < 0
+		})
+	}
+	for _, page := range pages {
+		if len(page) == pageSize {
+			more = true
+		}
+	}
+	if len(rows) > pageSize {
+		rows, more = rows[:pageSize], true
+	}
+	if more && len(rows) > 0 {
+		return rows, idOf(rows[len(rows)-1]), true
+	}
+	return rows, uuid.UUID{}, false
 }
 
 // ListDistinctTags returns one page of tag facets for the Collection's live
@@ -688,30 +734,25 @@ func likeEscape(s string) (string, bool) {
 	return b.String(), true
 }
 
-// objectHints is the SQL-expressible subset of an object filter, in the shape
-// the ListObjects query takes. The zero value narrows nothing.
-type objectHints struct {
-	state             *sqlc.ObjectState
-	prefix            *string
-	substr            *string
-	contentType       *string
-	contentTypePrefix *string
-	tags              []byte // jsonb object for `tags @>`; nil = no predicate
-	metadata          []byte // jsonb object for `metadata @>`
+// objectBranchHints extracts the pushdown from a raw CEL filter: one
+// objectHints per disjunct of cel.ExtractObjectBranches, at least one. The
+// compiled program stays authoritative over every fetched row, so a hint may
+// only narrow; a parse error (reported by the handler's own compile) yields a
+// single branch that narrows nothing.
+func objectBranchHints(filter string) []objectHints {
+	branches, err := cel.ExtractObjectBranches(filter)
+	if err != nil || len(branches) == 0 {
+		return []objectHints{{}}
+	}
+	out := make([]objectHints, len(branches))
+	for i, pd := range branches {
+		out[i] = hintsFrom(pd)
+	}
+	return out
 }
 
-// objectListHints extracts the pushdown from a raw CEL filter. The compiled
-// program stays authoritative over every fetched row, so a hint may only
-// narrow; a parse error (reported by the handler's own compile) yields none.
-func objectListHints(filter string) objectHints {
+func hintsFrom(pd cel.ObjectPushdown) objectHints {
 	var h objectHints
-	if filter == "" {
-		return h
-	}
-	pd, err := cel.ExtractObjectPushdown(filter)
-	if err != nil {
-		return h
-	}
 	if pd.StateEq != "" {
 		v := sqlc.ObjectState(pd.StateEq)
 		h.state = &v
@@ -736,6 +777,18 @@ func objectListHints(filter string) objectHints {
 		h.metadata = encodeMap(pd.MetadataEq)
 	}
 	return h
+}
+
+// objectHints is the SQL-expressible subset of an object filter, in the shape
+// the ListObjects query takes. The zero value narrows nothing.
+type objectHints struct {
+	state             *sqlc.ObjectState
+	prefix            *string
+	substr            *string
+	contentType       *string
+	contentTypePrefix *string
+	tags              []byte // jsonb object for `tags @>`; nil = no predicate
+	metadata          []byte // jsonb object for `metadata @>`
 }
 
 // celVars is the object as a filter sees it — cel.ObjectVars, shared with the
