@@ -1,0 +1,380 @@
+"""An in-memory Paladin data plane for the tests of a program built on the SDK.
+
+    with paladin.testing.FakePaladin() as fake:
+        p = fake.connect()
+        obj = paladin.upload(p.data, parent=str(fake.collection()), …)
+
+It serves ObjectService (upload, complete, get, lookup, list, download,
+delete) and MultipartUploadService, with presigned URLs on its own storage;
+every other RPC answers Unimplemented, as a server that lacks it does. Like
+the server it records the checksum an upload completes with, so a download
+verifies what it reads, and it answers Range requests. It runs on the
+standard library's WSGI server, in a thread, on loopback.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import json
+import threading
+import uuid
+from dataclasses import dataclass, field
+from types import TracebackType
+from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qs
+from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
+
+from connectrpc.code import Code
+from connectrpc.errors import ConnectError
+
+from paladin.common.v1 import pagination_pb2, resource_pb2
+from paladin.connect import Endpoints, Paladin, connect
+from paladin.data.v1 import multipart_service_pb2, object_service_pb2, types_pb2
+from paladin.data.v1.multipart_service_connect import (
+    MultipartUploadServiceSync,
+    MultipartUploadServiceWSGIApplication,
+)
+from paladin.data.v1.object_service_connect import ObjectServiceSync, ObjectServiceWSGIApplication
+from paladin.names import CollectionName, InvalidNameError
+from paladin.transfer import CHECKSUM_SHA256
+
+if TYPE_CHECKING:  # annotations only: typing.Self is 3.11+
+    from typing_extensions import Self
+
+DEFAULT_COLLECTION = "default"
+"""The collection ``collection()`` names."""
+PART_SIZE = 5 << 20
+"""The part size multipart uploads are told to use."""
+DEFAULT_PAGE_SIZE = 100
+"""The page ``list_objects`` answers when asked for none."""
+
+_LOOPBACK = "127.0.0.1"
+_EPHEMERAL_PORT = 0
+_STORAGE = "/storage/"
+_PART = "part"
+_OBJECTS_SEP = "/objects/"
+_PUT = "PUT"
+_GET = "GET"
+_AVAILABLE = types_pb2.OBJECT_STATE_AVAILABLE
+_PENDING = types_pb2.OBJECT_STATE_PENDING
+_DELETED = types_pb2.OBJECT_STATE_DELETED
+
+
+def _etag(body: bytes) -> str:
+    return hashlib.md5(body, usedforsecurity=False).hexdigest()
+
+
+@dataclass
+class _Object:
+    msg: types_pb2.Object
+    body: bytes | None = None
+    put: bytes | None = None
+
+
+@dataclass
+class _Multipart:
+    name: str
+    parts: dict[int, bytes] = field(default_factory=dict)
+
+
+class _Quiet(WSGIRequestHandler):
+    def log_message(self, format: str, *args: object) -> None:
+        return None
+
+
+class FakePaladin(ObjectServiceSync, MultipartUploadServiceSync):
+    """The fake; a context manager that starts and stops it. Thread-safe."""
+
+    def __init__(self) -> None:
+        self.tenant = str(uuid.uuid4())
+        """The id of the fake's one tenant."""
+        self.url = ""
+        """The base URL, for every plane; set once started."""
+        self._lock = threading.Lock()
+        self._objects: dict[str, _Object] = {}
+        self._uploads: dict[str, _Multipart] = {}
+        self._httpd: WSGIServer | None = None
+
+    # ─── Lifecycle ──────────────────────────────────────────────────────────
+
+    def __enter__(self) -> Self:
+        apps = [ObjectServiceWSGIApplication(self), MultipartUploadServiceWSGIApplication(self)]
+
+        def route(environ, start_response):  # type: ignore[no-untyped-def]
+            if environ["PATH_INFO"].startswith(_STORAGE):
+                return self._storage(environ, start_response)
+            # wsgiref hands over the raw socket, which blocks past the body.
+            length = int(environ.get("CONTENT_LENGTH") or 0)
+            environ["wsgi.input"] = io.BytesIO(environ["wsgi.input"].read(length))
+            for app in apps:
+                if environ["PATH_INFO"].startswith(app.path + "/"):
+                    return app(environ, start_response)
+            return _unimplemented(start_response)
+
+        self._httpd = make_server(_LOOPBACK, _EPHEMERAL_PORT, route, handler_class=_Quiet)
+        threading.Thread(target=self._httpd.serve_forever, daemon=True).start()
+        self.url = f"http://{_LOOPBACK}:{self._httpd.server_port}"
+        return self
+
+    def __exit__(
+        self,
+        kind: type[BaseException] | None,
+        value: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        if self._httpd is not None:
+            self._httpd.shutdown()
+            self._httpd.server_close()
+
+    def connect(self, **client_options: Any) -> Paladin:
+        """Clients for every plane, all served by the fake."""
+        return connect(Endpoints(data=self.url, admin=self.url, iam=self.url), **client_options)
+
+    def collection(self, name: str = DEFAULT_COLLECTION) -> CollectionName:
+        """A collection in the fake's tenant; every collection exists."""
+        return CollectionName(self.tenant, name)
+
+    # ─── Inspection ─────────────────────────────────────────────────────────
+
+    def put(
+        self, collection: CollectionName, key: str, content_type: str, body: bytes
+    ) -> types_pb2.Object:
+        """Store an object directly, as if uploaded and completed."""
+        with self._lock:
+            o = self._new(str(collection), key, content_type)
+            self._commit(o, body, "")
+            return o.msg
+
+    def content(self, name: str) -> bytes | None:
+        """What an object holds; None when there is no such object."""
+        with self._lock:
+            o = self._objects.get(name)
+            return o.body if o is not None and o.msg.state == _AVAILABLE else None
+
+    # ─── Helpers ────────────────────────────────────────────────────────────
+
+    def _new(self, parent: str, key: str, content_type: str) -> _Object:
+        object_id = str(uuid.uuid4())
+        msg = types_pb2.Object(
+            name=f"{parent}{_OBJECTS_SEP}{object_id}",
+            object_id=object_id,
+            tenant_id=self.tenant,
+            collection=CollectionName.parse(parent).collection,
+            key=key or object_id,
+            content_type=content_type,
+            state=_PENDING,
+        )
+        o = _Object(msg)
+        self._objects[msg.name] = o
+        return o
+
+    @staticmethod
+    def _commit(o: _Object, body: bytes, checksum: str) -> None:
+        o.body = body
+        o.msg.etag = _etag(body)
+        o.msg.size_bytes = len(body)
+        o.msg.state = _AVAILABLE
+        if checksum:
+            o.msg.checksum.algorithm = CHECKSUM_SHA256
+            o.msg.checksum.value = checksum
+
+    def _signed(self, path: str, method: str) -> resource_pb2.PresignedUrl:
+        return resource_pb2.PresignedUrl(url=f"{self.url}{_STORAGE}{path}", method=method)
+
+    def _get(self, name: str) -> _Object:
+        o = self._objects.get(name)
+        if o is None or o.msg.state == _DELETED:
+            raise ConnectError(Code.NOT_FOUND, f"{name} not found")
+        return o
+
+    @staticmethod
+    def _parent(parent: str) -> None:
+        try:
+            CollectionName.parse(parent)
+        except InvalidNameError as err:
+            raise ConnectError(Code.INVALID_ARGUMENT, str(err)) from err
+
+    def _by_id(self, object_id: str) -> _Object | None:
+        return next((o for o in self._objects.values() if o.msg.object_id == object_id), None)
+
+    # ─── ObjectService ──────────────────────────────────────────────────────
+
+    def upload_object(self, request, ctx):  # type: ignore[no-untyped-def]
+        self._parent(request.parent)
+        with self._lock:
+            o = self._new(request.parent, request.key, request.content_type)
+            return object_service_pb2.UploadObjectResponse(
+                object=o.msg, upload_url=self._signed(o.msg.object_id, _PUT)
+            )
+
+    def complete_object(self, request, ctx):  # type: ignore[no-untyped-def]
+        with self._lock:
+            o = self._objects.get(request.name)
+            if o is None:
+                raise ConnectError(Code.NOT_FOUND, f"{request.name} not found")
+            if o.put is None:
+                raise ConnectError(Code.FAILED_PRECONDITION, "nothing was uploaded")
+            if request.etag != _etag(o.put):
+                raise ConnectError(
+                    Code.FAILED_PRECONDITION, "the ETag is not the uploaded content's"
+                )
+            self._commit(o, o.put, request.checksum_value)
+            return o.msg
+
+    def get_object(self, request, ctx):  # type: ignore[no-untyped-def]
+        with self._lock:
+            return self._get(request.name).msg
+
+    def lookup_object(self, request, ctx):  # type: ignore[no-untyped-def]
+        prefix = request.parent + _OBJECTS_SEP
+        with self._lock:
+            for o in self._objects.values():
+                if (
+                    o.msg.name.startswith(prefix)
+                    and o.msg.key == request.key
+                    and o.msg.state == _AVAILABLE
+                ):
+                    return o.msg
+        raise ConnectError(Code.NOT_FOUND, f"{request.parent} has no key {request.key!r}")
+
+    def list_objects(self, request, ctx):  # type: ignore[no-untyped-def]
+        prefix = request.parent + _OBJECTS_SEP
+        with self._lock:
+            found = sorted(
+                (
+                    o.msg
+                    for o in self._objects.values()
+                    if o.msg.name.startswith(prefix) and o.msg.state == _AVAILABLE
+                ),
+                key=lambda m: m.key,
+            )
+        try:
+            start = int(request.page.page_token or 0)
+        except ValueError as err:
+            raise ConnectError(Code.INVALID_ARGUMENT, "bad page token") from err
+        end = min(start + (request.page.page_size or DEFAULT_PAGE_SIZE), len(found))
+        resp = object_service_pb2.ListObjectsResponse(
+            objects=found[start:end], page=pagination_pb2.PageResponse()
+        )
+        if end < len(found):
+            resp.page.next_page_token = str(end)
+        return resp
+
+    def download_object(self, request, ctx):  # type: ignore[no-untyped-def]
+        with self._lock:
+            o = self._get(request.name)
+            if o.msg.state != _AVAILABLE:
+                raise ConnectError(Code.FAILED_PRECONDITION, "the object is not complete")
+            return object_service_pb2.DownloadObjectResponse(
+                object=o.msg, download_url=self._signed(o.msg.object_id, _GET)
+            )
+
+    def delete_object(self, request, ctx):  # type: ignore[no-untyped-def]
+        with self._lock:
+            o = self._get(request.name)
+            o.msg.state = _DELETED
+            o.body = None
+            return object_service_pb2.DeleteObjectResponse()
+
+    # ─── MultipartUploadService ─────────────────────────────────────────────
+
+    def initiate_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
+        self._parent(request.parent)
+        with self._lock:
+            o = self._new(request.parent, request.key, request.content_type)
+            upload_id = str(uuid.uuid4())
+            self._uploads[upload_id] = _Multipart(o.msg.name)
+            return multipart_service_pb2.InitiateMultipartUploadResponse(
+                object=o.msg, upload_id=upload_id, recommended_part_size=PART_SIZE
+            )
+
+    def presign_part(self, request, ctx):  # type: ignore[no-untyped-def]
+        with self._lock:
+            if request.upload_id not in self._uploads:
+                raise ConnectError(Code.NOT_FOUND, f"upload {request.upload_id} not found")
+        return multipart_service_pb2.PresignPartResponse(
+            upload_url=self._signed(f"{request.upload_id}?{_PART}={request.part_number}", _PUT)
+        )
+
+    def complete_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
+        with self._lock:
+            up = self._uploads.get(request.upload_id)
+            if up is None:
+                raise ConnectError(Code.NOT_FOUND, f"upload {request.upload_id} not found")
+            body = bytearray()
+            for i, part in enumerate(request.parts):
+                data = up.parts.get(part.part_number)
+                if data is None or part.part_number != i + 1 or part.etag != _etag(data):
+                    raise ConnectError(
+                        Code.FAILED_PRECONDITION, f"part {part.part_number} is not the uploaded one"
+                    )
+                body += data
+            o = self._objects[up.name]
+            self._commit(o, bytes(body), "")
+            del self._uploads[request.upload_id]
+            return o.msg
+
+    def abort_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
+        with self._lock:
+            up = self._uploads.pop(request.upload_id, None)
+            if up is not None:
+                self._objects.pop(up.name, None)
+        return multipart_service_pb2.AbortMultipartUploadResponse()
+
+    # ─── Storage ────────────────────────────────────────────────────────────
+
+    def _storage(self, environ, start_response):  # type: ignore[no-untyped-def]
+        object_id = environ["PATH_INFO"][len(_STORAGE) :]
+        query = parse_qs(environ.get("QUERY_STRING", ""))
+        method = environ["REQUEST_METHOD"]
+        if method == _PUT:
+            body = environ["wsgi.input"].read(int(environ.get("CONTENT_LENGTH") or 0))
+            with self._lock:
+                if _PART in query:
+                    up = self._uploads.get(object_id)
+                    if up is None:
+                        return _status(start_response, "404 Not Found")
+                    up.parts[int(query[_PART][0])] = body
+                else:
+                    o = self._by_id(object_id)
+                    if o is None:
+                        return _status(start_response, "404 Not Found")
+                    o.put = body
+            start_response("200 OK", [("ETag", f'"{_etag(body)}"'), ("Content-Length", "0")])
+            return [b""]
+        if method != _GET:
+            return _status(start_response, "405 Method Not Allowed")
+        with self._lock:
+            o = self._by_id(object_id)
+            content = o.body if o is not None else None
+        if content is None:
+            return _status(start_response, "404 Not Found")
+        ranged = environ.get("HTTP_RANGE", "")
+        if ranged:
+            first, _, last = ranged.removeprefix("bytes=").partition("-")
+            part = content[int(first) : int(last) + 1 if last else len(content)]
+            start_response(
+                "206 Partial Content",
+                [("Content-Type", "application/octet-stream"), ("Content-Length", str(len(part)))],
+            )
+            return [part]
+        start_response(
+            "200 OK",
+            [("Content-Type", "application/octet-stream"), ("Content-Length", str(len(content)))],
+        )
+        return [content]
+
+
+def _status(start_response, status: str) -> list[bytes]:  # type: ignore[no-untyped-def]
+    start_response(status, [("Content-Length", "0")])
+    return [b""]
+
+
+def _unimplemented(start_response) -> list[bytes]:  # type: ignore[no-untyped-def]
+    """What a server answers for a procedure it does not serve."""
+    body = json.dumps({"code": "unimplemented", "message": "not served by the fake"}).encode()
+    start_response(
+        "404 Not Found", [("Content-Type", "application/json"), ("Content-Length", str(len(body)))]
+    )
+    return [body]
