@@ -132,8 +132,34 @@ requires one on `Create*` and `Issue*` calls.
 | `pages(call, request, items)` | Calls a List RPC page by page, following `next_page_token`, and yields every element of the repeated field `items`, e.g. `pages(p.data.object.list_objects, ListObjectsRequest(parent=c), "objects")`. Stopping early makes no further calls. `TypeError` for a message without `page`. `apages` is the async form. |
 | `wait(get, *, poll=0.5, max_poll=10.0, timeout=None)` | Calls `get` until the operation it returns is done, the pause doubling from `poll` to `max_poll` seconds. Raises `OperationFailed` (with `operation` and the Connect `code`) for one that failed, `TimeoutError` past `timeout`. `await_operation` is the async form; bound it with `asyncio.timeout`. |
 | `mask(MessageClass, *paths)` | An update mask from proto field names, nested ones with `.`, each checked against the descriptor: `ValueError` for one it lacks. |
-| `upload(p.data, *, parent, content_type, body, size, key="", metadata=None, tags=None, multipart_threshold=8 MiB, part_concurrency=3)` | Uploads `body` (bytes, or a seekable binary file) and completes it: one presigned PUT up to the threshold, multipart above it, aborted if any part fails. A refused transfer raises `TransferError`. Synchronous; from asyncio, run it with `asyncio.to_thread`. |
-| `download(p.data, name)` | The object's content, fetched through a presigned URL. |
+| `upload(p.data, *, parent, content_type, body, size, key="", metadata=None, tags=None, multipart_threshold=8 MiB, part_concurrency=3)` | Uploads `size` bytes of `body` and completes the object. `body` is bytes or a binary file, seekable or not (a pipe, a response body); it is read once, front to back, never whole. Up to the threshold one presigned PUT, which records the content's SHA-256 on the object; above it multipart, `part_concurrency` parts in flight, aborted if any part fails. Synchronous; from asyncio, run it with `asyncio.to_thread`. |
+| `download_stream(p.data, name, *, offset=0, length=0)` | The object's content as a file-like `ObjectReader` — `read`, `readinto`, `chunks()`, `content_type`, `content_length`, `object` — streamed, never held whole; use it in `with`. `offset`/`length` read a byte range (`RangeIgnoredError` when storage answers with the whole object). A whole read is verified: the read that reaches the end raises `IntegrityError` when the size or the recorded checksum (SHA-256, MD5; CRC32C with the `crc32c` extra) does not match. |
+| `download(p.data, name, *, offset=0, length=0)` | `download_stream` read whole, as bytes. |
+
+### Transfers
+
+`upload` and `download` move bytes through presigned URLs, straight to the
+storage backend. Those requests are not Paladin calls: the client's
+credentials, retries and interceptors are not on them. They go through the
+data plane's `Transfer`, declared once:
+
+```python
+transfer = paladin.Transfer(
+    # URLs signed for the public storage host, sent to its in-cluster address
+    # with the signed Host header kept.
+    split_horizon=("https://s3.example.com", "http://seaweedfs-s3.storage.svc:8333"),
+)
+p = paladin.connect(endpoints, token_source=session, transfer=transfer)
+```
+
+| Name | Does |
+| --- | --- |
+| `Transfer(*, split_horizon=None, rewrite=None, connect_timeout=10.0, read_timeout=30.0, pool_max_idle_per_host=32, transport=None)` | With no arguments: a connection timeout and a read timeout (`DEFAULT_TRANSFER_…`), but no bound on a whole transfer; 32 connections per host kept for reuse; redirects refused. Thread-safe, and meant to be shared. |
+| `split_horizon=(signed_origin, internal_origin)` | A URL signed for `signed_origin` is sent to `internal_origin`, keeping `Host: <signed host>`: the signature covers the header, not the address. Other origins go as signed. `ValueError` for anything but `scheme://host[:port]`. |
+| `rewrite=fn` | The general form: any URL to any URL, the signed Host still kept. Not with `split_horizon`. |
+| `transport=` | A `pyqwest.SyncHTTPTransport` of your own — a proxy, TLS settings. Build it with `follow_redirects=False`: one that follows them cannot be stopped from here. |
+| `connect(…, transfer=t)` | Every `upload` and `download` through that data plane uses `t`; without it, a shared default. |
+| `TransferError` | A request storage refused, or answered with a redirect: `method`, `host` (the URL's query is the signature and is not kept), `status`, and the first 512 bytes of the `body`. |
 
 ### Constants
 

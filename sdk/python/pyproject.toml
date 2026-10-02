@@ -20,8 +20,14 @@ dependencies = [
     "googleapis-common-protos>=1.75.5,<2",
 ]
 
+[project.optional-dependencies]
+# Verifies downloads whose recorded checksum is CRC32C; without it they are
+# not verified. Google's own implementation: the standard library has none.
+crc32c = ["google-crc32c>=1.9.0,<2"]
+
 [dependency-groups]
 dev = [
+    "google-crc32c==1.9.0",
     # Deliberately not the latest: its protoc's version is the oldest protobuf
     # runtime the stubs accept (ValidateProtobufRuntimeVersion), so it is the
     # newest release still generating for protobuf 6. A newer one would lock

@@ -16,6 +16,9 @@ from pathlib import Path
 
 # Plane class prefix, Python package of the plane's generated modules.
 PLANES = (("Data", "paladin.data.v1"), ("Admin", "paladin.admin.v1"), ("IAM", "paladin.iam.v1"))
+# The planes that move bytes through presigned URLs, and so carry the
+# ``Transfer`` that upload and download send them through.
+TRANSFER_PLANES = {"Data"}
 SERVICE_SUFFIX = "Service"
 DESCRIPTOR_MODULE_SUFFIX = "_pb2"
 CONNECT_MODULE_SUFFIX = "_connect"
@@ -66,8 +69,19 @@ def render() -> str:
                 f"class {kind}{prefix}Plane:",
                 f'    """Every service of the {prefix.lower()} plane."""',
                 "",
-                "    def __init__(self, address: str, interceptors: Any, **options: Any) -> None:",
             ]
+            if prefix in TRANSFER_PLANES:
+                lines += [
+                    "    def __init__(",
+                    "        self, address: str, interceptors: Any, *, transfer: Any = None, **options: Any",
+                    "    ) -> None:",
+                    "        self.transfer = transfer",
+                    '        """The ``Transfer`` upload and download use; None for the default."""',
+                ]
+            else:
+                lines.append(
+                    "    def __init__(self, address: str, interceptors: Any, **options: Any) -> None:"
+                )
             for name, _ in svcs:
                 lines.append(
                     f"        self.{attribute(name)} = {name}Client{suffix}"

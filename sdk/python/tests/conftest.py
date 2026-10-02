@@ -12,6 +12,7 @@ import pytest
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
 from connectrpc.request import RequestContext
+from data_plane_fake import Fake, serving
 
 from paladin.iam.v1 import auth_service_pb2, health_service_pb2
 from paladin.iam.v1.auth_service_connect import AuthServiceSync, AuthServiceWSGIApplication
@@ -111,3 +112,10 @@ def server() -> Iterator[Server]:
     finally:
         httpd.shutdown()
         httpd.server_close()
+
+
+@pytest.fixture
+def fake() -> Iterator[Fake]:
+    """A fake data plane and its storage; see data_plane_fake."""
+    with serving() as f:
+        yield f
