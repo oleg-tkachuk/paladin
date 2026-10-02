@@ -172,7 +172,7 @@ tasks:
             "Paladin — working on the repository" \
             "" \
             "  task -t Taskfile.dev.yaml verify-all         the commit gate: seconds, no Docker" \
-            "  task -t Taskfile.dev.yaml verify-deep        Postgres-backed suites; Docker, ~15 min" \
+            "  task -t Taskfile.dev.yaml verify-deep        Postgres-backed suites; Docker, ~3 min" \
             "  task -t Taskfile.dev.yaml verify-e2e         Playwright on this branch; Docker, ~10 min" \
             "  task -t Taskfile.dev.yaml verify-capability  the capability module on its own" \
             "  task -t Taskfile.dev.yaml verify-go-sdk      the Go SDK on its own" \
@@ -296,16 +296,28 @@ tasks:
     # verify-all is the pre-commit gate and has to stay in the tens of seconds,
     # so it runs no Docker and boots no stack. That trade is also how three
     # suites rotted unnoticed — they were left to CI workflows that stopped
-    # executing. This is the other half: ~15 minutes and a Docker daemon, run
-    # before a merge rather than before a commit.
+    # executing. This is the other half: a Docker daemon and several minutes,
+    # run before a merge rather than before a commit. CI runs the two halves
+    # as parallel jobs; together they are this task.
+    cmds:
+      - task: verify-deep:integration
+      - task: verify-deep:stack
+
+  verify-deep:integration:
+    desc: "verify-deep, first half: the Postgres-backed suites (testcontainers)"
     cmds:
       # Disk first, before anything consumes any. This check used to run after
       # the image build and after the integration suite, so it measured the
       # worst moment in the gate rather than a representative one — and refused
       # on a transient reading that had cleared minutes later.
-      - ./scripts/require-disk.sh "task -t Taskfile.dev.yaml verify-deep"
+      - ./scripts/require-disk.sh "task -t Taskfile.dev.yaml verify-deep:integration"
       # Testcontainers, not the compose stack: these bring their own Postgres.
       - task: backend:test:integration
+
+  verify-deep:stack:
+    desc: "verify-deep, second half: build the image and run the gates that need a live stack"
+    cmds:
+      - ./scripts/require-disk.sh "task -t Taskfile.dev.yaml verify-deep:stack"
       - task: backend:test:stack
 
   verify-e2e:

@@ -8,8 +8,9 @@ name: CI
 # from the change — runs here for a change the console or the backend reaches:
 # while it ran only locally, console bugs piled up behind a suite nobody ran.
 # `verify-deep` — the Postgres-backed integration suites and the stack gate
-# (RPC surface, Go admin e2e, S3 conformance, dev-bootstrap, smoke) — runs for
-# a change the backend reaches; it too had been local-only, and rotted there.
+# (RPC surface, Go admin e2e, S3 conformance, dev-bootstrap, smoke), as two
+# parallel jobs — runs for a change the backend reaches; it too had been
+# local-only, and rotted there.
 
 on:
   push:
@@ -376,19 +377,25 @@ jobs:
             frontend/test-results/
           retention-days: 7
 
-  # verify-deep, through the same task a developer runs: the Postgres-backed
-  # integration suites (testcontainers), then the stack gate — the RPC-surface
-  # gate, the Go admin e2e suite, S3 conformance, dev-bootstrap twice and the
-  # smoke test, against a compose stack built from this change. Only for a
-  # change the backend reaches (ci-groups.sh --needs-deep).
+  # verify-deep, through the same tasks a developer runs, as its two halves on
+  # two runners: the Postgres-backed integration suites (testcontainers), and
+  # the stack gate — the RPC-surface gate, the Go admin e2e suite, S3
+  # conformance, dev-bootstrap twice and the smoke test, against a compose
+  # stack built from this change. Neither half needs the other, and run in one
+  # job the image build waited on the suites for nothing. Only for a change
+  # the backend reaches (ci-groups.sh --needs-deep).
   deep:
-    name: Deep
+    name: Deep (${{ matrix.half }})
     needs: [changes]
     if: needs.changes.outputs.deep == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        half: [integration, stack]
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -431,8 +438,10 @@ jobs:
           sudo dpkg -i "$deb"
           step version
 
-      - name: task verify-deep
-        run: task --yes -t Taskfile.dev.yaml verify-deep
+      - name: task verify-deep:${{ matrix.half }}
+        env:
+          HALF: ${{ matrix.half }}
+        run: task --yes -t Taskfile.dev.yaml "verify-deep:${HALF}"
 
   # Two jobs over the same files, and the halves do not overlap. actionlint
   # covers whether a workflow is correct at all — schema, expression syntax,
