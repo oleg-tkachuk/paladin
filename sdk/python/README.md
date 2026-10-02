@@ -183,16 +183,19 @@ p = paladin.connect(endpoints, token_source=session, transfer=transfer)
 
 ### TLS
 
-`TLS` makes connections with a CA bundle and a client certificate, re-read
-whenever they change on disk, so certificates a workload-identity agent
-rotates are picked up without a restart. Give it to `connect` for the
-connections to Paladin, and to a `Transfer` for those to storage:
+`TLS` makes connections with a CA bundle, a client certificate and an
+expected server identity, re-read whenever the files change on disk, so
+certificates a workload-identity agent rotates are picked up without a
+restart. Give it to `connect` for the connections to Paladin, and to a
+`Transfer` for those to storage. It matches the Go SDK's `TLS`: the same
+fields, defaults, checks and errors.
 
 ```python
 identity = paladin.TLS(
     ca_file="/var/run/secrets/spiffe/bundle.pem",
     cert_file="/var/run/secrets/spiffe/svid.pem",
     key_file="/var/run/secrets/spiffe/svid-key.pem",
+    server_id="spiffe://cluster.local/ns/paladin/sa/paladin-core",
 )
 p = paladin.connect(endpoints, token_source=session, tls=identity,
                     transfer=paladin.Transfer(tls=identity))
@@ -200,16 +203,27 @@ p = paladin.connect(endpoints, token_source=session, tls=identity,
 
 | Name | Does |
 | --- | --- |
-| `TLS(*, ca_file=None, cert_file=None, key_file=None, reload_interval=30.0)` | `ca_file` is the only trust when given; without it the system roots. `cert_file` and `key_file` are both or neither (`ValueError`). The files are checked for a change at most every `reload_interval` seconds (`DEFAULT_TLS_RELOAD_INTERVAL`); a rotation caught half-written keeps the last good files. |
-| `connect(…, tls=t)`, `connect_async(…, tls=t)` | The connections to Paladin. `tls` builds the `http_client`; giving both is a `ValueError`. |
-| `Transfer(tls=t)` | The connections to storage. Not with `transport=`. |
-| `t.sync_transport(**settings)`, `t.async_transport(**settings)` | The rotating `pyqwest` transports these build, for a client of your own — the Go SDK's `TLS.RoundTripper()`; `settings` reach each `pyqwest` transport built. To wrap one (a circuit breaker, metrics), keep the SDK's header relay outermost: `Client.http_client(transport=wrap(t.sync_transport()))`. |
+| `TLS(*, ca_file=None, cert_file=None, key_file=None, reload_interval=30.0, server_id=None, verify_peer=None, min_version=DEFAULT_TLS_MIN_VERSION)` | `ca_file` is the only trust when given; without it the system roots. `cert_file` and `key_file` are both or neither (`TLSKeyPairError`). The files are checked for a change at most every `reload_interval` seconds (`DEFAULT_TLS_RELOAD_INTERVAL`); a rotation caught half-written keeps the last good files. |
+| `server_id` | The SPIFFE ID the server must present. Its certificate is verified as an X.509-SVID — one URI SAN, not a CA, `digitalSignature` — against `ca_file` as the trust bundle, instead of against the host name, which an SVID does not carry. A malformed ID is `ServerIDError` at once, and so is a mismatch at connection; without `ca_file` it is `ServerIDNeedsCAError`. |
+| `verify_peer` | Called with the server's leaf, a `cryptography` `x509.Certificate`, after the built-in checks pass — for an audit log, or a check of your own: an exception refuses the connection. |
+| `min_version` | The lowest TLS version offered, an `ssl.TLSVersion`: `DEFAULT_TLS_MIN_VERSION`, TLS 1.2, or TLS 1.3. Lower is `TLSMinVersionError`. |
+| `connect(…, tls=t)`, `connect_async(…, tls=t)` | The connections to Paladin. `tls` builds the `http_client`; giving both is `TLSAndHTTPError`. |
+| `Transfer(tls=t)` | The connections to storage. Not with `transport=` (`TLSAndHTTPError`). |
+| `t.sync_transport(**settings)`, `t.async_transport(**settings)` | The rotating transports these build, for a client of your own — the Go SDK's `TLS.RoundTripper()`. `settings` are pyqwest's names for what they honour: `connect_timeout`, `read_timeout`, `pool_idle_timeout`, `pool_max_idle_per_host`, `enable_otel`, `tracer_provider`. Any other pyqwest setting is deprecated: it keeps a pyqwest transport, without `server_id`, `verify_peer`, `min_version` or the closing below, and is refused in the next release. To wrap one (a circuit breaker, metrics), keep the SDK's header relay outermost: `Client.http_client(transport=wrap(t.sync_transport()))`. |
+| `NoCAError`, `ServerIDError`, `ServerIDNeedsCAError`, `TLSAndHTTPError`, `TLSKeyPairError`, `TLSMinVersionError` | The Go SDK's `ErrNoCA`, `ErrServerID`, `ErrServerIDNeedsCA`, `ErrTLSAndHTTP`, `ErrTLSKeyPair` and `ErrTLSMinVersion`, each a `ValueError`. A refused server reaches the caller as a `ConnectError` whose `__cause__` is the `ServerIDError`. |
 
-**Not in the Python SDK: a check of the server's SPIFFE ID.** The Go SDK's
-`TLS.ServerID` verifies the server by a URI SAN instead of its host name. The
-HTTP stack connect-python runs on (`pyqwest`, over Rust's `reqwest`) offers
-no hook into peer verification, so here the server's certificate is verified
-against the bundle and the host name, and must name the host it is reached at.
+After a rotation every new request goes out on a connection made with the
+new files, over HTTP/2 as well as HTTP/1.1; a request in flight finishes on
+its own, and the old connections close once nothing uses them.
+
+The connections under `TLS` are made by the standard library's `ssl`, under
+httpcore: pyqwest, the HTTP stack connect-python runs on, has no hook to
+check a peer or set a protocol floor. The SPIFFE ID and `verify_peer` are
+checked after the handshake and before anything is written, so a refused
+server never receives a request, a token or a body. Responses are decoded and
+errors raised as pyqwest does — a timeout is a `TimeoutError`, so the call's
+`timeout_ms` still ends it with `DEADLINE_EXCEEDED`. Plaintext connections
+stay on pyqwest.
 
 ### Errors
 
@@ -360,8 +374,8 @@ on purpose:
 | | Go | Python | Why |
 | --- | --- | --- | --- |
 | Typed errors | `errors.Is(err, paladin.ErrNotFound)`, `*paladin.Error` | `except paladin.NotFoundError`, `PaladinError` | Each language's idiom; the same kinds, fields and reasons. |
-| Server identity over TLS | `TLS.ServerID`: the SPIFFE ID, checked by `go-spiffe` | Not available: the CA bundle and the host name only | `pyqwest` has no peer-verification hook. |
-| Minimum TLS version | `TLS.MinVersion`, 1.2 by default | pyqwest's own floor | `pyqwest` has no option for it. |
+| Server identity over TLS | `TLS.ServerID`: the SPIFFE ID, checked by `go-spiffe` | `TLS(server_id=…)`: the same check, after the handshake and before any request byte | Python's connections under `TLS` run on `ssl` and httpcore, because `pyqwest` has no peer-verification hook. |
+| Minimum TLS version | `TLS.MinVersion`, 1.2 by default | `TLS(min_version=…)`, `ssl.TLSVersion.TLSv1_2` by default | |
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0 (BACKLOG). |
 | Bulk downloads | `DownloadMany`, a callback per reader | `download_many` / `adownload_many`, an iterator of results | Each language's idiom. |

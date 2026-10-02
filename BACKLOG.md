@@ -1759,19 +1759,6 @@ The contract-side half of ADR-0018. The client-side layers are in both SDKs.
   which `Connect` does not; that needs a per-call `TokenSource` reading the
   context.
 
-### Python TLS checks neither the server's SPIFFE ID nor a minimum version
-
-- **Status:** Blocked (upstream).
-- **Reason:** the Go SDK verifies `TLS.ServerID` as an X.509-SVID and takes
-  `TLS.MinVersion`; the Python `TLS` verifies the CA bundle and the host name
-  only, because pyqwest (0.11.0, the latest), the HTTP stack connect-python
-  runs on, exposes neither a peer-verification hook nor a protocol floor.
-- **Definition of Done:** `TLS(server_id=…, min_version=…)` in Python, with
-  the Go SDK's test cases — another SPIFFE ID, an SVID from another CA, a
-  server below the floor — passing against both.
-- **Blockers:** a verification callback and a minimum-version option in
-  pyqwest, or a decision to run connect-python over another transport.
-
 ### Python reads response headers through a transport of its own
 
 - **Status:** Deferred.

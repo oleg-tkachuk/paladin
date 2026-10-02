@@ -65,3 +65,23 @@ def test_readme_has_no_conflict_markers() -> None:
     # A release tag publishes the README as it is.
     found = CONFLICT_MARKER.findall(README.read_text())
     assert not found, f"README.md holds merge-conflict markers: {found}"
+
+
+def test_readme_documents_the_tls_surface() -> None:
+    # Every argument of TLS and every error it raises is named in README.md,
+    # so the section cannot fall behind the class.
+    import inspect as _inspect
+
+    import paladin.tls
+
+    text = README.read_text()
+    params = [p for p in _inspect.signature(paladin.tls.TLS.__init__).parameters if p != "self"]
+    errors = [
+        name
+        for name, value in vars(paladin.tls).items()
+        if _inspect.isclass(value) and issubclass(value, ValueError) and not name.startswith("_")
+    ]
+    assert params and errors
+    missing = [n for n in params if f"{n}=" not in text and f"`{n}`" not in text]
+    missing += [n for n in errors if f"`{n}`" not in text]
+    assert not missing, f"README.md does not document: {', '.join(missing)}"
