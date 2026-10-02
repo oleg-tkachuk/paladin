@@ -275,6 +275,13 @@ func sendPart(ctx context.Context, data *DataPlane, name, uploadID string, p par
 	return etag, nil
 }
 
+// Put sends size bytes of body to a presigned URL — one a caller presigned
+// itself, such as a part of a multipart upload it drives — and returns the
+// ETag storage answered with.
+func (t *Transfer) Put(ctx context.Context, signed *commonv1.PresignedUrl, body io.Reader, size int64) (string, error) {
+	return put(ctx, t, signed, "", body, size)
+}
+
 // put sends body to a presigned URL and returns the ETag storage answered with.
 func put(ctx context.Context, t *Transfer, signed *commonv1.PresignedUrl, contentType string, body io.Reader, size int64) (string, error) {
 	header := http.Header{}
