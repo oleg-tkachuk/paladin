@@ -237,3 +237,40 @@ def test_a_ca_bundle_replaces_the_system_roots(tmp_path: Path, with_ca: bool, sy
     f = write(tmp_path, ca.pem, ca.issue(client=True, ips=False))
     args, _ = (_tls(f) if with_ca else TLS())._read()
     assert args["tls_include_system_certs"] is system
+
+
+class _Counting:
+    """A caller's own transport around the SDK's rotating one: it sees every
+    request, as a circuit breaker or a metrics wrapper would."""
+
+    def __init__(self, inner: Any) -> None:
+        self.inner, self.requests = inner, 0
+
+    def execute_sync(self, request: Any) -> Any:
+        self.requests += 1
+        return self.inner.execute_sync(request)
+
+
+def test_a_wrapped_rotating_transport_sees_every_request_and_the_rotation(
+    serve: Any, tmp_path: Path
+) -> None:
+    from paladin import Client
+    from paladin.iam.v1.health_service_connect import HealthServiceClientSync
+
+    ca = Authority()
+    first, second = ca.issue(client=True, ips=False), ca.issue(client=True, ips=False)
+    f = write(tmp_path, ca.pem, first)
+    srv = serve(ca, ca.issue(client=False))
+    wrapper = _Counting(_tls(f, reload_interval=RELOAD_NOW).sync_transport())
+    client = Client(srv.url)
+    health = HealthServiceClientSync(
+        client.base_url,
+        interceptors=client.interceptors(),
+        http_client=client.http_client(transport=wrapper),
+    )
+    health.get_version(health_service_pb2.GetVersionRequest())
+    f.write_client(second)
+    _touch_later(f.cert, f.key)
+    health.get_version(health_service_pb2.GetVersionRequest())
+    assert srv.serials == [first.serial, second.serial]
+    assert wrapper.requests == len(srv.serials)
