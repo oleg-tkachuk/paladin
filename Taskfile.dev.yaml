@@ -252,6 +252,7 @@ tasks:
       - task: verify:new-release-tag
       - task: verify:stream-release-notes
       - task: verify:badge-versions
+      - task: verify:warm-go-proxy
       - task: verify:release-head
       - task: verify:release-rules
       - task: verify:go-module-paths
@@ -530,6 +531,11 @@ tasks:
     # already existed, and fail.
     cmds:
       - ./scripts/new-release-tag.test.sh
+
+  verify:warm-go-proxy:
+    desc: "Fail when a module tag would ask the Go proxy for another module or version"
+    cmds:
+      - ./scripts/warm-go-proxy.test.sh
 
   verify:badge-versions:
     desc: "Fail when the README's stack badges would read a version from the wrong place"

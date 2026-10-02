@@ -112,6 +112,10 @@ scope. One version covers both languages: the Go module resolves
 `sdk/go/vX.Y.Z`, and the Python package reads the same tag at build time
 through hatch-vcs, so neither carries a version to edit. A release is the
 tag; nothing else is published, and the Python package is not on PyPI yet.
+The release workflow asks the Go module proxy for each new module tag
+([`scripts/warm-go-proxy.sh`](../scripts/warm-go-proxy.sh)), so `go get
+…@latest` and the README's SDK badge see it at once rather than when the
+proxy next refreshes.
 
 ### Behaviour changes
 
