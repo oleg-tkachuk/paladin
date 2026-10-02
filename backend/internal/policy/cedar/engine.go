@@ -52,6 +52,11 @@ const (
 	ActionSetObjectLegalHold = "SetObjectLegalHold"
 	ActionReadObjectLock     = "ReadObjectLock"
 
+	// SetObjectTaint flags or clears an object's taint signals. Its own
+	// action: clearing a flag re-opens content to agents whose capability
+	// lacks AllowTaintedRead, which write access must not imply.
+	ActionSetObjectTaint = "SetObjectTaint"
+
 	// Collection-scoped actions (admin plane).
 	ActionManageCollection       = "ManageCollection"
 	ActionBindCollectionToBucket = "BindCollectionToBucket"

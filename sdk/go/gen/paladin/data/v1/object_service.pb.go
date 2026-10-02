@@ -1242,6 +1242,58 @@ func (x *SetObjectLegalHoldRequest) GetLegalHold() bool {
 	return false
 }
 
+type SetObjectTaintRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Signals       []TaintSignal          `protobuf:"varint,2,rep,packed,name=signals,proto3,enum=paladin.data.v1.TaintSignal" json:"signals,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetObjectTaintRequest) Reset() {
+	*x = SetObjectTaintRequest{}
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetObjectTaintRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetObjectTaintRequest) ProtoMessage() {}
+
+func (x *SetObjectTaintRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetObjectTaintRequest.ProtoReflect.Descriptor instead.
+func (*SetObjectTaintRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *SetObjectTaintRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SetObjectTaintRequest) GetSignals() []TaintSignal {
+	if x != nil {
+		return x.Signals
+	}
+	return nil
+}
+
 type GetObjectLockRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1251,7 +1303,7 @@ type GetObjectLockRequest struct {
 
 func (x *GetObjectLockRequest) Reset() {
 	*x = GetObjectLockRequest{}
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[17]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1263,7 +1315,7 @@ func (x *GetObjectLockRequest) String() string {
 func (*GetObjectLockRequest) ProtoMessage() {}
 
 func (x *GetObjectLockRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[17]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1276,7 +1328,7 @@ func (x *GetObjectLockRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetObjectLockRequest.ProtoReflect.Descriptor instead.
 func (*GetObjectLockRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{17}
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetObjectLockRequest) GetName() string {
@@ -1300,7 +1352,7 @@ type RestoreObjectRequest struct {
 
 func (x *RestoreObjectRequest) Reset() {
 	*x = RestoreObjectRequest{}
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[18]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1312,7 +1364,7 @@ func (x *RestoreObjectRequest) String() string {
 func (*RestoreObjectRequest) ProtoMessage() {}
 
 func (x *RestoreObjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[18]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1325,7 +1377,7 @@ func (x *RestoreObjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreObjectRequest.ProtoReflect.Descriptor instead.
 func (*RestoreObjectRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{18}
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RestoreObjectRequest) GetName() string {
@@ -1357,7 +1409,7 @@ type CopyObjectRequest struct {
 
 func (x *CopyObjectRequest) Reset() {
 	*x = CopyObjectRequest{}
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[19]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1369,7 +1421,7 @@ func (x *CopyObjectRequest) String() string {
 func (*CopyObjectRequest) ProtoMessage() {}
 
 func (x *CopyObjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[19]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1382,7 +1434,7 @@ func (x *CopyObjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CopyObjectRequest.ProtoReflect.Descriptor instead.
 func (*CopyObjectRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{19}
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CopyObjectRequest) GetSourceName() string {
@@ -1429,7 +1481,7 @@ type MetadataOverride struct {
 
 func (x *MetadataOverride) Reset() {
 	*x = MetadataOverride{}
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[20]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1441,7 +1493,7 @@ func (x *MetadataOverride) String() string {
 func (*MetadataOverride) ProtoMessage() {}
 
 func (x *MetadataOverride) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[20]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1454,7 +1506,7 @@ func (x *MetadataOverride) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetadataOverride.ProtoReflect.Descriptor instead.
 func (*MetadataOverride) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{20}
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *MetadataOverride) GetMetadata() map[string]string {
@@ -1473,7 +1525,7 @@ type TagsOverride struct {
 
 func (x *TagsOverride) Reset() {
 	*x = TagsOverride{}
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[21]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1485,7 +1537,7 @@ func (x *TagsOverride) String() string {
 func (*TagsOverride) ProtoMessage() {}
 
 func (x *TagsOverride) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[21]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1498,7 +1550,7 @@ func (x *TagsOverride) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TagsOverride.ProtoReflect.Descriptor instead.
 func (*TagsOverride) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{21}
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *TagsOverride) GetTags() map[string]string {
@@ -1523,7 +1575,7 @@ type ListObjectsRequest struct {
 
 func (x *ListObjectsRequest) Reset() {
 	*x = ListObjectsRequest{}
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[22]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1535,7 +1587,7 @@ func (x *ListObjectsRequest) String() string {
 func (*ListObjectsRequest) ProtoMessage() {}
 
 func (x *ListObjectsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[22]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1548,7 +1600,7 @@ func (x *ListObjectsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListObjectsRequest.ProtoReflect.Descriptor instead.
 func (*ListObjectsRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{22}
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListObjectsRequest) GetParent() string {
@@ -1596,7 +1648,7 @@ type ListObjectsResponse struct {
 
 func (x *ListObjectsResponse) Reset() {
 	*x = ListObjectsResponse{}
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[23]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1608,7 +1660,7 @@ func (x *ListObjectsResponse) String() string {
 func (*ListObjectsResponse) ProtoMessage() {}
 
 func (x *ListObjectsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[23]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1621,7 +1673,7 @@ func (x *ListObjectsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListObjectsResponse.ProtoReflect.Descriptor instead.
 func (*ListObjectsResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{23}
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListObjectsResponse) GetObjects() []*Object {
@@ -1648,7 +1700,7 @@ type CountObjectsRequest struct {
 
 func (x *CountObjectsRequest) Reset() {
 	*x = CountObjectsRequest{}
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[24]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1660,7 +1712,7 @@ func (x *CountObjectsRequest) String() string {
 func (*CountObjectsRequest) ProtoMessage() {}
 
 func (x *CountObjectsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[24]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1673,7 +1725,7 @@ func (x *CountObjectsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountObjectsRequest.ProtoReflect.Descriptor instead.
 func (*CountObjectsRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{24}
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CountObjectsRequest) GetParent() string {
@@ -1700,7 +1752,7 @@ type CountObjectsResponse struct {
 
 func (x *CountObjectsResponse) Reset() {
 	*x = CountObjectsResponse{}
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[25]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1712,7 +1764,7 @@ func (x *CountObjectsResponse) String() string {
 func (*CountObjectsResponse) ProtoMessage() {}
 
 func (x *CountObjectsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[25]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1725,7 +1777,7 @@ func (x *CountObjectsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountObjectsResponse.ProtoReflect.Descriptor instead.
 func (*CountObjectsResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{25}
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CountObjectsResponse) GetApproximateCount() int64 {
@@ -1855,7 +1907,10 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x19SetObjectLegalHoldRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12\x1d\n" +
 	"\n" +
-	"legal_hold\x18\x02 \x01(\bR\tlegalHold\"3\n" +
+	"legal_hold\x18\x02 \x01(\bR\tlegalHold\"\x7f\n" +
+	"\x15SetObjectTaintRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12I\n" +
+	"\asignals\x18\x02 \x03(\x0e2\x1c.paladin.data.v1.TaintSignalB\x11\xbaH\x0e\x92\x01\v\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\asignals\"3\n" +
 	"\x14GetObjectLockRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"g\n" +
 	"\x14RestoreObjectRequest\x12\x1b\n" +
@@ -1899,7 +1954,7 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x10PresignTransport\x12!\n" +
 	"\x1dPRESIGN_TRANSPORT_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PRESIGN_TRANSPORT_PUT\x10\x01\x12\x1a\n" +
-	"\x16PRESIGN_TRANSPORT_POST\x10\x022\xc8\f\n" +
+	"\x16PRESIGN_TRANSPORT_POST\x10\x022\xa0\r\n" +
 	"\rObjectService\x12[\n" +
 	"\fUploadObject\x12$.paladin.data.v1.UploadObjectRequest\x1a%.paladin.data.v1.UploadObjectResponse\x12a\n" +
 	"\x0eDownloadObject\x12&.paladin.data.v1.DownloadObjectRequest\x1a'.paladin.data.v1.DownloadObjectResponse\x12L\n" +
@@ -1918,7 +1973,8 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x14RestoreObjectVersion\x12,.paladin.data.v1.RestoreObjectVersionRequest\x1a\x17.paladin.data.v1.Object\"\x03\x90\x02\x02\x12g\n" +
 	"\x12SetObjectRetention\x12*.paladin.data.v1.SetObjectRetentionRequest\x1a .paladin.data.v1.ObjectLockState\"\x03\x90\x02\x02\x12g\n" +
 	"\x12SetObjectLegalHold\x12*.paladin.data.v1.SetObjectLegalHoldRequest\x1a .paladin.data.v1.ObjectLockState\"\x03\x90\x02\x02\x12]\n" +
-	"\rGetObjectLock\x12%.paladin.data.v1.GetObjectLockRequest\x1a .paladin.data.v1.ObjectLockState\"\x03\x90\x02\x01BJZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3"
+	"\rGetObjectLock\x12%.paladin.data.v1.GetObjectLockRequest\x1a .paladin.data.v1.ObjectLockState\"\x03\x90\x02\x01\x12V\n" +
+	"\x0eSetObjectTaint\x12&.paladin.data.v1.SetObjectTaintRequest\x1a\x17.paladin.data.v1.Object\"\x03\x90\x02\x02BJZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_object_service_proto_rawDescOnce sync.Once
@@ -1933,7 +1989,7 @@ func file_paladin_data_v1_object_service_proto_rawDescGZIP() []byte {
 }
 
 var file_paladin_data_v1_object_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_paladin_data_v1_object_service_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_paladin_data_v1_object_service_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_paladin_data_v1_object_service_proto_goTypes = []any{
 	(PresignTransport)(0),               // 0: paladin.data.v1.PresignTransport
 	(*ObjectVersion)(nil),               // 1: paladin.data.v1.ObjectVersion
@@ -1953,107 +2009,112 @@ var file_paladin_data_v1_object_service_proto_goTypes = []any{
 	(*DeleteObjectResponse)(nil),        // 15: paladin.data.v1.DeleteObjectResponse
 	(*SetObjectRetentionRequest)(nil),   // 16: paladin.data.v1.SetObjectRetentionRequest
 	(*SetObjectLegalHoldRequest)(nil),   // 17: paladin.data.v1.SetObjectLegalHoldRequest
-	(*GetObjectLockRequest)(nil),        // 18: paladin.data.v1.GetObjectLockRequest
-	(*RestoreObjectRequest)(nil),        // 19: paladin.data.v1.RestoreObjectRequest
-	(*CopyObjectRequest)(nil),           // 20: paladin.data.v1.CopyObjectRequest
-	(*MetadataOverride)(nil),            // 21: paladin.data.v1.MetadataOverride
-	(*TagsOverride)(nil),                // 22: paladin.data.v1.TagsOverride
-	(*ListObjectsRequest)(nil),          // 23: paladin.data.v1.ListObjectsRequest
-	(*ListObjectsResponse)(nil),         // 24: paladin.data.v1.ListObjectsResponse
-	(*CountObjectsRequest)(nil),         // 25: paladin.data.v1.CountObjectsRequest
-	(*CountObjectsResponse)(nil),        // 26: paladin.data.v1.CountObjectsResponse
-	nil,                                 // 27: paladin.data.v1.ObjectVersion.MetadataEntry
-	nil,                                 // 28: paladin.data.v1.ObjectVersion.TagsEntry
-	nil,                                 // 29: paladin.data.v1.UploadObjectRequest.MetadataEntry
-	nil,                                 // 30: paladin.data.v1.UploadObjectRequest.TagsEntry
-	nil,                                 // 31: paladin.data.v1.UpdateObjectRequest.MetadataEntry
-	nil,                                 // 32: paladin.data.v1.UpdateObjectRequest.TagsEntry
-	nil,                                 // 33: paladin.data.v1.MetadataOverride.MetadataEntry
-	nil,                                 // 34: paladin.data.v1.TagsOverride.TagsEntry
-	(*ChecksumDigest)(nil),              // 35: paladin.data.v1.ChecksumDigest
-	(*ObjectLockState)(nil),             // 36: paladin.data.v1.ObjectLockState
-	(*timestamppb.Timestamp)(nil),       // 37: google.protobuf.Timestamp
-	(*v1.PageRequest)(nil),              // 38: paladin.common.v1.PageRequest
-	(*v1.PageResponse)(nil),             // 39: paladin.common.v1.PageResponse
-	(v1.ChecksumAlgorithm)(0),           // 40: paladin.common.v1.ChecksumAlgorithm
-	(*Object)(nil),                      // 41: paladin.data.v1.Object
-	(*v1.PresignedUrl)(nil),             // 42: paladin.common.v1.PresignedUrl
-	(v1.CompletionMode)(0),              // 43: paladin.common.v1.CompletionMode
-	(*durationpb.Duration)(nil),         // 44: google.protobuf.Duration
-	(*fieldmaskpb.FieldMask)(nil),       // 45: google.protobuf.FieldMask
-	(v1.SortOrder)(0),                   // 46: paladin.common.v1.SortOrder
+	(*SetObjectTaintRequest)(nil),       // 18: paladin.data.v1.SetObjectTaintRequest
+	(*GetObjectLockRequest)(nil),        // 19: paladin.data.v1.GetObjectLockRequest
+	(*RestoreObjectRequest)(nil),        // 20: paladin.data.v1.RestoreObjectRequest
+	(*CopyObjectRequest)(nil),           // 21: paladin.data.v1.CopyObjectRequest
+	(*MetadataOverride)(nil),            // 22: paladin.data.v1.MetadataOverride
+	(*TagsOverride)(nil),                // 23: paladin.data.v1.TagsOverride
+	(*ListObjectsRequest)(nil),          // 24: paladin.data.v1.ListObjectsRequest
+	(*ListObjectsResponse)(nil),         // 25: paladin.data.v1.ListObjectsResponse
+	(*CountObjectsRequest)(nil),         // 26: paladin.data.v1.CountObjectsRequest
+	(*CountObjectsResponse)(nil),        // 27: paladin.data.v1.CountObjectsResponse
+	nil,                                 // 28: paladin.data.v1.ObjectVersion.MetadataEntry
+	nil,                                 // 29: paladin.data.v1.ObjectVersion.TagsEntry
+	nil,                                 // 30: paladin.data.v1.UploadObjectRequest.MetadataEntry
+	nil,                                 // 31: paladin.data.v1.UploadObjectRequest.TagsEntry
+	nil,                                 // 32: paladin.data.v1.UpdateObjectRequest.MetadataEntry
+	nil,                                 // 33: paladin.data.v1.UpdateObjectRequest.TagsEntry
+	nil,                                 // 34: paladin.data.v1.MetadataOverride.MetadataEntry
+	nil,                                 // 35: paladin.data.v1.TagsOverride.TagsEntry
+	(*ChecksumDigest)(nil),              // 36: paladin.data.v1.ChecksumDigest
+	(*ObjectLockState)(nil),             // 37: paladin.data.v1.ObjectLockState
+	(*timestamppb.Timestamp)(nil),       // 38: google.protobuf.Timestamp
+	(*v1.PageRequest)(nil),              // 39: paladin.common.v1.PageRequest
+	(*v1.PageResponse)(nil),             // 40: paladin.common.v1.PageResponse
+	(v1.ChecksumAlgorithm)(0),           // 41: paladin.common.v1.ChecksumAlgorithm
+	(*Object)(nil),                      // 42: paladin.data.v1.Object
+	(*v1.PresignedUrl)(nil),             // 43: paladin.common.v1.PresignedUrl
+	(v1.CompletionMode)(0),              // 44: paladin.common.v1.CompletionMode
+	(*durationpb.Duration)(nil),         // 45: google.protobuf.Duration
+	(*fieldmaskpb.FieldMask)(nil),       // 46: google.protobuf.FieldMask
+	(TaintSignal)(0),                    // 47: paladin.data.v1.TaintSignal
+	(v1.SortOrder)(0),                   // 48: paladin.common.v1.SortOrder
 }
 var file_paladin_data_v1_object_service_proto_depIdxs = []int32{
-	35, // 0: paladin.data.v1.ObjectVersion.checksum:type_name -> paladin.data.v1.ChecksumDigest
-	27, // 1: paladin.data.v1.ObjectVersion.metadata:type_name -> paladin.data.v1.ObjectVersion.MetadataEntry
-	28, // 2: paladin.data.v1.ObjectVersion.tags:type_name -> paladin.data.v1.ObjectVersion.TagsEntry
-	36, // 3: paladin.data.v1.ObjectVersion.lock:type_name -> paladin.data.v1.ObjectLockState
-	37, // 4: paladin.data.v1.ObjectVersion.created_at:type_name -> google.protobuf.Timestamp
-	38, // 5: paladin.data.v1.ListObjectVersionsRequest.page:type_name -> paladin.common.v1.PageRequest
+	36, // 0: paladin.data.v1.ObjectVersion.checksum:type_name -> paladin.data.v1.ChecksumDigest
+	28, // 1: paladin.data.v1.ObjectVersion.metadata:type_name -> paladin.data.v1.ObjectVersion.MetadataEntry
+	29, // 2: paladin.data.v1.ObjectVersion.tags:type_name -> paladin.data.v1.ObjectVersion.TagsEntry
+	37, // 3: paladin.data.v1.ObjectVersion.lock:type_name -> paladin.data.v1.ObjectLockState
+	38, // 4: paladin.data.v1.ObjectVersion.created_at:type_name -> google.protobuf.Timestamp
+	39, // 5: paladin.data.v1.ListObjectVersionsRequest.page:type_name -> paladin.common.v1.PageRequest
 	1,  // 6: paladin.data.v1.ListObjectVersionsResponse.versions:type_name -> paladin.data.v1.ObjectVersion
-	39, // 7: paladin.data.v1.ListObjectVersionsResponse.page:type_name -> paladin.common.v1.PageResponse
-	40, // 8: paladin.data.v1.UploadObjectRequest.checksum_algorithm:type_name -> paladin.common.v1.ChecksumAlgorithm
-	29, // 9: paladin.data.v1.UploadObjectRequest.metadata:type_name -> paladin.data.v1.UploadObjectRequest.MetadataEntry
-	30, // 10: paladin.data.v1.UploadObjectRequest.tags:type_name -> paladin.data.v1.UploadObjectRequest.TagsEntry
+	40, // 7: paladin.data.v1.ListObjectVersionsResponse.page:type_name -> paladin.common.v1.PageResponse
+	41, // 8: paladin.data.v1.UploadObjectRequest.checksum_algorithm:type_name -> paladin.common.v1.ChecksumAlgorithm
+	30, // 9: paladin.data.v1.UploadObjectRequest.metadata:type_name -> paladin.data.v1.UploadObjectRequest.MetadataEntry
+	31, // 10: paladin.data.v1.UploadObjectRequest.tags:type_name -> paladin.data.v1.UploadObjectRequest.TagsEntry
 	0,  // 11: paladin.data.v1.UploadObjectRequest.transport:type_name -> paladin.data.v1.PresignTransport
-	41, // 12: paladin.data.v1.UploadObjectResponse.object:type_name -> paladin.data.v1.Object
-	42, // 13: paladin.data.v1.UploadObjectResponse.upload_url:type_name -> paladin.common.v1.PresignedUrl
-	43, // 14: paladin.data.v1.UploadObjectResponse.completion_mode:type_name -> paladin.common.v1.CompletionMode
-	44, // 15: paladin.data.v1.DownloadObjectRequest.ttl:type_name -> google.protobuf.Duration
-	41, // 16: paladin.data.v1.DownloadObjectResponse.object:type_name -> paladin.data.v1.Object
-	42, // 17: paladin.data.v1.DownloadObjectResponse.download_url:type_name -> paladin.common.v1.PresignedUrl
-	45, // 18: paladin.data.v1.UpdateObjectRequest.update_mask:type_name -> google.protobuf.FieldMask
-	31, // 19: paladin.data.v1.UpdateObjectRequest.metadata:type_name -> paladin.data.v1.UpdateObjectRequest.MetadataEntry
-	32, // 20: paladin.data.v1.UpdateObjectRequest.tags:type_name -> paladin.data.v1.UpdateObjectRequest.TagsEntry
-	41, // 21: paladin.data.v1.DeleteObjectResponse.object:type_name -> paladin.data.v1.Object
-	37, // 22: paladin.data.v1.SetObjectRetentionRequest.retain_until:type_name -> google.protobuf.Timestamp
-	21, // 23: paladin.data.v1.CopyObjectRequest.metadata_override:type_name -> paladin.data.v1.MetadataOverride
-	22, // 24: paladin.data.v1.CopyObjectRequest.tags_override:type_name -> paladin.data.v1.TagsOverride
-	33, // 25: paladin.data.v1.MetadataOverride.metadata:type_name -> paladin.data.v1.MetadataOverride.MetadataEntry
-	34, // 26: paladin.data.v1.TagsOverride.tags:type_name -> paladin.data.v1.TagsOverride.TagsEntry
-	38, // 27: paladin.data.v1.ListObjectsRequest.page:type_name -> paladin.common.v1.PageRequest
-	46, // 28: paladin.data.v1.ListObjectsRequest.sort_order:type_name -> paladin.common.v1.SortOrder
-	41, // 29: paladin.data.v1.ListObjectsResponse.objects:type_name -> paladin.data.v1.Object
-	39, // 30: paladin.data.v1.ListObjectsResponse.page:type_name -> paladin.common.v1.PageResponse
-	6,  // 31: paladin.data.v1.ObjectService.UploadObject:input_type -> paladin.data.v1.UploadObjectRequest
-	8,  // 32: paladin.data.v1.ObjectService.DownloadObject:input_type -> paladin.data.v1.DownloadObjectRequest
-	10, // 33: paladin.data.v1.ObjectService.GetObject:input_type -> paladin.data.v1.GetObjectRequest
-	11, // 34: paladin.data.v1.ObjectService.LookupObject:input_type -> paladin.data.v1.LookupObjectRequest
-	12, // 35: paladin.data.v1.ObjectService.UpdateObject:input_type -> paladin.data.v1.UpdateObjectRequest
-	13, // 36: paladin.data.v1.ObjectService.CompleteObject:input_type -> paladin.data.v1.CompleteObjectRequest
-	14, // 37: paladin.data.v1.ObjectService.DeleteObject:input_type -> paladin.data.v1.DeleteObjectRequest
-	19, // 38: paladin.data.v1.ObjectService.RestoreObject:input_type -> paladin.data.v1.RestoreObjectRequest
-	20, // 39: paladin.data.v1.ObjectService.CopyObject:input_type -> paladin.data.v1.CopyObjectRequest
-	23, // 40: paladin.data.v1.ObjectService.ListObjects:input_type -> paladin.data.v1.ListObjectsRequest
-	25, // 41: paladin.data.v1.ObjectService.CountObjects:input_type -> paladin.data.v1.CountObjectsRequest
-	2,  // 42: paladin.data.v1.ObjectService.ListObjectVersions:input_type -> paladin.data.v1.ListObjectVersionsRequest
-	4,  // 43: paladin.data.v1.ObjectService.GetObjectVersion:input_type -> paladin.data.v1.GetObjectVersionRequest
-	5,  // 44: paladin.data.v1.ObjectService.RestoreObjectVersion:input_type -> paladin.data.v1.RestoreObjectVersionRequest
-	16, // 45: paladin.data.v1.ObjectService.SetObjectRetention:input_type -> paladin.data.v1.SetObjectRetentionRequest
-	17, // 46: paladin.data.v1.ObjectService.SetObjectLegalHold:input_type -> paladin.data.v1.SetObjectLegalHoldRequest
-	18, // 47: paladin.data.v1.ObjectService.GetObjectLock:input_type -> paladin.data.v1.GetObjectLockRequest
-	7,  // 48: paladin.data.v1.ObjectService.UploadObject:output_type -> paladin.data.v1.UploadObjectResponse
-	9,  // 49: paladin.data.v1.ObjectService.DownloadObject:output_type -> paladin.data.v1.DownloadObjectResponse
-	41, // 50: paladin.data.v1.ObjectService.GetObject:output_type -> paladin.data.v1.Object
-	41, // 51: paladin.data.v1.ObjectService.LookupObject:output_type -> paladin.data.v1.Object
-	41, // 52: paladin.data.v1.ObjectService.UpdateObject:output_type -> paladin.data.v1.Object
-	41, // 53: paladin.data.v1.ObjectService.CompleteObject:output_type -> paladin.data.v1.Object
-	15, // 54: paladin.data.v1.ObjectService.DeleteObject:output_type -> paladin.data.v1.DeleteObjectResponse
-	41, // 55: paladin.data.v1.ObjectService.RestoreObject:output_type -> paladin.data.v1.Object
-	41, // 56: paladin.data.v1.ObjectService.CopyObject:output_type -> paladin.data.v1.Object
-	24, // 57: paladin.data.v1.ObjectService.ListObjects:output_type -> paladin.data.v1.ListObjectsResponse
-	26, // 58: paladin.data.v1.ObjectService.CountObjects:output_type -> paladin.data.v1.CountObjectsResponse
-	3,  // 59: paladin.data.v1.ObjectService.ListObjectVersions:output_type -> paladin.data.v1.ListObjectVersionsResponse
-	1,  // 60: paladin.data.v1.ObjectService.GetObjectVersion:output_type -> paladin.data.v1.ObjectVersion
-	41, // 61: paladin.data.v1.ObjectService.RestoreObjectVersion:output_type -> paladin.data.v1.Object
-	36, // 62: paladin.data.v1.ObjectService.SetObjectRetention:output_type -> paladin.data.v1.ObjectLockState
-	36, // 63: paladin.data.v1.ObjectService.SetObjectLegalHold:output_type -> paladin.data.v1.ObjectLockState
-	36, // 64: paladin.data.v1.ObjectService.GetObjectLock:output_type -> paladin.data.v1.ObjectLockState
-	48, // [48:65] is the sub-list for method output_type
-	31, // [31:48] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	42, // 12: paladin.data.v1.UploadObjectResponse.object:type_name -> paladin.data.v1.Object
+	43, // 13: paladin.data.v1.UploadObjectResponse.upload_url:type_name -> paladin.common.v1.PresignedUrl
+	44, // 14: paladin.data.v1.UploadObjectResponse.completion_mode:type_name -> paladin.common.v1.CompletionMode
+	45, // 15: paladin.data.v1.DownloadObjectRequest.ttl:type_name -> google.protobuf.Duration
+	42, // 16: paladin.data.v1.DownloadObjectResponse.object:type_name -> paladin.data.v1.Object
+	43, // 17: paladin.data.v1.DownloadObjectResponse.download_url:type_name -> paladin.common.v1.PresignedUrl
+	46, // 18: paladin.data.v1.UpdateObjectRequest.update_mask:type_name -> google.protobuf.FieldMask
+	32, // 19: paladin.data.v1.UpdateObjectRequest.metadata:type_name -> paladin.data.v1.UpdateObjectRequest.MetadataEntry
+	33, // 20: paladin.data.v1.UpdateObjectRequest.tags:type_name -> paladin.data.v1.UpdateObjectRequest.TagsEntry
+	42, // 21: paladin.data.v1.DeleteObjectResponse.object:type_name -> paladin.data.v1.Object
+	38, // 22: paladin.data.v1.SetObjectRetentionRequest.retain_until:type_name -> google.protobuf.Timestamp
+	47, // 23: paladin.data.v1.SetObjectTaintRequest.signals:type_name -> paladin.data.v1.TaintSignal
+	22, // 24: paladin.data.v1.CopyObjectRequest.metadata_override:type_name -> paladin.data.v1.MetadataOverride
+	23, // 25: paladin.data.v1.CopyObjectRequest.tags_override:type_name -> paladin.data.v1.TagsOverride
+	34, // 26: paladin.data.v1.MetadataOverride.metadata:type_name -> paladin.data.v1.MetadataOverride.MetadataEntry
+	35, // 27: paladin.data.v1.TagsOverride.tags:type_name -> paladin.data.v1.TagsOverride.TagsEntry
+	39, // 28: paladin.data.v1.ListObjectsRequest.page:type_name -> paladin.common.v1.PageRequest
+	48, // 29: paladin.data.v1.ListObjectsRequest.sort_order:type_name -> paladin.common.v1.SortOrder
+	42, // 30: paladin.data.v1.ListObjectsResponse.objects:type_name -> paladin.data.v1.Object
+	40, // 31: paladin.data.v1.ListObjectsResponse.page:type_name -> paladin.common.v1.PageResponse
+	6,  // 32: paladin.data.v1.ObjectService.UploadObject:input_type -> paladin.data.v1.UploadObjectRequest
+	8,  // 33: paladin.data.v1.ObjectService.DownloadObject:input_type -> paladin.data.v1.DownloadObjectRequest
+	10, // 34: paladin.data.v1.ObjectService.GetObject:input_type -> paladin.data.v1.GetObjectRequest
+	11, // 35: paladin.data.v1.ObjectService.LookupObject:input_type -> paladin.data.v1.LookupObjectRequest
+	12, // 36: paladin.data.v1.ObjectService.UpdateObject:input_type -> paladin.data.v1.UpdateObjectRequest
+	13, // 37: paladin.data.v1.ObjectService.CompleteObject:input_type -> paladin.data.v1.CompleteObjectRequest
+	14, // 38: paladin.data.v1.ObjectService.DeleteObject:input_type -> paladin.data.v1.DeleteObjectRequest
+	20, // 39: paladin.data.v1.ObjectService.RestoreObject:input_type -> paladin.data.v1.RestoreObjectRequest
+	21, // 40: paladin.data.v1.ObjectService.CopyObject:input_type -> paladin.data.v1.CopyObjectRequest
+	24, // 41: paladin.data.v1.ObjectService.ListObjects:input_type -> paladin.data.v1.ListObjectsRequest
+	26, // 42: paladin.data.v1.ObjectService.CountObjects:input_type -> paladin.data.v1.CountObjectsRequest
+	2,  // 43: paladin.data.v1.ObjectService.ListObjectVersions:input_type -> paladin.data.v1.ListObjectVersionsRequest
+	4,  // 44: paladin.data.v1.ObjectService.GetObjectVersion:input_type -> paladin.data.v1.GetObjectVersionRequest
+	5,  // 45: paladin.data.v1.ObjectService.RestoreObjectVersion:input_type -> paladin.data.v1.RestoreObjectVersionRequest
+	16, // 46: paladin.data.v1.ObjectService.SetObjectRetention:input_type -> paladin.data.v1.SetObjectRetentionRequest
+	17, // 47: paladin.data.v1.ObjectService.SetObjectLegalHold:input_type -> paladin.data.v1.SetObjectLegalHoldRequest
+	19, // 48: paladin.data.v1.ObjectService.GetObjectLock:input_type -> paladin.data.v1.GetObjectLockRequest
+	18, // 49: paladin.data.v1.ObjectService.SetObjectTaint:input_type -> paladin.data.v1.SetObjectTaintRequest
+	7,  // 50: paladin.data.v1.ObjectService.UploadObject:output_type -> paladin.data.v1.UploadObjectResponse
+	9,  // 51: paladin.data.v1.ObjectService.DownloadObject:output_type -> paladin.data.v1.DownloadObjectResponse
+	42, // 52: paladin.data.v1.ObjectService.GetObject:output_type -> paladin.data.v1.Object
+	42, // 53: paladin.data.v1.ObjectService.LookupObject:output_type -> paladin.data.v1.Object
+	42, // 54: paladin.data.v1.ObjectService.UpdateObject:output_type -> paladin.data.v1.Object
+	42, // 55: paladin.data.v1.ObjectService.CompleteObject:output_type -> paladin.data.v1.Object
+	15, // 56: paladin.data.v1.ObjectService.DeleteObject:output_type -> paladin.data.v1.DeleteObjectResponse
+	42, // 57: paladin.data.v1.ObjectService.RestoreObject:output_type -> paladin.data.v1.Object
+	42, // 58: paladin.data.v1.ObjectService.CopyObject:output_type -> paladin.data.v1.Object
+	25, // 59: paladin.data.v1.ObjectService.ListObjects:output_type -> paladin.data.v1.ListObjectsResponse
+	27, // 60: paladin.data.v1.ObjectService.CountObjects:output_type -> paladin.data.v1.CountObjectsResponse
+	3,  // 61: paladin.data.v1.ObjectService.ListObjectVersions:output_type -> paladin.data.v1.ListObjectVersionsResponse
+	1,  // 62: paladin.data.v1.ObjectService.GetObjectVersion:output_type -> paladin.data.v1.ObjectVersion
+	42, // 63: paladin.data.v1.ObjectService.RestoreObjectVersion:output_type -> paladin.data.v1.Object
+	37, // 64: paladin.data.v1.ObjectService.SetObjectRetention:output_type -> paladin.data.v1.ObjectLockState
+	37, // 65: paladin.data.v1.ObjectService.SetObjectLegalHold:output_type -> paladin.data.v1.ObjectLockState
+	37, // 66: paladin.data.v1.ObjectService.GetObjectLock:output_type -> paladin.data.v1.ObjectLockState
+	42, // 67: paladin.data.v1.ObjectService.SetObjectTaint:output_type -> paladin.data.v1.Object
+	50, // [50:68] is the sub-list for method output_type
+	32, // [32:50] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_paladin_data_v1_object_service_proto_init() }
@@ -2062,14 +2123,14 @@ func file_paladin_data_v1_object_service_proto_init() {
 		return
 	}
 	file_paladin_data_v1_types_proto_init()
-	file_paladin_data_v1_object_service_proto_msgTypes[19].OneofWrappers = []any{}
+	file_paladin_data_v1_object_service_proto_msgTypes[20].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_data_v1_object_service_proto_rawDesc), len(file_paladin_data_v1_object_service_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   34,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

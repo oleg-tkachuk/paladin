@@ -706,6 +706,7 @@ func objectFromSQLC(o sqlc.Object, collectionName string) objecth.Object {
 		CommittedAt:      timePtr(o.CommittedAt),
 		TerminatedAt:     timePtr(o.TerminatedAt),
 		PresignExpiresAt: timePtr(o.PresignExpiresAt),
+		Taint:            o.Taint,
 	}
 }
 

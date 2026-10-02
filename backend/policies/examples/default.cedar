@@ -36,7 +36,8 @@ permit (
         Action::"DeleteObject",
         Action::"RestoreObject",
         Action::"UpdateObject",
-        Action::"CopyObject"
+        Action::"CopyObject",
+        Action::"SetObjectTaint"
     ],
     resource
 ) when {

@@ -171,6 +171,18 @@ func CapabilityEstablishingInterceptor(
 	return i
 }
 
+// TaintLookup reports whether the object a capability resource URI names
+// has been flagged with any taint signal. A URI that names no object is not
+// tainted.
+type TaintLookup func(ctx context.Context, resourceURI string) (bool, error)
+
+// WithTaintLookup turns on the AllowTaintedRead caveat: a capability without
+// it is refused a read of an object the lookup reports tainted. Without a
+// lookup the caveat cannot act — there is no taint signal to read.
+func WithTaintLookup(lookup TaintLookup) CapabilityOption {
+	return func(i *capabilityInterceptor) { i.taintLookup = lookup }
+}
+
 type capabilityInterceptor struct {
 	verifier *capability.StandardVerifier
 	audience string
@@ -193,6 +205,7 @@ type capabilityInterceptor struct {
 	chargePerRequestUnit   string
 	emitter                ChargeEventEmitter
 	dpop                   *capability.DPoPVerifier
+	taintLookup            TaintLookup
 }
 
 func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -226,6 +239,7 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 		ctx = WithChargeEventEmitter(ctx, i.emitter)
 		ctx = withLastOpHolder(ctx)
 		ctx = withIdempotencyKeyPresent(ctx, requestHasIdempotencyKey(req))
+		ctx = withTaintLookup(ctx, i.taintLookup)
 		return next(ctx, req)
 	}
 }
@@ -261,6 +275,7 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		ctx = WithChargeEventEmitter(ctx, i.emitter)
 		ctx = withLastOpHolder(ctx)
 		ctx = withIdempotencyKeyPresent(ctx, conn.RequestHeader().Get(paladin.HeaderIdempotencyKey) != "")
+		ctx = withTaintLookup(ctx, i.taintLookup)
 		return next(ctx, conn)
 	}
 }
@@ -865,14 +880,30 @@ func AssertCapabilityOp(ctx context.Context, op capability.Op, resourceURI strin
 	if !ok {
 		return nil // no capability presented; not our gate
 	}
-	// No taint signal exists in this deployment yet, so ResourceTainted is
-	// left false and AllowTaintedRead restricts nothing here (see BACKLOG).
-	if err := cap.Caveats.Check(capability.CheckRequest{
+	req := capability.CheckRequest{
 		Op:                op,
 		Resource:          resourceURI,
 		HasIdempotencyKey: idempotencyKeyPresent(ctx),
-	}); err != nil {
+	}
+	if err := cap.Caveats.Check(req); err != nil {
 		return connect.NewError(connect.CodePermissionDenied, err)
+	}
+	// The taint check costs a lookup, so it runs only once everything else
+	// has passed, and only where it can refuse: a read of a named object by
+	// a capability that was not allowed tainted reads.
+	if lookup := taintLookupFrom(ctx); lookup != nil && resourceURI != "" &&
+		!op.Mutating() && !cap.Caveats.AllowTaintedRead {
+		tainted, err := lookup(ctx, resourceURI)
+		if err != nil {
+			// Fail closed: "could not tell" is not "clean".
+			return connect.NewError(connect.CodeUnavailable, err)
+		}
+		if tainted {
+			req.ResourceTainted = true
+			if err := cap.Caveats.Check(req); err != nil {
+				return connect.NewError(connect.CodePermissionDenied, err)
+			}
+		}
 	}
 	// Stamp the op into the per-request holder so a later
 	// ChargeRequest / ChargeCapability call attributes the charges-
@@ -897,6 +928,20 @@ func requestHasIdempotencyKey(req connect.AnyRequest) bool {
 	}
 	c, ok := req.Any().(idempotencyKeyCarrier)
 	return ok && c.GetIdempotencyKey() != ""
+}
+
+type taintLookupKey struct{}
+
+func withTaintLookup(ctx context.Context, lookup TaintLookup) context.Context {
+	if lookup == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, taintLookupKey{}, lookup)
+}
+
+func taintLookupFrom(ctx context.Context) TaintLookup {
+	lookup, _ := ctx.Value(taintLookupKey{}).(TaintLookup)
+	return lookup
 }
 
 type idempotencyKeyPresentKey struct{}

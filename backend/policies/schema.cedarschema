@@ -244,6 +244,15 @@ action "SetObjectRetention", "SetObjectLegalHold", "ReadObjectLock" appliesTo {
   context: RequestContext
 };
 
+// SetObjectTaint flags or clears the signals that keep an object's content
+// from agents not allowed to read flagged content. Clearing one re-opens the
+// content, so it is not implied by write access.
+action "SetObjectTaint" appliesTo {
+  principal: [User],
+  resource: [Object],
+  context: RequestContext
+};
+
 // IAM — user management. Listing is checked against the Tenant.
 action "ManageUser", "ResetPassword", "GrantScopes" appliesTo {
   principal: [User],
