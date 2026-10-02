@@ -1650,16 +1650,15 @@ the code. Not fixed in the documentation change that recorded them.
   generated message schemas rather than literals.
 - **Blockers:** none.
 
-### The dispatcher holds row locks across sink I/O
+### Delivered and failed event rows are kept forever
 
 - **Status:** Deferred.
-- **Reason:** `OutboxRunner.tick` selects a batch `FOR UPDATE SKIP LOCKED` and
-  keeps that transaction open while it delivers every row, HTTP retries and
-  their sleeps included. A slow sink stretches the transaction; a failed
-  status update rolls the batch back and redelivers rows that already
-  succeeded. `failed` rows are never redriven or purged.
-- **Definition of Done:** delivery happens outside the locking transaction
-  (claim, deliver, record), with a retention and redrive path for `failed`.
+- **Reason:** `event_deliveries` has no retention: delivered rows pile up, and
+  a `failed` row — one that exhausted its attempts — stays failed with no way
+  to send it again short of an SQL update.
+- **Definition of Done:** a worker job purges delivered and failed rows past a
+  configured age, and an admin RPC re-queues a subscription's failed rows,
+  each with tests.
 - **Blockers:** none.
 
 ## Tooling and observability
