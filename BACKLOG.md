@@ -968,6 +968,21 @@ finding moving from "packages you import" to "your code is affected".
   score from one pass.
 - **Blockers:** none. It is a tool, not scheduled work.
 
+### Sign the Helm charts the release publishes
+
+- **Status:** Deferred.
+- **Reason:** `release.yaml` signs each image by digest and attests a
+  per-platform SBOM to it (`scripts/release-sign.sh`), but the charts it pushes
+  to the same registry are unsigned. Signing needs the chart's digest, and the
+  push runs inside the shared task library, where `helm push` reports it only
+  as a human-readable line — not something to parse.
+- **Definition of Done:** `release.yaml` resolves each pushed chart's digest
+  through a machine-readable interface (`crane digest`, or `helm push`'s own
+  output if a release adds a structured one), signs it keyless with the same
+  identity as the images, verifies it in the same job, and
+  `docs/releasing.md` shows the verify command for a chart.
+- **Blockers:** none.
+
 ### Index-usage tests are pinned to measured table sizes
 
 - **Status:** Deferred (works today; a trap for later).

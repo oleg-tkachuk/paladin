@@ -348,6 +348,14 @@ tasks:
     cmds:
       - ./scripts/workflows-audit.sh
 
+  verify:release-signing:
+    desc: "Sign, SBOM-attest and verify a multi-arch image the way release.yaml does, against a throwaway registry"
+    # Not part of verify-all: it needs Docker, cosign, syft, crane and network
+    # to ghcr.io. Keyless signing needs a CI OIDC token, so release.yaml's own
+    # verify step covers that path; this covers the rest of the same script.
+    cmds:
+      - ./scripts/release-sign.test.sh
+
   verify:portable-shell:
     desc: "The tracked shell scripts use no form only BSD or only GNU accepts"
     cmds:

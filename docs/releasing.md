@@ -29,6 +29,52 @@ change (`!` or a `BREAKING CHANGE:` footer) a major. Any other type — `docs`,
 `style`, `refactor`, `test`, `build`, `ci`, `chore` — releases nothing on its
 own.
 
+### Signatures and SBOMs
+
+Every image a release publishes is signed and carries a signed SBOM, so a
+deployment can check what it runs came from this repository's release
+workflow and know what is inside it.
+
+- **Signed by digest, keyless.** [Sigstore](https://www.sigstore.dev/) signs
+  each image with a short-lived certificate bound to the release workflow's
+  GitHub OIDC identity, and records it in the public transparency log. There
+  is no key to leak or rotate. The image index and every platform image are
+  signed, so a pull by tag and a pull by platform digest both verify.
+- **One SBOM per platform.** [Syft](https://github.com/anchore/syft) writes an
+  SPDX document for `linux/amd64` and `linux/arm64` separately; each is
+  attested (signed in-toto) to its own platform image and attached to the
+  GitHub release.
+- **Verified before the release exists.** The workflow verifies the
+  signatures and attestations it just made, against the identity below, and
+  publishes nothing further if they fail.
+
+The logic is [`scripts/release-sign.sh`](../scripts/release-sign.sh);
+`task -t Taskfile.dev.yaml verify:release-signing` runs it with a throwaway
+key against a local registry. Charts are not signed yet; see BACKLOG.md.
+
+Signing starts with the first release after 4.11.5; earlier images are
+unsigned. To verify an image (cosign v3):
+
+```bash
+image=ghcr.io/oleg-tkachuk/paladin-core:4.12.0
+cosign verify "$image" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github.com/oleg-tkachuk/paladin/\.github/workflows/release\.yaml@'
+```
+
+The SBOM is attested to a platform image, not to the index a tag names, so
+resolve the platform digest first — `cosign verify-attestation` on the tag
+finds nothing:
+
+```bash
+digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' |
+  jq -r '.manifests[] | select(.platform.architecture == "amd64") | .digest')
+cosign verify-attestation "${image%:*}@${digest}" --type spdxjson \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github.com/oleg-tkachuk/paladin/\.github/workflows/release\.yaml@' |
+  jq -r '.payload | @base64d | fromjson | .predicate.packages | length'
+```
+
 ## The SDKs: `api/vX.Y.Z`
 
 The Go SDK is generated from the proto, so it follows the contract, not the
