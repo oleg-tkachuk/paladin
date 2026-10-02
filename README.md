@@ -98,6 +98,10 @@ Two Helm charts, published to GHCR with every release (`vX.Y.Z`):
 | `oci://ghcr.io/oleg-tkachuk/charts/paladin-core` | the backend planes, plus the migrate and bootstrap Jobs |
 | `oci://ghcr.io/oleg-tkachuk/charts/paladin-console` | the web console and its BFF |
 
+The charts and the images they deploy are signed keyless with Sigstore, and
+each image carries a signed SPDX SBOM per platform;
+[releasing.md](docs/releasing.md#signatures-and-sboms) shows how to verify them.
+
 The charts run neither PostgreSQL nor the object store: bring PostgreSQL 16+
 and an S3-compatible store whose access key may create buckets. Kubernetes
 1.25+ and Helm 3.8+.

@@ -35,12 +35,23 @@ env:
   HELM_VERSION: "v4.3.0"
   # renovate: datasource=github-releases depName=mikefarah/yq
   YQ_VERSION: "v4.53.6"
+  # renovate: datasource=github-releases depName=sigstore/cosign
+  COSIGN_VERSION: "v3.1.3"
+  # renovate: datasource=github-releases depName=anchore/syft
+  SYFT_VERSION: "v1.54.0"
+  # renovate: datasource=github-releases depName=google/go-containerregistry
+  CRANE_VERSION: "v0.22.1"
+  # Who issues the OIDC token keyless signing is bound to; verification pins it.
+  CERT_OIDC_ISSUER: https://token.actions.githubusercontent.com
   # Where both components publish. Must match image.repository in the charts'
   # values.yaml and the defaults in Taskfile.yaml; verify:publish-target
   # checks all three.
   REGISTRY: ghcr.io
   IMAGE_NAMESPACE: ${{ github.repository_owner }}
   PLATFORMS: linux/amd64,linux/arm64
+  # The path segment the task library pushes charts under
+  # (oci://<registry>/<namespace>/charts); publish-target.test.sh checks the two agree.
+  CHART_PATH: charts
 
 concurrency:
   # Two dispatches close together would both compute "next version" from the
@@ -137,6 +148,7 @@ jobs:
     permissions:
       contents: read
       packages: write # push the image and the chart to GHCR
+      id-token: write # keyless signing: Sigstore binds the signature to this workflow
     strategy:
       # A failure in one component must not cancel the other halfway through a
       # push; each is re-runnable on its own, and both pushes are idempotent.
@@ -193,12 +205,15 @@ jobs:
 
           taskfile="${COMPONENT}/Taskfile.yaml"
           name="$(yq -r '.vars.PROJECT_NAME' "$taskfile")"
+          # The library names the chart CHART_NAME, else PROJECT_NAME.
+          chart="$(yq -r '.vars.CHART_NAME // .vars.PROJECT_NAME' "$taskfile")"
           dockerfile="$(yq -r '.vars.DOCKERFILE' "$taskfile")"
           context="$(yq -r '.vars.DOCKER_CONTEXT' "$taskfile")"
 
           {
             printf 'version=%s\n' "$version"
             printf 'image=%s/%s/%s\n' "$REGISTRY" "$IMAGE_NAMESPACE" "$name"
+            printf 'chart=%s/%s/%s/%s\n' "$REGISTRY" "$IMAGE_NAMESPACE" "$CHART_PATH" "$chart"
             printf 'file=%s/%s\n' "$COMPONENT" "$dockerfile"
             printf 'context=%s/%s\n' "$COMPONENT" "$context"
             # The same three values the library's image:build passes.
@@ -229,6 +244,7 @@ jobs:
       # No build cache: this job holds a write token, and a cache another run
       # wrote is not something to build a published image from.
       - name: Build and push the image
+        id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ${{ steps.resolve.outputs.context }}
@@ -240,6 +256,52 @@ jobs:
             APP_VERSION=${{ steps.resolve.outputs.version }}
             GIT_COMMIT_HASH=${{ steps.resolve.outputs.sha }}
             BUILD_TIME=${{ steps.resolve.outputs.build_time }}
+
+      - name: Set up cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Set up syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          syft-version: ${{ env.SYFT_VERSION }}
+
+      # Keyless: the certificate names this workflow at the ref it ran from,
+      # and the script verifies exactly that identity before anything else is
+      # published. docs/how-changes-land.md shows users the same check.
+      - name: Sign the image and attest its SBOMs
+        env:
+          IMAGE: ${{ steps.resolve.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          SYFT: ${{ steps.syft.outputs.cmd }}
+        run: |
+          set -euo pipefail
+          PATH="$(dirname "$SYFT"):$PATH"
+          export CERT_IDENTITY="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/release.yaml@${GITHUB_REF}"
+          ./scripts/release-sign.sh "$IMAGE" "$DIGEST" "${RUNNER_TEMP}/sbom"
+
+      # crane reads a pushed chart's digest; `helm push` reports it only as a
+      # line of text.
+      - name: Set up crane
+        run: |
+          set -euo pipefail
+          base="https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}"
+          tgz="go-containerregistry_Linux_x86_64.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "${base}/${tgz}"
+          curl -fsSL "${base}/checksums.txt" | grep " ${tgz}\$" | sha256sum -c -
+          sudo tar -xzf "$tgz" -C /usr/local/bin crane
+          crane version
+
+      - name: Keep the SBOMs for the release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-${{ matrix.component }}
+          path: ${{ runner.temp }}/sbom/*.spdx.json
+          if-no-files-found: error
+          retention-days: 7
 
       # After the image: the chart's appVersion names it, so a chart pushed
       # first would point at a tag that does not exist yet.
@@ -256,6 +318,16 @@ jobs:
           task --yes "${COMPONENT}:release:chart:push" \
             GLOBAL_REGISTRY="$REGISTRY" IMAGE_NAMESPACE="$IMAGE_NAMESPACE" APP_VERSION="$VERSION"
 
+      # Same identity and the same in-job verification as the image.
+      - name: Sign the chart
+        env:
+          CHART: ${{ steps.resolve.outputs.chart }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          export CERT_IDENTITY="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/release.yaml@${GITHUB_REF}"
+          ./scripts/release-sign-chart.sh "${CHART}:${VERSION}"
+
   # The GitHub release, once every component's image and chart is in GHCR.
   # `needs` alone would skip this when publish fails; the explicit result
   # check also keeps it from running if publish was skipped or cancelled.
@@ -270,9 +342,18 @@ jobs:
     env:
       TAG: ${{ needs.release.outputs.tag }}
     steps:
+      - name: Fetch the SBOMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: sbom-*
+          path: sbom
+          merge-multiple: true
+
       # Notes for people, built from merged pull requests and shaped by
-      # .github/release.yml. No checkout: gh works against the repository.
+      # .github/release.yml, with each image's per-platform SBOM attached. The
+      # same SBOMs are attested to the images; these copies are for reading.
+      # No checkout: gh works against the repository.
       - name: Create the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag
+        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag sbom/*.spdx.json
