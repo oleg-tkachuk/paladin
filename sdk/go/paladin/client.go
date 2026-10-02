@@ -60,6 +60,7 @@ type Client struct {
 	httpClient connect.HTTPClient
 	baseURL    string
 	options    []connect.ClientOption
+	transfer   *Transfer
 }
 
 // Option configures a Client.
@@ -71,9 +72,16 @@ type config struct {
 	retry      *retryPolicy
 	tokens     *tokenAuth
 	extra      []connect.ClientOption
+	transfer   *Transfer
 	// anyPlaneTokens and audience: WithTokens, and the plane Connect builds.
 	anyPlaneTokens TokenSource
 	audience       string
+}
+
+// WithTransfer sends the presigned requests of Upload and Download through t:
+// declared once here, it holds for every transfer through the client.
+func WithTransfer(t *Transfer) Option {
+	return func(cfg *config) { cfg.transfer = t }
 }
 
 // WithHTTPClient replaces http.DefaultClient.
@@ -167,6 +175,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 		httpClient: cfg.httpClient,
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		options:    options,
+		transfer:   cfg.transfer,
 	}, nil
 }
 

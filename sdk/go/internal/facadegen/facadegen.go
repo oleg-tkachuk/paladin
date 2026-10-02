@@ -30,6 +30,9 @@ type Plane struct {
 	Package protoreflect.FullName
 	// ConnectImport is the Go package of the plane's generated Connect clients.
 	ConnectImport string
+	// Transfers is whether the plane moves bytes through presigned URLs, and
+	// so carries the client's Transfer for Upload and Download.
+	Transfers bool
 }
 
 // connectImportPrefix is where buf generates the Connect clients.
@@ -37,7 +40,7 @@ const connectImportPrefix = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/
 
 // Planes are the three planes, in the order the facade declares them.
 var Planes = []Plane{
-	{Name: "Data", Package: "paladin.data.v1", ConnectImport: connectImportPrefix + "data/v1/paladindatav1connect"},
+	{Name: "Data", Package: "paladin.data.v1", ConnectImport: connectImportPrefix + "data/v1/paladindatav1connect", Transfers: true},
 	{Name: "Admin", Package: "paladin.admin.v1", ConnectImport: connectImportPrefix + "admin/v1/paladinadminv1connect"},
 	{Name: "IAM", Package: "paladin.iam.v1", ConnectImport: connectImportPrefix + "iam/v1/paladiniamv1connect"},
 }
@@ -81,9 +84,15 @@ func Render() ([]byte, error) {
 		for _, s := range services {
 			fmt.Fprintf(&b, "\t%s %s.%sClient\n", Field(s), alias, s)
 		}
+		if p.Transfers {
+			b.WriteString("\n\ttransfer *Transfer\n")
+		}
 		fmt.Fprintf(&b, "}\n\nfunc new%sPlane(c *Client) *%sPlane {\n\treturn &%sPlane{\n", p.Name, p.Name, p.Name)
 		for _, s := range services {
 			fmt.Fprintf(&b, "\t\t%s: %s.New%sClient(c.httpClient, c.baseURL, c.ClientOptions()...),\n", Field(s), alias, s)
+		}
+		if p.Transfers {
+			b.WriteString("\t\ttransfer: c.transfer,\n")
 		}
 		b.WriteString("\t}\n}\n")
 	}

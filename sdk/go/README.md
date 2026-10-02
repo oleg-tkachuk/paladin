@@ -124,8 +124,33 @@ and `Issue*` calls and answers a repeated key with the first response.
 | `Pages(ctx, call, req, items) iter.Seq2[Item, error]` | Calls a List RPC page by page, following `next_page_token`, and yields every item; `items` picks them out of a response, e.g. `(*datav1.ListObjectsResponse).GetObjects`. The first error is yielded and ends it; leaving the loop makes no further calls. `ErrNotPaged` for an RPC without `page`. |
 | `Wait(ctx, get) (Op, error)` | Polls `get` until the operation is done, from `DefaultPollInterval` (500ms) doubling to `DefaultMaxPollInterval` (10s). An operation that failed comes back with an `*OperationError` carrying its status; `Code()` is the Connect code. `ctx` bounds the wait. Works for both planes' `Operation`. |
 | `Mask[M](paths...) (*fieldmaskpb.FieldMask, error)` | An update mask for `M` from proto field names, nested ones with `.`, each checked against `M`'s descriptor: `ErrUnknownMaskPath` for one it lacks. |
-| `Upload(ctx, p.Data, UploadInput, UploadOptions) (*datav1.Object, error)` | Uploads `Body` (an `io.ReaderAt`: `*os.File`, `*bytes.Reader`) of `Size` bytes and completes it. Up to `MultipartThreshold` (default `DefaultMultipartThreshold`, 8 MiB) one presigned PUT; above it multipart, `PartConcurrency` parts at a time (default 3), aborted if any part fails. A refused transfer is a `*TransferError`. The presigned requests go to storage, not Paladin, through `UploadOptions.HTTPClient`. |
-| `Download(ctx, p.Data, name, httpClient) (io.ReadCloser, *datav1.Object, error)` | Opens the object's content through a presigned URL; close the reader. |
+| `Upload(ctx, p.Data, UploadInput, UploadOptions) (*datav1.Object, error)` | Uploads `Size` bytes from exactly one of `Body` (an `io.ReaderAt`: `*os.File`, `*bytes.Reader`) and `Stream` (an `io.Reader` read once: a pipe, a response body) and completes the object; neither is read into memory whole. Up to `MultipartThreshold` (default `DefaultMultipartThreshold`, 8 MiB) one presigned PUT, which records the content's SHA-256 on the object; above it multipart, `PartConcurrency` parts at a time (default 3), aborted if any part fails. `ErrUploadBody` for neither or both. |
+| `Download(ctx, p.Data, name, DownloadOptions) (*ObjectReader, error)` | Streams the object's content; close the reader. `DownloadOptions{Offset, Length}` reads a byte range (`ErrRangeIgnored` when storage answers with the whole object). A whole read is verified: the last `Read` returns an `*IntegrityError` instead of `io.EOF` when the size or the recorded checksum (SHA-256, CRC32C, MD5) does not match. `ObjectReader` carries the `Object`, `ContentType` and `ContentLength`. |
+
+### Transfers
+
+`Upload` and `Download` move bytes through presigned URLs, straight to the
+storage backend. Those requests are not Paladin calls: the client's
+credentials, retries and interceptors are not on them. They go through the
+client's `Transfer`, declared once:
+
+```go
+transfer, err := paladin.NewTransfer(
+	// URLs signed for the public storage host, sent to its in-cluster address
+	// with the signed Host header kept.
+	paladin.WithSplitHorizon("https://s3.example.com", "http://seaweedfs-s3.storage.svc:8333"),
+)
+p, err := paladin.Connect(endpoints, paladin.WithTokens(session), paladin.WithTransfer(transfer))
+```
+
+| Name | Does |
+| --- | --- |
+| `NewTransfer(opts...) (*Transfer, error)` | With no options: a transport bounded at each stage that can hang — dial, TLS handshake, response headers (`DefaultTransfer…` constants) — but not over a whole transfer, which the caller's context bounds; `DefaultTransferMaxIdleConnsPerHost` (32) connections kept for reuse; redirects refused. Safe for concurrent use and meant to be shared. |
+| `WithTransfer(t) Option` | Every `Upload` and `Download` through the client uses `t`. A client without one shares a default. |
+| `WithSplitHorizon(signedOrigin, internalOrigin)` | A URL signed for `signedOrigin` is sent to `internalOrigin`, keeping `Host: <signed host>`: the signature covers the header, not the address. Other origins go as signed. `ErrInvalidOrigin` for anything but `scheme://host[:port]`. |
+| `WithTransferRewrite(func(*url.URL) *url.URL)` | The general form: any mapping, the signed Host still kept. |
+| `WithTransferHTTPClient(c)` | Sends through `c` — a proxy, a TLS configuration, instrumentation. Redirects are still refused. |
+| `*TransferError` | A request storage refused, or answered with a redirect: `Method`, `Host` (the URL's query is the signature and is not kept), `Status`, and the first 512 bytes of the `Body`. |
 
 ### Header names
 

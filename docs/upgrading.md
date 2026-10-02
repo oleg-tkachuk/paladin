@@ -42,6 +42,30 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## v0.13.0 — the Go SDK's transfers are declared once, stream and verify
+
+The contract does not change. The Go SDK's `Upload` and `Download` do, and
+break code written against 0.12:
+
+- **The HTTP client for presigned requests moves to the client.**
+  `UploadOptions.HTTPClient` and `Download`'s `httpClient` argument are gone.
+  Declare it once with `paladin.WithTransfer(paladin.NewTransfer(
+  paladin.WithTransferHTTPClient(c)))`; every `Upload` and `Download` through
+  that client uses it.
+- **`Download` returns an `*ObjectReader`.** `Download(ctx, data, name, nil)`
+  becomes `Download(ctx, data, name, paladin.DownloadOptions{})`; the reader is
+  the `io.ReadCloser` it returned, and `r.Object` the object.
+- **A whole download is verified.** Its last `Read` returns an
+  `*IntegrityError` rather than `io.EOF` when the size or the recorded
+  checksum does not match. Code that treated any error at the end of the
+  content as the end of the content now sees it.
+- **Redirects are refused.** The default transport used to be
+  `http.DefaultClient`, which follows them; a presigned URL never redirects
+  legitimately, and following one sends its signed headers elsewhere. A
+  redirect is now a `*TransferError` with its 3xx status.
+- **A single-PUT upload records its SHA-256** on the object, through
+  `CompleteObject`'s `checksum_value`.
+
 ## v0.12.0 — the SDKs sign in, connect every plane, and stamp idempotency keys
 
 The contract gains one RPC, `EventSubscriptionService.RedriveFailedDeliveries`;

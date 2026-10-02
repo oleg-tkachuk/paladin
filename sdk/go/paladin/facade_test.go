@@ -67,8 +67,14 @@ func TestConnectBuildsEveryServiceOfEveryPlane(t *testing.T) {
 	for _, plane := range facadegen.Planes {
 		v := reflect.ValueOf(planes[plane.Name]).Elem()
 		services := facadegen.Services(plane.Package)
-		if v.NumField() != len(services) {
-			t.Errorf("%s plane has %d clients, the contract %d services", plane.Name, v.NumField(), len(services))
+		clients := 0
+		for _, f := range reflect.VisibleFields(v.Type()) {
+			if f.IsExported() {
+				clients++
+			}
+		}
+		if clients != len(services) {
+			t.Errorf("%s plane has %d clients, the contract %d services", plane.Name, clients, len(services))
 		}
 		for _, s := range services {
 			f := v.FieldByName(facadegen.Field(s))

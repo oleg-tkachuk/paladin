@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -165,12 +166,16 @@ func TestMask(t *testing.T) {
 // ─── Upload and Download ────────────────────────────────────────────────────
 
 // storage is a fake S3: presigned PUTs store bytes and answer an MD5 ETag,
-// GETs return them. It can refuse a part, and records required headers.
+// GETs return them and honour Range. It can refuse a part, ignore ranges or
+// redirect, and records required headers and the Host each request named.
 type storage struct {
 	mu          sync.Mutex
 	blobs       map[string][]byte
 	refusePart  string
+	ignoreRange bool
+	redirectTo  string
 	headersSeen map[string]string
+	hosts       []string
 }
 
 const (
@@ -181,6 +186,11 @@ const (
 func (s *storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.hosts = append(s.hosts, r.Host)
+	if s.redirectTo != "" {
+		http.Redirect(w, r, s.redirectTo, http.StatusTemporaryRedirect)
+		return
+	}
 	key := r.URL.Path + "?" + r.URL.RawQuery
 	switch r.Method {
 	case http.MethodPut:
@@ -199,7 +209,10 @@ func (s *storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		_, _ = w.Write(b)
+		if s.ignoreRange {
+			r.Header.Del("Range")
+		}
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(b))
 	}
 }
 
@@ -216,8 +229,12 @@ type dataPlane struct {
 	partSize   int64
 	mu         sync.Mutex
 	completed  map[string]string // object → etag
+	checksums  map[string]string // object → checksum value CompleteObject got
 	parts      []*datav1.CompletedPart
 	aborted    int
+	// described is what DownloadObject says of the object: size, checksum.
+	described *datav1.Object
+	noURL     bool
 }
 
 func (d *dataPlane) signed(path string) *commonv1.PresignedUrl {
@@ -235,14 +252,21 @@ func (d *dataPlane) CompleteObject(_ context.Context, req *connect.Request[datav
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.completed[req.Msg.GetName()] = req.Msg.GetEtag()
+	d.checksums[req.Msg.GetName()] = req.Msg.GetChecksumValue()
 	return connect.NewResponse(&datav1.Object{Name: req.Msg.GetName()}), nil
 }
 
 func (d *dataPlane) DownloadObject(_ context.Context, req *connect.Request[datav1.DownloadObjectRequest]) (*connect.Response[datav1.DownloadObjectResponse], error) {
 	key := req.Msg.GetName()[strings.LastIndex(req.Msg.GetName(), "/"):]
-	return connect.NewResponse(&datav1.DownloadObjectResponse{
-		Object: &datav1.Object{Name: req.Msg.GetName()}, DownloadUrl: d.signed(key),
-	}), nil
+	object := &datav1.Object{Name: req.Msg.GetName()}
+	if d.described != nil {
+		object = d.described
+	}
+	resp := &datav1.DownloadObjectResponse{Object: object, DownloadUrl: d.signed(key)}
+	if d.noURL {
+		resp.DownloadUrl = nil
+	}
+	return connect.NewResponse(resp), nil
 }
 
 func (d *dataPlane) InitiateMultipartUpload(_ context.Context, req *connect.Request[datav1.InitiateMultipartUploadRequest]) (*connect.Response[datav1.InitiateMultipartUploadResponse], error) {
@@ -272,22 +296,28 @@ func (d *dataPlane) AbortMultipartUpload(context.Context, *connect.Request[datav
 	return connect.NewResponse(&datav1.AbortMultipartUploadResponse{}), nil
 }
 
-func newTransfer(t *testing.T, partSize int64) (*paladin.DataPlane, *dataPlane, *storage) {
+func newTransfer(t *testing.T, partSize int64, opts ...paladin.Option) (*paladin.DataPlane, *dataPlane, *storage) {
 	t.Helper()
 	st := &storage{blobs: map[string][]byte{}, headersSeen: map[string]string{}}
 	stSrv := httptest.NewServer(st)
 	t.Cleanup(stSrv.Close)
-	dp := &dataPlane{storageURL: stSrv.URL, partSize: partSize, completed: map[string]string{}}
+	dp := &dataPlane{storageURL: stSrv.URL, partSize: partSize, completed: map[string]string{}, checksums: map[string]string{}}
+	return connectData(t, dp, opts...), dp, st
+}
+
+// connectData serves dp and returns a data plane connected to it with opts.
+func connectData(t *testing.T, dp *dataPlane, opts ...paladin.Option) *paladin.DataPlane {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle(paladindatav1connect.NewObjectServiceHandler(dp))
 	mux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(dp))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	p, err := paladin.Connect(paladin.Endpoints{Data: srv.URL})
+	p, err := paladin.Connect(paladin.Endpoints{Data: srv.URL}, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return p.Data, dp, st
+	return p.Data
 }
 
 const testParent = "tenants/t/collections/c"
@@ -308,7 +338,7 @@ func TestUploadAndDownloadASmallObject(t *testing.T) {
 		t.Errorf("required header = %q, want %q: storage refuses a request without it", got, requiredValue)
 	}
 
-	r, _, err := paladin.Download(context.Background(), data, obj.GetName(), nil)
+	r, err := paladin.Download(context.Background(), data, obj.GetName(), paladin.DownloadOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

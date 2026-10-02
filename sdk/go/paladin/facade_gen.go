@@ -17,6 +17,8 @@ type DataPlane struct {
 	Operation        paladindatav1connect.OperationServiceClient
 	Presign          paladindatav1connect.PresignServiceClient
 	StorageBootstrap paladindatav1connect.StorageBootstrapServiceClient
+
+	transfer *Transfer
 }
 
 func newDataPlane(c *Client) *DataPlane {
@@ -28,6 +30,7 @@ func newDataPlane(c *Client) *DataPlane {
 		Operation:        paladindatav1connect.NewOperationServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
 		Presign:          paladindatav1connect.NewPresignServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
 		StorageBootstrap: paladindatav1connect.NewStorageBootstrapServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
+		transfer:         c.transfer,
 	}
 }
 
