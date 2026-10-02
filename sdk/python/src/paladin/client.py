@@ -31,6 +31,7 @@ from connectrpc.interceptor import Interceptor, InterceptorSync
 from connectrpc.method import IdempotencyLevel
 from connectrpc.request import RequestContext
 
+from paladin.dpop import DPoPAsync, DPoPSync
 from paladin.errors import convert, relayed
 from paladin.observe import Hooks, RetryEvent, report_retry
 
@@ -181,6 +182,7 @@ class Client:
         user_agent_suffix: str | None = None,
         hooks: Hooks | None = None,
         interceptors: Sequence[Any] = (),
+        dpop_key: Any = None,
     ) -> None:
         """Validate ``base_url`` and hold the credentials and retry policy.
 
@@ -201,6 +203,11 @@ class Client:
         outside the SDK's own, so one that times or traces a call — such as
         connectrpc-otel's ``OpenTelemetryInterceptor(client=True)`` — covers
         its retries; give sync or async ones to match the clients.
+
+        ``dpop_key`` — a ``cryptography`` Ed25519 or P-256 private key — proves
+        possession of the key a ``capability`` is bound to: each call, each
+        retry included, carries a fresh DPoP proof (RFC 9449). Needs the
+        ``dpop`` extra; see ``paladin.dpop``.
         """
         if token_source is not None and not audience:
             raise ValueError("token_source needs the plane's audience; or use paladin.connect")
@@ -225,6 +232,12 @@ class Client:
         self._audience = audience or ""
         self._hooks = hooks
         self._extra = list(interceptors)
+        self._dpop: tuple[DPoPSync, DPoPAsync] | None = None
+        if dpop_key is not None:
+            self._dpop = (
+                DPoPSync(dpop_key, self._base_url, HEADER_CAPABILITY),
+                DPoPAsync(dpop_key, self._base_url, HEADER_CAPABILITY),
+            )
 
     @property
     def base_url(self) -> str:
@@ -243,6 +256,8 @@ class Client:
             result.append(_TokensSync(self._token_source, self._audience))
         if self._retry is not None:
             result.append(_RetrySync(self._retry, self._hooks))
+        if self._dpop is not None:
+            result.append(self._dpop[0])
         return result
 
     def async_interceptors(self) -> list[Interceptor]:
@@ -257,6 +272,8 @@ class Client:
             result.append(_TokensAsync(self._token_source, self._audience))
         if self._retry is not None:
             result.append(_RetryAsync(self._retry, self._hooks))
+        if self._dpop is not None:
+            result.append(self._dpop[1])
         return result
 
 

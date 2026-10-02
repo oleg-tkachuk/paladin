@@ -106,6 +106,14 @@ type jwtClaims struct {
 	PaladinCaveats   Caveats    `json:"paladin_caveats"`
 	PaladinParentID  string     `json:"paladin_parent_id,omitempty"`
 	PaladinGen       int64      `json:"paladin_gen,omitempty"`
+
+	// Confirmation is RFC 7800's `cnf`, omitted for an unbound capability so
+	// such tokens keep the frozen format byte for byte.
+	Confirmation *cnfClaim `json:"cnf,omitempty"`
+}
+
+type cnfClaim struct {
+	JKT string `json:"jkt"`
 }
 
 // Sign implements Signer. Encodes the header + claims, signs the
@@ -144,6 +152,9 @@ func (s *ed25519Signer) Sign(c Capability) (string, error) {
 	}
 	if c.ParentID != uuid.Nil {
 		claims.PaladinParentID = c.ParentID.String()
+	}
+	if c.ConfirmationJKT != "" {
+		claims.Confirmation = &cnfClaim{JKT: c.ConfirmationJKT}
 	}
 
 	headerJSON, err := json.Marshal(header)
@@ -236,6 +247,9 @@ func parseClaims(seg string) (*Capability, error) {
 		cap.Subject = *claims.PaladinPrincipal
 	} else {
 		cap.Subject = Principal{Subject: claims.Subject}
+	}
+	if claims.Confirmation != nil {
+		cap.ConfirmationJKT = claims.Confirmation.JKT
 	}
 	if claims.PaladinParentID != "" {
 		pid, err := uuid.Parse(claims.PaladinParentID)

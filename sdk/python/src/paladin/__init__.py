@@ -35,6 +35,7 @@ from paladin.client import (
     user_agent,
 )
 from paladin.connect import AsyncPaladin, Endpoints, Paladin, connect, connect_async
+from paladin.dpop import HEADER_DPOP, dpop_thumbprint
 from paladin.errors import (
     ERROR_DOMAIN,
     HEADER_SERVER_VERSION,
@@ -122,6 +123,7 @@ __all__ = [
     "HEADER_API_TOKEN",
     "HEADER_AUTHORIZATION",
     "HEADER_CAPABILITY",
+    "HEADER_DPOP",
     "HEADER_IDEMPOTENCY_KEY",
     "HEADER_RETRY_AFTER",
     "HEADER_SERVER_VERSION",
@@ -179,6 +181,7 @@ __all__ = [
     "download_many",
     "download_stream",
     "download_uri",
+    "dpop_thumbprint",
     "idempotency_key",
     "lookup_object",
     "mask",

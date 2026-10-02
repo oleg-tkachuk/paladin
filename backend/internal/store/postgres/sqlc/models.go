@@ -375,6 +375,7 @@ type CapabilityRecord struct {
 	IssuedAt         pgtype.Timestamptz `json:"issued_at"`
 	NotBefore        pgtype.Timestamptz `json:"not_before"`
 	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+	ConfirmationJkt  *string            `json:"confirmation_jkt"`
 }
 
 type CapabilityReservation struct {

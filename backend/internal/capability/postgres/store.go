@@ -77,11 +77,11 @@ func (s *Store) Insert(ctx context.Context, c capability.Capability, issuedBy ca
 INSERT INTO capability_records (
     id, tenant_id, issuer, principal_kind, principal_subject,
     principal_payload, audience, caveats, parent_id, generation,
-    issued_at, not_before, expires_at, created_by
+    issued_at, not_before, expires_at, created_by, confirmation_jkt
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6::jsonb, $7, $8::jsonb, $9, $10,
-    $11, $12, $13, $14
+    $11, $12, $13, $14, NULLIF($15, '')
 );
 `
 	var parent *uuid.UUID
@@ -128,6 +128,7 @@ INSERT INTO capability_records (
 		// contract rather than read from a request context — the capability
 		// module still depends on no auth pipeline.
 		issuedBy.Subject,
+		c.ConfirmationJKT,
 	); err != nil {
 		return fmt.Errorf("capability/postgres: insert: %w", err)
 	}
@@ -142,7 +143,7 @@ func (s *Store) Get(ctx context.Context, id uuid.UUID) (*capability.Capability, 
 	const stmt = `
 SELECT id, tenant_id, issuer, principal_kind, principal_subject,
        principal_payload, audience, caveats, parent_id, generation,
-       issued_at, not_before, expires_at
+       issued_at, not_before, expires_at, COALESCE(confirmation_jkt, '')
 FROM   capability_records
 WHERE  id = $1;
 `
@@ -331,7 +332,7 @@ func (s *Store) ListByPrincipal(ctx context.Context, args capability.ListByPrinc
 	stmt := fmt.Sprintf(`
 SELECT id, tenant_id, issuer, principal_kind, principal_subject,
        principal_payload, audience, caveats, parent_id, generation,
-       issued_at, not_before, expires_at
+       issued_at, not_before, expires_at, COALESCE(confirmation_jkt, '')
 FROM   capability_records cr
 WHERE  cr.tenant_id = $1
   AND  cr.principal_kind = $2
@@ -387,11 +388,12 @@ func scanRow(r scanner) (*capability.Capability, error) {
 		issuedAt              time.Time
 		notBefore             *time.Time
 		expiresAt             time.Time
+		confirmationJKT       string
 	)
 	err := r.Scan(
 		&id, &tenantID, &issuer, &kind, &subject,
 		&principalRaw, &audience, &caveats, &parent, &generation,
-		&issuedAt, &notBefore, &expiresAt,
+		&issuedAt, &notBefore, &expiresAt, &confirmationJKT,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -422,14 +424,15 @@ func scanRow(r scanner) (*capability.Capability, error) {
 	}
 
 	out := &capability.Capability{
-		ID:         id,
-		Issuer:     issuer,
-		Subject:    principal,
-		Audience:   audience,
-		Caveats:    cav,
-		IssuedAt:   issuedAt.UTC(),
-		ExpiresAt:  expiresAt.UTC(),
-		Generation: generation,
+		ID:              id,
+		Issuer:          issuer,
+		Subject:         principal,
+		Audience:        audience,
+		Caveats:         cav,
+		IssuedAt:        issuedAt.UTC(),
+		ExpiresAt:       expiresAt.UTC(),
+		Generation:      generation,
+		ConfirmationJKT: confirmationJKT,
 	}
 	if parent != nil {
 		out.ParentID = *parent

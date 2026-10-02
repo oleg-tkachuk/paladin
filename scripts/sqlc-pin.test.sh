@@ -53,14 +53,24 @@ exit 42
 STUB
 chmod +x "$stub/sqlc"
 
+# The stub's message is how a PATH sqlc shows itself; any other failure is the
+# drift gate doing its job — stale output — and is reported as that, not
+# blamed on the pin.
+readonly STUB_MARK="PATH sqlc was invoked"
 if ! out=$(cd "$root/backend" && PATH="$stub:$PATH" TMPDIR="$d/" TASK_OFFLINE=1 \
     task codegen:sqlc:check 2>&1); then
-    {
-        echo "!!! the sqlc drift gate did not use the go.mod-pinned sqlc"
-        echo "    set SQLC_MODULE on the codegen include in backend/Taskfile.yaml"
-        echo
-        sed 's/^/      /' <<<"$out"
-    } >&2
+    if grep -qF "$STUB_MARK" <<<"$out"; then
+        {
+            echo "!!! the sqlc drift gate did not use the go.mod-pinned sqlc"
+            echo "    set SQLC_MODULE on the codegen include in backend/Taskfile.yaml"
+        } >&2
+    else
+        {
+            echo "!!! the sqlc output is stale against the migrations and queries"
+            echo "    run: (cd backend && task codegen:sqlc), and commit the result"
+        } >&2
+    fi
+    printf '      %s\n' "${out//$'\n'/$'\n'      }" >&2
     exit 1
 fi
 

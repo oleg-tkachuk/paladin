@@ -37,6 +37,13 @@ func Narrows(parent, child Capability) error {
 		return fmt.Errorf("%w: tenant_id mismatch", ErrDelegationTooWide)
 	}
 
+	// Key binding: a bound parent cannot delegate an unbound child — that
+	// would turn a token useless without its key into one any holder can
+	// replay. The child may be bound to a different key: the sub-agent's.
+	if parent.ConfirmationJKT != "" && child.ConfirmationJKT == "" {
+		return fmt.Errorf("%w: parent is key-bound, child is not", ErrDelegationTooWide)
+	}
+
 	return narrowsCaveats(parent.Caveats, child.Caveats)
 }
 
