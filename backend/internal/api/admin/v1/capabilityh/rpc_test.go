@@ -346,8 +346,8 @@ func TestGetUsageReturnsCounters(t *testing.T) {
 	if usage.got != id {
 		t.Errorf("looked up %v, want %v", usage.got, id)
 	}
-	if resp.Msg.GetRequestCount() != 7 || resp.Msg.GetSpentAmount() != 42 {
-		t.Errorf("counters = %d / %v", resp.Msg.GetRequestCount(), resp.Msg.GetSpentAmount())
+	if resp.Msg.GetRequestCount() != 7 || resp.Msg.GetSpentMicros() != 42_000_000 {
+		t.Errorf("counters = %d / %d micros", resp.Msg.GetRequestCount(), resp.Msg.GetSpentMicros())
 	}
 	if resp.Msg.GetUnitCode() != "EUR" {
 		t.Errorf("UnitCode = %q, want EUR", resp.Msg.GetUnitCode())

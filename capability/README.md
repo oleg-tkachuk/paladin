@@ -226,6 +226,12 @@ A refund returns spend to every counter the charge took it from, and never
 more than the charge: `Amount: 0` refunds what is left, so a retried full
 refund is a no-op.
 
+Amounts are float64 in this API and exact in practice: `AmountToMicros`
+rounds an amount to whole millionths and `MicrosToAmount` reverses it
+without loss for anything below `MaxMicros` (fifteen significant digits,
+just under a billion units). Store and sum micros, not floats.
+
+
 ## Reserve before a cost is known
 
 An LLM call is priced by the tokens it ends up using. Hold an estimate first,

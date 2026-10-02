@@ -78,3 +78,45 @@ export function formatMoney(
   }
   return `${num} ${unitCode || ""}`.trim();
 }
+
+// Money crosses the API as int64 micros — millionths of the unit, so
+// 1.5 USD is 1_500_000n — which protobuf-es delivers as bigint. The
+// deprecated double fields beside them go away next release.
+
+const MICROS_PER_UNIT = 1_000_000n;
+
+// MAX_MICROS mirrors capability.MaxMicros: fifteen significant digits,
+// the most a JavaScript number carries exactly. The server refuses more.
+export const MAX_MICROS = 999_999_999_999_999n;
+
+// fromMicros turns micros into a number for display and arithmetic on the
+// screen. Exact for anything up to MAX_MICROS.
+export function fromMicros(micros: bigint | undefined): number {
+  return micros === undefined ? 0 : Number(micros) / 1_000_000;
+}
+
+// parseMicros reads what an operator typed — "25", "19.99", ".5" — into
+// micros without going through a float, so "0.1" is exactly 100_000n.
+// null for anything that is not a non-negative decimal with at most six
+// fractional digits, or that exceeds MAX_MICROS.
+export function parseMicros(text: string): bigint | null {
+  const match = /^(\d*)(?:\.(\d*))?$/.exec(text.trim());
+  if (!match) return null;
+  const [, whole = "", frac = ""] = match;
+  if (whole === "" && frac === "") return null;
+  if (frac.length > 6) return null;
+  const micros =
+    BigInt(whole || "0") * MICROS_PER_UNIT + BigInt(frac.padEnd(6, "0"));
+  return micros > MAX_MICROS ? null : micros;
+}
+
+// microsToInput renders micros as the shortest exact decimal, for seeding a
+// form field: 100_000_000n → "100", 1_500_000n → "1.5".
+export function microsToInput(micros: bigint): string {
+  const whole = micros / MICROS_PER_UNIT;
+  const frac = (micros % MICROS_PER_UNIT)
+    .toString()
+    .padStart(6, "0")
+    .replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : `${whole}`;
+}

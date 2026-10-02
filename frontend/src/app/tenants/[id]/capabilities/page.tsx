@@ -41,7 +41,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
-import { formatMoney } from "@/lib/format/money";
+import { formatMoney, fromMicros } from "@/lib/format/money";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
 import { ListLoadError } from "@/components/ui/ListLoadError";
@@ -181,7 +181,7 @@ export default function CapabilitiesPage() {
                 c.id,
                 {
                   requestCount: u.requestCount,
-                  spentAmount: u.spentAmount,
+                  spentAmount: fromMicros(u.spentMicros),
                   // UsageRecord without a unit_code is metering-only → UNIT.
                   unitCode: u.unitCode || "UNIT",
                 },
@@ -521,7 +521,9 @@ export default function CapabilitiesPage() {
                             </span>
                           );
                         const reqCap = c.caveats?.maxRequests ?? 0;
-                        const budgetCap = c.caveats?.maxBudgetAmount ?? 0;
+                        const budgetCap = fromMicros(
+                          c.caveats?.maxBudgetMicros,
+                        );
                         // Usage row → caveats → UNIT fallback. The
                         // "USD" default that lived here lied about
                         // the actual unit when both were absent

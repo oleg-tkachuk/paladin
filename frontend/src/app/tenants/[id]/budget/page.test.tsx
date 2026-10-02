@@ -22,6 +22,8 @@ const budget = {
   $typeName: "paladin.admin.v1.TenantBudget",
   maxBudgetAmount: 100,
   spentAmount: 0,
+  maxBudgetMicros: 100_000_000n,
+  spentMicros: 0n,
   unitCode: "USD",
   periodStart: undefined,
   periodEnd: undefined,
@@ -104,7 +106,12 @@ describe("TenantBudgetPage OCC", () => {
 
     // Another operator's write lands; a refresh reads it mid-edit.
     h.get.mockResolvedValue({
-      budget: { ...budget, maxBudgetAmount: 300, resourceVersion: "8" },
+      budget: {
+        ...budget,
+        maxBudgetAmount: 300,
+        maxBudgetMicros: 300_000_000n,
+        resourceVersion: "8",
+      },
     });
     await userEvent.click(screen.getByRole("button", { name: /refresh/i }));
     await waitFor(() => expect(h.get).toHaveBeenCalledTimes(2));
@@ -114,7 +121,7 @@ describe("TenantBudgetPage OCC", () => {
     );
     await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
     expect(h.set.mock.calls[0][0].resourceVersion).toBe("7");
-    expect(h.set.mock.calls[0][0].maxBudgetAmount).toBe(999);
+    expect(h.set.mock.calls[0][0].maxBudgetMicros).toBe(999_000_000n);
   });
 
   it('sends "0" when no budget exists yet — the create case', async () => {
@@ -196,7 +203,9 @@ describe("TenantBudgetPage OCC", () => {
 
     await userEvent.click(submit);
     await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
-    expect(h.set.mock.calls[0][0].maxBudgetAmount).toBe(Number(typed));
+    expect(h.set.mock.calls[0][0].maxBudgetMicros).toBe(
+      BigInt(typed) * 1_000_000n,
+    );
   });
 
   it("refetches and explains the conflict when the server aborts", async () => {

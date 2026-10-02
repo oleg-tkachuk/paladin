@@ -40,7 +40,13 @@ import { useNotification } from "@/components/ui/Notification";
 import { tenantBudgetClient } from "@/lib/connect/client";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { formatMoney, ALLOWED_UNIT_CODES } from "@/lib/format/money";
+import {
+  formatMoney,
+  ALLOWED_UNIT_CODES,
+  fromMicros,
+  microsToInput,
+  parseMicros,
+} from "@/lib/format/money";
 import { Select } from "@/components/ui/Select";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
@@ -127,7 +133,7 @@ export default function TenantBudgetPage() {
   if (budget !== seededFrom && !edited) {
     setSeededFrom(budget);
     if (budget) {
-      setMaxBudget(String(budget.maxBudgetAmount));
+      setMaxBudget(microsToInput(budget.maxBudgetMicros));
       if (budget.unitCode) setUnitCode(budget.unitCode);
       setPeriodEnd(
         budget.periodEnd
@@ -146,12 +152,14 @@ export default function TenantBudgetPage() {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    const cap = Number.parseFloat(maxBudget || "0");
-    if (!Number.isFinite(cap) || cap < 0) {
+    // Straight to micros, never through a float: "0.1" is exactly 100000n.
+    const cap = parseMicros(maxBudget || "0");
+    if (cap === null) {
       showNotification({
         type: "error",
         title: "Validation",
-        message: "Max budget must be a non-negative number.",
+        message:
+          "Max budget must be a non-negative amount with at most six decimals.",
       });
       return;
     }
@@ -159,7 +167,7 @@ export default function TenantBudgetPage() {
     try {
       await tenantBudgetClient.set({
         tenantId,
-        maxBudgetAmount: cap,
+        maxBudgetMicros: cap,
         unitCode,
         resetSpend,
         // OCC guard. "0" asserts no row exists yet — the create case — and is
@@ -180,8 +188,8 @@ export default function TenantBudgetPage() {
         type: "success",
         title: "Budget updated",
         message: resetSpend
-          ? `Cap set to ${formatAmount(cap, unitCode)} and period rolled.`
-          : `Cap set to ${formatAmount(cap, unitCode)}.`,
+          ? `Cap set to ${formatAmount(fromMicros(cap), unitCode)} and period rolled.`
+          : `Cap set to ${formatAmount(fromMicros(cap), unitCode)}.`,
       });
     } catch (err) {
       // Aborted is the OCC guard, not a fault: the row moved under us. Refetch
@@ -208,8 +216,8 @@ export default function TenantBudgetPage() {
     }
   };
 
-  const spent = Number(budget?.spentAmount ?? 0);
-  const cap = Number(budget?.maxBudgetAmount ?? 0);
+  const spent = fromMicros(budget?.spentMicros);
+  const cap = fromMicros(budget?.maxBudgetMicros);
   // Display fallback when an existing budget row carries no
   // unit_code (legacy data minted before the field was wired).
   // UNIT is correct: rendering "$0.00" for what's actually

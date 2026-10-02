@@ -59,11 +59,20 @@ message TenantBudget {
   // accumulates so admin tooling can show "current spend"). Field
   // number unchanged (wire-compatible with the previous
   // max_budget_usd name). Currency given by unit_code.
-  double max_budget_amount = 2 [(buf.validate.field).double.gte = 0];
+  //
+  // Deprecated: use max_budget_micros, an exact integer count of millionths. Kept
+  // for one release; the server fills both.
+  double max_budget_amount = 2 [
+    deprecated = true,
+    (buf.validate.field).double.gte = 0
+  ];
 
   // spent_amount is the accumulated spend within the current period.
   // Field number unchanged (wire-compatible with previous spent_usd).
-  double spent_amount = 3;
+  //
+  // Deprecated: use spent_micros, an exact integer count of millionths. Kept
+  // for one release; the server fills both.
+  double spent_amount = 3 [deprecated = true];
 
   google.protobuf.Timestamp period_start = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
   // period_end is optional — NULL means open-ended.
@@ -72,6 +81,11 @@ message TenantBudget {
   // unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT
   // (non-currency metering). One per TenantBudget message.
   string unit_code = 7;
+
+  // max_budget_micros is the cap in millionths of unit_code; 0 = unlimited.
+  int64 max_budget_micros = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // spent_micros is the spend in the current period, in millionths.
+  int64 spent_micros = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message TenantBudgetServiceGetRequest {
@@ -93,7 +107,13 @@ message TenantBudgetServiceSetRequest {
 
   // max_budget_amount is the new cap. 0 = unlimited. Field number
   // unchanged (wire-compatible with previous max_budget_usd).
-  double max_budget_amount = 2 [(buf.validate.field).double.gte = 0];
+  //
+  // Deprecated: use max_budget_micros, an exact integer count of millionths. Kept
+  // for one release; the server fills both.
+  double max_budget_amount = 2 [
+    deprecated = true,
+    (buf.validate.field).double.gte = 0
+  ];
 
   // reset_spend rolls the period: zeros spent_amount, moves
   // period_start to now. false leaves the counter alone — the cap
@@ -107,6 +127,11 @@ message TenantBudgetServiceSetRequest {
   // unit_code optionally pins the currency (ISO 4217 USD/EUR/UAH/
   // GBP or UNIT). Empty = keep existing or default to "USD".
   string unit_code = 5;
+
+  // max_budget_micros is the new cap in millionths of unit_code (1000 USD
+  // = 1000000000); 0 = unlimited. When set it wins over
+  // max_budget_amount, and a request carrying both must agree.
+  optional int64 max_budget_micros = 7 [(buf.validate.field).int64.gte = 0];
 }
 
 message TenantBudgetServiceSetResponse {

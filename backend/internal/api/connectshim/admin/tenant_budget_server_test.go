@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/capability"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -93,14 +94,17 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 
 	setRes, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID.String(),
-		MaxBudgetAmount: 100.0,
+		MaxBudgetAmount: 100.0, //nolint:staticcheck // an old client sends only the deprecated double
 		ResetSpend:      true,
 	}))
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got := setRes.Msg.GetBudget().GetMaxBudgetAmount(); got != 100.0 {
+	if got := setRes.Msg.GetBudget().GetMaxBudgetAmount(); got != 100.0 { //nolint:staticcheck // still filled for old clients
 		t.Errorf("max_budget_amount: got %v, want 100", got)
+	}
+	if got := setRes.Msg.GetBudget().GetMaxBudgetMicros(); got != 100_000_000 {
+		t.Errorf("max_budget_micros: got %d, want 100000000", got)
 	}
 	if got := setRes.Msg.GetBudget().GetUnitCode(); got != capability.DefaultUnitCode {
 		t.Errorf("unit_code: got %q, want %q (default)", got, capability.DefaultUnitCode)
@@ -138,7 +142,7 @@ func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
 
 	setRes, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID.String(),
-		MaxBudgetAmount: 250.0,
+		MaxBudgetMicros: proto.Int64(250_000_000),
 		UnitCode:        "EUR",
 		ResetSpend:      true,
 	}))
@@ -156,7 +160,7 @@ func TestTenantBudgetServer_Set_BadUnit(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
 	_, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
 		TenantId:        uuid.New().String(),
-		MaxBudgetAmount: 1.0,
+		MaxBudgetMicros: proto.Int64(1_000_000),
 		UnitCode:        "XYZ",
 	}))
 	var connErr *connect.Error
@@ -182,7 +186,7 @@ func TestTenantBudgetServer_Set_ReturnsNewVersion(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
 	res, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
 		TenantId:        uuid.New().String(),
-		MaxBudgetAmount: 10,
+		MaxBudgetMicros: proto.Int64(10_000_000),
 	}))
 	if err != nil {
 		t.Fatalf("Set: %v", err)
@@ -202,14 +206,14 @@ func TestTenantBudgetServer_Set_StaleVersionIsAborted(t *testing.T) {
 
 	if _, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID,
-		MaxBudgetAmount: 10,
+		MaxBudgetMicros: proto.Int64(10_000_000),
 	})); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	_, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID,
-		MaxBudgetAmount: 999,
+		MaxBudgetMicros: proto.Int64(999_000_000),
 		ResourceVersion: "1234",
 	}))
 	var connErr *connect.Error
@@ -223,7 +227,7 @@ func TestTenantBudgetServer_Set_BadVersionIsInvalidArgument(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
 	_, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
 		TenantId:        uuid.New().String(),
-		MaxBudgetAmount: 1,
+		MaxBudgetMicros: proto.Int64(1_000_000),
 		ResourceVersion: "not-a-number",
 	}))
 	var connErr *connect.Error

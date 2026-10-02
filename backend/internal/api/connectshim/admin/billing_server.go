@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -58,9 +59,11 @@ func (s *BillingServer) GetTenantSummary(
 		return nil, err
 	}
 	return connect.NewResponse(&pb.GetTenantSummaryResponse{
-		TotalAmount:     sum.TotalAmount,
+		TotalAmount:     sum.TotalAmount, //nolint:staticcheck // deprecated, still filled for one release
+		TotalMicros:     apiutil.Micros(sum.TotalAmount),
 		UnitCode:        sum.UnitCode,
-		MaxBudgetAmount: sum.MaxBudgetAmount,
+		MaxBudgetAmount: sum.MaxBudgetAmount, //nolint:staticcheck // deprecated, still filled for one release
+		MaxBudgetMicros: apiutil.Micros(sum.MaxBudgetAmount),
 		ChargeCount:     sum.ChargeCount,
 		TopCapabilities: topEntriesToProto(sum.TopCapabilities),
 		TopActors:       topEntriesToProto(sum.TopActors),
@@ -94,9 +97,10 @@ func (s *BillingServer) GetTenantTimeSeries(
 	}
 	for _, b := range ts.Buckets {
 		out.Buckets = append(out.Buckets, &pb.TimeBucket{
-			Start:       timestamppb.New(b.Start),
-			Amount:      b.Amount,
-			ChargeCount: b.ChargeCount,
+			Start:        timestamppb.New(b.Start),
+			Amount:       b.Amount, //nolint:staticcheck // deprecated, still filled for one release
+			AmountMicros: apiutil.Micros(b.Amount),
+			ChargeCount:  b.ChargeCount,
 		})
 	}
 	return connect.NewResponse(out), nil
@@ -108,9 +112,10 @@ func topEntriesToProto(in []billingh.TopEntry) []*pb.TopEntry {
 	out := make([]*pb.TopEntry, 0, len(in))
 	for _, e := range in {
 		out = append(out, &pb.TopEntry{
-			Label:       e.Label,
-			Amount:      e.Amount,
-			ChargeCount: e.ChargeCount,
+			Label:        e.Label,
+			Amount:       e.Amount, //nolint:staticcheck // deprecated, still filled for one release
+			AmountMicros: apiutil.Micros(e.Amount),
+			ChargeCount:  e.ChargeCount,
 		})
 	}
 	return out

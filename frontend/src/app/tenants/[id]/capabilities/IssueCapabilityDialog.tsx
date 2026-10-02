@@ -31,7 +31,7 @@ import { useNotification } from "@/components/ui/Notification";
 import { capabilityClient } from "@/lib/connect/client";
 import { copyToClipboard, cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { ALLOWED_UNIT_CODES } from "@/lib/format/money";
+import { ALLOWED_UNIT_CODES, parseMicros } from "@/lib/format/money";
 import {
   PrincipalKind,
   type Capability,
@@ -144,9 +144,10 @@ export function IssueCapabilityDialog({
   const maxRequests = issueMaxRequestsUnlimited
     ? 0
     : Number.parseInt(issueMaxRequests, 10);
-  const maxBudget = issueMaxBudgetUnlimited
-    ? 0
-    : Number.parseFloat(issueMaxBudget);
+  // Parsed straight to micros, never through a float: "0.1" is 100000n.
+  const maxBudgetMicros = issueMaxBudgetUnlimited
+    ? 0n
+    : parseMicros(issueMaxBudget);
   const maxRequestsError =
     !issueMaxRequestsUnlimited &&
     issueMaxRequests !== "" &&
@@ -156,8 +157,8 @@ export function IssueCapabilityDialog({
   const maxBudgetError =
     !issueMaxBudgetUnlimited &&
     issueMaxBudget !== "" &&
-    (!Number.isFinite(maxBudget) || maxBudget <= 0)
-      ? "A positive amount, or Unlimited."
+    (maxBudgetMicros === null || maxBudgetMicros <= 0n)
+      ? "A positive amount (up to six decimals), or Unlimited."
       : null;
 
   const blockedReason = !tenantId
@@ -193,7 +194,7 @@ export function IssueCapabilityDialog({
           resourcePrefixes: issueResourcePrefixes,
           resourceUris: [],
           maxRequests,
-          maxBudgetAmount: maxBudget,
+          maxBudgetMicros: maxBudgetMicros ?? 0n,
           unitCode: issueUnitCode,
           allowTaintedRead: false,
           idempotencyKeyRequired: false,

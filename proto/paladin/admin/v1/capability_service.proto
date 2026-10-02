@@ -93,7 +93,10 @@ message CapabilityCaveats {
   // max_budget_amount is the cost budget. Field number unchanged
   // (wire-compatible with the previous max_budget_usd field name).
   // Currency is given by unit_code; default "USD" when empty.
-  double max_budget_amount = 5;
+  //
+  // Deprecated: use max_budget_micros, an exact integer count of millionths. Kept
+  // for one release; the server fills both.
+  double max_budget_amount = 5 [deprecated = true];
   bool allow_tainted_read = 6;
   bool idempotency_key_required = 7;
   repeated string source_ip_cidr = 8;
@@ -102,6 +105,10 @@ message CapabilityCaveats {
   // the request defaults to "USD" server-side; the validator
   // rejects any other unrecognised value.
   string unit_code = 9;
+  // max_budget_micros is the cost budget in millionths of unit_code (25
+  // USD = 25000000); 0 = no budget. When set it wins over
+  // max_budget_amount, and a request carrying both must agree.
+  optional int64 max_budget_micros = 10 [(buf.validate.field).int64.gte = 0];
 }
 
 // Capability is the typed metadata view of an issued or stored
@@ -203,8 +210,13 @@ message CapabilityServiceGetUsageResponse {
   // spent_amount is the accumulated spend. Field number unchanged
   // (wire-compatible with the previous spent_usd field name).
   // Currency is given by unit_code.
-  double spent_amount = 3;
+  //
+  // Deprecated: use spent_micros, an exact integer count of millionths. Kept
+  // for one release; the server fills both.
+  double spent_amount = 3 [deprecated = true];
   google.protobuf.Timestamp updated_at = 4;
   // unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT.
   string unit_code = 5;
+  // spent_micros is the accumulated spend in millionths of unit_code.
+  int64 spent_micros = 6;
 }

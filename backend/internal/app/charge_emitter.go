@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
@@ -87,6 +88,8 @@ func (e *chargeEmitter) EmitChargedTx(
 			"capability_id": capabilityID,
 			"op":            op,
 			"amount":        amount,
+			// Exact, in millionths of unit_code: what a subscriber should sum.
+			"amount_micros": apiutil.Micros(amount),
 			"unit_code":     unitCode,
 		},
 	})
