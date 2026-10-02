@@ -5,11 +5,13 @@ package components
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -209,5 +211,75 @@ func TestReclaimCarriesLastProgress(t *testing.T) {
 			t.Errorf("%s: reported progress %+v that was never measured",
 				name, *got.LastProgress)
 		}
+	}
+}
+
+// A finished operation stays finished. The runner writes progress and then its
+// result without re-reading the state, so a cancel — or the reclaimer's
+// WORKER_LOST — used to be overwritten: progress put the row back to RUNNING
+// and the result to SUCCEEDED, against CancelOperation's contract.
+func TestOperationStateWritesKeepTerminalStates(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	tenant, _ := mkTenant(t, ctx, pool, "shared")
+	repo := adapters.NewOperationRepo(sqlc.New(pool), pool)
+
+	running := func() uuid.UUID {
+		id := uuid.New()
+		mustExec(t, ctx, pool,
+			`INSERT INTO operations (id, tenant_id, type, state) VALUES ($1, $2, 'BatchUpdateTags', 'RUNNING')`,
+			id, tenant)
+		return id
+	}
+	stateOf := func(id uuid.UUID) string {
+		var s string
+		if err := pool.QueryRow(ctx, `SELECT state::text FROM operations WHERE id = $1`, id).Scan(&s); err != nil {
+			t.Fatalf("read state: %v", err)
+		}
+		return s
+	}
+	progress := []byte(`{"processed":1,"total":2}`)
+
+	cancelled := running()
+	if err := repo.Cancel(ctx, cancelled, tenant); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	reclaimed := running()
+	mustExec(t, ctx, pool, `UPDATE operations SET updated_at = now() - interval '1 hour' WHERE id = $1`, reclaimed)
+	if _, err := repo.ReclaimStale(ctx, 15*time.Minute); err != nil {
+		t.Fatalf("reclaim: %v", err)
+	}
+
+	for name, tc := range map[string]struct {
+		id   uuid.UUID
+		want string
+	}{
+		"cancelled": {cancelled, "CANCELLED"},
+		"reclaimed": {reclaimed, "FAILED"},
+	} {
+		for _, write := range []struct {
+			state operationh.State
+			meta  []byte
+		}{{operationh.StateRunning, progress}, {operationh.StateSucceeded, nil}} {
+			err := repo.UpdateState(ctx, tc.id, write.state, write.meta, []byte(`{}`), "", "")
+			if !errors.Is(err, operationh.ErrOperationFinished) {
+				t.Errorf("%s: writing %s returned %v, want ErrOperationFinished", name, write.state, err)
+			}
+			if got := stateOf(tc.id); got != tc.want {
+				t.Errorf("%s: a late %s write turned it into %s", name, write.state, got)
+			}
+		}
+	}
+
+	live := running()
+	if err := repo.UpdateState(ctx, live, operationh.StateRunning, progress, nil, "", ""); err != nil {
+		t.Fatalf("progress on a running operation: %v", err)
+	}
+	if err := repo.UpdateState(ctx, live, operationh.StateSucceeded, nil, []byte(`{}`), "", ""); err != nil {
+		t.Fatalf("result on a running operation: %v", err)
+	}
+	if got := stateOf(live); got != "SUCCEEDED" {
+		t.Errorf("a running operation's result left it %s", got)
 	}
 }

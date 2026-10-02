@@ -792,6 +792,8 @@ type Querier interface {
 	// deduced for parameter". Every terminal transition failed on that: the runner
 	// logged "operation succeeded" and then "failed to mark SUCCEEDED", leaving
 	// every operation RUNNING forever and its response unwritten.
+	// A finished operation stays finished: a cancel, or the stale reclaimer's
+	// FAILED, is not overwritten by the runner's late progress or result.
 	UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error)
 	UpdateStorageBackend(ctx context.Context, displayName *string, endpoint *string, publicEndpoint *string, region *string, forcePathStyle *bool, credentialsSecretRef *string, sseType *string, sseKeyID *string, eventsEnabled *bool, eventsTarget *string, eventsQueueUrl *string, eventsPollIntervalMs *int64, cedarPolicy *string, name string, expectedVersion int64) (int64, error)
 	UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)

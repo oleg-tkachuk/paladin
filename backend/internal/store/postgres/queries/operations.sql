@@ -25,7 +25,10 @@ SET state         = sqlc.arg('state')::operation_state,
     done_at       = CASE WHEN sqlc.arg('state')::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
                          THEN now() ELSE done_at END,
     updated_at    = now()
-WHERE id = $1;
+-- A finished operation stays finished: a cancel, or the stale reclaimer's
+-- FAILED, is not overwritten by the runner's late progress or result.
+WHERE id = $1
+  AND state IN ('PENDING', 'RUNNING');
 
 -- name: ListOperations :many
 -- Oldest first. The cursor compares `>`, so paging walks forward in time.
