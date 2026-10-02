@@ -18,7 +18,7 @@ from paladin.facade import (
     IAMPlane,
 )
 from paladin.relay import RelaySyncTransport, RelayTransport
-from paladin.tls import TLS
+from paladin.tls import TLS, TLSAndHTTPError
 from paladin.transfer import Transfer
 
 
@@ -63,7 +63,9 @@ def _transport_options(
     extra = dict(transport or {})
     if _HTTP_CLIENT in extra:
         if tls is not None:
-            raise ValueError("tls builds the http_client; give one or the other")
+            raise TLSAndHTTPError(
+                "paladin: tls builds the http_client; give one, or wrap tls.sync_transport()"
+            )
         return extra
     extra[_HTTP_CLIENT] = client(tls)
     return extra

@@ -33,6 +33,7 @@ from connectrpc.interceptor import Interceptor, InterceptorSync
 from connectrpc.method import IdempotencyLevel
 from connectrpc.request import RequestContext
 
+from paladin._tls_http import call_deadline
 from paladin.dpop import DPoPAsync, DPoPSync
 from paladin.errors import convert
 from paladin.observe import Hooks, RetryEvent, report_retry
@@ -272,6 +273,8 @@ class Client:
             result.append(_RetrySync(self._retry, self._hooks))
         if self._dpop is not None:
             result.append(self._dpop[0])
+        # Innermost, so each attempt of a retried call gets its own.
+        result.append(_DeadlineSync())
         return result
 
     def async_interceptors(self) -> list[Interceptor]:
@@ -525,6 +528,24 @@ def _procedure(ctx: RequestContext) -> str:
 
 def _typed(err: ConnectError, ctx: RequestContext, meta: Captured) -> ConnectError:
     return convert(err, _procedure(ctx), meta, sdk_version(), parse_retry_after)
+
+
+class _DeadlineSync:
+    """Hands the attempt's deadline to the SDK's TLS transport, which pyqwest
+    tells it only through a private module; an async call is cancelled by
+    connect-python instead."""
+
+    def intercept_unary_sync(
+        self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
+    ) -> RES:
+        timeout_ms = ctx.timeout_ms()
+        if timeout_ms is None:
+            return call_next(request, ctx)
+        token = call_deadline.set(time.monotonic() + timeout_ms / _MS_PER_SECOND)
+        try:
+            return call_next(request, ctx)
+        finally:
+            call_deadline.reset(token)
 
 
 class _ErrorsSync:

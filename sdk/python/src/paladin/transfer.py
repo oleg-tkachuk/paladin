@@ -26,7 +26,7 @@ from urllib.parse import SplitResult, urlsplit, urlunsplit
 import pyqwest
 
 from paladin.observe import Hooks, TransferEvent, report_transfer
-from paladin.tls import TLS
+from paladin.tls import TLS, TLSAndHTTPError
 
 if TYPE_CHECKING:  # annotations only: typing.Self is 3.11+
     from typing_extensions import Self
@@ -162,7 +162,9 @@ class Transfer:
         self._rewrite = rewrite
         self.hooks = hooks
         if tls is not None and transport is not None:
-            raise ValueError("tls builds the transport; give one or the other")
+            raise TLSAndHTTPError(
+                "paladin: tls builds the transport; give one, or wrap tls.sync_transport()"
+            )
         settings: dict[str, Any] = {
             "connect_timeout": connect_timeout,
             "read_timeout": read_timeout,
