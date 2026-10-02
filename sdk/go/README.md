@@ -175,7 +175,7 @@ p, err := paladin.Connect(endpoints, paladin.WithTokens(session), paladin.WithTL
 | --- | --- |
 | `CAFile` | PEM bundle the server's chain must reach; empty trusts the system roots. `ErrNoCA` when it holds no certificate. |
 | `CertFile`, `KeyFile` | The client certificate for mutual TLS; both or neither (`ErrTLSKeyPair`). |
-| `ServerID` | A URI SAN the server's certificate must carry — a SPIFFE ID. It is checked instead of the host name, which a SPIFFE certificate does not name; the chain is still verified. `ErrServerID` on a mismatch. |
+| `ServerID` | The SPIFFE ID the server must present. Its certificate is verified as an X.509-SVID against `CAFile` as that trust domain's bundle, by the SPIFFE project's `go-spiffe`, instead of against the host name, which an SVID does not carry. `ErrServerID` on a mismatch or a malformed ID; `ErrServerIDNeedsCA` without `CAFile`. |
 | `VerifyPeer` | Runs on the server's leaf certificate after the built-in checks; its error refuses the connection. |
 | `ReloadInterval` | How often the files are checked for a change (`DefaultTLSReloadInterval`, 30s). A rotation caught half-written — a new certificate beside the old key — keeps the last good pair until the next check. |
 

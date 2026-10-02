@@ -11,6 +11,10 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 )
 
 // DefaultTLSReloadInterval is how often the TLS files are checked for a
@@ -21,8 +25,11 @@ const DefaultTLSReloadInterval = 30 * time.Second
 var (
 	ErrTLSKeyPair = errors.New("paladin: a client certificate needs both CertFile and KeyFile")
 	ErrNoCA       = errors.New("paladin: the CA file holds no PEM certificate")
-	ErrServerID   = errors.New("paladin: the server certificate does not carry the expected URI SAN")
-	ErrTLSAndHTTP = errors.New("paladin: WithTLS and WithHTTPClient both set the HTTP client; give one")
+	ErrServerID   = errors.New("paladin: the server certificate is not the expected SPIFFE ID")
+	// ErrServerIDNeedsCA is ServerID without CAFile: a SPIFFE ID is checked
+	// against its trust domain's bundle, which the system roots are not.
+	ErrServerIDNeedsCA = errors.New("paladin: ServerID needs CAFile, the trust bundle")
+	ErrTLSAndHTTP      = errors.New("paladin: WithTLS and WithHTTPClient both set the HTTP client; give one")
 )
 
 // TLS configures the connections to Paladin (WithTLS) or to storage
@@ -39,10 +46,10 @@ type TLS struct {
 	// neither.
 	CertFile string
 	KeyFile  string
-	// ServerID, when set, is a URI the server's certificate must carry as a
-	// SAN — a SPIFFE ID, spiffe://trust-domain/path. The certificate is then
-	// checked against it instead of against the host name, as SPIFFE
-	// certificates name a workload, not a host.
+	// ServerID, when set, is the SPIFFE ID the server must present,
+	// spiffe://trust-domain/path, verified as an X.509-SVID against CAFile as
+	// that trust domain's bundle, by the SPIFFE project's own library. The
+	// host name is then not checked: an SVID names a workload, not a host.
 	ServerID string
 	// VerifyPeer runs after the built-in checks, on the server's leaf
 	// certificate; an error refuses the connection.
@@ -61,6 +68,16 @@ func (c TLS) Transport() (*http.Transport, error) {
 		return nil, ErrTLSKeyPair
 	}
 	files := &tlsFiles{spec: c, interval: c.ReloadInterval}
+	if c.ServerID != "" {
+		if c.CAFile == "" {
+			return nil, ErrServerIDNeedsCA
+		}
+		id, err := spiffeid.FromString(c.ServerID)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrServerID, err)
+		}
+		files.serverID = id
+	}
 	if files.interval <= 0 {
 		files.interval = DefaultTLSReloadInterval
 	}
@@ -79,10 +96,13 @@ type tlsFiles struct {
 	spec     TLS
 	interval time.Duration
 
+	serverID spiffeid.ID // zero: none
+
 	mu      sync.Mutex
 	checked time.Time
 	mtimes  [3]time.Time
 	roots   *x509.CertPool // nil: the system roots
+	bundle  *x509bundle.Bundle
 	cert    *tls.Certificate
 }
 
@@ -111,7 +131,10 @@ func (f *tlsFiles) load() error {
 		}
 		mtimes[i] = m
 	}
-	var roots *x509.CertPool
+	var (
+		roots  *x509.CertPool
+		bundle *x509bundle.Bundle
+	)
 	if f.spec.CAFile != "" {
 		pem, err := os.ReadFile(f.spec.CAFile)
 		if err != nil {
@@ -120,6 +143,13 @@ func (f *tlsFiles) load() error {
 		roots = x509.NewCertPool()
 		if !roots.AppendCertsFromPEM(pem) {
 			return fmt.Errorf("%w: %s", ErrNoCA, f.spec.CAFile)
+		}
+		if !f.serverID.IsZero() {
+			b, err := x509bundle.Parse(f.serverID.TrustDomain(), pem)
+			if err != nil {
+				return fmt.Errorf("paladin: tls: %w", err)
+			}
+			bundle = b
 		}
 	}
 	var cert *tls.Certificate
@@ -130,7 +160,7 @@ func (f *tlsFiles) load() error {
 		}
 		cert = &pair
 	}
-	f.roots, f.cert, f.mtimes, f.checked = roots, cert, mtimes, time.Now()
+	f.roots, f.bundle, f.cert, f.mtimes, f.checked = roots, bundle, cert, mtimes, time.Now()
 	return nil
 }
 
@@ -138,7 +168,7 @@ func (f *tlsFiles) load() error {
 // when ReloadInterval has passed and one of them changed. A file caught
 // mid-rotation — one of the pair rewritten, the other not yet — fails to
 // load; the last good pair is kept and the next check tries again.
-func (f *tlsFiles) current() (*x509.CertPool, *tls.Certificate) {
+func (f *tlsFiles) current() (*x509.CertPool, *x509bundle.Bundle, *tls.Certificate) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if time.Since(f.checked) >= f.interval {
@@ -150,11 +180,11 @@ func (f *tlsFiles) current() (*x509.CertPool, *tls.Certificate) {
 			}
 		}
 	}
-	return f.roots, f.cert
+	return f.roots, f.bundle, f.cert
 }
 
 func (f *tlsFiles) clientCertificate(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-	_, cert := f.current()
+	_, _, cert := f.current()
 	return cert, nil
 }
 
@@ -163,27 +193,25 @@ var alpn = []string{"h2", "http/1.1"}
 
 // dial makes one TLS connection with the files as they are now: the current
 // CA pool and client certificate. Without ServerID the server's certificate
-// is verified the standard way, against the host dialled; with it, against
-// the URI SAN instead.
+// is verified the standard way, against the host dialled; with it, as an
+// X.509-SVID for that SPIFFE ID, by go-spiffe.
 func (f *tlsFiles) dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
 	}
-	roots, _ := f.current()
+	roots, bundle, _ := f.current()
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: host, NextProtos: alpn}
-	if f.spec.CertFile != "" {
-		cfg.GetClientCertificate = f.clientCertificate
-	}
 	switch {
-	case f.spec.ServerID != "":
-		// The chain and the URI SAN are checked in verifyServerID; a SPIFFE
-		// certificate names a workload, not the host, so the standard check
-		// would refuse it.
-		cfg.InsecureSkipVerify = true //nolint:gosec // verified in verifyServerID
-		cfg.VerifyConnection = func(cs tls.ConnectionState) error { return f.verifyServerID(cs, roots) }
+	case !f.serverID.IsZero():
+		// The hook resets the config's authentication fields, so the client
+		// certificate is set after it.
+		tlsconfig.HookTLSClientConfig(cfg, bundle, f.authorize)
 	case f.spec.VerifyPeer != nil:
 		cfg.VerifyConnection = func(cs tls.ConnectionState) error { return f.spec.VerifyPeer(cs.PeerCertificates[0]) }
+	}
+	if f.spec.CertFile != "" {
+		cfg.GetClientCertificate = f.clientCertificate
 	}
 	var d net.Dialer
 	d.Timeout = DefaultTransferDialTimeout
@@ -199,36 +227,16 @@ func (f *tlsFiles) dial(ctx context.Context, network, addr string) (net.Conn, er
 	return conn, nil
 }
 
-// verifyServerID checks the server's chain against roots and its leaf's URI
-// SAN against ServerID, then runs VerifyPeer.
-func (f *tlsFiles) verifyServerID(cs tls.ConnectionState, roots *x509.CertPool) error {
-	if len(cs.PeerCertificates) == 0 {
-		return errors.New("paladin: tls: the server sent no certificate")
+// authorize runs once go-spiffe has verified the server's SVID against the
+// bundle: the SPIFFE ID must be ServerID, and VerifyPeer must accept the leaf.
+func (f *tlsFiles) authorize(id spiffeid.ID, chains [][]*x509.Certificate) error {
+	if err := tlsconfig.AuthorizeID(f.serverID)(id, chains); err != nil {
+		return fmt.Errorf("%w: %w", ErrServerID, err)
 	}
-	leaf := cs.PeerCertificates[0]
-	opts := x509.VerifyOptions{Roots: roots, Intermediates: x509.NewCertPool()}
-	for _, c := range cs.PeerCertificates[1:] {
-		opts.Intermediates.AddCert(c)
-	}
-	if _, err := leaf.Verify(opts); err != nil {
-		return fmt.Errorf("paladin: tls: %w", err)
-	}
-	if !hasURI(leaf, f.spec.ServerID) {
-		return fmt.Errorf("%w: want %s", ErrServerID, f.spec.ServerID)
-	}
-	if f.spec.VerifyPeer != nil {
-		return f.spec.VerifyPeer(leaf)
+	if f.spec.VerifyPeer != nil && len(chains) > 0 && len(chains[0]) > 0 {
+		return f.spec.VerifyPeer(chains[0][0])
 	}
 	return nil
-}
-
-func hasURI(cert *x509.Certificate, want string) bool {
-	for _, u := range cert.URIs {
-		if u.String() == want {
-			return true
-		}
-	}
-	return false
 }
 
 // WithTLS makes the client's connections to Paladin with c: a CA bundle, a

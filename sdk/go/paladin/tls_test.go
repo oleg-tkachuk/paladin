@@ -315,6 +315,8 @@ func TestTLSConfigErrors(t *testing.T) {
 		{"key without cert", paladin.TLS{KeyFile: f.key}, paladin.ErrTLSKeyPair},
 		{"a CA file with no certificate", paladin.TLS{CAFile: notPEM}, paladin.ErrNoCA},
 		{"a missing file", paladin.TLS{CAFile: filepath.Join(t.TempDir(), "absent.pem")}, os.ErrNotExist},
+		{"a server ID without its bundle", paladin.TLS{ServerID: serverID}, paladin.ErrServerIDNeedsCA},
+		{"a server ID that is not a SPIFFE ID", paladin.TLS{CAFile: f.ca, ServerID: "https://paladin.example"}, paladin.ErrServerID},
 	}
 	for _, tc := range cases {
 		if _, err := tc.cfg.Transport(); !errors.Is(err, tc.want) {
