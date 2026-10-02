@@ -553,6 +553,36 @@ jobs:
           WITH: ${{ matrix.with }}
         run: ./scripts/py-sdk-compat.sh "$PYTHON" "$WITH"
 
+  # A consumer saw a process abort at exit on macOS with the SDK loaded
+  # (recursive_mutex lock failed). sdk/python/tests/test_lifecycle.py makes and
+  # drops clients and transfers in fresh interpreters; every test run does a
+  # few, and this job does enough to catch an intermittent one.
+  py-sdk-lifecycle:
+    name: Python SDK lifecycle
+    needs: [changes]
+    if: contains(fromJSON(needs.changes.outputs.groups), 'sdk')
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+
+      - name: Run the lifecycle stress
+        working-directory: sdk/python
+        env:
+          PALADIN_LIFECYCLE_RUNS: "200"
+        run: uv run --frozen pytest tests/test_lifecycle.py
+
   deep:
     name: Deep (${{ matrix.half }})
     needs: [changes]
@@ -743,7 +773,7 @@ jobs:
   # change, which is a pass; a failure or a cancellation anywhere is not.
   checks:
     name: All checks passed
-    needs: [changes, test, py-sdk-compat, e2e-images, e2e, deep, syntax, audit]
+    needs: [changes, test, py-sdk-compat, py-sdk-lifecycle, e2e-images, e2e, deep, syntax, audit]
     if: always()
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -767,7 +797,7 @@ jobs:
 
   dispatch-release:
     name: Dispatch release
-    needs: [changes, test, py-sdk-compat, e2e-images, e2e, deep, syntax, audit]
+    needs: [changes, test, py-sdk-compat, py-sdk-lifecycle, e2e-images, e2e, deep, syntax, audit]
     # Not for a documentation-only push: its code is byte-identical to the
     # commit before it, so a release would rebuild and republish the same
     # images under a new version. Its commits are not lost — semantic-release

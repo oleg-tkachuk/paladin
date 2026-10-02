@@ -228,12 +228,57 @@ def test_tls_argument_errors(tmp_path: Path) -> None:
         connect(Endpoints(iam="https://x"), tls=TLS(ca_file=tmp_path / "absent.pem"))
 
 
-@pytest.mark.parametrize(("with_ca", "system"), [(True, False), (False, True)])
-def test_a_ca_bundle_replaces_the_system_roots(tmp_path: Path, with_ca: bool, system: bool) -> None:
+def test_a_ca_bundle_replaces_the_system_roots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # A server certificate from a public CA cannot be made in a test, so the
-    # pinning is checked on the transport's arguments: a given bundle is the
-    # only trust, not an addition to the system's.
+    # pinning is checked on the context: a given bundle is the only trust, not
+    # an addition to the system's, which are loaded only without one.
+    from paladin.tls import _Files
+
+    loaded: list[bool] = []
+    monkeypatch.setattr(ssl.SSLContext, "load_default_certs", lambda self, *a: loaded.append(True))
     ca = Authority()
     f = write(tmp_path, ca.pem, ca.issue(client=True, ips=False))
-    args, _ = (_tls(f) if with_ca else TLS())._read()
-    assert args["tls_include_system_certs"] is system
+    _, pinned = _Files(_tls(f)).current()
+    assert [int(c["serialNumber"], 16) for c in pinned.get_ca_certs()] == [ca.cert.serial_number]
+    assert not loaded
+    _Files(TLS()).current()
+    assert loaded == [True]
+
+
+class _Counting:
+    """A caller's own transport around the SDK's rotating one: it sees every
+    request, as a circuit breaker or a metrics wrapper would."""
+
+    def __init__(self, inner: Any) -> None:
+        self.inner, self.requests = inner, 0
+
+    def execute_sync(self, request: Any) -> Any:
+        self.requests += 1
+        return self.inner.execute_sync(request)
+
+
+def test_a_wrapped_rotating_transport_sees_every_request_and_the_rotation(
+    serve: Any, tmp_path: Path
+) -> None:
+    from paladin import Client
+    from paladin.iam.v1.health_service_connect import HealthServiceClientSync
+
+    ca = Authority()
+    first, second = ca.issue(client=True, ips=False), ca.issue(client=True, ips=False)
+    f = write(tmp_path, ca.pem, first)
+    srv = serve(ca, ca.issue(client=False))
+    wrapper = _Counting(_tls(f, reload_interval=RELOAD_NOW).sync_transport())
+    client = Client(srv.url)
+    health = HealthServiceClientSync(
+        client.base_url,
+        interceptors=client.interceptors(),
+        http_client=client.http_client(transport=wrapper),
+    )
+    health.get_version(health_service_pb2.GetVersionRequest())
+    f.write_client(second)
+    _touch_later(f.cert, f.key)
+    health.get_version(health_service_pb2.GetVersionRequest())
+    assert srv.serials == [first.serial, second.serial]
+    assert wrapper.requests == len(srv.serials)

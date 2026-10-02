@@ -29,6 +29,20 @@ def _key_pem(key: ec.EllipticCurvePrivateKey) -> bytes:
     )
 
 
+# What an X.509-SVID leaf carries, and nothing a CA would.
+_LEAF_USAGE = x509.KeyUsage(
+    digital_signature=True,
+    key_cert_sign=False,
+    crl_sign=False,
+    content_commitment=False,
+    key_encipherment=False,
+    data_encipherment=False,
+    key_agreement=False,
+    encipher_only=False,
+    decipher_only=False,
+)
+
+
 @dataclass
 class Leaf:
     cert_pem: bytes
@@ -71,10 +85,19 @@ class Authority:
         )
         self.pem = _pem(self.cert)
 
-    def issue(self, *, client: bool, ips: bool = True, dns: tuple[str, ...] = ()) -> Leaf:
+    def issue(
+        self,
+        *,
+        client: bool,
+        ips: bool = True,
+        dns: tuple[str, ...] = (),
+        uris: tuple[str, ...] = (),
+    ) -> Leaf:
+        """A leaf for a client or a server; ``uris`` makes it an X.509-SVID."""
         key = ec.generate_private_key(ec.SECP256R1())
         now = datetime.datetime.now(datetime.timezone.utc)
         names: list[x509.GeneralName] = [x509.DNSName(d) for d in dns]
+        names += [x509.UniformResourceIdentifier(u) for u in uris]
         if ips:
             names.append(x509.IPAddress(LOOPBACK))
         usage = ExtendedKeyUsageOID.CLIENT_AUTH if client else ExtendedKeyUsageOID.SERVER_AUTH
@@ -87,6 +110,7 @@ class Authority:
             .not_valid_before(now - datetime.timedelta(minutes=1))
             .not_valid_after(now + LIFETIME)
             .add_extension(x509.ExtendedKeyUsage([usage]), critical=False)
+            .add_extension(_LEAF_USAGE, critical=True)
             .add_extension(
                 x509.AuthorityKeyIdentifier.from_issuer_public_key(self.key.public_key()),
                 critical=False,
