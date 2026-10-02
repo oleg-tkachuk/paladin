@@ -298,12 +298,16 @@ data, _ := srv.Content(obj.GetName())
 ```
 
 It serves `ObjectService` (upload, complete, get, lookup, list, download,
-delete) and `MultipartUploadService`; every other RPC answers
-`Unimplemented`. Like the server it refuses a collection named by the
-tenant's slug and a completion whose ETag is not the content's, records the
+delete), `MultipartUploadService` and `StorageBootstrapService`; every
+other RPC answers `Unimplemented`. Like the server it refuses a collection
+named by the tenant's slug and a completion whose ETag, when given, is not
+the content's; completing a completed object returns it. It records the
 checksum an upload completes with — so `Download` verifies — and answers
-range requests. `Put` stores an object directly; `Tenant` and `Collection`
-name the fake's tenant and its collections, all of which exist.
+range requests. `EnsureTenantStorage` reports a bucket and collections
+created the first time and existing after, for any backend id. `Put` stores
+an object directly; `Tenant` and `Collection` name the fake's tenant and its
+collections, all of which exist; `Requests` lists the RPCs received, each
+with its `Procedure` and `Header`, for a test of what the client sent.
 
 ### Concurrency
 

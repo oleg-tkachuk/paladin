@@ -316,12 +316,17 @@ with FakePaladin() as fake:
 ```
 
 It serves `ObjectService` (upload, complete, get, lookup, list, download,
-delete) and `MultipartUploadService`; every other RPC answers
-`UNIMPLEMENTED`. Like the server it refuses a collection named by the
-tenant's slug and a completion whose ETag is not the content's, records the
+delete), `MultipartUploadService` and `StorageBootstrapService`; every
+other RPC answers `UNIMPLEMENTED`. Like the server it refuses a collection
+named by the tenant's slug and a completion whose ETag, when given, is not
+the content's; completing a completed object returns it. It records the
 checksum an upload completes with — so a download verifies — and answers
-range requests. `put` stores an object directly; `tenant` and `collection()`
-name the fake's tenant and its collections, all of which exist.
+range requests. `ensure_tenant_storage` reports a bucket and collections
+created the first time and existing after, for any backend id. `put` stores
+an object directly; `tenant` and `collection()` name the fake's tenant and
+its collections, all of which exist; `requests()` lists the RPCs received,
+each a `Request` with its `procedure` and `headers` by lower-case name, for a
+test of what the client sent.
 
 ### Concurrency and asyncio
 
