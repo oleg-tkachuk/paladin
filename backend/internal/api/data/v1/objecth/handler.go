@@ -874,10 +874,12 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	if err != nil {
 		return nil, "", err
 	}
-	// Capability gate: list ops are scoped at the prefix level, so we
-	// skip the URI check (empty arg) and only verify the Op caveat.
-	// Per-row prefix filtering still happens inside the repo.
-	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
+	// Capability gate: a listing reads the whole collection, so it is
+	// asserted against the collection's URI prefix. A capability confined to
+	// part of the collection is refused rather than shown every row's name —
+	// nothing filters rows by resource caveat, and an empty URI here used to
+	// skip the resource check entirely.
+	if err := auth.AssertCapabilityOp(ctx, capability.OpList, capabilityCollectionURI(tenantID, in.Collection)); err != nil {
 		return nil, "", err
 	}
 	// Resolve the collection→bucket binding so a bucket:/collection:-scoped PAT
@@ -980,7 +982,7 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 	if err != nil {
 		return nil, err
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, capability.OpList, capabilityCollectionURI(tenantID, in.Collection)); err != nil {
 		return nil, err
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
@@ -1042,7 +1044,7 @@ func (h *Handler) ListDistinctTags(
 	if err != nil {
 		return DistinctTagPage{}, err
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, capability.OpList, capabilityCollectionURI(tenantID, collection)); err != nil {
 		return DistinctTagPage{}, err
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes

@@ -237,9 +237,12 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
 
-	caveats := parent.Caveats
-	if msg := req.Msg.GetCaveats(); msg != nil {
-		caveats = protoToCaveats(msg)
+	// No caveats in the request means "the parent's, unchanged" — asked for
+	// explicitly, so that caveats which ARE sent are never silently replaced.
+	var caveats capability.Caveats
+	inherit := req.Msg.GetCaveats() == nil
+	if !inherit {
+		caveats = protoToCaveats(req.Msg.GetCaveats())
 	}
 	audience := parent.Audience
 	if a := req.Msg.GetAudience(); len(a) > 0 {
@@ -262,16 +265,23 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 	}
 
 	cap, token, err := h.issuer.Delegate(ctx, capability.DelegateRequest{
-		Parent:    *parent,
-		Subject:   delegSubj,
-		Audience:  audience,
-		Caveats:   caveats,
-		TTL:       ttl,
-		NotBefore: nbf,
+		Parent:         *parent,
+		Subject:        delegSubj,
+		Audience:       audience,
+		Caveats:        caveats,
+		InheritCaveats: inherit,
+		TTL:            ttl,
+		NotBefore:      nbf,
 	})
 	if err != nil {
-		if errors.Is(err, capability.ErrDelegationTooWide) {
+		switch {
+		case errors.Is(err, capability.ErrDelegationTooWide),
+			errors.Is(err, capability.ErrUnitCodeMismatch):
 			return nil, connect.NewError(connect.CodePermissionDenied, err)
+		case errors.Is(err, capability.ErrRevoked), errors.Is(err, capability.ErrExpired):
+			// The parent can no longer delegate; that is a state the caller
+			// must act on, not a malformed request.
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 		}
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}

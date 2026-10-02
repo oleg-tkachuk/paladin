@@ -150,9 +150,10 @@ WHERE  id = $1;
 	return scanRow(row)
 }
 
-// IsRevoked implements capability.Store. The query is intentionally
-// trivial — verifiers wrap this with an in-memory TTL cache so the
-// per-request cost stays flat.
+// IsRevoked implements capability.Store: true when the capability or any
+// ancestor still on record is revoked. One round trip — a recursive walk up
+// parent_id joined against the revocation list — and verifiers wrap it in an
+// in-memory TTL cache so the per-request cost stays flat.
 //
 // The verifier calls this before any tenant is on the context: the tenant is
 // inside the token still being checked, so the pool's PrepareConn hook binds
@@ -172,17 +173,31 @@ func (s *Store) IsRevoked(ctx context.Context, id uuid.UUID) (bool, error) {
 	if _, err := tx.Exec(ctx, `SELECT set_config('paladin.cross_tenant', 'on', true)`); err != nil {
 		return false, fmt.Errorf("capability/postgres: is_revoked set cross-tenant: %w", err)
 	}
-	const stmt = `SELECT EXISTS (SELECT 1 FROM capability_revocations WHERE id = $1)`
-	var exists bool
-	if err := tx.QueryRow(ctx, stmt, id).Scan(&exists); err != nil {
+	const stmt = `
+WITH RECURSIVE chain(id, parent_id, depth) AS (
+    SELECT id, parent_id, 0 FROM capability_records WHERE id = $1
+    UNION ALL
+    SELECT r.id, r.parent_id, c.depth + 1
+    FROM   capability_records r
+    JOIN   chain c ON r.id = c.parent_id
+    WHERE  c.depth < 64
+)
+SELECT EXISTS (
+    SELECT 1 FROM capability_revocations v
+    WHERE  v.id = $1 OR v.id IN (SELECT id FROM chain)
+);
+`
+	var revoked bool
+	if err := tx.QueryRow(ctx, stmt, id).Scan(&revoked); err != nil {
 		return false, fmt.Errorf("capability/postgres: is_revoked: %w", err)
 	}
-	return exists, nil
+	return revoked, nil
 }
 
-// Revoke implements capability.Store. CascadeChildren walks the
-// delegation tree via a recursive CTE and inserts a revocation row for
-// every descendant in one transaction, so the tree is denied atomically.
+// Revoke implements capability.Store. Descendants stop verifying either way,
+// because IsRevoked walks the chain; CascadeChildren additionally walks the
+// delegation tree via a recursive CTE and inserts a revocation row for every
+// descendant in one transaction, so the audit trail names each of them.
 //
 // Both paths source their ids from capability_records rather than trusting
 // the argument, so a caller that cannot see the capability cannot revoke it.

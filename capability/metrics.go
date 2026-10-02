@@ -10,40 +10,38 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// OpenTelemetry instruments for the capability runtime counters.
-// Same lazy-init shape as internal/auth/api_token_metrics.go: every
-// module that imports internal/capability doesn't pay for instrument
-// creation when the OTel global MeterProvider isn't ready (tests,
-// sidecar tools).
+// OpenTelemetry instruments for the capability runtime counters,
+// created lazily so a consumer that never wires a MeterProvider (tests,
+// sidecar tools) does not pay for instrument creation.
 //
 // Cardinality:
 //
-//   - tenant_id is the only label. Cap id is deliberately omitted —
-//     a deployment with thousands of capabilities would blow the
-//     OTLP exporter's series count. Sum-by-tenant is the operator's
-//     usual filter anyway.
-//   - "decision" is a bounded enum: allowed / cap_exceeded /
-//     tenant_exceeded. "kind" likewise: request / charge / refund.
-//
-// Naming: `paladin.capability.<name>` to match the api_token convention.
+//   - tenant_id is the only high-cardinality label. Capability id is
+//     deliberately omitted — a deployment with thousands of capabilities
+//     would blow the exporter's series count.
+//   - unit_code is a small closed set (AllowedUnitCodes). Amounts are
+//     only meaningful per unit: summing USD and EUR is not a number, so
+//     every amount instrument carries the unit as an attribute and has
+//     no fixed metric unit of its own.
+//   - outcome is a bounded enum: allowed / cap_exceeded / tenant_exceeded
+//     for charges, allowed / limit_exceeded for request bumps.
 var (
 	capMetricsOnce sync.Once
 
-	capChargeAmount    metric.Float64Counter   // total spent by tenant
+	capChargeAmount    metric.Float64Counter   // total charged, by tenant + unit
 	capChargeDecisions metric.Int64Counter     // allow/deny per attempt
 	capRequestBumps    metric.Int64Counter     // allow/deny per attempt
-	capRefundAmount    metric.Float64Counter   // total refunded by tenant
+	capRefundAmount    metric.Float64Counter   // total refunded
 	capCurrentSpend    metric.Float64Histogram // distribution of post-charge spend
 )
 
 func initMetrics() {
 	capMetricsOnce.Do(func() {
-		meter := otel.Meter("github.com/oleg-tkachuk/paladin/internal/capability")
+		meter := otel.Meter("github.com/oleg-tkachuk/paladin/capability")
 
 		capChargeAmount, _ = meter.Float64Counter(
-			"paladin.capability.charge.amount_usd",
-			metric.WithDescription("Cumulative USD charged against capability budgets, by tenant."),
-			metric.WithUnit("USD"),
+			"paladin.capability.charge.amount",
+			metric.WithDescription("Cumulative amount charged against capability budgets, by tenant and unit_code."),
 		)
 		capChargeDecisions, _ = meter.Int64Counter(
 			"paladin.capability.charge.decisions",
@@ -54,74 +52,60 @@ func initMetrics() {
 			metric.WithDescription("Per-capability request-count bumps, bucketed by outcome: allowed / limit_exceeded."),
 		)
 		capRefundAmount, _ = meter.Float64Counter(
-			"paladin.capability.refund.amount_usd",
-			metric.WithDescription("Cumulative USD refunded on capability counters."),
-			metric.WithUnit("USD"),
+			"paladin.capability.refund.amount",
+			metric.WithDescription("Cumulative amount refunded from recorded charges."),
 		)
 		capCurrentSpend, _ = meter.Float64Histogram(
-			"paladin.capability.charge.current_spend_usd",
-			metric.WithDescription("Per-capability spend after each successful charge — distribution by tenant."),
-			metric.WithUnit("USD"),
+			"paladin.capability.charge.current_spend",
+			metric.WithDescription("Per-capability spend after each successful charge, by tenant and unit_code."),
 		)
 	})
 }
 
+func tenantAttrs(tenantID uuid.UUID, attrs ...attribute.KeyValue) []attribute.KeyValue {
+	if tenantID != uuid.Nil {
+		attrs = append(attrs, attribute.String("tenant_id", tenantID.String()))
+	}
+	return attrs
+}
+
 // recordChargeAttempt is called once per Charge regardless of outcome.
-// outcome is one of:
-//
-//	"allowed"          — both caps satisfied
-//	"cap_exceeded"     — per-capability cap rejected
-//	"tenant_exceeded"  — tenant aggregate cap rejected after the
-//	                     capability cap accepted (the inner refund is
-//	                     reflected in capRefundAmount separately)
-func recordChargeAttempt(ctx context.Context, tenantID uuid.UUID, amountUSD, postSpend float64, outcome string) {
+func recordChargeAttempt(ctx context.Context, tenantID uuid.UUID, unit string, amount, postSpend float64, outcome string) {
 	initMetrics()
 	if capChargeDecisions == nil {
 		return
 	}
-	attrs := []attribute.KeyValue{
-		attribute.String("outcome", outcome),
+	capChargeDecisions.Add(ctx, 1, metric.WithAttributes(
+		tenantAttrs(tenantID, attribute.String("outcome", outcome))...))
+	if outcome != "allowed" {
+		return
 	}
-	if tenantID != uuid.Nil {
-		attrs = append(attrs, attribute.String("tenant_id", tenantID.String()))
+	amountAttrs := metric.WithAttributes(tenantAttrs(tenantID, attribute.String("unit_code", unit))...)
+	if capChargeAmount != nil {
+		capChargeAmount.Add(ctx, amount, amountAttrs)
 	}
-	capChargeDecisions.Add(ctx, 1, metric.WithAttributes(attrs...))
-	if outcome == "allowed" && capChargeAmount != nil {
-		capChargeAmount.Add(ctx, amountUSD, metric.WithAttributes(attrs...))
-		if capCurrentSpend != nil {
-			capCurrentSpend.Record(ctx, postSpend, metric.WithAttributes(attrs...))
-		}
+	if capCurrentSpend != nil {
+		capCurrentSpend.Record(ctx, postSpend, amountAttrs)
 	}
 }
 
 // recordRequestBump is called once per BumpRequest regardless of outcome.
-// outcome ∈ {"allowed", "limit_exceeded"}.
 func recordRequestBump(ctx context.Context, tenantID uuid.UUID, outcome string) {
 	initMetrics()
 	if capRequestBumps == nil {
 		return
 	}
-	attrs := []attribute.KeyValue{
-		attribute.String("outcome", outcome),
-	}
-	if tenantID != uuid.Nil {
-		attrs = append(attrs, attribute.String("tenant_id", tenantID.String()))
-	}
-	capRequestBumps.Add(ctx, 1, metric.WithAttributes(attrs...))
+	capRequestBumps.Add(ctx, 1, metric.WithAttributes(
+		tenantAttrs(tenantID, attribute.String("outcome", outcome))...))
 }
 
-// recordRefund is called for both per-capability and per-tenant refunds.
-// scope ∈ {"capability", "tenant"}.
-func recordRefund(ctx context.Context, tenantID uuid.UUID, amountUSD float64, scope string) {
+// recordRefund is called once per committed refund. The refund request names
+// only the charge, so neither tenant nor unit is known here without a lookup
+// this decorator deliberately does not make.
+func recordRefund(ctx context.Context, amount float64) {
 	initMetrics()
 	if capRefundAmount == nil {
 		return
 	}
-	attrs := []attribute.KeyValue{
-		attribute.String("scope", scope),
-	}
-	if tenantID != uuid.Nil {
-		attrs = append(attrs, attribute.String("tenant_id", tenantID.String()))
-	}
-	capRefundAmount.Add(ctx, amountUSD, metric.WithAttributes(attrs...))
+	capRefundAmount.Add(ctx, amount)
 }

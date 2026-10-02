@@ -26,12 +26,17 @@
 // The module publishes three contracts and nothing more. A consumer that
 // implements them needs nothing else:
 //
-//   - [Store] — capability records and revocations. No transactions required;
-//     an in-memory map is a valid implementation.
-//   - [UsageStore] — request and spend counters. Generic in TX, the consumer's
-//     transaction handle; see "No-transaction mode" below.
+//   - [Store] — capability records and revocations. IsRevoked answers for the
+//     capability's whole delegation chain. No transactions required; an
+//     in-memory map is a valid implementation.
+//   - [UsageStore] — request and spend counters and the charges ledger; the
+//     union of [Meter], [TenantBudgets] and [UsageHousekeeping]. Every charge
+//     and request also counts against each ancestor. Generic in TX, the
+//     consumer's transaction handle; see "No-transaction mode" below.
 //   - [KeyResolver] — public verification keys. [StaticKeyResolver] ships as a
-//     working implementation and supports rotation via SetKey.
+//     working implementation and supports rotation via SetKey / RemoveKey;
+//     [RemoteJWKSResolver] fetches an issuer's JWKS for verifiers that run
+//     apart from it.
 //
 // Store and UsageStore are deliberately separate types: both declare a method
 // named Get with different signatures, so no single type can satisfy both.
@@ -39,7 +44,7 @@
 //
 // # No-transaction mode
 //
-// UsageStore.Charge takes an onCharged callback that runs inside the charge,
+// Meter.Charge takes an onCharged callback that runs inside the charge,
 // receiving the consumer's transaction handle, so a side effect such as an
 // outbox write commits atomically with the spend. The module never constructs,
 // inspects or constrains that handle — it only threads it back. That is what
@@ -54,10 +59,17 @@
 //
 // Rejections are individually matchable sentinels, so a consumer can map each
 // to its own transport status; the module does not choose status codes. A
-// charge rejected by either the capability or the tenant ceiling leaves both
-// counters and the ledger unmutated, so retrying after a rejection is safe.
-// Delegation can only narrow: any widening returns [ErrDelegationTooWide], and
-// a differing unit code returns [ErrUnitCodeMismatch] rather than converting.
+// charge rejected by any ceiling — the capability's, an ancestor's, the
+// tenant's — leaves every counter and the ledger unmutated, so retrying after
+// a rejection is safe. Delegation can only narrow: any widening returns
+// [ErrDelegationTooWide], and a differing unit code returns
+// [ErrUnitCodeMismatch] rather than converting.
+//
+// # Enforcing caveats
+//
+// [Caveats.Check] and [Caveats.CheckSource] are the single definition of what
+// the caveats mean at use time; delegation narrowing ([Narrows]) uses the same
+// resource matcher ([MatchResource]), so the two cannot disagree.
 //
 // See README.md for a five-minute walkthrough and example/ for it as a
 // runnable program.

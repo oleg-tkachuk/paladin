@@ -31,12 +31,10 @@ import (
 //     We map that to ErrRequestLimitExceeded / ErrBudgetExceeded so
 //     callers can branch on it.
 //
-//  2. Limit values come in via the SQL args, not the row. This means
-//     a capability whose MaxRequests / MaxBudgetAmount changes mid-
-//     life (delegation narrowing) is enforced against the *current*
-//     value the caller passes — no stale row-stored limit to
-//     invalidate. The caveats themselves live in the JWT claim set;
-//     the row just tracks accumulated usage.
+//  2. Limit values come in via the SQL args, not the row: the leaf's from
+//     the verified token, each ancestor's from its capability_records
+//     row. The usage row just tracks accumulated usage — for a capability
+//     with delegated children, the whole subtree's.
 type UsageStore struct {
 	q    *sqlc.Queries
 	pool *pgxpool.Pool // required — see NewUsageStore
@@ -71,129 +69,185 @@ func NewUsageStore(q *sqlc.Queries, pool *pgxpool.Pool, log *zap.Logger) *UsageS
 	return &UsageStore{q: q, pool: pool, log: log}
 }
 
-// BumpRequest implements capability.UsageStore[pgx.Tx].
-func (s *UsageStore) BumpRequest(
-	ctx context.Context,
-	capID uuid.UUID,
-	maxRequests int64,
-) (int64, error) {
-	count, err := s.q.BumpCapabilityRequestCount(
-		ctx,
-		pgtype.UUID{Bytes: capID, Valid: true},
-		maxRequests,
-	)
+// maxLineageDepth bounds the ancestor walk, matching Revoke's cascade guard.
+const maxLineageDepth = 64
+
+// ancestor is one link of a capability's delegation chain, with the ceilings
+// its own record carries. The ceilings are read from capability_records, not
+// taken from the caller: only the leaf's limits arrive in the verified token.
+type ancestor struct {
+	id          uuid.UUID
+	maxBudget   pgtype.Numeric
+	maxRequests int64
+}
+
+// ancestorsQuery walks parent_id upwards from a capability, nearest first. It
+// runs on the charging transaction, whose connection is scoped to the
+// capability's tenant; delegation never crosses tenants, so the whole chain is
+// visible under that scope. Caveats are stored as the Go struct's JSON, hence
+// the field names.
+const ancestorsQuery = `
+WITH RECURSIVE chain(id, parent_id, caveats, depth) AS (
+    SELECT id, parent_id, caveats, 0 FROM capability_records WHERE id = $1
+    UNION ALL
+    SELECT r.id, r.parent_id, r.caveats, c.depth + 1
+    FROM   capability_records r
+    JOIN   chain c ON r.id = c.parent_id
+    WHERE  c.depth < $2
+)
+SELECT id,
+       COALESCE((caveats->>'MaxBudgetAmount')::numeric, 0),
+       COALESCE((caveats->>'MaxRequests')::bigint, 0)
+FROM   chain
+WHERE  depth > 0
+ORDER  BY depth;
+`
+
+func ancestorsOf(ctx context.Context, tx pgx.Tx, capID uuid.UUID) ([]ancestor, error) {
+	rows, err := tx.Query(ctx, ancestorsQuery, capID, maxLineageDepth)
+	if err != nil {
+		return nil, fmt.Errorf("capability/postgres: lineage: %w", err)
+	}
+	defer rows.Close()
+	var out []ancestor
+	for rows.Next() {
+		var a ancestor
+		if err := rows.Scan(&a.id, &a.maxBudget, &a.maxRequests); err != nil {
+			return nil, fmt.Errorf("capability/postgres: lineage scan: %w", err)
+		}
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("capability/postgres: lineage: %w", err)
+	}
+	return out, nil
+}
+
+// BumpRequest implements capability.Meter. The capability and every
+// ancestor are bumped in one transaction, leaf first and then nearest
+// ancestor first — the same order every charge takes, so two requests
+// sharing part of a chain lock it in the same order and cannot deadlock.
+func (s *UsageStore) BumpRequest(ctx context.Context, req capability.RequestBump) (int64, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("capability/postgres: bump begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op after a successful commit
+	qtx := s.q.WithTx(tx)
+
+	count, err := qtx.BumpCapabilityRequestCount(ctx, pgtype.UUID{Bytes: req.CapabilityID, Valid: true}, req.MaxRequests)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, capability.ErrRequestLimitExceeded
 		}
 		return 0, fmt.Errorf("capability/postgres: bump: %w", err)
 	}
+	ancestors, err := ancestorsOf(ctx, tx, req.CapabilityID)
+	if err != nil {
+		return 0, err
+	}
+	for _, a := range ancestors {
+		if _, err := qtx.BumpCapabilityRequestCount(ctx, pgtype.UUID{Bytes: a.id, Valid: true}, a.maxRequests); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return 0, fmt.Errorf("%w: ancestor %s", capability.ErrRequestLimitExceeded, a.id)
+			}
+			return 0, fmt.Errorf("capability/postgres: bump ancestor: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("capability/postgres: bump commit: %w", err)
+	}
 	return count, nil
 }
 
-// Charge implements capability.UsageStore[pgx.Tx]. amount must be ≥ 0;
-// negative input rejected — refunds are explicit via RefundCapability
-// / RefundTenant.
+// Charge implements capability.Meter.
 //
 // unitCode pins the currency for newly-inserted rows. Empty value
-// resolves to capability.DefaultUnitCode. The existing row's
-// unit_code is preserved on conflict (the SQL uses the arg only on
-// INSERT) so callers cannot accidentally re-denominate an existing
-// counter.
+// resolves to capability.DefaultUnitCode. An existing row's unit_code is
+// preserved on conflict (the SQL uses the arg only on INSERT) so callers
+// cannot accidentally re-denominate an existing counter.
 //
 // Everything runs in ONE transaction so the charge is atomic
 // (ADR-0003 transactional outbox — no dual-write window):
 //
-//  1. Charge the capability counter (with cap-side cap).
-//  2. When tenantID is non-zero: charge the tenant aggregate (with
-//     tenant-side cap), write the charges-ledger row, and run
-//     onCharged so the event producer enqueues its outbox rows on
-//     the same tx.
-//  3. Commit. Any rejection or error rolls the whole thing back, so
-//     the two counters can never drift and the ledger row + fan-out
-//     rows are never orphaned from the spend they describe.
-//
-// The ledger insert used to be best-effort (committed, then a
-// separate pool.Exec that logged-and-swallowed on failure). That
-// hedge existed to avoid misleading a customer into a double-spend
-// retry after the running totals had already committed. Folding the
-// ledger into the same tx removes the hazard at the root: a failure
-// now rolls the counters back too, so a retry is always safe.
+//  1. Charge the capability counter (against the token's ceiling).
+//  2. Charge each ancestor's counter (against the ceiling on its record),
+//     so a parent's budget bounds everything delegated from it.
+//  3. Charge the tenant aggregate (against the tenant ceiling).
+//  4. Write the charges-ledger row and run onCharged so the event producer
+//     enqueues its outbox rows on the same tx.
+//  5. Commit. Any rejection or error rolls the whole thing back, so the
+//     counters can never drift and the ledger row + fan-out rows are never
+//     orphaned from the spend they describe.
 func (s *UsageStore) Charge(
 	ctx context.Context,
-	capID uuid.UUID,
-	amount, maxBudget float64,
-	unitCode string,
-	tenantID uuid.UUID,
-	op string,
-	actor string,
+	req capability.ChargeRequest,
 	onCharged func(ctx context.Context, tx pgx.Tx) error,
-) (float64, error) {
-	if amount < 0 {
-		return 0, errors.New("capability/postgres: charge amount must be >= 0")
+) (capability.ChargeReceipt, error) {
+	if err := capability.ValidateAmount(req.Amount); err != nil {
+		return capability.ChargeReceipt{}, err
 	}
-	resolvedUnit, err := capability.NormaliseUnitCode(unitCode)
-	if err != nil {
-		return 0, fmt.Errorf("capability/postgres: charge: %w", err)
+	if req.TenantID == uuid.Nil {
+		// The ledger row and the tenant ceiling both need one, and a
+		// capability always has one — the verifier refuses a tenantless token.
+		return capability.ChargeReceipt{}, errors.New("capability/postgres: charge requires a tenant")
 	}
-	amountNumeric, err := numericFromFloat(amount)
+	resolvedUnit, err := capability.NormaliseUnitCode(req.UnitCode)
 	if err != nil {
-		return 0, err
+		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge: %w", err)
 	}
-	maxBudgetNumeric, err := numericFromFloat(maxBudget)
+	amountNumeric, err := numericFromFloat(req.Amount)
 	if err != nil {
-		return 0, err
+		return capability.ChargeReceipt{}, err
+	}
+	maxBudgetNumeric, err := numericFromFloat(req.MaxBudget)
+	if err != nil {
+		return capability.ChargeReceipt{}, err
 	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("capability/postgres: charge begin: %w", err)
+		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // no-op after a successful commit
 	qtx := s.q.WithTx(tx)
 
-	spent, err := qtx.ChargeCapability(
-		ctx,
-		pgtype.UUID{Bytes: capID, Valid: true},
-		amountNumeric,
-		resolvedUnit,
-		maxBudgetNumeric,
-	)
+	spent, err := qtx.ChargeCapability(ctx, pgtype.UUID{Bytes: req.CapabilityID, Valid: true},
+		amountNumeric, resolvedUnit, maxBudgetNumeric)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, capability.ErrBudgetExceeded
+			return capability.ChargeReceipt{}, capability.ErrBudgetExceeded
 		}
-		return 0, fmt.Errorf("capability/postgres: charge: %w", err)
+		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge: %w", err)
 	}
 
-	if tenantID == uuid.Nil {
-		// No tenant aggregate path → no ledger row (the charges
-		// table requires a tenant_id; charges without one wouldn't
-		// surface in the per-tenant billing UI anyway) and no
-		// fan-out. Commit the lone capability bump.
-		if err := tx.Commit(ctx); err != nil {
-			return 0, fmt.Errorf("capability/postgres: charge commit: %w", err)
+	ancestors, err := ancestorsOf(ctx, tx, req.CapabilityID)
+	if err != nil {
+		return capability.ChargeReceipt{}, err
+	}
+	for _, a := range ancestors {
+		if _, err := qtx.ChargeCapability(ctx, pgtype.UUID{Bytes: a.id, Valid: true},
+			amountNumeric, resolvedUnit, a.maxBudget); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return capability.ChargeReceipt{}, fmt.Errorf("%w: ancestor %s", capability.ErrBudgetExceeded, a.id)
+			}
+			return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge ancestor: %w", err)
 		}
-		return floatFromNumeric(spent), nil
 	}
 
-	if _, tErr := qtx.ChargeTenantBudget(
-		ctx,
-		pgtype.UUID{Bytes: tenantID, Valid: true},
-		amountNumeric,
-		resolvedUnit,
-	); tErr != nil {
-		// Rollback (deferred) compensates the capability bump — no
-		// explicit refund needed now that both live on one tx.
+	if _, tErr := qtx.ChargeTenantBudget(ctx, pgtype.UUID{Bytes: req.TenantID, Valid: true},
+		amountNumeric, resolvedUnit); tErr != nil {
+		// Rollback (deferred) compensates every bump above — no explicit
+		// refund needed now that all of them live on one tx.
 		if errors.Is(tErr, pgx.ErrNoRows) {
-			return 0, capability.ErrTenantBudgetExceeded
+			return capability.ChargeReceipt{}, capability.ErrTenantBudgetExceeded
 		}
-		return 0, fmt.Errorf("capability/postgres: charge tenant: %w", tErr)
+		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge tenant: %w", tErr)
 	}
 
 	// Ledger row on the same tx — atomic with the counters.
 	ledgerID := uuid.New()
-	if _, lErr := tx.Exec(ctx,
+	tag, lErr := tx.Exec(ctx,
 		// tenant_slug is captured here rather than joined at read time: the
 		// ledger has to stay readable after a tenant renames itself, and a
 		// charge is a record of what was true when it happened. Resolved in
@@ -202,9 +256,16 @@ func (s *UsageStore) Charge(
 		                      amount, unit_code, op, actor_subject)
 		 SELECT $1, $2, t.slug, $3, $4::numeric, $5, $6, $7
 		   FROM tenants t WHERE t.id = $2`,
-		ledgerID, tenantID, capID, amountNumeric, resolvedUnit, op, actor,
-	); lErr != nil {
-		return 0, fmt.Errorf("capability/postgres: charge ledger insert: %w", lErr)
+		ledgerID, req.TenantID, req.CapabilityID, amountNumeric, resolvedUnit, req.Op, req.Actor,
+	)
+	if lErr != nil {
+		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge ledger insert: %w", lErr)
+	}
+	if tag.RowsAffected() != 1 {
+		// The INSERT ... SELECT found no tenant row. Committing would record
+		// spend with no ledger entry — and hand back a charge ID no refund
+		// could ever find.
+		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge ledger: tenant %s not found", req.TenantID)
 	}
 
 	// Transactional-outbox fan-out on the same tx (ADR-0003): the
@@ -218,59 +279,116 @@ func (s *UsageStore) Charge(
 			// surfacing so operators can correlate a charge-rejection spike
 			// with dispatcher trouble.
 			logger.FromContext(ctx).Warn("capability/postgres: charge rolled back on fan-out failure",
-				zap.String("capability_id", capID.String()),
-				zap.String("tenant_id", tenantID.String()),
-				zap.Float64("amount", amount),
+				zap.String("capability_id", req.CapabilityID.String()),
+				zap.String("tenant_id", req.TenantID.String()),
+				zap.Float64("amount", req.Amount),
 				zap.Error(fErr),
 			)
-			return 0, fmt.Errorf("capability/postgres: charge fan-out: %w", fErr)
+			return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge fan-out: %w", fErr)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("capability/postgres: charge commit: %w", err)
+		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge commit: %w", err)
 	}
-	return floatFromNumeric(spent), nil
+	return capability.ChargeReceipt{ChargeID: ledgerID, Spent: floatFromNumeric(spent)}, nil
 }
 
-// RefundCapability implements capability.UsageStore[pgx.Tx]. Idempotent —
-// row floored at 0; missing row is a no-op.
-func (s *UsageStore) RefundCapability(ctx context.Context, capID uuid.UUID, amount float64) error {
-	if amount <= 0 {
-		return nil
-	}
-	amountNumeric, err := numericFromFloat(amount)
-	if err != nil {
-		return err
-	}
-	if err := s.q.RefundCapabilityUsage(
-		ctx,
-		pgtype.UUID{Bytes: capID, Valid: true},
-		amountNumeric,
-	); err != nil {
-		return fmt.Errorf("capability/postgres: refund cap: %w", err)
-	}
-	return nil
-}
+// refundableQuery reads what is left of a charge and resolves the amount to
+// refund, all in numeric so a "refund the rest" is exact.
+const refundableQuery = `
+SELECT ch.capability_id,
+       ch.tenant_id,
+       r.refund,
+       r.refund > r.remaining AS exceeds
+FROM   charges ch
+CROSS  JOIN LATERAL (
+    SELECT rem.remaining,
+           CASE WHEN $2::numeric = 0 THEN rem.remaining ELSE $2::numeric END AS refund
+    FROM (
+        SELECT ch.amount - COALESCE(
+                   (SELECT sum(cr.amount) FROM charge_refunds cr WHERE cr.charge_id = ch.id), 0
+               ) AS remaining
+    ) rem
+) r
+WHERE  ch.id = $1;
+`
 
-// RefundTenant implements capability.UsageStore[pgx.Tx]. Same idempotency
-// shape as RefundCapability.
-func (s *UsageStore) RefundTenant(ctx context.Context, tenantID uuid.UUID, amount float64) error {
-	if amount <= 0 {
-		return nil
+// Refund implements capability.Meter.
+//
+// Concurrent refunds of one charge are serialised on a transaction-scoped
+// advisory lock keyed by the charge: charges is append-only by policy, so a
+// row lock (SELECT ... FOR UPDATE, which needs an UPDATE policy) is not
+// available, and without serialisation two refunds could each see the full
+// remainder.
+func (s *UsageStore) Refund(ctx context.Context, req capability.RefundRequest) (float64, error) {
+	if err := capability.ValidateAmount(req.Amount); err != nil {
+		return 0, err
 	}
-	amountNumeric, err := numericFromFloat(amount)
+	amountNumeric, err := numericFromFloat(req.Amount)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if err := s.q.RefundTenantBudget(
-		ctx,
-		pgtype.UUID{Bytes: tenantID, Valid: true},
-		amountNumeric,
-	); err != nil {
-		return fmt.Errorf("capability/postgres: refund tenant: %w", err)
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("capability/postgres: refund begin: %w", err)
 	}
-	return nil
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := s.q.WithTx(tx)
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`,
+		req.ChargeID.String()); err != nil {
+		return 0, fmt.Errorf("capability/postgres: refund lock: %w", err)
+	}
+
+	var (
+		capID, tenantID uuid.UUID
+		refund          pgtype.Numeric
+		exceeds         bool
+	)
+	if err := tx.QueryRow(ctx, refundableQuery, req.ChargeID, amountNumeric).
+		Scan(&capID, &tenantID, &refund, &exceeds); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, capability.ErrChargeNotFound
+		}
+		return 0, fmt.Errorf("capability/postgres: refund read: %w", err)
+	}
+	if exceeds {
+		return 0, fmt.Errorf("%w: charge %s", capability.ErrRefundExceedsCharge, req.ChargeID)
+	}
+	refunded := floatFromNumeric(refund)
+	if refunded == 0 {
+		return 0, nil // nothing left: a repeated full refund is a no-op
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO charge_refunds (charge_id, tenant_id, amount) VALUES ($1, $2, $3::numeric)`,
+		req.ChargeID, tenantID, refund); err != nil {
+		return 0, fmt.Errorf("capability/postgres: refund record: %w", err)
+	}
+
+	ids := []uuid.UUID{capID}
+	ancestors, err := ancestorsOf(ctx, tx, capID)
+	if err != nil {
+		return 0, err
+	}
+	for _, a := range ancestors {
+		ids = append(ids, a.id)
+	}
+	for _, id := range ids {
+		if err := qtx.RefundCapabilityUsage(ctx, pgtype.UUID{Bytes: id, Valid: true}, refund); err != nil {
+			return 0, fmt.Errorf("capability/postgres: refund capability: %w", err)
+		}
+	}
+	if err := qtx.RefundTenantBudget(ctx, pgtype.UUID{Bytes: tenantID, Valid: true}, refund); err != nil {
+		return 0, fmt.Errorf("capability/postgres: refund tenant: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("capability/postgres: refund commit: %w", err)
+	}
+	return refunded, nil
 }
 
 // GetTenantBudget implements capability.UsageStore[pgx.Tx].
