@@ -1143,6 +1143,21 @@ finding moving from "packages you import" to "your code is affected".
     hostnames over https and forwards no ports, so it is not the e2e run —
     though a hand-run port-forward during that window remains possible and
     would explain everything.
+- **Narrowed 2026-10-02:**
+  - *The message names a plain-HTTP client, nothing else.* A Go TLS server
+    answering `curl http://127.0.0.1:<port>` logs exactly this line, per
+    request, with the client's own address. A connection that opens and sends
+    nothing logs `EOF` instead — the readiness self-dial's old failure, not
+    this one. So each of the 14 lines was one HTTP request, and the burst was a
+    loop or a retrying client.
+  - *It cannot recur on the local cluster as it runs now.* Internal TLS is off
+    there (the planes serve plain HTTP inside the cluster), so a plain-HTTP
+    client gets an answer rather than this error. Catching it needs internal
+    TLS back on.
+  - *Not verified:* that `kubectl port-forward` traffic reaches the pod from
+    127.0.0.1. That is how port-forward is documented to work, and it would
+    make a hand-run `curl http://localhost:8080` loop through a forward the
+    whole explanation, but the check was not run on the cluster.
 - **Blockers:** it stopped happening. What remains is a client that leaves no
   trace in the tree, so `ss -tnp` inside the pod during a burst is still the
   step that finishes this — and there is no burst to catch.
