@@ -106,6 +106,7 @@ lefthook-local.yml
 .agents/
 .specify/
 .rtk/
+**/skills-lock.json
 
 # ── Release tooling (root package.json: semantic-release only) ──────────────
 /node_modules/
