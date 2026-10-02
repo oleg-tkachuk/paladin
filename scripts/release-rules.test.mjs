@@ -10,7 +10,7 @@
 // Runs from `task -t Taskfile.dev.yaml verify-repo` after `npm ci`.
 
 import { createRequire } from "node:module";
-import { analyzeWith, belongs, within } from "./release/paths-analyzer.mjs";
+import { analyzeWith, belongs, deciding, within } from "./release/paths-analyzer.mjs";
 
 const require = createRequire(import.meta.url);
 const { streams, analyzerFor } = require("../release.config.cjs");
@@ -20,6 +20,7 @@ const SDK = ["sdk/go/paladin/client.go"];
 const PYTHON_SDK = ["sdk/python/src/paladin/client.py"];
 const PROTO = ["proto/paladin/data/v1/object_service.proto"];
 const CAPABILITY = ["capability/mint.go"];
+const UPGRADING = ["docs/upgrading.md"];
 
 // [stream, commit message, files it changed, release wanted]
 const cases = [
@@ -43,6 +44,13 @@ const cases = [
   ["product", "feat(capability)!: the module's API breaks", CAPABILITY, "minor"],
   ["product", "feat(sdk)!: the SDK and the server break together", [...SDK, ...BACKEND], "major"],
   ["product", "feat(api)!: a contract break is the server's", PROTO, "major"],
+  // Its upgrade notes do not make a module's break the product's: what
+  // released v5.0.0 and v6.0.0 for SDK-only breaks.
+  ["product", "feat(sdk)!: the Go SDK breaks, with its notes", [...SDK, ...UPGRADING], "minor"],
+  ["product", "feat(sdk)!: the Python SDK breaks, with its notes", [...PYTHON_SDK, ...UPGRADING, "sdk/python/README.md"], null],
+  ["product", "feat(api)!: the server breaks, with its notes", [...BACKEND, ...UPGRADING], "major"],
+  ["product", "docs: documentation alone releases nothing", UPGRADING, null],
+  ["sdk", "feat(sdk)!: a break with its notes is still the SDK's", [...SDK, ...UPGRADING], "minor"],
 
   ["sdk", "feat(sdk): add a helper", SDK, "minor"],
   ["sdk", "fix(sdk): a Python fix", PYTHON_SDK, "patch"],
@@ -84,6 +92,8 @@ for (const [name, ok] of [
   ["exclude needs every file", belongs(["sdk/x", "backend/y"], { exclude: ["sdk/"] }) === true],
   ["within needs every file", within(["sdk/go/x", "backend/y"], ["sdk/go/"]) === false],
   ["a merge is within nothing", within([], ["sdk/go/"]) === false],
+  ["documentation does not decide", deciding(["sdk/go/a.go", "docs/x.md", "README.md"], { prefixes: ["docs/"], suffixes: [".md"] }).join() === "sdk/go/a.go"],
+  ["documentation alone keeps its files", deciding(["docs/x.md"], { prefixes: ["docs/"], suffixes: [".md"] }).join() === "docs/x.md"],
 ]) {
   if (!ok) {
     console.log(`FAIL ${name}`);

@@ -37,6 +37,9 @@ const SDK_PATHS = ["sdk/", "proto/"];
 const CAPABILITY_PATHS = ["capability/"];
 // The Go modules the backend compiles in: their API is theirs, not the product's.
 const MODULE_PATHS = ["sdk/go/", ...CAPABILITY_PATHS];
+// Files that do not decide which stream a commit belongs to, when it changed
+// code too: its upgrade notes and READMEs follow the code.
+const DOCUMENTATION = { prefixes: ["docs/"], suffixes: [".md"] };
 
 const streams = {
   product: {
@@ -49,15 +52,24 @@ const streams = {
       releaseRules: [SECURITY_IS_A_PATCH],
       exclude: ["sdk/python/"],
       modules: { paths: MODULE_PATHS, releaseRules: [BREAKING_IS_A_MINOR_BEFORE_1_0] },
+      documentation: DOCUMENTATION,
     },
   },
   sdk: {
     tagFormat: "sdk/go/v${version}",
-    analyzer: { releaseRules: [SECURITY_IS_A_PATCH, BREAKING_IS_A_MINOR_BEFORE_1_0], include: SDK_PATHS },
+    analyzer: {
+      releaseRules: [SECURITY_IS_A_PATCH, BREAKING_IS_A_MINOR_BEFORE_1_0],
+      include: SDK_PATHS,
+      documentation: DOCUMENTATION,
+    },
   },
   capability: {
     tagFormat: "capability/v${version}",
-    analyzer: { releaseRules: [SECURITY_IS_A_PATCH, BREAKING_IS_A_MINOR_BEFORE_1_0], include: CAPABILITY_PATHS },
+    analyzer: {
+      releaseRules: [SECURITY_IS_A_PATCH, BREAKING_IS_A_MINOR_BEFORE_1_0],
+      include: CAPABILITY_PATHS,
+      documentation: DOCUMENTATION,
+    },
   },
 };
 
