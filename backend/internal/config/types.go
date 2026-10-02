@@ -647,6 +647,10 @@ type Housekeeping struct {
 	// OperationsTTL bounds how long a terminal-state operation row is
 	// retained. 0 disables the reaper. See [worker.OperationsReaper].
 	OperationsTTL time.Duration `yaml:"operations_ttl" json:"operations_ttl"`
+	// EventDeliveriesTTL bounds how long a delivered or failed outbox row is
+	// kept after its last attempt — and so how long a failed one can be
+	// redriven. 0 disables the purge. See [worker.EventDeliveryPurger].
+	EventDeliveriesTTL time.Duration `yaml:"event_deliveries_ttl" json:"event_deliveries_ttl"`
 
 	// HardDeleteAfter is the cooling-off window between soft-delete
 	// (row state='DELETED') and hard-delete (S3 DELETE + DB row

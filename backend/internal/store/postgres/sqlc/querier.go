@@ -528,6 +528,10 @@ type Querier interface {
 	// until 0 rows so a long-overdue first sweep doesn't pin a single
 	// statement for minutes.
 	PurgeIngestedEventsBefore(ctx context.Context, ingestedAt pgtype.Timestamptz) (int64, error)
+	// One bounded batch of delivered and failed rows last attempted before the
+	// cutoff; the purger repeats it until a batch comes back short. The predicate
+	// matches event_deliveries_terminal_idx, so the pending queue is never read.
+	PurgeTerminalEventDeliveries(ctx context.Context, cutoff pgtype.Timestamptz, batchSize int32) (int64, error)
 	// Bounded batch (10k). Worker loops until result is 0. Uses
 	// idx_operations_terminal_done_at (added in the schema baseline (001_initial_schema.sql)) so the planner
 	// never scans the live PENDING/RUNNING tail.

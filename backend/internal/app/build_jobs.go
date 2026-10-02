@@ -143,6 +143,14 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			Logger:   l.Named("audit-purger"),
 		})
 	}
+	if cfg.Worker.Jobs.Housekeeping.EventDeliveriesTTL > 0 {
+		out = append(out, &worker.EventDeliveryPurger{
+			Repo:     adapters.NewEventDeliveryRepo(reaperQ),
+			TTL:      cfg.Worker.Jobs.Housekeeping.EventDeliveriesTTL,
+			Interval: cfg.Worker.Jobs.Housekeeping.Interval,
+			Logger:   l.Named("event-delivery-purger"),
+		})
+	}
 	if cfg.Worker.Jobs.Housekeeping.OperationsTTL > 0 {
 		out = append(out, &worker.OperationsReaper{
 			Repo:     adapters.NewOperationRepo(reaperQ, reaperPool),
