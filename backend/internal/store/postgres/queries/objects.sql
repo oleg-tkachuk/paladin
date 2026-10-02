@@ -185,9 +185,13 @@ SELECT EXISTS(
 -- out of the plan; this query then reads those rows under the caller's RLS,
 -- which still decides what is returned. The page is the function's LIMIT;
 -- keyset on id (UUIDv7, monotonic-by-time).
-SELECT sqlc.embed(o), c.name AS collection_name
+--
+-- No join to collections: the name is the argument, and joining cost a
+-- collections scan per returned row (the planner cannot size the id array).
+-- The collection is resolved once, by its unique (tenant_id, name), and
+-- still checked against every row.
+SELECT sqlc.embed(o), sqlc.arg('collection')::text AS collection_name
 FROM objects o
-JOIN collections c ON c.id = o.collection_id
 WHERE o.id = ANY (ARRAY(
         SELECT search_object_ids(
             sqlc.arg('tenant_id')::uuid,
@@ -202,7 +206,10 @@ WHERE o.id = ANY (ARRAY(
             sqlc.narg('after_id')::uuid,
             sqlc.arg('page_size')::integer)))
   AND o.tenant_id = sqlc.arg('tenant_id')::uuid
-  AND c.name = sqlc.arg('collection')::text
+  AND o.collection_id = (
+        SELECT c.id FROM collections c
+         WHERE c.tenant_id = sqlc.arg('tenant_id')::uuid
+           AND c.name = sqlc.arg('collection')::text)
 ORDER BY o.id;
 
 -- name: CountObjects :one

@@ -348,13 +348,12 @@ func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Tim
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, c.name AS collection_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, $1::text AS collection_name
 FROM objects o
-JOIN collections c ON c.id = o.collection_id
 WHERE o.id = ANY (ARRAY(
         SELECT search_object_ids(
-            $1::uuid,
-            $2::text,
+            $2::uuid,
+            $1::text,
             $3::object_state,
             $4::text,
             $5::text,
@@ -364,8 +363,11 @@ WHERE o.id = ANY (ARRAY(
             $9::jsonb,
             $10::uuid,
             $11::integer)))
-  AND o.tenant_id = $1::uuid
-  AND c.name = $2::text
+  AND o.tenant_id = $2::uuid
+  AND o.collection_id = (
+        SELECT c.id FROM collections c
+         WHERE c.tenant_id = $2::uuid
+           AND c.name = $1::text)
 ORDER BY o.id
 `
 
@@ -388,10 +390,15 @@ type ListObjectsRow struct {
 // out of the plan; this query then reads those rows under the caller's RLS,
 // which still decides what is returned. The page is the function's LIMIT;
 // keyset on id (UUIDv7, monotonic-by-time).
-func (q *Queries) ListObjects(ctx context.Context, tenantID pgtype.UUID, collection string, state *ObjectState, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
+//
+// No join to collections: the name is the argument, and joining cost a
+// collections scan per returned row (the planner cannot size the id array).
+// The collection is resolved once, by its unique (tenant_id, name), and
+// still checked against every row.
+func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *ObjectState, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
-		tenantID,
 		collection,
+		tenantID,
 		state,
 		prefix,
 		substr,
