@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -98,8 +99,12 @@ type ObjectReader struct {
 	// did not say.
 	ContentLength int64
 
-	body     io.ReadCloser
-	read     int64
+	body io.ReadCloser
+	read int64
+	// ended reports the transfer once, at the end of the content or at
+	// Close, whichever comes first.
+	ended    func(err error)
+	done     bool
 	wantSize int64 // -1: nothing to check
 	digest   hash.Hash
 	want     []byte
@@ -114,11 +119,22 @@ func (r *ObjectReader) Read(p []byte) (int, error) {
 		r.digest.Write(p[:n])
 	}
 	if errors.Is(err, io.EOF) {
-		if verr := r.verify(); verr != nil {
+		verr := r.verify()
+		r.end(verr)
+		if verr != nil {
 			return n, verr
 		}
+	} else if err != nil {
+		r.end(err)
 	}
 	return n, err
+}
+
+func (r *ObjectReader) end(err error) {
+	if !r.done && r.ended != nil {
+		r.done = true
+		r.ended(err)
+	}
 }
 
 func (r *ObjectReader) verify() error {
@@ -134,7 +150,10 @@ func (r *ObjectReader) verify() error {
 }
 
 // Close closes the response body.
-func (r *ObjectReader) Close() error { return r.body.Close() }
+func (r *ObjectReader) Close() error {
+	r.end(nil)
+	return r.body.Close()
+}
 
 // Download opens an object's content through a presigned URL, streamed: the
 // object is never held in memory whole. The request goes through the
@@ -155,7 +174,8 @@ func Download(ctx context.Context, data *DataPlane, name string, opts DownloadOp
 	if opts.ranged() {
 		header.Set(headerRange, opts.header())
 	}
-	got, err := data.Transfer().do(ctx, http.MethodGet, signed, header, nil, 0)
+	transfer, start := data.Transfer(), time.Now()
+	got, err := transfer.do(ctx, http.MethodGet, signed, header, nil, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -179,6 +199,9 @@ func Download(ctx context.Context, data *DataPlane, name string, opts DownloadOp
 	if !opts.ranged() {
 		r.expect(object)
 	}
+	r.ended = func(err error) {
+		transfer.ended(ctx, got.Request.Method, got.Request.URL.Host, r.read, start, err)
+	}
 	return r, nil
 }
 
@@ -201,4 +224,28 @@ func (r *ObjectReader) expect(object *datav1.Object) {
 		return
 	}
 	r.digest, r.want, r.algo = digest, want, sum.GetAlgorithm()
+}
+
+// LookupObject returns the object a paladin:// URI names, found by its key.
+func LookupObject(ctx context.Context, data *DataPlane, uri ObjectURI) (*datav1.Object, error) {
+	resp, err := data.Object.LookupObject(ctx, connect.NewRequest(&datav1.LookupObjectRequest{
+		Parent: uri.Parent(), Key: uri.Key,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+// DownloadURI is Download for the object a paladin:// URI names.
+func DownloadURI(ctx context.Context, data *DataPlane, uri string, opts DownloadOptions) (*ObjectReader, error) {
+	parsed, err := ParseObjectURI(uri)
+	if err != nil {
+		return nil, err
+	}
+	object, err := LookupObject(ctx, data, parsed)
+	if err != nil {
+		return nil, err
+	}
+	return Download(ctx, data, object.GetName(), opts)
 }

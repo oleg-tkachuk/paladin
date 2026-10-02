@@ -183,6 +183,17 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Datastores.Postgres.ReaperPasswordSecret = nil
 	}
 
+	// Read-replica secret — only when the replica is on, so a stale Secret
+	// reference left behind with enabled: false cannot crash boot.
+	if cfg.Datastores.Postgres.Replica.Enabled && cfg.Datastores.Postgres.Replica.PasswordSecret != nil {
+		pwd, err := r.resolveSecret(ctx, cfg.Datastores.Postgres.Replica.PasswordSecret)
+		if err != nil {
+			return fmt.Errorf("postgres.replica.password_secret: %w", err)
+		}
+		cfg.Datastores.Postgres.Replica.Password = pwd
+		cfg.Datastores.Postgres.Replica.PasswordSecret = nil
+	}
+
 	// Bootstrap admin password — only resolved when bootstrap.admin.enabled
 	// is true. Skip otherwise so a misconfigured Secret doesn't crash boot
 	// in clusters where bootstrap is intentionally off.
@@ -356,6 +367,9 @@ func (c *Config) Obfuscated() Config {
 	}
 	if cc.Datastores.Postgres.ReaperPassword != "" {
 		cc.Datastores.Postgres.ReaperPassword = Redacted
+	}
+	if cc.Datastores.Postgres.Replica.Password != "" {
+		cc.Datastores.Postgres.Replica.Password = Redacted
 	}
 
 	// Redact per-backend creds. Copy the map so we don't mutate the source.

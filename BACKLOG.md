@@ -1690,17 +1690,18 @@ finding moving from "packages you import" to "your code is affected".
 
 The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 
-### Resource names are strings each side assembles by hand
+### The server parses resource names by hand
 
 - **Status:** Deferred.
-- **Reason:** names such as `tenants/{t}/collections/{c}/objects/{id}` carry
-  no `google.api.resource` annotation, so the SDKs cannot generate builders
-  or parsers for them and callers format them by hand; the server parses
-  them in `connectshim/convx`, by hand too. A typo reaches the server as
-  NotFound or InvalidArgument.
-- **Definition of Done:** the resources are annotated in `proto/`; name
-  helpers for Go and Python, and the server's parsers, are generated from the
-  annotations; a test round-trips every pattern.
+- **Reason:** both SDKs now build and parse names (`paladin.ParseObjectName`,
+  `paladin.names`), against one shared table, `sdk/testdata/names.json`.
+  The server still parses them in `connectshim` by hand, and the contract
+  carries no `google.api.resource` annotation. An annotation cannot state
+  the rules: a collection may contain '/', which an AIP-122 pattern
+  segment cannot, so a generator would get collection and object names
+  wrong.
+- **Definition of Done:** the server's parsers run the same shared table,
+  so the server and both SDKs cannot disagree on a name.
 - **Blockers:** none.
 
 ### Webhook deliveries can be replayed, and the SDKs cannot verify them

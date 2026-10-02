@@ -55,6 +55,8 @@ class Fake(ObjectServiceSync, MultipartUploadServiceSync):
     headers_seen: dict[str, str] = field(default_factory=dict)
     checksums: dict[str, str] = field(default_factory=dict)
     hosts: list[str] = field(default_factory=list)
+    # storage requests that carried a traceparent
+    traceparents: int = 0
     refuse_part: str = ""
     ignore_range: bool = False
     redirect_to: str = ""
@@ -62,6 +64,8 @@ class Fake(ObjectServiceSync, MultipartUploadServiceSync):
     # What download_object says of the object; None: its name alone.
     described: types_pb2.Object | None = None
     no_url: bool = False
+    # parent|key of every lookup_object
+    looked_up: list[str] = field(default_factory=list)
     # The origin presigned URLs are signed for; "" is base.
     signed_origin: str = ""
     lock: threading.Lock = field(default_factory=threading.Lock)
@@ -115,6 +119,13 @@ class Fake(ObjectServiceSync, MultipartUploadServiceSync):
             resp.ClearField("download_url")
         return resp
 
+    def lookup_object(
+        self, request: object_service_pb2.LookupObjectRequest, ctx: RequestContext
+    ) -> types_pb2.Object:
+        with self.lock:
+            self.looked_up.append(f"{request.parent}|{request.key}")
+        return types_pb2.Object(name=f"{request.parent}/objects/{request.key}")
+
     def initiate_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
         return multipart_service_pb2.InitiateMultipartUploadResponse(
             object=types_pb2.Object(name=f"{request.parent}/objects/{request.key}"),
@@ -143,6 +154,8 @@ class Fake(ObjectServiceSync, MultipartUploadServiceSync):
         key = f"{path}?{query}"
         with self.lock:
             self.hosts.append(environ.get("HTTP_HOST", ""))
+            if environ.get("HTTP_TRACEPARENT"):
+                self.traceparents += 1
             if self.redirect_to:
                 start_response("307 Temporary Redirect", [("Location", self.redirect_to)])
                 return [b""]

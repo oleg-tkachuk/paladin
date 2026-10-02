@@ -132,7 +132,7 @@ service ObjectService {
 
 // ─── Versioning ─────────────────────────────────────────────────────────────
 message ObjectVersion {
-  // Resource name: "tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}/versions/{ver}".
+  // Resource name: "tenants/{tenant_id}/collections/{ok}/objects/{id}/versions/{ver}".
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   string version_id = 2;
   string object_id = 3;
@@ -161,7 +161,7 @@ message ListObjectVersionsResponse {
 }
 
 message GetObjectVersionRequest {
-  // Resource name: "tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}/versions/{ver}".
+  // Resource name: "tenants/{tenant_id}/collections/{ok}/objects/{id}/versions/{ver}".
   string name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
@@ -177,7 +177,7 @@ message RestoreObjectVersionRequest {
 
 // ─── Upload ─────────────────────────────────────────────────────────────────
 message UploadObjectRequest {
-  // Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
+  // Parent Collection: "tenants/{tenant_id}/collections/{ok}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   string key = 2; // empty → server uses object_id as key
   string content_type = 3 [(buf.validate.field).string.min_len = 1];
@@ -277,7 +277,7 @@ message DeleteObjectResponse {
 
 // ─── Object Lock ────────────────────────────────────────────────────────────
 message SetObjectRetentionRequest {
-  // Object resource name: "tenants/{tenant}/collections/{ok}/objects/{id}".
+  // Object resource name: "tenants/{tenant_id}/collections/{ok}/objects/{id}".
   string name = 1 [(buf.validate.field).string.min_len = 1];
 
   // GOVERNANCE | COMPLIANCE. Required.
@@ -336,7 +336,7 @@ message TagsOverride     { map<string, string> tags = 1; }
 
 // ─── List / Count ───────────────────────────────────────────────────────────
 message ListObjectsRequest {
-  // Parent Collection: "tenants/{tenant_id_or_slug}/collections/{ok}".
+  // Parent Collection: "tenants/{tenant_id}/collections/{ok}".
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   paladin.common.v1.PageRequest page = 2;
   string filter = 3;

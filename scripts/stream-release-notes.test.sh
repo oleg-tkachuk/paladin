@@ -48,6 +48,28 @@ for unwanted in "a server feature" "explain it" "a module fix" "the first helper
     [[ "$second" != *"$unwanted"* ]] || fail "the SDK notes list: $unwanted"
 done
 
+# A breaking release: one `!` commit, one with the footer, and a guide
+# section for the version.
+mkdir -p "$work/docs"
+printf '# Upgrading\n\n## v0.3.0 — the SDK'"'"'s calls change\n\nText.\n' >"$work/docs/upgrading.md"
+commit sdk/go/client.go "feat(sdk)!: rename a helper"
+mkdir -p "$work/sdk/go"
+echo x >>"$work/sdk/go/other.go"
+git -C "$work" add -A
+git -C "$work" commit -q -m "fix(sdk): stop retrying a call" -m "BREAKING CHANGE: the call is no longer retried."
+commit sdk/go/client.go "feat(sdk): an ordinary helper"
+git -C "$work" tag sdk/go/v0.3.0
+third=$(notes sdk/go/v0.3.0)
+behaviour=${third%%"## Features"*}
+for want in "## Behaviour changes" "feat(sdk)!: rename a helper" "fix(sdk): stop retrying a call" \
+    "upgrading.md#v030--the-sdks-calls-change"; do
+    [[ "$behaviour" == *"$want"* ]] || fail "the breaking notes lack, before the features: $want"
+done
+features=${third#*"## Features"}
+[[ "$features" == *"an ordinary helper"* ]] || fail "the features lack the ordinary helper"
+[[ "$features" != *"rename a helper"* ]] || fail "a breaking commit is listed twice"
+[[ "$(notes sdk/go/v0.2.0)" != *"Behaviour changes"* ]] || fail "a release with no break has a Behaviour changes section"
+
 if notes v1.0.0 >/dev/null 2>&1; then
     fail "a product tag was given stream notes"
 fi

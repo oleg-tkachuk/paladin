@@ -230,6 +230,54 @@ except paladin.FailedPreconditionError as err:
     if err.reason == error_reason_pb2.ERROR_REASON_COLLECTION_NOT_EMPTY:
         ...  # empty it first
 ```
+### Resource names and object URIs
+
+The server's naming rules, as types (`paladin.names`): a name built here is
+one it accepts, and a name parsed here is one it would. Under a tenant a
+name takes the tenant's **id**, a UUID, not its slug; a collection may
+contain `/`; object and version ids are UUIDs. `InvalidNameError` (a
+`ValueError`) for anything else. `str(name)` prints it; `.parse` reads it.
+
+| Type | Form |
+| --- | --- |
+| `TenantName` | `tenants/{tenant}` — the id or the slug |
+| `CollectionName` | `tenants/{tenant-id}/collections/{collection}` |
+| `ObjectName` | `…/collections/{collection}/objects/{object-id}` |
+| `ObjectVersionName` | `…/objects/{object-id}/versions/{version-id}` |
+| `ObjectURI` | `paladin://tenants/{tenant-id}/collections/{collection}/keys/{key}` — an object by its key; the collection and the key are escaped path segments |
+
+`lookup_object(p.data, uri)` finds the object an `ObjectURI` (or its string)
+names, and `download_uri(p.data, uri, offset=0, length=0)` streams it.
+
+To create a bucket and bind collections to it at every boot, call
+`p.data.storage_bootstrap.ensure_tenant_storage`: it is idempotent on the
+server, and reports which collections it created and which already existed.
+
+### Observability
+
+Nothing is observed unless asked, and the SDK depends on no OpenTelemetry
+package.
+
+| Name | Does |
+| --- | --- |
+| `Client(…, user_agent_suffix="worker/2.1")`, `connect(…, user_agent_suffix=…)` | Appends the application to the SDK's `User-Agent`, so the server's logs name it. |
+| `Hooks(on_retry=…, on_transfer=…)` | `connect(…, hooks=h)` calls `on_retry(RetryEvent)` before each retry — `procedure`, the failed `attempt`, the `wait`, the `error`. `Transfer(hooks=h)` calls `on_transfer(TransferEvent)` as each presigned request ends — `method`, `host`, `bytes` moved, `duration`, `error`. |
+| the `paladin` logger (`LOGGER_NAME`) | Retries and transfers at debug, failed transfers at warning, with their fields in the record's `extra` for a structured formatter. |
+| `Client(…, interceptors=[…])`, `connect(…, interceptors=[…])` | Interceptors of your own, run outside the SDK's, so one that times or traces a call covers its retries. |
+
+**OpenTelemetry** comes from the HTTP stack connect-python runs on,
+`pyqwest`, which makes a span for every request and sends W3C trace
+context:
+
+```python
+http = pyqwest.SyncClient(pyqwest.SyncHTTPTransport(tracer_provider=provider))
+p = paladin.connect(endpoints, transport={"http_client": http},
+                    transfer=paladin.Transfer(otel=True, tracer_provider=provider))
+```
+
+connect-python's own `connectrpc-otel` 0.2.0 does not work with
+connect-python 0.9.0 — it reads `RequestContext.method` as an attribute,
+which 0.9.0 has as a method — so it is not used here.
 
 ### Constants
 

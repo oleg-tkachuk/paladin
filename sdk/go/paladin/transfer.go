@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -65,6 +66,7 @@ func (e *TransferError) Error() string {
 type Transfer struct {
 	client  *http.Client
 	rewrite func(*url.URL) *url.URL
+	observe observer
 }
 
 // TransferOption configures a Transfer.
@@ -73,6 +75,8 @@ type TransferOption func(*transferConfig) error
 type transferConfig struct {
 	client  *http.Client
 	rewrite func(*url.URL) *url.URL
+	hooks   Hooks
+	logger  *slog.Logger
 }
 
 // WithTransferHTTPClient sends the presigned requests with c — for a proxy, a
@@ -147,7 +151,7 @@ func NewTransfer(opts ...TransferOption) (*Transfer, error) {
 		client = &copied
 	}
 	client.CheckRedirect = refuseRedirect
-	return &Transfer{client: client, rewrite: cfg.rewrite}, nil
+	return &Transfer{client: client, rewrite: cfg.rewrite, observe: observer{hooks: cfg.hooks, logger: cfg.logger}}, nil
 }
 
 func refuseRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -204,14 +208,25 @@ func (t *Transfer) do(ctx context.Context, fallbackMethod string, signed *common
 	for k, v := range signed.GetRequiredHeaders() {
 		req.Header.Set(k, v)
 	}
+	start := time.Now()
 	resp, err := t.client.Do(req)
 	if err != nil {
+		t.ended(ctx, method, target.Host, 0, start, err)
 		return nil, err
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		defer func() { _ = resp.Body.Close() }()
 		excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodyLimit))
-		return nil, &TransferError{Method: method, Host: target.Host, Status: resp.StatusCode, Body: string(excerpt)}
+		err := &TransferError{Method: method, Host: target.Host, Status: resp.StatusCode, Body: string(excerpt)}
+		t.ended(ctx, method, target.Host, 0, start, err)
+		return nil, err
 	}
 	return resp, nil
+}
+
+// ended reports a request that ended to the Transfer's hooks and logger.
+func (t *Transfer) ended(ctx context.Context, method, host string, bytes int64, start time.Time, err error) {
+	t.observe.transfer(ctx, TransferEvent{
+		Method: method, Host: host, Bytes: bytes, Duration: time.Since(start), Err: err,
+	})
 }

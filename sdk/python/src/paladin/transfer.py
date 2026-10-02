@@ -12,6 +12,7 @@ import base64
 import hashlib
 import io
 import threading
+import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any
@@ -19,6 +20,7 @@ from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import pyqwest
 
+from paladin.observe import Hooks, TransferEvent, report_transfer
 from paladin.tls import TLS
 
 DEFAULT_TRANSFER_CONNECT_TIMEOUT = 10.0
@@ -113,6 +115,11 @@ class Transfer:
     ``scheme://host[:port]``; other origins go as signed. ``rewrite`` is the
     general form, any URL to any URL, the signed Host still kept.
 
+    ``hooks`` are told as each request ends (``Hooks.on_transfer``), and
+    the ``paladin`` logger records it. ``otel=True`` turns on the HTTP
+    stack's own OpenTelemetry spans for these requests, with W3C trace
+    context, through ``tracer_provider`` or the global one.
+
     ``tls`` makes the connections to storage with a CA bundle and a client
     certificate that may rotate on disk (see ``TLS``).
 
@@ -133,6 +140,9 @@ class Transfer:
         read_timeout: float = DEFAULT_TRANSFER_READ_TIMEOUT,
         pool_max_idle_per_host: int = DEFAULT_TRANSFER_POOL_MAX_IDLE_PER_HOST,
         tls: TLS | None = None,
+        hooks: Hooks | None = None,
+        otel: bool = False,
+        tracer_provider: Any = None,
         transport: Any = None,
     ) -> None:
         if split_horizon is not None and rewrite is not None:
@@ -140,6 +150,7 @@ class Transfer:
         if split_horizon is not None:
             rewrite = _split_horizon(*split_horizon)
         self._rewrite = rewrite
+        self.hooks = hooks
         if tls is not None and transport is not None:
             raise ValueError("tls builds the transport; give one or the other")
         if transport is None:
@@ -148,7 +159,8 @@ class Transfer:
                 "read_timeout": read_timeout,
                 "pool_max_idle_per_host": pool_max_idle_per_host,
                 "follow_redirects": False,
-                "enable_otel": False,
+                "enable_otel": otel,
+                "tracer_provider": tracer_provider,
             }
             transport = (
                 tls.sync_transport(**settings)
@@ -178,10 +190,28 @@ class Transfer:
         sent[_HEADER_HOST] = host
         # Covered by the signature: storage refuses the request without them.
         sent.update(signed.required_headers)
-        with self._client.stream(method, url, sent, content) as resp:
-            if not _STATUS_OK <= resp.status < _STATUS_REDIRECT:
-                raise TransferError(method, urlsplit(url).netloc, resp.status, _excerpt(resp))
-            yield resp
+        started = time.monotonic()
+        target = urlsplit(url).netloc
+        try:
+            with self._client.stream(method, url, sent, content) as resp:
+                if not _STATUS_OK <= resp.status < _STATUS_REDIRECT:
+                    raise TransferError(method, target, resp.status, _excerpt(resp))
+                yield resp
+        except Exception as err:
+            self.ended(method, target, 0, started, err)
+            raise
+
+    def host_of(self, signed: Any) -> str:
+        """The host a request for ``signed`` goes to, after any rewrite."""
+        return urlsplit(self._target(signed.url)[0]).netloc
+
+    def ended(
+        self, method: str, host: str, moved: int, started: float, error: BaseException | None
+    ) -> None:
+        """Report a request that ended to the hooks and the logger."""
+        report_transfer(
+            self.hooks, TransferEvent(method, host, moved, time.monotonic() - started, error)
+        )
 
 
 def _split_horizon(signed_origin: str, internal_origin: str) -> Callable[[str], str]:
@@ -235,8 +265,11 @@ class ObjectReader(io.RawIOBase):
         obj: Any,
         *,
         verify: bool,
+        ended: Callable[[int, BaseException | None], None] | None = None,
     ) -> None:
         super().__init__()
+        self._ended = ended
+        self._reported = False
         self._cm = exchange
         self.object = obj
         self.content_type: str = resp.headers.get("content-type") or obj.content_type
@@ -278,7 +311,12 @@ class ObjectReader(io.RawIOBase):
             try:
                 self._pending, self._offset = bytes(next(self._chunks)), 0
             except StopIteration:
-                self._verify()
+                try:
+                    self._verify()
+                except IntegrityError as err:
+                    self._end(err)
+                    raise
+                self._end(None)
                 return 0
         n = min(len(buffer), len(self._pending) - self._offset)
         # bytes, not a view: google_crc32c accepts nothing else.
@@ -307,8 +345,14 @@ class ObjectReader(io.RawIOBase):
                     base64.b64encode(got).decode(),
                 )
 
+    def _end(self, error: BaseException | None) -> None:
+        if not self._reported and self._ended is not None:
+            self._reported = True
+            self._ended(self._read, error)
+
     def close(self) -> None:
         if not self.closed:
+            self._end(None)
             self._cm.__exit__(None, None, None)
         super().close()
 

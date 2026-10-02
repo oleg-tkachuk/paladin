@@ -221,6 +221,56 @@ case errors.Is(err, paladin.ErrNotFound):
 }
 ```
 
+### Observability
+
+Nothing is observed unless asked, and the SDK depends on no OpenTelemetry
+package.
+
+| Name | Does |
+| --- | --- |
+| `WithUserAgentSuffix("gateway/1.4")` | Appends the application to the SDK's `User-Agent`, so the server's logs name it. |
+| `WithHooks(Hooks{OnRetry: …})` | `OnRetry(RetryEvent)` before each retry: `Procedure`, the failed `Attempt`, the `Wait`, the `Err`. For latency, retries and errors per call as metrics of your own. |
+| `WithTransferHooks(Hooks{OnTransfer: …})` | `OnTransfer(TransferEvent)` as each presigned request ends: `Method`, `Host`, `Bytes` moved, `Duration`, `Err` — a refused request, or a download that failed verification. |
+| `WithLogger(*slog.Logger)`, `WithTransferLogger(*slog.Logger)` | Retries and transfers as structured records at debug level, failed transfers at warn. |
+
+**OpenTelemetry** goes through the extension points there are, with
+connect's and OpenTelemetry's own instrumentation — spans for every RPC and
+every presigned request, and W3C trace context carried to the server and to
+storage:
+
+```go
+otelInterceptor, err := otelconnect.NewInterceptor()        // connectrpc.com/otelconnect
+transfer, err := paladin.NewTransfer(paladin.WithTransferHTTPClient(&http.Client{
+	Transport: otelhttp.NewTransport(http.DefaultTransport), // go.opentelemetry.io/contrib/…/otelhttp
+}))
+p, err := paladin.Connect(endpoints,
+	paladin.WithClientOptions(connect.WithInterceptors(otelInterceptor)),
+	paladin.WithTransfer(transfer))
+```
+
+### Resource names and object URIs
+
+The server's naming rules, as types: a name built here is one it accepts,
+and a name parsed here is one it would. Under a tenant a name takes the
+tenant's **id**, a UUID, not its slug; a collection may contain `/`; object
+and version ids are UUIDs. `ErrInvalidName` for anything else.
+
+| Type | Form |
+| --- | --- |
+| `TenantName`, `ParseTenantName` | `tenants/{tenant}` — the id or the slug |
+| `CollectionName`, `ParseCollectionName` | `tenants/{tenant-id}/collections/{collection}` |
+| `ObjectName`, `ParseObjectName` | `…/collections/{collection}/objects/{object-id}` |
+| `ObjectVersionName`, `ParseObjectVersionName` | `…/objects/{object-id}/versions/{version-id}` |
+| `ObjectURI`, `ParseObjectURI` | `paladin://tenants/{tenant-id}/collections/{collection}/keys/{key}` — an object by its key; the collection and the key are escaped path segments |
+
+`LookupObject(ctx, p.Data, uri)` finds the object an `ObjectURI` names, and
+`DownloadURI(ctx, p.Data, "paladin://…", opts)` downloads it. The URI extends
+the `paladin://` resource space the MCP bridge serves.
+
+To create a bucket and bind collections to it at every boot, call
+`p.Data.StorageBootstrap.EnsureTenantStorage`: it is idempotent on the
+server, and reports which collections it created and which already existed.
+
 ### Header names
 
 `HeaderAuthorization`, `HeaderAPIToken`, `HeaderCapability` and
