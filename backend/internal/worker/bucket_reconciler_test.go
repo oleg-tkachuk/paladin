@@ -91,6 +91,10 @@ func (f *fakeBucketRepo) RunInTx(ctx context.Context, fn func(context.Context, p
 	return f.closureErr
 }
 
+func (f *fakeBucketRepo) LockTx(context.Context, pgx.Tx, string, string) error {
+	return f.getErr
+}
+
 func (f *fakeBucketRepo) GetTx(context.Context, pgx.Tx, string, string) (admindomain.Bucket, error) {
 	return f.getResult, f.getErr
 }
@@ -263,7 +267,7 @@ func TestBucketReconciler_NoProvisionerKeepsTheRowRetryable(t *testing.T) {
 // then does the row go. A backend failure that still removed the row would
 // leave a bucket nobody knows about, paid for and unreachable.
 func TestBucketReconciler_BackendDeleteFailureKeepsTheRow(t *testing.T) {
-	repo := &fakeBucketRepo{}
+	repo := &fakeBucketRepo{getResult: markedBucket()}
 	events := &fakeBucketEvents{}
 	r := newReconciler(repo, &fakeProvisioner{deleteErr: errors.New("BucketNotEmpty")})
 	r.SetEventProducer(events)
@@ -395,7 +399,7 @@ func TestBucketReconciler_LogsTerminalAndTransientDifferently(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			core, logs := observer.New(zapcore.DebugLevel)
-			repo := &fakeBucketRepo{}
+			repo := &fakeBucketRepo{getResult: markedBucket()}
 			prov := &fakeProvisioner{}
 			if tc.del {
 				prov.deleteErr = tc.err
@@ -441,7 +445,7 @@ func TestBucketReconciler_MarkFailedWriteFailureStopsThere(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			core, logs := observer.New(zapcore.DebugLevel)
-			repo := &fakeBucketRepo{}
+			repo := &fakeBucketRepo{getResult: markedBucket()}
 			prov := &fakeProvisioner{}
 			if tc.del {
 				repo.delFailErr = errBackend
@@ -497,5 +501,28 @@ func TestBucketReconciler_RecreatedBucketKeepsItsRow(t *testing.T) {
 	}
 	if len(events.dispatched) != 0 {
 		t.Errorf("a live bucket was announced as deleted: %v", events.dispatched)
+	}
+}
+
+// markedBucket is a row in the deletion outbox.
+func markedBucket() admindomain.Bucket {
+	return admindomain.Bucket{ProvisionState: admindomain.BucketProvisionStateDeleting}
+}
+
+// A bucket deleted and created again under the same name since the deletion
+// was listed: the backend bucket now belongs to the new one, so the backend
+// delete must not run. The reconciler used to call it before reading the row.
+func TestBucketReconciler_RecreatedBucketKeepsItsBackendBucket(t *testing.T) {
+	repo := &fakeBucketRepo{getResult: admindomain.Bucket{ProvisionState: "ready"}}
+	prov := &fakeProvisioner{}
+	r := newReconciler(repo, prov)
+
+	r.reconcileDeleteOne(context.Background(), provisionRow(uuid.New()))
+
+	if prov.removed != 0 {
+		t.Errorf("the backend bucket of a bucket created again was deleted (%d calls)", prov.removed)
+	}
+	if len(repo.delFailCalls) != 0 {
+		t.Errorf("a skipped delete was recorded as a failure: %v", repo.delFailCalls)
 	}
 }

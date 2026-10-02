@@ -6,6 +6,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -76,4 +79,58 @@ func TestBucketProvisionWritesApplyOnlyToTheListedState(t *testing.T) {
 	if got := stateOf("created-again"); got != "ready" {
 		t.Errorf("state = %s, want ready", got)
 	}
+}
+
+// lockWaitBudget is how long a write may wait on the reconciler's row lock
+// before the test concludes it is blocked.
+const lockWaitBudget = 300 * time.Millisecond
+
+// The reconciler deletes the backend bucket while holding the row lock, so a
+// change to the row — a recreate, a state flip — waits for it to finish
+// instead of landing between its check and its delete.
+func TestBucketLockTxHoldsTheRow(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := pgharness.Setup(t)
+	repo := adapters.NewBucketRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
+	seedBackend(t, h.PoolMigrate, stateTestBackend)
+	if _, err := h.PoolMigrate.Exec(ctx, `
+		INSERT INTO buckets (backend_id, name, provision_state)
+		SELECT sb.id, 'locked', 'deleting' FROM storage_backends sb WHERE sb.name = $1`, stateTestBackend); err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+
+	tx, err := h.PoolMigrate.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	if err := repo.LockTx(ctx, tx, stateTestBackend, "locked"); err != nil {
+		t.Fatalf("lock: %v", err)
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, lockWaitBudget)
+	defer cancel()
+	if _, err := h.PoolMigrate.Exec(waitCtx, `UPDATE buckets SET provision_state = 'ready' WHERE name = 'locked'`); err == nil {
+		t.Fatal("a write to the locked row went through during the reconciler's delete")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if _, err := h.PoolMigrate.Exec(ctx, `UPDATE buckets SET provision_state = 'ready' WHERE name = 'locked'`); err != nil {
+		t.Fatalf("write after the lock: %v", err)
+	}
+	if err := repo.LockTx(ctx, mustBegin(t, h), stateTestBackend, "absent"); !errors.Is(err, admindomain.ErrNotFound) {
+		t.Errorf("locking an absent bucket returned %v, want ErrNotFound", err)
+	}
+}
+
+func mustBegin(t *testing.T, h *pgharness.Harness) pgx.Tx {
+	t.Helper()
+	tx, err := h.PoolMigrate.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	return tx
 }
