@@ -176,6 +176,20 @@ type storage struct {
 	redirectTo  string
 	headersSeen map[string]string
 	hosts       []string
+	traced      int // requests that carried a traceparent
+	refuse      int // status every request is refused with; 0 none
+}
+
+func (s *storage) refuseWith(status int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refuse = status
+}
+
+func (s *storage) traceparents() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.traced
 }
 
 const (
@@ -187,6 +201,13 @@ func (s *storage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.hosts = append(s.hosts, r.Host)
+	if r.Header.Get("Traceparent") != "" {
+		s.traced++
+	}
+	if s.refuse != 0 {
+		http.Error(w, "refused", s.refuse)
+		return
+	}
 	if s.redirectTo != "" {
 		http.Redirect(w, r, s.redirectTo, http.StatusTemporaryRedirect)
 		return

@@ -271,8 +271,11 @@ def upload(
             yield chunk
 
     headers = {_HEADER_CONTENT_TYPE: content_type, _HEADER_CONTENT_LENGTH: str(size)}
-    with _transfer(data).stream(_PUT, allocated.upload_url, headers, content()) as resp:
+    transfer = _transfer(data)
+    started = time.monotonic()
+    with transfer.stream(_PUT, allocated.upload_url, headers, content()) as resp:
         etag = _etag(resp.headers)
+    transfer.ended(_PUT, transfer.host_of(allocated.upload_url), size, started, None)
     return data.object.complete_object(
         object_service_pb2.CompleteObjectRequest(
             name=allocated.object.name,
@@ -316,8 +319,10 @@ def _upload_multipart(
             )
         )
         headers = {_HEADER_CONTENT_LENGTH: str(len(chunk))}
+        started = time.monotonic()
         with transfer.stream(_PUT, signed.upload_url, headers, chunk) as resp:
             etag = _etag(resp.headers)
+        transfer.ended(_PUT, transfer.host_of(signed.upload_url), len(chunk), started, None)
         if not etag:
             raise TransferError(
                 _PUT, "", 0, f"part {index + 1} returned no ETag; storage must expose it"
@@ -377,7 +382,10 @@ def download_stream(
         raise TransferError(_GET, "", 0, "the server returned no download URL")
     ranged = offset != 0 or length != 0
     headers = {_HEADER_RANGE: range_header(offset, length)} if ranged else {}
-    exchange = _transfer(data).stream(_GET, resp.download_url, headers)
+    transfer = _transfer(data)
+    started = time.monotonic()
+    host = transfer.host_of(resp.download_url)
+    exchange = transfer.stream(_GET, resp.download_url, headers)
     got = exchange.__enter__()
     try:
         if ranged:
@@ -385,7 +393,13 @@ def download_stream(
     except BaseException:
         exchange.__exit__(None, None, None)
         raise
-    return ObjectReader(exchange, got, resp.object, verify=not ranged)
+    return ObjectReader(
+        exchange,
+        got,
+        resp.object,
+        verify=not ranged,
+        ended=lambda moved, error: transfer.ended(_GET, host, moved, started, error),
+    )
 
 
 def download(data: DataPlane, name: str, *, offset: int = 0, length: int = 0) -> bytes:

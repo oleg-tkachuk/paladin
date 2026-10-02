@@ -221,6 +221,33 @@ case errors.Is(err, paladin.ErrNotFound):
 }
 ```
 
+### Observability
+
+Nothing is observed unless asked, and the SDK depends on no OpenTelemetry
+package.
+
+| Name | Does |
+| --- | --- |
+| `WithUserAgentSuffix("gateway/1.4")` | Appends the application to the SDK's `User-Agent`, so the server's logs name it. |
+| `WithHooks(Hooks{OnRetry: …})` | `OnRetry(RetryEvent)` before each retry: `Procedure`, the failed `Attempt`, the `Wait`, the `Err`. For latency, retries and errors per call as metrics of your own. |
+| `WithTransferHooks(Hooks{OnTransfer: …})` | `OnTransfer(TransferEvent)` as each presigned request ends: `Method`, `Host`, `Bytes` moved, `Duration`, `Err` — a refused request, or a download that failed verification. |
+| `WithLogger(*slog.Logger)`, `WithTransferLogger(*slog.Logger)` | Retries and transfers as structured records at debug level, failed transfers at warn. |
+
+**OpenTelemetry** goes through the extension points there are, with
+connect's and OpenTelemetry's own instrumentation — spans for every RPC and
+every presigned request, and W3C trace context carried to the server and to
+storage:
+
+```go
+otelInterceptor, err := otelconnect.NewInterceptor()        // connectrpc.com/otelconnect
+transfer, err := paladin.NewTransfer(paladin.WithTransferHTTPClient(&http.Client{
+	Transport: otelhttp.NewTransport(http.DefaultTransport), // go.opentelemetry.io/contrib/…/otelhttp
+}))
+p, err := paladin.Connect(endpoints,
+	paladin.WithClientOptions(connect.WithInterceptors(otelInterceptor)),
+	paladin.WithTransfer(transfer))
+```
+
 ### Header names
 
 `HeaderAuthorization`, `HeaderAPIToken`, `HeaderCapability` and

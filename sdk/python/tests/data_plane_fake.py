@@ -55,6 +55,8 @@ class Fake(ObjectServiceSync, MultipartUploadServiceSync):
     headers_seen: dict[str, str] = field(default_factory=dict)
     checksums: dict[str, str] = field(default_factory=dict)
     hosts: list[str] = field(default_factory=list)
+    # storage requests that carried a traceparent
+    traceparents: int = 0
     refuse_part: str = ""
     ignore_range: bool = False
     redirect_to: str = ""
@@ -143,6 +145,8 @@ class Fake(ObjectServiceSync, MultipartUploadServiceSync):
         key = f"{path}?{query}"
         with self.lock:
             self.hosts.append(environ.get("HTTP_HOST", ""))
+            if environ.get("HTTP_TRACEPARENT"):
+                self.traceparents += 1
             if self.redirect_to:
                 start_response("307 Temporary Redirect", [("Location", self.redirect_to)])
                 return [b""]
