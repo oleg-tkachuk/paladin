@@ -112,6 +112,11 @@ func TestBuildBackgroundJobs_ConfigGates(t *testing.T) {
 			want: []string{"*worker.AuditLogPurger"},
 		},
 		{
+			name: "event deliveries ttl",
+			set:  func(c *config.Config) { c.Worker.Jobs.Housekeeping.EventDeliveriesTTL = time.Hour },
+			want: []string{"*worker.EventDeliveryPurger"},
+		},
+		{
 			name: "operations ttl",
 			set:  func(c *config.Config) { c.Worker.Jobs.Housekeeping.OperationsTTL = time.Hour },
 			want: []string{"*worker.OperationsReaper"},

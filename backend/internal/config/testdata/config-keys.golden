@@ -398,6 +398,7 @@ worker.jobs.capability.interval
 worker.jobs.housekeeping
 worker.jobs.housekeeping.audit_log_ttl
 worker.jobs.housekeeping.delete_orphaned_parts
+worker.jobs.housekeeping.event_deliveries_ttl
 worker.jobs.housekeeping.hard_delete_after
 worker.jobs.housekeeping.hard_delete_batch_size
 worker.jobs.housekeeping.interval

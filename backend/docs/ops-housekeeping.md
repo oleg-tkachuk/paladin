@@ -18,6 +18,7 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 | `quota_reconciler` | recomputes quota usage from live objects; resets daily counters | `quota_reconcile.interval` | `15m` |
 | `audit_purger` | deletes `audit_log` rows older than the TTL | `housekeeping.audit_log_ttl` | `8760h` |
 | `operations_purger` | deletes terminal `operations` rows older than the TTL | `housekeeping.operations_ttl` | `336h` |
+| `event_delivery_purger` | deletes delivered and failed `event_deliveries` rows whose last attempt is older than the TTL | `housekeeping.event_deliveries_ttl` | `336h` |
 | `partition_maintainer` | creates `audit_log` (monthly) and `idempotency_keys` (daily) partitions ahead; drops expired ones | `housekeeping.interval` | `1h` |
 | `idempotency_purger` | deletes expired idempotency keys | `housekeeping.interval` | `1h` |
 | `tenant_rate_bucket_sweeper` | drops elapsed per-tenant rate-limit windows | `housekeeping.interval` | `1h` |
@@ -28,10 +29,10 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 | `stale_operation_reclaimer` | fails operations no worker has touched for `stale_after` | `operations.stale_after` | `15m` |
 | `replication` | cross-backend replication; dry-run | `replication.enabled`, `.interval` | `false`, `5m` |
 
-`housekeeping.interval` also paces the audit and operations purgers, and the
-hard-deleter: its first sweep runs one interval after the worker starts. A
-sweep with nothing past the window logs nothing; each object it removes logs
-`hard-deleted`.
+`housekeeping.interval` also paces the audit, operations and event-delivery
+purgers, and the hard-deleter: its first sweep runs one interval after the
+worker starts. A sweep with nothing past the window logs nothing; each object
+it removes logs `hard-deleted`.
 
 `hard_delete_after` is a retention decision, so the default stays `0`: a
 soft-deleted object keeps its bytes until someone chooses how long. Production

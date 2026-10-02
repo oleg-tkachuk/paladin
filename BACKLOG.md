@@ -1614,15 +1614,14 @@ finding moving from "packages you import" to "your code is affected".
 Defects the review behind `backend/docs/diagrams.md` found and confirmed in
 the code. Not fixed in the documentation change that recorded them.
 
-### Delivered and failed event rows are kept forever
+### A failed event delivery cannot be sent again
 
 - **Status:** Deferred.
-- **Reason:** `event_deliveries` has no retention: delivered rows pile up, and
-  a `failed` row — one that exhausted its attempts — stays failed with no way
-  to send it again short of an SQL update.
-- **Definition of Done:** a worker job purges delivered and failed rows past a
-  configured age, and an admin RPC re-queues a subscription's failed rows,
-  each with tests.
+- **Reason:** a `failed` row — one that exhausted its attempts — stays failed
+  with no way to send it again short of an SQL update, until
+  `event_delivery_purger` removes it after `housekeeping.event_deliveries_ttl`.
+- **Definition of Done:** an admin RPC re-queues a subscription's failed rows,
+  with tests, and the console offers it on the subscription page.
 - **Blockers:** none.
 
 ## Tooling and observability

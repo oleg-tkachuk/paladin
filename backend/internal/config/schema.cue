@@ -305,6 +305,7 @@ worker: {
     multipart_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"72h"
     audit_log_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"8760h" // 365d
     operations_ttl:        =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"336h"  // 14d — decided, see docs/ops-housekeeping.md
+    event_deliveries_ttl:  =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"336h"  // 14d — see docs/ops-housekeeping.md
     interval:              =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
     delete_orphaned_parts: bool | *false
   }
