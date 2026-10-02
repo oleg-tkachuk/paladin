@@ -17,6 +17,7 @@ const { streams, analyzerFor } = require("../release.config.cjs");
 
 const BACKEND = ["backend/internal/api/handler.go"];
 const SDK = ["sdk/go/paladin/client.go"];
+const PYTHON_SDK = ["sdk/python/src/paladin/client.py"];
 const PROTO = ["proto/paladin/data/v1/object_service.proto"];
 const CAPABILITY = ["capability/mint.go"];
 
@@ -31,11 +32,15 @@ const cases = [
   ["product", "docs: explain a thing", BACKEND, null],
   ["product", "chore: tidy", BACKEND, null],
   ["product", "refactor(api): move a thing", BACKEND, null],
-  ["product", "feat(sdk): only the SDK", SDK, null],
-  ["product", "fix(capability): only the module", CAPABILITY, null],
-  ["product", "feat(sdk): the SDK and the server", [...SDK, ...BACKEND], "minor"],
+  // The backend compiles capability/ and sdk/go/ in: a change there changes
+  // its image, so the product releases it.
+  ["product", "fix(capability): a module fix ships in the backend", CAPABILITY, "patch"],
+  ["product", "feat(sdk): the Go SDK is compiled into the backend", SDK, "minor"],
+  ["product", "feat(sdk): only the Python SDK", PYTHON_SDK, null],
+  ["product", "feat(sdk): the Python SDK and the server", [...PYTHON_SDK, ...BACKEND], "minor"],
 
   ["sdk", "feat(sdk): add a helper", SDK, "minor"],
+  ["sdk", "fix(sdk): a Python fix", PYTHON_SDK, "patch"],
   ["sdk", "fix(sdk): repair a helper", SDK, "patch"],
   ["sdk", "security(sdk): stop logging a token", SDK, "patch"],
   ["sdk", "feat(events): a new RPC changes the stubs", PROTO, "minor"],

@@ -11,8 +11,10 @@
 // Each releases from the commits that touch its own files, read by
 // scripts/release/paths-analyzer.mjs: the SDK for a change under sdk/ or
 // proto/, the capability module for one under capability/, the product for
-// any commit that is not only one of those two. A commit that touches several
-// releases each.
+// any commit that changes what its images are built from — which is all of
+// it but the Python SDK: the backend compiles capability/ and sdk/go/ through
+// `replace`, and its Dockerfile copies both. A commit that touches several
+// streams releases each.
 //
 // The tag IS the release. The GitHub release beside the product's is notes for
 // people, created by the workflow with `gh release create --generate-notes`
@@ -37,8 +39,9 @@ const CAPABILITY_PATHS = ["capability/"];
 const streams = {
   product: {
     tagFormat: "v${version}",
-    // proto/ stays in: a contract change is a server change too.
-    analyzer: { releaseRules: [SECURITY_IS_A_PATCH], exclude: ["sdk/", ...CAPABILITY_PATHS] },
+    // Only sdk/python/ is in no image. capability/ and sdk/go/ are in the
+    // backend's, and proto/ is the server's contract.
+    analyzer: { releaseRules: [SECURITY_IS_A_PATCH], exclude: ["sdk/python/"] },
   },
   sdk: {
     tagFormat: "sdk/go/v${version}",

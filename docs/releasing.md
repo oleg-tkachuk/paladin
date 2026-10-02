@@ -6,13 +6,15 @@ that touch it ([`release.config.cjs`](../release.config.cjs)).
 
 | Tag | Cut by | Publishes | Versioned by |
 | --- | --- | --- | --- |
-| `vX.Y.Z` | semantic-release, after a green push to `main` | both images and both Helm charts, plus the GitHub release | the commits that touch anything but `sdk/` and `capability/` |
+| `vX.Y.Z` | semantic-release, after a green push to `main` | both images and both Helm charts, plus the GitHub release | the commits that change what the images are built from — everything but `sdk/python/` |
 | `sdk/go/vX.Y.Z` | semantic-release, in the same run | the tag: the Go proxy and pip resolve it | the commits that touch `sdk/` or `proto/` |
 | `capability/vX.Y.Z` | semantic-release, in the same run | the tag, for `go get` | the commits that touch `capability/` |
 | `api/vX.Y.Z` | a maintainer, by hand | nothing; the baseline `buf breaking` compares against | the API contract |
 
 A commit counts for every stream whose files it touches, and its type
-decides the bump on each — `feat` a minor, `fix`/`perf`/`security` a patch.
+decides the bump on each. The backend compiles `capability/` and `sdk/go/`
+through `replace` and its image copies both, so a change there releases the
+product as well as its own module — `feat` a minor, `fix`/`perf`/`security` a patch.
 The SDK and the capability module are pre-1.0, so a breaking change is a
 minor on their streams until they reach 1.0.
 
