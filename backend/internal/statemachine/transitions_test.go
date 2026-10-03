@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -37,12 +38,16 @@ type fakeExec struct {
 	tag     pgconn.CommandTag
 	execErr error
 	row     pgx.Row
+	// lockRow answers the registration check's SELECT … FOR UPDATE; nil
+	// answers it with row, whose state then decides whether it checks.
+	lockRow pgx.Row
 
 	execSQL   string
 	execArgs  []any
 	querySQL  string
 	queryArgs []any
 	execCalls int
+	lockCalls int
 }
 
 func (f *fakeExec) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
@@ -52,6 +57,13 @@ func (f *fakeExec) Exec(_ context.Context, sql string, args ...any) (pgconn.Comm
 }
 
 func (f *fakeExec) QueryRow(_ context.Context, sql string, args ...any) pgx.Row {
+	if strings.Contains(sql, "FOR UPDATE") {
+		f.lockCalls++
+		if f.lockRow != nil {
+			return f.lockRow
+		}
+		return f.row
+	}
 	f.querySQL, f.queryArgs = sql, args
 	return f.row
 }

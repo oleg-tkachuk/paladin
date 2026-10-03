@@ -67,9 +67,14 @@ type EventProducer interface {
 	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
 }
 
+// Promoter is the slice of *statemachine.Transitioner the handler uses.
+type Promoter interface {
+	PromoteToAvailableInTx(ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source, onPromoted func(ctx context.Context, tx pgx.Tx) error) (bool, error)
+}
+
 type PromoteHandler struct {
 	Lookup       ObjectLookup
-	Transitioner *statemachine.Transitioner
+	Transitioner Promoter
 	Events       EventProducer
 	Logger       *zap.Logger
 }
@@ -170,6 +175,16 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 				return h.emitUploaded(ctx, tx, ev, resourceName, collection, key, objectID)
 			},
 		)
+		if errors.Is(err, statemachine.ErrContentMismatch) {
+			// The event reports bytes that are not the ones the object was
+			// registered with. Retrying cannot change that, and an event
+			// alone is not grounds to delete — sources omit or round
+			// fields. The row stays PENDING; the reconciler HEADs it once
+			// its URL has expired and settles it from the store's answer.
+			logger.Warn("event does not match the object's registration; leaving it for the reconciler",
+				zap.String("object_id", objectID.String()), zap.Error(err))
+			return nil
+		}
 		if err != nil {
 			return fmt.Errorf("promote object: %w", err)
 		}

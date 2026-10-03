@@ -45,7 +45,7 @@ func TestHeadWrapsNotFound(t *testing.T) {
 	}
 	c := newTestClient(t, f.srv.URL)
 
-	_, _, _, _, err := c.Head(context.Background(), "bkt", uuid.New(), "ok-1", "k-1")
+	_, _, _, _, err := c.Head(context.Background(), "bkt", uuid.New(), "ok-1", "k-1", "")
 	if err == nil {
 		t.Fatal("Head against a 404 backend: want an error")
 	}
@@ -88,7 +88,7 @@ func TestHeadDoesNotWrapTransientFailures(t *testing.T) {
 			}
 			c := newTestClient(t, f.srv.URL)
 
-			_, _, _, _, err := c.Head(context.Background(), "bkt", uuid.New(), "ok-1", "k-1")
+			_, _, _, _, err := c.Head(context.Background(), "bkt", uuid.New(), "ok-1", "k-1", "")
 			if err == nil {
 				t.Fatal("want an error")
 			}
@@ -131,7 +131,7 @@ func TestHeadDistinguishesMissingBucketFromMissingObject(t *testing.T) {
 	}
 	c := newTestClient(t, f.srv.URL)
 
-	_, _, _, _, err := c.Head(context.Background(), "gone-bkt", uuid.New(), "ok-1", "k-1")
+	_, _, _, _, err := c.Head(context.Background(), "gone-bkt", uuid.New(), "ok-1", "k-1", "")
 	if err == nil {
 		t.Fatal("want an error")
 	}
@@ -166,7 +166,7 @@ func TestHeadUnreachableBackendIsNotNotFound(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, _, _, _, err := c.Head(ctx, "bkt", uuid.New(), "ok-1", "k-1")
+	_, _, _, _, err := c.Head(ctx, "bkt", uuid.New(), "ok-1", "k-1", "")
 	if err == nil {
 		t.Fatal("Head against a dead endpoint: want an error")
 	}

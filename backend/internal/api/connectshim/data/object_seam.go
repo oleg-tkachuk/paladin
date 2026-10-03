@@ -28,7 +28,7 @@ type objectHandler interface {
 	CountObjects(ctx context.Context, in objecth.CountObjectsInput) (*objecth.CountObjectsOutput, error)
 	GetObject(ctx context.Context, collection, objectID string) (*objecth.Object, error)
 	LookupObject(ctx context.Context, collection, key string) (*objecth.Object, error)
-	DownloadObject(ctx context.Context, collection, objectID string, ttl time.Duration, disposition string) (*objecth.DownloadObjectOutput, error)
+	DownloadObject(ctx context.Context, collection, objectID string, ttl time.Duration, disposition string, requireETagMatch bool) (*objecth.DownloadObjectOutput, error)
 	UpdateObject(ctx context.Context, in objecth.UpdateObjectInput) (*objecth.Object, error)
 	DeleteObject(ctx context.Context, collection, objectIDStr, resourceVersion string, permanent, bypassGovernance bool) error
 	RestoreObject(ctx context.Context, collection, objectIDStr, resourceVersion string) (*objecth.Object, error)

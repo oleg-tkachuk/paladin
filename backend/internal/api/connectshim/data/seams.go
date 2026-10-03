@@ -36,7 +36,7 @@ type batchHandler interface {
 
 type multipartHandler interface {
 	InitiateMultipartUpload(ctx context.Context, args multiparth.InitiateArgs) (*multiparth.Session, error)
-	PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration, want multiparth.SessionRef) (string, map[string]string, time.Time, error)
+	PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration, checksumValue string, want multiparth.SessionRef) (string, map[string]string, time.Time, error)
 	ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string, want multiparth.SessionRef) ([]multiparth.Part, string, error)
 	CompleteMultipartUpload(ctx context.Context, args multiparth.CompleteArgs) error
 	AbortMultipartUpload(ctx context.Context, uploadID string, want multiparth.SessionRef) error
@@ -49,7 +49,7 @@ type objectTagHandler interface {
 }
 
 type presignHandler interface {
-	PresignGet(ctx context.Context, collection, objectIDStr string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error)
+	PresignGet(ctx context.Context, collection, objectIDStr string, ttl time.Duration, disposition string, requireETagMatch bool) (string, map[string]string, time.Time, error)
 	RegenerateUploadURL(ctx context.Context, collection, objectIDStr string, ttl time.Duration) (presignh.UploadURL, error)
 }
 

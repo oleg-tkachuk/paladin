@@ -94,8 +94,8 @@ func TestAgentIdempotencyKeyBecomesTheHeader(t *testing.T) {
 	cs := dialInProcess(t, NewClients(plane.Client(), plane.URL, plane.URL, plane.URL, "tok"))
 
 	for _, args := range []map[string]any{
-		{"parent": "tenants/t1/collections/c1", "content_type": "text/plain", "idempotency_key": "agent-key-1"},
-		{"parent": "tenants/t1/collections/c1", "content_type": "text/plain"},
+		{"parent": "tenants/t1/collections/c1", "content_type": "text/plain", "size_bytes": 0, "checksum_value": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", "idempotency_key": "agent-key-1"},
+		{"parent": "tenants/t1/collections/c1", "content_type": "text/plain", "size_bytes": 0, "checksum_value": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="},
 	} {
 		if _, err := cs.CallTool(t.Context(), &mcpsdk.CallToolParams{Name: "paladin_upload_object", Arguments: args}); err != nil {
 			t.Fatalf("call: %v", err)

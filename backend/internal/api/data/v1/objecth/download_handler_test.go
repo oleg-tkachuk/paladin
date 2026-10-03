@@ -39,6 +39,8 @@ type downloadRepo struct {
 	findErr error
 	// constraints are the bucket's upload constraints.
 	constraints uploadpolicy.BucketConstraints
+	// etag is the object's recorded ETag.
+	etag string
 }
 
 func (r *downloadRepo) FindByName(_ context.Context, tenantID uuid.UUID, collection, _ string) (Object, error) {
@@ -53,6 +55,7 @@ func (r *downloadRepo) FindByName(_ context.Context, tenantID uuid.UUID, collect
 		State:       r.state,
 		SizeBytes:   4096,
 		ContentType: "application/pdf",
+		ETag:        r.etag,
 	}, nil
 }
 
@@ -95,7 +98,7 @@ func downloadHandler(t *testing.T, state statemachine.State) (*Handler, *presign
 func TestDownloadObjectReturnsThePresignedURL(t *testing.T) {
 	h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
 
-	out, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, "attachment")
+	out, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, "attachment", false)
 	if err != nil {
 		t.Fatalf("DownloadObject: %v", err)
 	}
@@ -126,7 +129,7 @@ func TestDownloadObjectReturnsThePresignedURL(t *testing.T) {
 func TestDownloadObjectAuthzResourceCarriesBucket(t *testing.T) {
 	h, _, authz, ctx := downloadHandler(t, statemachine.StateAvailable)
 
-	if _, err := h.DownloadObject(ctx, "docs", "report.pdf", time.Minute, ""); err != nil {
+	if _, err := h.DownloadObject(ctx, "docs", "report.pdf", time.Minute, "", false); err != nil {
 		t.Fatalf("DownloadObject: %v", err)
 	}
 	if authz.lastResource == nil {
@@ -153,7 +156,7 @@ func TestDownloadObjectRefusesUnavailableStates(t *testing.T) {
 		t.Run(string(state), func(t *testing.T) {
 			h, storage, _, ctx := downloadHandler(t, state)
 
-			_, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, "")
+			_, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, "", false)
 			if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 				t.Fatalf("code = %v, want FailedPrecondition for a %s object", connect.CodeOf(err), state)
 			}
@@ -167,10 +170,10 @@ func TestDownloadObjectRefusesUnavailableStates(t *testing.T) {
 func TestDownloadObjectRequiresCollectionAndObjectID(t *testing.T) {
 	h, _, _, ctx := downloadHandler(t, statemachine.StateAvailable)
 
-	if _, err := h.DownloadObject(ctx, "", "report.pdf", 0, ""); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := h.DownloadObject(ctx, "", "report.pdf", 0, "", false); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("empty collection: code = %v, want InvalidArgument", connect.CodeOf(err))
 	}
-	if _, err := h.DownloadObject(ctx, "docs", "", 0, ""); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := h.DownloadObject(ctx, "docs", "", 0, "", false); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("empty object id: code = %v, want InvalidArgument", connect.CodeOf(err))
 	}
 }
@@ -179,7 +182,7 @@ func TestDownloadObjectUnknownObjectIsNotFound(t *testing.T) {
 	h, _, _, ctx := downloadHandler(t, statemachine.StateAvailable)
 	h.repo = &downloadRepo{state: statemachine.StateAvailable, findErr: errors.New("no rows")}
 
-	_, err := h.DownloadObject(ctx, "docs", "missing.pdf", 0, "")
+	_, err := h.DownloadObject(ctx, "docs", "missing.pdf", 0, "", false)
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", connect.CodeOf(err))
 	}
@@ -202,7 +205,7 @@ func TestDownloadObjectRefusesTTLOutsidePolicy(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
-			_, err := h.DownloadObject(ctx, "docs", "report.pdf", tc.ttl, "")
+			_, err := h.DownloadObject(ctx, "docs", "report.pdf", tc.ttl, "", false)
 			if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 				t.Fatalf("code = %v (err %v), want InvalidArgument", got, err)
 			}
@@ -215,7 +218,7 @@ func TestDownloadObjectRefusesTTLOutsidePolicy(t *testing.T) {
 
 func TestDownloadObjectSignsTheRequestedTTLAtTheCeiling(t *testing.T) {
 	h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
-	if _, err := h.DownloadObject(ctx, "docs", "report.pdf", testPresignMaxTTL, ""); err != nil {
+	if _, err := h.DownloadObject(ctx, "docs", "report.pdf", testPresignMaxTTL, "", false); err != nil {
 		t.Fatalf("DownloadObject: %v", err)
 	}
 	if storage.got.TTL != testPresignMaxTTL {
@@ -229,7 +232,7 @@ func TestDownloadObjectSignsTheRequestedTTLAtTheCeiling(t *testing.T) {
 func TestDownloadObjectNormalizesContentDisposition(t *testing.T) {
 	t.Run("refused before signing", func(t *testing.T) {
 		h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
-		_, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, "attachment\r\nSet-Cookie: s=1")
+		_, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, "attachment\r\nSet-Cookie: s=1", false)
 		if connect.CodeOf(err) != connect.CodeInvalidArgument {
 			t.Fatalf("code = %v, want InvalidArgument", connect.CodeOf(err))
 		}
@@ -239,7 +242,7 @@ func TestDownloadObjectNormalizesContentDisposition(t *testing.T) {
 	})
 	t.Run("canonical form is signed and returned", func(t *testing.T) {
 		h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
-		out, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, `ATTACHMENT; filename="q3 report.pdf"`)
+		out, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, `ATTACHMENT; filename="q3 report.pdf"`, false)
 		if err != nil {
 			t.Fatal(err)
 		}

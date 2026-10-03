@@ -101,7 +101,7 @@ func TestStorageMigration_CrossBackendStreamThrough(t *testing.T) {
 	}
 
 	// The object landed on the dedicated backend with the right size...
-	if _, size, _, _, err := router.Head(ctx, "dedicated", bucketDedicated, tenant, collection, key); err != nil || size != int64(len(data)) {
+	if _, size, _, _, err := router.Head(ctx, "dedicated", bucketDedicated, tenant, collection, key, ""); err != nil || size != int64(len(data)) {
 		t.Fatalf("Head on dedicated backend: size=%d err=%v (want the 12MiB copy)", size, err)
 	}
 	// ...and byte-for-byte identical content (sha256 over the streamed body).
@@ -123,7 +123,7 @@ func TestStorageMigration_CrossBackendStreamThrough(t *testing.T) {
 	}
 
 	// The source copy is RETAINED (cleanup is a separate, retention-gated slice).
-	if _, _, _, _, err := router.Head(ctx, "shared", bucketShared, tenant, collection, key); err != nil {
+	if _, _, _, _, err := router.Head(ctx, "shared", bucketShared, tenant, collection, key, ""); err != nil {
 		t.Errorf("source object missing after copy: %v (Phase 3 retains the source until cleanup)", err)
 	}
 }

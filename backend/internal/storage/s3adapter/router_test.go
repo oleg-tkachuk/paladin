@@ -19,7 +19,7 @@ func TestObjectRouter_UnknownBackendPropagates(t *testing.T) {
 	rt := NewObjectRouter(reg)
 	ctx := context.Background()
 
-	if _, _, _, _, err := rt.Head(ctx, "nope", "bkt", uuid.New(), "ok", "k"); err == nil {
+	if _, _, _, _, err := rt.Head(ctx, "nope", "bkt", uuid.New(), "ok", "k", ""); err == nil {
 		t.Fatal("Head to unknown backend: want error")
 	}
 	if err := rt.DeleteObject(ctx, "nope", "bkt", uuid.New(), "ok", "k"); err == nil {

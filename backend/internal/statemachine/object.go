@@ -95,8 +95,33 @@ func (t *Transitioner) PromoteToAvailable(
 	sequencer string,
 	source Source,
 ) (changed bool, err error) {
-	return t.promote(ctx, t.pool, objectID, etag, sizeBytes, checksum, sequencer, source)
+	// In a transaction even with nothing to run after it: the check against
+	// what the object was registered with locks the row, and the lock has to
+	// last until the promote that depends on it.
+	return t.PromoteToAvailableInTx(ctx, objectID, etag, sizeBytes, checksum, sequencer, source, nil)
 }
+
+// ErrContentMismatch is returned by a promote whose stored bytes are not the
+// ones the object was registered with: a different size, or a checksum that
+// disagrees with the registered one. The row is left PENDING; the caller
+// decides what happens to the bytes. Match with errors.Is.
+var ErrContentMismatch = errors.New("stored object does not match its registration")
+
+// ContentMismatchError says which registered value the stored bytes broke.
+type ContentMismatchError struct {
+	Field     string // "size" or "checksum"
+	Want, Got string
+}
+
+func (e *ContentMismatchError) Error() string {
+	return fmt.Sprintf("%v: %s is %s, registered %s", ErrContentMismatch, e.Field, e.Got, e.Want)
+}
+
+func (e *ContentMismatchError) Is(target error) bool { return target == ErrContentMismatch }
+
+// FailedContentMismatch is the reason an object is failed with once the
+// bytes that broke its registration have been deleted.
+const FailedContentMismatch = "content mismatch"
 
 // PromoteToAvailableInTx promotes AND runs onPromoted inside ONE
 // transaction, so the caller (an event-producing handler) can write its
@@ -150,6 +175,12 @@ func (t *Transitioner) promote(
 	sequencer string,
 	source Source,
 ) (changed bool, err error) {
+	if err := verifyRegistration(ctx, exec, objectID, sizeBytes, checksum, sequencer); err != nil {
+		if isNoRows(err) {
+			return false, nil
+		}
+		return false, err
+	}
 	// Two promote regimes, split by whether the caller carries a sequencer:
 	//
 	//   - sequencer == '' (HEAD-driven: CompleteObject RPC, CopyObject, the
@@ -187,6 +218,50 @@ func (t *Transitioner) promote(
 	}
 	recordTransition(ctx, string(source), "AVAILABLE")
 	return true, nil
+}
+
+// verifyRegistration holds a PENDING object's first promote to what it was
+// registered with. The size and checksum the upload was admitted with are
+// what policy, quota and the presigned URL were checked against; promoting
+// bytes that differ would make every one of those checks about something
+// else. The URL already binds both, so a mismatch here means the object store
+// did not enforce the binding — this is the backstop that holds whatever the
+// backend does.
+//
+// It locks the row, so it must run inside the promote's transaction. An
+// object that is not PENDING is past its first promote and is not checked.
+// A storage event (sequencer set) reporting size 0 is treated as not
+// reporting a size: event sources omit it, and refusing on a zero they did
+// not mean would strand the object until the reconciler HEADs it.
+func verifyRegistration(ctx context.Context, exec dbExec, objectID uuid.UUID, sizeBytes int64, checksum, sequencer string) error {
+	const q = `
+        SELECT state, size_bytes, checksum
+          FROM objects
+         WHERE id = $1
+         FOR UPDATE
+    `
+	var (
+		state      string
+		registered *int64
+		expected   *string
+	)
+	if err := exec.QueryRow(ctx, q, objectID).Scan(&state, &registered, &expected); err != nil {
+		if isNoRows(err) {
+			return err
+		}
+		return fmt.Errorf("sm: lock for promote: %w", err)
+	}
+	if State(state) != StatePending {
+		return nil
+	}
+	sizeReported := sequencer == "" || sizeBytes > 0
+	if registered != nil && sizeReported && *registered != sizeBytes {
+		return &ContentMismatchError{Field: "size", Want: fmt.Sprint(*registered), Got: fmt.Sprint(sizeBytes)}
+	}
+	if expected != nil && *expected != "" && checksum != "" && *expected != checksum {
+		return &ContentMismatchError{Field: "checksum", Want: *expected, Got: checksum}
+	}
+	return nil
 }
 
 // MarkFailed transitions PENDING → FAILED after the presign TTL has
