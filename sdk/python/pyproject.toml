@@ -33,12 +33,18 @@ dependencies = [
 crc32c = ["google-crc32c>=1.9.0,<2"]
 # Signs DPoP proofs for key-bound capabilities (paladin.dpop).
 dpop = ["cryptography>=41"]
+# Narrows a capability's Biscuit form offline (paladin.attenuate). Pre-1.0: a
+# minor may change the API, so the range stops at the next one.
+biscuit = ["biscuit-python>=0.4.0,<0.5"]
 
 [dependency-groups]
 dev = [
     "opentelemetry-sdk==1.45.0",
     "cryptography==50.0.2",
     "google-crc32c==1.9.0",
+    # No wheel for CPython 3.14 yet, and its source build needs Rust; there the
+    # attenuation tests skip.
+    "biscuit-python==0.4.0; python_version < '3.14'",
     # Deliberately not the latest: its protoc's version is the oldest protobuf
     # runtime the stubs accept (ValidateProtobufRuntimeVersion), so it is the
     # newest release still generating for protobuf 6. A newer one would lock

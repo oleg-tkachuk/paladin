@@ -15,6 +15,7 @@ from paladin.auth import (
     Session,
     StaticToken,
 )
+from paladin.biscuit import attenuate
 from paladin.client import (
     DEFAULT_RETRY_BASE_DELAY,
     DEFAULT_RETRY_MAX_DELAY,
@@ -191,6 +192,7 @@ __all__ = [
     "adownload_uri",
     "alookup_object",
     "apages",
+    "attenuate",
     "aupload",
     "await_operation",
     "connect",
