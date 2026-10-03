@@ -80,8 +80,7 @@ export function formatMoney(
 }
 
 // Money crosses the API as int64 micros — millionths of the unit, so
-// 1.5 USD is 1_500_000n — which protobuf-es delivers as bigint. The
-// deprecated double fields beside them go away next release.
+// 1.5 USD is 1_500_000n — which protobuf-es delivers as bigint.
 
 const MICROS_PER_UNIT = 1_000_000n;
 

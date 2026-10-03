@@ -5,13 +5,14 @@ import (
 	"math"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/capability"
 )
 
-// Money crosses the API as int64 micros (`*_micros`) and, for one release
-// more, as the deprecated double beside it. These two helpers are the only
-// place the two meet.
+// Money crosses the API as int64 micros (`*_micros`); the store still holds
+// float64 amounts. These helpers are the only place the two meet.
 
 // Micros is an amount for a `*_micros` response field. A response reports
 // what the store holds, so this never refuses: amounts beyond
@@ -24,23 +25,42 @@ func Micros(amount float64) int64 {
 	return int64(math.Round(amount * capability.MicrosPerUnit))
 }
 
-// AmountFromRequest resolves a request's money field. micros, when set (the
-// optional field is present — 0 is a real value there, "unlimited"), wins; a deprecated double sent with it must name the same amount, since a
-// client sending two different numbers has a bug the server must not paper
-// over by picking one. Without micros the double is used as before.
-func AmountFromRequest(field string, amount float64, micros int64, set bool) (float64, error) {
-	if !set {
-		return amount, nil
-	}
+// AmountFromMicros resolves a request's `<field>_micros` value; an absent
+// optional field reads as 0, which every money field means as "unlimited".
+func AmountFromMicros(field string, micros int64) (float64, error) {
 	if micros < 0 || micros > capability.MaxMicros {
 		return 0, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("%s_micros: %d is outside 0..%d", field, micros, int64(capability.MaxMicros)))
 	}
-	if amount != 0 {
-		if m, err := capability.AmountToMicros(amount); err != nil || m != micros {
-			return 0, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("%s_amount %v and %s_micros %d disagree; send only %s_micros", field, amount, field, micros, field))
-		}
-	}
 	return capability.MicrosToAmount(micros), nil
+}
+
+// RefuseRemovedFields refuses msg when it carries a field the contract has
+// removed — a number in the message's reserved ranges, sent by a client built
+// before the removal. Ignoring it would quietly change the request's meaning:
+// a removed budget field read as absent is a budget lifted to unlimited.
+//
+// It sees only what the binary codec kept as unknown fields. Connect's JSON
+// codec drops unknown names before a handler runs, so a JSON client sending a
+// removed field cannot be told apart from one that sent nothing.
+func RefuseRemovedFields(msg proto.Message) error {
+	m := msg.ProtoReflect()
+	reserved := m.Descriptor().ReservedRanges()
+	for b := m.GetUnknown(); len(b) > 0; {
+		num, typ, n := protowire.ConsumeTag(b)
+		if n < 0 {
+			return nil
+		}
+		if reserved.Has(num) {
+			return connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("%s: field %d was removed from the API and is refused rather than ignored; upgrade the client",
+					m.Descriptor().FullName(), num))
+		}
+		v := protowire.ConsumeFieldValue(num, typ, b[n:])
+		if v < 0 {
+			return nil
+		}
+		b = b[n+v:]
+	}
+	return nil
 }

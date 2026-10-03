@@ -50,9 +50,9 @@ describe("BillingPage", () => {
 
   it("shows the empty-period card when the period has no charges", async () => {
     h.summary.mockResolvedValue({
-      totalAmount: 0,
+      totalMicros: 0n,
       unitCode: "USD",
-      maxBudgetAmount: 0,
+      maxBudgetMicros: 0n,
       chargeCount: 0n,
       topCapabilities: [],
       topActors: [],

@@ -20,8 +20,6 @@ import BudgetPage from "./page";
 
 const budget = {
   $typeName: "paladin.admin.v1.TenantBudget",
-  maxBudgetAmount: 100,
-  spentAmount: 0,
   maxBudgetMicros: 100_000_000n,
   spentMicros: 0n,
   unitCode: "USD",
@@ -108,7 +106,6 @@ describe("TenantBudgetPage OCC", () => {
     h.get.mockResolvedValue({
       budget: {
         ...budget,
-        maxBudgetAmount: 300,
         maxBudgetMicros: 300_000_000n,
         resourceVersion: "8",
       },
@@ -281,7 +278,7 @@ describe("TenantBudgetPage before the budget loads", () => {
 
     answer({ budget });
     await waitFor(() => expect(cap).toBeEnabled());
-    expect(cap).toHaveValue(budget.maxBudgetAmount);
+    expect(cap).toHaveValue(100);
 
     await userEvent.clear(cap);
     await userEvent.type(cap, "500");

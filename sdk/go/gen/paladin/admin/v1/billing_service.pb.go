@@ -87,27 +87,15 @@ func (x *GetTenantSummaryRequest) GetPeriodEnd() *timestamppb.Timestamp {
 
 type GetTenantSummaryResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// total_amount is the sum of charges.amount over the period.
-	// Deprecated: use total_micros, an exact integer count of millionths. Kept
-	// for one release; the server fills both.
-	//
-	// Deprecated: Marked as deprecated in paladin/admin/v1/billing_service.proto.
-	TotalAmount float64 `protobuf:"fixed64,1,opt,name=total_amount,json=totalAmount,proto3" json:"total_amount,omitempty"`
-	// total_micros is total_amount in millionths of unit_code (1.5 USD =
-	// 1500000). Integer, so sums never drift.
+	// total_micros is the sum of the period's charges in millionths of
+	// unit_code (1.5 USD = 1500000). Integer, so sums never drift.
 	TotalMicros int64 `protobuf:"varint,8,opt,name=total_micros,json=totalMicros,proto3" json:"total_micros,omitempty"`
 	// unit_code mirrors the tenant's pinned unit_code (or USD default).
 	// Mixed-unit periods collapse to whichever unit dominates the row
 	// count — non-issue today (no FX), audit-exposed for the future.
 	UnitCode string `protobuf:"bytes,2,opt,name=unit_code,json=unitCode,proto3" json:"unit_code,omitempty"`
-	// max_budget_amount is the tenant_budgets cap, copied for UI
-	// convenience so the frontend doesn't need a second RPC.
-	// Deprecated: use max_budget_micros, an exact integer count of millionths. Kept
-	// for one release; the server fills both.
-	//
-	// Deprecated: Marked as deprecated in paladin/admin/v1/billing_service.proto.
-	MaxBudgetAmount float64 `protobuf:"fixed64,3,opt,name=max_budget_amount,json=maxBudgetAmount,proto3" json:"max_budget_amount,omitempty"`
-	// max_budget_micros is max_budget_amount in millionths of unit_code.
+	// max_budget_micros is the tenant_budgets cap in millionths of unit_code,
+	// copied for UI convenience so the frontend doesn't need a second RPC.
 	MaxBudgetMicros int64       `protobuf:"varint,9,opt,name=max_budget_micros,json=maxBudgetMicros,proto3" json:"max_budget_micros,omitempty"`
 	TopCapabilities []*TopEntry `protobuf:"bytes,4,rep,name=top_capabilities,json=topCapabilities,proto3" json:"top_capabilities,omitempty"`
 	TopActors       []*TopEntry `protobuf:"bytes,5,rep,name=top_actors,json=topActors,proto3" json:"top_actors,omitempty"`
@@ -147,14 +135,6 @@ func (*GetTenantSummaryResponse) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_billing_service_proto_rawDescGZIP(), []int{1}
 }
 
-// Deprecated: Marked as deprecated in paladin/admin/v1/billing_service.proto.
-func (x *GetTenantSummaryResponse) GetTotalAmount() float64 {
-	if x != nil {
-		return x.TotalAmount
-	}
-	return 0
-}
-
 func (x *GetTenantSummaryResponse) GetTotalMicros() int64 {
 	if x != nil {
 		return x.TotalMicros
@@ -167,14 +147,6 @@ func (x *GetTenantSummaryResponse) GetUnitCode() string {
 		return x.UnitCode
 	}
 	return ""
-}
-
-// Deprecated: Marked as deprecated in paladin/admin/v1/billing_service.proto.
-func (x *GetTenantSummaryResponse) GetMaxBudgetAmount() float64 {
-	if x != nil {
-		return x.MaxBudgetAmount
-	}
-	return 0
 }
 
 func (x *GetTenantSummaryResponse) GetMaxBudgetMicros() int64 {
@@ -216,14 +188,9 @@ type TopEntry struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// label is the capability_id / actor_subject / op string,
 	// depending on which list this entry belongs to.
-	Label string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
-	// Deprecated: use amount_micros, an exact integer count of millionths. Kept
-	// for one release; the server fills both.
-	//
-	// Deprecated: Marked as deprecated in paladin/admin/v1/billing_service.proto.
-	Amount      float64 `protobuf:"fixed64,2,opt,name=amount,proto3" json:"amount,omitempty"`
-	ChargeCount int64   `protobuf:"varint,3,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
-	// amount_micros is amount in millionths of the response's unit_code.
+	Label       string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	ChargeCount int64  `protobuf:"varint,3,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
+	// amount_micros is the amount in millionths of the response's unit_code.
 	AmountMicros  int64 `protobuf:"varint,4,opt,name=amount_micros,json=amountMicros,proto3" json:"amount_micros,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -264,14 +231,6 @@ func (x *TopEntry) GetLabel() string {
 		return x.Label
 	}
 	return ""
-}
-
-// Deprecated: Marked as deprecated in paladin/admin/v1/billing_service.proto.
-func (x *TopEntry) GetAmount() float64 {
-	if x != nil {
-		return x.Amount
-	}
-	return 0
 }
 
 func (x *TopEntry) GetChargeCount() int64 {
@@ -411,15 +370,10 @@ func (x *GetTenantTimeSeriesResponse) GetUnitCode() string {
 }
 
 type TimeBucket struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Start *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
-	// Deprecated: use amount_micros, an exact integer count of millionths. Kept
-	// for one release; the server fills both.
-	//
-	// Deprecated: Marked as deprecated in paladin/admin/v1/billing_service.proto.
-	Amount      float64 `protobuf:"fixed64,2,opt,name=amount,proto3" json:"amount,omitempty"`
-	ChargeCount int64   `protobuf:"varint,3,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
-	// amount_micros is amount in millionths of the response's unit_code.
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Start       *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
+	ChargeCount int64                  `protobuf:"varint,3,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
+	// amount_micros is the amount in millionths of the response's unit_code.
 	AmountMicros  int64 `protobuf:"varint,4,opt,name=amount_micros,json=amountMicros,proto3" json:"amount_micros,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -462,14 +416,6 @@ func (x *TimeBucket) GetStart() *timestamppb.Timestamp {
 	return nil
 }
 
-// Deprecated: Marked as deprecated in paladin/admin/v1/billing_service.proto.
-func (x *TimeBucket) GetAmount() float64 {
-	if x != nil {
-		return x.Amount
-	}
-	return 0
-}
-
 func (x *TimeBucket) GetChargeCount() int64 {
 	if x != nil {
 		return x.ChargeCount
@@ -493,23 +439,20 @@ const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12=\n" +
 	"\fperiod_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
 	"\n" +
-	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"\xb7\x03\n" +
-	"\x18GetTenantSummaryResponse\x12%\n" +
-	"\ftotal_amount\x18\x01 \x01(\x01B\x02\x18\x01R\vtotalAmount\x12!\n" +
+	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"\x8d\x03\n" +
+	"\x18GetTenantSummaryResponse\x12!\n" +
 	"\ftotal_micros\x18\b \x01(\x03R\vtotalMicros\x12\x1b\n" +
-	"\tunit_code\x18\x02 \x01(\tR\bunitCode\x12.\n" +
-	"\x11max_budget_amount\x18\x03 \x01(\x01B\x02\x18\x01R\x0fmaxBudgetAmount\x12*\n" +
+	"\tunit_code\x18\x02 \x01(\tR\bunitCode\x12*\n" +
 	"\x11max_budget_micros\x18\t \x01(\x03R\x0fmaxBudgetMicros\x12E\n" +
 	"\x10top_capabilities\x18\x04 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\x0ftopCapabilities\x129\n" +
 	"\n" +
 	"top_actors\x18\x05 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\ttopActors\x123\n" +
 	"\atop_ops\x18\x06 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\x06topOps\x12!\n" +
-	"\fcharge_count\x18\a \x01(\x03R\vchargeCount\"\x84\x01\n" +
+	"\fcharge_count\x18\a \x01(\x03R\vchargeCountJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04R\ftotal_amountR\x11max_budget_amount\"v\n" +
 	"\bTopEntry\x12\x14\n" +
-	"\x05label\x18\x01 \x01(\tR\x05label\x12\x1a\n" +
-	"\x06amount\x18\x02 \x01(\x01B\x02\x18\x01R\x06amount\x12!\n" +
+	"\x05label\x18\x01 \x01(\tR\x05label\x12!\n" +
 	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount\x12#\n" +
-	"\ramount_micros\x18\x04 \x01(\x03R\famountMicros\"\xdf\x01\n" +
+	"\ramount_micros\x18\x04 \x01(\x03R\famountMicrosJ\x04\b\x02\x10\x03R\x06amount\"\xdf\x01\n" +
 	"\x1aGetTenantTimeSeriesRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12=\n" +
 	"\fperiod_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
@@ -518,13 +461,12 @@ const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"\vgranularity\x18\x04 \x01(\tR\vgranularity\"r\n" +
 	"\x1bGetTenantTimeSeriesResponse\x126\n" +
 	"\abuckets\x18\x01 \x03(\v2\x1c.paladin.admin.v1.TimeBucketR\abuckets\x12\x1b\n" +
-	"\tunit_code\x18\x02 \x01(\tR\bunitCode\"\xa7\x01\n" +
+	"\tunit_code\x18\x02 \x01(\tR\bunitCode\"\x99\x01\n" +
 	"\n" +
 	"TimeBucket\x125\n" +
-	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x05start\x12\x1a\n" +
-	"\x06amount\x18\x02 \x01(\x01B\x02\x18\x01R\x06amount\x12!\n" +
+	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x05start\x12!\n" +
 	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount\x12#\n" +
-	"\ramount_micros\x18\x04 \x01(\x03R\famountMicros2\xf9\x01\n" +
+	"\ramount_micros\x18\x04 \x01(\x03R\famountMicrosJ\x04\b\x02\x10\x03R\x06amount2\xf9\x01\n" +
 	"\x0eBillingService\x12n\n" +
 	"\x10GetTenantSummary\x12).paladin.admin.v1.GetTenantSummaryRequest\x1a*.paladin.admin.v1.GetTenantSummaryResponse\"\x03\x90\x02\x01\x12w\n" +
 	"\x13GetTenantTimeSeries\x12,.paladin.admin.v1.GetTenantTimeSeriesRequest\x1a-.paladin.admin.v1.GetTenantTimeSeriesResponse\"\x03\x90\x02\x01BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
