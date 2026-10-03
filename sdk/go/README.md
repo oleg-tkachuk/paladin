@@ -120,6 +120,39 @@ and `Issue*` calls and answers a repeated key with the first response.
 | `WithTokenSource(ts, audience)` | One plane's client: the token for `audience`. A call refused as `Unauthenticated` is made once more with a fresh token — the server authenticates before anything else, so the first attempt changed nothing. |
 | `AudienceData`, `AudienceAdmin`, `AudienceIAM` | The audience names; the server imports them from here. |
 
+### Narrowing a capability offline
+
+`CapabilityService.Issue` and `Delegate` return `biscuit` beside `token`: the
+same capability as a Biscuit v3 token, which whoever holds it can narrow with
+no key and no call to the server. This SDK has no helper of its own: import
+the capability module, whose `Attenuate` is the code the server's verifier is
+tested against, so there is no second implementation of the vocabulary to
+drift from it.
+
+```bash
+go get github.com/oleg-tkachuk/paladin/capability
+```
+
+```go
+import "github.com/oleg-tkachuk/paladin/capability"
+
+narrowed, err := capability.Attenuate(issued.GetBiscuit(), capability.Attenuation{
+    Ops:              []capability.Op{capability.OpGet},
+    ResourcePrefixes: []string{"corpus/public/"},
+    Planes:           []string{capability.AudiencePlaneData},
+    ExpiresAt:        time.Now().Add(10 * time.Minute),
+})
+client, err := paladin.New(dataURL, paladin.WithCapability(narrowed))
+```
+
+A field left empty leaves that dimension as it is; a set one replaces it and
+must be within what the token allows, or the server refuses the whole token.
+Setting `ResourcePrefixes` or `ResourceURIs` replaces both. `ConfirmationJKT`
+(`DPoPThumbprint(key.Public())`) binds the token to a key, and only an unbound
+token can be bound. The facts it writes are listed in
+[`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json),
+which the Python SDK's `attenuate` writes too.
+
 ### Workflows
 
 | Name | Does |
@@ -353,6 +386,7 @@ on purpose:
 | Server identity over TLS | `TLS.ServerID`: the SPIFFE ID, checked by `go-spiffe` | `TLS(server_id=…)`: the same check, after the handshake and before any request byte | Python's connections under `TLS` run on `ssl` and httpcore, because `pyqwest` has no peer-verification hook. |
 | Minimum TLS version | `TLS.MinVersion`, 1.2 by default | `TLS(min_version=…)`, `ssl.TLSVersion.TLSv1_2` by default | |
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
+| Biscuit attenuation | `capability.Attenuate`, from the capability module | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0 (BACKLOG). |
 | Bulk downloads | `DownloadMany`, a callback per reader | `download_many` / `adownload_many`, an iterator of results | Each language's idiom. |
 | asyncio | — | An `a…` form of every workflow | Go has goroutines. |
