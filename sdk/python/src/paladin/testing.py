@@ -8,14 +8,18 @@ It serves ObjectService (upload, complete, get, lookup, list, download,
 delete), MultipartUploadService, ListParts included, and
 StorageBootstrapService, with presigned URLs on its own storage; every other
 RPC answers Unimplemented, as a server that lacks it does. Like the server it
-records the checksum an upload completes with, so a download verifies what it
-reads, and it answers Range requests. ``requests()`` lists the RPCs it
+binds every upload URL to the size and checksum the upload was registered
+with — its storage refuses a PUT without exactly the signed headers, a body of
+another length or SHA-256, or an overwrite — records that checksum on the
+object, so a download verifies what it reads, and it answers Range and
+If-Match requests. ``requests()`` lists the RPCs it
 received, with their headers. It runs on the standard library's WSGI server,
 in a thread, on loopback.
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -75,6 +79,61 @@ _HEADER_PREFIX = "HTTP_"
 # Bounds of a bucket name, as the contract sets them.
 _MIN_BUCKET_LEN = 3
 _MAX_BUCKET_LEN = 63
+# Headers a bound upload URL requires, as the real presigner signs them.
+_CONTENT_LENGTH = "Content-Length"
+_CONTENT_TYPE = "Content-Type"
+_IF_NONE_MATCH = "If-None-Match"
+_IF_MATCH = "If-Match"
+_IF_NONE_MATCH_ANY = "*"
+_CHECKSUM_SHA256_HEADER = "X-Amz-Checksum-Sha256"
+# A base64 SHA-256 digest is 44 characters.
+_SHA256_B64_LEN = 44
+
+
+def _sha256(body: bytes) -> str:
+    return base64.b64encode(hashlib.sha256(body).digest()).decode()
+
+
+@dataclass(frozen=True)
+class _Binding:
+    """What one URL accepts: the body's exact length and SHA-256 and, for a
+    whole object, its Content-Type and no overwrite."""
+
+    size: int
+    checksum: str
+    content_type: str = ""
+    no_overwrite: bool = False
+
+    def headers(self) -> dict[str, str]:
+        h = {_CONTENT_LENGTH: str(self.size), _CHECKSUM_SHA256_HEADER: self.checksum}
+        if self.content_type:
+            h[_CONTENT_TYPE] = self.content_type
+        if self.no_overwrite:
+            h[_IF_NONE_MATCH] = _IF_NONE_MATCH_ANY
+        return h
+
+    def refuses(self, environ: dict[str, Any], body: bytes) -> str:
+        """Why a PUT breaks the binding; "" when it keeps it."""
+        for name, want in self.headers().items():
+            got = environ.get(_environ_key(name), "")
+            if got != want:
+                return f"signed header {name} is {got!r}, want {want!r}"
+        if len(body) != self.size:
+            return f"body is {len(body)} bytes, signed for {self.size}"
+        if _sha256(body) != self.checksum:
+            return "body's SHA-256 is not the signed one"
+        return ""
+
+
+def _environ_key(header: str) -> str:
+    """Where WSGI puts a request header."""
+    upper = header.upper().replace("-", "_")
+    return upper if upper in ("CONTENT_LENGTH", "CONTENT_TYPE") else _HEADER_PREFIX + upper
+
+
+def _require_checksum(value: str) -> None:
+    if len(value) != _SHA256_B64_LEN:
+        raise ConnectError(Code.INVALID_ARGUMENT, "checksum_value must be a base64 SHA-256")
 
 
 def _etag(body: bytes) -> str:
@@ -86,6 +145,7 @@ class _Object:
     msg: types_pb2.Object
     body: bytes | None = None
     put: bytes | None = None
+    bound: _Binding | None = None
 
 
 @dataclass(frozen=True)
@@ -102,7 +162,9 @@ class Request:
 @dataclass
 class _Multipart:
     name: str
+    size: int
     parts: dict[int, bytes] = field(default_factory=dict)
+    bindings: dict[int, _Binding] = field(default_factory=dict)
 
 
 class _Quiet(WSGIRequestHandler):
@@ -256,11 +318,15 @@ class FakePaladin(ObjectServiceSync, MultipartUploadServiceSync, StorageBootstra
 
     def upload_object(self, request, ctx):  # type: ignore[no-untyped-def]
         self._parent(request.parent)
+        _require_checksum(request.checksum_value)
         with self._lock:
             o = self._new(request.parent, request.key, request.content_type)
-            return object_service_pb2.UploadObjectResponse(
-                object=o.msg, upload_url=self._signed(o.msg.object_id, _PUT)
+            o.bound = _Binding(
+                request.size_hint_bytes, request.checksum_value, request.content_type, True
             )
+            url = self._signed(o.msg.object_id, _PUT)
+            url.required_headers.update(o.bound.headers())
+            return object_service_pb2.UploadObjectResponse(object=o.msg, upload_url=url)
 
     def complete_object(self, request, ctx):  # type: ignore[no-untyped-def]
         with self._lock:
@@ -277,7 +343,12 @@ class FakePaladin(ObjectServiceSync, MultipartUploadServiceSync, StorageBootstra
                 raise ConnectError(
                     Code.FAILED_PRECONDITION, "the ETag is not the uploaded content's"
                 )
-            self._commit(o, o.put, request.checksum_value)
+            registered = o.bound.checksum if o.bound else ""
+            if request.checksum_value and request.checksum_value != registered:
+                raise ConnectError(
+                    Code.FAILED_PRECONDITION, "checksum_value differs from the registered one"
+                )
+            self._commit(o, o.put, registered)
             return o.msg
 
     def get_object(self, request, ctx):  # type: ignore[no-untyped-def]
@@ -324,9 +395,10 @@ class FakePaladin(ObjectServiceSync, MultipartUploadServiceSync, StorageBootstra
             o = self._get(request.name)
             if o.msg.state != _AVAILABLE:
                 raise ConnectError(Code.FAILED_PRECONDITION, "the object is not complete")
-            return object_service_pb2.DownloadObjectResponse(
-                object=o.msg, download_url=self._signed(o.msg.object_id, _GET)
-            )
+            url = self._signed(o.msg.object_id, _GET)
+            if request.require_etag_match:
+                url.required_headers[_IF_MATCH] = f'"{o.msg.etag}"'
+            return object_service_pb2.DownloadObjectResponse(object=o.msg, download_url=url)
 
     def delete_object(self, request, ctx):  # type: ignore[no-untyped-def]
         with self._lock:
@@ -339,21 +411,34 @@ class FakePaladin(ObjectServiceSync, MultipartUploadServiceSync, StorageBootstra
 
     def initiate_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
         self._parent(request.parent)
+        if request.size_bytes <= 0:
+            raise ConnectError(Code.INVALID_ARGUMENT, "size_bytes must be positive")
         with self._lock:
             o = self._new(request.parent, request.key, request.content_type)
             upload_id = str(uuid.uuid4())
-            self._uploads[upload_id] = _Multipart(o.msg.name)
+            self._uploads[upload_id] = _Multipart(o.msg.name, request.size_bytes)
             return multipart_service_pb2.InitiateMultipartUploadResponse(
-                object=o.msg, upload_id=upload_id, recommended_part_size=PART_SIZE
+                object=o.msg,
+                upload_id=upload_id,
+                recommended_part_size=PART_SIZE,
+                total_parts=-(-request.size_bytes // PART_SIZE),
             )
 
     def presign_part(self, request, ctx):  # type: ignore[no-untyped-def]
+        _require_checksum(request.checksum_value)
         with self._lock:
-            if request.upload_id not in self._uploads:
+            up = self._uploads.get(request.upload_id)
+            if up is None:
                 raise ConnectError(Code.NOT_FOUND, f"upload {request.upload_id} not found")
-        return multipart_service_pb2.PresignPartResponse(
-            upload_url=self._signed(f"{request.upload_id}?{_PART}={request.part_number}", _PUT)
-        )
+            total = -(-up.size // PART_SIZE)
+            n = request.part_number
+            if not 1 <= n <= total:
+                raise ConnectError(Code.INVALID_ARGUMENT, f"part {n} out of range 1..{total}")
+            length = PART_SIZE if n < total else up.size - (total - 1) * PART_SIZE
+            up.bindings[n] = _Binding(length, request.checksum_value)
+            url = self._signed(f"{request.upload_id}?{_PART}={n}", _PUT)
+            url.required_headers.update(up.bindings[n].headers())
+        return multipart_service_pb2.PresignPartResponse(upload_url=url)
 
     def complete_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
         with self._lock:
@@ -363,7 +448,14 @@ class FakePaladin(ObjectServiceSync, MultipartUploadServiceSync, StorageBootstra
             body = bytearray()
             for i, part in enumerate(request.parts):
                 data = up.parts.get(part.part_number)
-                if data is None or part.part_number != i + 1 or part.etag != _etag(data):
+                bound = up.bindings.get(part.part_number)
+                if (
+                    data is None
+                    or part.part_number != i + 1
+                    or part.etag != _etag(data)
+                    or bound is None
+                    or part.checksum_value != bound.checksum
+                ):
                     raise ConnectError(
                         Code.FAILED_PRECONDITION, f"part {part.part_number} is not the uploaded one"
                     )
@@ -433,11 +525,22 @@ class FakePaladin(ObjectServiceSync, MultipartUploadServiceSync, StorageBootstra
                     up = self._uploads.get(object_id)
                     if up is None:
                         return _status(start_response, "404 Not Found")
-                    up.parts[int(query[_PART][0])] = body
+                    n = int(query[_PART][0])
+                    bound = up.bindings.get(n)
+                    if bound is None:
+                        return _status(start_response, "403 Forbidden")
+                    if bound.refuses(environ, body):
+                        return _status(start_response, "400 Bad Request")
+                    up.parts[n] = body
                 else:
                     o = self._by_id(object_id)
                     if o is None:
                         return _status(start_response, "404 Not Found")
+                    # If-None-Match: * — the key already holds a stored object.
+                    if o.put is not None or o.msg.state == _AVAILABLE:
+                        return _status(start_response, "412 Precondition Failed")
+                    if o.bound is None or o.bound.refuses(environ, body):
+                        return _status(start_response, "400 Bad Request")
                     o.put = body
             start_response("200 OK", [("ETag", f'"{_etag(body)}"'), ("Content-Length", "0")])
             return [b""]
@@ -446,8 +549,12 @@ class FakePaladin(ObjectServiceSync, MultipartUploadServiceSync, StorageBootstra
         with self._lock:
             o = self._by_id(object_id)
             content = o.body if o is not None else None
+            etag = f'"{o.msg.etag}"' if o is not None else ""
         if content is None:
             return _status(start_response, "404 Not Found")
+        if_match = environ.get(_environ_key(_IF_MATCH), "")
+        if if_match and if_match != etag:
+            return _status(start_response, "412 Precondition Failed")
         ranged = environ.get("HTTP_RANGE", "")
         if ranged:
             first, _, last = ranged.removeprefix("bytes=").partition("-")
