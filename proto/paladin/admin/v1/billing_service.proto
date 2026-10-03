@@ -36,23 +36,21 @@ message GetTenantSummaryRequest {
 }
 
 message GetTenantSummaryResponse {
-  // total_amount is the sum of charges.amount over the period.
-  // Deprecated: use total_micros, an exact integer count of millionths. Kept
-  // for one release; the server fills both.
-  double total_amount = 1 [deprecated = true];
-  // total_micros is total_amount in millionths of unit_code (1.5 USD =
-  // 1500000). Integer, so sums never drift.
+  // The double total_amount, replaced by total_micros.
+  reserved 1;
+  reserved "total_amount";
+  // total_micros is the sum of the period's charges in millionths of
+  // unit_code (1.5 USD = 1500000). Integer, so sums never drift.
   int64 total_micros = 8;
   // unit_code mirrors the tenant's pinned unit_code (or USD default).
   // Mixed-unit periods collapse to whichever unit dominates the row
   // count — non-issue today (no FX), audit-exposed for the future.
   string unit_code = 2;
-  // max_budget_amount is the tenant_budgets cap, copied for UI
-  // convenience so the frontend doesn't need a second RPC.
-  // Deprecated: use max_budget_micros, an exact integer count of millionths. Kept
-  // for one release; the server fills both.
-  double max_budget_amount = 3 [deprecated = true];
-  // max_budget_micros is max_budget_amount in millionths of unit_code.
+  // The double max_budget_amount, replaced by max_budget_micros.
+  reserved 3;
+  reserved "max_budget_amount";
+  // max_budget_micros is the tenant_budgets cap in millionths of unit_code,
+  // copied for UI convenience so the frontend doesn't need a second RPC.
   int64 max_budget_micros = 9;
   repeated TopEntry top_capabilities = 4;
   repeated TopEntry top_actors = 5;
@@ -64,11 +62,11 @@ message TopEntry {
   // label is the capability_id / actor_subject / op string,
   // depending on which list this entry belongs to.
   string label = 1;
-  // Deprecated: use amount_micros, an exact integer count of millionths. Kept
-  // for one release; the server fills both.
-  double amount = 2 [deprecated = true];
+  // The double amount, replaced by amount_micros.
+  reserved 2;
+  reserved "amount";
   int64 charge_count = 3;
-  // amount_micros is amount in millionths of the response's unit_code.
+  // amount_micros is the amount in millionths of the response's unit_code.
   int64 amount_micros = 4;
 }
 
@@ -88,10 +86,10 @@ message GetTenantTimeSeriesResponse {
 
 message TimeBucket {
   google.protobuf.Timestamp start = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
-  // Deprecated: use amount_micros, an exact integer count of millionths. Kept
-  // for one release; the server fills both.
-  double amount = 2 [deprecated = true];
+  // The double amount, replaced by amount_micros.
+  reserved 2;
+  reserved "amount";
   int64 charge_count = 3;
-  // amount_micros is amount in millionths of the response's unit_code.
+  // amount_micros is the amount in millionths of the response's unit_code.
   int64 amount_micros = 4;
 }

@@ -46,12 +46,11 @@ class CapabilityPrincipal(_message.Message):
     def __init__(self, kind: _Optional[_Union[PrincipalKind, str]] = ..., tenant_id: _Optional[str] = ..., subject: _Optional[str] = ..., agent_type: _Optional[str] = ..., agent_version: _Optional[str] = ..., run_id: _Optional[str] = ..., parent_agent_id: _Optional[str] = ..., model: _Optional[str] = ..., mcp_client: _Optional[str] = ...) -> None: ...
 
 class CapabilityCaveats(_message.Message):
-    __slots__ = ("ops", "resource_prefixes", "resource_uris", "max_requests", "max_budget_amount", "allow_tainted_read", "idempotency_key_required", "source_ip_cidr", "unit_code", "max_budget_micros")
+    __slots__ = ("ops", "resource_prefixes", "resource_uris", "max_requests", "allow_tainted_read", "idempotency_key_required", "source_ip_cidr", "unit_code", "max_budget_micros")
     OPS_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_PREFIXES_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_URIS_FIELD_NUMBER: _ClassVar[int]
     MAX_REQUESTS_FIELD_NUMBER: _ClassVar[int]
-    MAX_BUDGET_AMOUNT_FIELD_NUMBER: _ClassVar[int]
     ALLOW_TAINTED_READ_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_REQUIRED_FIELD_NUMBER: _ClassVar[int]
     SOURCE_IP_CIDR_FIELD_NUMBER: _ClassVar[int]
@@ -61,13 +60,12 @@ class CapabilityCaveats(_message.Message):
     resource_prefixes: _containers.RepeatedScalarFieldContainer[str]
     resource_uris: _containers.RepeatedScalarFieldContainer[str]
     max_requests: int
-    max_budget_amount: float
     allow_tainted_read: bool
     idempotency_key_required: bool
     source_ip_cidr: _containers.RepeatedScalarFieldContainer[str]
     unit_code: str
     max_budget_micros: int
-    def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., max_budget_amount: _Optional[float] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., unit_code: _Optional[str] = ..., max_budget_micros: _Optional[int] = ...) -> None: ...
+    def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., unit_code: _Optional[str] = ..., max_budget_micros: _Optional[int] = ...) -> None: ...
 
 class Capability(_message.Message):
     __slots__ = ("id", "issuer", "subject", "audience", "caveats", "issued_at", "not_before", "expires_at", "parent_id", "generation", "confirmation_jkt")
@@ -186,17 +184,15 @@ class CapabilityServiceGetUsageRequest(_message.Message):
     def __init__(self, id: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceGetUsageResponse(_message.Message):
-    __slots__ = ("capability_id", "request_count", "spent_amount", "updated_at", "unit_code", "spent_micros")
+    __slots__ = ("capability_id", "request_count", "updated_at", "unit_code", "spent_micros")
     CAPABILITY_ID_FIELD_NUMBER: _ClassVar[int]
     REQUEST_COUNT_FIELD_NUMBER: _ClassVar[int]
-    SPENT_AMOUNT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
     UNIT_CODE_FIELD_NUMBER: _ClassVar[int]
     SPENT_MICROS_FIELD_NUMBER: _ClassVar[int]
     capability_id: str
     request_count: int
-    spent_amount: float
     updated_at: _timestamp_pb2.Timestamp
     unit_code: str
     spent_micros: int
-    def __init__(self, capability_id: _Optional[str] = ..., request_count: _Optional[int] = ..., spent_amount: _Optional[float] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., unit_code: _Optional[str] = ..., spent_micros: _Optional[int] = ...) -> None: ...
+    def __init__(self, capability_id: _Optional[str] = ..., request_count: _Optional[int] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., unit_code: _Optional[str] = ..., spent_micros: _Optional[int] = ...) -> None: ...
