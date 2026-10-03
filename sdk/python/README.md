@@ -168,6 +168,10 @@ The block holds only the facts the server reads
 which the server's tests check too); a token the SDK attenuated is verified by
 the server's code in `capability/`'s tests.
 
+`CapabilityService.revoke_biscuit` revokes one copy: the token sent and every
+copy attenuated from it. The copy it came from, its siblings and the
+capability's JWT keep working; `revoke` stops them all.
+
 ### `connect`
 
 | Name | Does |
@@ -460,7 +464,7 @@ under [`proto/paladin`](../../proto/paladin).
 | `BillingService` | `get_tenant_summary`, `get_tenant_time_series` |
 | `BucketService` | `create_bucket`, `get_bucket`, `update_bucket`, `delete_bucket`, `list_buckets`, `set_bucket_policy`, `set_lifecycle_rules`, `set_object_lock`, `set_versioning`, `set_replication`, `list_accessible_buckets` |
 | `CELService` | `validate` |
-| `CapabilityService` | `issue`, `delegate`, `revoke`, `list`, `get_usage` |
+| `CapabilityService` | `issue`, `delegate`, `revoke`, `revoke_biscuit`, `list`, `get_usage` |
 | `CollectionService` | `create_collection`, `get_collection`, `update_collection`, `delete_collection`, `list_collections`, `set_collection_policy`, `bind_collection_to_bucket` |
 | `EventSubscriptionService` | `create_subscription`, `get_subscription`, `update_subscription`, `delete_subscription`, `list_subscriptions`, `test_subscription`, `redrive_failed_deliveries` |
 | `MCPInspectService` | `inspect`, `list_sessions`, `get_bridge_status` |

@@ -153,6 +153,10 @@ token can be bound. The facts it writes are listed in
 [`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json),
 which the Python SDK's `attenuate` writes too.
 
+`CapabilityService.RevokeBiscuit` revokes one copy: the token sent and every
+copy attenuated from it. The copy it came from, its siblings and the
+capability's JWT keep working; `Revoke` stops them all.
+
 ### Workflows
 
 | Name | Does |
@@ -429,7 +433,7 @@ what each field means, are documented in the `.proto` files under
 | `BackendService` | `CreateBackend`, `GetBackend`, `UpdateBackend`, `DeleteBackend`, `ListBackends`, `RotateCredentials`, `TestBackend`, `SetBackendEnabled`, `SetBackendReadOnly`, `SetBackendMaintenance` |
 | `BillingService` | `GetTenantSummary`, `GetTenantTimeSeries` |
 | `BucketService` | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `ListAccessibleBuckets` |
-| `CapabilityService` | `Issue`, `Delegate`, `Revoke`, `List`, `GetUsage` |
+| `CapabilityService` | `Issue`, `Delegate`, `Revoke`, `RevokeBiscuit`, `List`, `GetUsage` |
 | `CELService` | `Validate` |
 | `CollectionService` | `CreateCollection`, `GetCollection`, `UpdateCollection`, `DeleteCollection`, `ListCollections`, `SetCollectionPolicy`, `BindCollectionToBucket` |
 | `EventSubscriptionService` | `CreateSubscription`, `GetSubscription`, `UpdateSubscription`, `DeleteSubscription`, `ListSubscriptions`, `TestSubscription`, `RedriveFailedDeliveries` |

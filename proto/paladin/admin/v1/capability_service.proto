@@ -41,6 +41,14 @@ service CapabilityService {
     option idempotency_level = IDEMPOTENT;
   }
 
+  // RevokeBiscuit revokes one copy of a capability's Biscuit: the copy
+  // `token` is, and every copy attenuated from it. The capability, the copy
+  // it was attenuated from and its other copies keep working; revoke the
+  // capability to stop them all. Idempotent.
+  rpc RevokeBiscuit(CapabilityServiceRevokeBiscuitRequest) returns (CapabilityServiceRevokeBiscuitResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
   // List enumerates capabilities issued to a principal. Cursor-paginated.
   rpc List(CapabilityServiceListRequest) returns (CapabilityServiceListResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -187,6 +195,20 @@ message CapabilityServiceRevokeRequest {
 message CapabilityServiceRevokeResponse {
   // Empty on success; protobuf forward-compat slot for fields like
   // descendants_revoked when cascade is on.
+}
+
+message CapabilityServiceRevokeBiscuitRequest {
+  // token is the Biscuit copy to revoke, exactly as its holder presents it.
+  string token = 1 [
+    (buf.validate.field).string.min_len = 1,
+    debug_redact = true
+  ];
+  string reason = 2;
+}
+
+message CapabilityServiceRevokeBiscuitResponse {
+  // capability_id is the capability the revoked copy belongs to.
+  string capability_id = 1;
 }
 
 message CapabilityServiceListRequest {

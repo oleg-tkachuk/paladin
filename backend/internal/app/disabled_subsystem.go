@@ -79,6 +79,10 @@ func (disabledCapabilityServiceHandler) Revoke(context.Context, *connect.Request
 	return nil, subsystemDisabledError("capability", "config.capability.enabled")
 }
 
+func (disabledCapabilityServiceHandler) RevokeBiscuit(context.Context, *connect.Request[adminv1.CapabilityServiceRevokeBiscuitRequest]) (*connect.Response[adminv1.CapabilityServiceRevokeBiscuitResponse], error) {
+	return nil, subsystemDisabledError("capability", "config.capability.enabled")
+}
+
 func (disabledCapabilityServiceHandler) List(context.Context, *connect.Request[adminv1.CapabilityServiceListRequest]) (*connect.Response[adminv1.CapabilityServiceListResponse], error) {
 	return nil, subsystemDisabledError("capability", "config.capability.enabled")
 }

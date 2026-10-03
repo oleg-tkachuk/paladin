@@ -26,6 +26,9 @@ class CapabilityService(Protocol):
     async def revoke(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
 
+    async def revoke_biscuit(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
+
     async def list(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceListRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceListResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
 
@@ -67,6 +70,16 @@ class CapabilityServiceASGIApplication(ConnectASGIApplication[CapabilityService]
                         idempotency_level=IdempotencyLevel.IDEMPOTENT,
                     ),
                     function=svc.revoke,
+                ),
+                "/paladin.admin.v1.CapabilityService/RevokeBiscuit": Endpoint.unary(
+                    method=MethodInfo(
+                        name="RevokeBiscuit",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitRequest,
+                        output=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=svc.revoke_biscuit,
                 ),
                 "/paladin.admin.v1.CapabilityService/List": Endpoint.unary(
                     method=MethodInfo(
@@ -161,6 +174,26 @@ class CapabilityServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
         )
 
+    async def revoke_biscuit(
+        self,
+        request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None,
+        timeout_ms: int | None = None,
+    ) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="RevokeBiscuit",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitRequest,
+                output=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitResponse,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
     async def list(
         self,
         request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceListRequest,
@@ -213,6 +246,8 @@ class CapabilityServiceSync(Protocol):
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
     def revoke(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
+    def revoke_biscuit(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
     def list(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceListRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceListResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
     def get_usage(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetUsageRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetUsageResponse:
@@ -252,6 +287,16 @@ class CapabilityServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.IDEMPOTENT,
                     ),
                     function=service.revoke,
+                ),
+                "/paladin.admin.v1.CapabilityService/RevokeBiscuit": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="RevokeBiscuit",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitRequest,
+                        output=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=service.revoke_biscuit,
                 ),
                 "/paladin.admin.v1.CapabilityService/List": EndpointSync.unary(
                     method=MethodInfo(
@@ -340,6 +385,26 @@ class CapabilityServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.CapabilityService",
                 input=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeRequest,
                 output=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeResponse,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    def revoke_biscuit(
+        self,
+        request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None,
+        timeout_ms: int | None = None,
+    ) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="RevokeBiscuit",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitRequest,
+                output=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitResponse,
                 idempotency_level=IdempotencyLevel.IDEMPOTENT,
             ),
             headers=headers,

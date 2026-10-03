@@ -151,6 +151,20 @@ class CapabilityServiceRevokeResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
 
+class CapabilityServiceRevokeBiscuitRequest(_message.Message):
+    __slots__ = ("token", "reason")
+    TOKEN_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    token: str
+    reason: str
+    def __init__(self, token: _Optional[str] = ..., reason: _Optional[str] = ...) -> None: ...
+
+class CapabilityServiceRevokeBiscuitResponse(_message.Message):
+    __slots__ = ("capability_id",)
+    CAPABILITY_ID_FIELD_NUMBER: _ClassVar[int]
+    capability_id: str
+    def __init__(self, capability_id: _Optional[str] = ...) -> None: ...
+
 class CapabilityServiceListRequest(_message.Message):
     __slots__ = ("tenant_id", "principal_kind", "subject", "include_expired", "include_revoked", "page_size", "page_token")
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]

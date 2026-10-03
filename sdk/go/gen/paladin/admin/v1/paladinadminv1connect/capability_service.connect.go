@@ -42,6 +42,9 @@ const (
 	// CapabilityServiceRevokeProcedure is the fully-qualified name of the CapabilityService's Revoke
 	// RPC.
 	CapabilityServiceRevokeProcedure = "/paladin.admin.v1.CapabilityService/Revoke"
+	// CapabilityServiceRevokeBiscuitProcedure is the fully-qualified name of the CapabilityService's
+	// RevokeBiscuit RPC.
+	CapabilityServiceRevokeBiscuitProcedure = "/paladin.admin.v1.CapabilityService/RevokeBiscuit"
 	// CapabilityServiceListProcedure is the fully-qualified name of the CapabilityService's List RPC.
 	CapabilityServiceListProcedure = "/paladin.admin.v1.CapabilityService/List"
 	// CapabilityServiceGetUsageProcedure is the fully-qualified name of the CapabilityService's
@@ -63,6 +66,11 @@ type CapabilityServiceClient interface {
 	// CascadeChildren=true revokes every descendant in the delegation
 	// tree. Idempotent — re-revoking a revoked capability is a no-op.
 	Revoke(context.Context, *connect.Request[v1.CapabilityServiceRevokeRequest]) (*connect.Response[v1.CapabilityServiceRevokeResponse], error)
+	// RevokeBiscuit revokes one copy of a capability's Biscuit: the copy
+	// `token` is, and every copy attenuated from it. The capability, the copy
+	// it was attenuated from and its other copies keep working; revoke the
+	// capability to stop them all. Idempotent.
+	RevokeBiscuit(context.Context, *connect.Request[v1.CapabilityServiceRevokeBiscuitRequest]) (*connect.Response[v1.CapabilityServiceRevokeBiscuitResponse], error)
 	// List enumerates capabilities issued to a principal. Cursor-paginated.
 	List(context.Context, *connect.Request[v1.CapabilityServiceListRequest]) (*connect.Response[v1.CapabilityServiceListResponse], error)
 	// GetUsage returns the runtime counters for a capability:
@@ -102,6 +110,13 @@ func NewCapabilityServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
+		revokeBiscuit: connect.NewClient[v1.CapabilityServiceRevokeBiscuitRequest, v1.CapabilityServiceRevokeBiscuitResponse](
+			httpClient,
+			baseURL+CapabilityServiceRevokeBiscuitProcedure,
+			connect.WithSchema(capabilityServiceMethods.ByName("RevokeBiscuit")),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
+			connect.WithClientOptions(opts...),
+		),
 		list: connect.NewClient[v1.CapabilityServiceListRequest, v1.CapabilityServiceListResponse](
 			httpClient,
 			baseURL+CapabilityServiceListProcedure,
@@ -121,11 +136,12 @@ func NewCapabilityServiceClient(httpClient connect.HTTPClient, baseURL string, o
 
 // capabilityServiceClient implements CapabilityServiceClient.
 type capabilityServiceClient struct {
-	issue    *connect.Client[v1.CapabilityServiceIssueRequest, v1.CapabilityServiceIssueResponse]
-	delegate *connect.Client[v1.CapabilityServiceDelegateRequest, v1.CapabilityServiceIssueResponse]
-	revoke   *connect.Client[v1.CapabilityServiceRevokeRequest, v1.CapabilityServiceRevokeResponse]
-	list     *connect.Client[v1.CapabilityServiceListRequest, v1.CapabilityServiceListResponse]
-	getUsage *connect.Client[v1.CapabilityServiceGetUsageRequest, v1.CapabilityServiceGetUsageResponse]
+	issue         *connect.Client[v1.CapabilityServiceIssueRequest, v1.CapabilityServiceIssueResponse]
+	delegate      *connect.Client[v1.CapabilityServiceDelegateRequest, v1.CapabilityServiceIssueResponse]
+	revoke        *connect.Client[v1.CapabilityServiceRevokeRequest, v1.CapabilityServiceRevokeResponse]
+	revokeBiscuit *connect.Client[v1.CapabilityServiceRevokeBiscuitRequest, v1.CapabilityServiceRevokeBiscuitResponse]
+	list          *connect.Client[v1.CapabilityServiceListRequest, v1.CapabilityServiceListResponse]
+	getUsage      *connect.Client[v1.CapabilityServiceGetUsageRequest, v1.CapabilityServiceGetUsageResponse]
 }
 
 // Issue calls paladin.admin.v1.CapabilityService.Issue.
@@ -141,6 +157,11 @@ func (c *capabilityServiceClient) Delegate(ctx context.Context, req *connect.Req
 // Revoke calls paladin.admin.v1.CapabilityService.Revoke.
 func (c *capabilityServiceClient) Revoke(ctx context.Context, req *connect.Request[v1.CapabilityServiceRevokeRequest]) (*connect.Response[v1.CapabilityServiceRevokeResponse], error) {
 	return c.revoke.CallUnary(ctx, req)
+}
+
+// RevokeBiscuit calls paladin.admin.v1.CapabilityService.RevokeBiscuit.
+func (c *capabilityServiceClient) RevokeBiscuit(ctx context.Context, req *connect.Request[v1.CapabilityServiceRevokeBiscuitRequest]) (*connect.Response[v1.CapabilityServiceRevokeBiscuitResponse], error) {
+	return c.revokeBiscuit.CallUnary(ctx, req)
 }
 
 // List calls paladin.admin.v1.CapabilityService.List.
@@ -167,6 +188,11 @@ type CapabilityServiceHandler interface {
 	// CascadeChildren=true revokes every descendant in the delegation
 	// tree. Idempotent — re-revoking a revoked capability is a no-op.
 	Revoke(context.Context, *connect.Request[v1.CapabilityServiceRevokeRequest]) (*connect.Response[v1.CapabilityServiceRevokeResponse], error)
+	// RevokeBiscuit revokes one copy of a capability's Biscuit: the copy
+	// `token` is, and every copy attenuated from it. The capability, the copy
+	// it was attenuated from and its other copies keep working; revoke the
+	// capability to stop them all. Idempotent.
+	RevokeBiscuit(context.Context, *connect.Request[v1.CapabilityServiceRevokeBiscuitRequest]) (*connect.Response[v1.CapabilityServiceRevokeBiscuitResponse], error)
 	// List enumerates capabilities issued to a principal. Cursor-paginated.
 	List(context.Context, *connect.Request[v1.CapabilityServiceListRequest]) (*connect.Response[v1.CapabilityServiceListResponse], error)
 	// GetUsage returns the runtime counters for a capability:
@@ -202,6 +228,13 @@ func NewCapabilityServiceHandler(svc CapabilityServiceHandler, opts ...connect.H
 		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
+	capabilityServiceRevokeBiscuitHandler := connect.NewUnaryHandler(
+		CapabilityServiceRevokeBiscuitProcedure,
+		svc.RevokeBiscuit,
+		connect.WithSchema(capabilityServiceMethods.ByName("RevokeBiscuit")),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
+		connect.WithHandlerOptions(opts...),
+	)
 	capabilityServiceListHandler := connect.NewUnaryHandler(
 		CapabilityServiceListProcedure,
 		svc.List,
@@ -224,6 +257,8 @@ func NewCapabilityServiceHandler(svc CapabilityServiceHandler, opts ...connect.H
 			capabilityServiceDelegateHandler.ServeHTTP(w, r)
 		case CapabilityServiceRevokeProcedure:
 			capabilityServiceRevokeHandler.ServeHTTP(w, r)
+		case CapabilityServiceRevokeBiscuitProcedure:
+			capabilityServiceRevokeBiscuitHandler.ServeHTTP(w, r)
 		case CapabilityServiceListProcedure:
 			capabilityServiceListHandler.ServeHTTP(w, r)
 		case CapabilityServiceGetUsageProcedure:
@@ -247,6 +282,10 @@ func (UnimplementedCapabilityServiceHandler) Delegate(context.Context, *connect.
 
 func (UnimplementedCapabilityServiceHandler) Revoke(context.Context, *connect.Request[v1.CapabilityServiceRevokeRequest]) (*connect.Response[v1.CapabilityServiceRevokeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CapabilityService.Revoke is not implemented"))
+}
+
+func (UnimplementedCapabilityServiceHandler) RevokeBiscuit(context.Context, *connect.Request[v1.CapabilityServiceRevokeBiscuitRequest]) (*connect.Response[v1.CapabilityServiceRevokeBiscuitResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CapabilityService.RevokeBiscuit is not implemented"))
 }
 
 func (UnimplementedCapabilityServiceHandler) List(context.Context, *connect.Request[v1.CapabilityServiceListRequest]) (*connect.Response[v1.CapabilityServiceListResponse], error) {
