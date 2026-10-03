@@ -222,7 +222,7 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 			// silently would mask the misconfiguration.
 			return nil, connect.NewError(connect.CodePermissionDenied, err)
 		}
-		if err := i.checkPossession(cap, token, req.Header().Get(paladin.HeaderDPoP),
+		if err := i.checkPossession(ctx, cap, token, req.Header().Get(paladin.HeaderDPoP),
 			req.HTTPMethod(), req.Spec().Procedure); err != nil {
 			return nil, connect.NewError(connect.CodePermissionDenied, err)
 		}
@@ -258,7 +258,7 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		if err != nil {
 			return connect.NewError(connect.CodePermissionDenied, err)
 		}
-		if err := i.checkPossession(cap, token, conn.RequestHeader().Get(paladin.HeaderDPoP),
+		if err := i.checkPossession(ctx, cap, token, conn.RequestHeader().Get(paladin.HeaderDPoP),
 			http.MethodPost, conn.Spec().Procedure); err != nil {
 			return connect.NewError(connect.CodePermissionDenied, err)
 		}
@@ -284,7 +284,7 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 // capability passes. The URL compared is the procedure path: behind a proxy
 // the server cannot know the scheme and host its clients address it by, and
 // the paths of different services never coincide.
-func (i *capabilityInterceptor) checkPossession(cap *capability.Capability, token, proof, method, procedure string) error {
+func (i *capabilityInterceptor) checkPossession(ctx context.Context, cap *capability.Capability, token, proof, method, procedure string) error {
 	if cap.ConfirmationJKT == "" {
 		return nil
 	}
@@ -294,7 +294,7 @@ func (i *capabilityInterceptor) checkPossession(cap *capability.Capability, toke
 	if method == "" {
 		method = http.MethodPost
 	}
-	return i.dpop.Check(cap, capability.DPoPRequest{
+	return i.dpop.Check(ctx, cap, capability.DPoPRequest{
 		Proof:         proof,
 		Method:        method,
 		URL:           procedure,

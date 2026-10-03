@@ -1607,19 +1607,6 @@ finding moving from "packages you import" to "your code is affected".
   bridge holds its own key and receives capabilities delegated to it.
 - **Blockers:** choosing between the two.
 
-### DPoP replay cache is per replica
-
-- **Status:** Deferred — the window keeps the gap narrow.
-- **Reason:** `MemoryReplayCache` remembers proof ids in one process. A proof
-  replayed against another replica within the one-minute window is accepted
-  there. The proof is still bound to the same method, path and token, so the
-  replay can only repeat the request it was made for.
-- **Definition of Done:** a shared `ReplayCache` (Postgres `INSERT … ON
-  CONFLICT DO NOTHING` with a TTL purge, or Redis `SET NX EX`) wired in
-  `BuildCapabilityBundle`, with a test that a proof used on one replica is
-  refused on another.
-- **Blockers:** none; a per-request write is the cost to weigh.
-
 ### Offline attenuation covers a fixed vocabulary, not arbitrary Datalog
 
 - **Status:** Deferred — the vocabulary covers what Paladin enforces.
