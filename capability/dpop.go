@@ -1,6 +1,7 @@
 package capability
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -257,8 +258,9 @@ type DPoPRequest struct {
 // ReplayCache remembers proof ids for as long as a proof could be accepted.
 type ReplayCache interface {
 	// Seen records jti until expires and reports whether it was already
-	// recorded.
-	Seen(jti string, expires time.Time) bool
+	// recorded. An implementation that cannot tell — its store is
+	// unreachable — reports true: an unanswerable check refuses the proof.
+	Seen(ctx context.Context, jti string, expires time.Time) bool
 }
 
 // DPoPVerifier checks proofs for key-bound capabilities.
@@ -277,7 +279,7 @@ type DPoPVerifier struct {
 // proof that: is a dpop+jwt signed by the key its header carries; whose key's
 // thumbprint is the capability's; that names this method and URL and this
 // token's hash; that was issued within the window; and whose jti is new.
-func (v *DPoPVerifier) Check(c *Capability, req DPoPRequest) error {
+func (v *DPoPVerifier) Check(ctx context.Context, c *Capability, req DPoPRequest) error {
 	if c.ConfirmationJKT == "" {
 		return nil
 	}
@@ -334,7 +336,7 @@ func (v *DPoPVerifier) Check(c *Capability, req DPoPRequest) error {
 	if v.Replay == nil {
 		return fmt.Errorf("%w: no replay cache configured", ErrDPoPInvalid)
 	}
-	if v.Replay.Seen(claims.JTI, iat.Add(window)) {
+	if v.Replay.Seen(ctx, claims.JTI, iat.Add(window)) {
 		return ErrDPoPReplayed
 	}
 	return nil
@@ -394,7 +396,7 @@ func NewMemoryReplayCache(maxEntries int) *MemoryReplayCache {
 // Seen implements ReplayCache. When full, expired ids are dropped first; if
 // none have expired, the new id is still refused as a replay rather than
 // accepted unrecorded — a full cache errs towards refusing.
-func (c *MemoryReplayCache) Seen(jti string, expires time.Time) bool {
+func (c *MemoryReplayCache) Seen(_ context.Context, jti string, expires time.Time) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := c.now()
