@@ -47,8 +47,8 @@ service CapabilityService {
   }
 
   // GetUsage returns the runtime counters for a capability:
-  // request_count (vs Caveats.max_requests) and spent_amount
-  // (vs Caveats.max_budget_amount). Returns NOT_FOUND when the
+  // request_count (vs Caveats.max_requests) and spent_micros
+  // (vs Caveats.max_budget_micros). Returns NOT_FOUND when the
   // capability has never been used (no requests, no charges).
   rpc GetUsage(CapabilityServiceGetUsageRequest) returns (CapabilityServiceGetUsageResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -90,13 +90,11 @@ message CapabilityCaveats {
   repeated string resource_prefixes = 2;
   repeated string resource_uris = 3;
   int32 max_requests = 4;
-  // max_budget_amount is the cost budget. Field number unchanged
-  // (wire-compatible with the previous max_budget_usd field name).
-  // Currency is given by unit_code; default "USD" when empty.
-  //
-  // Deprecated: use max_budget_micros, an exact integer count of millionths. Kept
-  // for one release; the server fills both.
-  double max_budget_amount = 5 [deprecated = true];
+  // The double max_budget_amount, replaced by max_budget_micros. The server
+  // refuses a request that still sends it rather than issue the capability
+  // without its budget.
+  reserved 5;
+  reserved "max_budget_amount";
   bool allow_tainted_read = 6;
   bool idempotency_key_required = 7;
   repeated string source_ip_cidr = 8;
@@ -106,8 +104,8 @@ message CapabilityCaveats {
   // rejects any other unrecognised value.
   string unit_code = 9;
   // max_budget_micros is the cost budget in millionths of unit_code (25
-  // USD = 25000000); 0 = no budget. When set it wins over
-  // max_budget_amount, and a request carrying both must agree.
+  // USD = 25000000); 0 or absent = no budget. Currency is given by
+  // unit_code; default "USD" when empty.
   optional int64 max_budget_micros = 10 [(buf.validate.field).int64.gte = 0];
 }
 
@@ -213,13 +211,9 @@ message CapabilityServiceGetUsageRequest {
 message CapabilityServiceGetUsageResponse {
   string capability_id = 1;
   int64 request_count = 2;
-  // spent_amount is the accumulated spend. Field number unchanged
-  // (wire-compatible with the previous spent_usd field name).
-  // Currency is given by unit_code.
-  //
-  // Deprecated: use spent_micros, an exact integer count of millionths. Kept
-  // for one release; the server fills both.
-  double spent_amount = 3 [deprecated = true];
+  // The double spent_amount, replaced by spent_micros.
+  reserved 3;
+  reserved "spent_amount";
   google.protobuf.Timestamp updated_at = 4;
   // unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT.
   string unit_code = 5;

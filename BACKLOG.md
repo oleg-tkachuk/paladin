@@ -1639,20 +1639,6 @@ finding moving from "packages you import" to "your code is affected".
   ids, checked by the verifier beside the capability's own revocation.
 - **Blockers:** none.
 
-### Deprecated double money fields still on the wire
-
-- **Status:** Deferred — the deprecation window is one release.
-- **Reason:** every money field now has an exact `*_micros` int64 twin, which
-  the console uses, and the server fills both and accepts either (a request
-  carrying both must agree). The doubles stay for one release so older
-  clients keep working.
-- **Definition of Done:** in the release after the one that adds `*_micros`,
-  the double fields are removed and their numbers and names `reserved` in
-  `billing_service.proto`, `capability_service.proto` and
-  `tenant_budget_service.proto`; the `nolint:staticcheck` markers that fill
-  them go with them.
-- **Blockers:** the release that ships the micros fields.
-
 ### The capability module's Go API still takes float64 amounts
 
 - **Status:** Deferred — a breaking change to the module's public API.

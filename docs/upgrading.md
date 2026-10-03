@@ -42,7 +42,27 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
-## Unreleased — every presigned upload is bound to its body
+## Unreleased — money is micros only; the deprecated doubles are gone
+
+The double money fields deprecated beside `*_micros` are removed and their
+numbers and names reserved: `CapabilityCaveats.max_budget_amount`,
+`CapabilityServiceGetUsageResponse.spent_amount`,
+`TenantBudget.max_budget_amount` and `spent_amount`,
+`TenantBudgetServiceSetRequest.max_budget_amount`,
+`GetTenantSummaryResponse.total_amount` and `max_budget_amount`, and `amount`
+on `TopEntry` and `TimeBucket`. Read and send the `*_micros` field instead:
+millionths of `unit_code`, so 25 USD is `25000000`.
+
+- **A request that still sends a removed budget is refused** with
+  `InvalidArgument`, over the binary protocol — both SDKs' default. Read as
+  absent, it would have issued the capability with no budget, or lifted the
+  tenant's cap to unlimited.
+- **Over Connect JSON the server cannot tell.** Its JSON codec drops unknown
+  names, so `"maxBudgetAmount": 25` from a JSON client is ignored and the
+  budget is unlimited. Move JSON callers to `maxBudgetMicros` before
+  upgrading the server.
+- `max_budget_micros` stays `optional`; absent means 0, no budget.
+
 
 - **`checksum_value` is required** on `UploadObjectRequest` and
   `PresignPartRequest`, and on every `CompletedPart`: base64 of the body's

@@ -412,7 +412,6 @@ func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.Cap
 	return connect.NewResponse(&adminv1.CapabilityServiceGetUsageResponse{
 		CapabilityId: u.CapabilityID.String(),
 		RequestCount: u.RequestCount,
-		SpentAmount:  u.SpentAmount, //nolint:staticcheck // deprecated, still filled for one release
 		SpentMicros:  apiutil.Micros(u.SpentAmount),
 		UnitCode:     unit,
 		// updated_at not surfaced today — the UsageStore.Get value
@@ -492,9 +491,10 @@ func protoToCaveats(c *adminv1.CapabilityCaveats) (capability.Caveats, error) {
 	if c == nil {
 		return capability.Caveats{}, nil
 	}
-	//nolint:staticcheck // the deprecated double is still accepted for one release
-	budget, err := apiutil.AmountFromRequest("max_budget",
-		c.GetMaxBudgetAmount(), c.GetMaxBudgetMicros(), c.MaxBudgetMicros != nil)
+	if err := apiutil.RefuseRemovedFields(c); err != nil {
+		return capability.Caveats{}, err
+	}
+	budget, err := apiutil.AmountFromMicros("max_budget", c.GetMaxBudgetMicros())
 	if err != nil {
 		return capability.Caveats{}, err
 	}
@@ -564,7 +564,6 @@ func caveatsToProto(c capability.Caveats) *adminv1.CapabilityCaveats {
 		ResourcePrefixes:       c.ResourcePrefixes,
 		ResourceUris:           c.ResourceURIs,
 		MaxRequests:            safecast.Int32(c.MaxRequests),
-		MaxBudgetAmount:        c.MaxBudgetAmount, //nolint:staticcheck // deprecated, still filled for one release
 		MaxBudgetMicros:        proto.Int64(apiutil.Micros(c.MaxBudgetAmount)),
 		UnitCode:               unit,
 		AllowTaintedRead:       c.AllowTaintedRead,

@@ -98,9 +98,10 @@ func (s *TenantBudgetServer) Set(
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("resource_version: %w", err))
 	}
-	//nolint:staticcheck // the deprecated double is still accepted for one release
-	budget, err := apiutil.AmountFromRequest("max_budget",
-		m.GetMaxBudgetAmount(), m.GetMaxBudgetMicros(), m.MaxBudgetMicros != nil)
+	if err := apiutil.RefuseRemovedFields(m); err != nil {
+		return nil, err
+	}
+	budget, err := apiutil.AmountFromMicros("max_budget", m.GetMaxBudgetMicros())
 	if err != nil {
 		return nil, err
 	}
@@ -190,8 +191,6 @@ func tenantBudgetToProto(tb capability.TenantBudget) *pb.TenantBudget {
 	}
 	out := &pb.TenantBudget{
 		TenantId:        tb.TenantID.String(),
-		MaxBudgetAmount: tb.MaxBudgetAmount, //nolint:staticcheck // deprecated, still filled for one release
-		SpentAmount:     tb.SpentAmount,     //nolint:staticcheck // deprecated, still filled for one release
 		MaxBudgetMicros: apiutil.Micros(tb.MaxBudgetAmount),
 		SpentMicros:     apiutil.Micros(tb.SpentAmount),
 		UnitCode:        unit,

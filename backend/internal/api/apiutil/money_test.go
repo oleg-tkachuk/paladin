@@ -1,36 +1,31 @@
 package apiutil
 
 import (
+	"math"
 	"testing"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
+
+	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
-func ptr(v int64) *int64 { return &v }
-
-func TestAmountFromRequest(t *testing.T) {
+func TestAmountFromMicros(t *testing.T) {
 	cases := map[string]struct {
-		amount float64
-		micros *int64
+		micros int64
 		want   float64
 		code   connect.Code
 	}{
-		"double only (old client)":      {amount: 12.5, want: 12.5},
-		"micros only":                   {micros: ptr(12_500_000), want: 12.5},
-		"micros 0 means unlimited":      {micros: ptr(0), want: 0},
-		"micros wins over absent 0.0":   {amount: 0, micros: ptr(1), want: 0.000001},
-		"both, agreeing":                {amount: 0.1, micros: ptr(100_000), want: 0.1},
-		"both, disagreeing":             {amount: 0.1, micros: ptr(200_000), code: connect.CodeInvalidArgument},
-		"negative micros":               {micros: ptr(-1), code: connect.CodeInvalidArgument},
-		"micros beyond the exact range": {micros: ptr(1_000_000_000_000_000), code: connect.CodeInvalidArgument},
+		"micros":                        {micros: 12_500_000, want: 12.5},
+		"0 means unlimited":             {micros: 0, want: 0},
+		"one micro":                     {micros: 1, want: 0.000001},
+		"negative micros":               {micros: -1, code: connect.CodeInvalidArgument},
+		"micros beyond the exact range": {micros: 1_000_000_000_000_000, code: connect.CodeInvalidArgument},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			var m int64
-			if tc.micros != nil {
-				m = *tc.micros
-			}
-			got, err := AmountFromRequest("max_budget", tc.amount, m, tc.micros != nil)
+			got, err := AmountFromMicros("max_budget", tc.micros)
 			if tc.code != 0 {
 				if connect.CodeOf(err) != tc.code {
 					t.Fatalf("err = %v, want %v", err, tc.code)
@@ -41,6 +36,57 @@ func TestAmountFromRequest(t *testing.T) {
 				t.Fatalf("got %v, %v; want %v", got, err, tc.want)
 			}
 		})
+	}
+}
+
+// withUnknownDouble is msg as a client built against an older contract sends
+// it: a double under field num, which this contract no longer declares.
+func withUnknownDouble(t *testing.T, msg proto.Message, num protowire.Number) {
+	t.Helper()
+	raw, err := proto.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = protowire.AppendTag(raw, num, protowire.Fixed64Type)
+	raw = protowire.AppendFixed64(raw, math.Float64bits(25))
+	if err := proto.Unmarshal(raw, msg); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// firstReserved is a field number msg's contract has removed.
+func firstReserved(t *testing.T, msg proto.Message) protowire.Number {
+	t.Helper()
+	r := msg.ProtoReflect().Descriptor().ReservedRanges()
+	if r.Len() == 0 {
+		t.Fatalf("%T reserves no field", msg)
+	}
+	return r.Get(0)[0]
+}
+
+func TestRefuseRemovedFields(t *testing.T) {
+	removedBudgets := []proto.Message{
+		&adminv1.CapabilityCaveats{Ops: []string{"get"}},
+		&adminv1.TenantBudgetServiceSetRequest{TenantId: "t", ResourceVersion: "1"},
+	}
+	for _, msg := range removedBudgets {
+		t.Run(string(msg.ProtoReflect().Descriptor().Name()), func(t *testing.T) {
+			if err := RefuseRemovedFields(msg); err != nil {
+				t.Fatalf("a current request is refused: %v", err)
+			}
+			withUnknownDouble(t, msg, firstReserved(t, msg))
+			if err := RefuseRemovedFields(msg); connect.CodeOf(err) != connect.CodeInvalidArgument {
+				t.Fatalf("a removed field passed: err = %v", err)
+			}
+		})
+	}
+
+	// A field the server does not know but never removed is a newer client's,
+	// and stays accepted, as unknown fields always have been.
+	newer := &adminv1.CapabilityCaveats{Ops: []string{"get"}}
+	withUnknownDouble(t, newer, protowire.MaxValidNumber)
+	if err := RefuseRemovedFields(newer); err != nil {
+		t.Fatalf("an unreserved unknown field is refused: %v", err)
 	}
 }
 

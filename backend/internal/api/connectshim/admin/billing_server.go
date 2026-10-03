@@ -59,10 +59,8 @@ func (s *BillingServer) GetTenantSummary(
 		return nil, err
 	}
 	return connect.NewResponse(&pb.GetTenantSummaryResponse{
-		TotalAmount:     sum.TotalAmount, //nolint:staticcheck // deprecated, still filled for one release
 		TotalMicros:     apiutil.Micros(sum.TotalAmount),
 		UnitCode:        sum.UnitCode,
-		MaxBudgetAmount: sum.MaxBudgetAmount, //nolint:staticcheck // deprecated, still filled for one release
 		MaxBudgetMicros: apiutil.Micros(sum.MaxBudgetAmount),
 		ChargeCount:     sum.ChargeCount,
 		TopCapabilities: topEntriesToProto(sum.TopCapabilities),
@@ -98,7 +96,6 @@ func (s *BillingServer) GetTenantTimeSeries(
 	for _, b := range ts.Buckets {
 		out.Buckets = append(out.Buckets, &pb.TimeBucket{
 			Start:        timestamppb.New(b.Start),
-			Amount:       b.Amount, //nolint:staticcheck // deprecated, still filled for one release
 			AmountMicros: apiutil.Micros(b.Amount),
 			ChargeCount:  b.ChargeCount,
 		})
@@ -113,7 +110,6 @@ func topEntriesToProto(in []billingh.TopEntry) []*pb.TopEntry {
 	for _, e := range in {
 		out = append(out, &pb.TopEntry{
 			Label:        e.Label,
-			Amount:       e.Amount, //nolint:staticcheck // deprecated, still filled for one release
 			AmountMicros: apiutil.Micros(e.Amount),
 			ChargeCount:  e.ChargeCount,
 		})
