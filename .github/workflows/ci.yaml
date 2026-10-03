@@ -54,6 +54,11 @@ env:
   PROMETHEUS_VERSION: "v3.15.0"
   # renovate: datasource=github-releases depName=mikefarah/yq
   YQ_VERSION: "v4.53.6"
+  # The Python the sdk group's own tests run on, rather than whatever the
+  # runner ships (3.14 on ubuntu-26.04). The newest one biscuit-python has a
+  # wheel for, so the attenuation tests run here instead of skipping; the
+  # compatibility cells still cover every Python the SDK declares.
+  PY_SDK_PYTHON: "3.13"
   # Matches NODE_VERSION in frontend/deploy/Dockerfile, so the suite runs on
   # the Node the console image ships. That Node has no corepack; pnpm comes
   # from pnpm/action-setup below instead.
@@ -327,6 +332,10 @@ jobs:
           curl -fsSL "${base}/sha256sums.txt" | grep " ${archive}\$" | sha256sum -c -
           sudo tar -xzf "$archive" -C /usr/local/bin --strip-components=1 "${dir}/promtool"
           promtool --version
+      - name: Pin the Python SDK's interpreter
+        if: matrix.group == 'sdk'
+        run: echo "UV_PYTHON=${PY_SDK_PYTHON}" >> "$GITHUB_ENV"
+
       - name: task verify-${{ matrix.group }}
         env:
           GROUP: ${{ matrix.group }}
