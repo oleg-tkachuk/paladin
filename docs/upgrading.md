@@ -42,6 +42,15 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## Unreleased — the Python SDK knows its version under Poetry
+
+- **`sdk_version()`, the `User-Agent` and errors report the release** when
+  the package is installed from its git tag by a tool that builds without
+  git, as Poetry does through Dulwich. Such a build still records
+  `0.0.0+unknown` in its metadata; the SDK now reads the tag the installer
+  recorded in `direct_url.json` instead. Nothing to change on the caller's
+  side.
+
 ## v0.23.0 — TLS that a consumer can wrap, verify and close
 
 - **Go: `TLS.RoundTripper()` returns the rotating transport** `WithTLS` and

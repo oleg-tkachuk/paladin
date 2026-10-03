@@ -13,7 +13,10 @@ repeat. The service clients are the generated ones::
 from __future__ import annotations
 
 import asyncio
+import functools
+import json
 import random
+import re
 import secrets
 import time
 from collections.abc import Awaitable, Callable, Iterator, Sequence
@@ -56,6 +59,16 @@ _DISTRIBUTION = "paladin-sdk"
 _USER_AGENT_PRODUCT = "paladin-sdk-python"
 # Reported when the SDK runs from a source tree rather than an installed package.
 _DEVEL_VERSION = "devel"
+# The local label hatch-vcs records when it could not learn the version: the
+# end of fallback_version in pyproject.toml, which tests/test_version.py
+# checks against this.
+UNKNOWN_VERSION_LABEL = "+unknown"
+# An SDK release tag, as tag_regex in pyproject.toml reads it; the test checks
+# the two are the same pattern.
+RELEASE_TAG = re.compile(r"^sdk/go/v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)$")
+_TAG_VERSION_GROUP = "version"
+# PEP 610: where an installer records the URL and revision it installed from.
+_DIRECT_URL = "direct_url.json"
 # Bytes of randomness in a minted idempotency key.
 _IDEMPOTENCY_KEY_BYTES = 16
 _MS_PER_SECOND = 1000.0
@@ -114,12 +127,36 @@ def current_idempotency_key() -> str | None:
     return _idempotency_key.get() or None
 
 
+@functools.cache
 def sdk_version() -> str:
-    """This package's installed version; ``devel`` for a source tree."""
+    """This package's installed version; ``devel`` for a source tree.
+
+    A build with neither git nor a source archive — Poetry installs a git
+    dependency through Dulwich, with no git for hatch-vcs to ask — records
+    ``0.0.0+unknown``. The installer still records the tag it was asked for,
+    in the distribution's ``direct_url.json`` (PEP 610), and the version is
+    read from there.
+    """
     try:
-        return metadata.version(_DISTRIBUTION)
+        dist = metadata.distribution(_DISTRIBUTION)
     except metadata.PackageNotFoundError:
         return _DEVEL_VERSION
+    if not dist.version.endswith(UNKNOWN_VERSION_LABEL):
+        return dist.version
+    return _version_from_direct_url(dist.read_text(_DIRECT_URL)) or dist.version
+
+
+def _version_from_direct_url(text: str | None) -> str | None:
+    """The release a ``direct_url.json`` names by its tag; None when it names
+    none — no file, not a VCS install, or a branch or commit."""
+    if not text:
+        return None
+    try:
+        revision = json.loads(text).get("vcs_info", {}).get("requested_revision", "")
+    except (ValueError, AttributeError):
+        return None
+    found = RELEASE_TAG.fullmatch(revision or "")
+    return found.group(_TAG_VERSION_GROUP) if found else None
 
 
 def user_agent() -> str:
