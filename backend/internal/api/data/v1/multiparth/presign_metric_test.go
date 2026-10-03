@@ -65,7 +65,7 @@ func TestPresignPartIsCounted(t *testing.T) {
 	h := newHandler(repo, &fakeStorage{}, allow())
 
 	okBefore := presignCount(t, metrics.PresignOpPart, metrics.PresignOutcomeOK)
-	if _, _, _, err := h.PresignPart(authedCtx(tid), "up-1", 1, 0, SessionRef{}); err != nil {
+	if _, _, _, err := h.PresignPart(authedCtx(tid), "up-1", 1, 0, testPartChecksum, SessionRef{}); err != nil {
 		t.Fatal(err)
 	}
 	if got := presignCount(t, metrics.PresignOpPart, metrics.PresignOutcomeOK) - okBefore; got != 1 {
@@ -73,13 +73,13 @@ func TestPresignPartIsCounted(t *testing.T) {
 	}
 
 	// A refusal is counted too, under the outcome its error maps to.
-	_, _, _, err := h.PresignPart(authedCtx(tid), "up-1", 1, -time.Second, SessionRef{})
+	_, _, _, err := h.PresignPart(authedCtx(tid), "up-1", 1, -time.Second, testPartChecksum, SessionRef{})
 	outcome := metrics.PresignOutcome(err)
 	if err == nil || outcome == metrics.PresignOutcomeOK {
 		t.Fatalf("negative ttl: err=%v outcome=%q, want a refusal", err, outcome)
 	}
 	before := presignCount(t, metrics.PresignOpPart, outcome)
-	_, _, _, _ = h.PresignPart(authedCtx(tid), "up-1", 1, -time.Second, SessionRef{})
+	_, _, _, _ = h.PresignPart(authedCtx(tid), "up-1", 1, -time.Second, testPartChecksum, SessionRef{})
 	if got := presignCount(t, metrics.PresignOpPart, outcome) - before; got != 1 {
 		t.Errorf("a refused part presign added %d %q samples, want 1", got, outcome)
 	}

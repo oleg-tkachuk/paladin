@@ -133,9 +133,16 @@ func TestTheFakeRefusesWhatTheServerRefuses(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("err = %v, want InvalidArgument", err)
 	}
+	// An upload with no checksum to bind its URL to.
+	_, err = p.Data.Object.UploadObject(context.Background(), connect.NewRequest(&datav1.UploadObjectRequest{
+		Parent: srv.Collection().String(), Key: "k",
+	}))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("no checksum: err = %v, want InvalidArgument", err)
+	}
 	// A completion whose ETag is not the content's.
 	up, err := p.Data.Object.UploadObject(context.Background(), connect.NewRequest(&datav1.UploadObjectRequest{
-		Parent: srv.Collection().String(), Key: "k",
+		Parent: srv.Collection().String(), Key: "k", ChecksumValue: emptySHA256,
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -151,13 +158,19 @@ func TestCompleteMatchesTheServer(t *testing.T) {
 	p := srv.Connect()
 	ctx := context.Background()
 	body := []byte("no etag")
-	up, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{Parent: srv.Collection().String(), Key: "k"}))
+	sum, _ := paladin.Checksum(paladin.ChecksumSHA256, bytes.NewReader(body))
+	up, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+		Parent: srv.Collection().String(), Key: "k", SizeHintBytes: int64(len(body)), ChecksumValue: sum,
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, up.Msg.GetUploadUrl().GetUrl(), bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
+	}
+	for k, v := range up.Msg.GetUploadUrl().GetRequiredHeaders() {
+		req.Header.Set(k, v)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -224,7 +237,7 @@ func TestRequestsShowWhatTheClientSent(t *testing.T) {
 	srv := paladintest.New(t)
 	p := srv.Connect(paladin.WithBearerToken(token))
 	if _, err := p.Data.Object.UploadObject(context.Background(), connect.NewRequest(&datav1.UploadObjectRequest{
-		Parent: srv.Collection().String(), Key: "k",
+		Parent: srv.Collection().String(), Key: "k", ChecksumValue: emptySHA256,
 	})); err != nil {
 		t.Fatal(err)
 	}
@@ -244,5 +257,85 @@ func TestRequestsShowWhatTheClientSent(t *testing.T) {
 	}
 	if !strings.HasPrefix(r.Header.Get(paladin.HeaderUserAgent), "paladin-sdk-go/") {
 		t.Errorf("User-Agent = %q", r.Header.Get(paladin.HeaderUserAgent))
+	}
+}
+
+// emptySHA256 is the SHA-256 of an empty body, a checksum_value for uploads
+// whose content the test does not send.
+const emptySHA256 = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
+
+// The fake's storage holds a URL to its binding, as the object store does:
+// another body, a missing signed header, or an overwrite is refused.
+func TestTheFakeStorageEnforcesTheBinding(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	ctx := context.Background()
+	body := []byte("bound body")
+	sum, _ := paladin.Checksum(paladin.ChecksumSHA256, bytes.NewReader(body))
+	up, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+		Parent: srv.Collection().String(), Key: "k", ContentType: "text/plain", SizeHintBytes: int64(len(body)), ChecksumValue: sum,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := up.Msg.GetUploadUrl()
+	put := func(b []byte, drop string) int {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodPut, url.GetUrl(), bytes.NewReader(b))
+		for k, v := range url.GetRequiredHeaders() {
+			if k != drop {
+				req.Header.Set(k, v)
+			}
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	if got := put([]byte("other body"), ""); got != http.StatusBadRequest {
+		t.Errorf("another body of the same length: %d, want 400", got)
+	}
+	if got := put(body, "X-Amz-Checksum-Sha256"); got != http.StatusBadRequest {
+		t.Errorf("checksum header dropped: %d, want 400", got)
+	}
+	if got := put(body, ""); got != http.StatusOK {
+		t.Fatalf("the bound body: %d, want 200", got)
+	}
+	if got := put(body, ""); got != http.StatusPreconditionFailed {
+		t.Errorf("a second PUT: %d, want 412", got)
+	}
+}
+
+// A download URL bound to the object's ETag carries If-Match, and the fake's
+// storage refuses a stale one with 412, as S3 does.
+func TestTheFakeHonoursIfMatch(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	ctx := context.Background()
+	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
+	resp, err := p.Data.Object.DownloadObject(ctx, connect.NewRequest(&datav1.DownloadObjectRequest{Name: obj.GetName(), RequireEtagMatch: true}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := resp.Msg.GetDownloadUrl()
+	if url.GetRequiredHeaders()["If-Match"] == "" {
+		t.Fatal("no If-Match among the required headers")
+	}
+	get := func(ifMatch string) int {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url.GetUrl(), nil)
+		req.Header.Set("If-Match", ifMatch)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = r.Body.Close()
+		return r.StatusCode
+	}
+	if got := get(url.GetRequiredHeaders()["If-Match"]); got != http.StatusOK {
+		t.Errorf("the object's ETag: %d, want 200", got)
+	}
+	if got := get(`"stale"`); got != http.StatusPreconditionFailed {
+		t.Errorf("a stale ETag: %d, want 412", got)
 	}
 }

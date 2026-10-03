@@ -15,8 +15,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
 	"connectrpc.com/connect"
@@ -1032,13 +1034,15 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "Reserve a new object slot and return a presigned PUT URL. Agent uploads bytes directly to S3, then calls paladin_complete_object to promote the row to AVAILABLE.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in uploadObjectArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
-			Parent:         in.Parent,
-			Key:            in.Key,
-			ContentType:    in.ContentType,
-			SizeHintBytes:  in.SizeHintBytes,
-			Metadata:       in.Metadata,
-			Tags:           in.Tags,
-			IdempotencyKey: in.IdempotencyKey,
+			Parent:            in.Parent,
+			Key:               in.Key,
+			ContentType:       in.ContentType,
+			SizeHintBytes:     in.SizeBytes,
+			ChecksumAlgorithm: checksumAlgorithm(in.ChecksumAlgo),
+			ChecksumValue:     in.ChecksumValue,
+			Metadata:          in.Metadata,
+			Tags:              in.Tags,
+			IdempotencyKey:    in.IdempotencyKey,
 		})))
 	})
 
@@ -1060,6 +1064,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		req := &datav1.PresignDownloadRequest{
 			Name:               in.Name,
 			ContentDisposition: in.ContentDisposition,
+			RequireEtagMatch:   in.RequireETagMatch,
 		}
 		if in.TtlSeconds > 0 {
 			req.Ttl = durationpb.New(time.Duration(in.TtlSeconds) * time.Second)
@@ -1208,12 +1213,13 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "Begin a multipart upload for a large object. Returns an upload_id + object name; presign each part with paladin_presign_part, then finalise with paladin_complete_multipart_upload.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in initiateMultipartArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Multipart.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
-			Parent:      in.Parent,
-			Key:         in.Key,
-			ContentType: in.ContentType,
-			SizeBytes:   in.SizeBytes,
-			Metadata:    in.Metadata,
-			Tags:        in.Tags,
+			Parent:            in.Parent,
+			Key:               in.Key,
+			ContentType:       in.ContentType,
+			SizeBytes:         in.SizeBytes,
+			ChecksumAlgorithm: checksumAlgorithm(in.ChecksumAlgo),
+			Metadata:          in.Metadata,
+			Tags:              in.Tags,
 		})))
 	})
 
@@ -1222,9 +1228,10 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "Mint a presigned PUT URL for one part (1-based `part_number`) of an in-progress multipart upload. The agent PUTs the bytes to S3 and keeps the returned ETag for completion.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in presignPartArgs) (*mcpsdk.CallToolResult, any, error) {
 		req := &datav1.PresignPartRequest{
-			ObjectName: in.ObjectName,
-			UploadId:   in.UploadID,
-			PartNumber: in.PartNumber,
+			ObjectName:    in.ObjectName,
+			UploadId:      in.UploadID,
+			PartNumber:    in.PartNumber,
+			ChecksumValue: in.ChecksumValue,
 		}
 		if in.TtlSeconds > 0 {
 			req.Ttl = durationpb.New(time.Duration(in.TtlSeconds) * time.Second)
@@ -1285,7 +1292,9 @@ type uploadObjectArgs struct {
 	Parent         string            `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}"`
 	Key            string            `json:"key,omitempty" jsonschema:"object key under the namespace; empty = server uses the new object_id as key"`
 	ContentType    string            `json:"content_type" jsonschema:"MIME type (e.g. application/pdf)"`
-	SizeHintBytes  int64             `json:"size_hint_bytes,omitempty" jsonschema:"optional client-reported size"`
+	SizeBytes      int64             `json:"size_bytes" jsonschema:"exact size in bytes; the upload URL accepts exactly this many"`
+	ChecksumAlgo   string            `json:"checksum_algorithm,omitempty" jsonschema:"SHA256 (default), CRC32C or MD5"`
+	ChecksumValue  string            `json:"checksum_value" jsonschema:"base64 of the body's digest under checksum_algorithm; signed into the upload URL"`
 	Metadata       map[string]string `json:"metadata,omitempty"`
 	Tags           map[string]string `json:"tags,omitempty"`
 	IdempotencyKey string            `json:"idempotency_key,omitempty" jsonschema:"replay-safe key — same value returns the cached response"`
@@ -1293,12 +1302,13 @@ type uploadObjectArgs struct {
 type completeObjectArgs struct {
 	Name          string `json:"name" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}/objects/{id}"`
 	Etag          string `json:"etag" jsonschema:"etag the S3 endpoint returned on the PUT"`
-	ChecksumValue string `json:"checksum_value,omitempty" jsonschema:"hex-encoded checksum"`
+	ChecksumValue string `json:"checksum_value,omitempty" jsonschema:"base64 checksum of the uploaded body; refused if it differs from the one the object was registered with"`
 }
 type presignDownloadArgs struct {
 	Name               string `json:"name" jsonschema:"object resource name"`
 	TtlSeconds         int64  `json:"ttl_seconds,omitempty" jsonschema:"optional; defaults to limits.presign.get_ttl, refused above limits.presign.max_ttl"`
 	ContentDisposition string `json:"content_disposition,omitempty" jsonschema:"e.g. 'attachment; filename=\"report.pdf\"' to force browser download"`
+	RequireETagMatch   bool   `json:"require_etag_match,omitempty" jsonschema:"bind the URL to the object's current ETag; the caller must send the If-Match header it returns"`
 }
 type setObjectTagsArgs struct {
 	Name string            `json:"name" jsonschema:"object resource name"`
@@ -1369,23 +1379,25 @@ type regenerateUploadURLArgs struct {
 	TtlSeconds int64  `json:"ttl_seconds,omitempty" jsonschema:"optional; defaults to limits.presign.put_ttl, refused above limits.presign.max_ttl"`
 }
 type initiateMultipartArgs struct {
-	Parent      string            `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}"`
-	Key         string            `json:"key,omitempty" jsonschema:"object key under the namespace; empty = server uses the new object_id as key"`
-	ContentType string            `json:"content_type" jsonschema:"MIME type (e.g. application/octet-stream)"`
-	SizeBytes   int64             `json:"size_bytes,omitempty" jsonschema:"optional total size hint"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
-	Tags        map[string]string `json:"tags,omitempty"`
+	Parent       string            `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}"`
+	Key          string            `json:"key,omitempty" jsonschema:"object key under the namespace; empty = server uses the new object_id as key"`
+	ContentType  string            `json:"content_type" jsonschema:"MIME type (e.g. application/octet-stream)"`
+	SizeBytes    int64             `json:"size_bytes" jsonschema:"exact total size in bytes; fixes every part's length"`
+	ChecksumAlgo string            `json:"checksum_algorithm,omitempty" jsonschema:"SHA256 (default), CRC32C or MD5; every part is checksummed with it"`
+	Metadata     map[string]string `json:"metadata,omitempty"`
+	Tags         map[string]string `json:"tags,omitempty"`
 }
 type presignPartArgs struct {
-	ObjectName string `json:"object_name" jsonschema:"object resource name returned by paladin_initiate_multipart_upload"`
-	UploadID   string `json:"upload_id" jsonschema:"upload id from paladin_initiate_multipart_upload"`
-	PartNumber int32  `json:"part_number" jsonschema:"1-based part index"`
-	TtlSeconds int64  `json:"ttl_seconds,omitempty" jsonschema:"optional; defaults to limits.presign.part_ttl, refused above limits.presign.max_ttl"`
+	ObjectName    string `json:"object_name" jsonschema:"object resource name returned by paladin_initiate_multipart_upload"`
+	UploadID      string `json:"upload_id" jsonschema:"upload id from paladin_initiate_multipart_upload"`
+	PartNumber    int32  `json:"part_number" jsonschema:"1-based part index"`
+	ChecksumValue string `json:"checksum_value" jsonschema:"base64 of this part's digest under the upload's checksum_algorithm; signed into the part URL"`
+	TtlSeconds    int64  `json:"ttl_seconds,omitempty" jsonschema:"optional; defaults to limits.presign.part_ttl, refused above limits.presign.max_ttl"`
 }
 type completedPartArg struct {
 	PartNumber    int32  `json:"part_number" jsonschema:"1-based part index"`
 	Etag          string `json:"etag" jsonschema:"ETag the S3 endpoint returned on the part PUT"`
-	ChecksumValue string `json:"checksum_value,omitempty" jsonschema:"hex-encoded checksum, if computed"`
+	ChecksumValue string `json:"checksum_value" jsonschema:"base64 checksum the part was presigned with"`
 }
 type completeMultipartArgs struct {
 	ObjectName string             `json:"object_name" jsonschema:"object resource name returned by paladin_initiate_multipart_upload"`
@@ -1642,4 +1654,16 @@ func buildEventSubscription(in createSubscriptionArgs) (*adminv1.EventSubscripti
 		Sink:     sink,
 		Disabled: in.Disabled,
 	}, nil
+}
+
+// checksumAlgorithm maps a tool's algorithm name onto the API enum; an empty
+// name is SHA256, the data plane's default.
+func checksumAlgorithm(name string) commonv1.ChecksumAlgorithm {
+	switch strings.ToUpper(name) {
+	case checksum.CRC32C:
+		return commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_CRC32C
+	case checksum.MD5:
+		return commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_MD5
+	}
+	return commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256
 }

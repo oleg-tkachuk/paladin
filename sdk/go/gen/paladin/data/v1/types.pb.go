@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -545,10 +546,12 @@ func (x *PhysicalPlacement) GetStoragePath() string {
 
 // CompletedPart / PartInfo for multipart.
 type CompletedPart struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PartNumber    int32                  `protobuf:"varint,1,opt,name=part_number,json=partNumber,proto3" json:"part_number,omitempty"`
-	Etag          string                 `protobuf:"bytes,2,opt,name=etag,proto3" json:"etag,omitempty"`
-	ChecksumValue string                 `protobuf:"bytes,3,opt,name=checksum_value,json=checksumValue,proto3" json:"checksum_value,omitempty"` // optional
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	PartNumber int32                  `protobuf:"varint,1,opt,name=part_number,json=partNumber,proto3" json:"part_number,omitempty"`
+	Etag       string                 `protobuf:"bytes,2,opt,name=etag,proto3" json:"etag,omitempty"`
+	// Required: the checksum this part was presigned with; the object store
+	// checks each against the part it stored.
+	ChecksumValue string `protobuf:"bytes,3,opt,name=checksum_value,json=checksumValue,proto3" json:"checksum_value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -676,7 +679,7 @@ var File_paladin_data_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpaladin/data/v1/types.proto\x12\x0fpaladin.data.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xf1\t\n" +
+	"\x1bpaladin/data/v1/types.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xf1\t\n" +
 	"\x06Object\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12 \n" +
 	"\tobject_id\x18\x02 \x01(\tB\x03\xe0A\x03R\bobjectId\x12 \n" +
@@ -725,12 +728,12 @@ const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"backend_id\x18\x01 \x01(\tR\tbackendId\x12\x1b\n" +
 	"\tbucket_id\x18\x02 \x01(\tR\bbucketId\x12!\n" +
-	"\fstorage_path\x18\x03 \x01(\tR\vstoragePath\"k\n" +
+	"\fstorage_path\x18\x03 \x01(\tR\vstoragePath\"t\n" +
 	"\rCompletedPart\x12\x1f\n" +
 	"\vpart_number\x18\x01 \x01(\x05R\n" +
 	"partNumber\x12\x12\n" +
-	"\x04etag\x18\x02 \x01(\tR\x04etag\x12%\n" +
-	"\x0echecksum_value\x18\x03 \x01(\tR\rchecksumValue\"\xa0\x01\n" +
+	"\x04etag\x18\x02 \x01(\tR\x04etag\x12.\n" +
+	"\x0echecksum_value\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\rchecksumValue\"\xa0\x01\n" +
 	"\bPartInfo\x12\x1f\n" +
 	"\vpart_number\x18\x01 \x01(\x05R\n" +
 	"partNumber\x12\x1d\n" +

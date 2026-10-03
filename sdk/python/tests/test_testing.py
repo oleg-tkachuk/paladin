@@ -3,12 +3,15 @@ SDK's own workflows, as a consumer would."""
 
 from __future__ import annotations
 
+import urllib.error
 import urllib.request
+from collections.abc import Mapping
 
 import pytest
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
 
+import paladin
 from paladin import (
     CHECKSUM_SHA256,
     HEADER_AUTHORIZATION,
@@ -98,8 +101,15 @@ def test_everything_else_is_unimplemented(fake: FakePaladin) -> None:
 
 def test_the_fake_refuses_what_the_server_refuses(fake: FakePaladin) -> None:
     p = fake.connect()
+    # An upload with no checksum to bind its URL to.
+    with pytest.raises(ConnectError):
+        p.data.object.upload_object(
+            object_service_pb2.UploadObjectRequest(parent=str(fake.collection()), key="k")
+        )
     up = p.data.object.upload_object(
-        object_service_pb2.UploadObjectRequest(parent=str(fake.collection()), key="k")
+        object_service_pb2.UploadObjectRequest(
+            parent=str(fake.collection()), key="k", checksum_value=EMPTY_SHA256
+        )
     )
     with pytest.raises(FailedPreconditionError):
         p.data.object.complete_object(
@@ -107,19 +117,32 @@ def test_the_fake_refuses_what_the_server_refuses(fake: FakePaladin) -> None:
         )
 
 
-def _put(url: str, body: bytes) -> None:
-    request = urllib.request.Request(url, data=body, method="PUT")
-    with urllib.request.urlopen(request) as response:  # the fake's own loopback URL
-        response.read()
+EMPTY_SHA256 = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
+"""The SHA-256 of an empty body, for uploads whose content is not sent."""
+
+
+def _put(url: str, body: bytes, headers: Mapping[str, str] | None = None) -> int:
+    request = urllib.request.Request(url, data=body, method="PUT", headers=dict(headers or {}))
+    try:
+        with urllib.request.urlopen(request) as response:  # the fake's own loopback URL
+            response.read()
+            return int(response.status)
+    except urllib.error.HTTPError as err:
+        return int(err.code)
 
 
 def test_complete_matches_the_server(fake: FakePaladin) -> None:
     p = fake.connect()
     body = b"no etag"
     up = p.data.object.upload_object(
-        object_service_pb2.UploadObjectRequest(parent=str(fake.collection()), key="k")
+        object_service_pb2.UploadObjectRequest(
+            parent=str(fake.collection()),
+            key="k",
+            size_hint_bytes=len(body),
+            checksum_value=paladin.checksum(paladin.CHECKSUM_SHA256, body),
+        )
     )
-    _put(up.upload_url.url, body)
+    assert _put(up.upload_url.url, body, up.upload_url.required_headers) == HTTP_OK
     # The ETag is optional, as on the server.
     obj = p.data.object.complete_object(
         object_service_pb2.CompleteObjectRequest(name=up.object.name)
@@ -164,10 +187,61 @@ def test_requests_show_what_the_client_sent(fake: FakePaladin) -> None:
     token = "test-token"
     p = fake.connect(bearer_token=token)
     p.data.object.upload_object(
-        object_service_pb2.UploadObjectRequest(parent=str(fake.collection()), key="k")
+        object_service_pb2.UploadObjectRequest(
+            parent=str(fake.collection()), key="k", checksum_value=EMPTY_SHA256
+        )
     )
     [request] = fake.requests()
     assert request.procedure == UPLOAD_PROCEDURE
     assert request.headers[HEADER_AUTHORIZATION.lower()] == f"Bearer {token}"
     assert request.headers[HEADER_IDEMPOTENCY_KEY.lower()]
     assert request.headers[HEADER_USER_AGENT.lower()].startswith("paladin-sdk-python/")
+
+
+HTTP_OK = 200
+HTTP_BAD_REQUEST = 400
+HTTP_PRECONDITION_FAILED = 412
+
+
+def test_the_fake_storage_enforces_the_binding(fake: FakePaladin) -> None:
+    """The fake's storage holds a URL to its binding, as the object store
+    does: another body, a missing signed header, or an overwrite is refused."""
+    p = fake.connect()
+    body = b"bound body"
+    up = p.data.object.upload_object(
+        object_service_pb2.UploadObjectRequest(
+            parent=str(fake.collection()),
+            key="k",
+            content_type="text/plain",
+            size_hint_bytes=len(body),
+            checksum_value=paladin.checksum(paladin.CHECKSUM_SHA256, body),
+        )
+    )
+    signed = dict(up.upload_url.required_headers)
+    assert _put(up.upload_url.url, b"other body", signed) == HTTP_BAD_REQUEST
+    missing = {k: v for k, v in signed.items() if k != "X-Amz-Checksum-Sha256"}
+    assert _put(up.upload_url.url, body, missing) == HTTP_BAD_REQUEST
+    assert _put(up.upload_url.url, body, signed) == HTTP_OK
+    assert _put(up.upload_url.url, body, signed) == HTTP_PRECONDITION_FAILED
+
+
+def test_the_fake_honours_if_match(fake: FakePaladin) -> None:
+    p = fake.connect()
+    obj = fake.put(fake.collection(), "k", "text/plain", b"x")
+    resp = p.data.object.download_object(
+        object_service_pb2.DownloadObjectRequest(name=obj.name, require_etag_match=True)
+    )
+    etag = resp.download_url.required_headers["If-Match"]
+    assert etag
+
+    def get(if_match: str) -> int:
+        request = urllib.request.Request(resp.download_url.url, headers={"If-Match": if_match})
+        try:
+            with urllib.request.urlopen(request) as response:  # the fake's own loopback URL
+                response.read()
+                return int(response.status)
+        except urllib.error.HTTPError as err:
+            return int(err.code)
+
+    assert get(etag) == HTTP_OK
+    assert get('"stale"') == HTTP_PRECONDITION_FAILED

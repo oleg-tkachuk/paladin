@@ -25,7 +25,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_presign_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiVwYWxhZGluL2RhdGEvdjEvcHJlc2lnbl9zZXJ2aWNlLnByb3RvEg9wYWxhZGluLmRhdGEudjEiWwoaUmVnZW5lcmF0ZVVwbG9hZFVybFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARImCgN0dGwYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24ijgEKG1JlZ2VuZXJhdGVVcGxvYWRVcmxSZXNwb25zZRIzCgp1cGxvYWRfdXJsGAEgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUHJlc2lnbmVkVXJsEjoKD2NvbXBsZXRpb25fbW9kZRgCIAEoDjIhLnBhbGFkaW4uY29tbW9uLnYxLkNvbXBsZXRpb25Nb2RlInQKFlByZXNpZ25Eb3dubG9hZFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARImCgN0dGwYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SGwoTY29udGVudF9kaXNwb3NpdGlvbhgDIAEoCSJQChdQcmVzaWduRG93bmxvYWRSZXNwb25zZRI1Cgxkb3dubG9hZF91cmwYASABKAsyHy5wYWxhZGluLmNvbW1vbi52MS5QcmVzaWduZWRVcmwy7QEKDlByZXNpZ25TZXJ2aWNlEnUKE1JlZ2VuZXJhdGVVcGxvYWRVcmwSKy5wYWxhZGluLmRhdGEudjEuUmVnZW5lcmF0ZVVwbG9hZFVybFJlcXVlc3QaLC5wYWxhZGluLmRhdGEudjEuUmVnZW5lcmF0ZVVwbG9hZFVybFJlc3BvbnNlIgOQAgISZAoPUHJlc2lnbkRvd25sb2FkEicucGFsYWRpbi5kYXRhLnYxLlByZXNpZ25Eb3dubG9hZFJlcXVlc3QaKC5wYWxhZGluLmRhdGEudjEuUHJlc2lnbkRvd25sb2FkUmVzcG9uc2VCSlpIZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vZGF0YS92MTtwYWxhZGluZGF0YXYxYgZwcm90bzM",
+    "CiVwYWxhZGluL2RhdGEvdjEvcHJlc2lnbl9zZXJ2aWNlLnByb3RvEg9wYWxhZGluLmRhdGEudjEiWwoaUmVnZW5lcmF0ZVVwbG9hZFVybFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARImCgN0dGwYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24ijgEKG1JlZ2VuZXJhdGVVcGxvYWRVcmxSZXNwb25zZRIzCgp1cGxvYWRfdXJsGAEgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUHJlc2lnbmVkVXJsEjoKD2NvbXBsZXRpb25fbW9kZRgCIAEoDjIhLnBhbGFkaW4uY29tbW9uLnYxLkNvbXBsZXRpb25Nb2RlIpABChZQcmVzaWduRG93bmxvYWRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESJgoDdHRsGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhsKE2NvbnRlbnRfZGlzcG9zaXRpb24YAyABKAkSGgoScmVxdWlyZV9ldGFnX21hdGNoGAQgASgIIlAKF1ByZXNpZ25Eb3dubG9hZFJlc3BvbnNlEjUKDGRvd25sb2FkX3VybBgBIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlByZXNpZ25lZFVybDLtAQoOUHJlc2lnblNlcnZpY2USdQoTUmVnZW5lcmF0ZVVwbG9hZFVybBIrLnBhbGFkaW4uZGF0YS52MS5SZWdlbmVyYXRlVXBsb2FkVXJsUmVxdWVzdBosLnBhbGFkaW4uZGF0YS52MS5SZWdlbmVyYXRlVXBsb2FkVXJsUmVzcG9uc2UiA5ACAhJkCg9QcmVzaWduRG93bmxvYWQSJy5wYWxhZGluLmRhdGEudjEuUHJlc2lnbkRvd25sb2FkUmVxdWVzdBooLnBhbGFkaW4uZGF0YS52MS5QcmVzaWduRG93bmxvYWRSZXNwb25zZUJKWkhnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9kYXRhL3YxO3BhbGFkaW5kYXRhdjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_duration,
@@ -100,6 +100,13 @@ export type PresignDownloadRequest =
      * @generated from field: string content_disposition = 3;
      */
     contentDisposition: string;
+
+    /**
+     * As DownloadObjectRequest.require_etag_match.
+     *
+     * @generated from field: bool require_etag_match = 4;
+     */
+    requireEtagMatch: boolean;
   };
 
 /**
@@ -138,7 +145,8 @@ export const PresignDownloadResponseSchema: GenMessage<PresignDownloadResponse> 
 export const PresignService: GenService<{
   /**
    * RegenerateUploadUrl issues a fresh PUT URL for an object still PENDING —
-   * for when the first URL expired before the client finished.
+   * for when the first URL expired before the client finished. It is signed
+   * for the size, Content-Type and checksum the object was registered with.
    *
    * @generated from rpc paladin.data.v1.PresignService.RegenerateUploadUrl
    */

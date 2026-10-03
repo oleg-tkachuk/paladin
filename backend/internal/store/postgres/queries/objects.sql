@@ -34,7 +34,8 @@ WHERE objects.tenant_id = $1 AND objects.id = ANY($2::uuid[]);
 -- Reads an object by id alone. Used by background workers (reconciler,
 -- replicator) that don't carry a tenant context. Joins collections to
 -- materialize the bucket binding so the caller can call S3 in one trip.
-SELECT o.id, o.tenant_id, o.path, o.state,
+-- checksum_algorithm tells a HEAD which stored checksum is the object's.
+SELECT o.id, o.tenant_id, o.path, o.state, o.checksum_algorithm,
        c.name  AS collection_name,
        sb.name AS backend_name,
        bk.name AS bucket_name

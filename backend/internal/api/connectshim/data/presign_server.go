@@ -39,7 +39,7 @@ func (s *PresignServer) PresignDownload(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, badName(err)
 	}
-	url, headers, expires, err := s.H.PresignGet(ctx, collection, objectID, m.GetTtl().AsDuration(), m.GetContentDisposition())
+	url, headers, expires, err := s.H.PresignGet(ctx, collection, objectID, m.GetTtl().AsDuration(), m.GetContentDisposition(), m.GetRequireEtagMatch())
 	if err != nil {
 		return nil, err
 	}

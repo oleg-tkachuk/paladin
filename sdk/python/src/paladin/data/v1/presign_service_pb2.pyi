@@ -27,14 +27,16 @@ class RegenerateUploadUrlResponse(_message.Message):
     def __init__(self, upload_url: _Optional[_Union[_resource_pb2.PresignedUrl, _Mapping]] = ..., completion_mode: _Optional[_Union[_resource_pb2.CompletionMode, str]] = ...) -> None: ...
 
 class PresignDownloadRequest(_message.Message):
-    __slots__ = ("name", "ttl", "content_disposition")
+    __slots__ = ("name", "ttl", "content_disposition", "require_etag_match")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TTL_FIELD_NUMBER: _ClassVar[int]
     CONTENT_DISPOSITION_FIELD_NUMBER: _ClassVar[int]
+    REQUIRE_ETAG_MATCH_FIELD_NUMBER: _ClassVar[int]
     name: str
     ttl: _duration_pb2.Duration
     content_disposition: str
-    def __init__(self, name: _Optional[str] = ..., ttl: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., content_disposition: _Optional[str] = ...) -> None: ...
+    require_etag_match: bool
+    def __init__(self, name: _Optional[str] = ..., ttl: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., content_disposition: _Optional[str] = ..., require_etag_match: _Optional[bool] = ...) -> None: ...
 
 class PresignDownloadResponse(_message.Message):
     __slots__ = ("download_url",)

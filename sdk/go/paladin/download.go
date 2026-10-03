@@ -163,7 +163,10 @@ func Download(ctx context.Context, data *DataPlane, name string, opts DownloadOp
 	if opts.Offset < 0 || opts.Length < 0 {
 		return nil, ErrInvalidRange
 	}
-	resp, err := data.Object.DownloadObject(ctx, connect.NewRequest(&datav1.DownloadObjectRequest{Name: name}))
+	// Bound to the object's ETag: the URL serves only the bytes this
+	// response describes, so a range read — which the checksum cannot
+	// verify — never splices in a different object written at the key.
+	resp, err := data.Object.DownloadObject(ctx, connect.NewRequest(&datav1.DownloadObjectRequest{Name: name, RequireEtagMatch: true}))
 	if err != nil {
 		return nil, err
 	}

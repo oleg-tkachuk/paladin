@@ -19,6 +19,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -30,15 +31,37 @@ import (
 )
 
 type Storage interface {
-	InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType string) (storageUploadID string, err error)
-	CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, parts []PartETag) (etag string, sizeBytes int64, err error)
+	// InitiateMultipart opens the storage upload with the checksum algorithm
+	// its parts are bound by.
+	InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string) (storageUploadID string, err error)
+	// CompleteMultipart assembles the parts; each carries the checksum it was
+	// presigned with, which the store checks against the part it recorded.
+	CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key, checksumAlgo string, parts []PartETag) (etag string, sizeBytes int64, err error)
 	AbortMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string) error
 	// ListMultipartParts asks the backend which parts have actually landed.
 	// It has to be the backend: clients PUT parts straight to the object
 	// store through presigned URLs, so no part upload passes through Paladin
 	// and no table here can know what arrived.
 	ListMultipartParts(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, maxParts, afterPartNumber int32) ([]Part, int32, error)
-	PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
+	PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, part PartBinding, ttl time.Duration) (url string, headers map[string]string, expiresAt time.Time, err error)
+	// DeleteObject removes an assembled object whose bytes broke its
+	// registration (see discardMismatched).
+	DeleteObject(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) error
+}
+
+// StateMachine is the slice of *statemachine.Transitioner the handler uses.
+type StateMachine interface {
+	PromoteToAvailable(ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source) (bool, error)
+	MarkFailed(ctx context.Context, objectID uuid.UUID, reason string) error
+}
+
+// PartBinding is what one part URL is signed for: the part's number, its
+// exact length and its checksum.
+type PartBinding struct {
+	Number        int32
+	SizeBytes     int64
+	ChecksumAlgo  string
+	ChecksumValue string
 }
 
 // Part is one part the storage backend reports as uploaded.
@@ -51,8 +74,9 @@ type Part struct {
 }
 
 type PartETag struct {
-	PartNumber int32
-	ETag       string
+	PartNumber    int32
+	ETag          string
+	ChecksumValue string
 }
 
 // SessionRef is the object a caller claims an upload session belongs to,
@@ -98,7 +122,21 @@ type Session struct {
 	StorageUploadID string
 	PartSizeBytes   int64
 	TotalParts      int32
-	CreatedAt       time.Time
+	// SizeBytes is the object's registered size; with PartSizeBytes it fixes
+	// every part's exact length. ChecksumAlgo is the algorithm every part is
+	// checksummed with.
+	SizeBytes    int64
+	ChecksumAlgo string
+	CreatedAt    time.Time
+}
+
+// PartLength is part n's exact length: the planned part size, except the
+// last part, which carries the remainder.
+func (s Session) PartLength(n int32) int64 {
+	if n < s.TotalParts {
+		return s.PartSizeBytes
+	}
+	return s.SizeBytes - int64(s.TotalParts-1)*s.PartSizeBytes
 }
 
 type InitiateArgs struct {
@@ -179,7 +217,7 @@ type Handler struct {
 	repo     Repository
 	storage  Storage
 	policy   cedar.Authorizer
-	sm       *statemachine.Transitioner
+	sm       StateMachine
 	ttl      presignttl.Policy
 	limits   uploadpolicy.Limits
 	versions VersionRecorder // optional
@@ -190,7 +228,7 @@ type Handler struct {
 // CompleteMultipartUpload after a successful promotion. nil = no-op.
 func (h *Handler) SetQuotaUpdater(q QuotaUpdater) { h.quota = q }
 
-func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, sm *statemachine.Transitioner, ttl presignttl.Policy, limits uploadpolicy.Limits) *Handler {
+func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, sm StateMachine, ttl presignttl.Policy, limits uploadpolicy.Limits) *Handler {
 	return &Handler{repo: repo, storage: storage, policy: policy, sm: sm, ttl: ttl, limits: limits}
 }
 
@@ -243,7 +281,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		return nil, err
 	}
 
-	storageUploadID, err := h.storage.InitiateMultipart(ctx, backendID, bucket, tenantID, args.Collection, args.Key, args.ContentType)
+	storageUploadID, err := h.storage.InitiateMultipart(ctx, backendID, bucket, tenantID, args.Collection, args.Key, args.ContentType, args.ChecksumAlgo)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage initiate: %w", err))
 	}
@@ -286,12 +324,18 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 			return objecth.MapResolveErr(err)
 		}
 	}
-	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, args.Parts)
+	if err := sess.checkParts(args.Parts); err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, sess.ChecksumAlgo, args.Parts)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
 	}
 	// No sequencer from multipart completion — events will supply one later.
 	changed, err := h.sm.PromoteToAvailable(ctx, sess.ObjectID, etag, size, "", "", statemachine.SourceRPC)
+	if errors.Is(err, statemachine.ErrContentMismatch) {
+		return h.discardMismatched(ctx, sess, backendID, bucket, args.UploadID, err)
+	}
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
@@ -382,7 +426,9 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, wan
 // in-flight multipart session. Authorization is checked against the underlying
 // object's (collection, key); the storage URL targets the bucket bound to that
 // Collection.
-func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration, want SessionRef) (url string, hdrs map[string]string, exp time.Time, err error) {
+// PresignPart signs one part's URL, bound to the part's exact length and to
+// checksumValue under the upload's algorithm.
+func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration, checksumValue string, want SessionRef) (url string, hdrs map[string]string, exp time.Time, err error) {
 	// Counted like every other presign: Paladin never proxies bytes, so the
 	// URL is the transfer as far as the control plane is concerned.
 	start := time.Now()
@@ -407,6 +453,16 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if partNumber <= 0 || (sess.TotalParts > 0 && partNumber > sess.TotalParts) {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("part_number %d out of range (1..%d)", partNumber, sess.TotalParts))
+	}
+	// A part URL is bound to the part's length, which needs the object's
+	// registered size, and to a checksum, which needs the session's
+	// algorithm. A session without them predates the binding.
+	if sess.SizeBytes <= 0 || sess.TotalParts <= 0 || !checksum.Known(sess.ChecksumAlgo) {
+		return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
+			errors.New("upload was initiated without a size and checksum algorithm; start a new upload"))
+	}
+	if err := checksum.Validate(sess.ChecksumAlgo, checksumValue); err != nil {
+		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("checksum_value: %w", err))
 	}
 	objectURI := "object://" + tenantID.String() + "/" + sess.Collection + "/" + sess.Key
 	// Presigned part URL grants Put on the underlying object; gate on
@@ -437,7 +493,52 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if bucket == "" {
 		backendID, bucket = meta.BackendID, meta.BucketName
 	}
-	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, partNumber, ttl)
+	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, PartBinding{
+		Number:        partNumber,
+		SizeBytes:     sess.PartLength(partNumber),
+		ChecksumAlgo:  sess.ChecksumAlgo,
+		ChecksumValue: checksumValue,
+	}, ttl)
+}
+
+// checkParts refuses a completion list that is not the upload's parts
+// 1..TotalParts, each once and each with a checksum under the session's
+// algorithm. A subset would assemble an object shorter than the one admitted;
+// the store would accept it, and only the size check at promotion would
+// notice.
+func (s Session) checkParts(parts []PartETag) error {
+	if int32(len(parts)) != s.TotalParts {
+		return fmt.Errorf("%d parts listed, the upload has %d", len(parts), s.TotalParts)
+	}
+	seen := make(map[int32]bool, len(parts))
+	for _, p := range parts {
+		if p.PartNumber < 1 || p.PartNumber > s.TotalParts || seen[p.PartNumber] {
+			return fmt.Errorf("part %d is out of range or listed twice", p.PartNumber)
+		}
+		seen[p.PartNumber] = true
+		if err := checksum.Validate(s.ChecksumAlgo, p.ChecksumValue); err != nil {
+			return fmt.Errorf("part %d checksum: %w", p.PartNumber, err)
+		}
+	}
+	return nil
+}
+
+// discardMismatched settles an assembled object whose size is not the one it
+// was registered with: its bytes are deleted, then the row is failed. In that
+// order, so a failure between the two leaves a PENDING row the reconciler
+// will HEAD and fail, never a FAILED row over bytes nothing will remove.
+func (h *Handler) discardMismatched(ctx context.Context, sess Session, backendID, bucket, uploadID string, cause error) error {
+	if err := h.storage.DeleteObject(ctx, backendID, bucket, sess.TenantID, sess.Collection, sess.Key); err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("%w; deleting the stored bytes failed: %w", cause, err))
+	}
+	if err := h.sm.MarkFailed(ctx, sess.ObjectID, statemachine.FailedContentMismatch); err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("%w; failing the object failed: %w", cause, err))
+	}
+	if err := h.repo.DeleteSession(ctx, uploadID); err != nil {
+		logger.FromContext(ctx).Warn("multipart session not deleted after a refused complete",
+			zap.String("upload_id", uploadID), zap.Error(err))
+	}
+	return connect.NewError(connect.CodeFailedPrecondition, cause)
 }
 
 // ListParts reports which parts of an in-flight upload have actually landed

@@ -47,7 +47,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -520,6 +522,7 @@ func uploadFixtureObject(ctx context.Context, dc *mcp.Clients, parent, key strin
 		ContentType:       "text/plain",
 		SizeHintBytes:     int64(len(payload)),
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
+		ChecksumValue:     sha256Base64(payload),
 	}))
 	if err != nil {
 		return fmt.Errorf("UploadObject: %w", err)
@@ -747,9 +750,10 @@ func runSmokeUpload(cmd *cobra.Command) error {
 		Key:           storageKey,
 		ContentType:   "text/plain",
 		SizeHintBytes: int64(len(payload)),
-		// SHA256 is the data-plane default; explicit so the PUT side
-		// knows which checksum header (if any) the server expects.
+		// The URL is signed for this checksum: the store refuses any other
+		// body.
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
+		ChecksumValue:     sha256Base64(payload),
 	}))
 	if err != nil {
 		return fmt.Errorf("UploadObject: %w", err)
@@ -760,8 +764,8 @@ func runSmokeUpload(cmd *cobra.Command) error {
 		obj.GetObjectId(), obj.GetState(), obj.GetKey())
 	fmt.Printf("Presigned PUT: %s\n", url.GetUrl())
 
-	// Honour any RequiredHeaders the signer specified — typically
-	// Content-Type and the checksum algo header. Missing them flips
+	// Honour every RequiredHeader the signer specified — Content-Type,
+	// Content-Length, the checksum and If-None-Match. A missing one flips
 	// SF's S3 gateway to "SignatureDoesNotMatch" with a confusing
 	// message; copy verbatim.
 	req, err := http.NewRequestWithContext(ctx, url.GetMethod(), url.GetUrl(), bytes.NewReader(payload))
@@ -789,4 +793,10 @@ func runSmokeUpload(cmd *cobra.Command) error {
 	fmt.Printf("  SELECT state FROM objects WHERE object_id = '%s';\n",
 		obj.GetObjectId())
 	return nil
+}
+
+// sha256Base64 is payload's SHA-256 as an upload's checksum_value.
+func sha256Base64(payload []byte) string {
+	sum := sha256.Sum256(payload)
+	return base64.StdEncoding.EncodeToString(sum[:])
 }

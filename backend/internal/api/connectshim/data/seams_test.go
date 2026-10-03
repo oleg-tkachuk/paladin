@@ -52,7 +52,7 @@ type failingMultipart struct{}
 func (failingMultipart) InitiateMultipartUpload(context.Context, multiparth.InitiateArgs) (*multiparth.Session, error) {
 	return nil, errBoom
 }
-func (failingMultipart) PresignPart(context.Context, string, int32, time.Duration, multiparth.SessionRef) (string, map[string]string, time.Time, error) {
+func (failingMultipart) PresignPart(context.Context, string, int32, time.Duration, string, multiparth.SessionRef) (string, map[string]string, time.Time, error) {
 	return "", nil, time.Time{}, errBoom
 }
 func (failingMultipart) ListParts(context.Context, string, int32, string, multiparth.SessionRef) ([]multiparth.Part, string, error) {
@@ -79,7 +79,7 @@ func (failingTags) ListDistinctTags(context.Context, string, string, int32) (obj
 
 type failingPresign struct{}
 
-func (failingPresign) PresignGet(context.Context, string, string, time.Duration, string) (string, map[string]string, time.Time, error) {
+func (failingPresign) PresignGet(context.Context, string, string, time.Duration, string, bool) (string, map[string]string, time.Time, error) {
 	return "", nil, time.Time{}, errBoom
 }
 func (failingPresign) RegenerateUploadURL(context.Context, string, string, time.Duration) (presignh.UploadURL, error) {

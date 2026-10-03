@@ -91,7 +91,7 @@ type headStorage struct {
 	err  error
 }
 
-func (s headStorage) Head(context.Context, string, string, uuid.UUID, string, string) (string, int64, string, string, error) {
+func (s headStorage) Head(context.Context, string, string, uuid.UUID, string, string, string) (string, int64, string, string, error) {
 	if s.err != nil {
 		return "", 0, "", "", s.err
 	}
