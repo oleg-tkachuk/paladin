@@ -42,6 +42,19 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## capability/v0.10.0 — the DPoP replay cache is shared across replicas
+
+- **Go: `ReplayCache.Seen` and `DPoPVerifier.Check` take a
+  `context.Context` first.** Pass the request's context to `Check`; a
+  `ReplayCache` of your own adds the parameter to `Seen` and should honour it.
+  `MemoryReplayCache` ignores it.
+- **A `ReplayCache` that cannot answer should report the id as seen.** The
+  proof is then refused rather than accepted unrecorded.
+- **Paladin keeps proof ids in Postgres** (`dpop_seen_jti`, migration 037)
+  instead of per process, so a proof replayed against another replica is
+  refused. Every request with a key-bound capability costs one write; the
+  capability purger deletes expired ids on its existing interval.
+
 ## Unreleased — capabilities need the op for operations and storage bootstrap
 
 - **`OperationService` asserts a capability op.** `GetOperation` needs `get`,
