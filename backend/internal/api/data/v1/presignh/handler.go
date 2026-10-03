@@ -33,9 +33,12 @@ type Config struct {
 	Limits uploadpolicy.Limits
 }
 
+// Storage is the presigning half of objecth.Storage: the same arguments
+// UploadObject and DownloadObject sign with, so a URL from either RPC is
+// bound the same way.
 type Storage interface {
-	PresignGet(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string, ttl time.Duration, disposition string) (url string, headers map[string]string, expiresAt time.Time, err error)
-	PresignPut(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (url string, headers map[string]string, expiresAt time.Time, err error)
+	PresignGet(ctx context.Context, args objecth.PresignGetArgs) (url string, headers map[string]string, expiresAt time.Time, err error)
+	PresignPut(ctx context.Context, args objecth.PresignPutArgs) (url string, headers map[string]string, expiresAt time.Time, err error)
 }
 
 // ObjectRef is the slice of an object row a presign needs.
@@ -44,6 +47,12 @@ type ObjectRef struct {
 	Key         string
 	State       string
 	ContentType string
+	// SizeBytes is the size the object was registered with; nil when the row
+	// records none.
+	SizeBytes     *int64
+	ChecksumAlgo  string
+	ChecksumValue string // the checksum the object was registered with
+	ETag          string
 }
 
 // ErrNotPending is returned by ExtendPendingPresign when the object left
@@ -75,7 +84,9 @@ func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, cfg C
 	return &Handler{repo: repo, storage: storage, policy: policy, cfg: cfg}
 }
 
-func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string, ttl time.Duration, disposition string) (url string, hdrs map[string]string, exp time.Time, err error) {
+// PresignGet issues a download URL. requireETagMatch binds it to the
+// object's current ETag (signed If-Match), so it serves only these bytes.
+func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string, ttl time.Duration, disposition string, requireETagMatch bool) (url string, hdrs map[string]string, exp time.Time, err error) {
 	// Instrumented with a defer rather than a wrapper: the connectshim
 	// coverage gate reads the body of the method the shim calls, and
 	// delegating to an unexported twin hid this method's authorize call from
@@ -145,7 +156,18 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return h.storage.PresignGet(ctx, backendID, bucket, tenantID, collection, key, ttl, disposition)
+	args := objecth.PresignGetArgs{
+		BackendID: backendID, TenantID: tenantID, Bucket: bucket, Collection: collection, Key: key,
+		TTL: ttl, ContentDisposition: disposition,
+	}
+	if requireETagMatch {
+		if obj.ETag == "" {
+			return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
+				errors.New("the object has no recorded ETag to bind the URL to"))
+		}
+		args.IfMatch = obj.ETag
+	}
+	return h.storage.PresignGet(ctx, args)
 }
 
 // UploadURL is a regenerated PUT URL and how the upload completes.
@@ -157,8 +179,9 @@ type UploadURL struct {
 }
 
 // RegenerateUploadURL issues a fresh PUT URL for an object still PENDING. The
-// URL is signed with the object's stored Content-Type — the one the first URL
-// bound — and the row's reaper deadline moves to the new URL's expiry.
+// URL is signed for the size, Content-Type and checksum the object was
+// registered with — what the first URL bound — and the row's reaper deadline
+// moves to the new URL's expiry.
 func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDStr string, ttl time.Duration) (out UploadURL, err error) {
 	// Instrumented with a defer rather than a wrapper: the connectshim
 	// coverage gate reads the body of the method the shim calls, and
@@ -197,6 +220,13 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 		return UploadURL{}, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("object state %s does not allow PUT", obj.State))
 	}
+	// The new URL is bound to the size and checksum the object was
+	// registered with. A row without them predates that binding; it cannot
+	// get a bound URL, and an unbound one is what the binding exists to stop.
+	if obj.SizeBytes == nil || obj.ChecksumValue == "" {
+		return UploadURL{}, connect.NewError(connect.CodeFailedPrecondition,
+			errors.New("object was registered without a size and checksum; start a new upload"))
+	}
 	objectURI := "object://" + tenantID.String() + "/" + collection + "/" + key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
 		return UploadURL{}, err
@@ -221,7 +251,12 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return UploadURL{}, err
 	}
-	url, headers, expires, err := h.storage.PresignPut(ctx, meta.BackendID, meta.BucketName, tenantID, collection, key, obj.ContentType, "", ttl, 0)
+	url, headers, expires, err := h.storage.PresignPut(ctx, objecth.PresignPutArgs{
+		BackendID: meta.BackendID, TenantID: tenantID, Bucket: meta.BucketName,
+		Collection: collection, Key: key, ContentType: obj.ContentType,
+		SizeBytes: *obj.SizeBytes, ChecksumAlgo: obj.ChecksumAlgo, ChecksumValue: obj.ChecksumValue,
+		TTL: ttl,
+	})
 	if err != nil {
 		return UploadURL{}, connect.NewError(connect.CodeInternal, fmt.Errorf("presign PUT: %w", err))
 	}

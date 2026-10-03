@@ -55,7 +55,7 @@ type fakeRepo struct {
 
 func (f *fakeRepo) LookupObject(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (ObjectRef, error) {
 	if f.lookupObjectFn == nil {
-		return ObjectRef{Collection: collection, Key: "phys-key", State: "AVAILABLE", ContentType: "image/png"}, nil
+		return ObjectRef{Collection: collection, Key: "phys-key", State: "AVAILABLE", ContentType: "image/png", ETag: "etag-7"}, nil
 	}
 	return f.lookupObjectFn(ctx, tenantID, collection, objectID)
 }
@@ -74,10 +74,21 @@ func (f *fakeRepo) ExtendPendingPresign(_ context.Context, tenantID, objectID uu
 	return f.extendErr
 }
 
-// pendingRepo serves a PENDING object with a stored Content-Type.
+// registeredSize and registeredChecksum are what the pending object was
+// registered with.
+const (
+	registeredSize     int64 = 4096
+	registeredChecksum       = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
+)
+
+// pendingRepo serves a PENDING object with its registration.
 func pendingRepo() *fakeRepo {
 	return &fakeRepo{lookupObjectFn: func(_ context.Context, _ uuid.UUID, ok string, _ uuid.UUID) (ObjectRef, error) {
-		return ObjectRef{Collection: ok, Key: "phys", State: "PENDING", ContentType: "image/png"}, nil
+		size := registeredSize
+		return ObjectRef{
+			Collection: ok, Key: "phys", State: "PENDING", ContentType: "image/png",
+			SizeBytes: &size, ChecksumAlgo: "SHA256", ChecksumValue: registeredChecksum,
+		}, nil
 	}}
 }
 
@@ -94,25 +105,29 @@ type fakeStorage struct {
 	gotContentType string
 	gotBackendID   string
 	gotBucket      string
+	gotIfMatch     string
+	gotPut         objecth.PresignPutArgs
 }
 
 // putExpiry is what the fake presigner reports as the PUT URL's expiry; the
 // reaper deadline must be moved to exactly this instant.
 var putExpiry = time.Unix(200, 0)
 
-func (f *fakeStorage) PresignGet(_ context.Context, backendID, bucket string, _ uuid.UUID, _, _ string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
+func (f *fakeStorage) PresignGet(_ context.Context, a objecth.PresignGetArgs) (string, map[string]string, time.Time, error) {
 	f.getCalled = true
-	f.gotTTL, f.gotDisposition, f.gotBackendID, f.gotBucket = ttl, disposition, backendID, bucket
+	f.gotTTL, f.gotDisposition, f.gotBackendID, f.gotBucket = a.TTL, a.ContentDisposition, a.BackendID, a.Bucket
+	f.gotIfMatch = a.IfMatch
 	if f.err != nil {
 		return "", nil, time.Time{}, f.err
 	}
 	return "https://s3/get", map[string]string{"h": "get"}, time.Unix(100, 0), nil
 }
 
-func (f *fakeStorage) PresignPut(_ context.Context, backendID, bucket string, _ uuid.UUID, _, _, contentType, _ string, ttl time.Duration, _ int64) (string, map[string]string, time.Time, error) {
+func (f *fakeStorage) PresignPut(_ context.Context, a objecth.PresignPutArgs) (string, map[string]string, time.Time, error) {
 	f.putCalled = true
-	f.gotTTL, f.gotContentType = ttl, contentType
-	f.gotBackendID, f.gotBucket = backendID, bucket
+	f.gotTTL, f.gotContentType = a.TTL, a.ContentType
+	f.gotBackendID, f.gotBucket = a.BackendID, a.Bucket
+	f.gotPut = a
 	if f.err != nil {
 		return "", nil, time.Time{}, f.err
 	}
@@ -175,25 +190,25 @@ func TestPresignGet(t *testing.T) {
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
-		_, _, _, err := h.PresignGet(context.Background(), "obj", validObjectID, 0, "")
+		_, _, _, err := h.PresignGet(context.Background(), "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
 	t.Run("missing collection → invalid argument", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "", validObjectID, 0, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("missing object_id → invalid argument", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", "", 0, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", "", 0, "", false)
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("unparseable object_id → invalid argument", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", "not-a-uuid", 0, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", "not-a-uuid", 0, "", false)
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
@@ -202,39 +217,39 @@ func TestPresignGet(t *testing.T) {
 			return ObjectRef{}, errors.New("no such object")
 		}}
 		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodeNotFound)
 	})
 
 	t.Run("non-AVAILABLE state → failed precondition", func(t *testing.T) {
 		h := NewHandler(pendingRepo(), &fakeStorage{}, allowPolicy(), cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodeFailedPrecondition)
 	})
 
 	t.Run("capability lacks presign op → permission denied", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
 		ctx := authedCtxWithCap(tid, capability.OpGet) // has OpGet, missing OpPresign
-		_, _, _, err := h.PresignGet(ctx, "obj", validObjectID, 0, "")
+		_, _, _, err := h.PresignGet(ctx, "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("capability has presign but lacks get op → permission denied", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
 		ctx := authedCtxWithCap(tid, capability.OpPresign) // missing OpGet
-		_, _, _, err := h.PresignGet(ctx, "obj", validObjectID, 0, "")
+		_, _, _, err := h.PresignGet(ctx, "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, &fakePolicy{decision: cedar.DecisionDeny}, cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("policy error → internal", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, &fakePolicy{err: errors.New("engine down")}, cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodeInternal)
 	})
 
@@ -243,7 +258,7 @@ func TestPresignGet(t *testing.T) {
 			return objecth.BucketMeta{}, errors.New("route missing")
 		}}
 		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodeNotFound)
 	})
 
@@ -252,7 +267,7 @@ func TestPresignGet(t *testing.T) {
 			return objecth.BucketMeta{}, objecth.ErrBackendDisabled
 		}}
 		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodeFailedPrecondition)
 	})
 
@@ -262,7 +277,7 @@ func TestPresignGet(t *testing.T) {
 	t.Run("ttl above max_ttl → invalid argument, nothing signed", func(t *testing.T) {
 		st := &fakeStorage{}
 		h := NewHandler(&fakeRepo{}, st, allowPolicy(), cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, testMaxTTL+time.Second, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, testMaxTTL+time.Second, "", false)
 		wantCode(t, err, connect.CodeInvalidArgument)
 		if st.getCalled {
 			t.Fatal("a URL was signed for a refused TTL")
@@ -271,14 +286,14 @@ func TestPresignGet(t *testing.T) {
 
 	t.Run("negative ttl → invalid argument", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, -time.Second, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, -time.Second, "", false)
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("absent ttl → get_ttl", func(t *testing.T) {
 		st := &fakeStorage{}
 		h := NewHandler(&fakeRepo{}, st, allowPolicy(), cfg)
-		if _, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, ""); err != nil {
+		if _, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", false); err != nil {
 			t.Fatal(err)
 		}
 		if st.gotTTL != testGetTTL {
@@ -289,7 +304,7 @@ func TestPresignGet(t *testing.T) {
 	t.Run("an invalid content_disposition is refused before signing", func(t *testing.T) {
 		st := &fakeStorage{}
 		h := NewHandler(&fakeRepo{}, st, allowPolicy(), cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "form-data; name=x")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "form-data; name=x", false)
 		wantCode(t, err, connect.CodeInvalidArgument)
 		if st.getCalled {
 			t.Fatal("a URL was signed for a refused disposition")
@@ -299,7 +314,7 @@ func TestPresignGet(t *testing.T) {
 	t.Run("content_disposition is signed in canonical form", func(t *testing.T) {
 		st := &fakeStorage{}
 		h := NewHandler(&fakeRepo{}, st, allowPolicy(), cfg)
-		if _, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "Inline"); err != nil {
+		if _, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "Inline", false); err != nil {
 			t.Fatal(err)
 		}
 		if st.gotDisposition != "inline" {
@@ -310,7 +325,7 @@ func TestPresignGet(t *testing.T) {
 	t.Run("an unconfigured policy refuses rather than signs unbounded", func(t *testing.T) {
 		st := &fakeStorage{}
 		h := NewHandler(&fakeRepo{}, st, allowPolicy(), Config{})
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodeInternal)
 		if st.getCalled {
 			t.Fatal("signed with no TTL policy")
@@ -322,7 +337,7 @@ func TestPresignGet(t *testing.T) {
 		st := &fakeStorage{}
 		pol := allowPolicy()
 		h := NewHandler(repo, st, pol, cfg)
-		url, headers, exp, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, time.Hour, "inline")
+		url, headers, exp, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, time.Hour, "inline", false)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -544,7 +559,7 @@ func TestBucketTTLCeilings(t *testing.T) {
 	t.Run("download: default shrinks to the ceiling", func(t *testing.T) {
 		st := &fakeStorage{}
 		h := NewHandler(ceilingRepo(&fakeRepo{}, uploadpolicy.BucketConstraints{MaxPresignGetTTL: ceiling}), st, allowPolicy(), cfg)
-		if _, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, ""); err != nil {
+		if _, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", false); err != nil {
 			t.Fatal(err)
 		}
 		if st.gotTTL != ceiling {
@@ -555,7 +570,7 @@ func TestBucketTTLCeilings(t *testing.T) {
 	t.Run("download: above the ceiling is refused", func(t *testing.T) {
 		st := &fakeStorage{}
 		h := NewHandler(ceilingRepo(&fakeRepo{}, uploadpolicy.BucketConstraints{MaxPresignGetTTL: ceiling}), st, allowPolicy(), cfg)
-		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, ceiling+time.Second, "")
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, ceiling+time.Second, "", false)
 		wantCode(t, err, connect.CodeInvalidArgument)
 		if st.getCalled {
 			t.Fatal("signed above the bucket ceiling")
@@ -581,5 +596,66 @@ func TestBucketTTLCeilings(t *testing.T) {
 		if st.putCalled {
 			t.Fatal("signed above the bucket ceiling")
 		}
+	})
+}
+
+// RegenerateUploadUrl signed a URL bound to nothing — no size, no checksum —
+// for an object registered with both. It now signs exactly what the object
+// was registered with, and refuses a row that has no registration to bind.
+func TestRegenerateSignsTheRegistration(t *testing.T) {
+	tid := uuid.New()
+	cfg := testConfig(t)
+	t.Run("size and checksum are signed", func(t *testing.T) {
+		st := &fakeStorage{}
+		h := NewHandler(pendingRepo(), st, allowPolicy(), cfg)
+		if _, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0); err != nil {
+			t.Fatal(err)
+		}
+		if st.gotPut.SizeBytes != registeredSize || st.gotPut.ChecksumValue != registeredChecksum || st.gotPut.ChecksumAlgo != "SHA256" {
+			t.Fatalf("signed %+v, want the registration", st.gotPut)
+		}
+	})
+	t.Run("a row without a registration is refused", func(t *testing.T) {
+		repo := &fakeRepo{lookupObjectFn: func(_ context.Context, _ uuid.UUID, ok string, _ uuid.UUID) (ObjectRef, error) {
+			return ObjectRef{Collection: ok, Key: "phys", State: "PENDING", ContentType: "image/png"}, nil
+		}}
+		st := &fakeStorage{}
+		_, err := NewHandler(repo, st, allowPolicy(), cfg).RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0)
+		wantCode(t, err, connect.CodeFailedPrecondition)
+		if st.putCalled {
+			t.Fatal("an unbound URL was signed")
+		}
+	})
+}
+
+// A download URL can be bound to the object's current ETag: it then serves
+// only these bytes, and stops at 412 once the key holds anything else.
+func TestPresignGetETagBinding(t *testing.T) {
+	tid := uuid.New()
+	cfg := testConfig(t)
+	t.Run("requested: If-Match is the object's ETag", func(t *testing.T) {
+		st := &fakeStorage{}
+		if _, _, _, err := NewHandler(&fakeRepo{}, st, allowPolicy(), cfg).PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", true); err != nil {
+			t.Fatal(err)
+		}
+		if st.gotIfMatch != "etag-7" {
+			t.Fatalf("If-Match = %q, want the object's ETag", st.gotIfMatch)
+		}
+	})
+	t.Run("not requested: no If-Match", func(t *testing.T) {
+		st := &fakeStorage{}
+		if _, _, _, err := NewHandler(&fakeRepo{}, st, allowPolicy(), cfg).PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", false); err != nil {
+			t.Fatal(err)
+		}
+		if st.gotIfMatch != "" {
+			t.Fatalf("If-Match = %q, want none", st.gotIfMatch)
+		}
+	})
+	t.Run("requested for an object with no ETag", func(t *testing.T) {
+		repo := &fakeRepo{lookupObjectFn: func(_ context.Context, _ uuid.UUID, ok string, _ uuid.UUID) (ObjectRef, error) {
+			return ObjectRef{Collection: ok, Key: "k", State: "AVAILABLE"}, nil
+		}}
+		_, _, _, err := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg).PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", true)
+		wantCode(t, err, connect.CodeFailedPrecondition)
 	})
 }

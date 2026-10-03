@@ -79,7 +79,7 @@ func TestPresignPartHonoursBucketTTLCeiling(t *testing.T) {
 	}
 
 	storage := &fakeStorage{}
-	if _, _, _, err := newHandler(repo, storage, allow()).PresignPart(authedCtx(tid), "up-1", 1, 0, SessionRef{}); err != nil {
+	if _, _, _, err := newHandler(repo, storage, allow()).PresignPart(authedCtx(tid), "up-1", 1, 0, testPartChecksum, SessionRef{}); err != nil {
 		t.Fatal(err)
 	}
 	if storage.lastPresign.ttl != ceiling {
@@ -87,7 +87,7 @@ func TestPresignPartHonoursBucketTTLCeiling(t *testing.T) {
 	}
 
 	storage = &fakeStorage{}
-	_, _, _, err := newHandler(repo, storage, allow()).PresignPart(authedCtx(tid), "up-1", 1, ceiling+time.Second, SessionRef{})
+	_, _, _, err := newHandler(repo, storage, allow()).PresignPart(authedCtx(tid), "up-1", 1, ceiling+time.Second, testPartChecksum, SessionRef{})
 	wantCode(t, err, connect.CodeInvalidArgument)
 	if storage.lastPresign.ttl != 0 {
 		t.Fatal("a part URL was signed above the bucket's ceiling")

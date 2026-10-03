@@ -182,8 +182,8 @@ the server's code in `capability/`'s tests.
 | `pages(call, request, items)` | Calls a List RPC page by page, following `next_page_token`, and yields every element of the repeated field `items`, e.g. `pages(p.data.object.list_objects, ListObjectsRequest(parent=c), "objects")`. Stopping early makes no further calls. `TypeError` for a message without `page`. `apages` is the async form. |
 | `wait(get, *, poll=0.5, max_poll=10.0, timeout=None)` | Calls `get` until the operation it returns is done, the pause doubling from `poll` to `max_poll` seconds. Raises `OperationFailed` (with `operation` and the Connect `code`) for one that failed, `TimeoutError` past `timeout`. `await_operation` is the async form; bound it with `asyncio.timeout`. |
 | `mask(MessageClass, *paths)` | An update mask from proto field names, nested ones with `.`, each checked against the descriptor: `ValueError` for one it lacks. |
-| `upload(p.data, *, parent, content_type, body, size, key="", metadata=None, tags=None, multipart_threshold=8 MiB, part_concurrency=3)` | Uploads `size` bytes of `body` and completes the object. `body` is bytes or a binary file, seekable or not (a pipe, a response body); it is read once, front to back, never whole. Up to the threshold one presigned PUT, which records the content's SHA-256 on the object; above it multipart, `part_concurrency` parts in flight, aborted if any part fails. Synchronous; from asyncio, run it with `asyncio.to_thread`. |
-| `download_stream(p.data, name, *, offset=0, length=0)` | The object's content as a file-like `ObjectReader` — `read`, `readinto`, `chunks()`, `content_type`, `content_length`, `object` — streamed, never held whole; use it in `with`. `offset`/`length` read a byte range (`RangeIgnoredError` when storage answers with the whole object). A whole read is verified: the read that reaches the end raises `IntegrityError` when the size or the recorded checksum (SHA-256, MD5; CRC32C with the `crc32c` extra) does not match. |
+| `upload(p.data, *, parent, content_type, body, size, key="", metadata=None, tags=None, multipart_threshold=8 MiB, part_concurrency=3, on_session=None, resume=None)` | Uploads exactly `size` bytes of `body` (0 is an empty object) and completes the object. `body` is bytes or a binary file, seekable or not (a pipe, a response body); it is read once, front to back. Every upload URL is signed for its body's size and SHA-256, so a body is hashed before it is presigned and held in memory while it is sent: the whole object up to the threshold, in one presigned PUT whose checksum is recorded on the object; above it multipart, one part per request and `part_concurrency` parts in flight, aborted if any part fails. `checksum(algorithm, data)` computes the value for a caller that presigns itself. `on_session` receives the open multipart session as an `UploadSession` (`object_name`, `upload_id`, `part_size`, `total_parts`) and leaves a failed upload open; `resume=session` continues it, sending only the parts storage does not hold. Synchronous; from asyncio, run it with `asyncio.to_thread`. |
+| `download_stream(p.data, name, *, offset=0, length=0)` | The object's content as a file-like `ObjectReader` — `read`, `readinto`, `chunks()`, `content_type`, `content_length`, `object` — streamed, never held whole; use it in `with`. `offset`/`length` read a byte range (`RangeIgnoredError` when storage answers with the whole object). A whole read is verified: the read that reaches the end raises `IntegrityError` when the size or the recorded checksum (SHA-256, MD5; CRC32C with the `crc32c` extra) does not match. A retried request goes through a URL bound to the object's ETag as it was first read: `ObjectChangedError` when the object was replaced in between. |
 | `download(p.data, name, *, offset=0, length=0)` | `download_stream` read whole, as bytes. |
 
 ### Transfers
@@ -191,7 +191,13 @@ the server's code in `capability/`'s tests.
 `upload` and `download` move bytes through presigned URLs, straight to the
 storage backend. Those requests are not Paladin calls: the client's
 credentials, retries and interceptors are not on them. They go through the
-data plane's `Transfer`, declared once:
+data plane's `Transfer`, declared once, which retries each on its own: a busy
+store, a transport failure or an expired URL sends it again, up to
+`attempts` times, through a freshly presigned URL, and a URL within
+`PRESIGN_EXPIRY_SKEW` (30 s) of its expiry is presigned again before it is
+sent. A single PUT whose retry meets an object already stored (412, the URL's
+If-None-Match) completes. `expired(err)` and `already_stored(err)` classify a
+`TransferError`:
 
 ```python
 transfer = paladin.Transfer(
@@ -204,7 +210,7 @@ p = paladin.connect(endpoints, token_source=session, transfer=transfer)
 
 | Name | Does |
 | --- | --- |
-| `Transfer(*, split_horizon=None, rewrite=None, connect_timeout=10.0, read_timeout=30.0, pool_max_idle_per_host=32, transport=None)` | With no arguments: a connection timeout and a read timeout (`DEFAULT_TRANSFER_…`), but no bound on a whole transfer; 32 connections per host kept for reuse; redirects refused. Thread-safe, and meant to be shared. |
+| `Transfer(*, split_horizon=None, rewrite=None, connect_timeout=10.0, read_timeout=30.0, pool_max_idle_per_host=32, transport=None, attempts=4)` | With no arguments: a connection timeout and a read timeout (`DEFAULT_TRANSFER_…`), but no bound on a whole transfer; 32 connections per host kept for reuse; redirects refused; `DEFAULT_TRANSFER_ATTEMPTS` attempts per presigned request (`ValueError` below 1). Thread-safe, and meant to be shared. |
 | `split_horizon=(signed_origin, internal_origin)` | A URL signed for `signed_origin` is sent to `internal_origin`, keeping `Host: <signed host>`: the signature covers the header, not the address. Other origins go as signed. `ValueError` for anything but `scheme://host[:port]`. |
 | `rewrite=fn` | The general form: any URL to any URL, the signed Host still kept. Not with `split_horizon`. |
 | `transport=` | A `pyqwest.SyncHTTPTransport` of your own — a proxy, TLS settings. Build it with `follow_redirects=False`: one that follows them cannot be stopped from here. |

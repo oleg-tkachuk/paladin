@@ -13,7 +13,7 @@ import hashlib
 import io
 import threading
 import time
-from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable, Iterator
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable, Iterator, Mapping
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -39,6 +39,10 @@ transfer: a large object streams for as long as it takes."""
 DEFAULT_TRANSFER_POOL_MAX_IDLE_PER_HOST = 32
 """Connections to one storage host kept for reuse, for many concurrent transfers."""
 
+DEFAULT_TRANSFER_ATTEMPTS = 4
+"""How many times one presigned request is sent before its last error is
+raised; every attempt after the first goes through a freshly presigned URL."""
+
 ERROR_BODY_LIMIT = 512
 """Bytes of a refused transfer's body an error quotes."""
 
@@ -55,6 +59,20 @@ _STATUS_PARTIAL_CONTENT = 206
 _INTEGRITY_SIZE = "size"
 """``IntegrityError.what`` for a length mismatch."""
 _ROOT_PATHS = ("", "/")
+
+
+def _with_required(
+    headers: dict[str, str] | None, host: str, required: Mapping[str, str]
+) -> dict[str, str]:
+    """The headers to send: the caller's, the Host the URL was signed for,
+    and every header the signature covers — which win. Header names are
+    case-insensitive, so a caller's ``content-type`` is replaced by a signed
+    ``Content-Type`` rather than sent beside it as a second header."""
+    signed = {k.lower() for k in required} | {_HEADER_HOST.lower()}
+    sent = {k: v for k, v in (headers or {}).items() if k.lower() not in signed}
+    sent[_HEADER_HOST] = host
+    sent.update(required)
+    return sent
 
 
 class TransferError(Exception):
@@ -97,6 +115,21 @@ _DIGESTS: dict[str, Callable[[], Any]] = {
     CHECKSUM_MD5: lambda: hashlib.md5(usedforsecurity=False),
     CHECKSUM_CRC32C: _crc32c,
 }
+
+
+def checksum(algorithm: str, data: bytes) -> str:
+    """``data``'s checksum under ``algorithm`` (``CHECKSUM_SHA256``,
+    ``CHECKSUM_CRC32C`` or ``CHECKSUM_MD5``) in the form the API takes: base64
+    of the digest, as S3 writes it. An upload's URL is signed for this value,
+    so it is what ``UploadObjectRequest.checksum_value`` and
+    ``PresignPartRequest.checksum_value`` carry — compute it over exactly the
+    bytes the URL will be sent. CRC32C needs the ``crc32c`` extra."""
+    new = _DIGESTS.get(algorithm)
+    digest = new() if new is not None else None
+    if digest is None:
+        raise ValueError(f"cannot compute a {algorithm!r} checksum here")
+    digest.update(data)
+    return base64.b64encode(digest.digest()).decode()
 
 
 def _origin(value: str) -> SplitResult:
@@ -154,7 +187,12 @@ class Transfer:
         tracer_provider: Any = None,
         transport: Any = None,
         async_transport: Any = None,
+        attempts: int = DEFAULT_TRANSFER_ATTEMPTS,
     ) -> None:
+        if attempts < 1:
+            raise ValueError("attempts must be at least 1")
+        self.attempts = attempts
+        """How many times each presigned request is sent."""
         if split_horizon is not None and rewrite is not None:
             raise ValueError("give split_horizon or rewrite, not both")
         if split_horizon is not None:
@@ -211,10 +249,7 @@ class Transfer:
         """
         method = signed.method or method
         url, host = self._target(signed.url)
-        sent = dict(headers or {})
-        sent[_HEADER_HOST] = host
-        # Covered by the signature: storage refuses the request without them.
-        sent.update(signed.required_headers)
+        sent = _with_required(headers, host, signed.required_headers)
         started = time.monotonic()
         target = urlsplit(url).netloc
         try:
@@ -237,9 +272,7 @@ class Transfer:
         """``stream`` for the async workflows."""
         method = signed.method or method
         url, host = self._target(signed.url)
-        sent = dict(headers or {})
-        sent[_HEADER_HOST] = host
-        sent.update(signed.required_headers)
+        sent = _with_required(headers, host, signed.required_headers)
         started = time.monotonic()
         target = urlsplit(url).netloc
         try:

@@ -60,3 +60,11 @@ func TestIsFixtureCollection(t *testing.T) {
 		t.Error("fixtureCollection output must satisfy isFixtureCollection")
 	}
 }
+
+// The fixture's uploads are signed for their checksum; it must be the
+// base64 SHA-256 the store compares the body with.
+func TestSHA256Base64(t *testing.T) {
+	if got := sha256Base64(nil); got != "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=" {
+		t.Fatalf("sha256Base64(empty) = %q", got)
+	}
+}

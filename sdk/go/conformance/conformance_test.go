@@ -166,7 +166,17 @@ var scenarios = map[string]func(*testing.T, env){
 	},
 	"idempotent_replay": func(t *testing.T, e env) {
 		ctx := paladin.WithIdempotencyKey(context.Background(), rand.Text())
-		req := &datav1.UploadObjectRequest{Parent: e.collection.String(), Key: key(t), ContentType: "text/plain", SizeHintBytes: 1}
+		// The upload is never sent: the request only has to be one the
+		// server accepts, which means a checksum to bind its URL to.
+		body := []byte("x")
+		sum, err := paladin.Checksum(paladin.ChecksumSHA256, bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := &datav1.UploadObjectRequest{
+			Parent: e.collection.String(), Key: key(t), ContentType: "text/plain",
+			SizeHintBytes: int64(len(body)), ChecksumValue: sum,
+		}
 		first, err := e.data.Object.UploadObject(ctx, connect.NewRequest(req))
 		if err != nil {
 			t.Fatal(err)

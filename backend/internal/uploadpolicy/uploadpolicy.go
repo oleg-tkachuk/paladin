@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 )
 
 // BucketConstraints is a bucket's upload constraints as BucketService stores
@@ -56,13 +58,6 @@ type Limits struct {
 // store only when somebody uses it.
 const SigV4MaxPresignExpiry = 7 * 24 * time.Hour
 
-// Checksum algorithm names a bucket may require.
-const (
-	ChecksumCRC32C = "CRC32C"
-	ChecksumSHA256 = "SHA256"
-	ChecksumMD5    = "MD5"
-)
-
 // Validate refuses constraints no upload could satisfy, or that do not mean
 // what they say: a part bound outside S3's, a minimum above the maximum, an
 // unparseable media type, an algorithm Paladin does not know, a TTL ceiling
@@ -96,10 +91,8 @@ func (c BucketConstraints) Validate() error {
 			return fmt.Errorf("%s %s must be within [0, %s]", d.key, d.v, SigV4MaxPresignExpiry)
 		}
 	}
-	switch strings.ToUpper(c.RequiredChecksumAlgorithm) {
-	case "", ChecksumCRC32C, ChecksumSHA256, ChecksumMD5:
-	default:
-		return fmt.Errorf("required_checksum_algorithm %q: want %s, %s or %s", c.RequiredChecksumAlgorithm, ChecksumCRC32C, ChecksumSHA256, ChecksumMD5)
+	if c.RequiredChecksumAlgorithm != "" && !checksum.Known(c.RequiredChecksumAlgorithm) {
+		return fmt.Errorf("required_checksum_algorithm %q: want %s, %s or %s", c.RequiredChecksumAlgorithm, checksum.CRC32C, checksum.SHA256, checksum.MD5)
 	}
 	return nil
 }

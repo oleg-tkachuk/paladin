@@ -378,17 +378,22 @@ func TestTransitionInTxWrapsBeginAndCommitErrors(t *testing.T) {
 
 // ─── pool-backed wrappers ──────────────────────────────────────────────────
 
-func TestPromoteToAvailableRunsOnThePool(t *testing.T) {
-	pool := &fakePool{fakeExec: fakeExec{row: fakeRow{state: string(StateAvailable)}}}
+// The plain wrapper opens a transaction too: the registration check locks the
+// row, and the lock must last until the promote that depends on it.
+func TestPromoteToAvailableRunsInATransaction(t *testing.T) {
+	tx := &fakeTx{fakeExec: fakeExec{row: fakeRow{state: string(StateAvailable)}}}
+	pool := &fakePool{tx: tx}
 	sm := &Transitioner{pool: pool}
 
 	changed, err := sm.PromoteToAvailable(smCtx, objID, "e", 5, "c", "seq", SourceReconciler)
 	if err != nil || !changed {
 		t.Fatalf("changed=%v err=%v, want true/nil", changed, err)
 	}
-	// Auto-commit path: no transaction is opened at all.
-	if pool.beginCalls != 0 {
-		t.Error("the non-tx wrapper must not open a transaction")
+	if pool.beginCalls != 1 || tx.commitCalls != 1 {
+		t.Errorf("begin=%d commit=%d, want one transaction committed", pool.beginCalls, tx.commitCalls)
+	}
+	if tx.lockCalls != 1 {
+		t.Errorf("the row was locked %d times, want once", tx.lockCalls)
 	}
 }
 

@@ -12,18 +12,15 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 )
 
-// Routers implement the handler-facing storage interfaces (object.Storage,
-// presign.Storage, multipart.Storage, bucketh.Provisioner)
+// Routers implement the handler-facing storage interfaces (object.Storage —
+// which presign.Storage is a subset of — multipart.Storage,
+// bucketh.Provisioner)
 // by resolving the target *Client from a BackendRegistry per call and
 // delegating. The backend id travels in the method args — either a BackendID
 // field (presign args / Location) or a leading backendID parameter — so a
 // single deployment routes on the object's own backend without the client
 // knowing about the registry. On a one-backend config every call resolves to
 // the same client, so behaviour is identical to the pre-registry wiring.
-//
-// PresignGet/PresignPut appear on more than one interface with different
-// signatures, so each interface gets its own router type (one struct cannot
-// carry two same-named methods).
 
 // Compile-time interface conformance (bucketh.Provisioner is checked at the
 // wire.Storage assignment to avoid importing the bucket package here).
@@ -58,12 +55,12 @@ func (r *ObjectRouter) PresignGet(ctx context.Context, a objecth.PresignGetArgs)
 	return c.PresignGet(ctx, a)
 }
 
-func (r *ObjectRouter) Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) (string, int64, string, string, error) {
+func (r *ObjectRouter) Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, checksumAlgo string) (string, int64, string, string, error) {
 	c, err := r.reg.For(ctx, backendID)
 	if err != nil {
 		return "", 0, "", "", err
 	}
-	return c.Head(ctx, bucket, tenantID, collection, key)
+	return c.Head(ctx, bucket, tenantID, collection, key, checksumAlgo)
 }
 
 func (r *ObjectRouter) CopyObject(ctx context.Context, src, dst objecth.Location) error {
@@ -120,46 +117,25 @@ func (r *ObjectRouter) DeleteObject(ctx context.Context, backendID, bucket strin
 	return c.DeleteObject(ctx, bucket, tenantID, collection, key)
 }
 
-// PresignRouter routes presign.Storage calls by backend id.
-type PresignRouter struct{ reg *BackendRegistry }
-
-func NewPresignRouter(reg *BackendRegistry) *PresignRouter { return &PresignRouter{reg: reg} }
-
-func (r *PresignRouter) PresignGet(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
-	c, err := r.reg.For(ctx, backendID)
-	if err != nil {
-		return "", nil, time.Time{}, err
-	}
-	return c.Presign().PresignGet(ctx, bucket, tenantID, collection, key, ttl, disposition)
-}
-
-func (r *PresignRouter) PresignPut(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
-	c, err := r.reg.For(ctx, backendID)
-	if err != nil {
-		return "", nil, time.Time{}, err
-	}
-	return c.Presign().PresignPut(ctx, bucket, tenantID, collection, key, contentType, checksumAlgo, ttl, sizeHint)
-}
-
 // MultipartRouter routes multipart.Storage calls by backend id.
 type MultipartRouter struct{ reg *BackendRegistry }
 
 func NewMultipartRouter(reg *BackendRegistry) *MultipartRouter { return &MultipartRouter{reg: reg} }
 
-func (r *MultipartRouter) InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType string) (string, error) {
+func (r *MultipartRouter) InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string) (string, error) {
 	c, err := r.reg.For(ctx, backendID)
 	if err != nil {
 		return "", err
 	}
-	return c.InitiateMultipart(ctx, bucket, tenantID, collection, key, contentType)
+	return c.InitiateMultipart(ctx, bucket, tenantID, collection, key, contentType, checksumAlgo)
 }
 
-func (r *MultipartRouter) CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, parts []multiparth.PartETag) (string, int64, error) {
+func (r *MultipartRouter) CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key, checksumAlgo string, parts []multiparth.PartETag) (string, int64, error) {
 	c, err := r.reg.For(ctx, backendID)
 	if err != nil {
 		return "", 0, err
 	}
-	return c.CompleteMultipart(ctx, bucket, tenantID, storageUploadID, collection, key, parts)
+	return c.CompleteMultipart(ctx, bucket, tenantID, storageUploadID, collection, key, checksumAlgo, parts)
 }
 
 func (r *MultipartRouter) ListMultipartParts(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, maxParts, afterPartNumber int32) ([]multiparth.Part, int32, error) {
@@ -178,12 +154,20 @@ func (r *MultipartRouter) AbortMultipart(ctx context.Context, backendID, bucket 
 	return c.AbortMultipart(ctx, bucket, tenantID, storageUploadID, collection, key)
 }
 
-func (r *MultipartRouter) PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
+func (r *MultipartRouter) DeleteObject(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) error {
+	c, err := r.reg.For(ctx, backendID)
+	if err != nil {
+		return err
+	}
+	return c.DeleteObject(ctx, bucket, tenantID, collection, key)
+}
+
+func (r *MultipartRouter) PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, part multiparth.PartBinding, ttl time.Duration) (string, map[string]string, time.Time, error) {
 	c, err := r.reg.For(ctx, backendID)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return c.PresignPart(ctx, bucket, tenantID, storageUploadID, collection, key, partNumber, ttl)
+	return c.PresignPart(ctx, bucket, tenantID, storageUploadID, collection, key, part, ttl)
 }
 
 // ProvisionerRouter routes bucketh.Provisioner calls by backend id. The backend

@@ -72,3 +72,6 @@ export const STORAGE_KEYS = {
  * browser request's value unchanged on every call it makes to a plane.
  */
 export const FORWARDED_FOR_HEADER = "X-Forwarded-For";
+
+/** How long a query's data counts as fresh unless the query says otherwise. */
+export const QUERY_STALE_MS = 30_000;
