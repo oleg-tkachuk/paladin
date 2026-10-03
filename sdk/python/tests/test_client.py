@@ -9,6 +9,7 @@ import pytest
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
 
+import paladin.client
 from paladin import (
     HEADER_API_TOKEN,
     HEADER_AUTHORIZATION,
@@ -205,7 +206,10 @@ def test_retry_honours_retry_after(server) -> None:  # type: ignore[no-untyped-d
     assert server.recorder.calls == 1, "Retry-After was ignored"
 
 
-def test_retry_not_attempted_past_the_timeout(server) -> None:  # type: ignore[no-untyped-def]
+def test_retry_not_attempted_past_the_timeout(server, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # The wait is drawn at random up to the ceiling; pinned at the ceiling, it
+    # cannot land inside the timeout by chance (about 1 run in 1800 did).
+    monkeypatch.setattr(paladin.client.random, "uniform", lambda low, high: high)
     server.recorder.failures = 10
     slow = Retry(attempts=10, base_delay=3600.0, max_delay=3600.0)
     health = HealthServiceClientSync(
