@@ -629,9 +629,9 @@ type OperationsWorker struct {
 	StaleAfter time.Duration `yaml:"stale_after" json:"stale_after"`
 }
 
-// CapabilityWorker drops capability_revocations rows for tokens whose
-// underlying capability has been expired for at least `expired_for`.
-// Keeps the denylist bounded; the verifier doesn't notice (an expired
+// CapabilityWorker drops capability_revocations and
+// capability_biscuit_revocations rows for tokens whose underlying capability
+// has been expired for at least `expired_for`. Keeps the denylists bounded; the verifier doesn't notice (an expired
 // row can never match a verifying token by definition). Disable by
 // setting interval to 0.
 type CapabilityWorker struct {
