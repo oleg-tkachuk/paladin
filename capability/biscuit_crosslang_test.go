@@ -49,6 +49,8 @@ func goldenBiscuitVerifier(t *testing.T) *StandardVerifier {
 		TrustedIssuers: []string{goldenIssuer},
 		Now:            goldenClock,
 		AcceptBiscuit:  true,
+
+		BiscuitRevocations: revLookup{},
 	})
 	if err != nil {
 		t.Fatalf("verifier: %v", err)

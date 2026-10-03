@@ -93,6 +93,17 @@ millionths of `unit_code`, so 25 USD is `25000000`.
   and `If-Match`; the storage endpoint's CORS must allow them and expose
   `ETag` before the console is upgraded.
 
+## Unreleased — one copy of a Biscuit can be revoked on its own
+
+- **Go: a verifier with `AcceptBiscuit` needs `BiscuitRevocations`.**
+  `NewStandardVerifier` refuses the config without it. Implement
+  `BiscuitRevocationStore` beside your `Store` (`memstore.Store` does) and
+  pass it wrapped in `NewCachedBiscuitRevocationChecker`, cleared with the
+  other cache when a revocation is announced.
+- **Revoking a copy reaches only what was attenuated from it.** The copy it
+  came from, its siblings and the capability's JWT keep working; revoke the
+  capability to stop them all.
+
 ## capability/v0.10.0 — the DPoP replay cache is shared across replicas
 
 - **Go: `ReplayCache.Seen` and `DPoPVerifier.Check` take a

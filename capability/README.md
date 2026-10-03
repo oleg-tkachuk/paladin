@@ -226,6 +226,14 @@ anything else (Datalog rules and checks included), makes the whole token
 invalid. Counters stay shared: an attenuated copy spends its capability's
 budget and request count, and revoking the capability revokes every copy.
 
+One copy can also be revoked on its own. `verifier.BiscuitCopy(ctx, token)`
+checks the token and names its capability and the revocation id of its last
+block; listing that id through `BiscuitRevocationStore.RevokeBiscuit` stops
+that copy and every copy attenuated from it, and leaves the copy it came from,
+its siblings and the capability's JWT working. A verifier that accepts
+Biscuits needs `BiscuitRevocations` — wrap the store in a
+`CachedBiscuitRevocationChecker` and clear it with the other cache.
+
 The Biscuit seals an ordinary signed token, so a KMS-held signing key works.
 That token carries the root of the Biscuit's signature chain, whose private
 half is discarded once the Biscuit is built. A sealed token presented on its
@@ -326,6 +334,7 @@ Implement these and you are done:
 | Interface | Stores | Transactions needed? |
 |---|---|---|
 | `Store` | Capability records + revocations | No |
+| `BiscuitRevocationStore` | Revoked Biscuit copies (only if you accept Biscuits) | No |
 | `UsageStore[TX]` = `Meter[TX]` + `TenantBudgets` + `UsageHousekeeping` | Request and spend counters, the charges ledger, tenant ceilings | Only for atomic side effects |
 | `KeyResolver` | Public verification keys | No |
 
