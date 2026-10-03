@@ -43,6 +43,9 @@ import (
 type Client struct {
 	s3      *s3.Client
 	presign *s3.PresignClient
+	// creds are the credentials presigned URLs are signed with; their
+	// expiry bounds every URL's lifetime (see presignTTL).
+	creds   aws.CredentialsProvider
 	cfg     config.StorageBackend
 	mode    objecth.CompletionMode
 	sseType string // "", "AES256", or "aws:kms"
@@ -91,7 +94,12 @@ func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	return newClient(awsCfg, backend), nil
+}
 
+// newClient builds the Client from a resolved aws.Config; split from New so
+// tests can supply credentials New would otherwise fetch.
+func newClient(awsCfg aws.Config, backend config.StorageBackend) *Client {
 	// Internal S3 client — direct API calls from inside the cluster. Every one
 	// of them is counted and timed by the metrics middleware; see metrics.go
 	// for why it lives in the SDK stack rather than around each method.
@@ -127,13 +135,14 @@ func New(ctx context.Context, backend config.StorageBackend) (*Client, error) {
 	return &Client{
 		s3:      s3c,
 		presign: s3.NewPresignClient(s3PresignBase),
+		creds:   awsCfg.Credentials,
 		cfg:     backend,
 		mode:    mode,
 		sseType: backend.SSE.Type,
 		sseKey:  backend.SSE.KeyID,
 
 		backendID: backendID,
-	}, nil
+	}
 }
 
 // buildAWSConfig assembles an aws.Config whose credential provider matches
@@ -380,11 +389,19 @@ func (c *Client) PresignPut(ctx context.Context, args objecth.PresignPutArgs) (s
 		ContentType: aws.String(args.ContentType),
 	}
 	c.applySSE(in)
-	req, err := c.presign.PresignPutObject(ctx, in, s3.WithPresignExpires(args.TTL))
+	ttl, err := c.presignTTL(ctx, args.TTL)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
+	req, err := c.presign.PresignPutObject(ctx, in, s3.WithPresignExpires(ttl))
 	if err != nil {
 		return "", nil, time.Time{}, fmt.Errorf("presign put: %w", err)
 	}
-	return req.URL, signedHeaders(req), time.Now().Add(args.TTL), nil
+	exp, err := signedURLExpiry(req.URL)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
+	return req.URL, signedHeaders(req), exp, nil
 }
 
 func (c *Client) PresignPost(ctx context.Context, args objecth.PresignPostArgs) (string, map[string]string, time.Time, error) {
@@ -396,7 +413,11 @@ func (c *Client) PresignPost(ctx context.Context, args objecth.PresignPostArgs) 
 		ContentType: aws.String(args.ContentType),
 	}
 	c.applySSE(in)
-	req, err := c.presign.PresignPutObject(ctx, in, s3.WithPresignExpires(args.TTL))
+	ttl, err := c.presignTTL(ctx, args.TTL)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
+	req, err := c.presign.PresignPutObject(ctx, in, s3.WithPresignExpires(ttl))
 	if err != nil {
 		return "", nil, time.Time{}, fmt.Errorf("presign post fallback: %w", err)
 	}
@@ -408,7 +429,11 @@ func (c *Client) PresignPost(ctx context.Context, args objecth.PresignPostArgs) 
 	for k, v := range signedHeaders(req) {
 		fields[k] = v
 	}
-	return req.URL, fields, time.Now().Add(args.TTL), nil
+	exp, err := signedURLExpiry(req.URL)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
+	return req.URL, fields, exp, nil
 }
 
 func (c *Client) PresignGet(ctx context.Context, args objecth.PresignGetArgs) (string, map[string]string, time.Time, error) {
@@ -419,11 +444,23 @@ func (c *Client) PresignGet(ctx context.Context, args objecth.PresignGetArgs) (s
 	if args.ContentDisposition != "" {
 		in.ResponseContentDisposition = aws.String(args.ContentDisposition)
 	}
-	req, err := c.presign.PresignGetObject(ctx, in, s3.WithPresignExpires(args.TTL))
+	ttl, err := c.presignTTL(ctx, args.TTL)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
+	// The response may be cached for as long as the URL lives and no longer,
+	// and only by the client that holds it: a shared cache keyed on the URL
+	// would keep serving the object after the URL that authorised it died.
+	in.ResponseCacheControl = aws.String(downloadCacheControl(ttl))
+	req, err := c.presign.PresignGetObject(ctx, in, s3.WithPresignExpires(ttl))
 	if err != nil {
 		return "", nil, time.Time{}, fmt.Errorf("presign get: %w", err)
 	}
-	return req.URL, signedHeaders(req), time.Now().Add(args.TTL), nil
+	exp, err := signedURLExpiry(req.URL)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
+	return req.URL, signedHeaders(req), exp, nil
 }
 
 func (c *Client) Head(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key string) (string, int64, string, string, error) {
@@ -702,11 +739,19 @@ func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.U
 		PartNumber: aws.Int32(partNumber),
 		UploadId:   aws.String(storageUploadID),
 	}
+	ttl, err := c.presignTTL(ctx, ttl)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
 	req, err := c.presign.PresignUploadPart(ctx, in, s3.WithPresignExpires(ttl))
 	if err != nil {
 		return "", nil, time.Time{}, fmt.Errorf("presign part: %w", err)
 	}
-	return req.URL, signedHeaders(req), time.Now().Add(ttl), nil
+	exp, err := signedURLExpiry(req.URL)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
+	return req.URL, signedHeaders(req), exp, nil
 }
 
 // ─── object.StreamSink (methods; StreamRouter satisfies the interface) ──────
