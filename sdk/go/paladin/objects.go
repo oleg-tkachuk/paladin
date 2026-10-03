@@ -3,8 +3,10 @@ package paladin
 import (
 	"bytes"
 	"context"
+	"crypto/md5" //nolint:gosec // S3's part ETag, compared on resume
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
@@ -65,10 +67,28 @@ type UploadInput struct {
 }
 
 // UploadOptions tune Upload; the zero value takes the defaults. The presigned
-// requests go through the client's Transfer (WithTransfer).
+// requests go through the client's Transfer (WithTransfer), which retries
+// each one through a freshly presigned URL.
 type UploadOptions struct {
 	MultipartThreshold int64
 	PartConcurrency    int
+	// OnSession is called once a multipart upload is open, with what Resume
+	// needs to continue it after a crash; store it where a restart finds it.
+	// With OnSession set, a failed upload is left open for that restart
+	// instead of aborted.
+	OnSession func(UploadSession)
+	// Resume continues the multipart upload a previous Upload of the same
+	// input opened, sending only the parts storage does not already hold. A
+	// failed resume is left open too.
+	Resume *UploadSession
+}
+
+// UploadSession is an open multipart upload: enough to resume it.
+type UploadSession struct {
+	ObjectName string
+	UploadID   string
+	PartSize   int64
+	TotalParts int32
 }
 
 // Transfer is what sends this plane's presigned requests: the client's
@@ -101,27 +121,28 @@ func Upload(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOpt
 	return uploadSingle(ctx, data, in)
 }
 
-// content is length bytes at offset as a body that can be read again: a
-// section of Body, or the next length bytes of Stream, held in memory.
-func (in UploadInput) content(offset, length int64) (io.ReadSeeker, error) {
+// source opens a body afresh: every call is an independent reader over the
+// same bytes. Each attempt at a request reads its own, because net/http may
+// still be reading a failed attempt's body when the next one starts.
+type source func() io.Reader
+
+// content is length bytes at offset as a source: a section of Body, read in
+// place, or the next length bytes of Stream, held in memory.
+func (in UploadInput) content(offset, length int64) (source, error) {
 	if in.Body != nil {
-		return io.NewSectionReader(in.Body, offset, length), nil
+		return func() io.Reader { return io.NewSectionReader(in.Body, offset, length) }, nil
 	}
 	buf := make([]byte, length)
 	if _, err := io.ReadFull(in.Stream, buf); err != nil {
 		return nil, err
 	}
-	return bytes.NewReader(buf), nil
+	return func() io.Reader { return bytes.NewReader(buf) }, nil
 }
 
-// hashed is body's SHA-256 as an upload's checksum_value, with body rewound
-// to be sent.
-func hashed(body io.ReadSeeker) (string, error) {
+// hashed is the source's SHA-256 as an upload's checksum_value.
+func hashed(body source) (string, error) {
 	sum := sha256.New()
-	if _, err := io.Copy(sum, body); err != nil {
-		return "", err
-	}
-	if _, err := body.Seek(0, io.SeekStart); err != nil {
+	if _, err := io.Copy(sum, body()); err != nil {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(sum.Sum(nil)), nil
@@ -154,8 +175,24 @@ func uploadSingle(ctx context.Context, data *DataPlane, in UploadInput) (*datav1
 	if url.GetUrl() == "" || object == nil {
 		return nil, ErrNoUploadURL
 	}
-	etag, err := put(ctx, data.Transfer(), url, in.ContentType, body, in.Size)
-	if err != nil {
+	transfer := data.Transfer()
+	regenerate := func(ctx context.Context) (*commonv1.PresignedUrl, error) {
+		resp, err := data.Presign.RegenerateUploadUrl(ctx, connect.NewRequest(&datav1.RegenerateUploadUrlRequest{Name: object.GetName()}))
+		if err != nil {
+			return nil, err
+		}
+		return resp.Msg.GetUploadUrl(), nil
+	}
+	var etag string
+	err = withRetries(ctx, transfer.attempts, url, regenerate, func(ctx context.Context, signed *commonv1.PresignedUrl) error {
+		var err error
+		etag, err = put(ctx, transfer, signed, in.ContentType, body(), in.Size)
+		return err
+	})
+	// The URL refuses to overwrite, so 412 means an earlier attempt stored
+	// the bytes and only its answer was lost: complete without its ETag,
+	// which CompleteObject reads from storage itself.
+	if err != nil && !AlreadyStored(err) {
 		return nil, err
 	}
 	done, err := data.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{
@@ -168,21 +205,14 @@ func uploadSingle(ctx context.Context, data *DataPlane, in UploadInput) (*datav1
 }
 
 func uploadMultipart(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOptions) (_ *datav1.Object, err error) {
-	init, err := data.MultipartUpload.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
-		Parent:            in.Parent,
-		Key:               in.Key,
-		ContentType:       in.ContentType,
-		SizeBytes:         in.Size,
-		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
-		Metadata:          in.Metadata,
-		Tags:              in.Tags,
-	}))
+	session, stored, err := openSession(ctx, data, in, opts)
 	if err != nil {
 		return nil, err
 	}
-	name, uploadID := init.Msg.GetObject().GetName(), init.Msg.GetUploadId()
+	name, uploadID := session.ObjectName, session.UploadID
+	resumable := opts.OnSession != nil || opts.Resume != nil
 	defer func() {
-		if err != nil {
+		if err != nil && !resumable {
 			// Best effort, and past a cancelled ctx: a session left open is
 			// swept by the server, and must not mask the error that ended it.
 			_, _ = data.MultipartUpload.AbortMultipartUpload(context.WithoutCancel(ctx),
@@ -190,12 +220,9 @@ func uploadMultipart(ctx context.Context, data *DataPlane, in UploadInput, opts 
 		}
 	}()
 
-	partSize := init.Msg.GetRecommendedPartSize()
-	if partSize <= 0 {
-		partSize = DefaultMultipartThreshold
-	}
-	parts := int((in.Size + partSize - 1) / partSize)
-	sent, err := sendParts(ctx, data, in, opts, name, uploadID, partSize, parts)
+	partSize := session.PartSize
+	parts := int(session.TotalParts)
+	sent, err := sendParts(ctx, data, in, opts, session, stored, partSize, parts)
 	if err != nil {
 		return nil, err
 	}
@@ -212,10 +239,86 @@ func uploadMultipart(ctx context.Context, data *DataPlane, in UploadInput, opts 
 	return done.Msg, nil
 }
 
+// openSession opens the multipart upload, or takes up the one opts.Resume
+// names together with the parts storage already holds.
+func openSession(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOptions) (UploadSession, map[int32]*datav1.PartInfo, error) {
+	if opts.Resume != nil {
+		stored, err := storedParts(ctx, data, *opts.Resume)
+		return *opts.Resume, stored, err
+	}
+	init, err := data.MultipartUpload.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
+		Parent:            in.Parent,
+		Key:               in.Key,
+		ContentType:       in.ContentType,
+		SizeBytes:         in.Size,
+		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
+		Metadata:          in.Metadata,
+		Tags:              in.Tags,
+	}))
+	if err != nil {
+		return UploadSession{}, nil, err
+	}
+	session := UploadSession{
+		ObjectName: init.Msg.GetObject().GetName(),
+		UploadID:   init.Msg.GetUploadId(),
+		PartSize:   init.Msg.GetRecommendedPartSize(),
+		TotalParts: init.Msg.GetTotalParts(),
+	}
+	if session.PartSize <= 0 {
+		session.PartSize = DefaultMultipartThreshold
+	}
+	if session.TotalParts <= 0 {
+		session.TotalParts = int32((in.Size + session.PartSize - 1) / session.PartSize) //nolint:gosec // parts ≤ 10000 by the contract
+	}
+	if opts.OnSession != nil {
+		opts.OnSession(session)
+	}
+	return session, nil, nil
+}
+
+// storedParts lists every part storage holds for the session, all pages.
+func storedParts(ctx context.Context, data *DataPlane, s UploadSession) (map[int32]*datav1.PartInfo, error) {
+	out := map[int32]*datav1.PartInfo{}
+	token := ""
+	for {
+		resp, err := data.MultipartUpload.ListParts(ctx, connect.NewRequest(&datav1.ListPartsRequest{
+			ObjectName: s.ObjectName, UploadId: s.UploadID, Page: &commonv1.PageRequest{PageToken: token},
+		}))
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range resp.Msg.GetParts() {
+			out[p.GetPartNumber()] = p
+		}
+		if token = resp.Msg.GetPage().GetNextPageToken(); token == "" {
+			return out, nil
+		}
+	}
+}
+
+// partETagLen is the length of a part's ETag when it is the hex MD5 of the
+// part, as S3 writes it for a part stored without KMS encryption.
+const partETagLen = 2 * md5.Size
+
+// holds reports whether a part storage reports is the one to be sent: the
+// same length and, when its ETag is a plain MD5, the same bytes. An ETag of
+// another form cannot be checked here, so such a part is sent again — a
+// repeated part replaces the stored one harmlessly.
+func holds(stored *datav1.PartInfo, body source, length int64) (bool, error) {
+	if stored == nil || stored.GetSizeBytes() != length || len(stored.GetEtag()) != partETagLen {
+		return false, nil
+	}
+	sum := md5.New() //nolint:gosec // comparing with S3's MD5 ETag, not a security primitive
+	if _, err := io.Copy(sum, body()); err != nil {
+		return false, err
+	}
+	return hex.EncodeToString(sum.Sum(nil)) == stored.GetEtag(), nil
+}
+
 // part is one part to send: its index, and its bytes.
 type part struct {
 	index  int
-	body   io.ReadSeeker
+	body   source
 	length int64
 }
 
@@ -228,7 +331,7 @@ type sentPart struct {
 // sendParts presigns and PUTs every part, PartConcurrency at a time, and
 // returns them in part order. The first failure stops the rest.
 func sendParts(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOptions,
-	name, uploadID string, partSize int64, parts int,
+	session UploadSession, stored map[int32]*datav1.PartInfo, partSize int64, parts int,
 ) ([]sentPart, error) {
 	workers := opts.PartConcurrency
 	if workers <= 0 {
@@ -250,7 +353,7 @@ func sendParts(ctx context.Context, data *DataPlane, in UploadInput, opts Upload
 	for range min(workers, parts) {
 		wg.Go(func() {
 			for p := range next {
-				done, err := sendPart(ctx, data, name, uploadID, p)
+				done, err := sendPart(ctx, data, session, stored[int32(p.index+1)], p) //nolint:gosec // parts ≤ 10000 by the contract
 				if err != nil {
 					fail(err)
 					continue
@@ -288,23 +391,40 @@ feed:
 	return sent, nil
 }
 
-// sendPart hashes a part, presigns its URL for that checksum, and PUTs it.
-func sendPart(ctx context.Context, data *DataPlane, name, uploadID string, p part) (sentPart, error) {
+// sendPart hashes a part and, unless storage already holds it, presigns its
+// URL for that checksum and PUTs it, retrying through fresh URLs.
+func sendPart(ctx context.Context, data *DataPlane, session UploadSession, stored *datav1.PartInfo, p part) (sentPart, error) {
 	sum, err := hashed(p.body)
 	if err != nil {
 		return sentPart{}, err
 	}
-	signed, err := data.MultipartUpload.PresignPart(ctx, connect.NewRequest(&datav1.PresignPartRequest{
-		ObjectName: name, UploadId: uploadID, PartNumber: int32(p.index + 1), //nolint:gosec // parts ≤ 10000 by the contract
-		ChecksumValue: sum,
-	}))
+	have, err := holds(stored, p.body, p.length)
 	if err != nil {
 		return sentPart{}, err
 	}
-	if signed.Msg.GetUploadUrl().GetUrl() == "" {
-		return sentPart{}, ErrNoUploadURL
+	if have {
+		return sentPart{etag: stored.GetEtag(), checksum: sum}, nil
 	}
-	etag, err := put(ctx, data.Transfer(), signed.Msg.GetUploadUrl(), "", p.body, p.length)
+	presign := func(ctx context.Context) (*commonv1.PresignedUrl, error) {
+		signed, err := data.MultipartUpload.PresignPart(ctx, connect.NewRequest(&datav1.PresignPartRequest{
+			ObjectName: session.ObjectName, UploadId: session.UploadID, PartNumber: int32(p.index + 1), //nolint:gosec // parts ≤ 10000 by the contract
+			ChecksumValue: sum,
+		}))
+		if err != nil {
+			return nil, err
+		}
+		if signed.Msg.GetUploadUrl().GetUrl() == "" {
+			return nil, ErrNoUploadURL
+		}
+		return signed.Msg.GetUploadUrl(), nil
+	}
+	transfer := data.Transfer()
+	var etag string
+	err = withRetries(ctx, transfer.attempts, nil, presign, func(ctx context.Context, signed *commonv1.PresignedUrl) error {
+		var err error
+		etag, err = put(ctx, transfer, signed, "", p.body(), p.length)
+		return err
+	})
 	if err != nil {
 		return sentPart{}, err
 	}

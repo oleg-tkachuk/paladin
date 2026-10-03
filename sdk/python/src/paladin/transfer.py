@@ -39,6 +39,10 @@ transfer: a large object streams for as long as it takes."""
 DEFAULT_TRANSFER_POOL_MAX_IDLE_PER_HOST = 32
 """Connections to one storage host kept for reuse, for many concurrent transfers."""
 
+DEFAULT_TRANSFER_ATTEMPTS = 4
+"""How many times one presigned request is sent before its last error is
+raised; every attempt after the first goes through a freshly presigned URL."""
+
 ERROR_BODY_LIMIT = 512
 """Bytes of a refused transfer's body an error quotes."""
 
@@ -183,7 +187,12 @@ class Transfer:
         tracer_provider: Any = None,
         transport: Any = None,
         async_transport: Any = None,
+        attempts: int = DEFAULT_TRANSFER_ATTEMPTS,
     ) -> None:
+        if attempts < 1:
+            raise ValueError("attempts must be at least 1")
+        self.attempts = attempts
+        """How many times each presigned request is sent."""
         if split_horizon is not None and rewrite is not None:
             raise ValueError("give split_horizon or rewrite, not both")
         if split_horizon is not None:

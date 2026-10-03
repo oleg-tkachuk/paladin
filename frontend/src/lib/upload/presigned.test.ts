@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   presignPart: vi.fn(),
   completeMultipartUpload: vi.fn(async () => ({})),
   abortMultipartUpload: vi.fn(async () => ({})),
+  regenerateUploadUrl: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
   objectClient: {
@@ -19,14 +20,21 @@ vi.mock("@/lib/connect/client", () => ({
     completeMultipartUpload: h.completeMultipartUpload,
     abortMultipartUpload: h.abortMultipartUpload,
   },
+  presignClient: { regenerateUploadUrl: h.regenerateUploadUrl },
 }));
 
 import {
+  PART_CONCURRENCY,
   sha256Base64,
   signedRequestHeaders,
   uploadMultipart,
   uploadSingle,
 } from "./presigned";
+import { TRANSFER_ATTEMPTS, retryTiming } from "./retry";
+
+/** What S3 answers, with 403, for a presigned URL past its expiry. */
+const EXPIRED_BODY_FOR_TESTS =
+  "<Error><Code>AccessDenied</Code><Message>Request has expired</Message></Error>";
 
 /** The base64 SHA-256 of "hello". */
 const HELLO_SHA256 = "LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ=";
@@ -34,6 +42,9 @@ const HELLO_SHA256 = "LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ=";
 /** A minimal XMLHttpRequest that records what was sent and succeeds. */
 class FakeXHR {
   static last: FakeXHR | undefined;
+  /** What the next sends answer, in order; past the end, 200. */
+  static answers: { status: number; body: string }[] = [];
+  static sent: string[] = [];
   method = "";
   url = "";
   headers: Record<string, string> = {};
@@ -58,15 +69,26 @@ class FakeXHR {
   }
   send(body: unknown) {
     this.body = body;
+    FakeXHR.sent.push(this.url);
+    const answer = FakeXHR.answers.shift();
+    if (answer) {
+      this.status = answer.status;
+      this.responseText = answer.body;
+    }
     queueMicrotask(() => this.onload?.());
   }
 }
 
 beforeEach(() => {
   vi.stubGlobal("XMLHttpRequest", FakeXHR);
+  FakeXHR.answers = [];
+  FakeXHR.sent = [];
+  // Retries without the wait between them: the tests count attempts.
+  vi.spyOn(retryTiming, "backoffMs").mockReturnValue(0);
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 
@@ -162,6 +184,63 @@ describe("uploadSingle", () => {
   });
 });
 
+describe("uploadSingle retries", () => {
+  const first = { url: "https://s3/first", method: "PUT", requiredHeaders: {} };
+  const fresh = { url: "https://s3/fresh", method: "PUT", requiredHeaders: {} };
+  const run = () =>
+    uploadSingle({
+      parent: "p",
+      file: new File(["x"], "x.bin"),
+      tags: {},
+      idempotencyKey: "i",
+      onProgress: () => {},
+    });
+  beforeEach(() => {
+    h.uploadObject.mockResolvedValue({
+      object: { name: "objects/r1" },
+      uploadUrl: first,
+    });
+    h.regenerateUploadUrl.mockResolvedValue({ uploadUrl: fresh });
+  });
+
+  it("sends again through a regenerated URL when the first expired", async () => {
+    FakeXHR.answers = [{ status: 403, body: EXPIRED_BODY_FOR_TESTS }];
+    await run();
+    expect(h.regenerateUploadUrl).toHaveBeenCalledWith({ name: "objects/r1" });
+    expect(FakeXHR.sent).toEqual([first.url, fresh.url]);
+    expect(h.completeObject).toHaveBeenCalled();
+  });
+
+  // The first PUT stored the bytes and its answer was lost: the retry meets
+  // If-None-Match as 412, which means done.
+  it("completes when a retry finds the object stored", async () => {
+    FakeXHR.answers = [
+      { status: 503, body: "" },
+      { status: 412, body: "" },
+    ];
+    await run();
+    expect(h.completeObject).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "objects/r1", etag: "" }),
+    );
+  });
+
+  it("does not repeat a request storage refused outright", async () => {
+    FakeXHR.answers = [{ status: 400, body: "BadDigest" }];
+    await expect(run()).rejects.toThrow(/PUT failed \(400\)/);
+    expect(FakeXHR.sent).toHaveLength(1);
+    expect(h.completeObject).not.toHaveBeenCalled();
+  });
+
+  it("gives up after its attempts", async () => {
+    FakeXHR.answers = Array.from({ length: 10 }, () => ({
+      status: 503,
+      body: "",
+    }));
+    await expect(run()).rejects.toThrow(/PUT failed \(503\)/);
+    expect(FakeXHR.sent).toHaveLength(TRANSFER_ATTEMPTS);
+  });
+});
+
 describe("uploadMultipart", () => {
   const partSize = 4;
   beforeEach(() => {
@@ -241,11 +320,110 @@ describe("uploadMultipart", () => {
         tags: {},
         onProgress: () => {},
       }),
-    ).rejects.toThrow(/Part 1 failed: 400/);
+    ).rejects.toThrow(/Part \d failed: 400/);
     expect(h.abortMultipartUpload).toHaveBeenCalledWith({
       objectName: "objects/m1",
       uploadId: "up-1",
     });
     expect(h.completeMultipartUpload).not.toHaveBeenCalled();
+  });
+
+  it("retries a failed part through a fresh URL", async () => {
+    let failedPart2 = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.endsWith("part2") && !failedPart2) {
+          failedPart2 = true;
+          return new Response("SlowDown", { status: 503 });
+        }
+        return new Response(null, { status: 200, headers: { ETag: '"pe"' } });
+      }),
+    );
+    await uploadMultipart({
+      parent: "p",
+      file: new File(["hellowo"], "big.bin"),
+      tags: {},
+      onProgress: () => {},
+    });
+    // Part 2 was presigned twice: once per attempt.
+    expect(
+      h.presignPart.mock.calls.filter(([r]) => r.partNumber === 2),
+    ).toHaveLength(2);
+    expect(h.completeMultipartUpload).toHaveBeenCalled();
+    expect(h.abortMultipartUpload).not.toHaveBeenCalled();
+  });
+
+  it("retries a part whose request never got an answer", async () => {
+    let failed = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        if (!failed) {
+          failed = true;
+          throw new TypeError("Failed to fetch");
+        }
+        return new Response(null, { status: 200, headers: { ETag: '"pe"' } });
+      }),
+    );
+    await uploadMultipart({
+      parent: "p",
+      file: new File(["hellowo"], "big.bin"),
+      tags: {},
+      onProgress: () => {},
+    });
+    expect(h.completeMultipartUpload).toHaveBeenCalled();
+  });
+
+  // A refused part used to leave the other workers running: they went on
+  // presigning and sending parts after the session was aborted.
+  it("stops every part before it aborts the session", async () => {
+    const order: string[] = [];
+    h.initiateMultipartUpload.mockResolvedValue({
+      object: { name: "objects/m2" },
+      uploadId: "up-2",
+      recommendedPartSize: BigInt(2),
+      totalParts: 5,
+    });
+    h.abortMultipartUpload.mockImplementation(async () => {
+      order.push("abort");
+      return {};
+    });
+    // Part 1 is refused once parts 2 and 3 are in flight; those stay in
+    // flight until they are cut off.
+    let inFlight = 0;
+    let refuse: () => void = () => {};
+    const refused = new Promise<void>((resolve) => (refuse = resolve));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        if (url.endsWith("part1")) {
+          await refused;
+          return new Response("BadDigest", { status: 400 });
+        }
+        if (++inFlight === PART_CONCURRENCY - 1) refuse();
+        return new Promise<Response>((_, reject) => {
+          init.signal?.addEventListener("abort", () => {
+            order.push(`cut ${url}`);
+            reject(init.signal?.reason);
+          });
+        });
+      }),
+    );
+    await expect(
+      uploadMultipart({
+        parent: "p",
+        file: new File(["0123456789"], "big.bin"),
+        tags: {},
+        onProgress: () => {},
+      }),
+    ).rejects.toThrow(/Part 1 failed: 400/);
+    const presigned = h.presignPart.mock.calls.map(([r]) => r.partNumber);
+    // PART_CONCURRENCY parts started; none after the refusal.
+    expect(presigned.sort()).toEqual([1, 2, 3]);
+    expect(order.at(-1)).toBe("abort");
+    expect(order.filter((o) => o.startsWith("cut"))).toHaveLength(2);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(h.presignPart).toHaveBeenCalledTimes(3);
   });
 });
