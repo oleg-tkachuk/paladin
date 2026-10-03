@@ -1204,6 +1204,10 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	if err != nil {
 		return nil, err
 	}
+	disposition, err = NormalizeContentDisposition(disposition)
+	if err != nil {
+		return nil, err
+	}
 	obj, err := h.repo.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
