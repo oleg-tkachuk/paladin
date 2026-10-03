@@ -27,6 +27,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // BucketEnsurer idempotently ensures the physical Paladin bucket exists, reusing
@@ -96,6 +97,14 @@ func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket str
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("bucket is required"))
 	}
 
+	// A capability can authenticate a data-plane call on its own, and the
+	// Cedar permit below is tenant equality — which any capability of this
+	// tenant satisfies. Provisioning buckets and collections is tenant
+	// administration, so it takes manage; no resource URI bounds it, so a
+	// resource-restricted capability is refused.
+	if err := auth.AssertCapabilityOp(ctx, capability.OpManage, ""); err != nil {
+		return nil, err
+	}
 	// Authorize the whole self-provision bundle against the caller's own tenant
 	// (the built-in tenant_id-equality permit; see authorize).
 	if err := h.authorize(ctx, p, tenantID); err != nil {
