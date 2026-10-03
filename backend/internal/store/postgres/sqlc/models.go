@@ -443,6 +443,11 @@ type Collection struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type DpopSeenJti struct {
+	Jti       string             `json:"jti"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
 type EventDelivery struct {
 	ID             pgtype.UUID        `json:"id"`
 	TenantID       pgtype.UUID        `json:"tenant_id"`
