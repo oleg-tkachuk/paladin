@@ -6,7 +6,7 @@
 //
 //   - Storage: an S3 (or S3-compatible) adapter that satisfies every
 //     handler-package Storage interface: object.Storage, multipart.Storage,
-//     presign.Storage, object.StreamSink.
+//     presign.Storage.
 //   - Repos: Postgres-backed adapters over the sqlc-generated queries in
 //     internal/store/postgres/sqlc that satisfy the per-handler Repository
 //     interfaces.
@@ -98,12 +98,11 @@ type Repos struct {
 
 // Storage bundles the storage-side adapters. Every handler package declares
 // its own narrow Storage interface; a single backend adapter typically
-// implements all five.
+// implements all four.
 type Storage struct {
 	Object      objecth.Storage
 	Multipart   multiparth.Storage
 	Presign     presignh.Storage
-	Stream      objecth.StreamSink
 	Provisioner bucketh.Provisioner
 }
 
