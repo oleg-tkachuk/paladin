@@ -177,6 +177,11 @@ type Querier interface {
 	DeleteStorageBackend(ctx context.Context, name string, expectedVersion int64) (int64, error)
 	DeleteUser(ctx context.Context, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// RegenerateUploadUrl hands a PENDING object a new PUT URL; the reaper's
+	// deadline moves with it, or the row is failed under a client still holding
+	// a valid URL. GREATEST, so a shorter regenerated URL never pulls the
+	// deadline in under an earlier one that is still live.
+	ExtendPendingPresign(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expiresAt pgtype.Timestamptz) (int64, error)
 	FailStorageMigration(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string) (int64, error)
 	// Cross-tenant subject lookup for AuthService.Login when the caller supplied
 	// no tenant hint. The handler checks the password against every row this

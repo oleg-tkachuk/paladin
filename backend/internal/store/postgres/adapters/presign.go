@@ -3,19 +3,17 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/presignh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
-// PresignRepo satisfies presign.Repository.
-//
-// LookupMultipartSession joins multipart_uploads → objects → collections to
-// recover (storage_upload_id, collection, key); that isn't expressible as a
-// single sqlc query, so the adapter falls back to the raw pool.
+// PresignRepo satisfies presignh.Repository.
 type PresignRepo struct {
 	q    *sqlc.Queries
 	pool *pgxpool.Pool
@@ -27,42 +25,36 @@ func NewPresignRepo(q *sqlc.Queries, pool *pgxpool.Pool) *PresignRepo {
 
 var _ presignh.Repository = (*PresignRepo)(nil)
 
-func (r *PresignRepo) LookupObjectByName(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (resolvedCollection, key, state string, err error) {
+func (r *PresignRepo) LookupObject(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (presignh.ObjectRef, error) {
 	row, err := r.q.GetObject(ctx, pgUUID(tenantID), pgUUID(objectID))
 	if err != nil {
-		return "", "", "", err
+		return presignh.ObjectRef{}, err
 	}
 	if row.CollectionName != collection {
-		return "", "", "", fmt.Errorf("object %s not in collection %s", objectID, collection)
+		return presignh.ObjectRef{}, fmt.Errorf("object %s not in collection %s", objectID, collection)
 	}
-	return row.CollectionName, row.Object.Path, string(row.Object.State), nil
+	return presignh.ObjectRef{
+		Collection:  row.CollectionName,
+		Key:         row.Object.Path,
+		State:       string(row.Object.State),
+		ContentType: row.Object.ContentType,
+	}, nil
 }
 
-func (r *PresignRepo) LookupMultipartSession(ctx context.Context, uploadID string) (storageUploadID, collection, key string, err error) {
-	const q = `
-		SELECT mu.storage_upload_id, c.name, o.path
-		FROM multipart_uploads mu
-		JOIN objects o     ON o.id = mu.object_id
-		JOIN collections c ON c.id = o.collection_id
-		WHERE mu.id = $1
-	`
-	err = r.pool.QueryRow(ctx, q, uploadID).Scan(&storageUploadID, &collection, &key)
+// LookupBucketMeta is the object repository's resolution, so presign shares
+// its disabled-backend and read-only-drain gates: `write` is false for a GET
+// URL and true for a PUT URL.
+func (r *PresignRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error) {
+	return NewObjectRepo(r.q, r.pool).LookupBucketMeta(ctx, tenantID, collection, write)
+}
+
+func (r *PresignRepo) ExtendPendingPresign(ctx context.Context, tenantID, objectID uuid.UUID, expiresAt time.Time) error {
+	n, err := r.q.ExtendPendingPresign(ctx, pgUUID(tenantID), pgUUID(objectID), pgTS(expiresAt))
 	if err != nil {
-		if isNoRows(err) {
-			return "", "", "", fmt.Errorf("upload %q not found", uploadID)
-		}
-		return "", "", "", fmt.Errorf("lookup multipart: %w", err)
+		return fmt.Errorf("extend pending presign: %w", err)
 	}
-	return storageUploadID, collection, key, nil
-}
-
-// LookupBucket reads the physical S3 bucket bound to a Collection via
-// idx_collections_bucket_routing. bucket_name is NOT NULL after
-// the schema baseline (001_initial_schema.sql) so a successful lookup always returns a non-empty value.
-// `write` splits the read-only-drain gate (the schema baseline (001_initial_schema.sql)): presign-GET is a
-// read, presign-PUT / presign-part are writes. Both the disabled (feature
-// 002) and drain gates are enforced here so a presign URL is never issued
-// against a backend that can't serve the op.
-func (r *PresignRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
-	return resolveBucket(ctx, r.pool, tenantID, collection, write)
+	if n == 0 {
+		return presignh.ErrNotPending
+	}
+	return nil
 }

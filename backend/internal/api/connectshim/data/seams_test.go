@@ -13,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/presignh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/storagebootstraph"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
@@ -81,8 +82,8 @@ type failingPresign struct{}
 func (failingPresign) PresignGet(context.Context, string, string, time.Duration, string) (string, map[string]string, time.Time, error) {
 	return "", nil, time.Time{}, errBoom
 }
-func (failingPresign) PresignPut(context.Context, string, string, string, string, time.Duration, int64) (string, map[string]string, time.Time, error) {
-	return "", nil, time.Time{}, errBoom
+func (failingPresign) RegenerateUploadURL(context.Context, string, string, time.Duration) (presignh.UploadURL, error) {
+	return presignh.UploadURL{}, errBoom
 }
 
 type failingOperations struct{}

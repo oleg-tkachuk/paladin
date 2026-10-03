@@ -51,10 +51,12 @@ type BatchCopyExecutor struct {
 	Storage     objecth.Storage
 	Transitions Transitioner
 
-	// PresignDefaultTTL pins the destination row's presign_expires_at.
-	// Wired from the same cfg.Limits.Presign.DefaultTTL the data plane
-	// uses, so reaper / reconciler windows match RPC-driven creates.
-	PresignDefaultTTL time.Duration
+	// PendingTTL pins the destination row's presign_expires_at. Wired from
+	// cfg.Limits.Presign.PutTTL, the lifetime the data plane gives a PENDING
+	// row's upload URL, so reaper / reconciler windows match RPC-driven
+	// creates. Required: a copy with no deadline would leave its PENDING row
+	// outside the reaper's reach.
+	PendingTTL time.Duration
 }
 
 // BatchCopyResponse mirrors the BatchDelete shape.
@@ -74,6 +76,9 @@ type BatchCopyFailure struct {
 func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation) ([]byte, error) {
 	if e.Objects == nil || e.Storage == nil || e.Transitions == nil {
 		return nil, errors.New("BatchCopyExecutor: dependencies missing (Objects / Storage / Transitions)")
+	}
+	if e.PendingTTL <= 0 {
+		return nil, errors.New("BatchCopyExecutor: PendingTTL must be positive")
 	}
 
 	var args batchh.BatchCopyArgs
@@ -104,10 +109,7 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 
 	resp := BatchCopyResponse{Total: len(args.ObjectIDs)}
 
-	presignTTL := e.PresignDefaultTTL
-	if presignTTL <= 0 {
-		presignTTL = 15 * time.Minute
-	}
+	presignTTL := e.PendingTTL
 
 	// One batched read replaces a per-id FindByName round-trip inside
 	// copyOne; missing ids surface as per-row "not found" failures.

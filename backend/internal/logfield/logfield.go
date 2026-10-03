@@ -11,13 +11,28 @@ import (
 // told apart from a credential, so none of it is logged.
 const unparseableURL = "<unparseable url>"
 
-// URL logs raw with the userinfo password replaced, as url.URL.Redacted does:
-// a broker URL such as amqp://user:pass@host carries the password in the
-// string, and a log line is no place for it.
+// redactedQueryValue replaces every query parameter's value.
+const redactedQueryValue = "REDACTED"
+
+// URL logs raw with every credential-bearing part replaced: the userinfo
+// password, as url.URL.Redacted does, and every query value. A broker URL
+// such as amqp://user:pass@host carries a password in the userinfo; a
+// presigned URL carries its signature, credential and session token in the
+// query, and is a working bearer credential until it expires. Parameter
+// names stay, so a log line still says what kind of URL it was. The fragment
+// is dropped.
 func URL(key, raw string) zap.Field {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return zap.String(key, unparseableURL)
 	}
+	if u.RawQuery != "" {
+		q := u.Query()
+		for k := range q {
+			q[k] = []string{redactedQueryValue}
+		}
+		u.RawQuery = q.Encode()
+	}
+	u.Fragment, u.RawFragment = "", ""
 	return zap.String(key, u.Redacted())
 }

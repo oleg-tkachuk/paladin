@@ -96,7 +96,6 @@ limits:
     put_ttl: 15m
     get_ttl: 15m
     part_ttl: 15m
-    default_ttl: 15m
     max_ttl: 168h
     default_max_size: 5368709120
 

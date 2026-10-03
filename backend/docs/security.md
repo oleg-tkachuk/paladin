@@ -57,8 +57,11 @@ tenant differs from the tenant header on the request.
 ## 3. Storage
 
 - **Presigned URLs.** Clients never receive storage credentials. The api plane
-  signs SigV4 URLs for single objects; lifetimes are `limits.presign.*`
-  (`put_ttl`, `get_ttl`, `part_ttl`, `max_ttl`).
+  signs SigV4 URLs for single objects. A URL cannot be revoked before it
+  expires, so its lifetime is policy: `put_ttl`, `get_ttl` and `part_ttl`
+  under `limits.presign` are the defaults, and a caller asking for more than
+  `max_ttl` (at most 168h, the SigV4 ceiling) is refused with
+  `InvalidArgument` rather than shortened.
 - **Server-side encryption.** Per backend, `storage.backends.<name>.sse`
   selects none, `AES256` or `aws:kms`; the S3 adapter sets it on writes.
 

@@ -3,7 +3,6 @@ package objecth
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -88,7 +87,7 @@ func TestObjectTransfersAreCountedAsPresigns(t *testing.T) {
 				repo:    &uploadRepo{fakeObjectRepo: fakeObjectRepo{meta: BucketMeta{BackendID: "backend-7", BucketName: "bucket-7"}}},
 				storage: noopStorage{},
 				policy:  &recordingAuthorizer{},
-				presign: PresignConfig{DefaultTTL: time.Hour, MaxTTL: 2 * time.Hour},
+				presign: testPresignConfig(),
 			}
 			before := presignCount(t, tc.op, ok)
 			if _, err := h.UploadObject(ctx, UploadObjectInput{
