@@ -137,6 +137,37 @@ requires one on `Create*` and `Issue*` calls.
 | `Client(..., token_source=…, audience=…)` | Sends `token_source`'s token for `audience` on every call. A call refused as unauthenticated is made once more with a fresh one — the server authenticates before anything else, so the first attempt changed nothing. `connect` sets `audience` per plane. |
 | `AUDIENCE_DATA`, `AUDIENCE_ADMIN`, `AUDIENCE_IAM` | The audience names; `tests/test_headers.py` keeps them equal to the Go SDK's, which the server imports. |
 
+### Narrowing a capability offline
+
+`CapabilityService.Issue` and `Delegate` return `biscuit` beside `token`: the
+same capability as a Biscuit v3 token, which whoever holds it can narrow with
+no key and no call to the server — to hand a sub-agent less than it was given.
+Install the `biscuit` extra (`pip install "paladin-sdk[biscuit] @ git+…"`);
+`biscuit-python` ships wheels for CPython 3.10–3.13, and elsewhere builds
+from source with Rust.
+
+```python
+from datetime import datetime, timedelta, timezone
+
+narrowed = paladin.attenuate(
+    issued.biscuit,
+    ops=["get"],
+    resource_prefixes=["corpus/public/"],
+    planes=["data"],  # the capability planes: "data", "admin", "mcp"
+    expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+)
+client = paladin.Client(data_url, capability=narrowed)
+```
+
+| Name | Does |
+| --- | --- |
+| `attenuate(token, *, ops=None, resource_prefixes=None, resource_uris=None, planes=None, expires_at=None, bind_jkt=None)` | `token` with one more block appended, as a new token; `token` keeps working. An argument left `None` leaves that dimension as it is; a set one replaces it and must be within what the token allows, or the server refuses the whole token. Setting `resource_prefixes` or `resource_uris` replaces both. `expires_at` is timezone-aware and kept to the second. `bind_jkt` (`dpop_thumbprint(key.public_key())`) binds the token to a key, and only an unbound token can be bound. Raises `ValueError` for a JWT or anything else that is not a Paladin Biscuit, `ImportError` without the extra. |
+
+The block holds only the facts the server reads
+([`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json),
+which the server's tests check too); a token the SDK attenuated is verified by
+the server's code in `capability/`'s tests.
+
 ### `connect`
 
 | Name | Does |
@@ -377,6 +408,7 @@ on purpose:
 | Server identity over TLS | `TLS.ServerID`: the SPIFFE ID, checked by `go-spiffe` | `TLS(server_id=…)`: the same check, after the handshake and before any request byte | Python's connections under `TLS` run on `ssl` and httpcore, because `pyqwest` has no peer-verification hook. |
 | Minimum TLS version | `TLS.MinVersion`, 1.2 by default | `TLS(min_version=…)`, `ssl.TLSVersion.TLSv1_2` by default | |
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
+| Biscuit attenuation | `capability.Attenuate`, from the capability module | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0 (BACKLOG). |
 | Bulk downloads | `DownloadMany`, a callback per reader | `download_many` / `adownload_many`, an iterator of results | Each language's idiom. |
 | asyncio | — | An `a…` form of every workflow | Go has goroutines. |
