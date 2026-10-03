@@ -173,11 +173,13 @@ export async function uploadSingle(args: {
   return allocated.object.name;
 }
 
-/** One part's PUT; a refusal or a network failure is a TransferError. */
+/** One part's PUT; a refusal or a network failure is a TransferError. A
+ *  PUT cut off by `signal` is not one: it is not to be retried. */
 async function putPart(
   url: PresignedUrl,
   slice: Blob,
   partNumber: number,
+  signal: AbortSignal,
 ): Promise<Response> {
   let res: Response;
   try {
@@ -185,8 +187,10 @@ async function putPart(
       method: url.method || "PUT",
       headers: signedRequestHeaders(url.requiredHeaders),
       body: slice,
+      signal,
     });
   } catch (e) {
+    if (signal.aborted) throw e;
     throw new TransferError(0, "", `Part ${partNumber} failed: ${String(e)}`);
   }
   if (!res.ok) {
@@ -210,8 +214,9 @@ async function putPart(
  * Access-Control-Expose-Headers, which is why a missing one is reported as
  * configuration rather than as a transfer error.
  *
- * A failed part is retried through a freshly presigned URL. On failure the
- * session is aborted: the parts already stored are released
+ * A failed part is retried through a freshly presigned URL. A part that
+ * still fails stops the others — no new part starts and the PUTs in flight
+ * are cut off — and once every worker has stopped the session is aborted: the parts already stored are released
  * rather than left to bill as storage until the reaper notices.
  */
 export async function uploadMultipart(args: {
@@ -241,19 +246,27 @@ export async function uploadMultipart(args: {
     init.totalParts || Math.max(1, Math.ceil(file.size / partSize));
   const done = new Array<{ etag: string; checksum: string }>(partsTotal);
 
+  // Set by the first part that fails for good: the other workers stop, so
+  // nothing reaches storage after the session is aborted.
+  const stop = new AbortController();
+  let failure: unknown;
+
   try {
     let bytesSent = 0;
     let next = 0;
     const worker = async () => {
       for (;;) {
+        if (stop.signal.aborted) return;
         const index = next++;
         if (index >= partsTotal) return;
         const partNumber = index + 1; // S3 part numbers are 1-based
         const start = index * partSize;
         const slice = file.slice(start, Math.min(start + partSize, file.size));
         const checksum = await sha256Base64(slice);
+        if (stop.signal.aborted) return;
 
         const presign = async (): Promise<PresignedUrl> => {
+          stop.signal.throwIfAborted();
           const signed = await multipartClient.presignPart({
             objectName,
             uploadId: init.uploadId,
@@ -266,7 +279,7 @@ export async function uploadMultipart(args: {
           return signed.uploadUrl;
         };
         const res = await withRetries(undefined, presign, (url) =>
-          putPart(url, slice, partNumber),
+          putPart(url, slice, partNumber, stop.signal),
         );
         const etag = (res.headers.get("ETag") ?? "").replaceAll('"', "");
         if (!etag) {
@@ -281,8 +294,15 @@ export async function uploadMultipart(args: {
       }
     };
     await Promise.all(
-      Array.from({ length: Math.min(PART_CONCURRENCY, partsTotal) }, worker),
+      Array.from({ length: Math.min(PART_CONCURRENCY, partsTotal) }, () =>
+        worker().catch((e: unknown) => {
+          if (stop.signal.aborted) return;
+          failure = e;
+          stop.abort();
+        }),
+      ),
     );
+    if (stop.signal.aborted) throw failure;
 
     await multipartClient.completeMultipartUpload({
       objectName,

@@ -24,6 +24,7 @@ vi.mock("@/lib/connect/client", () => ({
 }));
 
 import {
+  PART_CONCURRENCY,
   sha256Base64,
   signedRequestHeaders,
   uploadMultipart,
@@ -319,7 +320,7 @@ describe("uploadMultipart", () => {
         tags: {},
         onProgress: () => {},
       }),
-    ).rejects.toThrow(/Part 1 failed: 400/);
+    ).rejects.toThrow(/Part \d failed: 400/);
     expect(h.abortMultipartUpload).toHaveBeenCalledWith({
       objectName: "objects/m1",
       uploadId: "up-1",
@@ -372,5 +373,57 @@ describe("uploadMultipart", () => {
       onProgress: () => {},
     });
     expect(h.completeMultipartUpload).toHaveBeenCalled();
+  });
+
+  // A refused part used to leave the other workers running: they went on
+  // presigning and sending parts after the session was aborted.
+  it("stops every part before it aborts the session", async () => {
+    const order: string[] = [];
+    h.initiateMultipartUpload.mockResolvedValue({
+      object: { name: "objects/m2" },
+      uploadId: "up-2",
+      recommendedPartSize: BigInt(2),
+      totalParts: 5,
+    });
+    h.abortMultipartUpload.mockImplementation(async () => {
+      order.push("abort");
+      return {};
+    });
+    // Part 1 is refused once parts 2 and 3 are in flight; those stay in
+    // flight until they are cut off.
+    let inFlight = 0;
+    let refuse: () => void = () => {};
+    const refused = new Promise<void>((resolve) => (refuse = resolve));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        if (url.endsWith("part1")) {
+          await refused;
+          return new Response("BadDigest", { status: 400 });
+        }
+        if (++inFlight === PART_CONCURRENCY - 1) refuse();
+        return new Promise<Response>((_, reject) => {
+          init.signal?.addEventListener("abort", () => {
+            order.push(`cut ${url}`);
+            reject(init.signal?.reason);
+          });
+        });
+      }),
+    );
+    await expect(
+      uploadMultipart({
+        parent: "p",
+        file: new File(["0123456789"], "big.bin"),
+        tags: {},
+        onProgress: () => {},
+      }),
+    ).rejects.toThrow(/Part 1 failed: 400/);
+    const presigned = h.presignPart.mock.calls.map(([r]) => r.partNumber);
+    // PART_CONCURRENCY parts started; none after the refusal.
+    expect(presigned.sort()).toEqual([1, 2, 3]);
+    expect(order.at(-1)).toBe("abort");
+    expect(order.filter((o) => o.startsWith("cut"))).toHaveLength(2);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(h.presignPart).toHaveBeenCalledTimes(3);
   });
 });
