@@ -1652,17 +1652,6 @@ finding moving from "packages you import" to "your code is affected".
   ids, checked by the verifier beside the capability's own revocation.
 - **Blockers:** none.
 
-### The SDKs cannot attenuate a Biscuit
-
-- **Status:** Deferred.
-- **Reason:** `capability.Attenuate` is Go, in the module. An agent written
-  against the Python SDK or the console has no helper and would have to
-  append the `paladin_*` facts with a Biscuit library itself.
-- **Definition of Done:** `attenuate(token, …)` in the Python SDK (on
-  `biscuit-python`, an optional extra) and the Go SDK, each tested against the
-  server, with the vocabulary in one shared spec file.
-- **Blockers:** none.
-
 ### Deprecated double money fields still on the wire
 
 - **Status:** Deferred — the deprecation window is one release.
