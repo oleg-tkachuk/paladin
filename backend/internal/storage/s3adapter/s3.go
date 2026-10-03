@@ -1,5 +1,5 @@
 // Package s3adapter implements the handler-facing storage interfaces
-// (object.Storage, object.StreamSink, multipart.Storage, presign.Storage)
+// (object.Storage, multipart.Storage, presign.Storage)
 // on top of an aws-sdk-go-v2 S3 client.
 //
 // One adapter instance fronts a single physical S3 bucket configured under
@@ -754,11 +754,11 @@ func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.U
 	return req.URL, signedHeaders(req), exp, nil
 }
 
-// ─── object.StreamSink (methods; StreamRouter satisfies the interface) ──────
+// ─── stream writer (cross-backend copy) ───────────────────────────────────
 
 // Open returns a StreamWriter that uploads a single object via S3 multipart.
 // 8 MiB parts are a reasonable default that balances memory vs S3 minimums.
-func (c *Client) Open(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType string, sizeHint int64) (objecth.StreamWriter, error) {
+func (c *Client) Open(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType string, sizeHint int64) (*StreamWriter, error) {
 	resolvedBucket := c.resolveBucket(bucket)
 	fullKey := composeKey(tenantID, collection, key)
 	in := &s3.CreateMultipartUploadInput{
@@ -775,7 +775,7 @@ func (c *Client) Open(ctx context.Context, bucket string, tenantID uuid.UUID, co
 	if partSize <= 0 {
 		partSize = 8 << 20
 	}
-	return &streamWriter{
+	return &StreamWriter{
 		ctx:      ctx,
 		c:        c,
 		bucket:   resolvedBucket,
@@ -785,7 +785,10 @@ func (c *Client) Open(ctx context.Context, bucket string, tenantID uuid.UUID, co
 	}, nil
 }
 
-type streamWriter struct {
+// StreamWriter writes one object as S3 multipart parts of the backend's
+// part_size. Close finalizes it and returns the etag, size and md5 checksum;
+// Abort discards the in-flight upload.
+type StreamWriter struct {
 	ctx      context.Context
 	c        *Client
 	bucket   string // resolved bucket captured at Open time
@@ -814,7 +817,7 @@ type streamWriter struct {
 //
 // The partSize > 0 guard keeps a misconfigured zero part size from spinning
 // forever here; Open already floors it at 8 MiB, so this is belt-and-braces.
-func (w *streamWriter) Write(p []byte) (int, error) {
+func (w *StreamWriter) Write(p []byte) (int, error) {
 	n := len(p)
 	w.buf = append(w.buf, p...)
 	w.total += int64(n)
@@ -830,7 +833,7 @@ func (w *streamWriter) Write(p []byte) (int, error) {
 // is left over for the next one. n <= 0, or an n beyond what is buffered,
 // means "everything still buffered" — the form Close uses for the trailing
 // part, which is the only part allowed to be smaller than partSize.
-func (w *streamWriter) flushPart(n int64) error {
+func (w *StreamWriter) flushPart(n int64) error {
 	if len(w.buf) == 0 {
 		return nil
 	}
@@ -864,7 +867,7 @@ func (w *streamWriter) flushPart(n int64) error {
 	return nil
 }
 
-func (w *streamWriter) Close() (string, int64, string, error) {
+func (w *StreamWriter) Close() (string, int64, string, error) {
 	if w.completed {
 		return "", 0, "", fmt.Errorf("stream writer already closed")
 	}
@@ -892,7 +895,7 @@ func (w *streamWriter) Close() (string, int64, string, error) {
 	return etag, w.total, checksum, nil
 }
 
-func (w *streamWriter) Abort() error {
+func (w *StreamWriter) Abort() error {
 	if w.aborted || w.completed {
 		return nil
 	}

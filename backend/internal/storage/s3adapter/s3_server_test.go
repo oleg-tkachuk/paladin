@@ -1445,31 +1445,6 @@ func TestMultipartRouterUnknownBackend(t *testing.T) {
 	}
 }
 
-func TestStreamRouterDelegates(t *testing.T) {
-	f := newFakeS3(t)
-	reg := registryWith(map[string]*Client{"primary": newTestClient(t, f.srv.URL)})
-	rt := NewStreamRouter(reg)
-
-	w, err := rt.Open(testCtx, "primary", "b", testTenant, "ok", "k", "text/plain", 0)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	if _, err := w.Write([]byte("abc")); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
-	if _, total, _, err := w.Close(); err != nil || total != 3 {
-		t.Fatalf("Close: total=%d err=%v", total, err)
-	}
-}
-
-func TestStreamRouterUnknownBackend(t *testing.T) {
-	rt := NewStreamRouter(registryWith(map[string]*Client{}))
-
-	if _, err := rt.Open(testCtx, "nope", "b", testTenant, "ok", "k", "", 0); err == nil {
-		t.Error("Open to unknown backend: want error")
-	}
-}
-
 func TestProvisionerRouterDelegates(t *testing.T) {
 	f := newFakeS3(t)
 	reg := registryWith(map[string]*Client{"primary": newTestClient(t, f.srv.URL)})
