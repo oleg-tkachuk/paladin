@@ -24,6 +24,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 	"github.com/oleg-tkachuk/paladin/capability"
 	"go.uber.org/zap"
 )
@@ -138,6 +139,9 @@ type Repository interface {
 	// (backend, bucket); callers that don't route on backend yet may discard
 	// backendID (docs/backend-registry.md).
 	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
+	// LookupBucketMeta is LookupBucket plus the bucket's upload constraints,
+	// for the paths that admit an upload or mint its URLs.
+	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error)
 }
 
 // VersionRecorder is the optional hook that records a versions-row when the
@@ -177,6 +181,7 @@ type Handler struct {
 	policy   cedar.Authorizer
 	sm       *statemachine.Transitioner
 	ttl      presignttl.Policy
+	limits   uploadpolicy.Limits
 	versions VersionRecorder // optional
 	quota    QuotaUpdater    // optional
 }
@@ -185,8 +190,8 @@ type Handler struct {
 // CompleteMultipartUpload after a successful promotion. nil = no-op.
 func (h *Handler) SetQuotaUpdater(q QuotaUpdater) { h.quota = q }
 
-func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, sm *statemachine.Transitioner, ttl presignttl.Policy) *Handler {
-	return &Handler{repo: repo, storage: storage, policy: policy, sm: sm, ttl: ttl}
+func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, sm *statemachine.Transitioner, ttl presignttl.Policy, limits uploadpolicy.Limits) *Handler {
+	return &Handler{repo: repo, storage: storage, policy: policy, sm: sm, ttl: ttl, limits: limits}
 }
 
 // SetVersionRecorder attaches the optional recorder used after a successful
@@ -196,30 +201,6 @@ func (h *Handler) SetVersionRecorder(v VersionRecorder) { h.versions = v }
 // InitiateMultipartUpload creates the PENDING object row and opens a storage
 // multipart session. Handler contract: size_bytes is required here because
 // part sizing needs it (unlike UploadObject where it's a hint).
-// S3 semantics, which every supported backend follows: a part must be at
-// least 5 MiB except the last, and an upload may have at most 10 000 parts.
-// Together they cap a multipart upload at ~48.8 GiB with the minimum part
-// size, so the part size grows with the object rather than the count.
-const (
-	minPartSizeBytes int64 = 5 * 1024 * 1024
-	maxPartCount     int64 = 10000
-)
-
-// planParts picks a part size and count for an object of `size` bytes.
-// Starts at the minimum and doubles until the count fits, so small uploads
-// stay cheap to retry and large ones stay within the part limit.
-func planParts(size int64) (partSize int64, totalParts int32) {
-	partSize = minPartSizeBytes
-	for (size+partSize-1)/partSize > maxPartCount {
-		partSize *= 2
-	}
-	n := (size + partSize - 1) / partSize
-	if n < 1 {
-		n = 1
-	}
-	return partSize, int32(n)
-}
-
 func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs) (*Session, error) {
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
@@ -230,16 +211,11 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	// a client must not be able to name someone else as the initiator.
 	args.InitiatedBySubject = p.Subject
 	args.InitiatedByKind = p.Kind.String()
-	if args.SizeHint <= 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("size_bytes is required for multipart uploads"))
-	}
 	// The client does not choose the part size — the request has no field
 	// for it, and the response promises a `recommended_part_size` plus a
 	// `total_parts`. Computing them here is what makes those promises true:
 	// they were left zero, so a caller had nothing to slice the file by and
 	// PresignPart rejected every part number as out of range.
-	args.PartSizeBytes, args.TotalParts = planParts(args.SizeHint)
 	objectURI := "object://" + tenantID.String() + "/" + args.Collection + "/" + args.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
@@ -247,10 +223,22 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	// Resolve the (backend, bucket) BEFORE authz so a bucket:/collection:-
 	// scoped write PAT enforces on multipart init; the same resolution routes
 	// InitiateMultipart and anchors the session below.
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, args.Collection, true) // multipart init (mutation)
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, args.Collection, true) // multipart init (mutation)
 	if err != nil {
 		return nil, objecth.MapResolveErr(err)
 	}
+	backendID, bucket := meta.BackendID, meta.BucketName
+	// The plan honours limits.* narrowed by the bucket: max_multipart_size,
+	// the part-size bounds and max_parts, plus the type and checksum rules
+	// every upload obeys. A size it cannot plan is refused here, not at the
+	// part that would not fit.
+	plan, err := uploadpolicy.For(h.limits, meta.Constraints).PlanMultipart(uploadpolicy.Upload{
+		SizeBytes: args.SizeHint, ContentType: args.ContentType, ChecksumAlgorithm: args.ChecksumAlgo,
+	})
+	if err != nil {
+		return nil, err
+	}
+	args.PartSizeBytes, args.TotalParts = plan.PartSize, plan.TotalParts
 	if err := h.authorize(ctx, p, tenantID, args.Collection, args.Key, backendID, bucket, cedar.ActionPutObject, args.SizeHint, args.ContentType); err != nil {
 		return nil, err
 	}
@@ -402,10 +390,6 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 		metrics.RecordPresign(ctx, metrics.PresignOpPart, metrics.PresignOutcome(err), time.Since(start).Seconds())
 	}()
 
-	ttl, err = h.ttl.Resolve(presignttl.OpPart, ttl)
-	if err != nil {
-		return "", nil, time.Time{}, err
-	}
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
@@ -439,12 +423,19 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err := h.authorize(ctx, p, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionPresignPut, 0, ""); err != nil {
 		return "", nil, time.Time{}, err
 	}
+	// The bucket's constraints bound the part URL's lifetime; the session
+	// keeps routing to the bucket it was opened against.
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, sess.Collection, true) // presign part (mutation)
+	if err != nil {
+		return "", nil, time.Time{}, objecth.MapResolveErr(err)
+	}
+	ttl, err = h.ttl.ResolveWithin(presignttl.OpPart, ttl, uploadpolicy.For(h.limits, meta.Constraints).PutTTLCeiling())
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
 	backendID, bucket := sess.BackendID, sess.Bucket
 	if bucket == "" {
-		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.Collection, true) // presign part (mutation)
-		if err != nil {
-			return "", nil, time.Time{}, objecth.MapResolveErr(err)
-		}
+		backendID, bucket = meta.BackendID, meta.BucketName
 	}
 	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, partNumber, ttl)
 }

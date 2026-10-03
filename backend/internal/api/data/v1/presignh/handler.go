@@ -22,12 +22,15 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
+	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
 
-// Config is how long URLs live; see internal/presignttl.
+// Config is how long URLs live (internal/presignttl) and the global upload
+// limits a bucket's constraints narrow (internal/uploadpolicy).
 type Config struct {
-	TTL presignttl.Policy
+	TTL    presignttl.Policy
+	Limits uploadpolicy.Limits
 }
 
 type Storage interface {
@@ -98,10 +101,6 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
-	ttl, err = h.cfg.TTL.Resolve(presignttl.OpGet, ttl)
-	if err != nil {
-		return "", nil, time.Time{}, err
-	}
 	disposition, err = objecth.NormalizeContentDisposition(disposition)
 	if err != nil {
 		return "", nil, time.Time{}, err
@@ -132,6 +131,11 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 		return "", nil, time.Time{}, objecth.MapResolveErr(err)
 	}
 	backendID, bucket := meta.BackendID, meta.BucketName
+	ttl, err = h.cfg.TTL.ResolveWithin(presignttl.OpGet, ttl,
+		uploadpolicy.For(h.cfg.Limits, meta.Constraints).GetTTLCeiling())
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
 	if err := h.authorize(ctx, p, tenantID, collection, key, backendID, bucket, cedar.ActionPresignGet); err != nil {
 		return "", nil, time.Time{}, err
 	}
@@ -181,10 +185,6 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 	if err != nil {
 		return UploadURL{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
-	ttl, err = h.cfg.TTL.Resolve(presignttl.OpPut, ttl)
-	if err != nil {
-		return UploadURL{}, err
-	}
 	obj, err := h.repo.LookupObject(ctx, tenantID, collection, objectID)
 	if err != nil {
 		return UploadURL{}, connect.NewError(connect.CodeNotFound, err)
@@ -209,6 +209,11 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, true) // presign PUT (mutation)
 	if err != nil {
 		return UploadURL{}, objecth.MapResolveErr(err)
+	}
+	ttl, err = h.cfg.TTL.ResolveWithin(presignttl.OpPut, ttl,
+		uploadpolicy.For(h.cfg.Limits, meta.Constraints).PutTTLCeiling())
+	if err != nil {
+		return UploadURL{}, err
 	}
 	if err := h.authorize(ctx, p, tenantID, collection, key, meta.BackendID, meta.BucketName, cedar.ActionPresignPut); err != nil {
 		return UploadURL{}, err

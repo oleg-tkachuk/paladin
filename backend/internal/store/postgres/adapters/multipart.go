@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -198,6 +199,12 @@ func (r *MultipartRepo) DeleteSession(ctx context.Context, uploadID string) erro
 // `write` splits the read-only-drain gate (the schema baseline (001_initial_schema.sql)). Every multipart
 // path (init / complete / abort / presign-part) is a mutation, so callers
 // pass write=true; the disabled (feature 002) gate applies to all.
+// LookupBucketMeta is the object repository's resolution, constraints
+// included.
+func (r *MultipartRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error) {
+	return NewObjectRepo(r.q, r.pool).LookupBucketMeta(ctx, tenantID, collection, write)
+}
+
 func (r *MultipartRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
 	return resolveBucket(ctx, r.pool, tenantID, collection, write)
 }

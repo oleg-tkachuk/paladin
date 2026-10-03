@@ -9,7 +9,29 @@ import (
 func validPresign() Presign {
 	return Presign{
 		GetTTL: 15 * time.Minute, PutTTL: 15 * time.Minute, PartTTL: 15 * time.Minute,
-		MaxTTL: SigV4MaxPresignExpiry, DefaultMaxSize: 1 << 30,
+		MaxTTL: SigV4MaxPresignExpiry,
+	}
+}
+
+// validLimits is limits.* as the CUE defaults produce it.
+func validLimits() Limits {
+	return Limits{
+		MaxObjectSizeBytes: 100_000_000, MaxMultipartSizeBytes: 1_000_000_000_000,
+		MinPartSizeBytes: 5 << 20, MaxPartSizeBytes: 5 << 30, MaxParts: 10000,
+		Presign: validPresign(),
+	}
+}
+
+// limits.* loaded whatever it held and was enforced nowhere; now that it is
+// enforced, a value the policy cannot plan with fails at load instead.
+func TestLimitsValidateAtLoad(t *testing.T) {
+	c := minimalValidConfig()
+	if err := c.Validate(); err != nil {
+		t.Fatalf("defaults: %v", err)
+	}
+	c.Limits.MinPartSizeBytes = 5_000_000 // "5MB": below S3's 5 MiB part
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "min_part_size") {
+		t.Fatalf("err = %v, want one naming min_part_size", err)
 	}
 }
 
@@ -29,7 +51,6 @@ func TestPresignValidate(t *testing.T) {
 		{"get_ttl above max_ttl", func(p *Presign) { p.MaxTTL = time.Hour; p.GetTTL = 2 * time.Hour }, "get_ttl"},
 		{"put_ttl zero", func(p *Presign) { p.PutTTL = 0 }, "put_ttl"},
 		{"part_ttl negative", func(p *Presign) { p.PartTTL = -time.Minute }, "part_ttl"},
-		{"default_max_size zero", func(p *Presign) { p.DefaultMaxSize = 0 }, "default_max_size"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

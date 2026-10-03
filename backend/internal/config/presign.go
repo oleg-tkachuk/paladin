@@ -3,12 +3,13 @@ package config
 import (
 	"fmt"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
 
-// SigV4MaxPresignExpiry is the longest X-Amz-Expires SigV4 accepts (604800
-// seconds). A longer URL signs without complaint and is refused by the object
-// store only when somebody uses it, so the ceiling is enforced at load.
-const SigV4MaxPresignExpiry = 7 * 24 * time.Hour
+// SigV4MaxPresignExpiry is the longest TTL max_ttl may name; enforced at load
+// because a longer URL signs fine and fails only when somebody uses it.
+const SigV4MaxPresignExpiry = uploadpolicy.SigV4MaxPresignExpiry
 
 // ValidatePresignTTLs checks the invariants every presign lifetime obeys:
 // positive, defaults within max, max within what SigV4 can express.
@@ -29,11 +30,17 @@ func ValidatePresignTTLs(get, put, part, maxTTL time.Duration) error {
 
 // Validate checks limits.presign.
 func (p Presign) Validate() error {
-	if err := ValidatePresignTTLs(p.GetTTL, p.PutTTL, p.PartTTL, p.MaxTTL); err != nil {
-		return err
+	return ValidatePresignTTLs(p.GetTTL, p.PutTTL, p.PartTTL, p.MaxTTL)
+}
+
+// UploadLimits is limits.* as the upload policy reads it.
+func (l Limits) UploadLimits() uploadpolicy.Limits {
+	return uploadpolicy.Limits{
+		MaxObjectSize:       l.MaxObjectSizeBytes,
+		MaxMultipartSize:    l.MaxMultipartSizeBytes,
+		MinPartSize:         l.MinPartSizeBytes,
+		MaxPartSize:         l.MaxPartSizeBytes,
+		MaxParts:            int64(l.MaxParts),
+		AllowedContentTypes: l.AllowedContentTypes,
 	}
-	if p.DefaultMaxSize <= 0 {
-		return fmt.Errorf("limits.presign.default_max_size %d must be positive", p.DefaultMaxSize)
-	}
-	return nil
 }

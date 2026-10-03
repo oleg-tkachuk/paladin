@@ -182,6 +182,11 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("backend_id and bucket_name required"))
 	}
+	// The data plane enforces these on every upload; constraints no upload
+	// could satisfy are refused here rather than discovered there.
+	if err := in.Bucket.Constraints.Validate(); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("constraints: %w", err))
+	}
 	if err := h.authorize(ctx, actionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
 		return nil, err
 	}
@@ -272,6 +277,9 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 	if in.Bucket.BackendID == "" || in.Bucket.BucketName == "" {
 		return nil, false, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("backend_id and bucket_name required"))
+	}
+	if err := in.Bucket.Constraints.Validate(); err != nil {
+		return nil, false, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("constraints: %w", err))
 	}
 	// Fast idempotent path: an existing row is a success no-op. This also keeps
 	// the common "already provisioned" startup call off the write path.

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
 
 // ─── Storage backend ────────────────────────────────────────────────────────
@@ -131,16 +133,9 @@ const (
 	BucketProvisionStateDeletionFailed = "deletion_failed"
 )
 
-type BucketConstraints struct {
-	MaxObjectSizeBytes        int64
-	MinPartSizeBytes          int64
-	MaxPartSizeBytes          int64
-	MaxParts                  int32
-	AllowedContentTypes       []string
-	MaxPresignPutTTL          time.Duration
-	MaxPresignGetTTL          time.Duration
-	RequiredChecksumAlgorithm string // "" | "CRC32C" | "SHA256" | "MD5"
-}
+// BucketConstraints is defined where it is enforced; the admin plane stores
+// the same struct, so the JSON keys in buckets.constraints have one spelling.
+type BucketConstraints = uploadpolicy.BucketConstraints
 
 type LifecycleRule struct {
 	ID         string

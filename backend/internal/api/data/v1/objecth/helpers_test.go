@@ -14,6 +14,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
+	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -373,14 +374,22 @@ func TestObjectResourceName(t *testing.T) {
 const (
 	testPresignTTL    = time.Hour
 	testPresignMaxTTL = 2 * time.Hour
-	// testPresignMaxSize is the single-request upload cap tests run under.
-	testPresignMaxSize = 5 << 30
+	// testMaxObjectSize is the single-request upload cap tests run under.
+	testMaxObjectSize = 5 << 30
 )
+
+// testUploadLimits are permissive global limits: tests that exercise a
+// limit set it themselves.
+var testUploadLimits = uploadpolicy.Limits{
+	MaxObjectSize: testMaxObjectSize, MaxMultipartSize: 1 << 40,
+	MinPartSize: uploadpolicy.S3MinPartSize, MaxPartSize: uploadpolicy.S3MaxPartSize,
+	MaxParts: uploadpolicy.S3MaxParts,
+}
 
 func testPresignConfig() PresignConfig {
 	p, err := presignttl.New(testPresignTTL, testPresignTTL, testPresignTTL, testPresignMaxTTL)
 	if err != nil {
 		panic(err)
 	}
-	return PresignConfig{TTL: p, DefaultMaxSize: testPresignMaxSize}
+	return PresignConfig{TTL: p, Limits: testUploadLimits}
 }
