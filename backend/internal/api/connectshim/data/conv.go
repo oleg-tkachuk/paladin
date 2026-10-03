@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -258,18 +259,18 @@ func objectStateProto(s statemachine.State) pb.ObjectState {
 func checksumAlgoStr(a commonpb.ChecksumAlgorithm) string {
 	switch a {
 	case commonpb.ChecksumAlgorithm_CHECKSUM_ALGORITHM_CRC32C:
-		return "CRC32C"
+		return checksum.CRC32C
 	case commonpb.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256:
-		return "SHA256"
+		return checksum.SHA256
 	case commonpb.ChecksumAlgorithm_CHECKSUM_ALGORITHM_MD5:
-		return "MD5"
+		return checksum.MD5
 	}
 	// UNSPECIFIED → SHA256 default. Connect-JSON omits enum-zero on
 	// the wire, so any client (including stale browser bundles) that
 	// forgets to set the field would otherwise blow up at the
 	// validator. SHA256 is what the data-plane verifies on
 	// CompleteObject anyway.
-	return "SHA256"
+	return checksum.SHA256
 }
 
 func presignedUrlProto(url, method string, headers map[string]string, expires time.Time, postAction string, postFields map[string]string) *commonpb.PresignedUrl {
