@@ -24,6 +24,7 @@ func TestNormalizeContentDisposition(t *testing.T) {
 		{"quoted filename", `attachment; filename="report 2026.pdf"`, `attachment; filename="report 2026.pdf"`, true},
 		{"bare token filename gains no quotes it does not need", "attachment; filename=report.pdf", "attachment; filename=report.pdf", true},
 		{"non-ASCII filename is RFC 2231 encoded", `attachment; filename*=UTF-8''%D0%B7%D0%B2%D1%96%D1%82.pdf`, "attachment; filename*=utf-8''%D0%B7%D0%B2%D1%96%D1%82.pdf", true},
+		{"RFC 5987 form of an ASCII filename, as the console sends it", `attachment; filename*=UTF-8''it%27s%20%281%29%21.txt`, `attachment; filename="it's (1)!.txt"`, true},
 		{"another type", "form-data; name=x", "", false},
 		{"an unknown parameter", `attachment; filename="a"; creation-date="x"`, "", false},
 		{"header injection", "attachment\r\nSet-Cookie: s=1", "", false},

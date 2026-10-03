@@ -3,6 +3,8 @@
 import { useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { QUERY_STALE_MS } from "@/constants";
+
 /**
  * App-wide TanStack Query provider. Adopted to replace the
  * setState-in-effect fetch-on-mount pattern across the data hooks /
@@ -29,7 +31,7 @@ export function QueryProvider({ children }: { children: ReactNode }) {
           queries: {
             refetchOnWindowFocus: false,
             retry: 1,
-            staleTime: 30_000,
+            staleTime: QUERY_STALE_MS,
           },
         },
       }),

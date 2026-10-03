@@ -1,6 +1,14 @@
-import { objectClient, multipartClient } from "@/lib/connect/client";
-import { ChecksumAlgorithm } from "@/gen/paladin/common/v1/resource_pb";
+import {
+  objectClient,
+  multipartClient,
+  presignClient,
+} from "@/lib/connect/client";
+import {
+  ChecksumAlgorithm,
+  type PresignedUrl,
+} from "@/gen/paladin/common/v1/resource_pb";
 import { PresignTransport } from "@/gen/paladin/data/v1/object_service_pb";
+import { TransferError, alreadyStored, withRetries } from "./retry";
 
 /**
  * Files at or below this go through the single-shot presigned PUT: one
@@ -84,10 +92,17 @@ function putWithProgress(
         const etag = xhr.getResponseHeader("ETag")?.replace(/"/g, "");
         resolve(etag ?? undefined);
       } else {
-        reject(new Error(`PUT failed (${xhr.status}): ${xhr.responseText}`));
+        reject(
+          new TransferError(
+            xhr.status,
+            xhr.responseText,
+            `PUT failed (${xhr.status}): ${xhr.responseText}`,
+          ),
+        );
       }
     };
-    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.onerror = () =>
+      reject(new TransferError(0, "", "Network error during upload"));
     xhr.send(body);
   });
 }
@@ -97,6 +112,9 @@ function putWithProgress(
  * size, Content-Type and SHA-256, so the file is hashed first and the PUT
  * carries every signed header — including If-None-Match: *, which keeps it
  * from replacing an object already at the key.
+ *
+ * A failed PUT is retried through a URL regenerated for the same object; a
+ * retry that meets 412 found the first attempt's bytes stored, and completes.
  */
 export async function uploadSingle(args: {
   parent: string;
@@ -124,19 +142,65 @@ export async function uploadSingle(args: {
   if (!url?.url || !allocated.object) {
     throw new Error("UploadObject returned no upload URL");
   }
-  const etag = await putWithProgress(
-    url.method || "PUT",
-    url.url,
-    signedRequestHeaders(url.requiredHeaders),
-    file,
-    args.onProgress,
-  );
+  const name = allocated.object.name;
+  const regenerate = async (): Promise<PresignedUrl> => {
+    const res = await presignClient.regenerateUploadUrl({ name });
+    if (!res.uploadUrl?.url) {
+      throw new Error("RegenerateUploadUrl returned no upload URL");
+    }
+    return res.uploadUrl;
+  };
+  let etag: string | undefined;
+  try {
+    etag = await withRetries(url, regenerate, (signed) =>
+      putWithProgress(
+        signed.method || "PUT",
+        signed.url,
+        signedRequestHeaders(signed.requiredHeaders),
+        file,
+        args.onProgress,
+      ),
+    );
+  } catch (e) {
+    // CompleteObject reads the stored ETag itself.
+    if (!alreadyStored(e)) throw e;
+  }
   await objectClient.completeObject({
-    name: allocated.object.name,
+    name,
     etag: etag ?? "",
     checksumValue: checksum,
   });
   return allocated.object.name;
+}
+
+/** One part's PUT; a refusal or a network failure is a TransferError. A
+ *  PUT cut off by `signal` is not one: it is not to be retried. */
+async function putPart(
+  url: PresignedUrl,
+  slice: Blob,
+  partNumber: number,
+  signal: AbortSignal,
+): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetch(url.url, {
+      method: url.method || "PUT",
+      headers: signedRequestHeaders(url.requiredHeaders),
+      body: slice,
+      signal,
+    });
+  } catch (e) {
+    if (signal.aborted) throw e;
+    throw new TransferError(0, "", `Part ${partNumber} failed: ${String(e)}`);
+  }
+  if (!res.ok) {
+    throw new TransferError(
+      res.status,
+      await res.text(),
+      `Part ${partNumber} failed: ${res.status} ${res.statusText}`,
+    );
+  }
+  return res;
 }
 
 /**
@@ -150,7 +214,9 @@ export async function uploadSingle(args: {
  * Access-Control-Expose-Headers, which is why a missing one is reported as
  * configuration rather than as a transfer error.
  *
- * On failure the session is aborted: the parts already stored are released
+ * A failed part is retried through a freshly presigned URL. A part that
+ * still fails stops the others — no new part starts and the PUTs in flight
+ * are cut off — and once every worker has stopped the session is aborted: the parts already stored are released
  * rather than left to bill as storage until the reaper notices.
  */
 export async function uploadMultipart(args: {
@@ -180,38 +246,41 @@ export async function uploadMultipart(args: {
     init.totalParts || Math.max(1, Math.ceil(file.size / partSize));
   const done = new Array<{ etag: string; checksum: string }>(partsTotal);
 
+  // Set by the first part that fails for good: the other workers stop, so
+  // nothing reaches storage after the session is aborted.
+  const stop = new AbortController();
+  let failure: unknown;
+
   try {
     let bytesSent = 0;
     let next = 0;
     const worker = async () => {
       for (;;) {
+        if (stop.signal.aborted) return;
         const index = next++;
         if (index >= partsTotal) return;
         const partNumber = index + 1; // S3 part numbers are 1-based
         const start = index * partSize;
         const slice = file.slice(start, Math.min(start + partSize, file.size));
         const checksum = await sha256Base64(slice);
+        if (stop.signal.aborted) return;
 
-        const signed = await multipartClient.presignPart({
-          objectName,
-          uploadId: init.uploadId,
-          partNumber,
-          checksumValue: checksum,
-        });
-        const url = signed.uploadUrl;
-        if (!url?.url) {
-          throw new Error(`No presigned URL for part ${partNumber}`);
-        }
-        const res = await fetch(url.url, {
-          method: url.method || "PUT",
-          headers: signedRequestHeaders(url.requiredHeaders),
-          body: slice,
-        });
-        if (!res.ok) {
-          throw new Error(
-            `Part ${partNumber} failed: ${res.status} ${res.statusText}`,
-          );
-        }
+        const presign = async (): Promise<PresignedUrl> => {
+          stop.signal.throwIfAborted();
+          const signed = await multipartClient.presignPart({
+            objectName,
+            uploadId: init.uploadId,
+            partNumber,
+            checksumValue: checksum,
+          });
+          if (!signed.uploadUrl?.url) {
+            throw new Error(`No presigned URL for part ${partNumber}`);
+          }
+          return signed.uploadUrl;
+        };
+        const res = await withRetries(undefined, presign, (url) =>
+          putPart(url, slice, partNumber, stop.signal),
+        );
         const etag = (res.headers.get("ETag") ?? "").replaceAll('"', "");
         if (!etag) {
           throw new Error(
@@ -225,8 +294,15 @@ export async function uploadMultipart(args: {
       }
     };
     await Promise.all(
-      Array.from({ length: Math.min(PART_CONCURRENCY, partsTotal) }, worker),
+      Array.from({ length: Math.min(PART_CONCURRENCY, partsTotal) }, () =>
+        worker().catch((e: unknown) => {
+          if (stop.signal.aborted) return;
+          failure = e;
+          stop.abort();
+        }),
+      ),
     );
+    if (stop.signal.aborted) throw failure;
 
     await multipartClient.completeMultipartUpload({
       objectName,

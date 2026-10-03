@@ -64,19 +64,31 @@ func (e *TransferError) Error() string {
 // shared: its connection pool is what makes many concurrent transfers to one
 // storage host cheap.
 type Transfer struct {
-	client  *http.Client
-	rewrite func(*url.URL) *url.URL
-	observe observer
+	client   *http.Client
+	rewrite  func(*url.URL) *url.URL
+	observe  observer
+	attempts int
 }
 
 // TransferOption configures a Transfer.
 type TransferOption func(*transferConfig) error
 
 type transferConfig struct {
-	client  *http.Client
-	rewrite func(*url.URL) *url.URL
-	hooks   Hooks
-	logger  *slog.Logger
+	client   *http.Client
+	rewrite  func(*url.URL) *url.URL
+	hooks    Hooks
+	logger   *slog.Logger
+	attempts int
+}
+
+// WithTransferAttempts sends each presigned request at most n times before
+// its last error is returned; n < 1 takes DefaultTransferAttempts. Every
+// attempt after the first goes through a freshly presigned URL.
+func WithTransferAttempts(n int) TransferOption {
+	return func(cfg *transferConfig) error {
+		cfg.attempts = n
+		return nil
+	}
 }
 
 // WithTransferHTTPClient sends the presigned requests with c — for a proxy, a
@@ -151,7 +163,14 @@ func NewTransfer(opts ...TransferOption) (*Transfer, error) {
 		client = &copied
 	}
 	client.CheckRedirect = refuseRedirect
-	return &Transfer{client: client, rewrite: cfg.rewrite, observe: observer{hooks: cfg.hooks, logger: cfg.logger}}, nil
+	attempts := cfg.attempts
+	if attempts < 1 {
+		attempts = DefaultTransferAttempts
+	}
+	return &Transfer{
+		client: client, rewrite: cfg.rewrite, attempts: attempts,
+		observe: observer{hooks: cfg.hooks, logger: cfg.logger},
+	}, nil
 }
 
 func refuseRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
