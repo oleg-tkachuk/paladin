@@ -42,6 +42,17 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## Unreleased — capabilities need the op for operations and storage bootstrap
+
+- **`OperationService` asserts a capability op.** `GetOperation` needs `get`,
+  `ListOperations` `list`, and `CancelOperation` `manage`. A capability
+  restricted by resource prefix or URI is refused all three, as it already was
+  for the batch RPCs that create operations.
+- **`EnsureTenantStorage` needs `manage`.** A capability alone authenticates a
+  data-plane call and the Cedar permit is tenant equality, so until now any
+  capability of the tenant could provision its buckets and collections.
+- Calls made with a JWT or API token and no capability are unaffected.
+
 ## Unreleased — uploads are held to `limits.*` and bucket constraints
 
 - **`limits.*` is enforced.** `max_object_size` now refuses a larger single

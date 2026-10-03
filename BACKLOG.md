@@ -1636,7 +1636,11 @@ finding moving from "packages you import" to "your code is affected".
   with `operation`, `resource`, `time` and `plane` facts on every capability
   RPC, with a gate proving that every RPC a capability reaches asserts its
   operation; per-copy counters keyed by the Biscuit's revocation id.
-- **Blockers:** the every-RPC-asserts gate, which does not exist today.
+- **Blockers:** none. The every-RPC-asserts gate exists:
+  `backend/tests/contract/capability_op_asserted_test.go` fails on a
+  data-plane RPC whose handler does not call `AssertCapabilityOp`. Admin and
+  iam are not gated — no capability carries a request there on its own —
+  and `capability_planes_test.go` fails if that stops being true.
 
 ### Attenuated Biscuits cannot be revoked one by one
 
