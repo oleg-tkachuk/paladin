@@ -27,11 +27,13 @@ type CapabilityBundle struct {
 	Keys     *capability.StaticKeyResolver
 
 	// DPoP checks the RFC 9449 proof a key-bound capability must arrive
-	// with. Its replay cache is per replica: a proof replayed against
-	// another replica inside the acceptance window is not caught, which
-	// the window (a minute) and the proof's method+path+token binding
-	// keep narrow.
+	// with, against Replay.
 	DPoP *capability.DPoPVerifier
+
+	// Replay records the DPoP proof ids every replica has accepted, so a
+	// proof replayed against any of them is refused. The capability
+	// purger drops the ids that have expired.
+	Replay *capabilitypg.ReplayCache
 
 	// PublicKeys is the kid → public key map exposed via the JWKS
 	// endpoint. Refreshed in place when rotation lands; today it
@@ -159,13 +161,19 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// instrument lookups.
 	usage := capability.WithMetering(capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage")))
 
+	replay, err := capabilitypg.NewReplayCache(deps.Pool, deps.Logger.Named("dpop-replay"))
+	if err != nil {
+		return nil, fmt.Errorf("app: DPoP replay cache: %w", err)
+	}
+
 	return &CapabilityBundle{
 		Store:        store,
 		Usage:        usage,
 		Issuer:       issuer,
 		Verifier:     verifier,
 		Keys:         keys,
-		DPoP:         &capability.DPoPVerifier{Replay: capability.NewMemoryReplayCache(0)},
+		DPoP:         &capability.DPoPVerifier{Replay: replay},
+		Replay:       replay,
 		PublicKeys:   map[string]ed25519.PublicKey{kid: pub},
 		IssuerName:   cfg.IssuerName,
 		EphemeralKey: generated,

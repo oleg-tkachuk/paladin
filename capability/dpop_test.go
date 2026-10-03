@@ -49,10 +49,10 @@ func TestDPoPAcceptsAProofFromTheBoundKey(t *testing.T) {
 				t.Fatal(err)
 			}
 			req := DPoPRequest{Proof: proof, Method: "POST", URL: dpopURL, Token: "the-token"}
-			if err := v.Check(c, req); err != nil {
+			if err := v.Check(context.Background(), c, req); err != nil {
 				t.Fatalf("valid proof refused: %v", err)
 			}
-			if err := v.Check(c, req); !errors.Is(err, ErrDPoPReplayed) {
+			if err := v.Check(context.Background(), c, req); !errors.Is(err, ErrDPoPReplayed) {
 				t.Fatalf("replayed proof: err = %v, want ErrDPoPReplayed", err)
 			}
 		})
@@ -96,7 +96,7 @@ func TestDPoPRefusals(t *testing.T) {
 			if tc.mod != nil {
 				tc.mod(&req)
 			}
-			err := v.Check(c, req)
+			err := v.Check(context.Background(), c, req)
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("err = %v, want %v", err, tc.want)
 			}
@@ -114,24 +114,24 @@ func TestDPoPPathOnlyIgnoresHostButNotPath(t *testing.T) {
 	v := &DPoPVerifier{Replay: NewMemoryReplayCache(0), Now: func() time.Time { return now }}
 	proof, _ := NewDPoPProof(key, "POST", dpopURL, "tok", now)
 	req := DPoPRequest{Proof: proof, Method: "POST", URL: "http://10.0.0.7:8080/paladin.data.v1.ObjectService/GetObject", MatchPathOnly: true, Token: "tok"}
-	if err := v.Check(c, req); err != nil {
+	if err := v.Check(context.Background(), c, req); err != nil {
 		t.Fatalf("path-only match behind a proxy: %v", err)
 	}
 	proof, _ = NewDPoPProof(key, "POST", "https://gw.example.com/paladin-api/paladin.data.v1.ObjectService/GetObject", "tok", now)
 	req.Proof = proof
-	if err := v.Check(c, req); err != nil {
+	if err := v.Check(context.Background(), c, req); err != nil {
 		t.Fatalf("path-only match behind a prefix-stripping proxy: %v", err)
 	}
 	proof, _ = NewDPoPProof(key, "POST", dpopURL, "tok", now)
 	req.Proof, req.URL = proof, "http://10.0.0.7:8080/paladin.data.v1.ObjectService/DeleteObject"
-	if err := v.Check(c, req); !errors.Is(err, ErrDPoPInvalid) {
+	if err := v.Check(context.Background(), c, req); !errors.Is(err, ErrDPoPInvalid) {
 		t.Fatalf("path-only with another path: err = %v, want ErrDPoPInvalid", err)
 	}
 }
 
 func TestDPoPUnboundCapabilityNeedsNoProof(t *testing.T) {
 	v := &DPoPVerifier{Replay: NewMemoryReplayCache(0)}
-	if err := v.Check(&Capability{}, DPoPRequest{}); err != nil {
+	if err := v.Check(context.Background(), &Capability{}, DPoPRequest{}); err != nil {
 		t.Fatalf("unbound capability: %v", err)
 	}
 }
@@ -190,17 +190,17 @@ func TestMemoryReplayCacheIsBoundedAndForgetsExpired(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	c := NewMemoryReplayCache(2)
 	c.now = func() time.Time { return now }
-	if c.Seen("a", now.Add(time.Minute)) || c.Seen("b", now.Add(time.Second)) {
+	if c.Seen(context.Background(), "a", now.Add(time.Minute)) || c.Seen(context.Background(), "b", now.Add(time.Second)) {
 		t.Fatal("fresh ids reported seen")
 	}
-	if !c.Seen("c", now.Add(time.Minute)) {
+	if !c.Seen(context.Background(), "c", now.Add(time.Minute)) {
 		t.Fatal("a full cache accepted an id it could not record")
 	}
 	now = now.Add(2 * time.Second) // b expires
-	if c.Seen("c", now.Add(time.Minute)) {
+	if c.Seen(context.Background(), "c", now.Add(time.Minute)) {
 		t.Fatal("an id refused while full was not accepted once room freed up")
 	}
-	if !c.Seen("a", now.Add(time.Minute)) {
+	if !c.Seen(context.Background(), "a", now.Add(time.Minute)) {
 		t.Fatal("a live id was forgotten")
 	}
 }
@@ -230,7 +230,7 @@ func TestDPoPProofFromAnOpaqueSigner(t *testing.T) {
 				t.Fatal(err)
 			}
 			v := &DPoPVerifier{Replay: NewMemoryReplayCache(0), Now: func() time.Time { return now }}
-			if err := v.Check(c, DPoPRequest{Proof: proof, Method: "POST", URL: dpopURL, Token: "tok"}); err != nil {
+			if err := v.Check(context.Background(), c, DPoPRequest{Proof: proof, Method: "POST", URL: dpopURL, Token: "tok"}); err != nil {
 				t.Fatalf("proof from an opaque signer refused: %v", err)
 			}
 		})
