@@ -32,6 +32,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
@@ -520,9 +521,10 @@ func objectResourceNameFrom(canonicalPrefix string, tenantID uuid.UUID, collecti
 	return canonicalPrefix + "/objects-by-key/" + key
 }
 
+// PresignConfig is what the handler needs to mint presigned URLs: how long
+// they live, and the largest body a single-request (PUT/POST) upload accepts.
 type PresignConfig struct {
-	DefaultTTL     time.Duration
-	MaxTTL         time.Duration
+	TTL            presignttl.Policy
 	DefaultMaxSize int64
 }
 
@@ -669,7 +671,10 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 
 	// 4. Insert PENDING row with presign expiry. key was derived before authz
 	//    (step 2) so the authorized resource IS the object created.
-	ttl := h.presign.DefaultTTL
+	ttl, err := h.presign.TTL.Resolve(presignttl.OpPut, 0)
+	if err != nil {
+		return nil, err
+	}
 	presignExp := time.Now().Add(ttl)
 	obj, err := h.repo.CreateObject(ctx, CreateObjectArgs{
 		TenantID:         tenantID,
@@ -1195,6 +1200,14 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	if collection == "" || objectID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
 	}
+	ttl, err = h.presign.TTL.Resolve(presignttl.OpGet, ttl)
+	if err != nil {
+		return nil, err
+	}
+	disposition, err = NormalizeContentDisposition(disposition)
+	if err != nil {
+		return nil, err
+	}
 	obj, err := h.repo.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
@@ -1227,9 +1240,6 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
 	}, cedar.ActionPresignGet, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
-	}
-	if ttl <= 0 {
-		ttl = h.presign.DefaultTTL
 	}
 	url, headers, expires, err := h.storage.PresignGet(ctx, PresignGetArgs{
 		BackendID:          backendID,
@@ -1787,7 +1797,7 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		Metadata:         coalesceMap(in.Metadata, src.Metadata),
 		Tags:             coalesceMap(in.Tags, src.Tags),
 		ExternalRef:      src.ExternalRef,
-		PresignExpiresAt: time.Now().Add(h.presign.DefaultTTL),
+		PresignExpiresAt: time.Now().Add(h.presign.TTL.Default(presignttl.OpPut)),
 	})
 	if err != nil {
 		return nil, mapCreateErr(err)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -101,7 +100,7 @@ func newPurgeHandler(t *testing.T, repo *purgeRepo, storage Storage) *Handler {
 		repo:    repo,
 		storage: storage,
 		policy:  allowAll{},
-		presign: PresignConfig{DefaultTTL: time.Hour, MaxTTL: 2 * time.Hour},
+		presign: testPresignConfig(),
 	}
 }
 

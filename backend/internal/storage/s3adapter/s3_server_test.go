@@ -1133,11 +1133,11 @@ func TestClientPresignPutGetPost(t *testing.T) {
 	_ = f
 }
 
-func TestPresignViewPart(t *testing.T) {
+func TestPresignPart(t *testing.T) {
 	f := newFakeS3(t)
 	c := newTestClient(t, f.srv.URL)
 
-	url, _, exp, err := c.Presign().PresignPart(testCtx, "b", testTenant, fakeUploadID, "ok", "k", 3, time.Minute)
+	url, _, exp, err := c.PresignPart(testCtx, "b", testTenant, fakeUploadID, "ok", "k", 3, time.Minute)
 	if err != nil {
 		t.Fatalf("PresignPart: %v", err)
 	}
@@ -1150,22 +1150,6 @@ func TestPresignViewPart(t *testing.T) {
 		t.Errorf("uploadId missing: %s", url)
 	}
 	assertExpiry(t, exp, time.Minute)
-}
-
-// Client.PresignPart must behave identically to the view it delegates to —
-// it exists only so *Client also satisfies multipart.Storage.
-func TestClientPresignPartMatchesView(t *testing.T) {
-	f := newFakeS3(t)
-	c := newTestClient(t, f.srv.URL)
-
-	direct, _, _, err := c.PresignPart(testCtx, "b", testTenant, fakeUploadID, "ok", "k", 2, time.Minute)
-	if err != nil {
-		t.Fatalf("Client.PresignPart: %v", err)
-	}
-	assertPresigned(t, direct, composeKey(testTenant, "ok", "k"), "b")
-	if !strings.Contains(direct, "partNumber=2") {
-		t.Errorf("partNumber missing: %s", direct)
-	}
 }
 
 // The whole point of the two-client split: signed URLs must embed the
@@ -1401,12 +1385,6 @@ func TestPresignRouterDelegates(t *testing.T) {
 		t.Fatalf("PresignPut: %v", err)
 	}
 	assertPresigned(t, url, wantKey, "b")
-
-	url, _, _, err = rt.PresignPart(testCtx, "primary", "b", testTenant, fakeUploadID, "ok", "k", 1, time.Minute)
-	if err != nil {
-		t.Fatalf("PresignPart: %v", err)
-	}
-	assertPresigned(t, url, wantKey, "b")
 }
 
 func TestPresignRouterUnknownBackend(t *testing.T) {
@@ -1417,9 +1395,6 @@ func TestPresignRouterUnknownBackend(t *testing.T) {
 	}
 	if _, _, _, err := rt.PresignPut(testCtx, "nope", "b", testTenant, "ok", "k", "", "", time.Minute, 0); err == nil {
 		t.Error("PresignPut to unknown backend: want error")
-	}
-	if _, _, _, err := rt.PresignPart(testCtx, "nope", "b", testTenant, "u", "ok", "k", 1, time.Minute); err == nil {
-		t.Error("PresignPart to unknown backend: want error")
 	}
 }
 

@@ -80,7 +80,7 @@ func downloadHandler(t *testing.T, state statemachine.State) (*Handler, *presign
 		repo:    &downloadRepo{state: state, bucket: "bucket-7"},
 		storage: storage,
 		policy:  authz,
-		presign: PresignConfig{DefaultTTL: time.Hour, MaxTTL: 2 * time.Hour},
+		presign: testPresignConfig(),
 	}
 	return h, storage, authz, ctx
 }
@@ -176,4 +176,69 @@ func TestDownloadObjectUnknownObjectIsNotFound(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", connect.CodeOf(err))
 	}
+}
+
+// DownloadObject used to sign any TTL the caller sent: limits.presign.max_ttl
+// was enforced on PresignService.PresignDownload and nowhere here, so the
+// same URL was bounded through one RPC and unbounded through the other. A TTL
+// above the ceiling, or a negative one, is now InvalidArgument and nothing is
+// signed.
+func TestDownloadObjectRefusesTTLOutsidePolicy(t *testing.T) {
+	cases := []struct {
+		name string
+		ttl  time.Duration
+	}{
+		{"above max_ttl", testPresignMaxTTL + time.Second},
+		{"a week, the old effective ceiling", 7 * 24 * time.Hour},
+		{"negative", -time.Minute},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
+			_, err := h.DownloadObject(ctx, "docs", "report.pdf", tc.ttl, "")
+			if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+				t.Fatalf("code = %v (err %v), want InvalidArgument", got, err)
+			}
+			if storage.got.TTL != 0 {
+				t.Errorf("a URL was signed with TTL %v despite the refusal", storage.got.TTL)
+			}
+		})
+	}
+}
+
+func TestDownloadObjectSignsTheRequestedTTLAtTheCeiling(t *testing.T) {
+	h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
+	if _, err := h.DownloadObject(ctx, "docs", "report.pdf", testPresignMaxTTL, ""); err != nil {
+		t.Fatalf("DownloadObject: %v", err)
+	}
+	if storage.got.TTL != testPresignMaxTTL {
+		t.Errorf("presigned TTL = %v, want exactly max_ttl %v", storage.got.TTL, testPresignMaxTTL)
+	}
+}
+
+// The disposition is a response header the object store writes from the
+// signed URL; DownloadObject now refuses one that is not inline/attachment
+// before anything is signed, and signs the canonical form of one that is.
+func TestDownloadObjectNormalizesContentDisposition(t *testing.T) {
+	t.Run("refused before signing", func(t *testing.T) {
+		h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
+		_, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, "attachment\r\nSet-Cookie: s=1")
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatalf("code = %v, want InvalidArgument", connect.CodeOf(err))
+		}
+		if storage.got.TTL != 0 {
+			t.Fatal("a URL was signed for a refused disposition")
+		}
+	})
+	t.Run("canonical form is signed and returned", func(t *testing.T) {
+		h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
+		out, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, `ATTACHMENT; filename="q3 report.pdf"`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		const want = `attachment; filename="q3 report.pdf"`
+		if storage.got.ContentDisposition != want || out.ContentDisposition != want {
+			t.Fatalf("signed %q, returned %q; want %q", storage.got.ContentDisposition, out.ContentDisposition, want)
+		}
+	})
 }

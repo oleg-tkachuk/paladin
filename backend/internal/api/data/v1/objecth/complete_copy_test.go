@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -85,7 +84,7 @@ func completeHandler(repo *completeRepo, storage Storage) (*Handler, *recordingA
 	authz := &recordingAuthorizer{}
 	h := &Handler{
 		repo: repo, storage: storage, policy: authz,
-		presign: PresignConfig{DefaultTTL: time.Hour, MaxTTL: 2 * time.Hour},
+		presign: testPresignConfig(),
 	}
 	return h, authz, ctx, tenantID
 }

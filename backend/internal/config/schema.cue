@@ -177,13 +177,14 @@ limits: {
   // Empty → accept anything. Listing common types here gives the upload
   // path an early reject for typos / drive-bys.
   allowed_content_types: [...string] | *[]
-  // Presign-URL ttls + body-size cap. Per-method ttls override default_ttl
-  // when non-zero; max_ttl bounds caller-supplied TTLs.
+  // Presign-URL ttls + body-size cap. Each *_ttl is the lifetime a URL of
+  // that kind gets when the caller names none; max_ttl is the most a caller
+  // may ask for, at most 168h (the SigV4 ceiling). Config.Validate enforces
+  // 0 < *_ttl <= max_ttl <= 168h.
   presign: {
     put_ttl:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
     get_ttl:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
     part_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
-    default_ttl:      =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
     max_ttl:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"168h"
     default_max_size: int & >= 1 | *5368709120 // 5 GiB
   }

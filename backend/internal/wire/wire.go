@@ -48,6 +48,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	policy "github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
@@ -115,8 +116,7 @@ func ProvideObjectHandler(
 	cfg config.Config,
 ) *objecth.Handler {
 	return objecth.NewHandler(repos.Object, storage.Object, pe, fe, sm, objecth.PresignConfig{
-		DefaultTTL:     cfg.Limits.Presign.DefaultTTL,
-		MaxTTL:         cfg.Limits.Presign.MaxTTL,
+		TTL:            presignttl.MustFromConfig(cfg.Limits.Presign),
 		DefaultMaxSize: cfg.Limits.Presign.DefaultMaxSize,
 	})
 }
@@ -142,14 +142,12 @@ func ProvideBatchHandler(repos Repos, opH *operationh.Handler, pe *policy.Engine
 
 func ProvidePresignHandler(repos Repos, storage Storage, pe *policy.Engine, cfg config.Config) *presignh.Handler {
 	return presignh.NewHandler(repos.Presign, storage.Presign, pe, presignh.Config{
-		DefaultTTL:     cfg.Limits.Presign.DefaultTTL,
-		MaxTTL:         cfg.Limits.Presign.MaxTTL,
-		DefaultMaxSize: cfg.Limits.Presign.DefaultMaxSize,
+		TTL: presignttl.MustFromConfig(cfg.Limits.Presign),
 	})
 }
 
-func ProvideMultipartHandler(repos Repos, storage Storage, pe *policy.Engine, sm *statemachine.Transitioner) *multiparth.Handler {
-	return multiparth.NewHandler(repos.Multipart, storage.Multipart, pe, sm)
+func ProvideMultipartHandler(repos Repos, storage Storage, pe *policy.Engine, sm *statemachine.Transitioner, cfg config.Config) *multiparth.Handler {
+	return multiparth.NewHandler(repos.Multipart, storage.Multipart, pe, sm, presignttl.MustFromConfig(cfg.Limits.Presign))
 }
 
 // ─── v2 IAM/admin handlers ──────────────────────────────────────────────────

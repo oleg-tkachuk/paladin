@@ -62,7 +62,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	opH := wire.ProvideOperationHandler(repos, polEngine)
 	batchH := wire.ProvideBatchHandler(repos, opH, polEngine)
 	presignH := wire.ProvidePresignHandler(repos, storage, polEngine, cfg)
-	mpH := wire.ProvideMultipartHandler(repos, storage, polEngine, deps.SM)
+	mpH := wire.ProvideMultipartHandler(repos, storage, polEngine, deps.SM, cfg)
 	versionH := wire.ProvideVersionHandler(repos, polEngine)
 	lockH := wire.ProvideLockHandler(repos, polEngine)
 	taintH := wire.ProvideTaintHandler(repos, polEngine)
