@@ -144,14 +144,6 @@ func (r *PresignRouter) PresignPut(ctx context.Context, backendID, bucket string
 	return c.Presign().PresignPut(ctx, bucket, tenantID, collection, key, contentType, checksumAlgo, ttl, sizeHint)
 }
 
-func (r *PresignRouter) PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
-	c, err := r.reg.For(ctx, backendID)
-	if err != nil {
-		return "", nil, time.Time{}, err
-	}
-	return c.Presign().PresignPart(ctx, bucket, tenantID, storageUploadID, collection, key, partNumber, ttl)
-}
-
 // MultipartRouter routes multipart.Storage calls by backend id.
 type MultipartRouter struct{ reg *BackendRegistry }
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -107,7 +106,7 @@ func tailHandler(t *testing.T, repo *completeRepo, st Storage, sm *fakeStateMach
 
 	h := &Handler{
 		repo: repo, storage: st, policy: &recordingAuthorizer{}, sm: sm,
-		presign: PresignConfig{DefaultTTL: time.Hour, MaxTTL: 2 * time.Hour},
+		presign: testPresignConfig(),
 	}
 	h.SetVersionHandler(NewVersionHandler(repo, versions))
 	h.SetQuotaUpdater(quota)

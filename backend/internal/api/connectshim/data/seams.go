@@ -50,7 +50,7 @@ type objectTagHandler interface {
 
 type presignHandler interface {
 	PresignGet(ctx context.Context, collection, objectIDStr string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error)
-	PresignPut(ctx context.Context, collection, objectIDStr, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error)
+	RegenerateUploadURL(ctx context.Context, collection, objectIDStr string, ttl time.Duration) (presignh.UploadURL, error)
 }
 
 type operationHandler interface {

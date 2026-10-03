@@ -34,6 +34,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
@@ -147,7 +148,9 @@ func (h *Handler) UploadSmall(ctx context.Context, stream StreamSource, deps Upl
 
 	// Pre-allocate the PENDING row — on success the stream writer gives us
 	// authoritative values and the SM promotes it.
-	ttl := h.presign.DefaultTTL
+	// No URL is minted here; presign_expires_at is the reaper's deadline for
+	// a stream that never finishes, so it takes the PUT lifetime.
+	ttl := h.presign.TTL.Default(presignttl.OpPut)
 	obj, err := h.repo.CreateObject(ctx, CreateObjectArgs{
 		TenantID: tenantID, Collection: init.Collection, Key: key,
 		ContentType: init.ContentType, SizeHint: init.SizeHint,

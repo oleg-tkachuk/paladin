@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
@@ -209,7 +210,22 @@ func allow() *fakeAuthorizer { return &fakeAuthorizer{decision: cedar.DecisionAl
 // only reached on the DB-coupled success tails of Complete/Abort, which these
 // unit tests deliberately stop short of, so it is never dereferenced.
 func newHandler(repo Repository, storage Storage, authz cedar.Authorizer) *Handler {
-	return NewHandler(repo, storage, authz, statemachine.New(nil))
+	return NewHandler(repo, storage, authz, statemachine.New(nil), testTTLPolicy())
+}
+
+// Part URL lifetimes the tests sign under: part_ttl distinct from the other
+// operations' defaults so the handler cannot pass by resolving the wrong one.
+const (
+	testPartTTL = 25 * time.Minute
+	testMaxTTL  = time.Hour
+)
+
+func testTTLPolicy() presignttl.Policy {
+	p, err := presignttl.New(time.Minute, 2*time.Minute, testPartTTL, testMaxTTL)
+	if err != nil {
+		panic(err)
+	}
+	return p
 }
 
 func authedCtx(tid uuid.UUID) context.Context {
@@ -630,15 +646,49 @@ func TestPresignPart(t *testing.T) {
 		}
 	})
 
-	t.Run("non-positive ttl defaults to 15m", func(t *testing.T) {
+	t.Run("absent ttl → part_ttl", func(t *testing.T) {
 		storage := &fakeStorage{}
 		_, _, _, err := newHandler(okSession(), storage, allow()).
 			PresignPart(authedCtx(tid), "up-1", 1, 0, SessionRef{})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if storage.lastPresign.ttl != 15*time.Minute {
-			t.Fatalf("default ttl: got %v want 15m", storage.lastPresign.ttl)
+		if storage.lastPresign.ttl != testPartTTL {
+			t.Fatalf("default ttl: got %v want part_ttl %v", storage.lastPresign.ttl, testPartTTL)
+		}
+	})
+
+	// Part URLs were the one presign with no ceiling: the requested TTL went
+	// to the signer as-is, so a caller could hold a week-long part URL under
+	// an operator's max_ttl of an hour. Above the ceiling, or negative, is
+	// now InvalidArgument, and nothing is signed.
+	for _, tc := range []struct {
+		name string
+		ttl  time.Duration
+	}{
+		{"above max_ttl", testMaxTTL + time.Second},
+		{"a week", 7 * 24 * time.Hour},
+		{"negative", -time.Second},
+	} {
+		t.Run("ttl "+tc.name+" → invalid argument", func(t *testing.T) {
+			storage := &fakeStorage{}
+			_, _, _, err := newHandler(okSession(), storage, allow()).
+				PresignPart(authedCtx(tid), "up-1", 1, tc.ttl, SessionRef{})
+			wantCode(t, err, connect.CodeInvalidArgument)
+			if storage.lastPresign.ttl != 0 {
+				t.Fatalf("a part URL was signed (ttl %v) despite the refusal", storage.lastPresign.ttl)
+			}
+		})
+	}
+
+	t.Run("ttl at max_ttl is honoured", func(t *testing.T) {
+		storage := &fakeStorage{}
+		if _, _, _, err := newHandler(okSession(), storage, allow()).
+			PresignPart(authedCtx(tid), "up-1", 1, testMaxTTL, SessionRef{}); err != nil {
+			t.Fatal(err)
+		}
+		if storage.lastPresign.ttl != testMaxTTL {
+			t.Fatalf("ttl = %v, want %v", storage.lastPresign.ttl, testMaxTTL)
 		}
 	})
 }

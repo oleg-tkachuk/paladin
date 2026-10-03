@@ -1297,7 +1297,7 @@ type completeObjectArgs struct {
 }
 type presignDownloadArgs struct {
 	Name               string `json:"name" jsonschema:"object resource name"`
-	TtlSeconds         int64  `json:"ttl_seconds,omitempty" jsonschema:"optional override; capped server-side by cfg.Limits.Presign.get_ttl"`
+	TtlSeconds         int64  `json:"ttl_seconds,omitempty" jsonschema:"optional; defaults to limits.presign.get_ttl, refused above limits.presign.max_ttl"`
 	ContentDisposition string `json:"content_disposition,omitempty" jsonschema:"e.g. 'attachment; filename=\"report.pdf\"' to force browser download"`
 }
 type setObjectTagsArgs struct {
@@ -1366,7 +1366,7 @@ type batchUpdateTagsArgs struct {
 }
 type regenerateUploadURLArgs struct {
 	Name       string `json:"name" jsonschema:"object resource name of the pending (not-yet-completed) upload"`
-	TtlSeconds int64  `json:"ttl_seconds,omitempty" jsonschema:"optional override; capped server-side by cfg.Limits.Presign.put_ttl"`
+	TtlSeconds int64  `json:"ttl_seconds,omitempty" jsonschema:"optional; defaults to limits.presign.put_ttl, refused above limits.presign.max_ttl"`
 }
 type initiateMultipartArgs struct {
 	Parent      string            `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}"`
@@ -1380,7 +1380,7 @@ type presignPartArgs struct {
 	ObjectName string `json:"object_name" jsonschema:"object resource name returned by paladin_initiate_multipart_upload"`
 	UploadID   string `json:"upload_id" jsonschema:"upload id from paladin_initiate_multipart_upload"`
 	PartNumber int32  `json:"part_number" jsonschema:"1-based part index"`
-	TtlSeconds int64  `json:"ttl_seconds,omitempty" jsonschema:"optional override; capped server-side"`
+	TtlSeconds int64  `json:"ttl_seconds,omitempty" jsonschema:"optional; defaults to limits.presign.part_ttl, refused above limits.presign.max_ttl"`
 }
 type completedPartArg struct {
 	PartNumber    int32  `json:"part_number" jsonschema:"1-based part index"`

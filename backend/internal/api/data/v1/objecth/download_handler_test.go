@@ -80,7 +80,7 @@ func downloadHandler(t *testing.T, state statemachine.State) (*Handler, *presign
 		repo:    &downloadRepo{state: state, bucket: "bucket-7"},
 		storage: storage,
 		policy:  authz,
-		presign: PresignConfig{DefaultTTL: time.Hour, MaxTTL: 2 * time.Hour},
+		presign: testPresignConfig(),
 	}
 	return h, storage, authz, ctx
 }
@@ -175,5 +175,43 @@ func TestDownloadObjectUnknownObjectIsNotFound(t *testing.T) {
 	_, err := h.DownloadObject(ctx, "docs", "missing.pdf", 0, "")
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", connect.CodeOf(err))
+	}
+}
+
+// DownloadObject used to sign any TTL the caller sent: limits.presign.max_ttl
+// was enforced on PresignService.PresignDownload and nowhere here, so the
+// same URL was bounded through one RPC and unbounded through the other. A TTL
+// above the ceiling, or a negative one, is now InvalidArgument and nothing is
+// signed.
+func TestDownloadObjectRefusesTTLOutsidePolicy(t *testing.T) {
+	cases := []struct {
+		name string
+		ttl  time.Duration
+	}{
+		{"above max_ttl", testPresignMaxTTL + time.Second},
+		{"a week, the old effective ceiling", 7 * 24 * time.Hour},
+		{"negative", -time.Minute},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
+			_, err := h.DownloadObject(ctx, "docs", "report.pdf", tc.ttl, "")
+			if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+				t.Fatalf("code = %v (err %v), want InvalidArgument", got, err)
+			}
+			if storage.got.TTL != 0 {
+				t.Errorf("a URL was signed with TTL %v despite the refusal", storage.got.TTL)
+			}
+		})
+	}
+}
+
+func TestDownloadObjectSignsTheRequestedTTLAtTheCeiling(t *testing.T) {
+	h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
+	if _, err := h.DownloadObject(ctx, "docs", "report.pdf", testPresignMaxTTL, ""); err != nil {
+		t.Fatalf("DownloadObject: %v", err)
+	}
+	if storage.got.TTL != testPresignMaxTTL {
+		t.Errorf("presigned TTL = %v, want exactly max_ttl %v", storage.got.TTL, testPresignMaxTTL)
 	}
 }

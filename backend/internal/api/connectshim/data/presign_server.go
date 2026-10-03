@@ -23,14 +23,13 @@ func (s *PresignServer) RegenerateUploadUrl(ctx context.Context, req *connect.Re
 	if err != nil {
 		return nil, badName(err)
 	}
-	// Regenerate uses PUT path; ContentType / ChecksumAlgo / SizeHint are
-	// looked up server-side from the existing object row by the handler.
-	url, headers, expires, err := s.H.PresignPut(ctx, collection, objectID, "", "", m.GetTtl().AsDuration(), 0)
+	out, err := s.H.RegenerateUploadURL(ctx, collection, objectID, m.GetTtl().AsDuration())
 	if err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&pb.RegenerateUploadUrlResponse{
-		UploadUrl: presignedUrlProto(url, "PUT", headers, expires, "", nil),
+		UploadUrl:      presignedUrlProto(out.URL, "PUT", out.Headers, out.ExpiresAt, "", nil),
+		CompletionMode: completionModeProto(out.CompletionMode),
 	}), nil
 }
 
