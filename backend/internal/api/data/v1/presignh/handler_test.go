@@ -12,45 +12,72 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
+
+// Lifetimes the tests sign under: distinct per operation, so a handler that
+// resolved the wrong operation's default cannot pass by coincidence.
+const (
+	testGetTTL  = 10 * time.Minute
+	testPutTTL  = 20 * time.Minute
+	testPartTTL = 30 * time.Minute
+	testMaxTTL  = 2 * time.Hour
+)
+
+func testConfig(t *testing.T) Config {
+	t.Helper()
+	p, err := presignttl.New(testGetTTL, testPutTTL, testPartTTL, testMaxTTL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return Config{TTL: p}
+}
 
 // --- fakes ---------------------------------------------------------------
 
 // fakeRepo is a configurable in-memory Repository. Each method delegates to
-// a func field so a test can drive a specific branch; nil funcs return zero
-// values so tests only wire the methods they exercise.
+// a func field so a test can drive a specific branch; nil funcs return a
+// healthy default so tests only wire the methods they exercise.
 type fakeRepo struct {
-	lookupObjectFn    func(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (string, string, string, error)
-	lookupMultipartFn func(ctx context.Context, uploadID string) (string, string, string, error)
-	lookupBucketFn    func(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error)
+	lookupObjectFn func(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (ObjectRef, error)
+	lookupMetaFn   func(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error)
+	extendErr      error
 
-	// captured args from the last LookupBucket call.
-	lastBucketWrite      bool
-	lastBucketCollection string
+	// captured args.
+	lastBucketWrite bool
+	extendCalled    bool
+	extendTenant    uuid.UUID
+	extendObject    uuid.UUID
+	extendTo        time.Time
 }
 
-func (f *fakeRepo) LookupObjectByName(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (string, string, string, error) {
+func (f *fakeRepo) LookupObject(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (ObjectRef, error) {
 	if f.lookupObjectFn == nil {
-		return collection, "phys-key", "AVAILABLE", nil
+		return ObjectRef{Collection: collection, Key: "phys-key", State: "AVAILABLE", ContentType: "image/png"}, nil
 	}
 	return f.lookupObjectFn(ctx, tenantID, collection, objectID)
 }
 
-func (f *fakeRepo) LookupMultipartSession(ctx context.Context, uploadID string) (string, string, string, error) {
-	if f.lookupMultipartFn == nil {
-		return "s3-upload", "obj", "phys-key", nil
+func (f *fakeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error) {
+	f.lastBucketWrite = write
+	if f.lookupMetaFn == nil {
+		return objecth.BucketMeta{BackendID: "backend-1", BucketName: "bucket-1"}, nil
 	}
-	return f.lookupMultipartFn(ctx, uploadID)
+	return f.lookupMetaFn(ctx, tenantID, collection, write)
 }
 
-func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
-	f.lastBucketWrite = write
-	f.lastBucketCollection = collection
-	if f.lookupBucketFn == nil {
-		return "backend-1", "bucket-1", nil
-	}
-	return f.lookupBucketFn(ctx, tenantID, collection, write)
+func (f *fakeRepo) ExtendPendingPresign(_ context.Context, tenantID, objectID uuid.UUID, expiresAt time.Time) error {
+	f.extendCalled = true
+	f.extendTenant, f.extendObject, f.extendTo = tenantID, objectID, expiresAt
+	return f.extendErr
+}
+
+// pendingRepo serves a PENDING object with a stored Content-Type.
+func pendingRepo() *fakeRepo {
+	return &fakeRepo{lookupObjectFn: func(_ context.Context, _ uuid.UUID, ok string, _ uuid.UUID) (ObjectRef, error) {
+		return ObjectRef{Collection: ok, Key: "phys", State: "PENDING", ContentType: "image/png"}, nil
+	}}
 }
 
 // fakeStorage records the args the handler forwards so tests can assert the
@@ -58,20 +85,19 @@ func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collect
 type fakeStorage struct {
 	err error
 
-	getCalled  bool
-	putCalled  bool
-	partCalled bool
+	getCalled bool
+	putCalled bool
 
 	gotTTL         time.Duration
 	gotDisposition string
 	gotContentType string
-	gotChecksum    string
-	gotSizeHint    int64
-	gotPartNumber  int32
-	gotStorageUp   string
 	gotBackendID   string
 	gotBucket      string
 }
+
+// putExpiry is what the fake presigner reports as the PUT URL's expiry; the
+// reaper deadline must be moved to exactly this instant.
+var putExpiry = time.Unix(200, 0)
 
 func (f *fakeStorage) PresignGet(_ context.Context, backendID, bucket string, _ uuid.UUID, _, _ string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
 	f.getCalled = true
@@ -82,24 +108,14 @@ func (f *fakeStorage) PresignGet(_ context.Context, backendID, bucket string, _ 
 	return "https://s3/get", map[string]string{"h": "get"}, time.Unix(100, 0), nil
 }
 
-func (f *fakeStorage) PresignPut(_ context.Context, backendID, bucket string, _ uuid.UUID, _, _, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
+func (f *fakeStorage) PresignPut(_ context.Context, backendID, bucket string, _ uuid.UUID, _, _, contentType, _ string, ttl time.Duration, _ int64) (string, map[string]string, time.Time, error) {
 	f.putCalled = true
-	f.gotTTL, f.gotContentType, f.gotChecksum, f.gotSizeHint = ttl, contentType, checksumAlgo, sizeHint
+	f.gotTTL, f.gotContentType = ttl, contentType
 	f.gotBackendID, f.gotBucket = backendID, bucket
 	if f.err != nil {
 		return "", nil, time.Time{}, f.err
 	}
-	return "https://s3/put", map[string]string{"h": "put"}, time.Unix(200, 0), nil
-}
-
-func (f *fakeStorage) PresignPart(_ context.Context, backendID, bucket string, _ uuid.UUID, storageUploadID, _, _ string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
-	f.partCalled = true
-	f.gotTTL, f.gotPartNumber, f.gotStorageUp = ttl, partNumber, storageUploadID
-	f.gotBackendID, f.gotBucket = backendID, bucket
-	if f.err != nil {
-		return "", nil, time.Time{}, f.err
-	}
-	return "https://s3/part", map[string]string{"h": "part"}, time.Unix(300, 0), nil
+	return "https://s3/put", map[string]string{"h": "put"}, putExpiry, nil
 }
 
 // fakePolicy is a cedar.Authorizer whose decision/error are fixed per test.
@@ -109,18 +125,14 @@ type fakePolicy struct {
 	decision    cedar.Decision
 	err         error
 	gotAction   string
-	gotSubject  string
 	gotResource *cedar.Resource
 }
 
-func (f *fakePolicy) IsAuthorized(_ context.Context, p *cedar.Principal, action string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (f *fakePolicy) IsAuthorized(_ context.Context, _ *cedar.Principal, action string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	f.gotAction = action
 	if r != nil {
 		cp := *r
 		f.gotResource = &cp
-	}
-	if p != nil {
-		f.gotSubject = p.Subject
 	}
 	return f.decision, f.err
 }
@@ -158,111 +170,145 @@ const validObjectID = "11111111-1111-1111-1111-111111111111"
 
 func TestPresignGet(t *testing.T) {
 	tid := uuid.New()
+	cfg := testConfig(t)
 
 	t.Run("unauthenticated", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
+		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
 		_, _, _, err := h.PresignGet(context.Background(), "obj", validObjectID, 0, "")
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
 	t.Run("missing collection → invalid argument", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
+		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
 		_, _, _, err := h.PresignGet(authedCtx(tid), "", validObjectID, 0, "")
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("missing object_id → invalid argument", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
+		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
 		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", "", 0, "")
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("unparseable object_id → invalid argument", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
+		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
 		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", "not-a-uuid", 0, "")
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("repo lookup error → not found", func(t *testing.T) {
-		repo := &fakeRepo{lookupObjectFn: func(context.Context, uuid.UUID, string, uuid.UUID) (string, string, string, error) {
-			return "", "", "", errors.New("no such object")
+		repo := &fakeRepo{lookupObjectFn: func(context.Context, uuid.UUID, string, uuid.UUID) (ObjectRef, error) {
+			return ObjectRef{}, errors.New("no such object")
 		}}
-		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), Config{})
+		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
 		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
 		wantCode(t, err, connect.CodeNotFound)
 	})
 
 	t.Run("non-AVAILABLE state → failed precondition", func(t *testing.T) {
-		repo := &fakeRepo{lookupObjectFn: func(_ context.Context, _ uuid.UUID, ok string, _ uuid.UUID) (string, string, string, error) {
-			return ok, "phys", "PENDING", nil
-		}}
-		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), Config{})
+		h := NewHandler(pendingRepo(), &fakeStorage{}, allowPolicy(), cfg)
 		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
 		wantCode(t, err, connect.CodeFailedPrecondition)
 	})
 
 	t.Run("capability lacks presign op → permission denied", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
+		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
 		ctx := authedCtxWithCap(tid, capability.OpGet) // has OpGet, missing OpPresign
 		_, _, _, err := h.PresignGet(ctx, "obj", validObjectID, 0, "")
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("capability has presign but lacks get op → permission denied", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
+		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
 		ctx := authedCtxWithCap(tid, capability.OpPresign) // missing OpGet
 		_, _, _, err := h.PresignGet(ctx, "obj", validObjectID, 0, "")
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, &fakePolicy{decision: cedar.DecisionDeny}, Config{})
+		h := NewHandler(&fakeRepo{}, &fakeStorage{}, &fakePolicy{decision: cedar.DecisionDeny}, cfg)
 		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("policy error → internal", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, &fakePolicy{err: errors.New("engine down")}, Config{})
+		h := NewHandler(&fakeRepo{}, &fakeStorage{}, &fakePolicy{err: errors.New("engine down")}, cfg)
 		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
 		wantCode(t, err, connect.CodeInternal)
 	})
 
 	t.Run("bucket resolve error → not found", func(t *testing.T) {
-		repo := &fakeRepo{lookupBucketFn: func(context.Context, uuid.UUID, string, bool) (string, string, error) {
-			return "", "", errors.New("route missing")
+		repo := &fakeRepo{lookupMetaFn: func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
+			return objecth.BucketMeta{}, errors.New("route missing")
 		}}
-		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), Config{})
+		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
 		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
 		wantCode(t, err, connect.CodeNotFound)
 	})
 
 	t.Run("disabled backend → failed precondition", func(t *testing.T) {
-		repo := &fakeRepo{lookupBucketFn: func(context.Context, uuid.UUID, string, bool) (string, string, error) {
-			return "", "", objecth.ErrBackendDisabled
+		repo := &fakeRepo{lookupMetaFn: func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
+			return objecth.BucketMeta{}, objecth.ErrBackendDisabled
 		}}
-		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), Config{})
+		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
 		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
 		wantCode(t, err, connect.CodeFailedPrecondition)
 	})
 
-	t.Run("ok forwards resolved TTL + disposition, reads from bucket", func(t *testing.T) {
+	// The proto has always said a TTL above max_ttl is InvalidArgument; the
+	// handler clamped it instead, so a caller asking for five hours got two
+	// and was not told. Nothing is signed for a refused TTL.
+	t.Run("ttl above max_ttl → invalid argument, nothing signed", func(t *testing.T) {
+		st := &fakeStorage{}
+		h := NewHandler(&fakeRepo{}, st, allowPolicy(), cfg)
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, testMaxTTL+time.Second, "")
+		wantCode(t, err, connect.CodeInvalidArgument)
+		if st.getCalled {
+			t.Fatal("a URL was signed for a refused TTL")
+		}
+	})
+
+	t.Run("negative ttl → invalid argument", func(t *testing.T) {
+		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, -time.Second, "")
+		wantCode(t, err, connect.CodeInvalidArgument)
+	})
+
+	t.Run("absent ttl → get_ttl", func(t *testing.T) {
+		st := &fakeStorage{}
+		h := NewHandler(&fakeRepo{}, st, allowPolicy(), cfg)
+		if _, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, ""); err != nil {
+			t.Fatal(err)
+		}
+		if st.gotTTL != testGetTTL {
+			t.Fatalf("TTL = %v, want get_ttl %v", st.gotTTL, testGetTTL)
+		}
+	})
+
+	t.Run("an unconfigured policy refuses rather than signs unbounded", func(t *testing.T) {
+		st := &fakeStorage{}
+		h := NewHandler(&fakeRepo{}, st, allowPolicy(), Config{})
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "")
+		wantCode(t, err, connect.CodeInternal)
+		if st.getCalled {
+			t.Fatal("signed with no TTL policy")
+		}
+	})
+
+	t.Run("ok forwards requested TTL + disposition, reads from bucket", func(t *testing.T) {
 		repo := &fakeRepo{}
 		st := &fakeStorage{}
 		pol := allowPolicy()
-		// requested TTL over the max ceiling → clamped to MaxTTL.
-		h := NewHandler(repo, st, pol, Config{DefaultTTL: time.Hour, MaxTTL: 2 * time.Hour})
-		url, headers, exp, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 5*time.Hour, "inline")
+		h := NewHandler(repo, st, pol, cfg)
+		url, headers, exp, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, time.Hour, "inline")
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
-		}
-		if !st.getCalled {
-			t.Fatal("storage.PresignGet was not called")
 		}
 		if url != "https://s3/get" || headers["h"] != "get" || !exp.Equal(time.Unix(100, 0)) {
 			t.Fatalf("passthrough mismatch: url=%q headers=%v exp=%v", url, headers, exp)
 		}
-		if st.gotTTL != 2*time.Hour {
-			t.Fatalf("TTL not clamped to MaxTTL: got %v want %v", st.gotTTL, 2*time.Hour)
+		if st.gotTTL != time.Hour {
+			t.Fatalf("TTL = %v, want the requested 1h", st.gotTTL)
 		}
 		if st.gotDisposition != "inline" {
 			t.Fatalf("disposition not forwarded: got %q", st.gotDisposition)
@@ -279,88 +325,172 @@ func TestPresignGet(t *testing.T) {
 	})
 }
 
-// --- PresignPut ----------------------------------------------------------
+// --- RegenerateUploadURL -------------------------------------------------
 
-func TestPresignPut(t *testing.T) {
+func TestRegenerateUploadURL(t *testing.T) {
 	tid := uuid.New()
-
-	// PresignPut requires PENDING state; the default fakeRepo returns
-	// AVAILABLE, so callers that must clear the state gate use pendingRepo.
-	pendingRepo := func() *fakeRepo {
-		return &fakeRepo{lookupObjectFn: func(_ context.Context, _ uuid.UUID, ok string, _ uuid.UUID) (string, string, string, error) {
-			return ok, "phys", "PENDING", nil
-		}}
-	}
+	cfg := testConfig(t)
 
 	t.Run("unauthenticated", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
-		_, _, _, err := h.PresignPut(context.Background(), "obj", validObjectID, "", "", 0, 0)
+		h := NewHandler(pendingRepo(), &fakeStorage{}, allowPolicy(), cfg)
+		_, err := h.RegenerateUploadURL(context.Background(), "obj", validObjectID, 0)
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
 	t.Run("missing object_id → invalid argument", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
-		_, _, _, err := h.PresignPut(authedCtx(tid), "obj", "", "", "", 0, 0)
+		h := NewHandler(pendingRepo(), &fakeStorage{}, allowPolicy(), cfg)
+		_, err := h.RegenerateUploadURL(authedCtx(tid), "obj", "", 0)
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("unparseable object_id → invalid argument", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
-		_, _, _, err := h.PresignPut(authedCtx(tid), "obj", "nope", "", "", 0, 0)
+		h := NewHandler(pendingRepo(), &fakeStorage{}, allowPolicy(), cfg)
+		_, err := h.RegenerateUploadURL(authedCtx(tid), "obj", "nope", 0)
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("AVAILABLE state rejects PUT → failed precondition", func(t *testing.T) {
-		// default fakeRepo returns AVAILABLE; PUT only allowed on PENDING.
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
-		_, _, _, err := h.PresignPut(authedCtx(tid), "obj", validObjectID, "", "", 0, 0)
+		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
+		_, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0)
 		wantCode(t, err, connect.CodeFailedPrecondition)
 	})
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
-		h := NewHandler(pendingRepo(), &fakeStorage{}, allowPolicy(), Config{})
+		h := NewHandler(pendingRepo(), &fakeStorage{}, allowPolicy(), cfg)
 		ctx := authedCtxWithCap(tid, capability.OpPresign) // missing OpPut
-		_, _, _, err := h.PresignPut(ctx, "obj", validObjectID, "", "", 0, 0)
+		_, err := h.RegenerateUploadURL(ctx, "obj", validObjectID, 0)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
-		h := NewHandler(pendingRepo(), &fakeStorage{}, &fakePolicy{decision: cedar.DecisionDeny}, Config{})
-		_, _, _, err := h.PresignPut(authedCtx(tid), "obj", validObjectID, "", "", 0, 0)
+		h := NewHandler(pendingRepo(), &fakeStorage{}, &fakePolicy{decision: cedar.DecisionDeny}, cfg)
+		_, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("bucket resolve error → not found", func(t *testing.T) {
 		repo := pendingRepo()
-		repo.lookupBucketFn = func(context.Context, uuid.UUID, string, bool) (string, string, error) {
-			return "", "", errors.New("route missing")
+		repo.lookupMetaFn = func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
+			return objecth.BucketMeta{}, errors.New("route missing")
 		}
-		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), Config{})
-		_, _, _, err := h.PresignPut(authedCtx(tid), "obj", validObjectID, "", "", 0, 0)
+		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
+		_, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0)
 		wantCode(t, err, connect.CodeNotFound)
 	})
 
-	t.Run("ok forwards content-type/checksum/size + default TTL + write bucket", func(t *testing.T) {
+	t.Run("ttl above max_ttl → invalid argument", func(t *testing.T) {
+		st := &fakeStorage{}
+		h := NewHandler(pendingRepo(), st, allowPolicy(), cfg)
+		_, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, testMaxTTL+time.Minute)
+		wantCode(t, err, connect.CodeInvalidArgument)
+		if st.putCalled {
+			t.Fatal("a URL was signed for a refused TTL")
+		}
+	})
+
+	t.Run("storage presigner error → internal, deadline untouched", func(t *testing.T) {
+		repo := pendingRepo()
+		h := NewHandler(repo, &fakeStorage{err: errors.New("sigv4 failed")}, allowPolicy(), cfg)
+		_, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0)
+		wantCode(t, err, connect.CodeInternal)
+		if repo.extendCalled {
+			t.Fatal("the reaper deadline moved for a URL that was never issued")
+		}
+	})
+
+	// The object can leave PENDING between the lookup and the deadline
+	// update — completed by an event, failed by the reaper. The URL just
+	// signed must not reach the caller then.
+	t.Run("object left PENDING before the deadline moved → failed precondition", func(t *testing.T) {
+		repo := pendingRepo()
+		repo.extendErr = ErrNotPending
+		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
+		_, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0)
+		wantCode(t, err, connect.CodeFailedPrecondition)
+	})
+
+	t.Run("deadline store error → internal", func(t *testing.T) {
+		repo := pendingRepo()
+		repo.extendErr = errors.New("db down")
+		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
+		_, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0)
+		wantCode(t, err, connect.CodeInternal)
+	})
+
+	// The regression this RPC was broken by: the connect shim passed an empty
+	// Content-Type, which the SDK signs as an empty header, so the
+	// regenerated URL refused the Content-Type the original accepted. The
+	// URL is signed with the type stored on the row.
+	t.Run("signs the stored Content-Type", func(t *testing.T) {
+		st := &fakeStorage{}
+		h := NewHandler(pendingRepo(), st, allowPolicy(), cfg)
+		if _, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0); err != nil {
+			t.Fatal(err)
+		}
+		if st.gotContentType != "image/png" {
+			t.Fatalf("signed Content-Type = %q, want the row's image/png", st.gotContentType)
+		}
+	})
+
+	// The second regression: presign_expires_at stayed at the FIRST URL's
+	// expiry, so the reaper failed the row under a client holding a fresh,
+	// valid URL.
+	t.Run("moves the reaper deadline to the new URL's expiry", func(t *testing.T) {
+		repo := pendingRepo()
+		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
+		if _, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0); err != nil {
+			t.Fatal(err)
+		}
+		if !repo.extendCalled {
+			t.Fatal("presign_expires_at was not moved")
+		}
+		if repo.extendTenant != tid || repo.extendObject.String() != validObjectID {
+			t.Fatalf("deadline moved for tenant=%s object=%s, want %s/%s", repo.extendTenant, repo.extendObject, tid, validObjectID)
+		}
+		if !repo.extendTo.Equal(putExpiry) {
+			t.Fatalf("deadline moved to %v, want the URL's expiry %v", repo.extendTo, putExpiry)
+		}
+	})
+
+	completion := []struct {
+		name   string
+		events bool
+		want   objecth.CompletionMode
+	}{
+		{"events backend → implicit", true, objecth.CompletionModeImplicit},
+		{"no events → explicit", false, objecth.CompletionModeExplicit},
+	}
+	for _, tc := range completion {
+		t.Run("completion mode: "+tc.name, func(t *testing.T) {
+			repo := pendingRepo()
+			repo.lookupMetaFn = func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
+				return objecth.BucketMeta{BackendID: "backend-1", BucketName: "bucket-1", EventsEnabled: tc.events}, nil
+			}
+			h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
+			out, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if out.CompletionMode != tc.want {
+				t.Fatalf("completion mode = %v, want %v", out.CompletionMode, tc.want)
+			}
+		})
+	}
+
+	t.Run("ok: put_ttl by default, write bucket, presign-put action", func(t *testing.T) {
 		repo := pendingRepo()
 		st := &fakeStorage{}
 		pol := allowPolicy()
-		// requested TTL 0 → DefaultTTL.
-		h := NewHandler(repo, st, pol, Config{DefaultTTL: 30 * time.Minute, MaxTTL: time.Hour})
-		url, headers, exp, err := h.PresignPut(authedCtx(tid), "obj", validObjectID, "image/png", "SHA256", 0, 4096)
+		h := NewHandler(repo, st, pol, cfg)
+		out, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if !st.putCalled {
-			t.Fatal("storage.PresignPut was not called")
+		if out.URL != "https://s3/put" || out.Headers["h"] != "put" || !out.ExpiresAt.Equal(putExpiry) {
+			t.Fatalf("passthrough mismatch: %+v", out)
 		}
-		if url != "https://s3/put" || headers["h"] != "put" || !exp.Equal(time.Unix(200, 0)) {
-			t.Fatalf("passthrough mismatch: url=%q headers=%v exp=%v", url, headers, exp)
-		}
-		if st.gotTTL != 30*time.Minute {
-			t.Fatalf("TTL: got %v want DefaultTTL 30m", st.gotTTL)
-		}
-		if st.gotContentType != "image/png" || st.gotChecksum != "SHA256" || st.gotSizeHint != 4096 {
-			t.Fatalf("args not forwarded: ct=%q sum=%q size=%d", st.gotContentType, st.gotChecksum, st.gotSizeHint)
+		if st.gotTTL != testPutTTL {
+			t.Fatalf("TTL = %v, want put_ttl %v", st.gotTTL, testPutTTL)
 		}
 		if !repo.lastBucketWrite {
 			t.Fatal("PUT must resolve bucket with write=true")
@@ -372,95 +502,6 @@ func TestPresignPut(t *testing.T) {
 		// check — or a bucket:/collection:-scoped PAT is fail-closed on PUT.
 		if pol.gotResource == nil || pol.gotResource.BucketName != "bucket-1" || pol.gotResource.BackendID != "backend-1" {
 			t.Fatalf("authz Resource missing physical binding: %+v", pol.gotResource)
-		}
-	})
-}
-
-// --- PresignPart ---------------------------------------------------------
-
-func TestPresignPart(t *testing.T) {
-	tid := uuid.New()
-
-	t.Run("unauthenticated", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
-		_, _, _, err := h.PresignPart(context.Background(), "up-1", 1, 0)
-		wantCode(t, err, connect.CodeUnauthenticated)
-	})
-
-	t.Run("session lookup error → not found", func(t *testing.T) {
-		repo := &fakeRepo{lookupMultipartFn: func(context.Context, string) (string, string, string, error) {
-			return "", "", "", errors.New("no session")
-		}}
-		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), Config{})
-		_, _, _, err := h.PresignPart(authedCtx(tid), "up-1", 1, 0)
-		wantCode(t, err, connect.CodeNotFound)
-	})
-
-	t.Run("capability lacks presign op → permission denied", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
-		ctx := authedCtxWithCap(tid, capability.OpPut) // missing OpPresign
-		_, _, _, err := h.PresignPart(ctx, "up-1", 1, 0)
-		wantCode(t, err, connect.CodePermissionDenied)
-	})
-
-	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), Config{})
-		ctx := authedCtxWithCap(tid, capability.OpPresign) // missing OpPut
-		_, _, _, err := h.PresignPart(ctx, "up-1", 1, 0)
-		wantCode(t, err, connect.CodePermissionDenied)
-	})
-
-	t.Run("policy denies → permission denied", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeStorage{}, &fakePolicy{decision: cedar.DecisionDeny}, Config{})
-		_, _, _, err := h.PresignPart(authedCtx(tid), "up-1", 1, 0)
-		wantCode(t, err, connect.CodePermissionDenied)
-	})
-
-	t.Run("bucket resolve error → not found", func(t *testing.T) {
-		repo := &fakeRepo{lookupBucketFn: func(context.Context, uuid.UUID, string, bool) (string, string, error) {
-			return "", "", errors.New("route missing")
-		}}
-		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), Config{})
-		_, _, _, err := h.PresignPart(authedCtx(tid), "up-1", 1, 0)
-		wantCode(t, err, connect.CodeNotFound)
-	})
-
-	t.Run("ok forwards storage upload id + part number + resolved TTL", func(t *testing.T) {
-		repo := &fakeRepo{lookupMultipartFn: func(context.Context, string) (string, string, string, error) {
-			return "s3-up-99", "obj", "phys", nil
-		}}
-		st := &fakeStorage{}
-		h := NewHandler(repo, st, allowPolicy(), Config{DefaultTTL: time.Hour, MaxTTL: 3 * time.Hour})
-		url, headers, exp, err := h.PresignPart(authedCtx(tid), "up-1", 7, 2*time.Hour)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if !st.partCalled {
-			t.Fatal("storage.PresignPart was not called")
-		}
-		if url != "https://s3/part" || headers["h"] != "part" || !exp.Equal(time.Unix(300, 0)) {
-			t.Fatalf("passthrough mismatch: url=%q headers=%v exp=%v", url, headers, exp)
-		}
-		if st.gotStorageUp != "s3-up-99" {
-			t.Fatalf("storage upload id not forwarded: got %q", st.gotStorageUp)
-		}
-		if st.gotPartNumber != 7 {
-			t.Fatalf("part number not forwarded: got %d want 7", st.gotPartNumber)
-		}
-		if st.gotTTL != 2*time.Hour { // within bounds → passthrough
-			t.Fatalf("TTL: got %v want 2h", st.gotTTL)
-		}
-		if !repo.lastBucketWrite {
-			t.Fatal("part upload must resolve bucket with write=true")
-		}
-	})
-
-	t.Run("storage presigner error propagates", func(t *testing.T) {
-		st := &fakeStorage{err: errors.New("sigv4 failed")}
-		h := NewHandler(&fakeRepo{}, st, allowPolicy(), Config{})
-		_, _, _, err := h.PresignPart(authedCtx(tid), "up-1", 1, 0)
-		if err == nil {
-			t.Fatal("expected storage error to propagate")
 		}
 	})
 }

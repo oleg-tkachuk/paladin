@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -365,4 +366,21 @@ func TestObjectResourceName(t *testing.T) {
 	if got != want {
 		t.Errorf("objectResourceName = %q, want %q", got, want)
 	}
+}
+
+// testPresignTTL and testPresignMaxTTL are the lifetimes handler tests sign
+// with: a one-hour default under a two-hour ceiling.
+const (
+	testPresignTTL    = time.Hour
+	testPresignMaxTTL = 2 * time.Hour
+	// testPresignMaxSize is the single-request upload cap tests run under.
+	testPresignMaxSize = 5 << 30
+)
+
+func testPresignConfig() PresignConfig {
+	p, err := presignttl.New(testPresignTTL, testPresignTTL, testPresignTTL, testPresignMaxTTL)
+	if err != nil {
+		panic(err)
+	}
+	return PresignConfig{TTL: p, DefaultMaxSize: testPresignMaxSize}
 }

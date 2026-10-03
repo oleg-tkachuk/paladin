@@ -693,25 +693,20 @@ func (p *PresignView) PresignPut(ctx context.Context, bucket string, tenantID uu
 	})
 }
 
-func (p *PresignView) PresignPart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
+// PresignPart signs one UploadPart for MultipartUploadService.PresignPart;
+// *Client satisfies multiparth.Storage through it.
+func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
 	in := &s3.UploadPartInput{
-		Bucket:     aws.String(p.c.resolveBucket(bucket)),
+		Bucket:     aws.String(c.resolveBucket(bucket)),
 		Key:        aws.String(composeKey(tenantID, collection, key)),
 		PartNumber: aws.Int32(partNumber),
 		UploadId:   aws.String(storageUploadID),
 	}
-	req, err := p.c.presign.PresignUploadPart(ctx, in, s3.WithPresignExpires(ttl))
+	req, err := c.presign.PresignUploadPart(ctx, in, s3.WithPresignExpires(ttl))
 	if err != nil {
 		return "", nil, time.Time{}, fmt.Errorf("presign part: %w", err)
 	}
 	return req.URL, signedHeaders(req), time.Now().Add(ttl), nil
-}
-
-// PresignPart on *Client delegates to the PresignView so that *Client also
-// satisfies multipart.Storage (which needs the part-presign capability for
-// the MultipartUploadService.PresignPart RPC).
-func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
-	return (&PresignView{c: c}).PresignPart(ctx, bucket, tenantID, storageUploadID, collection, key, partNumber, ttl)
 }
 
 // ─── object.StreamSink (methods; StreamRouter satisfies the interface) ──────

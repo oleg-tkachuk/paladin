@@ -429,7 +429,10 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 		lookup func(context.Context, uuid.UUID, string, bool) (string, string, error)
 	}{
 		{"object", adapters.NewObjectRepo(q, h.PoolMigrate).LookupBucket},
-		{"presign", adapters.NewPresignRepo(q, h.PoolMigrate).LookupBucket},
+		{"presign", func(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
+			meta, err := adapters.NewPresignRepo(q, h.PoolMigrate).LookupBucketMeta(ctx, tenantID, collection, write)
+			return meta.BackendID, meta.BucketName, err
+		}},
 		{"multipart", adapters.NewMultipartRepo(q, h.PoolMigrate).LookupBucket},
 	}
 

@@ -146,7 +146,6 @@ limits:
     put_ttl: 15m                        # per-method ttl for PresignPut / UploadObject
     get_ttl: 15m                        # PresignGet / DownloadObject
     part_ttl: 15m                       # PresignPart (multipart)
-    default_ttl: 15m                    # fallback when caller passes no ttl
     max_ttl: 168h                       # 7d — upper bound for caller-supplied ttls
     default_max_size: 5368709120        # 5 GiB; POST policy content-length-range cap
 

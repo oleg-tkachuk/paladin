@@ -20,7 +20,9 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/capability"
 	"go.uber.org/zap"
@@ -174,6 +176,7 @@ type Handler struct {
 	storage  Storage
 	policy   cedar.Authorizer
 	sm       *statemachine.Transitioner
+	ttl      presignttl.Policy
 	versions VersionRecorder // optional
 	quota    QuotaUpdater    // optional
 }
@@ -182,8 +185,8 @@ type Handler struct {
 // CompleteMultipartUpload after a successful promotion. nil = no-op.
 func (h *Handler) SetQuotaUpdater(q QuotaUpdater) { h.quota = q }
 
-func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, sm *statemachine.Transitioner) *Handler {
-	return &Handler{repo: repo, storage: storage, policy: policy, sm: sm}
+func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, sm *statemachine.Transitioner, ttl presignttl.Policy) *Handler {
+	return &Handler{repo: repo, storage: storage, policy: policy, sm: sm, ttl: ttl}
 }
 
 // SetVersionRecorder attaches the optional recorder used after a successful
@@ -391,7 +394,18 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, wan
 // in-flight multipart session. Authorization is checked against the underlying
 // object's (collection, key); the storage URL targets the bucket bound to that
 // Collection.
-func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration, want SessionRef) (string, map[string]string, time.Time, error) {
+func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration, want SessionRef) (url string, hdrs map[string]string, exp time.Time, err error) {
+	// Counted like every other presign: Paladin never proxies bytes, so the
+	// URL is the transfer as far as the control plane is concerned.
+	start := time.Now()
+	defer func() {
+		metrics.RecordPresign(ctx, metrics.PresignOpPart, metrics.PresignOutcome(err), time.Since(start).Seconds())
+	}()
+
+	ttl, err = h.ttl.Resolve(presignttl.OpPart, ttl)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
 	tenantID, p, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
@@ -431,9 +445,6 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 		if err != nil {
 			return "", nil, time.Time{}, objecth.MapResolveErr(err)
 		}
-	}
-	if ttl <= 0 {
-		ttl = 15 * time.Minute
 	}
 	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, partNumber, ttl)
 }

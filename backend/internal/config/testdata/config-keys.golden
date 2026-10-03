@@ -260,7 +260,6 @@ limits.max_parts
 limits.min_part_size
 limits.presign
 limits.presign.default_max_size
-limits.presign.default_ttl
 limits.presign.get_ttl
 limits.presign.max_ttl
 limits.presign.part_ttl

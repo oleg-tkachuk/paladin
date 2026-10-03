@@ -359,9 +359,9 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				// Routed: BatchCopy resolves (backend, bucket) per collection
 				// and builds Locations carrying BackendID, so the router
 				// dispatches each copy to the right backend.
-				Storage:           s3adapter.NewObjectRouter(deps.Registry),
-				Transitions:       smReaper,
-				PresignDefaultTTL: cfg.Limits.Presign.DefaultTTL,
+				Storage:     s3adapter.NewObjectRouter(deps.Registry),
+				Transitions: smReaper,
+				PendingTTL:  cfg.Limits.Presign.PutTTL,
 			},
 			"BatchUpdateTags": &operations.BatchUpdateTagsExecutor{
 				Objects: deps.Repos.Object,

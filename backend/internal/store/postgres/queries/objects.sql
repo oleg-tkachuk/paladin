@@ -276,3 +276,13 @@ WHERE o.tenant_id = $1
   AND c.name = $2
   AND o.path = $3
   AND o.state <> 'DELETED';
+
+-- name: ExtendPendingPresign :execrows
+-- RegenerateUploadUrl hands a PENDING object a new PUT URL; the reaper's
+-- deadline moves with it, or the row is failed under a client still holding
+-- a valid URL. GREATEST, so a shorter regenerated URL never pulls the
+-- deadline in under an earlier one that is still live.
+UPDATE objects
+SET presign_expires_at = GREATEST(COALESCE(presign_expires_at, sqlc.arg('expires_at')), sqlc.arg('expires_at'))
+WHERE tenant_id = $1 AND id = $2
+  AND state = 'PENDING';

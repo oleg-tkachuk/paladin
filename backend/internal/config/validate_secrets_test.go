@@ -18,6 +18,7 @@ func minimalValidConfig() Config {
 		Datastores: Datastores{
 			Postgres: Postgres{DSN: "postgres://x@y/z"},
 		},
+		Limits: Limits{Presign: validPresign()},
 		Storage: Storage{
 			Backends: map[string]StorageBackend{
 				"primary": {

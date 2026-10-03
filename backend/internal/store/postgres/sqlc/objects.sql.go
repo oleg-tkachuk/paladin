@@ -82,6 +82,25 @@ func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgt
 	return err
 }
 
+const extendPendingPresign = `-- name: ExtendPendingPresign :execrows
+UPDATE objects
+SET presign_expires_at = GREATEST(COALESCE(presign_expires_at, $3), $3)
+WHERE tenant_id = $1 AND id = $2
+  AND state = 'PENDING'
+`
+
+// RegenerateUploadUrl hands a PENDING object a new PUT URL; the reaper's
+// deadline moves with it, or the row is failed under a client still holding
+// a valid URL. GREATEST, so a shorter regenerated URL never pulls the
+// deadline in under an earlier one that is still live.
+func (q *Queries) ExtendPendingPresign(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expiresAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, extendPendingPresign, tenantID, iD, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getObject = `-- name: GetObject :one
 SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, c.name AS collection_name
 FROM objects

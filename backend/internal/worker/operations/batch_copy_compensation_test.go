@@ -12,6 +12,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
@@ -159,5 +160,20 @@ func TestCopyOneDoubleFailureSurfacesBoth(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "s3 down") || !strings.Contains(err.Error(), "compensation also failed") {
 		t.Errorf("error should name both failures, got %v", err)
+	}
+}
+
+// A copy executor wired without a PENDING lifetime used to fall back to a
+// hard-coded 15 minutes; it now refuses, because the value has exactly one
+// source — limits.presign.put_ttl — and a silent default hid a missing wire.
+func TestExecuteRefusesWithoutPendingTTL(t *testing.T) {
+	e := &BatchCopyExecutor{
+		Objects:     &copyFakeRepo{},
+		Storage:     &copyFakeStorage{},
+		Transitions: &copyFakeTransitioner{},
+	}
+	_, err := e.Execute(context.Background(), operationh.Operation{})
+	if err == nil || !strings.Contains(err.Error(), "PendingTTL") {
+		t.Fatalf("want PendingTTL error, got %v", err)
 	}
 }

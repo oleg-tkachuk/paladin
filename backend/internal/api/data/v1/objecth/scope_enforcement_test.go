@@ -81,7 +81,7 @@ func TestUploadObjectAuthzResourceCarriesBucket(t *testing.T) {
 		repo:    &uploadRepo{fakeObjectRepo: fakeObjectRepo{meta: BucketMeta{BackendID: "backend-7", BucketName: "bucket-7"}}},
 		storage: noopStorage{},
 		policy:  authz,
-		presign: PresignConfig{DefaultTTL: time.Hour, MaxTTL: 2 * time.Hour},
+		presign: testPresignConfig(),
 	}
 
 	if _, err := h.UploadObject(ctx, UploadObjectInput{Collection: "docs", Key: "a.txt", ContentType: "text/plain"}); err != nil {
