@@ -206,11 +206,16 @@ func (x *InitiateMultipartUploadResponse) GetTotalParts() int32 {
 }
 
 type PresignPartRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ObjectName    string                 `protobuf:"bytes,1,opt,name=object_name,json=objectName,proto3" json:"object_name,omitempty"`
-	UploadId      string                 `protobuf:"bytes,2,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
-	PartNumber    int32                  `protobuf:"varint,3,opt,name=part_number,json=partNumber,proto3" json:"part_number,omitempty"`
-	Ttl           *durationpb.Duration   `protobuf:"bytes,4,opt,name=ttl,proto3" json:"ttl,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ObjectName string                 `protobuf:"bytes,1,opt,name=object_name,json=objectName,proto3" json:"object_name,omitempty"`
+	UploadId   string                 `protobuf:"bytes,2,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	PartNumber int32                  `protobuf:"varint,3,opt,name=part_number,json=partNumber,proto3" json:"part_number,omitempty"`
+	Ttl        *durationpb.Duration   `protobuf:"bytes,4,opt,name=ttl,proto3" json:"ttl,omitempty"`
+	// Required: this part's checksum under the upload's checksum_algorithm,
+	// base64 of the digest. Signed into the part URL with the part's exact
+	// Content-Length (recommended_part_size, or the remainder for the last
+	// part), and passed back as CompletedPart.checksum_value on completion.
+	ChecksumValue string `protobuf:"bytes,5,opt,name=checksum_value,json=checksumValue,proto3" json:"checksum_value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -271,6 +276,13 @@ func (x *PresignPartRequest) GetTtl() *durationpb.Duration {
 		return x.Ttl
 	}
 	return nil
+}
+
+func (x *PresignPartRequest) GetChecksumValue() string {
+	if x != nil {
+		return x.ChecksumValue
+	}
+	return ""
 }
 
 type PresignPartResponse struct {
@@ -605,7 +617,7 @@ const file_paladin_data_v1_multipart_service_proto_rawDesc = "" +
 	"\tupload_id\x18\x02 \x01(\tR\buploadId\x122\n" +
 	"\x15recommended_part_size\x18\x03 \x01(\x03R\x13recommendedPartSize\x12\x1f\n" +
 	"\vtotal_parts\x18\x04 \x01(\x05R\n" +
-	"totalParts\"\xbe\x01\n" +
+	"totalParts\"\xee\x01\n" +
 	"\x12PresignPartRequest\x12(\n" +
 	"\vobject_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"objectName\x12$\n" +
@@ -613,7 +625,8 @@ const file_paladin_data_v1_multipart_service_proto_rawDesc = "" +
 	"\vpart_number\x18\x03 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\x90N(\x01R\n" +
 	"partNumber\x12+\n" +
-	"\x03ttl\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\"U\n" +
+	"\x03ttl\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\x12.\n" +
+	"\x0echecksum_value\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\rchecksumValue\"U\n" +
 	"\x13PresignPartResponse\x12>\n" +
 	"\n" +
 	"upload_url\x18\x01 \x01(\v2\x1f.paladin.common.v1.PresignedUrlR\tuploadUrl\"\xb0\x01\n" +

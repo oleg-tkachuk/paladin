@@ -1,5 +1,6 @@
 import datetime
 
+from buf.validate import validate_pb2 as _validate_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.api import field_behavior_pb2 as _field_behavior_pb2
 from google.protobuf.internal import containers as _containers

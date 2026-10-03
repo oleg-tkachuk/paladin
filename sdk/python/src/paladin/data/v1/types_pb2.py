@@ -22,11 +22,12 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from buf.validate import validate_pb2 as buf_dot_validate_dot_validate__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 from google.api import field_behavior_pb2 as google_dot_api_dot_field__behavior__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1bpaladin/data/v1/types.proto\x12\x0fpaladin.data.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xeb\x07\n\x06Object\x12\x11\n\x04name\x18\x01 \x01(\tB\x03\xe0\x41\x08\x12\x16\n\tobject_id\x18\x02 \x01(\tB\x03\xe0\x41\x03\x12\x16\n\ttenant_id\x18\x03 \x01(\tB\x03\xe0\x41\x03\x12\x17\n\ncollection\x18\x04 \x01(\tB\x03\xe0\x41\x03\x12\x10\n\x03key\x18\x05 \x01(\tB\x03\xe0\x41\x03\x12\x30\n\x05state\x18\x06 \x01(\x0e\x32\x1c.paladin.data.v1.ObjectStateB\x03\xe0\x41\x03\x12\x14\n\x0c\x63ontent_type\x18\x07 \x01(\t\x12\x17\n\nsize_bytes\x18\x08 \x01(\x03\x42\x03\xe0\x41\x03\x12\x11\n\x04\x65tag\x18\t \x01(\tB\x03\xe0\x41\x03\x12\x36\n\x08\x63hecksum\x18\n \x01(\x0b\x32\x1f.paladin.data.v1.ChecksumDigestB\x03\xe0\x41\x03\x12\x16\n\tsequencer\x18\x0b \x01(\tB\x03\xe0\x41\x03\x12\x37\n\x08metadata\x18\x0c \x03(\x0b\x32%.paladin.data.v1.Object.MetadataEntry\x12/\n\x04tags\x18\r \x03(\x0b\x32!.paladin.data.v1.Object.TagsEntry\x12\x14\n\x0c\x65xternal_ref\x18\x0e \x01(\t\x12\x1d\n\x10resource_version\x18\x0f \x01(\tB\x03\xe0\x41\x03\x12\x33\n\ncreated_at\x18\x10 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\nupdated_at\x18\x11 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x35\n\x0c\x63ommitted_at\x18\x12 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x36\n\rterminated_at\x18\x13 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12;\n\x12presign_expires_at\x18\x14 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\x04lock\x18\x15 \x01(\x0b\x32 .paladin.data.v1.ObjectLockStateB\x03\xe0\x41\x03\x12\x35\n\tplacement\x18\x16 \x01(\x0b\x32\".paladin.data.v1.PhysicalPlacement\x12\x30\n\x05taint\x18\x17 \x03(\x0e\x32\x1c.paladin.data.v1.TaintSignalB\x03\xe0\x41\x03\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x1a+\n\tTagsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"2\n\x0e\x43hecksumDigest\x12\x11\n\talgorithm\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"j\n\x0fObjectLockState\x12\x0c\n\x04mode\x18\x01 \x01(\t\x12\x35\n\x0cretain_until\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x12\n\nlegal_hold\x18\x03 \x01(\x08\"P\n\x11PhysicalPlacement\x12\x12\n\nbackend_id\x18\x01 \x01(\t\x12\x11\n\tbucket_id\x18\x02 \x01(\t\x12\x14\n\x0cstorage_path\x18\x03 \x01(\t\"J\n\rCompletedPart\x12\x13\n\x0bpart_number\x18\x01 \x01(\x05\x12\x0c\n\x04\x65tag\x18\x02 \x01(\t\x12\x16\n\x0e\x63hecksum_value\x18\x03 \x01(\t\"w\n\x08PartInfo\x12\x13\n\x0bpart_number\x18\x01 \x01(\x05\x12\x12\n\nsize_bytes\x18\x02 \x01(\x03\x12\x0c\n\x04\x65tag\x18\x03 \x01(\t\x12\x34\n\x0buploaded_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03*~\n\x0bTaintSignal\x12\x1c\n\x18TAINT_SIGNAL_UNSPECIFIED\x10\x00\x12!\n\x1dTAINT_SIGNAL_PROMPT_INJECTION\x10\x01\x12\x14\n\x10TAINT_SIGNAL_PII\x10\x02\x12\x18\n\x14TAINT_SIGNAL_SECRETS\x10\x03*\x94\x01\n\x0bObjectState\x12\x1c\n\x18OBJECT_STATE_UNSPECIFIED\x10\x00\x12\x18\n\x14OBJECT_STATE_PENDING\x10\x01\x12\x1a\n\x16OBJECT_STATE_AVAILABLE\x10\x02\x12\x17\n\x13OBJECT_STATE_FAILED\x10\x03\x12\x18\n\x14OBJECT_STATE_DELETED\x10\x04\x42JZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1bpaladin/data/v1/types.proto\x12\x0fpaladin.data.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xeb\x07\n\x06Object\x12\x11\n\x04name\x18\x01 \x01(\tB\x03\xe0\x41\x08\x12\x16\n\tobject_id\x18\x02 \x01(\tB\x03\xe0\x41\x03\x12\x16\n\ttenant_id\x18\x03 \x01(\tB\x03\xe0\x41\x03\x12\x17\n\ncollection\x18\x04 \x01(\tB\x03\xe0\x41\x03\x12\x10\n\x03key\x18\x05 \x01(\tB\x03\xe0\x41\x03\x12\x30\n\x05state\x18\x06 \x01(\x0e\x32\x1c.paladin.data.v1.ObjectStateB\x03\xe0\x41\x03\x12\x14\n\x0c\x63ontent_type\x18\x07 \x01(\t\x12\x17\n\nsize_bytes\x18\x08 \x01(\x03\x42\x03\xe0\x41\x03\x12\x11\n\x04\x65tag\x18\t \x01(\tB\x03\xe0\x41\x03\x12\x36\n\x08\x63hecksum\x18\n \x01(\x0b\x32\x1f.paladin.data.v1.ChecksumDigestB\x03\xe0\x41\x03\x12\x16\n\tsequencer\x18\x0b \x01(\tB\x03\xe0\x41\x03\x12\x37\n\x08metadata\x18\x0c \x03(\x0b\x32%.paladin.data.v1.Object.MetadataEntry\x12/\n\x04tags\x18\r \x03(\x0b\x32!.paladin.data.v1.Object.TagsEntry\x12\x14\n\x0c\x65xternal_ref\x18\x0e \x01(\t\x12\x1d\n\x10resource_version\x18\x0f \x01(\tB\x03\xe0\x41\x03\x12\x33\n\ncreated_at\x18\x10 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\nupdated_at\x18\x11 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x35\n\x0c\x63ommitted_at\x18\x12 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x36\n\rterminated_at\x18\x13 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12;\n\x12presign_expires_at\x18\x14 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\x04lock\x18\x15 \x01(\x0b\x32 .paladin.data.v1.ObjectLockStateB\x03\xe0\x41\x03\x12\x35\n\tplacement\x18\x16 \x01(\x0b\x32\".paladin.data.v1.PhysicalPlacement\x12\x30\n\x05taint\x18\x17 \x03(\x0e\x32\x1c.paladin.data.v1.TaintSignalB\x03\xe0\x41\x03\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x1a+\n\tTagsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"2\n\x0e\x43hecksumDigest\x12\x11\n\talgorithm\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"j\n\x0fObjectLockState\x12\x0c\n\x04mode\x18\x01 \x01(\t\x12\x35\n\x0cretain_until\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x12\n\nlegal_hold\x18\x03 \x01(\x08\"P\n\x11PhysicalPlacement\x12\x12\n\nbackend_id\x18\x01 \x01(\t\x12\x11\n\tbucket_id\x18\x02 \x01(\t\x12\x14\n\x0cstorage_path\x18\x03 \x01(\t\"S\n\rCompletedPart\x12\x13\n\x0bpart_number\x18\x01 \x01(\x05\x12\x0c\n\x04\x65tag\x18\x02 \x01(\t\x12\x1f\n\x0e\x63hecksum_value\x18\x03 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"w\n\x08PartInfo\x12\x13\n\x0bpart_number\x18\x01 \x01(\x05\x12\x12\n\nsize_bytes\x18\x02 \x01(\x03\x12\x0c\n\x04\x65tag\x18\x03 \x01(\t\x12\x34\n\x0buploaded_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03*~\n\x0bTaintSignal\x12\x1c\n\x18TAINT_SIGNAL_UNSPECIFIED\x10\x00\x12!\n\x1dTAINT_SIGNAL_PROMPT_INJECTION\x10\x01\x12\x14\n\x10TAINT_SIGNAL_PII\x10\x02\x12\x18\n\x14TAINT_SIGNAL_SECRETS\x10\x03*\x94\x01\n\x0bObjectState\x12\x1c\n\x18OBJECT_STATE_UNSPECIFIED\x10\x00\x12\x18\n\x14OBJECT_STATE_PENDING\x10\x01\x12\x1a\n\x16OBJECT_STATE_AVAILABLE\x10\x02\x12\x17\n\x13OBJECT_STATE_FAILED\x10\x03\x12\x18\n\x14OBJECT_STATE_DELETED\x10\x04\x42JZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -76,26 +77,28 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_OBJECT'].fields_by_name['taint']._serialized_options = b'\340A\003'
   _globals['_OBJECTLOCKSTATE'].fields_by_name['retain_until']._loaded_options = None
   _globals['_OBJECTLOCKSTATE'].fields_by_name['retain_until']._serialized_options = b'\340A\003'
+  _globals['_COMPLETEDPART'].fields_by_name['checksum_value']._loaded_options = None
+  _globals['_COMPLETEDPART'].fields_by_name['checksum_value']._serialized_options = b'\272H\004r\002\020\001'
   _globals['_PARTINFO'].fields_by_name['uploaded_at']._loaded_options = None
   _globals['_PARTINFO'].fields_by_name['uploaded_at']._serialized_options = b'\340A\003'
-  _globals['_TAINTSIGNAL']._serialized_start=1559
-  _globals['_TAINTSIGNAL']._serialized_end=1685
-  _globals['_OBJECTSTATE']._serialized_start=1688
-  _globals['_OBJECTSTATE']._serialized_end=1836
-  _globals['_OBJECT']._serialized_start=115
-  _globals['_OBJECT']._serialized_end=1118
-  _globals['_OBJECT_METADATAENTRY']._serialized_start=1026
-  _globals['_OBJECT_METADATAENTRY']._serialized_end=1073
-  _globals['_OBJECT_TAGSENTRY']._serialized_start=1075
-  _globals['_OBJECT_TAGSENTRY']._serialized_end=1118
-  _globals['_CHECKSUMDIGEST']._serialized_start=1120
-  _globals['_CHECKSUMDIGEST']._serialized_end=1170
-  _globals['_OBJECTLOCKSTATE']._serialized_start=1172
-  _globals['_OBJECTLOCKSTATE']._serialized_end=1278
-  _globals['_PHYSICALPLACEMENT']._serialized_start=1280
-  _globals['_PHYSICALPLACEMENT']._serialized_end=1360
-  _globals['_COMPLETEDPART']._serialized_start=1362
-  _globals['_COMPLETEDPART']._serialized_end=1436
-  _globals['_PARTINFO']._serialized_start=1438
-  _globals['_PARTINFO']._serialized_end=1557
+  _globals['_TAINTSIGNAL']._serialized_start=1597
+  _globals['_TAINTSIGNAL']._serialized_end=1723
+  _globals['_OBJECTSTATE']._serialized_start=1726
+  _globals['_OBJECTSTATE']._serialized_end=1874
+  _globals['_OBJECT']._serialized_start=144
+  _globals['_OBJECT']._serialized_end=1147
+  _globals['_OBJECT_METADATAENTRY']._serialized_start=1055
+  _globals['_OBJECT_METADATAENTRY']._serialized_end=1102
+  _globals['_OBJECT_TAGSENTRY']._serialized_start=1104
+  _globals['_OBJECT_TAGSENTRY']._serialized_end=1147
+  _globals['_CHECKSUMDIGEST']._serialized_start=1149
+  _globals['_CHECKSUMDIGEST']._serialized_end=1199
+  _globals['_OBJECTLOCKSTATE']._serialized_start=1201
+  _globals['_OBJECTLOCKSTATE']._serialized_end=1307
+  _globals['_PHYSICALPLACEMENT']._serialized_start=1309
+  _globals['_PHYSICALPLACEMENT']._serialized_end=1389
+  _globals['_COMPLETEDPART']._serialized_start=1391
+  _globals['_COMPLETEDPART']._serialized_end=1474
+  _globals['_PARTINFO']._serialized_start=1476
+  _globals['_PARTINFO']._serialized_end=1595
 # @@protoc_insertion_point(module_scope)
