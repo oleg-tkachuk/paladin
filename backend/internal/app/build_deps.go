@@ -180,7 +180,6 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		Object:      s3adapter.NewObjectRouter(registry),
 		Multipart:   s3adapter.NewMultipartRouter(registry),
 		Presign:     s3adapter.NewPresignRouter(registry),
-		Stream:      s3adapter.NewStreamRouter(registry),
 		Provisioner: s3adapter.NewProvisionerRouter(registry),
 	}
 
