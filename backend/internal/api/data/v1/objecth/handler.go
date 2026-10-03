@@ -35,6 +35,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
+	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
@@ -92,6 +93,9 @@ type BucketMeta struct {
 	// upload CompletionMode (implicit via bucket events vs explicit
 	// CompleteUpload call) without a second lookup on the upload path.
 	EventsEnabled bool
+	// Constraints are the bucket's upload constraints (BucketService
+	// SetConstraints); they narrow limits.* for every object written here.
+	Constraints uploadpolicy.BucketConstraints
 }
 
 // ObjectLock is the object row's lock state (object-level, distinct from
@@ -521,11 +525,12 @@ func objectResourceNameFrom(canonicalPrefix string, tenantID uuid.UUID, collecti
 	return canonicalPrefix + "/objects-by-key/" + key
 }
 
-// PresignConfig is what the handler needs to mint presigned URLs: how long
-// they live, and the largest body a single-request (PUT/POST) upload accepts.
+// PresignConfig is what the handler needs to admit uploads and mint their
+// URLs: how long URLs live, and the global upload limits a bucket's
+// constraints narrow.
 type PresignConfig struct {
-	TTL            presignttl.Policy
-	DefaultMaxSize int64
+	TTL    presignttl.Policy
+	Limits uploadpolicy.Limits
 }
 
 func NewHandler(
@@ -622,6 +627,12 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
+	policy := uploadpolicy.For(h.presign.Limits, meta.Constraints)
+	if err := policy.CheckSingle(uploadpolicy.Upload{
+		SizeBytes: in.SizeHint, ContentType: in.ContentType, ChecksumAlgorithm: in.ChecksumAlgo,
+	}); err != nil {
+		return nil, err
+	}
 
 	// 2. Derive the object id + key BEFORE authz so the Cedar resource is an
 	//    Object entity carrying `key`. The default per-tenant policy reads
@@ -671,7 +682,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 
 	// 4. Insert PENDING row with presign expiry. key was derived before authz
 	//    (step 2) so the authorized resource IS the object created.
-	ttl, err := h.presign.TTL.Resolve(presignttl.OpPut, 0)
+	ttl, err := h.presign.TTL.ResolveWithin(presignttl.OpPut, 0, policy.PutTTLCeiling())
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +717,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 			Collection:   in.Collection,
 			Key:          key,
 			ContentType:  in.ContentType,
-			MaxSizeBytes: resolveMaxSize(h.presign.DefaultMaxSize, in.SizeHint),
+			MaxSizeBytes: resolveMaxSize(policy.MaxSingleRequestSize(), in.SizeHint),
 			ChecksumAlgo: in.ChecksumAlgo,
 			TTL:          ttl,
 		})
@@ -1200,10 +1211,6 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	if collection == "" || objectID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
 	}
-	ttl, err = h.presign.TTL.Resolve(presignttl.OpGet, ttl)
-	if err != nil {
-		return nil, err
-	}
 	disposition, err = NormalizeContentDisposition(disposition)
 	if err != nil {
 		return nil, err
@@ -1230,9 +1237,15 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	// collection:-scoped read PAT enforces on download; the same read-only
 	// resolution routes the presigned GET below (one lookup, unchanged for
 	// the allowed path — it already ran here immediately after authz).
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, collection, false) // download (read)
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, false) // download (read)
 	if err != nil {
 		return nil, MapResolveErr(err)
+	}
+	backendID, bucket := meta.BackendID, meta.BucketName
+	ttl, err = h.presign.TTL.ResolveWithin(presignttl.OpGet, ttl,
+		uploadpolicy.For(h.presign.Limits, meta.Constraints).GetTTLCeiling())
+	if err != nil {
+		return nil, err
 	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: collection, Key: obj.Key,
@@ -1768,9 +1781,18 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	// authz Resource below is the destination (ActionCopyObject is checked
 	// against the dest). The same resolution is reused as the copy-dest
 	// Location; the source is resolved after authz as before.
-	dstBackendID, dstBucket, err := h.repo.LookupBucket(ctx, tenantID, in.DestCollection, true) // copy dest (mutation)
+	dstMeta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.DestCollection, true) // copy dest (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
+	}
+	dstBackendID, dstBucket := dstMeta.BackendID, dstMeta.BucketName
+	// The copy creates an object in the destination bucket, so it obeys that
+	// bucket's limits like an upload would; otherwise a copy is the way
+	// around an allowlist or a size cap.
+	if err := uploadpolicy.For(h.presign.Limits, dstMeta.Constraints).CheckCopy(uploadpolicy.Upload{
+		SizeBytes: src.SizeBytes, ContentType: src.ContentType, ChecksumAlgorithm: src.ChecksumAlgo,
+	}); err != nil {
+		return nil, err
 	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: in.DestCollection, Key: destKey,

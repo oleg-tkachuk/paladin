@@ -362,6 +362,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				Storage:     s3adapter.NewObjectRouter(deps.Registry),
 				Transitions: smReaper,
 				PendingTTL:  cfg.Limits.Presign.PutTTL,
+				Limits:      cfg.Limits.UploadLimits(),
 			},
 			"BatchUpdateTags": &operations.BatchUpdateTagsExecutor{
 				Objects: deps.Repos.Object,

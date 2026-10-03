@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
 
 // DownloadObject had no behavioural test of any kind. The RPC-surface gate
@@ -36,6 +37,8 @@ type downloadRepo struct {
 	bucket string
 	// findErr, when set, stands in for "no such object under this key".
 	findErr error
+	// constraints are the bucket's upload constraints.
+	constraints uploadpolicy.BucketConstraints
 }
 
 func (r *downloadRepo) FindByName(_ context.Context, tenantID uuid.UUID, collection, _ string) (Object, error) {
@@ -55,6 +58,10 @@ func (r *downloadRepo) FindByName(_ context.Context, tenantID uuid.UUID, collect
 
 func (r *downloadRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, _ bool) (string, string, error) {
 	return "backend-7", r.bucket, nil
+}
+
+func (r *downloadRepo) LookupBucketMeta(_ context.Context, _ uuid.UUID, _ string, _ bool) (BucketMeta, error) {
+	return BucketMeta{BackendID: "backend-7", BucketName: r.bucket, Constraints: r.constraints}, nil
 }
 
 // presignGetStorage records the args it was presigned with and returns a URL

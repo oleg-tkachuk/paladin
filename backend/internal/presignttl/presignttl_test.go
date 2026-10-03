@@ -94,7 +94,7 @@ func TestNewRejectsInvalidLifetimes(t *testing.T) {
 }
 
 func TestFromConfigReadsEachOperation(t *testing.T) {
-	p, err := FromConfig(config.Presign{GetTTL: getTTL, PutTTL: putTTL, PartTTL: partTTL, MaxTTL: maxTTL, DefaultMaxSize: 1})
+	p, err := FromConfig(config.Presign{GetTTL: getTTL, PutTTL: putTTL, PartTTL: partTTL, MaxTTL: maxTTL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,4 +115,44 @@ func TestMustFromConfigPanicsOnUnloadedConfig(t *testing.T) {
 		}
 	}()
 	MustFromConfig(config.Presign{})
+}
+
+// A bucket's max_presign_put_ttl / max_presign_get_ttl was stored by the
+// admin API and read by nothing. It now narrows max_ttl for that bucket.
+func TestResolveWithinBucketCeiling(t *testing.T) {
+	p := policy(t)
+	const ceiling = 7 * time.Minute // below put_ttl (10m), above get_ttl (5m)
+	cases := []struct {
+		name      string
+		op        Op
+		requested time.Duration
+		ceiling   time.Duration
+		want      time.Duration
+		refused   bool
+	}{
+		{"no ceiling behaves like Resolve", OpPut, 0, 0, putTTL, false},
+		{"a default above the ceiling shrinks to it", OpPut, 0, ceiling, ceiling, false},
+		{"a default below the ceiling is kept", OpGet, 0, ceiling, getTTL, false},
+		{"a request at the ceiling passes", OpPut, ceiling, ceiling, ceiling, false},
+		{"a request above the ceiling is refused", OpPut, ceiling + time.Second, ceiling, 0, true},
+		{"a ceiling above max_ttl leaves max_ttl in charge", OpGet, maxTTL + time.Second, 2 * maxTTL, 0, true},
+		{"a negative ceiling sets none", OpPut, maxTTL, -time.Second, maxTTL, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := p.ResolveWithin(tc.op, tc.requested, tc.ceiling)
+			if tc.refused {
+				if connect.CodeOf(err) != connect.CodeInvalidArgument {
+					t.Fatalf("err = %v, want InvalidArgument", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Fatalf("ResolveWithin = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }

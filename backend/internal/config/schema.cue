@@ -169,15 +169,20 @@ datastores: {
 }
 
 limits: {
-  max_object_size:    =~"^[0-9]+(B|KB|MB|GB|TB)$" | *"100MB"
-  max_multipart_size: =~"^[0-9]+(B|KB|MB|GB|TB)$" | *"1TB"
-  min_part_size:      =~"^[0-9]+(B|KB|MB|GB)$" | *"5MB"
-  max_part_size:      =~"^[0-9]+(B|KB|MB|GB)$" | *"5GB"
-  max_parts:          int | *10000
-  // Empty → accept anything. Listing common types here gives the upload
-  // path an early reject for typos / drive-bys.
+  // Enforced on every upload (internal/uploadpolicy); a bucket's
+  // constraints may narrow these, never widen them. max_object_size bounds a
+  // single PUT/POST, max_multipart_size an object assembled from parts. Part
+  // sizes are IEC units on purpose: S3's minimum part is 5 MiB, and "5MB" is
+  // 5 000 000 bytes, below it.
+  max_object_size:    =~"^[0-9]+(B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)$" | *"100MB"
+  max_multipart_size: =~"^[0-9]+(B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)$" | *"1TB"
+  min_part_size:      =~"^[0-9]+(B|KB|MB|GB|KiB|MiB|GiB)$" | *"5MiB"
+  max_part_size:      =~"^[0-9]+(B|KB|MB|GB|KiB|MiB|GiB)$" | *"5GiB"
+  max_parts:          int & >=1 & <=10000 | *10000
+  // Empty → accept anything. A media type's parameters are ignored when
+  // matching ("text/plain; charset=utf-8" is text/plain).
   allowed_content_types: [...string] | *[]
-  // Presign-URL ttls + body-size cap. Each *_ttl is the lifetime a URL of
+  // Presign-URL ttls. Each *_ttl is the lifetime a URL of
   // that kind gets when the caller names none; max_ttl is the most a caller
   // may ask for, at most 168h (the SigV4 ceiling). Config.Validate enforces
   // 0 < *_ttl <= max_ttl <= 168h.
@@ -186,7 +191,6 @@ limits: {
     get_ttl:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
     part_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
     max_ttl:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"168h"
-    default_max_size: int & >= 1 | *5368709120 // 5 GiB
   }
 }
 
