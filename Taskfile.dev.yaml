@@ -242,6 +242,7 @@ tasks:
       - task: verify:stack-ports
       - task: verify:stack-disk
       - task: verify:portable-shell
+      - task: verify:task-offline
       - task: verify:chart-values
       - task: verify:chart-reads
       - task: verify:chart-netpol
@@ -413,6 +414,11 @@ tasks:
     desc: "The tracked shell scripts use no form only BSD or only GNU accepts"
     cmds:
       - ./scripts/portable-shell.test.sh
+
+  verify:task-offline:
+    desc: "The git hooks run Task offline, without the hook's git state"
+    cmds:
+      - ./scripts/task-offline.test.sh
 
   verify:stack-disk:
     desc: "The disk check before a Docker gate reads free space on Linux and macOS"
