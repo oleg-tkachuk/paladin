@@ -22,12 +22,14 @@ from pathlib import Path
 import pytest
 
 from paladin import (
+    CHECKSUM_SHA256,
     CollectionName,
     Endpoints,
     NotFoundError,
     ObjectURI,
     PaladinError,
     StaticToken,
+    checksum,
     connect,
     download,
     download_uri,
@@ -128,8 +130,15 @@ def not_found_is_typed(e: Env) -> None:
 
 
 def idempotent_replay(e: Env) -> None:
+    # The upload is never sent: the request only has to be one the server
+    # accepts, which means a checksum to bind its URL to.
+    body = b"x"
     request = object_service_pb2.UploadObjectRequest(
-        parent=str(e.collection), key=_key("replay"), content_type="text/plain", size_hint_bytes=1
+        parent=str(e.collection),
+        key=_key("replay"),
+        content_type="text/plain",
+        size_hint_bytes=len(body),
+        checksum_value=checksum(CHECKSUM_SHA256, body),
     )
     with idempotency_key(secrets.token_hex(16)):
         first = e.data.object.upload_object(request)  # type: ignore[attr-defined]
