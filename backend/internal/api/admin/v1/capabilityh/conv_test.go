@@ -1,10 +1,12 @@
 package capabilityh
 
 import (
+	"math"
 	"testing"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/capability"
@@ -227,28 +229,44 @@ func mustCaveats(t *testing.T, c *adminv1.CapabilityCaveats) capability.Caveats 
 	return got
 }
 
-// The budget arrives in micros from a current client, as a double from an
-// old one, and both from a client in transition: they must then agree.
+// The budget arrives in micros; absent is no budget.
 func TestProtoToCaveatsBudgetMicros(t *testing.T) {
 	got := mustCaveats(t, &adminv1.CapabilityCaveats{MaxBudgetMicros: proto.Int64(19_990_000)})
 	if got.MaxBudgetAmount != 19.99 {
-		t.Errorf("micros only: budget = %v, want 19.99", got.MaxBudgetAmount)
+		t.Errorf("budget = %v, want 19.99", got.MaxBudgetAmount)
 	}
-	got = mustCaveats(t, &adminv1.CapabilityCaveats{MaxBudgetAmount: 19.99, MaxBudgetMicros: proto.Int64(19_990_000)}) //nolint:staticcheck // the transition case
-	if got.MaxBudgetAmount != 19.99 {
-		t.Errorf("both, agreeing: budget = %v", got.MaxBudgetAmount)
+	if got := mustCaveats(t, &adminv1.CapabilityCaveats{}); got.MaxBudgetAmount != 0 {
+		t.Errorf("absent: budget = %v, want 0", got.MaxBudgetAmount)
 	}
-	_, err := protoToCaveats(&adminv1.CapabilityCaveats{MaxBudgetAmount: 20, MaxBudgetMicros: proto.Int64(19_990_000)}) //nolint:staticcheck // the transition case
+	_, err := protoToCaveats(&adminv1.CapabilityCaveats{MaxBudgetMicros: proto.Int64(-1)})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Errorf("both, disagreeing: err = %v, want InvalidArgument", err)
+		t.Errorf("negative: err = %v, want InvalidArgument", err)
 	}
 }
 
-func TestCaveatsToProtoFillsBothBudgetFields(t *testing.T) {
+// A client built before max_budget_amount was removed still sends it. Read as
+// absent, its capability would be issued with no budget at all.
+func TestProtoToCaveatsRefusesTheRemovedDouble(t *testing.T) {
+	old := &adminv1.CapabilityCaveats{Ops: []string{"get"}}
+	removed := old.ProtoReflect().Descriptor().ReservedRanges().Get(0)[0]
+	raw, err := proto.Marshal(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = protowire.AppendTag(raw, removed, protowire.Fixed64Type)
+	raw = protowire.AppendFixed64(raw, math.Float64bits(25))
+	if err := proto.Unmarshal(raw, old); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := protoToCaveats(old); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("err = %v, want InvalidArgument", err)
+	}
+}
+
+func TestCaveatsToProtoBudgetMicros(t *testing.T) {
 	out := caveatsToProto(capability.Caveats{MaxBudgetAmount: 0.3})
-	//nolint:staticcheck // the deprecated double is still filled for old clients
-	if out.GetMaxBudgetMicros() != 300_000 || out.GetMaxBudgetAmount() != 0.3 {
-		t.Errorf("budget = %d micros / %v", out.GetMaxBudgetMicros(), out.GetMaxBudgetAmount()) //nolint:staticcheck // as above
+	if out.GetMaxBudgetMicros() != 300_000 {
+		t.Errorf("budget = %d micros, want 300000", out.GetMaxBudgetMicros())
 	}
 }
 

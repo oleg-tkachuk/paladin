@@ -3,10 +3,12 @@ package admin
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/capability"
@@ -94,14 +96,11 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 
 	setRes, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID.String(),
-		MaxBudgetAmount: 100.0, //nolint:staticcheck // an old client sends only the deprecated double
+		MaxBudgetMicros: proto.Int64(100_000_000),
 		ResetSpend:      true,
 	}))
 	if err != nil {
 		t.Fatalf("Set: %v", err)
-	}
-	if got := setRes.Msg.GetBudget().GetMaxBudgetAmount(); got != 100.0 { //nolint:staticcheck // still filled for old clients
-		t.Errorf("max_budget_amount: got %v, want 100", got)
 	}
 	if got := setRes.Msg.GetBudget().GetMaxBudgetMicros(); got != 100_000_000 {
 		t.Errorf("max_budget_micros: got %d, want 100000000", got)
@@ -118,6 +117,27 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 	}
 	if got := getRes.Msg.GetBudget().GetTenantId(); got != tenantID.String() {
 		t.Errorf("tenant_id: got %q, want %q", got, tenantID)
+	}
+}
+
+// A client built before max_budget_amount was removed still sends it. Read as
+// absent, the cap it set would be lifted to unlimited.
+func TestTenantBudgetServer_Set_RefusesTheRemovedDouble(t *testing.T) {
+	store := &fakeUsageStore{}
+	srv := NewTenantBudgetServer(store)
+	old := &pb.TenantBudgetServiceSetRequest{TenantId: uuid.New().String()}
+	removed := old.ProtoReflect().Descriptor().ReservedRanges().Get(0)[0]
+	raw, err := proto.Marshal(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = protowire.AppendTag(raw, removed, protowire.Fixed64Type)
+	raw = protowire.AppendFixed64(raw, math.Float64bits(100))
+	if err := proto.Unmarshal(raw, old); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.Set(context.Background(), connect.NewRequest(old)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("err = %v, want InvalidArgument", err)
 	}
 }
 

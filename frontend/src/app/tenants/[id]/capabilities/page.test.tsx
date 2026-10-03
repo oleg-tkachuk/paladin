@@ -41,7 +41,7 @@ beforeEach(() => {
   h.list.mockResolvedValue({ capabilities: [] });
   h.getUsage.mockResolvedValue({
     requestCount: 0n,
-    spentAmount: 0,
+    spentMicros: 0n,
     unitCode: "UNIT",
   });
   h.issue.mockReset();
@@ -96,7 +96,7 @@ describe("CapabilitiesPage", () => {
           resourceUris: [],
           sourceIpCidr: [],
           maxRequests: 0n,
-          maxBudgetAmount: 0,
+          maxBudgetMicros: 0n,
           unitCode: "UNIT",
           allowTaintedRead: false,
           idempotencyKeyRequired: false,
@@ -137,7 +137,7 @@ describe("CapabilitiesPage", () => {
       resourceUris: [],
       sourceIpCidr: [],
       maxRequests: 0n,
-      maxBudgetAmount: 0,
+      maxBudgetMicros: 0n,
       unitCode: "UNIT",
       allowTaintedRead: false,
       idempotencyKeyRequired: false,

@@ -16,7 +16,7 @@
 //     quotas live under storageBackends/.../buckets/.../quota and
 //     surface in the per-bucket Quota tab (BACKLOG; not in this slice).
 //   - 0 caps mean "unlimited" per proto contract — same convention as
-//     TenantBudget.maxBudgetAmount. UI renders `∞ unlimited`.
+//     TenantBudget.maxBudgetMicros. UI renders `∞ unlimited`.
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";

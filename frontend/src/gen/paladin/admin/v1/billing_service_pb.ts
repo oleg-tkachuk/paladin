@@ -24,7 +24,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_billing_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiZwYWxhZGluL2FkbWluL3YxL2JpbGxpbmdfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSKYAQoXR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIsACChhHZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2USGAoMdG90YWxfYW1vdW50GAEgASgBQgIYARIUCgx0b3RhbF9taWNyb3MYCCABKAMSEQoJdW5pdF9jb2RlGAIgASgJEh0KEW1heF9idWRnZXRfYW1vdW50GAMgASgBQgIYARIZChFtYXhfYnVkZ2V0X21pY3JvcxgJIAEoAxI0ChB0b3BfY2FwYWJpbGl0aWVzGAQgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIuCgp0b3BfYWN0b3JzGAUgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIrCgd0b3Bfb3BzGAYgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIUCgxjaGFyZ2VfY291bnQYByABKAMiWgoIVG9wRW50cnkSDQoFbGFiZWwYASABKAkSEgoGYW1vdW50GAIgASgBQgIYARIUCgxjaGFyZ2VfY291bnQYAyABKAMSFQoNYW1vdW50X21pY3JvcxgEIAEoAyKwAQoaR2V0VGVuYW50VGltZVNlcmllc1JlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2dyYW51bGFyaXR5GAQgASgJIl8KG0dldFRlbmFudFRpbWVTZXJpZXNSZXNwb25zZRItCgdidWNrZXRzGAEgAygLMhwucGFsYWRpbi5hZG1pbi52MS5UaW1lQnVja2V0EhEKCXVuaXRfY29kZRgCIAEoCSJ9CgpUaW1lQnVja2V0Ei4KBXN0YXJ0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEhIKBmFtb3VudBgCIAEoAUICGAESFAoMY2hhcmdlX2NvdW50GAMgASgDEhUKDWFtb3VudF9taWNyb3MYBCABKAMy+QEKDkJpbGxpbmdTZXJ2aWNlEm4KEEdldFRlbmFudFN1bW1hcnkSKS5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFN1bW1hcnlSZXF1ZXN0GioucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2UiA5ACARJ3ChNHZXRUZW5hbnRUaW1lU2VyaWVzEiwucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRUaW1lU2VyaWVzUmVxdWVzdBotLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50VGltZVNlcmllc1Jlc3BvbnNlIgOQAgFCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
+    "CiZwYWxhZGluL2FkbWluL3YxL2JpbGxpbmdfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSKYAQoXR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIrQCChhHZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2USFAoMdG90YWxfbWljcm9zGAggASgDEhEKCXVuaXRfY29kZRgCIAEoCRIZChFtYXhfYnVkZ2V0X21pY3JvcxgJIAEoAxI0ChB0b3BfY2FwYWJpbGl0aWVzGAQgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIuCgp0b3BfYWN0b3JzGAUgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIrCgd0b3Bfb3BzGAYgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIUCgxjaGFyZ2VfY291bnQYByABKANKBAgBEAJKBAgDEARSDHRvdGFsX2Ftb3VudFIRbWF4X2J1ZGdldF9hbW91bnQiVAoIVG9wRW50cnkSDQoFbGFiZWwYASABKAkSFAoMY2hhcmdlX2NvdW50GAMgASgDEhUKDWFtb3VudF9taWNyb3MYBCABKANKBAgCEANSBmFtb3VudCKwAQoaR2V0VGVuYW50VGltZVNlcmllc1JlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2dyYW51bGFyaXR5GAQgASgJIl8KG0dldFRlbmFudFRpbWVTZXJpZXNSZXNwb25zZRItCgdidWNrZXRzGAEgAygLMhwucGFsYWRpbi5hZG1pbi52MS5UaW1lQnVja2V0EhEKCXVuaXRfY29kZRgCIAEoCSJ3CgpUaW1lQnVja2V0Ei4KBXN0YXJ0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEhQKDGNoYXJnZV9jb3VudBgDIAEoAxIVCg1hbW91bnRfbWljcm9zGAQgASgDSgQIAhADUgZhbW91bnQy+QEKDkJpbGxpbmdTZXJ2aWNlEm4KEEdldFRlbmFudFN1bW1hcnkSKS5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFN1bW1hcnlSZXF1ZXN0GioucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2UiA5ACARJ3ChNHZXRUZW5hbnRUaW1lU2VyaWVzEiwucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRUaW1lU2VyaWVzUmVxdWVzdBotLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50VGltZVNlcmllc1Jlc3BvbnNlIgOQAgFCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_timestamp,
@@ -67,18 +67,8 @@ export const GetTenantSummaryRequestSchema: GenMessage<GetTenantSummaryRequest> 
 export type GetTenantSummaryResponse =
   Message<"paladin.admin.v1.GetTenantSummaryResponse"> & {
     /**
-     * total_amount is the sum of charges.amount over the period.
-     * Deprecated: use total_micros, an exact integer count of millionths. Kept
-     * for one release; the server fills both.
-     *
-     * @generated from field: double total_amount = 1 [deprecated = true];
-     * @deprecated
-     */
-    totalAmount: number;
-
-    /**
-     * total_micros is total_amount in millionths of unit_code (1.5 USD =
-     * 1500000). Integer, so sums never drift.
+     * total_micros is the sum of the period's charges in millionths of
+     * unit_code (1.5 USD = 1500000). Integer, so sums never drift.
      *
      * @generated from field: int64 total_micros = 8;
      */
@@ -94,18 +84,8 @@ export type GetTenantSummaryResponse =
     unitCode: string;
 
     /**
-     * max_budget_amount is the tenant_budgets cap, copied for UI
-     * convenience so the frontend doesn't need a second RPC.
-     * Deprecated: use max_budget_micros, an exact integer count of millionths. Kept
-     * for one release; the server fills both.
-     *
-     * @generated from field: double max_budget_amount = 3 [deprecated = true];
-     * @deprecated
-     */
-    maxBudgetAmount: number;
-
-    /**
-     * max_budget_micros is max_budget_amount in millionths of unit_code.
+     * max_budget_micros is the tenant_budgets cap in millionths of unit_code,
+     * copied for UI convenience so the frontend doesn't need a second RPC.
      *
      * @generated from field: int64 max_budget_micros = 9;
      */
@@ -153,21 +133,12 @@ export type TopEntry = Message<"paladin.admin.v1.TopEntry"> & {
   label: string;
 
   /**
-   * Deprecated: use amount_micros, an exact integer count of millionths. Kept
-   * for one release; the server fills both.
-   *
-   * @generated from field: double amount = 2 [deprecated = true];
-   * @deprecated
-   */
-  amount: number;
-
-  /**
    * @generated from field: int64 charge_count = 3;
    */
   chargeCount: bigint;
 
   /**
-   * amount_micros is amount in millionths of the response's unit_code.
+   * amount_micros is the amount in millionths of the response's unit_code.
    *
    * @generated from field: int64 amount_micros = 4;
    */
@@ -253,21 +224,12 @@ export type TimeBucket = Message<"paladin.admin.v1.TimeBucket"> & {
   start?: Timestamp | undefined;
 
   /**
-   * Deprecated: use amount_micros, an exact integer count of millionths. Kept
-   * for one release; the server fills both.
-   *
-   * @generated from field: double amount = 2 [deprecated = true];
-   * @deprecated
-   */
-  amount: number;
-
-  /**
    * @generated from field: int64 charge_count = 3;
    */
   chargeCount: bigint;
 
   /**
-   * amount_micros is amount in millionths of the response's unit_code.
+   * amount_micros is the amount in millionths of the response's unit_code.
    *
    * @generated from field: int64 amount_micros = 4;
    */
