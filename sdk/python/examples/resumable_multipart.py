@@ -8,6 +8,7 @@ upload id where a restart can find them.
 from __future__ import annotations
 
 import paladin
+from paladin.common.v1 import resource_pb2
 from paladin.data.v1 import multipart_service_pb2, types_pb2
 from paladin.testing import PART_SIZE, FakePaladin
 
@@ -15,9 +16,13 @@ from paladin.testing import PART_SIZE, FakePaladin
 def send_part(
     p: paladin.Paladin, transfer: paladin.Transfer, name: str, upload_id: str, n: int, data: bytes
 ) -> None:
+    # The part's URL is signed for its checksum.
     signed = p.data.multipart_upload.presign_part(  # type: ignore[union-attr]
         multipart_service_pb2.PresignPartRequest(
-            object_name=name, upload_id=upload_id, part_number=n
+            object_name=name,
+            upload_id=upload_id,
+            part_number=n,
+            checksum_value=paladin.checksum(paladin.CHECKSUM_SHA256, data),
         )
     )
     with transfer.stream("PUT", signed.upload_url, {"Content-Length": str(len(data))}, data):
@@ -30,7 +35,10 @@ def main(fake: FakePaladin) -> tuple[int, int, bool]:
     body = b"x" * (2 * PART_SIZE + 10)
     init = p.data.multipart_upload.initiate_multipart_upload(  # type: ignore[union-attr]
         multipart_service_pb2.InitiateMultipartUploadRequest(
-            parent=str(fake.collection()), key="big.bin", size_bytes=len(body)
+            parent=str(fake.collection()),
+            key="big.bin",
+            size_bytes=len(body),
+            checksum_algorithm=resource_pb2.CHECKSUM_ALGORITHM_SHA256,
         )
     )
     name, upload_id, size = init.object.name, init.upload_id, init.recommended_part_size
@@ -58,8 +66,14 @@ def main(fake: FakePaladin) -> tuple[int, int, bool]:
         multipart_service_pb2.CompleteMultipartUploadRequest(
             object_name=name,
             upload_id=upload_id,
+            # Each part again with its checksum, from the part's own bytes.
             parts=[
-                types_pb2.CompletedPart(part_number=pt.part_number, etag=pt.etag) for pt in listed
+                types_pb2.CompletedPart(
+                    part_number=pt.part_number,
+                    etag=pt.etag,
+                    checksum_value=paladin.checksum(paladin.CHECKSUM_SHA256, part(pt.part_number)),
+                )
+                for pt in listed
             ],
         )
     )

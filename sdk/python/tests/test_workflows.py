@@ -162,9 +162,9 @@ def test_upload_aborts_when_a_part_is_refused(fake: Fake) -> None:
     assert fake.aborted == 1 and not fake.parts
 
 
-def test_upload_refuses_an_empty_body(fake: Fake) -> None:
+def test_upload_refuses_a_negative_size(fake: Fake) -> None:
     with pytest.raises(ValueError):
-        upload(_data(fake), parent=PARENT, content_type="text/plain", body=b"", size=0)
+        upload(_data(fake), parent=PARENT, content_type="text/plain", body=b"", size=-1)
 
 
 def test_rpc_errors_pass_through(fake: Fake) -> None:
