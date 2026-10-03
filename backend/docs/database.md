@@ -89,7 +89,8 @@ to `object_versions (object_id, id)`, so the two rows can be written in
 either order within one transaction but can never disagree at commit.
 
 **Governance** — `quotas`, `capability_records`, `capability_revocations`,
-`capability_usage`, `charges`. Quota caps are `NOT NULL DEFAULT 0` where 0
+`capability_biscuit_revocations` (revoked copies of a capability's Biscuit,
+by block revocation id), `capability_usage`, `charges`. Quota caps are `NOT NULL DEFAULT 0` where 0
 means "no cap" — the convention every reader uses (`max_x > 0 AND usage_x >=
 max_x`). Nullable caps would poison those comparisons three-valued.
 `charges` captures `tenant_slug` at charge time: the ledger must stay

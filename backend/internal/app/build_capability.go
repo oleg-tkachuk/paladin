@@ -20,7 +20,9 @@ import (
 // when capability is enabled; nil otherwise. Callers (interceptor,
 // admin handler) pull the pieces they need.
 type CapabilityBundle struct {
-	Store    capability.Store
+	Store capability.Store
+	// Copies records revoked copies of a capability's Biscuit.
+	Copies   capability.BiscuitRevocationStore
 	Usage    capability.UsageStore[pgx.Tx]
 	Issuer   *capability.Issuer
 	Verifier *capability.StandardVerifier
@@ -130,6 +132,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	}
 
 	cache := capability.NewCachedRevocationChecker(store, cfg.RevocationCacheTTL)
+	copies := capability.NewCachedBiscuitRevocationChecker(store, cfg.RevocationCacheTTL)
 
 	// Revocations made on any replica clear this one's cache at once; the
 	// TTL above is only the fallback for while the LISTEN connection is
@@ -137,7 +140,8 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// so it runs on its own context, which StopWatchers cancels before the
 	// pool is closed — the same arrangement as the Cedar watcher.
 	watchCtx, stopWatch := context.WithCancel(context.Background())
-	if err := capabilitypg.NewRevocationWatcher(deps.Pool, cache.Clear).Start(watchCtx); err != nil {
+	clearCaches := func() { cache.Clear(); copies.Clear() }
+	if err := capabilitypg.NewRevocationWatcher(deps.Pool, clearCaches).Start(watchCtx); err != nil {
 		stopWatch()
 		return nil, fmt.Errorf("app: capability revocation watch: %w", err)
 	}
@@ -149,7 +153,8 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Leeway:         cfg.VerifierLeeway,
 		// Every capability is also handed out as a Biscuit its holder can
 		// narrow offline (CapabilityService.Issue), so every plane takes one.
-		AcceptBiscuit: true,
+		AcceptBiscuit:      true,
+		BiscuitRevocations: copies,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability verifier: %w", err)
@@ -168,6 +173,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 
 	return &CapabilityBundle{
 		Store:        store,
+		Copies:       store,
 		Usage:        usage,
 		Issuer:       issuer,
 		Verifier:     verifier,

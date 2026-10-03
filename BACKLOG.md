@@ -1629,16 +1629,6 @@ finding moving from "packages you import" to "your code is affected".
   iam are not gated — no capability carries a request there on its own —
   and `capability_planes_test.go` fails if that stops being true.
 
-### Attenuated Biscuits cannot be revoked one by one
-
-- **Status:** Deferred.
-- **Reason:** every Biscuit of a capability, attenuated or not, carries its
-  capability's ID, so revocation is all or nothing: revoking the capability
-  revokes every copy, and no single copy can be revoked alone.
-- **Definition of Done:** a revocation list keyed by Biscuit block revocation
-  ids, checked by the verifier beside the capability's own revocation.
-- **Blockers:** none.
-
 ### The capability module's Go API still takes float64 amounts
 
 - **Status:** Deferred — a breaking change to the module's public API.

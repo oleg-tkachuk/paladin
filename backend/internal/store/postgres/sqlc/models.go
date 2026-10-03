@@ -360,6 +360,14 @@ type Bucket struct {
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type CapabilityBiscuitRevocation struct {
+	RevocationID []byte             `json:"revocation_id"`
+	CapabilityID pgtype.UUID        `json:"capability_id"`
+	RevokedAt    pgtype.Timestamptz `json:"revoked_at"`
+	Reason       string             `json:"reason"`
+	Actor        string             `json:"actor"`
+}
+
 type CapabilityRecord struct {
 	ID               pgtype.UUID        `json:"id"`
 	TenantID         pgtype.UUID        `json:"tenant_id"`

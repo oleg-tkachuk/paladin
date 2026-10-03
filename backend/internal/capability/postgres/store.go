@@ -280,9 +280,10 @@ SELECT count(*) FROM target;
 	return nil
 }
 
-// PurgeExpired implements capability.Store. Drops revocation rows whose
-// underlying capability has been expired for at least the supplied
-// grace; keeps the denylist bounded over time.
+// PurgeExpired implements capability.Store. Drops revocation rows — of
+// capabilities and of Biscuit copies — whose underlying capability has been
+// expired for at least the supplied grace; keeps the denylists bounded over
+// time. Returns the rows dropped from both.
 func (s *Store) PurgeExpired(ctx context.Context, expiredFor time.Duration) (int64, error) {
 	const stmt = `
 DELETE FROM capability_revocations
@@ -297,7 +298,20 @@ WHERE id IN (
 	if err != nil {
 		return 0, fmt.Errorf("capability/postgres: purge: %w", err)
 	}
-	return tag.RowsAffected(), nil
+	// Revoked Biscuit copies go on the same grace: no copy outlives its
+	// capability's expiry.
+	const copies = `
+DELETE FROM capability_biscuit_revocations
+WHERE capability_id IN (
+    SELECT id FROM capability_records
+    WHERE  expires_at < NOW() - ($1::bigint || ' microseconds')::interval
+);
+`
+	copyTag, err := s.pool.Exec(ctx, copies, expiredFor.Microseconds())
+	if err != nil {
+		return 0, fmt.Errorf("capability/postgres: purge biscuit copies: %w", err)
+	}
+	return tag.RowsAffected() + copyTag.RowsAffected(), nil
 }
 
 // ListByPrincipal implements capability.Store. Cursor is the last seen

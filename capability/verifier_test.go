@@ -18,6 +18,7 @@ import (
 type memStore struct {
 	caps     map[uuid.UUID]Capability
 	revoked  map[uuid.UUID]bool
+	copies   map[string]bool // revoked Biscuit copies, by revocation id
 	getCalls int64
 	revCalls int64
 }
@@ -26,6 +27,7 @@ func newMemStore() *memStore {
 	return &memStore{
 		caps:    map[uuid.UUID]Capability{},
 		revoked: map[uuid.UUID]bool{},
+		copies:  map[string]bool{},
 	}
 }
 
@@ -47,6 +49,18 @@ func (m *memStore) IsRevoked(_ context.Context, id uuid.UUID) (bool, error) {
 }
 func (m *memStore) Revoke(_ context.Context, args RevokeArgs) error {
 	m.revoked[args.ID] = true
+	return nil
+}
+func (m *memStore) IsBiscuitRevoked(_ context.Context, ids [][]byte) (bool, error) {
+	for _, id := range ids {
+		if m.copies[string(id)] {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+func (m *memStore) RevokeBiscuit(_ context.Context, args RevokeBiscuitArgs) error {
+	m.copies[string(args.RevocationID)] = true
 	return nil
 }
 func (m *memStore) PurgeExpired(context.Context, time.Duration) (int64, error) {
