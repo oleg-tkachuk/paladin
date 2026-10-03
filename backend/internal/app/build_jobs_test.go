@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
@@ -199,6 +200,43 @@ func TestBuildBackgroundJobs_SubsystemPurgersNeedTheirBundle(t *testing.T) {
 		if !has(names, w) {
 			t.Errorf("%s missing with both a bundle and an interval; built %v", w, names)
 		}
+	}
+}
+
+// The purger sweeps DPoP proof ids only when the bundle carries a replay
+// cache. A nil *ReplayCache stored in the interface field would read as wired
+// and panic on the first tick.
+func TestBuildBackgroundJobs_CapabilityPurgerReplayWiring(t *testing.T) {
+	purgerFor := func(t *testing.T, bundle *CapabilityBundle) *worker.CapabilityPurger {
+		t.Helper()
+		cfg := config.Config{}
+		cfg.Worker.Jobs.Capability.Interval = time.Second
+		deps := &SharedDeps{
+			Cfg:        cfg,
+			Logger:     zap.NewNop(),
+			Pool:       &pgxpool.Pool{},
+			ReaperPool: &pgxpool.Pool{},
+			Capability: bundle,
+		}
+		for _, j := range BuildBackgroundJobs(deps) {
+			if p, ok := j.(*worker.CapabilityPurger); ok {
+				return p
+			}
+		}
+		t.Fatal("CapabilityPurger not built")
+		return nil
+	}
+
+	if p := purgerFor(t, &CapabilityBundle{}); p.Replay != nil {
+		t.Errorf("Replay = %#v with no replay cache in the bundle, want a nil interface", p.Replay)
+	}
+
+	replay, err := capabilitypg.NewReplayCache(&pgxpool.Pool{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := purgerFor(t, &CapabilityBundle{Replay: replay}); p.Replay != replay {
+		t.Errorf("Replay = %#v, want the bundle's replay cache", p.Replay)
 	}
 }
 
