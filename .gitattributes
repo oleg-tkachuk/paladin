@@ -64,7 +64,7 @@ Brewfile -linguist-detectable
 # otherwise use and does not want on its bar. The directory is upstream's,
 # carried here so a feature plan resolves offline.
 
-# The shared Task library's module bodies, 159 KB, committed so TASK_OFFLINE=1
+# The shared Task library's module bodies, 159 KB, committed so `task --offline`
 # resolves every include from this repository instead of cloning. They are
 # another repository's source, kept verbatim — see .gitignore for why the
 # checksums travel with them.
