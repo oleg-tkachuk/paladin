@@ -42,6 +42,37 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## Unreleased — every presigned upload is bound to its body
+
+- **`checksum_value` is required** on `UploadObjectRequest` and
+  `PresignPartRequest`, and on every `CompletedPart`: base64 of the body's
+  digest under the upload's `checksum_algorithm`, as S3 writes it.
+  `size_hint_bytes` is now the exact size (0 is an empty object). Both are
+  signed into the URL — PUT and part URLs carry `Content-Length`, the
+  checksum and, for a PUT, `If-None-Match: *` — and the object store refuses
+  any other body. Send every header in `required_headers`. The Go and Python
+  SDKs and the console do this for you; a client that presigns itself uses
+  `paladin.Checksum` / `paladin.checksum`.
+- **A PUT cannot overwrite.** A second PUT through an upload URL answers 412;
+  treat it as already stored and complete the object.
+- **POST is a real POST policy** binding the size, Content-Type and checksum;
+  submit every field in `post_policy.fields`. It cannot refuse an overwrite.
+- **Promotion checks the stored bytes** against the registered size and
+  checksum; bytes that differ are deleted and the object fails with
+  `FailedPrecondition`.
+- **`RegenerateUploadUrl` refuses objects registered before this release**
+  (no size or checksum to bind): start a new upload instead.
+- **Downloads may be bound to the object's ETag** with `require_etag_match`;
+  the SDKs always bind theirs. A browser navigation cannot send `If-Match`,
+  so the console does not.
+- **MCP:** `paladin_upload_object` takes `size_bytes` (was `size_hint_bytes`)
+  and a required `checksum_value`; `paladin_presign_part` and each completed
+  part need `checksum_value`; `paladin_initiate_multipart_upload` now sends a
+  checksum algorithm (it was refused without one).
+- **Deploy order:** browser uploads send `x-amz-checksum-*`, `If-None-Match`
+  and `If-Match`; the storage endpoint's CORS must allow them and expose
+  `ETag` before the console is upgraded.
+
 ## capability/v0.10.0 — the DPoP replay cache is shared across replicas
 
 - **Go: `ReplayCache.Seen` and `DPoPVerifier.Check` take a
@@ -65,6 +96,7 @@ tree with itself and passes without checking anything.
   data-plane call and the Cedar permit is tenant equality, so until now any
   capability of the tenant could provision its buckets and collections.
 - Calls made with a JWT or API token and no capability are unaffected.
+
 
 ## Unreleased — uploads are held to `limits.*` and bucket constraints
 
