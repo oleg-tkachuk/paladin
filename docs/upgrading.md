@@ -42,6 +42,30 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## Unreleased — uploads are held to `limits.*` and bucket constraints
+
+- **`limits.*` is enforced.** `max_object_size` now refuses a larger single
+  PUT/POST, `max_multipart_size` a larger multipart upload, and
+  `allowed_content_types` any other media type, all with `InvalidArgument`.
+  These were documented as enforced and were not; a deployment that relied on
+  their being ignored — the chart ships an allowlist — must widen them first.
+  A bucket's constraints (`max_object_size_bytes`, part limits,
+  `allowed_content_types`, `required_checksum_algorithm`, presign TTL
+  ceilings) now apply to uploads, copies and URLs for that bucket, narrowing
+  the global limits.
+- **Config keys removed.** `limits.presign.default_max_size` (use
+  `limits.max_object_size`) and, since #215, `limits.presign.default_ttl` (the
+  per-method `put_ttl`/`get_ttl`/`part_ttl` are the defaults). The loader
+  rejects unknown keys, so delete them from any override.
+- **Part sizes are IEC.** `min_part_size`/`max_part_size` default to `5MiB`/
+  `5GiB`; a `min_part_size` below S3's 5 MiB, including the old `5MB`, fails
+  at load.
+- **Presign TTLs are refused, not shortened.** A TTL above `max_ttl` (or a
+  bucket ceiling) is `InvalidArgument` on every presigning RPC, and
+  `max_ttl` may not exceed 168h.
+- **Bucket creation validates constraints.** Constraints no upload could
+  satisfy are refused by CreateBucket.
+
 ## Unreleased — the Python SDK knows its version under Poetry
 
 - **`sdk_version()`, the `User-Agent` and errors report the release** when
