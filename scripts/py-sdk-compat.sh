@@ -44,8 +44,10 @@ wheel=$(find "$work/dist" -name '*.whl' | head -1)
 
 # What the tests themselves import, at the versions the SDK's lock holds.
 # Not the whole dev group: its generator pins protobuf, and its optional
-# google-crc32c would hide the path where that extra is absent.
-readonly TEST_DEPS='^(pytest|cryptography)=='
+# google-crc32c would hide the path where that extra is absent. biscuit-python
+# is installed only where it has a wheel (before 3.14); the 3.14 cells run the
+# path where the biscuit extra is absent.
+readonly TEST_DEPS='^(pytest|cryptography|biscuit-python)=='
 mapfile -t test_deps < <(cd "$SDK" && uv export --quiet --frozen --only-group dev --no-hashes --no-annotate --no-emit-project |
     grep -E "$TEST_DEPS")
 
