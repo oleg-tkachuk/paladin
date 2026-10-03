@@ -161,7 +161,7 @@ func TestAdversarial_RLSFiltersCrossTenantObjects(t *testing.T) {
 // TestAdversarial_ProvisionGateOnUploadPath proves the provision-state gate
 // also covers the UploadObject resolver (LookupBucketMeta), not just the
 // presign LookupBucket — otherwise a dedicated tenant could push a
-// multipart/streaming upload into a bucket S3 doesn't have yet.
+// multipart upload into a bucket S3 doesn't have yet.
 func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

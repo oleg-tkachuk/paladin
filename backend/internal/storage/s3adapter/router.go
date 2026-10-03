@@ -13,7 +13,7 @@ import (
 )
 
 // Routers implement the handler-facing storage interfaces (object.Storage,
-// presign.Storage, multipart.Storage, object.StreamSink, bucketh.Provisioner)
+// presign.Storage, multipart.Storage, bucketh.Provisioner)
 // by resolving the target *Client from a BackendRegistry per call and
 // delegating. The backend id travels in the method args — either a BackendID
 // field (presign args / Location) or a leading backendID parameter — so a
@@ -27,10 +27,7 @@ import (
 
 // Compile-time interface conformance (bucketh.Provisioner is checked at the
 // wire.Storage assignment to avoid importing the bucket package here).
-var (
-	_ objecth.Storage    = (*ObjectRouter)(nil)
-	_ objecth.StreamSink = (*StreamRouter)(nil)
-)
+var _ objecth.Storage = (*ObjectRouter)(nil)
 
 // ObjectRouter routes object.Storage calls by backend id.
 type ObjectRouter struct{ reg *BackendRegistry }
@@ -187,19 +184,6 @@ func (r *MultipartRouter) PresignPart(ctx context.Context, backendID, bucket str
 		return "", nil, time.Time{}, err
 	}
 	return c.PresignPart(ctx, bucket, tenantID, storageUploadID, collection, key, partNumber, ttl)
-}
-
-// StreamRouter routes object.StreamSink calls by backend id.
-type StreamRouter struct{ reg *BackendRegistry }
-
-func NewStreamRouter(reg *BackendRegistry) *StreamRouter { return &StreamRouter{reg: reg} }
-
-func (r *StreamRouter) Open(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType string, sizeHint int64) (objecth.StreamWriter, error) {
-	c, err := r.reg.For(ctx, backendID)
-	if err != nil {
-		return nil, err
-	}
-	return c.Open(ctx, bucket, tenantID, collection, key, contentType, sizeHint)
 }
 
 // ProvisionerRouter routes bucketh.Provisioner calls by backend id. The backend
