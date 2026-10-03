@@ -495,7 +495,10 @@ the stubs, the declared floor and the matrix disagree.
 The package version is the SDK's tag, `sdk/go/vX.Y.Z`, cut automatically from
 the commits that touch `sdk/` or `proto/`; hatch-vcs reads it at build time
 (a source archive of a tag reads it from `.git_archival.txt`; a tree with
-neither builds as `0.0.0+unknown`). Pre-1.0, a minor version may break the contract or this
+neither builds as `0.0.0+unknown`). An install from the git tag whose build
+had no git — Poetry fetches through Dulwich — records `0.0.0+unknown`, and
+`sdk_version()`, the `User-Agent` and errors report the tag's version
+instead, read from the install's `direct_url.json` (PEP 610). Pre-1.0, a minor version may break the contract or this
 package's own API; see [`docs/upgrading.md`](../../docs/upgrading.md). The buf.validate module the contract's descriptors depend
 on ships inside the wheel as `buf.validate`, because no PyPI package provides
 it for the `protobuf` runtime.
