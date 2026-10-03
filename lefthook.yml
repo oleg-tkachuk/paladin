@@ -72,13 +72,9 @@ pre-commit:
       # reports success without checking anything, and a false failure for
       # anyone whose PATH sqlc was not the pinned one.
       #
-      # Own TMPDIR and TASK_OFFLINE, for the reason spelled out on the
-      # chart-verify jobs below: this hook set runs `parallel: true`, and Task
-      # resolves its remote includes through a clone directory shared by every
-      # process on the machine, with no lock.
-      run: |
-        d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT
-        TMPDIR="$d/" TASK_OFFLINE=1 task codegen:sqlc:check
+      # Through scripts/task-offline.sh, like every hook that runs Task: see
+      # the note on backend-chart-verify.
+      run: ../scripts/task-offline.sh codegen:sqlc:check
 
     # Formatters re-stage through `stage_fixed`, never a `git add` of their own.
     # In a linked worktree git runs hooks with GIT_DIR exported and no
@@ -171,32 +167,21 @@ pre-push:
       root: backend/
       tags: [chart, lint]
       glob: "backend/deploy/chart/**/*"
-      # Own TMPDIR: Task clones a remote include into
-      # $TMPDIR/task-git-repos/git/<hash of url+ref>, one directory per repo+ref
-      # shared by every module, every consumer and every process on the machine,
-      # with no lock. Two `task` runs at once lose the clone — reproduced as
-      # `could not create work tree dir ... File exists`, six out of six.
-      #
-      # TASK_OFFLINE, because every module resolved here is committed under
-      # .task/remote: nothing is fetched, so no timeout and no github.com. The
-      # private TMPDIR stays — offline alone is not enough, each job passes
-      # under it alone and two together still lose the shared clone directory.
-      run: |
-        d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT
-        TMPDIR="$d/" TASK_OFFLINE=1 task release:chart:verify
+      # Through scripts/task-offline.sh, which runs `task --offline` without the
+      # hook's git variables. Every module resolved here is committed under
+      # .task/remote, so nothing is fetched: no timeout, no github.com, and no
+      # clone into Task's task-git-repos — the one directory per repo+ref that
+      # parallel jobs raced over (`could not create work tree dir ... File
+      # exists`), and that in a linked worktree inherited GIT_INDEX_FILE and
+      # wrote the include repository's paths into this repository's index.
+      run: ../scripts/task-offline.sh release:chart:verify
 
     - name: frontend-chart-verify
       root: frontend/
       tags: [chart, lint]
       glob: "frontend/deploy/chart/**/*"
-      # Own TMPDIR, same reason as the job above: Task clones a remote include into
-      # $TMPDIR/task-git-repos/git/<hash of url+ref>, one directory per repo+ref
-      # shared by every module, every consumer and every process on the machine,
-      # with no lock. Two `task` runs at once lose the clone — reproduced as
-      # `could not create work tree dir ... File exists`, six out of six.
-      run: |
-        d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT
-        TMPDIR="$d/" TASK_OFFLINE=1 task release:chart:verify
+      # Through scripts/task-offline.sh, same reason as the job above.
+      run: ../scripts/task-offline.sh release:chart:verify
 
     - name: frontend-tsc
       root: frontend/
