@@ -39,12 +39,9 @@ if ! git -C "$root" diff --quiet -- "$sqlc_out" ||
 fi
 
 stub=$(mktemp -d)
-# Own TMPDIR, as the lefthook jobs do: Task shares one clone directory per
-# remote include across every process on the machine, with no lock.
-d=$(mktemp -d)
 # Restore whatever the gate regenerated. It should be a no-op when the pin
 # holds; it is what keeps a failure from leaving the tree rewritten.
-trap 'rm -rf "$stub" "$d"; git -C "$root" checkout --quiet -- "$sqlc_out"' EXIT
+trap 'rm -rf "$stub"; git -C "$root" checkout --quiet -- "$sqlc_out"' EXIT
 
 cat >"$stub/sqlc" <<'STUB'
 #!/bin/sh
@@ -57,8 +54,9 @@ chmod +x "$stub/sqlc"
 # drift gate doing its job — stale output — and is reported as that, not
 # blamed on the pin.
 readonly STUB_MARK="PATH sqlc was invoked"
-if ! out=$(cd "$root/backend" && PATH="$stub:$PATH" TMPDIR="$d/" TASK_OFFLINE=1 \
-    task codegen:sqlc:check 2>&1); then
+# Through scripts/task-offline.sh, as the lefthook job runs it.
+if ! out=$(cd "$root/backend" && PATH="$stub:$PATH" \
+    ../scripts/task-offline.sh codegen:sqlc:check 2>&1); then
     if grep -qF "$STUB_MARK" <<<"$out"; then
         {
             echo "!!! the sqlc drift gate did not use the go.mod-pinned sqlc"
