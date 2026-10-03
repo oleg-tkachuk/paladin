@@ -148,6 +148,7 @@ type Server struct {
 	paladindatav1connect.UnimplementedObjectServiceHandler
 	paladindatav1connect.UnimplementedMultipartUploadServiceHandler
 	paladindatav1connect.UnimplementedStorageBootstrapServiceHandler
+	paladindatav1connect.UnimplementedPresignServiceHandler
 
 	// URL is the server's base URL, for every plane.
 	URL    string
@@ -159,6 +160,52 @@ type Server struct {
 	buckets  map[string]bool // "backend/bucket"
 	bound    map[string]bool // collections EnsureTenantStorage created
 	requests []Request
+	// fault, when set, answers a storage request before the fake does;
+	// afterStore answers a PUT the fake has already stored.
+	fault      StorageFault
+	afterStore StorageFault
+	storeOps   []StorageOp
+}
+
+// StorageFault decides a storage request's answer before the fake does: a
+// status of 0 lets the fake answer it, anything else is answered with that
+// status and body — an expired URL, a busy store, a refused part.
+type StorageFault func(r *http.Request) (status int, body string)
+
+// ExpiredBody is what S3 answers, with 403, for a presigned URL past its
+// expiry.
+const ExpiredBody = "<Error><Code>AccessDenied</Code><Message>Request has expired</Message></Error>"
+
+// StorageOp is one request the fake's storage received.
+type StorageOp struct {
+	Method string
+	// Path is the presigned URL's path and query, e.g. /storage/{id}?part=2.
+	Path string
+}
+
+// FailStorage sets the fault every storage request passes through first;
+// nil clears it.
+func (s *Server) FailStorage(f StorageFault) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.fault = f
+}
+
+// FailStorageAfterStoring sets a fault applied to a PUT after the fake has
+// stored its body — an upload that landed but whose answer was lost; nil
+// clears it.
+func (s *Server) FailStorageAfterStoring(f StorageFault) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.afterStore = f
+}
+
+// StorageOps returns the storage requests the fake has received, oldest
+// first, faulted ones included.
+func (s *Server) StorageOps() []StorageOp {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]StorageOp(nil), s.storeOps...)
 }
 
 // Request is one RPC the fake received.
@@ -217,6 +264,7 @@ func Start() (*Server, func()) {
 	mux.Handle(paladindatav1connect.NewObjectServiceHandler(s, record))
 	mux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(s, record))
 	mux.Handle(paladindatav1connect.NewStorageBootstrapServiceHandler(s, record))
+	mux.Handle(paladindatav1connect.NewPresignServiceHandler(s, record))
 	mux.Handle(storagePath, http.HandlerFunc(s.storage))
 	srv := httptest.NewServer(mux)
 	s.URL = srv.URL
@@ -461,6 +509,25 @@ func (s *Server) DeleteObject(_ context.Context, req *connect.Request[datav1.Del
 	return connect.NewResponse(&datav1.DeleteObjectResponse{}), nil
 }
 
+// ─── PresignService ─────────────────────────────────────────────────────────
+
+// RegenerateUploadUrl presigns a PENDING object's upload URL again, bound as
+// the first was.
+func (s *Server) RegenerateUploadUrl(_ context.Context, req *connect.Request[datav1.RegenerateUploadUrlRequest]) (*connect.Response[datav1.RegenerateUploadUrlResponse], error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	o, err := s.lookup(req.Msg.GetName())
+	if err != nil {
+		return nil, err
+	}
+	if o.msg.GetState() != datav1.ObjectState_OBJECT_STATE_PENDING {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("the object is not pending"))
+	}
+	url := s.signed(o.msg.GetObjectId(), http.MethodPut)
+	url.RequiredHeaders = o.bound.headers()
+	return connect.NewResponse(&datav1.RegenerateUploadUrlResponse{UploadUrl: url}), nil
+}
+
 // ─── MultipartUploadService ────────────────────────────────────────────────
 
 func (s *Server) InitiateMultipartUpload(_ context.Context, req *connect.Request[datav1.InitiateMultipartUploadRequest]) (*connect.Response[datav1.InitiateMultipartUploadResponse], error) {
@@ -598,6 +665,16 @@ func (s *Server) EnsureTenantStorage(_ context.Context, req *connect.Request[dat
 // with Range.
 func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, storagePath)
+	s.mu.Lock()
+	s.storeOps = append(s.storeOps, StorageOp{Method: r.Method, Path: r.URL.RequestURI()})
+	fault := s.fault
+	s.mu.Unlock()
+	if fault != nil {
+		if status, body := fault(r); status != 0 {
+			http.Error(w, body, status)
+			return
+		}
+	}
 	switch r.Method {
 	case http.MethodPut:
 		body := new(bytes.Buffer)
@@ -640,6 +717,12 @@ func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			o.put = body.Bytes()
+		}
+		if s.afterStore != nil {
+			if status, msg := s.afterStore(r); status != 0 {
+				http.Error(w, msg, status)
+				return
+			}
 		}
 		w.Header().Set("ETag", etagQuote+etagOf(body.Bytes())+etagQuote)
 	case http.MethodGet:

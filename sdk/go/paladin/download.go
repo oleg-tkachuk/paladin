@@ -18,6 +18,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
 
@@ -49,6 +50,9 @@ var (
 	// ErrRangeIgnored is storage answering a range request with the whole
 	// object: reading it as the range would return the wrong bytes.
 	ErrRangeIgnored = errors.New("paladin: storage ignored the range and sent the whole object")
+	// ErrObjectChanged is a download whose object was replaced while it was
+	// being retried: the fresh URL is for different bytes than the first.
+	ErrObjectChanged = errors.New("paladin: the object changed while its download was retried")
 )
 
 // IntegrityError is a download whose content does not match what the server
@@ -178,8 +182,25 @@ func Download(ctx context.Context, data *DataPlane, name string, opts DownloadOp
 	if opts.ranged() {
 		header.Set(headerRange, opts.header())
 	}
+	// A retry asks for a fresh URL; it is bound to the object's ETag as it is
+	// then, so an object replaced in between is reported, not read.
+	presign := func(ctx context.Context) (*commonv1.PresignedUrl, error) {
+		again, err := data.Object.DownloadObject(ctx, connect.NewRequest(&datav1.DownloadObjectRequest{Name: name, RequireEtagMatch: true}))
+		if err != nil {
+			return nil, err
+		}
+		if again.Msg.GetObject().GetEtag() != object.GetEtag() {
+			return nil, ErrObjectChanged
+		}
+		return again.Msg.GetDownloadUrl(), nil
+	}
 	transfer, start := data.Transfer(), time.Now()
-	got, err := transfer.do(ctx, http.MethodGet, signed, header, nil, 0)
+	var got *http.Response
+	err = withRetries(ctx, transfer.attempts, signed, presign, func(ctx context.Context, s *commonv1.PresignedUrl) error {
+		var err error
+		got, err = transfer.do(ctx, http.MethodGet, s, header, nil, 0)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
