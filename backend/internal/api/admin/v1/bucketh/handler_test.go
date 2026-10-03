@@ -538,3 +538,19 @@ var (
 	_ Provisioner      = okProvisioner{}
 	_ cedar.Authorizer = allowAuthorizer{}
 )
+
+// Bucket constraints are now enforced on every upload into the bucket, so a
+// set no upload could satisfy — a part bound outside S3's, an unknown
+// checksum algorithm — is refused when the bucket is created, not discovered
+// by the first upload that fails.
+func TestCreateBucket_RefusesUnusableConstraints(t *testing.T) {
+	b := validBucket()
+	b.Constraints = admindomain.BucketConstraints{MinPartSizeBytes: 1 << 20}
+	h := NewHandler(&fakeRepo{backendEnabled: true}, okProvisioner{}, allowAuthorizer{})
+	if _, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: b}); code(err) != connect.CodeInvalidArgument {
+		t.Fatalf("CreateBucket code = %v, want InvalidArgument", code(err))
+	}
+	if _, _, err := h.EnsureBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: b}); code(err) != connect.CodeInvalidArgument {
+		t.Fatalf("EnsureBucket code = %v, want InvalidArgument", code(err))
+	}
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
 
@@ -27,6 +28,8 @@ type fakeRepo struct {
 	getSessionFn      func(ctx context.Context, uploadID string) (Session, error)
 	deleteSessionFn   func(ctx context.Context, uploadID string) error
 	lookupBucketFn    func(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error)
+	// constraints are the bucket constraints LookupBucketMeta reports.
+	constraints uploadpolicy.BucketConstraints
 
 	lastInitiate struct {
 		args            InitiateArgs
@@ -77,6 +80,11 @@ func (f *fakeRepo) DeleteSession(ctx context.Context, uploadID string) error {
 		return f.deleteSessionFn(ctx, uploadID)
 	}
 	return nil
+}
+
+func (f *fakeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error) {
+	backendID, bucket, err := f.LookupBucket(ctx, tenantID, collection, write)
+	return objecth.BucketMeta{BackendID: backendID, BucketName: bucket, Constraints: f.constraints}, err
 }
 
 func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
@@ -210,7 +218,15 @@ func allow() *fakeAuthorizer { return &fakeAuthorizer{decision: cedar.DecisionAl
 // only reached on the DB-coupled success tails of Complete/Abort, which these
 // unit tests deliberately stop short of, so it is never dereferenced.
 func newHandler(repo Repository, storage Storage, authz cedar.Authorizer) *Handler {
-	return NewHandler(repo, storage, authz, statemachine.New(nil), testTTLPolicy())
+	return NewHandler(repo, storage, authz, statemachine.New(nil), testTTLPolicy(), testUploadLimits)
+}
+
+// testUploadLimits are S3's own limits: permissive, so a test that exercises
+// a limit sets it on the bucket.
+var testUploadLimits = uploadpolicy.Limits{
+	MaxObjectSize: uploadpolicy.S3MaxPartSize, MaxMultipartSize: 1 << 40,
+	MinPartSize: uploadpolicy.S3MinPartSize, MaxPartSize: uploadpolicy.S3MaxPartSize,
+	MaxParts: uploadpolicy.S3MaxParts,
 }
 
 // Part URL lifetimes the tests sign under: part_ttl distinct from the other

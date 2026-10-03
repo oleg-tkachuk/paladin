@@ -11,6 +11,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
 
 // CompleteObject and CopyObject were the last two of the thirteen handlers at
@@ -35,6 +36,8 @@ type completeRepo struct {
 	writeErr  error // returned from LookupBucket when write=true
 	createErr error
 	created   *CreateObjectArgs
+	// constraints are the destination bucket's upload constraints.
+	constraints uploadpolicy.BucketConstraints
 }
 
 func (r *completeRepo) FindByName(context.Context, uuid.UUID, string, string) (Object, error) {
@@ -52,6 +55,23 @@ func (r *completeRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, wr
 		return "", "", r.bucketErr
 	}
 	return "backend-7", "bucket-7", nil
+}
+
+// LookupBucketMeta answers the embedded meta (versioning flags), falling back
+// to LookupBucket's binding when the test set none, plus the test's
+// constraints.
+func (r *completeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (BucketMeta, error) {
+	meta, err := r.fakeObjectRepo.LookupBucketMeta(ctx, tenantID, collection, write)
+	if err != nil {
+		return BucketMeta{}, err
+	}
+	if meta.BucketName == "" {
+		if meta.BackendID, meta.BucketName, err = r.LookupBucket(ctx, tenantID, collection, write); err != nil {
+			return BucketMeta{}, err
+		}
+	}
+	meta.Constraints = r.constraints
+	return meta, nil
 }
 
 func (r *completeRepo) CreateObject(_ context.Context, a CreateObjectArgs) (Object, error) {

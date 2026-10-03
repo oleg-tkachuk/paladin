@@ -128,9 +128,9 @@ datastores:
 # ─── Request limits (single source of truth for refusals) ───────────────────
 limits:
   max_object_size: "100MB"              # rejected at presign time
-  max_multipart_size: "1TB"             # CompleteMultipart cap
-  min_part_size: "5MB"                  # AWS S3 minimum (last part exempt)
-  max_part_size: "5GB"
+  max_multipart_size: "1TB"             # checked when the upload is initiated
+  min_part_size: "5MiB"                 # AWS S3 minimum (last part exempt)
+  max_part_size: "5GiB"
   max_parts: 10000
   allowed_content_types:                # empty list = accept any
     - "image/jpeg"
@@ -147,7 +147,6 @@ limits:
     get_ttl: 15m                        # PresignGet / DownloadObject
     part_ttl: 15m                       # PresignPart (multipart)
     max_ttl: 168h                       # 7d — upper bound for caller-supplied ttls
-    default_max_size: 5368709120        # 5 GiB; POST policy content-length-range cap
 
 # ─── Auth (JWT issuance + verification) ─────────────────────────────────────
 # Paladin IAM mints HS256 tokens via Login / RefreshToken and verifies them on

@@ -70,10 +70,16 @@ tenant differs from the tenant header on the request.
 - **Request shape.** Connect handlers run behind a `protovalidate` interceptor
   (`internal/middleware/validate.go`); a request violating its
   `buf.validate` rules is refused with `InvalidArgument` before the handler.
-- **Content type.** `limits.allowed_content_types` (empty accepts any).
-- **Size.** `limits.max_object_size` is enforced when the upload URL is
-  signed; `limits.max_multipart_size`, `min_part_size`, `max_part_size` and
-  `max_parts` bound multipart uploads.
+- **Upload limits.** Every path that creates an object — UploadObject,
+  multipart, copy, batch copy — is admitted by one policy
+  (`internal/uploadpolicy`). `limits.max_object_size` bounds a single PUT or
+  POST, `limits.max_multipart_size` an object assembled from parts, and
+  `min_part_size`, `max_part_size` and `max_parts` decide the part plan.
+  `limits.allowed_content_types` (empty accepts any; parameters are ignored)
+  refuses other media types. A bucket's constraints narrow all of these —
+  never widen them — and may also require a checksum algorithm and cap the
+  bucket's presign TTLs. Constraints no upload could satisfy are refused when
+  the bucket is created.
 
 ## 5. Secret Management
 

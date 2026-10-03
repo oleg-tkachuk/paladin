@@ -895,11 +895,10 @@ type StorageBackendEvents struct {
 // Each *_ttl is the lifetime a URL of that kind gets when the caller names
 // none; max_ttl is the most a caller may ask for. See internal/presignttl.
 type Presign struct {
-	PutTTL         time.Duration `yaml:"put_ttl" json:"put_ttl"`
-	GetTTL         time.Duration `yaml:"get_ttl" json:"get_ttl"`
-	PartTTL        time.Duration `yaml:"part_ttl" json:"part_ttl"`
-	MaxTTL         time.Duration `yaml:"max_ttl" json:"max_ttl"`
-	DefaultMaxSize int64         `yaml:"default_max_size" json:"default_max_size"`
+	PutTTL  time.Duration `yaml:"put_ttl" json:"put_ttl"`
+	GetTTL  time.Duration `yaml:"get_ttl" json:"get_ttl"`
+	PartTTL time.Duration `yaml:"part_ttl" json:"part_ttl"`
+	MaxTTL  time.Duration `yaml:"max_ttl" json:"max_ttl"`
 }
 
 type Reconciler struct {
