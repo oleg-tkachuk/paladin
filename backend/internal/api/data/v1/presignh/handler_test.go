@@ -285,6 +285,27 @@ func TestPresignGet(t *testing.T) {
 		}
 	})
 
+	t.Run("an invalid content_disposition is refused before signing", func(t *testing.T) {
+		st := &fakeStorage{}
+		h := NewHandler(&fakeRepo{}, st, allowPolicy(), cfg)
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "form-data; name=x")
+		wantCode(t, err, connect.CodeInvalidArgument)
+		if st.getCalled {
+			t.Fatal("a URL was signed for a refused disposition")
+		}
+	})
+
+	t.Run("content_disposition is signed in canonical form", func(t *testing.T) {
+		st := &fakeStorage{}
+		h := NewHandler(&fakeRepo{}, st, allowPolicy(), cfg)
+		if _, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "Inline"); err != nil {
+			t.Fatal(err)
+		}
+		if st.gotDisposition != "inline" {
+			t.Fatalf("signed disposition %q, want inline", st.gotDisposition)
+		}
+	})
+
 	t.Run("an unconfigured policy refuses rather than signs unbounded", func(t *testing.T) {
 		st := &fakeStorage{}
 		h := NewHandler(&fakeRepo{}, st, allowPolicy(), Config{})

@@ -215,3 +215,30 @@ func TestDownloadObjectSignsTheRequestedTTLAtTheCeiling(t *testing.T) {
 		t.Errorf("presigned TTL = %v, want exactly max_ttl %v", storage.got.TTL, testPresignMaxTTL)
 	}
 }
+
+// The disposition is a response header the object store writes from the
+// signed URL; DownloadObject now refuses one that is not inline/attachment
+// before anything is signed, and signs the canonical form of one that is.
+func TestDownloadObjectNormalizesContentDisposition(t *testing.T) {
+	t.Run("refused before signing", func(t *testing.T) {
+		h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
+		_, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, "attachment\r\nSet-Cookie: s=1")
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatalf("code = %v, want InvalidArgument", connect.CodeOf(err))
+		}
+		if storage.got.TTL != 0 {
+			t.Fatal("a URL was signed for a refused disposition")
+		}
+	})
+	t.Run("canonical form is signed and returned", func(t *testing.T) {
+		h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
+		out, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, `ATTACHMENT; filename="q3 report.pdf"`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		const want = `attachment; filename="q3 report.pdf"`
+		if storage.got.ContentDisposition != want || out.ContentDisposition != want {
+			t.Fatalf("signed %q, returned %q; want %q", storage.got.ContentDisposition, out.ContentDisposition, want)
+		}
+	})
+}

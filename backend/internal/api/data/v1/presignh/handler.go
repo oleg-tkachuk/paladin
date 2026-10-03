@@ -102,6 +102,10 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
+	disposition, err = objecth.NormalizeContentDisposition(disposition)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
 	obj, err := h.repo.LookupObject(ctx, tenantID, collection, objectID)
 	if err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
