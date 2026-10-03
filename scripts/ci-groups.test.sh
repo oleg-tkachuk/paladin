@@ -33,6 +33,7 @@ check "a backend file"            '["backend","repo"]' backend/internal/mcp/brid
 check "capability reaches backend" '["backend","capability","repo"]' capability/token.go
 check "the Go SDK reaches backend" '["backend","sdk","repo"]' sdk/go/client.go
 check "the Python SDK only"       '["sdk","repo"]' sdk/python/pyproject.toml
+check "shared SDK fixtures reach capability" '["capability","sdk","repo"]' sdk/testdata/biscuit_vocabulary.json
 check "the contract reaches all its readers" '["backend","sdk","frontend","repo"]' proto/paladin/admin/v1/tenant_service.proto
 check "a chart"                   '["frontend","repo"]' frontend/deploy/chart/values.yaml
 check "root config"               '["repo"]' .checkov.yaml
