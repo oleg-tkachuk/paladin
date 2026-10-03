@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"sync"
@@ -44,7 +45,10 @@ type Store[TX any] struct {
 	caps     map[uuid.UUID]capability.Capability
 	issuedBy map[uuid.UUID]capability.Principal
 	revoked  map[uuid.UUID]bool
-	nowFn    func() time.Time
+	// revokedCopies maps a revoked Biscuit copy's revocation id to the
+	// capability it belongs to.
+	revokedCopies map[string]uuid.UUID
+	nowFn         func() time.Time
 }
 
 // UsageStore implements capability.UsageStore[TX] — request and spend counters.
@@ -92,6 +96,8 @@ func New[TX any]() *Store[TX] {
 		issuedBy: map[uuid.UUID]capability.Principal{},
 		revoked:  map[uuid.UUID]bool{},
 		nowFn:    time.Now,
+
+		revokedCopies: map[string]uuid.UUID{},
 	}
 }
 
@@ -244,6 +250,32 @@ func (s *Store[TX]) Revoke(_ context.Context, args capability.RevokeArgs) error 
 	}
 }
 
+// IsBiscuitRevoked implements capability.BiscuitRevocationLookup.
+func (s *Store[TX]) IsBiscuitRevoked(_ context.Context, revocationIDs [][]byte) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, id := range revocationIDs {
+		if _, ok := s.revokedCopies[string(id)]; ok {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// RevokeBiscuit implements capability.BiscuitRevocationStore.
+func (s *Store[TX]) RevokeBiscuit(_ context.Context, args capability.RevokeBiscuitArgs) error {
+	if len(args.RevocationID) == 0 {
+		return errors.New("memstore: revocation id required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.caps[args.CapabilityID]; !ok {
+		return capability.ErrNotFound
+	}
+	s.revokedCopies[string(args.RevocationID)] = args.CapabilityID
+	return nil
+}
+
 func (s *Store[TX]) PurgeExpired(_ context.Context, expiredFor time.Duration) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -253,6 +285,7 @@ func (s *Store[TX]) PurgeExpired(_ context.Context, expiredFor time.Duration) (i
 		if !c.ExpiresAt.IsZero() && c.ExpiresAt.Before(cutoff) {
 			delete(s.caps, id)
 			delete(s.revoked, id)
+			maps.DeleteFunc(s.revokedCopies, func(_ string, c uuid.UUID) bool { return c == id })
 			n++
 		}
 	}

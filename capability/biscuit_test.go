@@ -22,6 +22,8 @@ func biscuitFixture(t *testing.T) (*Issuer, *StandardVerifier, *memStore, *Capab
 		Revocations:    NewCachedRevocationChecker(store, -1),
 		TrustedIssuers: []string{"paladin-test"},
 		AcceptBiscuit:  true,
+
+		BiscuitRevocations: NewCachedBiscuitRevocationChecker(store, -1),
 	})
 	if err != nil {
 		t.Fatal(err)

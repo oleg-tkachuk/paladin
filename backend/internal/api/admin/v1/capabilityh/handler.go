@@ -41,6 +41,10 @@ type Handler struct {
 	store  capability.Store
 	usage  capability.UsageStore[pgx.Tx]
 	policy cedar.Authorizer
+
+	// copier and copies serve RevokeBiscuit; see WithBiscuitCopies.
+	copier BiscuitCopier
+	copies capability.BiscuitRevocationStore
 }
 
 // NewHandler builds the Handler. issuer / store / policy are required;
