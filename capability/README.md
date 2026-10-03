@@ -185,7 +185,7 @@ proof, _ := capability.NewDPoPProof(agentKey, "POST", url, token, time.Now())
 
 // Server, after Verify:
 dpop := &capability.DPoPVerifier{Replay: capability.NewMemoryReplayCache(0)}
-err := dpop.Check(cap, capability.DPoPRequest{Proof: proof, Method: "POST", URL: url, Token: token})
+err := dpop.Check(ctx, cap, capability.DPoPRequest{Proof: proof, Method: "POST", URL: url, Token: token})
 ```
 
 The token carries the thumbprint as `cnf.jkt` (RFC 7800), omitted when
