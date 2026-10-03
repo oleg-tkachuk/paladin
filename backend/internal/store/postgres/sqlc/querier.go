@@ -512,6 +512,7 @@ type Querier interface {
 	// Reads an object by id alone. Used by background workers (reconciler,
 	// replicator) that don't carry a tenant context. Joins collections to
 	// materialize the bucket binding so the caller can call S3 in one trip.
+	// checksum_algorithm tells a HEAD which stored checksum is the object's.
 	LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupObjectByIDRow, error)
 	// Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
 	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, name string, path string) (LookupObjectByKeyRow, error)

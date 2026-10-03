@@ -33,8 +33,14 @@ import (
 // headFunc adapts a function to adapters.HeadProber.
 type headFunc func(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) (string, int64, string, string, error)
 
-func (f headFunc) Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) (string, int64, string, string, error) {
+func (f headFunc) Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, _ string) (string, int64, string, string, error) {
 	return f(ctx, backendID, bucket, tenantID, collection, key)
+}
+
+// DeleteObject is never reached here: these objects are absent, not
+// mismatched.
+func (headFunc) DeleteObject(context.Context, string, string, uuid.UUID, string, string) error {
+	return nil
 }
 
 // runOneTick starts the reconciler, lets it fire at least once, and stops it.

@@ -10,7 +10,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
@@ -103,11 +105,13 @@ func TestPresignedURLsAreBoundedBySessionCredentials(t *testing.T) {
 			return u, exp, err
 		},
 		"put": func() (string, time.Time, error) {
-			u, _, exp, err := c.PresignPut(ctx, objecth.PresignPutArgs{TenantID: tenant, Bucket: "b", Collection: "ok", Key: "k", ContentType: "text/plain", TTL: 24 * time.Hour})
+			u, _, exp, err := c.PresignPut(ctx, objecth.PresignPutArgs{TenantID: tenant, Bucket: "b", Collection: "ok", Key: "k", ContentType: "text/plain",
+				SizeBytes: 5, ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksum, TTL: 24 * time.Hour})
 			return u, exp, err
 		},
 		"part": func() (string, time.Time, error) {
-			u, _, exp, err := c.PresignPart(ctx, "b", tenant, "upload-1", "ok", "k", 1, 24*time.Hour)
+			u, _, exp, err := c.PresignPart(ctx, "b", tenant, "upload-1", "ok", "k",
+				multiparth.PartBinding{Number: 1, SizeBytes: 5, ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksum}, 24*time.Hour)
 			return u, exp, err
 		},
 	}

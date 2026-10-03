@@ -194,7 +194,7 @@ func (e *BatchCopyExecutor) copyOne(
 		Collection:       args.DstCollection,
 		Key:              dstKey,
 		ContentType:      src.ContentType,
-		SizeHint:         src.SizeBytes,
+		SizeBytes:        &src.SizeBytes,
 		Metadata:         copyMap(src.Metadata),
 		Tags:             copyMap(src.Tags),
 		ExternalRef:      src.ExternalRef,

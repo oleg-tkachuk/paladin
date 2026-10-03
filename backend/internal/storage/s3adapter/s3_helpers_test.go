@@ -134,17 +134,6 @@ func TestCompletionMode(t *testing.T) {
 	}
 }
 
-func TestPresignViewWrapsSameClient(t *testing.T) {
-	c := &Client{}
-	pv := c.Presign()
-	if pv == nil {
-		t.Fatal("Presign() returned nil")
-	}
-	if pv.c != c {
-		t.Error("Presign() must wrap the same *Client instance")
-	}
-}
-
 // TestStreamingMD5 proves the folded digest across chunked Write calls equals
 // a one-shot md5 of the concatenated bytes — the checksum surfaced by
 // StreamWriter.Close.

@@ -27,7 +27,7 @@ from google.protobuf import duration_pb2 as google_dot_protobuf_dot_duration__pb
 from paladin.common.v1 import resource_pb2 as paladin_dot_common_dot_v1_dot_resource__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%paladin/data/v1/presign_service.proto\x12\x0fpaladin.data.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a paladin/common/v1/resource.proto\"[\n\x1aRegenerateUploadUrlRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12&\n\x03ttl\x18\x02 \x01(\x0b\x32\x19.google.protobuf.Duration\"\x8e\x01\n\x1bRegenerateUploadUrlResponse\x12\x33\n\nupload_url\x18\x01 \x01(\x0b\x32\x1f.paladin.common.v1.PresignedUrl\x12:\n\x0f\x63ompletion_mode\x18\x02 \x01(\x0e\x32!.paladin.common.v1.CompletionMode\"t\n\x16PresignDownloadRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12&\n\x03ttl\x18\x02 \x01(\x0b\x32\x19.google.protobuf.Duration\x12\x1b\n\x13\x63ontent_disposition\x18\x03 \x01(\t\"P\n\x17PresignDownloadResponse\x12\x35\n\x0c\x64ownload_url\x18\x01 \x01(\x0b\x32\x1f.paladin.common.v1.PresignedUrl2\xed\x01\n\x0ePresignService\x12u\n\x13RegenerateUploadUrl\x12+.paladin.data.v1.RegenerateUploadUrlRequest\x1a,.paladin.data.v1.RegenerateUploadUrlResponse\"\x03\x90\x02\x02\x12\x64\n\x0fPresignDownload\x12\'.paladin.data.v1.PresignDownloadRequest\x1a(.paladin.data.v1.PresignDownloadResponseBJZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%paladin/data/v1/presign_service.proto\x12\x0fpaladin.data.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a paladin/common/v1/resource.proto\"[\n\x1aRegenerateUploadUrlRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12&\n\x03ttl\x18\x02 \x01(\x0b\x32\x19.google.protobuf.Duration\"\x8e\x01\n\x1bRegenerateUploadUrlResponse\x12\x33\n\nupload_url\x18\x01 \x01(\x0b\x32\x1f.paladin.common.v1.PresignedUrl\x12:\n\x0f\x63ompletion_mode\x18\x02 \x01(\x0e\x32!.paladin.common.v1.CompletionMode\"\x90\x01\n\x16PresignDownloadRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12&\n\x03ttl\x18\x02 \x01(\x0b\x32\x19.google.protobuf.Duration\x12\x1b\n\x13\x63ontent_disposition\x18\x03 \x01(\t\x12\x1a\n\x12require_etag_match\x18\x04 \x01(\x08\"P\n\x17PresignDownloadResponse\x12\x35\n\x0c\x64ownload_url\x18\x01 \x01(\x0b\x32\x1f.paladin.common.v1.PresignedUrl2\xed\x01\n\x0ePresignService\x12u\n\x13RegenerateUploadUrl\x12+.paladin.data.v1.RegenerateUploadUrlRequest\x1a,.paladin.data.v1.RegenerateUploadUrlResponse\"\x03\x90\x02\x02\x12\x64\n\x0fPresignDownload\x12\'.paladin.data.v1.PresignDownloadRequest\x1a(.paladin.data.v1.PresignDownloadResponseBJZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -45,10 +45,10 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_REGENERATEUPLOADURLREQUEST']._serialized_end=244
   _globals['_REGENERATEUPLOADURLRESPONSE']._serialized_start=247
   _globals['_REGENERATEUPLOADURLRESPONSE']._serialized_end=389
-  _globals['_PRESIGNDOWNLOADREQUEST']._serialized_start=391
-  _globals['_PRESIGNDOWNLOADREQUEST']._serialized_end=507
-  _globals['_PRESIGNDOWNLOADRESPONSE']._serialized_start=509
-  _globals['_PRESIGNDOWNLOADRESPONSE']._serialized_end=589
-  _globals['_PRESIGNSERVICE']._serialized_start=592
-  _globals['_PRESIGNSERVICE']._serialized_end=829
+  _globals['_PRESIGNDOWNLOADREQUEST']._serialized_start=392
+  _globals['_PRESIGNDOWNLOADREQUEST']._serialized_end=536
+  _globals['_PRESIGNDOWNLOADRESPONSE']._serialized_start=538
+  _globals['_PRESIGNDOWNLOADRESPONSE']._serialized_end=618
+  _globals['_PRESIGNSERVICE']._serialized_start=621
+  _globals['_PRESIGNSERVICE']._serialized_end=858
 # @@protoc_insertion_point(module_scope)

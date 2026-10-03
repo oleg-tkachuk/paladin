@@ -210,6 +210,12 @@ def _reader(body: bytes | IO[bytes]) -> IO[bytes]:
     return body
 
 
+def _sha256(chunk: bytes) -> str:
+    """``chunk``'s SHA-256 as an upload's ``checksum_value``: base64 of the
+    digest, as S3 writes it. The upload URL is signed for it."""
+    return base64.b64encode(hashlib.sha256(chunk).digest()).decode()
+
+
 def _read_exactly(reader: IO[bytes], length: int) -> bytes:
     got = bytearray()
     while len(got) < length:
@@ -235,19 +241,24 @@ def upload(
 ) -> types_pb2.Object:
     """Store ``size`` bytes of ``body`` as a new object and return it once
     complete. ``body`` is bytes or a binary file — seekable or not: a pipe, a
-    response body. It is read once, front to back, and never whole.
+    response body. It is read once, front to back. ``size`` is exact; 0 is an
+    empty object.
 
-    Up to ``multipart_threshold`` bytes one presigned PUT, which records the
-    content's SHA-256 on the object for ``download`` to verify; above it
-    multipart, ``part_concurrency`` parts in flight, whose failure aborts the
-    session. The requests go through the data plane's ``Transfer``."""
-    if size <= 0:
-        raise ValueError("upload size must be positive")
+    Every upload URL is signed for its body's size and SHA-256, so a body is
+    hashed before it is presigned and held in memory while it is sent: the
+    whole object up to ``multipart_threshold`` bytes, in one presigned PUT;
+    above it multipart, one part per request and ``part_concurrency`` parts
+    in flight, whose failure aborts the session. The requests go through the
+    data plane's ``Transfer``."""
+    if size < 0:
+        raise ValueError("upload size must not be negative")
     reader = _reader(body)
     if size > multipart_threshold:
         return _upload_multipart(
             data, parent, key, content_type, size, reader, metadata, tags, part_concurrency
         )
+    content = _read_exactly(reader, size)
+    checksum = _sha256(content)
     allocated = data.object.upload_object(
         object_service_pb2.UploadObjectRequest(
             parent=parent,
@@ -255,6 +266,7 @@ def upload(
             content_type=content_type,
             size_hint_bytes=size,
             checksum_algorithm=resource_pb2.CHECKSUM_ALGORITHM_SHA256,
+            checksum_value=checksum,
             metadata=metadata or {},
             tags=tags or {},
             transport=object_service_pb2.PRESIGN_TRANSPORT_PUT,
@@ -262,27 +274,15 @@ def upload(
     )
     if not allocated.upload_url.url:
         raise TransferError(_PUT, "", 0, "the server returned no upload URL")
-    digest = hashlib.sha256()
-
-    def content() -> Iterator[bytes]:
-        remaining = size
-        while remaining:
-            chunk = _read_exactly(reader, min(_STREAM_CHUNK, remaining))
-            digest.update(chunk)
-            remaining -= len(chunk)
-            yield chunk
-
     headers = {_HEADER_CONTENT_TYPE: content_type, _HEADER_CONTENT_LENGTH: str(size)}
     transfer = _transfer(data)
     started = time.monotonic()
-    with transfer.stream(_PUT, allocated.upload_url, headers, content()) as resp:
+    with transfer.stream(_PUT, allocated.upload_url, headers, content) as resp:
         etag = _etag(resp.headers)
     transfer.ended(_PUT, transfer.host_of(allocated.upload_url), size, started, None)
     return data.object.complete_object(
         object_service_pb2.CompleteObjectRequest(
-            name=allocated.object.name,
-            etag=etag,
-            checksum_value=base64.b64encode(digest.digest()).decode(),
+            name=allocated.object.name, etag=etag, checksum_value=checksum
         )
     )
 
@@ -315,9 +315,13 @@ def _upload_multipart(
     transfer = _transfer(data)
 
     def send(index: int, chunk: bytes) -> types_pb2.CompletedPart:
+        checksum = _sha256(chunk)
         signed = data.multipart_upload.presign_part(
             multipart_service_pb2.PresignPartRequest(
-                object_name=name, upload_id=upload_id, part_number=index + 1
+                object_name=name,
+                upload_id=upload_id,
+                part_number=index + 1,
+                checksum_value=checksum,
             )
         )
         headers = {_HEADER_CONTENT_LENGTH: str(len(chunk))}
@@ -329,7 +333,7 @@ def _upload_multipart(
             raise TransferError(
                 _PUT, "", 0, f"part {index + 1} returned no ETag; storage must expose it"
             )
-        return types_pb2.CompletedPart(part_number=index + 1, etag=etag)
+        return types_pb2.CompletedPart(part_number=index + 1, etag=etag, checksum_value=checksum)
 
     workers = max(1, min(concurrency, count))
     try:
@@ -379,7 +383,11 @@ def download_stream(
     (``IntegrityError``)."""
     if offset < 0 or length < 0:
         raise ValueError("a range needs offset >= 0 and length >= 0")
-    resp = data.object.download_object(object_service_pb2.DownloadObjectRequest(name=name))
+    resp = data.object.download_object(
+        # Bound to the object's ETag: a range, which the checksum cannot
+        # verify, never splices in another object written at the key.
+        object_service_pb2.DownloadObjectRequest(name=name, require_etag_match=True)
+    )
     if not resp.download_url.url:
         raise TransferError(_GET, "", 0, "the server returned no download URL")
     ranged = offset != 0 or length != 0
@@ -448,8 +456,8 @@ async def aupload(
 ) -> types_pb2.Object:
     """``upload`` for the async clients (``connect_async``). The body is read
     in a worker thread, so a file read does not block the event loop."""
-    if size <= 0:
-        raise ValueError("upload size must be positive")
+    if size < 0:
+        raise ValueError("upload size must not be negative")
     reader = _reader(body)
     transfer = _transfer(data)
     if size > multipart_threshold:
@@ -465,6 +473,8 @@ async def aupload(
             tags,
             part_concurrency,
         )
+    content = await _aread_exactly(reader, size)
+    checksum = _sha256(content)
     allocated = await data.object.upload_object(
         object_service_pb2.UploadObjectRequest(
             parent=parent,
@@ -472,6 +482,7 @@ async def aupload(
             content_type=content_type,
             size_hint_bytes=size,
             checksum_algorithm=resource_pb2.CHECKSUM_ALGORITHM_SHA256,
+            checksum_value=checksum,
             metadata=metadata or {},
             tags=tags or {},
             transport=object_service_pb2.PRESIGN_TRANSPORT_PUT,
@@ -479,26 +490,14 @@ async def aupload(
     )
     if not allocated.upload_url.url:
         raise TransferError(_PUT, "", 0, "the server returned no upload URL")
-    digest = hashlib.sha256()
-
-    async def content() -> AsyncIterator[bytes]:
-        remaining = size
-        while remaining:
-            chunk = await _aread_exactly(reader, min(_STREAM_CHUNK, remaining))
-            digest.update(chunk)
-            remaining -= len(chunk)
-            yield chunk
-
     headers = {_HEADER_CONTENT_TYPE: content_type, _HEADER_CONTENT_LENGTH: str(size)}
     started = time.monotonic()
-    async with transfer.astream(_PUT, allocated.upload_url, headers, content()) as resp:
+    async with transfer.astream(_PUT, allocated.upload_url, headers, content) as resp:
         etag = _etag(resp.headers)
     transfer.ended(_PUT, transfer.host_of(allocated.upload_url), size, started, None)
     return await data.object.complete_object(
         object_service_pb2.CompleteObjectRequest(
-            name=allocated.object.name,
-            etag=etag,
-            checksum_value=base64.b64encode(digest.digest()).decode(),
+            name=allocated.object.name, etag=etag, checksum_value=checksum
         )
     )
 
@@ -531,9 +530,13 @@ async def _aupload_multipart(
     count = -(-size // part_size)
 
     async def send(index: int, chunk: bytes) -> types_pb2.CompletedPart:
+        checksum = _sha256(chunk)
         signed = await data.multipart_upload.presign_part(
             multipart_service_pb2.PresignPartRequest(
-                object_name=name, upload_id=upload_id, part_number=index + 1
+                object_name=name,
+                upload_id=upload_id,
+                part_number=index + 1,
+                checksum_value=checksum,
             )
         )
         started = time.monotonic()
@@ -545,7 +548,7 @@ async def _aupload_multipart(
             raise TransferError(
                 _PUT, "", 0, f"part {index + 1} returned no ETag; storage must expose it"
             )
-        return types_pb2.CompletedPart(part_number=index + 1, etag=etag)
+        return types_pb2.CompletedPart(part_number=index + 1, etag=etag, checksum_value=checksum)
 
     workers = max(1, min(concurrency, count))
     tasks: list[asyncio.Task[types_pb2.CompletedPart]] = []
@@ -588,7 +591,9 @@ async def adownload_stream(
     """``download_stream`` for the async clients: an ``AsyncObjectReader``."""
     if offset < 0 or length < 0:
         raise ValueError("a range needs offset >= 0 and length >= 0")
-    resp = await data.object.download_object(object_service_pb2.DownloadObjectRequest(name=name))
+    resp = await data.object.download_object(
+        object_service_pb2.DownloadObjectRequest(name=name, require_etag_match=True)
+    )
     if not resp.download_url.url:
         raise TransferError(_GET, "", 0, "the server returned no download URL")
     ranged = offset != 0 or length != 0

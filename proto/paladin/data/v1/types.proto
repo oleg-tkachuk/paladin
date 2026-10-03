@@ -4,6 +4,7 @@ package paladin.data.v1;
 
 option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1";
 
+import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "google/api/field_behavior.proto";
 
@@ -89,7 +90,9 @@ message PhysicalPlacement {
 message CompletedPart {
   int32 part_number = 1;
   string etag = 2;
-  string checksum_value = 3; // optional
+  // Required: the checksum this part was presigned with; the object store
+  // checks each against the part it stored.
+  string checksum_value = 3 [(buf.validate.field).string.min_len = 1];
 }
 
 message PartInfo {

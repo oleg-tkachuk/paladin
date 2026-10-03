@@ -102,7 +102,6 @@ type Repos struct {
 type Storage struct {
 	Object      objecth.Storage
 	Multipart   multiparth.Storage
-	Presign     presignh.Storage
 	Provisioner bucketh.Provisioner
 }
 
@@ -140,7 +139,7 @@ func ProvideBatchHandler(repos Repos, opH *operationh.Handler, pe *policy.Engine
 }
 
 func ProvidePresignHandler(repos Repos, storage Storage, pe *policy.Engine, cfg config.Config) *presignh.Handler {
-	return presignh.NewHandler(repos.Presign, storage.Presign, pe, presignh.Config{
+	return presignh.NewHandler(repos.Presign, storage.Object, pe, presignh.Config{
 		TTL:    presignttl.MustFromConfig(cfg.Limits.Presign),
 		Limits: cfg.Limits.UploadLimits(),
 	})

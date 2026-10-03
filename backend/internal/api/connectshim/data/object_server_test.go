@@ -36,7 +36,7 @@ func (f failingHandler) GetObject(context.Context, string, string) (*objecth.Obj
 func (f failingHandler) LookupObject(context.Context, string, string) (*objecth.Object, error) {
 	return nil, f.err
 }
-func (f failingHandler) DownloadObject(context.Context, string, string, time.Duration, string) (*objecth.DownloadObjectOutput, error) {
+func (f failingHandler) DownloadObject(context.Context, string, string, time.Duration, string, bool) (*objecth.DownloadObjectOutput, error) {
 	return nil, f.err
 }
 func (f failingHandler) UpdateObject(context.Context, objecth.UpdateObjectInput) (*objecth.Object, error) {
@@ -352,7 +352,7 @@ func (c *countingHandler) LookupObject(context.Context, string, string) (*object
 	c.n++
 	return &objecth.Object{}, nil
 }
-func (c *countingHandler) DownloadObject(context.Context, string, string, time.Duration, string) (*objecth.DownloadObjectOutput, error) {
+func (c *countingHandler) DownloadObject(context.Context, string, string, time.Duration, string, bool) (*objecth.DownloadObjectOutput, error) {
 	c.n++
 	return &objecth.DownloadObjectOutput{}, nil
 }

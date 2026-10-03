@@ -134,8 +134,10 @@ type PresignDownloadRequest struct {
 	Name               string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Ttl                *durationpb.Duration   `protobuf:"bytes,2,opt,name=ttl,proto3" json:"ttl,omitempty"`
 	ContentDisposition string                 `protobuf:"bytes,3,opt,name=content_disposition,json=contentDisposition,proto3" json:"content_disposition,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// As DownloadObjectRequest.require_etag_match.
+	RequireEtagMatch bool `protobuf:"varint,4,opt,name=require_etag_match,json=requireEtagMatch,proto3" json:"require_etag_match,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *PresignDownloadRequest) Reset() {
@@ -187,6 +189,13 @@ func (x *PresignDownloadRequest) GetContentDisposition() string {
 		return x.ContentDisposition
 	}
 	return ""
+}
+
+func (x *PresignDownloadRequest) GetRequireEtagMatch() bool {
+	if x != nil {
+		return x.RequireEtagMatch
+	}
+	return false
 }
 
 type PresignDownloadResponse struct {
@@ -244,11 +253,12 @@ const file_paladin_data_v1_presign_service_proto_rawDesc = "" +
 	"\x1bRegenerateUploadUrlResponse\x12>\n" +
 	"\n" +
 	"upload_url\x18\x01 \x01(\v2\x1f.paladin.common.v1.PresignedUrlR\tuploadUrl\x12J\n" +
-	"\x0fcompletion_mode\x18\x02 \x01(\x0e2!.paladin.common.v1.CompletionModeR\x0ecompletionMode\"\x93\x01\n" +
+	"\x0fcompletion_mode\x18\x02 \x01(\x0e2!.paladin.common.v1.CompletionModeR\x0ecompletionMode\"\xc1\x01\n" +
 	"\x16PresignDownloadRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12+\n" +
 	"\x03ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\x12/\n" +
-	"\x13content_disposition\x18\x03 \x01(\tR\x12contentDisposition\"]\n" +
+	"\x13content_disposition\x18\x03 \x01(\tR\x12contentDisposition\x12,\n" +
+	"\x12require_etag_match\x18\x04 \x01(\bR\x10requireEtagMatch\"]\n" +
 	"\x17PresignDownloadResponse\x12B\n" +
 	"\fdownload_url\x18\x01 \x01(\v2\x1f.paladin.common.v1.PresignedUrlR\vdownloadUrl2\xed\x01\n" +
 	"\x0ePresignService\x12u\n" +

@@ -190,7 +190,11 @@ message UploadObjectRequest {
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   string key = 2; // empty → server uses object_id as key
   string content_type = 3 [(buf.validate.field).string.min_len = 1];
-  int64 size_hint_bytes = 4;
+  // The object's exact size in bytes; 0 is an empty object. The upload URL
+  // is signed for exactly this many bytes (Content-Length for PUT, a
+  // content-length-range of [size, size] for POST), so the object store
+  // refuses any other body. Size caps and policy are checked against it.
+  int64 size_hint_bytes = 4 [(buf.validate.field).int64.gte = 0];
   // UNSPECIFIED is allowed and means "let the server pick" — handler
   // resolves the empty value to SHA256 (the data-plane default the
   // PresignedPUT verification path expects). The earlier
@@ -207,8 +211,19 @@ message UploadObjectRequest {
   // request if both are set and disagree. A repeat with the same key
   // replays the first response instead of re-executing.
   string idempotency_key = 10;
+  // Required: the object's checksum under checksum_algorithm, base64 of the
+  // digest as S3 writes it (SHA256: 32 bytes, CRC32C: 4, MD5: 16). It is
+  // signed into the upload URL, so the object store refuses any body that
+  // does not match and the URL cannot be used to upload anything else.
+  string checksum_value = 11 [(buf.validate.field).string.min_len = 1];
 }
 
+// How the upload URL is delivered. PUT signs Content-Length, the checksum
+// and If-None-Match: * (the upload cannot overwrite an object already at the
+// key); every header in required_headers must be sent as given. POST returns
+// a policy whose conditions bind the size, Content-Type and checksum; the
+// form must carry every field in post_policy.fields. POST cannot carry
+// If-None-Match, so only PUT refuses to overwrite.
 enum PresignTransport {
   PRESIGN_TRANSPORT_UNSPECIFIED = 0;
   PRESIGN_TRANSPORT_PUT = 1;
@@ -226,6 +241,11 @@ message DownloadObjectRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   google.protobuf.Duration ttl = 2;
   string content_disposition = 3;
+  // Sign If-Match with the object's current ETag: the URL then serves only
+  // these bytes, and answers 412 once the object at the key has changed. The
+  // caller must send If-Match from required_headers, which a browser
+  // navigation (window.open, <img src>) cannot — leave it false for those.
+  bool require_etag_match = 4;
 }
 
 message DownloadObjectResponse {

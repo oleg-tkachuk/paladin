@@ -62,16 +62,18 @@ class InitiateMultipartUploadResponse(_message.Message):
     def __init__(self, object: _Optional[_Union[_types_pb2.Object, _Mapping]] = ..., upload_id: _Optional[str] = ..., recommended_part_size: _Optional[int] = ..., total_parts: _Optional[int] = ...) -> None: ...
 
 class PresignPartRequest(_message.Message):
-    __slots__ = ("object_name", "upload_id", "part_number", "ttl")
+    __slots__ = ("object_name", "upload_id", "part_number", "ttl", "checksum_value")
     OBJECT_NAME_FIELD_NUMBER: _ClassVar[int]
     UPLOAD_ID_FIELD_NUMBER: _ClassVar[int]
     PART_NUMBER_FIELD_NUMBER: _ClassVar[int]
     TTL_FIELD_NUMBER: _ClassVar[int]
+    CHECKSUM_VALUE_FIELD_NUMBER: _ClassVar[int]
     object_name: str
     upload_id: str
     part_number: int
     ttl: _duration_pb2.Duration
-    def __init__(self, object_name: _Optional[str] = ..., upload_id: _Optional[str] = ..., part_number: _Optional[int] = ..., ttl: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ...) -> None: ...
+    checksum_value: str
+    def __init__(self, object_name: _Optional[str] = ..., upload_id: _Optional[str] = ..., part_number: _Optional[int] = ..., ttl: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., checksum_value: _Optional[str] = ...) -> None: ...
 
 class PresignPartResponse(_message.Message):
     __slots__ = ("upload_url",)

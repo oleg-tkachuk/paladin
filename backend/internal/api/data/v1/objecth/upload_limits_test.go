@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
@@ -46,11 +47,15 @@ func limitsHandler(constraints uploadpolicy.BucketConstraints, limits uploadpoli
 // uploadRepoRecording notes whether a PENDING row was created.
 type uploadRepoRecording struct {
 	uploadRepo
-	created bool
+	created  bool
+	onCreate func(CreateObjectArgs)
 }
 
 func (r *uploadRepoRecording) CreateObject(ctx context.Context, args CreateObjectArgs) (Object, error) {
 	r.created = true
+	if r.onCreate != nil {
+		r.onCreate(args)
+	}
 	return r.uploadRepo.CreateObject(ctx, args)
 }
 
@@ -69,11 +74,11 @@ func TestUploadObjectEnforcesUploadLimits(t *testing.T) {
 		constraints uploadpolicy.BucketConstraints
 		in          UploadObjectInput
 	}{
-		{"above limits.max_object_size", strictGlobal, uploadpolicy.BucketConstraints{}, UploadObjectInput{SizeHint: 1001, ContentType: "text/plain"}},
-		{"a type outside limits.allowed_content_types", strictGlobal, uploadpolicy.BucketConstraints{}, UploadObjectInput{SizeHint: 1, ContentType: "application/x-msdownload"}},
-		{"above the bucket's max object size", testUploadLimits, uploadpolicy.BucketConstraints{MaxObjectSizeBytes: 10}, UploadObjectInput{SizeHint: 11, ContentType: "text/plain"}},
-		{"a type outside the bucket's allowlist", testUploadLimits, uploadpolicy.BucketConstraints{AllowedContentTypes: []string{"image/png"}}, UploadObjectInput{SizeHint: 1, ContentType: "text/plain"}},
-		{"a checksum the bucket does not require", testUploadLimits, uploadpolicy.BucketConstraints{RequiredChecksumAlgorithm: "CRC32C"}, UploadObjectInput{SizeHint: 1, ContentType: "text/plain", ChecksumAlgo: "SHA256"}},
+		{"above limits.max_object_size", strictGlobal, uploadpolicy.BucketConstraints{}, UploadObjectInput{SizeBytes: 1001, ContentType: "text/plain", ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksumValue}},
+		{"a type outside limits.allowed_content_types", strictGlobal, uploadpolicy.BucketConstraints{}, UploadObjectInput{SizeBytes: 1, ContentType: "application/x-msdownload", ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksumValue}},
+		{"above the bucket's max object size", testUploadLimits, uploadpolicy.BucketConstraints{MaxObjectSizeBytes: 10}, UploadObjectInput{SizeBytes: 11, ContentType: "text/plain", ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksumValue}},
+		{"a type outside the bucket's allowlist", testUploadLimits, uploadpolicy.BucketConstraints{AllowedContentTypes: []string{"image/png"}}, UploadObjectInput{SizeBytes: 1, ContentType: "text/plain", ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksumValue}},
+		{"a checksum the bucket does not require", testUploadLimits, uploadpolicy.BucketConstraints{RequiredChecksumAlgorithm: "CRC32C"}, UploadObjectInput{SizeBytes: 1, ContentType: "text/plain", ChecksumAlgo: "SHA256", ChecksumValue: testChecksumValue}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -93,7 +98,7 @@ func TestUploadObjectEnforcesUploadLimits(t *testing.T) {
 
 func TestUploadObjectAdmitsWithinLimits(t *testing.T) {
 	h, _, storage, ctx := limitsHandler(uploadpolicy.BucketConstraints{AllowedContentTypes: []string{"text/plain"}}, testUploadLimits)
-	if _, err := h.UploadObject(ctx, UploadObjectInput{Collection: "docs", Key: "a", SizeHint: 5, ContentType: "text/plain; charset=utf-8", ChecksumAlgo: "SHA256"}); err != nil {
+	if _, err := h.UploadObject(ctx, UploadObjectInput{Collection: "docs", Key: "a", SizeBytes: 5, ContentType: "text/plain; charset=utf-8", ChecksumAlgo: "SHA256", ChecksumValue: testChecksumValue}); err != nil {
 		t.Fatal(err)
 	}
 	if storage.put == nil {
@@ -101,16 +106,14 @@ func TestUploadObjectAdmitsWithinLimits(t *testing.T) {
 	}
 }
 
-// The POST policy's size ceiling was limits.presign.default_max_size, a knob
-// that duplicated max_object_size; it is now the effective single-request
-// limit, the bucket's included.
-func TestUploadObjectPostCeilingIsTheEffectiveLimit(t *testing.T) {
+// The POST policy is bound to the exact size admitted, as a PUT is.
+func TestUploadObjectPostIsBoundToTheAdmittedSize(t *testing.T) {
 	h, _, storage, ctx := limitsHandler(uploadpolicy.BucketConstraints{MaxObjectSizeBytes: 4096}, testUploadLimits)
-	if _, err := h.UploadObject(ctx, UploadObjectInput{Collection: "docs", Key: "a", ContentType: "text/plain", TransportPOST: true}); err != nil {
+	if _, err := h.UploadObject(ctx, UploadObjectInput{Collection: "docs", Key: "a", ContentType: "text/plain", SizeBytes: 4096, TransportPOST: true, ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksumValue}); err != nil {
 		t.Fatal(err)
 	}
-	if storage.post == nil || storage.post.MaxSizeBytes != 4096 {
-		t.Fatalf("POST ceiling = %+v, want the bucket's 4096", storage.post)
+	if storage.post == nil || storage.post.SizeBytes != 4096 || storage.post.ChecksumValue != testChecksumValue {
+		t.Fatalf("POST args = %+v, want size 4096 and the checksum", storage.post)
 	}
 }
 
@@ -118,7 +121,7 @@ func TestUploadObjectPostCeilingIsTheEffectiveLimit(t *testing.T) {
 func TestUploadObjectHonoursBucketPutTTLCeiling(t *testing.T) {
 	const ceiling = time.Minute
 	h, _, storage, ctx := limitsHandler(uploadpolicy.BucketConstraints{MaxPresignPutTTL: ceiling}, testUploadLimits)
-	if _, err := h.UploadObject(ctx, UploadObjectInput{Collection: "docs", Key: "a", ContentType: "text/plain"}); err != nil {
+	if _, err := h.UploadObject(ctx, UploadObjectInput{Collection: "docs", Key: "a", ContentType: "text/plain", ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksumValue}); err != nil {
 		t.Fatal(err)
 	}
 	if storage.put == nil || storage.put.TTL != ceiling {
@@ -131,14 +134,14 @@ func TestDownloadObjectHonoursBucketGetTTLCeiling(t *testing.T) {
 	h, storage, _, ctx := downloadHandler(t, statemachine.StateAvailable)
 	h.repo.(*downloadRepo).constraints = uploadpolicy.BucketConstraints{MaxPresignGetTTL: ceiling}
 
-	if _, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, ""); err != nil {
+	if _, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, "", false); err != nil {
 		t.Fatal(err)
 	}
 	if storage.got.TTL != ceiling {
 		t.Fatalf("default TTL = %v, want the bucket ceiling %v", storage.got.TTL, ceiling)
 	}
 	storage.got = PresignGetArgs{}
-	_, err := h.DownloadObject(ctx, "docs", "report.pdf", ceiling+time.Second, "")
+	_, err := h.DownloadObject(ctx, "docs", "report.pdf", ceiling+time.Second, "", false)
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument above the bucket ceiling", connect.CodeOf(err))
 	}

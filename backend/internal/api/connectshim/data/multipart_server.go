@@ -68,7 +68,7 @@ func (s *MultipartServer) PresignPart(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, err
 	}
-	url, headers, expires, err := s.H.PresignPart(ctx, m.GetUploadId(), m.GetPartNumber(), m.GetTtl().AsDuration(), want)
+	url, headers, expires, err := s.H.PresignPart(ctx, m.GetUploadId(), m.GetPartNumber(), m.GetTtl().AsDuration(), m.GetChecksumValue(), want)
 	if err != nil {
 		return nil, err
 	}
@@ -82,8 +82,9 @@ func (s *MultipartServer) CompleteMultipartUpload(ctx context.Context, req *conn
 	parts := make([]multiparth.PartETag, 0, len(m.GetParts()))
 	for _, p := range m.GetParts() {
 		parts = append(parts, multiparth.PartETag{
-			PartNumber: p.GetPartNumber(),
-			ETag:       p.GetEtag(),
+			PartNumber:    p.GetPartNumber(),
+			ETag:          p.GetEtag(),
+			ChecksumValue: p.GetChecksumValue(),
 		})
 	}
 	if err := s.H.CompleteMultipartUpload(ctx, multiparth.CompleteArgs{

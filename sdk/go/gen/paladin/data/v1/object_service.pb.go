@@ -28,6 +28,12 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// How the upload URL is delivered. PUT signs Content-Length, the checksum
+// and If-None-Match: * (the upload cannot overwrite an object already at the
+// key); every header in required_headers must be sent as given. POST returns
+// a policy whose conditions bind the size, Content-Type and checksum; the
+// form must carry every field in post_policy.fields. POST cannot carry
+// If-None-Match, so only PUT refuses to overwrite.
 type PresignTransport int32
 
 const (
@@ -438,10 +444,14 @@ func (x *RestoreObjectVersionRequest) GetResourceVersion() string {
 type UploadObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Parent Collection: "tenants/{tenant_id}/collections/{ok}".
-	Parent        string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
-	Key           string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"` // empty → server uses object_id as key
-	ContentType   string `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
-	SizeHintBytes int64  `protobuf:"varint,4,opt,name=size_hint_bytes,json=sizeHintBytes,proto3" json:"size_hint_bytes,omitempty"`
+	Parent      string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	Key         string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"` // empty → server uses object_id as key
+	ContentType string `protobuf:"bytes,3,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	// The object's exact size in bytes; 0 is an empty object. The upload URL
+	// is signed for exactly this many bytes (Content-Length for PUT, a
+	// content-length-range of [size, size] for POST), so the object store
+	// refuses any other body. Size caps and policy are checked against it.
+	SizeHintBytes int64 `protobuf:"varint,4,opt,name=size_hint_bytes,json=sizeHintBytes,proto3" json:"size_hint_bytes,omitempty"`
 	// UNSPECIFIED is allowed and means "let the server pick" — handler
 	// resolves the empty value to SHA256 (the data-plane default the
 	// PresignedPUT verification path expects). The earlier
@@ -457,8 +467,13 @@ type UploadObjectRequest struct {
 	// request if both are set and disagree. A repeat with the same key
 	// replays the first response instead of re-executing.
 	IdempotencyKey string `protobuf:"bytes,10,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Required: the object's checksum under checksum_algorithm, base64 of the
+	// digest as S3 writes it (SHA256: 32 bytes, CRC32C: 4, MD5: 16). It is
+	// signed into the upload URL, so the object store refuses any body that
+	// does not match and the URL cannot be used to upload anything else.
+	ChecksumValue string `protobuf:"bytes,11,opt,name=checksum_value,json=checksumValue,proto3" json:"checksum_value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UploadObjectRequest) Reset() {
@@ -561,6 +576,13 @@ func (x *UploadObjectRequest) GetIdempotencyKey() string {
 	return ""
 }
 
+func (x *UploadObjectRequest) GetChecksumValue() string {
+	if x != nil {
+		return x.ChecksumValue
+	}
+	return ""
+}
+
 type UploadObjectResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Object         *Object                `protobuf:"bytes,1,opt,name=object,proto3" json:"object,omitempty"`
@@ -627,8 +649,13 @@ type DownloadObjectRequest struct {
 	Name               string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Ttl                *durationpb.Duration   `protobuf:"bytes,2,opt,name=ttl,proto3" json:"ttl,omitempty"`
 	ContentDisposition string                 `protobuf:"bytes,3,opt,name=content_disposition,json=contentDisposition,proto3" json:"content_disposition,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Sign If-Match with the object's current ETag: the URL then serves only
+	// these bytes, and answers 412 once the object at the key has changed. The
+	// caller must send If-Match from required_headers, which a browser
+	// navigation (window.open, <img src>) cannot — leave it false for those.
+	RequireEtagMatch bool `protobuf:"varint,4,opt,name=require_etag_match,json=requireEtagMatch,proto3" json:"require_etag_match,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DownloadObjectRequest) Reset() {
@@ -680,6 +707,13 @@ func (x *DownloadObjectRequest) GetContentDisposition() string {
 		return x.ContentDisposition
 	}
 	return ""
+}
+
+func (x *DownloadObjectRequest) GetRequireEtagMatch() bool {
+	if x != nil {
+		return x.RequireEtagMatch
+	}
+	return false
 }
 
 type DownloadObjectResponse struct {
@@ -1835,19 +1869,20 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"n\n" +
 	"\x1bRestoreObjectVersionRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
-	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\x92\x05\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\xcb\x05\n" +
 	"\x13UploadObjectRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12*\n" +
-	"\fcontent_type\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcontentType\x12&\n" +
-	"\x0fsize_hint_bytes\x18\x04 \x01(\x03R\rsizeHintBytes\x12]\n" +
+	"\fcontent_type\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcontentType\x12/\n" +
+	"\x0fsize_hint_bytes\x18\x04 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\rsizeHintBytes\x12]\n" +
 	"\x12checksum_algorithm\x18\x05 \x01(\x0e2$.paladin.common.v1.ChecksumAlgorithmB\b\xbaH\x05\x82\x01\x02\x10\x01R\x11checksumAlgorithm\x12N\n" +
 	"\bmetadata\x18\x06 \x03(\v22.paladin.data.v1.UploadObjectRequest.MetadataEntryR\bmetadata\x12B\n" +
 	"\x04tags\x18\a \x03(\v2..paladin.data.v1.UploadObjectRequest.TagsEntryR\x04tags\x12!\n" +
 	"\fexternal_ref\x18\b \x01(\tR\vexternalRef\x12?\n" +
 	"\ttransport\x18\t \x01(\x0e2!.paladin.data.v1.PresignTransportR\ttransport\x12'\n" +
 	"\x0fidempotency_key\x18\n" +
-	" \x01(\tR\x0eidempotencyKey\x1a;\n" +
+	" \x01(\tR\x0eidempotencyKey\x12.\n" +
+	"\x0echecksum_value\x18\v \x01(\tB\a\xbaH\x04r\x02\x10\x01R\rchecksumValue\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a7\n" +
@@ -1858,11 +1893,12 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x06object\x18\x01 \x01(\v2\x17.paladin.data.v1.ObjectR\x06object\x12>\n" +
 	"\n" +
 	"upload_url\x18\x02 \x01(\v2\x1f.paladin.common.v1.PresignedUrlR\tuploadUrl\x12J\n" +
-	"\x0fcompletion_mode\x18\x03 \x01(\x0e2!.paladin.common.v1.CompletionModeR\x0ecompletionMode\"\x92\x01\n" +
+	"\x0fcompletion_mode\x18\x03 \x01(\x0e2!.paladin.common.v1.CompletionModeR\x0ecompletionMode\"\xc0\x01\n" +
 	"\x15DownloadObjectRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12+\n" +
 	"\x03ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\x12/\n" +
-	"\x13content_disposition\x18\x03 \x01(\tR\x12contentDisposition\"\x8d\x01\n" +
+	"\x13content_disposition\x18\x03 \x01(\tR\x12contentDisposition\x12,\n" +
+	"\x12require_etag_match\x18\x04 \x01(\bR\x10requireEtagMatch\"\x8d\x01\n" +
 	"\x16DownloadObjectResponse\x12/\n" +
 	"\x06object\x18\x01 \x01(\v2\x17.paladin.data.v1.ObjectR\x06object\x12B\n" +
 	"\fdownload_url\x18\x02 \x01(\v2\x1f.paladin.common.v1.PresignedUrlR\vdownloadUrl\"/\n" +

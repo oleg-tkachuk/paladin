@@ -22,6 +22,7 @@ import (
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladintest"
 )
 
 // ─── Pages ──────────────────────────────────────────────────────────────────
@@ -424,9 +425,63 @@ func TestUploadAbortsWhenAPartIsRefused(t *testing.T) {
 	}
 }
 
-func TestUploadRefusesAnEmptyBody(t *testing.T) {
+func TestUploadRefusesANegativeSize(t *testing.T) {
 	data, _, _ := newTransfer(t, 0)
-	if _, err := paladin.Upload(context.Background(), data, paladin.UploadInput{Parent: testParent}, paladin.UploadOptions{}); !errors.Is(err, paladin.ErrUploadSize) {
+	if _, err := paladin.Upload(context.Background(), data, paladin.UploadInput{Parent: testParent, Size: -1, Body: bytes.NewReader(nil)}, paladin.UploadOptions{}); !errors.Is(err, paladin.ErrUploadSize) {
 		t.Fatalf("err = %v, want ErrUploadSize", err)
+	}
+}
+
+// Every upload URL is now signed for its body's size and SHA-256. An empty
+// object is a size of zero — it used to be refused outright — and a stream
+// is hashed before it is presigned.
+func TestUploadBindsEveryBody(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	ctx := context.Background()
+	for name, in := range map[string]paladin.UploadInput{
+		"an empty object": {Key: "empty", ContentType: "text/plain", Size: 0, Body: bytes.NewReader(nil)},
+		"a stream":        {Key: "stream", ContentType: "text/plain", Size: 5, Stream: strings.NewReader("hello")},
+		"a multipart stream": {Key: "big", ContentType: "application/octet-stream", Size: 2*paladintest.PartSize + 7,
+			Stream: bytes.NewReader(bytes.Repeat([]byte("z"), 2*paladintest.PartSize+7))},
+	} {
+		t.Run(name, func(t *testing.T) {
+			in.Parent = srv.Collection().String()
+			obj, err := paladin.Upload(ctx, p.Data, in, paladin.UploadOptions{MultipartThreshold: paladintest.PartSize})
+			if err != nil {
+				t.Fatalf("Upload: %v", err)
+			}
+			if obj.GetSizeBytes() != in.Size {
+				t.Fatalf("stored %d bytes, want %d", obj.GetSizeBytes(), in.Size)
+			}
+		})
+	}
+}
+
+// Download binds its URL to the object's ETag and sends the If-Match that
+// binding requires; the fake's storage answers 412 to a wrong one.
+func TestDownloadIsBoundToTheETag(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	ctx := context.Background()
+	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("etag-bound"))
+
+	r, err := paladin.Download(ctx, p.Data, obj.GetName(), paladin.DownloadOptions{Offset: 5})
+	if err != nil {
+		t.Fatalf("Download: %v", err)
+	}
+	b, _ := io.ReadAll(r)
+	_ = r.Close()
+	if string(b) != "bound" {
+		t.Fatalf("read %q, want the range", b)
+	}
+	var sawDownload bool
+	for _, req := range srv.Requests() {
+		if strings.HasSuffix(req.Procedure, "/DownloadObject") {
+			sawDownload = true
+		}
+	}
+	if !sawDownload {
+		t.Fatal("no DownloadObject call recorded")
 	}
 }

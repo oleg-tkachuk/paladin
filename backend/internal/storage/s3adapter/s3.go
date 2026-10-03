@@ -382,11 +382,21 @@ func (c *Client) TagBucketOwner(ctx context.Context, backendID, bucketName strin
 // is reached only through the router (see router.go), so it no longer asserts
 // the interfaces directly.
 
+// PresignPut signs a PUT bound to one body: its exact Content-Length, its
+// checksum (x-amz-checksum-* or Content-MD5) and its Content-Type, with
+// If-None-Match: * so the upload cannot replace an object already at the key.
+// Every bound header comes back in the headers map; the object store refuses
+// a request that omits or alters any of them.
 func (c *Client) PresignPut(ctx context.Context, args objecth.PresignPutArgs) (string, map[string]string, time.Time, error) {
 	in := &s3.PutObjectInput{
-		Bucket:      aws.String(c.resolveBucket(args.Bucket)),
-		Key:         aws.String(composeKey(args.TenantID, args.Collection, args.Key)),
-		ContentType: aws.String(args.ContentType),
+		Bucket:        aws.String(c.resolveBucket(args.Bucket)),
+		Key:           aws.String(composeKey(args.TenantID, args.Collection, args.Key)),
+		ContentType:   aws.String(args.ContentType),
+		ContentLength: aws.Int64(args.SizeBytes),
+		IfNoneMatch:   aws.String(ifNoneMatchAny),
+	}
+	if err := setPutChecksum(in, args.ChecksumAlgo, args.ChecksumValue); err != nil {
+		return "", nil, time.Time{}, err
 	}
 	c.applySSE(in)
 	ttl, err := c.presignTTL(ctx, args.TTL)
@@ -404,38 +414,64 @@ func (c *Client) PresignPut(ctx context.Context, args objecth.PresignPutArgs) (s
 	return req.URL, signedHeaders(req), exp, nil
 }
 
+// PresignPost signs a browser form upload. The policy's conditions bind the
+// same things a presigned PUT signs — the exact size as a content-length-range
+// of [size, size], the Content-Type, the checksum and the encryption — and the
+// returned fields carry each value the form must submit verbatim. The key
+// condition comes from the presigner itself. POST has no If-None-Match, so
+// unlike PUT it cannot refuse to overwrite.
 func (c *Client) PresignPost(ctx context.Context, args objecth.PresignPostArgs) (string, map[string]string, time.Time, error) {
-	// aws-sdk-go-v2 doesn't ship PresignPost; return a v4-signed PUT URL with
-	// POST-style fields so callers that requested POST have a working fallback.
-	in := &s3.PutObjectInput{
-		Bucket:      aws.String(c.resolveBucket(args.Bucket)),
-		Key:         aws.String(composeKey(args.TenantID, args.Collection, args.Key)),
-		ContentType: aws.String(args.ContentType),
+	field, err := postChecksumField(args.ChecksumAlgo)
+	if err != nil {
+		return "", nil, time.Time{}, err
 	}
-	c.applySSE(in)
+	extra := map[string]string{
+		contentTypeField: args.ContentType,
+		field:            args.ChecksumValue,
+	}
+	sse := &s3.PutObjectInput{}
+	c.applySSE(sse)
+	if sse.ServerSideEncryption != "" {
+		extra[sseField] = string(sse.ServerSideEncryption)
+	}
+	if sse.SSEKMSKeyId != nil {
+		extra[sseKMSKeyField] = *sse.SSEKMSKeyId
+	}
+	conditions := []any{[]any{contentLengthRange, args.SizeBytes, args.SizeBytes}}
+	for k, v := range extra {
+		conditions = append(conditions, map[string]string{k: v})
+	}
 	ttl, err := c.presignTTL(ctx, args.TTL)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	req, err := c.presign.PresignPutObject(ctx, in, s3.WithPresignExpires(ttl))
+	req, err := c.presign.PresignPostObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(c.resolveBucket(args.Bucket)),
+		Key:    aws.String(composeKey(args.TenantID, args.Collection, args.Key)),
+	}, func(o *s3.PresignPostOptions) {
+		o.Expires = ttl
+		o.Conditions = conditions
+	})
 	if err != nil {
-		return "", nil, time.Time{}, fmt.Errorf("presign post fallback: %w", err)
+		return "", nil, time.Time{}, fmt.Errorf("presign post: %w", err)
 	}
-	fields := map[string]string{
-		"Content-Type":          args.ContentType,
-		"Content-Length-Range":  fmt.Sprintf("0,%d", args.MaxSizeBytes),
-		"X-Amz-Signed-Fallback": "put",
-	}
-	for k, v := range signedHeaders(req) {
+	fields := make(map[string]string, len(req.Values)+len(extra))
+	for k, v := range req.Values {
 		fields[k] = v
 	}
-	exp, err := signedURLExpiry(req.URL)
+	for k, v := range extra {
+		fields[k] = v
+	}
+	exp, err := signedPostExpiry(req.Values, ttl)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
 	return req.URL, fields, exp, nil
 }
 
+// PresignGet signs a download. With IfMatch set the URL is bound to that
+// ETag: it serves only those bytes, and answers 412 once the key holds
+// anything else.
 func (c *Client) PresignGet(ctx context.Context, args objecth.PresignGetArgs) (string, map[string]string, time.Time, error) {
 	in := &s3.GetObjectInput{
 		Bucket: aws.String(c.resolveBucket(args.Bucket)),
@@ -443,6 +479,9 @@ func (c *Client) PresignGet(ctx context.Context, args objecth.PresignGetArgs) (s
 	}
 	if args.ContentDisposition != "" {
 		in.ResponseContentDisposition = aws.String(args.ContentDisposition)
+	}
+	if args.IfMatch != "" {
+		in.IfMatch = aws.String(quoteETag(args.IfMatch))
 	}
 	ttl, err := c.presignTTL(ctx, args.TTL)
 	if err != nil {
@@ -463,11 +502,16 @@ func (c *Client) PresignGet(ctx context.Context, args objecth.PresignGetArgs) (s
 	return req.URL, signedHeaders(req), exp, nil
 }
 
-func (c *Client) Head(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key string) (string, int64, string, string, error) {
+// Head reports the stored object's etag, size and its checksum under
+// checksumAlgo — the algorithm it was uploaded with. ChecksumMode is what
+// makes the store return checksums at all; without it every checksum field
+// is empty.
+func (c *Client) Head(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, checksumAlgo string) (string, int64, string, string, error) {
 	resolved := c.resolveBucket(bucket)
 	out, err := c.s3.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(resolved),
-		Key:    aws.String(composeKey(tenantID, collection, key)),
+		Bucket:       aws.String(resolved),
+		Key:          aws.String(composeKey(tenantID, collection, key)),
+		ChecksumMode: s3types.ChecksumModeEnabled,
 	})
 	if err != nil {
 		// Object-absent gets the sentinel so callers can make a terminal
@@ -498,15 +542,7 @@ func (c *Client) Head(ctx context.Context, bucket string, tenantID uuid.UUID, co
 	if out.ContentLength != nil {
 		size = *out.ContentLength
 	}
-	checksum := ""
-	switch {
-	case out.ChecksumSHA256 != nil:
-		checksum = *out.ChecksumSHA256
-	case out.ChecksumCRC32C != nil:
-		checksum = *out.ChecksumCRC32C
-	case out.ChecksumCRC32 != nil:
-		checksum = *out.ChecksumCRC32
-	}
+	checksum := headChecksum(out, checksumAlgo)
 	// SeaweedFS / real S3: no Sequencer from HEAD; leave empty. The event
 	// pipeline supplies it where available.
 	return etag, size, checksum, "", nil
@@ -578,11 +614,12 @@ func (c *Client) CompletionMode(collection string) objecth.CompletionMode {
 
 // ─── multipart.Storage (methods; MultipartRouter satisfies the interface) ───
 
-func (c *Client) InitiateMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType string) (string, error) {
+func (c *Client) InitiateMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string) (string, error) {
 	in := &s3.CreateMultipartUploadInput{
-		Bucket:      aws.String(c.resolveBucket(bucket)),
-		Key:         aws.String(composeKey(tenantID, collection, key)),
-		ContentType: aws.String(contentType),
+		Bucket:            aws.String(c.resolveBucket(bucket)),
+		Key:               aws.String(composeKey(tenantID, collection, key)),
+		ContentType:       aws.String(contentType),
+		ChecksumAlgorithm: multipartChecksumAlgorithm(checksumAlgo),
 	}
 	c.applyMultipartSSE(in)
 	out, err := c.s3.CreateMultipartUpload(ctx, in)
@@ -592,13 +629,15 @@ func (c *Client) InitiateMultipart(ctx context.Context, bucket string, tenantID 
 	return aws.ToString(out.UploadId), nil
 }
 
-func (c *Client) CompleteMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, parts []multiparth.PartETag) (string, int64, error) {
+func (c *Client) CompleteMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, collection, key, checksumAlgo string, parts []multiparth.PartETag) (string, int64, error) {
 	completed := make([]s3types.CompletedPart, 0, len(parts))
 	for _, p := range parts {
-		completed = append(completed, s3types.CompletedPart{
+		cp := s3types.CompletedPart{
 			PartNumber: aws.Int32(p.PartNumber),
 			ETag:       aws.String(p.ETag),
-		})
+		}
+		setCompletedPartChecksum(&cp, checksumAlgo, p.ChecksumValue)
+		completed = append(completed, cp)
 	}
 	resolvedBucket := c.resolveBucket(bucket)
 	fullKey := composeKey(tenantID, collection, key)
@@ -702,42 +741,19 @@ func (c *Client) AbortMultipart(ctx context.Context, bucket string, tenantID uui
 	return nil
 }
 
-// ─── presign.Storage ───────────────────────────────────────────────────────
-//
-// object.Storage and presign.Storage both expose methods named PresignGet /
-// PresignPut with different signatures, so the adapter cannot satisfy both
-// on the same receiver. PresignView wraps a *Client and exposes the
-// presign.Storage-shaped entrypoints. The Client primary methods remain
-// wired to object.Storage.
-
-type PresignView struct{ c *Client }
-
-func (c *Client) Presign() *PresignView { return &PresignView{c: c} }
-
-// PresignView carries the per-backend presign method bodies; PresignRouter
-// satisfies the presign.Storage interface and delegates here.
-
-func (p *PresignView) PresignGet(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key string, ttl time.Duration, disposition string) (string, map[string]string, time.Time, error) {
-	return p.c.PresignGet(ctx, objecth.PresignGetArgs{
-		TenantID: tenantID, Bucket: bucket, Collection: collection, Key: key, TTL: ttl, ContentDisposition: disposition,
-	})
-}
-
-func (p *PresignView) PresignPut(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string, ttl time.Duration, sizeHint int64) (string, map[string]string, time.Time, error) {
-	return p.c.PresignPut(ctx, objecth.PresignPutArgs{
-		TenantID: tenantID, Bucket: bucket, Collection: collection, Key: key, ContentType: contentType,
-		ChecksumAlgo: checksumAlgo, SizeHint: sizeHint, TTL: ttl,
-	})
-}
-
 // PresignPart signs one UploadPart for MultipartUploadService.PresignPart;
-// *Client satisfies multiparth.Storage through it.
-func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
+// *Client satisfies multiparth.Storage through it. The URL is bound to the
+// part's exact length and checksum, as a single PUT is to the object's.
+func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, part multiparth.PartBinding, ttl time.Duration) (string, map[string]string, time.Time, error) {
 	in := &s3.UploadPartInput{
-		Bucket:     aws.String(c.resolveBucket(bucket)),
-		Key:        aws.String(composeKey(tenantID, collection, key)),
-		PartNumber: aws.Int32(partNumber),
-		UploadId:   aws.String(storageUploadID),
+		Bucket:        aws.String(c.resolveBucket(bucket)),
+		Key:           aws.String(composeKey(tenantID, collection, key)),
+		PartNumber:    aws.Int32(part.Number),
+		UploadId:      aws.String(storageUploadID),
+		ContentLength: aws.Int64(part.SizeBytes),
+	}
+	if err := setPartChecksum(in, part.ChecksumAlgo, part.ChecksumValue); err != nil {
+		return "", nil, time.Time{}, err
 	}
 	ttl, err := c.presignTTL(ctx, ttl)
 	if err != nil {

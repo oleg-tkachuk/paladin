@@ -36,17 +36,24 @@ const (
 var (
 	ErrNoUploadURL = errors.New("paladin: the server returned no upload URL")
 	ErrNoETag      = errors.New("paladin: storage returned no ETag for a part; it must expose the ETag header")
-	ErrUploadSize  = errors.New("paladin: upload size must be positive")
+	ErrUploadSize  = errors.New("paladin: upload size must not be negative")
 	ErrUploadBody  = errors.New("paladin: an upload needs exactly one of Body and Stream")
 )
 
 // UploadInput describes one object to upload, from exactly one of Body and
-// Stream; neither is read into memory whole.
+// Stream.
+//
+// Every upload URL is signed for its body's exact size and SHA-256, so each
+// body is hashed before it is presigned. Body is read twice for that — once
+// to hash, once to send — and never held in memory. Stream can be read only
+// once, so its bytes are held while they are hashed and sent: the whole
+// object below the multipart threshold, and the parts in flight above it.
 type UploadInput struct {
 	Parent      string // tenants/{tenant}/collections/{collection}
 	Key         string // empty: the server names the object by its id
 	ContentType string
-	Size        int64
+	// Size is the object's exact size; 0 is an empty object.
+	Size int64
 	// Body is read at offsets, so a multipart upload sends its parts in
 	// parallel: an *os.File, *bytes.Reader or io.NewSectionReader all fit.
 	Body io.ReaderAt
@@ -78,7 +85,7 @@ func (d *DataPlane) Transfer() *Transfer {
 // multipart upload is aborted. A single PUT records the content's SHA-256 on
 // the object, which Download then verifies.
 func Upload(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOptions) (*datav1.Object, error) {
-	if in.Size <= 0 {
+	if in.Size < 0 {
 		return nil, ErrUploadSize
 	}
 	if (in.Body == nil) == (in.Stream == nil) {
@@ -94,22 +101,48 @@ func Upload(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOpt
 	return uploadSingle(ctx, data, in)
 }
 
-// content reads length bytes at offset: from Body directly, from Stream in
-// order. Only multipart asks for anything but the whole.
-func (in UploadInput) content(offset, length int64) io.Reader {
+// content is length bytes at offset as a body that can be read again: a
+// section of Body, or the next length bytes of Stream, held in memory.
+func (in UploadInput) content(offset, length int64) (io.ReadSeeker, error) {
 	if in.Body != nil {
-		return io.NewSectionReader(in.Body, offset, length)
+		return io.NewSectionReader(in.Body, offset, length), nil
 	}
-	return io.LimitReader(in.Stream, length)
+	buf := make([]byte, length)
+	if _, err := io.ReadFull(in.Stream, buf); err != nil {
+		return nil, err
+	}
+	return bytes.NewReader(buf), nil
+}
+
+// hashed is body's SHA-256 as an upload's checksum_value, with body rewound
+// to be sent.
+func hashed(body io.ReadSeeker) (string, error) {
+	sum := sha256.New()
+	if _, err := io.Copy(sum, body); err != nil {
+		return "", err
+	}
+	if _, err := body.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(sum.Sum(nil)), nil
 }
 
 func uploadSingle(ctx context.Context, data *DataPlane, in UploadInput) (*datav1.Object, error) {
+	body, err := in.content(0, in.Size)
+	if err != nil {
+		return nil, err
+	}
+	sum, err := hashed(body)
+	if err != nil {
+		return nil, err
+	}
 	allocated, err := data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
 		Parent:            in.Parent,
 		Key:               in.Key,
 		ContentType:       in.ContentType,
 		SizeHintBytes:     in.Size,
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
+		ChecksumValue:     sum,
 		Metadata:          in.Metadata,
 		Tags:              in.Tags,
 		Transport:         datav1.PresignTransport_PRESIGN_TRANSPORT_PUT,
@@ -121,13 +154,12 @@ func uploadSingle(ctx context.Context, data *DataPlane, in UploadInput) (*datav1
 	if url.GetUrl() == "" || object == nil {
 		return nil, ErrNoUploadURL
 	}
-	sum := sha256.New()
-	etag, err := put(ctx, data.Transfer(), url, in.ContentType, io.TeeReader(in.content(0, in.Size), sum), in.Size)
+	etag, err := put(ctx, data.Transfer(), url, in.ContentType, body, in.Size)
 	if err != nil {
 		return nil, err
 	}
 	done, err := data.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{
-		Name: object.GetName(), Etag: etag, ChecksumValue: base64.StdEncoding.EncodeToString(sum.Sum(nil)),
+		Name: object.GetName(), Etag: etag, ChecksumValue: sum,
 	}))
 	if err != nil {
 		return nil, err
@@ -163,13 +195,13 @@ func uploadMultipart(ctx context.Context, data *DataPlane, in UploadInput, opts 
 		partSize = DefaultMultipartThreshold
 	}
 	parts := int((in.Size + partSize - 1) / partSize)
-	etags, err := sendParts(ctx, data, in, opts, name, uploadID, partSize, parts)
+	sent, err := sendParts(ctx, data, in, opts, name, uploadID, partSize, parts)
 	if err != nil {
 		return nil, err
 	}
 	completed := make([]*datav1.CompletedPart, parts)
-	for i, etag := range etags {
-		completed[i] = &datav1.CompletedPart{PartNumber: int32(i + 1), Etag: etag} //nolint:gosec // parts ≤ 10000 by the contract
+	for i, p := range sent {
+		completed[i] = &datav1.CompletedPart{PartNumber: int32(i + 1), Etag: p.etag, ChecksumValue: p.checksum} //nolint:gosec // parts ≤ 10000 by the contract
 	}
 	done, err := data.MultipartUpload.CompleteMultipartUpload(ctx, connect.NewRequest(&datav1.CompleteMultipartUploadRequest{
 		ObjectName: name, UploadId: uploadID, Parts: completed,
@@ -183,15 +215,21 @@ func uploadMultipart(ctx context.Context, data *DataPlane, in UploadInput, opts 
 // part is one part to send: its index, and its bytes.
 type part struct {
 	index  int
-	body   io.Reader
+	body   io.ReadSeeker
 	length int64
 }
 
+// sentPart is what completion needs of a part: the ETag storage answered
+// with and the checksum the part was presigned for.
+type sentPart struct {
+	etag, checksum string
+}
+
 // sendParts presigns and PUTs every part, PartConcurrency at a time, and
-// returns their ETags in part order. The first failure stops the rest.
+// returns them in part order. The first failure stops the rest.
 func sendParts(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOptions,
 	name, uploadID string, partSize int64, parts int,
-) ([]string, error) {
+) ([]sentPart, error) {
 	workers := opts.PartConcurrency
 	if workers <= 0 {
 		workers = DefaultPartConcurrency
@@ -199,7 +237,7 @@ func sendParts(ctx context.Context, data *DataPlane, in UploadInput, opts Upload
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	etags := make([]string, parts)
+	sent := make([]sentPart, parts)
 	next := make(chan part)
 	var (
 		wg       sync.WaitGroup
@@ -212,12 +250,12 @@ func sendParts(ctx context.Context, data *DataPlane, in UploadInput, opts Upload
 	for range min(workers, parts) {
 		wg.Go(func() {
 			for p := range next {
-				etag, err := sendPart(ctx, data, name, uploadID, p)
+				done, err := sendPart(ctx, data, name, uploadID, p)
 				if err != nil {
 					fail(err)
 					continue
 				}
-				etags[p.index] = etag
+				sent[p.index] = done
 			}
 		})
 	}
@@ -225,19 +263,14 @@ feed:
 	for i := range parts {
 		offset := int64(i) * partSize
 		p := part{index: i, length: min(partSize, in.Size-offset)}
-		if in.Body != nil {
-			p.body = in.content(offset, p.length)
-		} else {
-			// A stream is read in order, so each part is read here, before it
-			// is handed to a worker; the unbuffered channel bounds how many
-			// are held.
-			buf := make([]byte, p.length)
-			if _, err := io.ReadFull(in.Stream, buf); err != nil {
-				fail(err)
-				break feed
-			}
-			p.body = bytes.NewReader(buf)
+		// A stream is read in order, so each part is read here, before it is
+		// handed to a worker; the unbuffered channel bounds how many are held.
+		body, err := in.content(offset, p.length)
+		if err != nil {
+			fail(err)
+			break feed
 		}
+		p.body = body
 		select {
 		case next <- p:
 		case <-ctx.Done():
@@ -252,27 +285,33 @@ feed:
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return etags, nil
+	return sent, nil
 }
 
-func sendPart(ctx context.Context, data *DataPlane, name, uploadID string, p part) (string, error) {
+// sendPart hashes a part, presigns its URL for that checksum, and PUTs it.
+func sendPart(ctx context.Context, data *DataPlane, name, uploadID string, p part) (sentPart, error) {
+	sum, err := hashed(p.body)
+	if err != nil {
+		return sentPart{}, err
+	}
 	signed, err := data.MultipartUpload.PresignPart(ctx, connect.NewRequest(&datav1.PresignPartRequest{
 		ObjectName: name, UploadId: uploadID, PartNumber: int32(p.index + 1), //nolint:gosec // parts ≤ 10000 by the contract
+		ChecksumValue: sum,
 	}))
 	if err != nil {
-		return "", err
+		return sentPart{}, err
 	}
 	if signed.Msg.GetUploadUrl().GetUrl() == "" {
-		return "", ErrNoUploadURL
+		return sentPart{}, ErrNoUploadURL
 	}
 	etag, err := put(ctx, data.Transfer(), signed.Msg.GetUploadUrl(), "", p.body, p.length)
 	if err != nil {
-		return "", err
+		return sentPart{}, err
 	}
 	if etag == "" {
-		return "", ErrNoETag
+		return sentPart{}, ErrNoETag
 	}
-	return etag, nil
+	return sentPart{etag: etag, checksum: sum}, nil
 }
 
 // Put sends size bytes of body to a presigned URL — one a caller presigned

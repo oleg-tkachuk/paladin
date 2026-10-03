@@ -484,7 +484,7 @@ func (q *Queries) LockObjectPath(ctx context.Context, lockKey int64) error {
 }
 
 const lookupObjectByID = `-- name: LookupObjectByID :one
-SELECT o.id, o.tenant_id, o.path, o.state,
+SELECT o.id, o.tenant_id, o.path, o.state, o.checksum_algorithm,
        c.name  AS collection_name,
        sb.name AS backend_name,
        bk.name AS bucket_name
@@ -496,18 +496,20 @@ WHERE o.id = $1
 `
 
 type LookupObjectByIDRow struct {
-	ID             pgtype.UUID `json:"id"`
-	TenantID       pgtype.UUID `json:"tenant_id"`
-	Path           string      `json:"path"`
-	State          ObjectState `json:"state"`
-	CollectionName string      `json:"collection_name"`
-	BackendName    string      `json:"backend_name"`
-	BucketName     string      `json:"bucket_name"`
+	ID                pgtype.UUID `json:"id"`
+	TenantID          pgtype.UUID `json:"tenant_id"`
+	Path              string      `json:"path"`
+	State             ObjectState `json:"state"`
+	ChecksumAlgorithm int16       `json:"checksum_algorithm"`
+	CollectionName    string      `json:"collection_name"`
+	BackendName       string      `json:"backend_name"`
+	BucketName        string      `json:"bucket_name"`
 }
 
 // Reads an object by id alone. Used by background workers (reconciler,
 // replicator) that don't carry a tenant context. Joins collections to
 // materialize the bucket binding so the caller can call S3 in one trip.
+// checksum_algorithm tells a HEAD which stored checksum is the object's.
 func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupObjectByIDRow, error) {
 	row := q.db.QueryRow(ctx, lookupObjectByID, id)
 	var i LookupObjectByIDRow
@@ -516,6 +518,7 @@ func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupO
 		&i.TenantID,
 		&i.Path,
 		&i.State,
+		&i.ChecksumAlgorithm,
 		&i.CollectionName,
 		&i.BackendName,
 		&i.BucketName,

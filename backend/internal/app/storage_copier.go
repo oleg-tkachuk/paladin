@@ -26,7 +26,7 @@ func (c storageCopier) DeleteObject(ctx context.Context, loc worker.CopyLocation
 // HeadObject returns the physical size of one object — used by the verify phase
 // to confirm each copy landed in the target bucket.
 func (c storageCopier) HeadObject(ctx context.Context, loc worker.CopyLocation) (int64, error) {
-	_, size, _, _, err := c.s.Head(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.Collection, loc.Key)
+	_, size, _, _, err := c.s.Head(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.Collection, loc.Key, "")
 	return size, err
 }
 

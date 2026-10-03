@@ -94,7 +94,7 @@ func (*copyFakeStorage) PresignPost(context.Context, objecth.PresignPostArgs) (s
 func (*copyFakeStorage) PresignGet(context.Context, objecth.PresignGetArgs) (string, map[string]string, time.Time, error) {
 	panic("unused")
 }
-func (*copyFakeStorage) Head(context.Context, string, string, uuid.UUID, string, string) (string, int64, string, string, error) {
+func (*copyFakeStorage) Head(context.Context, string, string, uuid.UUID, string, string, string) (string, int64, string, string, error) {
 	panic("unused")
 }
 func (*copyFakeStorage) DeleteObject(context.Context, string, string, uuid.UUID, string, string) error {

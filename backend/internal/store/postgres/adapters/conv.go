@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 )
 
 // ─── uuid ↔ pgtype.UUID ─────────────────────────────────────────────────────
@@ -95,11 +96,11 @@ func decodeMap(b []byte) map[string]string {
 
 func checksumAlgoInt(name string) int16 {
 	switch name {
-	case "CRC32C":
+	case checksum.CRC32C:
 		return 1
-	case "SHA256":
+	case checksum.SHA256:
 		return 2
-	case "MD5":
+	case checksum.MD5:
 		return 3
 	default:
 		return 0
@@ -109,11 +110,11 @@ func checksumAlgoInt(name string) int16 {
 func checksumAlgoName(v int16) string {
 	switch v {
 	case 1:
-		return "CRC32C"
+		return checksum.CRC32C
 	case 2:
-		return "SHA256"
+		return checksum.SHA256
 	case 3:
-		return "MD5"
+		return checksum.MD5
 	default:
 		return ""
 	}

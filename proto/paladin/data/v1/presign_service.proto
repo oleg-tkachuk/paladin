@@ -12,7 +12,8 @@ import "paladin/common/v1/resource.proto";
 // Initial URL is bundled with UploadObject; this service handles refresh.
 service PresignService {
   // RegenerateUploadUrl issues a fresh PUT URL for an object still PENDING —
-  // for when the first URL expired before the client finished.
+  // for when the first URL expired before the client finished. It is signed
+  // for the size, Content-Type and checksum the object was registered with.
   rpc RegenerateUploadUrl(RegenerateUploadUrlRequest) returns (RegenerateUploadUrlResponse) {
     option idempotency_level = IDEMPOTENT;
   }
@@ -35,6 +36,8 @@ message PresignDownloadRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
   google.protobuf.Duration ttl = 2;
   string content_disposition = 3;
+  // As DownloadObjectRequest.require_etag_match.
+  bool require_etag_match = 4;
 }
 
 message PresignDownloadResponse {
