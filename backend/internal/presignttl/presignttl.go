@@ -97,19 +97,31 @@ var ErrNotConfigured = errors.New("presign ttl policy is not configured")
 // the contract says so, and silently shortening a requested lifetime leaves a
 // caller holding a URL that dies earlier than it planned for.
 func (p Policy) Resolve(op Op, requested time.Duration) (time.Duration, error) {
+	return p.ResolveWithin(op, requested, 0)
+}
+
+// ResolveWithin is Resolve under a further ceiling — a bucket's
+// max_presign_put_ttl or max_presign_get_ttl. A ceiling of zero or less sets
+// none. The default shrinks to the ceiling when it is the smaller, so a
+// caller who names no TTL is never refused for a limit it did not pick.
+func (p Policy) ResolveWithin(op Op, requested, ceiling time.Duration) (time.Duration, error) {
 	def := p.Default(op)
 	if def <= 0 || p.max <= 0 {
 		return 0, connect.NewError(connect.CodeInternal, ErrNotConfigured)
 	}
+	limit, limitName := p.max, "limits.presign.max_ttl"
+	if ceiling > 0 && ceiling < limit {
+		limit, limitName = ceiling, "the bucket's presign ttl ceiling"
+	}
 	switch {
 	case requested == 0:
-		return def, nil
+		return min(def, limit), nil
 	case requested < 0:
 		return 0, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("ttl %s must be positive", requested))
-	case requested > p.max:
+	case requested > limit:
 		return 0, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("ttl %s exceeds limits.presign.max_ttl %s", requested, p.max))
+			fmt.Errorf("ttl %s exceeds %s %s", requested, limitName, limit))
 	}
 	return requested, nil
 }

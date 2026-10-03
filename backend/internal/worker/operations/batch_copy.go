@@ -13,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
 
 // BatchCopyExecutor implements the BatchCopy operation type.
@@ -57,6 +58,12 @@ type BatchCopyExecutor struct {
 	// creates. Required: a copy with no deadline would leave its PENDING row
 	// outside the reaper's reach.
 	PendingTTL time.Duration
+
+	// Limits are limits.*; with the destination bucket's constraints they
+	// decide which objects may be copied in. Required: a copy creates an
+	// object, and without the check a batch copy is the way around the
+	// destination's allowlist and size cap.
+	Limits uploadpolicy.Limits
 }
 
 // BatchCopyResponse mirrors the BatchDelete shape.
@@ -80,6 +87,9 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 	if e.PendingTTL <= 0 {
 		return nil, errors.New("BatchCopyExecutor: PendingTTL must be positive")
 	}
+	if err := e.Limits.Validate(); err != nil {
+		return nil, fmt.Errorf("BatchCopyExecutor: %w", err)
+	}
 
 	var args batchh.BatchCopyArgs
 	if err := json.Unmarshal(op.Metadata, &args); err != nil {
@@ -102,10 +112,12 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 	if err != nil {
 		return nil, fmt.Errorf("lookup src bucket: %w", err)
 	}
-	dstBackendID, dstBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.DstCollection, true) // copy dest (mutation)
+	dstMeta, err := e.Objects.LookupBucketMeta(ctx, args.TenantID, args.DstCollection, true) // copy dest (mutation)
 	if err != nil {
 		return nil, fmt.Errorf("lookup dst bucket: %w", err)
 	}
+	dstBackendID, dstBucket := dstMeta.BackendID, dstMeta.BucketName
+	dstPolicy := uploadpolicy.For(e.Limits, dstMeta.Constraints)
 
 	resp := BatchCopyResponse{Total: len(args.ObjectIDs)}
 
@@ -129,6 +141,16 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 			resp.Failures = append(resp.Failures, BatchCopyFailure{
 				ObjectID: srcID.String(),
 				Reason:   "not found",
+			})
+			continue
+		}
+		if err := dstPolicy.CheckCopy(uploadpolicy.Upload{
+			SizeBytes: src.SizeBytes, ContentType: src.ContentType, ChecksumAlgorithm: src.ChecksumAlgo,
+		}); err != nil {
+			resp.Failed++
+			resp.Failures = append(resp.Failures, BatchCopyFailure{
+				ObjectID: srcID.String(),
+				Reason:   err.Error(),
 			})
 			continue
 		}

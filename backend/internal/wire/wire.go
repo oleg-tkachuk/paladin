@@ -116,8 +116,8 @@ func ProvideObjectHandler(
 	cfg config.Config,
 ) *objecth.Handler {
 	return objecth.NewHandler(repos.Object, storage.Object, pe, fe, sm, objecth.PresignConfig{
-		TTL:            presignttl.MustFromConfig(cfg.Limits.Presign),
-		DefaultMaxSize: cfg.Limits.Presign.DefaultMaxSize,
+		TTL:    presignttl.MustFromConfig(cfg.Limits.Presign),
+		Limits: cfg.Limits.UploadLimits(),
 	})
 }
 
@@ -142,12 +142,13 @@ func ProvideBatchHandler(repos Repos, opH *operationh.Handler, pe *policy.Engine
 
 func ProvidePresignHandler(repos Repos, storage Storage, pe *policy.Engine, cfg config.Config) *presignh.Handler {
 	return presignh.NewHandler(repos.Presign, storage.Presign, pe, presignh.Config{
-		TTL: presignttl.MustFromConfig(cfg.Limits.Presign),
+		TTL:    presignttl.MustFromConfig(cfg.Limits.Presign),
+		Limits: cfg.Limits.UploadLimits(),
 	})
 }
 
 func ProvideMultipartHandler(repos Repos, storage Storage, pe *policy.Engine, sm *statemachine.Transitioner, cfg config.Config) *multiparth.Handler {
-	return multiparth.NewHandler(repos.Multipart, storage.Multipart, pe, sm, presignttl.MustFromConfig(cfg.Limits.Presign))
+	return multiparth.NewHandler(repos.Multipart, storage.Multipart, pe, sm, presignttl.MustFromConfig(cfg.Limits.Presign), cfg.Limits.UploadLimits())
 }
 
 // ─── v2 IAM/admin handlers ──────────────────────────────────────────────────

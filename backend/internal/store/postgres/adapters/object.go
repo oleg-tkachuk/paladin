@@ -502,7 +502,7 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		       bk.object_lock_default_mode,
 		       bk.object_lock_default_retention_seconds,
 		       c.constraints, sb.enabled, sb.read_only, sb.events_enabled,
-		       bk.provision_state
+		       bk.provision_state, bk.constraints
 		FROM collections c
 		JOIN buckets bk          ON bk.id = c.bucket_id
 		JOIN storage_backends sb ON sb.id = bk.backend_id
@@ -516,11 +516,12 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		provisionState   string
 		defaultMode      *string
 		retentionSeconds int64
+		bucketConstraint []byte
 	)
 	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), collection).Scan(
 		&meta.BackendID, &meta.BucketName, &meta.VersioningEnabled, &meta.ObjectLockEnabled,
 		&defaultMode, &retentionSeconds,
-		&constraintsJSON, &enabled, &readOnly, &meta.EventsEnabled, &provisionState,
+		&constraintsJSON, &enabled, &readOnly, &meta.EventsEnabled, &provisionState, &bucketConstraint,
 	); err != nil {
 		if isNoRows(err) {
 			return objecth.BucketMeta{}, fmt.Errorf("collection %q not found", collection)
@@ -529,6 +530,14 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 	}
 	if err := bucketOpAllowed(write, enabled, readOnly, provisionState); err != nil {
 		return objecth.BucketMeta{}, err
+	}
+	// Fail closed on a document that does not decode: these are limits the
+	// bucket owner set, and reading a broken one as "no limits" would admit
+	// exactly what they were set to refuse.
+	if len(bucketConstraint) > 0 {
+		if err := json.Unmarshal(bucketConstraint, &meta.Constraints); err != nil {
+			return objecth.BucketMeta{}, fmt.Errorf("bucket %q constraints: %w", meta.BucketName, err)
+		}
 	}
 	if v, ok := readBoolOverride(constraintsJSON, "versioning_enabled"); ok {
 		meta.VersioningEnabled = v

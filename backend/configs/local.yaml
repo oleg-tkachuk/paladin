@@ -61,8 +61,8 @@ datastores:
 limits:
   max_object_size: "100MB"
   max_multipart_size: "1TB"
-  min_part_size: "5MB"
-  max_part_size: "5GB"
+  min_part_size: "5MiB"
+  max_part_size: "5GiB"
   max_parts: 10000
   allowed_content_types:
     - "image/jpeg"
@@ -76,7 +76,6 @@ limits:
     get_ttl: 15m
     part_ttl: 15m
     max_ttl: 168h
-    default_max_size: 5368709120
 
 auth:
   issuer: "paladin-dev"

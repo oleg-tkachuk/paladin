@@ -107,18 +107,6 @@ func Load(paths []string, log *zap.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("YAML unmarshal failed: %w", err)
 	}
 
-	if err := cfg.Validate(); err != nil {
-		return Config{}, fmt.Errorf("configuration validation failed: %w", err)
-	}
-
-	// Resolve secrets if running in a Kubernetes environment
-	if os.Getenv(DefaultK8sServiceHostEnvKey) != "" {
-		resolver := NewK8sSecretResolver(log)
-		if err := resolver.ResolveConfig(context.Background(), &cfg); err != nil {
-			return Config{}, fmt.Errorf("secret resolution failed: %w", err)
-		}
-	}
-
 	// Parse sizes — per-backend part_size lands in PartSizeBytes on each entry.
 	for name, b := range cfg.Storage.Backends {
 		if b.PartSizeRaw == "" {
@@ -154,6 +142,20 @@ func Load(paths []string, log *zap.Logger) (Config, error) {
 		cfg.Limits.MaxPartSizeBytes = n
 	} else {
 		return Config{}, fmt.Errorf("failed to parse limits.max_part_size (%s): %w", cfg.Limits.MaxPartSizeRaw, err)
+	}
+
+	// Validate after the sizes are parsed: the upload limits are checked in
+	// bytes.
+	if err := cfg.Validate(); err != nil {
+		return Config{}, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
+	// Resolve secrets if running in a Kubernetes environment
+	if os.Getenv(DefaultK8sServiceHostEnvKey) != "" {
+		resolver := NewK8sSecretResolver(log)
+		if err := resolver.ResolveConfig(context.Background(), &cfg); err != nil {
+			return Config{}, fmt.Errorf("secret resolution failed: %w", err)
+		}
 	}
 
 	if cfg.Security.LogSensitive {
@@ -226,6 +228,9 @@ func (c *Config) Validate() error {
 	}
 
 	if err := c.Limits.Presign.Validate(); err != nil {
+		return err
+	}
+	if err := c.Limits.UploadLimits().Validate(); err != nil {
 		return err
 	}
 

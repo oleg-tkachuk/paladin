@@ -13,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
+	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
 
@@ -523,6 +524,62 @@ func TestRegenerateUploadURL(t *testing.T) {
 		// check — or a bucket:/collection:-scoped PAT is fail-closed on PUT.
 		if pol.gotResource == nil || pol.gotResource.BucketName != "bucket-1" || pol.gotResource.BackendID != "backend-1" {
 			t.Fatalf("authz Resource missing physical binding: %+v", pol.gotResource)
+		}
+	})
+}
+
+// A bucket's max_presign_get_ttl / max_presign_put_ttl were stored and never
+// read; they now narrow max_ttl for URLs into that bucket.
+func TestBucketTTLCeilings(t *testing.T) {
+	tid := uuid.New()
+	cfg := testConfig(t)
+	const ceiling = 3 * time.Minute // below every test default
+	ceilingRepo := func(base *fakeRepo, c uploadpolicy.BucketConstraints) *fakeRepo {
+		base.lookupMetaFn = func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
+			return objecth.BucketMeta{BackendID: "backend-1", BucketName: "bucket-1", Constraints: c}, nil
+		}
+		return base
+	}
+
+	t.Run("download: default shrinks to the ceiling", func(t *testing.T) {
+		st := &fakeStorage{}
+		h := NewHandler(ceilingRepo(&fakeRepo{}, uploadpolicy.BucketConstraints{MaxPresignGetTTL: ceiling}), st, allowPolicy(), cfg)
+		if _, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, ""); err != nil {
+			t.Fatal(err)
+		}
+		if st.gotTTL != ceiling {
+			t.Fatalf("TTL = %v, want the bucket ceiling %v", st.gotTTL, ceiling)
+		}
+	})
+
+	t.Run("download: above the ceiling is refused", func(t *testing.T) {
+		st := &fakeStorage{}
+		h := NewHandler(ceilingRepo(&fakeRepo{}, uploadpolicy.BucketConstraints{MaxPresignGetTTL: ceiling}), st, allowPolicy(), cfg)
+		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, ceiling+time.Second, "")
+		wantCode(t, err, connect.CodeInvalidArgument)
+		if st.getCalled {
+			t.Fatal("signed above the bucket ceiling")
+		}
+	})
+
+	t.Run("regenerate: the put ceiling applies, the get ceiling does not", func(t *testing.T) {
+		st := &fakeStorage{}
+		h := NewHandler(ceilingRepo(pendingRepo(), uploadpolicy.BucketConstraints{MaxPresignPutTTL: ceiling, MaxPresignGetTTL: time.Second}), st, allowPolicy(), cfg)
+		if _, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0); err != nil {
+			t.Fatal(err)
+		}
+		if st.gotTTL != ceiling {
+			t.Fatalf("TTL = %v, want the put ceiling %v", st.gotTTL, ceiling)
+		}
+	})
+
+	t.Run("regenerate: above the put ceiling is refused", func(t *testing.T) {
+		st := &fakeStorage{}
+		h := NewHandler(ceilingRepo(pendingRepo(), uploadpolicy.BucketConstraints{MaxPresignPutTTL: ceiling}), st, allowPolicy(), cfg)
+		_, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, ceiling+time.Second)
+		wantCode(t, err, connect.CodeInvalidArgument)
+		if st.putCalled {
+			t.Fatal("signed above the bucket ceiling")
 		}
 	})
 }
