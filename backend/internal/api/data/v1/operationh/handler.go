@@ -19,6 +19,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // State mirrors the operation_state SQL enum.
@@ -82,6 +83,14 @@ func NewHandler(repo Repository, policy cedar.Authorizer) *Handler {
 	return &Handler{cel: celpkg.NewEvaluator(), repo: repo, policy: policy}
 }
 
+// Each RPC also asserts a capability op, because a capability alone can
+// authenticate a data-plane call: reading an operation is get, listing them
+// is list, and cancelling one is manage — it stops work some other caller may
+// have started. None can name a resource URI: an operation spans the
+// collections its batch touched, and its metadata names them. So a
+// resource-restricted capability is refused, as it is for the batch RPCs that
+// create operations.
+
 // authorize gates operation RPCs against Cedar with the operation's
 // tenant_id (an operation is owned by the tenant whose principal spawned
 // it; cross-tenant Get/Cancel is denied at the repo layer too).
@@ -110,6 +119,9 @@ func (h *Handler) GetOperation(ctx context.Context, opID uuid.UUID) (*Operation,
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, ""); err != nil {
+		return nil, err
+	}
 	if err := h.authorize(ctx, cedar.ActionReadOperation, tenantID); err != nil {
 		return nil, err
 	}
@@ -124,6 +136,9 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpManage, ""); err != nil {
+		return err
 	}
 	if err := h.authorize(ctx, cedar.ActionCancelOperation, tenantID); err != nil {
 		return err
@@ -143,6 +158,9 @@ func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
+		return nil, "", err
 	}
 	if err := h.authorize(ctx, cedar.ActionReadOperation, tenantID); err != nil {
 		return nil, "", err

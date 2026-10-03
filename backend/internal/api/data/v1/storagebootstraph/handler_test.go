@@ -13,6 +13,7 @@ import (
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // ─── fakes ────────────────────────────────────────────────────────────────
@@ -228,5 +229,48 @@ func TestEnsureTenantStorage_BucketEnsureError(t *testing.T) {
 	}
 	if len(keys.seenKeys) != 0 {
 		t.Error("object-keys must not be ensured after a bucket-ensure failure")
+	}
+}
+
+// A capability authenticates the call on its own, and Cedar's tenant-equality
+// permit admits it, so the capability's op is the only thing standing between
+// a get-only capability and provisioning the tenant's storage.
+func TestEnsureTenantStorage_CapabilityOp(t *testing.T) {
+	caller := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000a6")
+	cases := []struct {
+		name    string
+		caveats capability.Caveats
+		want    connect.Code // zero: allowed
+	}{
+		{"manage allowed", capability.Caveats{Ops: []capability.Op{capability.OpManage}}, 0},
+		{"put only refused", capability.Caveats{Ops: []capability.Op{capability.OpGet, capability.OpPut}}, connect.CodePermissionDenied},
+		{
+			"resource-restricted manage refused",
+			capability.Caveats{Ops: []capability.Op{capability.OpManage}, ResourcePrefixes: []string{"paladin://t/docs"}},
+			connect.CodePermissionDenied,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			backends := &fakeBackends{enabled: true}
+			buckets := &fakeBuckets{}
+			authz := &recordingAuthorizer{allow: true}
+			h := newHandler(authz, backends, buckets, &fakeCollections{})
+			ctx := auth.WithCapability(ctxWithPAT(caller), &capability.Capability{Caveats: tc.caveats})
+
+			_, err := h.EnsureTenantStorage(ctx, backendID, bucket, []string{"docs"})
+			if tc.want == 0 {
+				if err != nil {
+					t.Fatalf("unexpected err: %v", err)
+				}
+				return
+			}
+			if connect.CodeOf(err) != tc.want {
+				t.Fatalf("err code = %v, want %v (err=%v)", connect.CodeOf(err), tc.want, err)
+			}
+			if authz.gotAction != "" || backends.gotID != "" || buckets.calls != 0 {
+				t.Error("a refused capability must short-circuit before Cedar and any provisioning")
+			}
+		})
 	}
 }
