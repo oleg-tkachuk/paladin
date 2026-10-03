@@ -294,9 +294,16 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// is unaffected (an expired token can never verify, so dropping its
 	// revocation row is safe).
 	if deps.Capability != nil && cfg.Worker.Jobs.Capability.Interval > 0 {
+		// Assigned only when set: a nil *ReplayCache in the interface
+		// field would read as wired and panic on the first tick.
+		var replay worker.ReplayPurger
+		if deps.Capability.Replay != nil {
+			replay = deps.Capability.Replay
+		}
 		out = append(out, &worker.CapabilityPurger{
 			Store:      deps.Capability.Store,
 			Usage:      deps.Capability.Usage,
+			Replay:     replay,
 			Interval:   cfg.Worker.Jobs.Capability.Interval,
 			ExpiredFor: cfg.Worker.Jobs.Capability.ExpiredFor,
 			Logger:     l.Named("capability-purger"),
