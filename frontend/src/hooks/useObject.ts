@@ -12,7 +12,9 @@ import { useAuth } from "@/context/AuthContext";
 import { useRefreshSignal, useBumpRefresh } from "@/context/RefreshContext";
 import { useNotification } from "@/components/ui/Notification";
 import { normalizeError } from "@/lib/connect/error";
-import { DEFAULT_OBJECT_KEY } from "@/constants";
+import { DEFAULT_OBJECT_KEY, QUERY_STALE_MS } from "@/constants";
+import { attachmentDisposition } from "@/lib/download";
+import { msUntilStale } from "@/lib/upload/retry";
 import { fieldMask } from "@/lib/connect/fieldMask";
 import { UpdateObjectRequestSchema } from "@/gen/paladin/data/v1/object_service_pb";
 
@@ -27,6 +29,14 @@ import { UpdateObjectRequestSchema } from "@/gen/paladin/data/v1/object_service_
 interface ObjectQueryResult {
   object: Object$;
   downloadUrl: PresignedUrl | null;
+}
+
+/** How long the query's download URL stays usable; undefined without one. */
+export function downloadUrlLifetime(
+  data: ObjectQueryResult | undefined,
+  now: number = Date.now(),
+): number | undefined {
+  return data?.downloadUrl ? msUntilStale(data.downloadUrl, now) : undefined;
 }
 
 export function useObject(
@@ -50,6 +60,10 @@ export function useObject(
     // No retry: the queryFn toasts non-NotFound failures, and a retry would
     // double-toast (and NotFound is a normal inspector state, not transient).
     retry: false,
+    // The download URL expires: presign it again before it does, rather
+    // than hand out a link storage will refuse.
+    staleTime: (q) => downloadUrlLifetime(q.state.data) ?? QUERY_STALE_MS,
+    refetchInterval: (q) => downloadUrlLifetime(q.state.data) ?? false,
     queryFn: async ({ signal }) => {
       try {
         const obj = await objectClient.lookupObject(
@@ -60,7 +74,10 @@ export function useObject(
         if (obj.state === ObjectState.AVAILABLE) {
           try {
             const res = await presignClient.presignDownload(
-              { name: obj.name, contentDisposition: "" },
+              {
+                name: obj.name,
+                contentDisposition: attachmentDisposition(obj.key),
+              },
               { signal },
             );
             downloadUrl = res.downloadUrl ?? null;
