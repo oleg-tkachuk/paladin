@@ -124,6 +124,11 @@ type VerifierConfig struct {
 	// AcceptBiscuit accepts the Biscuit form (Issuer.Biscuit, Attenuate)
 	// beside the JWT. Off, a Biscuit is refused like any malformed token.
 	AcceptBiscuit bool
+
+	// BiscuitRevocations answers whether a copy of a Biscuit is revoked on
+	// its own. Required when AcceptBiscuit is set; wrap the store in a
+	// CachedBiscuitRevocationChecker.
+	BiscuitRevocations BiscuitRevocationLookup
 }
 
 // StandardVerifier is the production verifier — signature first, then
@@ -146,6 +151,9 @@ func NewStandardVerifier(cfg VerifierConfig) (*StandardVerifier, error) {
 	}
 	if len(cfg.TrustedIssuers) == 0 {
 		return nil, errors.New("capability: VerifierConfig.TrustedIssuers required")
+	}
+	if cfg.AcceptBiscuit && cfg.BiscuitRevocations == nil {
+		return nil, errNoBiscuitRevocations
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
@@ -175,22 +183,13 @@ func (v *StandardVerifier) Verify(ctx context.Context, token string, audience st
 	}
 
 	var cap *Capability
+	var biscuitIDs [][]byte // set for a Biscuit, from its verified chain
 	if IsBiscuit(token) {
 		if !v.cfg.AcceptBiscuit {
 			return nil, fmt.Errorf("%w: Biscuit tokens are not accepted here", ErrInvalidSignature)
 		}
-		inner, attenuate, err := openBiscuit(token)
-		if err != nil {
-			return nil, err
-		}
-		sealed, err := v.verifySigned(ctx, inner)
-		if err != nil {
-			return nil, err
-		}
-		if sealed.BiscuitRoot == "" {
-			return nil, fmt.Errorf("%w: biscuit seals an ordinary token", ErrInvalidSignature)
-		}
-		if cap, err = attenuate(sealed); err != nil {
+		var err error
+		if cap, biscuitIDs, err = v.verifyBiscuit(ctx, token); err != nil {
 			return nil, err
 		}
 	} else {
@@ -229,8 +228,37 @@ func (v *StandardVerifier) Verify(ctx context.Context, token string, audience st
 	if revoked {
 		return nil, ErrRevoked
 	}
+	// 7) Revocation of this copy of a Biscuit, or a copy it was attenuated
+	// from.
+	if biscuitIDs != nil {
+		revoked, err := v.cfg.BiscuitRevocations.IsBiscuitRevoked(ctx, biscuitIDs)
+		if err != nil {
+			return nil, fmt.Errorf("capability: biscuit revocation lookup: %w", err)
+		}
+		if revoked {
+			return nil, ErrRevoked
+		}
+	}
 
 	return cap, nil
+}
+
+// verifyBiscuit checks a Biscuit's sealed token as verifySigned does, then its
+// signature chain and attenuation blocks. It returns the capability the
+// Biscuit grants and its revocation ids, authority first.
+func (v *StandardVerifier) verifyBiscuit(ctx context.Context, token string) (*Capability, [][]byte, error) {
+	inner, attenuate, err := openBiscuit(token)
+	if err != nil {
+		return nil, nil, err
+	}
+	sealed, err := v.verifySigned(ctx, inner)
+	if err != nil {
+		return nil, nil, err
+	}
+	if sealed.BiscuitRoot == "" {
+		return nil, nil, fmt.Errorf("%w: biscuit seals an ordinary token", ErrInvalidSignature)
+	}
+	return attenuate(sealed)
 }
 
 // verifySigned checks a compact JWT's header, signature, issuer and tenant —

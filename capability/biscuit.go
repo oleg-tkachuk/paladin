@@ -63,7 +63,8 @@ func IsBiscuit(token string) bool {
 
 // Biscuit returns the Biscuit form of a capability this issuer issued: the
 // same capability — same ID, caveats, expiry and binding, revoked together
-// with it — in a token its holder can attenuate offline.
+// with it — in a token its holder can attenuate offline. One copy can also be
+// revoked on its own; see BiscuitRevocationStore.
 func (i *Issuer) Biscuit(c *Capability) (string, error) {
 	rootPub, rootPriv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -152,8 +153,9 @@ func Attenuate(token string, a Attenuation) (string, error) {
 // openBiscuit reads a Biscuit's sealed JWT and returns it with the function
 // that finishes verification once the caller has verified that JWT: the
 // signature chain against the root the JWT vouches for, then each
-// attenuation block folded in.
-func openBiscuit(token string) (string, func(*Capability) (*Capability, error), error) {
+// attenuation block folded in. That function also returns the token's
+// revocation ids, authority first, read from the chain it verified.
+func openBiscuit(token string) (string, func(*Capability) (*Capability, [][]byte, error), error) {
 	raw, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {
 		return "", nil, fmt.Errorf("%w: biscuit encoding: %w", ErrInvalidSignature, err)
@@ -172,28 +174,28 @@ func openBiscuit(token string) (string, func(*Capability) (*Capability, error), 
 	}
 	// The chain is checked once the sealed token has named its root; the
 	// caller verifies that token first and hands back what it vouches for.
-	attenuate := func(parent *Capability) (*Capability, error) {
+	attenuate := func(parent *Capability) (*Capability, [][]byte, error) {
 		root, err := base64.RawURLEncoding.DecodeString(parent.BiscuitRoot)
 		if err != nil || len(root) != ed25519.PublicKeySize {
-			return nil, fmt.Errorf("%w: sealed token names no biscuit root", ErrInvalidSignature)
+			return nil, nil, fmt.Errorf("%w: sealed token names no biscuit root", ErrInvalidSignature)
 		}
 		b, err := biscuit.Unmarshal(raw)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrInvalidSignature, err)
+			return nil, nil, fmt.Errorf("%w: %w", ErrInvalidSignature, err)
 		}
 		if _, err := b.Authorizer(ed25519.PublicKey(root)); err != nil {
-			return nil, fmt.Errorf("%w: biscuit chain: %w", ErrInvalidSignature, err)
+			return nil, nil, fmt.Errorf("%w: biscuit chain: %w", ErrInvalidSignature, err)
 		}
 		cur := *parent
 		cur.BiscuitRoot = ""
 		for i, blk := range blocks[1:] {
 			next, err := applyAttenuation(cur, blk)
 			if err != nil {
-				return nil, fmt.Errorf("%w: block %d: %w", ErrBiscuitAttenuation, i+1, err)
+				return nil, nil, fmt.Errorf("%w: block %d: %w", ErrBiscuitAttenuation, i+1, err)
 			}
 			cur = next
 		}
-		return &cur, nil
+		return &cur, b.RevocationIds(), nil
 	}
 	return inner, attenuate, nil
 }

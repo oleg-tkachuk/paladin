@@ -261,3 +261,48 @@ func TestChargeRejectsInvalidAmounts(t *testing.T) {
 		}
 	}
 }
+
+// A revoked Biscuit copy is found by any of a token's ids, belongs to a
+// capability on record, and goes when that capability is purged.
+func TestRevokeBiscuit(t *testing.T) {
+	ctx := context.Background()
+	s := New[struct{}]()
+	id := uuid.New()
+	if err := s.Insert(ctx, mkCap(id, uuid.Nil, uuid.New(), "a"), capability.Principal{Subject: "op"}); err != nil {
+		t.Fatal(err)
+	}
+	copyID, other := []byte("copy"), []byte("other")
+
+	if err := s.RevokeBiscuit(ctx, capability.RevokeBiscuitArgs{CapabilityID: uuid.New(), RevocationID: copyID}); !errors.Is(err, capability.ErrNotFound) {
+		t.Fatalf("unknown capability: err = %v, want ErrNotFound", err)
+	}
+	if err := s.RevokeBiscuit(ctx, capability.RevokeBiscuitArgs{CapabilityID: id}); err == nil {
+		t.Fatal("empty revocation id accepted")
+	}
+	for range 2 { // idempotent
+		if err := s.RevokeBiscuit(ctx, capability.RevokeBiscuitArgs{CapabilityID: id, RevocationID: copyID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, tc := range map[string]struct {
+		ids  [][]byte
+		want bool
+	}{
+		"the copy alone":          {[][]byte{copyID}, true},
+		"a copy attenuated after": {[][]byte{copyID, other}, true},
+		"another copy":            {[][]byte{other}, false},
+		"no ids":                  {nil, false},
+	} {
+		if got, err := s.IsBiscuitRevoked(ctx, tc.ids); err != nil || got != tc.want {
+			t.Errorf("%s: IsBiscuitRevoked = %v, %v; want %v", name, got, err, tc.want)
+		}
+	}
+
+	s.nowFn = func() time.Time { return time.Now().Add(2 * time.Hour) }
+	if _, err := s.PurgeExpired(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.IsBiscuitRevoked(ctx, [][]byte{copyID}); got {
+		t.Error("revoked copy outlived its purged capability")
+	}
+}

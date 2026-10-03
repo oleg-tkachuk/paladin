@@ -24,6 +24,8 @@ type revLookup struct{}
 
 func (revLookup) IsRevoked(context.Context, uuid.UUID) (bool, error) { return false, nil }
 
+func (revLookup) IsBiscuitRevoked(context.Context, [][]byte) (bool, error) { return false, nil }
+
 func TestLatencyBaseline(t *testing.T) {
 	if os.Getenv("PALADIN_WRITE_LATENCY") != "1" {
 		t.Skip("set PALADIN_WRITE_LATENCY=1 to (re)record the baseline")
