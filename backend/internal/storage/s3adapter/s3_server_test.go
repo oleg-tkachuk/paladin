@@ -21,6 +21,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
@@ -475,7 +476,7 @@ func TestClientHead(t *testing.T) {
 	f := newFakeS3(t)
 	c := newTestClient(t, f.srv.URL)
 
-	etag, size, checksum, seq, err := c.Head(testCtx, "bkt", testTenant, "ok", "k1")
+	etag, size, sum, seq, err := c.Head(testCtx, "bkt", testTenant, "ok", "k1", checksum.SHA256)
 	if err != nil {
 		t.Fatalf("Head: %v", err)
 	}
@@ -485,8 +486,8 @@ func TestClientHead(t *testing.T) {
 	if size != fakeHeadSize {
 		t.Errorf("size = %d, want %d", size, fakeHeadSize)
 	}
-	if checksum != "sha256-chk" {
-		t.Errorf("checksum = %q, want the SHA256 value", checksum)
+	if sum != "sha256-chk" {
+		t.Errorf("checksum = %q, want the SHA256 value", sum)
 	}
 	if seq != "" {
 		t.Errorf("HEAD carries no sequencer, got %q", seq)
@@ -503,22 +504,33 @@ func TestClientHead(t *testing.T) {
 	if heads[0].Bucket != "bkt" {
 		t.Errorf("per-call bucket must win over the configured default, got %q", heads[0].Bucket)
 	}
+	// Without checksum mode the store returns no checksum fields at all.
+	if got := heads[0].Header.Get("X-Amz-Checksum-Mode"); got != "ENABLED" {
+		t.Errorf("x-amz-checksum-mode = %q, want ENABLED", got)
+	}
 }
 
-// Checksum selection is a documented precedence chain, so each rung needs its
-// own case — a single SHA256 test would not catch a broken fallback.
-func TestClientHeadChecksumPrecedence(t *testing.T) {
+// HEAD reports the checksum under the algorithm the object was uploaded
+// with. It used to take whichever field came first in a fixed order, so a
+// checksum the store computed by default (AWS adds CRC64NVME) or a CRC32
+// could be recorded as the object's SHA-256, and every download verifying
+// against it would fail.
+func TestClientHeadReportsTheObjectsAlgorithm(t *testing.T) {
+	all := map[string]string{
+		"x-amz-checksum-sha256": "s", "x-amz-checksum-crc32c": "c",
+		"x-amz-checksum-crc32": "z", "x-amz-checksum-crc64nvme": "n",
+	}
 	tests := []struct {
 		name    string
+		algo    string
 		headers map[string]string
 		want    string
 	}{
-		{"sha256 wins", map[string]string{
-			"x-amz-checksum-sha256": "s", "x-amz-checksum-crc32c": "c", "x-amz-checksum-crc32": "z"}, "s"},
-		{"crc32c when no sha256", map[string]string{
-			"x-amz-checksum-crc32c": "c", "x-amz-checksum-crc32": "z"}, "c"},
-		{"crc32 last", map[string]string{"x-amz-checksum-crc32": "z"}, "z"},
-		{"none", map[string]string{}, ""},
+		{"sha256", checksum.SHA256, all, "s"},
+		{"crc32c even with a sha256 present", checksum.CRC32C, all, "c"},
+		{"md5 has no stored checksum", checksum.MD5, all, ""},
+		{"no algorithm, no checksum", "", all, ""},
+		{"a default crc64nvme is not a sha256", checksum.SHA256, map[string]string{"x-amz-checksum-crc64nvme": "n"}, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -537,12 +549,12 @@ func TestClientHeadChecksumPrecedence(t *testing.T) {
 			}
 			c := newTestClient(t, f.srv.URL)
 
-			_, _, checksum, _, err := c.Head(testCtx, "b", testTenant, "ok", "k")
+			_, _, got, _, err := c.Head(testCtx, "b", testTenant, "ok", "k", tc.algo)
 			if err != nil {
 				t.Fatalf("Head: %v", err)
 			}
-			if checksum != tc.want {
-				t.Errorf("checksum = %q, want %q", checksum, tc.want)
+			if got != tc.want {
+				t.Errorf("checksum = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -559,7 +571,7 @@ func TestClientHeadError(t *testing.T) {
 	}
 	c := newTestClient(t, f.srv.URL)
 
-	if _, _, _, _, err := c.Head(testCtx, "b", testTenant, "ok", "k"); err == nil {
+	if _, _, _, _, err := c.Head(testCtx, "b", testTenant, "ok", "k", ""); err == nil {
 		t.Fatal("HEAD of a missing object: want error")
 	}
 }
@@ -570,7 +582,7 @@ func TestClientHeadFallsBackToConfiguredBucket(t *testing.T) {
 	f := newFakeS3(t)
 	c := newTestClient(t, f.srv.URL)
 
-	if _, _, _, _, err := c.Head(testCtx, "", testTenant, "ok", "k"); err != nil {
+	if _, _, _, _, err := c.Head(testCtx, "", testTenant, "ok", "k", ""); err != nil {
 		t.Fatalf("Head: %v", err)
 	}
 	if got := f.requestsFor(http.MethodHead, "")[0].Bucket; got != "default-bkt" {
@@ -704,7 +716,7 @@ func TestClientInitiateMultipart(t *testing.T) {
 	f := newFakeS3(t)
 	c := newTestClient(t, f.srv.URL)
 
-	id, err := c.InitiateMultipart(testCtx, "b", testTenant, "ok", "k", "application/pdf")
+	id, err := c.InitiateMultipart(testCtx, "b", testTenant, "ok", "k", "application/pdf", checksum.SHA256)
 	if err != nil {
 		t.Fatalf("InitiateMultipart: %v", err)
 	}
@@ -731,7 +743,7 @@ func TestClientInitiateMultipartError(t *testing.T) {
 	}
 	c := newTestClient(t, f.srv.URL)
 
-	if _, err := c.InitiateMultipart(testCtx, "b", testTenant, "ok", "k", ""); err == nil {
+	if _, err := c.InitiateMultipart(testCtx, "b", testTenant, "ok", "k", "", checksum.SHA256); err == nil {
 		t.Fatal("initiate rejection: want error")
 	}
 }
@@ -741,7 +753,7 @@ func TestClientCompleteMultipart(t *testing.T) {
 	c := newTestClient(t, f.srv.URL)
 
 	parts := []multiparth.PartETag{{PartNumber: 1, ETag: "e1"}, {PartNumber: 2, ETag: "e2"}}
-	etag, size, err := c.CompleteMultipart(testCtx, "b", testTenant, fakeUploadID, "ok", "k", parts)
+	etag, size, err := c.CompleteMultipart(testCtx, "b", testTenant, fakeUploadID, "ok", "k", checksum.SHA256, parts)
 	if err != nil {
 		t.Fatalf("CompleteMultipart: %v", err)
 	}
@@ -775,7 +787,7 @@ func TestClientCompleteMultipartError(t *testing.T) {
 	}
 	c := newTestClient(t, f.srv.URL)
 
-	if _, _, err := c.CompleteMultipart(testCtx, "b", testTenant, "u", "ok", "k", nil); err == nil {
+	if _, _, err := c.CompleteMultipart(testCtx, "b", testTenant, "u", "ok", "k", checksum.SHA256, nil); err == nil {
 		t.Fatal("complete with a bad part: want error")
 	}
 }
@@ -793,7 +805,7 @@ func TestClientCompleteMultipartHeadFailure(t *testing.T) {
 	}
 	c := newTestClient(t, f.srv.URL)
 
-	etag, size, err := c.CompleteMultipart(testCtx, "b", testTenant, "u", "ok", "k", nil)
+	etag, size, err := c.CompleteMultipart(testCtx, "b", testTenant, "u", "ok", "k", checksum.SHA256, nil)
 	if err == nil {
 		t.Fatal("head-after-complete failure: want error")
 	}
@@ -1072,6 +1084,9 @@ func TestStreamWriterUploadPartFailure(t *testing.T) {
 	}
 }
 
+// testChecksum is a well-formed SHA-256 checksum (of the empty body).
+const testChecksum = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
+
 // ─── presigning ────────────────────────────────────────────────────────────
 
 func TestClientPresignPutGetPost(t *testing.T) {
@@ -1083,7 +1098,7 @@ func TestClientPresignPutGetPost(t *testing.T) {
 	t.Run("put", func(t *testing.T) {
 		url, hdrs, exp, err := c.PresignPut(testCtx, objecth.PresignPutArgs{
 			TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k",
-			ContentType: "text/plain", TTL: ttl,
+			ContentType: "text/plain", SizeBytes: 5, ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksum, TTL: ttl,
 		})
 		if err != nil {
 			t.Fatalf("PresignPut: %v", err)
@@ -1111,24 +1126,21 @@ func TestClientPresignPutGetPost(t *testing.T) {
 		assertExpiry(t, exp, ttl)
 	})
 
-	t.Run("post falls back to a signed put", func(t *testing.T) {
-		url, fields, _, err := c.PresignPost(testCtx, objecth.PresignPostArgs{
+	t.Run("post is a real POST policy", func(t *testing.T) {
+		action, fields, exp, err := c.PresignPost(testCtx, objecth.PresignPostArgs{
 			TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k",
-			ContentType: "text/plain", MaxSizeBytes: 4096, TTL: ttl,
+			ContentType: "text/plain", SizeBytes: 4096, ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksum, TTL: ttl,
 		})
 		if err != nil {
 			t.Fatalf("PresignPost: %v", err)
 		}
-		assertPresigned(t, url, wantKey, "b")
-		if fields["X-Amz-Signed-Fallback"] != "put" {
-			t.Errorf("callers must be told this is the PUT fallback, got %v", fields)
+		if strings.Contains(action, "X-Amz-Signature") {
+			t.Errorf("POST action %q carries a query signature; the form carries it", action)
 		}
-		if fields["Content-Length-Range"] != "0,4096" {
-			t.Errorf("Content-Length-Range = %q, want 0,4096", fields["Content-Length-Range"])
+		if fields["key"] != wantKey || fields["policy"] == "" || fields["X-Amz-Signature"] == "" {
+			t.Errorf("form fields missing key/policy/signature: %v", fields)
 		}
-		if fields["Content-Type"] != "text/plain" {
-			t.Errorf("Content-Type field = %q", fields["Content-Type"])
-		}
+		assertExpiry(t, exp, ttl)
 	})
 	_ = f
 }
@@ -1137,7 +1149,7 @@ func TestPresignPart(t *testing.T) {
 	f := newFakeS3(t)
 	c := newTestClient(t, f.srv.URL)
 
-	url, _, exp, err := c.PresignPart(testCtx, "b", testTenant, fakeUploadID, "ok", "k", 3, time.Minute)
+	url, _, exp, err := c.PresignPart(testCtx, "b", testTenant, fakeUploadID, "ok", "k", multiparth.PartBinding{Number: 3, SizeBytes: 5, ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksum}, time.Minute)
 	if err != nil {
 		t.Fatalf("PresignPart: %v", err)
 	}
@@ -1204,7 +1216,7 @@ func TestObjectRouterDelegatesToResolvedBackend(t *testing.T) {
 
 	// Routing on the id carried by the call is the router's entire job, so
 	// assert the *other* backend stayed untouched.
-	if _, _, _, _, err := rt.Head(testCtx, "secondary", "b", testTenant, "ok", "k"); err != nil {
+	if _, _, _, _, err := rt.Head(testCtx, "secondary", "b", testTenant, "ok", "k", ""); err != nil {
 		t.Fatalf("Head: %v", err)
 	}
 	if len(fSecondary.requestsFor(http.MethodHead, "")) != 1 {
@@ -1227,12 +1239,14 @@ func TestObjectRouterDelegatesToResolvedBackend(t *testing.T) {
 	}{
 		{"PresignPut", func() error {
 			_, _, _, err := rt.PresignPut(testCtx, objecth.PresignPutArgs{
-				BackendID: "primary", TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k", TTL: time.Minute})
+				BackendID: "primary", TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k", TTL: time.Minute,
+				ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksum})
 			return err
 		}},
 		{"PresignPost", func() error {
 			_, _, _, err := rt.PresignPost(testCtx, objecth.PresignPostArgs{
-				BackendID: "primary", TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k", TTL: time.Minute})
+				BackendID: "primary", TenantID: testTenant, Bucket: "b", Collection: "ok", Key: "k", TTL: time.Minute,
+				ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksum})
 			return err
 		}},
 		{"PresignGet", func() error {
@@ -1368,42 +1382,12 @@ func TestObjectRouterStreamThroughErrors(t *testing.T) {
 	})
 }
 
-func TestPresignRouterDelegates(t *testing.T) {
-	f := newFakeS3(t)
-	reg := registryWith(map[string]*Client{"primary": newTestClient(t, f.srv.URL)})
-	rt := NewPresignRouter(reg)
-	wantKey := composeKey(testTenant, "ok", "k")
-
-	url, _, _, err := rt.PresignGet(testCtx, "primary", "b", testTenant, "ok", "k", time.Minute, "")
-	if err != nil {
-		t.Fatalf("PresignGet: %v", err)
-	}
-	assertPresigned(t, url, wantKey, "b")
-
-	url, _, _, err = rt.PresignPut(testCtx, "primary", "b", testTenant, "ok", "k", "text/plain", "", time.Minute, 0)
-	if err != nil {
-		t.Fatalf("PresignPut: %v", err)
-	}
-	assertPresigned(t, url, wantKey, "b")
-}
-
-func TestPresignRouterUnknownBackend(t *testing.T) {
-	rt := NewPresignRouter(registryWith(map[string]*Client{}))
-
-	if _, _, _, err := rt.PresignGet(testCtx, "nope", "b", testTenant, "ok", "k", time.Minute, ""); err == nil {
-		t.Error("PresignGet to unknown backend: want error")
-	}
-	if _, _, _, err := rt.PresignPut(testCtx, "nope", "b", testTenant, "ok", "k", "", "", time.Minute, 0); err == nil {
-		t.Error("PresignPut to unknown backend: want error")
-	}
-}
-
 func TestMultipartRouterDelegates(t *testing.T) {
 	f := newFakeS3(t)
 	reg := registryWith(map[string]*Client{"primary": newTestClient(t, f.srv.URL)})
 	rt := NewMultipartRouter(reg)
 
-	id, err := rt.InitiateMultipart(testCtx, "primary", "b", testTenant, "ok", "k", "text/plain")
+	id, err := rt.InitiateMultipart(testCtx, "primary", "b", testTenant, "ok", "k", "text/plain", checksum.SHA256)
 	if err != nil {
 		t.Fatalf("InitiateMultipart: %v", err)
 	}
@@ -1411,7 +1395,7 @@ func TestMultipartRouterDelegates(t *testing.T) {
 		t.Errorf("uploadID = %q, want %q", id, fakeUploadID)
 	}
 
-	etag, size, err := rt.CompleteMultipart(testCtx, "primary", "b", testTenant, id, "ok", "k",
+	etag, size, err := rt.CompleteMultipart(testCtx, "primary", "b", testTenant, id, "ok", "k", checksum.SHA256,
 		[]multiparth.PartETag{{PartNumber: 1, ETag: "e1"}})
 	if err != nil {
 		t.Fatalf("CompleteMultipart: %v", err)
@@ -1420,7 +1404,7 @@ func TestMultipartRouterDelegates(t *testing.T) {
 		t.Errorf("complete returned (%q,%d), want (%q,%d)", etag, size, fakeCompleteETag, fakeHeadSize)
 	}
 
-	if _, _, _, err := rt.PresignPart(testCtx, "primary", "b", testTenant, id, "ok", "k", 1, time.Minute); err != nil {
+	if _, _, _, err := rt.PresignPart(testCtx, "primary", "b", testTenant, id, "ok", "k", multiparth.PartBinding{Number: 1, SizeBytes: 5, ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksum}, time.Minute); err != nil {
 		t.Fatalf("PresignPart: %v", err)
 	}
 	if err := rt.AbortMultipart(testCtx, "primary", "b", testTenant, id, "ok", "k"); err != nil {
@@ -1431,16 +1415,16 @@ func TestMultipartRouterDelegates(t *testing.T) {
 func TestMultipartRouterUnknownBackend(t *testing.T) {
 	rt := NewMultipartRouter(registryWith(map[string]*Client{}))
 
-	if _, err := rt.InitiateMultipart(testCtx, "nope", "b", testTenant, "ok", "k", ""); err == nil {
+	if _, err := rt.InitiateMultipart(testCtx, "nope", "b", testTenant, "ok", "k", "", checksum.SHA256); err == nil {
 		t.Error("InitiateMultipart to unknown backend: want error")
 	}
-	if _, _, err := rt.CompleteMultipart(testCtx, "nope", "b", testTenant, "u", "ok", "k", nil); err == nil {
+	if _, _, err := rt.CompleteMultipart(testCtx, "nope", "b", testTenant, "u", "ok", "k", checksum.SHA256, nil); err == nil {
 		t.Error("CompleteMultipart to unknown backend: want error")
 	}
 	if err := rt.AbortMultipart(testCtx, "nope", "b", testTenant, "u", "ok", "k"); err == nil {
 		t.Error("AbortMultipart to unknown backend: want error")
 	}
-	if _, _, _, err := rt.PresignPart(testCtx, "nope", "b", testTenant, "u", "ok", "k", 1, time.Minute); err == nil {
+	if _, _, _, err := rt.PresignPart(testCtx, "nope", "b", testTenant, "u", "ok", "k", multiparth.PartBinding{Number: 1, SizeBytes: 5, ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksum}, time.Minute); err == nil {
 		t.Error("PresignPart to unknown backend: want error")
 	}
 }

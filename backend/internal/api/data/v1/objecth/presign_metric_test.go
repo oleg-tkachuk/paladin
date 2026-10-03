@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
@@ -66,7 +67,7 @@ func TestObjectTransfersAreCountedAsPresigns(t *testing.T) {
 	t.Run("download", func(t *testing.T) {
 		h, _, _, ctx := downloadHandler(t, statemachine.StateAvailable)
 		before := presignCount(t, metrics.PresignOpGet, ok)
-		if _, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, "attachment"); err != nil {
+		if _, err := h.DownloadObject(ctx, "docs", "report.pdf", 0, "attachment", false); err != nil {
 			t.Fatalf("DownloadObject: %v", err)
 		}
 		if got := presignCount(t, metrics.PresignOpGet, ok) - before; got != 1 {
@@ -92,6 +93,7 @@ func TestObjectTransfersAreCountedAsPresigns(t *testing.T) {
 			before := presignCount(t, tc.op, ok)
 			if _, err := h.UploadObject(ctx, UploadObjectInput{
 				Collection: "docs", Key: "a.txt", ContentType: "text/plain", TransportPOST: tc.post,
+				ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksumValue,
 			}); err != nil {
 				t.Fatalf("UploadObject: %v", err)
 			}
@@ -105,7 +107,7 @@ func TestObjectTransfersAreCountedAsPresigns(t *testing.T) {
 		h, _, _, ctx := downloadHandler(t, statemachine.StateAvailable)
 		const refused = "invalid_argument"
 		before := presignCount(t, metrics.PresignOpGet, refused)
-		if _, err := h.DownloadObject(ctx, "", "", 0, ""); err == nil {
+		if _, err := h.DownloadObject(ctx, "", "", 0, "", false); err == nil {
 			t.Fatal("a download with no collection was accepted")
 		}
 		if got := presignCount(t, metrics.PresignOpGet, refused) - before; got != 1 {

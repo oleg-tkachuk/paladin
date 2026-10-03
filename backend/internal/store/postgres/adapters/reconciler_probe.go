@@ -23,7 +23,8 @@ import (
 // from AWS error types in the persistence layer, which is what the stub this
 // replaced was written to avoid.
 type HeadProber interface {
-	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
+	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, checksumAlgo string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
+	DeleteObject(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) error
 }
 
 // ReconcilerProbe satisfies worker.StorageProbe. It looks up the object's
@@ -50,7 +51,7 @@ func (r *ReconcilerProbe) HeadByObjectID(ctx context.Context, objectID uuid.UUID
 	tenantID := uuidFrom(row.TenantID)
 	// LookupObjectByID already materializes the backend binding, so the HEAD
 	// is routed to the object's own backend (not the default).
-	etag, sizeBytes, checksum, sequencer, err = r.head.Head(ctx, row.BackendName, row.BucketName, tenantID, row.CollectionName, row.Path)
+	etag, sizeBytes, checksum, sequencer, err = r.head.Head(ctx, row.BackendName, row.BucketName, tenantID, row.CollectionName, row.Path, checksumAlgoName(row.ChecksumAlgorithm))
 	if err != nil {
 		// HEAD failure is "not found" if the storage adapter signals 404 via
 		// the standard not-found error wrapping; treat as not-found here.
@@ -61,6 +62,20 @@ func (r *ReconcilerProbe) HeadByObjectID(ctx context.Context, objectID uuid.UUID
 		return "", 0, "", "", false, err
 	}
 	return etag, sizeBytes, checksum, sequencer, true, nil
+}
+
+// DeleteByObjectID removes an object's stored bytes — the reconciler's
+// answer to bytes that broke the object's registration. A row that is gone
+// has nothing left to delete for.
+func (r *ReconcilerProbe) DeleteByObjectID(ctx context.Context, objectID uuid.UUID) error {
+	row, err := r.q.LookupObjectByID(ctx, pgUUID(objectID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("lookup object: %w", err)
+	}
+	return r.head.DeleteObject(ctx, row.BackendName, row.BucketName, uuidFrom(row.TenantID), row.CollectionName, row.Path)
 }
 
 // isNotFoundErr reports whether a HEAD failure means the object genuinely is

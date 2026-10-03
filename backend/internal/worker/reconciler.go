@@ -15,6 +15,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,6 +35,9 @@ type ReconcilerV2Config struct {
 // narrow interface so unit tests don't need a full S3 client.
 type StorageProbe interface {
 	HeadByObjectID(ctx context.Context, objectID uuid.UUID) (etag string, sizeBytes int64, checksum, sequencer string, found bool, err error)
+	// DeleteByObjectID removes the stored bytes of an object that broke its
+	// registration.
+	DeleteByObjectID(ctx context.Context, objectID uuid.UUID) error
 }
 
 type ReconcilerV2 struct {
@@ -91,7 +95,12 @@ func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) {
 		return
 	}
 	if found {
-		if _, err := r.sm.PromoteToAvailable(ctx, objectID, etag, size, checksum, seq, statemachine.SourceReconciler); err != nil {
+		_, err := r.sm.PromoteToAvailable(ctx, objectID, etag, size, checksum, seq, statemachine.SourceReconciler)
+		if errors.Is(err, statemachine.ErrContentMismatch) {
+			r.discardMismatched(ctx, objectID, err)
+			return
+		}
+		if err != nil {
 			r.log.Warn("failed to promote object", zap.String("object_id", objectID.String()), zap.Error(err))
 		}
 		return
@@ -99,4 +108,21 @@ func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) {
 	if err := r.sm.MarkFailed(ctx, objectID, "presign-expired"); err != nil {
 		r.log.Warn("failed to mark object as failed", zap.String("object_id", objectID.String()), zap.Error(err))
 	}
+}
+
+// discardMismatched settles an object whose stored bytes broke its
+// registration: the bytes are deleted, then the row failed. A failed delete
+// leaves the row PENDING, so the next tick tries again rather than failing a
+// row over bytes nothing will remove.
+func (r *ReconcilerV2) discardMismatched(ctx context.Context, objectID uuid.UUID, cause error) {
+	log := r.log.With(zap.String("object_id", objectID.String()), zap.NamedError("mismatch", cause))
+	if err := r.probe.DeleteByObjectID(ctx, objectID); err != nil {
+		log.Warn("failed to delete mismatched object bytes", zap.Error(err))
+		return
+	}
+	if err := r.sm.MarkFailed(ctx, objectID, statemachine.FailedContentMismatch); err != nil {
+		log.Warn("failed to mark mismatched object as failed", zap.Error(err))
+		return
+	}
+	log.Warn("discarded object whose stored bytes broke its registration")
 }

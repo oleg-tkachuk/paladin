@@ -73,11 +73,6 @@ var _ objecth.Repository = (*ObjectRepo)(nil)
 
 func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObjectArgs) (objecth.Object, error) {
 	objectID := uuid.Must(uuid.NewV7())
-	var sizePtr *int64
-	if args.SizeHint > 0 {
-		s := args.SizeHint
-		sizePtr = &s
-	}
 	// Under the path lock, so a purge of bytes a deleted object left at this
 	// path cannot delete this one's (package objectpath).
 	tx, err := r.pool.Begin(ctx)
@@ -103,9 +98,9 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 		args.Key,
 		sqlc.ObjectStatePENDING,
 		args.ContentType,
-		sizePtr,
+		args.SizeBytes,
 		checksumAlgoInt(args.ChecksumAlgo),
-		nil, // checksum fills on promote
+		strPtr(args.ChecksumValue),
 		encodeMap(args.Metadata),
 		encodeMap(args.Tags),
 		strPtr(args.ExternalRef),
