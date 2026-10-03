@@ -142,30 +142,6 @@ func TestCoalesceMap(t *testing.T) {
 	}
 }
 
-// A client hint may only shrink the ceiling, never raise it above the
-// server-configured maximum.
-func TestResolveMaxSize(t *testing.T) {
-	const defaultMax = int64(1000)
-	cases := []struct {
-		name string
-		hint int64
-		want int64
-	}{
-		{"no hint", 0, defaultMax},
-		{"negative hint ignored", -5, defaultMax},
-		{"smaller hint wins", 500, 500},
-		{"larger hint clamped", 5000, defaultMax},
-		{"equal hint keeps the default", 1000, defaultMax},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := resolveMaxSize(defaultMax, tc.hint); got != tc.want {
-				t.Errorf("resolveMaxSize(%d, %d) = %d, want %d", defaultMax, tc.hint, got, tc.want)
-			}
-		})
-	}
-}
-
 // ─── mapCreateErr ──────────────────────────────────────────────────────────
 
 // A unique-index conflict is the "this key already exists" case and must
@@ -377,6 +353,9 @@ const (
 	// testMaxObjectSize is the single-request upload cap tests run under.
 	testMaxObjectSize = 5 << 30
 )
+
+// testChecksumValue is a well-formed SHA-256 checksum (of the empty body).
+const testChecksumValue = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
 
 // testUploadLimits are permissive global limits: tests that exercise a
 // limit set it themselves.

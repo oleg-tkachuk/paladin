@@ -167,16 +167,16 @@ func TestBackendRegistryRouting(t *testing.T) {
 	// Route Head through the object router: backend "a" resolves the object,
 	// backend "b" (a distinct MinIO with the same bucket name) does not.
 	orouter := s3adapter.NewObjectRouter(reg)
-	if _, size, _, _, err := orouter.Head(ctx, "a", bucketA, tenant, collection, key); err != nil || size != int64(len(data)) {
+	if _, size, _, _, err := orouter.Head(ctx, "a", bucketA, tenant, collection, key, ""); err != nil || size != int64(len(data)) {
 		t.Fatalf("Head via backend a: size=%d err=%v (want the object)", size, err)
 	}
-	if _, _, _, _, err := orouter.Head(ctx, "b", bucketB, tenant, collection, key); err == nil {
+	if _, _, _, _, err := orouter.Head(ctx, "b", bucketB, tenant, collection, key, ""); err == nil {
 		t.Fatal("Head via backend b resolved the object — routing leaked across backends")
 	}
 
 	// An unknown backend id is refused by the registry, never silently
 	// defaulted onto another tenant's store.
-	if _, _, _, _, err := orouter.Head(ctx, "ghost", bucketA, tenant, collection, key); err == nil {
+	if _, _, _, _, err := orouter.Head(ctx, "ghost", bucketA, tenant, collection, key, ""); err == nil {
 		t.Fatal("Head via unknown backend must error")
 	}
 }

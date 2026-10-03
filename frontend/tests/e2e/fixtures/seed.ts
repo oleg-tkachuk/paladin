@@ -20,6 +20,8 @@
  * keyed by audience so a single seedTenant() call doesn't
  * burn two logins.
  */
+import { createHash } from "node:crypto";
+
 import { createClient, ConnectError, Code } from "@connectrpc/connect";
 // connect-NODE (not -web): this runs in Playwright's Node worker. The web
 // transport's fetch path mis-handles a large (gzip-compressed) unary response
@@ -671,6 +673,11 @@ export interface SeededObject {
  * AVAILABLE. The bytes go straight to the backend, which is the whole point
  * of the design — Paladin never sees them.
  */
+/** The base64 SHA-256 of a body: the checksum_value its upload URL binds. */
+function sha256Base64(body: string | Buffer): string {
+  return createHash("sha256").update(body).digest("base64");
+}
+
 export async function seedObject(opts: {
   tenantId: string;
   collection: string;
@@ -681,11 +688,14 @@ export async function seedObject(opts: {
   const body = opts.body ?? "paladin e2e payload\n";
   const client = createClient(ObjectService, dataTransport());
 
+  // The upload URL is signed for the body's size and SHA-256.
   const up = await client.uploadObject({
     parent: `tenants/${opts.tenantId}/collections/${opts.collection}`,
     key,
     contentType: "text/plain",
     sizeHintBytes: BigInt(Buffer.byteLength(body)),
+    checksumAlgorithm: ChecksumAlgorithm.SHA256,
+    checksumValue: sha256Base64(body),
   });
   const presigned = up.uploadUrl;
   if (!presigned?.url) {
@@ -780,22 +790,29 @@ export async function seedMultipartObject(opts: {
   const partSize = Number(init.recommendedPartSize);
   const partsTotal =
     init.totalParts || Math.max(1, Math.ceil(opts.sizeBytes / partSize));
-  const parts: Array<{ partNumber: number; etag: string }> = [];
+  const parts: Array<{
+    partNumber: number;
+    etag: string;
+    checksumValue: string;
+  }> = [];
 
   for (let i = 0; i < partsTotal; i++) {
     const partNumber = i + 1;
-    const signed = await client.presignPart({
-      objectName,
-      uploadId: init.uploadId,
-      partNumber,
-    });
-    if (!signed.uploadUrl?.url) {
-      throw new Error(`seed.ts: no presigned URL for part ${partNumber}`);
-    }
     const slice = body.subarray(
       i * partSize,
       Math.min((i + 1) * partSize, opts.sizeBytes),
     );
+    // Each part's URL is signed for its SHA-256; completion lists it again.
+    const checksumValue = sha256Base64(slice);
+    const signed = await client.presignPart({
+      objectName,
+      uploadId: init.uploadId,
+      partNumber,
+      checksumValue,
+    });
+    if (!signed.uploadUrl?.url) {
+      throw new Error(`seed.ts: no presigned URL for part ${partNumber}`);
+    }
     const res = await fetch(signed.uploadUrl.url, {
       method: signed.uploadUrl.method || "PUT",
       headers: { ...signed.uploadUrl.requiredHeaders },
@@ -808,7 +825,7 @@ export async function seedMultipartObject(opts: {
     if (!etag) {
       throw new Error(`seed.ts: part ${partNumber} returned no ETag`);
     }
-    parts.push({ partNumber, etag });
+    parts.push({ partNumber, etag, checksumValue });
   }
 
   await client.completeMultipartUpload({

@@ -103,7 +103,7 @@ class RestoreObjectVersionRequest(_message.Message):
     def __init__(self, name: _Optional[str] = ..., resource_version: _Optional[str] = ...) -> None: ...
 
 class UploadObjectRequest(_message.Message):
-    __slots__ = ("parent", "key", "content_type", "size_hint_bytes", "checksum_algorithm", "metadata", "tags", "external_ref", "transport", "idempotency_key")
+    __slots__ = ("parent", "key", "content_type", "size_hint_bytes", "checksum_algorithm", "metadata", "tags", "external_ref", "transport", "idempotency_key", "checksum_value")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -128,6 +128,7 @@ class UploadObjectRequest(_message.Message):
     EXTERNAL_REF_FIELD_NUMBER: _ClassVar[int]
     TRANSPORT_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
+    CHECKSUM_VALUE_FIELD_NUMBER: _ClassVar[int]
     parent: str
     key: str
     content_type: str
@@ -138,7 +139,8 @@ class UploadObjectRequest(_message.Message):
     external_ref: str
     transport: PresignTransport
     idempotency_key: str
-    def __init__(self, parent: _Optional[str] = ..., key: _Optional[str] = ..., content_type: _Optional[str] = ..., size_hint_bytes: _Optional[int] = ..., checksum_algorithm: _Optional[_Union[_resource_pb2.ChecksumAlgorithm, str]] = ..., metadata: _Optional[_Mapping[str, str]] = ..., tags: _Optional[_Mapping[str, str]] = ..., external_ref: _Optional[str] = ..., transport: _Optional[_Union[PresignTransport, str]] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
+    checksum_value: str
+    def __init__(self, parent: _Optional[str] = ..., key: _Optional[str] = ..., content_type: _Optional[str] = ..., size_hint_bytes: _Optional[int] = ..., checksum_algorithm: _Optional[_Union[_resource_pb2.ChecksumAlgorithm, str]] = ..., metadata: _Optional[_Mapping[str, str]] = ..., tags: _Optional[_Mapping[str, str]] = ..., external_ref: _Optional[str] = ..., transport: _Optional[_Union[PresignTransport, str]] = ..., idempotency_key: _Optional[str] = ..., checksum_value: _Optional[str] = ...) -> None: ...
 
 class UploadObjectResponse(_message.Message):
     __slots__ = ("object", "upload_url", "completion_mode")
@@ -151,14 +153,16 @@ class UploadObjectResponse(_message.Message):
     def __init__(self, object: _Optional[_Union[_types_pb2.Object, _Mapping]] = ..., upload_url: _Optional[_Union[_resource_pb2.PresignedUrl, _Mapping]] = ..., completion_mode: _Optional[_Union[_resource_pb2.CompletionMode, str]] = ...) -> None: ...
 
 class DownloadObjectRequest(_message.Message):
-    __slots__ = ("name", "ttl", "content_disposition")
+    __slots__ = ("name", "ttl", "content_disposition", "require_etag_match")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TTL_FIELD_NUMBER: _ClassVar[int]
     CONTENT_DISPOSITION_FIELD_NUMBER: _ClassVar[int]
+    REQUIRE_ETAG_MATCH_FIELD_NUMBER: _ClassVar[int]
     name: str
     ttl: _duration_pb2.Duration
     content_disposition: str
-    def __init__(self, name: _Optional[str] = ..., ttl: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., content_disposition: _Optional[str] = ...) -> None: ...
+    require_etag_match: bool
+    def __init__(self, name: _Optional[str] = ..., ttl: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., content_disposition: _Optional[str] = ..., require_etag_match: _Optional[bool] = ...) -> None: ...
 
 class DownloadObjectResponse(_message.Message):
     __slots__ = ("object", "download_url")

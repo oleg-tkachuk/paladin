@@ -29,7 +29,7 @@ from paladin.common.v1 import resource_pb2 as paladin_dot_common_dot_v1_dot_reso
 from paladin.data.v1 import types_pb2 as paladin_dot_data_dot_v1_dot_types__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\'paladin/data/v1/multipart_service.proto\x12\x0fpaladin.data.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\"paladin/common/v1/pagination.proto\x1a paladin/common/v1/resource.proto\x1a\x1bpaladin/data/v1/types.proto\"\xf7\x03\n\x1eInitiateMultipartUploadRequest\x12\x17\n\x06parent\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x0b\n\x03key\x18\x02 \x01(\t\x12\x1d\n\x0c\x63ontent_type\x18\x03 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1b\n\nsize_bytes\x18\x04 \x01(\x03\x42\x07\xbaH\x04\"\x02 \x00\x12L\n\x12\x63hecksum_algorithm\x18\x05 \x01(\x0e\x32$.paladin.common.v1.ChecksumAlgorithmB\n\xbaH\x07\x82\x01\x04\x10\x01 \x00\x12O\n\x08metadata\x18\x06 \x03(\x0b\x32=.paladin.data.v1.InitiateMultipartUploadRequest.MetadataEntry\x12G\n\x04tags\x18\x07 \x03(\x0b\x32\x39.paladin.data.v1.InitiateMultipartUploadRequest.TagsEntry\x12\x14\n\x0c\x65xternal_ref\x18\x08 \x01(\t\x12\x17\n\x0fidempotency_key\x18\t \x01(\t\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x1a+\n\tTagsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x91\x01\n\x1fInitiateMultipartUploadResponse\x12\'\n\x06object\x18\x01 \x01(\x0b\x32\x17.paladin.data.v1.Object\x12\x11\n\tupload_id\x18\x02 \x01(\t\x12\x1d\n\x15recommended_part_size\x18\x03 \x01(\x03\x12\x13\n\x0btotal_parts\x18\x04 \x01(\x05\"\x97\x01\n\x12PresignPartRequest\x12\x1c\n\x0bobject_name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1a\n\tupload_id\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1f\n\x0bpart_number\x18\x03 \x01(\x05\x42\n\xbaH\x07\x1a\x05\x18\x90N(\x01\x12&\n\x03ttl\x18\x04 \x01(\x0b\x32\x19.google.protobuf.Duration\"J\n\x13PresignPartResponse\x12\x33\n\nupload_url\x18\x01 \x01(\x0b\x32\x1f.paladin.common.v1.PresignedUrl\"\x93\x01\n\x1e\x43ompleteMultipartUploadRequest\x12\x1c\n\x0bobject_name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1a\n\tupload_id\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x37\n\x05parts\x18\x03 \x03(\x0b\x32\x1e.paladin.data.v1.CompletedPartB\x08\xbaH\x05\x92\x01\x02\x08\x01\"W\n\x1b\x41\x62ortMultipartUploadRequest\x12\x1c\n\x0bobject_name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1a\n\tupload_id\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\x1e\n\x1c\x41\x62ortMultipartUploadResponse\"z\n\x10ListPartsRequest\x12\x1c\n\x0bobject_name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1a\n\tupload_id\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12,\n\x04page\x18\x03 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\"l\n\x11ListPartsResponse\x12(\n\x05parts\x18\x01 \x03(\x0b\x32\x19.paladin.data.v1.PartInfo\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse2\xa8\x04\n\x16MultipartUploadService\x12|\n\x17InitiateMultipartUpload\x12/.paladin.data.v1.InitiateMultipartUploadRequest\x1a\x30.paladin.data.v1.InitiateMultipartUploadResponse\x12X\n\x0bPresignPart\x12#.paladin.data.v1.PresignPartRequest\x1a$.paladin.data.v1.PresignPartResponse\x12\x63\n\x17\x43ompleteMultipartUpload\x12/.paladin.data.v1.CompleteMultipartUploadRequest\x1a\x17.paladin.data.v1.Object\x12x\n\x14\x41\x62ortMultipartUpload\x12,.paladin.data.v1.AbortMultipartUploadRequest\x1a-.paladin.data.v1.AbortMultipartUploadResponse\"\x03\x90\x02\x02\x12W\n\tListParts\x12!.paladin.data.v1.ListPartsRequest\x1a\".paladin.data.v1.ListPartsResponse\"\x03\x90\x02\x01\x42JZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\'paladin/data/v1/multipart_service.proto\x12\x0fpaladin.data.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\"paladin/common/v1/pagination.proto\x1a paladin/common/v1/resource.proto\x1a\x1bpaladin/data/v1/types.proto\"\xf7\x03\n\x1eInitiateMultipartUploadRequest\x12\x17\n\x06parent\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x0b\n\x03key\x18\x02 \x01(\t\x12\x1d\n\x0c\x63ontent_type\x18\x03 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1b\n\nsize_bytes\x18\x04 \x01(\x03\x42\x07\xbaH\x04\"\x02 \x00\x12L\n\x12\x63hecksum_algorithm\x18\x05 \x01(\x0e\x32$.paladin.common.v1.ChecksumAlgorithmB\n\xbaH\x07\x82\x01\x04\x10\x01 \x00\x12O\n\x08metadata\x18\x06 \x03(\x0b\x32=.paladin.data.v1.InitiateMultipartUploadRequest.MetadataEntry\x12G\n\x04tags\x18\x07 \x03(\x0b\x32\x39.paladin.data.v1.InitiateMultipartUploadRequest.TagsEntry\x12\x14\n\x0c\x65xternal_ref\x18\x08 \x01(\t\x12\x17\n\x0fidempotency_key\x18\t \x01(\t\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x1a+\n\tTagsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x91\x01\n\x1fInitiateMultipartUploadResponse\x12\'\n\x06object\x18\x01 \x01(\x0b\x32\x17.paladin.data.v1.Object\x12\x11\n\tupload_id\x18\x02 \x01(\t\x12\x1d\n\x15recommended_part_size\x18\x03 \x01(\x03\x12\x13\n\x0btotal_parts\x18\x04 \x01(\x05\"\xb8\x01\n\x12PresignPartRequest\x12\x1c\n\x0bobject_name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1a\n\tupload_id\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1f\n\x0bpart_number\x18\x03 \x01(\x05\x42\n\xbaH\x07\x1a\x05\x18\x90N(\x01\x12&\n\x03ttl\x18\x04 \x01(\x0b\x32\x19.google.protobuf.Duration\x12\x1f\n\x0e\x63hecksum_value\x18\x05 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"J\n\x13PresignPartResponse\x12\x33\n\nupload_url\x18\x01 \x01(\x0b\x32\x1f.paladin.common.v1.PresignedUrl\"\x93\x01\n\x1e\x43ompleteMultipartUploadRequest\x12\x1c\n\x0bobject_name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1a\n\tupload_id\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x37\n\x05parts\x18\x03 \x03(\x0b\x32\x1e.paladin.data.v1.CompletedPartB\x08\xbaH\x05\x92\x01\x02\x08\x01\"W\n\x1b\x41\x62ortMultipartUploadRequest\x12\x1c\n\x0bobject_name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1a\n\tupload_id\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\x1e\n\x1c\x41\x62ortMultipartUploadResponse\"z\n\x10ListPartsRequest\x12\x1c\n\x0bobject_name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1a\n\tupload_id\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12,\n\x04page\x18\x03 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\"l\n\x11ListPartsResponse\x12(\n\x05parts\x18\x01 \x03(\x0b\x32\x19.paladin.data.v1.PartInfo\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse2\xa8\x04\n\x16MultipartUploadService\x12|\n\x17InitiateMultipartUpload\x12/.paladin.data.v1.InitiateMultipartUploadRequest\x1a\x30.paladin.data.v1.InitiateMultipartUploadResponse\x12X\n\x0bPresignPart\x12#.paladin.data.v1.PresignPartRequest\x1a$.paladin.data.v1.PresignPartResponse\x12\x63\n\x17\x43ompleteMultipartUpload\x12/.paladin.data.v1.CompleteMultipartUploadRequest\x1a\x17.paladin.data.v1.Object\x12x\n\x14\x41\x62ortMultipartUpload\x12,.paladin.data.v1.AbortMultipartUploadRequest\x1a-.paladin.data.v1.AbortMultipartUploadResponse\"\x03\x90\x02\x02\x12W\n\tListParts\x12!.paladin.data.v1.ListPartsRequest\x1a\".paladin.data.v1.ListPartsResponse\"\x03\x90\x02\x01\x42JZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -55,6 +55,8 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_PRESIGNPARTREQUEST'].fields_by_name['upload_id']._serialized_options = b'\272H\004r\002\020\001'
   _globals['_PRESIGNPARTREQUEST'].fields_by_name['part_number']._loaded_options = None
   _globals['_PRESIGNPARTREQUEST'].fields_by_name['part_number']._serialized_options = b'\272H\007\032\005\030\220N(\001'
+  _globals['_PRESIGNPARTREQUEST'].fields_by_name['checksum_value']._loaded_options = None
+  _globals['_PRESIGNPARTREQUEST'].fields_by_name['checksum_value']._serialized_options = b'\272H\004r\002\020\001'
   _globals['_COMPLETEMULTIPARTUPLOADREQUEST'].fields_by_name['object_name']._loaded_options = None
   _globals['_COMPLETEMULTIPARTUPLOADREQUEST'].fields_by_name['object_name']._serialized_options = b'\272H\004r\002\020\001'
   _globals['_COMPLETEMULTIPARTUPLOADREQUEST'].fields_by_name['upload_id']._loaded_options = None
@@ -82,19 +84,19 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_INITIATEMULTIPARTUPLOADRESPONSE']._serialized_start=727
   _globals['_INITIATEMULTIPARTUPLOADRESPONSE']._serialized_end=872
   _globals['_PRESIGNPARTREQUEST']._serialized_start=875
-  _globals['_PRESIGNPARTREQUEST']._serialized_end=1026
-  _globals['_PRESIGNPARTRESPONSE']._serialized_start=1028
-  _globals['_PRESIGNPARTRESPONSE']._serialized_end=1102
-  _globals['_COMPLETEMULTIPARTUPLOADREQUEST']._serialized_start=1105
-  _globals['_COMPLETEMULTIPARTUPLOADREQUEST']._serialized_end=1252
-  _globals['_ABORTMULTIPARTUPLOADREQUEST']._serialized_start=1254
-  _globals['_ABORTMULTIPARTUPLOADREQUEST']._serialized_end=1341
-  _globals['_ABORTMULTIPARTUPLOADRESPONSE']._serialized_start=1343
-  _globals['_ABORTMULTIPARTUPLOADRESPONSE']._serialized_end=1373
-  _globals['_LISTPARTSREQUEST']._serialized_start=1375
-  _globals['_LISTPARTSREQUEST']._serialized_end=1497
-  _globals['_LISTPARTSRESPONSE']._serialized_start=1499
-  _globals['_LISTPARTSRESPONSE']._serialized_end=1607
-  _globals['_MULTIPARTUPLOADSERVICE']._serialized_start=1610
-  _globals['_MULTIPARTUPLOADSERVICE']._serialized_end=2162
+  _globals['_PRESIGNPARTREQUEST']._serialized_end=1059
+  _globals['_PRESIGNPARTRESPONSE']._serialized_start=1061
+  _globals['_PRESIGNPARTRESPONSE']._serialized_end=1135
+  _globals['_COMPLETEMULTIPARTUPLOADREQUEST']._serialized_start=1138
+  _globals['_COMPLETEMULTIPARTUPLOADREQUEST']._serialized_end=1285
+  _globals['_ABORTMULTIPARTUPLOADREQUEST']._serialized_start=1287
+  _globals['_ABORTMULTIPARTUPLOADREQUEST']._serialized_end=1374
+  _globals['_ABORTMULTIPARTUPLOADRESPONSE']._serialized_start=1376
+  _globals['_ABORTMULTIPARTUPLOADRESPONSE']._serialized_end=1406
+  _globals['_LISTPARTSREQUEST']._serialized_start=1408
+  _globals['_LISTPARTSREQUEST']._serialized_end=1530
+  _globals['_LISTPARTSRESPONSE']._serialized_start=1532
+  _globals['_LISTPARTSRESPONSE']._serialized_end=1640
+  _globals['_MULTIPARTUPLOADSERVICE']._serialized_start=1643
+  _globals['_MULTIPARTUPLOADSERVICE']._serialized_end=2195
 # @@protoc_insertion_point(module_scope)

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
 
@@ -60,7 +61,7 @@ func (noopStorage) PresignPost(context.Context, PresignPostArgs) (string, map[st
 func (noopStorage) PresignGet(context.Context, PresignGetArgs) (string, map[string]string, time.Time, error) {
 	return "", nil, time.Time{}, nil
 }
-func (noopStorage) Head(context.Context, string, string, uuid.UUID, string, string) (string, int64, string, string, error) {
+func (noopStorage) Head(context.Context, string, string, uuid.UUID, string, string, string) (string, int64, string, string, error) {
 	return "", 0, "", "", nil
 }
 func (noopStorage) CopyObject(context.Context, Location, Location) error { return nil }
@@ -84,7 +85,7 @@ func TestUploadObjectAuthzResourceCarriesBucket(t *testing.T) {
 		presign: testPresignConfig(),
 	}
 
-	if _, err := h.UploadObject(ctx, UploadObjectInput{Collection: "docs", Key: "a.txt", ContentType: "text/plain"}); err != nil {
+	if _, err := h.UploadObject(ctx, UploadObjectInput{Collection: "docs", Key: "a.txt", ContentType: "text/plain", ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksumValue}); err != nil {
 		t.Fatalf("UploadObject: %v", err)
 	}
 	if authz.lastResource == nil {

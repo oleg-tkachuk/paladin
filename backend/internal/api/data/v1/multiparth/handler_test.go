@@ -3,6 +3,7 @@ package multiparth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
@@ -112,10 +114,12 @@ type fakeStorage struct {
 		tenantID          uuid.UUID
 		collection, key   string
 		contentType       string
+		checksumAlgo      string
 	}
 	lastComplete struct {
 		backendID, bucket string
 		storageUploadID   string
+		checksumAlgo      string
 		parts             []PartETag
 	}
 	lastAbort struct {
@@ -126,6 +130,7 @@ type fakeStorage struct {
 		backendID, bucket string
 		storageUploadID   string
 		partNumber        int32
+		part              PartBinding
 		ttl               time.Duration
 	}
 	lastListParts struct {
@@ -134,6 +139,8 @@ type fakeStorage struct {
 		maxParts, after   int32
 	}
 	abortCalled bool
+	deleted     []string
+	deleteErr   error
 }
 
 func (f *fakeStorage) ListMultipartParts(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, maxParts, after int32) ([]Part, int32, error) {
@@ -148,7 +155,8 @@ func (f *fakeStorage) ListMultipartParts(ctx context.Context, backendID, bucket 
 	return nil, 0, nil
 }
 
-func (f *fakeStorage) InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType string) (string, error) {
+func (f *fakeStorage) InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string) (string, error) {
+	f.lastInitiate.checksumAlgo = checksumAlgo
 	f.lastInitiate.backendID = backendID
 	f.lastInitiate.bucket = bucket
 	f.lastInitiate.tenantID = tenantID
@@ -161,7 +169,8 @@ func (f *fakeStorage) InitiateMultipart(ctx context.Context, backendID, bucket s
 	return "storage-up-1", nil
 }
 
-func (f *fakeStorage) CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, parts []PartETag) (string, int64, error) {
+func (f *fakeStorage) CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key, checksumAlgo string, parts []PartETag) (string, int64, error) {
+	f.lastComplete.checksumAlgo = checksumAlgo
 	f.lastComplete.backendID = backendID
 	f.lastComplete.bucket = bucket
 	f.lastComplete.storageUploadID = storageUploadID
@@ -183,7 +192,14 @@ func (f *fakeStorage) AbortMultipart(ctx context.Context, backendID, bucket stri
 	return nil
 }
 
-func (f *fakeStorage) PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, partNumber int32, ttl time.Duration) (string, map[string]string, time.Time, error) {
+func (f *fakeStorage) DeleteObject(_ context.Context, backendID, bucket string, _ uuid.UUID, collection, key string) error {
+	f.deleted = append(f.deleted, collection+"/"+key)
+	return f.deleteErr
+}
+
+func (f *fakeStorage) PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, part PartBinding, ttl time.Duration) (string, map[string]string, time.Time, error) {
+	partNumber := part.Number
+	f.lastPresign.part = part
 	f.lastPresign.backendID = backendID
 	f.lastPresign.bucket = bucket
 	f.lastPresign.storageUploadID = storageUploadID
@@ -276,8 +292,31 @@ func sessionForTenant(tid uuid.UUID) Session {
 		Collection:      "photos",
 		Key:             "cat.jpg",
 		StorageUploadID: "storage-up-9",
-		TotalParts:      5,
+		TotalParts:      testTotalParts,
+		PartSizeBytes:   testPartSize,
+		SizeBytes:       testObjectSize,
+		ChecksumAlgo:    checksum.SHA256,
 	}
+}
+
+// The test session: five parts of 5 MiB, the last one 1 KiB.
+const (
+	testTotalParts = 5
+	testPartSize   = 5 << 20
+	testLastPart   = 1024
+	testObjectSize = (testTotalParts-1)*testPartSize + testLastPart
+)
+
+// testPartChecksum is a well-formed SHA-256 checksum (of the empty body).
+const testPartChecksum = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="
+
+// completeParts is the test session's full completion list.
+func completeParts() []PartETag {
+	parts := make([]PartETag, testTotalParts)
+	for i := range parts {
+		parts[i] = PartETag{PartNumber: int32(i + 1), ETag: fmt.Sprintf("e%d", i+1), ChecksumValue: testPartChecksum}
+	}
+	return parts
 }
 
 // --- InitiateMultipartUpload -----------------------------------------------
@@ -465,7 +504,7 @@ func TestCompleteMultipartUpload(t *testing.T) {
 	})
 
 	t.Run("storage complete error → internal, forwards parts", func(t *testing.T) {
-		parts := []PartETag{{PartNumber: 1, ETag: "e1"}, {PartNumber: 2, ETag: "e2"}}
+		parts := completeParts()
 		storage := &fakeStorage{completeFn: func([]PartETag) (string, int64, error) {
 			return "", 0, errors.New("multipart complete rejected")
 		}}
@@ -473,7 +512,7 @@ func TestCompleteMultipartUpload(t *testing.T) {
 		err := newHandler(okSession(), storage, authz).
 			CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: parts})
 		wantCode(t, err, connect.CodeInternal)
-		if len(storage.lastComplete.parts) != 2 || storage.lastComplete.parts[1].ETag != "e2" {
+		if len(storage.lastComplete.parts) != testTotalParts || storage.lastComplete.parts[1].ETag != "e2" {
 			t.Fatalf("parts not forwarded to storage: %+v", storage.lastComplete.parts)
 		}
 		if storage.lastComplete.storageUploadID != "storage-up-9" {
@@ -559,7 +598,7 @@ func TestPresignPart(t *testing.T) {
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		_, _, _, err := newHandler(&fakeRepo{}, &fakeStorage{}, allow()).
-			PresignPart(context.Background(), "up-1", 1, time.Minute, SessionRef{})
+			PresignPart(context.Background(), "up-1", 1, time.Minute, testPartChecksum, SessionRef{})
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
@@ -568,7 +607,7 @@ func TestPresignPart(t *testing.T) {
 			return Session{}, errors.New("no session")
 		}}
 		_, _, _, err := newHandler(repo, &fakeStorage{}, allow()).
-			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, SessionRef{})
+			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, testPartChecksum, SessionRef{})
 		wantCode(t, err, connect.CodeNotFound)
 	})
 
@@ -577,40 +616,40 @@ func TestPresignPart(t *testing.T) {
 			return sessionForTenant(uuid.New()), nil // different tenant
 		}}
 		_, _, _, err := newHandler(repo, &fakeStorage{}, allow()).
-			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, SessionRef{})
+			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, testPartChecksum, SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("part number zero → invalid argument", func(t *testing.T) {
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, allow()).
-			PresignPart(authedCtx(tid), "up-1", 0, time.Minute, SessionRef{})
+			PresignPart(authedCtx(tid), "up-1", 0, time.Minute, testPartChecksum, SessionRef{})
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("part number above total → invalid argument", func(t *testing.T) {
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, allow()).
-			PresignPart(authedCtx(tid), "up-1", 6, time.Minute, SessionRef{}) // TotalParts=5
+			PresignPart(authedCtx(tid), "up-1", 6, time.Minute, testPartChecksum, SessionRef{}) // TotalParts=5
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("capability lacks presign op → permission denied", func(t *testing.T) {
 		ctx := authedCtxWithCap(tid, capability.OpPut) // has put, not presign
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, allow()).
-			PresignPart(ctx, "up-1", 1, time.Minute, SessionRef{})
+			PresignPart(ctx, "up-1", 1, time.Minute, testPartChecksum, SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
 		ctx := authedCtxWithCap(tid, capability.OpPresign) // has presign, not put
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, allow()).
-			PresignPart(ctx, "up-1", 1, time.Minute, SessionRef{})
+			PresignPart(ctx, "up-1", 1, time.Minute, testPartChecksum, SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
 		authz := &fakeAuthorizer{decision: cedar.DecisionDeny}
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, authz).
-			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, SessionRef{})
+			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, testPartChecksum, SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 		if authz.lastAction != cedar.ActionPresignPut {
 			t.Fatalf("cedar action: got %q want %q", authz.lastAction, cedar.ActionPresignPut)
@@ -629,7 +668,7 @@ func TestPresignPart(t *testing.T) {
 			},
 		}
 		_, _, _, err := newHandler(repo, &fakeStorage{}, allow()).
-			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, SessionRef{})
+			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, testPartChecksum, SessionRef{})
 		wantCode(t, err, connect.CodeNotFound)
 	})
 
@@ -638,7 +677,7 @@ func TestPresignPart(t *testing.T) {
 			return "https://s3/presigned-part", map[string]string{"Content-Length": "5"}, time.Unix(1700000123, 0), nil
 		}}
 		url, headers, exp, err := newHandler(okSession(), storage, allow()).
-			PresignPart(authedCtx(tid), "up-1", 3, 7*time.Minute, SessionRef{})
+			PresignPart(authedCtx(tid), "up-1", 3, 7*time.Minute, testPartChecksum, SessionRef{})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -665,7 +704,7 @@ func TestPresignPart(t *testing.T) {
 	t.Run("absent ttl → part_ttl", func(t *testing.T) {
 		storage := &fakeStorage{}
 		_, _, _, err := newHandler(okSession(), storage, allow()).
-			PresignPart(authedCtx(tid), "up-1", 1, 0, SessionRef{})
+			PresignPart(authedCtx(tid), "up-1", 1, 0, testPartChecksum, SessionRef{})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -689,7 +728,7 @@ func TestPresignPart(t *testing.T) {
 		t.Run("ttl "+tc.name+" → invalid argument", func(t *testing.T) {
 			storage := &fakeStorage{}
 			_, _, _, err := newHandler(okSession(), storage, allow()).
-				PresignPart(authedCtx(tid), "up-1", 1, tc.ttl, SessionRef{})
+				PresignPart(authedCtx(tid), "up-1", 1, tc.ttl, testPartChecksum, SessionRef{})
 			wantCode(t, err, connect.CodeInvalidArgument)
 			if storage.lastPresign.ttl != 0 {
 				t.Fatalf("a part URL was signed (ttl %v) despite the refusal", storage.lastPresign.ttl)
@@ -700,7 +739,7 @@ func TestPresignPart(t *testing.T) {
 	t.Run("ttl at max_ttl is honoured", func(t *testing.T) {
 		storage := &fakeStorage{}
 		if _, _, _, err := newHandler(okSession(), storage, allow()).
-			PresignPart(authedCtx(tid), "up-1", 1, testMaxTTL, SessionRef{}); err != nil {
+			PresignPart(authedCtx(tid), "up-1", 1, testMaxTTL, testPartChecksum, SessionRef{}); err != nil {
 			t.Fatal(err)
 		}
 		if storage.lastPresign.ttl != testMaxTTL {

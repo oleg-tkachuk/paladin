@@ -88,8 +88,9 @@ func (s *ObjectServer) UploadObject(ctx context.Context, req *connect.Request[pb
 		Collection:    collection,
 		Key:           m.GetKey(),
 		ContentType:   m.GetContentType(),
-		SizeHint:      m.GetSizeHintBytes(),
+		SizeBytes:     m.GetSizeHintBytes(),
 		ChecksumAlgo:  checksumAlgoStr(m.GetChecksumAlgorithm()),
+		ChecksumValue: m.GetChecksumValue(),
 		Metadata:      m.GetMetadata(),
 		Tags:          m.GetTags(),
 		ExternalRef:   m.GetExternalRef(),
@@ -114,7 +115,7 @@ func (s *ObjectServer) DownloadObject(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, badName(err)
 	}
-	out, err := s.H.DownloadObject(ctx, collection, objectID, m.GetTtl().AsDuration(), m.GetContentDisposition())
+	out, err := s.H.DownloadObject(ctx, collection, objectID, m.GetTtl().AsDuration(), m.GetContentDisposition(), m.GetRequireEtagMatch())
 	if err != nil {
 		return nil, err
 	}

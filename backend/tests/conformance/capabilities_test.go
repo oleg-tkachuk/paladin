@@ -6,11 +6,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"net/http"
 	"testing"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 )
 
@@ -49,7 +50,7 @@ func TestCapabilities(t *testing.T) {
 		// claimed the wire answer and would have reported "yes" for every
 		// backend alike.
 		gone := tg.bucket + "-absent"
-		_, _, _, _, err := tg.client.Head(ctx, gone, tg.tenant, tg.collection, "any")
+		_, _, _, _, err := tg.client.Head(ctx, gone, tg.tenant, tg.collection, "any", "")
 		switch {
 		case err == nil:
 			tg.record("head.missing_bucket_not_notfound", "unknown", "HEAD on a missing bucket succeeded")
@@ -60,49 +61,55 @@ func TestCapabilities(t *testing.T) {
 		}
 	})
 
-	t.Run("checksum algorithms on presigned PUT", func(t *testing.T) {
-		// RequireChecksum makes the adapter demand a checksum header on the
-		// PUT. A backend that rejects the algorithm fails the upload, so this
-		// decides whether checksum enforcement can be turned on at all.
-		for _, algo := range []string{"SHA256", "CRC32C"} {
-			key := "conf/checksum-" + algo
-			url, headers, _, err := tg.client.PresignPut(ctx, objecth.PresignPutArgs{
-				Bucket: tg.bucket, TenantID: tg.tenant, Collection: tg.collection,
-				Key: key, ContentType: "text/plain", ChecksumAlgo: algo,
-				SizeHint: 4, TTL: ttl(), RequireChecksum: true,
-			})
-			if err != nil {
-				tg.record("presign.checksum."+algo, "no", errText(err))
-				continue
-			}
-			req, _ := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader([]byte("abcd")))
-			for k, v := range headers {
-				req.Header.Set(k, v)
-			}
-			res, err := http.DefaultClient.Do(req)
-			if err != nil {
-				tg.record("presign.checksum."+algo, "unknown", errText(err))
-				continue
-			}
-			b, _ := io.ReadAll(res.Body)
-			res.Body.Close()
-			if res.StatusCode/100 == 2 {
-				tg.record("presign.checksum."+algo, "yes", "")
-				_ = tg.client.DeleteObject(ctx, tg.bucket, tg.tenant, tg.collection, key)
-			} else {
-				tg.record("presign.checksum."+algo, "no", trim(string(b)))
-			}
+	t.Run("multipart completion checks part checksums", func(t *testing.T) {
+		// Each part's checksum is already checked as the part arrives, so this
+		// is a second line: whether the store also compares the completion
+		// list's checksums with the parts it recorded.
+		mkey := "conf/multi-checks"
+		uploadID, err := tg.client.InitiateMultipart(ctx, tg.bucket, tg.tenant, tg.collection, mkey, "application/octet-stream", checksum.SHA256)
+		if err != nil {
+			tg.record("multipart.complete_checks_part_checksums", "unknown", errText(err))
+			return
 		}
+		part := []byte("part-one")
+		b := multiparth.PartBinding{Number: 1, SizeBytes: int64(len(part)), ChecksumAlgo: checksum.SHA256, ChecksumValue: digest(checksum.SHA256, part)}
+		purl, ph, _, err := tg.client.PresignPart(ctx, tg.bucket, tg.tenant, uploadID, tg.collection, mkey, b, ttl())
+		if err != nil {
+			tg.record("multipart.complete_checks_part_checksums", "unknown", errText(err))
+			return
+		}
+		status, msg, hdr, err := send(ctx, http.MethodPut, purl, ph, part)
+		if err != nil || !ok(status) {
+			tg.record("multipart.complete_checks_part_checksums", "unknown", msg+errText(err))
+			return
+		}
+		wrong := digest(checksum.SHA256, []byte("something else"))
+		_, _, err = tg.client.CompleteMultipart(ctx, tg.bucket, tg.tenant, uploadID, tg.collection, mkey, checksum.SHA256,
+			[]multiparth.PartETag{{PartNumber: 1, ETag: hdr.Get("ETag"), ChecksumValue: wrong}})
+		tg.record("multipart.complete_checks_part_checksums", yesNo(err != nil), errText(err))
+		_ = tg.client.AbortMultipart(ctx, tg.bucket, tg.tenant, uploadID, tg.collection, mkey)
+		_ = tg.client.DeleteObject(ctx, tg.bucket, tg.tenant, tg.collection, mkey)
 	})
 
-	t.Run("presigned POST", func(t *testing.T) {
-		// Browser form uploads. Not on Paladin's current path, but the adapter
-		// exposes it, so whether it works decides if it can be.
-		_, _, _, err := tg.client.PresignPost(ctx, objecth.PresignPostArgs{
-			Bucket: tg.bucket, TenantID: tg.tenant, Collection: tg.collection,
-			Key: "conf/post.txt", ContentType: "text/plain", TTL: ttl(),
+	t.Run("a presigned GET bound by If-Match", func(t *testing.T) {
+		// DownloadObject's require_etag_match signs If-Match; whether the
+		// store refuses a stale ETag decides whether that binding holds.
+		key := "conf/if-match.txt"
+		if err := putSmall(ctx, tg, key, []byte("x")); err != nil {
+			tg.record("presign.get_if_match", "unknown", errText(err))
+			return
+		}
+		url, headers, _, err := tg.client.PresignGet(ctx, objecth.PresignGetArgs{
+			Bucket: tg.bucket, TenantID: tg.tenant, Collection: tg.collection, Key: key, TTL: ttl(),
+			IfMatch: "not-the-etag",
 		})
-		tg.record("presign.post", yesNo(err == nil), errText(err))
+		if err != nil {
+			tg.record("presign.get_if_match", "unknown", errText(err))
+			return
+		}
+		status, _, _, err := send(ctx, http.MethodGet, url, headers, nil)
+		tg.record("presign.get_if_match", yesNo(err == nil && status == http.StatusPreconditionFailed), errText(err))
+		_ = tg.client.DeleteObject(ctx, tg.bucket, tg.tenant, tg.collection, key)
 	})
 
 	t.Run("bucket delete on a non-empty bucket", func(t *testing.T) {
@@ -128,28 +135,12 @@ func TestCapabilities(t *testing.T) {
 }
 
 func putSmall(ctx context.Context, tg *target, key string, body []byte) error {
-	url, headers, _, err := tg.client.PresignPut(ctx, objecth.PresignPutArgs{
-		Bucket: tg.bucket, TenantID: tg.tenant, Collection: tg.collection,
-		Key: key, ContentType: "text/plain", SizeHint: int64(len(body)), TTL: ttl(),
-	})
+	status, msg, err := putSigned(ctx, tg, key, checksum.SHA256, body, body)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	if res.StatusCode/100 != 2 {
-		b, _ := io.ReadAll(res.Body)
-		return errors.New(trim(string(b)))
+	if !ok(status) {
+		return errors.New(msg)
 	}
 	return nil
 }

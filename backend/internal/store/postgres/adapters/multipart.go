@@ -42,11 +42,6 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.Ini
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := r.q.WithTx(tx)
 
-	var sizePtr *int64
-	if args.SizeHint > 0 {
-		s := args.SizeHint
-		sizePtr = &s
-	}
 	// Under the path lock, as every object insert (package objectpath).
 	if err := objectpath.Lock(ctx, qtx, args.TenantID, args.Collection, args.Key); err != nil {
 		return multiparth.Session{}, fmt.Errorf("lock object path: %w", err)
@@ -62,7 +57,7 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.Ini
 		args.Key,
 		sqlc.ObjectStatePENDING,
 		args.ContentType,
-		sizePtr,
+		&args.SizeHint,
 		checksumAlgoInt(args.ChecksumAlgo),
 		nil,
 		encodeMap(args.Metadata),
@@ -111,6 +106,8 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.Ini
 		StorageUploadID: storageUploadID,
 		PartSizeBytes:   args.PartSizeBytes,
 		TotalParts:      args.TotalParts,
+		SizeBytes:       args.SizeHint,
+		ChecksumAlgo:    args.ChecksumAlgo,
 		CreatedAt:       time.Now(),
 	}, nil
 }
@@ -120,7 +117,8 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 				SELECT mu.id, mu.object_id, mu.storage_upload_id,
 		       mu.part_size_bytes, mu.total_parts, mu.created_at,
 		       sb.name, bk.name,
-		       o.tenant_id, c.name, o.path
+		       o.tenant_id, c.name, o.path,
+		       o.size_bytes, o.checksum_algorithm
 		FROM multipart_uploads mu
 		JOIN objects o           ON o.id = mu.object_id
 		JOIN collections c       ON c.id = o.collection_id
@@ -137,6 +135,8 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 		key        string
 		partSize   int64
 		totalParts int32
+		size       *int64
+		algo       int16
 	)
 	err := r.pool.QueryRow(ctx, q, uploadID).Scan(
 		&s.UploadID,
@@ -150,6 +150,8 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 		&tenantID,
 		&collection,
 		&key,
+		&size,
+		&algo,
 	)
 	if err != nil {
 		if isNoRows(err) {
@@ -164,6 +166,10 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 	s.CreatedAt = createdAt
 	s.Collection = collection
 	s.Key = key
+	if size != nil {
+		s.SizeBytes = *size
+	}
+	s.ChecksumAlgo = checksumAlgoName(algo)
 	return s, nil
 }
 

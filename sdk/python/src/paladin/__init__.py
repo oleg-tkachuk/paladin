@@ -86,6 +86,7 @@ from paladin.transfer import (
     RangeIgnoredError,
     Transfer,
     TransferError,
+    checksum,
 )
 from paladin.workflows import (
     DEFAULT_BULK_CONCURRENCY,
@@ -195,6 +196,7 @@ __all__ = [
     "attenuate",
     "aupload",
     "await_operation",
+    "checksum",
     "connect",
     "connect_async",
     "current_idempotency_key",

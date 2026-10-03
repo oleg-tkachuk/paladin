@@ -28,6 +28,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
@@ -70,7 +71,9 @@ type Storage interface {
 	PresignPut(ctx context.Context, args PresignPutArgs) (url string, headers map[string]string, expiresAt time.Time, err error)
 	PresignPost(ctx context.Context, args PresignPostArgs) (action string, fields map[string]string, expiresAt time.Time, err error)
 	PresignGet(ctx context.Context, args PresignGetArgs) (url string, headers map[string]string, expiresAt time.Time, err error)
-	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
+	// Head reports the stored object; checksum is its checksum under
+	// checksumAlgo, "" when the store keeps none for that algorithm.
+	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, checksumAlgo string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
 	CopyObject(ctx context.Context, src, dst Location) error
 	// DeleteObject is optional — for permanent deletes only.
 	DeleteObject(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) error
@@ -198,29 +201,34 @@ type Location struct {
 	Key        string // storage key inside the prefix
 }
 
+// PresignPutArgs describe the one body a PUT URL will accept: its exact
+// size, Content-Type and checksum are all signed into the URL.
 type PresignPutArgs struct {
-	BackendID       string // storage backend id; "" = default backend
-	TenantID        uuid.UUID
-	Bucket          string // physical S3 bucket; resolved from Collection row
-	Collection      string
-	Key             string
-	ContentType     string
-	ChecksumAlgo    string
-	SizeHint        int64
-	TTL             time.Duration
-	RequireChecksum bool
+	BackendID     string // storage backend id; "" = default backend
+	TenantID      uuid.UUID
+	Bucket        string // physical S3 bucket; resolved from Collection row
+	Collection    string
+	Key           string
+	ContentType   string
+	SizeBytes     int64
+	ChecksumAlgo  string
+	ChecksumValue string // base64 digest, see internal/checksum
+	TTL           time.Duration
 }
 
+// PresignPostArgs are PresignPutArgs for a browser form upload: the POST
+// policy binds the same size, Content-Type and checksum.
 type PresignPostArgs struct {
-	BackendID    string // storage backend id; "" = default backend
-	TenantID     uuid.UUID
-	Bucket       string
-	Collection   string
-	Key          string
-	ContentType  string
-	MaxSizeBytes int64
-	ChecksumAlgo string
-	TTL          time.Duration
+	BackendID     string // storage backend id; "" = default backend
+	TenantID      uuid.UUID
+	Bucket        string
+	Collection    string
+	Key           string
+	ContentType   string
+	SizeBytes     int64
+	ChecksumAlgo  string
+	ChecksumValue string
+	TTL           time.Duration
 }
 
 type PresignGetArgs struct {
@@ -231,6 +239,9 @@ type PresignGetArgs struct {
 	Key                string
 	TTL                time.Duration
 	ContentDisposition string
+	// IfMatch, when set, binds the URL to this ETag (see
+	// DownloadObjectRequest.require_etag_match).
+	IfMatch string
 }
 
 // Repository is the persistence seam. Implementations live in internal/store
@@ -357,12 +368,18 @@ type Object struct {
 }
 
 type CreateObjectArgs struct {
-	TenantID         uuid.UUID
-	Collection       string
-	Key              string
-	ContentType      string
-	SizeHint         int64
-	ChecksumAlgo     string
+	TenantID    uuid.UUID
+	Collection  string
+	Key         string
+	ContentType string
+	// SizeBytes is the size the object is registered with — what policy and
+	// quota admitted, and what promotion holds the stored bytes to. nil when
+	// the creator does not know it.
+	SizeBytes    *int64
+	ChecksumAlgo string
+	// ChecksumValue is the checksum the object is registered with, base64;
+	// "" when the creator has none. Promotion holds the stored bytes to it.
+	ChecksumValue    string
 	Metadata         map[string]string
 	Tags             map[string]string
 	ExternalRef      string
@@ -558,11 +575,16 @@ func NewHandler(
 // UploadObjectInput is the decoded request. In production wiring, this comes
 // from the generated Connect stub (paladinv1.UploadObjectRequest).
 type UploadObjectInput struct {
-	Collection    string
-	Key           string
-	ContentType   string
-	SizeHint      int64
-	ChecksumAlgo  string
+	Collection  string
+	Key         string
+	ContentType string
+	// SizeBytes is the object's exact size; 0 is an empty object. The URL is
+	// signed for exactly this many bytes.
+	SizeBytes    int64
+	ChecksumAlgo string
+	// ChecksumValue is the object's checksum under ChecksumAlgo, base64 of
+	// the digest; signed into the URL.
+	ChecksumValue string
 	Metadata      map[string]string
 	Tags          map[string]string
 	ExternalRef   string
@@ -602,6 +624,11 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
+	// The checksum is signed into the URL; a malformed one would produce a
+	// URL every upload fails against, so it is refused here instead.
+	if err := checksum.Validate(in.ChecksumAlgo, in.ChecksumValue); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("checksum_value: %w", err))
+	}
 
 	objectURI := "object://" + tenantID.String() + "/" + in.Collection + "/" + in.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
@@ -629,7 +656,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	}
 	policy := uploadpolicy.For(h.presign.Limits, meta.Constraints)
 	if err := policy.CheckSingle(uploadpolicy.Upload{
-		SizeBytes: in.SizeHint, ContentType: in.ContentType, ChecksumAlgorithm: in.ChecksumAlgo,
+		SizeBytes: in.SizeBytes, ContentType: in.ContentType, ChecksumAlgorithm: in.ChecksumAlgo,
 	}); err != nil {
 		return nil, err
 	}
@@ -658,11 +685,11 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 			BackendID:   meta.BackendID,
 			BucketName:  meta.BucketName,
 			ContentType: in.ContentType,
-			SizeBytes:   in.SizeHint,
+			SizeBytes:   in.SizeBytes,
 			Tags:        in.Tags,
 		},
 		cedar.RequestContext{
-			SizeBytes:   in.SizeHint,
+			SizeBytes:   in.SizeBytes,
 			ContentType: in.ContentType,
 			Now:         time.Now(),
 		},
@@ -692,8 +719,9 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 		Collection:       in.Collection,
 		Key:              key,
 		ContentType:      in.ContentType,
-		SizeHint:         in.SizeHint,
+		SizeBytes:        &in.SizeBytes,
 		ChecksumAlgo:     in.ChecksumAlgo,
+		ChecksumValue:    in.ChecksumValue,
 		Metadata:         in.Metadata,
 		Tags:             in.Tags,
 		ExternalRef:      in.ExternalRef,
@@ -711,15 +739,16 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	}
 	if in.TransportPOST {
 		action, fields, exp, err := h.storage.PresignPost(ctx, PresignPostArgs{
-			BackendID:    meta.BackendID,
-			TenantID:     tenantID,
-			Bucket:       bucket,
-			Collection:   in.Collection,
-			Key:          key,
-			ContentType:  in.ContentType,
-			MaxSizeBytes: resolveMaxSize(policy.MaxSingleRequestSize(), in.SizeHint),
-			ChecksumAlgo: in.ChecksumAlgo,
-			TTL:          ttl,
+			BackendID:     meta.BackendID,
+			TenantID:      tenantID,
+			Bucket:        bucket,
+			Collection:    in.Collection,
+			Key:           key,
+			ContentType:   in.ContentType,
+			SizeBytes:     in.SizeBytes,
+			ChecksumAlgo:  in.ChecksumAlgo,
+			ChecksumValue: in.ChecksumValue,
+			TTL:           ttl,
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("presign POST: %w", err))
@@ -730,16 +759,16 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 		out.ExpiresAt = exp
 	} else {
 		url, headers, exp, err := h.storage.PresignPut(ctx, PresignPutArgs{
-			BackendID:       meta.BackendID,
-			TenantID:        tenantID,
-			Bucket:          bucket,
-			Collection:      in.Collection,
-			Key:             key,
-			ContentType:     in.ContentType,
-			ChecksumAlgo:    in.ChecksumAlgo,
-			SizeHint:        in.SizeHint,
-			TTL:             ttl,
-			RequireChecksum: true,
+			BackendID:     meta.BackendID,
+			TenantID:      tenantID,
+			Bucket:        bucket,
+			Collection:    in.Collection,
+			Key:           key,
+			ContentType:   in.ContentType,
+			SizeBytes:     in.SizeBytes,
+			ChecksumAlgo:  in.ChecksumAlgo,
+			ChecksumValue: in.ChecksumValue,
+			TTL:           ttl,
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("presign PUT: %w", err))
@@ -822,7 +851,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
-	etag, size, checksum, seq, err := h.storage.Head(ctx, backendID, bucket, tenantID, obj.Collection, obj.Key)
+	etag, size, checksum, seq, err := h.storage.Head(ctx, backendID, bucket, tenantID, obj.Collection, obj.Key, obj.ChecksumAlgo)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("object not uploaded yet: %w", err))
@@ -830,6 +859,13 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	if in.ETag != "" && etag != in.ETag {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("etag mismatch"))
+	}
+	// The caller's own checksum must be the one the object was registered
+	// with — the one its URL was signed for. A different one means the
+	// caller believes it uploaded something it did not.
+	if in.Checksum != "" && obj.Checksum != "" && in.Checksum != obj.Checksum {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			errors.New("checksum_value differs from the checksum the object was registered with"))
 	}
 
 	// Promote + outbox fan-out run in ONE transaction (ADR-0003): the
@@ -857,6 +893,11 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 					"content_type": obj.ContentType,
 				})
 		})
+	if errors.Is(err, statemachine.ErrContentMismatch) {
+		return nil, h.discardMismatched(ctx, obj.ObjectID, Location{
+			BackendID: backendID, TenantID: tenantID, Bucket: bucket, Collection: obj.Collection, Key: obj.Key,
+		}, err)
+	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -876,6 +917,22 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 		}
 	}
 	return &fresh, nil
+}
+
+// discardMismatched settles an object whose stored bytes broke its
+// registration — a size or checksum other than the one admitted. The bytes
+// are deleted first and the row failed second, so a failure between the two
+// leaves a PENDING row the reconciler will HEAD and fail, never a FAILED row
+// over bytes nothing will remove. The caller gets FailedPrecondition naming
+// what did not match.
+func (h *Handler) discardMismatched(ctx context.Context, objectID uuid.UUID, loc Location, cause error) error {
+	if err := h.storage.DeleteObject(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.Collection, loc.Key); err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("%w; deleting the stored bytes failed: %w", cause, err))
+	}
+	if err := h.sm.MarkFailed(ctx, objectID, statemachine.FailedContentMismatch); err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("%w; failing the object failed: %w", cause, err))
+	}
+	return connect.NewError(connect.CodeFailedPrecondition, cause)
 }
 
 // ─── ListObjects ────────────────────────────────────────────────────────────
@@ -1197,7 +1254,9 @@ type DownloadObjectOutput struct {
 
 // DownloadObject returns metadata + a presigned GET URL for an AVAILABLE
 // object. PENDING / DELETED / FAILED objects are refused (CodeFailedPrecondition).
-func (h *Handler) DownloadObject(ctx context.Context, collection, objectID string, ttl time.Duration, disposition string) (_ *DownloadObjectOutput, err error) {
+// DownloadObject returns the object and a presigned GET for it.
+// requireETagMatch binds the URL to the object's current ETag.
+func (h *Handler) DownloadObject(ctx context.Context, collection, objectID string, ttl time.Duration, disposition string, requireETagMatch bool) (_ *DownloadObjectOutput, err error) {
 	// See UploadObject: a download URL is a presign whichever RPC mints it.
 	start := time.Now()
 	defer func() {
@@ -1254,7 +1313,7 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	}, cedar.ActionPresignGet, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
 	}
-	url, headers, expires, err := h.storage.PresignGet(ctx, PresignGetArgs{
+	args := PresignGetArgs{
 		BackendID:          backendID,
 		TenantID:           tenantID,
 		Bucket:             bucket,
@@ -1262,7 +1321,15 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 		Key:                obj.Key,
 		TTL:                ttl,
 		ContentDisposition: disposition,
-	})
+	}
+	if requireETagMatch {
+		if obj.ETag == "" {
+			return nil, connect.NewError(connect.CodeFailedPrecondition,
+				errors.New("the object has no recorded ETag to bind the URL to"))
+		}
+		args.IfMatch = obj.ETag
+	}
+	url, headers, expires, err := h.storage.PresignGet(ctx, args)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("presign get: %w", err))
 	}
@@ -1814,8 +1881,8 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		Collection:       in.DestCollection,
 		Key:              destKey,
 		ContentType:      src.ContentType,
-		SizeHint:         src.SizeBytes,
-		ChecksumAlgo:     "", // copied object inherits source's algo via HEAD
+		SizeBytes:        &src.SizeBytes,
+		ChecksumAlgo:     src.ChecksumAlgo,
 		Metadata:         coalesceMap(in.Metadata, src.Metadata),
 		Tags:             coalesceMap(in.Tags, src.Tags),
 		ExternalRef:      src.ExternalRef,
@@ -1865,6 +1932,11 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 					"source_object_id":  in.SourceObjectID,
 				})
 		})
+	if errors.Is(err, statemachine.ErrContentMismatch) {
+		return nil, h.discardMismatched(ctx, dst.ObjectID, Location{
+			BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, Collection: in.DestCollection, Key: destKey,
+		}, err)
+	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -1944,13 +2016,6 @@ func coalesceMap(primary, fallback map[string]string) map[string]string {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-func resolveMaxSize(defaultMax, hint int64) int64 {
-	if hint > 0 && hint < defaultMax {
-		return hint
-	}
-	return defaultMax
-}
 
 func mapCreateErr(err error) error {
 	if err == nil {

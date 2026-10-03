@@ -34,10 +34,14 @@ func (r *PresignRepo) LookupObject(ctx context.Context, tenantID uuid.UUID, coll
 		return presignh.ObjectRef{}, fmt.Errorf("object %s not in collection %s", objectID, collection)
 	}
 	return presignh.ObjectRef{
-		Collection:  row.CollectionName,
-		Key:         row.Object.Path,
-		State:       string(row.Object.State),
-		ContentType: row.Object.ContentType,
+		Collection:    row.CollectionName,
+		Key:           row.Object.Path,
+		State:         string(row.Object.State),
+		ContentType:   row.Object.ContentType,
+		SizeBytes:     row.Object.SizeBytes,
+		ChecksumAlgo:  checksumAlgoName(row.Object.ChecksumAlgorithm),
+		ChecksumValue: derefStr(row.Object.Checksum),
+		ETag:          derefStr(row.Object.Etag),
 	}, nil
 }
 
