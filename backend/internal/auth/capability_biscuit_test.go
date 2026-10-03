@@ -40,6 +40,8 @@ func TestCapabilityBiscuit_OfflineAttenuationIsEnforced(t *testing.T) {
 		Revocations:    store,
 		TrustedIssuers: []string{"paladin-test"},
 		AcceptBiscuit:  true,
+
+		BiscuitRevocations: store,
 	})
 	if err != nil {
 		t.Fatal(err)
