@@ -17,6 +17,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladintest"
@@ -142,6 +143,7 @@ func Example_resumableMultipart() {
 
 	init, err := p.Data.MultipartUpload.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
 		Parent: srv.Collection().String(), Key: "big.bin", SizeBytes: int64(len(body)),
+		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
 	}))
 	if err != nil {
 		panic(err)
@@ -151,9 +153,18 @@ func Example_resumableMultipart() {
 		start := int64(n-1) * size
 		return body[start:min(start+size, int64(len(body)))]
 	}
+	// Each part's URL is signed for its checksum, and completion lists it
+	// again; both come from the part's own bytes.
+	sum := func(n int32) string {
+		s, err := paladin.Checksum(paladin.ChecksumSHA256, bytes.NewReader(part(n)))
+		if err != nil {
+			panic(err)
+		}
+		return s
+	}
 	send := func(n int32) {
 		signed, err := p.Data.MultipartUpload.PresignPart(ctx, connect.NewRequest(&datav1.PresignPartRequest{
-			ObjectName: name, UploadId: uploadID, PartNumber: n,
+			ObjectName: name, UploadId: uploadID, PartNumber: n, ChecksumValue: sum(n),
 		}))
 		if err != nil {
 			panic(err)
@@ -185,7 +196,7 @@ func Example_resumableMultipart() {
 		panic(err)
 	}
 	for _, pt := range listed.Msg.GetParts() {
-		parts = append(parts, &datav1.CompletedPart{PartNumber: pt.GetPartNumber(), Etag: pt.GetEtag()})
+		parts = append(parts, &datav1.CompletedPart{PartNumber: pt.GetPartNumber(), Etag: pt.GetEtag(), ChecksumValue: sum(pt.GetPartNumber())})
 	}
 	done, err := p.Data.MultipartUpload.CompleteMultipartUpload(ctx, connect.NewRequest(&datav1.CompleteMultipartUploadRequest{
 		ObjectName: name, UploadId: uploadID, Parts: parts,

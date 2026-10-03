@@ -200,6 +200,12 @@ func (t *Transfer) do(ctx context.Context, fallbackMethod string, signed *common
 	req.Host = signedHost
 	if body != nil {
 		req.ContentLength = size
+		// net/http reads ContentLength 0 with a body as "unknown" and sends
+		// it chunked, with no Content-Length; an upload URL signed for
+		// Content-Length: 0 then refuses the empty object.
+		if size == 0 {
+			req.Body = http.NoBody
+		}
 	}
 	for k, vs := range header {
 		req.Header[k] = vs
