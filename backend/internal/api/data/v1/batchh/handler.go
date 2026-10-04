@@ -174,6 +174,10 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("object_ids must be non-empty"))
 	}
+	if len(args.ObjectIDs) > maxBatchSize {
+		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
+	}
 	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, capability.OpTag); err != nil {
 		return uuid.Nil, err
 	}
