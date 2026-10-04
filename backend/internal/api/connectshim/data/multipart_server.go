@@ -26,7 +26,7 @@ func NewMultipartServer(h *multiparth.Handler) *MultipartServer { return &Multip
 
 func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *connect.Request[pb.InitiateMultipartUploadRequest]) (*connect.Response[pb.InitiateMultipartUploadResponse], error) {
 	m := req.Msg
-	collection, err := collectionNameParts(ctx, m.GetParent())
+	ctx, collection, err := collectionNameParts(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -64,7 +64,7 @@ func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *conn
 
 func (s *MultipartServer) PresignPart(ctx context.Context, req *connect.Request[pb.PresignPartRequest]) (*connect.Response[pb.PresignPartResponse], error) {
 	m := req.Msg
-	want, err := sessionRef(ctx, m.GetObjectName())
+	ctx, want, err := sessionRef(ctx, m.GetObjectName())
 	if err != nil {
 		return nil, err
 	}
@@ -87,6 +87,12 @@ func (s *MultipartServer) CompleteMultipartUpload(ctx context.Context, req *conn
 			ChecksumValue: p.GetChecksumValue(),
 		})
 	}
+	// The session row names the object; the name is checked so that its
+	// tenant scopes the request like every other name.
+	ctx, _, _, err := objectNameParts(ctx, m.GetObjectName())
+	if err != nil {
+		return nil, badName(err)
+	}
 	if err := s.H.CompleteMultipartUpload(ctx, multiparth.CompleteArgs{
 		UploadID: m.GetUploadId(),
 		Parts:    parts,
@@ -98,7 +104,7 @@ func (s *MultipartServer) CompleteMultipartUpload(ctx context.Context, req *conn
 }
 
 func (s *MultipartServer) AbortMultipartUpload(ctx context.Context, req *connect.Request[pb.AbortMultipartUploadRequest]) (*connect.Response[pb.AbortMultipartUploadResponse], error) {
-	want, err := sessionRef(ctx, req.Msg.GetObjectName())
+	ctx, want, err := sessionRef(ctx, req.Msg.GetObjectName())
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +116,7 @@ func (s *MultipartServer) AbortMultipartUpload(ctx context.Context, req *connect
 
 func (s *MultipartServer) ListParts(ctx context.Context, req *connect.Request[pb.ListPartsRequest]) (*connect.Response[pb.ListPartsResponse], error) {
 	m := req.Msg
-	want, err := sessionRef(ctx, m.GetObjectName())
+	ctx, want, err := sessionRef(ctx, m.GetObjectName())
 	if err != nil {
 		return nil, err
 	}
@@ -140,15 +146,17 @@ var _ = commonpb.PageResponse{}
 // The name is the caller's statement of which object the upload belongs to;
 // the handler checks it against the session. An unparseable name is rejected
 // here rather than silently treated as "no claim".
-func sessionRef(ctx context.Context, objectName string) (multiparth.SessionRef, error) {
-	collection, objectID, err := objectNameParts(ctx, objectName)
+// The returned ctx is scoped to the name's tenant (scopeToTenant); the
+// handler must be called with it.
+func sessionRef(ctx context.Context, objectName string) (context.Context, multiparth.SessionRef, error) {
+	ctx, collection, objectID, err := objectNameParts(ctx, objectName)
 	if err != nil {
-		return multiparth.SessionRef{}, badName(err)
+		return ctx, multiparth.SessionRef{}, badName(err)
 	}
 	id, err := uuid.Parse(objectID)
 	if err != nil {
-		return multiparth.SessionRef{}, connect.NewError(connect.CodeInvalidArgument,
+		return ctx, multiparth.SessionRef{}, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid object_id in object_name: %w", err))
 	}
-	return multiparth.SessionRef{Collection: collection, ObjectID: id}, nil
+	return ctx, multiparth.SessionRef{Collection: collection, ObjectID: id}, nil
 }

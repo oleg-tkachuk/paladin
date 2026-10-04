@@ -19,7 +19,7 @@ func NewPresignServer(h *presignh.Handler) *PresignServer { return &PresignServe
 
 func (s *PresignServer) RegenerateUploadUrl(ctx context.Context, req *connect.Request[pb.RegenerateUploadUrlRequest]) (*connect.Response[pb.RegenerateUploadUrlResponse], error) {
 	m := req.Msg
-	collection, objectID, err := objectNameParts(ctx, m.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -35,7 +35,7 @@ func (s *PresignServer) RegenerateUploadUrl(ctx context.Context, req *connect.Re
 
 func (s *PresignServer) PresignDownload(ctx context.Context, req *connect.Request[pb.PresignDownloadRequest]) (*connect.Response[pb.PresignDownloadResponse], error) {
 	m := req.Msg
-	collection, objectID, err := objectNameParts(ctx, m.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}

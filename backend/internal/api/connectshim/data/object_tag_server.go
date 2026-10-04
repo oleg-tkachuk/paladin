@@ -25,7 +25,7 @@ type ObjectTagServer struct {
 func NewObjectTagServer(h *objecth.Handler) *ObjectTagServer { return &ObjectTagServer{H: h} }
 
 func (s *ObjectTagServer) GetObjectTags(ctx context.Context, req *connect.Request[pb.GetObjectTagsRequest]) (*connect.Response[pb.GetObjectTagsResponse], error) {
-	collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -38,7 +38,7 @@ func (s *ObjectTagServer) GetObjectTags(ctx context.Context, req *connect.Reques
 
 func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *connect.Request[pb.PutObjectTagsRequest]) (*connect.Response[pb.PutObjectTagsResponse], error) {
 	m := req.Msg
-	collection, objectID, err := objectNameParts(ctx, m.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -62,7 +62,7 @@ func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *connect.Reques
 
 func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Request[pb.DeleteObjectTagsRequest]) (*connect.Response[pb.DeleteObjectTagsResponse], error) {
 	m := req.Msg
-	collection, objectID, err := objectNameParts(ctx, m.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -104,7 +104,7 @@ func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Req
 }
 
 func (s *ObjectTagServer) ListDistinctTags(ctx context.Context, req *connect.Request[pb.ListDistinctTagsRequest]) (*connect.Response[pb.ListDistinctTagsResponse], error) {
-	collection, err := collectionNameParts(ctx, req.Msg.GetParent())
+	ctx, collection, err := collectionNameParts(ctx, req.Msg.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}

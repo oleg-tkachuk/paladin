@@ -1,6 +1,8 @@
 package data
 
 import (
+	"context"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -8,14 +10,20 @@ import (
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
-// versionParent parses a version name (conv.go: the SDK's parser) and
-// returns its parent, the object's name.
-func versionParent(name string) (paladin.ObjectName, error) {
+// versionParent parses a version name (conv.go: the SDK's parser), scopes ctx
+// to its tenant as every other name is (scopeToTenant), and returns its
+// parent, the object's name. The handler's own parser keeps only the
+// collection and ids, so the tenant is checked here or nowhere.
+func versionParent(ctx context.Context, name string) (context.Context, paladin.ObjectName, error) {
 	n, err := paladin.ParseObjectVersionName(name)
 	if err != nil {
-		return paladin.ObjectName{}, err
+		return ctx, paladin.ObjectName{}, err
 	}
-	return n.ObjectName, nil
+	ctx, err = scopeToTenant(ctx, n.Tenant)
+	if err != nil {
+		return ctx, paladin.ObjectName{}, err
+	}
+	return ctx, n.ObjectName, nil
 }
 
 // versionToProto builds the pb.ObjectVersion envelope, named under parent.

@@ -65,7 +65,7 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 	}
 	if h.policy != nil {
 		decision, err := h.policy.IsAuthorized(ctx,
-			apiutil.CedarPrincipalFor(principal, tenantID),
+			apiutil.CedarPrincipal(principal),
 			cedar.ActionSetObjectTaint,
 			&cedar.Resource{
 				TenantID:    tenantID,

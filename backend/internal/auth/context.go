@@ -172,9 +172,10 @@ type actingTenantKey struct{}
 // when present, so every query on the derived context — reads and writes
 // alike — is scoped to that tenant instead of the caller's.
 //
-// This is what lets the admin plane work: a platform admin's principal is
-// bound to the `platform` tenant, but the resources it manages belong to
-// someone else. Without it a cross-tenant write trips WITH CHECK, and a
+// This is what lets the admin plane work — and the data plane, for a platform
+// admin naming another tenant's objects (connectshim/data scopeToTenant,
+// ADR-0022): a platform admin's principal is bound to the `platform` tenant,
+// but the resources it manages belong to someone else. Without it a cross-tenant write trips WITH CHECK, and a
 // cross-tenant read silently returns nothing — RLS filters rather than
 // errors, so the second failure looks like an empty list.
 //
