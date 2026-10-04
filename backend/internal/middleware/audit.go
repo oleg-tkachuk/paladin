@@ -1,8 +1,11 @@
 // Audit-write interceptor.
 //
 // Wraps every Connect RPC and inserts an entry into admindomain.AuditRepository
-// when the call mutates state. Idempotent reads (RPC names starting with
-// `Get`, `List`, `Lookup`, `Validate`, `Simulate`, `WhoAmI`) are skipped.
+// when the call mutates state. Reads are skipped: an RPC the contract declares
+// `idempotency_level = NO_SIDE_EFFECTS`, and — for the RPCs that declare
+// nothing yet — one named like a read (`Get…`, `List…`, `Lookup…`, `Count…`,
+// `Validate…`, `Simulate…`). So are the session operations, which mint tokens
+// rather than change state.
 //
 // The interceptor is plane-aware — `audience` is recorded so audits can be
 // filtered per plane.
@@ -113,7 +116,7 @@ func (a *auditInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		// after the handler returns (see preferCanonical).
 		ctx = apiutil.WithResourceSlot(ctx)
 		resp, err := next(ctx, req)
-		if a.shouldSkip(req.Spec().Procedure) {
+		if a.shouldSkip(req.Spec()) {
 			return resp, err
 		}
 		// Best-effort in the sense that it never blocks or fails the RPC — NOT
@@ -142,7 +145,7 @@ func (a *auditInterceptor) WrapStreamingClient(next connect.StreamingClientFunc)
 func (a *auditInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		err := next(ctx, conn)
-		if a.shouldSkip(conn.Spec().Procedure) {
+		if a.shouldSkip(conn.Spec()) {
 			return err
 		}
 		_ = a.writeStream(ctx, conn.Spec().Procedure, conn.RequestHeader().Get("X-Request-Id"), err)
@@ -150,14 +153,26 @@ func (a *auditInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFun
 	}
 }
 
-func (a *auditInterceptor) shouldSkip(procedure string) bool {
+// sessionOperations mint or exchange tokens: every page load of the console
+// runs them, and recording each one buried the mutations the log is for.
+var sessionOperations = map[string]bool{
+	"WhoAmI": true, "Login": true, "RefreshToken": true, "ExchangeAudience": true,
+}
+
+func (a *auditInterceptor) shouldSkip(spec connect.Spec) bool {
 	if a.recordReads {
 		return false
 	}
+	if spec.IdempotencyLevel == connect.IdempotencyNoSideEffects {
+		return true
+	}
 	// Procedure shape: "/paladin.admin.v1.BackendService/GetBackend"
-	method := procedure
-	if i := strings.LastIndexByte(procedure, '/'); i >= 0 {
-		method = procedure[i+1:]
+	method := spec.Procedure
+	if i := strings.LastIndexByte(method, '/'); i >= 0 {
+		method = method[i+1:]
+	}
+	if sessionOperations[method] {
+		return true
 	}
 	switch {
 	case strings.HasPrefix(method, "Get"),
@@ -165,10 +180,7 @@ func (a *auditInterceptor) shouldSkip(procedure string) bool {
 		strings.HasPrefix(method, "Lookup"),
 		strings.HasPrefix(method, "Count"),
 		strings.HasPrefix(method, "Validate"),
-		strings.HasPrefix(method, "Simulate"),
-		method == "WhoAmI",
-		method == "RefreshToken",
-		method == "Login":
+		strings.HasPrefix(method, "Simulate"):
 		return true
 	}
 	return false
