@@ -1,33 +1,30 @@
 package data
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
-// stripVersionSuffix removes "/versions/{ver}" tail. Returns the parent name.
-func stripVersionSuffix(name string) (string, error) {
-	const sep = "/versions/"
-	idx := strings.LastIndex(name, sep)
-	if idx <= 0 {
-		return "", fmt.Errorf("invalid version name %q (missing /versions/{id})", name)
+// versionParent parses a version name (conv.go: the SDK's parser) and
+// returns its parent, the object's name.
+func versionParent(name string) (paladin.ObjectName, error) {
+	n, err := paladin.ParseObjectVersionName(name)
+	if err != nil {
+		return paladin.ObjectName{}, err
 	}
-	return name[:idx], nil
+	return n.ObjectName, nil
 }
 
-// versionToProto builds the pb.ObjectVersion envelope. parentName is the
-// AIP-122 parent so the proto `name` can include the full path.
-func versionToProto(parentName string, v *objecth.ObjectVersion) *pb.ObjectVersion {
+// versionToProto builds the pb.ObjectVersion envelope, named under parent.
+func versionToProto(parent paladin.ObjectName, v *objecth.ObjectVersion) *pb.ObjectVersion {
 	if v == nil {
 		return nil
 	}
 	out := &pb.ObjectVersion{
-		Name:           parentName + "/versions/" + v.VersionID.String(),
+		Name:           paladin.ObjectVersionName{ObjectName: parent, Version: v.VersionID.String()}.String(),
 		VersionId:      v.VersionID.String(),
 		ObjectId:       v.ObjectID.String(),
 		IsDeleteMarker: v.IsDeleteMarker,

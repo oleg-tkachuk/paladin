@@ -14,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // VersionHandler implements the data-plane versioning RPCs. It is a sibling
@@ -415,64 +416,21 @@ type versionNameParts struct {
 	versionID  uuid.UUID
 }
 
-// parseVersionName decodes the AIP-122 form
-// "tenants/{t}/collections/{ok}/objects/{id}/versions/{ver}".
-//
-// The collection body may contain slashes — "e2e/7f3fec78" is an ordinary
-// collection name, and every e2e fixture uses that shape. Splitting on "/" and
-// demanding six segments therefore rejected legitimate names, which made the
-// version RPCs unreachable for them. Locate the separators instead, and let
-// the collection be whatever sits between them; this mirrors objectNameParts
-// in connectshim/data, which parses the same form minus the version suffix.
+// parseVersionName decodes "tenants/{t}/collections/{collection}/objects/{id}/versions/{ver}"
+// with the Go SDK's parser, which the server and both SDKs share
+// (sdk/testdata/names.json). The collection may contain '/'.
 func parseVersionName(name string) (versionNameParts, error) {
-	const (
-		prefix = "tenants/"
-		okSep  = "/collections/"
-		objSep = "/objects/"
-		verSep = "/versions/"
-	)
-	if !strings.HasPrefix(name, prefix) {
-		return versionNameParts{}, fmt.Errorf("invalid version name %q (must start with %q)", name, prefix)
-	}
-	// Last separator in each case, so the same token appearing inside the
-	// collection body cannot shadow the real suffix.
-	verIdx := strings.LastIndex(name, verSep)
-	if verIdx <= 0 {
-		return versionNameParts{}, fmt.Errorf("invalid version name %q (missing /versions/{id})", name)
-	}
-	verIDStr := name[verIdx+len(verSep):]
-	verID, err := uuid.Parse(verIDStr)
+	n, err := paladin.ParseObjectVersionName(name)
 	if err != nil {
-		return versionNameParts{}, fmt.Errorf("invalid version_id: %w", err)
+		return versionNameParts{}, err
 	}
-
-	rest := name[len(prefix):verIdx]
-	okIdx := strings.Index(rest, okSep)
-	if okIdx <= 0 {
-		return versionNameParts{}, fmt.Errorf("invalid version name %q (missing %q)", name, okSep)
-	}
-	if _, err := uuid.Parse(rest[:okIdx]); err != nil {
-		return versionNameParts{}, fmt.Errorf("invalid tenant_id in name: %w", err)
-	}
-
-	afterOK := rest[okIdx+len(okSep):]
-	objIdx := strings.LastIndex(afterOK, objSep)
-	if objIdx <= 0 {
-		return versionNameParts{}, fmt.Errorf("invalid version name %q (missing %q)", name, objSep)
-	}
-	collection := afterOK[:objIdx]
-	objIDStr := afterOK[objIdx+len(objSep):]
-	if collection == "" {
-		return versionNameParts{}, fmt.Errorf("invalid version name %q (empty collection)", name)
-	}
-	// The object id is one segment; a slash here means the caller's
-	// "/objects/" landed inside the collection body rather than before the id.
-	if strings.Contains(objIDStr, "/") {
-		return versionNameParts{}, fmt.Errorf("invalid version name %q (object_id must be one segment)", name)
-	}
-	objectID, err := uuid.Parse(objIDStr)
+	objectID, err := uuid.Parse(n.Object)
 	if err != nil {
-		return versionNameParts{}, fmt.Errorf("invalid object_id: %w", err)
+		return versionNameParts{}, err
 	}
-	return versionNameParts{collection: collection, objectID: objectID, versionID: verID}, nil
+	versionID, err := uuid.Parse(n.Version)
+	if err != nil {
+		return versionNameParts{}, err
+	}
+	return versionNameParts{collection: n.Collection, objectID: objectID, versionID: versionID}, nil
 }
