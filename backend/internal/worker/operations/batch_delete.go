@@ -103,7 +103,7 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 	// SoftDelete. Ids missing from the result are reported per-id
 	// below — same contract as the old per-id lookup, minus the N
 	// sequential round-trips.
-	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.ObjectIDs)
+	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.Collection, args.ObjectIDs)
 	if err != nil {
 		return nil, fmt.Errorf("batch lookup: %w", err)
 	}
