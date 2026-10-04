@@ -23,7 +23,7 @@ import (
 func TestServerDoesNotAdvertiseDeprecatedLogging(t *testing.T) {
 	t.Parallel()
 
-	cs := dialInProcess(t, NewInlineClients(InlineHandlers{}, "tok"))
+	cs := dialInProcess(t, mustClients(t)(NewInlineClients(InlineHandlers{}, "tok")))
 	caps := cs.InitializeResult().Capabilities
 
 	// Reading the deprecated field is the entire point of the assertion.
@@ -65,7 +65,7 @@ func TestRegisterResourcesDispatch(t *testing.T) {
 	}
 
 	t.Run("catalog", func(t *testing.T) {
-		cs := dialInProcess(t, NewInlineClients(InlineHandlers{}, "tok"))
+		cs := dialInProcess(t, mustClients(t)(NewInlineClients(InlineHandlers{}, "tok")))
 		res, err := cs.ListResources(context.Background(), &mcpsdk.ListResourcesParams{})
 		if err != nil {
 			t.Fatalf("ListResources: %v", err)
@@ -94,9 +94,9 @@ func TestRegisterResourcesDispatch(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.uri, func(t *testing.T) {
 			var paths []string
-			cs := dialInProcess(t, NewInlineClients(InlineHandlers{
+			cs := dialInProcess(t, mustClients(t)(NewInlineClients(InlineHandlers{
 				Admin: recordingProtoPlane(&paths),
-			}, "tok"))
+			}, "tok")))
 
 			res, err := cs.ReadResource(context.Background(), &mcpsdk.ReadResourceParams{URI: tc.uri})
 			if err != nil {
@@ -129,11 +129,11 @@ func TestRegisterResourcesDispatch(t *testing.T) {
 func TestReadResourcePropagatesUpstreamError(t *testing.T) {
 	t.Parallel()
 
-	cs := dialInProcess(t, NewInlineClients(InlineHandlers{
+	cs := dialInProcess(t, mustClients(t)(NewInlineClients(InlineHandlers{
 		Admin: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "boom", http.StatusInternalServerError)
 		}),
-	}, "tok"))
+	}, "tok")))
 
 	if _, err := cs.ReadResource(context.Background(), &mcpsdk.ReadResourceParams{
 		URI: "paladin://tenants",
@@ -147,7 +147,7 @@ func TestReadResourcePropagatesUpstreamError(t *testing.T) {
 func TestRegisterPrompts(t *testing.T) {
 	t.Parallel()
 
-	cs := dialInProcess(t, NewInlineClients(InlineHandlers{}, "tok"))
+	cs := dialInProcess(t, mustClients(t)(NewInlineClients(InlineHandlers{}, "tok")))
 	ctx := context.Background()
 
 	list, err := cs.ListPrompts(ctx, &mcpsdk.ListPromptsParams{})

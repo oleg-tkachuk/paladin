@@ -1689,18 +1689,6 @@ finding moving from "packages you import" to "your code is affected".
 
 The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 
-### The MCP bridge carries its own copy of what the SDK now does
-
-- **Status:** Deferred.
-- **Reason:** `internal/mcp/bridge.go` builds its own three-plane client set
-  and stamps idempotency keys in its own interceptor, from before the SDK did
-  either.
-- **Definition of Done:** the bridge builds its clients with `paladin.Connect`
-  and drops its interceptor; its tests still pass.
-- **Blockers:** the bridge takes credentials per call from the MCP request,
-  which `Connect` does not; that needs a per-call `TokenSource` reading the
-  context.
-
 ### Python reads response headers through a transport of its own
 
 - **Status:** Deferred.

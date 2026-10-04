@@ -218,7 +218,11 @@ func (t idempotencyTransport) RoundTrip(req *http.Request) (*http.Response, erro
 }
 
 func login(ctx context.Context, httpc *http.Client, iamURL, user, password, audience string) (string, error) {
-	authClient := mcp.NewClients(httpc, "", "", iamURL, "").Auth
+	iam, err := mcp.NewClients(httpc, "", "", iamURL, "")
+	if err != nil {
+		return "", err
+	}
+	authClient := iam.Auth
 	resp, err := authClient.Login(ctx, connect.NewRequest(&iamv1.LoginRequest{
 		Subject:           user,
 		Password:          password,
@@ -294,7 +298,10 @@ func runUp(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	clients := mcp.NewClients(httpc, adminURL, dataURL, iamURL, tok)
+	clients, err := mcp.NewClients(httpc, adminURL, dataURL, iamURL, tok)
+	if err != nil {
+		return err
+	}
 
 	switch flavour {
 	case "demo":
@@ -320,7 +327,10 @@ func runObjectSeed(cmd *cobra.Command, ctx context.Context, iamURL, dataURL, use
 	if err != nil {
 		return fmt.Errorf("data login: %w", err)
 	}
-	dc := mcp.NewClients(httpc, "", dataURL, iamURL, dataTok)
+	dc, err := mcp.NewClients(httpc, "", dataURL, iamURL, dataTok)
+	if err != nil {
+		return err
+	}
 	parent := fmt.Sprintf("tenants/%s/collections/%s", tenant, collection)
 
 	if !seed {
@@ -347,7 +357,10 @@ func runDown(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	clients := mcp.NewClients(httpc, adminURL, dataURL, iamURL, tok)
+	clients, err := mcp.NewClients(httpc, adminURL, dataURL, iamURL, tok)
+	if err != nil {
+		return err
+	}
 
 	switch flavour {
 	case "demo":
@@ -733,7 +746,10 @@ func runSmokeUpload(cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("data login: %w", err)
 	}
-	dataClients := mcp.NewClients(httpc, "", dataURL, iamURL, dataTok)
+	dataClients, err := mcp.NewClients(httpc, "", dataURL, iamURL, dataTok)
+	if err != nil {
+		return err
+	}
 
 	parent := fmt.Sprintf("tenants/%s/collections/%s", tenantHint, collection)
 

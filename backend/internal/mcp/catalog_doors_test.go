@@ -13,7 +13,7 @@ import (
 
 func dialWithFilter(t *testing.T, filter *ToolFilter) *mcpsdk.ClientSession {
 	t.Helper()
-	srv := NewServer("t", "0", NewClients(nil, "http://admin", "http://data", "http://iam", ""), filter)
+	srv := NewServer("t", "0", mustClients(t)(NewClients(nil, "http://admin", "http://data", "http://iam", "")), filter)
 	st, ct := mcpsdk.NewInMemoryTransports()
 	if _, err := srv.Connect(context.Background(), st, nil); err != nil {
 		t.Fatal(err)

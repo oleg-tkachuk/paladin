@@ -188,11 +188,11 @@ func TestNewInlineClients_TokenInjected(t *testing.T) {
 		_, _ = w.Write([]byte("{}"))
 	})
 
-	clients := NewInlineClients(InlineHandlers{
+	clients := mustClients(t)(NewInlineClients(InlineHandlers{
 		Data:  captureAuth,
 		Admin: captureAuth,
 		IAM:   captureAuth,
-	}, "tok-abc")
+	}, "tok-abc"))
 
 	// Direct check on the http.Client wired into Clients: round-trip a
 	// hand-crafted request with the auth interceptor, confirm it lands
