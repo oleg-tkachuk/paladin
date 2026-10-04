@@ -110,7 +110,7 @@ func TestResolveSinkValue_NoResolverIsHardError(t *testing.T) {
 func TestDeliverHTTP_SigningSecretRefResolved(t *testing.T) {
 	var gotSig string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotSig = r.Header.Get("X-Paladin-Signature")
+		gotSig = r.Header.Get(legacySignatureHeader)
 		_, _ = io.Copy(io.Discard, r.Body)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -129,7 +129,7 @@ func TestDeliverHTTP_SigningSecretRefResolved(t *testing.T) {
 	if err := d.DeliverOne(context.Background(), sub, "paladin.bucket.updated"); err != nil {
 		t.Fatalf("DeliverOne: %v", err)
 	}
-	if gotSig == "" || !strings.HasPrefix(gotSig, "sha256=") {
+	if gotSig == "" || !strings.HasPrefix(gotSig, legacySignaturePrefix) {
 		t.Fatalf("signature header = %q", gotSig)
 	}
 	// The signature must correspond to the resolved key, not the literal ref.
