@@ -48,6 +48,12 @@ OBSERVED = {
 METRICS_PORT = int(OBSERVED["config.otel.metrics_addr"].rsplit(":", 1)[1])
 OTLP_PORT = int(OBSERVED["config.otel.endpoint"].rsplit(":", 1)[1])
 MONITORING_NS = OBSERVED["networkPolicies.monitoring.namespace"]
+# An API server port other than the chart's default, as OrbStack's is: every
+# role reads its secrets through the API at boot, and a policy is matched on
+# the endpoint port, so a port hardcoded in the template instead of read from
+# networkPolicies.kubeAPIPorts leaves the pod crash-looping on its first read.
+KUBE_API_PORT = 26443
+KUBE_API = {"networkPolicies.kubeAPIPorts": f"{{{KUBE_API_PORT}}}"}
 # The roles whose scrape listener is a port of its own (config.otel.metrics_addr);
 # the others serve /metrics on an ops port their policy already opens.
 SCRAPE_LISTENER_ROLES = ("api", "admin")
@@ -131,6 +137,16 @@ def egress_reaches_otlp(doc: dict) -> bool:
         if not rule:  # `- {}` — open egress
             return True
         if OTLP_PORT in {p.get("port") for p in rule.get("ports") or []}:
+            return True
+    return False
+
+
+def egress_reaches_port(doc: dict, port: int) -> bool:
+    """Whether a policy lets its pods out to anywhere on `port`."""
+    for rule in doc["spec"].get("egress") or []:
+        if not rule:  # `- {}` — open egress
+            return True
+        if not rule.get("to") and port in {p.get("port") for p in rule.get("ports") or []}:
             return True
     return False
 
@@ -238,6 +254,22 @@ def observability_problems(chart: Path) -> list[str]:
             problems.append(
                 f"role {role!r} cannot reach the OTLP collector on port {OTLP_PORT} "
                 f"— its spans are dropped")
+    return problems
+
+
+def kube_api_problems(chart: Path) -> list[str]:
+    """Every role must reach the API server on the port it is told to.
+
+    Not loud either: the pod crash-loops on "connection refused" from the
+    API's ClusterIP, which reads as the API being down rather than refused."""
+    problems: list[str] = []
+    for doc in render(chart, KUBE_API):
+        if doc.get("kind") != "NetworkPolicy" or not component(doc):
+            continue
+        if "Egress" in (doc["spec"].get("policyTypes") or []) and not egress_reaches_port(doc, KUBE_API_PORT):
+            problems.append(
+                f"role {component(doc)!r} cannot reach the Kubernetes API on port "
+                f"{KUBE_API_PORT} (networkPolicies.kubeAPIPorts) — its secret read is refused")
     return problems
 
 
@@ -394,6 +426,7 @@ def main() -> int:
             problems.append(f"role {role!r} has no DNS egress — it cannot resolve any name")
 
     problems += observability_problems(root / "backend/deploy/chart")
+    problems += kube_api_problems(root / "backend/deploy/chart")
     problems += in_release_problems({component(p): p for p in policies if component(p)})
     problems += console_problems(root)
     problems += every_workload_problems(root)

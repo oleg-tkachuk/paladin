@@ -178,6 +178,13 @@ must be named where it actually runs, or its traffic is dropped:
 | `networkPolicies.postgres.namespace` / `.port` (backend) | `database`, `5432` | PostgreSQL |
 | `networkPolicies.storage.namespace` (backend) | `storage` | the object store |
 | `networkPolicies.nats.namespace` / `.port` (backend) | `nats`, `4222` | NATS, when ingest uses it |
+| `networkPolicies.kubeAPIPorts` (backend) | `[6443]` | the Kubernetes API server, which every pod reads its secrets from at boot |
+
+A policy matches the endpoint a Service resolves to, so `kubeAPIPorts` is the
+API server's own port, not the `kubernetes` Service's 443 — `kubectl get
+endpointslices -n default -l kubernetes.io/service-name=kubernetes` shows it
+(26443 on OrbStack). A wrong port shows up as pods crash-looping on
+`connection refused` from the API's ClusterIP.
 
 With the Caddy ingress controller from the section above:
 
