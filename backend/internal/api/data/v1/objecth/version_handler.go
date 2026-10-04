@@ -73,7 +73,7 @@ func (h *VersionHandler) authorizeParent(
 	// scope key, which leaves scoped principals fail-closed.
 	backendID, bucket, _ := h.objects.LookupBucket(ctx, tenantID, parent.Collection, write)
 	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipalFor(principal, tenantID),
+		apiutil.CedarPrincipal(principal),
 		action,
 		&cedar.Resource{
 			TenantID: tenantID, Collection: parent.Collection, Key: parent.Key,
@@ -139,7 +139,7 @@ type ListVersionsInput struct {
 }
 
 func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput) ([]ObjectVersion, string, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -168,7 +168,7 @@ func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput)
 // ─── Get ────────────────────────────────────────────────────────────────────
 
 func (h *VersionHandler) GetVersion(ctx context.Context, name string) (*ObjectVersion, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersi
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}

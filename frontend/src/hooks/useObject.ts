@@ -8,7 +8,7 @@ import { objectClient, presignClient } from "@/lib/connect/client";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import type { PresignedUrl } from "@/gen/paladin/common/v1/resource_pb";
-import { useAuth } from "@/context/AuthContext";
+import { useActingTenantId } from "@/hooks/useActingTenant";
 import { useRefreshSignal, useBumpRefresh } from "@/context/RefreshContext";
 import { useNotification } from "@/components/ui/Notification";
 import { normalizeError } from "@/lib/connect/error";
@@ -43,8 +43,7 @@ export function useObject(
   key: string | undefined,
   parentCollection: string = DEFAULT_OBJECT_KEY,
 ) {
-  const { user } = useAuth();
-  const tenantId = user?.tenantId ?? "";
+  const tenantId = useActingTenantId();
   const parent = tenantId
     ? `tenants/${tenantId}/collections/${parentCollection}`
     : "";

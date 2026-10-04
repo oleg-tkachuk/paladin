@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/resolve"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
@@ -153,7 +154,8 @@ func (q *QuotaSoftCheck) CheckUpload(ctx context.Context, procedure string, msg 
 	// object. Everything else on the gated list creates one.
 	newObject := procedure != regenerateUploadURLProc
 
-	tenantID := p.TenantID.String()
+	ctx, quotaTenant := uploadTenant(ctx, p, msg)
+	tenantID := quotaTenant.String()
 
 	// Tenant-quota row absent = unlimited. Other read errors degrade open
 	// (presigns are not blast-radius events).
@@ -162,7 +164,7 @@ func (q *QuotaSoftCheck) CheckUpload(ctx context.Context, procedure string, msg 
 	// decision, and counting it as "allowed" would bury the allow/reject ratio
 	// under traffic the quota system never looked at — the ratio being the
 	// whole reason this metric exists.
-	if quota, err := q.Reader.GetTenant(ctx, p.TenantID); err == nil {
+	if quota, err := q.Reader.GetTenant(ctx, quotaTenant); err == nil {
 		if err := checkCaps(quota, "tenant", sizeHint, newObject, q.Headroom); err != nil {
 			metrics.RecordQuotaDecision(ctx, tenantID, "tenant", "rejected")
 			return err
@@ -178,6 +180,25 @@ func (q *QuotaSoftCheck) CheckUpload(ctx context.Context, procedure string, msg 
 		metrics.RecordQuotaDecision(ctx, tenantID, "bucket", "allowed")
 	}
 	return nil
+}
+
+// uploadTenant is the tenant whose quotas an upload counts against: the one
+// its collection name names, when a platform admin names another tenant —
+// the data plane then writes into that tenant (connectshim/data
+// scopeToTenant), so its caps apply and its rows are read under its scope —
+// and otherwise the caller's own. Anyone else naming another tenant is
+// refused behind this interceptor; counting them against their own tenant
+// here changes nothing.
+func uploadTenant(ctx context.Context, p *auth.Principal, msg any) (context.Context, uuid.UUID) {
+	name := extractCollectionName(msg)
+	if name == "" || !p.HasRole(apiutil.RolePlatformAdmin) {
+		return ctx, p.TenantID
+	}
+	ref, err := resolve.ParseCollectionName(ctx, name)
+	if err != nil || ref.TenantID == uuid.Nil || ref.TenantID == p.TenantID {
+		return ctx, p.TenantID
+	}
+	return auth.WithActingTenant(ctx, ref.TenantID), ref.TenantID
 }
 
 // bucketQuota resolves the upload's target bucket and reads its quota row.

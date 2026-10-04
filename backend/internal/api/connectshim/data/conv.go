@@ -14,6 +14,7 @@ package data
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
@@ -40,40 +41,87 @@ import (
 // UUIDs come back in their canonical lower-case form.
 
 // parseObjectName decodes "tenants/{tenant_id}/collections/{collection}/objects/{object_id}"
-// and asserts the tenant matches the caller's (assertJWTTenant): cross-tenant
-// access on the data plane is refused.
-func parseObjectName(ctx context.Context, name string) (paladin.ObjectName, error) {
+// and scopes ctx to its tenant (scopeToTenant). Handlers read the tenant from
+// the returned ctx, so every name a request carries goes through here.
+func parseObjectName(ctx context.Context, name string) (context.Context, paladin.ObjectName, error) {
 	n, err := paladin.ParseObjectName(name)
 	if err != nil {
-		return paladin.ObjectName{}, err
+		return ctx, paladin.ObjectName{}, err
 	}
-	if err := assertJWTTenant(ctx, n.Tenant); err != nil {
-		return paladin.ObjectName{}, err
+	ctx, err = scopeToTenant(ctx, n.Tenant)
+	if err != nil {
+		return ctx, paladin.ObjectName{}, err
 	}
-	return n, nil
+	return ctx, n, nil
 }
 
 // objectNameParts is parseObjectName's collection and object id.
-func objectNameParts(ctx context.Context, name string) (collection, objectID string, err error) {
-	n, err := parseObjectName(ctx, name)
+func objectNameParts(ctx context.Context, name string) (context.Context, string, string, error) {
+	ctx, n, err := parseObjectName(ctx, name)
 	if err != nil {
-		return "", "", err
+		return ctx, "", "", err
 	}
-	return n.Collection, n.Object, nil
+	return ctx, n.Collection, n.Object, nil
 }
 
 // collectionNameParts decodes "tenants/{tenant_id}/collections/{collection}"
-// and asserts the tenant as objectNameParts does.
-func collectionNameParts(ctx context.Context, name string) (collection string, err error) {
+// and scopes ctx as parseObjectName does.
+func collectionNameParts(ctx context.Context, name string) (context.Context, string, error) {
 	n, err := paladin.ParseCollectionName(name)
 	if err != nil {
-		return "", err
+		return ctx, "", err
 	}
-	if err := assertJWTTenant(ctx, n.Tenant); err != nil {
-		return "", err
+	ctx, err = scopeToTenant(ctx, n.Tenant)
+	if err != nil {
+		return ctx, "", err
 	}
-	return n.Collection, nil
+	return ctx, n.Collection, nil
 }
+
+// scopeToTenant admits a request to the tenant a resource name carries and
+// returns the context the handler acts on.
+//
+// A caller acts on its own tenant. A platform admin may name another, and the
+// request then acts on that tenant (auth.WithActingTenant): RLS, the storage
+// keys and the Cedar resource all follow the one tenant the handler reads
+// back (apiutil.ActingContext), and Cedar evaluates the operation against that
+// tenant's policies. This role check is the gate WithActingTenant requires,
+// the same one the admin plane applies (ADR-0022).
+//
+// Every name in one request must name the same tenant: a copy or a batch
+// whose names span two tenants is refused, rather than half-acted on one.
+func scopeToTenant(ctx context.Context, urlTenantID string) (context.Context, error) {
+	if err := assertJWTTenant(ctx, urlTenantID); err != nil {
+		return ctx, err
+	}
+	tenantID, err := uuid.Parse(urlTenantID)
+	if err != nil {
+		return ctx, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant %q: %w", urlTenantID, err))
+	}
+	if named, ok := ctx.Value(namedTenantKey{}).(uuid.UUID); ok {
+		if named != tenantID {
+			return ctx, connect.NewError(connect.CodePermissionDenied, errNamesSpanTenants)
+		}
+		return ctx, nil
+	}
+	ctx = context.WithValue(ctx, namedTenantKey{}, tenantID)
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return ctx, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	if p.TenantID == tenantID {
+		return ctx, nil
+	}
+	// Only a platform admin gets here: assertJWTTenant refused everyone else.
+	return auth.WithActingTenant(ctx, tenantID), nil
+}
+
+// namedTenantKey holds the tenant the request's first resource name named.
+type namedTenantKey struct{}
+
+// errNamesSpanTenants refuses a request whose resource names disagree on the
+// tenant.
+var errNamesSpanTenants = errors.New("resource names in one request must name the same tenant")
 
 // badName turns a resource-name failure into a Connect status, keeping the
 // status a lower layer already chose.
@@ -98,7 +146,8 @@ func badName(err error) error {
 }
 
 // assertJWTTenant returns an error when the URL tenant does not match the
-// caller's JWT tenant. Platform admins bypass the check.
+// caller's JWT tenant. Platform admins pass, and scopeToTenant then makes the
+// request act on the tenant they named.
 func assertJWTTenant(ctx context.Context, urlTenantID string) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {

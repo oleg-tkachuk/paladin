@@ -65,6 +65,7 @@ Numbered, immutable once accepted, superseded rather than edited. See
 | [0019](adr/0019-object-search-and-read-replica.md) | Object search under RLS, and an opt-in read replica |
 | [0020](adr/0020-sdk-integration-grade.md) | The SDKs to integration grade |
 | [0021](adr/0021-biscuit-copies.md) | Biscuit copies — narrowed offline, revoked and counted by block |
+| [0022](adr/0022-data-plane-acts-on-the-named-tenant.md) | The data plane acts on the tenant a platform admin names |
 
 ## Runbooks
 

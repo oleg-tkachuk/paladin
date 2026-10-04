@@ -240,7 +240,7 @@ func (h *Handler) SetVersionRecorder(v VersionRecorder) { h.versions = v }
 // multipart session. Handler contract: size_bytes is required here because
 // part sizing needs it (unlike UploadObject where it's a hint).
 func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs) (*Session, error) {
-	tenantID, p, err := apiutil.CallerContext(ctx)
+	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +298,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 }
 
 func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs) error {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -378,7 +378,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 }
 
 func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, want SessionRef) error {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -436,7 +436,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 		metrics.RecordPresign(ctx, metrics.PresignOpPart, metrics.PresignOutcome(err), time.Since(start).Seconds())
 	}()
 
-	tenantID, p, err := apiutil.CallerContext(ctx)
+	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
@@ -554,7 +554,7 @@ func (h *Handler) discardMismatched(ctx context.Context, sess Session, backendID
 // The page token is the last part number seen, matching the S3 contract the
 // call is a thin wrapper over.
 func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string, want SessionRef) ([]Part, string, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -613,7 +613,7 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 // scoped principal — unscoped/roles-only callers are unaffected.
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, key, backendID, bucket, action string, sizeBytes int64, contentType string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipalFor(p, tenantID),
+		apiutil.CedarPrincipal(p),
 		action,
 		&cedar.Resource{TenantID: tenantID, Collection: collection, Key: key, BackendID: backendID, BucketName: bucket, SizeBytes: sizeBytes, ContentType: contentType},
 		cedar.RequestContext{SizeBytes: sizeBytes, ContentType: contentType, Now: time.Now()},

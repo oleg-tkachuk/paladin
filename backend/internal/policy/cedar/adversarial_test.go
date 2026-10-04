@@ -126,3 +126,30 @@ func TestAdversarial_SlugWithoutATrustedUUIDIsNotAMember(t *testing.T) {
 		t.Fatal("a principal with no trusted tenant UUID satisfied a member permit by naming the slug")
 	}
 }
+
+// A platform admin acting on another tenant's data (the data plane's
+// acting-tenant path, ADR-0022) is authorised by its role, against that
+// tenant's policy set — and is never made a member of it: its principal keeps
+// its own tenant, so the target's member permits do not apply to it, and the
+// target's forbids still do.
+func TestAdversarial_PlatformAdminActingOnAnotherTenant(t *testing.T) {
+	platform, target := uuid.New(), uuid.New()
+	admin := &Principal{Subject: "admin", TenantID: platform, TenantSlug: "platform", Roles: []string{"platform.admin"}}
+	resource := &Resource{TenantID: target, Collection: "k"}
+
+	if got := decide(t, bravoMemberPolicy, "bravo", admin, resource); got != DecisionAllow {
+		t.Error("platform admin refused on another tenant: the role permit no longer reaches it")
+	}
+
+	const targetForbids = `forbid (principal, action == Action::"GetObject", resource);`
+	if got := decide(t, targetForbids, "bravo", admin, resource); got != DecisionDeny {
+		t.Error("the target tenant's forbid did not apply to a platform admin acting on it")
+	}
+
+	// The same caller without the role is not let in by the target's member
+	// permit, as it would be if its principal were pinned to the target.
+	plain := &Principal{Subject: "admin", TenantID: platform, TenantSlug: "platform", Roles: []string{"tenant.admin"}}
+	if got := decide(t, bravoMemberPolicy, "bravo", plain, resource); got != DecisionDeny {
+		t.Fatal("SECURITY: a caller from another tenant matched the target's member permit")
+	}
+}

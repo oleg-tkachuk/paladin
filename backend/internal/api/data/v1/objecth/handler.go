@@ -620,7 +620,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 		metrics.RecordPresign(ctx, presignOp, metrics.PresignOutcome(err), time.Since(start).Seconds())
 	}()
 
-	tenantID, err := auth.TenantFromContext(ctx)
+	tenantID, err := auth.EffectiveTenant(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
@@ -676,7 +676,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	// 3. Cedar authorization: may this principal PutObject here?
 	principal, _ := auth.PrincipalFromContext(ctx)
 	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipalFor(principal, tenantID),
+		apiutil.CedarPrincipal(principal),
 		cedar.ActionPresignPut,
 		&cedar.Resource{
 			TenantID:    tenantID,
@@ -801,7 +801,7 @@ type CompleteObjectInput struct {
 // it returns the current state without error. If the object is still PENDING,
 // it HEADs the backend to retrieve authoritative etag/size/sequencer.
 func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*Object, error) {
-	tenantID, err := auth.TenantFromContext(ctx)
+	tenantID, err := auth.EffectiveTenant(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
@@ -951,7 +951,7 @@ type ListObjectsInput struct {
 // skipped — listing is permitted for any authenticated tenant member to keep
 // pagination cheap (same contract as ListCollections).
 func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Object, string, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1059,7 +1059,7 @@ type CountObjectsOutput struct {
 // returns exact=true; with a filter it iterates rows applying CEL and may
 // return an approximate result when the scan cap is hit.
 func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*CountObjectsOutput, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1122,7 +1122,7 @@ const distinctTagValueLimit = 100
 func (h *Handler) ListDistinctTags(
 	ctx context.Context, collection, pageToken string, pageSize int32,
 ) (DistinctTagPage, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return DistinctTagPage{}, err
 	}
@@ -1164,7 +1164,7 @@ func (h *Handler) ListDistinctTags(
 // do; Cedar enforces tenant-admin policy. Both must agree before the
 // read happens.
 func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (*Object, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1212,7 +1212,7 @@ func (h *Handler) attachLock(ctx context.Context, tenantID uuid.UUID, obj *Objec
 // LookupObject resolves an object by (collection, key) instead of object_id —
 // useful when callers only have the path-style identifier (S3-style).
 func (h *Handler) LookupObject(ctx context.Context, collection, key string) (*Object, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1263,7 +1263,7 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 		metrics.RecordPresign(ctx, metrics.PresignOpGet, metrics.PresignOutcome(err), time.Since(start).Seconds())
 	}()
 
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1356,7 +1356,7 @@ type UpdateObjectInput struct {
 }
 
 func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Object, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1434,7 +1434,7 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 // honored only for callers holding `lock.governance.bypass` or
 // `platform.admin` — protects compliance-mode locks regardless.
 func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, resourceVersion string, permanent, bypassGovernance bool) error {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -1711,7 +1711,7 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1810,7 +1810,7 @@ type CopyObjectInput struct {
 }
 
 func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1987,7 +1987,7 @@ func (h *Handler) authorize(
 	contentType string,
 ) error {
 	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipalFor(principal, tenantID),
+		apiutil.CedarPrincipal(principal),
 		action,
 		res,
 		cedar.RequestContext{SizeBytes: sizeBytes, ContentType: contentType, Now: time.Now()},
