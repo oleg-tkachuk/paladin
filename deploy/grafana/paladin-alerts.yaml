@@ -1,5 +1,5 @@
-# Paladin alerting rules for the outbox, rate limiting, capability charges and
-# the read replica.
+# Paladin alerting rules for the outbox, rate limiting, capability charges,
+# the read replica and uploads the reconciler cannot settle.
 #
 # Plain Prometheus rule group, same format as worker-alerts.yaml: drop it into
 # `rule_files:` or use it as the `spec.groups` body of a PrometheusRule CR.
@@ -98,3 +98,27 @@ groups:
             Every pod is sending listing reads to the primary. The health page's
             postgres-replica row says why (unreachable, lag, not probed);
             paladin_db_replica_lag_seconds shows how far behind it is.
+
+      # An upload the reconciler should have settled — PENDING past its
+      # presign expiry plus worker.jobs.reconciler.min_object_age — has been
+      # waiting over 30m more. The reconciler takes the oldest first every
+      # interval (30s by default), so one keeping up holds this under a
+      # minute. reconcile() logs a failed HEAD or promote and the tick still
+      # succeeds, so the worker alerts stay quiet while it happens: the
+      # objects stay PENDING and cannot be downloaded. The gauge comes from
+      # the reconciler itself; a reconciler that is not running at all is
+      # PaladinWorkerStalled's.
+      - alert: PaladinUploadsNotSettling
+        expr: |
+          max(paladin_objects_pending_overdue_age_seconds) > 1800
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Paladin has uploads the reconciler cannot settle"
+          description: >-
+            The oldest overdue PENDING object is {{ $value | humanizeDuration }}
+            past the reconciler's deadline. Those objects cannot be downloaded
+            until it completes or fails them. Check the worker logs for failed
+            HEADs and paladin_objects_pending_overdue for how many are waiting.
+          runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/uploads-not-settling.md"

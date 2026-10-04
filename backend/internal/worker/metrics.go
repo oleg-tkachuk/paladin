@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"sync"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -49,5 +50,46 @@ func recordOutboxDepth(ctx context.Context, total, maxPerTenant int64) {
 	}
 	if outboxPendingMax != nil {
 		outboxPendingMax.Record(ctx, maxPerTenant)
+	}
+}
+
+// Overdue-upload gauges, sampled by the reconciler after each tick: the
+// PENDING objects it should already have settled, and how far past that
+// deadline the oldest is. reconcile() logs a failed HEAD or promote and moves
+// on, so the tick still succeeds and PaladinWorkerTicksAllFailing never
+// fires; these are what show uploads the reconciler cannot settle. No tenant
+// label, for the outbox gauges' reason.
+var (
+	pendingMetricsOnce sync.Once
+
+	pendingOverdueCount metric.Int64Gauge   // PENDING objects past presign expiry + grace
+	pendingOverdueAge   metric.Float64Gauge // how far past that the oldest is
+)
+
+func initPendingMetrics() {
+	pendingMetricsOnce.Do(func() {
+		meter := otel.Meter("github.com/oleg-tkachuk/paladin/internal/worker")
+
+		pendingOverdueCount, _ = meter.Int64Gauge(
+			"paladin.objects.pending_overdue",
+			metric.WithDescription("PENDING objects past their presign expiry plus the reconciler's grace: uploads it should already have settled."),
+		)
+		pendingOverdueAge, _ = meter.Float64Gauge(
+			"paladin.objects.pending_overdue.age",
+			metric.WithDescription("How far past the reconciler's deadline the oldest overdue PENDING object is; 0 with none."),
+			metric.WithUnit("s"),
+		)
+	})
+}
+
+// recordPendingOverdue publishes the sampled overdue-upload gauges. No-op-safe
+// before the MeterProvider is wired.
+func recordPendingOverdue(ctx context.Context, count int64, oldest time.Duration) {
+	initPendingMetrics()
+	if pendingOverdueCount != nil {
+		pendingOverdueCount.Record(ctx, count)
+	}
+	if pendingOverdueAge != nil {
+		pendingOverdueAge.Record(ctx, oldest.Seconds())
 	}
 }

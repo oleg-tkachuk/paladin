@@ -73,6 +73,8 @@ For when something is already on fire.
 
 - [worker-stalled.md](runbooks/worker-stalled.md) — background worker
   stalled or failing.
+- [uploads-not-settling.md](runbooks/uploads-not-settling.md) — uploads
+  the reconciler should have settled stay PENDING.
 - [quota-usage-drift.md](runbooks/quota-usage-drift.md) — a tenant hits
   its quota while storing almost nothing.
 - [platform-stats-unavailable.md](runbooks/platform-stats-unavailable.md)

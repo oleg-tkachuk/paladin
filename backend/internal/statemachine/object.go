@@ -407,6 +407,28 @@ func (t *Transitioner) ScanPendingExpired(
 	return ids, rows.Err()
 }
 
+// PendingOverdue reports the PENDING objects the reconciler should already
+// have settled — their presign TTL elapsed more than graceBeyond ago — and
+// how long past that deadline the oldest of them is. Zero and zero when there
+// are none. ScanPendingExpired picks from the same rows, oldest first, so a
+// reconciler keeping up holds the age near its poll interval; one that is not
+// — every HEAD failing, a backlog past its batch size — lets it grow.
+func (t *Transitioner) PendingOverdue(ctx context.Context, graceBeyond time.Duration) (count int64, oldest time.Duration, err error) {
+	const q = `
+        SELECT count(*),
+               COALESCE(EXTRACT(EPOCH FROM (now() - $1::interval) - min(presign_expires_at)), 0)::float8
+          FROM objects
+         WHERE state = 'PENDING'
+           AND presign_expires_at IS NOT NULL
+           AND presign_expires_at < now() - $1::interval
+    `
+	var seconds float64
+	if err := t.pool.QueryRow(ctx, q, graceBeyond.String()).Scan(&count, &seconds); err != nil {
+		return 0, 0, fmt.Errorf("sm: pending overdue: %w", err)
+	}
+	return count, time.Duration(seconds * float64(time.Second)), nil
+}
+
 var (
 	ErrConflict = errors.New("statemachine: version conflict")
 	ErrNotFound = errors.New("statemachine: object not found or wrong state")
