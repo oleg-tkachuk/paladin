@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -401,6 +402,19 @@ func TestInitiateMultipartUpload(t *testing.T) {
 		}
 		if storage.lastAbort.storageUploadID != "SUP-42" {
 			t.Fatalf("rollback aborted wrong upload: got %q want SUP-42", storage.lastAbort.storageUploadID)
+		}
+	})
+
+	t.Run("path taken → already exists, storage rolled back", func(t *testing.T) {
+		storage := &fakeStorage{initiateFn: func() (string, error) { return "SUP-43", nil }}
+		repo := &fakeRepo{initiateSessionFn: func(context.Context, InitiateArgs, uuid.UUID, string, string, string) (Session, error) {
+			return Session{}, fmt.Errorf("create multipart object row: %w", &pgconn.PgError{Code: "23505"})
+		}}
+		_, err := newHandler(repo, storage, allow()).
+			InitiateMultipartUpload(authedCtx(tid), base)
+		wantCode(t, err, connect.CodeAlreadyExists)
+		if storage.lastAbort.storageUploadID != "SUP-43" {
+			t.Fatalf("rollback aborted %q, want SUP-43", storage.lastAbort.storageUploadID)
 		}
 	})
 

@@ -5,10 +5,18 @@ resuming the multipart session where it stopped.
 leaves to the application is here: keeping the open session where a restart
 finds it, and trying the whole upload again. A body is read once, so each
 attempt opens it afresh.
+
+The key is what keeps a retry from storing the content twice: the server
+holds one object per key, so an attempt after an earlier one registered its
+object is refused with AlreadyExistsError, and ``settle`` finishes or clears
+what that attempt left. It takes one writer per key at a time — a job holding
+a lock on it, say: a PENDING object there is taken for this upload's own.
 """
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import io
 import threading
 import time
@@ -18,9 +26,19 @@ from typing import IO
 from connectrpc.code import Code
 
 import paladin
-from paladin.data.v1 import types_pb2
+from paladin.data.v1 import object_service_pb2, types_pb2
 from paladin.facade import DataPlane
 from paladin.testing import PART_SIZE, FakePaladin, StorageOp
+
+# The metadata key the content's SHA-256 is recorded under, so a later attempt
+# knows its own object from another.
+CONTENT_SHA256 = "content-sha256"
+
+
+class KeyTakenError(Exception):
+    """Another object, not an earlier attempt at this one, holds the key — or
+    one is in the trash there. Deciding that is not a retry's."""
+
 
 # Codes a call may succeed on when made again: Paladin down, busy or slow.
 TRANSIENT_CODES = frozenset({Code.UNAVAILABLE, Code.RESOURCE_EXHAUSTED, Code.DEADLINE_EXCEEDED})
@@ -58,6 +76,15 @@ def transient(err: BaseException) -> bool:
     return isinstance(err, OSError)
 
 
+def sha256_of(body: IO[bytes]) -> str:
+    """The body's SHA-256 as ``paladin.checksum`` writes it, read a chunk at a
+    time rather than held whole."""
+    digest = hashlib.sha256()
+    for chunk in iter(lambda: body.read(1 << 20), b""):
+        digest.update(chunk)
+    return base64.b64encode(digest.digest()).decode()
+
+
 def upload_durably(
     data: DataPlane,
     store: SessionStore,
@@ -73,7 +100,13 @@ def upload_durably(
     """``upload`` until it completes, at most ``attempts`` times; returns the
     object and the attempts it took. A multipart session is saved as soon as
     it opens, so the next attempt — here or after a restart — sends only the
-    parts storage does not hold; it is dropped once the object is complete."""
+    parts storage does not hold; it is dropped once the object is complete.
+    ``key`` must be the application's own: without one every attempt makes a
+    new object."""
+    if not key:
+        raise ValueError("a durable upload needs a key of its own")
+    with open_body() as body:
+        sha256 = sha256_of(body)
     store_key = f"{parent}/{key}"
     for attempt in range(1, attempts + 1):
         resume = store.load(store_key)
@@ -86,20 +119,69 @@ def upload_durably(
                     content_type=content_type,
                     body=body,
                     size=size,
+                    metadata={CONTENT_SHA256: sha256},
                     multipart_threshold=multipart_threshold,
                     on_session=lambda s: store.save(store_key, s),
                     resume=resume,
                 )
+        except paladin.AlreadyExistsError:
+            try:
+                settled = settle(data, parent, key, sha256)
+            except Exception as err:
+                if not transient(err) or attempt == attempts:
+                    raise
+                settled = None
+            if settled is not None:
+                store.delete(store_key)
+                return settled, attempt
+            if attempt == attempts:
+                raise
         except Exception as err:
             if resume is not None and isinstance(err, paladin.NotFoundError):
                 store.delete(store_key)  # the server swept the session: start over
             elif not transient(err) or attempt == attempts:
                 raise
-            time.sleep(0.01 * attempt)  # longer in production
-            continue
-        store.delete(store_key)
-        return obj, attempt
+        else:
+            store.delete(store_key)
+            return obj, attempt
+        time.sleep(0.01 * attempt)  # longer in production
     raise AssertionError("unreachable")
+
+
+def settle(data: DataPlane, parent: str, key: str, sha256: str) -> types_pb2.Object | None:
+    """Deal with the object at ``key``: return it when it is this content,
+    complete or completed now; delete it permanently, so the next attempt can
+    register the key again, when it is an attempt that never got its bytes or
+    failed; raise ``KeyTakenError`` when it is another object."""
+    try:
+        existing = paladin.lookup_object(
+            data, paladin.ObjectURI(paladin.CollectionName.parse(parent), key)
+        )
+    except paladin.NotFoundError:
+        # The key is held, yet no live object answers: one in the trash.
+        raise KeyTakenError(f"an object is in the trash at {key!r}") from None
+    if existing.metadata.get(CONTENT_SHA256) != sha256:
+        raise KeyTakenError(existing.name)
+    if existing.state == types_pb2.OBJECT_STATE_AVAILABLE:
+        return existing  # the earlier attempt completed; only its answer was lost
+    if existing.state == types_pb2.OBJECT_STATE_PENDING:
+        # Its bytes may have landed with the answer lost: the server HEADs
+        # storage and completes it if so.
+        try:
+            return data.object.complete_object(  # type: ignore[no-any-return]
+                object_service_pb2.CompleteObjectRequest(name=existing.name, checksum_value=sha256)
+            )
+        except paladin.FailedPreconditionError:
+            pass
+    elif existing.state != types_pb2.OBJECT_STATE_FAILED:
+        raise KeyTakenError(f"{existing.name} is {types_pb2.ObjectState.Name(existing.state)}")
+    # Permanently: an object in the trash keeps its key.
+    data.object.delete_object(
+        object_service_pb2.DeleteObjectRequest(
+            name=existing.name, resource_version=existing.resource_version, permanent=True
+        )
+    )
+    return None
 
 
 def main(fake: FakePaladin) -> tuple[int, bool, bool]:

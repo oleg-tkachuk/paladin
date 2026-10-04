@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"strings"
@@ -253,6 +254,19 @@ func transient(err error) bool {
 	return errors.As(err, &ne)
 }
 
+// contentSHA256 is the metadata key uploadDurably records the content's
+// SHA-256 under, so a later attempt knows its own object from another.
+const contentSHA256 = "content-sha256"
+
+var (
+	// errNoKey: without a key every attempt makes a new object, so a retry
+	// after a lost answer would store the content twice.
+	errNoKey = errors.New("a durable upload needs a key of its own and a Body it can read again")
+	// errKeyTaken: another object, not an earlier attempt at this one, holds
+	// the key — or one is in the trash there. Deciding that is not a retry's.
+	errKeyTaken = errors.New("the key holds another object")
+)
+
 // uploadDurably runs Upload until it completes, at most attempts times. A
 // multipart session is saved as soon as it opens, so the next attempt — in
 // this process or after a restart — resumes it and sends only the parts
@@ -260,11 +274,29 @@ func transient(err error) bool {
 // itself retries each request and completes the object; this adds what it
 // leaves to the application: keeping the session, and trying the whole
 // upload again.
+//
+// The key is what keeps a retry from storing the content twice: the server
+// holds one object per key, so an attempt after an earlier one registered
+// its object is refused with ErrAlreadyExists, and settle finishes or clears
+// what that attempt left. It takes one writer per key at a time — a job
+// holding a lock on it, say: a PENDING object there is taken for this
+// upload's own.
 func uploadDurably(ctx context.Context, data *paladin.DataPlane, in paladin.UploadInput,
 	store *sessionStore, attempts int,
 ) (*datav1.Object, int, error) {
+	if in.Key == "" || in.Body == nil {
+		return nil, 0, errNoKey
+	}
+	sum, err := paladin.Checksum(paladin.ChecksumSHA256, io.NewSectionReader(in.Body, 0, in.Size))
+	if err != nil {
+		return nil, 0, err
+	}
+	in.Metadata = maps.Clone(in.Metadata)
+	if in.Metadata == nil {
+		in.Metadata = map[string]string{}
+	}
+	in.Metadata[contentSHA256] = sum
 	key := in.Parent + "/" + in.Key
-	var err error
 	for attempt := 1; attempt <= attempts; attempt++ {
 		opts := paladin.UploadOptions{OnSession: func(s paladin.UploadSession) { store.Save(key, s) }}
 		if s, ok := store.Load(key); ok {
@@ -276,6 +308,18 @@ func uploadDurably(ctx context.Context, data *paladin.DataPlane, in paladin.Uplo
 			return obj, attempt, nil
 		}
 		switch {
+		case errors.Is(err, paladin.ErrAlreadyExists):
+			settled, serr := settle(ctx, data, in, sum)
+			if settled != nil {
+				store.Delete(key)
+				return settled, attempt, nil
+			}
+			if serr != nil {
+				if !transient(serr) {
+					return nil, attempt, serr
+				}
+				err = serr
+			}
 		case opts.Resume != nil && errors.Is(err, paladin.ErrNotFound):
 			store.Delete(key) // the server swept the session: start over
 		case !transient(err):
@@ -288,6 +332,52 @@ func uploadDurably(ctx context.Context, data *paladin.DataPlane, in paladin.Uplo
 		}
 	}
 	return nil, attempts, err
+}
+
+// settle deals with the object at in's key: returned when it is this
+// content, complete or completed now; permanently deleted, so the next
+// attempt can register the key again, when it is an attempt that never got
+// its bytes or failed; errKeyTaken when it is another object.
+func settle(ctx context.Context, data *paladin.DataPlane, in paladin.UploadInput, sum string) (*datav1.Object, error) {
+	collection, err := paladin.ParseCollectionName(in.Parent)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := paladin.LookupObject(ctx, data, paladin.ObjectURI{Collection: collection, Key: in.Key})
+	if errors.Is(err, paladin.ErrNotFound) {
+		// The key is held, yet no live object answers: one in the trash.
+		return nil, fmt.Errorf("%w: one is in the trash at %q", errKeyTaken, in.Key)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if existing.GetMetadata()[contentSHA256] != sum {
+		return nil, fmt.Errorf("%w: %s", errKeyTaken, existing.GetName())
+	}
+	switch existing.GetState() {
+	case datav1.ObjectState_OBJECT_STATE_AVAILABLE:
+		return existing, nil // the earlier attempt completed; only its answer was lost
+	case datav1.ObjectState_OBJECT_STATE_PENDING:
+		// Its bytes may have landed with the answer lost: the server HEADs
+		// storage and completes it if so.
+		done, err := data.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{
+			Name: existing.GetName(), ChecksumValue: sum,
+		}))
+		if err == nil {
+			return done.Msg, nil
+		}
+		if !errors.Is(err, paladin.ErrFailedPrecondition) {
+			return nil, err
+		}
+	case datav1.ObjectState_OBJECT_STATE_FAILED:
+	default:
+		return nil, fmt.Errorf("%w: %s is %s", errKeyTaken, existing.GetName(), existing.GetState())
+	}
+	// Permanently: an object in the trash keeps its key.
+	_, err = data.Object.DeleteObject(ctx, connect.NewRequest(&datav1.DeleteObjectRequest{
+		Name: existing.GetName(), ResourceVersion: existing.GetResourceVersion(), Permanent: true,
+	}))
+	return nil, err
 }
 
 // An upload kept until it completes: a failure part-way is tried again,
