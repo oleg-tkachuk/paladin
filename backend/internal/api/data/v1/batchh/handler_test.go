@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/capability"
@@ -51,10 +53,33 @@ func (f fakeBuckets) LookupBucket(_ context.Context, _ uuid.UUID, collection str
 	return "backend-def", "bucket-def", nil
 }
 
-// newHandler wires a Handler with a default bucket resolver. Tests that assert
-// on the resolved bucket pass an explicit resolver via NewHandler directly.
+// fakeObjects serves FindByIDs from a fixed set, as the store would: every
+// object whose id was asked for, whatever its collection.
+type fakeObjects struct {
+	objs  []objecth.Object
+	err   error
+	calls int
+}
+
+func (f *fakeObjects) FindByIDs(_ context.Context, _ uuid.UUID, ids []uuid.UUID) ([]objecth.Object, error) {
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	var out []objecth.Object
+	for _, o := range f.objs {
+		if slices.Contains(ids, o.ObjectID) {
+			out = append(out, o)
+		}
+	}
+	return out, nil
+}
+
+// newHandler wires a Handler with a default bucket resolver and no objects.
+// Tests that assert on the resolved bucket or the objects read pass their own
+// to NewHandler directly.
 func newHandler(sub Submitter, az cedar.Authorizer) *Handler {
-	return NewHandler(sub, az, fakeBuckets{})
+	return NewHandler(sub, az, fakeBuckets{}, &fakeObjects{})
 }
 
 // fakeAuthorizer is a configurable cedar.Authorizer. fn decides the
@@ -464,7 +489,7 @@ func TestBatchAuthzResourceCarriesBucket(t *testing.T) {
 		"src": {"be-s", "bucket-src"},
 		"dst": {"be-d", "bucket-dst"},
 	}}
-	_, err := NewHandler(&fakeSubmitter{id: uuid.New()}, az, buckets).
+	_, err := NewHandler(&fakeSubmitter{id: uuid.New()}, az, buckets, &fakeObjects{}).
 		BatchCopy(authedCtx(tid), BatchCopyArgs{ObjectIDs: ids(1), SrcCollection: "src", DstCollection: "dst"})
 	if err != nil {
 		t.Fatalf("BatchCopy: %v", err)
@@ -509,7 +534,7 @@ func TestBatchScopeEnforcedByEngine(t *testing.T) {
 
 	t.Run("allow on scoped object-key", func(t *testing.T) {
 		sub := &fakeSubmitter{id: uuid.New()}
-		_, err := NewHandler(sub, engine, buckets).
+		_, err := NewHandler(sub, engine, buckets, &fakeObjects{}).
 			BatchDelete(scopedCtx(tid, okScope), BatchDeleteArgs{Collection: "docs", ObjectIDs: ids(1)})
 		if err != nil {
 			t.Fatalf("scoped PAT on its own object-key must be allowed, got %v", err)
@@ -521,7 +546,7 @@ func TestBatchScopeEnforcedByEngine(t *testing.T) {
 
 	t.Run("deny off scoped object-key", func(t *testing.T) {
 		sub := &fakeSubmitter{id: uuid.New()}
-		_, err := NewHandler(sub, engine, buckets).
+		_, err := NewHandler(sub, engine, buckets, &fakeObjects{}).
 			BatchDelete(scopedCtx(tid, okScope), BatchDeleteArgs{Collection: "secret", ObjectIDs: ids(1)})
 		wantCode(t, err, connect.CodePermissionDenied)
 		if sub.called {
@@ -531,7 +556,7 @@ func TestBatchScopeEnforcedByEngine(t *testing.T) {
 
 	t.Run("deny whole submit when ANY target off-scope (copy dst)", func(t *testing.T) {
 		sub := &fakeSubmitter{id: uuid.New()}
-		_, err := NewHandler(sub, engine, buckets).
+		_, err := NewHandler(sub, engine, buckets, &fakeObjects{}).
 			BatchCopy(scopedCtx(tid, okScope), BatchCopyArgs{
 				ObjectIDs: ids(1), SrcCollection: "docs", DstCollection: "secret",
 			})
@@ -540,4 +565,185 @@ func TestBatchScopeEnforcedByEngine(t *testing.T) {
 			t.Fatal("submitter must not run when a copy target is off-scope")
 		}
 	})
+}
+
+// ─── resource-restricted capabilities ──────────────────────────────────────
+
+const (
+	scopedCollection = "docs"
+	inScopeDir       = "in/"
+)
+
+// restrictedCtx carries a capability confined to inScopeDir of
+// scopedCollection, with ops.
+func restrictedCtx(tid uuid.UUID, ops ...capability.Op) context.Context {
+	return auth.WithCapability(authedCtx(tid), &capability.Capability{Caveats: capability.Caveats{
+		Ops:              ops,
+		ResourcePrefixes: []string{objecth.CapabilityObjectURI(tid, scopedCollection, inScopeDir)},
+	}})
+}
+
+func object(collection, key string) objecth.Object {
+	return objecth.Object{ObjectID: uuid.New(), Collection: collection, Key: key}
+}
+
+func idsOf(objs ...objecth.Object) []uuid.UUID {
+	out := make([]uuid.UUID, 0, len(objs))
+	for _, o := range objs {
+		out = append(out, o.ObjectID)
+	}
+	return out
+}
+
+// The three batches over one collection check a restricted capability against
+// each object they will act on.
+func TestBatchOverOneCollectionChecksEachObject(t *testing.T) {
+	tid := uuid.New()
+	inside := object(scopedCollection, inScopeDir+"a.txt")
+	outside := object(scopedCollection, "out/b.txt")
+	elsewhere := object("other", inScopeDir+"c.txt")
+
+	batches := map[string]struct {
+		op     capability.Op
+		submit func(*Handler, context.Context, []uuid.UUID) error
+	}{
+		"BatchDelete": {capability.OpDelete, func(h *Handler, ctx context.Context, ids []uuid.UUID) error {
+			_, err := h.BatchDelete(ctx, BatchDeleteArgs{Collection: scopedCollection, ObjectIDs: ids})
+			return err
+		}},
+		"BatchUpdateTags": {capability.OpTag, func(h *Handler, ctx context.Context, ids []uuid.UUID) error {
+			_, err := h.BatchUpdateTags(ctx, BatchUpdateTagsArgs{Collection: scopedCollection, ObjectIDs: ids})
+			return err
+		}},
+		"BatchRestoreObjects": {capability.OpPut, func(h *Handler, ctx context.Context, ids []uuid.UUID) error {
+			_, err := h.BatchRestoreObjects(ctx, BatchRestoreObjectsArgs{Collection: scopedCollection, ObjectIDs: ids})
+			return err
+		}},
+	}
+	cases := map[string]struct {
+		ids  []uuid.UUID
+		code connect.Code // 0: submitted
+	}{
+		"every object in scope":           {ids: idsOf(inside)},
+		"in scope, and one missing":       {ids: append(idsOf(inside), uuid.New())},
+		"one object out of scope":         {ids: idsOf(inside, outside), code: connect.CodePermissionDenied},
+		"only another collection's":       {ids: idsOf(elsewhere), code: connect.CodePermissionDenied},
+		"no object of the batch exists":   {ids: ids(2), code: connect.CodePermissionDenied},
+		"another collection's is skipped": {ids: idsOf(inside, elsewhere)},
+	}
+	for name, b := range batches {
+		for cname, tc := range cases {
+			t.Run(name+"/"+cname, func(t *testing.T) {
+				sub := &fakeSubmitter{id: uuid.New()}
+				h := NewHandler(sub, allowAll(), fakeBuckets{}, &fakeObjects{objs: []objecth.Object{inside, outside, elsewhere}})
+				err := b.submit(h, restrictedCtx(tid, b.op), tc.ids)
+				if tc.code == 0 {
+					if err != nil || !sub.called {
+						t.Fatalf("err = %v, submitted = %v; want submitted", err, sub.called)
+					}
+					return
+				}
+				wantCode(t, err, tc.code)
+				if sub.called {
+					t.Fatal("a refused batch was submitted")
+				}
+			})
+		}
+	}
+}
+
+// Without resource caveats the op alone decides, as before, and no object is
+// read for it; nor for a caller with no capability at all.
+func TestBatchReadsObjectsOnlyForARestrictedCapability(t *testing.T) {
+	tid := uuid.New()
+	for name, ctx := range map[string]context.Context{
+		"unrestricted capability": authedCtxWithCap(tid, capability.OpDelete),
+		"no capability":           authedCtx(tid),
+	} {
+		t.Run(name, func(t *testing.T) {
+			objs := &fakeObjects{}
+			sub := &fakeSubmitter{id: uuid.New()}
+			if _, err := NewHandler(sub, allowAll(), fakeBuckets{}, objs).
+				BatchDelete(ctx, BatchDeleteArgs{Collection: scopedCollection, ObjectIDs: ids(1)}); err != nil {
+				t.Fatalf("BatchDelete: %v", err)
+			}
+			if objs.calls != 0 {
+				t.Errorf("objects read %d times", objs.calls)
+			}
+		})
+	}
+}
+
+func TestBatchObjectLookupFailureRefuses(t *testing.T) {
+	tid := uuid.New()
+	sub := &fakeSubmitter{}
+	_, err := NewHandler(sub, allowAll(), fakeBuckets{}, &fakeObjects{err: errors.New("db down")}).
+		BatchDelete(restrictedCtx(tid, capability.OpDelete), BatchDeleteArgs{Collection: scopedCollection, ObjectIDs: ids(1)})
+	if err == nil || sub.called {
+		t.Fatalf("err = %v, submitted = %v; want refused", err, sub.called)
+	}
+}
+
+// A copy reads its sources and writes its destinations: get on each source,
+// put on each KeyPrefix + key under the destination collection.
+func TestBatchCopyChecksSourcesAndDestinations(t *testing.T) {
+	tid := uuid.New()
+	src := object(scopedCollection, inScopeDir+"a.txt")
+	tainted := object(scopedCollection, inScopeDir+"t.txt")
+	tainted.Taint = []string{"pii"}
+	readWrite := []capability.Op{capability.OpGet, capability.OpPut}
+
+	cases := map[string]struct {
+		ctx       context.Context
+		dst       string
+		keyPrefix string
+		ids       []uuid.UUID
+		code      connect.Code
+	}{
+		"restricted, both ends in scope": {
+			ctx: restrictedCtx(tid, readWrite...), dst: scopedCollection, keyPrefix: inScopeDir + "copy/", ids: idsOf(src),
+		},
+		"restricted, destination out of scope": {
+			ctx: restrictedCtx(tid, readWrite...), dst: scopedCollection, keyPrefix: "out/", ids: idsOf(src),
+			code: connect.CodePermissionDenied,
+		},
+		"restricted, no source exists": {
+			ctx: restrictedCtx(tid, readWrite...), dst: scopedCollection, keyPrefix: inScopeDir, ids: ids(1),
+			code: connect.CodePermissionDenied,
+		},
+		"unrestricted without get": {
+			ctx: authedCtxWithCap(tid, capability.OpPut), dst: "dst", ids: idsOf(src), code: connect.CodePermissionDenied,
+		},
+		"unrestricted, a tainted source": {
+			ctx: authedCtxWithCap(tid, readWrite...), dst: "dst", ids: idsOf(tainted), code: connect.CodePermissionDenied,
+		},
+		"unrestricted, allowed tainted reads": {
+			ctx: auth.WithCapability(authedCtx(tid), &capability.Capability{Caveats: capability.Caveats{
+				Ops: readWrite, AllowTaintedRead: true,
+			}}),
+			dst: "dst", ids: idsOf(tainted),
+		},
+		"unrestricted, no source exists": {
+			ctx: authedCtxWithCap(tid, readWrite...), dst: "dst", ids: ids(1),
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			sub := &fakeSubmitter{id: uuid.New()}
+			h := NewHandler(sub, allowAll(), fakeBuckets{}, &fakeObjects{objs: []objecth.Object{src, tainted}})
+			_, err := h.BatchCopy(tc.ctx, BatchCopyArgs{
+				SrcCollection: scopedCollection, DstCollection: tc.dst, KeyPrefix: tc.keyPrefix, ObjectIDs: tc.ids,
+			})
+			if tc.code == 0 {
+				if err != nil || !sub.called {
+					t.Fatalf("err = %v, submitted = %v; want submitted", err, sub.called)
+				}
+				return
+			}
+			wantCode(t, err, tc.code)
+			if sub.called {
+				t.Fatal("a refused copy was submitted")
+			}
+		})
+	}
 }

@@ -76,7 +76,7 @@ func (e *BatchRestoreExecutor) Execute(ctx context.Context, op operationh.Operat
 	// One batched read for existence checks (DELETED rows included —
 	// the query has no state filter). Missing ids land in the failure
 	// list below, same contract as the old per-id FindByName loop.
-	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.ObjectIDs)
+	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.Collection, args.ObjectIDs)
 	if err != nil {
 		return nil, fmt.Errorf("batch lookup: %w", err)
 	}

@@ -158,8 +158,8 @@ func TestBatchDeleteSucceeds(t *testing.T) {
 	tenant := uuid.New()
 	id1, id2 := uuid.New(), uuid.New()
 	repo := &lookupRepo{objs: []objecth.Object{
-		{ObjectID: id1, ResourceVersion: 3},
-		{ObjectID: id2, ResourceVersion: 7},
+		{ObjectID: id1, Collection: "k", ResourceVersion: 3},
+		{ObjectID: id2, Collection: "k", ResourceVersion: 7},
 	}}
 	tr := newFakeTransitions()
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr}
@@ -186,12 +186,41 @@ func TestBatchDeleteSucceeds(t *testing.T) {
 	}
 }
 
+// The batch was authorised for its collection, and ids are tenant-wide: an
+// object of another collection named in it must be left alone and reported as
+// not found, like an id that does not exist.
+func TestBatchDeleteLeavesOtherCollectionsAlone(t *testing.T) {
+	tenant := uuid.New()
+	inside, outside := uuid.New(), uuid.New()
+	repo := &lookupRepo{objs: []objecth.Object{
+		{ObjectID: inside, Collection: "k", ResourceVersion: 1},
+		{ObjectID: outside, Collection: "other", ResourceVersion: 1},
+	}}
+	tr := newFakeTransitions()
+	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr}
+
+	body, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchDeleteArgs{
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{inside, outside},
+	}))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if _, touched := tr.softArgs[outside]; touched {
+		t.Fatal("an object of another collection was deleted")
+	}
+	resp := decodeDeleteResp(t, body)
+	if resp.Succeeded != 1 || len(resp.Failures) != 1 ||
+		resp.Failures[0].ObjectID != outside.String() || resp.Failures[0].Reason != "not found" {
+		t.Errorf("resp = %+v", resp)
+	}
+}
+
 // Partial success is the batch contract: a missing id is reported per-object,
 // not raised as a batch-level error.
 func TestBatchDeleteReportsMissingObjects(t *testing.T) {
 	tenant := uuid.New()
 	present, missing := uuid.New(), uuid.New()
-	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: present, ResourceVersion: 1}}}
+	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: present, Collection: "k", ResourceVersion: 1}}}
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions()}
 
 	body, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchDeleteArgs{
@@ -218,7 +247,7 @@ func TestBatchDeleteReportsTransitionFailures(t *testing.T) {
 	tenant := uuid.New()
 	ok, bad := uuid.New(), uuid.New()
 	repo := &lookupRepo{objs: []objecth.Object{
-		{ObjectID: ok, ResourceVersion: 1}, {ObjectID: bad, ResourceVersion: 1},
+		{ObjectID: ok, Collection: "k", ResourceVersion: 1}, {ObjectID: bad, Collection: "k", ResourceVersion: 1},
 	}}
 	tr := newFakeTransitions()
 	tr.softErrs[bad] = statemachine.ErrConflict
@@ -263,7 +292,7 @@ func TestBatchDeleteLookupErrorFailsTheBatch(t *testing.T) {
 func TestBatchDeleteHonoursContextCancellation(t *testing.T) {
 	tenant := uuid.New()
 	id := uuid.New()
-	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, ResourceVersion: 1}}}
+	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 1}}}
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions()}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -282,10 +311,10 @@ func TestBatchDeleteHonoursContextCancellation(t *testing.T) {
 func TestFindByIDsIndexesByID(t *testing.T) {
 	id1, id2 := uuid.New(), uuid.New()
 	repo := &lookupRepo{objs: []objecth.Object{
-		{ObjectID: id1, Key: "a"}, {ObjectID: id2, Key: "b"},
+		{ObjectID: id1, Collection: "k", Key: "a"}, {ObjectID: id2, Collection: "k", Key: "b"},
 	}}
 
-	got, err := findByIDs(context.Background(), repo, uuid.New(), []uuid.UUID{id1, id2})
+	got, err := findByIDs(context.Background(), repo, uuid.New(), "k", []uuid.UUID{id1, id2})
 	if err != nil {
 		t.Fatalf("findByIDs: %v", err)
 	}
@@ -298,9 +327,9 @@ func TestFindByIDsIndexesByID(t *testing.T) {
 // callers detect "not found" without a second query.
 func TestFindByIDsOmitsMissing(t *testing.T) {
 	present, missing := uuid.New(), uuid.New()
-	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: present}}}
+	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: present, Collection: "k"}}}
 
-	got, err := findByIDs(context.Background(), repo, uuid.New(), []uuid.UUID{present, missing})
+	got, err := findByIDs(context.Background(), repo, uuid.New(), "k", []uuid.UUID{present, missing})
 	if err != nil {
 		t.Fatalf("findByIDs: %v", err)
 	}
@@ -311,8 +340,29 @@ func TestFindByIDsOmitsMissing(t *testing.T) {
 
 func TestFindByIDsPropagatesError(t *testing.T) {
 	boom := errors.New("db down")
-	if _, err := findByIDs(context.Background(), &lookupRepo{err: boom}, uuid.New(), nil); !errors.Is(err, boom) {
+	if _, err := findByIDs(context.Background(), &lookupRepo{err: boom}, uuid.New(), "k", nil); !errors.Is(err, boom) {
 		t.Fatalf("want the repo error, got %v", err)
+	}
+}
+
+// An id is unique across the tenant, so the repository finds it whatever
+// collection it is in. The batch was authorised for its own collection only:
+// an object from another one must read as not found.
+func TestFindByIDsOmitsOtherCollections(t *testing.T) {
+	inside, outside := uuid.New(), uuid.New()
+	repo := &lookupRepo{objs: []objecth.Object{
+		{ObjectID: inside, Collection: "k"}, {ObjectID: outside, Collection: "other"},
+	}}
+
+	got, err := findByIDs(context.Background(), repo, uuid.New(), "k", []uuid.UUID{inside, outside})
+	if err != nil {
+		t.Fatalf("findByIDs: %v", err)
+	}
+	if _, ok := got[inside]; !ok {
+		t.Error("the object in the batch's collection is missing")
+	}
+	if _, ok := got[outside]; ok {
+		t.Error("an object from another collection is in the batch")
 	}
 }
 
@@ -330,7 +380,7 @@ func decodeRestoreResp(t *testing.T, body []byte) BatchRestoreResponse {
 func TestBatchRestoreSucceeds(t *testing.T) {
 	tenant := uuid.New()
 	id1, id2 := uuid.New(), uuid.New()
-	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id1}, {ObjectID: id2}}}
+	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id1, Collection: "k"}, {ObjectID: id2, Collection: "k"}}}
 	tr := newFakeTransitions()
 	e := &BatchRestoreExecutor{Objects: repo, Transitions: tr}
 
@@ -352,7 +402,7 @@ func TestBatchRestoreSucceeds(t *testing.T) {
 func TestBatchRestorePartialSuccess(t *testing.T) {
 	tenant := uuid.New()
 	ok, bad, missing := uuid.New(), uuid.New(), uuid.New()
-	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: ok}, {ObjectID: bad}}}
+	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: ok, Collection: "k"}, {ObjectID: bad, Collection: "k"}}}
 	tr := newFakeTransitions()
 	tr.restErrs[bad] = statemachine.ErrNotFound
 	e := &BatchRestoreExecutor{Objects: repo, Transitions: tr}
@@ -428,7 +478,7 @@ func TestBatchUpdateTagsSucceeds(t *testing.T) {
 	tenant := uuid.New()
 	id := uuid.New()
 	repo := &tagRepo{
-		lookupRepo: lookupRepo{objs: []objecth.Object{{ObjectID: id, ResourceVersion: 5}}},
+		lookupRepo: lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 5}}},
 		updErrs:    map[uuid.UUID]error{},
 	}
 	e := &BatchUpdateTagsExecutor{Objects: repo}
@@ -466,7 +516,7 @@ func TestBatchUpdateTagsPartialSuccess(t *testing.T) {
 	tenant := uuid.New()
 	ok, bad, missing := uuid.New(), uuid.New(), uuid.New()
 	repo := &tagRepo{
-		lookupRepo: lookupRepo{objs: []objecth.Object{{ObjectID: ok}, {ObjectID: bad}}},
+		lookupRepo: lookupRepo{objs: []objecth.Object{{ObjectID: ok, Collection: "k"}, {ObjectID: bad, Collection: "k"}}},
 		updErrs:    map[uuid.UUID]error{bad: objecth.ErrVersionMismatch},
 	}
 	e := &BatchUpdateTagsExecutor{Objects: repo}
@@ -540,8 +590,8 @@ func TestBatchDeletePermanentHardDeletesEachObject(t *testing.T) {
 	tenant := uuid.New()
 	id1, id2 := uuid.New(), uuid.New()
 	repo := &lookupRepo{objs: []objecth.Object{
-		{ObjectID: id1, ResourceVersion: 3},
-		{ObjectID: id2, ResourceVersion: 7},
+		{ObjectID: id1, Collection: "k", ResourceVersion: 3},
+		{ObjectID: id2, Collection: "k", ResourceVersion: 7},
 	}}
 	tr := newFakeTransitions()
 	pd := newFakePermanentDeleter()
@@ -580,8 +630,8 @@ func TestBatchDeletePermanentReportsALockedObjectAndKeepsGoing(t *testing.T) {
 	tenant := uuid.New()
 	locked, free := uuid.New(), uuid.New()
 	repo := &lookupRepo{objs: []objecth.Object{
-		{ObjectID: locked, ResourceVersion: 1},
-		{ObjectID: free, ResourceVersion: 1},
+		{ObjectID: locked, Collection: "k", ResourceVersion: 1},
+		{ObjectID: free, Collection: "k", ResourceVersion: 1},
 	}}
 	pd := newFakePermanentDeleter()
 	pd.errs[locked] = errors.New("cannot delete: compliance retention until 2030-01-01")
@@ -610,7 +660,7 @@ func TestBatchDeletePermanentFailsTheBatchWithNoDeleterWired(t *testing.T) {
 	// guard used to prevent. A misconfigured worker must fail loudly.
 	tenant := uuid.New()
 	id := uuid.New()
-	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, ResourceVersion: 1}}}
+	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 1}}}
 	tr := newFakeTransitions()
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr}
 
@@ -628,7 +678,7 @@ func TestBatchDeletePermanentFailsTheBatchWithNoDeleterWired(t *testing.T) {
 func TestBatchDeleteDefaultsToSoftWhenPermanentIsUnset(t *testing.T) {
 	tenant := uuid.New()
 	id := uuid.New()
-	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, ResourceVersion: 2}}}
+	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 2}}}
 	tr := newFakeTransitions()
 	pd := newFakePermanentDeleter()
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr, Permanent: pd}

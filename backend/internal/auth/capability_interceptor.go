@@ -876,6 +876,26 @@ func chargeError(err error) error {
 // the set. Mutating ops also need an idempotency key when the capability
 // requires one.
 func AssertCapabilityOp(ctx context.Context, op capability.Op, resourceURI string) error {
+	return assertCapabilityOp(ctx, op, resourceURI, func(ctx context.Context) (bool, error) {
+		lookup := taintLookupFrom(ctx)
+		if lookup == nil {
+			return false, nil
+		}
+		return lookup(ctx, resourceURI)
+	})
+}
+
+// AssertCapabilityOpOnObject is AssertCapabilityOp for an object the caller
+// has already read: tainted is whether it carries any taint signal, so a
+// handler checking many objects does not look each one up again.
+func AssertCapabilityOpOnObject(ctx context.Context, op capability.Op, resourceURI string, tainted bool) error {
+	return assertCapabilityOp(ctx, op, resourceURI, func(context.Context) (bool, error) {
+		return tainted, nil
+	})
+}
+
+// assertCapabilityOp is AssertCapabilityOp with the taint source given.
+func assertCapabilityOp(ctx context.Context, op capability.Op, resourceURI string, tainted func(context.Context) (bool, error)) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
 		return nil // no capability presented; not our gate
@@ -888,17 +908,16 @@ func AssertCapabilityOp(ctx context.Context, op capability.Op, resourceURI strin
 	if err := cap.Caveats.Check(req); err != nil {
 		return connect.NewError(connect.CodePermissionDenied, err)
 	}
-	// The taint check costs a lookup, so it runs only once everything else
+	// The taint check can cost a lookup, so it runs only once everything else
 	// has passed, and only where it can refuse: a read of a named object by
 	// a capability that was not allowed tainted reads.
-	if lookup := taintLookupFrom(ctx); lookup != nil && resourceURI != "" &&
-		!op.Mutating() && !cap.Caveats.AllowTaintedRead {
-		tainted, err := lookup(ctx, resourceURI)
+	if resourceURI != "" && !op.Mutating() && !cap.Caveats.AllowTaintedRead {
+		isTainted, err := tainted(ctx)
 		if err != nil {
 			// Fail closed: "could not tell" is not "clean".
 			return connect.NewError(connect.CodeUnavailable, err)
 		}
-		if tainted {
+		if isTainted {
 			req.ResourceTainted = true
 			if err := cap.Caveats.Check(req); err != nil {
 				return connect.NewError(connect.CodePermissionDenied, err)

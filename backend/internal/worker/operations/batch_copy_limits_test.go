@@ -49,9 +49,9 @@ var copyLimits = uploadpolicy.Limits{
 // failure and nothing is created for it; the rest copy as before.
 func TestBatchCopyEnforcesDestinationLimits(t *testing.T) {
 	tenant := uuid.New()
-	png := objecth.Object{ObjectID: uuid.New(), State: statemachine.StateAvailable, Key: "a.png", ContentType: "image/png", SizeBytes: 10}
-	exe := objecth.Object{ObjectID: uuid.New(), State: statemachine.StateAvailable, Key: "b.exe", ContentType: "application/x-msdownload", SizeBytes: 10}
-	big := objecth.Object{ObjectID: uuid.New(), State: statemachine.StateAvailable, Key: "c.png", ContentType: "image/png", SizeBytes: 1000}
+	png := objecth.Object{ObjectID: uuid.New(), Collection: "src", State: statemachine.StateAvailable, Key: "a.png", ContentType: "image/png", SizeBytes: 10}
+	exe := objecth.Object{ObjectID: uuid.New(), Collection: "src", State: statemachine.StateAvailable, Key: "b.exe", ContentType: "application/x-msdownload", SizeBytes: 10}
+	big := objecth.Object{ObjectID: uuid.New(), Collection: "src", State: statemachine.StateAvailable, Key: "c.png", ContentType: "image/png", SizeBytes: 1000}
 	repo := &limitsCopyRepo{
 		sources:     []objecth.Object{png, exe, big},
 		constraints: uploadpolicy.BucketConstraints{AllowedContentTypes: []string{"image/png"}, MaxObjectSizeBytes: 100},
