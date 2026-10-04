@@ -155,6 +155,9 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		// narrow offline (CapabilityService.Issue), so every plane takes one.
 		AcceptBiscuit:      true,
 		BiscuitRevocations: copies,
+		// The capability interceptor passes a copy's own limits to the usage
+		// store, which counts them (capability_copy_usage).
+		MeterCopies: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability verifier: %w", err)

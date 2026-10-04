@@ -379,12 +379,14 @@ func (i *capabilityInterceptor) enforceCaveats(
 
 	// Bumped whenever a delegated capability is presented too, not only when
 	// it carries its own MaxRequests: an ancestor's ceiling bounds the whole
-	// subtree, and the store reads it from the ancestor's record.
-	if i.usage != nil && (cap.Caveats.MaxRequests > 0 || cap.ParentID != uuid.Nil) {
+	// subtree, and the store reads it from the ancestor's record. A Biscuit
+	// copy with limits of its own is counted the same way.
+	if i.usage != nil && (cap.Caveats.MaxRequests > 0 || cap.ParentID != uuid.Nil || len(cap.Copies) > 0) {
 		if _, err := i.usage.BumpRequest(ledgerContext(ctx, cap), capability.RequestBump{
 			CapabilityID: cap.ID,
 			TenantID:     cap.Subject.TenantID,
 			MaxRequests:  int64(cap.Caveats.MaxRequests),
+			Copies:       cap.Copies,
 		}); err != nil {
 			if errors.Is(err, capability.ErrRequestLimitExceeded) {
 				return connect.NewError(connect.CodeResourceExhausted, err)
@@ -670,6 +672,7 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 		UnitCode:     resolvedUnit,
 		Op:           op,
 		Actor:        actor,
+		Copies:       cap.Copies,
 	}, onCharged)
 	if err != nil {
 		// The two exhaustion cases are separated because they need different
@@ -780,6 +783,7 @@ func ReserveCapability(ctx context.Context, amount float64, ttl time.Duration) (
 		TTL:          ttl,
 		Op:           readLastOp(ctx),
 		Actor:        cap.Subject.Subject,
+		Copies:       cap.Copies,
 	})
 	if err != nil {
 		return uuid.Nil, chargeError(err)

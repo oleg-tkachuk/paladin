@@ -125,6 +125,13 @@ type VerifierConfig struct {
 	// beside the JWT. Off, a Biscuit is refused like any malformed token.
 	AcceptBiscuit bool
 
+	// MeterCopies admits Biscuits whose attenuation blocks set a copy's own
+	// request or budget limits (Attenuation.MaxRequests, MaxBudgetMicros).
+	// Set it only when the Meter that enforces caveats counts
+	// RequestBump.Copies and the like; off, such a token is refused with
+	// ErrCopyCountersNotMetered rather than accepted with its limits unkept.
+	MeterCopies bool
+
 	// BiscuitRevocations answers whether a copy of a Biscuit is revoked on
 	// its own. Required when AcceptBiscuit is set; wrap the store in a
 	// CachedBiscuitRevocationChecker.
@@ -258,7 +265,7 @@ func (v *StandardVerifier) verifyBiscuit(ctx context.Context, token string) (*Ca
 	if sealed.BiscuitRoot == "" {
 		return nil, nil, fmt.Errorf("%w: biscuit seals an ordinary token", ErrInvalidSignature)
 	}
-	return attenuate(sealed)
+	return attenuate(sealed, v.cfg.MeterCopies)
 }
 
 // verifySigned checks a compact JWT's header, signature, issuer and tenant —
