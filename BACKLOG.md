@@ -1690,20 +1690,6 @@ finding moving from "packages you import" to "your code is affected".
 
 The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 
-### The server parses resource names by hand
-
-- **Status:** Deferred.
-- **Reason:** both SDKs now build and parse names (`paladin.ParseObjectName`,
-  `paladin.names`), against one shared table, `sdk/testdata/names.json`.
-  The server still parses them in `connectshim` by hand, and the contract
-  carries no `google.api.resource` annotation. An annotation cannot state
-  the rules: a collection may contain '/', which an AIP-122 pattern
-  segment cannot, so a generator would get collection and object names
-  wrong.
-- **Definition of Done:** the server's parsers run the same shared table,
-  so the server and both SDKs cannot disagree on a name.
-- **Blockers:** none.
-
 ### Webhook deliveries can be replayed, and the SDKs cannot verify them
 
 - **Status:** Deferred.

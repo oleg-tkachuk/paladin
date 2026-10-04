@@ -383,8 +383,8 @@ connection pools are what make many calls cheap — a `Transfer` keeps
 Both SDKs run the same scenarios against a live server
 ([`sdk/testdata/scenarios.json`](../testdata/scenarios.json), in CI's stack
 gate) and parse names against the same table
-([`sdk/testdata/names.json`](../testdata/names.json)). Where they differ, it is
-on purpose:
+([`sdk/testdata/names.json`](../testdata/names.json)), which the server's
+tests hold its parsers to as well. Where they differ, it is on purpose:
 
 | | Go | Python | Why |
 | --- | --- | --- | --- |

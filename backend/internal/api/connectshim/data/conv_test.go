@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // The data-plane shim's job is name parsing, tenant assertion, and proto
@@ -461,13 +462,18 @@ func TestLockStateToProtoAnswersUnlockedRatherThanNil(t *testing.T) {
 func TestVersionToProtoCarriesTheIdentityAndBody(t *testing.T) {
 	vid, oid := uuid.New(), uuid.New()
 	created := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
-	got := versionToProto("tenants/t/collections/docs/objects/o", &objecth.ObjectVersion{
+	tid := uuid.New()
+	parent := paladin.ObjectName{
+		CollectionName: paladin.CollectionName{Tenant: tid.String(), Collection: "docs"},
+		Object:         oid.String(),
+	}
+	got := versionToProto(parent, &objecth.ObjectVersion{
 		VersionID: vid, ObjectID: oid, StoragePath: "docs/a.txt", SizeBytes: 42,
 		ETag: "etag-1", ContentType: "text/plain",
 		Metadata: map[string]string{"k": "v"}, Tags: map[string]string{"env": "prod"},
 		CreatedAt: created, IsCurrent: true,
 	})
-	if got.GetName() != "tenants/t/collections/docs/objects/o/versions/"+vid.String() {
+	if got.GetName() != "tenants/"+tid.String()+"/collections/docs/objects/"+oid.String()+"/versions/"+vid.String() {
 		t.Errorf("name = %q", got.GetName())
 	}
 	// Two UUIDs side by side: crossed, every version would claim to be its own
@@ -495,7 +501,7 @@ func TestVersionToProtoOmitsEmptySubMessages(t *testing.T) {
 	// A version with no checksum and no lock must carry neither sub-message.
 	// An empty ChecksumDigest reads as "checksummed with the empty algorithm",
 	// and an empty ObjectLockState on a history entry invents a lock.
-	got := versionToProto("p", &objecth.ObjectVersion{VersionID: uuid.New(), ObjectID: uuid.New()})
+	got := versionToProto(paladin.ObjectName{}, &objecth.ObjectVersion{VersionID: uuid.New(), ObjectID: uuid.New()})
 	if got.GetChecksum() != nil {
 		t.Errorf("checksum = %+v, want absent", got.GetChecksum())
 	}
@@ -507,7 +513,7 @@ func TestVersionToProtoOmitsEmptySubMessages(t *testing.T) {
 func TestVersionToProtoIncludesALockHeldOnlyByLegalHold(t *testing.T) {
 	// A legal hold with no mode and no date is a real lock, and the cheapest
 	// one to lose: every field it travels with is zero.
-	got := versionToProto("p", &objecth.ObjectVersion{
+	got := versionToProto(paladin.ObjectName{}, &objecth.ObjectVersion{
 		VersionID: uuid.New(), ObjectID: uuid.New(), LegalHold: true,
 	})
 	if got.GetLock() == nil || !got.GetLock().GetLegalHold() {
