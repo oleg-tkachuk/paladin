@@ -183,3 +183,37 @@ func TestCopyUsageIsTenantScoped(t *testing.T) {
 		t.Fatalf("another tenant reads %d copy counters", seen)
 	}
 }
+
+// CopyUsage reads back the counters under the owning tenant, and another
+// tenant reads nothing.
+func TestCopyUsageIsReadBackPerTenant(t *testing.T) {
+	t.Parallel()
+	ctx, f := newLineageFixture(t)
+	f.usage = rlsUsage(t, ctx, f)
+	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
+	c := ceiling("read", 5, 2)
+	if _, err := f.usage.BumpRequest(ledgerCtx, capability.RequestBump{
+		CapabilityID: f.root, TenantID: f.tenant, Copies: []capability.CopyCeiling{c},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.usage.Charge(ledgerCtx, capability.ChargeRequest{
+		CapabilityID: f.root, TenantID: f.tenant, Amount: 0.5, MaxBudget: 25, UnitCode: "USD",
+		Copies: []capability.CopyCeiling{c},
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	ids := [][]byte{[]byte("read"), []byte("never")}
+	got, err := f.usage.CopyUsage(ledgerCtx, ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || string(got[0].RevocationID) != "read" || got[0].CapabilityID != f.root ||
+		got[0].RequestCount != 1 || !closeEnough(got[0].SpentAmount, 0.5) || got[0].ReservedAmount != 0 {
+		t.Fatalf("CopyUsage = %+v", got)
+	}
+	other, _ := mkTenant(t, ctx, f.pool, "shared")
+	if got, err := f.usage.CopyUsage(auth.WithActingTenant(ctx, other), ids); err != nil || len(got) != 0 {
+		t.Fatalf("another tenant read %+v, %v", got, err)
+	}
+}

@@ -128,7 +128,9 @@ Four mechanisms, applied in order, each answering a different question.
    reaches, and a built-in Cedar `forbid` denies everything outside it,
    whatever the tenant's policies permit. A capability also narrows the
    operations and source addresses it may be used for, and a capability
-   delegated to a sub-agent may only ever narrow, never widen. (CEL is used
+   delegated to a sub-agent may only ever narrow, never widen. Its Biscuit
+   form can be narrowed by the holder with no call to the server, and each
+   copy so made can be revoked on its own (ADR-0021). (CEL is used
    elsewhere: it filters list results, it does not authorise.)
 
 4. **Isolation — can the query even see it?** Postgres row-level
@@ -140,7 +142,8 @@ Four mechanisms, applied in order, each answering a different question.
 
 Budgets sit alongside all four. A capability carries a spend ceiling, and
 usage is metered per call against the lineage that spent it — which run,
-spawned by which parent.
+spawned by which parent. A Biscuit copy may carry request and budget limits
+of its own, counted apart from its siblings' and within the capability's.
 
 ## Storage
 

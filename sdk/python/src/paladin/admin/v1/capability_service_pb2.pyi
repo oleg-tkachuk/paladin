@@ -165,6 +165,38 @@ class CapabilityServiceRevokeBiscuitResponse(_message.Message):
     capability_id: str
     def __init__(self, capability_id: _Optional[str] = ...) -> None: ...
 
+class CapabilityServiceGetBiscuitUsageRequest(_message.Message):
+    __slots__ = ("token",)
+    TOKEN_FIELD_NUMBER: _ClassVar[int]
+    token: str
+    def __init__(self, token: _Optional[str] = ...) -> None: ...
+
+class CapabilityBiscuitCopyUsage(_message.Message):
+    __slots__ = ("revocation_id", "max_requests", "max_budget_micros", "request_count", "spent_micros", "reserved_micros")
+    REVOCATION_ID_FIELD_NUMBER: _ClassVar[int]
+    MAX_REQUESTS_FIELD_NUMBER: _ClassVar[int]
+    MAX_BUDGET_MICROS_FIELD_NUMBER: _ClassVar[int]
+    REQUEST_COUNT_FIELD_NUMBER: _ClassVar[int]
+    SPENT_MICROS_FIELD_NUMBER: _ClassVar[int]
+    RESERVED_MICROS_FIELD_NUMBER: _ClassVar[int]
+    revocation_id: bytes
+    max_requests: int
+    max_budget_micros: int
+    request_count: int
+    spent_micros: int
+    reserved_micros: int
+    def __init__(self, revocation_id: _Optional[bytes] = ..., max_requests: _Optional[int] = ..., max_budget_micros: _Optional[int] = ..., request_count: _Optional[int] = ..., spent_micros: _Optional[int] = ..., reserved_micros: _Optional[int] = ...) -> None: ...
+
+class CapabilityServiceGetBiscuitUsageResponse(_message.Message):
+    __slots__ = ("capability_id", "unit_code", "copies")
+    CAPABILITY_ID_FIELD_NUMBER: _ClassVar[int]
+    UNIT_CODE_FIELD_NUMBER: _ClassVar[int]
+    COPIES_FIELD_NUMBER: _ClassVar[int]
+    capability_id: str
+    unit_code: str
+    copies: _containers.RepeatedCompositeFieldContainer[CapabilityBiscuitCopyUsage]
+    def __init__(self, capability_id: _Optional[str] = ..., unit_code: _Optional[str] = ..., copies: _Optional[_Iterable[_Union[CapabilityBiscuitCopyUsage, _Mapping]]] = ...) -> None: ...
+
 class CapabilityServiceListRequest(_message.Message):
     __slots__ = ("tenant_id", "principal_kind", "subject", "include_expired", "include_revoked", "page_size", "page_token")
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]

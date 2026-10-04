@@ -151,7 +151,9 @@ Setting `ResourcePrefixes` or `ResourceURIs` replaces both. `ConfirmationJKT`
 (`DPoPThumbprint(key.Public())`) binds the token to a key, and only an unbound
 token can be bound. `MaxRequests` and `MaxBudgetMicros` give the copy limits of
 its own, counted apart from other copies and within every limit already in
-force; spending past them answers `ResourceExhausted`. The facts it writes are listed in
+force; spending past them answers `ResourceExhausted`.
+`CapabilityService.GetBiscuitUsage` takes a copy and reports each limit in
+force on it with what has been counted against it. The facts it writes are listed in
 [`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json),
 which the Python SDK's `attenuate` writes too.
 
@@ -435,7 +437,7 @@ what each field means, are documented in the `.proto` files under
 | `BackendService` | `CreateBackend`, `GetBackend`, `UpdateBackend`, `DeleteBackend`, `ListBackends`, `RotateCredentials`, `TestBackend`, `SetBackendEnabled`, `SetBackendReadOnly`, `SetBackendMaintenance` |
 | `BillingService` | `GetTenantSummary`, `GetTenantTimeSeries` |
 | `BucketService` | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `ListAccessibleBuckets` |
-| `CapabilityService` | `Issue`, `Delegate`, `Revoke`, `RevokeBiscuit`, `List`, `GetUsage` |
+| `CapabilityService` | `Issue`, `Delegate`, `Revoke`, `RevokeBiscuit`, `GetBiscuitUsage`, `List`, `GetUsage` |
 | `CELService` | `Validate` |
 | `CollectionService` | `CreateCollection`, `GetCollection`, `UpdateCollection`, `DeleteCollection`, `ListCollections`, `SetCollectionPolicy`, `BindCollectionToBucket` |
 | `EventSubscriptionService` | `CreateSubscription`, `GetSubscription`, `UpdateSubscription`, `DeleteSubscription`, `ListSubscriptions`, `TestSubscription`, `RedriveFailedDeliveries` |

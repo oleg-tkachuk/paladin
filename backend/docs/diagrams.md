@@ -383,6 +383,11 @@ erDiagram
     users ||--o{ refresh_tokens : holds
     tenants ||--o{ api_tokens : has
     tenants ||--o{ capability_records : issues
+    capability_records ||--o| capability_revocations : revokes
+    capability_records ||--o{ capability_biscuit_revocations : "revokes a copy"
+    capability_records ||--o| capability_usage : counts
+    capability_records ||--o{ capability_copy_usage : "counts a copy"
+    capability_records ||--o{ capability_reservations : holds
     capability_records ||--o{ charges : meters
     tenants ||--o| tenant_budgets : caps
 ```
@@ -414,7 +419,9 @@ erDiagram
 ```
 
 `capability_records` also references itself: a delegated capability points
-at its parent.
+at its parent. The two `copy` tables are keyed by a Biscuit block's revocation
+id rather than a uuid: a copy exists only in its holder's hands, and the id is
+all the server ever sees of it (ADR-0021).
 
 ## Deployment
 
