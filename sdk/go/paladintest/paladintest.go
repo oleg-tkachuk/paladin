@@ -25,6 +25,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -333,12 +334,39 @@ func (s *Server) newObject(parent, key, contentType string) *object {
 	o := &object{msg: &datav1.Object{
 		Name: parent + "/objects/" + id, ObjectId: id, TenantId: s.tenant,
 		Key: key, ContentType: contentType, State: datav1.ObjectState_OBJECT_STATE_PENDING,
+		ResourceVersion: "1",
 	}}
 	if c, err := paladin.ParseCollectionName(parent); err == nil {
 		o.msg.Collection = c.Collection
 	}
 	s.objects[o.msg.GetName()] = o
 	return o
+}
+
+// claim makes the object an upload registers, refusing a key another object
+// holds — in any state, the trash included — as the server's unique path
+// does.
+func (s *Server) claim(parent, key, contentType string, metadata, tags map[string]string) (*object, error) {
+	if key != "" {
+		for _, o := range s.objects {
+			if strings.HasPrefix(o.msg.GetName(), parent+"/objects/") && o.msg.GetKey() == key {
+				return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("an object is already at %q", key))
+			}
+		}
+	}
+	o := s.newObject(parent, key, contentType)
+	o.msg.Metadata, o.msg.Tags = maps.Clone(metadata), maps.Clone(tags)
+	return o, nil
+}
+
+// MarkFailed fails a PENDING object, as the server's reconciler does when its
+// upload URL expired with no bytes stored.
+func (s *Server) MarkFailed(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if o, ok := s.objects[name]; ok && o.msg.GetState() == datav1.ObjectState_OBJECT_STATE_PENDING {
+		o.msg.State = datav1.ObjectState_OBJECT_STATE_FAILED
+	}
 }
 
 func (s *Server) commit(o *object, body []byte, checksum string) {
@@ -393,7 +421,10 @@ func (s *Server) UploadObject(_ context.Context, req *connect.Request[datav1.Upl
 	if req.Msg.GetSizeHintBytes() < 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("size must not be negative"))
 	}
-	o := s.newObject(req.Msg.GetParent(), req.Msg.GetKey(), req.Msg.GetContentType())
+	o, err := s.claim(req.Msg.GetParent(), req.Msg.GetKey(), req.Msg.GetContentType(), req.Msg.GetMetadata(), req.Msg.GetTags())
+	if err != nil {
+		return nil, err
+	}
 	o.bound = binding{
 		size: req.Msg.GetSizeHintBytes(), algo: algo, checksum: req.Msg.GetChecksumValue(),
 		contentType: req.Msg.GetContentType(), noOverwrite: true,
@@ -443,7 +474,7 @@ func (s *Server) LookupObject(_ context.Context, req *connect.Request[datav1.Loo
 	defer s.mu.Unlock()
 	for _, o := range s.objects {
 		if strings.HasPrefix(o.msg.GetName(), req.Msg.GetParent()+"/objects/") && o.msg.GetKey() == req.Msg.GetKey() &&
-			o.msg.GetState() == datav1.ObjectState_OBJECT_STATE_AVAILABLE {
+			o.msg.GetState() != datav1.ObjectState_OBJECT_STATE_DELETED {
 			return connect.NewResponse(o.msg), nil
 		}
 	}
@@ -500,11 +531,19 @@ func (s *Server) DownloadObject(_ context.Context, req *connect.Request[datav1.D
 func (s *Server) DeleteObject(_ context.Context, req *connect.Request[datav1.DeleteObjectRequest]) (*connect.Response[datav1.DeleteObjectResponse], error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if req.Msg.GetPermanent() {
+		// As the server: one in the trash is purged too, and the path is free.
+		if _, ok := s.objects[req.Msg.GetName()]; !ok {
+			return nil, notFound(req.Msg.GetName())
+		}
+		delete(s.objects, req.Msg.GetName())
+		return connect.NewResponse(&datav1.DeleteObjectResponse{}), nil
+	}
 	o, err := s.lookup(req.Msg.GetName())
 	if err != nil {
 		return nil, err
 	}
-	o.msg.State = datav1.ObjectState_OBJECT_STATE_DELETED
+	o.msg.State = datav1.ObjectState_OBJECT_STATE_DELETED // in the trash, still holding its key
 	o.body = nil
 	return connect.NewResponse(&datav1.DeleteObjectResponse{}), nil
 }
@@ -539,7 +578,10 @@ func (s *Server) InitiateMultipartUpload(_ context.Context, req *connect.Request
 	if req.Msg.GetSizeBytes() <= 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("size_bytes must be positive"))
 	}
-	o := s.newObject(req.Msg.GetParent(), req.Msg.GetKey(), req.Msg.GetContentType())
+	o, err := s.claim(req.Msg.GetParent(), req.Msg.GetKey(), req.Msg.GetContentType(), req.Msg.GetMetadata(), req.Msg.GetTags())
+	if err != nil {
+		return nil, err
+	}
 	id := uuid.NewString()
 	s.uploads[id] = &multipart{
 		name: o.msg.GetName(), size: req.Msg.GetSizeBytes(), algo: algorithmName(req.Msg.GetChecksumAlgorithm()),

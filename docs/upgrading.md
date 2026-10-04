@@ -43,6 +43,19 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a multipart upload to a taken key is `AlreadyExists`
+
+- **`InitiateMultipartUpload` at a key another object holds answers
+  `AlreadyExists`**, as `UploadObject` always has. It answered `Internal`, so
+  a client could not tell a conflict it can act on from a server failure. A
+  key is held by an object in any state, the trash included, until a
+  permanent delete.
+- **`paladintest` and `paladin.testing` hold one object per key as well**, and
+  keep an upload's metadata and tags; `LookupObject` finds an object in any
+  state but deleted, and `MarkFailed` / `mark_failed` fail a pending one. A
+  test that uploaded twice to one key against the fake now meets
+  `ErrAlreadyExists` / `AlreadyExistsError`, as it would against the server.
+
 ## Unreleased — the data plane acts on the tenant a platform admin names
 
 - **A platform admin's data-plane calls on another tenant now reach that

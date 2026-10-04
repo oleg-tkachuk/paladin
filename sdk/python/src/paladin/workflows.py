@@ -856,7 +856,70 @@ async def adownload_uri(
 # ─── Many objects ───────────────────────────────────────────────────────────
 
 DEFAULT_BULK_CONCURRENCY = 8
-"""Objects ``download_many`` and ``adownload_many`` fetch at once."""
+"""Objects the ``…_many`` workflows move at once."""
+
+R = TypeVar("R")
+
+
+@dataclass(frozen=True, eq=False)
+class UploadItem:
+    """One object for ``upload_many``: ``upload``'s arguments for it. Compared
+    by identity, so an item is its own key."""
+
+    parent: str
+    content_type: str
+    body: bytes | IO[bytes]
+    size: int
+    key: str = ""
+    metadata: dict[str, str] | None = None
+    tags: dict[str, str] | None = None
+
+
+def _bounded(
+    fn: Callable[[T], R], items: Iterable[T], concurrency: int
+) -> Iterator[tuple[T, R | BaseException]]:
+    """``fn`` over ``items`` in threads, ``concurrency`` at a time, yielding
+    ``(item, result)`` — or ``(item, error)`` — in the order they finish.
+    ``items`` is drawn only as a slot frees, so it may be lazy and long."""
+    if concurrency < 1:
+        raise ValueError("concurrency must be at least 1")
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        pending: dict[Future[R], T] = {}
+
+        def drain(until: int) -> Iterator[tuple[T, R | BaseException]]:
+            while len(pending) > until:
+                done, _ = wait_futures(pending, return_when=FIRST_COMPLETED)
+                for f in done:
+                    item, err = pending.pop(f), f.exception()
+                    yield (item, err) if err is not None else (item, f.result())
+
+        for item in items:
+            pending[pool.submit(fn, item)] = item
+            yield from drain(concurrency - 1)
+        yield from drain(0)
+
+
+async def _abounded(
+    fn: Callable[[T], Awaitable[R]], items: Iterable[T], concurrency: int
+) -> AsyncIterator[tuple[T, R | BaseException]]:
+    """``_bounded`` as tasks on the running loop."""
+    if concurrency < 1:
+        raise ValueError("concurrency must be at least 1")
+    pending: dict[asyncio.Future[R], T] = {}
+
+    async def drain(until: int) -> AsyncIterator[tuple[T, R | BaseException]]:
+        while len(pending) > until:
+            done, _ = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                item, err = pending.pop(task), task.exception()
+                yield (item, err) if err is not None else (item, task.result())
+
+    for item in items:
+        pending[asyncio.ensure_future(fn(item))] = item
+        async for outcome in drain(concurrency - 1):
+            yield outcome
+    async for outcome in drain(0):
+        yield outcome
 
 
 def download_many(
@@ -866,47 +929,75 @@ def download_many(
     ``(name, content)`` in the order they finish — or ``(name, error)`` for
     one that failed, so one bad object does not stop the rest. Each is held
     in memory whole; for large ones, use ``download_stream`` per object."""
-    if concurrency < 1:
-        raise ValueError("concurrency must be at least 1")
-    names = iter(names)
-    with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        pending: dict[Future[bytes], str] = {}
-        for name in names:
-            pending[pool.submit(download, data, name)] = name
-            if len(pending) >= concurrency:
-                done, _ = wait_futures(pending, return_when=FIRST_COMPLETED)
-                for f in done:
-                    yield _outcome(pending.pop(f), f)
-        while pending:
-            done, _ = wait_futures(pending, return_when=FIRST_COMPLETED)
-            for f in done:
-                yield _outcome(pending.pop(f), f)
-
-
-def _outcome(name: str, f: Future[bytes]) -> tuple[str, bytes | BaseException]:
-    err = f.exception()
-    return (name, err) if err is not None else (name, f.result())
+    return _bounded(lambda name: download(data, name), names, concurrency)
 
 
 async def adownload_many(
     data: AsyncDataPlane, names: Iterable[str], *, concurrency: int = DEFAULT_BULK_CONCURRENCY
 ) -> AsyncIterator[tuple[str, bytes | BaseException]]:
     """``download_many`` for the async clients."""
-    if concurrency < 1:
-        raise ValueError("concurrency must be at least 1")
-    pending: dict[asyncio.Task[bytes], str] = {}
+    async for outcome in _abounded(lambda name: adownload(data, name), names, concurrency):
+        yield outcome
 
-    async def drain(until: int) -> AsyncIterator[tuple[str, bytes | BaseException]]:
-        while len(pending) > until:
-            done, _ = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-            for task in done:
-                name = pending.pop(task)
-                err = task.exception()
-                yield (name, err) if err is not None else (name, task.result())
 
-    for name in names:
-        pending[asyncio.ensure_future(adownload(data, name))] = name
-        async for outcome in drain(concurrency - 1):
-            yield outcome
-    async for outcome in drain(0):
+def upload_many(
+    data: DataPlane,
+    items: Iterable[UploadItem],
+    *,
+    concurrency: int = DEFAULT_BULK_CONCURRENCY,
+    multipart_threshold: int = DEFAULT_MULTIPART_THRESHOLD,
+    part_concurrency: int = DEFAULT_PART_CONCURRENCY,
+) -> Iterator[tuple[UploadItem, types_pb2.Object | BaseException]]:
+    """Upload many objects, ``concurrency`` at a time, each as ``upload``
+    does, and yield each as ``(item, object)`` in the order they finish — or
+    ``(item, error)`` for one that failed, so one bad item does not stop the
+    rest; each is completed, or aborted, on its own. ``items`` is drawn only
+    as a slot frees, so it may be a generator that opens each file in turn.
+
+    Up to ``concurrency`` uploads are in flight, each holding in memory the
+    whole body up to ``multipart_threshold`` or ``part_concurrency`` parts
+    above it. A crashed upload to resume goes through ``upload``."""
+
+    def one(item: UploadItem) -> types_pb2.Object:
+        return upload(
+            data,
+            parent=item.parent,
+            content_type=item.content_type,
+            body=item.body,
+            size=item.size,
+            key=item.key,
+            metadata=item.metadata,
+            tags=item.tags,
+            multipart_threshold=multipart_threshold,
+            part_concurrency=part_concurrency,
+        )
+
+    return _bounded(one, items, concurrency)
+
+
+async def aupload_many(
+    data: AsyncDataPlane,
+    items: Iterable[UploadItem],
+    *,
+    concurrency: int = DEFAULT_BULK_CONCURRENCY,
+    multipart_threshold: int = DEFAULT_MULTIPART_THRESHOLD,
+    part_concurrency: int = DEFAULT_PART_CONCURRENCY,
+) -> AsyncIterator[tuple[UploadItem, types_pb2.Object | BaseException]]:
+    """``upload_many`` for the async clients."""
+
+    def one(item: UploadItem) -> Awaitable[types_pb2.Object]:
+        return aupload(
+            data,
+            parent=item.parent,
+            content_type=item.content_type,
+            body=item.body,
+            size=item.size,
+            key=item.key,
+            metadata=item.metadata,
+            tags=item.tags,
+            multipart_threshold=multipart_threshold,
+            part_concurrency=part_concurrency,
+        )
+
+    async for outcome in _abounded(one, items, concurrency):
         yield outcome

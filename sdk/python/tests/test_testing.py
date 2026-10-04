@@ -28,7 +28,12 @@ from paladin import (
     upload,
 )
 from paladin.admin.v1 import tenant_service_pb2
-from paladin.data.v1 import object_service_pb2, storage_bootstrap_service_pb2, types_pb2
+from paladin.data.v1 import (
+    multipart_service_pb2,
+    object_service_pb2,
+    storage_bootstrap_service_pb2,
+    types_pb2,
+)
 from paladin.testing import PART_SIZE, FakePaladin
 
 UPLOAD_PROCEDURE = "/paladin.data.v1.ObjectService/UploadObject"
@@ -245,3 +250,65 @@ def test_the_fake_honours_if_match(fake: FakePaladin) -> None:
 
     assert get(etag) == HTTP_OK
     assert get('"stale"') == HTTP_PRECONDITION_FAILED
+
+
+def test_the_fake_holds_one_object_per_key(fake: FakePaladin) -> None:
+    # As the server's unique path: in any state, the trash included, until a
+    # permanent delete frees it.
+    data = fake.connect().data
+
+    def put() -> types_pb2.Object:
+        return upload(
+            data,  # type: ignore[arg-type]
+            parent=str(fake.collection()),
+            key="k",
+            content_type="text/plain",
+            body=b"x",
+            size=1,
+            metadata={"m": "v"},
+        )
+
+    obj = put()
+    assert obj.metadata["m"] == "v"
+    with pytest.raises(paladin.AlreadyExistsError):
+        put()
+    with pytest.raises(paladin.AlreadyExistsError):
+        data.multipart_upload.initiate_multipart_upload(  # type: ignore[union-attr]
+            multipart_service_pb2.InitiateMultipartUploadRequest(
+                parent=str(fake.collection()), key="k", size_bytes=1
+            )
+        )
+
+    def delete(permanent: bool) -> None:
+        data.object.delete_object(  # type: ignore[union-attr]
+            object_service_pb2.DeleteObjectRequest(
+                name=obj.name, resource_version=obj.resource_version, permanent=permanent
+            )
+        )
+
+    delete(False)
+    with pytest.raises(paladin.AlreadyExistsError):
+        put()
+    delete(True)
+    put()
+
+
+def test_the_fake_looks_up_and_fails_pending_objects(fake: FakePaladin) -> None:
+    data = fake.connect().data
+    pending = data.object.upload_object(  # type: ignore[union-attr]
+        object_service_pb2.UploadObjectRequest(
+            parent=str(fake.collection()),
+            key="k",
+            content_type="text/plain",
+            size_hint_bytes=1,
+            checksum_value=paladin.checksum(CHECKSUM_SHA256, b"x"),
+        )
+    ).object
+
+    def state() -> int:
+        return lookup_object(data, ObjectURI(fake.collection(), "k")).state  # type: ignore[arg-type]
+
+    # The server finds an object in any state but DELETED.
+    assert state() == types_pb2.OBJECT_STATE_PENDING
+    fake.mark_failed(pending.name)
+    assert state() == types_pb2.OBJECT_STATE_FAILED

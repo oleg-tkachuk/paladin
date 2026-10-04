@@ -383,11 +383,16 @@ It serves `ObjectService` (upload, complete, get, lookup, list, download,
 delete), `MultipartUploadService` and `StorageBootstrapService`; every
 other RPC answers `Unimplemented`. Like the server it refuses a collection
 named by the tenant's slug and a completion whose ETag, when given, is not
-the content's; completing a completed object returns it. It records the
+the content's; completing a completed object returns it. Like the server it
+holds one object per key: an upload to a key another object holds, in any
+state and the trash included, is refused with `ErrAlreadyExists` until a
+`Permanent` delete frees it, and `LookupObject` finds an object in any state
+but deleted. It keeps an upload's metadata and tags. It records the
 checksum an upload completes with — so `Download` verifies — and answers
 range requests. `EnsureTenantStorage` reports a bucket and collections
 created the first time and existing after, for any backend id. `Put` stores
-an object directly; `Tenant` and `Collection` name the fake's tenant and its
+an object directly; `MarkFailed` fails a pending one, as the server's
+reconciler does when its URL expired with nothing stored; `Tenant` and `Collection` name the fake's tenant and its
 collections, all of which exist; `Requests` lists the RPCs received, each
 with its `Procedure` and `Header`, for a test of what the client sent.
 
@@ -403,6 +408,7 @@ connection pools are what make many calls cheap — a `Transfer` keeps
 | --- | --- |
 | `UploadOptions.PartConcurrency` | Parts of one multipart upload in flight at once (default 3). |
 | `DownloadMany(ctx, p.Data, names, concurrency, fn)` | Downloads many objects, `concurrency` at a time (`DefaultBulkConcurrency`, 8), handing each reader to `fn` — which runs concurrently and reads it. Returns the names that failed, with their errors; one bad object does not stop the rest. |
+| `UploadMany(ctx, p.Data, inputs, concurrency, opts)` | Uploads many inputs, `concurrency` at a time (`DefaultBulkConcurrency`), each as `Upload` does with `opts`, and returns the objects in the order of `inputs` — nil for one that failed — with the indexes that failed and their errors; one bad input does not stop the rest, and each is completed, or aborted, on its own. A cancelled `ctx` stops starting more. Up to `concurrency × PartConcurrency` parts are in flight, held in memory for `Stream` inputs. `ErrBulkSession` for every input when `opts` sets `OnSession` or `Resume`: those name one upload, so resume through `Upload`. |
 
 ### Parity with the Python SDK
 
@@ -422,7 +428,7 @@ tests hold its parsers to as well. Where they differ, it is on purpose:
 | Webhook signatures | `VerifyWebhook`, options for the window and clock | `verify_webhook`, keyword arguments | Each language's idiom; both run the vectors in `sdk/testdata/webhook_signatures.json`. |
 | Biscuit attenuation | `capability.Attenuate`, from the capability module | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0 (BACKLOG). |
-| Bulk downloads | `DownloadMany`, a callback per reader | `download_many` / `adownload_many`, an iterator of results | Each language's idiom. |
+| Bulk transfers | `DownloadMany`, a callback per reader; `UploadMany`, objects in input order and failures by index | `download_many` / `adownload_many` and `upload_many` / `aupload_many`, iterators of results as each finishes | Each language's idiom. |
 | asyncio | — | An `a…` form of every workflow | Go has goroutines. |
 
 ### Cookbook
@@ -437,6 +443,7 @@ Runnable examples, in [`paladin/example_cookbook_test.go`](paladin/example_cookb
 | `Example_rotatingToken` | A token read from the store operators rotate it in, on every call. |
 | `Example_bulkIngestion` | Many documents through `DownloadMany` at a bounded concurrency. |
 | `Example_resumableMultipart` | A multipart upload resumed from `ListParts` after a crash, through `Transfer.Put`. |
+| `Example_durableUpload` | `Upload` tried again until it completes, its multipart session kept where a restart finds it and resumed; its own key, the content's SHA-256 in its metadata, keeps a retry after a lost answer from storing it twice — what an earlier attempt left at the key is taken, completed, or deleted and uploaded again (`cookbook_durable_test.go`). |
 | `Example_streamingLargeObjects` | Upload from a stream, download into a consumer, verified at the end. |
 | `Example_migratingFromConnectJSON` | A hand-written Connect-JSON call and its SDK form. |
 
