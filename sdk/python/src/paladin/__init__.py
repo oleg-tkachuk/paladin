@@ -90,6 +90,13 @@ from paladin.transfer import (
     TransferError,
     checksum,
 )
+from paladin.webhooks import (
+    DEFAULT_WEBHOOK_TOLERANCE,
+    HEADER_WEBHOOK_SIGNATURE,
+    WebhookSignatureError,
+    sign_webhook,
+    verify_webhook,
+)
 from paladin.workflows import (
     DEFAULT_BULK_CONCURRENCY,
     DEFAULT_MAX_POLL_INTERVAL,
@@ -138,6 +145,7 @@ __all__ = [
     "DEFAULT_TRANSFER_CONNECT_TIMEOUT",
     "DEFAULT_TRANSFER_POOL_MAX_IDLE_PER_HOST",
     "DEFAULT_TRANSFER_READ_TIMEOUT",
+    "DEFAULT_WEBHOOK_TOLERANCE",
     "ERROR_DOMAIN",
     "HEADER_API_TOKEN",
     "HEADER_AUTHORIZATION",
@@ -147,6 +155,7 @@ __all__ = [
     "HEADER_RETRY_AFTER",
     "HEADER_SERVER_VERSION",
     "HEADER_USER_AGENT",
+    "HEADER_WEBHOOK_SIGNATURE",
     "LOGGER_NAME",
     "PRESIGN_EXPIRY_SKEW",
     "TLS",
@@ -195,6 +204,7 @@ __all__ = [
     "UnauthenticatedError",
     "UploadSession",
     "VersionConflictError",
+    "WebhookSignatureError",
     "adownload",
     "adownload_many",
     "adownload_stream",
@@ -224,7 +234,9 @@ __all__ = [
     "parse_retry_after",
     "reason",
     "sdk_version",
+    "sign_webhook",
     "upload",
     "user_agent",
+    "verify_webhook",
     "wait",
 ]
