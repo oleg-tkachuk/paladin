@@ -12,7 +12,9 @@
     "paladin_resource_uri": "string",
     "paladin_plane": "string",
     "paladin_expires": "date",
-    "paladin_bind": "string"
+    "paladin_bind": "string",
+    "paladin_max_requests": "integer",
+    "paladin_max_budget_micros": "integer"
   },
   "replace_together": [["paladin_resource_prefix", "paladin_resource_uri"]],
   "bind_thumbprint_bytes": 32

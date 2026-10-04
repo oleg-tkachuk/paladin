@@ -93,6 +93,18 @@ millionths of `unit_code`, so 25 USD is `25000000`.
   and `If-Match`; the storage endpoint's CORS must allow them and expose
   `ETag` before the console is upgraded.
 
+## Unreleased — a Biscuit copy can carry request and budget limits of its own
+
+- **Go: a `Meter` of your own should count `Copies`.** `RequestBump`,
+  `ChargeRequest` and `ReserveRequest` carry the presented copy's limits;
+  check and count each under its revocation id, record the ids on the charge
+  and the reservation, and return to them on refund, settle and release.
+  `memstore` shows how. Then set `VerifierConfig.MeterCopies`; until you do, a
+  copy carrying limits is refused with `ErrCopyCountersNotMetered`.
+- **Pass `cap.Copies` on** wherever you build those requests from a verified
+  capability.
+- **Python: `attenuate` takes `max_requests` and `max_budget_micros`.**
+
 ## Unreleased — one copy of a Biscuit can be revoked on its own
 
 - **Go: a verifier with `AcceptBiscuit` needs `BiscuitRevocations`.**

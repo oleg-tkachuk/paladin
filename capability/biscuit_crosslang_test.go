@@ -49,6 +49,7 @@ func goldenBiscuitVerifier(t *testing.T) *StandardVerifier {
 		TrustedIssuers: []string{goldenIssuer},
 		Now:            goldenClock,
 		AcceptBiscuit:  true,
+		MeterCopies:    true,
 
 		BiscuitRevocations: revLookup{},
 	})
@@ -102,6 +103,8 @@ type biscuitCase struct {
 		Planes           []string  `json:"planes"`
 		ExpiresAt        time.Time `json:"expires_at"`
 		ConfirmationJKT  string    `json:"confirmation_jkt"`
+		CopyMaxRequests  int64     `json:"copy_max_requests"`
+		CopyMaxBudget    int64     `json:"copy_max_budget_micros"`
 	} `json:"expect"`
 }
 
@@ -145,6 +148,11 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 	}
 	if got.ConfirmationJKT != want.ConfirmationJKT {
 		t.Errorf("ConfirmationJKT = %q, want %q", got.ConfirmationJKT, want.ConfirmationJKT)
+	}
+	if len(got.Copies) != 1 || got.Copies[0].MaxRequests != want.CopyMaxRequests ||
+		got.Copies[0].MaxBudgetMicros != want.CopyMaxBudget {
+		t.Errorf("Copies = %+v, want one with %d requests and %d micros",
+			got.Copies, want.CopyMaxRequests, want.CopyMaxBudget)
 	}
 	if _, err := v.Verify(ctx, token, AudiencePlaneMCP); err == nil {
 		t.Error("the plane the attenuation dropped is still accepted")

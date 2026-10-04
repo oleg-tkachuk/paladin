@@ -36,6 +36,17 @@ type UsageStore[TX any] interface {
 // anything — its children expired with it, since a child cannot outlive its
 // parent.
 //
+// # Copies of a Biscuit
+//
+// A Biscuit's holder can give a copy limits of its own (CopyCeiling), which
+// arrive as Copies on RequestBump, ChargeRequest and ReserveRequest. Each is
+// counted under its revocation id, apart from its siblings, and checked
+// before the capability's ceilings; the capability's counters still take
+// every copy's requests and spend. A charge or reservation records the copies
+// it debited, so Refund, Settle, Release and ReleaseExpired return to them
+// without being handed them again. A Meter that does not count copies must
+// not be paired with a verifier that sets VerifierConfig.MeterCopies.
+//
 // All methods are concurrency-safe. A rejected call mutates nothing, so a
 // retry after rejection is safe.
 type Meter[TX any] interface {
@@ -157,6 +168,9 @@ type RequestBump struct {
 	// MaxRequests is the capability's own ceiling, from the verified
 	// token. 0 = unlimited. Ancestors' ceilings come from their records.
 	MaxRequests int64
+	// Copies are the presented Biscuit copy's own limits, from the verified
+	// token (Capability.Copies), innermost first.
+	Copies []CopyCeiling
 }
 
 // ChargeRequest is the input to Meter.Charge.
@@ -178,6 +192,8 @@ type ChargeRequest struct {
 	// both may be empty and neither affects enforcement.
 	Op    string
 	Actor string
+	// Copies are the presented Biscuit copy's own limits (Capability.Copies).
+	Copies []CopyCeiling
 }
 
 // ChargeReceipt is the result of a committed charge.
@@ -209,6 +225,9 @@ type ReserveRequest struct {
 	// Op and Actor are carried onto the charge Settle records.
 	Op    string
 	Actor string
+	// Copies are the presented Biscuit copy's own limits (Capability.Copies).
+	// The reservation keeps them, and Settle checks and charges them.
+	Copies []CopyCeiling
 }
 
 // Reservation is a committed hold.
