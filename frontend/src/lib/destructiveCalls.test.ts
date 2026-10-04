@@ -38,6 +38,8 @@ const GUARDED: Record<string, string> = {
     "the call is made from the dialog itself",
   "app/tenants/[id]/capabilities/RevokeCapabilityDialog.tsx::revoke":
     "the call is made from the dialog itself",
+  "app/tenants/[id]/capabilities/RevokeBiscuitCopyDialog.tsx::revokeBiscuit":
+    "the call is made from the dialog itself",
   "app/tenants/[id]/collections/[name]/objects/page.tsx::purgeObject":
     "confirm state on the page",
   "app/tenants/[id]/collections/[name]/trash/page.tsx::purgeObject":

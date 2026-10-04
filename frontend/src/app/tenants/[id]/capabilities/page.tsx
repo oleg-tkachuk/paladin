@@ -35,6 +35,7 @@ import { useTenant } from "../tenant-context";
 import { IssueCapabilityDialog } from "./IssueCapabilityDialog";
 import { CapabilityDetailsDialog } from "./CapabilityDetailsDialog";
 import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
+import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
 import { PRINCIPAL_KIND_OPTIONS, isExpired } from "./_constants";
 import { capabilityClient } from "@/lib/connect/client";
 import { cn } from "@/lib/utils";
@@ -90,6 +91,9 @@ function readLastBrowse(
 //     returned exactly once and shown in a "save now" reveal panel.
 //   • Revoke — single-row action; cascade-children flag is exposed
 //     under "Advanced" for revoking a delegation tree.
+//   • Revoke a copy — a header action: the operator pastes one copy of
+//     a capability's Biscuit, which no list holds, and only that copy
+//     and the copies narrowed from it stop working.
 //
 // Delegate is intentionally NOT exposed in the operator UI. Delegation
 // is an agent-side flow (the agent narrows its own capability when
@@ -266,6 +270,7 @@ export default function CapabilitiesPage() {
 
   // ── revoke ──────────────────────────────────────────────────────────
   const [revokeTarget, setRevokeTarget] = useState<Capability | null>(null);
+  const [revokeCopyOpen, setRevokeCopyOpen] = useState(false);
 
   const visibleItems = useMemo(() => items, [items]);
 
@@ -291,6 +296,14 @@ export default function CapabilitiesPage() {
               className={cn("size-4", loading && "animate-spin")}
             />
             Refresh
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setRevokeCopyOpen(true)}
+          >
+            <TrashIcon className="size-4" />
+            Revoke a copy
           </Button>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <PlusIcon className="size-4" />
@@ -640,6 +653,12 @@ export default function CapabilitiesPage() {
         cap={revokeTarget}
         onClose={() => setRevokeTarget(null)}
         onRevoked={() => void fetchList()}
+      />
+
+      {/* ─── Revoke one Biscuit copy ───────────────────────────────── */}
+      <RevokeBiscuitCopyDialog
+        open={revokeCopyOpen}
+        onClose={() => setRevokeCopyOpen(false)}
       />
     </div>
   );
