@@ -18,10 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useNotification } from "@/components/ui/Notification";
 import { capabilityClient } from "@/lib/connect/client";
 import { errorMessage } from "@/hooks/errorContract";
-
-// A compact JWT has dots between its parts; a Biscuit, being one base64url
-// string, has none. The server makes the same distinction.
-const isJWT = (token: string) => token.includes(".");
+import { isJWT } from "./_biscuit";
 
 /**
  * Revokes one copy of a capability's Biscuit. Copies are narrowed offline by
