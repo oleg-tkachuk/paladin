@@ -30,6 +30,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0018](0018-sdk-layers.md) | The SDKs as three layers over the generated clients | Accepted |
 | [0019](0019-object-search-and-read-replica.md) | Object search under RLS, and an opt-in read replica | Accepted |
 | [0020](0020-sdk-integration-grade.md) | The SDKs to integration grade | Accepted |
+| [0021](0021-biscuit-copies.md) | Biscuit copies — narrowed offline, revoked and counted by block | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to

@@ -12,9 +12,10 @@ process.
 
 ## Contract boundary
 
-The module ships the primitive and three contracts; the consumer supplies the
+The module ships the primitive and its contracts; the consumer supplies the
 storage behind them. `memstore` is the in-memory reference implementation, and
-Paladin's PostgreSQL adapters are another.
+Paladin's PostgreSQL adapters are another. The two Biscuit contracts are needed
+only by a consumer that accepts the Biscuit form.
 
 ```mermaid
 flowchart LR
@@ -28,6 +29,8 @@ flowchart LR
         verifier["<b>StandardVerifier</b><br/>Verify(token, audience)"]
         caveats["<b>Caveats</b><br/>Check · CheckSource · MatchResource"]
         cache["CachedRevocationChecker<br/>TTL · single-flight"]
+        bcache["CachedBiscuitRevocationChecker<br/>TTL · per token"]
+        attenuate["<b>Attenuate</b><br/>offline · no key"]
         metering["MeteringStore[TX]<br/>WithMetering · OTel counters"]
         static["StaticKeyResolver<br/>SetKey · RemoveKey"]
         remote["RemoteJWKSResolver<br/>ETag · MaxStale"]
@@ -38,6 +41,8 @@ flowchart LR
         store["<b>Store</b><br/>Insert · Get · IsRevoked · Revoke<br/>PurgeExpired · ListByPrincipal"]
         usage["<b>UsageStore[TX]</b><br/>Meter[TX]: Charge · Reserve · Settle · Refund<br/>TenantBudgets · UsageHousekeeping"]
         keys["<b>KeyResolver</b><br/>PublicKey(kid)"]
+        brev["<b>BiscuitRevocationStore</b><br/>IsBiscuitRevoked · RevokeBiscuit"]
+        cusage["<b>CopyUsageReader</b><br/>CopyUsage(revocation ids)"]
     end
 
     impl[("memstore · PostgreSQL · …")]
@@ -48,11 +53,14 @@ flowchart LR
     caller --> verifier
     caller --> caveats
     caller --> metering
+    caller -. "Biscuit holder" .-> attenuate
     issuer --> narrows
     issuer --> signer
     issuer --> store
     verifier --> keys
     verifier --> cache --> store
+    verifier -. "AcceptBiscuit" .-> bcache --> brev
+    caller -. "admin read" .-> cusage
     metering --> usage
     metering -. "metrics" .-> otel
     static -. "implements" .-> keys
@@ -60,6 +68,8 @@ flowchart LR
     remote -- "HTTP GET" --> jwks
     store --> impl
     usage --> impl
+    brev --> impl
+    cusage --> impl
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
@@ -68,8 +78,8 @@ flowchart LR
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     class caller client
     class issuer,signer,narrows,verifier,caveats role
-    class cache,metering,static,remote optional
-    class store,usage,keys,impl store
+    class cache,metering,static,remote,bcache,attenuate optional
+    class store,usage,keys,impl,brev,cusage store
     class jwks,otel external
 ```
 
@@ -175,6 +185,66 @@ flowchart TB
 An unknown kid, an untrusted issuer, a kid bound to another issuer and a
 missing tenant all surface as `ErrInvalidSignature`, so security-sensitive
 callers cannot branch on which one it was.
+
+A Biscuit goes through the same gates, around them. Its authority block seals
+an ordinary signed token, which is checked as above; that token names the key
+rooting the Biscuit's chain, which is checked next, and then each attenuation
+block is folded in. The capability that comes out is narrower than the sealed
+one and carries the limits its blocks set; both revocation lists are asked
+last.
+
+```mermaid
+flowchart TB
+    tok(["Biscuit, audience"])
+    on{"AcceptBiscuit"}
+    sealed["the sealed token through the gates above<br/>it must carry BiscuitRoot"]
+    chain{"signature chain verifies<br/>against BiscuitRoot"}
+    subgraph fold ["each attenuation block, in order"]
+        direction TB
+        vocab{"only paladin_* facts<br/>no rules · no checks"}
+        narrow{"Narrows(cur, next)<br/>ops · resources · planes · expiry · binding"}
+        lim{"sets max_requests / max_budget_micros?"}
+        meter{"MeterCopies"}
+        fit{"within the capability's limit<br/>and every enclosing copy's"}
+        copies["Capability.Copies gains<br/>{revocation id, limits}, innermost first"]
+        vocab -- yes --> narrow -- yes --> lim
+        lim -- yes --> meter -- yes --> fit -- yes --> copies
+    end
+    rev{"IsRevoked(capability)"}
+    brev{"IsBiscuitRevoked(revocation ids)<br/>any block of this token"}
+    ok(["*Capability with Copies"])
+
+    bad["ErrInvalidSignature"]
+    att["ErrBiscuitAttenuation"]
+    unmetered["ErrCopyCountersNotMetered"]
+    revoked["ErrRevoked"]
+
+    tok --> on -- yes --> sealed --> chain -- yes --> vocab
+    lim -- no --> rev
+    copies --> rev
+    rev -- no --> brev -- no --> ok
+    on -- no --> bad
+    chain -- no --> bad
+    vocab -- no --> att
+    narrow -- widens --> att
+    fit -- no --> att
+    meter -- no --> unmetered
+    rev -- yes --> revoked
+    brev -- yes --> revoked
+
+    classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
+    classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
+    class tok,ok client
+    class on,sealed,chain,vocab,narrow,lim,meter,fit,copies role
+    class rev,brev store
+    class bad,att,unmetered,revoked external
+```
+
+The sealed token presented on its own is refused, so it cannot be lifted out
+to shed an attenuation. `ErrBiscuitAttenuation` and
+`ErrCopyCountersNotMetered` both match `ErrInvalidSignature`.
 
 Verification proves the token is genuine. What the bearer may do with it is a
 second, separate step, `Caveats.Check`, evaluated per operation:
@@ -288,6 +358,55 @@ flowchart TB
     class deny external
 ```
 
+## Biscuit copies: one tree, revoked and counted by block
+
+Every attenuation appends a block, and every block has a revocation id — its
+signature. A copy carries the ids of every block above it, so an id names a
+copy *and everything attenuated from it*. The same ids key both of the things
+a holder's copy can have on its own: a revocation, and limits.
+
+```mermaid
+flowchart TB
+    cap(["capability<br/>MaxRequests 100 · budget 10.00"])
+    root["<b>root Biscuit</b><br/>authority block: id A"]
+    w1["<b>worker 1</b><br/>ids A · B<br/>block B: max_requests 30"]
+    w2["<b>worker 2</b><br/>ids A · C<br/>block C: max_budget 2.00"]
+    sub["<b>sub-agent of worker 1</b><br/>ids A · B · D<br/>block D: max_requests 5"]
+    jwt["the capability's JWT"]
+
+    cap --- root
+    cap --- jwt
+    root -- "Attenuate" --> w1
+    root -- "Attenuate" --> w2
+    w1 -- "Attenuate" --> sub
+
+    revB["RevokeBiscuit(worker 1)<br/>lists B: worker 1 and the sub-agent stop;<br/>root, worker 2 and the JWT do not"]
+    cntD["a request by the sub-agent counts on D, on B<br/>and on the capability; each limit is checked"]
+
+    w1 -.-> revB
+    sub -.-> cntD
+
+    classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
+    classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
+    classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
+    classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
+    class cap client
+    class root,w1,w2,sub,jwt role
+    class revB,cntD store
+```
+
+- **Revocation.** `BiscuitCopy` checks a copy as `Verify` does and names its
+  capability and last block's id; `BiscuitRevocationStore.RevokeBiscuit` lists
+  it. Revoking the capability still stops every copy and the JWT.
+- **Limits.** A block may set `max_requests` and `max_budget_micros`, within
+  every limit in force. The `Meter` counts each under the block's id, beside
+  the capability's own counters, and a charge or reservation records the ids
+  it debited so a refund, settle or release returns to them.
+  `CopyUsageReader` reads the counters back.
+- **Delegation from a copy** narrows from the copy as presented, not from the
+  capability's record; a copy with limits of its own cannot delegate, because
+  a server-side child would count against the capability and never the copy.
+
 ## Charge: stage, then commit
 
 `Meter.Charge` checks three ceilings and runs the consumer's side effect before
@@ -303,27 +422,29 @@ the last of a budget.
 
 ```mermaid
 flowchart TB
-    req(["ChargeRequest<br/>CapabilityID · TenantID · Amount · MaxBudget · UnitCode"])
+    req(["ChargeRequest<br/>CapabilityID · TenantID · Amount · MaxBudget · UnitCode · Copies"])
     sreq(["SettleRequest<br/>ReservationID · Amount · MaxBudget"])
     hold{"reservation open"}
     val{"ValidateAmount<br/>NormaliseUnitCode"}
 
     subgraph stage ["stage — compute, publish nothing"]
         direction TB
+        c0{"each Biscuit copy, innermost first:<br/>spend + reserved + Amount ≤ its budget"}
         c1{"own spend + reserved + Amount ≤ MaxBudget<br/>(ceiling from the verified token)"}
         c2{"each ancestor: spend + reserved + Amount<br/>≤ its MaxBudgetAmount<br/>(ceiling from the stored record)"}
         c3{"tenant spend + reserved + Amount<br/>≤ TenantBudget.MaxBudgetAmount"}
         cb{"onCharged(ctx, tx)<br/>consumer's side effect on its own TX"}
-        c1 -- yes --> c2 -- yes --> c3 -- yes --> cb
+        c0 -- yes --> c1 -- yes --> c2 -- yes --> c3 -- yes --> cb
     end
 
     subgraph commit ["commit — all together"]
         direction TB
+        w5["each copy's spend += Amount"]
         w1["capability spend += Amount"]
         w2["each ancestor spend += Amount"]
         w3["tenant spend += Amount"]
         w0["settling: the hold leaves reserved everywhere"]
-        w4["ledger row: ChargeID · Ancestors · Op · Actor"]
+        w4["ledger row: ChargeID · Ancestors · copy ids · Op · Actor"]
     end
 
     ok(["ChargeReceipt{ChargeID, Spent}"])
@@ -336,12 +457,13 @@ flowchart TB
     e4["the callback's error"]
     e5["ErrReservationNotFound"]
 
-    req --> val -- ok --> c1
-    sreq --> hold -- "yes: its own hold<br/>is not counted" --> c1
+    req --> val -- ok --> c0
+    sreq --> hold -- "yes: its own hold<br/>is not counted" --> c0
     hold -- "settled · released · expired" --> e5
-    cb -- nil --> w1 --> w2 --> w3 --> w0 --> w4 --> ok
+    cb -- nil --> w5 --> w1 --> w2 --> w3 --> w0 --> w4 --> ok
     ok -. "later" .-> refund
     val -- invalid --> e0
+    c0 -- no --> e1
     c1 -- no --> e1
     c2 -- no --> e2
     c3 -- no --> e3
@@ -353,11 +475,15 @@ flowchart TB
     classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     class req,sreq,ok client
-    class val,hold,c1,c2,c3 role
+    class val,hold,c0,c1,c2,c3 role
     class cb optional
-    class w1,w2,w3,w0,w4,refund store
+    class w5,w1,w2,w3,w0,w4,refund store
     class e0,e1,e2,e3,e4,e5 external
 ```
+
+`BumpRequest` takes the same order for requests: each copy's limit, then the
+capability's, then each ancestor's. A reservation keeps its copies' budgets,
+so `Settle` checks them without being handed the token again.
 
 A settle rejected by a ceiling leaves the reservation in place, to be settled
 lower or released with `Release`. A hold never settled lapses at its
@@ -382,6 +508,9 @@ flowchart LR
     chain["IsRevoked(id):<br/>id or any ancestor revoked"]
     cache["<b>CachedRevocationChecker</b><br/>answer cached for TTL<br/>one upstream call per id at a time<br/>errors never cached"]
     notify{{"consumer's revocation signal<br/>e.g. a Postgres channel"}}
+    bop(["RevokeBiscuit(RevokeBiscuitArgs{CapabilityID, RevocationID})"])
+    blist[("<b>BiscuitRevocationStore</b><br/>revoked block ids")]
+    bcache["<b>CachedBiscuitRevocationChecker</b><br/>answer per token, cached for TTL"]
     v1["StandardVerifier"]
     v2["StandardVerifier"]
 
@@ -391,16 +520,20 @@ flowchart LR
     cache --> v1
     cache --> v2
     notify -. "Clear() · Invalidate(id)" .-> cache
+    bop --> blist --> bcache
+    bcache --> v1
+    bcache --> v2
+    notify -. "Clear()" .-> bcache
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
     classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
     classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
-    class op client
-    class v1,v2,cache role
+    class op,bop client
+    class v1,v2,cache,bcache role
     class cascade optional
-    class store,chain store
+    class store,chain,blist store
     class notify external
 ```
 
@@ -408,6 +541,8 @@ Revoking a capability stops everything delegated from it whether or not
 `CascadeChildren` is set, because `IsRevoked` walks the ancestors; the flag
 only adds the per-descendant entries that name each stopped capability. Without
 a revocation signal, a verifier learns of a revocation within the cache TTL.
+Revoked Biscuit copies travel the same way, on their own list and cache; one
+signal clears both.
 
 A verifier that runs apart from the issuer resolves keys with
 `RemoteJWKSResolver`: it serves the cached key set for `RefreshInterval`,
