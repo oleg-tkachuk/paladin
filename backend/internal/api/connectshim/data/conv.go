@@ -14,8 +14,6 @@ package data
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
@@ -29,84 +27,52 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // ─── ts helpers ─────────────────────────────────────────────────────────────
 
 // ─── Resource-name parsers ──────────────────────────────────────────────────
 
-// objectNameParts decodes "tenants/{tenant_id}/collections/{collection}/objects/{object_id}".
-// It also asserts the parsed tenant matches the JWT-bound tenant (when the
-// caller has one). Cross-tenant access on the data plane is rejected.
-//
-// `collection` can be a multi-segment slash-separated path
-// (`invoices/2026/q1`); rather than splitting by `/` and counting
-// fixed positions we anchor on the literal `tenants/<id>/collections/`
-// prefix and the `/objects/<uuid>` suffix, treating everything in
-// between as the collection body.
-func objectNameParts(ctx context.Context, name string) (collection, objectID string, err error) {
-	const prefix = "tenants/"
-	const okSep = "/collections/"
-	const objSep = "/objects/"
-	if !strings.HasPrefix(name, prefix) {
-		return "", "", fmt.Errorf("invalid object name %q", name)
+// Names are parsed by the Go SDK's parsers, which both SDKs' tests hold to
+// one shared table (sdk/testdata/names.json), as do this package's: the server
+// and the SDKs cannot disagree on a name. A collection may contain '/', and
+// UUIDs come back in their canonical lower-case form.
+
+// parseObjectName decodes "tenants/{tenant_id}/collections/{collection}/objects/{object_id}"
+// and asserts the tenant matches the caller's (assertJWTTenant): cross-tenant
+// access on the data plane is refused.
+func parseObjectName(ctx context.Context, name string) (paladin.ObjectName, error) {
+	n, err := paladin.ParseObjectName(name)
+	if err != nil {
+		return paladin.ObjectName{}, err
 	}
-	rest := name[len(prefix):]
-	tIDEnd := strings.Index(rest, okSep)
-	if tIDEnd <= 0 {
-		return "", "", fmt.Errorf("invalid object name %q", name)
+	if err := assertJWTTenant(ctx, n.Tenant); err != nil {
+		return paladin.ObjectName{}, err
 	}
-	tIDStr := rest[:tIDEnd]
-	afterOK := rest[tIDEnd+len(okSep):]
-	// Find the LAST "/objects/" so any "/objects/" substring inside
-	// the collection (unusual but legal) can't shadow the suffix.
-	objIdx := strings.LastIndex(afterOK, objSep)
-	if objIdx <= 0 {
-		return "", "", fmt.Errorf("invalid object name %q", name)
-	}
-	ok := afterOK[:objIdx]
-	oIDStr := afterOK[objIdx+len(objSep):]
-	if ok == "" || strings.Contains(oIDStr, "/") {
-		return "", "", fmt.Errorf("invalid object name %q", name)
-	}
-	if _, err := uuid.Parse(tIDStr); err != nil {
-		return "", "", fmt.Errorf("invalid tenant_id in name: %w", err)
-	}
-	if _, err := uuid.Parse(oIDStr); err != nil {
-		return "", "", fmt.Errorf("invalid object_id in name: %w", err)
-	}
-	if err := assertJWTTenant(ctx, tIDStr); err != nil {
-		return "", "", err
-	}
-	return ok, oIDStr, nil
+	return n, nil
 }
 
-// collectionNameParts decodes "tenants/{tenant_id}/collections/{collection}".
-// collection can be a multi-segment slash-separated path; everything
-// after `collections/` is the body.
+// objectNameParts is parseObjectName's collection and object id.
+func objectNameParts(ctx context.Context, name string) (collection, objectID string, err error) {
+	n, err := parseObjectName(ctx, name)
+	if err != nil {
+		return "", "", err
+	}
+	return n.Collection, n.Object, nil
+}
+
+// collectionNameParts decodes "tenants/{tenant_id}/collections/{collection}"
+// and asserts the tenant as objectNameParts does.
 func collectionNameParts(ctx context.Context, name string) (collection string, err error) {
-	const prefix = "tenants/"
-	const okSep = "/collections/"
-	if !strings.HasPrefix(name, prefix) {
-		return "", fmt.Errorf("invalid collection name %q", name)
-	}
-	rest := name[len(prefix):]
-	tIDEnd := strings.Index(rest, okSep)
-	if tIDEnd <= 0 {
-		return "", fmt.Errorf("invalid collection name %q", name)
-	}
-	tIDStr := rest[:tIDEnd]
-	ok := rest[tIDEnd+len(okSep):]
-	if ok == "" {
-		return "", fmt.Errorf("invalid collection name %q", name)
-	}
-	if _, err := uuid.Parse(tIDStr); err != nil {
-		return "", fmt.Errorf("invalid tenant_id in name: %w", err)
-	}
-	if err := assertJWTTenant(ctx, tIDStr); err != nil {
+	n, err := paladin.ParseCollectionName(name)
+	if err != nil {
 		return "", err
 	}
-	return ok, nil
+	if err := assertJWTTenant(ctx, n.Tenant); err != nil {
+		return "", err
+	}
+	return n.Collection, nil
 }
 
 // badName turns a resource-name failure into a Connect status, keeping the
@@ -153,12 +119,20 @@ func assertJWTTenant(ctx context.Context, urlTenantID string) error {
 
 // ─── Object ↔ proto ─────────────────────────────────────────────────────────
 
+// objectName is o's resource name, printed as the SDKs print it.
+func objectName(o *objecth.Object) paladin.ObjectName {
+	return paladin.ObjectName{
+		CollectionName: paladin.CollectionName{Tenant: o.TenantID.String(), Collection: o.Collection},
+		Object:         o.ObjectID.String(),
+	}
+}
+
 func objectToProto(o *objecth.Object) *pb.Object {
 	if o == nil {
 		return nil
 	}
 	out := &pb.Object{
-		Name:             fmt.Sprintf("tenants/%s/collections/%s/objects/%s", o.TenantID, o.Collection, o.ObjectID),
+		Name:             objectName(o).String(),
 		ObjectId:         o.ObjectID.String(),
 		TenantId:         o.TenantID.String(),
 		Collection:       o.Collection,

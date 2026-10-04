@@ -9,7 +9,7 @@
 # A path feeds the groups whose code reads it. backend builds against
 # capability/ and sdk/go/ through `replace`, and every stub is generated from
 # proto/. capability/ tests read the Biscuit vocabulary and fixtures the SDKs
-# share in sdk/testdata/. The Taskfiles, their cached includes, the contract scripts and this
+# share in sdk/testdata/, and backend tests the resource names there. The Taskfiles, their cached includes, the contract scripts and this
 # workflow feed every group. Anything else that is not documentation reaches
 # `repo`, which checks charts, images, the contract and the repository's own
 # config — a path nobody has classified is checked by default, not skipped.
@@ -65,7 +65,7 @@ if touches "$SHARED"; then
 fi
 
 picked=()
-if touches '^(backend|capability|sdk/go|proto)/'; then picked+=(backend); fi
+if touches '^(backend|capability|sdk/go|sdk/testdata|proto)/'; then picked+=(backend); fi
 if touches '^(capability|sdk/testdata)/'; then picked+=(capability); fi
 if touches '^(sdk|proto)/'; then picked+=(sdk); fi
 if touches '^(frontend|proto)/'; then picked+=(frontend); fi

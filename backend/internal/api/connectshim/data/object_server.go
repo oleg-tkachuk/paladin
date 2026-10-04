@@ -314,13 +314,13 @@ func (s *ObjectServer) ListObjectVersions(ctx context.Context, req *connect.Requ
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("versioning not wired"))
 	}
 	m := req.Msg
-	collection, objectID, err := objectNameParts(ctx, m.GetParent())
+	parent, err := parseObjectName(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}
 	out, next, err := s.Versions.ListVersions(ctx, objecth.ListVersionsInput{
-		Collection: collection,
-		ObjectID:   objectID,
+		Collection: parent.Collection,
+		ObjectID:   parent.Object,
 		PageSize:   m.GetPage().GetPageSize(),
 		PageToken:  m.GetPage().GetPageToken(),
 	})
@@ -329,7 +329,7 @@ func (s *ObjectServer) ListObjectVersions(ctx context.Context, req *connect.Requ
 	}
 	resp := &pb.ListObjectVersionsResponse{Page: convx.PageResponseProto(next)}
 	for i := range out {
-		resp.Versions = append(resp.Versions, versionToProto(m.GetParent(), &out[i]))
+		resp.Versions = append(resp.Versions, versionToProto(parent, &out[i]))
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -338,7 +338,7 @@ func (s *ObjectServer) GetObjectVersion(ctx context.Context, req *connect.Reques
 	if s.Versions == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("versioning not wired"))
 	}
-	parent, err := stripVersionSuffix(req.Msg.GetName())
+	parent, err := versionParent(req.Msg.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
