@@ -112,11 +112,11 @@ type mcpRunner struct {
 	modeLabel string
 	// stdioClients builds the single process-wide Clients for the stdio
 	// transport (one session per process).
-	stdioClients func() *mcp.Clients
+	stdioClients func() (*mcp.Clients, error)
 	// httpClients builds the Clients the streamable-HTTP transport shares
 	// across every session. They carry no credential of their own: each tool
 	// call presents the bearer and capability on the request that carries it.
-	httpClients func() *mcp.Clients
+	httpClients func() (*mcp.Clients, error)
 	// onStop releases mode-owned resources after the transport drains. Bridge
 	// owns none and leaves it nil.
 	onStop func(context.Context)
@@ -132,7 +132,7 @@ func provideMCPBridgeRunner(cfg config.Config, l *zap.Logger) mcpRunner {
 		// at construction instead.
 		l.Fatal("mcp bridge: build upstream client", zap.Error(err))
 	}
-	makeClients := func(bearer, capToken string) *mcp.Clients {
+	makeClients := func(bearer, capToken string) (*mcp.Clients, error) {
 		return mcp.NewClientsWithCapability(
 			httpc,
 			cfg.MCP.Upstreams.AdminURL,
@@ -146,13 +146,13 @@ func provideMCPBridgeRunner(cfg config.Config, l *zap.Logger) mcpRunner {
 		cfg:       cfg,
 		l:         l,
 		modeLabel: "bridge",
-		stdioClients: func() *mcp.Clients {
+		stdioClients: func() (*mcp.Clients, error) {
 			// stdio sessions are one-per-process; pick up an optional
 			// capability from env so a developer can experiment without
 			// hand-editing JSON-RPC frames.
 			return makeClients(os.Getenv("PALADIN_MCP_TOKEN"), os.Getenv("PALADIN_MCP_CAPABILITY"))
 		},
-		httpClients: func() *mcp.Clients { return makeClients("", "") },
+		httpClients: func() (*mcp.Clients, error) { return makeClients("", "") },
 	}
 }
 
@@ -178,17 +178,17 @@ func provideMCPEmbeddedRunner(
 		Admin: muxes.Admin,
 		IAM:   muxes.IAM,
 	}
-	makeInlineClients := func(bearer, capToken string) *mcp.Clients {
+	makeInlineClients := func(bearer, capToken string) (*mcp.Clients, error) {
 		return mcp.NewInlineClientsWithCapability(inlineHandlers, bearer, capToken)
 	}
 	return mcpRunner{
 		cfg:       cfg,
 		l:         l,
 		modeLabel: "embedded",
-		stdioClients: func() *mcp.Clients {
+		stdioClients: func() (*mcp.Clients, error) {
 			return makeInlineClients(os.Getenv("PALADIN_MCP_TOKEN"), os.Getenv("PALADIN_MCP_CAPABILITY"))
 		},
-		httpClients: func() *mcp.Clients { return makeInlineClients("", "") },
+		httpClients: func() (*mcp.Clients, error) { return makeInlineClients("", "") },
 		onStop: func(context.Context) {
 			// Bounded (5s) fresh-context OTel flush — see the same note in the
 			// other roles: the fx OnStop context carries the 90s StopTimeout, so
@@ -219,11 +219,16 @@ func runMCPServer(lc fx.Lifecycle, sd fx.Shutdowner, r mcpRunner) {
 			go func() {
 				defer close(done)
 				var err error
+				var clients *mcp.Clients
 				switch mcpTransport {
 				case "stdio":
-					err = runStdio(workCtx, r.cfg, r.l, r.stdioClients())
+					if clients, err = r.stdioClients(); err == nil {
+						err = runStdio(workCtx, r.cfg, r.l, clients)
+					}
 				case "http":
-					err = runHTTP(workCtx, r.cfg, r.l, r.modeLabel, r.httpClients())
+					if clients, err = r.httpClients(); err == nil {
+						err = runHTTP(workCtx, r.cfg, r.l, r.modeLabel, clients)
+					}
 				default:
 					r.l.Error("unknown transport (expected stdio|http)", zap.String("transport", mcpTransport))
 					_ = sd.Shutdown(fx.ExitCode(1))
