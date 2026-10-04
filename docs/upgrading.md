@@ -117,6 +117,22 @@ millionths of `unit_code`, so 25 USD is `25000000`.
   refused. Every request with a key-bound capability costs one write; the
   capability purger deletes expired ids on its existing interval.
 
+## Unreleased — batches act only on their own collection, and take restricted capabilities
+
+- **A batch acts only on objects of the collection it names.** An object id
+  from another collection of the tenant is reported as not found, like an id
+  that does not exist; before, the worker acted on it although the batch was
+  authorised for its own collection only.
+- **A resource-restricted capability can run `BatchDelete`,
+  `BatchUpdateTags`, `BatchRestoreObjects` and `BatchCopy`.** Each object the
+  batch acts on must be in scope, or the batch is refused with
+  `PermissionDenied` — as is one that would act on none of them, since
+  nothing in it is shown to be in scope.
+- **`BatchCopy` needs `get` as well as `put`** from a capability — `get` on each
+  source, `put` on each destination — and a capability without
+  `AllowTaintedRead` cannot copy a tainted object.
+- Calls made with a JWT or API token and no capability are unaffected.
+
 ## Unreleased — capabilities need the op for operations and storage bootstrap
 
 - **`OperationService` asserts a capability op.** `GetOperation` needs `get`,
