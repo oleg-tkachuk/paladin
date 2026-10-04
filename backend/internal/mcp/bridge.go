@@ -22,7 +22,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
 	"connectrpc.com/connect"
-	"github.com/google/uuid"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -71,8 +70,9 @@ type Clients struct {
 }
 
 // NewClients constructs a Clients bundle. Bearer is the access token the MCP
-// service-account holds; it is injected into every outbound Connect request.
-func NewClients(httpc *http.Client, adminURL, dataURL, iamURL, bearer string) *Clients {
+// service-account holds; it is sent on every outbound Connect request whose
+// MCP request carried none of its own.
+func NewClients(httpc *http.Client, adminURL, dataURL, iamURL, bearer string) (*Clients, error) {
 	return NewClientsWithCapability(httpc, adminURL, dataURL, iamURL, bearer, "")
 }
 
@@ -85,85 +85,60 @@ func NewClients(httpc *http.Client, adminURL, dataURL, iamURL, bearer string) *C
 // capabilityToken is the optional capability that grants fine-grained
 // caveats. Either or both may be present. Empty values are not sent.
 //
+// Both are defaults: a call made for an MCP request that carried credentials
+// (withRequestCredentials) sends that request's instead. The clients are the
+// Go SDK's (paladin.Connect), which also stamps the idempotency keys —
+// the agent's own idempotency_key field when it set one, a fresh key on every
+// other call with side effects. A plane given no URL has no clients.
+//
 // MCP HTTP transport forwards the capability via the same X-Paladin-Capability
 // header the streamable-HTTP getServer hook reads — see cmd/server/serve_mcp.go.
-func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bearer, capabilityToken string) *Clients {
+func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bearer, capabilityToken string) (*Clients, error) {
 	if httpc == nil {
 		httpc = http.DefaultClient
 	}
 	defaults := Credentials{Bearer: bearer, Capability: capabilityToken}
-	authInjector := connect.WithInterceptors(connect.UnaryInterceptorFunc(
-		func(next connect.UnaryFunc) connect.UnaryFunc {
-			return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-				cred := credentialsFrom(ctx, defaults)
-				if cred.Bearer != "" {
-					req.Header().Set("Authorization", "Bearer "+cred.Bearer)
-				}
-				if cred.Capability != "" {
-					req.Header().Set(paladin.HeaderCapability, cred.Capability)
-				}
-				// Idempotency-Key on the calls whose replay means something.
-				//
-				// The bridge sent one on nothing at all, and nothing rejected
-				// it: none of the RPCs it drives is Create*/Issue*, which is
-				// the only shape the server REQUIRES a key on. But it drives
-				// UploadObject, CompleteObject, CopyObject, RestoreObjectVersion
-				// and both multipart halves — every one of which creates state
-				// and answers AlreadyExists on a retry that carries no key.
-				//
-				// This surface makes that worse than most: the caller is an
-				// agent, and an agent retrying a tool call it is unsure about
-				// is normal behaviour, not an exception. A fresh UUID per
-				// attempt only collapses a transport-level retry; a caller
-				// wanting more can set the header itself, which this respects.
-				//
-				// A key the agent put in the message's idempotency_key field wins:
-				// the plane refuses a request whose header and field disagree, so
-				// stamping a fresh UUID beside it failed every such call, and a
-				// retry with the same key was never recognised as one.
-				if wantsIdempotencyKey(req.Spec().Procedure) &&
-					req.Header().Get(paladin.HeaderIdempotencyKey) == "" {
-					key := uuid.NewString()
-					if c, ok := req.Any().(interface{ GetIdempotencyKey() string }); ok && c.GetIdempotencyKey() != "" {
-						key = c.GetIdempotencyKey()
-					}
-					req.Header().Set(paladin.HeaderIdempotencyKey, key)
-				}
-				return next(ctx, req)
-			}
-		},
-	))
-	return &Clients{
+	p, err := paladin.Connect(paladin.Endpoints{Admin: adminURL, Data: dataURL, IAM: iamURL},
+		paladin.WithHTTPClient(httpc),
+		paladin.WithTokens(requestTokens{defaults: defaults}),
+		paladin.WithCapabilitySource(func(ctx context.Context) string {
+			return credentialsFrom(ctx, defaults).Capability
+		}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("mcp: upstream clients: %w", err)
+	}
+	c := &Clients{
 		HTTP:        httpc,
 		AdminURL:    adminURL,
 		DataURL:     dataURL,
 		IAMURL:      iamURL,
 		BearerToken: bearer,
-
-		Backend:  adminv1connect.NewBackendServiceClient(httpc, adminURL, authInjector),
-		Bucket:   adminv1connect.NewBucketServiceClient(httpc, adminURL, authInjector),
-		Tenant:   adminv1connect.NewTenantServiceClient(httpc, adminURL, authInjector),
-		OKey:     adminv1connect.NewCollectionServiceClient(httpc, adminURL, authInjector),
-		Policy:   adminv1connect.NewPolicyServiceClient(httpc, adminURL, authInjector),
-		Quota:    adminv1connect.NewQuotaServiceClient(httpc, adminURL, authInjector),
-		Audit:    adminv1connect.NewAuditLogServiceClient(httpc, adminURL, authInjector),
-		EventSub: adminv1connect.NewEventSubscriptionServiceClient(httpc, adminURL, authInjector),
-		CEL:      adminv1connect.NewCELServiceClient(httpc, adminURL, authInjector),
-		System:   adminv1connect.NewSystemServiceClient(httpc, adminURL, authInjector),
-		Budget:   adminv1connect.NewTenantBudgetServiceClient(httpc, adminURL, authInjector),
-		Billing:  adminv1connect.NewBillingServiceClient(httpc, adminURL, authInjector),
-		PlatOp:   adminv1connect.NewPlatformOperationServiceClient(httpc, adminURL, authInjector),
-
-		Object:        datav1connect.NewObjectServiceClient(httpc, dataURL, authInjector),
-		Multipart:     datav1connect.NewMultipartUploadServiceClient(httpc, dataURL, authInjector),
-		Presign:       datav1connect.NewPresignServiceClient(httpc, dataURL, authInjector),
-		ObjectTag:     datav1connect.NewObjectTagServiceClient(httpc, dataURL, authInjector),
-		Batch:         datav1connect.NewBatchServiceClient(httpc, dataURL, authInjector),
-		DataOperation: datav1connect.NewOperationServiceClient(httpc, dataURL, authInjector),
-
-		Auth:  iamv1connect.NewAuthServiceClient(httpc, iamURL, authInjector),
-		Users: iamv1connect.NewUserServiceClient(httpc, iamURL, authInjector),
 	}
+	if a := p.Admin; a != nil {
+		c.Backend, c.Bucket, c.Tenant, c.OKey = a.Backend, a.Bucket, a.Tenant, a.Collection
+		c.Policy, c.Quota, c.Audit, c.EventSub = a.Policy, a.Quota, a.AuditLog, a.EventSubscription
+		c.CEL, c.System, c.Budget, c.Billing, c.PlatOp = a.CEL, a.System, a.TenantBudget, a.Billing, a.PlatformOperation
+	}
+	if d := p.Data; d != nil {
+		c.Object, c.Multipart, c.Presign = d.Object, d.MultipartUpload, d.Presign
+		c.ObjectTag, c.Batch, c.DataOperation = d.ObjectTag, d.Batch, d.Operation
+	}
+	if i := p.IAM; i != nil {
+		c.Auth, c.Users = i.Auth, i.User
+	}
+	return c, nil
+}
+
+// requestTokens is the bridge's paladin.TokenSource: the bearer of the MCP
+// request a call is made for, else the session's. An empty one sends no
+// Authorization, for a caller holding only a capability.
+type requestTokens struct {
+	defaults Credentials
+}
+
+func (s requestTokens) Token(ctx context.Context, _ string) (string, error) {
+	return credentialsFrom(ctx, s.defaults).Bearer, nil
 }
 
 // NewServer constructs an MCP server with the Paladin tool / resource / prompt

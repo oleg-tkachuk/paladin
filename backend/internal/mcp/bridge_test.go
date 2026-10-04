@@ -38,7 +38,7 @@ func dialInProcess(t *testing.T, c *Clients) *mcpsdk.ClientSession {
 func TestServerRegistersDefaultCatalog(t *testing.T) {
 	t.Parallel()
 
-	cs := dialInProcess(t, NewInlineClients(InlineHandlers{}, "tok"))
+	cs := dialInProcess(t, mustClients(t)(NewInlineClients(InlineHandlers{}, "tok")))
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
@@ -159,9 +159,9 @@ func TestDataMutationToolsDispatch(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.tool, func(t *testing.T) {
 			var paths []string
-			clients := NewInlineClients(InlineHandlers{
+			clients := mustClients(t)(NewInlineClients(InlineHandlers{
 				Data: recordingPlane(&paths),
-			}, "tok")
+			}, "tok"))
 			cs := dialInProcess(t, clients)
 
 			res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
@@ -232,7 +232,7 @@ func TestCoverageToolsDispatch(t *testing.T) {
 			default:
 				h.Data = recordingPlane(&paths)
 			}
-			cs := dialInProcess(t, NewInlineClients(h, "tok"))
+			cs := dialInProcess(t, mustClients(t)(NewInlineClients(h, "tok")))
 
 			res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 				Name:      tc.tool,
@@ -263,7 +263,7 @@ func TestBillingToolsRejectAMalformedPeriod(t *testing.T) {
 	for _, tool := range []string{"paladin_billing_summary", "paladin_billing_timeseries"} {
 		t.Run(tool, func(t *testing.T) {
 			var paths []string
-			cs := dialInProcess(t, NewInlineClients(InlineHandlers{Admin: recordingPlane(&paths)}, "tok"))
+			cs := dialInProcess(t, mustClients(t)(NewInlineClients(InlineHandlers{Admin: recordingPlane(&paths)}, "tok")))
 
 			res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 				Name:      tool,

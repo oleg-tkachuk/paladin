@@ -12,7 +12,7 @@ import (
 // Every paladin RPC must resolve. This is the guard on the blank imports above.
 //
 // Without them the registry holds nothing, Level answers "not found" for
-// everything, and both callers quietly stop stamping keys — no error, no
+// everything, and its callers quietly stop stamping keys — no error, no
 // failure, just a fleet of clients that no longer send a header the server
 // requires. A silent registry is a silent guard, so it fails here instead.
 func TestEveryRPCResolves(t *testing.T) {

@@ -56,14 +56,22 @@ func withoutKey(ctx context.Context) bool {
 }
 
 // headerInterceptor sets the credentials on every request, and the
-// idempotency key on every request that should carry one.
+// idempotency key on every request that should carry one. It runs before
+// the DPoP interceptor, which signs over the capability it sets.
 type headerInterceptor struct {
 	headers http.Header
+	// capability is WithCapabilitySource's, read per call.
+	capability func(context.Context) string
 }
 
-func (h *headerInterceptor) apply(dst http.Header) {
+func (h *headerInterceptor) apply(ctx context.Context, dst http.Header) {
 	for name, values := range h.headers {
 		dst[name] = append([]string(nil), values...)
+	}
+	if h.capability != nil {
+		if token := h.capability(ctx); token != "" {
+			dst.Set(HeaderCapability, token)
+		}
 	}
 }
 
@@ -92,7 +100,7 @@ func idempotencyKeyFor(ctx context.Context, req connect.AnyRequest) (string, boo
 
 func (h *headerInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		h.apply(req.Header())
+		h.apply(ctx, req.Header())
 		// Before the retry interceptor, so every attempt carries the same key.
 		if key, ok := idempotencyKeyFor(ctx, req); ok {
 			req.Header().Set(HeaderIdempotencyKey, key)
@@ -104,7 +112,7 @@ func (h *headerInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc 
 func (h *headerInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
 		conn := next(ctx, spec)
-		h.apply(conn.RequestHeader())
+		h.apply(ctx, conn.RequestHeader())
 		if key, ok := IdempotencyKey(ctx); ok {
 			conn.RequestHeader().Set(HeaderIdempotencyKey, key)
 		}

@@ -38,7 +38,7 @@ func callSetQuota(t *testing.T, plane *quotaPlane, args map[string]any) *mcpsdk.
 	mux.Handle(adminv1connect.NewQuotaServiceHandler(plane))
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
-	cs := dialInProcess(t, NewClients(ts.Client(), ts.URL, ts.URL, ts.URL, "tok"))
+	cs := dialInProcess(t, mustClients(t)(NewClients(ts.Client(), ts.URL, ts.URL, ts.URL, "tok")))
 	res, err := cs.CallTool(t.Context(), &mcpsdk.CallToolParams{Name: "paladin_set_quota", Arguments: args})
 	if err != nil {
 		t.Fatal(err)
