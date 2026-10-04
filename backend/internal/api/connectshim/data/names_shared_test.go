@@ -41,15 +41,15 @@ type parsedName struct {
 
 var serverParsers = map[string]func(context.Context, string) (parsedName, error){
 	"collection": func(ctx context.Context, s string) (parsedName, error) {
-		c, err := collectionNameParts(ctx, s)
+		_, c, err := collectionNameParts(ctx, s)
 		return parsedName{collection: c}, err
 	},
 	"object": func(ctx context.Context, s string) (parsedName, error) {
-		n, err := parseObjectName(ctx, s)
+		_, n, err := parseObjectName(ctx, s)
 		return parsedName{collection: n.Collection, object: n.Object, out: n.String()}, err
 	},
-	"version": func(_ context.Context, s string) (parsedName, error) {
-		n, err := versionParent(s)
+	"version": func(ctx context.Context, s string) (parsedName, error) {
+		_, n, err := versionParent(ctx, s)
 		return parsedName{collection: n.Collection, object: n.Object}, err
 	},
 }

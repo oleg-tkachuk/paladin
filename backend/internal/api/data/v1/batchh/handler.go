@@ -100,7 +100,7 @@ func NewHandler(submitter Submitter, policy cedar.Authorizer, buckets BucketReso
 // BatchDelete validates and enqueues an async delete across up to 10k objects.
 // Returns the operation_id to poll via GetOperation.
 func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.UUID, error) {
-	tenantID, p, err := apiutil.CallerContext(ctx)
+	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -134,7 +134,7 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 }
 
 func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID, error) {
-	tenantID, p, err := apiutil.CallerContext(ctx)
+	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -165,7 +165,7 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 }
 
 func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs) (uuid.UUID, error) {
-	tenantID, p, err := apiutil.CallerContext(ctx)
+	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -192,7 +192,7 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 }
 
 func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObjectsArgs) (uuid.UUID, error) {
-	tenantID, p, err := apiutil.CallerContext(ctx)
+	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -327,7 +327,7 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		backendID, bucket, _ = h.buckets.LookupBucket(ctx, tenantID, collection, false)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipalFor(p, tenantID),
+		apiutil.CedarPrincipal(p),
 		action,
 		&cedar.Resource{TenantID: tenantID, Collection: collection, BackendID: backendID, BucketName: bucket},
 		cedar.RequestContext{Now: time.Now()},

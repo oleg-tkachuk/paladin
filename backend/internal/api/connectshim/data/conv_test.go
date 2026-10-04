@@ -46,7 +46,7 @@ func name(tenant uuid.UUID, collection string, obj uuid.UUID) string {
 }
 
 func TestObjectNamePartsHappyPath(t *testing.T) {
-	ok, oid, err := objectNameParts(ctxTenant(tenantA), name(tenantA, "logs", objUUID))
+	_, ok, oid, err := objectNameParts(ctxTenant(tenantA), name(tenantA, "logs", objUUID))
 	if err != nil {
 		t.Fatalf("objectNameParts: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestObjectNamePartsHappyPath(t *testing.T) {
 // collection is legally a multi-segment path, so the parser must anchor on the
 // literal separators rather than counting slash positions.
 func TestObjectNamePartsMultiSegmentKey(t *testing.T) {
-	ok, _, err := objectNameParts(ctxTenant(tenantA), name(tenantA, "invoices/2026/q1", objUUID))
+	_, ok, _, err := objectNameParts(ctxTenant(tenantA), name(tenantA, "invoices/2026/q1", objUUID))
 	if err != nil {
 		t.Fatalf("objectNameParts: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestObjectNamePartsMultiSegmentKey(t *testing.T) {
 // An collection containing the literal "/objects/" must not shadow the real
 // suffix — that is why the parser uses LastIndex.
 func TestObjectNamePartsKeyContainingObjectsSegment(t *testing.T) {
-	ok, oid, err := objectNameParts(ctxTenant(tenantA), name(tenantA, "a/objects/b", objUUID))
+	_, ok, oid, err := objectNameParts(ctxTenant(tenantA), name(tenantA, "a/objects/b", objUUID))
 	if err != nil {
 		t.Fatalf("objectNameParts: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestObjectNamePartsRejectsMalformed(t *testing.T) {
 	}
 	for label, n := range cases {
 		t.Run(label, func(t *testing.T) {
-			if _, _, err := objectNameParts(ctx, n); err == nil {
+			if _, _, _, err := objectNameParts(ctx, n); err == nil {
 				t.Errorf("want an error for %q", n)
 			}
 		})
@@ -113,13 +113,13 @@ func TestCollectionNameParts(t *testing.T) {
 	ctx := ctxTenant(tenantA)
 
 	t.Run("happy path", func(t *testing.T) {
-		ok, err := collectionNameParts(ctx, "tenants/"+tenantA.String()+"/collections/logs")
+		_, ok, err := collectionNameParts(ctx, "tenants/"+tenantA.String()+"/collections/logs")
 		if err != nil || ok != "logs" {
 			t.Errorf("got %q, %v", ok, err)
 		}
 	})
 	t.Run("multi-segment key", func(t *testing.T) {
-		ok, err := collectionNameParts(ctx, "tenants/"+tenantA.String()+"/collections/a/b/c")
+		_, ok, err := collectionNameParts(ctx, "tenants/"+tenantA.String()+"/collections/a/b/c")
 		if err != nil || ok != "a/b/c" {
 			t.Errorf("got %q, %v", ok, err)
 		}
@@ -132,7 +132,7 @@ func TestCollectionNameParts(t *testing.T) {
 			"empty tenant":  "tenants//collections/logs",
 			"bad tenant id": "tenants/nope/collections/logs",
 		} {
-			if _, err := collectionNameParts(ctx, n); err == nil {
+			if _, _, err := collectionNameParts(ctx, n); err == nil {
 				t.Errorf("%s: want an error for %q", label, n)
 			}
 		}
@@ -192,10 +192,10 @@ func TestAssertJWTTenant(t *testing.T) {
 func TestNameParsersEnforceTheTenantGate(t *testing.T) {
 	crossTenant := name(tenantB, "logs", objUUID)
 
-	if _, _, err := objectNameParts(ctxTenant(tenantA), crossTenant); code(err) != connect.CodePermissionDenied {
+	if _, _, _, err := objectNameParts(ctxTenant(tenantA), crossTenant); code(err) != connect.CodePermissionDenied {
 		t.Errorf("objectNameParts code = %v, want PermissionDenied", code(err))
 	}
-	if _, err := collectionNameParts(ctxTenant(tenantA), "tenants/"+tenantB.String()+"/collections/logs"); code(err) != connect.CodePermissionDenied {
+	if _, _, err := collectionNameParts(ctxTenant(tenantA), "tenants/"+tenantB.String()+"/collections/logs"); code(err) != connect.CodePermissionDenied {
 		t.Errorf("collectionNameParts code = %v, want PermissionDenied", code(err))
 	}
 }
@@ -413,7 +413,7 @@ func TestBadName(t *testing.T) {
 	t.Run("cross-tenant object key name is denied, not invalid", func(t *testing.T) {
 		name := "tenants/" + tenantB.String() + "/collections/docs"
 
-		_, err := collectionNameParts(ctxTenant(tenantA), name)
+		_, _, err := collectionNameParts(ctxTenant(tenantA), name)
 
 		if got := code(badName(err)); got != connect.CodePermissionDenied {
 			t.Errorf("code = %v, want PermissionDenied", got)
@@ -558,5 +558,71 @@ func TestDataOperationToProtoPutsFailuresInTheErrorArm(t *testing.T) {
 	}
 	if got.GetResponse() != nil {
 		t.Error("a failed operation also carried a response")
+	}
+}
+
+// ─── scopeToTenant ───────────────────────────────────────────────────────────
+
+// A request acts on the tenant its names name: the caller's own, or, for a
+// platform admin naming another, that tenant — and every parser hands the
+// scoped context on, multipart's sessionRef included, since a handler run on
+// the unscoped one acts on the admin's own tenant.
+func TestNameParsersScopeTheRequestToTheNamedTenant(t *testing.T) {
+	objName := name(tenantB, "logs", objUUID)
+	collName := "tenants/" + tenantB.String() + "/collections/logs"
+	parsers := map[string]func(context.Context) (context.Context, error){
+		"objectNameParts": func(ctx context.Context) (context.Context, error) {
+			ctx, _, _, err := objectNameParts(ctx, objName)
+			return ctx, err
+		},
+		"collectionNameParts": func(ctx context.Context) (context.Context, error) {
+			ctx, _, err := collectionNameParts(ctx, collName)
+			return ctx, err
+		},
+		"versionParent": func(ctx context.Context) (context.Context, error) {
+			ctx, _, err := versionParent(ctx, objName+"/versions/"+uuid.NewString())
+			return ctx, err
+		},
+		"sessionRef": func(ctx context.Context) (context.Context, error) {
+			ctx, _, err := sessionRef(ctx, objName)
+			return ctx, err
+		},
+	}
+	for name, parse := range parsers {
+		t.Run(name, func(t *testing.T) {
+			ctx, err := parse(ctxTenant(tenantA, "platform.admin"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if acting, ok := auth.ActingTenant(ctx); !ok || acting != tenantB {
+				t.Errorf("admin naming tenant B acts on %v (set=%v), want B", acting, ok)
+			}
+			own, err := parse(ctxTenant(tenantB))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := auth.ActingTenant(own); ok {
+				t.Error("a caller naming its own tenant was given an acting tenant")
+			}
+		})
+	}
+}
+
+// Once a request has named a tenant, a name naming another is refused — for
+// an admin as much as anyone, so a copy cannot read one tenant and write
+// another.
+func TestNamesInOneRequestMustNameOneTenant(t *testing.T) {
+	admin := ctxTenant(tenantA, "platform.admin")
+	for first, second := range map[uuid.UUID]uuid.UUID{
+		tenantB: tenantA, // another tenant first, then the admin's own
+		tenantA: tenantB, // the admin's own first, then another
+	} {
+		ctx, _, err := collectionNameParts(admin, "tenants/"+first.String()+"/collections/logs")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, _, err := objectNameParts(ctx, name(second, "logs", objUUID)); code(err) != connect.CodePermissionDenied {
+			t.Errorf("names in %v then %v: code = %v, want PermissionDenied", first, second, code(err))
+		}
 	}
 }

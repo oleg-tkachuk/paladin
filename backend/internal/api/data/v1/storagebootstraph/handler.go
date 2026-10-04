@@ -172,7 +172,7 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 	// universal (no per-tenant policy seed). A scoped PAT is still confined by the
 	// scope-enforcement built-in at tenant granularity (scope_keys = tenant:<id>).
 	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipalFor(p, tenantID),
+		apiutil.CedarPrincipal(p),
 		cedar.ActionEnsureTenantStorage,
 		&cedar.Resource{TenantID: tenantID},
 		cedar.RequestContext{Now: time.Now()},
