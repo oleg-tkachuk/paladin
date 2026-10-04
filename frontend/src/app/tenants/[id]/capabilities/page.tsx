@@ -227,7 +227,12 @@ export default function CapabilitiesPage() {
   const usage = browseQuery.data?.usage ?? EMPTY_USAGE;
   const loading = browseQuery.isFetching;
   const hasFetched = browseQuery.isFetched;
-  const fetchList = () => browseQuery.refetch();
+  // refetch() runs even while the query is disabled, so guard it the same
+  // way: with no principal chosen there is nothing to list, and List refuses
+  // an empty subject.
+  const fetchList = async () => {
+    if (subject.trim()) await browseQuery.refetch();
+  };
 
   // Browse filter + persistence are now driven by the query itself: the
   // (kind, subject, filters) tuple is the queryKey, so changing any of them
