@@ -2,9 +2,6 @@ package worker
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -22,6 +19,10 @@ import (
 )
 
 const testSigningSecret = "inline-signing-secret"
+
+// removedSignatureHeader is the body-only signature deliveries used to carry;
+// a captured one verified forever.
+const removedSignatureHeader = "X-Paladin-Signature"
 
 type signedDelivery struct {
 	signature, legacy string
@@ -42,7 +43,7 @@ func signingSink(t *testing.T, statuses ...int) (*httptest.Server, func() []sign
 		n := len(got)
 		got = append(got, signedDelivery{
 			signature: r.Header.Get(paladin.HeaderWebhookSignature),
-			legacy:    r.Header.Get(legacySignatureHeader),
+			legacy:    r.Header.Get(removedSignatureHeader),
 			body:      body,
 		})
 		mu.Unlock()
@@ -75,7 +76,7 @@ func signedSub(t *testing.T, url string) admindomain.EventSubscription {
 }
 
 // A delivery carries the timestamped signature, which the SDK verifies, and
-// for now the body-only one beside it.
+// no longer the body-only one.
 func TestDeliverHTTPSignsWithATimestamp(t *testing.T) {
 	srv, deliveries := signingSink(t)
 	signedAt := time.Unix(1_767_225_600, 0)
@@ -95,10 +96,8 @@ func TestDeliverHTTPSignsWithATimestamp(t *testing.T) {
 	if !strings.HasPrefix(got[0].signature, "t="+strconv.FormatInt(signedAt.Unix(), 10)+",") {
 		t.Errorf("signature %q is not stamped with the dispatcher's clock", got[0].signature)
 	}
-	mac := hmac.New(sha256.New, []byte(testSigningSecret))
-	mac.Write(got[0].body)
-	if want := legacySignaturePrefix + hex.EncodeToString(mac.Sum(nil)); got[0].legacy != want {
-		t.Errorf("legacy signature = %q, want %q", got[0].legacy, want)
+	if got[0].legacy != "" {
+		t.Errorf("%s is still sent: %q", removedSignatureHeader, got[0].legacy)
 	}
 }
 

@@ -360,8 +360,7 @@ if err := paladin.VerifyWebhook(secret, r.Header.Get(paladin.HeaderWebhookSignat
 | `SignWebhook(secret, t, body)` | The header value the server sends, for a test of your own handler. |
 
 A replay inside the window verifies: deduplicate on `X-Paladin-Event-Id`,
-which is stable across retries. The older `X-Paladin-Signature` (an HMAC of the
-body alone) is still sent for one release.
+which is stable across retries.
 
 ### Testing with a fake: `paladintest`
 

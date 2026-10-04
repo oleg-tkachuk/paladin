@@ -38,10 +38,7 @@ package worker
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -646,7 +643,6 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 			// its own time, or it would arrive outside the subscriber's
 			// tolerance window.
 			req.Header.Set(paladin.HeaderWebhookSignature, paladin.SignWebhook(secret, d.now(), body))
-			req.Header.Set(legacySignatureHeader, legacySignaturePrefix+signHMAC(body, secret))
 		}
 		resp, err := httpClient.Do(req)
 		if err != nil {
@@ -677,26 +673,11 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 	return lastStatus, fmt.Errorf("delivery failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
-// The body-only signature that HeaderWebhookSignature replaces. It verifies
-// forever once captured, and is sent beside the new one for a release so
-// subscribers can move.
-const (
-	legacySignatureHeader = "X-Paladin-Signature"
-	legacySignaturePrefix = "sha256="
-)
-
 func (d *Dispatcher) now() time.Time {
 	if d.Now != nil {
 		return d.Now()
 	}
 	return time.Now()
-}
-
-// signHMAC produces a hex-encoded HMAC-SHA256 of body using key.
-func signHMAC(body []byte, key string) string {
-	mac := hmac.New(sha256.New, []byte(key))
-	mac.Write(body)
-	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func (d *Dispatcher) log() *zap.Logger {
