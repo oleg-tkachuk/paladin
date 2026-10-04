@@ -32,9 +32,10 @@ import (
 // presented alone.
 //
 // Attenuation blocks speak a fixed vocabulary of facts — the operations,
-// resources, planes and expiry they allow, and a key to bind to — which the
-// verifier folds into a narrower Capability through Narrows, exactly as a
-// server-side delegation is checked. Everything downstream (Caveats.Check,
+// resources, planes and expiry they allow, a key to bind to, and request and
+// budget limits of the copy's own — which the verifier folds into a narrower
+// Capability through Narrows, exactly as a server-side delegation is checked,
+// and into Capability.Copies. Everything downstream (Caveats.Check,
 // budgets, DPoP) then sees an ordinary Capability. A block holding anything
 // outside the vocabulary — a rule, a check, another predicate — is refused:
 // a restriction the verifier cannot enforce must not pass as one it did.
