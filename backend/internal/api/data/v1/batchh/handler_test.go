@@ -377,18 +377,24 @@ func TestBatchUpdateTags(t *testing.T) {
 		}
 	})
 
-	t.Run("no maxBatchSize cap on tags: oversized batch still accepted", func(t *testing.T) {
-		// BatchUpdateTags intentionally omits the maxBatchSize guard the
-		// other three handlers apply. Lock that behavioural difference in.
+	t.Run("batch too large → invalid argument", func(t *testing.T) {
+		sub := &fakeSubmitter{}
+		h := newHandler(sub, allowAll())
+		_, err := h.BatchUpdateTags(authedCtx(tid), BatchUpdateTagsArgs{ObjectIDs: make([]uuid.UUID, maxBatchSize+1)})
+		wantCode(t, err, connect.CodeInvalidArgument)
+		if sub.called {
+			t.Fatal("submitter must not be called when batch is oversized")
+		}
+	})
+
+	t.Run("batch at maxBatchSize → accepted", func(t *testing.T) {
 		sub := &fakeSubmitter{id: uuid.New()}
-		_, err := newHandler(sub, allowAll()).BatchUpdateTags(authedCtx(tid), BatchUpdateTagsArgs{
-			ObjectIDs: make([]uuid.UUID, maxBatchSize+1),
-		})
-		if err != nil {
+		h := newHandler(sub, allowAll())
+		if _, err := h.BatchUpdateTags(authedCtx(tid), BatchUpdateTagsArgs{ObjectIDs: make([]uuid.UUID, maxBatchSize)}); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if !sub.called {
-			t.Fatal("expected submit despite oversized batch (no cap on tags)")
+			t.Fatal("expected submit for a batch at the cap")
 		}
 	})
 }
