@@ -244,15 +244,7 @@ export default function TenantCollectionsPage() {
         <div>
           <h2 className="text-lg font-semibold">Collections</h2>
           <p className={cn(T.helper, "max-w-prose")}>
-            Tenant-scoped namespaces routed to a physical bucket. Cross-tenant
-            index lives at{" "}
-            <Link
-              href="/collections"
-              className="text-primary hover:underline font-mono"
-            >
-              /collections
-            </Link>
-            .
+            Tenant-scoped namespaces routed to a physical bucket.
           </p>
         </div>
         {isOwnTenant && (
