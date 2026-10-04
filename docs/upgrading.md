@@ -103,6 +103,15 @@ millionths of `unit_code`, so 25 USD is `25000000`.
   and `If-Match`; the storage endpoint's CORS must allow them and expose
   `ETag` before the console is upgraded.
 
+## Unreleased — a Biscuit copy's usage can be read
+
+- **Go: `BiscuitCopy` names the copy's limits** (`Limits`), and names a copy
+  carrying limits on a verifier without `MeterCopies` too, where it used to
+  refuse it — so such a copy can be read and revoked anywhere.
+- **`CopyUsageReader` reads a copy's counters**; implement it beside your
+  `Meter` to show them. `CapabilityService.GetBiscuitUsage` and the console's
+  "Copy usage" serve them.
+
 ## Unreleased — a Biscuit copy can carry request and budget limits of its own
 
 - **Go: a `Meter` of your own should count `Copies`.** `RequestBump`,

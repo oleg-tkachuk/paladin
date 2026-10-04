@@ -235,6 +235,9 @@ counts them when they are passed on as `Copies` in `RequestBump`,
 `ChargeRequest` and `ReserveRequest`. A verifier admits such a copy only with
 `MeterCopies` set, which says the `Meter` behind it counts copies; without it
 the token is refused rather than accepted with its limits unkept.
+`verifier.BiscuitCopy` names the limits in force on a copy, on any verifier,
+and a `CopyUsageReader` (`memstore` implements one) reads what each has
+counted.
 
 One copy can also be revoked on its own. `verifier.BiscuitCopy(ctx, token)`
 checks the token and names its capability and the revocation id of its last
@@ -345,6 +348,7 @@ Implement these and you are done:
 |---|---|---|
 | `Store` | Capability records + revocations | No |
 | `BiscuitRevocationStore` | Revoked Biscuit copies (only if you accept Biscuits) | No |
+| `CopyUsageReader` | Reads Biscuit copies' own counters (only to show them) | No |
 | `UsageStore[TX]` = `Meter[TX]` + `TenantBudgets` + `UsageHousekeeping` | Request and spend counters, the charges ledger, tenant ceilings | Only for atomic side effects |
 | `KeyResolver` | Public verification keys | No |
 
