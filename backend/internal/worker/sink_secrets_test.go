@@ -16,6 +16,7 @@ import (
 	kafka "github.com/segmentio/kafka-go"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // fakeSinkSecrets counts resolutions so tests can pin the TTL cache. The
@@ -108,10 +109,13 @@ func TestResolveSinkValue_NoResolverIsHardError(t *testing.T) {
 // deliverHTTP: a k8s: signing_secret_ref signs with the RESOLVED key, and a
 // resolution failure fails the delivery (never signs with the literal ref).
 func TestDeliverHTTP_SigningSecretRefResolved(t *testing.T) {
-	var gotSig string
+	var (
+		gotSig  string
+		gotBody []byte
+	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotSig = r.Header.Get(legacySignatureHeader)
-		_, _ = io.Copy(io.Discard, r.Body)
+		gotSig = r.Header.Get(paladin.HeaderWebhookSignature)
+		gotBody, _ = io.ReadAll(r.Body)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -129,10 +133,10 @@ func TestDeliverHTTP_SigningSecretRefResolved(t *testing.T) {
 	if err := d.DeliverOne(context.Background(), sub, "paladin.bucket.updated"); err != nil {
 		t.Fatalf("DeliverOne: %v", err)
 	}
-	if gotSig == "" || !strings.HasPrefix(gotSig, legacySignaturePrefix) {
-		t.Fatalf("signature header = %q", gotSig)
-	}
 	// The signature must correspond to the resolved key, not the literal ref.
+	if err := paladin.VerifyWebhook("resolved-hmac-key", gotSig, gotBody); err != nil {
+		t.Fatalf("signature %q does not verify under the resolved key: %v", gotSig, err)
+	}
 	if secrets.calls.Load() != 1 {
 		t.Errorf("resolver calls = %d, want 1", secrets.calls.Load())
 	}
