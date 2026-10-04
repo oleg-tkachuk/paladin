@@ -10,11 +10,10 @@ export default function TenantPoliciesPage() {
     <TabStub
       title="Effective Cedar policy"
       description={
-        "The tenant-scoped Cedar policy graph (inherited + " +
-        "per-bucket / per-collection overrides) lands in Phase 5. " +
-        "Until then, the cross-tenant cedar templates editor at " +
-        "/policies is the entry point — pick the template, attach " +
-        "to the relevant entity from its detail page."
+        "This tenant's effective Cedar policy — inherited, with its " +
+        "per-bucket and per-collection overrides — is not shown here " +
+        "yet. Edit, validate and simulate policies for it at " +
+        "/policies: pick the tenant as the target."
       }
       legacyHref="/policies"
       legacyLabel="/policies (system-wide)"

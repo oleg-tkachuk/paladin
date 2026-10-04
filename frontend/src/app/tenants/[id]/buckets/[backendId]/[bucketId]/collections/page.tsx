@@ -94,14 +94,6 @@ export default function BucketCollectionsPage() {
             Collections routed to this bucket. Tenant-scoped listing filtered
             client-side by{" "}
             <span className={T.code}>bucket = {bucket.bucketId}</span>.
-            Cross-tenant index lives at{" "}
-            <Link
-              href="/collections"
-              className="text-primary hover:underline font-mono"
-            >
-              /collections
-            </Link>
-            .
           </p>
         </div>
         <Button
