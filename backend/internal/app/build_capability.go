@@ -22,11 +22,13 @@ import (
 type CapabilityBundle struct {
 	Store capability.Store
 	// Copies records revoked copies of a capability's Biscuit.
-	Copies   capability.BiscuitRevocationStore
-	Usage    capability.UsageStore[pgx.Tx]
-	Issuer   *capability.Issuer
-	Verifier *capability.StandardVerifier
-	Keys     *capability.StaticKeyResolver
+	Copies capability.BiscuitRevocationStore
+	// CopyUsage reads the counters of Biscuit copies with limits of their own.
+	CopyUsage capability.CopyUsageReader
+	Usage     capability.UsageStore[pgx.Tx]
+	Issuer    *capability.Issuer
+	Verifier  *capability.StandardVerifier
+	Keys      *capability.StaticKeyResolver
 
 	// DPoP checks the RFC 9449 proof a key-bound capability must arrive
 	// with, against Replay.
@@ -167,7 +169,8 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// metrics for the runtime counters. Pure pass-through on cold
 	// MeterProvider so test paths and sidecar tools don't pay for
 	// instrument lookups.
-	usage := capability.WithMetering(capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage")))
+	pgUsage := capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage"))
+	usage := capability.WithMetering(pgUsage)
 
 	replay, err := capabilitypg.NewReplayCache(deps.Pool, deps.Logger.Named("dpop-replay"))
 	if err != nil {
@@ -177,6 +180,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	return &CapabilityBundle{
 		Store:        store,
 		Copies:       store,
+		CopyUsage:    pgUsage,
 		Usage:        usage,
 		Issuer:       issuer,
 		Verifier:     verifier,

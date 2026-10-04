@@ -29,6 +29,9 @@ class CapabilityService(Protocol):
     async def revoke_biscuit(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
 
+    async def get_biscuit_usage(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
+
     async def list(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceListRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceListResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
 
@@ -80,6 +83,16 @@ class CapabilityServiceASGIApplication(ConnectASGIApplication[CapabilityService]
                         idempotency_level=IdempotencyLevel.IDEMPOTENT,
                     ),
                     function=svc.revoke_biscuit,
+                ),
+                "/paladin.admin.v1.CapabilityService/GetBiscuitUsage": Endpoint.unary(
+                    method=MethodInfo(
+                        name="GetBiscuitUsage",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageRequest,
+                        output=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.get_biscuit_usage,
                 ),
                 "/paladin.admin.v1.CapabilityService/List": Endpoint.unary(
                     method=MethodInfo(
@@ -194,6 +207,28 @@ class CapabilityServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
         )
 
+    async def get_biscuit_usage(
+        self,
+        request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None,
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GetBiscuitUsage",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageRequest,
+                output=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
     async def list(
         self,
         request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceListRequest,
@@ -248,6 +283,8 @@ class CapabilityServiceSync(Protocol):
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
     def revoke_biscuit(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceRevokeBiscuitResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
+    def get_biscuit_usage(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
     def list(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceListRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceListResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
     def get_usage(self, request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetUsageRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetUsageResponse:
@@ -297,6 +334,16 @@ class CapabilityServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.IDEMPOTENT,
                     ),
                     function=service.revoke_biscuit,
+                ),
+                "/paladin.admin.v1.CapabilityService/GetBiscuitUsage": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="GetBiscuitUsage",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageRequest,
+                        output=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.get_biscuit_usage,
                 ),
                 "/paladin.admin.v1.CapabilityService/List": EndpointSync.unary(
                     method=MethodInfo(
@@ -409,6 +456,28 @@ class CapabilityServiceClientSync(ConnectClientSync):
             ),
             headers=headers,
             timeout_ms=timeout_ms,
+        )
+
+    def get_biscuit_usage(
+        self,
+        request: paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None,
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GetBiscuitUsage",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageRequest,
+                output=paladin_dot_admin_dot_v1_dot_capability__service__pb2.CapabilityServiceGetBiscuitUsageResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
         )
 
     def list(

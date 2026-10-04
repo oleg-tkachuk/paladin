@@ -83,6 +83,10 @@ func (disabledCapabilityServiceHandler) RevokeBiscuit(context.Context, *connect.
 	return nil, subsystemDisabledError("capability", "config.capability.enabled")
 }
 
+func (disabledCapabilityServiceHandler) GetBiscuitUsage(context.Context, *connect.Request[adminv1.CapabilityServiceGetBiscuitUsageRequest]) (*connect.Response[adminv1.CapabilityServiceGetBiscuitUsageResponse], error) {
+	return nil, subsystemDisabledError("capability", "config.capability.enabled")
+}
+
 func (disabledCapabilityServiceHandler) List(context.Context, *connect.Request[adminv1.CapabilityServiceListRequest]) (*connect.Response[adminv1.CapabilityServiceListResponse], error) {
 	return nil, subsystemDisabledError("capability", "config.capability.enabled")
 }
