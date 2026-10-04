@@ -196,7 +196,7 @@ func (v *StandardVerifier) Verify(ctx context.Context, token string, audience st
 			return nil, fmt.Errorf("%w: Biscuit tokens are not accepted here", ErrInvalidSignature)
 		}
 		var err error
-		if cap, biscuitIDs, err = v.verifyBiscuit(ctx, token); err != nil {
+		if cap, biscuitIDs, err = v.verifyBiscuit(ctx, token, v.cfg.MeterCopies); err != nil {
 			return nil, err
 		}
 	} else {
@@ -252,8 +252,9 @@ func (v *StandardVerifier) Verify(ctx context.Context, token string, audience st
 
 // verifyBiscuit checks a Biscuit's sealed token as verifySigned does, then its
 // signature chain and attenuation blocks. It returns the capability the
-// Biscuit grants and its revocation ids, authority first.
-func (v *StandardVerifier) verifyBiscuit(ctx context.Context, token string) (*Capability, [][]byte, error) {
+// Biscuit grants and its revocation ids, authority first. meterCopies admits
+// blocks that set a copy's own limits.
+func (v *StandardVerifier) verifyBiscuit(ctx context.Context, token string, meterCopies bool) (*Capability, [][]byte, error) {
 	inner, attenuate, err := openBiscuit(token)
 	if err != nil {
 		return nil, nil, err
@@ -265,7 +266,7 @@ func (v *StandardVerifier) verifyBiscuit(ctx context.Context, token string) (*Ca
 	if sealed.BiscuitRoot == "" {
 		return nil, nil, fmt.Errorf("%w: biscuit seals an ordinary token", ErrInvalidSignature)
 	}
-	return attenuate(sealed, v.cfg.MeterCopies)
+	return attenuate(sealed, meterCopies)
 }
 
 // verifySigned checks a compact JWT's header, signature, issuer and tenant —
