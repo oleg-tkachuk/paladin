@@ -15,12 +15,13 @@ vars:
   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v11.1.2'
   PROJECT_NAME: paladin-console
   K8S_NAMESPACE: paladin
-  K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
-  # GLOBAL_REGISTRY and IMAGE_NAMESPACE are deliberately NOT declared: Task
-  # 3.53.1 evaluates an included file's own vars before the include's `vars:`,
-  # so a declaration here — even one wrapped in `default` — always wins over
-  # what the entry point forwards. Undeclared, they arrive from the entry
-  # point, the command line or the environment; deploy requires both.
+  # GLOBAL_REGISTRY, IMAGE_NAMESPACE and K8S_CONTEXT are deliberately NOT
+  # declared: Task 3.53.1 evaluates an included file's own vars before the
+  # include's `vars:`, so a declaration here — even one wrapped in `default` —
+  # always wins over what the entry point forwards. Undeclared, they arrive
+  # from the entry point (orbstack by default), the command line or the
+  # environment; deploy requires the first two, the cluster tasks the third
+  # (scripts/taskfile-forwarded-vars.test.sh).
   # Only v* tags version this image. The others — api/*, sdk/go/*,
   # capability/* — carry a `/` that is invalid in a Docker tag, and one of them
   # landing on a release commit must not restamp the release.

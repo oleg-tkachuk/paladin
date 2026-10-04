@@ -467,13 +467,14 @@ tasks:
       - python3 ./scripts/chart-netpol.py
 
   verify:taskfile-vars:
-    desc: "Fail when one component's Taskfile var leaks into the other"
+    desc: "Fail when one component's Taskfile var leaks into the other, or an entry point's never reaches it"
     # Task does not isolate an included file's vars from its siblings, so a
     # name declared on one component only is silently inherited by the other.
     # That shipped: the console image built with the repo root as its docker
     # context from anywhere but frontend/, and took verify-e2e down with it.
     cmds:
       - ./scripts/taskfile-vars.test.sh
+      - ./scripts/taskfile-forwarded-vars.test.sh
 
   verify:taskfile-drift:
     desc: "Fail when the entry points list different components"
