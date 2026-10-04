@@ -66,6 +66,18 @@ type UsageStore[TX any] struct {
 	holds     map[uuid.UUID]hold
 	nowFn     func() time.Time
 	txFactory func() TX
+
+	// copies counts each Biscuit copy that set limits of its own, by its
+	// block's revocation id.
+	copies map[string]copyCounter
+}
+
+// copyCounter is one Biscuit copy's own counters.
+type copyCounter struct {
+	capID    uuid.UUID // the capability the copy belongs to
+	requests int64
+	spent    float64
+	reserved float64
 }
 
 // LedgerEntry records one committed charge. Exposed so tests (and readers)
@@ -84,6 +96,9 @@ type LedgerEntry struct {
 	At        time.Time
 	// Refunded is the total refunded from this charge so far.
 	Refunded float64
+	// Copies are the revocation ids of the Biscuit copies the charge also
+	// debited, innermost first.
+	Copies [][]byte
 }
 
 // New returns an empty store. TX is inferred from the call site:
@@ -110,6 +125,7 @@ func NewUsage[TX any](records *Store[TX]) *UsageStore[TX] {
 		usage:   map[uuid.UUID]capability.Usage{},
 		budgets: map[uuid.UUID]capability.TenantBudget{},
 		holds:   map[uuid.UUID]hold{},
+		copies:  map[string]copyCounter{},
 		records: records,
 		nowFn:   time.Now,
 	}
@@ -344,6 +360,11 @@ func (s *UsageStore[TX]) BumpRequest(_ context.Context, req capability.RequestBu
 	defer s.mu.Unlock()
 	u := s.usage[req.CapabilityID]
 	next := u.RequestCount + 1
+	for _, c := range req.Copies {
+		if c.MaxRequests > 0 && s.copies[string(c.RevocationID)].requests+1 > c.MaxRequests {
+			return u.RequestCount, fmt.Errorf("%w: copy %x", capability.ErrRequestLimitExceeded, c.RevocationID)
+		}
+	}
 	if req.MaxRequests > 0 && next > req.MaxRequests {
 		return u.RequestCount, capability.ErrRequestLimitExceeded
 	}
@@ -358,6 +379,12 @@ func (s *UsageStore[TX]) BumpRequest(_ context.Context, req capability.RequestBu
 		au.CapabilityID = a.ID
 		au.RequestCount++
 		s.usage[a.ID] = au
+	}
+	for _, c := range req.Copies {
+		cc := s.copies[string(c.RevocationID)]
+		cc.capID = req.CapabilityID
+		cc.requests++
+		s.copies[string(c.RevocationID)] = cc
 	}
 	u.CapabilityID = req.CapabilityID
 	u.RequestCount = next
@@ -374,6 +401,7 @@ type hold struct {
 	unit      string
 	op, actor string
 	expires   time.Time
+	copies    []capability.CopyCeiling
 }
 
 // Charge applies the ceiling chain and commits atomically.
@@ -434,6 +462,15 @@ func (s *UsageStore[TX]) chargeLocked(
 	u := s.usage[req.CapabilityID]
 	stagedSpent := u.SpentAmount + req.Amount
 
+	// 0. the copy's own ceilings, innermost first
+	for _, c := range req.Copies {
+		cc := s.copies[string(c.RevocationID)]
+		if c.MaxBudgetMicros > 0 && cc.spent+cc.reserved-released+req.Amount > c.MaxBudget() {
+			return capability.ChargeReceipt{Spent: u.SpentAmount},
+				fmt.Errorf("%w: copy %x", capability.ErrBudgetExceeded, c.RevocationID)
+		}
+	}
+
 	// 1. capability ceiling
 	if req.MaxBudget > 0 && stagedSpent+u.ReservedAmount-released > req.MaxBudget {
 		return capability.ChargeReceipt{Spent: u.SpentAmount}, capability.ErrBudgetExceeded
@@ -490,10 +527,19 @@ func (s *UsageStore[TX]) chargeLocked(
 		stagedBudget.UpdatedAt = s.nowFn()
 		s.budgets[req.TenantID] = stagedBudget
 	}
+	copyIDs := make([][]byte, 0, len(req.Copies))
+	for _, c := range req.Copies {
+		cc := s.copies[string(c.RevocationID)]
+		cc.capID = req.CapabilityID
+		cc.spent += req.Amount
+		cc.reserved = max0(cc.reserved - released)
+		s.copies[string(c.RevocationID)] = cc
+		copyIDs = append(copyIDs, c.RevocationID)
+	}
 	entry := LedgerEntry{
 		ID: uuid.New(), CapabilityID: req.CapabilityID, Ancestors: ids,
 		TenantID: req.TenantID, Amount: req.Amount, UnitCode: unit,
-		Op: req.Op, Actor: req.Actor, At: s.nowFn(),
+		Op: req.Op, Actor: req.Actor, At: s.nowFn(), Copies: copyIDs,
 	}
 	s.ledger = append(s.ledger, entry)
 	return capability.ChargeReceipt{ChargeID: entry.ID, Spent: stagedSpent}, nil
@@ -520,6 +566,12 @@ func (s *UsageStore[TX]) Reserve(_ context.Context, req capability.ReserveReques
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	for _, c := range req.Copies {
+		cc := s.copies[string(c.RevocationID)]
+		if c.MaxBudgetMicros > 0 && cc.spent+cc.reserved+req.Amount > c.MaxBudget() {
+			return capability.Reservation{}, fmt.Errorf("%w: copy %x", capability.ErrBudgetExceeded, c.RevocationID)
+		}
+	}
 	u := s.usage[req.CapabilityID]
 	if req.MaxBudget > 0 && u.SpentAmount+u.ReservedAmount+req.Amount > req.MaxBudget {
 		return capability.Reservation{}, capability.ErrBudgetExceeded
@@ -538,7 +590,7 @@ func (s *UsageStore[TX]) Reserve(_ context.Context, req capability.ReserveReques
 	h := hold{
 		capID: req.CapabilityID, ancestors: ancestorIDs(ancestors), tenantID: req.TenantID,
 		amount: req.Amount, unit: unit, op: req.Op, actor: req.Actor,
-		expires: s.nowFn().Add(ttl),
+		expires: s.nowFn().Add(ttl), copies: slices.Clone(req.Copies),
 	}
 	s.applyHoldLocked(h, +1)
 	id := uuid.New()
@@ -560,6 +612,12 @@ func (s *UsageStore[TX]) applyHoldLocked(h hold, sign float64) {
 	if b, ok := s.budgets[h.tenantID]; ok {
 		b.ReservedAmount = max0(b.ReservedAmount + sign*h.amount)
 		s.budgets[h.tenantID] = b
+	}
+	for _, c := range h.copies {
+		cc := s.copies[string(c.RevocationID)]
+		cc.capID = h.capID
+		cc.reserved = max0(cc.reserved + sign*h.amount)
+		s.copies[string(c.RevocationID)] = cc
 	}
 }
 
@@ -586,6 +644,7 @@ func (s *UsageStore[TX]) Settle(
 	receipt, err := s.chargeLocked(ctx, capability.ChargeRequest{
 		CapabilityID: h.capID, TenantID: h.tenantID, Amount: req.Amount,
 		MaxBudget: req.MaxBudget, UnitCode: h.unit, Op: h.op, Actor: h.actor,
+		Copies: h.copies,
 	}, h.unit, h.ancestors, ancestors, &h, onCharged)
 	if err != nil {
 		return receipt, err
@@ -656,6 +715,12 @@ func (s *UsageStore[TX]) Refund(_ context.Context, req capability.RefundRequest)
 		b.SpentAmount = max0(b.SpentAmount - amount)
 		b.UpdatedAt = s.nowFn()
 		s.budgets[e.TenantID] = b
+	}
+	for _, id := range e.Copies {
+		if cc, ok := s.copies[string(id)]; ok {
+			cc.spent = max0(cc.spent - amount)
+			s.copies[string(id)] = cc
+		}
 	}
 	e.Refunded += amount
 	return amount, nil
@@ -754,6 +819,7 @@ func (s *UsageStore[TX]) Delete(_ context.Context, capID uuid.UUID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.usage, capID)
+	maps.DeleteFunc(s.copies, func(_ string, c copyCounter) bool { return c.capID == capID })
 	return nil
 }
 
@@ -767,6 +833,9 @@ func (s *UsageStore[TX]) PurgeOrphans(_ context.Context) (int64, error) {
 			n++
 		}
 	}
+	maps.DeleteFunc(s.copies, func(_ string, c copyCounter) bool {
+		return s.records == nil || !s.records.exists(c.capID)
+	})
 	return n, nil
 }
 

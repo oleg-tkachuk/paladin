@@ -223,8 +223,18 @@ and (on an unbound token) bind a key. The verifier folds each block in
 through `Narrows`, so an attenuated token is checked exactly like a
 delegated one. A block that asks for more than the token has, or holds
 anything else (Datalog rules and checks included), makes the whole token
-invalid. Counters stay shared: an attenuated copy spends its capability's
-budget and request count, and revoking the capability revokes every copy.
+invalid. An attenuated copy spends its capability's budget and request
+count, and revoking the capability revokes every copy.
+
+A copy can also get limits of its own: `MaxRequests` and `MaxBudgetMicros` on
+the `Attenuation`. Each is counted under the revocation id of the block that
+set it, so siblings narrowed apart count apart, while the capability's own
+limits still bound them all; a limit must fit every limit already in force.
+The verifier hands them to the caller as `Capability.Copies`, and the `Meter`
+counts them when they are passed on as `Copies` in `RequestBump`,
+`ChargeRequest` and `ReserveRequest`. A verifier admits such a copy only with
+`MeterCopies` set, which says the `Meter` behind it counts copies; without it
+the token is refused rather than accepted with its limits unkept.
 
 One copy can also be revoked on its own. `verifier.BiscuitCopy(ctx, token)`
 checks the token and names its capability and the revocation id of its last

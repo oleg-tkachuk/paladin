@@ -5,7 +5,9 @@
     "resource_prefixes": ["corpus/public/"],
     "planes": ["data"],
     "expires_at": "2026-01-01T00:30:00Z",
-    "bind_jkt": "nhJL-4fvkZxa3j-NAU29y8N1wqcS_E-ZMtKfgT23tV0"
+    "bind_jkt": "nhJL-4fvkZxa3j-NAU29y8N1wqcS_E-ZMtKfgT23tV0",
+    "max_requests": 25,
+    "max_budget_micros": 1500000
   },
   "expect": {
     "ops": ["get"],
@@ -13,6 +15,8 @@
     "resource_uris": [],
     "planes": ["data"],
     "expires_at": "2026-01-01T00:30:00Z",
-    "confirmation_jkt": "nhJL-4fvkZxa3j-NAU29y8N1wqcS_E-ZMtKfgT23tV0"
+    "confirmation_jkt": "nhJL-4fvkZxa3j-NAU29y8N1wqcS_E-ZMtKfgT23tV0",
+    "copy_max_requests": 25,
+    "copy_max_budget_micros": 1500000
   }
 }
