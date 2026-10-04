@@ -75,6 +75,9 @@ func (s *UsageStore) Reserve(ctx context.Context, req capability.ReserveRequest)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if err := addCopySpend(ctx, tx, req.CapabilityID, req.Copies, amount, copyReserved); err != nil {
+		return capability.Reservation{}, err
+	}
 	if err := holdCapability(ctx, tx, req.CapabilityID, amount, unit, maxBudget); err != nil {
 		return capability.Reservation{}, err
 	}
@@ -101,10 +104,12 @@ func (s *UsageStore) Reserve(ctx context.Context, req capability.ReserveRequest)
 	id := uuid.New()
 	var expires time.Time
 	if err := tx.QueryRow(ctx, `
-INSERT INTO capability_reservations (id, tenant_id, capability_id, amount, unit_code, op, actor_subject, expires_at)
-VALUES ($1, $2, $3, $4::numeric, $5, $6, $7, now() + ($8::bigint * interval '1 microsecond'))
+INSERT INTO capability_reservations (id, tenant_id, capability_id, amount, unit_code, op, actor_subject, expires_at,
+                                     copy_ids, copy_max_budget_micros)
+VALUES ($1, $2, $3, $4::numeric, $5, $6, $7, now() + ($8::bigint * interval '1 microsecond'), $9::bytea[], $10::bigint[])
 RETURNING expires_at`,
 		id, req.TenantID, req.CapabilityID, amount, unit, req.Op, req.Actor, ttl.Microseconds(),
+		copyIDs(req.Copies), copyBudgets(req.Copies),
 	).Scan(&expires); err != nil {
 		return capability.Reservation{}, fmt.Errorf("capability/postgres: reserve record: %w", err)
 	}
@@ -131,6 +136,10 @@ type openReservation struct {
 	capID, tenantID uuid.UUID
 	amount          pgtype.Numeric
 	unit, op, actor string
+	// copyIDs and copyBudgets are the Biscuit copies the hold is on, and
+	// their budget limits in micros.
+	copyIDs     [][]byte
+	copyBudgets []int64
 }
 
 // takeReservation deletes a reservation and returns it. live restricts it to
@@ -140,15 +149,20 @@ func takeReservation(ctx context.Context, tx pgx.Tx, id uuid.UUID, live bool) (o
 	if live {
 		stmt += ` AND expires_at > now()`
 	}
-	stmt += ` RETURNING capability_id, tenant_id, amount, unit_code, op, actor_subject`
+	stmt += ` RETURNING capability_id, tenant_id, amount, unit_code, op, actor_subject,
+	                    copy_ids, copy_max_budget_micros`
 	var r openReservation
-	err := tx.QueryRow(ctx, stmt, id).Scan(&r.capID, &r.tenantID, &r.amount, &r.unit, &r.op, &r.actor)
+	err := tx.QueryRow(ctx, stmt, id).Scan(&r.capID, &r.tenantID, &r.amount, &r.unit, &r.op, &r.actor,
+		&r.copyIDs, &r.copyBudgets)
 	return r, err
 }
 
 // releaseHold subtracts a reservation's amount from every counter it was
-// added to: the capability's, each ancestor's and the tenant's.
+// added to: each copy's, the capability's, each ancestor's and the tenant's.
 func (s *UsageStore) releaseHold(ctx context.Context, tx pgx.Tx, r openReservation) error {
+	if err := subtractCopySpend(ctx, tx, r.copyIDs, r.amount, copyReserved); err != nil {
+		return err
+	}
 	ids := []uuid.UUID{r.capID}
 	ancestors, err := ancestorsOf(ctx, tx, r.capID)
 	if err != nil {
@@ -211,6 +225,10 @@ func (s *UsageStore) Settle(
 	if err := s.releaseHold(ctx, tx, r); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
+	copies, err := ceilingsOf(r.copyIDs, r.copyBudgets)
+	if err != nil {
+		return capability.ChargeReceipt{}, err
+	}
 	receipt, err := s.chargeInTx(ctx, tx, capability.ChargeRequest{
 		CapabilityID: r.capID,
 		TenantID:     r.tenantID,
@@ -219,6 +237,7 @@ func (s *UsageStore) Settle(
 		UnitCode:     r.unit,
 		Op:           r.op,
 		Actor:        r.actor,
+		Copies:       copies,
 	}, r.unit, amount, maxBudget, onCharged)
 	if err != nil {
 		return capability.ChargeReceipt{}, err

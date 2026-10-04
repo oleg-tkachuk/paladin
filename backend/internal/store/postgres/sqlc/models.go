@@ -368,6 +368,15 @@ type CapabilityBiscuitRevocation struct {
 	Actor        string             `json:"actor"`
 }
 
+type CapabilityCopyUsage struct {
+	RevocationID []byte             `json:"revocation_id"`
+	CapabilityID pgtype.UUID        `json:"capability_id"`
+	RequestCount int64              `json:"request_count"`
+	Spent        pgtype.Numeric     `json:"spent"`
+	Reserved     pgtype.Numeric     `json:"reserved"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CapabilityRecord struct {
 	ID               pgtype.UUID        `json:"id"`
 	TenantID         pgtype.UUID        `json:"tenant_id"`
@@ -387,15 +396,17 @@ type CapabilityRecord struct {
 }
 
 type CapabilityReservation struct {
-	ID           pgtype.UUID        `json:"id"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	CapabilityID pgtype.UUID        `json:"capability_id"`
-	Amount       pgtype.Numeric     `json:"amount"`
-	UnitCode     string             `json:"unit_code"`
-	Op           string             `json:"op"`
-	ActorSubject string             `json:"actor_subject"`
-	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID                  pgtype.UUID        `json:"id"`
+	TenantID            pgtype.UUID        `json:"tenant_id"`
+	CapabilityID        pgtype.UUID        `json:"capability_id"`
+	Amount              pgtype.Numeric     `json:"amount"`
+	UnitCode            string             `json:"unit_code"`
+	Op                  string             `json:"op"`
+	ActorSubject        string             `json:"actor_subject"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	CopyIds             [][]byte           `json:"copy_ids"`
+	CopyMaxBudgetMicros []int64            `json:"copy_max_budget_micros"`
 }
 
 type CapabilityRevocation struct {
@@ -426,6 +437,7 @@ type Charge struct {
 	UnitCode     string             `json:"unit_code"`
 	Op           string             `json:"op"`
 	ActorSubject string             `json:"actor_subject"`
+	CopyIds      [][]byte           `json:"copy_ids"`
 }
 
 type ChargeRefund struct {
