@@ -42,6 +42,16 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## Unreleased — `BatchUpdateTags` is capped like the other batch RPCs
+
+- **The handler refuses more than 10 000 object ids with
+  `InvalidArgument`,** as `BatchDelete`, `BatchCopy` and
+  `BatchRestoreObjects` already did. The tag handler never had the check,
+  and a test had pinned its absence as intentional with no reason given.
+- **RPC clients see no change.** `ObjectSelector.names` is already capped at
+  100 by the proto validation; the cap reaches only code that calls the
+  handler directly.
+
 ## Unreleased — money is micros only; the deprecated doubles are gone
 
 The double money fields deprecated beside `*_micros` are removed and their
