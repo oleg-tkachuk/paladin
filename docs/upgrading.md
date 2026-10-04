@@ -42,6 +42,17 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+
+## Unreleased — the data plane acts on the tenant a platform admin names
+
+- **A platform admin's data-plane calls on another tenant now reach that
+  tenant.** They used to act on the admin's own tenant — empty lists, and
+  writes into a same-named collection there. They are now evaluated against
+  the target tenant's policies and quotas.
+- **Names in one request must agree on the tenant.** A copy or batch whose
+  names span two tenants is `PermissionDenied`, and so is a version name or a
+  multipart completion naming a tenant other than the caller's, which used to
+  be served the caller's own tenant silently.
 ## Unreleased — webhook deliveries no longer carry `X-Paladin-Signature`
 
 - **The body-only `X-Paladin-Signature` is gone**, after one release
