@@ -61,6 +61,23 @@ describe("CapabilitiesPage", () => {
     expect(issueButtons().length).toBeGreaterThan(0);
   });
 
+  // react-query's refetch ignores `enabled`: with no principal chosen, closing
+  // the issue dialog or submitting the filter sent List an empty subject,
+  // which the server refuses, and the page showed the refusal as a load error.
+  it("never lists without a principal", async () => {
+    render(<CapabilitiesPage />);
+    await userEvent.click(issueButtons()[0]);
+    await userEvent.keyboard("{Escape}");
+    fireEvent.submit(
+      screen.getByRole("button", { name: /^Browse$/i }).closest("form")!,
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(h.list).not.toHaveBeenCalled();
+    expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
+  });
+
   it("opens the copy-revocation dialog from the header action", async () => {
     render(<CapabilitiesPage />);
     await userEvent.click(
