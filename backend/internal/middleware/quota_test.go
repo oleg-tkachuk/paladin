@@ -459,3 +459,59 @@ func TestQuotaSoftCheck_BucketDailyCapRejects(t *testing.T) {
 		t.Errorf("err = %v, want a bucket-scope daily rejection", err)
 	}
 }
+
+// tenantRecordingReader answers the tenant scope per tenant, recording which
+// tenant it was asked about and under which acting tenant.
+type tenantRecordingReader struct {
+	byTenant map[uuid.UUID]admindomain.Quota
+	asked    uuid.UUID
+	acting   uuid.UUID
+}
+
+func (r *tenantRecordingReader) GetTenant(ctx context.Context, tenant uuid.UUID) (admindomain.Quota, error) {
+	r.asked = tenant
+	r.acting, _ = auth.ActingTenant(ctx)
+	if q, ok := r.byTenant[tenant]; ok {
+		return q, nil
+	}
+	return admindomain.Quota{}, errors.New("no quota")
+}
+
+func (r *tenantRecordingReader) GetBucket(context.Context, string, string) (admindomain.Quota, error) {
+	return admindomain.Quota{}, errors.New("no bucket quota")
+}
+
+// A platform admin uploading into another tenant writes into that tenant
+// (ADR-0022), so that tenant's caps apply, read under its scope. Anyone
+// else is counted against its own tenant: naming another one is refused
+// further in.
+func TestQuotaSoftCheck_CountsAnAdminUploadAgainstTheNamedTenant(t *testing.T) {
+	own, target := uuid.New(), uuid.New()
+	full := admindomain.Quota{MaxTotalBytes: 100, UsageTotalBytes: 100}
+	upload := &fakeUploadWithParent{parent: "tenants/" + target.String() + "/collections/docs", sizeHint: 1}
+
+	for name, tc := range map[string]struct {
+		roles     []string
+		wantAsked uuid.UUID
+		wantErr   bool
+	}{
+		"a platform admin": {[]string{"platform.admin"}, target, true},
+		"anyone else":      {[]string{"tenant.admin"}, own, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			reader := &tenantRecordingReader{byTenant: map[uuid.UUID]admindomain.Quota{target: full}}
+			q := &QuotaSoftCheck{Reader: reader, UploadProcedures: map[string]struct{}{"/test/Upload": {}}}
+			ctx := auth.WithPrincipal(context.Background(), &auth.Principal{TenantID: own, Roles: tc.roles})
+			err := q.CheckUpload(ctx, "/test/Upload", upload)
+			if reader.asked != tc.wantAsked {
+				t.Errorf("tenant quota read for %v, want %v", reader.asked, tc.wantAsked)
+			}
+			if (err != nil) != tc.wantErr {
+				t.Errorf("err = %v, want rejected=%v", err, tc.wantErr)
+			}
+			if tc.wantErr && reader.acting != target {
+				t.Errorf("the target's quota was read acting on %v, want the target", reader.acting)
+			}
+		})
+	}
+}
