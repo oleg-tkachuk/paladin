@@ -42,6 +42,13 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## Unreleased — webhook deliveries no longer carry `X-Paladin-Signature`
+
+- **The body-only `X-Paladin-Signature` is gone**, after one release
+  (v10.5.0) beside `X-Paladin-Webhook-Signature`. A subscriber that still
+  verifies it refuses every delivery: verify `X-Paladin-Webhook-Signature`
+  with `paladin.VerifyWebhook` or `paladin.verify_webhook` instead.
+
 ## Unreleased — webhook deliveries carry a timestamped signature
 
 - **An HTTP subscription with a signing secret now also receives
