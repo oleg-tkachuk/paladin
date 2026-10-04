@@ -74,7 +74,7 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operationh.Ope
 
 	// One batched read supplies each row's ResourceVersion for the OCC
 	// check in UpdateMetadata; per-id not-found reporting is preserved.
-	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.ObjectIDs)
+	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.Collection, args.ObjectIDs)
 	if err != nil {
 		return nil, fmt.Errorf("batch lookup: %w", err)
 	}
