@@ -396,11 +396,16 @@ It serves `ObjectService` (upload, complete, get, lookup, list, download,
 delete), `MultipartUploadService` and `StorageBootstrapService`; every
 other RPC answers `UNIMPLEMENTED`. Like the server it refuses a collection
 named by the tenant's slug and a completion whose ETag, when given, is not
-the content's; completing a completed object returns it. It records the
+the content's; completing a completed object returns it. Like the server it
+holds one object per key: an upload to a key another object holds, in any
+state and the trash included, is refused with `AlreadyExistsError` until a
+`permanent` delete frees it, and `lookup_object` finds an object in any state
+but deleted. It keeps an upload's metadata and tags. It records the
 checksum an upload completes with — so a download verifies — and answers
 range requests. `ensure_tenant_storage` reports a bucket and collections
 created the first time and existing after, for any backend id. `put` stores
-an object directly; `tenant` and `collection()` name the fake's tenant and
+an object directly; `mark_failed` fails a pending one, as the server's
+reconciler does when its URL expired with nothing stored; `tenant` and `collection()` name the fake's tenant and
 its collections, all of which exist; `requests()` lists the RPCs received,
 each a `Request` with its `procedure` and `headers` by lower-case name, for a
 test of what the client sent.
@@ -459,7 +464,7 @@ against `paladin.testing`:
 | [`rotating_token.py`](examples/rotating_token.py) | A token read from the store operators rotate it in, on every call. |
 | [`bulk_ingestion.py`](examples/bulk_ingestion.py) | Many documents through `download_many` and `adownload_many`. |
 | [`resumable_multipart.py`](examples/resumable_multipart.py) | A multipart upload resumed from `list_parts` after a crash. |
-| [`durable_upload.py`](examples/durable_upload.py) | `upload` tried again until it completes, its multipart session kept where a restart finds it and resumed. |
+| [`durable_upload.py`](examples/durable_upload.py) | `upload` tried again until it completes, its multipart session kept where a restart finds it and resumed; its own key, the content's SHA-256 in its metadata, keeps a retry after a lost answer from storing it twice — what an earlier attempt left at the key is taken, completed, or deleted and uploaded again. |
 | [`streaming.py`](examples/streaming.py) | Upload from a file, download into a parser, verified at the end. |
 | [`migrating_from_connect_json.py`](examples/migrating_from_connect_json.py) | A hand-written Connect-JSON call and its SDK form. |
 

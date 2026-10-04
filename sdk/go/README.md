@@ -383,11 +383,16 @@ It serves `ObjectService` (upload, complete, get, lookup, list, download,
 delete), `MultipartUploadService` and `StorageBootstrapService`; every
 other RPC answers `Unimplemented`. Like the server it refuses a collection
 named by the tenant's slug and a completion whose ETag, when given, is not
-the content's; completing a completed object returns it. It records the
+the content's; completing a completed object returns it. Like the server it
+holds one object per key: an upload to a key another object holds, in any
+state and the trash included, is refused with `ErrAlreadyExists` until a
+`Permanent` delete frees it, and `LookupObject` finds an object in any state
+but deleted. It keeps an upload's metadata and tags. It records the
 checksum an upload completes with — so `Download` verifies — and answers
 range requests. `EnsureTenantStorage` reports a bucket and collections
 created the first time and existing after, for any backend id. `Put` stores
-an object directly; `Tenant` and `Collection` name the fake's tenant and its
+an object directly; `MarkFailed` fails a pending one, as the server's
+reconciler does when its URL expired with nothing stored; `Tenant` and `Collection` name the fake's tenant and its
 collections, all of which exist; `Requests` lists the RPCs received, each
 with its `Procedure` and `Header`, for a test of what the client sent.
 
@@ -438,7 +443,7 @@ Runnable examples, in [`paladin/example_cookbook_test.go`](paladin/example_cookb
 | `Example_rotatingToken` | A token read from the store operators rotate it in, on every call. |
 | `Example_bulkIngestion` | Many documents through `DownloadMany` at a bounded concurrency. |
 | `Example_resumableMultipart` | A multipart upload resumed from `ListParts` after a crash, through `Transfer.Put`. |
-| `Example_durableUpload` | `Upload` tried again until it completes, its multipart session kept where a restart finds it and resumed. |
+| `Example_durableUpload` | `Upload` tried again until it completes, its multipart session kept where a restart finds it and resumed; its own key, the content's SHA-256 in its metadata, keeps a retry after a lost answer from storing it twice — what an earlier attempt left at the key is taken, completed, or deleted and uploaded again (`cookbook_durable_test.go`). |
 | `Example_streamingLargeObjects` | Upload from a stream, download into a consumer, verified at the end. |
 | `Example_migratingFromConnectJSON` | A hand-written Connect-JSON call and its SDK form. |
 

@@ -339,3 +339,75 @@ func TestTheFakeHonoursIfMatch(t *testing.T) {
 		t.Errorf("a stale ETag: %d, want 412", got)
 	}
 }
+
+// A key holds one object, as the server's unique path does: in any state,
+// the trash included, until a permanent delete frees it.
+func TestTheFakeHoldsOneObjectPerKey(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	ctx := context.Background()
+	upload := func() (*datav1.Object, error) {
+		return paladin.Upload(ctx, p.Data, paladin.UploadInput{
+			Parent: srv.Collection().String(), Key: "k", ContentType: "text/plain",
+			Size: 1, Body: bytes.NewReader([]byte("x")), Metadata: map[string]string{"m": "v"},
+		}, paladin.UploadOptions{})
+	}
+	obj, err := upload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if obj.GetMetadata()["m"] != "v" {
+		t.Errorf("metadata = %v, want the request's", obj.GetMetadata())
+	}
+	if _, err := upload(); !errors.Is(err, paladin.ErrAlreadyExists) {
+		t.Fatalf("second upload: %v, want ErrAlreadyExists", err)
+	}
+	_, err = p.Data.MultipartUpload.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
+		Parent: srv.Collection().String(), Key: "k", SizeBytes: 1,
+	}))
+	if !errors.Is(err, paladin.ErrAlreadyExists) {
+		t.Fatalf("multipart at the key: %v, want ErrAlreadyExists", err)
+	}
+	del := func(permanent bool) {
+		if _, err := p.Data.Object.DeleteObject(ctx, connect.NewRequest(&datav1.DeleteObjectRequest{
+			Name: obj.GetName(), ResourceVersion: obj.GetResourceVersion(), Permanent: permanent,
+		})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	del(false)
+	if _, err := upload(); !errors.Is(err, paladin.ErrAlreadyExists) {
+		t.Fatalf("upload over the trash: %v, want ErrAlreadyExists", err)
+	}
+	del(true)
+	if _, err := upload(); err != nil {
+		t.Fatalf("upload after a permanent delete: %v", err)
+	}
+}
+
+func TestTheFakeLooksUpAndFailsPendingObjects(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	ctx := context.Background()
+	resp, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+		Parent: srv.Collection().String(), Key: "k", ContentType: "text/plain", SizeHintBytes: 1,
+		ChecksumValue: "LGW4m3CYc5cGdyqLzSa4tqkq2Hj1/jmn6wGAWuR+hEk=",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lookup := func() datav1.ObjectState {
+		obj, err := paladin.LookupObject(ctx, p.Data, paladin.ObjectURI{Collection: srv.Collection(), Key: "k"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return obj.GetState()
+	}
+	if got := lookup(); got != datav1.ObjectState_OBJECT_STATE_PENDING {
+		t.Errorf("lookup = %s, want PENDING: the server finds an object in any state but DELETED", got)
+	}
+	srv.MarkFailed(resp.Msg.GetObject().GetName())
+	if got := lookup(); got != datav1.ObjectState_OBJECT_STATE_FAILED {
+		t.Errorf("after MarkFailed = %s, want FAILED", got)
+	}
+}

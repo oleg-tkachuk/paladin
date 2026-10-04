@@ -84,6 +84,7 @@ _GET = "GET"
 _AVAILABLE = types_pb2.OBJECT_STATE_AVAILABLE
 _PENDING = types_pb2.OBJECT_STATE_PENDING
 _DELETED = types_pb2.OBJECT_STATE_DELETED
+_FAILED = types_pb2.OBJECT_STATE_FAILED
 # The WSGI environ names a request header HTTP_<NAME>, with _ for -.
 _HEADER_PREFIX = "HTTP_"
 # Bounds of a bucket name, as the contract sets them.
@@ -293,6 +294,14 @@ class FakePaladin(
         with self._lock:
             self._after_store = fault
 
+    def mark_failed(self, name: str) -> None:
+        """Fail a PENDING object, as the server's reconciler does when its
+        upload URL expired with no bytes stored."""
+        with self._lock:
+            o = self._objects.get(name)
+            if o is not None and o.msg.state == _PENDING:
+                o.msg.state = _FAILED
+
     def storage_ops(self) -> list[StorageOp]:
         """The storage requests received, oldest first."""
         with self._lock:
@@ -329,9 +338,26 @@ class FakePaladin(
             key=key or object_id,
             content_type=content_type,
             state=_PENDING,
+            resource_version="1",
         )
         o = _Object(msg)
         self._objects[msg.name] = o
+        return o
+
+    def _claim(self, request: Any) -> _Object:
+        """The object an upload registers, refusing a key another object
+        holds — in any state, the trash included — as the server's unique path
+        does."""
+        if request.key:
+            prefix = request.parent + _OBJECTS_SEP
+            for o in self._objects.values():
+                if o.msg.name.startswith(prefix) and o.msg.key == request.key:
+                    raise ConnectError(
+                        Code.ALREADY_EXISTS, f"an object is already at {request.key!r}"
+                    )
+        o = self._new(request.parent, request.key, request.content_type)
+        o.msg.metadata.update(request.metadata)
+        o.msg.tags.update(request.tags)
         return o
 
     @staticmethod
@@ -369,7 +395,7 @@ class FakePaladin(
         self._parent(request.parent)
         _require_checksum(request.checksum_value)
         with self._lock:
-            o = self._new(request.parent, request.key, request.content_type)
+            o = self._claim(request)
             o.bound = _Binding(
                 request.size_hint_bytes, request.checksum_value, request.content_type, True
             )
@@ -411,7 +437,7 @@ class FakePaladin(
                 if (
                     o.msg.name.startswith(prefix)
                     and o.msg.key == request.key
-                    and o.msg.state == _AVAILABLE
+                    and o.msg.state != _DELETED
                 ):
                     return o.msg
         raise ConnectError(Code.NOT_FOUND, f"{request.parent} has no key {request.key!r}")
@@ -451,8 +477,14 @@ class FakePaladin(
 
     def delete_object(self, request, ctx):  # type: ignore[no-untyped-def]
         with self._lock:
+            if request.permanent:
+                # As the server: one in the trash is purged too, and the path
+                # is free again.
+                if self._objects.pop(request.name, None) is None:
+                    raise ConnectError(Code.NOT_FOUND, f"{request.name} not found")
+                return object_service_pb2.DeleteObjectResponse()
             o = self._get(request.name)
-            o.msg.state = _DELETED
+            o.msg.state = _DELETED  # in the trash, still holding its key
             o.body = None
             return object_service_pb2.DeleteObjectResponse()
 
@@ -476,7 +508,7 @@ class FakePaladin(
         if request.size_bytes <= 0:
             raise ConnectError(Code.INVALID_ARGUMENT, "size_bytes must be positive")
         with self._lock:
-            o = self._new(request.parent, request.key, request.content_type)
+            o = self._claim(request)
             upload_id = str(uuid.uuid4())
             self._uploads[upload_id] = _Multipart(o.msg.name, request.size_bytes)
             return multipart_service_pb2.InitiateMultipartUploadResponse(
