@@ -7,7 +7,7 @@ import { objectClient, batchClient, presignClient } from "@/lib/connect/client";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import type { PresignedUrl } from "@/gen/paladin/common/v1/resource_pb";
 import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
-import { useAuth } from "@/context/AuthContext";
+import { useActingTenantId } from "@/hooks/useActingTenant";
 import { useRefreshSignal, useBumpRefresh } from "@/context/RefreshContext";
 import { normalizeError } from "@/lib/connect/error";
 import { API_LIMIT_DEFAULT } from "@/constants";
@@ -69,8 +69,7 @@ function groupByCollection(items: BulkItem[]): Map<string, string[]> {
 }
 
 export function useObjects(options: UseObjectsOptions = {}) {
-  const { user } = useAuth();
-  const tenantId = user?.tenantId ?? "";
+  const tenantId = useActingTenantId();
   const collection = options.collection ?? DEFAULT_OBJECT_KEY;
   const parent = useMemo(
     () => (tenantId ? `tenants/${tenantId}/collections/${collection}` : ""),

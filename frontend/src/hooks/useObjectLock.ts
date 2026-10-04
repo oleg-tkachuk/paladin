@@ -6,7 +6,7 @@ import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 import { objectClient } from "@/lib/connect/client";
 import type { ObjectLockState } from "@/gen/paladin/data/v1/types_pb";
-import { useAuth } from "@/context/AuthContext";
+import { useActingTenantId } from "@/hooks/useActingTenant";
 import { useRefreshSignal, useBumpRefresh } from "@/context/RefreshContext";
 import { useNotification } from "@/components/ui/Notification";
 import { normalizeError } from "@/lib/connect/error";
@@ -42,12 +42,12 @@ export interface UseObjectLockResult {
 export function useObjectLock(
   objectName: string | undefined,
 ): UseObjectLockResult {
-  const { user } = useAuth();
+  const tenantId = useActingTenantId();
   const { showNotification } = useNotification();
   const refreshSignal = useRefreshSignal("objects");
   const bumpRefresh = useBumpRefresh();
 
-  const enabled = Boolean(objectName) && Boolean(user?.tenantId);
+  const enabled = Boolean(objectName) && Boolean(tenantId);
 
   const query = useQuery({
     queryKey: ["objectLock", objectName, refreshSignal],

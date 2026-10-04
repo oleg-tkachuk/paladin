@@ -7,7 +7,7 @@ import {
   uploadMultipart,
   uploadSingle,
 } from "@/lib/upload/presigned";
-import { useAuth } from "@/context/AuthContext";
+import { useActingTenantId } from "@/hooks/useActingTenant";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { useNotification } from "@/components/ui/Notification";
 import { errorMessage } from "@/hooks/errorContract";
@@ -45,8 +45,7 @@ export type UploadQueueItem = {
 export type UploadTask = UploadQueueItem;
 
 export function useUpload() {
-  const { user } = useAuth();
-  const tenantId = user?.tenantId ?? "";
+  const tenantId = useActingTenantId();
   const { showNotification } = useNotification();
   const bumpRefresh = useBumpRefresh();
 

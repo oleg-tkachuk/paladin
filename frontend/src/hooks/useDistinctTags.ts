@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ConnectError } from "@connectrpc/connect";
 
-import { useAuth } from "@/context/AuthContext";
+import { useActingTenantId } from "@/hooks/useActingTenant";
 import { objectTagClient } from "@/lib/connect/client";
 
 /**
@@ -17,8 +17,7 @@ import { objectTagClient } from "@/lib/connect/client";
  * objects already loaded — so the dropdown degrades gracefully.
  */
 export function useDistinctTags(collection: string): string[] {
-  const { user } = useAuth();
-  const tenantId = user?.tenantId ?? "";
+  const tenantId = useActingTenantId();
 
   const { data } = useQuery({
     queryKey: ["distinctTags", tenantId, collection],
