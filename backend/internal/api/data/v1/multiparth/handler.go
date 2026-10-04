@@ -24,6 +24,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 	"github.com/oleg-tkachuk/paladin/capability"
@@ -292,6 +293,12 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		// Best-effort rollback: abort the orphan storage session. Log and
 		// proceed — a background sweeper eventually cleans stragglers.
 		_ = h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, storageUploadID, args.Collection, args.Key)
+		// The path is taken — by an object in any state, the trash included —
+		// as UploadObject reports it: a conflict the caller can act on, not a
+		// failure of the server.
+		if pgerr.Is(err, pgerr.UniqueViolation) {
+			return nil, connect.NewError(connect.CodeAlreadyExists, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &session, nil
