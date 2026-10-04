@@ -424,6 +424,8 @@ the body in a worker thread, so a file read does not block the loop.
 | `upload(…, part_concurrency=3)` | Parts of one multipart upload in flight at once. |
 | `download_many(p.data, names, concurrency=8)` | Downloads many objects, `concurrency` at a time (`DEFAULT_BULK_CONCURRENCY`), and yields `(name, content)` as each finishes — or `(name, error)`, so one bad object does not stop the rest. Each is held whole; for large ones, `download_stream` per object. |
 | `adownload_many(p.data, names, concurrency=8)` | The same for the async clients, as an async iterator. |
+| `upload_many(p.data, items, concurrency=8, multipart_threshold=8 MiB, part_concurrency=3)` | Uploads many objects, `concurrency` at a time, each as `upload` does, and yields `(item, object)` as each finishes — or `(item, error)`, so one bad item does not stop the rest; each is completed, or aborted, on its own. An item is an `UploadItem(parent, content_type, body, size, key="", metadata=None, tags=None)`, compared by identity. `items` is drawn only as a slot frees, so it may be a generator that opens each file in turn. Up to `concurrency` bodies are held in memory, whole up to the threshold or `part_concurrency` parts above it. A crashed upload to resume goes through `upload`. |
+| `aupload_many(p.data, items, …)` | The same for the async clients, as an async iterator. |
 
 ### Parity with the Go SDK
 
@@ -442,7 +444,7 @@ tests hold its parsers to as well. Where they differ, it is on purpose:
 | Webhook signatures | `VerifyWebhook`, options for the window and clock | `verify_webhook`, keyword arguments | Each language's idiom; both run the vectors in `sdk/testdata/webhook_signatures.json`. |
 | Biscuit attenuation | `capability.Attenuate`, from the capability module | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0 (BACKLOG). |
-| Bulk downloads | `DownloadMany`, a callback per reader | `download_many` / `adownload_many`, an iterator of results | Each language's idiom. |
+| Bulk transfers | `DownloadMany`, a callback per reader; `UploadMany`, objects in input order and failures by index | `download_many` / `adownload_many` and `upload_many` / `aupload_many`, iterators of results as each finishes | Each language's idiom. |
 | asyncio | — | An `a…` form of every workflow | Go has goroutines. |
 
 ### Cookbook
@@ -457,6 +459,7 @@ against `paladin.testing`:
 | [`rotating_token.py`](examples/rotating_token.py) | A token read from the store operators rotate it in, on every call. |
 | [`bulk_ingestion.py`](examples/bulk_ingestion.py) | Many documents through `download_many` and `adownload_many`. |
 | [`resumable_multipart.py`](examples/resumable_multipart.py) | A multipart upload resumed from `list_parts` after a crash. |
+| [`durable_upload.py`](examples/durable_upload.py) | `upload` tried again until it completes, its multipart session kept where a restart finds it and resumed. |
 | [`streaming.py`](examples/streaming.py) | Upload from a file, download into a parser, verified at the end. |
 | [`migrating_from_connect_json.py`](examples/migrating_from_connect_json.py) | A hand-written Connect-JSON call and its SDK form. |
 

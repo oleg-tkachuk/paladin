@@ -37,6 +37,7 @@ def test_every_example_is_tested() -> None:
         "rotating_token",
         "bulk_ingestion",
         "resumable_multipart",
+        "durable_upload",
         "streaming",
         "migrating_from_connect_json",
     }
@@ -68,6 +69,10 @@ def test_bulk_ingestion(fake: FakePaladin) -> None:
 
 def test_resumable_multipart(fake: FakePaladin) -> None:
     assert load("resumable_multipart").main(fake) == (1, 3, True)
+
+
+def test_durable_upload(fake: FakePaladin) -> None:
+    assert load("durable_upload").main(fake) == (2, True, True)
 
 
 def test_streaming(fake: FakePaladin) -> None:
