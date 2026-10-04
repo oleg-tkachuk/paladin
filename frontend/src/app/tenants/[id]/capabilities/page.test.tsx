@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   issue: vi.fn(),
   revoke: vi.fn(),
   revokeBiscuit: vi.fn(),
+  getBiscuitUsage: vi.fn(),
   showNotification: vi.fn(),
 }));
 
@@ -22,6 +23,7 @@ vi.mock("@/lib/connect/client", () => ({
     issue: h.issue,
     revoke: h.revoke,
     revokeBiscuit: h.revokeBiscuit,
+    getBiscuitUsage: h.getBiscuitUsage,
   },
 }));
 vi.mock("../tenant-context", () => ({
@@ -68,6 +70,14 @@ describe("CapabilitiesPage", () => {
     );
     expect(
       screen.getByRole("alertdialog", { name: /Revoke one copy of a Biscuit/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the copy-usage dialog from the header action", async () => {
+    render(<CapabilitiesPage />);
+    await userEvent.click(screen.getByRole("button", { name: /Copy usage/ }));
+    expect(
+      screen.getByRole("dialog", { name: /Usage of one Biscuit copy/ }),
     ).toBeInTheDocument();
   });
 

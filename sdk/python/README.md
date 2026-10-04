@@ -161,7 +161,7 @@ client = paladin.Client(data_url, capability=narrowed)
 
 | Name | Does |
 | --- | --- |
-| `attenuate(token, *, ops=None, resource_prefixes=None, resource_uris=None, planes=None, expires_at=None, bind_jkt=None, max_requests=None, max_budget_micros=None)` | `token` with one more block appended, as a new token; `token` keeps working. An argument left `None` leaves that dimension as it is; a set one replaces it and must be within what the token allows, or the server refuses the whole token. Setting `resource_prefixes` or `resource_uris` replaces both. `expires_at` is timezone-aware and kept to the second. `bind_jkt` (`dpop_thumbprint(key.public_key())`) binds the token to a key, and only an unbound token can be bound. `max_requests` and `max_budget_micros` (positive `int`s) give the copy limits of its own, counted apart from other copies and within every limit already in force. Raises `ValueError` for a JWT or anything else that is not a Paladin Biscuit, `ImportError` without the extra. |
+| `attenuate(token, *, ops=None, resource_prefixes=None, resource_uris=None, planes=None, expires_at=None, bind_jkt=None, max_requests=None, max_budget_micros=None)` | `token` with one more block appended, as a new token; `token` keeps working. An argument left `None` leaves that dimension as it is; a set one replaces it and must be within what the token allows, or the server refuses the whole token. Setting `resource_prefixes` or `resource_uris` replaces both. `expires_at` is timezone-aware and kept to the second. `bind_jkt` (`dpop_thumbprint(key.public_key())`) binds the token to a key, and only an unbound token can be bound. `max_requests` and `max_budget_micros` (positive `int`s) give the copy limits of its own, counted apart from other copies and within every limit already in force; `CapabilityService.get_biscuit_usage` reports each limit in force on a copy with what has been counted against it. Raises `ValueError` for a JWT or anything else that is not a Paladin Biscuit, `ImportError` without the extra. |
 
 The block holds only the facts the server reads
 ([`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json),
@@ -464,7 +464,7 @@ under [`proto/paladin`](../../proto/paladin).
 | `BillingService` | `get_tenant_summary`, `get_tenant_time_series` |
 | `BucketService` | `create_bucket`, `get_bucket`, `update_bucket`, `delete_bucket`, `list_buckets`, `set_bucket_policy`, `set_lifecycle_rules`, `set_object_lock`, `set_versioning`, `set_replication`, `list_accessible_buckets` |
 | `CELService` | `validate` |
-| `CapabilityService` | `issue`, `delegate`, `revoke`, `revoke_biscuit`, `list`, `get_usage` |
+| `CapabilityService` | `issue`, `delegate`, `revoke`, `revoke_biscuit`, `get_biscuit_usage`, `list`, `get_usage` |
 | `CollectionService` | `create_collection`, `get_collection`, `update_collection`, `delete_collection`, `list_collections`, `set_collection_policy`, `bind_collection_to_bucket` |
 | `EventSubscriptionService` | `create_subscription`, `get_subscription`, `update_subscription`, `delete_subscription`, `list_subscriptions`, `test_subscription`, `redrive_failed_deliveries` |
 | `MCPInspectService` | `inspect`, `list_sessions`, `get_bridge_status` |

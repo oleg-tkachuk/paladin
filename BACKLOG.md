@@ -1629,19 +1629,6 @@ finding moving from "packages you import" to "your code is affected".
   iam are not gated — no capability carries a request there on its own —
   and `capability_planes_test.go` fails if that stops being true.
 
-### A Biscuit copy's own usage cannot be read
-
-- **Status:** Deferred.
-- **Reason:** a copy with limits of its own is counted in
-  `capability_copy_usage`, but nothing reads the counters back:
-  `Meter.Get` and `CapabilityService.GetUsage` answer by capability id, and
-  the console shows only the capability's totals. An operator learns a copy
-  is spent only from the `ResourceExhausted` its holder gets.
-- **Definition of Done:** a read of one copy's counters — by the copy, as
-  `RevokeBiscuit` takes it — in the Meter contract, the admin API, both SDKs
-  and the console's capabilities page.
-- **Blockers:** none.
-
 ### The capability module's Go API still takes float64 amounts
 
 - **Status:** Deferred — a breaking change to the module's public API.

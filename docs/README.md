@@ -64,6 +64,7 @@ Numbered, immutable once accepted, superseded rather than edited. See
 | [0018](adr/0018-sdk-layers.md) | The SDKs as three layers over the generated clients |
 | [0019](adr/0019-object-search-and-read-replica.md) | Object search under RLS, and an opt-in read replica |
 | [0020](adr/0020-sdk-integration-grade.md) | The SDKs to integration grade |
+| [0021](adr/0021-biscuit-copies.md) | Biscuit copies — narrowed offline, revoked and counted by block |
 
 ## Runbooks
 

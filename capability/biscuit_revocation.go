@@ -62,13 +62,18 @@ type BiscuitCopy struct {
 	// RevocationID is the id of the copy's last block: listing it revokes
 	// this copy and every copy attenuated from it.
 	RevocationID []byte
+	// Limits are the request and budget limits in force on the copy — its
+	// own and those of the copies it was attenuated from — innermost first;
+	// CopyUsageReader reads their counters.
+	Limits []CopyCeiling
 }
 
 // BiscuitCopy reads which copy token is, after checking it as Verify does —
 // the sealed token's signature, issuer and tenant, then the Biscuit's
 // signature chain — so that a revocation is only ever recorded against a
 // capability the token genuinely carries. Expiry, audience and revocation are
-// not checked: a copy can be revoked whatever its state.
+// not checked: a copy can be revoked whatever its state. Nor is MeterCopies:
+// a copy carrying limits is named, and can be revoked, on any verifier.
 func (v *StandardVerifier) BiscuitCopy(ctx context.Context, token string) (BiscuitCopy, error) {
 	if !IsBiscuit(token) {
 		return BiscuitCopy{}, fmt.Errorf("%w: not a Biscuit token", ErrInvalidSignature)
@@ -77,11 +82,11 @@ func (v *StandardVerifier) BiscuitCopy(ctx context.Context, token string) (Biscu
 		return BiscuitCopy{}, fmt.Errorf("%w: token is %d bytes (limit %d)",
 			ErrInvalidSignature, len(token), v.cfg.MaxTokenBytes)
 	}
-	c, ids, err := v.verifyBiscuit(ctx, token)
+	c, ids, err := v.verifyBiscuit(ctx, token, true)
 	if err != nil {
 		return BiscuitCopy{}, err
 	}
-	return BiscuitCopy{CapabilityID: c.ID, RevocationID: ids[len(ids)-1]}, nil
+	return BiscuitCopy{CapabilityID: c.ID, RevocationID: ids[len(ids)-1], Limits: c.Copies}, nil
 }
 
 // CachedBiscuitRevocationChecker caches IsBiscuitRevoked answers per token —

@@ -736,6 +736,22 @@ func (s *UsageStore[TX]) Get(_ context.Context, capID uuid.UUID) (capability.Usa
 	return u, nil
 }
 
+// CopyUsage implements capability.CopyUsageReader.
+func (s *UsageStore[TX]) CopyUsage(_ context.Context, revocationIDs [][]byte) ([]capability.CopyUsage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []capability.CopyUsage
+	for _, id := range revocationIDs {
+		if c, ok := s.copies[string(id)]; ok {
+			out = append(out, capability.CopyUsage{
+				RevocationID: slices.Clone(id), CapabilityID: c.capID,
+				RequestCount: c.requests, SpentAmount: c.spent, ReservedAmount: c.reserved,
+			})
+		}
+	}
+	return out, nil
+}
+
 func (s *UsageStore[TX]) GetTenantBudget(_ context.Context, tenantID uuid.UUID) (capability.TenantBudget, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -853,3 +869,5 @@ var (
 	_ capability.Store                = (*Store[struct{}])(nil)
 	_ capability.UsageStore[struct{}] = (*UsageStore[struct{}])(nil)
 )
+
+var _ capability.CopyUsageReader = (*UsageStore[struct{}])(nil)

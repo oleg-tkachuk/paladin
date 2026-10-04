@@ -327,6 +327,25 @@ type Usage struct {
 	UnitCode       string
 }
 
+// CopyUsage is the counters of one Biscuit copy with limits of its own (see
+// Meter, "Copies of a Biscuit"): the copy and every copy attenuated from it.
+type CopyUsage struct {
+	RevocationID   []byte
+	CapabilityID   uuid.UUID
+	RequestCount   int64
+	SpentAmount    float64
+	ReservedAmount float64
+}
+
+// CopyUsageReader reads the counters of Biscuit copies. It is separate from
+// Meter so that a Meter which does not count copies implements nothing more.
+type CopyUsageReader interface {
+	// CopyUsage returns the counters of each copy named that has been used,
+	// in no particular order; a copy never used has no counters and is
+	// absent from the result.
+	CopyUsage(ctx context.Context, revocationIDs [][]byte) ([]CopyUsage, error)
+}
+
 // Usage-related sentinels. ErrBudgetExceeded already lives in types.go
 // (declared before the runtime enforcement landed); reused here.
 var (

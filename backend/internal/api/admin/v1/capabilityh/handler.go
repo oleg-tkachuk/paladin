@@ -45,6 +45,8 @@ type Handler struct {
 	// copier and copies serve RevokeBiscuit; see WithBiscuitCopies.
 	copier BiscuitCopier
 	copies capability.BiscuitRevocationStore
+	// copyUsage serves GetBiscuitUsage; see WithCopyUsage.
+	copyUsage capability.CopyUsageReader
 }
 
 // NewHandler builds the Handler. issuer / store / policy are required;
