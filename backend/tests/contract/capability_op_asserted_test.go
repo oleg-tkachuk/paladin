@@ -141,6 +141,8 @@ const dataPlanePackage = "paladin.data.v1"
 var assertingHelpers = []handlerMethod{
 	{pkg: "objecth", typ: "VersionHandler", method: "authorizeParent"},
 	{pkg: "objecth", typ: "LockHandler", method: "resolve"},
+	{pkg: "batchh", typ: "Handler", method: "assertOnObjects"},
+	{pkg: "batchh", typ: "Handler", method: "assertCopy"},
 }
 
 // exemptRPC lists data-plane RPCs that legitimately do not assert, keyed by

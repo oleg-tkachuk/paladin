@@ -78,7 +78,7 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpManage,
-		capabilityObjectURI(tenantID, obj.Collection, obj.Key)); err != nil {
+		CapabilityObjectURI(tenantID, obj.Collection, obj.Key)); err != nil {
 		return nil, err
 	}
 	if h.policy != nil {

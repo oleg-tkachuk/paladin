@@ -103,6 +103,22 @@ millionths of `unit_code`, so 25 USD is `25000000`.
   and `If-Match`; the storage endpoint's CORS must allow them and expose
   `ETag` before the console is upgraded.
 
+## Unreleased — a Biscuit copy can carry request and budget limits of its own
+
+- **Go: a `Meter` of your own should count `Copies`.** `RequestBump`,
+  `ChargeRequest` and `ReserveRequest` carry the presented copy's limits;
+  check and count each under its revocation id, record the ids on the charge
+  and the reservation, and return to them on refund, settle and release.
+  `memstore` shows how. Then set `VerifierConfig.MeterCopies`; until you do, a
+  copy carrying limits is refused with `ErrCopyCountersNotMetered`.
+- **Pass `cap.Copies` on** wherever you build those requests from a verified
+  capability.
+- **Python: `attenuate` takes `max_requests` and `max_budget_micros`.**
+- **`Delegate` from a Biscuit copy narrows from the copy.** A child used to
+  be narrowed from the capability's stored record, so it could regain what the
+  copy had given up offline. A copy with limits of its own cannot delegate at
+  all (`FailedPrecondition`): attenuate it instead.
+
 ## Unreleased — one copy of a Biscuit can be revoked on its own
 
 - **Go: a verifier with `AcceptBiscuit` needs `BiscuitRevocations`.**
@@ -126,6 +142,22 @@ millionths of `unit_code`, so 25 USD is `25000000`.
   instead of per process, so a proof replayed against another replica is
   refused. Every request with a key-bound capability costs one write; the
   capability purger deletes expired ids on its existing interval.
+
+## Unreleased — batches act only on their own collection, and take restricted capabilities
+
+- **A batch acts only on objects of the collection it names.** An object id
+  from another collection of the tenant is reported as not found, like an id
+  that does not exist; before, the worker acted on it although the batch was
+  authorised for its own collection only.
+- **A resource-restricted capability can run `BatchDelete`,
+  `BatchUpdateTags`, `BatchRestoreObjects` and `BatchCopy`.** Each object the
+  batch acts on must be in scope, or the batch is refused with
+  `PermissionDenied` — as is one that would act on none of them, since
+  nothing in it is shown to be in scope.
+- **`BatchCopy` needs `get` as well as `put`** from a capability — `get` on each
+  source, `put` on each destination — and a capability without
+  `AllowTaintedRead` cannot copy a tainted object.
+- Calls made with a JWT or API token and no capability are unaffected.
 
 ## Unreleased — capabilities need the op for operations and storage bootstrap
 

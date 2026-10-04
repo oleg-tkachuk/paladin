@@ -1424,8 +1424,17 @@ networkPolicies:
   nats:
     namespace: nats
     port: 4222
+  # Ports the Kubernetes API server listens on; every role reads its secrets
+  # through the API at boot. A policy is matched after the `kubernetes`
+  # Service is translated to its endpoint, so this is the endpoint's port, not
+  # the Service's 443:
+  #   kubectl get endpointslices -n default -l kubernetes.io/service-name=kubernetes
+  # 6443 on most distributions, 26443 on OrbStack. Wrong, every role but the
+  # dispatcher, whose egress is open, fails its first secret read with
+  # "connection refused".
+  kubeAPIPorts: [6443]
   # Broker ports the ADMIN pod may dial for the synchronous TestSubscription
-  # RPC (443 is always allowed for K8s API + https webhooks). The dispatcher
+  # RPC (443 is always allowed for https webhooks). The dispatcher
   # is NOT limited by this list — it gets open egress, since customer sinks
   # live on arbitrary endpoints.
   adminBrokerPorts: [4222, 5671, 5672, 9092, 9093]

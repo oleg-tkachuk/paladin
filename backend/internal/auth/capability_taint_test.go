@@ -83,3 +83,27 @@ func TestAssertCapabilityOpChecksCheapCaveatsFirst(t *testing.T) {
 		t.Errorf("lookup ran for a request the op caveat refused")
 	}
 }
+
+// A handler that has read the object passes its taint instead of the lookup
+// running again; the refusal is the same.
+func TestAssertCapabilityOpOnObjectUsesTheTaintGiven(t *testing.T) {
+	cap := &capability.Capability{ID: uuid.New(), Caveats: capability.Caveats{
+		Ops: []capability.Op{capability.OpGet, capability.OpPut},
+	}}
+	calls := 0
+	ctx := taintCtx(cap, flaggedOnly, &calls)
+
+	err := AssertCapabilityOpOnObject(ctx, capability.OpGet, "object://t/c/clean.txt", true)
+	if connect.CodeOf(err) != connect.CodePermissionDenied || !errors.Is(err, capability.ErrTaintedReadNotAllowed) {
+		t.Fatalf("tainted read: err = %v, want PermissionDenied wrapping ErrTaintedReadNotAllowed", err)
+	}
+	if err := AssertCapabilityOpOnObject(ctx, capability.OpGet, taintedURI, false); err != nil {
+		t.Fatalf("clean read: %v", err)
+	}
+	if err := AssertCapabilityOpOnObject(ctx, capability.OpPut, taintedURI, true); err != nil {
+		t.Fatalf("write to a tainted object: %v", err)
+	}
+	if calls != 0 {
+		t.Errorf("the lookup ran %d times although the taint was given", calls)
+	}
+}

@@ -194,7 +194,32 @@ type Capability struct {
 	// presented on its own, so it cannot be lifted out of an attenuated
 	// Biscuit to shed the attenuation.
 	BiscuitRoot string
+
+	// Copies are the request and budget limits the attenuation blocks of a
+	// verified Biscuit set, innermost block first. Each is counted on its
+	// own, beside the capability's counters, by every Meter call that is
+	// handed them. Set by the verifier only; never part of a token or a
+	// stored record.
+	Copies []CopyCeiling `json:"-"`
 }
+
+// CopyCeiling is a limit one attenuation block of a Biscuit set on the copy
+// it ends and every copy attenuated from it, all of which carry the block's
+// revocation id. Its counters are keyed by that id, so siblings attenuated
+// apart count apart, while the capability's own counters still bound them
+// all together.
+type CopyCeiling struct {
+	// RevocationID is the block's revocation id.
+	RevocationID []byte
+	// MaxRequests bounds the requests made with the copy; 0 = no limit here.
+	MaxRequests int64
+	// MaxBudgetMicros bounds the copy's spend, in micros of the
+	// capability's unit; 0 = no limit here.
+	MaxBudgetMicros int64
+}
+
+// MaxBudget is MaxBudgetMicros as an amount, for the Meter's float boundary.
+func (c CopyCeiling) MaxBudget() float64 { return MicrosToAmount(c.MaxBudgetMicros) }
 
 // Caveats is a typed bag of restrictions. Empty values are interpreted
 // as "no restriction on that axis"; explicit bounds are AND-combined.

@@ -19,8 +19,9 @@ const biscuitVocabularyFile = "biscuit_vocabulary.json"
 
 // Term kinds the shared spec names.
 const (
-	termString = "string"
-	termDate   = "date"
+	termString  = "string"
+	termDate    = "date"
+	termInteger = "integer"
 )
 
 type biscuitVocabulary struct {
@@ -58,6 +59,8 @@ func TestBiscuitVocabularyMatchesSharedSpec(t *testing.T) {
 		biscuitFactPlane:          termString,
 		biscuitFactExpires:        termDate,
 		biscuitFactBind:           termString,
+		biscuitFactMaxRequests:    termInteger,
+		biscuitFactMaxBudget:      termInteger,
 	}
 	if !reflect.DeepEqual(v.Facts, want) {
 		t.Errorf("facts = %v, want %v", v.Facts, want)

@@ -32,23 +32,31 @@ import (
 // presented alone.
 //
 // Attenuation blocks speak a fixed vocabulary of facts — the operations,
-// resources, planes and expiry they allow, and a key to bind to — which the
-// verifier folds into a narrower Capability through Narrows, exactly as a
-// server-side delegation is checked. Everything downstream (Caveats.Check,
+// resources, planes and expiry they allow, a key to bind to, and request and
+// budget limits of the copy's own — which the verifier folds into a narrower
+// Capability through Narrows, exactly as a server-side delegation is checked,
+// and into Capability.Copies. Everything downstream (Caveats.Check,
 // budgets, DPoP) then sees an ordinary Capability. A block holding anything
 // outside the vocabulary — a rule, a check, another predicate — is refused:
 // a restriction the verifier cannot enforce must not pass as one it did.
 
 // Facts of the attenuation vocabulary. Each takes one term.
 const (
-	biscuitFactCapability     = "paladin_capability"      // authority only: the sealed JWT
-	biscuitFactOp             = "paladin_op"              // string: an Op the token keeps
-	biscuitFactResourcePrefix = "paladin_resource_prefix" // string
-	biscuitFactResourceURI    = "paladin_resource_uri"    // string
-	biscuitFactPlane          = "paladin_plane"           // string: an audience the token keeps
-	biscuitFactExpires        = "paladin_expires"         // date: an earlier expiry
-	biscuitFactBind           = "paladin_bind"            // string: a JWK thumbprint
+	biscuitFactCapability     = "paladin_capability"        // authority only: the sealed JWT
+	biscuitFactOp             = "paladin_op"                // string: an Op the token keeps
+	biscuitFactResourcePrefix = "paladin_resource_prefix"   // string
+	biscuitFactResourceURI    = "paladin_resource_uri"      // string
+	biscuitFactPlane          = "paladin_plane"             // string: an audience the token keeps
+	biscuitFactExpires        = "paladin_expires"           // date: an earlier expiry
+	biscuitFactBind           = "paladin_bind"              // string: a JWK thumbprint
+	biscuitFactMaxRequests    = "paladin_max_requests"      // integer: a copy's own request limit
+	biscuitFactMaxBudget      = "paladin_max_budget_micros" // integer: a copy's own budget, in micros
 )
+
+// ErrCopyCountersNotMetered — a Biscuit sets a copy's own request or budget
+// limit, and the verifier was not told that its Meter counts copies. The
+// limit would go unenforced, so the token is refused instead.
+var ErrCopyCountersNotMetered = fmt.Errorf("%w: copy limits need a verifier with MeterCopies", ErrBiscuitAttenuation)
 
 // ErrBiscuitAttenuation — an attenuation block the verifier cannot honour:
 // outside the vocabulary, malformed, or widening its parent. Matches
@@ -105,6 +113,12 @@ type Attenuation struct {
 	// unbound token can be bound offline: a bound one stays bound to its key,
 	// because rebinding needs no key and anyone could do it.
 	ConfirmationJKT string
+	// MaxRequests and MaxBudgetMicros give this copy limits of its own,
+	// counted apart from its siblings' and within the capability's: requests
+	// made with it, and its spend in micros of the capability's unit. 0
+	// sets none. Each must be within every limit already in force.
+	MaxRequests     int64
+	MaxBudgetMicros int64
 }
 
 // Attenuate appends a block that narrows token. It needs no key and no
@@ -140,6 +154,15 @@ func Attenuate(token string, a Attenuation) (string, error) {
 		}
 		errs = append(errs, add(biscuitFactBind, biscuit.String(a.ConfirmationJKT)))
 	}
+	if a.MaxRequests < 0 || a.MaxBudgetMicros < 0 {
+		return "", fmt.Errorf("%w: copy limits cannot be negative", ErrBiscuitAttenuation)
+	}
+	if a.MaxRequests > 0 {
+		errs = append(errs, add(biscuitFactMaxRequests, biscuit.Integer(a.MaxRequests)))
+	}
+	if a.MaxBudgetMicros > 0 {
+		errs = append(errs, add(biscuitFactMaxBudget, biscuit.Integer(a.MaxBudgetMicros)))
+	}
 	if err := errors.Join(errs...); err != nil {
 		return "", fmt.Errorf("capability: attenuation block: %w", err)
 	}
@@ -155,7 +178,8 @@ func Attenuate(token string, a Attenuation) (string, error) {
 // signature chain against the root the JWT vouches for, then each
 // attenuation block folded in. That function also returns the token's
 // revocation ids, authority first, read from the chain it verified.
-func openBiscuit(token string) (string, func(*Capability) (*Capability, [][]byte, error), error) {
+// meterCopies admits blocks that set a copy's own limits.
+func openBiscuit(token string) (string, func(parent *Capability, meterCopies bool) (*Capability, [][]byte, error), error) {
 	raw, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {
 		return "", nil, fmt.Errorf("%w: biscuit encoding: %w", ErrInvalidSignature, err)
@@ -174,7 +198,7 @@ func openBiscuit(token string) (string, func(*Capability) (*Capability, [][]byte
 	}
 	// The chain is checked once the sealed token has named its root; the
 	// caller verifies that token first and hands back what it vouches for.
-	attenuate := func(parent *Capability) (*Capability, [][]byte, error) {
+	attenuate := func(parent *Capability, meterCopies bool) (*Capability, [][]byte, error) {
 		root, err := base64.RawURLEncoding.DecodeString(parent.BiscuitRoot)
 		if err != nil || len(root) != ed25519.PublicKeySize {
 			return nil, nil, fmt.Errorf("%w: sealed token names no biscuit root", ErrInvalidSignature)
@@ -188,14 +212,19 @@ func openBiscuit(token string) (string, func(*Capability) (*Capability, [][]byte
 		}
 		cur := *parent
 		cur.BiscuitRoot = ""
+		cur.Copies = nil
+		ids := b.RevocationIds()
 		for i, blk := range blocks[1:] {
-			next, err := applyAttenuation(cur, blk)
+			next, err := applyAttenuation(cur, blk, ids[i+1], meterCopies)
 			if err != nil {
+				if errors.Is(err, ErrCopyCountersNotMetered) {
+					return nil, nil, fmt.Errorf("block %d: %w", i+1, err)
+				}
 				return nil, nil, fmt.Errorf("%w: block %d: %w", ErrBiscuitAttenuation, i+1, err)
 			}
 			cur = next
 		}
-		return &cur, b.RevocationIds(), nil
+		return &cur, ids, nil
 	}
 	return inner, attenuate, nil
 }
@@ -208,7 +237,7 @@ type decodedBlock struct {
 
 type decodedFact struct {
 	name string
-	term any // string or time.Time
+	term any // string, time.Time or int64
 }
 
 // decodeBiscuitBlocks reads every block's facts as data. The signatures are
@@ -236,6 +265,8 @@ func decodeBiscuitBlocks(c *pb.Biscuit) ([]decodedBlock, error) {
 				term = symbols.Str(datalog.String(t.String_))
 			case *pb.TermV2_Date:
 				term = time.Unix(int64(t.Date), 0).UTC() //nolint:gosec // a Biscuit date is seconds since the epoch
+			case *pb.TermV2_Integer:
+				term = t.Integer
 			default:
 				return nil, fmt.Errorf("block %d: fact %s has an unsupported term", i, name)
 			}
@@ -259,8 +290,9 @@ func sealedToken(authority decodedBlock) (string, error) {
 }
 
 // applyAttenuation folds one block into cur, refusing anything it cannot
-// enforce and anything that would widen cur.
-func applyAttenuation(cur Capability, blk decodedBlock) (Capability, error) {
+// enforce and anything that would widen cur. id is the block's revocation id,
+// which keys the counters of the limits it sets.
+func applyAttenuation(cur Capability, blk decodedBlock, id []byte, meterCopies bool) (Capability, error) {
 	if blk.others != 0 {
 		return cur, errors.New("rules and checks are not supported; use the paladin_* facts")
 	}
@@ -269,6 +301,7 @@ func applyAttenuation(cur Capability, blk decodedBlock) (Capability, error) {
 	var ops []Op
 	var prefixes, uris, planes []string
 	resources := false
+	ceiling := CopyCeiling{RevocationID: id}
 	for _, f := range blk.facts {
 		s, isString := f.term.(string)
 		switch f.name {
@@ -308,6 +341,16 @@ func applyAttenuation(cur Capability, blk decodedBlock) (Capability, error) {
 				return cur, errors.New("a key-bound token cannot be rebound offline")
 			}
 			next.ConfirmationJKT = s
+		case biscuitFactMaxRequests, biscuitFactMaxBudget:
+			n, ok := f.term.(int64)
+			if !ok || n <= 0 {
+				return cur, fmt.Errorf("%s takes a positive integer", f.name)
+			}
+			if f.name == biscuitFactMaxRequests {
+				ceiling.MaxRequests = n
+			} else {
+				ceiling.MaxBudgetMicros = n
+			}
 		default:
 			return cur, fmt.Errorf("fact %q is not part of the attenuation vocabulary", f.name)
 		}
@@ -325,7 +368,52 @@ func applyAttenuation(cur Capability, blk decodedBlock) (Capability, error) {
 	if err := Narrows(cur, next); err != nil {
 		return cur, err
 	}
+	if ceiling.MaxRequests > 0 || ceiling.MaxBudgetMicros > 0 {
+		if !meterCopies {
+			return cur, ErrCopyCountersNotMetered
+		}
+		if err := copyCeilingNarrows(cur, ceiling); err != nil {
+			return cur, err
+		}
+		next.Copies = append([]CopyCeiling{ceiling}, cur.Copies...)
+	}
 	return next, nil
+}
+
+// copyCeilingNarrows checks a copy's limits against every limit already in
+// force on cur: the capability's own and each enclosing copy's. A limit not
+// set by the new block stays as it was, so only the ones it sets are checked.
+func copyCeilingNarrows(cur Capability, c CopyCeiling) error {
+	if c.MaxRequests > 0 {
+		if limit := int64(cur.Caveats.MaxRequests); limit > 0 && c.MaxRequests > limit {
+			return fmt.Errorf("copy requests %d exceed the capability's %d", c.MaxRequests, limit)
+		}
+		for _, outer := range cur.Copies {
+			if outer.MaxRequests > 0 && c.MaxRequests > outer.MaxRequests {
+				return fmt.Errorf("copy requests %d exceed an enclosing copy's %d", c.MaxRequests, outer.MaxRequests)
+			}
+		}
+	}
+	if c.MaxBudgetMicros > 0 {
+		if c.MaxBudgetMicros > MaxMicros {
+			return fmt.Errorf("copy budget %d exceeds %d micros", c.MaxBudgetMicros, int64(MaxMicros))
+		}
+		if cur.Caveats.MaxBudgetAmount > 0 {
+			limit, err := AmountToMicros(cur.Caveats.MaxBudgetAmount)
+			if err != nil {
+				return err
+			}
+			if c.MaxBudgetMicros > limit {
+				return fmt.Errorf("copy budget %d exceeds the capability's %d micros", c.MaxBudgetMicros, limit)
+			}
+		}
+		for _, outer := range cur.Copies {
+			if outer.MaxBudgetMicros > 0 && c.MaxBudgetMicros > outer.MaxBudgetMicros {
+				return fmt.Errorf("copy budget %d exceeds an enclosing copy's %d micros", c.MaxBudgetMicros, outer.MaxBudgetMicros)
+			}
+		}
+	}
+	return nil
 }
 
 func biscuitFact(name string, term biscuit.Term) biscuit.Fact {
