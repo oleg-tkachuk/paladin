@@ -104,6 +104,10 @@ millionths of `unit_code`, so 25 USD is `25000000`.
 - **Pass `cap.Copies` on** wherever you build those requests from a verified
   capability.
 - **Python: `attenuate` takes `max_requests` and `max_budget_micros`.**
+- **`Delegate` from a Biscuit copy narrows from the copy.** A child used to
+  be narrowed from the capability's stored record, so it could regain what the
+  copy had given up offline. A copy with limits of its own cannot delegate at
+  all (`FailedPrecondition`): attenuate it instead.
 
 ## Unreleased — one copy of a Biscuit can be revoked on its own
 
