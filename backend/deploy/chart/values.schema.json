@@ -1903,6 +1903,15 @@
           },
           "type": "object"
         },
+        "kubeAPIPorts": {
+          "items": {
+            "maximum": 65535,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
         "monitoring": {
           "additionalProperties": false,
           "properties": {
