@@ -211,3 +211,26 @@ func TestCopiesAreNeverSigned(t *testing.T) {
 		t.Fatalf("copies = %+v, want none", got.Copies)
 	}
 }
+
+// BiscuitCopy names the limits in force on a copy, innermost first, and does
+// so on a verifier that does not meter copies: a limited copy can still be
+// read and revoked there.
+func TestBiscuitCopyNamesItsLimits(t *testing.T) {
+	v, _, root := limitedBiscuit(t)
+	v.cfg.MeterCopies = false
+	outer, _ := Attenuate(root, Attenuation{MaxRequests: 50})
+	inner, _ := Attenuate(outer, Attenuation{MaxBudgetMicros: MicrosPerUnit})
+
+	got, err := v.BiscuitCopy(context.Background(), inner)
+	if err != nil {
+		t.Fatalf("BiscuitCopy: %v", err)
+	}
+	if len(got.Limits) != 2 ||
+		!bytes.Equal(got.Limits[0].RevocationID, lastRevocationID(t, inner)) || got.Limits[0].MaxBudgetMicros != MicrosPerUnit ||
+		!bytes.Equal(got.Limits[1].RevocationID, lastRevocationID(t, outer)) || got.Limits[1].MaxRequests != 50 {
+		t.Fatalf("limits = %+v", got.Limits)
+	}
+	if plain, err := v.BiscuitCopy(context.Background(), root); err != nil || plain.Limits != nil {
+		t.Fatalf("root copy: %+v, %v; want no limits", plain, err)
+	}
+}

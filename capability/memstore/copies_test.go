@@ -171,3 +171,27 @@ func TestCopyCountersPurgedWithTheirCapability(t *testing.T) {
 		t.Fatal("PurgeOrphans left a copy counter of a capability not on record")
 	}
 }
+
+// CopyUsage reads back what was counted, and leaves out a copy never used.
+func TestCopyUsageReadsTheCounters(t *testing.T) {
+	ctx, u, capID, tenant := newCopyFixture(t)
+	c := copyCeiling("read", 5, 2*capability.MicrosPerUnit)
+	if _, err := u.BumpRequest(ctx, capability.RequestBump{CapabilityID: capID, TenantID: tenant, Copies: []capability.CopyCeiling{c}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := u.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenant, Amount: 0.5, Copies: []capability.CopyCeiling{c}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := u.Reserve(ctx, capability.ReserveRequest{CapabilityID: capID, TenantID: tenant, Amount: 0.25, Copies: []capability.CopyCeiling{c}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := u.CopyUsage(ctx, [][]byte{[]byte("read"), []byte("never")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := capability.CopyUsage{RevocationID: []byte("read"), CapabilityID: capID, RequestCount: 1, SpentAmount: 0.5, ReservedAmount: 0.25}
+	if len(got) != 1 || string(got[0].RevocationID) != "read" || got[0].CapabilityID != want.CapabilityID ||
+		got[0].RequestCount != want.RequestCount || got[0].SpentAmount != want.SpentAmount || got[0].ReservedAmount != want.ReservedAmount {
+		t.Fatalf("CopyUsage = %+v, want [%+v]", got, want)
+	}
+}
