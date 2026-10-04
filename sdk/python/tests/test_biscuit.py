@@ -62,6 +62,10 @@ def _expected_facts(args: dict[str, Any]) -> set[str]:
         | {f'{pb.FACT_RESOURCE_PREFIX}("{v}")' for v in args["resource_prefixes"]}
         | {f'{pb.FACT_PLANE}("{v}")' for v in args["planes"]}
         | {f"{pb.FACT_EXPIRES}({expires})", f'{pb.FACT_BIND}("{args["bind_jkt"]}")'}
+        | {
+            f"{pb.FACT_MAX_REQUESTS}({args['max_requests']})",
+            f"{pb.FACT_MAX_BUDGET_MICROS}({args['max_budget_micros']})",
+        }
     )
 
 
@@ -74,6 +78,8 @@ def test_vocabulary_matches_shared_spec() -> None:
         pb.FACT_PLANE: "string",
         pb.FACT_EXPIRES: "date",
         pb.FACT_BIND: "string",
+        pb.FACT_MAX_REQUESTS: "integer",
+        pb.FACT_MAX_BUDGET_MICROS: "integer",
     }
     assert spec["authority"]["fact"] == pb.FACT_CAPABILITY
     assert spec["authority"]["root_claim"] == pb.ROOT_CLAIM
@@ -153,6 +159,10 @@ def test_refuses_a_token_whose_chain_is_broken() -> None:
         ({"expires_at": "2026-01-01"}, TypeError, "datetime"),
         ({"bind_jkt": "short"}, ValueError, "thumbprint"),
         ({"bind_jkt": JKT + "="}, ValueError, "thumbprint"),
+        ({"max_requests": 0}, ValueError, "positive"),
+        ({"max_budget_micros": -1}, ValueError, "positive"),
+        ({"max_requests": True}, TypeError, "int"),
+        ({"max_budget_micros": 1.5}, TypeError, "int"),
     ],
 )
 def test_refuses_malformed_arguments(

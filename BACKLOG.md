@@ -1611,23 +1611,36 @@ finding moving from "packages you import" to "your code is affected".
 
 - **Status:** Deferred — the vocabulary covers what Paladin enforces.
 - **Reason:** a Biscuit holder narrows it with `paladin_op`,
-  `paladin_resource_prefix` / `_uri`, `paladin_plane`, `paladin_expires` and
-  `paladin_bind` facts, which the verifier folds into a Capability through
-  `Narrows`. A block with Datalog rules or checks is refused rather than
-  half-enforced: a check that reads `operation` or `resource` can only be
-  evaluated where a handler names them (`AssertCapabilityOp`), and an RPC that
-  never asserts would skip it silently. Counters (`MaxRequests`, budget)
-  cannot be narrowed offline either: an attenuated copy shares its
-  capability's ledger row.
+  `paladin_resource_prefix` / `_uri`, `paladin_plane`, `paladin_expires`,
+  `paladin_bind` and the copy limits `paladin_max_requests` /
+  `paladin_max_budget_micros`, which the verifier folds into a Capability
+  through `Narrows` and `Capability.Copies`. A block with Datalog rules or
+  checks is refused rather than half-enforced: a check that reads `operation`
+  or `resource` can only be evaluated where a handler names them
+  (`AssertCapabilityOp`), and an RPC that never asserts would skip it
+  silently.
 - **Definition of Done:** Datalog checks evaluated by the Biscuit authorizer
   with `operation`, `resource`, `time` and `plane` facts on every capability
   RPC, with a gate proving that every RPC a capability reaches asserts its
-  operation; per-copy counters keyed by the Biscuit's revocation id.
+  operation.
 - **Blockers:** none. The every-RPC-asserts gate exists:
   `backend/tests/contract/capability_op_asserted_test.go` fails on a
   data-plane RPC whose handler does not call `AssertCapabilityOp`. Admin and
   iam are not gated — no capability carries a request there on its own —
   and `capability_planes_test.go` fails if that stops being true.
+
+### A Biscuit copy's own usage cannot be read
+
+- **Status:** Deferred.
+- **Reason:** a copy with limits of its own is counted in
+  `capability_copy_usage`, but nothing reads the counters back:
+  `Meter.Get` and `CapabilityService.GetUsage` answer by capability id, and
+  the console shows only the capability's totals. An operator learns a copy
+  is spent only from the `ResourceExhausted` its holder gets.
+- **Definition of Done:** a read of one copy's counters — by the copy, as
+  `RevokeBiscuit` takes it — in the Meter contract, the admin API, both SDKs
+  and the console's capabilities page.
+- **Blockers:** none.
 
 ### The capability module's Go API still takes float64 amounts
 
