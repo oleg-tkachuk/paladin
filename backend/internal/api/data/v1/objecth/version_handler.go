@@ -61,7 +61,7 @@ func (h *VersionHandler) authorizeParent(
 	op capability.Op,
 	action string,
 ) error {
-	if err := auth.AssertCapabilityOp(ctx, op, capabilityObjectURI(tenantID, parent.Collection, parent.Key)); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, op, CapabilityObjectURI(tenantID, parent.Collection, parent.Key)); err != nil {
 		return err
 	}
 	if h.policy == nil {
@@ -92,8 +92,8 @@ func (h *VersionHandler) authorizeParent(
 	return nil
 }
 
-// capabilityObjectURI is the resource a capability names an object by.
-func capabilityObjectURI(tenantID uuid.UUID, collection, key string) string {
+// CapabilityObjectURI is the resource a capability names an object by.
+func CapabilityObjectURI(tenantID uuid.UUID, collection, key string) string {
 	return capabilityCollectionURI(tenantID, collection) + key
 }
 
