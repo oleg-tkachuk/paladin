@@ -58,6 +58,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // Event is the wire payload delivered to subscribers. The shape is JSON-
@@ -161,6 +162,8 @@ type Dispatcher struct {
 	MaxAttempts int
 	// BaseBackoff is the per-attempt backoff seed for DeliverOne.
 	BaseBackoff time.Duration
+	// Now stamps webhook signatures. nil = time.Now; tests pin it.
+	Now func() time.Time
 
 	// Secrets resolves "k8s:<name>/<key>" refs in sink-credential fields
 	// (see sink_secrets.go). nil = inline-only configs; a ref with no
@@ -639,8 +642,11 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 			if serr != nil {
 				return 0, serr
 			}
-			sig := signHMAC(body, secret)
-			req.Header.Set("X-Paladin-Signature", "sha256="+sig)
+			// Signed per attempt: a retry after a long backoff carries
+			// its own time, or it would arrive outside the subscriber's
+			// tolerance window.
+			req.Header.Set(paladin.HeaderWebhookSignature, paladin.SignWebhook(secret, d.now(), body))
+			req.Header.Set(legacySignatureHeader, legacySignaturePrefix+signHMAC(body, secret))
 		}
 		resp, err := httpClient.Do(req)
 		if err != nil {
@@ -669,6 +675,21 @@ func (d *Dispatcher) deliverHTTPWithStatus(ctx context.Context, sub admindomain.
 		}
 	}
 	return lastStatus, fmt.Errorf("delivery failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
+// The body-only signature that HeaderWebhookSignature replaces. It verifies
+// forever once captured, and is sent beside the new one for a release so
+// subscribers can move.
+const (
+	legacySignatureHeader = "X-Paladin-Signature"
+	legacySignaturePrefix = "sha256="
+)
+
+func (d *Dispatcher) now() time.Time {
+	if d.Now != nil {
+		return d.Now()
+	}
+	return time.Now()
 }
 
 // signHMAC produces a hex-encoded HMAC-SHA256 of body using key.

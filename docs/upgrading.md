@@ -42,6 +42,20 @@ moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
 
+## Unreleased — webhook deliveries carry a timestamped signature
+
+- **An HTTP subscription with a signing secret now also receives
+  `X-Paladin-Webhook-Signature: t=<unix seconds>,v1=<hex>`**, an HMAC-SHA256 of
+  `<t>.<body>` under the same secret. Verify it with `paladin.VerifyWebhook`
+  (Go) or `paladin.verify_webhook` (Python), which refuse a delivery more
+  than five minutes from the subscriber's clock — a captured delivery can no
+  longer be replayed later. Deduplicate on `X-Paladin-Event-Id` against a
+  replay inside the window.
+- **`X-Paladin-Signature` is deprecated.** It signs the body alone and so
+  verifies forever once captured. It is still sent beside the new header for
+  this release, and removed in the next: move verification before upgrading
+  past it.
+
 ## Unreleased — `BatchUpdateTags` is capped like the other batch RPCs
 
 - **The handler refuses more than 10 000 object ids with

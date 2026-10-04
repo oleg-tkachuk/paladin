@@ -1677,18 +1677,18 @@ finding moving from "packages you import" to "your code is affected".
 
 The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 
-### Webhook deliveries can be replayed, and the SDKs cannot verify them
+### Webhook deliveries still carry the body-only signature
 
-- **Status:** Deferred.
-- **Reason:** `X-Paladin-Signature` is an HMAC of the body alone
-  (`worker/event_dispatcher.go`), so a captured delivery verifies forever.
-  The SDKs offer no verifier, so each subscriber writes its own comparison.
-- **Definition of Done:** the dispatcher signs `t=<unix>,v1=<hmac(t.body)>`
-  in a versioned header, sending the old one alongside for a release; both
-  SDKs verify it with a tolerance window and a constant-time compare, with
-  tests for a replayed, tampered and stale delivery.
-- **Blockers:** subscribers verifying the old header must be told before it
-  goes.
+- **Status:** Deferred — the deprecation window is one release.
+- **Reason:** deliveries carry `X-Paladin-Webhook-Signature`, timestamped and
+  verified by both SDKs, and beside it the deprecated `X-Paladin-Signature`,
+  an HMAC of the body alone that verifies forever once captured. It stays for
+  one release so subscribers verifying it can move.
+- **Definition of Done:** in the release after the one that adds the new
+  header, the dispatcher stops sending `X-Paladin-Signature`
+  (`legacySignatureHeader` in `worker/event_dispatcher.go`) and upgrading.md
+  says so.
+- **Blockers:** the release that ships `X-Paladin-Webhook-Signature`.
 
 ### The MCP bridge carries its own copy of what the SDK now does
 

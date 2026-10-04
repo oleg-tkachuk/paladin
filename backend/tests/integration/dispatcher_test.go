@@ -35,6 +35,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // recordedReq captures every request that hit the recorder server so
@@ -380,7 +381,7 @@ func TestDispatcher_OutboxToHTTPDelivery_HappyPath(t *testing.T) {
 	if reqs[0].Header.Get("X-Paladin-Subscription-Id") != subID.String() {
 		t.Errorf("missing/wrong subscription id header: %v", reqs[0].Header)
 	}
-	if reqs[0].Header.Get("X-Paladin-Signature") == "" {
+	if reqs[0].Header.Get(paladin.HeaderWebhookSignature) == "" {
 		t.Errorf("missing signature header")
 	}
 }
