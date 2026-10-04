@@ -88,3 +88,15 @@ describe("ObjectsFilterBar content type and metadata", () => {
     expect(props.onFilterChange).toHaveBeenCalledWith({ meta: undefined });
   });
 });
+
+describe("ObjectsFilterBar layout", () => {
+  // The status, type and metadata filters sat in a row that could not wrap,
+  // so on a narrow screen the metadata field ran past the card and the window.
+  // jsdom has no layout, so this pins the class that lets the row wrap; the
+  // overflow itself was measured in a browser.
+  it("lets the filter row wrap", () => {
+    bar();
+    const row = screen.getByLabelText("Filter by metadata").parentElement!;
+    expect(row).toHaveClass("flex-wrap");
+  });
+});

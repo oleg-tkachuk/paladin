@@ -115,7 +115,7 @@ export function ObjectsFilterBar({
         />
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <FunnelIcon className="w-4 h-4 text-muted-foreground" />
 
         <div className="flex items-center gap-2 px-3 py-2 bg-foreground/5 border border-border rounded-xl">

@@ -140,8 +140,8 @@ export default function DefaultBindingPage() {
           <h2 className="text-base font-semibold">Default route</h2>
           <p className="text-sm text-muted-foreground">
             Where a bare collection name (created without naming a bucket) lands
-            for this tenant. Creating an collection with no bucket and no
-            default route is rejected.
+            for this tenant. Creating a collection with no bucket and no default
+            route is rejected.
           </p>
         </div>
 
