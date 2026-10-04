@@ -16,9 +16,9 @@
     mcp        ← ingress-controller / monitoring   → common + api/admin pods
                  / admin (sessions) / UI (health)
 
-  "common" egress = DNS (kube-system:53), 443/6443 anywhere (K8s API for the
-  secret resolver + https webhooks/JWKS), Postgres, and the OTLP collector on
-  the port config.otel.endpoint names.
+  "common" egress = DNS (kube-system:53), 443 anywhere (https webhooks/JWKS),
+  networkPolicies.kubeAPIPorts anywhere (K8s API for the secret resolver),
+  Postgres, and the OTLP collector on the port config.otel.endpoint names.
 
   With config.otel.metrics_exporter: prometheus, api and admin also admit the
   monitoring namespace on the port of config.otel.metrics_addr — their scrape
@@ -33,8 +33,19 @@
 {{- $common := list }}
 {{/* DNS */}}
 {{- $dns := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" "kube-system")))) "ports" (list (dict "protocol" "UDP" "port" 53) (dict "protocol" "TCP" "port" 53)) }}
-{{/* K8s API + any https (secret resolver, JWKS fetch, webhook sinks on 443) */}}
-{{- $https := dict "ports" (list (dict "protocol" "TCP" "port" 443) (dict "protocol" "TCP" "port" 6443)) }}
+{{/*
+  Any https (JWKS fetch, webhook sinks on 443), and the K8s API the secret
+  resolver reads at boot. A policy is matched after a Service is translated to
+  its endpoint, so the API ports are the API server's own, not the
+  `kubernetes` Service's 443 — see networkPolicies.kubeAPIPorts.
+*/}}
+{{- $httpsPorts := list (dict "protocol" "TCP" "port" 443) }}
+{{- range $p := $np.kubeAPIPorts }}
+{{- if ne (int $p) 443 }}
+{{- $httpsPorts = append $httpsPorts (dict "protocol" "TCP" "port" (int $p)) }}
+{{- end }}
+{{- end }}
+{{- $https := dict "ports" $httpsPorts }}
 {{/* Postgres */}}
 {{- $pg := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.postgres.namespace)))) "ports" (list (dict "protocol" "TCP" "port" $np.postgres.port)) }}
 {{/*
