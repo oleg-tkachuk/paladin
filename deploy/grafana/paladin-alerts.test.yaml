@@ -139,3 +139,59 @@ tests:
       - eval_time: 20m
         alertname: PaladinReadReplicaOutOfSync
         exp_alerts: []
+
+  # Overdue uploads waiting an hour past the deadline, in one of two pods →
+  # fires once the 15m `for:` has passed.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_objects_pending_overdue_age_seconds{instance="worker-0"}'
+        values: "3600+60x30"
+      - series: 'paladin_objects_pending_overdue_age_seconds{instance="worker-1"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinUploadsNotSettling
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Paladin has uploads the reconciler cannot settle"
+              description: >-
+                The oldest overdue PENDING object is 1h 20m 0s
+                past the reconciler's deadline. Those objects cannot be downloaded
+                until it completes or fails them. Check the worker logs for failed
+                HEADs and paladin_objects_pending_overdue for how many are waiting.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/uploads-not-settling.md"
+
+  # A reconciler keeping up: objects fall due every tick and are settled
+  # within it, so the age stays under a minute.
+  - interval: 1m
+    input_series:
+      - series: paladin_objects_pending_overdue_age_seconds
+        values: "0 30 0 45 0 20 0 0 50 0 30 0 45 0 20 0 0 50 0 30 0 45 0 20 0 0 50 0 30 0"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PaladinUploadsNotSettling
+        exp_alerts: []
+
+  # A backlog past one batch, worked down steadily: overdue, but never by
+  # 30m. Below the threshold however long it lasts.
+  - interval: 1m
+    input_series:
+      - series: paladin_objects_pending_overdue_age_seconds
+        values: "600x45"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: PaladinUploadsNotSettling
+        exp_alerts: []
+
+  # Overdue for 30m+ but recovering before `for:` runs out does not fire.
+  - interval: 1m
+    input_series:
+      - series: paladin_objects_pending_overdue_age_seconds
+        values: "2000x10 0x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinUploadsNotSettling
+        exp_alerts: []
+
