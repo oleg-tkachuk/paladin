@@ -135,6 +135,9 @@ func (s *UsageStore) BumpRequest(ctx context.Context, req capability.RequestBump
 	defer func() { _ = tx.Rollback(ctx) }() // no-op after a successful commit
 	qtx := s.q.WithTx(tx)
 
+	if err := bumpCopies(ctx, tx, req.CapabilityID, req.Copies); err != nil {
+		return 0, err
+	}
 	count, err := qtx.BumpCapabilityRequestCount(ctx, pgtype.UUID{Bytes: req.CapabilityID, Valid: true}, req.MaxRequests)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -234,6 +237,9 @@ func (s *UsageStore) chargeInTx(
 ) (capability.ChargeReceipt, error) {
 	qtx := s.q.WithTx(tx)
 
+	if err := addCopySpend(ctx, tx, req.CapabilityID, req.Copies, amountNumeric, copySpent); err != nil {
+		return capability.ChargeReceipt{}, err
+	}
 	spent, err := qtx.ChargeCapability(ctx, pgtype.UUID{Bytes: req.CapabilityID, Valid: true},
 		amountNumeric, resolvedUnit, maxBudgetNumeric)
 	if err != nil {
@@ -275,10 +281,10 @@ func (s *UsageStore) chargeInTx(
 		// charge is a record of what was true when it happened. Resolved in
 		// the same statement so it cannot drift from tenant_id.
 		`INSERT INTO charges (id, tenant_id, tenant_slug, capability_id,
-		                      amount, unit_code, op, actor_subject)
-		 SELECT $1, $2, t.slug, $3, $4::numeric, $5, $6, $7
+		                      amount, unit_code, op, actor_subject, copy_ids)
+		 SELECT $1, $2, t.slug, $3, $4::numeric, $5, $6, $7, $8::bytea[]
 		   FROM tenants t WHERE t.id = $2`,
-		ledgerID, req.TenantID, req.CapabilityID, amountNumeric, resolvedUnit, req.Op, req.Actor,
+		ledgerID, req.TenantID, req.CapabilityID, amountNumeric, resolvedUnit, req.Op, req.Actor, copyIDs(req.Copies),
 	)
 	if lErr != nil {
 		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge ledger insert: %w", lErr)
@@ -318,6 +324,7 @@ func (s *UsageStore) chargeInTx(
 const refundableQuery = `
 SELECT ch.capability_id,
        ch.tenant_id,
+       ch.copy_ids,
        r.refund,
        r.refund > r.remaining AS exceeds
 FROM   charges ch
@@ -363,11 +370,12 @@ func (s *UsageStore) Refund(ctx context.Context, req capability.RefundRequest) (
 
 	var (
 		capID, tenantID uuid.UUID
+		copies          [][]byte
 		refund          pgtype.Numeric
 		exceeds         bool
 	)
 	if err := tx.QueryRow(ctx, refundableQuery, req.ChargeID, amountNumeric).
-		Scan(&capID, &tenantID, &refund, &exceeds); err != nil {
+		Scan(&capID, &tenantID, &copies, &refund, &exceeds); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, capability.ErrChargeNotFound
 		}
@@ -387,6 +395,9 @@ func (s *UsageStore) Refund(ctx context.Context, req capability.RefundRequest) (
 		return 0, fmt.Errorf("capability/postgres: refund record: %w", err)
 	}
 
+	if err := subtractCopySpend(ctx, tx, copies, refund, copySpent); err != nil {
+		return 0, err
+	}
 	ids := []uuid.UUID{capID}
 	ancestors, err := ancestorsOf(ctx, tx, capID)
 	if err != nil {
