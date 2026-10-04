@@ -355,6 +355,28 @@ connect-python's own `connectrpc-otel` 0.2.0 does not work with
 connect-python 0.9.0 — it reads `RequestContext.method` as an attribute,
 which 0.9.0 has as a method — so it is not used here.
 
+### Verifying webhook deliveries
+
+An HTTP event subscription with a signing secret receives each delivery with
+`X-Paladin-Webhook-Signature: t=<unix seconds>,v1=<hex>`, an HMAC-SHA256 of
+`<t>.<body>`. Verify it against the raw body before trusting anything in it:
+
+```python
+try:
+    paladin.verify_webhook(secret, request.headers[paladin.HEADER_WEBHOOK_SIGNATURE], raw_body)
+except (KeyError, paladin.WebhookSignatureError):
+    return 401
+```
+
+| Name | Does |
+| --- | --- |
+| `verify_webhook(secret, header, body, *, tolerance=DEFAULT_WEBHOOK_TOLERANCE, now=None)` | Returns when one `v1` matches under `secret`, compared in constant time, and `t` is within `tolerance` seconds (300) of `now`, either way; otherwise raises `WebhookSignatureError`, a `ValueError`. Standard library only, no extra. |
+| `sign_webhook(secret, t, body)` | The header value the server sends, for a test of your own handler. |
+
+A replay inside the window verifies: deduplicate on `X-Paladin-Event-Id`,
+which is stable across retries. The older `X-Paladin-Signature` (an HMAC of the
+body alone) is still sent for one release.
+
 ### Testing with a fake: `paladin.testing`
 
 `FakePaladin` is an in-memory data plane for the tests of a program built on
@@ -418,6 +440,7 @@ tests hold its parsers to as well. Where they differ, it is on purpose:
 | Server identity over TLS | `TLS.ServerID`: the SPIFFE ID, checked by `go-spiffe` | `TLS(server_id=…)`: the same check, after the handshake and before any request byte | Python's connections under `TLS` run on `ssl` and httpcore, because `pyqwest` has no peer-verification hook. |
 | Minimum TLS version | `TLS.MinVersion`, 1.2 by default | `TLS(min_version=…)`, `ssl.TLSVersion.TLSv1_2` by default | |
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
+| Webhook signatures | `VerifyWebhook`, options for the window and clock | `verify_webhook`, keyword arguments | Each language's idiom; both run the vectors in `sdk/testdata/webhook_signatures.json`. |
 | Biscuit attenuation | `capability.Attenuate`, from the capability module | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0 (BACKLOG). |
 | Bulk downloads | `DownloadMany`, a callback per reader | `download_many` / `adownload_many`, an iterator of results | Each language's idiom. |

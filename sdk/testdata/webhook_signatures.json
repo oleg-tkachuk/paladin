@@ -1,0 +1,150 @@
+{
+  "_comment": "Webhook delivery signatures, as the server sends them and both SDKs verify them. The header value is comma-separated key=value pairs: t is the unix time in seconds, decimal digits only (no sign) when the delivery was signed, and each v1 is the hex (digits only, no spaces) HMAC-SHA256, keyed by the subscription's signing secret, of the bytes '<t>.<body>' \u2014 the decimal t, a literal '.', then the raw body. Unknown keys (a future v2) are ignored; any one matching v1 verifies. A delivery verifies when |now - t| <= tolerance_seconds. A replay inside that window verifies by design: deduplicate on X-Paladin-Event-Id. The expected values were computed independently of either SDK.",
+  "secret": "whsec-shared-test-vector",
+  "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+  "timestamp": 1767225600,
+  "header": "t=1767225600,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+  "tolerance_seconds": 300,
+  "cases": [
+    {
+      "name": "valid",
+      "header": "t=1767225600,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": true
+    },
+    {
+      "name": "valid, clock slightly behind",
+      "header": "t=1767225600,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225590,
+      "ok": true
+    },
+    {
+      "name": "at the edge of the window",
+      "header": "t=1767225600,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225900,
+      "ok": true
+    },
+    {
+      "name": "stale: replayed after the window",
+      "header": "t=1767225600,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225901,
+      "ok": false
+    },
+    {
+      "name": "from the future beyond the window",
+      "header": "t=1767225600,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225299,
+      "ok": false
+    },
+    {
+      "name": "tampered body",
+      "header": "t=1767225600,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.deleted\"}",
+      "now": 1767225610,
+      "ok": false
+    },
+    {
+      "name": "tampered signature",
+      "header": "t=1767225600,v1=0000000000000000000000000000000000000000000000000000000000000000",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": false
+    },
+    {
+      "name": "tampered timestamp",
+      "header": "t=1767225601,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": false
+    },
+    {
+      "name": "signed with another secret",
+      "header": "t=1767225600,v1=0b11f950d8feebc845c9ce139c28fab9105bff0b1849b26806da20caf16186cc",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": false
+    },
+    {
+      "name": "one of several v1 matches",
+      "header": "t=1767225600,v1=0b11f950d8feebc845c9ce139c28fab9105bff0b1849b26806da20caf16186cc,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": true
+    },
+    {
+      "name": "unknown scheme ignored",
+      "header": "t=1767225600,v2=abc,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": true
+    },
+    {
+      "name": "no v1",
+      "header": "t=1767225600,v2=abc",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": false
+    },
+    {
+      "name": "no t",
+      "header": "v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": false
+    },
+    {
+      "name": "t not an integer",
+      "header": "t=soon,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": false
+    },
+    {
+      "name": "v1 not hex",
+      "header": "t=1767225600,v1=zz",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": false
+    },
+    {
+      "name": "empty header",
+      "header": "",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": false
+    },
+    {
+      "name": "the old body-only signature",
+      "header": "sha256=62e711ff476e1fe529d1f497ac75d86793d2e05f63cb288c3d717cafdc7a9dad",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": false
+    },
+    {
+      "name": "t with a sign",
+      "header": "t=+1767225600,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": false
+    },
+    {
+      "name": "v1 with a space inside",
+      "header": "t=1767225600,v1=ec47041d711379d36ccc1f11f01c3a17 1260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": false
+    },
+    {
+      "name": "t twice",
+      "header": "t=1767225600,t=1767225600,v1=ec47041d711379d36ccc1f11f01c3a171260134b68d2f58c28faaea7a921f4da",
+      "body": "{\"specversion\":\"1.0\",\"id\":\"evt-1\",\"type\":\"paladin.object.created\"}",
+      "now": 1767225610,
+      "ok": false
+    }
+  ]
+}
