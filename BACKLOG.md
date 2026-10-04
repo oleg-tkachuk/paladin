@@ -1657,18 +1657,19 @@ finding moving from "packages you import" to "your code is affected".
   with known positives and negatives for each signal.
 - **Blockers:** choosing the detectors, and their cost per object.
 
-### Resource-restricted capabilities cannot run batch or tag operations
+### The tag-definition handler is unreachable
 
 - **Status:** Deferred.
-- **Reason:** batch operations name their objects by ID and tag operations
-  touch tenant-level tag definitions, so neither can pass a resource URI to
-  `AssertCapabilityOp`. They used to pass an empty URI, which skipped the
-  resource check — a capability confined to one prefix could batch-delete
-  anywhere in its tenant. They now fail closed for any resource-restricted
-  capability, which is safe but means such a capability cannot use them.
-- **Definition of Done:** the batch handlers resolve each object ID to its URI
-  and assert every one; tag operations get a resource form of their own.
-- **Blockers:** none.
+- **Reason:** `backend/internal/api/data/v1/objecttagh` (create, get, update,
+  delete and list of tenant tag definitions) is built into the wiring's
+  repositories but no RPC constructs its `Handler`; the tag RPCs that exist
+  work on an object's own tags through `objecth`. Its capability checks pass
+  no resource, so if it is ever exposed a resource-restricted capability is
+  refused all of it.
+- **Definition of Done:** the package and its repository are removed, or an
+  RPC exposes it with a resource form for tag definitions that
+  `AssertCapabilityOp` can check.
+- **Blockers:** deciding whether tenants need tag definitions at all.
 
 ---
 
