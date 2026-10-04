@@ -49,6 +49,14 @@ service CapabilityService {
     option idempotency_level = IDEMPOTENT;
   }
 
+  // GetBiscuitUsage returns the limits in force on one copy of a
+  // capability's Biscuit — its own and those of the copies it was attenuated
+  // from — with what has been counted against each. A copy gets limits only
+  // by attenuation; one under none returns no copies.
+  rpc GetBiscuitUsage(CapabilityServiceGetBiscuitUsageRequest) returns (CapabilityServiceGetBiscuitUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   // List enumerates capabilities issued to a principal. Cursor-paginated.
   rpc List(CapabilityServiceListRequest) returns (CapabilityServiceListResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -209,6 +217,37 @@ message CapabilityServiceRevokeBiscuitRequest {
 message CapabilityServiceRevokeBiscuitResponse {
   // capability_id is the capability the revoked copy belongs to.
   string capability_id = 1;
+}
+
+message CapabilityServiceGetBiscuitUsageRequest {
+  // token is the Biscuit copy, exactly as its holder presents it.
+  string token = 1 [
+    (buf.validate.field).string.min_len = 1,
+    debug_redact = true
+  ];
+}
+
+// CapabilityBiscuitCopyUsage is one set of limits an attenuation block put on
+// a copy, and what that copy and every copy attenuated from it have used.
+message CapabilityBiscuitCopyUsage {
+  // revocation_id is the id of the block that set the limits.
+  bytes revocation_id = 1;
+  // max_requests and max_budget_micros are the limits; 0 sets none.
+  int64 max_requests = 2;
+  int64 max_budget_micros = 3;
+  int64 request_count = 4;
+  // spent_micros and reserved_micros are in millionths of unit_code.
+  int64 spent_micros = 5;
+  int64 reserved_micros = 6;
+}
+
+message CapabilityServiceGetBiscuitUsageResponse {
+  string capability_id = 1;
+  // unit_code is the capability's unit, which its copies' budgets share.
+  string unit_code = 2;
+  // copies are innermost first: the copy itself when it set limits, then the
+  // copies it was attenuated from.
+  repeated CapabilityBiscuitCopyUsage copies = 3;
 }
 
 message CapabilityServiceListRequest {

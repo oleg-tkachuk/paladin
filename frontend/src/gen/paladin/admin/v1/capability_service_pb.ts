@@ -26,7 +26,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_capability_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CilwYWxhZGluL2FkbWluL3YxL2NhcGFiaWxpdHlfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSL+AQoTQ2FwYWJpbGl0eVByaW5jaXBhbBI5CgRraW5kGAEgASgOMh8ucGFsYWRpbi5hZG1pbi52MS5QcmluY2lwYWxLaW5kQgq6SAeCAQQQASAAEhsKCXRlbmFudF9pZBgCIAEoCUIIukgFcgOwAQESGAoHc3ViamVjdBgDIAEoCUIHukgEcgIQARISCgphZ2VudF90eXBlGAogASgJEhUKDWFnZW50X3ZlcnNpb24YCyABKAkSDgoGcnVuX2lkGAwgASgJEhcKD3BhcmVudF9hZ2VudF9pZBgNIAEoCRINCgVtb2RlbBgOIAEoCRISCgptY3BfY2xpZW50GA8gASgJIrMCChFDYXBhYmlsaXR5Q2F2ZWF0cxIVCgNvcHMYASADKAlCCLpIBZIBAggBEhkKEXJlc291cmNlX3ByZWZpeGVzGAIgAygJEhUKDXJlc291cmNlX3VyaXMYAyADKAkSFAoMbWF4X3JlcXVlc3RzGAQgASgFEhoKEmFsbG93X3RhaW50ZWRfcmVhZBgGIAEoCBIgChhpZGVtcG90ZW5jeV9rZXlfcmVxdWlyZWQYByABKAgSFgoOc291cmNlX2lwX2NpZHIYCCADKAkSEQoJdW5pdF9jb2RlGAkgASgJEicKEW1heF9idWRnZXRfbWljcm9zGAogASgDQge6SAQiAigASACIAQFCFAoSX21heF9idWRnZXRfbWljcm9zSgQIBRAGUhFtYXhfYnVkZ2V0X2Ftb3VudCKRAwoKQ2FwYWJpbGl0eRIPCgJpZBgBIAEoCUID4EEDEhMKBmlzc3VlchgCIAEoCUID4EEDEjYKB3N1YmplY3QYAyABKAsyJS5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlQcmluY2lwYWwSEAoIYXVkaWVuY2UYBCADKAkSNAoHY2F2ZWF0cxgFIAEoCzIjLnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eUNhdmVhdHMSMgoJaXNzdWVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCm5vdF9iZWZvcmUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKZXhwaXJlc19hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIRCglwYXJlbnRfaWQYCSABKAkSEgoKZ2VuZXJhdGlvbhgKIAEoAxIYChBjb25maXJtYXRpb25famt0GAsgASgJIsACCh1DYXBhYmlsaXR5U2VydmljZUlzc3VlUmVxdWVzdBI+CgdzdWJqZWN0GAEgASgLMiUucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5UHJpbmNpcGFsQga6SAPIAQESGgoIYXVkaWVuY2UYAiADKAlCCLpIBZIBAggBEjwKB2NhdmVhdHMYAyABKAsyIy5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlDYXZlYXRzQga6SAPIAQESHAoLdHRsX3NlY29uZHMYBCABKANCB7pIBCICKAASLgoKbm90X2JlZm9yZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNwoQY29uZmlybWF0aW9uX2prdBgGIAEoCUIdukga2AEBchUyE15bQS1aYS16MC05Xy1dezQzfSQifAoeQ2FwYWJpbGl0eVNlcnZpY2VJc3N1ZVJlc3BvbnNlEjAKCmNhcGFiaWxpdHkYASABKAsyHC5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHkSEgoFdG9rZW4YAiABKAlCA4ABARIUCgdiaXNjdWl0GAMgASgJQgOAAQEixgIKIENhcGFiaWxpdHlTZXJ2aWNlRGVsZWdhdGVSZXF1ZXN0EhsKCXBhcmVudF9pZBgBIAEoCUIIukgFcgOwAQESNgoHc3ViamVjdBgCIAEoCzIlLnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eVByaW5jaXBhbBIQCghhdWRpZW5jZRgDIAMoCRI0CgdjYXZlYXRzGAQgASgLMiMucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5Q2F2ZWF0cxIcCgt0dGxfc2Vjb25kcxgFIAEoA0IHukgEIgIoABIuCgpub3RfYmVmb3JlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI3ChBjb25maXJtYXRpb25famt0GAcgASgJQh26SBrYAQFyFTITXltBLVphLXowLTlfLV17NDN9JCJgCh5DYXBhYmlsaXR5U2VydmljZVJldm9rZVJlcXVlc3QSFAoCaWQYASABKAlCCLpIBXIDsAEBEg4KBnJlYXNvbhgCIAEoCRIYChBjYXNjYWRlX2NoaWxkcmVuGAMgASgIIiEKH0NhcGFiaWxpdHlTZXJ2aWNlUmV2b2tlUmVzcG9uc2UiUgolQ2FwYWJpbGl0eVNlcnZpY2VSZXZva2VCaXNjdWl0UmVxdWVzdBIZCgV0b2tlbhgBIAEoCUIKgAEBukgEcgIQARIOCgZyZWFzb24YAiABKAkiPwomQ2FwYWJpbGl0eVNlcnZpY2VSZXZva2VCaXNjdWl0UmVzcG9uc2USFQoNY2FwYWJpbGl0eV9pZBgBIAEoCSL8AQocQ2FwYWJpbGl0eVNlcnZpY2VMaXN0UmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEkMKDnByaW5jaXBhbF9raW5kGAIgASgOMh8ucGFsYWRpbi5hZG1pbi52MS5QcmluY2lwYWxLaW5kQgq6SAeCAQQQASAAEhgKB3N1YmplY3QYAyABKAlCB7pIBHICEAESFwoPaW5jbHVkZV9leHBpcmVkGAQgASgIEhcKD2luY2x1ZGVfcmV2b2tlZBgFIAEoCBIaCglwYWdlX3NpemUYBiABKAVCB7pIBBoCKAASEgoKcGFnZV90b2tlbhgHIAEoCSJsCh1DYXBhYmlsaXR5U2VydmljZUxpc3RSZXNwb25zZRIyCgxjYXBhYmlsaXRpZXMYASADKAsyHC5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIjgKIENhcGFiaWxpdHlTZXJ2aWNlR2V0VXNhZ2VSZXF1ZXN0EhQKAmlkGAEgASgJQgi6SAVyA7ABASK+AQohQ2FwYWJpbGl0eVNlcnZpY2VHZXRVc2FnZVJlc3BvbnNlEhUKDWNhcGFiaWxpdHlfaWQYASABKAkSFQoNcmVxdWVzdF9jb3VudBgCIAEoAxIuCgp1cGRhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgl1bml0X2NvZGUYBSABKAkSFAoMc3BlbnRfbWljcm9zGAYgASgDSgQIAxAEUgxzcGVudF9hbW91bnQqfgoNUHJpbmNpcGFsS2luZBIeChpQUklOQ0lQQUxfS0lORF9VTlNQRUNJRklFRBAAEhcKE1BSSU5DSVBBTF9LSU5EX1VTRVIQARIYChRQUklOQ0lQQUxfS0lORF9BR0VOVBACEhoKFlBSSU5DSVBBTF9LSU5EX1NFUlZJQ0UQAzLXBQoRQ2FwYWJpbGl0eVNlcnZpY2USagoFSXNzdWUSLy5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlSXNzdWVSZXF1ZXN0GjAucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZUlzc3VlUmVzcG9uc2UScAoIRGVsZWdhdGUSMi5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlRGVsZWdhdGVSZXF1ZXN0GjAucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZUlzc3VlUmVzcG9uc2UScgoGUmV2b2tlEjAucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZVJldm9rZVJlcXVlc3QaMS5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlUmV2b2tlUmVzcG9uc2UiA5ACAhKHAQoNUmV2b2tlQmlzY3VpdBI3LnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VSZXZva2VCaXNjdWl0UmVxdWVzdBo4LnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VSZXZva2VCaXNjdWl0UmVzcG9uc2UiA5ACAhJsCgRMaXN0Ei4ucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZUxpc3RSZXF1ZXN0Gi8ucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZUxpc3RSZXNwb25zZSIDkAIBEngKCEdldFVzYWdlEjIucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZUdldFVzYWdlUmVxdWVzdBozLnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VHZXRVc2FnZVJlc3BvbnNlIgOQAgFCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
+    "CilwYWxhZGluL2FkbWluL3YxL2NhcGFiaWxpdHlfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSL+AQoTQ2FwYWJpbGl0eVByaW5jaXBhbBI5CgRraW5kGAEgASgOMh8ucGFsYWRpbi5hZG1pbi52MS5QcmluY2lwYWxLaW5kQgq6SAeCAQQQASAAEhsKCXRlbmFudF9pZBgCIAEoCUIIukgFcgOwAQESGAoHc3ViamVjdBgDIAEoCUIHukgEcgIQARISCgphZ2VudF90eXBlGAogASgJEhUKDWFnZW50X3ZlcnNpb24YCyABKAkSDgoGcnVuX2lkGAwgASgJEhcKD3BhcmVudF9hZ2VudF9pZBgNIAEoCRINCgVtb2RlbBgOIAEoCRISCgptY3BfY2xpZW50GA8gASgJIrMCChFDYXBhYmlsaXR5Q2F2ZWF0cxIVCgNvcHMYASADKAlCCLpIBZIBAggBEhkKEXJlc291cmNlX3ByZWZpeGVzGAIgAygJEhUKDXJlc291cmNlX3VyaXMYAyADKAkSFAoMbWF4X3JlcXVlc3RzGAQgASgFEhoKEmFsbG93X3RhaW50ZWRfcmVhZBgGIAEoCBIgChhpZGVtcG90ZW5jeV9rZXlfcmVxdWlyZWQYByABKAgSFgoOc291cmNlX2lwX2NpZHIYCCADKAkSEQoJdW5pdF9jb2RlGAkgASgJEicKEW1heF9idWRnZXRfbWljcm9zGAogASgDQge6SAQiAigASACIAQFCFAoSX21heF9idWRnZXRfbWljcm9zSgQIBRAGUhFtYXhfYnVkZ2V0X2Ftb3VudCKRAwoKQ2FwYWJpbGl0eRIPCgJpZBgBIAEoCUID4EEDEhMKBmlzc3VlchgCIAEoCUID4EEDEjYKB3N1YmplY3QYAyABKAsyJS5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlQcmluY2lwYWwSEAoIYXVkaWVuY2UYBCADKAkSNAoHY2F2ZWF0cxgFIAEoCzIjLnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eUNhdmVhdHMSMgoJaXNzdWVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCm5vdF9iZWZvcmUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKZXhwaXJlc19hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIRCglwYXJlbnRfaWQYCSABKAkSEgoKZ2VuZXJhdGlvbhgKIAEoAxIYChBjb25maXJtYXRpb25famt0GAsgASgJIsACCh1DYXBhYmlsaXR5U2VydmljZUlzc3VlUmVxdWVzdBI+CgdzdWJqZWN0GAEgASgLMiUucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5UHJpbmNpcGFsQga6SAPIAQESGgoIYXVkaWVuY2UYAiADKAlCCLpIBZIBAggBEjwKB2NhdmVhdHMYAyABKAsyIy5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlDYXZlYXRzQga6SAPIAQESHAoLdHRsX3NlY29uZHMYBCABKANCB7pIBCICKAASLgoKbm90X2JlZm9yZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNwoQY29uZmlybWF0aW9uX2prdBgGIAEoCUIdukga2AEBchUyE15bQS1aYS16MC05Xy1dezQzfSQifAoeQ2FwYWJpbGl0eVNlcnZpY2VJc3N1ZVJlc3BvbnNlEjAKCmNhcGFiaWxpdHkYASABKAsyHC5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHkSEgoFdG9rZW4YAiABKAlCA4ABARIUCgdiaXNjdWl0GAMgASgJQgOAAQEixgIKIENhcGFiaWxpdHlTZXJ2aWNlRGVsZWdhdGVSZXF1ZXN0EhsKCXBhcmVudF9pZBgBIAEoCUIIukgFcgOwAQESNgoHc3ViamVjdBgCIAEoCzIlLnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eVByaW5jaXBhbBIQCghhdWRpZW5jZRgDIAMoCRI0CgdjYXZlYXRzGAQgASgLMiMucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5Q2F2ZWF0cxIcCgt0dGxfc2Vjb25kcxgFIAEoA0IHukgEIgIoABIuCgpub3RfYmVmb3JlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI3ChBjb25maXJtYXRpb25famt0GAcgASgJQh26SBrYAQFyFTITXltBLVphLXowLTlfLV17NDN9JCJgCh5DYXBhYmlsaXR5U2VydmljZVJldm9rZVJlcXVlc3QSFAoCaWQYASABKAlCCLpIBXIDsAEBEg4KBnJlYXNvbhgCIAEoCRIYChBjYXNjYWRlX2NoaWxkcmVuGAMgASgIIiEKH0NhcGFiaWxpdHlTZXJ2aWNlUmV2b2tlUmVzcG9uc2UiUgolQ2FwYWJpbGl0eVNlcnZpY2VSZXZva2VCaXNjdWl0UmVxdWVzdBIZCgV0b2tlbhgBIAEoCUIKgAEBukgEcgIQARIOCgZyZWFzb24YAiABKAkiPwomQ2FwYWJpbGl0eVNlcnZpY2VSZXZva2VCaXNjdWl0UmVzcG9uc2USFQoNY2FwYWJpbGl0eV9pZBgBIAEoCSJECidDYXBhYmlsaXR5U2VydmljZUdldEJpc2N1aXRVc2FnZVJlcXVlc3QSGQoFdG9rZW4YASABKAlCCoABAbpIBHICEAEiqgEKGkNhcGFiaWxpdHlCaXNjdWl0Q29weVVzYWdlEhUKDXJldm9jYXRpb25faWQYASABKAwSFAoMbWF4X3JlcXVlc3RzGAIgASgDEhkKEW1heF9idWRnZXRfbWljcm9zGAMgASgDEhUKDXJlcXVlc3RfY291bnQYBCABKAMSFAoMc3BlbnRfbWljcm9zGAUgASgDEhcKD3Jlc2VydmVkX21pY3JvcxgGIAEoAyKSAQooQ2FwYWJpbGl0eVNlcnZpY2VHZXRCaXNjdWl0VXNhZ2VSZXNwb25zZRIVCg1jYXBhYmlsaXR5X2lkGAEgASgJEhEKCXVuaXRfY29kZRgCIAEoCRI8CgZjb3BpZXMYAyADKAsyLC5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlCaXNjdWl0Q29weVVzYWdlIvwBChxDYXBhYmlsaXR5U2VydmljZUxpc3RSZXF1ZXN0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQESQwoOcHJpbmNpcGFsX2tpbmQYAiABKA4yHy5wYWxhZGluLmFkbWluLnYxLlByaW5jaXBhbEtpbmRCCrpIB4IBBBABIAASGAoHc3ViamVjdBgDIAEoCUIHukgEcgIQARIXCg9pbmNsdWRlX2V4cGlyZWQYBCABKAgSFwoPaW5jbHVkZV9yZXZva2VkGAUgASgIEhoKCXBhZ2Vfc2l6ZRgGIAEoBUIHukgEGgIoABISCgpwYWdlX3Rva2VuGAcgASgJImwKHUNhcGFiaWxpdHlTZXJ2aWNlTGlzdFJlc3BvbnNlEjIKDGNhcGFiaWxpdGllcxgBIAMoCzIcLnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiOAogQ2FwYWJpbGl0eVNlcnZpY2VHZXRVc2FnZVJlcXVlc3QSFAoCaWQYASABKAlCCLpIBXIDsAEBIr4BCiFDYXBhYmlsaXR5U2VydmljZUdldFVzYWdlUmVzcG9uc2USFQoNY2FwYWJpbGl0eV9pZBgBIAEoCRIVCg1yZXF1ZXN0X2NvdW50GAIgASgDEi4KCnVwZGF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhEKCXVuaXRfY29kZRgFIAEoCRIUCgxzcGVudF9taWNyb3MYBiABKANKBAgDEARSDHNwZW50X2Ftb3VudCp+Cg1QcmluY2lwYWxLaW5kEh4KGlBSSU5DSVBBTF9LSU5EX1VOU1BFQ0lGSUVEEAASFwoTUFJJTkNJUEFMX0tJTkRfVVNFUhABEhgKFFBSSU5DSVBBTF9LSU5EX0FHRU5UEAISGgoWUFJJTkNJUEFMX0tJTkRfU0VSVklDRRADMucGChFDYXBhYmlsaXR5U2VydmljZRJqCgVJc3N1ZRIvLnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VJc3N1ZVJlcXVlc3QaMC5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlSXNzdWVSZXNwb25zZRJwCghEZWxlZ2F0ZRIyLnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VEZWxlZ2F0ZVJlcXVlc3QaMC5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlSXNzdWVSZXNwb25zZRJyCgZSZXZva2USMC5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlUmV2b2tlUmVxdWVzdBoxLnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VSZXZva2VSZXNwb25zZSIDkAICEocBCg1SZXZva2VCaXNjdWl0EjcucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZVJldm9rZUJpc2N1aXRSZXF1ZXN0GjgucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZVJldm9rZUJpc2N1aXRSZXNwb25zZSIDkAICEo0BCg9HZXRCaXNjdWl0VXNhZ2USOS5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlR2V0QmlzY3VpdFVzYWdlUmVxdWVzdBo6LnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eVNlcnZpY2VHZXRCaXNjdWl0VXNhZ2VSZXNwb25zZSIDkAIBEmwKBExpc3QSLi5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlTGlzdFJlcXVlc3QaLy5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlTGlzdFJlc3BvbnNlIgOQAgESeAoIR2V0VXNhZ2USMi5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTZXJ2aWNlR2V0VXNhZ2VSZXF1ZXN0GjMucGFsYWRpbi5hZG1pbi52MS5DYXBhYmlsaXR5U2VydmljZUdldFVzYWdlUmVzcG9uc2UiA5ACAUJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
       file_google_protobuf_timestamp,
@@ -488,6 +488,114 @@ export const CapabilityServiceRevokeBiscuitResponseSchema: GenMessage<Capability
   messageDesc(file_paladin_admin_v1_capability_service, 9);
 
 /**
+ * @generated from message paladin.admin.v1.CapabilityServiceGetBiscuitUsageRequest
+ */
+export type CapabilityServiceGetBiscuitUsageRequest =
+  Message<"paladin.admin.v1.CapabilityServiceGetBiscuitUsageRequest"> & {
+    /**
+     * token is the Biscuit copy, exactly as its holder presents it.
+     *
+     * @generated from field: string token = 1;
+     */
+    token: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.CapabilityServiceGetBiscuitUsageRequest.
+ * Use `create(CapabilityServiceGetBiscuitUsageRequestSchema)` to create a new message.
+ */
+export const CapabilityServiceGetBiscuitUsageRequestSchema: GenMessage<CapabilityServiceGetBiscuitUsageRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_capability_service, 10);
+
+/**
+ * CapabilityBiscuitCopyUsage is one set of limits an attenuation block put on
+ * a copy, and what that copy and every copy attenuated from it have used.
+ *
+ * @generated from message paladin.admin.v1.CapabilityBiscuitCopyUsage
+ */
+export type CapabilityBiscuitCopyUsage =
+  Message<"paladin.admin.v1.CapabilityBiscuitCopyUsage"> & {
+    /**
+     * revocation_id is the id of the block that set the limits.
+     *
+     * @generated from field: bytes revocation_id = 1;
+     */
+    revocationId: Uint8Array;
+
+    /**
+     * max_requests and max_budget_micros are the limits; 0 sets none.
+     *
+     * @generated from field: int64 max_requests = 2;
+     */
+    maxRequests: bigint;
+
+    /**
+     * @generated from field: int64 max_budget_micros = 3;
+     */
+    maxBudgetMicros: bigint;
+
+    /**
+     * @generated from field: int64 request_count = 4;
+     */
+    requestCount: bigint;
+
+    /**
+     * spent_micros and reserved_micros are in millionths of unit_code.
+     *
+     * @generated from field: int64 spent_micros = 5;
+     */
+    spentMicros: bigint;
+
+    /**
+     * @generated from field: int64 reserved_micros = 6;
+     */
+    reservedMicros: bigint;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.CapabilityBiscuitCopyUsage.
+ * Use `create(CapabilityBiscuitCopyUsageSchema)` to create a new message.
+ */
+export const CapabilityBiscuitCopyUsageSchema: GenMessage<CapabilityBiscuitCopyUsage> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_capability_service, 11);
+
+/**
+ * @generated from message paladin.admin.v1.CapabilityServiceGetBiscuitUsageResponse
+ */
+export type CapabilityServiceGetBiscuitUsageResponse =
+  Message<"paladin.admin.v1.CapabilityServiceGetBiscuitUsageResponse"> & {
+    /**
+     * @generated from field: string capability_id = 1;
+     */
+    capabilityId: string;
+
+    /**
+     * unit_code is the capability's unit, which its copies' budgets share.
+     *
+     * @generated from field: string unit_code = 2;
+     */
+    unitCode: string;
+
+    /**
+     * copies are innermost first: the copy itself when it set limits, then the
+     * copies it was attenuated from.
+     *
+     * @generated from field: repeated paladin.admin.v1.CapabilityBiscuitCopyUsage copies = 3;
+     */
+    copies: CapabilityBiscuitCopyUsage[];
+  };
+
+/**
+ * Describes the message paladin.admin.v1.CapabilityServiceGetBiscuitUsageResponse.
+ * Use `create(CapabilityServiceGetBiscuitUsageResponseSchema)` to create a new message.
+ */
+export const CapabilityServiceGetBiscuitUsageResponseSchema: GenMessage<CapabilityServiceGetBiscuitUsageResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_capability_service, 12);
+
+/**
  * @generated from message paladin.admin.v1.CapabilityServiceListRequest
  */
 export type CapabilityServiceListRequest =
@@ -534,7 +642,7 @@ export type CapabilityServiceListRequest =
  */
 export const CapabilityServiceListRequestSchema: GenMessage<CapabilityServiceListRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_capability_service, 10);
+  messageDesc(file_paladin_admin_v1_capability_service, 13);
 
 /**
  * @generated from message paladin.admin.v1.CapabilityServiceListResponse
@@ -558,7 +666,7 @@ export type CapabilityServiceListResponse =
  */
 export const CapabilityServiceListResponseSchema: GenMessage<CapabilityServiceListResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_capability_service, 11);
+  messageDesc(file_paladin_admin_v1_capability_service, 14);
 
 /**
  * @generated from message paladin.admin.v1.CapabilityServiceGetUsageRequest
@@ -577,7 +685,7 @@ export type CapabilityServiceGetUsageRequest =
  */
 export const CapabilityServiceGetUsageRequestSchema: GenMessage<CapabilityServiceGetUsageRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_capability_service, 12);
+  messageDesc(file_paladin_admin_v1_capability_service, 15);
 
 /**
  * @generated from message paladin.admin.v1.CapabilityServiceGetUsageResponse
@@ -620,7 +728,7 @@ export type CapabilityServiceGetUsageResponse =
  */
 export const CapabilityServiceGetUsageResponseSchema: GenMessage<CapabilityServiceGetUsageResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_capability_service, 13);
+  messageDesc(file_paladin_admin_v1_capability_service, 16);
 
 /**
  * PrincipalKind discriminates the principal-shape oneof. Mirrors the
@@ -725,6 +833,19 @@ export const CapabilityService: GenService<{
     methodKind: "unary";
     input: typeof CapabilityServiceRevokeBiscuitRequestSchema;
     output: typeof CapabilityServiceRevokeBiscuitResponseSchema;
+  };
+  /**
+   * GetBiscuitUsage returns the limits in force on one copy of a
+   * capability's Biscuit — its own and those of the copies it was attenuated
+   * from — with what has been counted against each. A copy gets limits only
+   * by attenuation; one under none returns no copies.
+   *
+   * @generated from rpc paladin.admin.v1.CapabilityService.GetBiscuitUsage
+   */
+  getBiscuitUsage: {
+    methodKind: "unary";
+    input: typeof CapabilityServiceGetBiscuitUsageRequestSchema;
+    output: typeof CapabilityServiceGetBiscuitUsageResponseSchema;
   };
   /**
    * List enumerates capabilities issued to a principal. Cursor-paginated.
