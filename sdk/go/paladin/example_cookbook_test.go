@@ -11,8 +11,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
@@ -206,6 +209,116 @@ func Example_resumableMultipart() {
 	}
 	fmt.Println(len(have), len(parts), done.Msg.GetSizeBytes() == int64(len(body)))
 	// Output: 1 3 true
+}
+
+// sessionStore keeps open multipart sessions where a restart finds them: a
+// table in the application's database, here a map.
+type sessionStore struct {
+	mu       sync.Mutex
+	sessions map[string]paladin.UploadSession
+}
+
+func (s *sessionStore) Load(key string) (paladin.UploadSession, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[key]
+	return session, ok
+}
+
+func (s *sessionStore) Save(key string, session paladin.UploadSession) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sessions[key] = session
+}
+
+func (s *sessionStore) Delete(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.sessions, key)
+}
+
+// transient reports whether an upload that failed with err may succeed when
+// tried again: storage busy or down, an expired URL, Paladin unavailable or
+// busy, the network. Anything else — a refusal, a bad request — fails again.
+func transient(err error) bool {
+	var te *paladin.TransferError
+	if errors.As(err, &te) {
+		return te.Status >= 500 || te.Status == 429 || paladin.Expired(err)
+	}
+	switch connect.CodeOf(err) {
+	case connect.CodeUnavailable, connect.CodeResourceExhausted, connect.CodeDeadlineExceeded:
+		return true
+	}
+	var ne net.Error
+	return errors.As(err, &ne)
+}
+
+// uploadDurably runs Upload until it completes, at most attempts times. A
+// multipart session is saved as soon as it opens, so the next attempt — in
+// this process or after a restart — resumes it and sends only the parts
+// storage does not hold; it is dropped once the object is complete. Upload
+// itself retries each request and completes the object; this adds what it
+// leaves to the application: keeping the session, and trying the whole
+// upload again.
+func uploadDurably(ctx context.Context, data *paladin.DataPlane, in paladin.UploadInput,
+	store *sessionStore, attempts int,
+) (*datav1.Object, int, error) {
+	key := in.Parent + "/" + in.Key
+	var err error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		opts := paladin.UploadOptions{OnSession: func(s paladin.UploadSession) { store.Save(key, s) }}
+		if s, ok := store.Load(key); ok {
+			opts.Resume = &s
+		}
+		var obj *datav1.Object
+		if obj, err = paladin.Upload(ctx, data, in, opts); err == nil {
+			store.Delete(key)
+			return obj, attempt, nil
+		}
+		switch {
+		case opts.Resume != nil && errors.Is(err, paladin.ErrNotFound):
+			store.Delete(key) // the server swept the session: start over
+		case !transient(err):
+			return nil, attempt, err
+		}
+		select {
+		case <-time.After(time.Duration(attempt) * 10 * time.Millisecond): // longer in production
+		case <-ctx.Done():
+			return nil, attempt, ctx.Err()
+		}
+	}
+	return nil, attempts, err
+}
+
+// An upload kept until it completes: a failure part-way is tried again,
+// resuming the multipart session where it stopped.
+func Example_durableUpload() {
+	srv, stop := paladintest.Start()
+	defer stop()
+	transfer, err := paladin.NewTransfer(paladin.WithTransferAttempts(1)) // so one refusal fails the upload
+	if err != nil {
+		panic(err)
+	}
+	p := srv.Connect(paladin.WithTransfer(transfer))
+	ctx := context.Background()
+	body := bytes.Repeat([]byte("x"), 2*paladintest.PartSize+10)
+
+	// Storage is busy for one part of the first attempt.
+	var puts atomic.Int32
+	srv.FailStorage(func(r *http.Request) (int, string) {
+		if r.Method == http.MethodPut && puts.Add(1) == 2 {
+			return http.StatusServiceUnavailable, "busy"
+		}
+		return 0, ""
+	})
+	store := &sessionStore{sessions: map[string]paladin.UploadSession{}}
+	obj, attempts, err := uploadDurably(ctx, p.Data, paladin.UploadInput{
+		Parent: srv.Collection().String(), Key: "big.bin", ContentType: "application/octet-stream",
+		Size: int64(len(body)), Body: bytes.NewReader(body),
+	}, store, 5)
+	_, open := store.Load(srv.Collection().String() + "/big.bin")
+	fmt.Println(attempts, obj.GetSizeBytes() == int64(len(body)), open, err)
+	// Output: 2 true false <nil>
 }
 
 // A large object streamed into a consumer, never held whole, and verified
