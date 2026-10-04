@@ -139,3 +139,38 @@ func ceilingsOf(ids [][]byte, budgets []int64) ([]capability.CopyCeiling, error)
 	}
 	return out, nil
 }
+
+var _ capability.CopyUsageReader = (*UsageStore)(nil)
+
+// CopyUsage implements capability.CopyUsageReader. It reads under the
+// caller's tenant scoping: a copy of another tenant's capability is absent,
+// exactly as one never used.
+func (s *UsageStore) CopyUsage(ctx context.Context, revocationIDs [][]byte) ([]capability.CopyUsage, error) {
+	if len(revocationIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := s.pool.Query(ctx, `
+SELECT revocation_id, capability_id, request_count, spent, reserved
+FROM   capability_copy_usage
+WHERE  revocation_id = ANY($1::bytea[])`, revocationIDs)
+	if err != nil {
+		return nil, fmt.Errorf("capability/postgres: copy usage: %w", err)
+	}
+	defer rows.Close()
+	var out []capability.CopyUsage
+	for rows.Next() {
+		var (
+			u               capability.CopyUsage
+			spent, reserved pgtype.Numeric
+		)
+		if err := rows.Scan(&u.RevocationID, &u.CapabilityID, &u.RequestCount, &spent, &reserved); err != nil {
+			return nil, fmt.Errorf("capability/postgres: copy usage scan: %w", err)
+		}
+		u.SpentAmount, u.ReservedAmount = floatFromNumeric(spent), floatFromNumeric(reserved)
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("capability/postgres: copy usage: %w", err)
+	}
+	return out, nil
+}
