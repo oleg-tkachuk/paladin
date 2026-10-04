@@ -1429,6 +1429,23 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Architecture (post-review 2026-05)
 
+### A platform admin's data-plane work is not in the target tenant's trail
+
+- **Status:** Deferred.
+- **Reason:** the data plane acts on the tenant a platform admin names
+  (ADR-0022), but three things still key on the admin's own tenant. The data
+  plane has no audit interceptor at all, and the audit log records only the
+  actor's tenant, so the target tenant's audit page never shows what an admin
+  did to its objects. The tenant rate limit and idempotency keys run before
+  the name is parsed and count against the admin's tenant: an admin's uploads
+  do not draw on the target's rate budget, and one Idempotency-Key reused
+  against two tenants collides.
+- **Definition of Done:** data-plane mutations are audited with the target
+  tenant beside the actor's, and the tenant audit page shows rows where the
+  tenant is either; the rate limiter and idempotency store key on the tenant
+  the request acts on, with tests through the assembled data plane.
+- **Blockers:** an audit schema change (a target-tenant column and its RLS).
+
 ### Audit form (B): staging table + projector (latency mitigation only)
 
 - **Status:** Deferred — crash-durability is DONE via form (A)

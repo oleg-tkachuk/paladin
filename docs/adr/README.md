@@ -31,6 +31,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0019](0019-object-search-and-read-replica.md) | Object search under RLS, and an opt-in read replica | Accepted |
 | [0020](0020-sdk-integration-grade.md) | The SDKs to integration grade | Accepted |
 | [0021](0021-biscuit-copies.md) | Biscuit copies — narrowed offline, revoked and counted by block | Accepted |
+| [0022](0022-data-plane-acts-on-the-named-tenant.md) | The data plane acts on the tenant a platform admin names | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
