@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -80,14 +81,20 @@ type BucketResolver interface {
 	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
 }
 
+// ObjectFinder reads the objects a batch names by id, as the worker does.
+type ObjectFinder interface {
+	FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) ([]objecth.Object, error)
+}
+
 type Handler struct {
 	submitter Submitter
 	policy    cedar.Authorizer
 	buckets   BucketResolver
+	objects   ObjectFinder
 }
 
-func NewHandler(submitter Submitter, policy cedar.Authorizer, buckets BucketResolver) *Handler {
-	return &Handler{submitter: submitter, policy: policy, buckets: buckets}
+func NewHandler(submitter Submitter, policy cedar.Authorizer, buckets BucketResolver, objects ObjectFinder) *Handler {
+	return &Handler{submitter: submitter, policy: policy, buckets: buckets, objects: objects}
 }
 
 // BatchDelete validates and enqueues an async delete across up to 10k objects.
@@ -106,11 +113,7 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
 	}
-	// Capability gate: BatchDelete names its objects by ID, not URI, so it
-	// asserts OpDelete with no resource. A resource-restricted capability is
-	// therefore refused (it cannot be shown to stay in scope); an
-	// unrestricted one needs only the op.
-	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, ""); err != nil {
+	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, capability.OpDelete); err != nil {
 		return uuid.Nil, err
 	}
 	// Collection-level authorization, and the ONLY authorization this batch
@@ -144,7 +147,7 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, ""); err != nil {
+	if err := h.assertCopy(ctx, tenantID, args); err != nil {
 		return uuid.Nil, err
 	}
 	// Require copy on source and put on destination — collection-level check.
@@ -171,7 +174,7 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("object_ids must be non-empty"))
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpTag, ""); err != nil {
+	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, capability.OpTag); err != nil {
 		return uuid.Nil, err
 	}
 	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionUpdateObject); err != nil {
@@ -200,7 +203,7 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 	}
 	// Restoring a soft-deleted object is a write to the lifecycle —
 	// the operator authority required mirrors the put path.
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, ""); err != nil {
+	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, capability.OpPut); err != nil {
 		return uuid.Nil, err
 	}
 	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionRestoreObject); err != nil {
@@ -208,6 +211,99 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 	}
 	md, _ := json.Marshal(args)
 	return h.chargeAndSubmit(ctx, "BatchRestoreObjects", md)
+}
+
+// batchObjects is what a batch will act on: the objects of collection among
+// ids, read and filtered as the worker reads them. Ids missing here are left
+// for the worker to report as not found.
+func (h *Handler) batchObjects(ctx context.Context, tenantID uuid.UUID, collection string, ids []uuid.UUID) ([]objecth.Object, error) {
+	if h.objects == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("batch: object lookup not wired"))
+	}
+	found, err := h.objects.FindByIDs(ctx, tenantID, ids)
+	if err != nil {
+		return nil, apiutil.MapError(fmt.Errorf("batch lookup: %w", err))
+	}
+	objs := make([]objecth.Object, 0, len(found))
+	for _, o := range found {
+		if o.Collection == collection {
+			objs = append(objs, o)
+		}
+	}
+	return objs, nil
+}
+
+// errNothingInScope refuses a resource-restricted capability a batch that
+// would act on none of its objects: nothing in it is shown to be in scope, so
+// the capability is refused as it would be any unbound operation. Missing ids
+// are otherwise the worker's to report, per object.
+func errNothingInScope(collection string) error {
+	return connect.NewError(connect.CodePermissionDenied,
+		fmt.Errorf("%w: none of object_ids is an object of collection %q", capability.ErrResourceNotAllowed, collection))
+}
+
+// assertOnObjects checks the capability on ctx, if any, for op over a batch.
+// A capability that is not resource-restricted needs only the op, and nothing
+// is read. A restricted one is checked against each object the batch will act
+// on; the batch names them by id, so they are read to learn their URIs.
+func (h *Handler) assertOnObjects(ctx context.Context, tenantID uuid.UUID, collection string, ids []uuid.UUID, op capability.Op) error {
+	cap, ok := auth.CapabilityFromContext(ctx)
+	if !ok || !cap.Caveats.RestrictsResources() {
+		return auth.AssertCapabilityOp(ctx, op, "")
+	}
+	objs, err := h.batchObjects(ctx, tenantID, collection, ids)
+	if err != nil {
+		return err
+	}
+	if len(objs) == 0 {
+		return errNothingInScope(collection)
+	}
+	for _, o := range objs {
+		uri := objecth.CapabilityObjectURI(tenantID, o.Collection, o.Key)
+		if err := auth.AssertCapabilityOpOnObject(ctx, op, uri, len(o.Taint) > 0); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// assertCopy checks the capability on ctx, if any, for a BatchCopy: get on
+// each source and put on each destination. The sources are read whatever the
+// capability's resource caveats, because a copy reads them: a capability not
+// allowed tainted reads must not copy a tainted object where it can read it.
+func (h *Handler) assertCopy(ctx context.Context, tenantID uuid.UUID, args BatchCopyArgs) error {
+	cap, ok := auth.CapabilityFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	objs, err := h.batchObjects(ctx, tenantID, args.SrcCollection, args.ObjectIDs)
+	if err != nil {
+		return err
+	}
+	if len(objs) == 0 {
+		if cap.Caveats.RestrictsResources() {
+			return errNothingInScope(args.SrcCollection)
+		}
+		if err := auth.AssertCapabilityOp(ctx, capability.OpGet, ""); err != nil {
+			return err
+		}
+		return auth.AssertCapabilityOp(ctx, capability.OpPut, "")
+	}
+	for _, o := range objs {
+		src := objecth.CapabilityObjectURI(tenantID, o.Collection, o.Key)
+		if err := auth.AssertCapabilityOpOnObject(ctx, capability.OpGet, src, len(o.Taint) > 0); err != nil {
+			return err
+		}
+	}
+	// Put last: the op asserted last is the one a charge is attributed to.
+	for _, o := range objs {
+		// The worker writes each copy at KeyPrefix + the source key.
+		dst := objecth.CapabilityObjectURI(tenantID, args.DstCollection, args.KeyPrefix+o.Key)
+		if err := auth.AssertCapabilityOpOnObject(ctx, capability.OpPut, dst, false); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // authorize runs the submit-time Cedar check for ONE target object-key. It

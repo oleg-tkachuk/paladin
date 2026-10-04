@@ -83,12 +83,12 @@ func TestTaintedLooksUpTheObjectTheURINames(t *testing.T) {
 	h, _, tenantID := newTaintHandler(nil)
 	ctx := context.Background()
 	cases := map[string]bool{
-		capabilityObjectURI(tenantID, "docs", "a.pdf"):     true,
-		capabilityObjectURI(tenantID, "docs", "b.pdf"):     false,
+		CapabilityObjectURI(tenantID, "docs", "a.pdf"):     true,
+		CapabilityObjectURI(tenantID, "docs", "b.pdf"):     false,
 		capabilityCollectionURI(tenantID, "docs"):          false, // a prefix names no object
 		"object://not-a-uuid/docs/a.pdf":                   false,
 		"something-else":                                   false,
-		capabilityObjectURI(tenantID, "docs", "dir/a.pdf"): false,
+		CapabilityObjectURI(tenantID, "docs", "dir/a.pdf"): false,
 	}
 	for uri, want := range cases {
 		got, err := h.Tainted(ctx, uri)
@@ -100,7 +100,7 @@ func TestTaintedLooksUpTheObjectTheURINames(t *testing.T) {
 
 func TestParseCapabilityObjectURIKeepsSlashesInTheKey(t *testing.T) {
 	tenantID := uuid.New()
-	gotTenant, collection, key, ok := parseCapabilityObjectURI(capabilityObjectURI(tenantID, "docs", "2026/q3/report.pdf"))
+	gotTenant, collection, key, ok := parseCapabilityObjectURI(CapabilityObjectURI(tenantID, "docs", "2026/q3/report.pdf"))
 	if !ok || gotTenant != tenantID || collection != "docs" || key != "2026/q3/report.pdf" {
 		t.Fatalf("parse = %v %q %q %v", gotTenant, collection, key, ok)
 	}

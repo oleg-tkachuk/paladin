@@ -125,7 +125,7 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 
 	// One batched read replaces a per-id FindByName round-trip inside
 	// copyOne; missing ids surface as per-row "not found" failures.
-	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.ObjectIDs)
+	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.SrcCollection, args.ObjectIDs)
 	if err != nil {
 		return nil, fmt.Errorf("batch lookup: %w", err)
 	}
