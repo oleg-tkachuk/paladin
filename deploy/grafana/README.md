@@ -8,9 +8,9 @@ through `rule_files:` or as the `spec.groups` of a `PrometheusRule`.
 | File | Contents |
 |------|----------|
 | `paladin-rpc-red.json` | RPC rate, errors and duration per service and method |
-| `paladin-operations.json` | outbox, workers, Postgres, rate limiting, presigns, capability charges |
+| `paladin-operations.json` | outbox, workers, Postgres, rate limiting, presigns, capability charges, overdue uploads |
 | `worker-alerts.yaml` | a worker that stopped ticking, or fails every tick |
-| `paladin-alerts.yaml` | outbox not draining, rate limiting failing open, refused capability charges, throttled tenants, read replica out of sync |
+| `paladin-alerts.yaml` | outbox not draining, rate limiting failing open, refused capability charges, throttled tenants, read replica out of sync, uploads the reconciler cannot settle |
 
 `task -t Taskfile.dev.yaml verify:grafana-rules` parses every rule file and
 dashboard query with `promtool`, and runs the alert unit tests in
@@ -98,11 +98,12 @@ The work that does not show up in RPC metrics.
 | Rate limiting failing open, Per-tenant rate-limit decisions | `paladin_tenant_ratelimit_*`, `paladin_api_token_ratelimit_fail_open_total` | `internal/middleware/tenant_ratelimit.go`, `internal/auth/api_token_metrics.go` |
 | Presigns, Presign latency | `paladin_presign_total`, `paladin_presign_duration_seconds` (labels `op`, `outcome`) | `internal/metrics/domain.go` |
 | Capability charges | `paladin_capability_charges_total` (labels `outcome`, `tenant_id`) | `internal/metrics/domain.go` |
+| Overdue uploads | `paladin_objects_pending_overdue`, `paladin_objects_pending_overdue_age_seconds` | `internal/worker/metrics.go`, sampled by the reconciler |
 
 `tenant_id` appears on the rate-limit and capability-charge series only; the
 outbox gauge carries the deepest tenant's depth, not a per-tenant series.
 
-## `paladin-alerts.yaml` — outbox, rate limiting, charges, read replica
+## `paladin-alerts.yaml` — outbox, rate limiting, charges, read replica, uploads
 
 | Alert | Fires when | Severity |
 |-------|-----------|----------|
@@ -111,6 +112,7 @@ outbox gauge carries the deepest tenant's depth, not a per-tenant series.
 | `PaladinCapabilityChargesRefused` | over 90% of a tenant's charges were refused for 15m | warning |
 | `PaladinTenantThrottled` | the per-tenant limiter refused over 1 req/s for 10m | warning |
 | `PaladinReadReplicaOutOfSync` | the read replica is enabled and no pod has routed a read to it for 15m | warning |
+| `PaladinUploadsNotSettling` | the oldest overdue PENDING object has been past the reconciler's deadline over 30m, for 15m ([runbook](../../docs/runbooks/uploads-not-settling.md)) | warning |
 
 The counters behind the charge and throttling rules exist only after their
 path has run once, and the replica gauge only where the replica is enabled.

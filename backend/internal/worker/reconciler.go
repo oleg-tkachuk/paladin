@@ -75,6 +75,8 @@ func (r *ReconcilerV2) Run(ctx context.Context) error {
 }
 
 func (r *ReconcilerV2) tick(ctx context.Context) {
+	// After the batch, so the gauges show what the tick could not settle.
+	defer r.sampleOverdue(ctx)
 	ids, err := r.sm.ScanPendingExpired(ctx, r.cfg.PendingGraceTTL, r.cfg.BatchSize)
 	if err != nil {
 		r.log.Warn("failed to scan pending objects", zap.Error(err))
@@ -86,6 +88,20 @@ func (r *ReconcilerV2) tick(ctx context.Context) {
 		}
 		r.reconcile(ctx, id)
 	}
+}
+
+// sampleOverdue publishes how many PENDING objects are still past their
+// deadline and how far past it the oldest is.
+func (r *ReconcilerV2) sampleOverdue(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+	count, oldest, err := r.sm.PendingOverdue(ctx, r.cfg.PendingGraceTTL)
+	if err != nil {
+		r.log.Warn("failed to sample overdue pending objects", zap.Error(err))
+		return
+	}
+	recordPendingOverdue(ctx, count, oldest)
 }
 
 func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) {

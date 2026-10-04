@@ -428,6 +428,34 @@
         }
       },
       "id": 13
+    },
+    {
+      "type": "timeseries",
+      "title": "Overdue uploads",
+      "description": "PENDING objects past their presign expiry plus the reconciler's grace, and how far past that the oldest is. A reconciler keeping up holds both near zero; an age that keeps climbing is PaladinUploadsNotSettling.",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "max(paladin_objects_pending_overdue)",
+          "legendFormat": "overdue objects"
+        },
+        {
+          "datasource": "${datasource}",
+          "expr": "max(paladin_objects_pending_overdue_age_seconds)",
+          "legendFormat": "oldest, seconds overdue"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {}
+      },
+      "id": 14
     }
   ]
 }
