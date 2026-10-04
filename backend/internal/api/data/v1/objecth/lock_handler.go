@@ -226,7 +226,7 @@ type resolved struct {
 // the Cedar decision, and the version the lock attaches to.
 func (h *LockHandler) resolve(ctx context.Context, collection, objectID, action string) (resolved, error) {
 	var out resolved
-	tenantID, principal, err := apiutil.CallerContext(ctx)
+	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -283,7 +283,7 @@ func (h *LockHandler) authorizeLock(
 		return nil
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipalFor(principal, tenantID),
+		apiutil.CedarPrincipal(principal),
 		action,
 		&cedar.Resource{
 			TenantID:    tenantID,

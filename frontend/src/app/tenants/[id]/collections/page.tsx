@@ -2,16 +2,10 @@
 
 // /tenants/<id>/collections — tenant-scoped Collection list.
 //
-// We call ListCollections directly with `parent = tenants/<tenantId>`
-// rather than going through the useCollections hook — the hook
-// pins parent to `user.tenantId` from the auth context, which
-// would silently return the signed-in user's list for any URL
-// (broken when a platform-admin pivots into another tenant).
-//
-// Create / Delete still go through the hook because they only
-// fire for the signed-in tenant in practice — UI hides them
-// otherwise. Tracked in BACKLOG: thread tenantId through
-// useCollections when platform-admin cross-tenant mutation lands.
+// The list is read here with `parent = tenants/<tenantId>` from the route;
+// Create and Delete go through useCollections, which acts on the same routed
+// tenant (useActingTenantId), so a platform admin manages another tenant's
+// collections from its page.
 
 import React, { useEffect, useMemo, useState } from "react";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
@@ -29,7 +23,6 @@ import {
 
 import { useCollections } from "@/hooks/useCollections";
 import { useBackends } from "@/hooks/useBackends";
-import { useAuth } from "@/context/AuthContext";
 import { useNotification } from "@/components/ui/Notification";
 
 import { collectionClient } from "@/lib/connect/client";
@@ -81,7 +74,6 @@ const TENANT_KEY_INDEX = 1;
 
 export default function TenantCollectionsPage() {
   const tenant = useTenant();
-  const { user } = useAuth();
   const { createCollection, deleteCollection } = useCollections();
   const {
     backends: backendRows,
@@ -90,7 +82,6 @@ export default function TenantCollectionsPage() {
   } = useBackends();
   const { showNotification } = useNotification();
 
-  const isOwnTenant = user?.tenantId === tenant.tenantId;
   // Only backends that can actually receive a Collection. A disabled one
   // cannot, and a drained (read-only) one cannot either — offering them puts
   // a trap in the dialog: the operator picks it, no bucket is available, and
@@ -247,12 +238,10 @@ export default function TenantCollectionsPage() {
             Tenant-scoped namespaces routed to a physical bucket.
           </p>
         </div>
-        {isOwnTenant && (
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="size-4" />
-            New Collection
-          </Button>
-        )}
+        <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <PlusIcon className="size-4" />
+          New Collection
+        </Button>
       </div>
 
       {/* Filter bar */}
@@ -336,7 +325,7 @@ export default function TenantCollectionsPage() {
                         ? "No Collections match your search."
                         : "No Collections yet."}
                     </p>
-                    {!search && isOwnTenant && (
+                    {!search && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -398,15 +387,13 @@ export default function TenantCollectionsPage() {
                             View details
                           </Link>
                         </DropdownMenuItem>
-                        {isOwnTenant && (
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={() => setDeleteTarget(ok)}
-                          >
-                            <TrashIcon className="size-4" />
-                            Delete Collection
-                          </DropdownMenuItem>
-                        )}
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() => setDeleteTarget(ok)}
+                        >
+                          <TrashIcon className="size-4" />
+                          Delete Collection
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

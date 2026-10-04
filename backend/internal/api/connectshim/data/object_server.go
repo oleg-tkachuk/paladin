@@ -67,7 +67,7 @@ func (s *ObjectServer) SetObjectTaint(ctx context.Context, req *connect.Request[
 	if s.Taints == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("object taint not wired"))
 	}
-	collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -80,7 +80,7 @@ func (s *ObjectServer) SetObjectTaint(ctx context.Context, req *connect.Request[
 
 func (s *ObjectServer) UploadObject(ctx context.Context, req *connect.Request[pb.UploadObjectRequest]) (*connect.Response[pb.UploadObjectResponse], error) {
 	m := req.Msg
-	collection, err := collectionNameParts(ctx, m.GetParent())
+	ctx, collection, err := collectionNameParts(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -111,7 +111,7 @@ func (s *ObjectServer) UploadObject(ctx context.Context, req *connect.Request[pb
 
 func (s *ObjectServer) DownloadObject(ctx context.Context, req *connect.Request[pb.DownloadObjectRequest]) (*connect.Response[pb.DownloadObjectResponse], error) {
 	m := req.Msg
-	collection, objectID, err := objectNameParts(ctx, m.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -128,7 +128,7 @@ func (s *ObjectServer) DownloadObject(ctx context.Context, req *connect.Request[
 }
 
 func (s *ObjectServer) GetObject(ctx context.Context, req *connect.Request[pb.GetObjectRequest]) (*connect.Response[pb.Object], error) {
-	collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -140,7 +140,7 @@ func (s *ObjectServer) GetObject(ctx context.Context, req *connect.Request[pb.Ge
 }
 
 func (s *ObjectServer) LookupObject(ctx context.Context, req *connect.Request[pb.LookupObjectRequest]) (*connect.Response[pb.Object], error) {
-	collection, err := collectionNameParts(ctx, req.Msg.GetParent())
+	ctx, collection, err := collectionNameParts(ctx, req.Msg.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -158,7 +158,7 @@ var updateObjectPaths = []string{"metadata", "tags", "external_ref"}
 
 func (s *ObjectServer) UpdateObject(ctx context.Context, req *connect.Request[pb.UpdateObjectRequest]) (*connect.Response[pb.Object], error) {
 	m := req.Msg
-	collection, objectID, err := objectNameParts(ctx, m.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -188,7 +188,7 @@ func (s *ObjectServer) UpdateObject(ctx context.Context, req *connect.Request[pb
 
 func (s *ObjectServer) CompleteObject(ctx context.Context, req *connect.Request[pb.CompleteObjectRequest]) (*connect.Response[pb.Object], error) {
 	m := req.Msg
-	collection, objectID, err := objectNameParts(ctx, m.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -206,7 +206,7 @@ func (s *ObjectServer) CompleteObject(ctx context.Context, req *connect.Request[
 
 func (s *ObjectServer) DeleteObject(ctx context.Context, req *connect.Request[pb.DeleteObjectRequest]) (*connect.Response[pb.DeleteObjectResponse], error) {
 	m := req.Msg
-	collection, objectID, err := objectNameParts(ctx, m.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -219,7 +219,7 @@ func (s *ObjectServer) DeleteObject(ctx context.Context, req *connect.Request[pb
 }
 
 func (s *ObjectServer) RestoreObject(ctx context.Context, req *connect.Request[pb.RestoreObjectRequest]) (*connect.Response[pb.Object], error) {
-	collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -232,11 +232,11 @@ func (s *ObjectServer) RestoreObject(ctx context.Context, req *connect.Request[p
 
 func (s *ObjectServer) CopyObject(ctx context.Context, req *connect.Request[pb.CopyObjectRequest]) (*connect.Response[pb.Object], error) {
 	m := req.Msg
-	srcCollection, srcObjectID, err := objectNameParts(ctx, m.GetSourceName())
+	ctx, srcCollection, srcObjectID, err := objectNameParts(ctx, m.GetSourceName())
 	if err != nil {
 		return nil, badName(fmt.Errorf("source: %w", err))
 	}
-	destCollection, err := collectionNameParts(ctx, m.GetDestinationCollection())
+	ctx, destCollection, err := collectionNameParts(ctx, m.GetDestinationCollection())
 	if err != nil {
 		return nil, badName(fmt.Errorf("destination: %w", err))
 	}
@@ -261,7 +261,7 @@ func (s *ObjectServer) CopyObject(ctx context.Context, req *connect.Request[pb.C
 
 func (s *ObjectServer) ListObjects(ctx context.Context, req *connect.Request[pb.ListObjectsRequest]) (*connect.Response[pb.ListObjectsResponse], error) {
 	m := req.Msg
-	collection, err := collectionNameParts(ctx, m.GetParent())
+	ctx, collection, err := collectionNameParts(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -285,7 +285,7 @@ func (s *ObjectServer) ListObjects(ctx context.Context, req *connect.Request[pb.
 
 func (s *ObjectServer) CountObjects(ctx context.Context, req *connect.Request[pb.CountObjectsRequest]) (*connect.Response[pb.CountObjectsResponse], error) {
 	m := req.Msg
-	collection, err := collectionNameParts(ctx, m.GetParent())
+	ctx, collection, err := collectionNameParts(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -314,7 +314,7 @@ func (s *ObjectServer) ListObjectVersions(ctx context.Context, req *connect.Requ
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("versioning not wired"))
 	}
 	m := req.Msg
-	parent, err := parseObjectName(ctx, m.GetParent())
+	ctx, parent, err := parseObjectName(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -338,7 +338,7 @@ func (s *ObjectServer) GetObjectVersion(ctx context.Context, req *connect.Reques
 	if s.Versions == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("versioning not wired"))
 	}
-	parent, err := versionParent(req.Msg.GetName())
+	ctx, parent, err := versionParent(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -352,6 +352,10 @@ func (s *ObjectServer) GetObjectVersion(ctx context.Context, req *connect.Reques
 func (s *ObjectServer) RestoreObjectVersion(ctx context.Context, req *connect.Request[pb.RestoreObjectVersionRequest]) (*connect.Response[pb.Object], error) {
 	if s.Versions == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("versioning not wired"))
+	}
+	ctx, _, err := versionParent(ctx, req.Msg.GetName())
+	if err != nil {
+		return nil, badName(err)
 	}
 	out, err := s.Versions.RestoreVersion(ctx, req.Msg.GetName(), req.Msg.GetResourceVersion())
 	if err != nil {
@@ -367,7 +371,7 @@ func (s *ObjectServer) SetObjectRetention(ctx context.Context, req *connect.Requ
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("object lock not wired"))
 	}
 	m := req.Msg
-	collection, objectID, err := objectNameParts(ctx, m.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -391,7 +395,7 @@ func (s *ObjectServer) SetObjectLegalHold(ctx context.Context, req *connect.Requ
 	if s.Locks == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("object lock not wired"))
 	}
-	collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -406,7 +410,7 @@ func (s *ObjectServer) GetObjectLock(ctx context.Context, req *connect.Request[p
 	if s.Locks == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("object lock not wired"))
 	}
-	collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
+	ctx, collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}

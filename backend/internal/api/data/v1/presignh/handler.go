@@ -101,7 +101,7 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 		metrics.RecordPresign(ctx, metrics.PresignOpGet, metrics.PresignOutcome(err), time.Since(start).Seconds())
 	}()
 
-	tenantID, p, err := apiutil.CallerContext(ctx)
+	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
@@ -197,7 +197,7 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 		metrics.RecordPresign(ctx, metrics.PresignOpPut, metrics.PresignOutcome(err), time.Since(start).Seconds())
 	}()
 
-	tenantID, p, err := apiutil.CallerContext(ctx)
+	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return UploadURL{}, err
 	}
@@ -282,7 +282,7 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 // denies a scoped principal — unscoped/roles-only callers are unaffected.
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, key, backendID, bucket, action string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipalFor(p, tenantID),
+		apiutil.CedarPrincipal(p),
 		action,
 		&cedar.Resource{TenantID: tenantID, Collection: collection, Key: key, BackendID: backendID, BucketName: bucket},
 		cedar.RequestContext{Now: time.Now()},

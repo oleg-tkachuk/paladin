@@ -6,7 +6,7 @@ import { create } from "@bufbuild/protobuf";
 import { collectionClient } from "@/lib/connect/client";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
 import { CollectionSchema } from "@/gen/paladin/admin/v1/types_pb";
-import { useAuth } from "@/context/AuthContext";
+import { useActingTenantId } from "@/hooks/useActingTenant";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 import { errorMessage } from "@/hooks/errorContract";
@@ -28,8 +28,8 @@ const MAX_LIST_PAGES = 20;
  * `bucket: string` (full resource name). Page-level callers still use the
  * legacy positional signatures — the hook builds the new request shapes.
  *
- * `parent` is sourced from the signed-in user's tenantId so the page
- * doesn't need to thread it through.
+ * `parent` is the tenant the page acts on (useActingTenantId): the routed
+ * tenant under /tenants/<id>/, the signed-in user's own elsewhere.
  */
 
 const collectionResourceName = (tenantId: string, collection: string) =>
@@ -39,8 +39,8 @@ const bucketResourceName = (backendId: string, bucketId: string) =>
   `storageBackends/${backendId}/buckets/${bucketId}`;
 
 export function useCollections() {
-  const { user } = useAuth();
-  const tenantParent = user?.tenantId ? `tenants/${user.tenantId}` : "";
+  const actingTenantId = useActingTenantId();
+  const tenantParent = actingTenantId ? `tenants/${actingTenantId}` : "";
   // `bumpRefresh` is deliberately absent from the mutation dep arrays below,
   // and each one carries a disable comment saying so. The two hook rules want
   // opposite things here: exhaustive-deps warns that it is missing, and adding
@@ -135,7 +135,7 @@ export function useCollections() {
     ): Promise<Collection> => {
       try {
         setError(null);
-        const tenantId = user?.tenantId ?? "";
+        const tenantId = actingTenantId;
         const collectionResource = create(CollectionSchema, {
           name: collectionResourceName(tenantId, collection),
           tenantId,
@@ -162,7 +162,7 @@ export function useCollections() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bumpRefresh is stable; see the note at its declaration
-    [tenantParent, user?.tenantId],
+    [tenantParent, actingTenantId],
   );
 
   const deleteCollection = useCallback(
@@ -176,7 +176,7 @@ export function useCollections() {
     ): Promise<void> => {
       try {
         setError(null);
-        const tenantId = user?.tenantId ?? "";
+        const tenantId = actingTenantId;
         await collectionClient.deleteCollection({
           name: collectionResourceName(tenantId, collection),
           resourceVersion,
@@ -194,27 +194,22 @@ export function useCollections() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bumpRefresh is stable; see the note at its declaration
-    [user?.tenantId],
+    [actingTenantId],
   );
 
-  // Hoist the tenant id so the callback closes over a scalar, not `user`.
-  // React Compiler infers the dep from the body; referencing `user?.tenantId`
-  // inline made the inferred dep (`user`) disagree with the manual
-  // `[user?.tenantId]` (react-hooks/preserve-manual-memoization).
-  const callerTenantId = user?.tenantId ?? "";
   const getCollection = useCallback(
     async (collection: string): Promise<Collection | null> => {
       try {
         setError(null);
         return await collectionClient.getCollection({
-          name: collectionResourceName(callerTenantId, collection),
+          name: collectionResourceName(actingTenantId, collection),
         });
       } catch (err) {
         // Imperative read (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
-    [callerTenantId],
+    [actingTenantId],
   );
 
   const updateCollection = useCallback(
@@ -226,7 +221,7 @@ export function useCollections() {
     ): Promise<Collection> => {
       try {
         setError(null);
-        const tenantId = user?.tenantId ?? "";
+        const tenantId = actingTenantId;
         const collectionResource = create(CollectionSchema, {
           name: collectionResourceName(tenantId, collection),
           tenantId,
@@ -252,7 +247,7 @@ export function useCollections() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bumpRefresh is stable; see the note at its declaration
-    [user?.tenantId],
+    [actingTenantId],
   );
 
   // Stats RPC was removed during the proto refactor. Surface a stable shape
