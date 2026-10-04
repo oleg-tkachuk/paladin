@@ -30,6 +30,8 @@ const TokenRefreshMargin = 30 * time.Second
 var ErrNoToken = errors.New("paladin: token source has no token")
 
 // TokenSource supplies the bearer token for a call to one audience's plane.
+// An empty token with no error sends the call without Authorization, for a
+// caller that authenticates another way, such as with a capability.
 type TokenSource interface {
 	Token(ctx context.Context, audience string) (string, error)
 }
@@ -225,6 +227,10 @@ func (a *tokenAuth) set(ctx context.Context, h http.Header) error {
 	token, err := a.source.Token(ctx, a.audience)
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	if token == "" {
+		h.Del(HeaderAuthorization)
+		return nil
 	}
 	h.Set(HeaderAuthorization, bearerScheme+" "+token)
 	return nil

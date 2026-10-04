@@ -9,6 +9,7 @@
 package paladin
 
 import (
+	"context"
 	"crypto"
 	"errors"
 	"fmt"
@@ -96,6 +97,8 @@ type config struct {
 	audience       string
 	// dpopKey: WithDPoP.
 	dpopKey crypto.Signer
+	// capabilitySource: WithCapabilitySource.
+	capabilitySource func(context.Context) string
 }
 
 // WithTransfer sends the presigned requests of Upload and Download through t:
@@ -130,6 +133,13 @@ func WithAPIToken(token string) Option {
 // WithCapability sends a capability token in HeaderCapability.
 func WithCapability(token string) Option {
 	return func(cfg *config) { cfg.headers.Set(HeaderCapability, token) }
+}
+
+// WithCapabilitySource sends the capability token source returns for each
+// call's context, for a client that acts for many callers — each call carries
+// its own caller's capability. An empty one leaves WithCapability's, if any.
+func WithCapabilitySource(source func(ctx context.Context) string) Option {
+	return func(cfg *config) { cfg.capabilitySource = source }
 }
 
 // WithRetries retries a unary call up to attempts times in total when the
@@ -206,7 +216,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	}
 	// Outermost: every failure reaches the caller as an *Error, while the
 	// interceptors inside see the Connect error they act on.
-	interceptors := []connect.Interceptor{errorInterceptor{}, &headerInterceptor{headers: cfg.headers}}
+	interceptors := []connect.Interceptor{errorInterceptor{}, &headerInterceptor{headers: cfg.headers, capability: cfg.capabilitySource}}
 	if cfg.tokens != nil {
 		interceptors = append(interceptors, cfg.tokens)
 	}

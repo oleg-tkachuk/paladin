@@ -79,7 +79,7 @@ func TestToolCallsReportTheExplainedError(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":"unauthenticated","message":"jwt: audience mismatch"}`))
 	}))
 	t.Cleanup(plane.Close)
-	cs := dialInProcess(t, NewClients(plane.Client(), plane.URL, plane.URL, plane.URL, "tok"))
+	cs := dialInProcess(t, mustClients(t)(NewClients(plane.Client(), plane.URL, plane.URL, plane.URL, "tok")))
 
 	res, err := cs.CallTool(t.Context(), &mcpsdk.CallToolParams{
 		Name:      "paladin_query_objects",
