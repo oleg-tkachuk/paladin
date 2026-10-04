@@ -1,8 +1,9 @@
 # ADR-0018: The SDKs as three layers over the generated clients
 
 - **Status:** Accepted 2026-10-02. The contract and server parts it left
-  proposed are settled by [ADR-0020](0020-sdk-integration-grade.md), but for
-  the webhook signature, still in BACKLOG.md under *SDK*.
+  proposed are settled by [ADR-0020](0020-sdk-integration-grade.md) and, for
+  the webhook signature, by `X-Paladin-Webhook-Signature` and the SDKs'
+  verifiers.
 
 - **Context.** Both SDKs were a thin shim over the generated Connect clients:
   a base URL, a static token, a context-scoped idempotency key, and retries.
@@ -51,7 +52,7 @@
   - an in-memory fake for SDK users' tests, and one set of scenarios both
     SDKs run against the stack: done;
   - a webhook signature over a timestamp and the body, with a verifier in
-    both SDKs: still proposed, in BACKLOG.md.
+    both SDKs: done.
 
 - **Consequences.** The SDK release is breaking: calls now carry keys they
   did not, a retry that cannot fit the deadline returns the server's error
