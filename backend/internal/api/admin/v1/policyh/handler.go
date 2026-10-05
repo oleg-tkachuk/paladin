@@ -228,14 +228,25 @@ func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, f
 		}},
 	}
 	tenantName := apiutil.TenantNamePrefix + tenantID.String()
-	sources := map[string]string{
-		cedar.LayerTenant:     tenantName,
-		cedar.LayerBucket:     stored.BucketName,
-		cedar.LayerCollection: tenantName + collectionsSegment + collection,
+	// Every layer the resource is subject to is listed, an empty one
+	// included: a collection with no policy of its own, in a bucket with
+	// none, still shows both — that they add nothing is the answer. The
+	// engine leaves empty layers out of the text, not out of scope.
+	scope := []struct{ name, source string }{{cedar.LayerTenant, tenantName}}
+	if stored.BucketName != "" {
+		scope = append(scope, struct{ name, source string }{cedar.LayerBucket, stored.BucketName})
 	}
+	if collection != "" {
+		scope = append(scope, struct{ name, source string }{cedar.LayerCollection, tenantName + collectionsSegment + collection})
+	}
+	evaluated := map[string]cedar.EvaluatedLayer{}
 	for _, l := range layers {
+		evaluated[l.Name] = l
+	}
+	for _, sc := range scope {
+		l := evaluated[sc.name]
 		out.Layers = append(out.Layers, PolicyLayer{
-			Source:               sources[l.Name],
+			Source:               sc.source,
 			CedarPolicy:          l.Stored,
 			Frozen:               l.Frozen,
 			EvaluatedCedarPolicy: l.Evaluated,
