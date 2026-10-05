@@ -28,7 +28,7 @@ import io
 import json
 import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
@@ -42,8 +42,10 @@ from connectrpc.code import Code
 from connectrpc.errors import ConnectError
 from connectrpc.request import RequestContext
 from google.protobuf import descriptor_pool
+from google.protobuf.message import Message
 from google.rpc import error_details_pb2
 
+from paladin.client import HEADER_API_TOKEN, HEADER_AUTHORIZATION, HEADER_CAPABILITY
 from paladin.common.v1 import error_reason_pb2, pagination_pb2, resource_pb2
 from paladin.connect import Endpoints, Paladin, connect
 from paladin.data.v1 import (
@@ -187,6 +189,20 @@ class Request:
     headers: dict[str, str]
     """What the client sent, by lower-case name: credentials, the idempotency
     key, the User-Agent."""
+    message: Message | None = None
+    """The request message, e.g. a ``GetObjectRequest``: a copy, so changing
+    it changes nothing in the fake."""
+
+    def _copy(self) -> Request:
+        return Request(self.procedure, dict(self.headers), _copy_message(self.message))
+
+
+def _copy_message(message: Message | None) -> Message | None:
+    if message is None:
+        return None
+    out = type(message)()
+    out.CopyFrom(message)
+    return out
 
 
 @dataclass(frozen=True)
@@ -244,28 +260,110 @@ def _served(procedure: str) -> bool:
     return method in found.methods_by_name
 
 
-@dataclass
+RequestMatch = Callable[[Message], bool]
+"""Picks the calls ``fail_rpc_if`` fails and ``calls`` returns, by their request
+message: an object's name, a collection."""
+
+
+@dataclass(eq=False)
 class _RPCFault:
-    """What ``fail_rpc`` set for one procedure: the code, and how many more
-    calls answer it."""
+    """One failure ``fail_rpc`` or ``fail_rpc_if`` set: the code, which calls
+    it takes — every one when ``match`` is None — and how many more it
+    answers."""
 
     code: Code
+    match: RequestMatch | None
     remaining: int
 
 
-class _FailRPCs:
-    """The interceptor that raises what ``fail_rpc`` set, after the call is
-    recorded."""
+class _Calls:
+    """The interceptor every served RPC passes: it records the call, checks
+    its credentials under ``strict_auth``, then raises what ``fail_rpc`` set
+    for it."""
 
     def __init__(self, fake: FakePaladin) -> None:
         self._fake = fake
 
     def intercept_unary_sync(self, call_next, request, ctx: RequestContext):  # type: ignore[no-untyped-def]
         method = ctx.method()
-        err = self._fake._take_rpc_fault(f"/{method.service_name}/{method.name}")
+        procedure = f"/{method.service_name}/{method.name}"
+        headers = dict(ctx.request_headers().items())
+        self._fake._record(Request(procedure, headers, _copy_message(request)))
+        if self._fake.strict_auth:
+            self._fake._authenticate(headers, request)
+        err = self._fake._take_rpc_fault(procedure, request)
         if err is not None:
             raise err
         return call_next(request, ctx)
+
+
+# ─── Strict auth ──────────────────────────────────────────────────────────────
+
+_API_TOKEN_PREFIX = "paladin_pat_"
+"""An API token carries the server's prefix, so a client tells it from a
+bearer token as it does against the server."""
+_BEARER_TOKEN_PREFIX = "paladintest_jwt_"
+_CAPABILITY_PREFIX = "paladintest_cap_"
+_BEARER_SCHEME = "Bearer "
+_CAPABILITY_SCHEME = "capability "
+# Fields of a request message that name a resource, whose tenant a credential
+# must hold; and the one that names a multipart upload.
+_NAMING_FIELDS = ("name", "parent")
+_UPLOAD_ID_FIELD = "upload_id"
+
+# The server's answers to a credential it refuses, word for word.
+_MISSING_AUTHORIZATION = "missing Authorization header"
+_EXPECTED_BEARER = "expected Bearer token"
+_EMPTY_TOKEN = "empty token"
+_JWT_MALFORMED = "jwt: malformed token"
+_JWT_EXPIRED = "jwt: token expired"
+_API_TOKEN_NOT_FOUND = "api_token: token not found"
+_API_TOKEN_REVOKED = "api_token: token revoked"
+_CAPABILITY_INVALID = "capability: invalid signature"
+_CAPABILITY_REVOKED = "capability: revoked"
+_TENANT_MISMATCH = "URL tenant does not match token tenant"
+_NAMES_SPAN_TENANTS = "resource names in one request must name the same tenant"
+_UPLOAD_TENANT_MISMATCH = "tenant mismatch"
+
+
+@dataclass
+class _Credential:
+    """One the fake issued: its kind (its prefix), its tenant, and whether it
+    was revoked."""
+
+    prefix: str
+    tenant: str
+    revoked: bool = False
+
+
+def _api_token(x_header: str, authz: str) -> str:
+    """The API token a call carries: the X-header, else a bearer
+    Authorization with the API token prefix; "" when it carries none."""
+    if x_header.startswith(_API_TOKEN_PREFIX):
+        return x_header
+    token = authz.removeprefix(_BEARER_SCHEME)
+    return token if token != authz and token.startswith(_API_TOKEN_PREFIX) else ""
+
+
+def _capability_token(x_header: str, authz: str) -> str:
+    """The capability a call carries: the X-header, else an Authorization
+    with the capability scheme; "" when it carries none."""
+    if x_header:
+        return x_header
+    token = authz.removeprefix(_CAPABILITY_SCHEME)
+    return token.strip() if token != authz else ""
+
+
+def _tenant_of(name: str) -> str | None:
+    """The tenant a resource name or a collection names."""
+    for parse in (ObjectName.parse, CollectionName.parse):
+        try:
+            parsed = parse(name)
+        except InvalidNameError:
+            continue
+        collection = parsed.collection if isinstance(parsed, ObjectName) else parsed
+        return collection.tenant
+    return None
 
 
 _CONNECTION_BACKLOG = 128
@@ -292,7 +390,11 @@ class FakePaladin(
 ):
     """The fake; a context manager that starts and stops it. Thread-safe."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, strict_auth: bool = False) -> None:
+        """``strict_auth`` checks credentials as the server's data plane does,
+        instead of serving every call; see ``issue_bearer_token``."""
+        self.strict_auth = strict_auth
+        """Whether the fake checks credentials."""
         self.tenant = str(uuid.uuid4())
         """The id of the fake's one tenant."""
         self.url = ""
@@ -306,13 +408,14 @@ class FakePaladin(
         self._fault: StorageFault | None = None
         self._after_store: StorageFault | None = None
         self._storage_ops: list[StorageOp] = []
-        self._rpc_faults: dict[str, _RPCFault] = {}
+        self._rpc_faults: dict[str, list[_RPCFault]] = {}
+        self._credentials: dict[str, _Credential] = {}
         self._httpd: WSGIServer | None = None
 
     # ─── Lifecycle ──────────────────────────────────────────────────────────
 
     def __enter__(self) -> Self:
-        faults = (_FailRPCs(self),)
+        faults = (_Calls(self),)
         apps = [
             ObjectServiceWSGIApplication(self, interceptors=faults),
             MultipartUploadServiceWSGIApplication(self, interceptors=faults),
@@ -328,7 +431,6 @@ class FakePaladin(
             environ["wsgi.input"] = io.BytesIO(environ["wsgi.input"].read(length))
             for app in apps:
                 if environ["PATH_INFO"].startswith(app.path + "/"):
-                    self._record(environ)
                     return app(environ, start_response)
             return _unimplemented(start_response)
 
@@ -369,10 +471,26 @@ class FakePaladin(
             return o.msg
 
     def requests(self) -> list[Request]:
-        """The RPCs received, oldest first; one the fake does not serve is not
-        among them."""
+        """The RPCs received, oldest first, each with a copy of its message;
+        one the fake does not serve is not among them."""
         with self._lock:
-            return [Request(r.procedure, dict(r.headers)) for r in self._requests]
+            return [r._copy() for r in self._requests]
+
+    def calls(self, procedure: str, match: RequestMatch | None = None) -> list[Request]:
+        """The requests for ``procedure`` whose message ``match`` accepts,
+        oldest first; None accepts every one. A test that shares the fake with
+        others counts its own calls by what they named::
+
+            fake.calls(GET_OBJECT, lambda m: m.name == obj.name)
+
+        ``match`` gets a copy of each message, and runs without the fake's
+        lock held."""
+        return [
+            r
+            for r in self.requests()
+            if r.procedure == procedure
+            and (match is None or (r.message is not None and match(r.message)))
+        ]
 
     def fail_storage(self, fault: StorageFault | None) -> None:
         """Answer storage requests through ``fault`` before the fake does;
@@ -400,44 +518,201 @@ class FakePaladin(
         Raises ValueError for a procedure the fake does not serve or a
         ``times`` below 1, and TypeError for a ``code`` that is not a ``Code``:
         each is a mistake in the test, not a scenario."""
+        return self._fail_rpc("fail_rpc", procedure, None, times, code)
+
+    def fail_rpc_if(
+        self, procedure: str, match: RequestMatch, times: int, code: Code
+    ) -> Callable[[], None]:
+        """``fail_rpc`` for the calls of ``procedure`` whose request ``match``
+        accepts — an object's name, a collection — so tests sharing one fake
+        fail only their own calls; every other call of the procedure is
+        served. Its failures stack: each adds one, and a call is taken by the
+        most recent one that matches it. ``match`` gets a copy of the request,
+        runs without the fake's lock held, and must not block.
+
+        Raises as ``fail_rpc`` does, and TypeError for a ``match`` that is not
+        callable."""
+        if not callable(match):
+            raise TypeError("fail_rpc_if: match is not callable; fail_rpc fails every call")
+        return self._fail_rpc("fail_rpc_if", procedure, match, times, code)
+
+    def _fail_rpc(
+        self,
+        caller: str,
+        procedure: str,
+        match: RequestMatch | None,
+        times: int,
+        code: Code,
+    ) -> Callable[[], None]:
         if not _served(procedure):
-            raise ValueError(f"fail_rpc: {procedure!r} is not a procedure the fake serves")
+            raise ValueError(f"{caller}: {procedure!r} is not a procedure the fake serves")
         if times < 1:
-            raise ValueError(f"fail_rpc: times is {times}, want at least 1")
+            raise ValueError(f"{caller}: times is {times}, want at least 1")
         if not isinstance(code, Code):
-            raise TypeError(f"fail_rpc: {code!r} is not a connectrpc Code")
-        fault = _RPCFault(code, times)
+            raise TypeError(f"{caller}: {code!r} is not a connectrpc Code")
+        fault = _RPCFault(code, match, times)
         with self._lock:
-            self._rpc_faults[procedure] = fault
+            faults = self._rpc_faults.get(procedure, [])
+            if match is None:
+                # A later fail_rpc replaces the earlier one, as it always has.
+                faults = [f for f in faults if f.match is not None]
+            self._rpc_faults[procedure] = [*faults, fault]
 
         def reset() -> None:
             with self._lock:
-                if self._rpc_faults.get(procedure) is fault:
-                    del self._rpc_faults[procedure]
+                self._drop_rpc_fault(procedure, fault)
 
         return reset
 
-    def _take_rpc_fault(self, procedure: str) -> ConnectError | None:
-        """The error ``fail_rpc`` set for ``procedure``'s next call, None when
-        there is none, counting the call against it."""
+    def _drop_rpc_fault(self, procedure: str, fault: _RPCFault) -> None:
+        """Remove ``fault`` from ``procedure``'s failures; the caller holds the
+        lock."""
+        left = [f for f in self._rpc_faults.get(procedure, []) if f is not fault]
+        if left:
+            self._rpc_faults[procedure] = left
+        else:
+            self._rpc_faults.pop(procedure, None)
+
+    def _take_rpc_fault(self, procedure: str, message: Message) -> ConnectError | None:
+        """The error ``fail_rpc`` or ``fail_rpc_if`` set for this call of
+        ``procedure``, None when none takes it, counting the call against the
+        one that does. A match runs without the lock."""
         with self._lock:
-            fault = self._rpc_faults.get(procedure)
-            if fault is None:
-                return None
-            fault.remaining -= 1
-            if fault.remaining == 0:
-                del self._rpc_faults[procedure]
-        reason = _SERVER_REASON.get(fault.code)
-        details = (
-            [
-                error_details_pb2.ErrorInfo(
-                    reason=error_reason_pb2.ErrorReason.Name(reason), domain=ERROR_DOMAIN
-                )
-            ]
-            if reason is not None
-            else []
+            faults = list(self._rpc_faults.get(procedure, []))
+        for fault in reversed(faults):
+            if fault.match is not None and not fault.match(_copy_message(message)):  # type: ignore[arg-type]
+                continue
+            with self._lock:
+                live = any(f is fault for f in self._rpc_faults.get(procedure, []))
+                if live:
+                    fault.remaining -= 1
+                    if fault.remaining == 0:
+                        self._drop_rpc_fault(procedure, fault)
+            if live:  # another call may have spent it meanwhile
+                return _failure(procedure, fault.code)
+        return None
+
+    # ─── Credentials ────────────────────────────────────────────────────────
+
+    def issue_bearer_token(self, tenant: str) -> str:
+        """A bearer token for ``tenant`` — ``tenant`` attribute for the fake's
+        own — as an OIDC JWT is, for ``connect(bearer_token=…)``.
+
+        With ``strict_auth`` a call must carry a credential the fake issued,
+        not revoked, and every resource it names must be in that credential's
+        tenant. The answers are the server's, codes and messages, with no
+        ``ErrorInfo`` reason, as the server's authentication sends none: no
+        credential, or a bearer or API token the fake did not issue or
+        revoked, is UNAUTHENTICATED; a capability it did not issue or revoked
+        is PERMISSION_DENIED, as the server answers every capability it cannot
+        verify; a name or parent in another tenant, or another tenant's
+        multipart upload, is PERMISSION_DENIED. The fake checks only that: no
+        signature, Biscuit, caveat, scope, audience or expiry, and no platform
+        admin acting in another tenant. Credentials are checked before
+        ``fail_rpc``'s failures."""
+        return self._issue(_BEARER_TOKEN_PREFIX, tenant)
+
+    def issue_api_token(self, tenant: str) -> str:
+        """An API token for ``tenant``, for ``connect(api_token=…)`` or
+        ``connect(bearer_token=…)``."""
+        return self._issue(_API_TOKEN_PREFIX, tenant)
+
+    def issue_capability(self, tenant: str) -> str:
+        """A capability for ``tenant``, for ``connect(capability=…)``. It is
+        the fake's own token, not a Biscuit: the fake checks only that it
+        issued it, did not revoke it, and that it names the tenant."""
+        return self._issue(_CAPABILITY_PREFIX, tenant)
+
+    def _issue(self, prefix: str, tenant: str) -> str:
+        token = prefix + uuid.uuid4().hex
+        with self._lock:
+            self._credentials[token] = _Credential(prefix, tenant)
+        return token
+
+    def revoke(self, token: str) -> None:
+        """Revoke a credential the fake issued: with ``strict_auth``, a call
+        that carries it is refused from then on — UNAUTHENTICATED for a bearer
+        or API token, PERMISSION_DENIED for a capability, as the server
+        answers. A token the fake did not issue is ignored."""
+        with self._lock:
+            credential = self._credentials.get(token)
+            if credential is not None:
+                credential.revoked = True
+
+    def _authenticate(self, headers: Mapping[str, str], message: Message) -> None:
+        """Raise the server's answer to a call's credentials; return when it
+        lets the call through."""
+        tenant = self._principal_tenant(headers)
+        self._authorize_tenant(tenant, message)
+
+    def _principal_tenant(self, headers: Mapping[str, str]) -> str:
+        """The tenant of the call's credential, found as the server's
+        interceptors find it: an API token first, then a capability, then a
+        bearer token."""
+        authz = headers.get(HEADER_AUTHORIZATION.lower(), "")
+        token = _api_token(headers.get(HEADER_API_TOKEN.lower(), ""), authz)
+        if token:
+            return self._verify(
+                token,
+                _API_TOKEN_PREFIX,
+                Code.UNAUTHENTICATED,
+                _API_TOKEN_NOT_FOUND,
+                _API_TOKEN_REVOKED,
+            )
+        token = _capability_token(headers.get(HEADER_CAPABILITY.lower(), ""), authz)
+        if token:
+            return self._verify(
+                token,
+                _CAPABILITY_PREFIX,
+                Code.PERMISSION_DENIED,
+                _CAPABILITY_INVALID,
+                _CAPABILITY_REVOKED,
+            )
+        if not authz:
+            raise ConnectError(Code.UNAUTHENTICATED, _MISSING_AUTHORIZATION)
+        if not authz.startswith(_BEARER_SCHEME):
+            raise ConnectError(Code.UNAUTHENTICATED, _EXPECTED_BEARER)
+        token = authz.removeprefix(_BEARER_SCHEME).strip()
+        if not token:
+            raise ConnectError(Code.UNAUTHENTICATED, _EMPTY_TOKEN)
+        return self._verify(
+            token, _BEARER_TOKEN_PREFIX, Code.UNAUTHENTICATED, _JWT_MALFORMED, _JWT_EXPIRED
         )
-        return ConnectError(fault.code, f"{procedure} failed by fail_rpc", details)
+
+    def _verify(self, token: str, prefix: str, code: Code, unknown: str, revoked: str) -> str:
+        """The tenant of ``token``, a credential issued with ``prefix``; raise
+        ``code`` with ``unknown`` or ``revoked`` otherwise."""
+        with self._lock:
+            credential = self._credentials.get(token)
+        if credential is None or credential.prefix != prefix:
+            raise ConnectError(code, unknown)
+        if credential.revoked:
+            raise ConnectError(code, revoked)
+        return credential.tenant
+
+    def _authorize_tenant(self, tenant: str, message: Message) -> None:
+        """Refuse a call that names a resource outside ``tenant``: its name or
+        parent, or the object of the multipart upload it names."""
+        fields = message.DESCRIPTOR.fields_by_name
+        named: str | None = None
+        for field_name in _NAMING_FIELDS:
+            if field_name not in fields:
+                continue
+            value = getattr(message, field_name)
+            found = _tenant_of(value) if isinstance(value, str) else None
+            if found is None:
+                continue  # not a resource name: the RPC refuses it itself
+            if named is not None and found != named:
+                raise ConnectError(Code.PERMISSION_DENIED, _NAMES_SPAN_TENANTS)
+            named = found
+        if named is not None and named != tenant:
+            raise ConnectError(Code.PERMISSION_DENIED, _TENANT_MISMATCH)
+        if _UPLOAD_ID_FIELD in fields:
+            with self._lock:
+                up = self._uploads.get(getattr(message, _UPLOAD_ID_FIELD))
+                o = self._objects.get(up.name) if up is not None else None
+            if o is not None and o.msg.tenant_id != tenant:
+                raise ConnectError(Code.PERMISSION_DENIED, _UPLOAD_TENANT_MISMATCH)
 
     def mark_failed(self, name: str) -> None:
         """Fail a PENDING object, as the server's reconciler does when its
@@ -452,18 +727,9 @@ class FakePaladin(
         with self._lock:
             return list(self._storage_ops)
 
-    def _record(self, environ: dict[str, Any]) -> None:
-        headers = {
-            key[len(_HEADER_PREFIX) :].replace("_", "-").lower(): value
-            for key, value in environ.items()
-            if key.startswith(_HEADER_PREFIX)
-        }
-        # WSGI keeps these two out of the HTTP_ names.
-        for key in ("CONTENT_TYPE", "CONTENT_LENGTH"):
-            if environ.get(key):
-                headers[key.replace("_", "-").lower()] = environ[key]
+    def _record(self, request: Request) -> None:
         with self._lock:
-            self._requests.append(Request(environ["PATH_INFO"], headers))
+            self._requests.append(request)
 
     def content(self, name: str) -> bytes | None:
         """What an object holds; None when there is no such object."""
@@ -850,6 +1116,22 @@ class FakePaladin(
             return [part]
         start_response("200 OK", [*headers, ("Content-Length", str(len(content)))])
         return [content]
+
+
+def _failure(procedure: str, code: Code) -> ConnectError:
+    """What an injected failure answers with: ``code``, and the reason the
+    server attaches to it."""
+    reason = _SERVER_REASON.get(code)
+    details = (
+        [
+            error_details_pb2.ErrorInfo(
+                reason=error_reason_pb2.ErrorReason.Name(reason), domain=ERROR_DOMAIN
+            )
+        ]
+        if reason is not None
+        else []
+    )
+    return ConnectError(code, f"{procedure} failed by fail_rpc", details)
 
 
 def _status(start_response, status: str | int, body: str = "") -> list[bytes]:  # type: ignore[no-untyped-def]
