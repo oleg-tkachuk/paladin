@@ -114,3 +114,38 @@ func TestTenantRefHasID(t *testing.T) {
 		t.Error("HasID() should be false for the zero ref")
 	}
 }
+
+// Every shape a resource name takes in the audit log: the tenant itself, a
+// child of it, and a collection nested under its bucket.
+func TestTenantInResourceName(t *testing.T) {
+	id := rnTID.String()
+	cases := []struct {
+		name   string
+		in     string
+		wantOK bool
+	}{
+		{"tenant", "tenants/" + id, true},
+		{"child", "tenants/" + id + "/quota", true},
+		{"grandchild", "tenants/" + id + "/users/" + uuid.NewString(), true},
+		{"under a bucket", "storageBackends/primary/buckets/b/tenants/" + id + "/collections/e2e/k", true},
+		{"empty", "", false},
+		{"no tenant", "storageBackends/primary/buckets/b", false},
+		{"slug", "tenants/platform", false},
+		{"segment without a value", "storageBackends/primary/tenants", false},
+		{"look-alike segment", "mytenants/" + id, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := TenantInResourceName(tc.in)
+			if ok != tc.wantOK {
+				t.Fatalf("TenantInResourceName(%q) ok = %v, want %v", tc.in, ok, tc.wantOK)
+			}
+			if ok && got != rnTID {
+				t.Errorf("TenantInResourceName(%q) = %s, want %s", tc.in, got, rnTID)
+			}
+			if !ok && got != uuid.Nil {
+				t.Errorf("TenantInResourceName(%q) = %s on a miss, want uuid.Nil", tc.in, got)
+			}
+		})
+	}
+}

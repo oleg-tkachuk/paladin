@@ -296,21 +296,22 @@ type ApiTokenRateBucket struct {
 }
 
 type AuditLog struct {
-	ID            pgtype.UUID        `json:"id"`
-	At            pgtype.Timestamptz `json:"at"`
-	ActorSubject  string             `json:"actor_subject"`
-	ActorTenantID pgtype.UUID        `json:"actor_tenant_id"`
-	ActorAudience string             `json:"actor_audience"`
-	Action        string             `json:"action"`
-	ResourceName  string             `json:"resource_name"`
-	RequestID     string             `json:"request_id"`
-	SourceIp      *string            `json:"source_ip"`
-	CapabilityID  pgtype.UUID        `json:"capability_id"`
-	Outcome       string             `json:"outcome"`
-	ErrorMessage  *string            `json:"error_message"`
-	BeforeJson    []byte             `json:"before_json"`
-	AfterJson     []byte             `json:"after_json"`
-	Detail        []byte             `json:"detail"`
+	ID               pgtype.UUID        `json:"id"`
+	At               pgtype.Timestamptz `json:"at"`
+	ActorSubject     string             `json:"actor_subject"`
+	ActorTenantID    pgtype.UUID        `json:"actor_tenant_id"`
+	ActorAudience    string             `json:"actor_audience"`
+	Action           string             `json:"action"`
+	ResourceName     string             `json:"resource_name"`
+	RequestID        string             `json:"request_id"`
+	SourceIp         *string            `json:"source_ip"`
+	CapabilityID     pgtype.UUID        `json:"capability_id"`
+	Outcome          string             `json:"outcome"`
+	ErrorMessage     *string            `json:"error_message"`
+	BeforeJson       []byte             `json:"before_json"`
+	AfterJson        []byte             `json:"after_json"`
+	Detail           []byte             `json:"detail"`
+	ResourceTenantID pgtype.UUID        `json:"resource_tenant_id"`
 }
 
 type AuditLogDefault struct {

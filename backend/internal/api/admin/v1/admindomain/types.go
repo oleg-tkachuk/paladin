@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
 
@@ -196,6 +197,19 @@ type AuditEntry struct {
 	// cap that authorised it without joining across capability_records
 	// by request_id.
 	CapabilityID uuid.UUID
+
+	// ResourceTenantID is the tenant the action was done to, as read back
+	// from the log. Writers leave it unset; it is derived from ResourceName
+	// on insert (ResourceTenant). uuid.Nil when the name carries none.
+	ResourceTenantID uuid.UUID
+}
+
+// ResourceTenant is the tenant this entry's resource sits under, or uuid.Nil.
+// It is what places a platform admin's work inside tenant X in X's trail,
+// whose actor tenant is the platform's.
+func (e AuditEntry) ResourceTenant() uuid.UUID {
+	id, _ := apiutil.TenantInResourceName(e.ResourceName)
+	return id
 }
 
 // ─── Quota ──────────────────────────────────────────────────────────────────

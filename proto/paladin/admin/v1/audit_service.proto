@@ -35,6 +35,15 @@ message ListAuditLogRequest {
   // CEL filter: actor_subject == "x", action prefix, resource_name pattern,
   // time range via at >= ts && at < ts.
   string filter = 2;
+  // tenant_id narrows the log to one tenant's trail: entries its principals
+  // made, and entries on its resources — a platform admin's work inside the
+  // tenant included. Applied in the query, so every page holds up to
+  // page_size of them. Empty = every tenant. A caller other than a platform
+  // admin may name only its own tenant.
+  string tenant_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
 }
 
 message ListAuditLogResponse {
