@@ -194,6 +194,10 @@ type Server struct {
 	// rpcFaults are the failures FailRPC and FailRPCIf set, by procedure,
 	// oldest first.
 	rpcFaults map[string][]*rpcFault
+	// strictAuth is WithStrictAuth; credentials are what the Issue methods
+	// issued, by token.
+	strictAuth  bool
+	credentials map[string]*credential
 }
 
 // StorageFault decides a storage request's answer before the fake does: a
@@ -418,16 +422,16 @@ type multipart struct {
 }
 
 // New starts a fake for the test, stopped when it ends.
-func New(t testing.TB) *Server {
+func New(t testing.TB, opts ...Option) *Server {
 	t.Helper()
-	s, stop := Start()
+	s, stop := Start(opts...)
 	t.Cleanup(stop)
 	return s
 }
 
 // Start starts a fake outside a test — an example, a local tool — and
 // returns it with the function that stops it.
-func Start() (*Server, func()) {
+func Start(opts ...Option) (*Server, func()) {
 	s := &Server{
 		tenant:  uuid.NewString(),
 		objects: map[string]*object{},
@@ -436,6 +440,11 @@ func Start() (*Server, func()) {
 		bound:   map[string]bool{},
 
 		rpcFaults: map[string][]*rpcFault{},
+
+		credentials: map[string]*credential{},
+	}
+	for _, opt := range opts {
+		opt(s)
 	}
 	record := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
@@ -444,6 +453,11 @@ func Start() (*Server, func()) {
 			s.mu.Lock()
 			s.requests = append(s.requests, Request{Procedure: procedure, Header: req.Header().Clone(), Message: msg})
 			s.mu.Unlock()
+			if s.strictAuth {
+				if err := s.authenticate(req.Header(), msg); err != nil {
+					return nil, err
+				}
+			}
 			if err := s.takeRPCFault(procedure, msg); err != nil {
 				return nil, err
 			}
