@@ -735,12 +735,21 @@ type OutboxRunner struct {
 	Dispatcher *Dispatcher // for sink delivery (re-uses deliver/deliverHTTP)
 	Logger     *zap.Logger
 
-	PollInterval       time.Duration // default 1s
-	BatchSize          int           // default 50
-	BaseBackoff        time.Duration // default 5s
-	MaxBackoff         time.Duration // default 1h
-	DefaultMaxAttempts int           // default 5; used when sub HttpSink.MaxAttempts==0
+	PollInterval       time.Duration // default DefaultOutboxPollInterval
+	BatchSize          int           // default DefaultOutboxBatchSize
+	BaseBackoff        time.Duration // default DefaultOutboxBaseBackoff
+	MaxBackoff         time.Duration // default DefaultOutboxMaxBackoff
+	DefaultMaxAttempts int           // default DefaultOutboxMaxAttempts; used when sub HttpSink.MaxAttempts==0
 }
+
+// OutboxRunner defaults, for a field left zero.
+const (
+	DefaultOutboxPollInterval = time.Second
+	DefaultOutboxBatchSize    = 50
+	DefaultOutboxBaseBackoff  = 5 * time.Second
+	DefaultOutboxMaxBackoff   = time.Hour
+	DefaultOutboxMaxAttempts  = 5
+)
 
 func (r *OutboxRunner) log() *zap.Logger {
 	if r.Logger != nil {
@@ -755,7 +764,7 @@ func (r *OutboxRunner) log() *zap.Logger {
 func (r *OutboxRunner) Run(ctx context.Context) error {
 	poll := r.PollInterval
 	if poll <= 0 {
-		poll = time.Second
+		poll = DefaultOutboxPollInterval
 	}
 	var lastDepthSample time.Time
 	for {
@@ -798,12 +807,12 @@ func (r *OutboxRunner) Tick(ctx context.Context) (int, error) {
 // resolution.
 const outboxDepthSampleInterval = 30 * time.Second
 
-// outboxDepthWarnThreshold is the per-tenant pending backlog above which
+// OutboxDepthWarnThreshold is the per-tenant pending backlog above which
 // sampleDepth logs a warning. A deep single-tenant backlog means the drain
 // isn't keeping up with that tenant's fan-out (a broad audit-mirror filter, a
 // mutation burst): the operator levers are dispatcher.batch_size /
 // poll_interval, or narrowing the subscription's filter.
-const outboxDepthWarnThreshold = 10_000
+const OutboxDepthWarnThreshold = 10_000
 
 // OutboxDepth reports the cluster-wide pending backlog and the deepest single
 // per-tenant backlog. This is the fan-out-volume measurement the admission-
@@ -834,7 +843,7 @@ func (r *OutboxRunner) sampleDepth(ctx context.Context) {
 		return
 	}
 	recordOutboxDepth(ctx, total, maxPerTenant)
-	if maxPerTenant >= outboxDepthWarnThreshold {
+	if maxPerTenant >= OutboxDepthWarnThreshold {
 		r.log().Warn("outbox backlog high — a tenant's pending fan-out is deep; raise dispatcher.batch_size / lower poll_interval, or narrow that tenant's subscription filters",
 			zap.Int64("pending_total", total),
 			zap.Int64("pending_max_per_tenant", maxPerTenant))
@@ -847,7 +856,7 @@ func (r *OutboxRunner) sampleDepth(ctx context.Context) {
 func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 	batch := r.BatchSize
 	if batch <= 0 {
-		batch = 50
+		batch = DefaultOutboxBatchSize
 	}
 	// Claim, then deliver, then record — not one transaction around all
 	// three. Holding the row locks across sink I/O stretched a transaction
@@ -1140,11 +1149,11 @@ func (r *OutboxRunner) markFailed(ctx context.Context, tx rowExecer, id uuid.UUI
 func (r *OutboxRunner) backoffFor(attempt int) time.Duration {
 	base := r.BaseBackoff
 	if base <= 0 {
-		base = 5 * time.Second
+		base = DefaultOutboxBaseBackoff
 	}
 	max := r.MaxBackoff
 	if max <= 0 {
-		max = time.Hour
+		max = DefaultOutboxMaxBackoff
 	}
 	d := base
 	for i := 1; i < attempt; i++ {
@@ -1164,7 +1173,7 @@ func (r *OutboxRunner) backoffFor(attempt int) time.Duration {
 func (r *OutboxRunner) maxAttemptsFor(sub admindomain.EventSubscription) int {
 	def := r.DefaultMaxAttempts
 	if def <= 0 {
-		def = 5
+		def = DefaultOutboxMaxAttempts
 	}
 	if sub.SinkKind != "http" {
 		return def
