@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 )
 
 func ctxAs(roles ...string) context.Context {
@@ -113,7 +114,7 @@ func TestDispatcherStats_Non200IsUnavailable(t *testing.T) {
 
 func TestPlatformStats_RequiresPlatformAdmin(t *testing.T) {
 	h := New(config.Config{}, "")
-	_, err := h.PlatformStats(ctxAs("tenant.admin"))
+	_, err := h.PlatformStats(ctxAs("tenant.admin"), platformstats.TenantPage{})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("code = %v, want PermissionDenied", connect.CodeOf(err))
 	}
@@ -121,7 +122,7 @@ func TestPlatformStats_RequiresPlatformAdmin(t *testing.T) {
 
 func TestPlatformStats_UnconfiguredWorkerIsUnavailableNotError(t *testing.T) {
 	h := New(config.Config{}, "") // no worker.ops_url, no pool
-	res, err := h.PlatformStats(ctxAs(apiutil.RolePlatformAdmin))
+	res, err := h.PlatformStats(ctxAs(apiutil.RolePlatformAdmin), platformstats.TenantPage{})
 	if err != nil {
 		t.Fatalf("err = %v, want nil (graceful degrade)", err)
 	}
@@ -133,7 +134,7 @@ func TestPlatformStats_UnconfiguredWorkerIsUnavailableNotError(t *testing.T) {
 func TestPlatformStats_UnreachableWorkerIsUnavailableNotError(t *testing.T) {
 	cfg := config.Config{}
 	cfg.Worker.OpsURL = "http://127.0.0.1:1" // nothing listens there
-	res, err := New(cfg, "").PlatformStats(ctxAs(apiutil.RolePlatformAdmin))
+	res, err := New(cfg, "").PlatformStats(ctxAs(apiutil.RolePlatformAdmin), platformstats.TenantPage{})
 	if err != nil {
 		t.Fatalf("err = %v, want nil (graceful degrade)", err)
 	}
@@ -168,7 +169,7 @@ func TestPlatformStats_ProxiesTheWorkerOpsEndpoint(t *testing.T) {
 
 	cfg := config.Config{}
 	cfg.Worker.OpsURL = srv.URL
-	res, err := New(cfg, "").PlatformStats(ctxAs(apiutil.RolePlatformAdmin))
+	res, err := New(cfg, "").PlatformStats(ctxAs(apiutil.RolePlatformAdmin), platformstats.TenantPage{})
 	if err != nil {
 		t.Fatalf("PlatformStats: %v", err)
 	}
@@ -211,11 +212,36 @@ func TestPlatformStats_Non200WorkerIsUnavailable(t *testing.T) {
 
 	cfg := config.Config{}
 	cfg.Worker.OpsURL = srv.URL
-	res, err := New(cfg, "").PlatformStats(ctxAs(apiutil.RolePlatformAdmin))
+	res, err := New(cfg, "").PlatformStats(ctxAs(apiutil.RolePlatformAdmin), platformstats.TenantPage{})
 	if err != nil {
 		t.Fatalf("err = %v, want nil (graceful degrade)", err)
 	}
 	if res.RLSAvailable {
 		t.Error("available = true, want false")
+	}
+}
+
+// The requested page reaches the worker, and the worker's next token comes
+// back to the caller.
+func TestPlatformStats_ForwardsTheTenantPage(t *testing.T) {
+	want := platformstats.TenantPage{Size: 3, After: "cursor"}
+	var asked platformstats.TenantPage
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = platformstats.TenantPageFromQuery(r.URL.Query())
+		_, _ = w.Write([]byte(`{"objects":{"tenants_next_page_token":"next"}}`))
+	}))
+	defer srv.Close()
+
+	cfg := config.Config{}
+	cfg.Worker.OpsURL = srv.URL
+	res, err := New(cfg, "").PlatformStats(ctxAs(apiutil.RolePlatformAdmin), want)
+	if err != nil {
+		t.Fatalf("PlatformStats: %v", err)
+	}
+	if asked != want {
+		t.Errorf("worker was asked for %+v, want %+v", asked, want)
+	}
+	if res.RLS.Objects.TenantsNext != "next" {
+		t.Errorf("next token = %q, want the worker's", res.RLS.Objects.TenantsNext)
 	}
 }

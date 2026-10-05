@@ -37,7 +37,7 @@ func TestCredentialCensuses_ClassifyEachRowExactlyOnce(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
 
-	base, err := platformstats.CollectRLS(ctx, pool)
+	base, err := platformstats.CollectRLS(ctx, pool, platformstats.TenantPage{})
 	if err != nil {
 		t.Fatalf("baseline census: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestCredentialCensuses_ClassifyEachRowExactlyOnce(t *testing.T) {
 	tok("30 days", false, true) // revoked while still valid, never used
 	tok("-1 hour", false, true) // revoked AND expired — revocation wins
 
-	got, err := platformstats.CollectRLS(ctx, pool)
+	got, err := platformstats.CollectRLS(ctx, pool, platformstats.TenantPage{})
 	if err != nil {
 		t.Fatalf("CollectRLS: %v", err)
 	}

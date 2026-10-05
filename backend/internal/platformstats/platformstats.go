@@ -22,8 +22,12 @@ package platformstats
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"net/url"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -194,11 +198,22 @@ func scanCounts(ctx context.Context, pool *pgxpool.Pool, sql string, into map[st
 
 // ─── RLS'd census (worker pod, BYPASSRLS) ───────────────────────────────────
 
-// maxTenantRows caps the per-tenant breakdown so a fleet with thousands of
-// tenants can't balloon the ops payload (and the console table). Tenants
-// sort by total object count descending, so the cap trims the quiet tail;
-// TenantsTruncated reports how many were dropped.
+// maxTenantRows caps one page of the per-tenant breakdown so a fleet with
+// thousands of tenants can't balloon the ops payload (and the console
+// table). Tenants sort by total object count descending, so the first page
+// holds the busiest; TenantsCut reports how many are past the page.
 const maxTenantRows = 200
+
+// TenantPage selects one page of the per-tenant object breakdown.
+type TenantPage struct {
+	// Size is the page size; zero, negative or above maxTenantRows means
+	// maxTenantRows.
+	Size int
+	// After is ObjectCensus.TenantsNext from the previous page. Empty, or a
+	// token that does not decode, starts from the first page: a stale token
+	// costs the operator a page, not the whole census.
+	After string
+}
 
 // nearLimitRatio is the fraction of a quota cap at which a row counts as
 // "near limit". 0.9 gives an operator roughly one business day of warning
@@ -228,6 +243,9 @@ type ObjectCensus struct {
 	TotalBytes int64        `json:"total_bytes"`
 	Tenants    []TenantStat `json:"tenants"`
 	TenantsCut int64        `json:"tenants_truncated"`
+	// TenantsNext is the cursor for the page after Tenants; empty on the
+	// last page.
+	TenantsNext string `json:"tenants_next_page_token,omitempty"`
 }
 
 // StateStat is one (state, count, bytes) triple. `State` carries the
@@ -257,8 +275,8 @@ type TenantStat struct {
 // least-privilege pool alongside the background jobs, and a dashboard poll
 // has no business claiming five connections at once to save a few
 // milliseconds.
-func CollectRLS(ctx context.Context, pool *pgxpool.Pool) (*RLSCensus, error) {
-	objects, err := collectObjects(ctx, pool)
+func CollectRLS(ctx context.Context, pool *pgxpool.Pool, page TenantPage) (*RLSCensus, error) {
+	objects, err := collectObjects(ctx, pool, page)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +298,7 @@ func CollectRLS(ctx context.Context, pool *pgxpool.Pool) (*RLSCensus, error) {
 
 // collectObjects folds one GROUP BY over (tenant_id, state) into the
 // global rollup plus the per-tenant rows.
-func collectObjects(ctx context.Context, pool *pgxpool.Pool) (*ObjectCensus, error) {
+func collectObjects(ctx context.Context, pool *pgxpool.Pool, page TenantPage) (*ObjectCensus, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT tenant_id::text, state::text,
 		       count(*), COALESCE(sum(size_bytes), 0)
@@ -336,11 +354,7 @@ func collectObjects(ctx context.Context, pool *pgxpool.Pool) (*ObjectCensus, err
 		tenants = append(tenants, *t)
 	}
 	sortTenants(tenants)
-	if len(tenants) > maxTenantRows {
-		out.TenantsCut = int64(len(tenants) - maxTenantRows)
-		tenants = tenants[:maxTenantRows]
-	}
-	out.Tenants = tenants
+	out.Tenants, out.TenantsNext, out.TenantsCut = pageTenants(tenants, page)
 	return out, nil
 }
 
@@ -582,9 +596,98 @@ func sortStates(s []StateStat) {
 // across polls.
 func sortTenants(t []TenantStat) {
 	sort.Slice(t, func(i, j int) bool {
-		if t[i].TotalCount != t[j].TotalCount {
-			return t[i].TotalCount > t[j].TotalCount
-		}
-		return t[i].TenantID < t[j].TenantID
+		return tenantBefore(t[i].TotalCount, t[i].TenantID, t[j].TotalCount, t[j].TenantID)
 	})
+}
+
+// The worker's census endpoint reads a TenantPage from these query
+// parameters, and the admin pod writes them.
+const (
+	tenantPageSizeParam  = "tenants_page_size"
+	tenantPageAfterParam = "tenants_page_token"
+)
+
+// Query encodes the page for the worker's census endpoint.
+func (p TenantPage) Query() url.Values {
+	q := url.Values{}
+	if p.Size > 0 {
+		q.Set(tenantPageSizeParam, strconv.Itoa(p.Size))
+	}
+	if p.After != "" {
+		q.Set(tenantPageAfterParam, p.After)
+	}
+	return q
+}
+
+// TenantPageFromQuery reads the page Query wrote. A size that does not parse
+// is the default size, as pageTenants treats any size out of range.
+func TenantPageFromQuery(q url.Values) TenantPage {
+	size, _ := strconv.Atoi(q.Get(tenantPageSizeParam))
+	return TenantPage{Size: size, After: q.Get(tenantPageAfterParam)}
+}
+
+// tenantBefore is the one ordering sortTenants ranks by and pageTenants
+// resumes from.
+func tenantBefore(countA int64, idA string, countB int64, idB string) bool {
+	if countA != countB {
+		return countA > countB
+	}
+	return idA < idB
+}
+
+// pageTenants cuts one page out of tenants, which sortTenants has ordered.
+// It returns the page, the cursor for the next one (empty on the last), and
+// how many tenants follow the page.
+//
+// The cursor names the last row's (count, tenant_id) rather than an offset,
+// so a tenant appearing or vanishing earlier in the ranking does not shift
+// the next page by one. Counts are live, so a tenant whose count moves across
+// the cursor between requests can still repeat or be skipped.
+func pageTenants(tenants []TenantStat, page TenantPage) ([]TenantStat, string, int64) {
+	size := page.Size
+	if size <= 0 || size > maxTenantRows {
+		size = maxTenantRows
+	}
+	start := 0
+	if count, id, ok := decodeTenantCursor(page.After); ok {
+		start = sort.Search(len(tenants), func(i int) bool {
+			return tenantBefore(count, id, tenants[i].TotalCount, tenants[i].TenantID)
+		})
+	}
+	end := min(start+size, len(tenants))
+	out := tenants[start:end]
+	rest := int64(len(tenants) - end)
+	if rest == 0 || len(out) == 0 {
+		return out, "", rest
+	}
+	last := out[len(out)-1]
+	return out, encodeTenantCursor(last.TotalCount, last.TenantID), rest
+}
+
+// tenantCursorSep joins a cursor's count and tenant_id. A tenant id is a
+// UUID, so it never contains one.
+const tenantCursorSep = "/"
+
+func encodeTenantCursor(count int64, tenantID string) string {
+	raw := strconv.FormatInt(count, 10) + tenantCursorSep + tenantID
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeTenantCursor(token string) (int64, string, bool) {
+	if token == "" {
+		return 0, "", false
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return 0, "", false
+	}
+	countText, id, found := strings.Cut(string(raw), tenantCursorSep)
+	if !found {
+		return 0, "", false
+	}
+	count, err := strconv.ParseInt(countText, 10, 64)
+	if err != nil {
+		return 0, "", false
+	}
+	return count, id, true
 }

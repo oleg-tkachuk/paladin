@@ -282,7 +282,8 @@ func workerOpsMux(cfg config.Runtime, deps *app.SharedDeps, l *zap.Logger) (http
 			http.Error(w, "no bypassrls pool", http.StatusServiceUnavailable)
 			return
 		}
-		census, err := platformstats.CollectRLS(r.Context(), deps.ReaperPool)
+		census, err := platformstats.CollectRLS(r.Context(), deps.ReaperPool,
+			platformstats.TenantPageFromQuery(r.URL.Query()))
 		if err != nil {
 			l.Warn("RLS census failed", zap.Error(err))
 			http.Error(w, "census unavailable", http.StatusInternalServerError)

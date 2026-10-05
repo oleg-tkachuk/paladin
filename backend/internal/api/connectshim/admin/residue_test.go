@@ -233,29 +233,45 @@ func TestTestSubscriptionReportsDelivery(t *testing.T) {
 
 // ─── system ────────────────────────────────────────────────────────────────
 
-type reportingSystem struct{ failingSystem }
+type reportingSystem struct {
+	failingSystem
+	asked *platformstats.TenantPage
+}
 
 func (reportingSystem) DispatcherStats(context.Context) (*worker.DeliveryStats, bool, error) {
 	return &worker.DeliveryStats{Pending: 3, Failed: 1}, true, nil
 }
 
-func (reportingSystem) PlatformStats(context.Context) (*systemh.PlatformStatsResult, error) {
+func (r reportingSystem) PlatformStats(_ context.Context, page platformstats.TenantPage) (*systemh.PlatformStatsResult, error) {
+	*r.asked = page
 	return &systemh.PlatformStatsResult{
 		ControlPlane: &platformstats.ControlPlane{Tenants: platformstats.TenantCensus{Total: 4}},
-		RLS:          &platformstats.RLSCensus{Objects: platformstats.ObjectCensus{TotalCount: 7}},
+		RLS: &platformstats.RLSCensus{Objects: platformstats.ObjectCensus{
+			TotalCount: 7, TenantsCut: 2, TenantsNext: "next",
+		}},
 		RLSAvailable: true,
 	}, nil
 }
 
 func TestSystemStatsCarryWhatTheHandlerReported(t *testing.T) {
-	srv := &SystemServer{H: reportingSystem{}}
+	var asked platformstats.TenantPage
+	srv := &SystemServer{H: reportingSystem{asked: &asked}}
 	ds, err := srv.GetDispatcherStats(context.Background(), connect.NewRequest(&pb.GetDispatcherStatsRequest{}))
 	if err != nil || ds.Msg.GetPending() != 3 || ds.Msg.GetFailed() != 1 {
 		t.Errorf("dispatcher stats = %v, %v", ds, err)
 	}
-	ps, err := srv.GetPlatformStats(context.Background(), connect.NewRequest(&pb.GetPlatformStatsRequest{}))
+	ps, err := srv.GetPlatformStats(context.Background(), connect.NewRequest(&pb.GetPlatformStatsRequest{
+		TenantPage: &commonv1.PageRequest{PageSize: 3, PageToken: "cursor"},
+	}))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if want := (platformstats.TenantPage{Size: 3, After: "cursor"}); asked != want {
+		t.Errorf("handler was asked for %+v, want %+v", asked, want)
+	}
+	if o := ps.Msg.GetRls().GetObjects(); o.GetTenantsNextPageToken() != "next" || o.GetTenantsTruncated() != 2 {
+		t.Errorf("tenant page = next %q, truncated %d; want next, 2",
+			o.GetTenantsNextPageToken(), o.GetTenantsTruncated())
 	}
 	if ps.Msg.GetTenants().GetTotal() != 4 {
 		t.Errorf("tenant total = %d, want 4", ps.Msg.GetTenants().GetTotal())

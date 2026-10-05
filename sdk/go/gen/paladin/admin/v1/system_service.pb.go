@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -332,7 +333,13 @@ func (x *SubscriptionDeliveryStat) GetLastAttemptAt() string {
 
 // ─── Platform census ────────────────────────────────────────────────────────
 type GetPlatformStatsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Pages the per-tenant object breakdown (rls.objects.tenants), biggest
+	// tenant first. page_size 0 or above the server's cap means the cap;
+	// page_token is rls.objects.tenants_next_page_token from the previous
+	// response. Every other field of the response is the whole fleet on
+	// every page.
+	TenantPage    *v1.PageRequest `protobuf:"bytes,1,opt,name=tenant_page,json=tenantPage,proto3" json:"tenant_page,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -365,6 +372,13 @@ func (x *GetPlatformStatsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use GetPlatformStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetPlatformStatsRequest) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetPlatformStatsRequest) GetTenantPage() *v1.PageRequest {
+	if x != nil {
+		return x.TenantPage
+	}
+	return nil
 }
 
 // GetPlatformStatsResponse is the /stats page's whole payload. Split by
@@ -1503,13 +1517,20 @@ type ObjectStats struct {
 	States     []*ObjectStateStat `protobuf:"bytes,2,rep,name=states,proto3" json:"states,omitempty"`
 	TotalCount int64              `protobuf:"varint,3,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
 	TotalBytes int64              `protobuf:"varint,4,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
-	// Per-tenant breakdown, biggest total_count first. Capped server-side
-	// (see systemh.maxTenantObjectRows); `tenants_truncated` is the count
-	// of tenants omitted past the cap.
+	// Per-tenant breakdown, biggest total_count first, one page of it (see
+	// GetPlatformStatsRequest.tenant_page; the cap is
+	// platformstats.maxTenantRows). `tenants_truncated` is the count of
+	// tenants past this page.
+	//
+	// The cursor is over live counts: a tenant whose count crosses a page
+	// boundary between requests can repeat or be skipped. The rollup above
+	// is authoritative.
 	Tenants          []*TenantObjectStats `protobuf:"bytes,5,rep,name=tenants,proto3" json:"tenants,omitempty"`
 	TenantsTruncated int64                `protobuf:"varint,6,opt,name=tenants_truncated,json=tenantsTruncated,proto3" json:"tenants_truncated,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Empty on the last page.
+	TenantsNextPageToken string `protobuf:"bytes,7,opt,name=tenants_next_page_token,json=tenantsNextPageToken,proto3" json:"tenants_next_page_token,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ObjectStats) Reset() {
@@ -1577,11 +1598,18 @@ func (x *ObjectStats) GetTenantsTruncated() int64 {
 	return 0
 }
 
+func (x *ObjectStats) GetTenantsNextPageToken() string {
+	if x != nil {
+		return x.TenantsNextPageToken
+	}
+	return ""
+}
+
 var File_paladin_admin_v1_system_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\n" +
-	"%paladin/admin/v1/system_service.proto\x12\x10paladin.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x12\n" +
+	"%paladin/admin/v1/system_service.proto\x12\x10paladin.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"paladin/common/v1/pagination.proto\"\x12\n" +
 	"\x10GetConfigRequest\"H\n" +
 	"\x11GetConfigResponse\x12\x12\n" +
 	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x1f\n" +
@@ -1602,8 +1630,10 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\n" +
 	"last_error\x18\x05 \x01(\tR\tlastError\x12(\n" +
 	"\x10last_status_code\x18\x06 \x01(\x05R\x0elastStatusCode\x12&\n" +
-	"\x0flast_attempt_at\x18\a \x01(\tR\rlastAttemptAt\"\x19\n" +
-	"\x17GetPlatformStatsRequest\"\xbc\x03\n" +
+	"\x0flast_attempt_at\x18\a \x01(\tR\rlastAttemptAt\"Z\n" +
+	"\x17GetPlatformStatsRequest\x12?\n" +
+	"\vtenant_page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\n" +
+	"tenantPage\"\xbc\x03\n" +
 	"\x18GetPlatformStatsResponse\x127\n" +
 	"\atenants\x18\x01 \x01(\v2\x1d.paladin.admin.v1.TenantStatsR\atenants\x12:\n" +
 	"\bbackends\x18\x02 \x01(\v2\x1e.paladin.admin.v1.BackendStatsR\bbackends\x127\n" +
@@ -1718,7 +1748,7 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\vtotal_count\x18\x05 \x01(\x03R\n" +
 	"totalCount\x12\x1f\n" +
 	"\vtotal_bytes\x18\x06 \x01(\x03R\n" +
-	"totalBytes\"\x87\x02\n" +
+	"totalBytes\"\xbe\x02\n" +
 	"\vObjectStats\x129\n" +
 	"\x06states\x18\x02 \x03(\v2!.paladin.admin.v1.ObjectStateStatR\x06states\x12\x1f\n" +
 	"\vtotal_count\x18\x03 \x01(\x03R\n" +
@@ -1726,7 +1756,8 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\vtotal_bytes\x18\x04 \x01(\x03R\n" +
 	"totalBytes\x12=\n" +
 	"\atenants\x18\x05 \x03(\v2#.paladin.admin.v1.TenantObjectStatsR\atenants\x12+\n" +
-	"\x11tenants_truncated\x18\x06 \x01(\x03R\x10tenantsTruncatedJ\x04\b\x01\x10\x02R\tavailable2\xd0\x02\n" +
+	"\x11tenants_truncated\x18\x06 \x01(\x03R\x10tenantsTruncated\x125\n" +
+	"\x17tenants_next_page_token\x18\a \x01(\tR\x14tenantsNextPageTokenJ\x04\b\x01\x10\x02R\tavailable2\xd0\x02\n" +
 	"\rSystemService\x12Y\n" +
 	"\tGetConfig\x12\".paladin.admin.v1.GetConfigRequest\x1a#.paladin.admin.v1.GetConfigResponse\"\x03\x90\x02\x01\x12t\n" +
 	"\x12GetDispatcherStats\x12+.paladin.admin.v1.GetDispatcherStatsRequest\x1a,.paladin.admin.v1.GetDispatcherStatsResponse\"\x03\x90\x02\x01\x12n\n" +
@@ -1772,42 +1803,44 @@ var file_paladin_admin_v1_system_service_proto_goTypes = []any{
 	nil,                                // 23: paladin.admin.v1.BucketStats.ByProvisionStateEntry
 	nil,                                // 24: paladin.admin.v1.BucketStats.ByBackendEntry
 	nil,                                // 25: paladin.admin.v1.CollectionStats.ByBackendEntry
-	(*timestamppb.Timestamp)(nil),      // 26: google.protobuf.Timestamp
+	(*v1.PageRequest)(nil),             // 26: paladin.common.v1.PageRequest
+	(*timestamppb.Timestamp)(nil),      // 27: google.protobuf.Timestamp
 }
 var file_paladin_admin_v1_system_service_proto_depIdxs = []int32{
 	4,  // 0: paladin.admin.v1.GetDispatcherStatsResponse.subscriptions:type_name -> paladin.admin.v1.SubscriptionDeliveryStat
-	12, // 1: paladin.admin.v1.GetPlatformStatsResponse.tenants:type_name -> paladin.admin.v1.TenantStats
-	13, // 2: paladin.admin.v1.GetPlatformStatsResponse.backends:type_name -> paladin.admin.v1.BackendStats
-	14, // 3: paladin.admin.v1.GetPlatformStatsResponse.buckets:type_name -> paladin.admin.v1.BucketStats
-	15, // 4: paladin.admin.v1.GetPlatformStatsResponse.collections:type_name -> paladin.admin.v1.CollectionStats
-	16, // 5: paladin.admin.v1.GetPlatformStatsResponse.users:type_name -> paladin.admin.v1.UserStats
-	26, // 6: paladin.admin.v1.GetPlatformStatsResponse.collected_at:type_name -> google.protobuf.Timestamp
-	7,  // 7: paladin.admin.v1.GetPlatformStatsResponse.rls:type_name -> paladin.admin.v1.RLSStats
-	19, // 8: paladin.admin.v1.RLSStats.objects:type_name -> paladin.admin.v1.ObjectStats
-	8,  // 9: paladin.admin.v1.RLSStats.quotas:type_name -> paladin.admin.v1.QuotaStats
-	9,  // 10: paladin.admin.v1.RLSStats.capabilities:type_name -> paladin.admin.v1.CapabilityStats
-	10, // 11: paladin.admin.v1.RLSStats.api_tokens:type_name -> paladin.admin.v1.APITokenStats
-	11, // 12: paladin.admin.v1.RLSStats.subscriptions:type_name -> paladin.admin.v1.SubscriptionStats
-	20, // 13: paladin.admin.v1.CapabilityStats.by_principal_kind:type_name -> paladin.admin.v1.CapabilityStats.ByPrincipalKindEntry
-	21, // 14: paladin.admin.v1.SubscriptionStats.by_sink_kind:type_name -> paladin.admin.v1.SubscriptionStats.BySinkKindEntry
-	22, // 15: paladin.admin.v1.BackendStats.by_kind:type_name -> paladin.admin.v1.BackendStats.ByKindEntry
-	23, // 16: paladin.admin.v1.BucketStats.by_provision_state:type_name -> paladin.admin.v1.BucketStats.ByProvisionStateEntry
-	24, // 17: paladin.admin.v1.BucketStats.by_backend:type_name -> paladin.admin.v1.BucketStats.ByBackendEntry
-	25, // 18: paladin.admin.v1.CollectionStats.by_backend:type_name -> paladin.admin.v1.CollectionStats.ByBackendEntry
-	17, // 19: paladin.admin.v1.TenantObjectStats.states:type_name -> paladin.admin.v1.ObjectStateStat
-	17, // 20: paladin.admin.v1.ObjectStats.states:type_name -> paladin.admin.v1.ObjectStateStat
-	18, // 21: paladin.admin.v1.ObjectStats.tenants:type_name -> paladin.admin.v1.TenantObjectStats
-	0,  // 22: paladin.admin.v1.SystemService.GetConfig:input_type -> paladin.admin.v1.GetConfigRequest
-	2,  // 23: paladin.admin.v1.SystemService.GetDispatcherStats:input_type -> paladin.admin.v1.GetDispatcherStatsRequest
-	5,  // 24: paladin.admin.v1.SystemService.GetPlatformStats:input_type -> paladin.admin.v1.GetPlatformStatsRequest
-	1,  // 25: paladin.admin.v1.SystemService.GetConfig:output_type -> paladin.admin.v1.GetConfigResponse
-	3,  // 26: paladin.admin.v1.SystemService.GetDispatcherStats:output_type -> paladin.admin.v1.GetDispatcherStatsResponse
-	6,  // 27: paladin.admin.v1.SystemService.GetPlatformStats:output_type -> paladin.admin.v1.GetPlatformStatsResponse
-	25, // [25:28] is the sub-list for method output_type
-	22, // [22:25] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	26, // 1: paladin.admin.v1.GetPlatformStatsRequest.tenant_page:type_name -> paladin.common.v1.PageRequest
+	12, // 2: paladin.admin.v1.GetPlatformStatsResponse.tenants:type_name -> paladin.admin.v1.TenantStats
+	13, // 3: paladin.admin.v1.GetPlatformStatsResponse.backends:type_name -> paladin.admin.v1.BackendStats
+	14, // 4: paladin.admin.v1.GetPlatformStatsResponse.buckets:type_name -> paladin.admin.v1.BucketStats
+	15, // 5: paladin.admin.v1.GetPlatformStatsResponse.collections:type_name -> paladin.admin.v1.CollectionStats
+	16, // 6: paladin.admin.v1.GetPlatformStatsResponse.users:type_name -> paladin.admin.v1.UserStats
+	27, // 7: paladin.admin.v1.GetPlatformStatsResponse.collected_at:type_name -> google.protobuf.Timestamp
+	7,  // 8: paladin.admin.v1.GetPlatformStatsResponse.rls:type_name -> paladin.admin.v1.RLSStats
+	19, // 9: paladin.admin.v1.RLSStats.objects:type_name -> paladin.admin.v1.ObjectStats
+	8,  // 10: paladin.admin.v1.RLSStats.quotas:type_name -> paladin.admin.v1.QuotaStats
+	9,  // 11: paladin.admin.v1.RLSStats.capabilities:type_name -> paladin.admin.v1.CapabilityStats
+	10, // 12: paladin.admin.v1.RLSStats.api_tokens:type_name -> paladin.admin.v1.APITokenStats
+	11, // 13: paladin.admin.v1.RLSStats.subscriptions:type_name -> paladin.admin.v1.SubscriptionStats
+	20, // 14: paladin.admin.v1.CapabilityStats.by_principal_kind:type_name -> paladin.admin.v1.CapabilityStats.ByPrincipalKindEntry
+	21, // 15: paladin.admin.v1.SubscriptionStats.by_sink_kind:type_name -> paladin.admin.v1.SubscriptionStats.BySinkKindEntry
+	22, // 16: paladin.admin.v1.BackendStats.by_kind:type_name -> paladin.admin.v1.BackendStats.ByKindEntry
+	23, // 17: paladin.admin.v1.BucketStats.by_provision_state:type_name -> paladin.admin.v1.BucketStats.ByProvisionStateEntry
+	24, // 18: paladin.admin.v1.BucketStats.by_backend:type_name -> paladin.admin.v1.BucketStats.ByBackendEntry
+	25, // 19: paladin.admin.v1.CollectionStats.by_backend:type_name -> paladin.admin.v1.CollectionStats.ByBackendEntry
+	17, // 20: paladin.admin.v1.TenantObjectStats.states:type_name -> paladin.admin.v1.ObjectStateStat
+	17, // 21: paladin.admin.v1.ObjectStats.states:type_name -> paladin.admin.v1.ObjectStateStat
+	18, // 22: paladin.admin.v1.ObjectStats.tenants:type_name -> paladin.admin.v1.TenantObjectStats
+	0,  // 23: paladin.admin.v1.SystemService.GetConfig:input_type -> paladin.admin.v1.GetConfigRequest
+	2,  // 24: paladin.admin.v1.SystemService.GetDispatcherStats:input_type -> paladin.admin.v1.GetDispatcherStatsRequest
+	5,  // 25: paladin.admin.v1.SystemService.GetPlatformStats:input_type -> paladin.admin.v1.GetPlatformStatsRequest
+	1,  // 26: paladin.admin.v1.SystemService.GetConfig:output_type -> paladin.admin.v1.GetConfigResponse
+	3,  // 27: paladin.admin.v1.SystemService.GetDispatcherStats:output_type -> paladin.admin.v1.GetDispatcherStatsResponse
+	6,  // 28: paladin.admin.v1.SystemService.GetPlatformStats:output_type -> paladin.admin.v1.GetPlatformStatsResponse
+	26, // [26:29] is the sub-list for method output_type
+	23, // [23:26] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_system_service_proto_init() }
