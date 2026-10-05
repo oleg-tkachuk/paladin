@@ -379,35 +379,23 @@ func preWarmNATS(ctx context.Context, pool *pgxpool.Pool, natsPool *worker.NatsC
 		return
 	}
 	defer rows.Close()
-	seen := make(map[string]worker.NatsTarget)
+	// Warmup drops the duplicates: every subscription to one server is listed.
+	var targets []worker.NatsTarget
 	for rows.Next() {
 		var raw []byte
 		if err := rows.Scan(&raw); err != nil {
 			l.Warn("nats pre-warm: row scan failed", zap.Error(err))
 			continue
 		}
-		var cfg struct {
-			URL            string `json:"url"`
-			CredentialsRef string `json:"credentials_ref"`
+		if t, ok := worker.NatsTargetFromSinkConfig(raw); ok {
+			targets = append(targets, t)
 		}
-		if err := json.Unmarshal(raw, &cfg); err != nil {
-			continue
-		}
-		if cfg.URL == "" {
-			continue
-		}
-		key := cfg.URL + "\x00" + cfg.CredentialsRef
-		seen[key] = worker.NatsTarget{URL: cfg.URL, CredentialsRef: cfg.CredentialsRef}
-	}
-	targets := make([]worker.NatsTarget, 0, len(seen))
-	for _, t := range seen {
-		targets = append(targets, t)
 	}
 	if len(targets) == 0 {
 		l.Info("nats pre-warm: no nats-sink subscriptions configured")
 		return
 	}
-	l.Info("nats pre-warm: dialing servers", zap.Int("targets", len(targets)))
+	l.Info("nats pre-warm: dialing servers", zap.Int("subscriptions", len(targets)))
 	natsPool.Warmup(targets)
 }
 
