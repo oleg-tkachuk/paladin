@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/policies"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // Handler offers Cedar inspection helpers — validation, dry-run authz, and
@@ -165,6 +166,16 @@ func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*Si
 // name. Falls back to the principal's tenant when the resource name does
 // not embed one (e.g. backend names).
 func parseSimulateResource(name string, fallbackTenant uuid.UUID) (uuid.UUID, string, error) {
+	// A collection's name may contain '/', so the collection is everything
+	// between "collections/" and an object's "/objects/{id}" — the SDK's
+	// parsers draw that line, as the data plane's do. Taking the next path
+	// segment read "e2e/logs" as "e2e", another collection's policy.
+	if o, err := paladin.ParseObjectName(name); err == nil {
+		return collectionScope(o.CollectionName)
+	}
+	if c, err := paladin.ParseCollectionName(name); err == nil {
+		return collectionScope(c)
+	}
 	parts := strings.Split(name, "/")
 	if len(parts) >= 4 && parts[0] == "tenants" && parts[2] == "collections" {
 		id, err := uuid.Parse(parts[1])
@@ -182,6 +193,11 @@ func parseSimulateResource(name string, fallbackTenant uuid.UUID) (uuid.UUID, st
 	}
 	// Backend / bucket names — Cedar only sees the tenant-level policy.
 	return fallbackTenant, "", nil
+}
+
+func collectionScope(n paladin.CollectionName) (uuid.UUID, string, error) {
+	id, err := uuid.Parse(n.Tenant)
+	return id, n.Collection, err
 }
 
 // ─── GetEffectivePolicy ─────────────────────────────────────────────────────
@@ -213,7 +229,11 @@ func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, f
 	if err := h.authorizeInspect(ctx, tenantID, collection); err != nil {
 		return nil, err
 	}
-	stored, _, _, err := h.store.Fetch(ctx, tenantID, collection)
+	// Read as the tenant asked about, as the authorizer reads it for that
+	// tenant's requests. The caller's own scope hides another tenant's
+	// collection from RLS, and with it the collection's policy and its
+	// bucket's — an admin inspecting tenant X saw neither.
+	stored, _, _, err := h.store.Fetch(auth.WithActingTenant(ctx, tenantID), tenantID, collection)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("fetch policy: %w", err))
 	}
@@ -228,14 +248,25 @@ func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, f
 		}},
 	}
 	tenantName := apiutil.TenantNamePrefix + tenantID.String()
-	sources := map[string]string{
-		cedar.LayerTenant:     tenantName,
-		cedar.LayerBucket:     stored.BucketName,
-		cedar.LayerCollection: tenantName + collectionsSegment + collection,
+	// Every layer the resource is subject to is listed, an empty one
+	// included: a collection with no policy of its own, in a bucket with
+	// none, still shows both — that they add nothing is the answer. The
+	// engine leaves empty layers out of the text, not out of scope.
+	scope := []struct{ name, source string }{{cedar.LayerTenant, tenantName}}
+	if stored.BucketName != "" {
+		scope = append(scope, struct{ name, source string }{cedar.LayerBucket, stored.BucketName})
 	}
+	if collection != "" {
+		scope = append(scope, struct{ name, source string }{cedar.LayerCollection, tenantName + collectionsSegment + collection})
+	}
+	evaluated := map[string]cedar.EvaluatedLayer{}
 	for _, l := range layers {
+		evaluated[l.Name] = l
+	}
+	for _, sc := range scope {
+		l := evaluated[sc.name]
 		out.Layers = append(out.Layers, PolicyLayer{
-			Source:               sources[l.Name],
+			Source:               sc.source,
 			CedarPolicy:          l.Stored,
 			Frozen:               l.Frozen,
 			EvaluatedCedarPolicy: l.Evaluated,
