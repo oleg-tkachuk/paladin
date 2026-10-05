@@ -26,6 +26,9 @@ class SystemService(Protocol):
     async def get_platform_stats(self, request: paladin_dot_admin_dot_v1_dot_system__service__pb2.GetPlatformStatsRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_system__service__pb2.GetPlatformStatsResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
 
+    async def list_platform_stats_tenants(self, request: paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
+
 
 class SystemServiceASGIApplication(ConnectASGIApplication[SystemService]):
     def __init__(self, service: SystemService | AsyncGenerator[SystemService], *, interceptors: Iterable[Interceptor]=(), read_max_bytes: int | None = None, compressions: Iterable[Compression] | None = None) -> None:
@@ -61,6 +64,16 @@ class SystemServiceASGIApplication(ConnectASGIApplication[SystemService]):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=svc.get_platform_stats,
+                ),
+                "/paladin.admin.v1.SystemService/ListPlatformStatsTenants": Endpoint.unary(
+                    method=MethodInfo(
+                        name="ListPlatformStatsTenants",
+                        service_name="paladin.admin.v1.SystemService",
+                        input=paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsRequest,
+                        output=paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.list_platform_stats_tenants,
                 ),
             },
             interceptors=interceptors,
@@ -141,6 +154,28 @@ class SystemServiceClient(ConnectClient):
             use_get=use_get,
         )
 
+    async def list_platform_stats_tenants(
+        self,
+        request: paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None,
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListPlatformStatsTenants",
+                service_name="paladin.admin.v1.SystemService",
+                input=paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsRequest,
+                output=paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
 
 class SystemServiceSync(Protocol):
     def get_config(self, request: paladin_dot_admin_dot_v1_dot_system__service__pb2.GetConfigRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_system__service__pb2.GetConfigResponse:
@@ -148,6 +183,8 @@ class SystemServiceSync(Protocol):
     def get_dispatcher_stats(self, request: paladin_dot_admin_dot_v1_dot_system__service__pb2.GetDispatcherStatsRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_system__service__pb2.GetDispatcherStatsResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
     def get_platform_stats(self, request: paladin_dot_admin_dot_v1_dot_system__service__pb2.GetPlatformStatsRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_system__service__pb2.GetPlatformStatsResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
+    def list_platform_stats_tenants(self, request: paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsRequest, ctx: RequestContext) -> paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsResponse:
         raise ConnectError(Code.UNIMPLEMENTED, "Not implemented")
 
 
@@ -184,6 +221,16 @@ class SystemServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=service.get_platform_stats,
+                ),
+                "/paladin.admin.v1.SystemService/ListPlatformStatsTenants": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="ListPlatformStatsTenants",
+                        service_name="paladin.admin.v1.SystemService",
+                        input=paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsRequest,
+                        output=paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.list_platform_stats_tenants,
                 ),
             },
             interceptors=interceptors,
@@ -257,6 +304,28 @@ class SystemServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.SystemService",
                 input=paladin_dot_admin_dot_v1_dot_system__service__pb2.GetPlatformStatsRequest,
                 output=paladin_dot_admin_dot_v1_dot_system__service__pb2.GetPlatformStatsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
+    def list_platform_stats_tenants(
+        self,
+        request: paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None,
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListPlatformStatsTenants",
+                service_name="paladin.admin.v1.SystemService",
+                input=paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsRequest,
+                output=paladin_dot_admin_dot_v1_dot_system__service__pb2.ListPlatformStatsTenantsResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
             ),
             headers=headers,

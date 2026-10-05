@@ -4,6 +4,7 @@ package paladin.admin.v1;
 
 option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1";
 
+import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "paladin/common/v1/pagination.proto";
 
@@ -49,6 +50,60 @@ service SystemService {
   rpc GetPlatformStats(GetPlatformStatsRequest) returns (GetPlatformStatsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // ListPlatformStatsTenants answers "whose" for one of the census counts
+  // GetPlatformStats flags for attention: the tenants behind it, biggest
+  // share first, paged like the object table. The counts are computed from
+  // the same predicates as the census, so a full walk plus `unattributed`
+  // adds up to the number GetPlatformStats reported at the same instant.
+  //
+  // Proxied from the worker like the census, but with no degraded answer:
+  // UNAVAILABLE when the worker leg is unconfigured or unreachable, because
+  // an empty list would read as "nobody". Read-only, no audit row.
+  rpc ListPlatformStatsTenants(ListPlatformStatsTenantsRequest) returns (ListPlatformStatsTenantsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// PlatformStatsSignal is a census count the console flags for attention.
+enum PlatformStatsSignal {
+  PLATFORM_STATS_SIGNAL_UNSPECIFIED = 0;
+  // Quota rows at or over a cap (QuotaStats.at_limit).
+  PLATFORM_STATS_SIGNAL_QUOTA_AT_LIMIT = 1;
+  // Quota rows near a cap and not at one (QuotaStats.near_limit).
+  PLATFORM_STATS_SIGNAL_QUOTA_NEAR_LIMIT = 2;
+  // Active capabilities inside the expiry window (CapabilityStats.expiring_soon).
+  PLATFORM_STATS_SIGNAL_CAPABILITIES_EXPIRING = 3;
+  // Active API tokens inside the expiry window (APITokenStats.expiring_soon).
+  PLATFORM_STATS_SIGNAL_API_TOKENS_EXPIRING = 4;
+}
+
+message ListPlatformStatsTenantsRequest {
+  PlatformStatsSignal signal = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  // page_size 0 or above the server's cap means the cap; page_token is
+  // page.next_page_token from the previous response.
+  paladin.common.v1.PageRequest page = 2;
+}
+
+message ListPlatformStatsTenantsResponse {
+  repeated SignalTenant tenants = 1;
+  // next_page_token is empty on the last page.
+  paladin.common.v1.PageResponse page = 2;
+  // Tenants after this page.
+  int64 tenants_truncated = 3;
+  // Rows behind the signal that belong to no tenant: quotas on a shared
+  // bucket. The same on every page.
+  int64 unattributed = 4;
+}
+
+// SignalTenant is one tenant's share of a signal.
+message SignalTenant {
+  string tenant_id = 1;
+  // slug / display_name are joined in by the admin pod; empty when the
+  // tenant row is gone but its rows linger.
+  string slug = 2;
+  string display_name = 3;
+  int64 count = 4;
 }
 
 message GetConfigRequest {}

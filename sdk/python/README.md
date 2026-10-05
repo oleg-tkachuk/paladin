@@ -566,7 +566,7 @@ under [`proto/paladin`](../../proto/paladin).
 | `PlatformOperationService` | `get_operation`, `list_operations`, `cancel_operation` |
 | `PolicyService` | `validate`, `simulate_authz`, `get_effective_policy` |
 | `QuotaService` | `get_quota`, `set_quota`, `reset_usage` |
-| `SystemService` | `get_config`, `get_dispatcher_stats`, `get_platform_stats` |
+| `SystemService` | `get_config`, `get_dispatcher_stats`, `get_platform_stats`, `list_platform_stats_tenants` |
 | `TenantBudgetService` | `get`, `set`, `summarize` |
 | `TenantService` | `create_tenant`, `get_tenant`, `update_tenant`, `delete_tenant`, `list_tenants`, `set_inherited_policy`, `restore_tenant`, `purge_tenant`, `rename_tenant_slug`, `migrate_tenant_storage_layout`, `get_tenant_storage_migration`, `resolve_renamed_slug`, `get_tenant_default_binding`, `set_tenant_default_binding`, `clear_tenant_default_binding` |
 

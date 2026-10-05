@@ -73,4 +73,9 @@ func TestSystemServer_NilHandler_Unavailable(t *testing.T) {
 
 	_, err = srv.GetPlatformStats(ctx, connect.NewRequest(&pb.GetPlatformStatsRequest{}))
 	assertUnavailable(t, "GetPlatformStats", err)
+
+	_, err = srv.ListPlatformStatsTenants(ctx, connect.NewRequest(&pb.ListPlatformStatsTenantsRequest{
+		Signal: pb.PlatformStatsSignal_PLATFORM_STATS_SIGNAL_QUOTA_AT_LIMIT,
+	}))
+	assertUnavailable(t, "ListPlatformStatsTenants", err)
 }
