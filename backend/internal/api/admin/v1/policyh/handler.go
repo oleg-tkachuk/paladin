@@ -229,7 +229,11 @@ func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, f
 	if err := h.authorizeInspect(ctx, tenantID, collection); err != nil {
 		return nil, err
 	}
-	stored, _, _, err := h.store.Fetch(ctx, tenantID, collection)
+	// Read as the tenant asked about, as the authorizer reads it for that
+	// tenant's requests. The caller's own scope hides another tenant's
+	// collection from RLS, and with it the collection's policy and its
+	// bucket's — an admin inspecting tenant X saw neither.
+	stored, _, _, err := h.store.Fetch(auth.WithActingTenant(ctx, tenantID), tenantID, collection)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("fetch policy: %w", err))
 	}
