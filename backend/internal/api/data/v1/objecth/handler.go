@@ -812,7 +812,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 
 	obj, err := h.repo.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, objectLookupError(err)
 	}
 	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
@@ -1173,7 +1173,7 @@ func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (*
 	}
 	obj, err := h.repo.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, objectLookupError(err)
 	}
 	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
@@ -1276,7 +1276,7 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	}
 	obj, err := h.repo.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, objectLookupError(err)
 	}
 	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
 	// Download issues a presigned URL — capability needs OpPresign and
@@ -1371,7 +1371,7 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	// content type applies to an update the same way it does to a delete.
 	cur, err := h.repo.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, objectLookupError(err)
 	}
 	objectURI := "object://" + tenantID.String() + "/" + in.Collection + "/" + cur.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
@@ -1447,7 +1447,7 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 	}
 	obj, err := h.repo.FindByName(ctx, tenantID, collection, objectIDStr)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err)
+		return objectLookupError(err)
 	}
 	objectURI := "object://" + tenantID.String() + "/" + collection + "/" + obj.Key
 	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, objectURI); err != nil {
@@ -1724,7 +1724,7 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	}
 	obj, err := h.repo.FindByName(ctx, tenantID, collection, objectIDStr)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, objectLookupError(err)
 	}
 	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
 	// Restore is conceptually a Put (re-creates the live object from a
@@ -1824,7 +1824,7 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	}
 	src, err := h.repo.FindByName(ctx, tenantID, in.SourceCollection, in.SourceObjectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, objectLookupError(err)
 	}
 	if src.State != statemachine.StateAvailable {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,

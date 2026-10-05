@@ -2,7 +2,6 @@ package objecth
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -135,7 +134,7 @@ func TestGetVersionUnknownParentIsNotFound(t *testing.T) {
 	versions := newFakeVersionRepo()
 	tenantID := uuid.New()
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
-	h := NewVersionHandler(&parentRepo{findErr: errors.New("no rows")}, versions)
+	h := NewVersionHandler(&parentRepo{findErr: ErrObjectNotFound}, versions)
 	h.SetAuthorizer(allowAll{})
 
 	_, err := h.GetVersion(ctx, versionName(tenantID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())))
