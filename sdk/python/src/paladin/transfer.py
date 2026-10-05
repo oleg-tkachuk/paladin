@@ -67,7 +67,12 @@ def _with_required(
     """The headers to send: the caller's, the Host the URL was signed for,
     and every header the signature covers — which win. Header names are
     case-insensitive, so a caller's ``content-type`` is replaced by a signed
-    ``Content-Type`` rather than sent beside it as a second header."""
+    ``Content-Type`` rather than sent beside it as a second header.
+
+    ``Content-Length`` is among the signed ones and is sent as given: the body
+    may be an iterable, whose length the HTTP client cannot know and would
+    send chunked, which storage refuses. The body is exactly that long — the
+    URL was signed for the size it was registered with."""
     signed = {k.lower() for k in required} | {_HEADER_HOST.lower()}
     sent = {k: v for k, v in (headers or {}).items() if k.lower() not in signed}
     sent[_HEADER_HOST] = host

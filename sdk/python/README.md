@@ -219,7 +219,7 @@ p = paladin.connect(endpoints, token_source=session, transfer=transfer)
 | `rewrite=fn` | The general form: any URL to any URL, the signed Host still kept. Not with `split_horizon`. |
 | `transport=` | A `pyqwest.SyncHTTPTransport` of your own — a proxy, TLS settings. Build it with `follow_redirects=False`: one that follows them cannot be stopped from here. |
 | `connect(…, transfer=t)` | Every `upload` and `download` through that data plane uses `t`; without it, a shared default. |
-| `stream(method, signed, headers=None, content=None)`, `astream(…)` | One presigned request of your own — a URL the server signed that the workflows do not send, such as a PUT minted for another service. A context manager yielding storage's 2xx `pyqwest` response, unread; `method` applies when `signed.method` is empty. The signed Host and `signed.required_headers` are sent, and the rewrite applied. Any other status is a `TransferError`, reported to the hooks; on success report it yourself with `ended(method, host_of(signed), moved, started, None)`, `started` from `time.monotonic()` before the call. |
+| `stream(method, signed, headers=None, content=None)`, `astream(…)` | One presigned request of your own — a URL the server signed that the workflows do not send, such as a PUT minted for another service. A context manager yielding storage's 2xx `pyqwest` response, unread; `method` applies when `signed.method` is empty. The signed Host and `signed.required_headers` are sent, and the rewrite applied; `Content-Length` among them too, since a streamed body has no length the HTTP client could find — send a body of exactly that length. Any other status is a `TransferError`, reported to the hooks; on success report it yourself with `ended(method, host_of(signed), moved, started, None)`, `started` from `time.monotonic()` before the call. |
 | `TransferError` | A request storage refused, or answered with a redirect: `method`, `host` (the URL's query is the signature and is not kept), `status`, and the first 512 bytes of the `body`. |
 
 ### TLS
@@ -408,8 +408,14 @@ created the first time and existing after, for any backend id. `put` stores
 an object directly; `mark_failed` fails a pending one, as the server's
 reconciler does when its URL expired with nothing stored; `tenant` and `collection()` name the fake's tenant and
 its collections, all of which exist; `requests()` lists the RPCs received,
-each a `Request` with its `procedure` and `headers` by lower-case name, for a
-test of what the client sent.
+each a `Request` with its `procedure`, `headers` by lower-case name and
+`message` — a copy of the request — for a test of what the client sent.
+`calls(procedure, match=None)` returns a procedure's requests whose message
+`match` accepts, so a test sharing the fake counts its own:
+
+```python
+mine = fake.calls("/paladin.data.v1.ObjectService/GetObject", lambda m: m.name == obj.name)
+```
 
 `presign_download` signs a GET on the fake's storage, as the server does: it
 expires after `DEFAULT_DOWNLOAD_TTL` (15 minutes) unless the request names a
@@ -429,10 +435,45 @@ fake.fail_rpc("/paladin.data.v1.ObjectService/GetObject", 1, Code.UNAVAILABLE)
 # the first get_object is UNAVAILABLE, the second is served
 ```
 
+`fail_rpc_if(procedure, match, times, code)` fails only the calls whose
+request `match` accepts — one object, one collection — and serves the
+procedure's other calls, so tests sharing one fake each fail their own. Its
+failures stack; the latest that matches takes a call, and a later `fail_rpc`
+still replaces the earlier one. The fake serves each connection on its own
+thread, so callers sharing it are not queued behind one another.
+
 `fail_storage` answers storage requests with a status of the test's choosing
 — an expired URL, a busy store — and `fail_storage_after_storing` loses a
 PUT's answer after storing its body; `storage_ops()` lists what storage
 received.
+
+By default the fake serves every call, whatever credential it carries.
+`FakePaladin(strict_auth=True)` checks credentials as the data plane does.
+The data plane takes the tenant from the credential — there is no tenant
+header — so the fake issues the credentials it accepts, each for a tenant:
+`issue_bearer_token`, `issue_api_token` (with the server's `paladin_pat_`
+prefix) and `issue_capability`. `revoke(token)` revokes one.
+
+```python
+with FakePaladin(strict_auth=True) as fake:
+    p = fake.connect(bearer_token=fake.issue_bearer_token(fake.tenant))
+```
+
+It refuses as the server does, with the server's code and message and no
+`ErrorInfo` reason, since the server's authentication sends none:
+
+| Call | Answer |
+| --- | --- |
+| No credential, or an `Authorization` that is not a bearer token | `UNAUTHENTICATED` |
+| A bearer or API token the fake did not issue, or revoked | `UNAUTHENTICATED` |
+| A capability the fake did not issue, or revoked | `PERMISSION_DENIED` — the server's answer to any capability it cannot verify |
+| A `name` or `parent` in another tenant, or another tenant's multipart upload | `PERMISSION_DENIED` |
+
+It checks only that: the credential is one it issued, not revoked, and of
+the tenant the call names. It verifies no signature, Biscuit, caveat,
+scope, audience or expiry, and has no platform admin acting in another
+tenant. A refused call is in `requests()`, and is refused before
+`fail_rpc`'s failures, which it does not spend.
 
 ### Concurrency and asyncio
 
