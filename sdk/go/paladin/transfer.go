@@ -32,6 +32,16 @@ const (
 // errorBodyLimit bounds how much of a refused transfer's body an error quotes.
 const errorBodyLimit = 512
 
+// transportOwned are the required headers net/http writes itself, from the
+// request's body and URL, rather than from its Header.
+var transportOwned = map[string]bool{
+	headerContentLength: true,
+	headerHost:          true,
+}
+
+// headerHost names the Host a presigned URL was signed for.
+const headerHost = "Host"
+
 // Errors from NewTransfer.
 var (
 	ErrInvalidOrigin = errors.New("paladin: an origin must be an absolute http or https URL with no path")
@@ -230,7 +240,13 @@ func (t *Transfer) do(ctx context.Context, fallbackMethod string, signed *common
 		req.Header[k] = vs
 	}
 	// Covered by the signature: storage refuses the request without them.
+	// Content-Length and Host are covered too, but net/http writes them from
+	// req.ContentLength and req.Host, set above from the body and the signed
+	// URL, and ignores them in req.Header; they are skipped so that is plain.
 	for k, v := range signed.GetRequiredHeaders() {
+		if transportOwned[http.CanonicalHeaderKey(k)] {
+			continue
+		}
 		req.Header.Set(k, v)
 	}
 	start := time.Now()
