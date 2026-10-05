@@ -984,7 +984,8 @@ finding moving from "packages you import" to "your code is affected".
 
 ### List filters push down only the conjuncts SQL can express
 
-- **Status:** Deferred, narrowed 2026-08-28 — timestamps are done.
+- **Status:** Deferred, narrowed 2026-08-28 (timestamps) and 2026-10-05
+  (operation `state` and `done`).
 - **Reason:** The filterable list RPCs extract the SQL-expressible subset of
   the caller's CEL (`cel.ExtractPushdown`) and hand it to the query, so
   `filter` selects from the table rather than from whichever page the cursor
@@ -1000,11 +1001,8 @@ finding moving from "packages you import" to "your code is affected".
   touched, would have accepted. A filter made entirely of those reads the
   whole table one page at a time: correct (paging continues, no row is
   dropped) and slow.
-  Two paths are narrower still and worth naming: `ListCollections` has a
-  hand-written branch for the (backend, bucket) browser that takes no hints at
-  all, and `operations.state` is deliberately not pushed from a filter because
-  the column is an enum and casting an arbitrary literal to it makes Postgres
-  reject the whole query rather than return no rows.
+  One path is narrower still: `ListCollections` has a hand-written branch for
+  the (backend, bucket) browser that takes only the `search` hint.
 - **Definition of Done:** Either the walk covers the rest of the CEL surface
   each schema exposes, or the schemas stop exposing what no query can answer.
   Whatever is added must hold the invariant
