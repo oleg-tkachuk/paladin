@@ -43,27 +43,34 @@ type MultipartAborter interface {
 	AbortMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string) error
 }
 
+// MultipartReaper defaults, for a field left zero.
+const (
+	DefaultMultipartReaperInterval  = time.Hour
+	DefaultMultipartReaperBatchSize = 100
+)
+
 func (r *MultipartReaper) Run(ctx context.Context) error {
 	if r.TTL <= 0 {
 		// Disabled — no TTL configured.
 		return nil
 	}
 	if r.Interval <= 0 {
-		r.Interval = 1 * time.Hour
+		r.Interval = DefaultMultipartReaperInterval
 	}
-	batch := r.BatchSize
-	if batch <= 0 {
-		batch = 100
+	if r.BatchSize <= 0 {
+		r.BatchSize = DefaultMultipartReaperBatchSize
 	}
 	return RunTicker(ctx, "multipart_reaper", r.Interval, func(ctx context.Context) error {
-		r.sweep(ctx, batch)
+		r.Sweep(ctx)
 		return nil
 	})
 }
 
-func (r *MultipartReaper) sweep(ctx context.Context, batch int32) {
+// Sweep reaps one batch of sessions older than TTL. Exported so a test can
+// drive a single tick without the ticker.
+func (r *MultipartReaper) Sweep(ctx context.Context) {
 	cutoff := pgtype.Timestamptz{Time: time.Now().UTC().Add(-r.TTL), Valid: true}
-	rows, err := r.Q.ListStaleMultipartUploads(ctx, cutoff, batch)
+	rows, err := r.Q.ListStaleMultipartUploads(ctx, cutoff, r.BatchSize)
 	if err != nil {
 		r.log().Warn("list stale multipart uploads failed", zap.Error(err))
 		return
