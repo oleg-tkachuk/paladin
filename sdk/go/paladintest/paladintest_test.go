@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -580,6 +581,144 @@ func TestFailRPCRefusesAMistake(t *testing.T) {
 				}
 			}()
 			srv.FailRPC(tc.procedure, tc.times, tc.code)
+		})
+	}
+}
+
+// presignDownload asks the fake for a download URL.
+func presignDownload(p *paladin.Paladin, req *datav1.PresignDownloadRequest) (*datav1.PresignDownloadResponse, error) {
+	resp, err := p.Data.Presign.PresignDownload(context.Background(), connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+// fetch GETs a presigned URL with its required headers, and overrides.
+func fetch(t *testing.T, signed *commonv1.PresignedUrl, override map[string]string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), signed.GetMethod(), signed.GetUrl(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range signed.GetRequiredHeaders() {
+		req.Header.Set(k, v)
+	}
+	for k, v := range override {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	return resp
+}
+
+// A PresignDownload URL reads the object's bytes from the fake's storage,
+// expiring after the default TTL.
+func TestPresignDownloadReadsTheObject(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	body := []byte("presigned body")
+	obj := srv.Put(srv.Collection(), "k", "text/plain", body)
+	before := time.Now()
+	resp, err := presignDownload(p, &datav1.PresignDownloadRequest{Name: obj.GetName()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed := resp.GetDownloadUrl()
+	if signed.GetMethod() != http.MethodGet || len(signed.GetRequiredHeaders()) != 0 {
+		t.Errorf("url = %v, want a GET with no required headers", signed)
+	}
+	expires, err := time.Parse(time.RFC3339, signed.GetExpiresAtRfc3339())
+	if err != nil {
+		t.Fatalf("expires_at %q: %v", signed.GetExpiresAtRfc3339(), err)
+	}
+	// RFC 3339 here has whole seconds: allow one either way.
+	if lo, hi := before.Add(paladintest.DefaultDownloadTTL-time.Second), time.Now().Add(paladintest.DefaultDownloadTTL+time.Second); expires.Before(lo) || expires.After(hi) {
+		t.Errorf("expires_at = %s, want about %s from now", expires, paladintest.DefaultDownloadTTL)
+	}
+	got := fetch(t, signed, nil)
+	data, err := io.ReadAll(got.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.StatusCode != http.StatusOK || !bytes.Equal(data, body) {
+		t.Errorf("GET = %d %q, want 200 %q", got.StatusCode, data, body)
+	}
+}
+
+func TestPresignDownloadHonoursTheRequest(t *testing.T) {
+	const (
+		ttl         = time.Hour
+		disposition = `attachment; filename="a.txt"`
+	)
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
+	resp, err := presignDownload(p, &datav1.PresignDownloadRequest{
+		Name: obj.GetName(), Ttl: durationpb.New(ttl), ContentDisposition: disposition, RequireEtagMatch: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed := resp.GetDownloadUrl()
+	expires, err := time.Parse(time.RFC3339, signed.GetExpiresAtRfc3339())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if left := time.Until(expires); left < ttl-time.Minute || left > ttl+time.Second {
+		t.Errorf("expires in %s, want the requested %s", left, ttl)
+	}
+	if want := `"` + obj.GetEtag() + `"`; signed.GetRequiredHeaders()["If-Match"] != want {
+		t.Errorf("If-Match = %q, want %q", signed.GetRequiredHeaders()["If-Match"], want)
+	}
+	got := fetch(t, signed, nil)
+	if got.StatusCode != http.StatusOK || got.Header.Get("Content-Disposition") != disposition {
+		t.Errorf("GET = %d, Content-Disposition %q; want 200 and %q", got.StatusCode, got.Header.Get("Content-Disposition"), disposition)
+	}
+	if stale := fetch(t, signed, map[string]string{"If-Match": `"stale"`}); stale.StatusCode != http.StatusPreconditionFailed {
+		t.Errorf("a stale If-Match: %d, want 412", stale.StatusCode)
+	}
+}
+
+// PresignDownload refuses what the server refuses, with the server's codes.
+func TestPresignDownloadRefusesWhatTheServerRefuses(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	ctx := context.Background()
+	available := srv.Put(srv.Collection(), "available", "text/plain", []byte("x"))
+	register := func(key string) string {
+		resp, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+			Parent: srv.Collection().String(), Key: key, ChecksumValue: emptySHA256,
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp.Msg.GetObject().GetName()
+	}
+	pending := register("pending")
+	failed := register("failed")
+	srv.MarkFailed(failed)
+	unknown := paladin.ObjectName{CollectionName: srv.Collection(), Object: "00000000-0000-0000-0000-000000000000"}.String()
+	cases := []struct {
+		name string
+		req  *datav1.PresignDownloadRequest
+		code connect.Code
+	}{
+		{"pending", &datav1.PresignDownloadRequest{Name: pending}, connect.CodeFailedPrecondition},
+		{"failed", &datav1.PresignDownloadRequest{Name: failed}, connect.CodeFailedPrecondition},
+		{"unknown", &datav1.PresignDownloadRequest{Name: unknown}, connect.CodeNotFound},
+		{"not an object name", &datav1.PresignDownloadRequest{Name: "objects/x"}, connect.CodeInvalidArgument},
+		{"a negative ttl", &datav1.PresignDownloadRequest{Name: available.GetName(), Ttl: durationpb.New(-time.Second)}, connect.CodeInvalidArgument},
+		{"a ttl above the maximum", &datav1.PresignDownloadRequest{Name: available.GetName(), Ttl: durationpb.New(paladintest.MaxPresignTTL + time.Second)}, connect.CodeInvalidArgument},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := presignDownload(p, tc.req); connect.CodeOf(err) != tc.code {
+				t.Errorf("err = %v, want %s", err, tc.code)
+			}
 		})
 	}
 }
