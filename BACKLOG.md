@@ -860,87 +860,6 @@ finding moving from "packages you import" to "your code is affected".
   decision, not a test gap.
 - **Blockers:** none.
 
-### internal/worker: what is left really is integration work — but less than claimed
-
-- **Status:** Deferred (the integration work is done; what is left is the
-  fourth `poolKey` copy and the unkillable `Statuses` mutant).
-- **The correction.** This entry used to say the remaining branches "need a
-  transaction and a failing dependency, so they belong in
-  tests/integration/components". That was true of the outbox runner and wrong of three
-  other files. BucketReconciler takes interfaces for everything it touches and
-  had no test file at all; ReplicationWorker and StaleOperationReclaimer are
-  likewise fully seamed and were half-held. None of that needed Postgres. The
-  earlier 37% was also measured against the package's own tests alone; with
-  the worker-related integration tests in the denominator it is 47%.
-- **What landed since:** the bucket reconciler's provision and delete paths,
-  including the two branches whose only observable is the log level that tells
-  an operator whether a bucket can ever succeed (held via zaptest/observer,
-  the pattern already used in internal/middleware); and one half each of two
-  disjunctive guards that no test could see, the sharper being a bucket with
-  replication DISABLED but a destination configured, which under `&&` copies a
-  tenant's objects into another bucket against configuration.
-- **The dead-letter boundary is DONE, and the reason it looked open is worth
-  keeping.** `attempts+1 >= max` decides whether an event is retried or dropped
-  forever. It was written out at FOUR call sites — the single-row path plus one
-  per batched sink family — and the integration test only ever drove the HTTP
-  one, so the other three copies could each be relaxed from `>=` to `>` with
-  every test passing. A mutation run found the NATS copy; chasing it found the
-  duplication. The rule now lives once, in
-  `OutboxRunner.markDeliveryFailed`, and the existing
-  TestDispatcher_MaxAttemptsTransitionsToFailed holds it for all four sinks
-  (verified by mutating the single remaining copy).
-- **The OutboxRunner integration work is DONE (2026-10-05).** It held 17 of
-  its 49 mutants against both suites; it now holds 43, through tests in
-  tests/integration that drive the tick, the batch routing, the outcome writes,
-  `DeliveryStats` and the `Run` loop against Postgres, with no broker. The six
-  left are equivalent: the claim's `next_attempt_at <= now()`, the two
-  `MaxBackoff` comparisons in `backoffFor`, the 30s depth-sample boundary, and
-  the NATS and Kafka `pool != nil` halves of the batch routing, which both
-  paths fail or deliver identically (SQS is told apart by its error text).
-  Its defaults are named constants now (`DefaultOutbox*`,
-  `OutboxDepthWarnThreshold`).
-- **A denominator trap specific to this repo:** there are TWO integration
-  suites, `tests/integration/components` and `tests/integration`, and the dispatcher's
-  own tests are in the second. A measurement whose --test-cmd names only the
-  first reports branches as unheld that the other suite covers. Name both.
-- **`sink_nats.go` was measured 2026-09-10, and this bullet was wrong.** It
-  claimed the file had no test file and that coverage had gone to what was easy
-  rather than what runs. A 30-mutation sample against the package's own tests
-  alone scores 87%, and of the four survivors two are held by `tests/integration`
-  (the denominator trap this entry documents two bullets down), one is an
-  equivalent mutant, and one was a real assertion weakness now fixed. Reading a
-  line count as a gap is what produced the claim: coverage of this file lives in
-  four files plus two suites — `parseNatsCredentials` and the auth round-trips in
-  event_dispatcher_test.go, the batch path in sink_batch_test.go, the publish
-  paths in tests/integration against embedded NATS and JetStream servers.
-- **Still genuinely open on the NATS sink, and deliberately left:**
-  `NatsConnPool.Statuses` strips the credentials label from its keys with
-  `i >= 0`; relaxing it to `i > 0` leaks that label into the operator-facing
-  status map, but only for a pool key whose URL is empty, and all three paths
-  into the pool (`deliverNATS`, `natsGroupTarget`, and the warmup scan in
-  cmd/server/serve_dispatcher.go) refuse an empty URL first. Unkillable without
-  fabricating a state the code prevents.
-- **The five files that had no test file named after them are measured
-  (2026-10-05), each against the suites that cover it.** `metrics` 4/4,
-  `capability_purger` 12/13, `reconciler` 12/12, `multipart_reaper` 9/9,
-  `multipart_abort_drainer` 13/14; the two survivors are equivalent and their
-  tests say why. The signal was right this time for two of them: the reaper
-  and the abort drainer had no test at all, unit or integration, and now have
-  both. The reconciler showed the opposite trap — 0% against the package's
-  own tests, 42% once `tests/integration/components` was in the denominator.
-- **A fourth hand-written copy of `poolKey`** sits in
-  cmd/server/serve_dispatcher.go (`key := cfg.URL + "\x00" + cfg.CredentialsRef`),
-  because `poolKey` is unexported and that file is package main. It is used only
-  to dedup warmup targets locally, so drift would mis-dedup rather than
-  misroute — but it is the same rule written twice, and the session that found
-  it chose not to widen the package's API for one caller.
-- **Lesson, third instance in this file:** two of the three fixes here were
-  "one half of a pattern". The disabled-bucket test set both halves of a
-  disjunction at once; the reconciler's log test covered the provision path and
-  not its identical delete twin. A guard written as one expression reads as one
-  thing, and covering part of it feels like covering it.
-- **Blockers:** none.
-
 ### Mutation testing: how to read what it says
 
 - **Status:** Deferred (the tool is in the repo; this is the note that goes
@@ -956,6 +875,10 @@ finding moving from "packages you import" to "your code is affected".
   write tests for behaviour that is already held. `--test-cmd` exists for that,
   and a filter that matches the wrong test names produces a 0% which is also
   not a finding.
+- **This repo has TWO integration suites,** `tests/integration/components` and
+  `tests/integration`, and the dispatcher's tests are in the second. A
+  `--test-cmd` naming only the first reports branches as unheld that the other
+  suite covers. Name both.
 - **A sampled score says nothing about a line.** connectshim/admin scored 98%
   on an eighty-mutation sample and 86% exhaustively: 43 survivors the sample
   never drew. To retire a named survivor, mutate that line; to call a package
