@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/capability"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -117,6 +118,27 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 	}
 	if got := getRes.Msg.GetBudget().GetTenantId(); got != tenantID.String() {
 		t.Errorf("tenant_id: got %q, want %q", got, tenantID)
+	}
+}
+
+// The request names the tenant by id, so the audit row named nothing and a
+// platform admin's change to a tenant's budget was in no tenant's trail.
+func TestTenantBudgetServer_Set_NamesTheBudgetForTheAuditLog(t *testing.T) {
+	srv := NewTenantBudgetServer(&fakeUsageStore{})
+	tenantID := uuid.New()
+	ctx := apiutil.WithResourceSlot(context.Background())
+	if _, err := srv.Set(ctx, connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+		TenantId:        tenantID.String(),
+		MaxBudgetMicros: proto.Int64(100_000_000),
+	})); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	got := apiutil.ResourceFromContext(ctx)
+	if want := apiutil.TenantNamePrefix + tenantID.String() + budgetSegment; got != want {
+		t.Errorf("resource = %q, want %q", got, want)
+	}
+	if tenant, ok := apiutil.TenantInResourceName(got); !ok || tenant != tenantID {
+		t.Errorf("the name files the row under %s (%v), want %s", tenant, ok, tenantID)
 	}
 }
 
