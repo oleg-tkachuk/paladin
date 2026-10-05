@@ -380,8 +380,9 @@ data, _ := srv.Content(obj.GetName())
 ```
 
 It serves `ObjectService` (upload, complete, get, lookup, list, download,
-delete), `MultipartUploadService` and `StorageBootstrapService`; every
-other RPC answers `Unimplemented`. Like the server it refuses a collection
+delete), `MultipartUploadService`, `PresignService` (`RegenerateUploadUrl`,
+`PresignDownload`) and `StorageBootstrapService`; every other RPC answers
+`Unimplemented`. Like the server it refuses a collection
 named by the tenant's slug and a completion whose ETag, when given, is not
 the content's; completing a completed object returns it. Like the server it
 holds one object per key: an upload to a key another object holds, in any
@@ -395,6 +396,28 @@ an object directly; `MarkFailed` fails a pending one, as the server's
 reconciler does when its URL expired with nothing stored; `Tenant` and `Collection` name the fake's tenant and its
 collections, all of which exist; `Requests` lists the RPCs received, each
 with its `Procedure` and `Header`, for a test of what the client sent.
+
+`PresignDownload` signs a GET on the fake's storage, as the server does: it
+expires after `DefaultDownloadTTL` (15 minutes) unless the request names a
+TTL up to `MaxPresignTTL`, carries `If-Match` when `require_etag_match` is
+set, and answers with the request's `content_disposition`. A pending or
+failed object is `FailedPrecondition`, an unknown one `NotFound`.
+
+Failures are injected on both sides. `FailRPC(procedure, times, code)` makes
+the next `times` calls of a procedure of a served service answer `code`, with
+the `ErrorInfo` reason the server attaches to it, so `errors.Is` and
+`paladin.Reason` read it as they would the server's; calls after those are
+served, every failed one is in `Requests`, and the returned `reset` clears
+what is left:
+
+```go
+srv.FailRPC(paladindatav1connect.ObjectServiceGetObjectProcedure, 1, connect.CodeUnavailable)
+// the first GetObject is Unavailable, the second is served
+```
+
+`FailStorage` answers storage requests with a status of the test's choosing
+— an expired URL, a busy store — and `FailStorageAfterStoring` loses a PUT's
+answer after storing its body; `StorageOps` lists what storage received.
 
 ### Concurrency
 

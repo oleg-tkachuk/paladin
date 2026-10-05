@@ -7,15 +7,18 @@
 //	obj, err := paladin.Upload(ctx, p.Data, paladin.UploadInput{Parent: srv.Collection().String(), …}, paladin.UploadOptions{})
 //
 // It serves ObjectService (upload, complete, get, lookup, list, download,
-// delete), MultipartUploadService, ListParts included, and
-// StorageBootstrapService; every other RPC of every plane answers
-// Unimplemented, as a server that lacks it does. Like the server it binds
+// delete), MultipartUploadService, ListParts included, PresignService
+// (RegenerateUploadUrl, PresignDownload) and StorageBootstrapService; every
+// other RPC of every plane answers Unimplemented, as a server that lacks it
+// does. Like the server it binds
 // every upload URL to the size and checksum the upload was registered with —
 // its storage refuses a PUT that does not carry exactly the signed headers,
 // a body of another length or checksum, or an overwrite — records that
 // checksum on the object, so Download verifies what it reads, and answers
 // Range and If-Match requests. Requests lists the RPCs it received, with
-// their headers.
+// their headers. FailRPC makes a procedure's next calls fail with a code as
+// the server sends it, and FailStorage the storage requests, for a test of
+// how a program retries and maps errors.
 package paladintest
 
 import (
