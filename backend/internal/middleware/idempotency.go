@@ -241,7 +241,10 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 			}
 			return next(ctx, req)
 		}
-		tenantID, err := auth.TenantFromContext(ctx)
+		// The tenant the request acts on: a platform admin's data-plane call
+		// names another one (ActOnNamedTenant), and keying it on the admin's
+		// own let one key collide across every tenant the admin worked in.
+		tenantID, err := auth.EffectiveTenant(ctx)
 		if err != nil {
 			// Pre-auth or auth-failed: skip memoize, defer to next()
 			// which will surface the auth error to the caller.

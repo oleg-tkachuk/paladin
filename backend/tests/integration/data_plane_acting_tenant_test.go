@@ -176,3 +176,112 @@ func TestDataPlaneTenantBoundaries(t *testing.T) {
 		}
 	}
 }
+
+// The idempotency store keys a response on the tenant the request acts on.
+// It keyed on the caller's own, so a platform admin who reused one
+// Idempotency-Key in two tenants had the second call answered with the
+// first one's response, and the second write never happened.
+func TestDataPlaneAdminIdempotencyKeyIsPerTenant(t *testing.T) {
+	f := newActingTenantFixture(t)
+	admin := f.mint(f.platform, "platform.admin")
+	ctx, cancel := context.WithTimeout(context.Background(), actingTenantCallTimeout)
+	defer cancel()
+
+	const key = "admin-key-reused-across-tenants"
+	for _, c := range []struct {
+		tenant, object uuid.UUID
+	}{{f.target, f.inTarget}, {f.platform, f.inPlatform}} {
+		req := authed(admin, &pbdata.UpdateObjectRequest{
+			Name:            objectOf(c.tenant, c.object),
+			ResourceVersion: "1",
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
+			Tags:            map[string]string{"set-by": "platform-admin"},
+		})
+		req.Header().Set("Idempotency-Key", key)
+		resp, err := f.objects.UpdateObject(ctx, req)
+		if err != nil {
+			t.Fatalf("UpdateObject in %s: %v", c.tenant, err)
+		}
+		if got, want := resp.Msg.GetName(), objectOf(c.tenant, c.object); got != want {
+			t.Errorf("answered with %s, want %s — the key replayed another tenant's response", got, want)
+		}
+		if got := mustObjectTags(t, f.h.PoolMigrate, c.object); got["set-by"] != "platform-admin" {
+			t.Errorf("object %s was not written: tags %v", c.object, got)
+		}
+	}
+
+	// And within the tenant the key still does its job: a retry is answered
+	// from the first call, not run again. Keyed on the caller while the
+	// connection is scoped to the target, the row was refused by RLS and a
+	// retry ran the write twice.
+	retry := authed(admin, &pbdata.UpdateObjectRequest{
+		Name:            objectOf(f.target, f.inTarget),
+		ResourceVersion: "1",
+		UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
+		Tags:            map[string]string{"set-by": "a-retry-that-must-not-run"},
+	})
+	retry.Header().Set("Idempotency-Key", key)
+	if _, err := f.objects.UpdateObject(ctx, retry); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if got := mustObjectTags(t, f.h.PoolMigrate, f.inTarget); got["set-by"] != "platform-admin" {
+		t.Errorf("the retry ran the write again: tags %v", got)
+	}
+}
+
+// A platform admin's data-plane work inside another tenant is in that
+// tenant's trail; its work in its own tenant, like any tenant's own
+// data-plane writes, is not audited.
+func TestDataPlaneAdminWorkIsInTheTenantsTrail(t *testing.T) {
+	f := newActingTenantFixture(t)
+	admin := f.mint(f.platform, "platform.admin")
+	ctx, cancel := context.WithTimeout(context.Background(), actingTenantCallTimeout)
+	defer cancel()
+
+	for _, c := range []struct {
+		tenant, object uuid.UUID
+	}{{f.target, f.inTarget}, {f.platform, f.inPlatform}} {
+		if _, err := f.objects.UpdateObject(ctx, authed(admin, &pbdata.UpdateObjectRequest{
+			Name:            objectOf(c.tenant, c.object),
+			ResourceVersion: "1",
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
+			Tags:            map[string]string{"set-by": "platform-admin"},
+		})); err != nil {
+			t.Fatalf("UpdateObject in %s: %v", c.tenant, err)
+		}
+	}
+
+	type row struct {
+		action, resource string
+		actor            uuid.UUID
+	}
+	rowsUnder := func(tenant uuid.UUID) []row {
+		rows, err := f.h.PoolMigrate.Query(ctx,
+			`SELECT action, resource_name, actor_tenant_id FROM audit_log
+			 WHERE resource_tenant_id = $1 AND action LIKE '%ObjectService/UpdateObject'`, tenant)
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		defer rows.Close()
+		var out []row
+		for rows.Next() {
+			var r row
+			if err := rows.Scan(&r.action, &r.resource, &r.actor); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			out = append(out, r)
+		}
+		return out
+	}
+
+	got := rowsUnder(f.target)
+	if len(got) != 1 {
+		t.Fatalf("%d rows in the target's trail, want 1", len(got))
+	}
+	if got[0].actor != f.platform || got[0].resource != objectOf(f.target, f.inTarget) {
+		t.Errorf("row = %+v, want the admin's tenant as actor and the object as resource", got[0])
+	}
+	if own := rowsUnder(f.platform); len(own) != 0 {
+		t.Errorf("the admin's work in its own tenant was audited: %+v", own)
+	}
+}
