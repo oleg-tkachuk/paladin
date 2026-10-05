@@ -1169,22 +1169,6 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** none. Wants a design pass on the page first — it already
   carries five cards plus a wide table.
 
-### Platform Stats: per-tenant table caps at 200 rows
-
-- **Status:** Deferred (bounded payload beats a complete one, for now).
-- **Reason:** `platformstats.maxTenantRows` trims the census to the 200 busiest
-  tenants and reports the omitted count; the rollup row still totals every
-  tenant, so the aggregate is never wrong — only the drill-down is partial. A
-  paginated or sortable table is the real answer, but it needs a page token on
-  the RPC and column-sort state in the UI, which is a bigger surface than the
-  first cut of the page justified.
-- **Definition of Done:**
-  - The RPC takes a page token / sort key, or the console filters server-side
-    by tenant slug.
-  - The "N smaller tenant(s) omitted" note becomes a link that pages rather
-    than a dead end.
-- **Blockers:** none.
-
 ### UI/UX refactor (2026-07-24): flatten the deep tenant→bucket→surface URLs
 
 - **Status:** Deferred (the identity + navigation-legibility pass landed this
