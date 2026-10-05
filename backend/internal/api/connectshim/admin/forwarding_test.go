@@ -3,6 +3,7 @@ package admin
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -488,5 +489,24 @@ func TestListSubscriptions_NarrowsToTheParentTenant(t *testing.T) {
 		t.Errorf("the listing was scoped to %v, not the tenant the caller named — "+
 			"a request for one tenant's subscriptions answered from another's",
 			h.args.TenantID)
+	}
+}
+
+// deniedPolicy refuses every inspection, as the handler's Cedar gate does.
+type deniedPolicy struct{ failingPolicy }
+
+func (deniedPolicy) GetEffectivePolicy(context.Context, string, uuid.UUID) (*policyh.EffectivePolicyOutput, error) {
+	return nil, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+}
+
+// The handler's code reaches the caller. Every error used to be wrapped as
+// Internal, so a caller refused by policy read it as a server fault.
+func TestGetEffectivePolicy_KeepsTheHandlersCode(t *testing.T) {
+	srv := &PolicyServer{H: deniedPolicy{}}
+	_, err := srv.GetEffectivePolicy(context.Background(), connect.NewRequest(&pb.GetEffectivePolicyRequest{
+		ResourceName: "tenants/" + uuid.NewString(),
+	}))
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("code = %v (%v), want PermissionDenied", connect.CodeOf(err), err)
 	}
 }

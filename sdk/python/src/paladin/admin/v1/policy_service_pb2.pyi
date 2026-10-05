@@ -74,9 +74,13 @@ class GetEffectivePolicyResponse(_message.Message):
     def __init__(self, merged_cedar_policy: _Optional[str] = ..., layers: _Optional[_Iterable[_Union[PolicyLayer, _Mapping]]] = ...) -> None: ...
 
 class PolicyLayer(_message.Message):
-    __slots__ = ("source", "cedar_policy")
+    __slots__ = ("source", "cedar_policy", "frozen", "evaluated_cedar_policy")
     SOURCE_FIELD_NUMBER: _ClassVar[int]
     CEDAR_POLICY_FIELD_NUMBER: _ClassVar[int]
+    FROZEN_FIELD_NUMBER: _ClassVar[int]
+    EVALUATED_CEDAR_POLICY_FIELD_NUMBER: _ClassVar[int]
     source: str
     cedar_policy: str
-    def __init__(self, source: _Optional[str] = ..., cedar_policy: _Optional[str] = ...) -> None: ...
+    frozen: bool
+    evaluated_cedar_policy: str
+    def __init__(self, source: _Optional[str] = ..., cedar_policy: _Optional[str] = ..., frozen: _Optional[bool] = ..., evaluated_cedar_policy: _Optional[str] = ...) -> None: ...

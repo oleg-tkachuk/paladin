@@ -74,12 +74,23 @@ message GetEffectivePolicyRequest {
 }
 
 message GetEffectivePolicyResponse {
-  // Concatenated cedar text in evaluation order: tenant → bucket → collection.
+  // The exact text the authorizer compiles for the resource: the built-in
+  // layer, then tenant → bucket → collection, a frozen layer as evaluated.
   string merged_cedar_policy = 1;
+  // The layers in that order, the built-in one first.
   repeated PolicyLayer layers = 2;
 }
 
 message PolicyLayer {
-  string source = 1; // resource name owning the layer
+  // Resource name owning the layer, or "built-in" for the platform's own.
+  string source = 1;
+  // The layer as stored.
   string cedar_policy = 2;
+  // The stored text does not compile, so the authorizer evaluates a freeze
+  // over the layer's scope in its place: everything is denied there except
+  // replacing the layer.
+  bool frozen = 3;
+  // What the authorizer evaluates for this layer: the freeze when frozen,
+  // otherwise the same as cedar_policy.
+  string evaluated_cedar_policy = 4;
 }

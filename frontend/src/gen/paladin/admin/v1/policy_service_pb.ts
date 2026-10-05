@@ -21,7 +21,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_policy_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiVwYWxhZGluL2FkbWluL3YxL3BvbGljeV9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIjAKD1ZhbGlkYXRlUmVxdWVzdBIdCgxjZWRhcl9wb2xpY3kYASABKAlCB7pIBHICEAEiVwoQVmFsaWRhdGVSZXNwb25zZRIKCgJvaxgBIAEoCBI3CgtkaWFnbm9zdGljcxgCIAMoCzIiLnBhbGFkaW4uYWRtaW4udjEuUG9saWN5RGlhZ25vc3RpYyJTChBQb2xpY3lEaWFnbm9zdGljEhAKCHNldmVyaXR5GAEgASgJEg8KB21lc3NhZ2UYAiABKAkSDAoEbGluZRgDIAEoBRIOCgZjb2x1bW4YBCABKAUiwQEKFFNpbXVsYXRlQXV0aHpSZXF1ZXN0EiIKEXByaW5jaXBhbF9zdWJqZWN0GAEgASgJQge6SARyAhABEhsKE3ByaW5jaXBhbF90ZW5hbnRfaWQYAiABKAkSFwoPcHJpbmNpcGFsX3JvbGVzGAMgAygJEhcKBmFjdGlvbhgEIAEoCUIHukgEcgIQARIeCg1yZXNvdXJjZV9uYW1lGAUgASgJQge6SARyAhABEhYKDnByaW5jaXBhbF9raW5kGAYgASgJIlcKFVNpbXVsYXRlQXV0aHpSZXNwb25zZRIPCgdhbGxvd2VkGAEgASgIEhgKEG1hdGNoZWRfcG9saWNpZXMYAiADKAkSEwoLZXhwbGFuYXRpb24YAyABKAkiOwoZR2V0RWZmZWN0aXZlUG9saWN5UmVxdWVzdBIeCg1yZXNvdXJjZV9uYW1lGAEgASgJQge6SARyAhABImgKGkdldEVmZmVjdGl2ZVBvbGljeVJlc3BvbnNlEhsKE21lcmdlZF9jZWRhcl9wb2xpY3kYASABKAkSLQoGbGF5ZXJzGAIgAygLMh0ucGFsYWRpbi5hZG1pbi52MS5Qb2xpY3lMYXllciIzCgtQb2xpY3lMYXllchIOCgZzb3VyY2UYASABKAkSFAoMY2VkYXJfcG9saWN5GAIgASgJMsQCCg1Qb2xpY3lTZXJ2aWNlElYKCFZhbGlkYXRlEiEucGFsYWRpbi5hZG1pbi52MS5WYWxpZGF0ZVJlcXVlc3QaIi5wYWxhZGluLmFkbWluLnYxLlZhbGlkYXRlUmVzcG9uc2UiA5ACARJlCg1TaW11bGF0ZUF1dGh6EiYucGFsYWRpbi5hZG1pbi52MS5TaW11bGF0ZUF1dGh6UmVxdWVzdBonLnBhbGFkaW4uYWRtaW4udjEuU2ltdWxhdGVBdXRoelJlc3BvbnNlIgOQAgESdAoSR2V0RWZmZWN0aXZlUG9saWN5EisucGFsYWRpbi5hZG1pbi52MS5HZXRFZmZlY3RpdmVQb2xpY3lSZXF1ZXN0GiwucGFsYWRpbi5hZG1pbi52MS5HZXRFZmZlY3RpdmVQb2xpY3lSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
+    "CiVwYWxhZGluL2FkbWluL3YxL3BvbGljeV9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIjAKD1ZhbGlkYXRlUmVxdWVzdBIdCgxjZWRhcl9wb2xpY3kYASABKAlCB7pIBHICEAEiVwoQVmFsaWRhdGVSZXNwb25zZRIKCgJvaxgBIAEoCBI3CgtkaWFnbm9zdGljcxgCIAMoCzIiLnBhbGFkaW4uYWRtaW4udjEuUG9saWN5RGlhZ25vc3RpYyJTChBQb2xpY3lEaWFnbm9zdGljEhAKCHNldmVyaXR5GAEgASgJEg8KB21lc3NhZ2UYAiABKAkSDAoEbGluZRgDIAEoBRIOCgZjb2x1bW4YBCABKAUiwQEKFFNpbXVsYXRlQXV0aHpSZXF1ZXN0EiIKEXByaW5jaXBhbF9zdWJqZWN0GAEgASgJQge6SARyAhABEhsKE3ByaW5jaXBhbF90ZW5hbnRfaWQYAiABKAkSFwoPcHJpbmNpcGFsX3JvbGVzGAMgAygJEhcKBmFjdGlvbhgEIAEoCUIHukgEcgIQARIeCg1yZXNvdXJjZV9uYW1lGAUgASgJQge6SARyAhABEhYKDnByaW5jaXBhbF9raW5kGAYgASgJIlcKFVNpbXVsYXRlQXV0aHpSZXNwb25zZRIPCgdhbGxvd2VkGAEgASgIEhgKEG1hdGNoZWRfcG9saWNpZXMYAiADKAkSEwoLZXhwbGFuYXRpb24YAyABKAkiOwoZR2V0RWZmZWN0aXZlUG9saWN5UmVxdWVzdBIeCg1yZXNvdXJjZV9uYW1lGAEgASgJQge6SARyAhABImgKGkdldEVmZmVjdGl2ZVBvbGljeVJlc3BvbnNlEhsKE21lcmdlZF9jZWRhcl9wb2xpY3kYASABKAkSLQoGbGF5ZXJzGAIgAygLMh0ucGFsYWRpbi5hZG1pbi52MS5Qb2xpY3lMYXllciJjCgtQb2xpY3lMYXllchIOCgZzb3VyY2UYASABKAkSFAoMY2VkYXJfcG9saWN5GAIgASgJEg4KBmZyb3plbhgDIAEoCBIeChZldmFsdWF0ZWRfY2VkYXJfcG9saWN5GAQgASgJMsQCCg1Qb2xpY3lTZXJ2aWNlElYKCFZhbGlkYXRlEiEucGFsYWRpbi5hZG1pbi52MS5WYWxpZGF0ZVJlcXVlc3QaIi5wYWxhZGluLmFkbWluLnYxLlZhbGlkYXRlUmVzcG9uc2UiA5ACARJlCg1TaW11bGF0ZUF1dGh6EiYucGFsYWRpbi5hZG1pbi52MS5TaW11bGF0ZUF1dGh6UmVxdWVzdBonLnBhbGFkaW4uYWRtaW4udjEuU2ltdWxhdGVBdXRoelJlc3BvbnNlIgOQAgESdAoSR2V0RWZmZWN0aXZlUG9saWN5EisucGFsYWRpbi5hZG1pbi52MS5HZXRFZmZlY3RpdmVQb2xpY3lSZXF1ZXN0GiwucGFsYWRpbi5hZG1pbi52MS5HZXRFZmZlY3RpdmVQb2xpY3lSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
     [file_buf_validate_validate],
   );
 
@@ -212,13 +212,16 @@ export const GetEffectivePolicyRequestSchema: GenMessage<GetEffectivePolicyReque
 export type GetEffectivePolicyResponse =
   Message<"paladin.admin.v1.GetEffectivePolicyResponse"> & {
     /**
-     * Concatenated cedar text in evaluation order: tenant → bucket → collection.
+     * The exact text the authorizer compiles for the resource: the built-in
+     * layer, then tenant → bucket → collection, a frozen layer as evaluated.
      *
      * @generated from field: string merged_cedar_policy = 1;
      */
     mergedCedarPolicy: string;
 
     /**
+     * The layers in that order, the built-in one first.
+     *
      * @generated from field: repeated paladin.admin.v1.PolicyLayer layers = 2;
      */
     layers: PolicyLayer[];
@@ -237,16 +240,35 @@ export const GetEffectivePolicyResponseSchema: GenMessage<GetEffectivePolicyResp
  */
 export type PolicyLayer = Message<"paladin.admin.v1.PolicyLayer"> & {
   /**
-   * resource name owning the layer
+   * Resource name owning the layer, or "built-in" for the platform's own.
    *
    * @generated from field: string source = 1;
    */
   source: string;
 
   /**
+   * The layer as stored.
+   *
    * @generated from field: string cedar_policy = 2;
    */
   cedarPolicy: string;
+
+  /**
+   * The stored text does not compile, so the authorizer evaluates a freeze
+   * over the layer's scope in its place: everything is denied there except
+   * replacing the layer.
+   *
+   * @generated from field: bool frozen = 3;
+   */
+  frozen: boolean;
+
+  /**
+   * What the authorizer evaluates for this layer: the freeze when frozen,
+   * otherwise the same as cedar_policy.
+   *
+   * @generated from field: string evaluated_cedar_policy = 4;
+   */
+  evaluatedCedarPolicy: string;
 };
 
 /**

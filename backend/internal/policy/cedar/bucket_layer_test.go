@@ -56,8 +56,8 @@ func TestBrokenBucketLayerFreezesItsCollections(t *testing.T) {
 	}
 
 	_, degraded := (&Engine{}).degradeUnparseableLayers(Layers{Bucket: `permit(principal);`}, tid, "docs")
-	if len(degraded) != 1 || degraded[0] != layerBucket {
-		t.Errorf("degraded = %v, want only %q", degraded, layerBucket)
+	if len(degraded) != 1 || degraded[0] != LayerBucket {
+		t.Errorf("degraded = %v, want only %q", degraded, LayerBucket)
 	}
 }
 

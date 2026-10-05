@@ -386,11 +386,13 @@ func (x *GetEffectivePolicyRequest) GetResourceName() string {
 
 type GetEffectivePolicyResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Concatenated cedar text in evaluation order: tenant → bucket → collection.
-	MergedCedarPolicy string         `protobuf:"bytes,1,opt,name=merged_cedar_policy,json=mergedCedarPolicy,proto3" json:"merged_cedar_policy,omitempty"`
-	Layers            []*PolicyLayer `protobuf:"bytes,2,rep,name=layers,proto3" json:"layers,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// The exact text the authorizer compiles for the resource: the built-in
+	// layer, then tenant → bucket → collection, a frozen layer as evaluated.
+	MergedCedarPolicy string `protobuf:"bytes,1,opt,name=merged_cedar_policy,json=mergedCedarPolicy,proto3" json:"merged_cedar_policy,omitempty"`
+	// The layers in that order, the built-in one first.
+	Layers        []*PolicyLayer `protobuf:"bytes,2,rep,name=layers,proto3" json:"layers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetEffectivePolicyResponse) Reset() {
@@ -438,11 +440,20 @@ func (x *GetEffectivePolicyResponse) GetLayers() []*PolicyLayer {
 }
 
 type PolicyLayer struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Source        string                 `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"` // resource name owning the layer
-	CedarPolicy   string                 `protobuf:"bytes,2,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Resource name owning the layer, or "built-in" for the platform's own.
+	Source string `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	// The layer as stored.
+	CedarPolicy string `protobuf:"bytes,2,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
+	// The stored text does not compile, so the authorizer evaluates a freeze
+	// over the layer's scope in its place: everything is denied there except
+	// replacing the layer.
+	Frozen bool `protobuf:"varint,3,opt,name=frozen,proto3" json:"frozen,omitempty"`
+	// What the authorizer evaluates for this layer: the freeze when frozen,
+	// otherwise the same as cedar_policy.
+	EvaluatedCedarPolicy string `protobuf:"bytes,4,opt,name=evaluated_cedar_policy,json=evaluatedCedarPolicy,proto3" json:"evaluated_cedar_policy,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *PolicyLayer) Reset() {
@@ -489,6 +500,20 @@ func (x *PolicyLayer) GetCedarPolicy() string {
 	return ""
 }
 
+func (x *PolicyLayer) GetFrozen() bool {
+	if x != nil {
+		return x.Frozen
+	}
+	return false
+}
+
+func (x *PolicyLayer) GetEvaluatedCedarPolicy() string {
+	if x != nil {
+		return x.EvaluatedCedarPolicy
+	}
+	return ""
+}
+
 var File_paladin_admin_v1_policy_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_policy_service_proto_rawDesc = "" +
@@ -519,10 +544,12 @@ const file_paladin_admin_v1_policy_service_proto_rawDesc = "" +
 	"\rresource_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fresourceName\"\x83\x01\n" +
 	"\x1aGetEffectivePolicyResponse\x12.\n" +
 	"\x13merged_cedar_policy\x18\x01 \x01(\tR\x11mergedCedarPolicy\x125\n" +
-	"\x06layers\x18\x02 \x03(\v2\x1d.paladin.admin.v1.PolicyLayerR\x06layers\"H\n" +
+	"\x06layers\x18\x02 \x03(\v2\x1d.paladin.admin.v1.PolicyLayerR\x06layers\"\x96\x01\n" +
 	"\vPolicyLayer\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12!\n" +
-	"\fcedar_policy\x18\x02 \x01(\tR\vcedarPolicy2\xc4\x02\n" +
+	"\fcedar_policy\x18\x02 \x01(\tR\vcedarPolicy\x12\x16\n" +
+	"\x06frozen\x18\x03 \x01(\bR\x06frozen\x124\n" +
+	"\x16evaluated_cedar_policy\x18\x04 \x01(\tR\x14evaluatedCedarPolicy2\xc4\x02\n" +
 	"\rPolicyService\x12V\n" +
 	"\bValidate\x12!.paladin.admin.v1.ValidateRequest\x1a\".paladin.admin.v1.ValidateResponse\"\x03\x90\x02\x01\x12e\n" +
 	"\rSimulateAuthz\x12&.paladin.admin.v1.SimulateAuthzRequest\x1a'.paladin.admin.v1.SimulateAuthzResponse\"\x03\x90\x02\x01\x12t\n" +

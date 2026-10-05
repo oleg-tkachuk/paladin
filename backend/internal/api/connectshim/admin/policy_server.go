@@ -67,15 +67,19 @@ func (s *PolicyServer) GetEffectivePolicy(ctx context.Context, req *connect.Requ
 	}
 	out, err := s.H.GetEffectivePolicy(ctx, req.Msg.GetResourceName(), fallback)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		// The handler answers with its own codes; wrapping them all as
+		// Internal turned a refused caller into a server fault.
+		return nil, err
 	}
 	resp := &pb.GetEffectivePolicyResponse{
 		MergedCedarPolicy: out.MergedCedarPolicy,
 	}
 	for _, layer := range out.Layers {
 		resp.Layers = append(resp.Layers, &pb.PolicyLayer{
-			Source:      layer.Source,
-			CedarPolicy: layer.CedarPolicy,
+			Source:               layer.Source,
+			CedarPolicy:          layer.CedarPolicy,
+			Frozen:               layer.Frozen,
+			EvaluatedCedarPolicy: layer.EvaluatedCedarPolicy,
 		})
 	}
 	return connect.NewResponse(resp), nil
