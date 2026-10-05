@@ -76,6 +76,12 @@ func (f failingLocks) GetLock(context.Context, string, string) (objecth.ObjectLo
 	return objecth.ObjectLock{}, f.err
 }
 
+type failingTaints struct{ err error }
+
+func (f failingTaints) SetTaint(context.Context, string, string, []string) (*objecth.Object, error) {
+	return nil, f.err
+}
+
 // ONE test, not one per branch.
 //
 // Every error branch in this file is the same passthrough — `if err != nil {
@@ -88,12 +94,13 @@ func (f failingLocks) GetLock(context.Context, string, string) (objecth.ObjectLo
 // caught here rather than in a stack run.
 func TestHandlerErrorsReachTheCaller(t *testing.T) {
 	boom := errors.New("backend unavailable")
-	// All three fields, because they are three independently wired handlers
-	// and the shim's error branches are spread across them.
+	// Every handler field, because they are independently wired handlers and
+	// the shim's error branches are spread across them.
 	s := &ObjectServer{
 		H:        failingHandler{err: boom},
 		Versions: failingVersions{err: boom},
 		Locks:    failingLocks{err: boom},
+		Taints:   failingTaints{err: boom},
 	}
 	// A principal on the context, because the shim asserts the JWT tenant
 	// matches the resource name before it calls the handler — without one the
@@ -112,6 +119,10 @@ func TestHandlerErrorsReachTheCaller(t *testing.T) {
 	}{
 		{"GetObject", func() error {
 			_, err := s.GetObject(ctx, connect.NewRequest(&pb.GetObjectRequest{Name: objName}))
+			return err
+		}},
+		{"SetObjectTaint", func() error {
+			_, err := s.SetObjectTaint(ctx, connect.NewRequest(&pb.SetObjectTaintRequest{Name: objName}))
 			return err
 		}},
 		{"DownloadObject", func() error {
