@@ -535,15 +535,15 @@ function CollectionObjectsContent() {
           page header above (rendered by the OK detail layout); this
           local badge keeps the operator anchored when the toolbar
           gets long. */}
-      <div className="flex items-center justify-between rounded-lg border bg-card/40 p-3">
-        <div className="space-y-0.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card/40 p-3">
+        <div className="min-w-0 space-y-0.5">
           <Label className={T.label}>Object Key</Label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant="info" className={T.code}>
               {collection}
             </Badge>
             {collectionResource.bucket && (
-              <span className="text-xs text-muted-foreground font-mono">
+              <span className="min-w-0 break-all text-xs text-muted-foreground font-mono">
                 → {collectionResource.bucket}
               </span>
             )}

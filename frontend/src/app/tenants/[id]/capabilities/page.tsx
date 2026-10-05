@@ -294,7 +294,7 @@ export default function CapabilitiesPage() {
             <span className="font-mono">{tenant.displayName}</span>.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"
