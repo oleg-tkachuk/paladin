@@ -6,13 +6,11 @@
  * value rests on two things: that an action taken a moment ago shows up, and
  * that the filter narrows rather than empties.
  *
- * Worth knowing before writing anything here: entries are scoped by the
- * ACTOR's tenant, not the affected resource's. A platform admin who creates,
- * renames or deletes something inside tenant X leaves the record under
- * platform — X's own audit log shows nothing of it. That is why these tests
- * use the platform tenant: it is the only one where the actor and the page
- * agree. It also means this page cannot answer "what was done to my tenant"
- * when the answer is "by an operator above it".
+ * The page shows the tenant's trail: what its principals did, and what was
+ * done to it — a platform admin's work inside the tenant included. That last
+ * part is what the page long missed: entries were keyed by the actor's tenant
+ * alone, so an operator's changes to tenant X landed under platform and X's
+ * page stayed empty.
  */
 import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
@@ -30,11 +28,7 @@ test.describe("Tenant audit log", () => {
     makeCollection,
   }) => {
     await loginAsAdmin(page);
-    // The platform tenant, deliberately: entries are keyed by the ACTOR's
-    // tenant, not the resource's. A platform admin creating a collection
-    // inside tenant X leaves the record under platform, so X's own log stays
-    // empty — see the note in the header. Actor and page tenant have to
-    // coincide for this page to have anything to show.
+    // The admin's own tenant: actor and page coincide.
     const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
     // A write with a name of its own: the entry has to be findable by
@@ -62,17 +56,43 @@ test.describe("Tenant audit log", () => {
     expect(collection.collection).toBeTruthy();
   });
 
+  test("an admin's action inside another tenant appears in that tenant's log", async ({
+    page,
+    makeTenant,
+    makeBucket,
+    makeCollection,
+  }) => {
+    await loginAsAdmin(page);
+    // A tenant the admin is not a member of. The collection's resource name
+    // nests the tenant under its bucket, so this also checks that the trail
+    // does not hang on a `tenants/<id>/` prefix.
+    const tenant = await makeTenant();
+    const bucket = await makeBucket();
+    await makeCollection({ tenantId: tenant.tenantId, bucket });
+
+    await gotoSettled(page, auditURL(tenant.tenantId));
+    await expect(
+      page.getByRole("heading", { name: /^Audit log$/ }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(
+        async () =>
+          page
+            .getByText(/CreateCollection/)
+            .count()
+            .then((n) => n > 0),
+        { timeout: 20_000 },
+      )
+      .toBe(true);
+  });
+
   test("the filter narrows the log instead of clearing it", async ({
     page,
     makeBucket,
     makeCollection,
   }) => {
     await loginAsAdmin(page);
-    // The platform tenant, deliberately: entries are keyed by the ACTOR's
-    // tenant, not the resource's. A platform admin creating a collection
-    // inside tenant X leaves the record under platform, so X's own log stays
-    // empty — see the note in the header. Actor and page tenant have to
-    // coincide for this page to have anything to show.
+    // The admin's own tenant: actor and page coincide.
     const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
     await makeCollection({ tenantId, bucket });
