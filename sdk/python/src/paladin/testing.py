@@ -32,6 +32,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
+from socketserver import ThreadingMixIn
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlencode
@@ -267,6 +268,20 @@ class _FailRPCs:
         return call_next(request, ctx)
 
 
+_CONNECTION_BACKLOG = 128
+"""Connections the fake queues before it accepts them: room for every test of
+a suite sharing one fake to call at once. The standard library's default, 5,
+resets the rest."""
+
+
+class _ThreadingServer(ThreadingMixIn, WSGIServer):
+    """Serves each connection on its own thread, so callers sharing the fake
+    are not queued behind one another; the fake's state is behind its lock."""
+
+    daemon_threads = True
+    request_queue_size = _CONNECTION_BACKLOG
+
+
 class _Quiet(WSGIRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         return None
@@ -317,7 +332,9 @@ class FakePaladin(
                     return app(environ, start_response)
             return _unimplemented(start_response)
 
-        self._httpd = make_server(_LOOPBACK, _EPHEMERAL_PORT, route, handler_class=_Quiet)
+        self._httpd = make_server(
+            _LOOPBACK, _EPHEMERAL_PORT, route, server_class=_ThreadingServer, handler_class=_Quiet
+        )
         threading.Thread(target=self._httpd.serve_forever, daemon=True).start()
         self.url = f"http://{_LOOPBACK}:{self._httpd.server_port}"
         return self

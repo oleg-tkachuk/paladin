@@ -6,6 +6,7 @@ from __future__ import annotations
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 
@@ -550,3 +551,17 @@ def test_presign_download_refuses_what_the_server_refuses(fake: FakePaladin) -> 
         with pytest.raises(ConnectError) as caught:
             _presign(p, **fields)
         assert caught.value.code == code, fields
+
+
+def test_the_fake_serves_concurrent_callers(fake: FakePaladin) -> None:
+    """Callers sharing one fake call at once — more of them than the standard
+    library's server queues — and every call is served."""
+    callers = 32
+    p = fake.connect()
+    obj = fake.put(fake.collection(), "k", "text/plain", b"x")
+
+    def call(_: int) -> str:
+        return p.data.object.get_object(object_service_pb2.GetObjectRequest(name=obj.name)).name
+
+    with ThreadPoolExecutor(callers) as pool:
+        assert list(pool.map(call, range(callers))) == [obj.name] * callers
