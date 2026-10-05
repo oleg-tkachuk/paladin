@@ -12,6 +12,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -189,7 +190,7 @@ func bucketToProto(b *admindomain.Bucket) *pb.Bucket {
 }
 
 func uuidStrEmpty(s string) string {
-	if s == "00000000-0000-0000-0000-000000000000" {
+	if s == uuid.Nil.String() {
 		return ""
 	}
 	return s
@@ -376,7 +377,7 @@ func quotaToProto(q *admindomain.Quota) *pb.Quota {
 	}
 	var name string
 	switch {
-	case q.TenantID.String() != "00000000-0000-0000-0000-000000000000":
+	case q.TenantID != uuid.Nil:
 		name = fmt.Sprintf("tenants/%s/quota", q.TenantID)
 	case q.BackendID != "" && q.BucketName != "":
 		name = fmt.Sprintf("storageBackends/%s/buckets/%s/quota", q.BackendID, q.BucketName)
