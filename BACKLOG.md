@@ -1438,22 +1438,6 @@ finding moving from "packages you import" to "your code is affected".
   with tests through the assembled data plane.
 - **Blockers:** none.
 
-### Admin actions that name no resource are in no tenant's trail
-
-- **Status:** Deferred.
-- **Reason:** a tenant's audit trail is the rows its principals made plus the
-  rows whose `resource_name` sits under it (`resource_tenant_id`). Several
-  admin RPCs record an empty resource name — `CreateTenant`,
-  `CapabilityService/Issue` and `Revoke`, `TenantBudgetService/Set`, some
-  `CreateUser` — so a platform admin's call to them is invisible on the
-  tenant's page. The audit middleware takes the name from the request's
-  `name` or `parent`; these requests carry the tenant in another field, or
-  learn it only from the response.
-- **Definition of Done:** each such handler names its resource through
-  `apiutil` (the seam `preferCanonical` already reads), so the row carries
-  the tenant; a test per RPC through the audit interceptor.
-- **Blockers:** none.
-
 ### A disjunctive audit filter can return an empty page with a cursor
 
 - **Status:** Deferred.

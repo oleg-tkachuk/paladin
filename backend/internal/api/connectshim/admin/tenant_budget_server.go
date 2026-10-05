@@ -18,6 +18,10 @@ import (
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
+// budgetSegment names a tenant's budget in a resource name:
+// `tenants/{tenant}/budget`, as its quota is `tenants/{tenant}/quota`.
+const budgetSegment = "/budget"
+
 // TenantBudgetServer is the Connect adapter for capability.TenantBudgets —
 // the tenant-ceiling half of the usage store. It depends on nothing that
 // meters, so it cannot charge or refund. A thin pass-through that does shape
@@ -83,6 +87,9 @@ func (s *TenantBudgetServer) Set(
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("tenant_id: %w", err))
 	}
+	// The request names the tenant by id, so the audit row would name nothing
+	// and the change would be in no tenant's trail.
+	apiutil.StashResource(ctx, apiutil.TenantNamePrefix+tenantID.String()+budgetSegment)
 	// Validate the optional unit_code at the boundary; the store
 	// also re-validates but surfacing InvalidArgument to the caller
 	// here is more useful than the generic Internal we'd otherwise
