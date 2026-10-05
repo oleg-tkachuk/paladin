@@ -72,7 +72,7 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 sm:gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl sm:px-6">
       <Button
         variant="ghost"
         size="icon"
@@ -87,16 +87,18 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
       <button
         type="button"
         onClick={openCommand}
-        className="group inline-flex h-9 flex-1 max-w-md items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 focus-visible:outline-none"
+        className="group inline-flex h-9 min-w-0 flex-1 max-w-md items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 focus-visible:outline-none"
       >
         <MagnifyingGlassIcon className="size-4 shrink-0" />
-        <span className="truncate">Search anything…</span>
+        {/* Below sm the trigger shrinks to its icon; the label stays as its
+            accessible name. */}
+        <span className="truncate max-sm:sr-only">Search anything…</span>
         <kbd className="ml-auto hidden items-center gap-0.5 rounded border bg-background px-1.5 font-mono text-tiny font-medium text-muted-foreground sm:inline-flex">
           ⌘K
         </kbd>
       </button>
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
         <ScopePicker />
         <Separator orientation="vertical" className="hidden h-6 sm:block" />
         <RealTimeStatus />
