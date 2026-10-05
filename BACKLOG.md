@@ -852,12 +852,6 @@ finding moving from "packages you import" to "your code is affected".
   untruncated body fails the same parse). All three differ only in the error
   MESSAGE; a test that pinned the prose would be brittle and would hold no
   behaviour.
-- **Worth knowing about the plane:** `ListUsers` maps an unparseable `parent`
-  to uuid.Nil and treats it as the deliberate cross-tenant listing, so
-  `tenants/{typo}` silently widens scope instead of erroring. The handler
-  enforces the role, so this is not a privilege hole — but "empty" and
-  "malformed" are not distinguished. Left as-is: changing it is a behaviour
-  decision, not a test gap.
 - **Blockers:** none.
 
 ### Mutation testing: how to read what it says
