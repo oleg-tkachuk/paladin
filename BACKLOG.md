@@ -1062,18 +1062,6 @@ finding moving from "packages you import" to "your code is affected".
 
 ## UI / Admin Console
 
-### A tenant's Policies tab shows no policy
-
-- **Status:** Deferred.
-- **Reason:** `/tenants/<id>/policies` is a stub pointing at `/policies`.
-  The tenant's effective Cedar policy — its inherited policy with the
-  per-bucket and per-collection overrides — is assembled only by the server's
-  authorizer, and no RPC returns it as one graph.
-- **Definition of Done:** the tab renders the effective policy for the
-  tenant, each statement labelled with the entity it came from, from an RPC
-  that returns what the authorizer evaluates.
-- **Blockers:** that RPC.
-
 ### Option: Inter and IBM Plex Mono as the console's typefaces
 
 - **Status:** Deferred (an option, decided against for now — Geist stays).
