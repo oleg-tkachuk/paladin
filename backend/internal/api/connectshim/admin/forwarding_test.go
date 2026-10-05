@@ -317,6 +317,31 @@ func TestListAuditLog_DecodesTheCursor(t *testing.T) {
 	}
 }
 
+// The tenant a request names reaches the handler as the trail to read; a
+// value that is not a UUID is refused rather than dropped, which would list
+// every tenant's entries.
+func TestListAuditLog_NamesTheTrailTenant(t *testing.T) {
+	tenant := uuid.New()
+	h := &recordingAudit{}
+	srv := &AuditServer{H: h}
+
+	if _, err := srv.ListAuditLog(context.Background(), connect.NewRequest(&pb.ListAuditLogRequest{
+		TenantId: tenant.String(),
+	})); err != nil {
+		t.Fatalf("listing: %v", err)
+	}
+	if h.args.TrailTenantID != tenant {
+		t.Errorf("trail = %s, want %s", h.args.TrailTenantID, tenant)
+	}
+
+	_, err := srv.ListAuditLog(context.Background(), connect.NewRequest(&pb.ListAuditLogRequest{
+		TenantId: "platform",
+	}))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("a tenant that is not a UUID: err = %v, want InvalidArgument", err)
+	}
+}
+
 type recordingBucketCreate struct {
 	failingBucket
 	in bucketh.CreateBucketInput

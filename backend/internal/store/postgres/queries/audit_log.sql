@@ -2,8 +2,9 @@
 INSERT INTO audit_log (
     id, at, actor_subject, actor_tenant_id, actor_audience,
     action, resource_name, request_id, source_ip,
-    before_json, after_json, error_message, capability_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+    before_json, after_json, error_message, capability_id,
+    resource_tenant_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
 
 -- name: GetAuditEntry :one
 SELECT sqlc.embed(audit_log)
@@ -45,6 +46,10 @@ WHERE (sqlc.narg('actor_subject')::text IS NULL
        OR actor_subject = sqlc.narg('actor_subject')::text)
   AND (sqlc.narg('actor_tenant_id')::uuid IS NULL
        OR actor_tenant_id = sqlc.narg('actor_tenant_id')::uuid)
+  -- A tenant's trail: what its principals did, and what was done to it.
+  AND (sqlc.narg('trail_tenant_id')::uuid IS NULL
+       OR actor_tenant_id = sqlc.narg('trail_tenant_id')::uuid
+       OR resource_tenant_id = sqlc.narg('trail_tenant_id')::uuid)
   AND (sqlc.narg('action_eq')::text IS NULL
        OR action = sqlc.narg('action_eq')::text)
   AND (sqlc.narg('action_prefix')::text IS NULL
