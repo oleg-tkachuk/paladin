@@ -22,11 +22,12 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from buf.validate import validate_pb2 as buf_dot_validate_dot_validate__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 from paladin.common.v1 import pagination_pb2 as paladin_dot_common_dot_v1_dot_pagination__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%paladin/admin/v1/system_service.proto\x12\x10paladin.admin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"paladin/common/v1/pagination.proto\"\x12\n\x10GetConfigRequest\"6\n\x11GetConfigResponse\x12\x0c\n\x04yaml\x18\x01 \x01(\t\x12\x13\n\x0bsource_path\x18\x02 \x01(\t\"\x1b\n\x19GetDispatcherStatsRequest\"\xb3\x01\n\x1aGetDispatcherStatsResponse\x12\x11\n\tavailable\x18\x01 \x01(\x08\x12\x0f\n\x07pending\x18\x02 \x01(\x03\x12\x0e\n\x06\x66\x61iled\x18\x03 \x01(\x03\x12\x1e\n\x16oldest_pending_seconds\x18\x04 \x01(\x03\x12\x41\n\rsubscriptions\x18\x05 \x03(\x0b\x32*.paladin.admin.v1.SubscriptionDeliveryStat\"\xae\x01\n\x18SubscriptionDeliveryStat\x12\x17\n\x0fsubscription_id\x18\x01 \x01(\t\x12\x11\n\ttenant_id\x18\x02 \x01(\t\x12\x0f\n\x07pending\x18\x03 \x01(\x03\x12\x0e\n\x06\x66\x61iled\x18\x04 \x01(\x03\x12\x12\n\nlast_error\x18\x05 \x01(\t\x12\x18\n\x10last_status_code\x18\x06 \x01(\x05\x12\x17\n\x0flast_attempt_at\x18\x07 \x01(\t\"N\n\x17GetPlatformStatsRequest\x12\x33\n\x0btenant_page\x18\x01 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\"\xfa\x02\n\x18GetPlatformStatsResponse\x12.\n\x07tenants\x18\x01 \x01(\x0b\x32\x1d.paladin.admin.v1.TenantStats\x12\x30\n\x08\x62\x61\x63kends\x18\x02 \x01(\x0b\x32\x1e.paladin.admin.v1.BackendStats\x12.\n\x07\x62uckets\x18\x03 \x01(\x0b\x32\x1d.paladin.admin.v1.BucketStats\x12\x36\n\x0b\x63ollections\x18\x04 \x01(\x0b\x32!.paladin.admin.v1.CollectionStats\x12*\n\x05users\x18\x05 \x01(\x0b\x32\x1b.paladin.admin.v1.UserStats\x12\x30\n\x0c\x63ollected_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03rls\x18\x08 \x01(\x0b\x32\x1a.paladin.admin.v1.RLSStatsJ\x04\x08\x06\x10\x07R\x07objects\"\xa5\x02\n\x08RLSStats\x12\x11\n\tavailable\x18\x01 \x01(\x08\x12.\n\x07objects\x18\x02 \x01(\x0b\x32\x1d.paladin.admin.v1.ObjectStats\x12,\n\x06quotas\x18\x03 \x01(\x0b\x32\x1c.paladin.admin.v1.QuotaStats\x12\x37\n\x0c\x63\x61pabilities\x18\x04 \x01(\x0b\x32!.paladin.admin.v1.CapabilityStats\x12\x33\n\napi_tokens\x18\x05 \x01(\x0b\x32\x1f.paladin.admin.v1.APITokenStats\x12:\n\rsubscriptions\x18\x06 \x01(\x0b\x32#.paladin.admin.v1.SubscriptionStats\"\xbb\x01\n\nQuotaStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x15\n\rtenant_scoped\x18\x02 \x01(\x03\x12\x15\n\rbucket_scoped\x18\x03 \x01(\x03\x12\x13\n\x0bwith_limits\x18\x04 \x01(\x03\x12\x10\n\x08\x61t_limit\x18\x05 \x01(\x03\x12\x12\n\nnear_limit\x18\x06 \x01(\x03\x12\x1a\n\x12usage_object_count\x18\x07 \x01(\x03\x12\x19\n\x11usage_total_bytes\x18\x08 \x01(\x03\"\x87\x02\n\x0f\x43\x61pabilityStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x0e\n\x06\x61\x63tive\x18\x02 \x01(\x03\x12\x0f\n\x07\x65xpired\x18\x03 \x01(\x03\x12\x0f\n\x07revoked\x18\x04 \x01(\x03\x12\x11\n\tdelegated\x18\x05 \x01(\x03\x12\x15\n\rexpiring_soon\x18\x06 \x01(\x03\x12Q\n\x11\x62y_principal_kind\x18\x07 \x03(\x0b\x32\x36.paladin.admin.v1.CapabilityStats.ByPrincipalKindEntry\x1a\x36\n\x14\x42yPrincipalKindEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"{\n\rAPITokenStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x0e\n\x06\x61\x63tive\x18\x02 \x01(\x03\x12\x0f\n\x07\x65xpired\x18\x03 \x01(\x03\x12\x0f\n\x07revoked\x18\x04 \x01(\x03\x12\x15\n\rexpiring_soon\x18\x05 \x01(\x03\x12\x12\n\nnever_used\x18\x06 \x01(\x03\"\xd8\x01\n\x11SubscriptionStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x03\x12\x10\n\x08\x64isabled\x18\x03 \x01(\x03\x12\x13\n\x0bwith_filter\x18\x04 \x01(\x03\x12I\n\x0c\x62y_sink_kind\x18\x05 \x03(\x0b\x32\x33.paladin.admin.v1.SubscriptionStats.BySinkKindEntry\x1a\x31\n\x0f\x42ySinkKindEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"\x8f\x01\n\x0bTenantStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x0e\n\x06\x61\x63tive\x18\x02 \x01(\x03\x12\x0f\n\x07trashed\x18\x03 \x01(\x03\x12\x15\n\rshared_layout\x18\x04 \x01(\x03\x12\x18\n\x10\x64\x65\x64icated_layout\x18\x05 \x01(\x03\x12\x1f\n\x17without_default_binding\x18\x06 \x01(\x03\"\xd4\x01\n\x0c\x42\x61\x63kendStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x03\x12\x10\n\x08\x64isabled\x18\x03 \x01(\x03\x12\x11\n\tread_only\x18\x04 \x01(\x03\x12\x13\n\x0bmaintenance\x18\x05 \x01(\x03\x12;\n\x07\x62y_kind\x18\x06 \x03(\x0b\x32*.paladin.admin.v1.BackendStats.ByKindEntry\x1a-\n\x0b\x42yKindEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"\x96\x03\n\x0b\x42ucketStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12O\n\x12\x62y_provision_state\x18\x02 \x03(\x0b\x32\x33.paladin.admin.v1.BucketStats.ByProvisionStateEntry\x12@\n\nby_backend\x18\x03 \x03(\x0b\x32,.paladin.admin.v1.BucketStats.ByBackendEntry\x12\x14\n\x0ctenant_owned\x18\x04 \x01(\x03\x12\x0e\n\x06shared\x18\x05 \x01(\x03\x12\x1a\n\x12versioning_enabled\x18\x06 \x01(\x03\x12\x1b\n\x13object_lock_enabled\x18\x07 \x01(\x03\x12\x1b\n\x13replication_enabled\x18\x08 \x01(\x03\x1a\x37\n\x15\x42yProvisionStateEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\x1a\x30\n\x0e\x42yBackendEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"\xa9\x01\n\x0f\x43ollectionStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x44\n\nby_backend\x18\x02 \x03(\x0b\x32\x30.paladin.admin.v1.CollectionStats.ByBackendEntry\x12\x0f\n\x07unbound\x18\x03 \x01(\x03\x1a\x30\n\x0e\x42yBackendEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\",\n\tUserStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x10\n\x08\x64isabled\x18\x02 \x01(\x03\">\n\x0fObjectStateStat\x12\r\n\x05state\x18\x01 \x01(\t\x12\r\n\x05\x63ount\x18\x02 \x01(\x03\x12\r\n\x05\x62ytes\x18\x03 \x01(\x03\"\xa7\x01\n\x11TenantObjectStats\x12\x11\n\ttenant_id\x18\x01 \x01(\t\x12\x0c\n\x04slug\x18\x02 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x03 \x01(\t\x12\x31\n\x06states\x18\x04 \x03(\x0b\x32!.paladin.admin.v1.ObjectStateStat\x12\x13\n\x0btotal_count\x18\x05 \x01(\x03\x12\x13\n\x0btotal_bytes\x18\x06 \x01(\x03\"\xed\x01\n\x0bObjectStats\x12\x31\n\x06states\x18\x02 \x03(\x0b\x32!.paladin.admin.v1.ObjectStateStat\x12\x13\n\x0btotal_count\x18\x03 \x01(\x03\x12\x13\n\x0btotal_bytes\x18\x04 \x01(\x03\x12\x34\n\x07tenants\x18\x05 \x03(\x0b\x32#.paladin.admin.v1.TenantObjectStats\x12\x19\n\x11tenants_truncated\x18\x06 \x01(\x03\x12\x1f\n\x17tenants_next_page_token\x18\x07 \x01(\tJ\x04\x08\x01\x10\x02R\tavailable2\xd0\x02\n\rSystemService\x12Y\n\tGetConfig\x12\".paladin.admin.v1.GetConfigRequest\x1a#.paladin.admin.v1.GetConfigResponse\"\x03\x90\x02\x01\x12t\n\x12GetDispatcherStats\x12+.paladin.admin.v1.GetDispatcherStatsRequest\x1a,.paladin.admin.v1.GetDispatcherStatsResponse\"\x03\x90\x02\x01\x12n\n\x10GetPlatformStats\x12).paladin.admin.v1.GetPlatformStatsRequest\x1a*.paladin.admin.v1.GetPlatformStatsResponse\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%paladin/admin/v1/system_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"paladin/common/v1/pagination.proto\"\x92\x01\n\x1fListPlatformStatsTenantsRequest\x12\x41\n\x06signal\x18\x01 \x01(\x0e\x32%.paladin.admin.v1.PlatformStatsSignalB\n\xbaH\x07\x82\x01\x04\x10\x01 \x00\x12,\n\x04page\x18\x02 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\"\xb3\x01\n ListPlatformStatsTenantsResponse\x12/\n\x07tenants\x18\x01 \x03(\x0b\x32\x1e.paladin.admin.v1.SignalTenant\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\x12\x19\n\x11tenants_truncated\x18\x03 \x01(\x03\x12\x14\n\x0cunattributed\x18\x04 \x01(\x03\"T\n\x0cSignalTenant\x12\x11\n\ttenant_id\x18\x01 \x01(\t\x12\x0c\n\x04slug\x18\x02 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x03 \x01(\t\x12\r\n\x05\x63ount\x18\x04 \x01(\x03\"\x12\n\x10GetConfigRequest\"6\n\x11GetConfigResponse\x12\x0c\n\x04yaml\x18\x01 \x01(\t\x12\x13\n\x0bsource_path\x18\x02 \x01(\t\"\x1b\n\x19GetDispatcherStatsRequest\"\xb3\x01\n\x1aGetDispatcherStatsResponse\x12\x11\n\tavailable\x18\x01 \x01(\x08\x12\x0f\n\x07pending\x18\x02 \x01(\x03\x12\x0e\n\x06\x66\x61iled\x18\x03 \x01(\x03\x12\x1e\n\x16oldest_pending_seconds\x18\x04 \x01(\x03\x12\x41\n\rsubscriptions\x18\x05 \x03(\x0b\x32*.paladin.admin.v1.SubscriptionDeliveryStat\"\xae\x01\n\x18SubscriptionDeliveryStat\x12\x17\n\x0fsubscription_id\x18\x01 \x01(\t\x12\x11\n\ttenant_id\x18\x02 \x01(\t\x12\x0f\n\x07pending\x18\x03 \x01(\x03\x12\x0e\n\x06\x66\x61iled\x18\x04 \x01(\x03\x12\x12\n\nlast_error\x18\x05 \x01(\t\x12\x18\n\x10last_status_code\x18\x06 \x01(\x05\x12\x17\n\x0flast_attempt_at\x18\x07 \x01(\t\"N\n\x17GetPlatformStatsRequest\x12\x33\n\x0btenant_page\x18\x01 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\"\xfa\x02\n\x18GetPlatformStatsResponse\x12.\n\x07tenants\x18\x01 \x01(\x0b\x32\x1d.paladin.admin.v1.TenantStats\x12\x30\n\x08\x62\x61\x63kends\x18\x02 \x01(\x0b\x32\x1e.paladin.admin.v1.BackendStats\x12.\n\x07\x62uckets\x18\x03 \x01(\x0b\x32\x1d.paladin.admin.v1.BucketStats\x12\x36\n\x0b\x63ollections\x18\x04 \x01(\x0b\x32!.paladin.admin.v1.CollectionStats\x12*\n\x05users\x18\x05 \x01(\x0b\x32\x1b.paladin.admin.v1.UserStats\x12\x30\n\x0c\x63ollected_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03rls\x18\x08 \x01(\x0b\x32\x1a.paladin.admin.v1.RLSStatsJ\x04\x08\x06\x10\x07R\x07objects\"\xa5\x02\n\x08RLSStats\x12\x11\n\tavailable\x18\x01 \x01(\x08\x12.\n\x07objects\x18\x02 \x01(\x0b\x32\x1d.paladin.admin.v1.ObjectStats\x12,\n\x06quotas\x18\x03 \x01(\x0b\x32\x1c.paladin.admin.v1.QuotaStats\x12\x37\n\x0c\x63\x61pabilities\x18\x04 \x01(\x0b\x32!.paladin.admin.v1.CapabilityStats\x12\x33\n\napi_tokens\x18\x05 \x01(\x0b\x32\x1f.paladin.admin.v1.APITokenStats\x12:\n\rsubscriptions\x18\x06 \x01(\x0b\x32#.paladin.admin.v1.SubscriptionStats\"\xbb\x01\n\nQuotaStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x15\n\rtenant_scoped\x18\x02 \x01(\x03\x12\x15\n\rbucket_scoped\x18\x03 \x01(\x03\x12\x13\n\x0bwith_limits\x18\x04 \x01(\x03\x12\x10\n\x08\x61t_limit\x18\x05 \x01(\x03\x12\x12\n\nnear_limit\x18\x06 \x01(\x03\x12\x1a\n\x12usage_object_count\x18\x07 \x01(\x03\x12\x19\n\x11usage_total_bytes\x18\x08 \x01(\x03\"\x87\x02\n\x0f\x43\x61pabilityStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x0e\n\x06\x61\x63tive\x18\x02 \x01(\x03\x12\x0f\n\x07\x65xpired\x18\x03 \x01(\x03\x12\x0f\n\x07revoked\x18\x04 \x01(\x03\x12\x11\n\tdelegated\x18\x05 \x01(\x03\x12\x15\n\rexpiring_soon\x18\x06 \x01(\x03\x12Q\n\x11\x62y_principal_kind\x18\x07 \x03(\x0b\x32\x36.paladin.admin.v1.CapabilityStats.ByPrincipalKindEntry\x1a\x36\n\x14\x42yPrincipalKindEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"{\n\rAPITokenStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x0e\n\x06\x61\x63tive\x18\x02 \x01(\x03\x12\x0f\n\x07\x65xpired\x18\x03 \x01(\x03\x12\x0f\n\x07revoked\x18\x04 \x01(\x03\x12\x15\n\rexpiring_soon\x18\x05 \x01(\x03\x12\x12\n\nnever_used\x18\x06 \x01(\x03\"\xd8\x01\n\x11SubscriptionStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x03\x12\x10\n\x08\x64isabled\x18\x03 \x01(\x03\x12\x13\n\x0bwith_filter\x18\x04 \x01(\x03\x12I\n\x0c\x62y_sink_kind\x18\x05 \x03(\x0b\x32\x33.paladin.admin.v1.SubscriptionStats.BySinkKindEntry\x1a\x31\n\x0f\x42ySinkKindEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"\x8f\x01\n\x0bTenantStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x0e\n\x06\x61\x63tive\x18\x02 \x01(\x03\x12\x0f\n\x07trashed\x18\x03 \x01(\x03\x12\x15\n\rshared_layout\x18\x04 \x01(\x03\x12\x18\n\x10\x64\x65\x64icated_layout\x18\x05 \x01(\x03\x12\x1f\n\x17without_default_binding\x18\x06 \x01(\x03\"\xd4\x01\n\x0c\x42\x61\x63kendStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x03\x12\x10\n\x08\x64isabled\x18\x03 \x01(\x03\x12\x11\n\tread_only\x18\x04 \x01(\x03\x12\x13\n\x0bmaintenance\x18\x05 \x01(\x03\x12;\n\x07\x62y_kind\x18\x06 \x03(\x0b\x32*.paladin.admin.v1.BackendStats.ByKindEntry\x1a-\n\x0b\x42yKindEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"\x96\x03\n\x0b\x42ucketStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12O\n\x12\x62y_provision_state\x18\x02 \x03(\x0b\x32\x33.paladin.admin.v1.BucketStats.ByProvisionStateEntry\x12@\n\nby_backend\x18\x03 \x03(\x0b\x32,.paladin.admin.v1.BucketStats.ByBackendEntry\x12\x14\n\x0ctenant_owned\x18\x04 \x01(\x03\x12\x0e\n\x06shared\x18\x05 \x01(\x03\x12\x1a\n\x12versioning_enabled\x18\x06 \x01(\x03\x12\x1b\n\x13object_lock_enabled\x18\x07 \x01(\x03\x12\x1b\n\x13replication_enabled\x18\x08 \x01(\x03\x1a\x37\n\x15\x42yProvisionStateEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\x1a\x30\n\x0e\x42yBackendEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\"\xa9\x01\n\x0f\x43ollectionStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x44\n\nby_backend\x18\x02 \x03(\x0b\x32\x30.paladin.admin.v1.CollectionStats.ByBackendEntry\x12\x0f\n\x07unbound\x18\x03 \x01(\x03\x1a\x30\n\x0e\x42yBackendEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x03:\x02\x38\x01\",\n\tUserStats\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x10\n\x08\x64isabled\x18\x02 \x01(\x03\">\n\x0fObjectStateStat\x12\r\n\x05state\x18\x01 \x01(\t\x12\r\n\x05\x63ount\x18\x02 \x01(\x03\x12\r\n\x05\x62ytes\x18\x03 \x01(\x03\"\xa7\x01\n\x11TenantObjectStats\x12\x11\n\ttenant_id\x18\x01 \x01(\t\x12\x0c\n\x04slug\x18\x02 \x01(\t\x12\x14\n\x0c\x64isplay_name\x18\x03 \x01(\t\x12\x31\n\x06states\x18\x04 \x03(\x0b\x32!.paladin.admin.v1.ObjectStateStat\x12\x13\n\x0btotal_count\x18\x05 \x01(\x03\x12\x13\n\x0btotal_bytes\x18\x06 \x01(\x03\"\xed\x01\n\x0bObjectStats\x12\x31\n\x06states\x18\x02 \x03(\x0b\x32!.paladin.admin.v1.ObjectStateStat\x12\x13\n\x0btotal_count\x18\x03 \x01(\x03\x12\x13\n\x0btotal_bytes\x18\x04 \x01(\x03\x12\x34\n\x07tenants\x18\x05 \x03(\x0b\x32#.paladin.admin.v1.TenantObjectStats\x12\x19\n\x11tenants_truncated\x18\x06 \x01(\x03\x12\x1f\n\x17tenants_next_page_token\x18\x07 \x01(\tJ\x04\x08\x01\x10\x02R\tavailable*\xf2\x01\n\x13PlatformStatsSignal\x12%\n!PLATFORM_STATS_SIGNAL_UNSPECIFIED\x10\x00\x12(\n$PLATFORM_STATS_SIGNAL_QUOTA_AT_LIMIT\x10\x01\x12*\n&PLATFORM_STATS_SIGNAL_QUOTA_NEAR_LIMIT\x10\x02\x12/\n+PLATFORM_STATS_SIGNAL_CAPABILITIES_EXPIRING\x10\x03\x12-\n)PLATFORM_STATS_SIGNAL_API_TOKENS_EXPIRING\x10\x04\x32\xd9\x03\n\rSystemService\x12Y\n\tGetConfig\x12\".paladin.admin.v1.GetConfigRequest\x1a#.paladin.admin.v1.GetConfigResponse\"\x03\x90\x02\x01\x12t\n\x12GetDispatcherStats\x12+.paladin.admin.v1.GetDispatcherStatsRequest\x1a,.paladin.admin.v1.GetDispatcherStatsResponse\"\x03\x90\x02\x01\x12n\n\x10GetPlatformStats\x12).paladin.admin.v1.GetPlatformStatsRequest\x1a*.paladin.admin.v1.GetPlatformStatsResponse\"\x03\x90\x02\x01\x12\x86\x01\n\x18ListPlatformStatsTenants\x12\x31.paladin.admin.v1.ListPlatformStatsTenantsRequest\x1a\x32.paladin.admin.v1.ListPlatformStatsTenantsResponse\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,6 +35,8 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'paladin.admin.v1.system_ser
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1'
+  _globals['_LISTPLATFORMSTATSTENANTSREQUEST'].fields_by_name['signal']._loaded_options = None
+  _globals['_LISTPLATFORMSTATSTENANTSREQUEST'].fields_by_name['signal']._serialized_options = b'\272H\007\202\001\004\020\001 \000'
   _globals['_CAPABILITYSTATS_BYPRINCIPALKINDENTRY']._loaded_options = None
   _globals['_CAPABILITYSTATS_BYPRINCIPALKINDENTRY']._serialized_options = b'8\001'
   _globals['_SUBSCRIPTIONSTATS_BYSINKKINDENTRY']._loaded_options = None
@@ -52,58 +55,68 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_SYSTEMSERVICE'].methods_by_name['GetDispatcherStats']._serialized_options = b'\220\002\001'
   _globals['_SYSTEMSERVICE'].methods_by_name['GetPlatformStats']._loaded_options = None
   _globals['_SYSTEMSERVICE'].methods_by_name['GetPlatformStats']._serialized_options = b'\220\002\001'
-  _globals['_GETCONFIGREQUEST']._serialized_start=128
-  _globals['_GETCONFIGREQUEST']._serialized_end=146
-  _globals['_GETCONFIGRESPONSE']._serialized_start=148
-  _globals['_GETCONFIGRESPONSE']._serialized_end=202
-  _globals['_GETDISPATCHERSTATSREQUEST']._serialized_start=204
-  _globals['_GETDISPATCHERSTATSREQUEST']._serialized_end=231
-  _globals['_GETDISPATCHERSTATSRESPONSE']._serialized_start=234
-  _globals['_GETDISPATCHERSTATSRESPONSE']._serialized_end=413
-  _globals['_SUBSCRIPTIONDELIVERYSTAT']._serialized_start=416
-  _globals['_SUBSCRIPTIONDELIVERYSTAT']._serialized_end=590
-  _globals['_GETPLATFORMSTATSREQUEST']._serialized_start=592
-  _globals['_GETPLATFORMSTATSREQUEST']._serialized_end=670
-  _globals['_GETPLATFORMSTATSRESPONSE']._serialized_start=673
-  _globals['_GETPLATFORMSTATSRESPONSE']._serialized_end=1051
-  _globals['_RLSSTATS']._serialized_start=1054
-  _globals['_RLSSTATS']._serialized_end=1347
-  _globals['_QUOTASTATS']._serialized_start=1350
-  _globals['_QUOTASTATS']._serialized_end=1537
-  _globals['_CAPABILITYSTATS']._serialized_start=1540
-  _globals['_CAPABILITYSTATS']._serialized_end=1803
-  _globals['_CAPABILITYSTATS_BYPRINCIPALKINDENTRY']._serialized_start=1749
-  _globals['_CAPABILITYSTATS_BYPRINCIPALKINDENTRY']._serialized_end=1803
-  _globals['_APITOKENSTATS']._serialized_start=1805
-  _globals['_APITOKENSTATS']._serialized_end=1928
-  _globals['_SUBSCRIPTIONSTATS']._serialized_start=1931
-  _globals['_SUBSCRIPTIONSTATS']._serialized_end=2147
-  _globals['_SUBSCRIPTIONSTATS_BYSINKKINDENTRY']._serialized_start=2098
-  _globals['_SUBSCRIPTIONSTATS_BYSINKKINDENTRY']._serialized_end=2147
-  _globals['_TENANTSTATS']._serialized_start=2150
-  _globals['_TENANTSTATS']._serialized_end=2293
-  _globals['_BACKENDSTATS']._serialized_start=2296
-  _globals['_BACKENDSTATS']._serialized_end=2508
-  _globals['_BACKENDSTATS_BYKINDENTRY']._serialized_start=2463
-  _globals['_BACKENDSTATS_BYKINDENTRY']._serialized_end=2508
-  _globals['_BUCKETSTATS']._serialized_start=2511
-  _globals['_BUCKETSTATS']._serialized_end=2917
-  _globals['_BUCKETSTATS_BYPROVISIONSTATEENTRY']._serialized_start=2812
-  _globals['_BUCKETSTATS_BYPROVISIONSTATEENTRY']._serialized_end=2867
-  _globals['_BUCKETSTATS_BYBACKENDENTRY']._serialized_start=2869
-  _globals['_BUCKETSTATS_BYBACKENDENTRY']._serialized_end=2917
-  _globals['_COLLECTIONSTATS']._serialized_start=2920
-  _globals['_COLLECTIONSTATS']._serialized_end=3089
-  _globals['_COLLECTIONSTATS_BYBACKENDENTRY']._serialized_start=2869
-  _globals['_COLLECTIONSTATS_BYBACKENDENTRY']._serialized_end=2917
-  _globals['_USERSTATS']._serialized_start=3091
-  _globals['_USERSTATS']._serialized_end=3135
-  _globals['_OBJECTSTATESTAT']._serialized_start=3137
-  _globals['_OBJECTSTATESTAT']._serialized_end=3199
-  _globals['_TENANTOBJECTSTATS']._serialized_start=3202
-  _globals['_TENANTOBJECTSTATS']._serialized_end=3369
-  _globals['_OBJECTSTATS']._serialized_start=3372
-  _globals['_OBJECTSTATS']._serialized_end=3609
-  _globals['_SYSTEMSERVICE']._serialized_start=3612
-  _globals['_SYSTEMSERVICE']._serialized_end=3948
+  _globals['_SYSTEMSERVICE'].methods_by_name['ListPlatformStatsTenants']._loaded_options = None
+  _globals['_SYSTEMSERVICE'].methods_by_name['ListPlatformStatsTenants']._serialized_options = b'\220\002\001'
+  _globals['_PLATFORMSTATSSIGNAL']._serialized_start=4058
+  _globals['_PLATFORMSTATSSIGNAL']._serialized_end=4300
+  _globals['_LISTPLATFORMSTATSTENANTSREQUEST']._serialized_start=158
+  _globals['_LISTPLATFORMSTATSTENANTSREQUEST']._serialized_end=304
+  _globals['_LISTPLATFORMSTATSTENANTSRESPONSE']._serialized_start=307
+  _globals['_LISTPLATFORMSTATSTENANTSRESPONSE']._serialized_end=486
+  _globals['_SIGNALTENANT']._serialized_start=488
+  _globals['_SIGNALTENANT']._serialized_end=572
+  _globals['_GETCONFIGREQUEST']._serialized_start=574
+  _globals['_GETCONFIGREQUEST']._serialized_end=592
+  _globals['_GETCONFIGRESPONSE']._serialized_start=594
+  _globals['_GETCONFIGRESPONSE']._serialized_end=648
+  _globals['_GETDISPATCHERSTATSREQUEST']._serialized_start=650
+  _globals['_GETDISPATCHERSTATSREQUEST']._serialized_end=677
+  _globals['_GETDISPATCHERSTATSRESPONSE']._serialized_start=680
+  _globals['_GETDISPATCHERSTATSRESPONSE']._serialized_end=859
+  _globals['_SUBSCRIPTIONDELIVERYSTAT']._serialized_start=862
+  _globals['_SUBSCRIPTIONDELIVERYSTAT']._serialized_end=1036
+  _globals['_GETPLATFORMSTATSREQUEST']._serialized_start=1038
+  _globals['_GETPLATFORMSTATSREQUEST']._serialized_end=1116
+  _globals['_GETPLATFORMSTATSRESPONSE']._serialized_start=1119
+  _globals['_GETPLATFORMSTATSRESPONSE']._serialized_end=1497
+  _globals['_RLSSTATS']._serialized_start=1500
+  _globals['_RLSSTATS']._serialized_end=1793
+  _globals['_QUOTASTATS']._serialized_start=1796
+  _globals['_QUOTASTATS']._serialized_end=1983
+  _globals['_CAPABILITYSTATS']._serialized_start=1986
+  _globals['_CAPABILITYSTATS']._serialized_end=2249
+  _globals['_CAPABILITYSTATS_BYPRINCIPALKINDENTRY']._serialized_start=2195
+  _globals['_CAPABILITYSTATS_BYPRINCIPALKINDENTRY']._serialized_end=2249
+  _globals['_APITOKENSTATS']._serialized_start=2251
+  _globals['_APITOKENSTATS']._serialized_end=2374
+  _globals['_SUBSCRIPTIONSTATS']._serialized_start=2377
+  _globals['_SUBSCRIPTIONSTATS']._serialized_end=2593
+  _globals['_SUBSCRIPTIONSTATS_BYSINKKINDENTRY']._serialized_start=2544
+  _globals['_SUBSCRIPTIONSTATS_BYSINKKINDENTRY']._serialized_end=2593
+  _globals['_TENANTSTATS']._serialized_start=2596
+  _globals['_TENANTSTATS']._serialized_end=2739
+  _globals['_BACKENDSTATS']._serialized_start=2742
+  _globals['_BACKENDSTATS']._serialized_end=2954
+  _globals['_BACKENDSTATS_BYKINDENTRY']._serialized_start=2909
+  _globals['_BACKENDSTATS_BYKINDENTRY']._serialized_end=2954
+  _globals['_BUCKETSTATS']._serialized_start=2957
+  _globals['_BUCKETSTATS']._serialized_end=3363
+  _globals['_BUCKETSTATS_BYPROVISIONSTATEENTRY']._serialized_start=3258
+  _globals['_BUCKETSTATS_BYPROVISIONSTATEENTRY']._serialized_end=3313
+  _globals['_BUCKETSTATS_BYBACKENDENTRY']._serialized_start=3315
+  _globals['_BUCKETSTATS_BYBACKENDENTRY']._serialized_end=3363
+  _globals['_COLLECTIONSTATS']._serialized_start=3366
+  _globals['_COLLECTIONSTATS']._serialized_end=3535
+  _globals['_COLLECTIONSTATS_BYBACKENDENTRY']._serialized_start=3315
+  _globals['_COLLECTIONSTATS_BYBACKENDENTRY']._serialized_end=3363
+  _globals['_USERSTATS']._serialized_start=3537
+  _globals['_USERSTATS']._serialized_end=3581
+  _globals['_OBJECTSTATESTAT']._serialized_start=3583
+  _globals['_OBJECTSTATESTAT']._serialized_end=3645
+  _globals['_TENANTOBJECTSTATS']._serialized_start=3648
+  _globals['_TENANTOBJECTSTATS']._serialized_end=3815
+  _globals['_OBJECTSTATS']._serialized_start=3818
+  _globals['_OBJECTSTATS']._serialized_end=4055
+  _globals['_SYSTEMSERVICE']._serialized_start=4303
+  _globals['_SYSTEMSERVICE']._serialized_end=4776
 # @@protoc_insertion_point(module_scope)

@@ -130,6 +130,7 @@ type systemHandler interface {
 	DispatcherStats(ctx context.Context) (stats *worker.DeliveryStats, available bool, err error)
 	MarshalRedacted(ctx context.Context) (yamlBlob string, sourcePath string, err error)
 	PlatformStats(ctx context.Context, page platformstats.TenantPage) (*systemh.PlatformStatsResult, error)
+	PlatformStatsTenants(ctx context.Context, signal platformstats.Signal, page platformstats.TenantPage) (*systemh.SignalTenantsResult, error)
 }
 
 var _ systemHandler = (*systemh.Handler)(nil)

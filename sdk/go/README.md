@@ -545,7 +545,7 @@ what each field means, are documented in the `.proto` files under
 | `PlatformOperationService` | `GetOperation`, `ListOperations`, `CancelOperation` |
 | `PolicyService` | `Validate`, `SimulateAuthz`, `GetEffectivePolicy` |
 | `QuotaService` | `GetQuota`, `SetQuota`, `ResetUsage` |
-| `SystemService` | `GetConfig`, `GetDispatcherStats`, `GetPlatformStats` |
+| `SystemService` | `GetConfig`, `GetDispatcherStats`, `GetPlatformStats`, `ListPlatformStatsTenants` |
 | `TenantBudgetService` | `Get`, `Set`, `Summarize` |
 | `TenantService` | `CreateTenant`, `GetTenant`, `UpdateTenant`, `DeleteTenant`, `ListTenants`, `SetInheritedPolicy`, `RestoreTenant`, `PurgeTenant`, `RenameTenantSlug`, `MigrateTenantStorageLayout`, `GetTenantStorageMigration`, `ResolveRenamedSlug`, `GetTenantDefaultBinding`, `SetTenantDefaultBinding`, `ClearTenantDefaultBinding` |
 

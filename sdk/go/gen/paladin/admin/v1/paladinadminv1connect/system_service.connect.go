@@ -42,6 +42,9 @@ const (
 	// SystemServiceGetPlatformStatsProcedure is the fully-qualified name of the SystemService's
 	// GetPlatformStats RPC.
 	SystemServiceGetPlatformStatsProcedure = "/paladin.admin.v1.SystemService/GetPlatformStats"
+	// SystemServiceListPlatformStatsTenantsProcedure is the fully-qualified name of the SystemService's
+	// ListPlatformStatsTenants RPC.
+	SystemServiceListPlatformStatsTenantsProcedure = "/paladin.admin.v1.SystemService/ListPlatformStatsTenants"
 )
 
 // SystemServiceClient is a client for the paladin.admin.v1.SystemService service.
@@ -72,6 +75,16 @@ type SystemServiceClient interface {
 	// degrades to `objects.available=false` when that is unconfigured or
 	// unreachable. Read-only, no audit row — it is a dashboard poll.
 	GetPlatformStats(context.Context, *connect.Request[v1.GetPlatformStatsRequest]) (*connect.Response[v1.GetPlatformStatsResponse], error)
+	// ListPlatformStatsTenants answers "whose" for one of the census counts
+	// GetPlatformStats flags for attention: the tenants behind it, biggest
+	// share first, paged like the object table. The counts are computed from
+	// the same predicates as the census, so a full walk plus `unattributed`
+	// adds up to the number GetPlatformStats reported at the same instant.
+	//
+	// Proxied from the worker like the census, but with no degraded answer:
+	// UNAVAILABLE when the worker leg is unconfigured or unreachable, because
+	// an empty list would read as "nobody". Read-only, no audit row.
+	ListPlatformStatsTenants(context.Context, *connect.Request[v1.ListPlatformStatsTenantsRequest]) (*connect.Response[v1.ListPlatformStatsTenantsResponse], error)
 }
 
 // NewSystemServiceClient constructs a client for the paladin.admin.v1.SystemService service. By
@@ -106,14 +119,22 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		listPlatformStatsTenants: connect.NewClient[v1.ListPlatformStatsTenantsRequest, v1.ListPlatformStatsTenantsResponse](
+			httpClient,
+			baseURL+SystemServiceListPlatformStatsTenantsProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("ListPlatformStatsTenants")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // systemServiceClient implements SystemServiceClient.
 type systemServiceClient struct {
-	getConfig          *connect.Client[v1.GetConfigRequest, v1.GetConfigResponse]
-	getDispatcherStats *connect.Client[v1.GetDispatcherStatsRequest, v1.GetDispatcherStatsResponse]
-	getPlatformStats   *connect.Client[v1.GetPlatformStatsRequest, v1.GetPlatformStatsResponse]
+	getConfig                *connect.Client[v1.GetConfigRequest, v1.GetConfigResponse]
+	getDispatcherStats       *connect.Client[v1.GetDispatcherStatsRequest, v1.GetDispatcherStatsResponse]
+	getPlatformStats         *connect.Client[v1.GetPlatformStatsRequest, v1.GetPlatformStatsResponse]
+	listPlatformStatsTenants *connect.Client[v1.ListPlatformStatsTenantsRequest, v1.ListPlatformStatsTenantsResponse]
 }
 
 // GetConfig calls paladin.admin.v1.SystemService.GetConfig.
@@ -129,6 +150,11 @@ func (c *systemServiceClient) GetDispatcherStats(ctx context.Context, req *conne
 // GetPlatformStats calls paladin.admin.v1.SystemService.GetPlatformStats.
 func (c *systemServiceClient) GetPlatformStats(ctx context.Context, req *connect.Request[v1.GetPlatformStatsRequest]) (*connect.Response[v1.GetPlatformStatsResponse], error) {
 	return c.getPlatformStats.CallUnary(ctx, req)
+}
+
+// ListPlatformStatsTenants calls paladin.admin.v1.SystemService.ListPlatformStatsTenants.
+func (c *systemServiceClient) ListPlatformStatsTenants(ctx context.Context, req *connect.Request[v1.ListPlatformStatsTenantsRequest]) (*connect.Response[v1.ListPlatformStatsTenantsResponse], error) {
+	return c.listPlatformStatsTenants.CallUnary(ctx, req)
 }
 
 // SystemServiceHandler is an implementation of the paladin.admin.v1.SystemService service.
@@ -159,6 +185,16 @@ type SystemServiceHandler interface {
 	// degrades to `objects.available=false` when that is unconfigured or
 	// unreachable. Read-only, no audit row — it is a dashboard poll.
 	GetPlatformStats(context.Context, *connect.Request[v1.GetPlatformStatsRequest]) (*connect.Response[v1.GetPlatformStatsResponse], error)
+	// ListPlatformStatsTenants answers "whose" for one of the census counts
+	// GetPlatformStats flags for attention: the tenants behind it, biggest
+	// share first, paged like the object table. The counts are computed from
+	// the same predicates as the census, so a full walk plus `unattributed`
+	// adds up to the number GetPlatformStats reported at the same instant.
+	//
+	// Proxied from the worker like the census, but with no degraded answer:
+	// UNAVAILABLE when the worker leg is unconfigured or unreachable, because
+	// an empty list would read as "nobody". Read-only, no audit row.
+	ListPlatformStatsTenants(context.Context, *connect.Request[v1.ListPlatformStatsTenantsRequest]) (*connect.Response[v1.ListPlatformStatsTenantsResponse], error)
 }
 
 // NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -189,6 +225,13 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	systemServiceListPlatformStatsTenantsHandler := connect.NewUnaryHandler(
+		SystemServiceListPlatformStatsTenantsProcedure,
+		svc.ListPlatformStatsTenants,
+		connect.WithSchema(systemServiceMethods.ByName("ListPlatformStatsTenants")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/paladin.admin.v1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SystemServiceGetConfigProcedure:
@@ -197,6 +240,8 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 			systemServiceGetDispatcherStatsHandler.ServeHTTP(w, r)
 		case SystemServiceGetPlatformStatsProcedure:
 			systemServiceGetPlatformStatsHandler.ServeHTTP(w, r)
+		case SystemServiceListPlatformStatsTenantsProcedure:
+			systemServiceListPlatformStatsTenantsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -216,4 +261,8 @@ func (UnimplementedSystemServiceHandler) GetDispatcherStats(context.Context, *co
 
 func (UnimplementedSystemServiceHandler) GetPlatformStats(context.Context, *connect.Request[v1.GetPlatformStatsRequest]) (*connect.Response[v1.GetPlatformStatsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.SystemService.GetPlatformStats is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) ListPlatformStatsTenants(context.Context, *connect.Request[v1.ListPlatformStatsTenantsRequest]) (*connect.Response[v1.ListPlatformStatsTenantsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.SystemService.ListPlatformStatsTenants is not implemented"))
 }
