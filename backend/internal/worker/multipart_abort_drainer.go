@@ -39,6 +39,14 @@ type MultipartAbortDrainer struct {
 	Logger     *zap.Logger
 }
 
+// MultipartAbortDrainer defaults, for a field left zero, and the first retry's
+// delay, which doubles per attempt up to MaxBackoff.
+const (
+	DefaultMultipartAbortBatchSize  = 100
+	DefaultMultipartAbortMaxBackoff = time.Hour
+	multipartAbortFirstBackoff      = time.Minute
+)
+
 // Run blocks until ctx is cancelled. Interval <= 0 disables it, which is only
 // appropriate where multipart upload is unreachable — otherwise a cascade has
 // no other path to closing the S3 session.
@@ -47,10 +55,10 @@ func (w *MultipartAbortDrainer) Run(ctx context.Context) error {
 		return nil
 	}
 	if w.BatchSize <= 0 {
-		w.BatchSize = 100
+		w.BatchSize = DefaultMultipartAbortBatchSize
 	}
 	if w.MaxBackoff <= 0 {
-		w.MaxBackoff = time.Hour
+		w.MaxBackoff = DefaultMultipartAbortMaxBackoff
 	}
 	return RunTicker(ctx, "multipart_abort_drainer", w.Interval, func(ctx context.Context) error {
 		w.Sweep(ctx)
@@ -115,7 +123,7 @@ func (w *MultipartAbortDrainer) Sweep(ctx context.Context) {
 
 // backoff grows with the attempt count and is capped by MaxBackoff.
 func (w *MultipartAbortDrainer) backoff(attempts int32) time.Duration {
-	d := time.Minute
+	d := multipartAbortFirstBackoff
 	for range attempts {
 		d *= 2
 		if d >= w.MaxBackoff {

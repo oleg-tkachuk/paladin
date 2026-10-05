@@ -30,6 +30,10 @@ type ReplayPurger interface {
 	PurgeExpired(ctx context.Context) (int64, error)
 }
 
+// DefaultCapabilityExpiredFor is how long a revocation outlives its
+// capability's expiry before the purger drops it, when ExpiredFor is unset.
+const DefaultCapabilityExpiredFor = 24 * time.Hour
+
 // CapabilityPurger periodically calls Store.PurgeExpired and, when
 // Usage is wired, sweeps orphan capability_usage rows whose parent
 // capability is gone; when Replay is wired, it drops expired DPoP proof
@@ -51,7 +55,7 @@ func (p *CapabilityPurger) Run(ctx context.Context) error {
 		return nil
 	}
 	if p.ExpiredFor <= 0 {
-		p.ExpiredFor = 24 * time.Hour
+		p.ExpiredFor = DefaultCapabilityExpiredFor
 	}
 	return RunTicker(ctx, "capability_purger", p.Interval, p.tick)
 }
