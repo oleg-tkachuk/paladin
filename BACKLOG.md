@@ -1446,17 +1446,46 @@ finding moving from "packages you import" to "your code is affected".
 - **Status:** Deferred.
 - **Reason:** the data plane acts on the tenant a platform admin names
   (ADR-0022), but three things still key on the admin's own tenant. The data
-  plane has no audit interceptor at all, and the audit log records only the
-  actor's tenant, so the target tenant's audit page never shows what an admin
-  did to its objects. The tenant rate limit and idempotency keys run before
-  the name is parsed and count against the admin's tenant: an admin's uploads
-  do not draw on the target's rate budget, and one Idempotency-Key reused
-  against two tenants collides.
-- **Definition of Done:** data-plane mutations are audited with the target
-  tenant beside the actor's, and the tenant audit page shows rows where the
-  tenant is either; the rate limiter and idempotency store key on the tenant
-  the request acts on, with tests through the assembled data plane.
-- **Blockers:** an audit schema change (a target-tenant column and its RLS).
+  plane has no audit interceptor at all, so the target tenant's audit page
+  never shows what an admin did to its objects. The tenant rate limit and
+  idempotency keys run before the name is parsed and count against the
+  admin's tenant: an admin's uploads do not draw on the target's rate budget,
+  and one Idempotency-Key reused against two tenants collides.
+- **Definition of Done:** data-plane mutations are audited, so the tenant's
+  trail (`audit_log.resource_tenant_id`, migration 040) picks them up; the
+  rate limiter and idempotency store key on the tenant the request acts on,
+  with tests through the assembled data plane.
+- **Blockers:** none.
+
+### Admin actions that name no resource are in no tenant's trail
+
+- **Status:** Deferred.
+- **Reason:** a tenant's audit trail is the rows its principals made plus the
+  rows whose `resource_name` sits under it (`resource_tenant_id`). Several
+  admin RPCs record an empty resource name — `CreateTenant`,
+  `CapabilityService/Issue` and `Revoke`, `TenantBudgetService/Set`, some
+  `CreateUser` — so a platform admin's call to them is invisible on the
+  tenant's page. The audit middleware takes the name from the request's
+  `name` or `parent`; these requests carry the tenant in another field, or
+  learn it only from the response.
+- **Definition of Done:** each such handler names its resource through
+  `apiutil` (the seam `preferCanonical` already reads), so the row carries
+  the tenant; a test per RPC through the audit interceptor.
+- **Blockers:** none.
+
+### A disjunctive audit filter can return an empty page with a cursor
+
+- **Status:** Deferred.
+- **Reason:** `ListAuditLog` and `ExportAuditLog` push only top-level `&&`
+  conjuncts of the CEL filter into SQL and evaluate the rest on the fetched
+  page. A filter with `||` therefore reads one page of the whole log and can
+  hand back zero rows with a next-page token; the reader has to page through
+  the log to find matches. The tenant pages no longer depend on this
+  (`ListAuditLogRequest.tenant_id`), but `/audit` with a user filter does.
+- **Definition of Done:** either disjunctions over pushable fields reach SQL,
+  or the handler keeps reading until a page is full or the log is exhausted,
+  within a bound, with a test of a sparse match.
+- **Blockers:** none.
 
 ### Audit form (B): staging table + projector (latency mitigation only)
 

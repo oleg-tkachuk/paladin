@@ -65,6 +65,7 @@ func (r *AuditRepoV2) insertWith(ctx context.Context, q *sqlc.Queries, e admindo
 		// pgUUIDOptional maps that to a NULL DB value so the partial
 		// index on the column stays small.
 		pgUUIDOptional(e.CapabilityID),
+		pgUUIDOptional(e.ResourceTenant()),
 	)
 }
 
@@ -136,6 +137,7 @@ func (r *AuditRepoV2) List(ctx context.Context, args admindomain.ListAuditArgs) 
 	rows, err := r.q.ListAuditEntries(ctx,
 		strPtrNonEmpty(args.ActorSubject),
 		pgUUIDOptional(args.ActorTenantID),
+		pgUUIDOptional(args.TrailTenantID),
 		strPtrNonEmpty(args.ActionEq),
 		likePrefixOrNil(args.ActionPrefix),
 		tsOptional(args.AtGTE),
@@ -215,5 +217,7 @@ func auditEntryFromModel(row sqlc.AuditLog) admindomain.AuditEntry {
 		AfterJSON:     row.AfterJson,
 		ErrorMessage:  derefStr(row.ErrorMessage),
 		CapabilityID:  uuidFrom(row.CapabilityID),
+
+		ResourceTenantID: uuidFrom(row.ResourceTenantID),
 	}
 }

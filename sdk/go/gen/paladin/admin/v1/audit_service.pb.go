@@ -29,7 +29,13 @@ type ListAuditLogRequest struct {
 	Page  *v1.PageRequest        `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
 	// CEL filter: actor_subject == "x", action prefix, resource_name pattern,
 	// time range via at >= ts && at < ts.
-	Filter        string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
+	Filter string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
+	// tenant_id narrows the log to one tenant's trail: entries its principals
+	// made, and entries on its resources — a platform admin's work inside the
+	// tenant included. Applied in the query, so every page holds up to
+	// page_size of them. Empty = every tenant. A caller other than a platform
+	// admin may name only its own tenant.
+	TenantId      string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -74,6 +80,13 @@ func (x *ListAuditLogRequest) GetPage() *v1.PageRequest {
 func (x *ListAuditLogRequest) GetFilter() string {
 	if x != nil {
 		return x.Filter
+	}
+	return ""
+}
+
+func (x *ListAuditLogRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
 	}
 	return ""
 }
@@ -232,10 +245,11 @@ var File_paladin_admin_v1_audit_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_audit_service_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/admin/v1/audit_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a(paladin/admin/v1/operation_service.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"a\n" +
+	"$paladin/admin/v1/audit_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a(paladin/admin/v1/operation_service.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\x8b\x01\n" +
 	"\x13ListAuditLogRequest\x122\n" +
 	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
-	"\x06filter\x18\x02 \x01(\tR\x06filter\"\x86\x01\n" +
+	"\x06filter\x18\x02 \x01(\tR\x06filter\x12(\n" +
+	"\ttenant_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\btenantId\"\x86\x01\n" +
 	"\x14ListAuditLogResponse\x129\n" +
 	"\aentries\x18\x01 \x03(\v2\x1f.paladin.admin.v1.AuditLogEntryR\aentries\x123\n" +
 	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"=\n" +

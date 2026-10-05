@@ -78,6 +78,10 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 			return nil, "", connect.NewError(connect.CodePermissionDenied,
 				errors.New("cross-tenant audit denied"))
 		}
+		if args.TrailTenantID != uuid.Nil && args.TrailTenantID != caller {
+			return nil, "", connect.NewError(connect.CodePermissionDenied,
+				errors.New("cross-tenant audit denied"))
+		}
 		args.ActorTenantID = caller
 	}
 	if err := h.authorize(ctx, cedar.ActionReadAuditLog, args.ActorTenantID); err != nil {

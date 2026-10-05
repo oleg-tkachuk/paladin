@@ -12,7 +12,7 @@ import (
 )
 
 const getAuditEntry = `-- name: GetAuditEntry :one
-SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.before_json, audit_log.after_json, audit_log.detail
+SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.before_json, audit_log.after_json, audit_log.detail, audit_log.resource_tenant_id
 FROM audit_log
 WHERE id = $1
 `
@@ -40,6 +40,7 @@ func (q *Queries) GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEn
 		&i.AuditLog.BeforeJson,
 		&i.AuditLog.AfterJson,
 		&i.AuditLog.Detail,
+		&i.AuditLog.ResourceTenantID,
 	)
 	return i, err
 }
@@ -48,11 +49,12 @@ const insertAuditEntry = `-- name: InsertAuditEntry :exec
 INSERT INTO audit_log (
     id, at, actor_subject, actor_tenant_id, actor_audience,
     action, resource_name, request_id, source_ip,
-    before_json, after_json, error_message, capability_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    before_json, after_json, error_message, capability_id,
+    resource_tenant_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 `
 
-func (q *Queries) InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID) error {
+func (q *Queries) InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID, resourceTenantID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, insertAuditEntry,
 		iD,
 		at,
@@ -67,30 +69,35 @@ func (q *Queries) InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtyp
 		afterJson,
 		errorMessage,
 		capabilityID,
+		resourceTenantID,
 	)
 	return err
 }
 
 const listAuditEntries = `-- name: ListAuditEntries :many
-SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.before_json, audit_log.after_json, audit_log.detail
+SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.before_json, audit_log.after_json, audit_log.detail, audit_log.resource_tenant_id
 FROM audit_log
 WHERE ($1::text IS NULL
        OR actor_subject = $1::text)
   AND ($2::uuid IS NULL
        OR actor_tenant_id = $2::uuid)
-  AND ($3::text IS NULL
-       OR action = $3::text)
+  -- A tenant's trail: what its principals did, and what was done to it.
+  AND ($3::uuid IS NULL
+       OR actor_tenant_id = $3::uuid
+       OR resource_tenant_id = $3::uuid)
   AND ($4::text IS NULL
-       OR action LIKE $4::text)
-  AND ($5::timestamptz IS NULL
-       OR at >= $5::timestamptz)
+       OR action = $4::text)
+  AND ($5::text IS NULL
+       OR action LIKE $5::text)
   AND ($6::timestamptz IS NULL
-       OR at <= $6::timestamptz)
+       OR at >= $6::timestamptz)
   AND ($7::timestamptz IS NULL
-       OR at < $7::timestamptz
-       OR (at = $7::timestamptz AND id < $8::uuid))
+       OR at <= $7::timestamptz)
+  AND ($8::timestamptz IS NULL
+       OR at < $8::timestamptz
+       OR (at = $8::timestamptz AND id < $9::uuid))
 ORDER BY at DESC, id DESC
-LIMIT $9
+LIMIT $10
 `
 
 type ListAuditEntriesRow struct {
@@ -107,10 +114,11 @@ type ListAuditEntriesRow struct {
 // full CEL program ALWAYS still runs in-memory after this fetch, so
 // pushdown only narrows the candidate set; correctness lives in the
 // handler, not in this WHERE clause.
-func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error) {
+func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error) {
 	rows, err := q.db.Query(ctx, listAuditEntries,
 		actorSubject,
 		actorTenantID,
+		trailTenantID,
 		actionEq,
 		actionPrefix,
 		atGte,
@@ -142,6 +150,7 @@ func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, ac
 			&i.AuditLog.BeforeJson,
 			&i.AuditLog.AfterJson,
 			&i.AuditLog.Detail,
+			&i.AuditLog.ResourceTenantID,
 		); err != nil {
 			return nil, err
 		}

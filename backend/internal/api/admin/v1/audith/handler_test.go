@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
@@ -22,6 +23,7 @@ func (allowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ str
 type fakeAuditRepo struct {
 	pages [][]admindomain.AuditEntry // each call to List returns next page
 	calls int
+	args  admindomain.ListAuditArgs // the last List's arguments
 }
 
 func (f *fakeAuditRepo) Insert(context.Context, admindomain.AuditEntry) error { return nil }
@@ -37,7 +39,8 @@ func (f *fakeAuditRepo) InsertWithOutbox(ctx context.Context, e admindomain.Audi
 func (f *fakeAuditRepo) Get(context.Context, uuid.UUID) (admindomain.AuditEntry, error) {
 	return admindomain.AuditEntry{}, admindomain.ErrNotFound
 }
-func (f *fakeAuditRepo) List(_ context.Context, _ admindomain.ListAuditArgs) ([]admindomain.AuditEntry, string, error) {
+func (f *fakeAuditRepo) List(_ context.Context, args admindomain.ListAuditArgs) ([]admindomain.AuditEntry, string, error) {
+	f.args = args
 	if f.calls >= len(f.pages) {
 		return nil, "", nil
 	}
@@ -195,5 +198,52 @@ func TestDecodeCursorInvalid(t *testing.T) {
 	at, id := decodeCursor("garbage")
 	if !at.IsZero() || id != uuid.Nil {
 		t.Errorf("expected zero-values for malformed cursor")
+	}
+}
+
+// A tenant's trail reaches the query as a trail — not as the actor tenant,
+// which would drop a platform admin's work inside it — and only a platform
+// admin may name another tenant's.
+func TestListAuditLogTrailTenant(t *testing.T) {
+	own := uuid.New()
+	other := uuid.New()
+	member := auth.WithPrincipal(context.Background(), &auth.Principal{
+		TenantID: own, Subject: "alice", Roles: []string{"tenant.admin"}, Audience: "paladin-admin",
+	})
+	cases := []struct {
+		name       string
+		ctx        context.Context
+		trail      uuid.UUID
+		wantDenied bool
+		wantActor  uuid.UUID
+	}{
+		{name: "platform admin, another tenant", ctx: ctxWithPlatformAdmin(t), trail: other, wantActor: uuid.Nil},
+		{name: "member, own tenant", ctx: member, trail: own, wantActor: own},
+		{name: "member, another tenant", ctx: member, trail: other, wantDenied: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &fakeAuditRepo{}
+			h := NewHandler(repo, allowAuthorizer{})
+			_, _, err := h.ListAuditLog(tc.ctx, admindomain.ListAuditArgs{PageSize: 50, TrailTenantID: tc.trail}, "")
+			if tc.wantDenied {
+				if connect.CodeOf(err) != connect.CodePermissionDenied {
+					t.Fatalf("err = %v, want PermissionDenied", err)
+				}
+				if repo.calls != 0 {
+					t.Error("the log was read for a denied caller")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("list: %v", err)
+			}
+			if repo.args.TrailTenantID != tc.trail {
+				t.Errorf("trail = %s, want %s", repo.args.TrailTenantID, tc.trail)
+			}
+			if repo.args.ActorTenantID != tc.wantActor {
+				t.Errorf("actor tenant = %s, want %s", repo.args.ActorTenantID, tc.wantActor)
+			}
+		})
 	}
 }
