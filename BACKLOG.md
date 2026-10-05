@@ -914,14 +914,14 @@ finding moving from "packages you import" to "your code is affected".
   into the pool (`deliverNATS`, `natsGroupTarget`, and the warmup scan in
   cmd/server/serve_dispatcher.go) refuse an empty URL first. Unkillable without
   fabricating a state the code prevents.
-- **Five files in the package still have no test file named after them**
-  (`capability_purger`, `metrics`, `multipart_abort_drainer`, `multipart_reaper`,
-  `reconciler`). That is a signal, not a finding — the same signal was wrong
-  about `sink_nats.go`, whose coverage lives in four other files. Two of the
-  seven that looked untested on 2026-09-10 turned out to be genuinely untested
-  and now have tests (`api_token_purger`, `tenant_rate_bucket_sweeper`); the
-  rest are unmeasured. What settles each is a mutation run naming both
-  integration suites in --test-cmd, not a line count.
+- **The five files that had no test file named after them are measured
+  (2026-10-05), each against the suites that cover it.** `metrics` 4/4,
+  `capability_purger` 12/13, `reconciler` 12/12, `multipart_reaper` 9/9,
+  `multipart_abort_drainer` 13/14; the two survivors are equivalent and their
+  tests say why. The signal was right this time for two of them: the reaper
+  and the abort drainer had no test at all, unit or integration, and now have
+  both. The reconciler showed the opposite trap — 0% against the package's
+  own tests, 42% once `tests/integration/components` was in the denominator.
 - **A fourth hand-written copy of `poolKey`** sits in
   cmd/server/serve_dispatcher.go (`key := cfg.URL + "\x00" + cfg.CredentialsRef`),
   because `poolKey` is unexported and that file is package main. It is used only

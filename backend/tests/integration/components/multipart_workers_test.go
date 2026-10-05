@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -225,4 +226,84 @@ func TestMultipartAbortDrainerSettlesOnceTheAbortLands(t *testing.T) {
 	if len(aborter.calls) != 2 || aborter.calls[1] != want {
 		t.Errorf("aborts = %+v, want two of %+v", aborter.calls, want)
 	}
+}
+
+// ─── what each sweep tells an operator ─────────────────────────────────────
+
+const (
+	drainerAborted   = "aborted an orphaned multipart upload"
+	drainerAbortFail = "multipart abort drainer: abort failed; debt kept"
+	drainerBackoff   = "multipart abort drainer: backoff"
+	drainerSettle    = "multipart abort drainer: settle"
+	drainerCommit    = "multipart abort drainer: commit"
+	reaperReaped     = "reaped abandoned multipart upload"
+	reaperDeleteFail = "delete multipart session row failed"
+)
+
+// A sweep warns about what failed and nothing else: a warning on success
+// trains an operator to ignore the one that matters.
+func TestMultipartAbortDrainerLogsOnlyWhatFailed(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	s := seedAbortDebt(t, ctx, pool)
+
+	core, logs := observer.New(zap.InfoLevel)
+	d := newAbortDrainer(pool, &recordingAborter{failures: 1})
+	d.Logger = zap.New(core)
+	d.Sweep(ctx)
+	if logs.FilterMessage(drainerAbortFail).Len() != 1 {
+		t.Errorf("the failed abort was not reported: %v", logs.All())
+	}
+	mustExec(t, ctx, pool, `UPDATE pending_multipart_aborts SET next_attempt_at = now() WHERE storage_upload_id = $1`, s.storageID)
+	d.Sweep(ctx)
+	if logs.FilterMessage(drainerAborted).Len() != 1 {
+		t.Errorf("the settled abort was not reported: %v", logs.All())
+	}
+	for _, msg := range []string{drainerBackoff, drainerSettle, drainerCommit} {
+		if n := logs.FilterMessage(msg).Len(); n != 0 {
+			t.Errorf("%q logged %d times by sweeps where it did not happen", msg, n)
+		}
+	}
+}
+
+// failingSessions refuses every delete.
+type failingSessions struct{}
+
+func (failingSessions) DeleteSession(context.Context, string) error {
+	return errors.New("database unavailable")
+}
+
+// The abort landed but the row could not go: the reaper says so, and does not
+// claim the session reaped.
+func TestMultipartReaperReportsARowItCouldNotDelete(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	seedMultipart(t, ctx, pool, staleAge)
+
+	core, logs := observer.New(zap.InfoLevel)
+	r := newReaper(pool, &recordingAborter{})
+	r.Sessions, r.Logger = failingSessions{}, zap.New(core)
+	r.Sweep(ctx)
+	if logs.FilterMessage(reaperDeleteFail).Len() != 1 || logs.FilterMessage(reaperReaped).Len() != 0 {
+		t.Errorf("log = %v", logs.All())
+	}
+}
+
+// Without a Logger both workers log to nowhere rather than panicking on the
+// first thing they have to say.
+func TestMultipartWorkersRunWithoutALogger(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	seedMultipart(t, ctx, pool, staleAge)
+	seedAbortDebt(t, ctx, pool)
+
+	r := newReaper(pool, &recordingAborter{failures: 1})
+	r.Logger = nil
+	r.Sweep(ctx)
+	d := newAbortDrainer(pool, &recordingAborter{failures: 1})
+	d.Logger = nil
+	d.Sweep(ctx)
 }
