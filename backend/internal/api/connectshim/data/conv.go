@@ -23,6 +23,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
@@ -52,6 +53,7 @@ func parseObjectName(ctx context.Context, name string) (context.Context, paladin
 	if err != nil {
 		return ctx, paladin.ObjectName{}, err
 	}
+	nameForAudit(ctx, n.String())
 	return ctx, n, nil
 }
 
@@ -75,7 +77,19 @@ func collectionNameParts(ctx context.Context, name string) (context.Context, str
 	if err != nil {
 		return ctx, "", err
 	}
+	nameForAudit(ctx, n.String())
 	return ctx, n.Collection, nil
+}
+
+// nameForAudit records the first resource a request names as the one its
+// audit row is filed under. Several data-plane requests carry their name in a
+// field the audit interceptor does not read (object_name, source_name), and
+// the row's tenant comes from that name. First wins: a batch names its
+// collection before its objects, a copy its source before its destination.
+func nameForAudit(ctx context.Context, name string) {
+	if apiutil.ResourceFromContext(ctx) == "" {
+		apiutil.StashResource(ctx, name)
+	}
 }
 
 // scopeToTenant admits a request to the tenant a resource name carries and

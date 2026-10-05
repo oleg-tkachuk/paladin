@@ -28,12 +28,10 @@ import {
 /**
  * Seeds a collection under the ADMIN's own tenant.
  *
- * Not under a fresh tenant, which was the first shape this took: the data
- * plane scopes every request to the caller's tenant, so uploading into
- * another tenant's collection fails with "collection not found" — RLS
- * hiding a row that exists. That is the isolation working. A data-plane
- * test therefore runs where its token can see, and cross-tenant behaviour
- * is asserted on the admin plane, where crossing is the point.
+ * The admin could work in another tenant's collection too — the data plane
+ * acts on the tenant a platform admin names (ADR-0022) — but these tests are
+ * about the object lifecycle, not about crossing tenants, so they run where
+ * the token's own tenant is.
  */
 async function seedScope(makeCollection: MakeCollection) {
   const tenantId = await seedAdminTenantID();
