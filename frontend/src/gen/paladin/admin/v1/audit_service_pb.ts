@@ -27,7 +27,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_audit_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiRwYWxhZGluL2FkbWluL3YxL2F1ZGl0X3NlcnZpY2UucHJvdG8SEHBhbGFkaW4uYWRtaW4udjEiUwoTTGlzdEF1ZGl0TG9nUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJIncKFExpc3RBdWRpdExvZ1Jlc3BvbnNlEjAKB2VudHJpZXMYASADKAsyHy5wYWxhZGluLmFkbWluLnYxLkF1ZGl0TG9nRW50cnkSLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSI0ChdHZXRBdWRpdExvZ0VudHJ5UmVxdWVzdBIZCghlbnRyeV9pZBgBIAEoCUIHukgEcgIQASJFChVFeHBvcnRBdWRpdExvZ1JlcXVlc3QSDgoGZmlsdGVyGAEgASgJEhwKC2Rlc3RpbmF0aW9uGAIgASgJQge6SARyAhABMrcCCg9BdWRpdExvZ1NlcnZpY2USYgoMTGlzdEF1ZGl0TG9nEiUucGFsYWRpbi5hZG1pbi52MS5MaXN0QXVkaXRMb2dSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5MaXN0QXVkaXRMb2dSZXNwb25zZSIDkAIBEmMKEEdldEF1ZGl0TG9nRW50cnkSKS5wYWxhZGluLmFkbWluLnYxLkdldEF1ZGl0TG9nRW50cnlSZXF1ZXN0Gh8ucGFsYWRpbi5hZG1pbi52MS5BdWRpdExvZ0VudHJ5IgOQAgESWwoORXhwb3J0QXVkaXRMb2cSJy5wYWxhZGluLmFkbWluLnYxLkV4cG9ydEF1ZGl0TG9nUmVxdWVzdBobLnBhbGFkaW4uYWRtaW4udjEuT3BlcmF0aW9uIgOQAgFCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
+    "CiRwYWxhZGluL2FkbWluL3YxL2F1ZGl0X3NlcnZpY2UucHJvdG8SEHBhbGFkaW4uYWRtaW4udjEicwoTTGlzdEF1ZGl0TG9nUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEh4KCXRlbmFudF9pZBgDIAEoCUILukgI2AEBcgOwAQEidwoUTGlzdEF1ZGl0TG9nUmVzcG9uc2USMAoHZW50cmllcxgBIAMoCzIfLnBhbGFkaW4uYWRtaW4udjEuQXVkaXRMb2dFbnRyeRItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlIjQKF0dldEF1ZGl0TG9nRW50cnlSZXF1ZXN0EhkKCGVudHJ5X2lkGAEgASgJQge6SARyAhABIkUKFUV4cG9ydEF1ZGl0TG9nUmVxdWVzdBIOCgZmaWx0ZXIYASABKAkSHAoLZGVzdGluYXRpb24YAiABKAlCB7pIBHICEAEytwIKD0F1ZGl0TG9nU2VydmljZRJiCgxMaXN0QXVkaXRMb2cSJS5wYWxhZGluLmFkbWluLnYxLkxpc3RBdWRpdExvZ1JlcXVlc3QaJi5wYWxhZGluLmFkbWluLnYxLkxpc3RBdWRpdExvZ1Jlc3BvbnNlIgOQAgESYwoQR2V0QXVkaXRMb2dFbnRyeRIpLnBhbGFkaW4uYWRtaW4udjEuR2V0QXVkaXRMb2dFbnRyeVJlcXVlc3QaHy5wYWxhZGluLmFkbWluLnYxLkF1ZGl0TG9nRW50cnkiA5ACARJbCg5FeHBvcnRBdWRpdExvZxInLnBhbGFkaW4uYWRtaW4udjEuRXhwb3J0QXVkaXRMb2dSZXF1ZXN0GhsucGFsYWRpbi5hZG1pbi52MS5PcGVyYXRpb24iA5ACAUJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
       file_paladin_admin_v1_operation_service,
@@ -53,6 +53,17 @@ export type ListAuditLogRequest =
      * @generated from field: string filter = 2;
      */
     filter: string;
+
+    /**
+     * tenant_id narrows the log to one tenant's trail: entries its principals
+     * made, and entries on its resources — a platform admin's work inside the
+     * tenant included. Applied in the query, so every page holds up to
+     * page_size of them. Empty = every tenant. A caller other than a platform
+     * admin may name only its own tenant.
+     *
+     * @generated from field: string tenant_id = 3;
+     */
+    tenantId: string;
   };
 
 /**

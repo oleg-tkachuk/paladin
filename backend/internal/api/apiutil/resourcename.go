@@ -48,6 +48,26 @@ func ParseTenantName(name string) (uuid.UUID, error) {
 	return uuid.Parse(name)
 }
 
+// TenantInResourceName returns the tenant a resource name sits under: the
+// UUID that follows the first `tenants` segment, wherever that segment is.
+// A collection's name nests it under its bucket
+// (`storageBackends/b/buckets/k/tenants/{id}/collections/c`), so the tenant
+// is not always the name's root. A name with no such segment, or one whose
+// tenant is a slug, reports false: a slug resolves only through the tenant
+// repository.
+func TenantInResourceName(name string) (uuid.UUID, bool) {
+	tenantsSegment := strings.TrimSuffix(TenantNamePrefix, "/")
+	parts := strings.Split(name, "/")
+	for i := 0; i+1 < len(parts); i++ {
+		if parts[i] != tenantsSegment {
+			continue
+		}
+		id, err := uuid.Parse(parts[i+1])
+		return id, err == nil
+	}
+	return uuid.Nil, false
+}
+
 // ParseTenantNameRef parses "tenants/{tenant_id_or_slug}" and returns a
 // TenantRef carrying either the UUID or the slug. Handlers that wish to
 // accept the human-readable slug form call this and resolve the slug via

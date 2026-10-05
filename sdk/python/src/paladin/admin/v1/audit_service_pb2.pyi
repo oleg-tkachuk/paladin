@@ -11,12 +11,14 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class ListAuditLogRequest(_message.Message):
-    __slots__ = ("page", "filter")
+    __slots__ = ("page", "filter", "tenant_id")
     PAGE_FIELD_NUMBER: _ClassVar[int]
     FILTER_FIELD_NUMBER: _ClassVar[int]
+    TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     page: _pagination_pb2.PageRequest
     filter: str
-    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ...) -> None: ...
+    tenant_id: str
+    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., tenant_id: _Optional[str] = ...) -> None: ...
 
 class ListAuditLogResponse(_message.Message):
     __slots__ = ("entries", "page")

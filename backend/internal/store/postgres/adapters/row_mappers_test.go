@@ -309,6 +309,7 @@ func TestAuditEntryFromModel(t *testing.T) {
 	entryID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
 	actorTenant := uuid.MustParse("22222222-2222-4222-8222-222222222222")
 	capability := uuid.MustParse("33333333-3333-4333-8333-333333333333")
+	resourceTenant := uuid.MustParse("44444444-4444-4444-8444-444444444444")
 	at := time.Date(2026, 4, 5, 6, 7, 8, 0, time.UTC)
 	sourceIP, errMsg := "203.0.113.7", "permission denied"
 
@@ -326,6 +327,8 @@ func TestAuditEntryFromModel(t *testing.T) {
 		ErrorMessage:  &errMsg,
 		BeforeJson:    []byte(`{"side":"before"}`),
 		AfterJson:     []byte(`{"side":"after"}`),
+
+		ResourceTenantID: pgUUID(resourceTenant),
 	})
 
 	checks := []struct {
@@ -343,6 +346,7 @@ func TestAuditEntryFromModel(t *testing.T) {
 		{"SourceIP", got.SourceIP, "203.0.113.7"},
 		{"ErrorMessage", got.ErrorMessage, "permission denied"},
 		{"CapabilityID", got.CapabilityID, capability},
+		{"ResourceTenantID", got.ResourceTenantID, resourceTenant},
 	}
 	for _, c := range checks {
 		if c.got != c.want {

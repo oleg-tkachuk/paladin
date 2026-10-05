@@ -171,6 +171,9 @@ type AuditRepository interface {
 type ListAuditArgs struct {
 	ActorSubject  string
 	ActorTenantID uuid.UUID
+	// TrailTenantID selects a tenant's trail: entries its principals made OR
+	// entries on its resources (AuditEntry.ResourceTenant). uuid.Nil = all.
+	TrailTenantID uuid.UUID
 	AfterAt       time.Time
 	AfterID       uuid.UUID
 	PageSize      int32

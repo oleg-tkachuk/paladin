@@ -28,7 +28,7 @@ from paladin.admin.v1 import types_pb2 as paladin_dot_admin_dot_v1_dot_types__pb
 from paladin.common.v1 import pagination_pb2 as paladin_dot_common_dot_v1_dot_pagination__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$paladin/admin/v1/audit_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a(paladin/admin/v1/operation_service.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"S\n\x13ListAuditLogRequest\x12,\n\x04page\x18\x01 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x02 \x01(\t\"w\n\x14ListAuditLogResponse\x12\x30\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x1f.paladin.admin.v1.AuditLogEntry\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"4\n\x17GetAuditLogEntryRequest\x12\x19\n\x08\x65ntry_id\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"E\n\x15\x45xportAuditLogRequest\x12\x0e\n\x06\x66ilter\x18\x01 \x01(\t\x12\x1c\n\x0b\x64\x65stination\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x32\xb7\x02\n\x0f\x41uditLogService\x12\x62\n\x0cListAuditLog\x12%.paladin.admin.v1.ListAuditLogRequest\x1a&.paladin.admin.v1.ListAuditLogResponse\"\x03\x90\x02\x01\x12\x63\n\x10GetAuditLogEntry\x12).paladin.admin.v1.GetAuditLogEntryRequest\x1a\x1f.paladin.admin.v1.AuditLogEntry\"\x03\x90\x02\x01\x12[\n\x0e\x45xportAuditLog\x12\'.paladin.admin.v1.ExportAuditLogRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$paladin/admin/v1/audit_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a(paladin/admin/v1/operation_service.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"s\n\x13ListAuditLogRequest\x12,\n\x04page\x18\x01 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x02 \x01(\t\x12\x1e\n\ttenant_id\x18\x03 \x01(\tB\x0b\xbaH\x08r\x03\xb0\x01\x01\xd8\x01\x01\"w\n\x14ListAuditLogResponse\x12\x30\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x1f.paladin.admin.v1.AuditLogEntry\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"4\n\x17GetAuditLogEntryRequest\x12\x19\n\x08\x65ntry_id\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"E\n\x15\x45xportAuditLogRequest\x12\x0e\n\x06\x66ilter\x18\x01 \x01(\t\x12\x1c\n\x0b\x64\x65stination\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x32\xb7\x02\n\x0f\x41uditLogService\x12\x62\n\x0cListAuditLog\x12%.paladin.admin.v1.ListAuditLogRequest\x1a&.paladin.admin.v1.ListAuditLogResponse\"\x03\x90\x02\x01\x12\x63\n\x10GetAuditLogEntry\x12).paladin.admin.v1.GetAuditLogEntryRequest\x1a\x1f.paladin.admin.v1.AuditLogEntry\"\x03\x90\x02\x01\x12[\n\x0e\x45xportAuditLog\x12\'.paladin.admin.v1.ExportAuditLogRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,6 +36,8 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'paladin.admin.v1.audit_serv
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1'
+  _globals['_LISTAUDITLOGREQUEST'].fields_by_name['tenant_id']._loaded_options = None
+  _globals['_LISTAUDITLOGREQUEST'].fields_by_name['tenant_id']._serialized_options = b'\272H\010r\003\260\001\001\330\001\001'
   _globals['_GETAUDITLOGENTRYREQUEST'].fields_by_name['entry_id']._loaded_options = None
   _globals['_GETAUDITLOGENTRYREQUEST'].fields_by_name['entry_id']._serialized_options = b'\272H\004r\002\020\001'
   _globals['_EXPORTAUDITLOGREQUEST'].fields_by_name['destination']._loaded_options = None
@@ -47,13 +49,13 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_AUDITLOGSERVICE'].methods_by_name['ExportAuditLog']._loaded_options = None
   _globals['_AUDITLOGSERVICE'].methods_by_name['ExportAuditLog']._serialized_options = b'\220\002\001'
   _globals['_LISTAUDITLOGREQUEST']._serialized_start=195
-  _globals['_LISTAUDITLOGREQUEST']._serialized_end=278
-  _globals['_LISTAUDITLOGRESPONSE']._serialized_start=280
-  _globals['_LISTAUDITLOGRESPONSE']._serialized_end=399
-  _globals['_GETAUDITLOGENTRYREQUEST']._serialized_start=401
-  _globals['_GETAUDITLOGENTRYREQUEST']._serialized_end=453
-  _globals['_EXPORTAUDITLOGREQUEST']._serialized_start=455
-  _globals['_EXPORTAUDITLOGREQUEST']._serialized_end=524
-  _globals['_AUDITLOGSERVICE']._serialized_start=527
-  _globals['_AUDITLOGSERVICE']._serialized_end=838
+  _globals['_LISTAUDITLOGREQUEST']._serialized_end=310
+  _globals['_LISTAUDITLOGRESPONSE']._serialized_start=312
+  _globals['_LISTAUDITLOGRESPONSE']._serialized_end=431
+  _globals['_GETAUDITLOGENTRYREQUEST']._serialized_start=433
+  _globals['_GETAUDITLOGENTRYREQUEST']._serialized_end=485
+  _globals['_EXPORTAUDITLOGREQUEST']._serialized_start=487
+  _globals['_EXPORTAUDITLOGREQUEST']._serialized_end=556
+  _globals['_AUDITLOGSERVICE']._serialized_start=559
+  _globals['_AUDITLOGSERVICE']._serialized_end=870
 # @@protoc_insertion_point(module_scope)

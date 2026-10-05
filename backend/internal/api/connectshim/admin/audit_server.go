@@ -30,6 +30,13 @@ func NewAuditServer(h *audith.Handler) *AuditServer { return &AuditServer{H: h} 
 func (s *AuditServer) ListAuditLog(ctx context.Context, req *connect.Request[pb.ListAuditLogRequest]) (*connect.Response[pb.ListAuditLogResponse], error) {
 	m := req.Msg
 	args := admindomain.ListAuditArgs{PageSize: m.GetPage().GetPageSize()}
+	if id := m.GetTenantId(); id != "" {
+		tenant, err := uuid.Parse(id)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
+		}
+		args.TrailTenantID = tenant
+	}
 	if tok := m.GetPage().GetPageToken(); tok != "" {
 		args.AfterAt, args.AfterID = decodeAuditCursor(tok)
 	}
