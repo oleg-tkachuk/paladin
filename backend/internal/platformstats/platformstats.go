@@ -393,24 +393,28 @@ type QuotaCensus struct {
 	UsageTotalBytes  int64 `json:"usage_total_bytes"`
 }
 
-func collectQuotas(ctx context.Context, pool *pgxpool.Pool, out *QuotaCensus) error {
-	// `atLimit` / `nearLimit` are expressed once as SQL fragments so the
-	// two FILTERs can't drift apart. A cap of 0 means "no cap" throughout
-	// the schema, hence the `> 0` guard on every term.
-	const atLimit = `(
-		 (max_total_bytes     > 0 AND usage_total_bytes    >= max_total_bytes)
-		OR (max_object_count    > 0 AND usage_object_count   >= max_object_count)
-		OR (max_bytes_per_day   > 0 AND usage_bytes_today    >= max_bytes_per_day)
-		OR (max_objects_per_day > 0 AND usage_objects_today  >= max_objects_per_day))`
-	// The ::float8 casts are load-bearing: without them Postgres infers $1
-	// from the bigint operand, rounds 0.9 to 1, and "near limit" silently
-	// becomes "at limit".
-	const nearLimit = `(
-		 (max_total_bytes     > 0 AND usage_total_bytes    >= max_total_bytes     * $1::float8)
-		OR (max_object_count    > 0 AND usage_object_count   >= max_object_count    * $1::float8)
-		OR (max_bytes_per_day   > 0 AND usage_bytes_today    >= max_bytes_per_day   * $1::float8)
-		OR (max_objects_per_day > 0 AND usage_objects_today  >= max_objects_per_day * $1::float8))`
+// quotaAtLimitSQL and quotaNearLimitSQL are a quota row's two warning states,
+// written once so the census FILTERs and the per-tenant drill-down
+// (CollectSignalTenants) count the same rows. A cap of 0 means "no cap"
+// throughout the schema, hence the `> 0` guard on every term.
+const quotaAtLimitSQL = `(
+	 (max_total_bytes     > 0 AND usage_total_bytes    >= max_total_bytes)
+	OR (max_object_count    > 0 AND usage_object_count   >= max_object_count)
+	OR (max_bytes_per_day   > 0 AND usage_bytes_today    >= max_bytes_per_day)
+	OR (max_objects_per_day > 0 AND usage_objects_today  >= max_objects_per_day))`
 
+// quotaNearLimitSQL takes nearLimitRatio as $1. The ::float8 casts are
+// load-bearing: without them Postgres infers $1 from the bigint operand,
+// rounds 0.9 to 1, and "near limit" silently becomes "at limit". A row at its
+// limit is near it too; "near limit" as reported excludes those.
+const quotaNearLimitSQL = `(
+	 (max_total_bytes     > 0 AND usage_total_bytes    >= max_total_bytes     * $1::float8)
+	OR (max_object_count    > 0 AND usage_object_count   >= max_object_count    * $1::float8)
+	OR (max_bytes_per_day   > 0 AND usage_bytes_today    >= max_bytes_per_day   * $1::float8)
+	OR (max_objects_per_day > 0 AND usage_objects_today  >= max_objects_per_day * $1::float8))`
+
+func collectQuotas(ctx context.Context, pool *pgxpool.Pool, out *QuotaCensus) error {
+	const atLimit, nearLimit = quotaAtLimitSQL, quotaNearLimitSQL
 	err := pool.QueryRow(ctx, `
 		SELECT count(*),
 		       count(*) FILTER (WHERE tenant_id IS NOT NULL),
@@ -460,17 +464,24 @@ type CapabilityCensus struct {
 // so a day of warning covers any realistic re-issue loop.
 const capabilityExpiringWindow = "24 hours"
 
+// capabilityRevokedSQL and capabilityExpiringSQL read a capability_records row
+// aliased `c`; shared with the per-tenant drill-down like the quota fragments.
+const (
+	capabilityRevokedSQL  = `EXISTS (SELECT 1 FROM capability_revocations r WHERE r.id = c.id)`
+	capabilityExpiringSQL = `(NOT ` + capabilityRevokedSQL + ` AND c.expires_at > now()
+		AND c.expires_at <= now() + interval '` + capabilityExpiringWindow + `')`
+)
+
 func collectCapabilities(ctx context.Context, pool *pgxpool.Pool, out *CapabilityCensus) error {
 	out.ByPrincipalKind = map[string]int64{}
-	const revoked = `EXISTS (SELECT 1 FROM capability_revocations r WHERE r.id = c.id)`
+	const revoked = capabilityRevokedSQL
 	err := pool.QueryRow(ctx, `
 		SELECT count(*),
 		       count(*) FILTER (WHERE NOT `+revoked+` AND c.expires_at >  now()),
 		       count(*) FILTER (WHERE NOT `+revoked+` AND c.expires_at <= now()),
 		       count(*) FILTER (WHERE     `+revoked+`),
 		       count(*) FILTER (WHERE c.parent_id IS NOT NULL),
-		       count(*) FILTER (WHERE NOT `+revoked+` AND c.expires_at > now()
-		                          AND c.expires_at <= now() + interval '`+capabilityExpiringWindow+`')
+		       count(*) FILTER (WHERE `+capabilityExpiringSQL+`)
 		FROM capability_records c`,
 	).Scan(&out.Total, &out.Active, &out.Expired, &out.Revoked,
 		&out.Delegated, &out.ExpiringSoon)
@@ -509,14 +520,18 @@ type APITokenCensus struct {
 
 const apiTokenExpiringWindow = "7 days"
 
+// apiTokenExpiringSQL is an active api_tokens row inside the warning window;
+// shared with the per-tenant drill-down.
+const apiTokenExpiringSQL = `(revoked_at IS NULL AND expires_at > now()
+	AND expires_at <= now() + interval '` + apiTokenExpiringWindow + `')`
+
 func collectAPITokens(ctx context.Context, pool *pgxpool.Pool, out *APITokenCensus) error {
 	err := pool.QueryRow(ctx, `
 		SELECT count(*),
 		       count(*) FILTER (WHERE revoked_at IS NULL AND expires_at >  now()),
 		       count(*) FILTER (WHERE revoked_at IS NULL AND expires_at <= now()),
 		       count(*) FILTER (WHERE revoked_at IS NOT NULL),
-		       count(*) FILTER (WHERE revoked_at IS NULL AND expires_at > now()
-		                          AND expires_at <= now() + interval '`+apiTokenExpiringWindow+`'),
+		       count(*) FILTER (WHERE `+apiTokenExpiringSQL+`),
 		       count(*) FILTER (WHERE revoked_at IS NULL AND expires_at > now()
 		                          AND last_used_at IS NULL)
 		FROM api_tokens`,
@@ -644,24 +659,31 @@ func tenantBefore(countA int64, idA string, countB int64, idB string) bool {
 // the next page by one. Counts are live, so a tenant whose count moves across
 // the cursor between requests can still repeat or be skipped.
 func pageTenants(tenants []TenantStat, page TenantPage) ([]TenantStat, string, int64) {
+	return pageRanked(tenants, func(t TenantStat) (int64, string) { return t.TotalCount, t.TenantID }, page)
+}
+
+// pageRanked is pageTenants over any per-tenant row: rank reads the row's
+// (count, tenant_id), and rows must already be in tenantBefore order.
+func pageRanked[T any](rows []T, rank func(T) (int64, string), page TenantPage) ([]T, string, int64) {
 	size := page.Size
 	if size <= 0 || size > maxTenantRows {
 		size = maxTenantRows
 	}
 	start := 0
 	if count, id, ok := decodeTenantCursor(page.After); ok {
-		start = sort.Search(len(tenants), func(i int) bool {
-			return tenantBefore(count, id, tenants[i].TotalCount, tenants[i].TenantID)
+		start = sort.Search(len(rows), func(i int) bool {
+			c, rid := rank(rows[i])
+			return tenantBefore(count, id, c, rid)
 		})
 	}
-	end := min(start+size, len(tenants))
-	out := tenants[start:end]
-	rest := int64(len(tenants) - end)
+	end := min(start+size, len(rows))
+	out := rows[start:end]
+	rest := int64(len(rows) - end)
 	if rest == 0 || len(out) == 0 {
 		return out, "", rest
 	}
-	last := out[len(out)-1]
-	return out, encodeTenantCursor(last.TotalCount, last.TenantID), rest
+	count, id := rank(out[len(out)-1])
+	return out, encodeTenantCursor(count, id), rest
 }
 
 // tenantCursorSep joins a cursor's count and tenant_id. A tenant id is a
