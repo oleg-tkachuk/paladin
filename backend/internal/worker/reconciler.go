@@ -25,6 +25,13 @@ import (
 )
 
 // ReconcilerV2Config governs poll cadence and per-tick ceilings.
+// ReconcilerV2Config defaults, for a field left zero.
+const (
+	DefaultReconcilerPollInterval    = 30 * time.Second
+	DefaultReconcilerPendingGraceTTL = 2 * time.Hour
+	DefaultReconcilerBatchSize       = 100
+)
+
 type ReconcilerV2Config struct {
 	PollInterval    time.Duration
 	PendingGraceTTL time.Duration
@@ -49,13 +56,13 @@ type ReconcilerV2 struct {
 
 func NewReconcilerV2(sm *statemachine.Transitioner, probe StorageProbe, cfg ReconcilerV2Config, log *zap.Logger) *ReconcilerV2 {
 	if cfg.PollInterval == 0 {
-		cfg.PollInterval = 30 * time.Second
+		cfg.PollInterval = DefaultReconcilerPollInterval
 	}
 	if cfg.PendingGraceTTL == 0 {
-		cfg.PendingGraceTTL = 2 * time.Hour
+		cfg.PendingGraceTTL = DefaultReconcilerPendingGraceTTL
 	}
 	if cfg.BatchSize == 0 {
-		cfg.BatchSize = 100
+		cfg.BatchSize = DefaultReconcilerBatchSize
 	}
 	return &ReconcilerV2{sm: sm, probe: probe, cfg: cfg, log: log}
 }
