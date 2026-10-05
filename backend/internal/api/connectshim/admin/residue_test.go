@@ -279,3 +279,15 @@ func TestTenantBudgetSetForwardsThePeriodEnd(t *testing.T) {
 		t.Errorf("PeriodEnd = %v, want %v", store.lastSet.PeriodEnd, end)
 	}
 }
+
+// The mutants an exhaustive run leaves, each equivalent — a test for any of
+// them could not fail:
+//
+//   - tenant_server.go, `len(t.Labels) > 0` to `>= 0`: Unmarshal of nothing
+//     fails as an empty blob would (TestTenantLabels).
+//   - operation_server.go, `len(name) <= len(prefix)` to `<`: uuid.Parse("")
+//     refuses the bare prefix too (TestOperationID).
+//   - audit_server.go, decodeAuditCursor's `idx <= 0` to `< 0`: at idx 0 the
+//     following time.Parse("") returns the same zero cursor.
+//   - bucket_server.go and collection_server.go: `true` inside the text of an
+//     error message ("pass force=true to bypass"), which changes only prose.
