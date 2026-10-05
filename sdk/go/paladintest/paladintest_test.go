@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -423,13 +424,7 @@ func getObject(p *paladin.Paladin, obj *datav1.Object) error {
 
 // calls counts the requests for procedure the fake received.
 func calls(srv *paladintest.Server, procedure string) int {
-	n := 0
-	for _, r := range srv.Requests() {
-		if r.Procedure == procedure {
-			n++
-		}
-	}
-	return n
+	return len(srv.Calls(procedure, nil))
 }
 
 // FailRPC answers the next calls with the code and the reason the server
@@ -720,5 +715,57 @@ func TestPresignDownloadRefusesWhatTheServerRefuses(t *testing.T) {
 				t.Errorf("err = %v, want %s", err, tc.code)
 			}
 		})
+	}
+}
+
+// Requests carries each call's message, so a test tells its calls apart by
+// what they named.
+func TestRequestsCarryTheMessage(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	mine := srv.Put(srv.Collection(), "mine", "text/plain", []byte("x"))
+	theirs := srv.Put(srv.Collection(), "theirs", "text/plain", []byte("y"))
+	for _, obj := range []*datav1.Object{mine, theirs, mine} {
+		if err := getObject(p, obj); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reqs := srv.Requests()
+	if len(reqs) != 3 {
+		t.Fatalf("requests = %d, want 3", len(reqs))
+	}
+	got, ok := reqs[1].Message.(*datav1.GetObjectRequest)
+	if !ok || got.GetName() != theirs.GetName() {
+		t.Errorf("second message = %v, want a GetObjectRequest for %s", reqs[1].Message, theirs.GetName())
+	}
+	named := func(name string) func(proto.Message) bool {
+		return func(m proto.Message) bool { return m.(*datav1.GetObjectRequest).GetName() == name }
+	}
+	if n := len(srv.Calls(paladindatav1connect.ObjectServiceGetObjectProcedure, named(mine.GetName()))); n != 2 {
+		t.Errorf("calls for mine = %d, want 2", n)
+	}
+	if n := len(srv.Calls(paladindatav1connect.ObjectServiceGetObjectProcedure, nil)); n != 3 {
+		t.Errorf("calls with no filter = %d, want 3", n)
+	}
+	if n := len(srv.Calls(paladindatav1connect.ObjectServiceLookupObjectProcedure, nil)); n != 0 {
+		t.Errorf("calls of another procedure = %d, want 0", n)
+	}
+}
+
+// The recorded message is a copy: changing what Requests returned changes
+// nothing a later Requests sees.
+func TestRequestsAreCopies(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
+	if err := getObject(p, obj); err != nil {
+		t.Fatal(err)
+	}
+	first := srv.Requests()[0]
+	first.Message.(*datav1.GetObjectRequest).Name = "changed"
+	first.Header.Set(paladin.HeaderUserAgent, "changed")
+	again := srv.Requests()[0]
+	if again.Message.(*datav1.GetObjectRequest).GetName() != obj.GetName() || again.Header.Get(paladin.HeaderUserAgent) == "changed" {
+		t.Errorf("a change to a returned request reached the fake: %v", again)
 	}
 }
