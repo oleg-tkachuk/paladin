@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,17 @@ func TestConvertersAnswerNilWithNil(t *testing.T) {
 	}
 	if kind, cfg := sinkToConfig(nil); kind != "" || cfg != nil {
 		t.Errorf("no sink: kind %q, config %s", kind, cfg)
+	}
+}
+
+// A sink given is a sink used: an inverted nil guard would answer every real
+// one as "no sink", and nil alone cannot tell, since the proto getter on a
+// nil sink is nil-safe.
+func TestSinkToConfigReadsAGivenSink(t *testing.T) {
+	const url = "https://hooks.example.com/paladin"
+	kind, cfg := sinkToConfig(&pb.EventSink{Target: &pb.EventSink_Http{Http: &pb.HttpSink{Url: url}}})
+	if kind != "http" || !strings.Contains(string(cfg), url) {
+		t.Errorf("kind %q, config %s", kind, cfg)
 	}
 }
 
