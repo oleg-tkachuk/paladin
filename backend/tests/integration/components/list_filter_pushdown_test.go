@@ -167,6 +167,68 @@ func TestPushdown_Operations(t *testing.T) {
 	}
 }
 
+// state and done are pushed too. Two finished operations bracket four running
+// ones in id order, so a two-row page read without the predicate starts with
+// the wrong kind of row whichever way the filter points.
+func TestPushdown_OperationsStateAndDone(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	tenantID, _ := mkTenant(t, ctx, pool, "shared")
+	repo := adapters.NewOperationRepo(sqlc.New(pool), pool)
+
+	const pageSize = 2
+	const running = 4
+	finished := func() {
+		mustExec(t, ctx, pool,
+			`INSERT INTO operations (id, tenant_id, type, state, done_at) VALUES ($1, $2, 'BatchCopy', 'FAILED', now())`,
+			uuid.Must(uuid.NewV7()), tenantID)
+	}
+	finished()
+	for range running {
+		mustExec(t, ctx, pool,
+			`INSERT INTO operations (id, tenant_id, type, state) VALUES ($1, $2, 'BatchCopy', 'RUNNING')`,
+			uuid.Must(uuid.NewV7()), tenantID)
+	}
+	finished()
+
+	cases := []struct {
+		filter string
+		want   int
+		keep   func(operationRow) bool
+	}{
+		{`state == "FAILED"`, 2, func(o operationRow) bool { return o.state == "FAILED" }},
+		{`"RUNNING" == state`, pageSize, func(o operationRow) bool { return o.state == "RUNNING" }},
+		{`done`, 2, func(o operationRow) bool { return o.done }},
+		{`!done`, pageSize, func(o operationRow) bool { return !o.done }},
+		// Not a value of the enum: no row, and no error from a failed cast.
+		{`state == "NOT_A_STATE"`, 0, func(operationRow) bool { return false }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.filter, func(t *testing.T) {
+			got, _, err := repo.List(ctx, tenantID, nil, uuid.Nil, pageSize, tc.filter, false)
+			if err != nil {
+				t.Fatalf("list: %v", err)
+			}
+			if len(got) != tc.want {
+				t.Fatalf("got %d rows, want %d", len(got), tc.want)
+			}
+			for _, o := range got {
+				row := operationRow{state: string(o.State), done: o.DoneAt != nil}
+				if !tc.keep(row) {
+					t.Errorf("row %s (state %s, done %v) does not match %s — the predicate was not pushed",
+						o.OperationID, row.state, row.done, tc.filter)
+				}
+			}
+		})
+	}
+}
+
+type operationRow struct {
+	state string
+	done  bool
+}
+
 func TestPushdown_Collections(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
