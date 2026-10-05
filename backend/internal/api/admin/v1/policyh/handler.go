@@ -194,58 +194,55 @@ type EffectivePolicyOutput struct {
 type PolicyLayer struct {
 	Source      string
 	CedarPolicy string
+	// Frozen: CedarPolicy does not compile, and EvaluatedCedarPolicy — a
+	// freeze over the layer's scope — is evaluated in its place.
+	Frozen               bool
+	EvaluatedCedarPolicy string
 }
+
+// BuiltinLayerSource names the platform's own layer, which no resource owns.
+const BuiltinLayerSource = "built-in"
 
 // GetEffectivePolicy returns the merged Cedar text the engine would compile
 // for the given resource, plus its layer breakdown for inspection.
 func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, fallbackTenant uuid.UUID) (*EffectivePolicyOutput, error) {
 	tenantID, collection, err := parseSimulateResource(resourceName, fallbackTenant)
 	if err != nil {
-		return nil, err
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if err := h.authorizeInspect(ctx, tenantID, collection); err != nil {
 		return nil, err
 	}
-	layers, _, _, err := h.store.Fetch(ctx, tenantID, collection)
+	stored, _, _, err := h.store.Fetch(ctx, tenantID, collection)
 	if err != nil {
-		return nil, err
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("fetch policy: %w", err))
 	}
-	// The store hands the layers over separately now, so attribution is read
-	// off the data rather than recovered by splitting a joined string on a
-	// comment marker. The old extractTenantLayer / extractCollectionLayer
-	// pair guessed where one layer ended; a tenant policy that happened to
-	// contain the marker text would have been mis-attributed.
-	merged := layers.Tenant
-	for _, layer := range []struct{ marker, text string }{
-		{"// --- bucket-scoped ---", layers.Bucket},
-		{"// --- collection-scoped ---", layers.Collection},
-	} {
-		if layer.text == "" {
-			continue
-		}
-		if merged != "" {
-			merged += "\n"
-		}
-		merged += layer.marker + "\n" + layer.text
+	// Built by the engine's own join, so what this returns is what the
+	// authorizer compiles — the built-in layer and any freeze included.
+	layers, text := cedar.EvaluatedLayers(stored)
+	builtin := cedar.BuiltinPolicy()
+	out := &EffectivePolicyOutput{
+		MergedCedarPolicy: cedar.CompiledText(text),
+		Layers: []PolicyLayer{{
+			Source: BuiltinLayerSource, CedarPolicy: builtin, EvaluatedCedarPolicy: builtin,
+		}},
 	}
-	out := &EffectivePolicyOutput{MergedCedarPolicy: merged}
-	// Stable layer attribution, in the order the engine joins them: tenant,
-	// the bucket the collection is bound to, the collection.
-	out.Layers = append(out.Layers, PolicyLayer{
-		Source:      fmt.Sprintf("tenants/%s", tenantID),
-		CedarPolicy: layers.Tenant,
-	})
-	if layers.BucketName != "" {
+	tenantName := apiutil.TenantNamePrefix + tenantID.String()
+	sources := map[string]string{
+		cedar.LayerTenant:     tenantName,
+		cedar.LayerBucket:     stored.BucketName,
+		cedar.LayerCollection: tenantName + collectionsSegment + collection,
+	}
+	for _, l := range layers {
 		out.Layers = append(out.Layers, PolicyLayer{
-			Source:      layers.BucketName,
-			CedarPolicy: layers.Bucket,
-		})
-	}
-	if collection != "" {
-		out.Layers = append(out.Layers, PolicyLayer{
-			Source:      fmt.Sprintf("tenants/%s/collections/%s", tenantID, collection),
-			CedarPolicy: layers.Collection,
+			Source:               sources[l.Name],
+			CedarPolicy:          l.Stored,
+			Frozen:               l.Frozen,
+			EvaluatedCedarPolicy: l.Evaluated,
 		})
 	}
 	return out, nil
 }
+
+// collectionsSegment joins a tenant's name to one of its collections.
+const collectionsSegment = "/collections/"
