@@ -296,7 +296,7 @@ type cacheKey struct {
 type compiledPolicy struct {
 	hash      []byte
 	policySet *cedar.PolicySet
-	// degraded names the tenant-authored layers (layerTenant, layerBucket, layerCollection) that
+	// degraded names the tenant-authored layers (LayerTenant, LayerBucket, LayerCollection) that
 	// did not parse and were replaced by a freeze. Empty in the normal case.
 	// Kept so a reader can tell a scope that denies from a scope that cannot
 	// answer.
@@ -810,11 +810,70 @@ unless {
 // built-in platform-admin permit. Empty input still produces a non-empty
 // set because of the builtin, which is the whole point.
 func compile(text string) (*cedar.PolicySet, error) {
-	combined := builtinPolicy
-	if text != "" {
-		combined += "\n// --- tenant policy follows ---\n" + text
+	return cedar.NewPolicySetFromBytes("", []byte(CompiledText(text)))
+}
+
+// tenantPolicyMarker opens the tenant-authored text in the compiled set.
+const tenantPolicyMarker = "// --- tenant policy follows ---"
+
+// CompiledText is the exact text the authorizer compiles for the
+// tenant-authored text EvaluatedLayers joins: the built-in layer, then it.
+func CompiledText(text string) string {
+	if text == "" {
+		return builtinPolicy
 	}
-	return cedar.NewPolicySetFromBytes("", []byte(combined))
+	return builtinPolicy + "\n" + tenantPolicyMarker + "\n" + text
+}
+
+// BuiltinPolicy is the layer every compiled set starts with (builtinPolicy).
+func BuiltinPolicy() string { return builtinPolicy }
+
+// EvaluatedLayer is one tenant-authored layer as the authorizer evaluates it.
+type EvaluatedLayer struct {
+	// Name is the layer: LayerTenant, LayerBucket or LayerCollection.
+	Name string
+	// Stored is the text as written.
+	Stored string
+	// Evaluated is what is compiled in its place: Stored, or a freeze when
+	// Stored does not parse (Frozen).
+	Evaluated string
+	Frozen    bool
+}
+
+// EvaluatedLayers returns the tenant, bucket and collection layers of l as
+// the authorizer evaluates them, and the text it joins them into (which
+// CompiledText completes). Empty bucket and collection layers are left out;
+// the tenant layer is always first, even empty.
+//
+// A layer that does not parse is replaced by a freeze over the scope it
+// governs (see freezeExcept for why that is safe and how it is repaired).
+func EvaluatedLayers(l Layers) ([]EvaluatedLayer, string) {
+	layers := []EvaluatedLayer{evaluatedLayer(LayerTenant, l.Tenant, ActionManageTenant)}
+	// The bucket's repair, SetBucketPolicy, is checked against the Bucket with
+	// no collection in scope, so it never loads this layer: the freeze can
+	// name ConfigureBucketPolicy and still cannot block it.
+	if l.Bucket != "" {
+		layers = append(layers, evaluatedLayer(LayerBucket, l.Bucket, ActionConfigureBucketPolicy))
+	}
+	if l.Collection != "" {
+		layers = append(layers, evaluatedLayer(LayerCollection, l.Collection, ActionManageCollection))
+	}
+	text := layers[0].Evaluated
+	for _, layer := range layers[1:] {
+		if text != "" {
+			text += "\n"
+		}
+		text += layerMarkers[layer.Name] + "\n" + layer.Evaluated
+	}
+	return layers, text
+}
+
+func evaluatedLayer(name, stored, repair string) EvaluatedLayer {
+	out := EvaluatedLayer{Name: name, Stored: stored, Evaluated: stored}
+	if stored != "" && layerParses(stored) != nil {
+		out.Evaluated, out.Frozen = freezeExcept(repair), true
+	}
+	return out
 }
 
 // ErrPolicyUnparseable marks a STORED Cedar policy the engine cannot compile.
@@ -853,47 +912,23 @@ var ErrPolicyUnparseable = errors.New("cedar: stored policy does not compile")
 // the action vocabulary. Carving out management grants nothing new — whoever
 // holds it could delete the entity while the policy was valid — and it beats
 // the alternative, which was an entity nobody could ever remove.
-func (e *Engine) degradeUnparseableLayers(l Layers, tenantID uuid.UUID, collection string) (string, []string) {
+func (e *Engine) degradeUnparseableLayers(l Layers, _ uuid.UUID, _ string) (string, []string) {
+	layers, text := EvaluatedLayers(l)
 	var degraded []string
-	tenant, bucketText, collectionText := l.Tenant, l.Bucket, l.Collection
-
-	if tenant != "" && layerParses(tenant) != nil {
-		tenant = freezeExcept(ActionManageTenant)
-		degraded = append(degraded, layerTenant)
-	}
-	// The bucket's repair, SetBucketPolicy, is checked against the Bucket with
-	// no collection in scope, so it never loads this layer: the freeze can
-	// name ConfigureBucketPolicy and still cannot block it.
-	if bucketText != "" && layerParses(bucketText) != nil {
-		bucketText = freezeExcept(ActionConfigureBucketPolicy)
-		degraded = append(degraded, layerBucket)
-	}
-	if collectionText != "" && layerParses(collectionText) != nil {
-		collectionText = freezeExcept(ActionManageCollection)
-		degraded = append(degraded, layerCollection)
-	}
-
-	text := tenant
-	for _, layer := range []struct{ marker, text string }{
-		{bucketLayerMarker, bucketText},
-		{collectionLayerMarker, collectionText},
-	} {
-		if layer.text == "" {
-			continue
+	for _, layer := range layers {
+		if layer.Frozen {
+			degraded = append(degraded, layer.Name)
 		}
-		if text != "" {
-			text += "\n"
-		}
-		text += layer.marker + "\n" + layer.text
 	}
 	return text, degraded
 }
 
-// Layer names, as compiledPolicy.degraded and the warning log report them.
+// Layer names, as compiledPolicy.degraded, the warning log and
+// EvaluatedLayer report them.
 const (
-	layerTenant     = "tenant"
-	layerBucket     = "bucket"
-	layerCollection = "collection"
+	LayerTenant     = "tenant"
+	LayerBucket     = "bucket"
+	LayerCollection = "collection"
 )
 
 // Comment lines that open each layer in the joined policy text, so a reader
@@ -902,6 +937,11 @@ const (
 	bucketLayerMarker     = "// --- bucket-scoped ---"
 	collectionLayerMarker = "// --- collection-scoped ---"
 )
+
+var layerMarkers = map[string]string{
+	LayerBucket:     bucketLayerMarker,
+	LayerCollection: collectionLayerMarker,
+}
 
 // layerParses reports whether one tenant-authored layer compiles on its own.
 // Cedar statements are self-contained, so a layer that parses alone parses in

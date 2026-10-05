@@ -336,28 +336,36 @@ func TestGetEffectivePolicy(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "db down") {
 			t.Fatalf("expected store error to propagate, got %v", err)
 		}
+		wantCode(t, err, connect.CodeInternal)
 	})
 
-	t.Run("tenant-only resource → single tenant layer", func(t *testing.T) {
+	// The built-in layer comes first and the merged text is what the engine
+	// compiles: the same function builds both.
+	t.Run("tenant-only resource → built-in and tenant layers", func(t *testing.T) {
+		const tenantRule = "permit(principal, action, resource);"
 		fs := &fakeStore{fetchFn: func(_ context.Context, _ uuid.UUID, key string) (cedar.Layers, []byte, string, error) {
 			if key != "" {
 				t.Fatalf("tenant-only name must fetch empty collection, got %q", key)
 			}
-			return cedar.Layers{Tenant: "permit(principal, action, resource);"}, nil, "", nil
+			return cedar.Layers{Tenant: tenantRule}, nil, "", nil
 		}}
 		h := NewHandler(allowEngine(), fs)
 		out, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/"+tid.String(), tid)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if out.MergedCedarPolicy != "permit(principal, action, resource);" {
-			t.Fatalf("merged text: %q", out.MergedCedarPolicy)
+		if want := cedar.CompiledText(tenantRule); out.MergedCedarPolicy != want {
+			t.Fatalf("merged text is not what the engine compiles:\n%s", out.MergedCedarPolicy)
 		}
-		if len(out.Layers) != 1 {
-			t.Fatalf("expected 1 layer for a tenant-only name, got %d", len(out.Layers))
+		if len(out.Layers) != 2 {
+			t.Fatalf("expected the built-in and tenant layers, got %d", len(out.Layers))
 		}
-		if !strings.Contains(out.Layers[0].Source, tid.String()) {
-			t.Fatalf("tenant layer source: %q", out.Layers[0].Source)
+		if l := out.Layers[0]; l.Source != BuiltinLayerSource || l.CedarPolicy != cedar.BuiltinPolicy() {
+			t.Fatalf("first layer = %q, want the built-in", l.Source)
+		}
+		if l := out.Layers[1]; l.Source != "tenants/"+tid.String() || l.CedarPolicy != tenantRule ||
+			l.EvaluatedCedarPolicy != tenantRule || l.Frozen {
+			t.Fatalf("tenant layer = %+v", l)
 		}
 	})
 
@@ -365,12 +373,14 @@ func TestGetEffectivePolicy(t *testing.T) {
 	// recovered by splitting a joined string on a comment marker, which a
 	// tenant policy containing that text would have defeated.
 	t.Run("collection resource → tenant + collection layers, attributed", func(t *testing.T) {
+		const tenantRule, objRule = `permit(principal, action == Action::"GetObject", resource);`,
+			`forbid(principal, action == Action::"DeleteObject", resource);`
 		objTenant := uuid.New()
 		var gotTenant uuid.UUID
 		var gotKey string
 		fs := &fakeStore{fetchFn: func(_ context.Context, tenant uuid.UUID, key string) (cedar.Layers, []byte, string, error) {
 			gotTenant, gotKey = tenant, key
-			return cedar.Layers{Tenant: "tenant-rule", Collection: "obj-rule"}, nil, "", nil
+			return cedar.Layers{Tenant: tenantRule, Collection: objRule}, nil, "", nil
 		}}
 		h := NewHandler(allowEngine(), fs)
 		out, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/"+objTenant.String()+"/collections/logs", tid)
@@ -380,17 +390,15 @@ func TestGetEffectivePolicy(t *testing.T) {
 		if gotTenant != objTenant || gotKey != "logs" {
 			t.Fatalf("store fetched (%v,%q), want %v/logs", gotTenant, gotKey, objTenant)
 		}
-		if len(out.Layers) != 2 {
-			t.Fatalf("expected 2 layers, got %d", len(out.Layers))
+		if len(out.Layers) != 3 {
+			t.Fatalf("expected 3 layers, got %d", len(out.Layers))
 		}
-		if out.Layers[0].CedarPolicy != "tenant-rule" {
-			t.Fatalf("tenant layer text: %q", out.Layers[0].CedarPolicy)
+		if out.Layers[1].CedarPolicy != tenantRule {
+			t.Fatalf("tenant layer text: %q", out.Layers[1].CedarPolicy)
 		}
-		if out.Layers[1].CedarPolicy != "obj-rule" {
-			t.Fatalf("collection layer text: %q", out.Layers[1].CedarPolicy)
-		}
-		if !strings.Contains(out.Layers[1].Source, "logs") {
-			t.Fatalf("collection layer source: %q", out.Layers[1].Source)
+		if l := out.Layers[2]; l.CedarPolicy != objRule ||
+			l.Source != "tenants/"+objTenant.String()+"/collections/logs" {
+			t.Fatalf("collection layer = %+v", l)
 		}
 	})
 
@@ -398,21 +406,53 @@ func TestGetEffectivePolicy(t *testing.T) {
 	// text carries it in the same order the engine compiles it.
 	t.Run("collection in a bucket with a policy → tenant, bucket, collection", func(t *testing.T) {
 		const bucket = "storageBackends/primary/buckets/shared"
+		const tenantRule, bucketRule, objRule = `permit(principal, action == Action::"GetObject", resource);`,
+			`permit(principal, action == Action::"PutObject", resource);`,
+			`forbid(principal, action == Action::"DeleteObject", resource);`
 		fs := &fakeStore{fetchFn: func(context.Context, uuid.UUID, string) (cedar.Layers, []byte, string, error) {
-			return cedar.Layers{Tenant: "tenant-rule", Bucket: "bucket-rule", BucketName: bucket, Collection: "obj-rule"}, nil, "", nil
+			return cedar.Layers{Tenant: tenantRule, Bucket: bucketRule, BucketName: bucket, Collection: objRule}, nil, "", nil
 		}}
 		h := NewHandler(allowEngine(), fs)
 		out, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/"+tid.String()+"/collections/logs", tid)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if len(out.Layers) != 3 || out.Layers[1].Source != bucket || out.Layers[1].CedarPolicy != "bucket-rule" {
-			t.Fatalf("layers = %+v, want the bucket's in the middle", out.Layers)
+		if len(out.Layers) != 4 || out.Layers[2].Source != bucket || out.Layers[2].CedarPolicy != bucketRule {
+			t.Fatalf("layers = %+v, want the bucket's between the tenant's and the collection's", out.Layers)
 		}
-		b, c := strings.Index(out.MergedCedarPolicy, "bucket-rule"), strings.Index(out.MergedCedarPolicy, "obj-rule")
+		b, c := strings.Index(out.MergedCedarPolicy, bucketRule), strings.Index(out.MergedCedarPolicy, objRule)
 		if b < 0 || c < b {
 			t.Fatalf("merged text out of order:\n%s", out.MergedCedarPolicy)
 		}
+	})
+
+	// A stored layer that does not compile is not what the authorizer runs:
+	// it runs a freeze over the layer's scope. The page has to say so, or an
+	// operator debugging a deny reads rules nothing evaluates.
+	t.Run("a layer that does not parse is shown frozen", func(t *testing.T) {
+		const broken = "this is not cedar"
+		fs := &fakeStore{fetchFn: func(context.Context, uuid.UUID, string) (cedar.Layers, []byte, string, error) {
+			return cedar.Layers{Tenant: broken}, nil, "", nil
+		}}
+		h := NewHandler(allowEngine(), fs)
+		out, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/"+tid.String(), tid)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		l := out.Layers[1]
+		if !l.Frozen || l.CedarPolicy != broken || l.EvaluatedCedarPolicy == broken ||
+			!strings.Contains(l.EvaluatedCedarPolicy, "forbid") {
+			t.Fatalf("tenant layer = %+v, want frozen with the freeze evaluated", l)
+		}
+		if strings.Contains(out.MergedCedarPolicy, broken) {
+			t.Errorf("merged text carries the text nothing evaluates")
+		}
+	})
+
+	t.Run("a name that is not one is InvalidArgument", func(t *testing.T) {
+		h := NewHandler(allowEngine(), &fakeStore{})
+		_, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/not-a-uuid", tid)
+		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 }
 
