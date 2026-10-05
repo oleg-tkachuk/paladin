@@ -191,8 +191,9 @@ type Server struct {
 	fault      StorageFault
 	afterStore StorageFault
 	storeOps   []StorageOp
-	// rpcFaults are the failures FailRPC set, by procedure.
-	rpcFaults map[string]*rpcFault
+	// rpcFaults are the failures FailRPC and FailRPCIf set, by procedure,
+	// oldest first.
+	rpcFaults map[string][]*rpcFault
 }
 
 // StorageFault decides a storage request's answer before the fake does: a
@@ -258,10 +259,11 @@ var serverReason = map[connect.Code]commonv1.ErrorReason{
 	connect.CodeUnauthenticated:    commonv1.ErrorReason_ERROR_REASON_UNAUTHENTICATED,
 }
 
-// rpcFault is what FailRPC set for one procedure: the code, and how many
-// more calls answer it.
+// rpcFault is one failure FailRPC or FailRPCIf set: the code, which calls
+// it takes — every one when match is nil — and how many more it answers.
 type rpcFault struct {
 	code      connect.Code
+	match     func(proto.Message) bool
 	remaining int
 }
 
@@ -276,26 +278,58 @@ type rpcFault struct {
 // It panics on a procedure the fake does not serve, a times below 1, or an
 // unknown code: each is a mistake in the test, not a scenario.
 func (s *Server) FailRPC(procedure string, times int, code connect.Code) (reset func()) {
+	return s.failRPC("FailRPC", procedure, nil, times, code)
+}
+
+// FailRPCIf is FailRPC for the calls of procedure whose request match
+// accepts — an object's name, a collection — so tests sharing one fake fail
+// only their own calls; every other call of the procedure is served. Its
+// failures stack: each FailRPCIf adds one, and a call is taken by the most
+// recent one that matches it. match gets a copy of the request message, runs
+// without the fake's lock held, and must not block.
+//
+// It panics as FailRPC does, and on a nil match.
+func (s *Server) FailRPCIf(procedure string, match func(req proto.Message) bool, times int, code connect.Code) (reset func()) {
+	if match == nil {
+		panic("paladintest: FailRPCIf: match is nil; FailRPC fails every call")
+	}
+	return s.failRPC("FailRPCIf", procedure, match, times, code)
+}
+
+func (s *Server) failRPC(caller, procedure string, match func(proto.Message) bool, times int, code connect.Code) (reset func()) {
 	if !served(procedure) {
-		panic(fmt.Sprintf("paladintest: FailRPC: %q is not a procedure the fake serves", procedure))
+		panic(fmt.Sprintf("paladintest: %s: %q is not a procedure the fake serves", caller, procedure))
 	}
 	if times < 1 {
-		panic(fmt.Sprintf("paladintest: FailRPC: times is %d, want at least 1", times))
+		panic(fmt.Sprintf("paladintest: %s: times is %d, want at least 1", caller, times))
 	}
 	if code < connect.CodeCanceled || code > connect.CodeUnauthenticated {
-		panic(fmt.Sprintf("paladintest: FailRPC: %d is not a Connect error code", code))
+		panic(fmt.Sprintf("paladintest: %s: %d is not a Connect error code", caller, code))
 	}
-	f := &rpcFault{code: code, remaining: times}
+	f := &rpcFault{code: code, match: match, remaining: times}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.rpcFaults[procedure] = f
+	faults := s.rpcFaults[procedure]
+	if match == nil {
+		// A later FailRPC replaces the earlier one, as it always has.
+		faults = slices.DeleteFunc(slices.Clone(faults), func(g *rpcFault) bool { return g.match == nil })
+	}
+	s.rpcFaults[procedure] = append(faults, f)
 	return func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if s.rpcFaults[procedure] == f {
-			delete(s.rpcFaults, procedure)
-		}
+		s.dropRPCFault(procedure, f)
 	}
+}
+
+// dropRPCFault removes f from procedure's failures. The caller holds mu.
+func (s *Server) dropRPCFault(procedure string, f *rpcFault) {
+	faults := slices.DeleteFunc(slices.Clone(s.rpcFaults[procedure]), func(g *rpcFault) bool { return g == f })
+	if len(faults) == 0 {
+		delete(s.rpcFaults, procedure)
+		return
+	}
+	s.rpcFaults[procedure] = faults
 }
 
 // served reports whether procedure is an RPC of a service the fake mounts.
@@ -308,19 +342,38 @@ func served(procedure string) bool {
 	return err == nil
 }
 
-// takeRPCFault is the error FailRPC set for procedure's next call, nil when
-// there is none, counting the call against it. The caller holds mu.
-func (s *Server) takeRPCFault(procedure string) error {
-	f, ok := s.rpcFaults[procedure]
-	if !ok {
-		return nil
+// takeRPCFault is the error FailRPC or FailRPCIf set for this call of
+// procedure, nil when none takes it, counting the call against the one that
+// does. The caller does not hold mu: a match runs without it.
+func (s *Server) takeRPCFault(procedure string, msg proto.Message) error {
+	s.mu.Lock()
+	faults := slices.Clone(s.rpcFaults[procedure])
+	s.mu.Unlock()
+	for _, f := range slices.Backward(faults) {
+		if f.match != nil && !f.match(proto.Clone(msg)) {
+			continue
+		}
+		s.mu.Lock()
+		live := slices.Contains(s.rpcFaults[procedure], f)
+		if live {
+			f.remaining--
+			if f.remaining == 0 {
+				s.dropRPCFault(procedure, f)
+			}
+		}
+		s.mu.Unlock()
+		if live { // another call may have spent it meanwhile
+			return failure(procedure, f.code)
+		}
 	}
-	f.remaining--
-	if f.remaining == 0 {
-		delete(s.rpcFaults, procedure)
-	}
-	err := connect.NewError(f.code, fmt.Errorf("paladintest: %s failed by FailRPC", procedure))
-	if reason, ok := serverReason[f.code]; ok {
+	return nil
+}
+
+// failure is the error an injected failure answers with: code, and the
+// reason the server attaches to it.
+func failure(procedure string, code connect.Code) error {
+	err := connect.NewError(code, fmt.Errorf("paladintest: %s failed by FailRPC", procedure))
+	if reason, ok := serverReason[code]; ok {
 		detail, derr := connect.NewErrorDetail(&errdetails.ErrorInfo{Reason: reason.String(), Domain: paladin.ErrorDomain})
 		if derr != nil {
 			panic(fmt.Sprintf("paladintest: %v", derr)) // an ErrorInfo always marshals
@@ -382,16 +435,16 @@ func Start() (*Server, func()) {
 		buckets: map[string]bool{},
 		bound:   map[string]bool{},
 
-		rpcFaults: map[string]*rpcFault{},
+		rpcFaults: map[string][]*rpcFault{},
 	}
 	record := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			procedure := req.Spec().Procedure
+			msg := cloneMessage(req)
 			s.mu.Lock()
-			s.requests = append(s.requests, Request{Procedure: procedure, Header: req.Header().Clone(), Message: cloneMessage(req)})
-			err := s.takeRPCFault(procedure)
+			s.requests = append(s.requests, Request{Procedure: procedure, Header: req.Header().Clone(), Message: msg})
 			s.mu.Unlock()
-			if err != nil {
+			if err := s.takeRPCFault(procedure, msg); err != nil {
 				return nil, err
 			}
 			return next(ctx, req)
