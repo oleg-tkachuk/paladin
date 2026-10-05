@@ -6,10 +6,13 @@ from __future__ import annotations
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
+from datetime import datetime, timedelta, timezone
+from http import HTTPStatus
 
 import pytest
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
+from google.protobuf import duration_pb2
 
 import paladin
 from paladin import (
@@ -20,7 +23,10 @@ from paladin import (
     ContractSkewError,
     FailedPreconditionError,
     NotFoundError,
+    ObjectName,
     ObjectURI,
+    Retry,
+    VersionConflictError,
     download,
     download_uri,
     lookup_object,
@@ -28,15 +34,24 @@ from paladin import (
     upload,
 )
 from paladin.admin.v1 import tenant_service_pb2
+from paladin.common.v1 import error_reason_pb2
 from paladin.data.v1 import (
     multipart_service_pb2,
     object_service_pb2,
+    presign_service_pb2,
     storage_bootstrap_service_pb2,
     types_pb2,
 )
-from paladin.testing import PART_SIZE, FakePaladin
+from paladin.testing import (
+    DEFAULT_DOWNLOAD_TTL,
+    MAX_PRESIGN_TTL,
+    PART_SIZE,
+    FakePaladin,
+)
 
 UPLOAD_PROCEDURE = "/paladin.data.v1.ObjectService/UploadObject"
+GET_OBJECT_PROCEDURE = "/paladin.data.v1.ObjectService/GetObject"
+COUNT_OBJECTS_PROCEDURE = "/paladin.data.v1.ObjectService/CountObjects"
 BACKEND = "seaweedfs"
 BUCKET = "paladin-shared"
 
@@ -312,3 +327,226 @@ def test_the_fake_looks_up_and_fails_pending_objects(fake: FakePaladin) -> None:
     assert state() == types_pb2.OBJECT_STATE_PENDING
     fake.mark_failed(pending.name)
     assert state() == types_pb2.OBJECT_STATE_FAILED
+
+
+# ─── fail_rpc ───────────────────────────────────────────────────────────────
+
+
+def _get_object(p: paladin.Paladin, obj: types_pb2.Object) -> None:
+    p.data.object.get_object(object_service_pb2.GetObjectRequest(name=obj.name))
+
+
+def _calls(fake: FakePaladin, procedure: str) -> int:
+    return sum(1 for r in fake.requests() if r.procedure == procedure)
+
+
+@pytest.mark.parametrize(
+    ("times", "code", "kind", "want_reason"),
+    [
+        (1, Code.UNAVAILABLE, None, error_reason_pb2.ERROR_REASON_UNSPECIFIED),
+        (1, Code.NOT_FOUND, NotFoundError, error_reason_pb2.ERROR_REASON_NOT_FOUND),
+        (3, Code.UNAVAILABLE, None, error_reason_pb2.ERROR_REASON_UNSPECIFIED),
+        (1, Code.DATA_LOSS, None, error_reason_pb2.ERROR_REASON_UNSPECIFIED),
+        (1, Code.ABORTED, VersionConflictError, error_reason_pb2.ERROR_REASON_VERSION_CONFLICT),
+    ],
+    ids=["one Unavailable", "one NotFound", "three Unavailable", "DataLoss", "Aborted"],
+)
+def test_fail_rpc(
+    fake: FakePaladin,
+    times: int,
+    code: Code,
+    kind: type[Exception] | None,
+    want_reason: int,
+) -> None:
+    """The next calls answer the code with the reason the server attaches to
+    it, each is recorded, and then the RPC is served again."""
+    p = fake.connect()
+    obj = fake.put(fake.collection(), "k", "text/plain", b"x")
+    fake.fail_rpc(GET_OBJECT_PROCEDURE, times, code)
+    for _ in range(times):
+        with pytest.raises(ConnectError) as caught:
+            _get_object(p, obj)
+        assert caught.value.code == code
+        if kind is not None:
+            assert isinstance(caught.value, kind)
+        assert paladin.reason(caught.value) == want_reason
+    _get_object(p, obj)
+    assert _calls(fake, GET_OBJECT_PROCEDURE) == times + 1
+
+
+def test_fail_rpc_sees_the_retry(fake: FakePaladin) -> None:
+    """A client that retries UNAVAILABLE reads through one failure, and the
+    fake shows both attempts."""
+    p = fake.connect(retry=Retry(attempts=3, base_delay=0.001, max_delay=0.001))
+    obj = fake.put(fake.collection(), "k", "text/plain", b"x")
+    fake.fail_rpc(GET_OBJECT_PROCEDURE, 1, Code.UNAVAILABLE)
+    _get_object(p, obj)
+    assert _calls(fake, GET_OBJECT_PROCEDURE) == 2
+
+
+def test_fail_rpc_fails_only_its_procedure(fake: FakePaladin) -> None:
+    p = fake.connect()
+    obj = fake.put(fake.collection(), "k", "text/plain", b"x")
+    fake.fail_rpc(GET_OBJECT_PROCEDURE, 1, Code.UNAVAILABLE)
+    lookup_object(p.data, ObjectURI(fake.collection(), "k"))
+    with pytest.raises(ConnectError) as caught:
+        _get_object(p, obj)
+    assert caught.value.code == Code.UNAVAILABLE
+
+
+def test_fail_rpc_reset_restores_the_rpc(fake: FakePaladin) -> None:
+    p = fake.connect()
+    obj = fake.put(fake.collection(), "k", "text/plain", b"x")
+    reset = fake.fail_rpc(GET_OBJECT_PROCEDURE, 5, Code.UNAVAILABLE)
+    with pytest.raises(ConnectError):
+        _get_object(p, obj)
+    reset()
+    _get_object(p, obj)
+    reset()  # twice is harmless
+
+
+def test_fail_rpc_reset_leaves_a_later_failure(fake: FakePaladin) -> None:
+    p = fake.connect()
+    obj = fake.put(fake.collection(), "k", "text/plain", b"x")
+    first = fake.fail_rpc(GET_OBJECT_PROCEDURE, 1, Code.UNAVAILABLE)
+    fake.fail_rpc(GET_OBJECT_PROCEDURE, 1, Code.NOT_FOUND)
+    first()
+    with pytest.raises(NotFoundError):
+        _get_object(p, obj)
+
+
+def test_fail_rpc_on_an_unimplemented_procedure(fake: FakePaladin) -> None:
+    """Any procedure of a served service can fail, one the fake answers
+    UNIMPLEMENTED included."""
+    p = fake.connect()
+    fake.fail_rpc(COUNT_OBJECTS_PROCEDURE, 1, Code.UNAVAILABLE)
+    with pytest.raises(ConnectError) as caught:
+        p.data.object.count_objects(object_service_pb2.CountObjectsRequest())
+    assert caught.value.code == Code.UNAVAILABLE
+    with pytest.raises(ContractSkewError):
+        p.data.object.count_objects(object_service_pb2.CountObjectsRequest())
+
+
+@pytest.mark.parametrize(
+    ("procedure", "times", "code", "error"),
+    [
+        ("/paladin.data.v1.ObjectService/NoSuchRPC", 1, Code.UNAVAILABLE, ValueError),
+        ("/paladin.admin.v1.TenantService/ListTenants", 1, Code.UNAVAILABLE, ValueError),
+        ("GetObject", 1, Code.UNAVAILABLE, ValueError),
+        (GET_OBJECT_PROCEDURE, 0, Code.UNAVAILABLE, ValueError),
+        (GET_OBJECT_PROCEDURE, 1, "unavailable", TypeError),
+    ],
+    ids=[
+        "no such procedure",
+        "a service not served",
+        "not a procedure",
+        "zero times",
+        "not a Code",
+    ],
+)
+def test_fail_rpc_refuses_a_mistake(
+    fake: FakePaladin, procedure: str, times: int, code: Code, error: type[Exception]
+) -> None:
+    with pytest.raises(error):
+        fake.fail_rpc(procedure, times, code)
+
+
+# ─── presign_download ───────────────────────────────────────────────────────
+
+
+def _presign(p: paladin.Paladin, **fields: object) -> presign_service_pb2.PresignDownloadResponse:
+    return p.data.presign.presign_download(presign_service_pb2.PresignDownloadRequest(**fields))
+
+
+def _fetch(url: object, headers: Mapping[str, str]) -> tuple[int, bytes, Mapping[str, str]]:
+    request = urllib.request.Request(url.url, method=url.method, headers=dict(headers))  # type: ignore[attr-defined]
+    try:
+        with urllib.request.urlopen(request) as resp:
+            return resp.status, resp.read(), resp.headers
+    except urllib.error.HTTPError as err:
+        return err.code, b"", err.headers
+
+
+def _expires(url: object) -> datetime:
+    return datetime.strptime(url.expires_at_rfc3339, "%Y-%m-%dT%H:%M:%SZ").replace(  # type: ignore[attr-defined]
+        tzinfo=timezone.utc
+    )
+
+
+def test_presign_download_reads_the_object(fake: FakePaladin) -> None:
+    p = fake.connect()
+    body = b"presigned body"
+    obj = fake.put(fake.collection(), "k", "text/plain", body)
+    before = datetime.now(timezone.utc)
+    url = _presign(p, name=obj.name).download_url
+    assert url.method == "GET"
+    assert not url.required_headers
+    # RFC 3339 here has whole seconds: allow one either way.
+    second = timedelta(seconds=1)
+    expires = _expires(url)
+    assert before + DEFAULT_DOWNLOAD_TTL - second <= expires
+    assert expires <= datetime.now(timezone.utc) + DEFAULT_DOWNLOAD_TTL + second
+    status, got, _ = _fetch(url, url.required_headers)
+    assert (status, got) == (HTTPStatus.OK, body)
+
+
+def test_presign_download_honours_the_request(fake: FakePaladin) -> None:
+    ttl = timedelta(hours=1)
+    disposition = 'attachment; filename="a.txt"'
+    p = fake.connect()
+    obj = fake.put(fake.collection(), "k", "text/plain", b"x")
+    duration = duration_pb2.Duration()
+    duration.FromTimedelta(ttl)
+    url = _presign(
+        p,
+        name=obj.name,
+        ttl=duration,
+        content_disposition=disposition,
+        require_etag_match=True,
+    ).download_url
+    left = _expires(url) - datetime.now(timezone.utc)
+    assert ttl - timedelta(minutes=1) <= left <= ttl + timedelta(seconds=1)
+    assert url.required_headers["If-Match"] == f'"{obj.etag}"'
+    status, _, headers = _fetch(url, url.required_headers)
+    assert status == HTTPStatus.OK
+    assert headers["Content-Disposition"] == disposition
+    stale, _, _ = _fetch(url, {"If-Match": '"stale"'})
+    assert stale == HTTPStatus.PRECONDITION_FAILED
+
+
+def test_presign_download_refuses_what_the_server_refuses(fake: FakePaladin) -> None:
+    p = fake.connect()
+    available = fake.put(fake.collection(), "available", "text/plain", b"x")
+
+    def register(key: str) -> str:
+        return p.data.object.upload_object(
+            object_service_pb2.UploadObjectRequest(
+                parent=str(fake.collection()), key=key, checksum_value=EMPTY_SHA256
+            )
+        ).object.name
+
+    pending = register("pending")
+    failed = register("failed")
+    fake.mark_failed(failed)
+    unknown = str(ObjectName(fake.collection(), "00000000-0000-0000-0000-000000000000"))
+
+    def ttl(delta: timedelta) -> duration_pb2.Duration:
+        d = duration_pb2.Duration()
+        d.FromTimedelta(delta)
+        return d
+
+    cases = [
+        ({"name": pending}, Code.FAILED_PRECONDITION),
+        ({"name": failed}, Code.FAILED_PRECONDITION),
+        ({"name": unknown}, Code.NOT_FOUND),
+        ({"name": "objects/x"}, Code.INVALID_ARGUMENT),
+        ({"name": available.name, "ttl": ttl(-timedelta(seconds=1))}, Code.INVALID_ARGUMENT),
+        (
+            {"name": available.name, "ttl": ttl(MAX_PRESIGN_TTL + timedelta(seconds=1))},
+            Code.INVALID_ARGUMENT,
+        ),
+    ]
+    for fields, code in cases:
+        with pytest.raises(ConnectError) as caught:
+            _presign(p, **fields)
+        assert caught.value.code == code, fields
