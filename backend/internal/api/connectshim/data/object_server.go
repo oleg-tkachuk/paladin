@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
@@ -271,7 +272,7 @@ func (s *ObjectServer) ListObjects(ctx context.Context, req *connect.Request[pb.
 		PageToken:  m.GetPage().GetPageToken(),
 		Filter:     m.GetFilter(),
 		OrderBy:    m.GetOrderBy(),
-		SortDesc:   m.GetSortOrder() == 2, // SORT_ORDER_DESC
+		SortDesc:   m.GetSortOrder() == commonpb.SortOrder_SORT_ORDER_DESC,
 	})
 	if err != nil {
 		return nil, err

@@ -132,11 +132,9 @@ func resolveObjectIDs(ctx context.Context, sel *pb.ObjectSelector) ([]uuid.UUID,
 		if err != nil {
 			return nil, err
 		}
-		id, err := uuid.Parse(idStr)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, id)
+		// objectNameParts has parsed the id and returns it canonical, so it
+		// cannot fail here; a check would be a branch no request can reach.
+		out = append(out, uuid.MustParse(idStr))
 	}
 	return out, nil
 }

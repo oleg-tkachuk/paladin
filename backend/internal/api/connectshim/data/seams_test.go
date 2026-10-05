@@ -256,6 +256,11 @@ func (cancelFailsGetSucceeds) GetOperation(context.Context, uuid.UUID) (*operati
 	return &operationh.Operation{}, nil
 }
 
+// The inverse: the cancel lands, the re-read that reports it fails.
+type cancelSucceedsGetFails struct{ failingOperations }
+
+func (cancelSucceedsGetFails) CancelOperation(context.Context, uuid.UUID) error { return nil }
+
 type readOKWriteFails struct{ failingTags }
 
 func (readOKWriteFails) GetObject(context.Context, string, string) (*objecth.Object, error) {
@@ -278,6 +283,20 @@ func TestTheFAILINGStepIsTheOneReported(t *testing.T) {
 		}
 		if !errors.Is(err, errBoom) {
 			t.Errorf("error %v is not the cancel's", err)
+		}
+	})
+
+	t.Run("the re-read fails after the cancel succeeded", func(t *testing.T) {
+		srv := &OperationServer{H: cancelSucceedsGetFails{}}
+		resp, err := srv.CancelOperation(ctx, connect.NewRequest(&pb.CancelOperationRequest{
+			Name: "operations/" + objUUID.String(),
+		}))
+		if err == nil {
+			t.Fatalf("the re-read failed and the shim answered %v — a client "+
+				"reads an empty operation as the cancelled one", resp)
+		}
+		if !errors.Is(err, errBoom) {
+			t.Errorf("error %v is not the re-read's", err)
 		}
 	})
 
