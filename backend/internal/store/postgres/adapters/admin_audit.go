@@ -155,8 +155,7 @@ func (r *AuditRepoV2) List(ctx context.Context, args admindomain.ListAuditArgs) 
 	}
 	var next string
 	if len(out) == int(pageSize) && len(out) > 0 {
-		last := out[len(out)-1]
-		next = last.At.UTC().Format(time.RFC3339Nano) + "/" + last.EntryID.String()
+		next = admindomain.AuditCursor(out[len(out)-1])
 	}
 	return out, next, nil
 }
