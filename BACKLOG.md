@@ -883,20 +883,6 @@ finding moving from "packages you import" to "your code is affected".
   decision, not a test gap.
 - **Blockers:** none.
 
-### connectshim/data: response projections no test pins
-
-- **Status:** Deferred (every error branch is held; these are not error
-  branches).
-- **Reason:** `backend/scripts/mutate.py` over the package catches 129 of 141
-  mutants. The 12 survivors are conditions that shape a response or read a
-  name, which no test asserts: `operation_server.go` (the `operations/` name
-  check, `Done`, metadata, result, the list's sort order), `conv.go:214` and
-  `version_helpers.go:48,51` (when a lock is reported), and
-  `object_tag_server.go:79,125` (delete-all and the next page token).
-- **Definition of Done:** a test per projection that fails on its mutant, or a
-  line in the test file saying why the mutant is equivalent.
-- **Blockers:** none.
-
 ### internal/worker: what is left really is integration work — but less than claimed
 
 - **Status:** Deferred (partially addressed; this entry corrects its own earlier
