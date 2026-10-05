@@ -28,6 +28,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -60,8 +61,21 @@ const (
 	storagePath = "/storage/"
 	etagQuote   = `"`
 	partQuery   = "part"
+	// dispositionQuery carries a download's Content-Disposition, as S3's
+	// presigned GET does.
+	dispositionQuery = "response-content-disposition"
 	// maxParts is the most parts a multipart upload has, as in S3.
 	maxParts = 10000
+)
+
+// Presigned-URL lifetimes, the server's defaults (limits.presign).
+const (
+	// DefaultDownloadTTL is how long a PresignDownload URL lives when the
+	// request names no TTL: the server's get_ttl.
+	DefaultDownloadTTL = 15 * time.Minute
+	// MaxPresignTTL is the longest TTL a request may name: the server's
+	// max_ttl. A longer one is refused, not shortened.
+	MaxPresignTTL = 168 * time.Hour
 )
 
 // Headers a bound upload URL requires, as the real presigner signs them.
@@ -70,7 +84,10 @@ const (
 	headerContentType   = "Content-Type"
 	headerIfNoneMatch   = "If-None-Match"
 	headerIfMatch       = "If-Match"
-	ifNoneMatchAny      = "*"
+	// headerContentDisposition is what a GET answers with when its URL
+	// carries dispositionQuery.
+	headerContentDisposition = "Content-Disposition"
+	ifNoneMatchAny           = "*"
 )
 
 // checksumHeader is the header each algorithm's value is signed in.
@@ -674,6 +691,43 @@ func (s *Server) RegenerateUploadUrl(_ context.Context, req *connect.Request[dat
 	return connect.NewResponse(&datav1.RegenerateUploadUrlResponse{UploadUrl: url}), nil
 }
 
+// PresignDownload presigns a GET of an AVAILABLE object on the fake's
+// storage, as the server does: an absent TTL is DefaultDownloadTTL, one that
+// is negative or above MaxPresignTTL is InvalidArgument, a name that is not
+// an object's is InvalidArgument, an unknown object NotFound, and one that
+// is not AVAILABLE FailedPrecondition.
+func (s *Server) PresignDownload(_ context.Context, req *connect.Request[datav1.PresignDownloadRequest]) (*connect.Response[datav1.PresignDownloadResponse], error) {
+	if _, err := paladin.ParseObjectName(req.Msg.GetName()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	ttl := req.Msg.GetTtl().AsDuration()
+	if ttl < 0 || ttl > MaxPresignTTL {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("ttl %s is outside 0..%s", ttl, MaxPresignTTL))
+	}
+	if ttl == 0 {
+		ttl = DefaultDownloadTTL
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	o, err := s.lookup(req.Msg.GetName())
+	if err != nil {
+		return nil, err
+	}
+	if state := o.msg.GetState(); state != datav1.ObjectState_OBJECT_STATE_AVAILABLE {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("object state %s does not allow GET", state))
+	}
+	path := o.msg.GetObjectId()
+	if d := req.Msg.GetContentDisposition(); d != "" {
+		path += "?" + url.Values{dispositionQuery: {d}}.Encode()
+	}
+	signed := s.signed(path, http.MethodGet)
+	signed.ExpiresAtRfc3339 = time.Now().Add(ttl).UTC().Format(time.RFC3339)
+	if req.Msg.GetRequireEtagMatch() {
+		signed.RequiredHeaders = map[string]string{headerIfMatch: etagQuote + o.msg.GetEtag() + etagQuote}
+	}
+	return connect.NewResponse(&datav1.PresignDownloadResponse{DownloadUrl: signed}), nil
+}
+
 // ─── MultipartUploadService ────────────────────────────────────────────────
 
 func (s *Server) InitiateMultipartUpload(_ context.Context, req *connect.Request[datav1.InitiateMultipartUploadRequest]) (*connect.Response[datav1.InitiateMultipartUploadResponse], error) {
@@ -811,7 +865,7 @@ func (s *Server) EnsureTenantStorage(_ context.Context, req *connect.Request[dat
 
 // storage serves the presigned URLs: PUT /storage/{object-id} and
 // PUT /storage/{upload-id}?part=N store, GET /storage/{object-id} reads,
-// with Range.
+// with Range, and answers the Content-Disposition its URL carries.
 func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, storagePath)
 	s.mu.Lock()
@@ -889,6 +943,9 @@ func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 		}
 		// http.ServeContent compares If-Match with the ETag header it is given.
 		w.Header().Set("ETag", etagQuote+etag+etagQuote)
+		if d := r.URL.Query().Get(dispositionQuery); d != "" {
+			w.Header().Set(headerContentDisposition, d)
+		}
 		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(content))
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
