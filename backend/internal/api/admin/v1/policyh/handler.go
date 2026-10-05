@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/policies"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // Handler offers Cedar inspection helpers — validation, dry-run authz, and
@@ -165,6 +166,16 @@ func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*Si
 // name. Falls back to the principal's tenant when the resource name does
 // not embed one (e.g. backend names).
 func parseSimulateResource(name string, fallbackTenant uuid.UUID) (uuid.UUID, string, error) {
+	// A collection's name may contain '/', so the collection is everything
+	// between "collections/" and an object's "/objects/{id}" — the SDK's
+	// parsers draw that line, as the data plane's do. Taking the next path
+	// segment read "e2e/logs" as "e2e", another collection's policy.
+	if o, err := paladin.ParseObjectName(name); err == nil {
+		return collectionScope(o.CollectionName)
+	}
+	if c, err := paladin.ParseCollectionName(name); err == nil {
+		return collectionScope(c)
+	}
 	parts := strings.Split(name, "/")
 	if len(parts) >= 4 && parts[0] == "tenants" && parts[2] == "collections" {
 		id, err := uuid.Parse(parts[1])
@@ -182,6 +193,11 @@ func parseSimulateResource(name string, fallbackTenant uuid.UUID) (uuid.UUID, st
 	}
 	// Backend / bucket names — Cedar only sees the tenant-level policy.
 	return fallbackTenant, "", nil
+}
+
+func collectionScope(n paladin.CollectionName) (uuid.UUID, string, error) {
+	id, err := uuid.Parse(n.Tenant)
+	return id, n.Collection, err
 }
 
 // ─── GetEffectivePolicy ─────────────────────────────────────────────────────

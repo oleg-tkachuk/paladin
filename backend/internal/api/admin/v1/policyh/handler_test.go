@@ -497,6 +497,23 @@ func TestParseSimulateResource(t *testing.T) {
 		}
 	})
 
+	// A collection may contain '/'. Taking the next path segment read
+	// "e2e/logs" as "e2e" — another collection, with another policy.
+	t.Run("a collection containing a slash", func(t *testing.T) {
+		gotT, gotK, err := parseSimulateResource("tenants/"+tenant.String()+"/collections/e2e/logs", fallback)
+		if err != nil || gotT != tenant || gotK != "e2e/logs" {
+			t.Fatalf("got (%v,%q,%v), want %v/e2e/logs", gotT, gotK, err, tenant)
+		}
+	})
+
+	t.Run("an object in such a collection", func(t *testing.T) {
+		name := "tenants/" + tenant.String() + "/collections/e2e/logs/objects/" + uuid.NewString()
+		gotT, gotK, err := parseSimulateResource(name, fallback)
+		if err != nil || gotT != tenant || gotK != "e2e/logs" {
+			t.Fatalf("got (%v,%q,%v), want %v/e2e/logs", gotT, gotK, err, tenant)
+		}
+	})
+
 	t.Run("tenant-only name", func(t *testing.T) {
 		gotT, gotK, err := parseSimulateResource("tenants/"+tenant.String(), fallback)
 		if err != nil {
