@@ -863,8 +863,7 @@ finding moving from "packages you import" to "your code is affected".
 ### internal/worker: what is left really is integration work — but less than claimed
 
 - **Status:** Deferred (the integration work is done; what is left is the
-  fourth `poolKey` copy, the unkillable `Statuses` mutant, and two test files
-  nothing runs).
+  fourth `poolKey` copy and the unkillable `Statuses` mutant).
 - **The correction.** This entry used to say the remaining branches "need a
   transaction and a failing dependency, so they belong in
   tests/integration/components". That was true of the outbox runner and wrong of three
@@ -900,12 +899,6 @@ finding moving from "packages you import" to "your code is affected".
   paths fail or deliver identically (SQS is told apart by its error text).
   Its defaults are named constants now (`DefaultOutbox*`,
   `OutboxDepthWarnThreshold`).
-- **Two integration-tagged test files are run by nothing.**
-  `internal/worker/sqs_batch_integration_test.go` and
-  `internal/worker/lease/claim_integration_test.go` carry `//go:build
-  integration`, but `task backend:test:integration` and CI run that tag only
-  over `./tests/integration/...`, so both only ever compile. Either the task
-  widens its package list or the two move under tests/integration.
 - **A denominator trap specific to this repo:** there are TWO integration
   suites, `tests/integration/components` and `tests/integration`, and the dispatcher's
   own tests are in the second. A measurement whose --test-cmd names only the
