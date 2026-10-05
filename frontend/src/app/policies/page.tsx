@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Badge } from "@/components/ui/badge";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useNotification } from "@/components/ui/Notification";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -44,6 +43,7 @@ import { useCollections } from "@/hooks/useCollections";
 import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { useCedarValidation, hasCedarErrors } from "@/hooks/useCedarValidation";
 import { CedarIndicator } from "@/components/ui/CedarIndicator";
+import { PolicyLayers } from "@/components/features/policy/PolicyLayers";
 import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb";
 import type { PolicyLayer } from "@/gen/paladin/admin/v1/policy_service_pb";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
@@ -647,8 +647,9 @@ export default function PoliciesPage() {
               <div>
                 <p className="text-sm font-medium">Merged policy stack</p>
                 <p className="text-xs text-muted-foreground">
-                  Tenant → bucket → object_key, evaluated in that order. Use
-                  this view to debug why a request was allowed or denied.
+                  Built-in → tenant → bucket → collection, exactly as the
+                  authorizer compiles them. Use this view to debug why a request
+                  was allowed or denied.
                 </p>
               </div>
               <Button
@@ -660,30 +661,7 @@ export default function PoliciesPage() {
                 {loadingEffective ? "Loading…" : "Compute"}
               </Button>
             </div>
-            {layers.length > 0 && (
-              <div className="space-y-2">
-                {layers.map((layer, i) => (
-                  <div
-                    key={`${layer.source}-${i}`}
-                    className="rounded-md border bg-muted/30 p-2"
-                  >
-                    <div className="mb-1 flex items-center gap-2 text-xs">
-                      <Badge variant="outline" className="font-mono">
-                        {layer.source || "(unknown)"}
-                      </Badge>
-                    </div>
-                    <pre
-                      className={cn(
-                        T.codeSmall,
-                        "overflow-x-auto whitespace-pre-wrap leading-relaxed text-muted-foreground",
-                      )}
-                    >
-                      {layer.cedarPolicy || "(empty)"}
-                    </pre>
-                  </div>
-                ))}
-              </div>
-            )}
+            {layers.length > 0 && <PolicyLayers layers={layers} />}
             {merged && (
               <div>
                 <Label className="text-xs">Merged</Label>

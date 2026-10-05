@@ -1,9 +1,8 @@
 "use client";
 
-// Shared placeholder for bucket sub-tabs awaiting Phase 2+ wires.
-// Mirrors the `_TabStub` pattern at the tenant level — same affordance
-// (title, description, optional legacy link) so operators get a
-// consistent "this is intentionally a stub" signal across the tree.
+// Shared placeholder for bucket sub-tabs awaiting Phase 2+ wires: a title,
+// a description and an optional legacy link, so operators get a consistent
+// "this is intentionally a stub" signal.
 
 import Link from "next/link";
 
