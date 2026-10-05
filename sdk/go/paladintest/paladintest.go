@@ -43,6 +43,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
@@ -336,6 +337,14 @@ type Request struct {
 	// Header is what the client sent: credentials, the idempotency key, the
 	// User-Agent.
 	Header http.Header
+	// Message is the request message, e.g. a *datav1.GetObjectRequest: a
+	// copy, so changing it changes nothing in the fake.
+	Message proto.Message
+}
+
+// clone is a deep copy of the request.
+func (r Request) clone() Request {
+	return Request{Procedure: r.Procedure, Header: r.Header.Clone(), Message: proto.Clone(r.Message)}
 }
 
 type object struct {
@@ -379,7 +388,7 @@ func Start() (*Server, func()) {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			procedure := req.Spec().Procedure
 			s.mu.Lock()
-			s.requests = append(s.requests, Request{Procedure: procedure, Header: req.Header().Clone()})
+			s.requests = append(s.requests, Request{Procedure: procedure, Header: req.Header().Clone(), Message: cloneMessage(req)})
 			err := s.takeRPCFault(procedure)
 			s.mu.Unlock()
 			if err != nil {
@@ -437,9 +446,38 @@ func (s *Server) Requests() []Request {
 	defer s.mu.Unlock()
 	out := make([]Request, len(s.requests))
 	for i, r := range s.requests {
-		out[i] = Request{Procedure: r.Procedure, Header: r.Header.Clone()}
+		out[i] = r.clone()
 	}
 	return out
+}
+
+// Calls returns the requests for procedure whose message match accepts,
+// oldest first; a nil match accepts every one. A test that shares the fake
+// with others counts its own calls by what they named:
+//
+//	srv.Calls(paladindatav1connect.ObjectServiceGetObjectProcedure, func(m proto.Message) bool {
+//		return m.(*datav1.GetObjectRequest).GetName() == obj.GetName()
+//	})
+//
+// match gets a copy of each message, and runs without the fake's lock held.
+func (s *Server) Calls(procedure string, match func(proto.Message) bool) []Request {
+	var out []Request
+	for _, r := range s.Requests() {
+		if r.Procedure == procedure && (match == nil || match(r.Message)) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// cloneMessage is a copy of req's message, nil for one that is not a
+// protobuf message.
+func cloneMessage(req connect.AnyRequest) proto.Message {
+	m, ok := req.Any().(proto.Message)
+	if !ok {
+		return nil
+	}
+	return proto.Clone(m)
 }
 
 // Content returns what an object holds, and whether it exists.
