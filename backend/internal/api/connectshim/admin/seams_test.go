@@ -20,6 +20,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -220,7 +221,7 @@ func (failingSystem) DispatcherStats(context.Context) (*worker.DeliveryStats, bo
 func (failingSystem) MarshalRedacted(context.Context) (string, string, error) {
 	return "", "", errBoom
 }
-func (failingSystem) PlatformStats(context.Context) (*systemh.PlatformStatsResult, error) {
+func (failingSystem) PlatformStats(context.Context, platformstats.TenantPage) (*systemh.PlatformStatsResult, error) {
 	return nil, errBoom
 }
 

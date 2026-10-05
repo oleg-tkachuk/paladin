@@ -1,6 +1,7 @@
 import datetime
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
+from paladin.common.v1 import pagination_pb2 as _pagination_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -58,8 +59,10 @@ class SubscriptionDeliveryStat(_message.Message):
     def __init__(self, subscription_id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., pending: _Optional[int] = ..., failed: _Optional[int] = ..., last_error: _Optional[str] = ..., last_status_code: _Optional[int] = ..., last_attempt_at: _Optional[str] = ...) -> None: ...
 
 class GetPlatformStatsRequest(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("tenant_page",)
+    TENANT_PAGE_FIELD_NUMBER: _ClassVar[int]
+    tenant_page: _pagination_pb2.PageRequest
+    def __init__(self, tenant_page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ...) -> None: ...
 
 class GetPlatformStatsResponse(_message.Message):
     __slots__ = ("tenants", "backends", "buckets", "collections", "users", "collected_at", "rls")
@@ -302,15 +305,17 @@ class TenantObjectStats(_message.Message):
     def __init__(self, tenant_id: _Optional[str] = ..., slug: _Optional[str] = ..., display_name: _Optional[str] = ..., states: _Optional[_Iterable[_Union[ObjectStateStat, _Mapping]]] = ..., total_count: _Optional[int] = ..., total_bytes: _Optional[int] = ...) -> None: ...
 
 class ObjectStats(_message.Message):
-    __slots__ = ("states", "total_count", "total_bytes", "tenants", "tenants_truncated")
+    __slots__ = ("states", "total_count", "total_bytes", "tenants", "tenants_truncated", "tenants_next_page_token")
     STATES_FIELD_NUMBER: _ClassVar[int]
     TOTAL_COUNT_FIELD_NUMBER: _ClassVar[int]
     TOTAL_BYTES_FIELD_NUMBER: _ClassVar[int]
     TENANTS_FIELD_NUMBER: _ClassVar[int]
     TENANTS_TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    TENANTS_NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     states: _containers.RepeatedCompositeFieldContainer[ObjectStateStat]
     total_count: int
     total_bytes: int
     tenants: _containers.RepeatedCompositeFieldContainer[TenantObjectStats]
     tenants_truncated: int
-    def __init__(self, states: _Optional[_Iterable[_Union[ObjectStateStat, _Mapping]]] = ..., total_count: _Optional[int] = ..., total_bytes: _Optional[int] = ..., tenants: _Optional[_Iterable[_Union[TenantObjectStats, _Mapping]]] = ..., tenants_truncated: _Optional[int] = ...) -> None: ...
+    tenants_next_page_token: str
+    def __init__(self, states: _Optional[_Iterable[_Union[ObjectStateStat, _Mapping]]] = ..., total_count: _Optional[int] = ..., total_bytes: _Optional[int] = ..., tenants: _Optional[_Iterable[_Union[TenantObjectStats, _Mapping]]] = ..., tenants_truncated: _Optional[int] = ..., tenants_next_page_token: _Optional[str] = ...) -> None: ...

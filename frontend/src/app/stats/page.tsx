@@ -14,7 +14,7 @@
 // it says "unavailable" rather than rendering a misleading all-zero view.
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
   ArchiveBoxIcon,
@@ -58,6 +58,9 @@ import { errorMessage } from "@/hooks/errorContract";
 // on operator actions and bulk uploads rather than second-to-second, and
 // the object census is a GROUP BY over every row in `objects`.
 const POLL_INTERVAL = 30_000;
+
+// PageRequest.page_size 0: the server's own page of the per-tenant table.
+const SERVER_PAGE_SIZE = 0;
 
 // Column order for the per-tenant object table. Pinned to the lifecycle
 // order the backend sorts by, so the header row is stable even when a
@@ -351,16 +354,53 @@ function TenantRow({
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function StatsPage() {
-  const { data, isLoading, isFetching, error, refetch } = useQuery({
+  // Every page carries the whole fleet census; only the per-tenant object
+  // table is paged. An infinite query rather than appended state, so a poll
+  // refreshes the tenant pages already shown along with the first.
+  const {
+    data: pages,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["platformStats"],
-    queryFn: () => adminSystemClient.getPlatformStats({}),
+    initialPageParam: "",
+    queryFn: ({ pageParam }) =>
+      adminSystemClient.getPlatformStats({
+        tenantPage: { pageSize: SERVER_PAGE_SIZE, pageToken: pageParam },
+      }),
+    getNextPageParam: (last) =>
+      last.rls?.objects?.tenantsNextPageToken || undefined,
     refetchInterval: POLL_INTERVAL,
     retry: false,
   });
 
+  const data = pages?.pages[0];
   const rls = data?.rls;
   const rlsUp = !!rls?.available;
-  const objects = rls?.objects;
+  const objects = useMemo(() => {
+    const first = pages?.pages[0]?.rls?.objects;
+    if (!first) return undefined;
+    // Counts are live, so a tenant can reach a second page twice; it is
+    // shown once.
+    const byId = new Map<string, TenantObjectStats>();
+    for (const t of (pages?.pages ?? []).flatMap(
+      (p) => p.rls?.objects?.tenants ?? [],
+    )) {
+      if (!byId.has(t.tenantId)) byId.set(t.tenantId, t);
+    }
+    const tenants = [...byId.values()];
+    const last = pages?.pages.at(-1)?.rls?.objects;
+    return {
+      ...first,
+      tenants,
+      tenantsTruncated: last?.tenantsTruncated ?? first.tenantsTruncated,
+    };
+  }, [pages]);
 
   // Column set = the pinned lifecycle order, plus any state the backend
   // reported that we don't know about yet (a new object_state enum member
@@ -766,10 +806,22 @@ export default function StatsPage() {
                     </TableBody>
                   </Table>
                   {objects.tenantsTruncated > 0n && (
-                    <p className={cn(T.hint, "px-4 py-2")}>
-                      {num(objects.tenantsTruncated)} smaller tenant(s) omitted
-                      — the rollup row still counts them.
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2 px-4 py-2">
+                      <span className={T.hint}>
+                        {num(objects.tenantsTruncated)} smaller tenant(s) not
+                        shown — the rollup row counts them.
+                      </span>
+                      {hasNextPage && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void fetchNextPage()}
+                          disabled={isFetchingNextPage}
+                        >
+                          {isFetchingNextPage ? "Loading…" : "Show more"}
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

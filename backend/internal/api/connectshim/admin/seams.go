@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -128,7 +129,7 @@ var _ quotaHandler = (*quotah.Handler)(nil)
 type systemHandler interface {
 	DispatcherStats(ctx context.Context) (stats *worker.DeliveryStats, available bool, err error)
 	MarshalRedacted(ctx context.Context) (yamlBlob string, sourcePath string, err error)
-	PlatformStats(ctx context.Context) (*systemh.PlatformStatsResult, error)
+	PlatformStats(ctx context.Context, page platformstats.TenantPage) (*systemh.PlatformStatsResult, error)
 }
 
 var _ systemHandler = (*systemh.Handler)(nil)
