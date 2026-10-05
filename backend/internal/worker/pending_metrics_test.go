@@ -54,3 +54,15 @@ func TestRecordPendingOverdue(t *testing.T) {
 		t.Errorf("after settling, age = %v, want 0", age)
 	}
 }
+
+// The backlog the dispatcher samples reaches both gauges.
+func TestRecordOutboxDepth(t *testing.T) {
+	const total, deepest = 42, 17
+	recordOutboxDepth(context.Background(), total, deepest)
+	if n, _, ok := gauge[int64](t, "paladin.outbox.pending"); !ok || n != total {
+		t.Errorf("outbox.pending = %d (found %v), want %d", n, ok, total)
+	}
+	if n, _, ok := gauge[int64](t, "paladin.outbox.pending.max_per_tenant"); !ok || n != deepest {
+		t.Errorf("outbox.pending.max_per_tenant = %d (found %v), want %d", n, ok, deepest)
+	}
+}
