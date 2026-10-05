@@ -43,6 +43,12 @@ WHERE tenant_id = $1
   AND (sqlc.narg('type_eq')::text IS NULL OR type = sqlc.narg('type_eq')::text)
   AND (sqlc.narg('type_like')::text IS NULL OR type LIKE sqlc.narg('type_like')::text)
   AND (sqlc.narg('error_code_eq')::text IS NULL OR error_code = sqlc.narg('error_code_eq')::text)
+  -- The filter's `state == "…"` compares as text, not as a cast to the enum:
+  -- a literal the enum does not hold then matches no row, as the CEL pass
+  -- would decide, instead of failing the whole query.
+  AND (sqlc.narg('state_eq')::text IS NULL OR state::text = sqlc.narg('state_eq')::text)
+  -- `done` is what the domain derives from done_at (operationh.handler).
+  AND (sqlc.narg('done')::bool IS NULL OR (done_at IS NOT NULL) = sqlc.narg('done')::bool)
   AND (sqlc.narg('error_message_neq')::text IS NULL
        OR coalesce(error_message, '') <> sqlc.narg('error_message_neq')::text)
   -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
@@ -68,6 +74,12 @@ WHERE tenant_id = $1
   AND (sqlc.narg('type_eq')::text IS NULL OR type = sqlc.narg('type_eq')::text)
   AND (sqlc.narg('type_like')::text IS NULL OR type LIKE sqlc.narg('type_like')::text)
   AND (sqlc.narg('error_code_eq')::text IS NULL OR error_code = sqlc.narg('error_code_eq')::text)
+  -- The filter's `state == "…"` compares as text, not as a cast to the enum:
+  -- a literal the enum does not hold then matches no row, as the CEL pass
+  -- would decide, instead of failing the whole query.
+  AND (sqlc.narg('state_eq')::text IS NULL OR state::text = sqlc.narg('state_eq')::text)
+  -- `done` is what the domain derives from done_at (operationh.handler).
+  AND (sqlc.narg('done')::bool IS NULL OR (done_at IS NOT NULL) = sqlc.narg('done')::bool)
   AND (sqlc.narg('error_message_neq')::text IS NULL
        OR coalesce(error_message, '') <> sqlc.narg('error_message_neq')::text)
   -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to

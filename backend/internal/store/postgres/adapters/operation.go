@@ -158,13 +158,14 @@ func (r *OperationRepo) List(
 		v := sqlc.OperationState(string(*state))
 		ns = &v
 	}
-	// Pushdown: see admin_bucket.go. `state` is deliberately not pushed from
-	// the filter — the column is an enum, and casting an arbitrary literal to
-	// it makes Postgres reject the whole query rather than match nothing. The
-	// typed state argument above is already validated.
+	// Pushdown: see admin_bucket.go. The filter's `state` is compared as text
+	// in the query, so a literal the enum does not hold matches nothing rather
+	// than failing the cast; the typed state argument above is validated.
 	pd := hints(cel.OperationSchema, filter)
 	typeEq, typeLike := pd.StringHint("type")
 	errorCodeEq, _ := pd.StringHint("error_code")
+	stateEq, _ := pd.StringHint("state")
+	done := pd.BoolHint("done")
 	// `error_message != ""` is how a caller asks for "operations that failed"
 	// — the dashboard's failed-ops widget does exactly that. Without the hint
 	// the predicate only narrowed the page it was handed, so a page of five
@@ -178,7 +179,7 @@ func (r *OperationRepo) List(
 	out := make([]operationh.Operation, 0, pageSize)
 	if newestFirst {
 		rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
-			typeEq, typeLike, errorCodeEq, errorMessageNeq,
+			typeEq, typeLike, errorCodeEq, stateEq, done, errorMessageNeq,
 			createdGTE, createdLTE, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list operations: %w", err)
@@ -188,7 +189,7 @@ func (r *OperationRepo) List(
 		}
 	} else {
 		rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
-			typeEq, typeLike, errorCodeEq, errorMessageNeq,
+			typeEq, typeLike, errorCodeEq, stateEq, done, errorMessageNeq,
 			createdGTE, createdLTE, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list operations: %w", err)

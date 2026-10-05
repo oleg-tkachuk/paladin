@@ -87,17 +87,23 @@ WHERE tenant_id = $1
   AND ($4::text IS NULL OR type = $4::text)
   AND ($5::text IS NULL OR type LIKE $5::text)
   AND ($6::text IS NULL OR error_code = $6::text)
-  AND ($7::text IS NULL
-       OR coalesce(error_message, '') <> $7::text)
+  -- The filter's ` + "`" + `state == "…"` + "`" + ` compares as text, not as a cast to the enum:
+  -- a literal the enum does not hold then matches no row, as the CEL pass
+  -- would decide, instead of failing the whole query.
+  AND ($7::text IS NULL OR state::text = $7::text)
+  -- ` + "`" + `done` + "`" + ` is what the domain derives from done_at (operationh.handler).
+  AND ($8::bool IS NULL OR (done_at IS NOT NULL) = $8::bool)
+  AND ($9::text IS NULL
+       OR coalesce(error_message, '') <> $9::text)
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.
-  AND ($8::timestamptz IS NULL
-       OR created_at >= $8::timestamptz)
-  AND ($9::timestamptz IS NULL
-       OR created_at <= $9::timestamptz)
+  AND ($10::timestamptz IS NULL
+       OR created_at >= $10::timestamptz)
+  AND ($11::timestamptz IS NULL
+       OR created_at <= $11::timestamptz)
 ORDER BY id
-LIMIT $10
+LIMIT $12
 `
 
 type ListOperationsRow struct {
@@ -105,7 +111,7 @@ type ListOperationsRow struct {
 }
 
 // Oldest first. The cursor compares `>`, so paging walks forward in time.
-func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error) {
+func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, stateEq *string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error) {
 	rows, err := q.db.Query(ctx, listOperations,
 		tenantID,
 		state,
@@ -113,6 +119,8 @@ func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, stat
 		typeEq,
 		typeLike,
 		errorCodeEq,
+		stateEq,
+		done,
 		errorMessageNeq,
 		createdAtGte,
 		createdAtLte,
@@ -157,17 +165,23 @@ WHERE tenant_id = $1
   AND ($4::text IS NULL OR type = $4::text)
   AND ($5::text IS NULL OR type LIKE $5::text)
   AND ($6::text IS NULL OR error_code = $6::text)
-  AND ($7::text IS NULL
-       OR coalesce(error_message, '') <> $7::text)
+  -- The filter's ` + "`" + `state == "…"` + "`" + ` compares as text, not as a cast to the enum:
+  -- a literal the enum does not hold then matches no row, as the CEL pass
+  -- would decide, instead of failing the whole query.
+  AND ($7::text IS NULL OR state::text = $7::text)
+  -- ` + "`" + `done` + "`" + ` is what the domain derives from done_at (operationh.handler).
+  AND ($8::bool IS NULL OR (done_at IS NOT NULL) = $8::bool)
+  AND ($9::text IS NULL
+       OR coalesce(error_message, '') <> $9::text)
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.
-  AND ($8::timestamptz IS NULL
-       OR created_at >= $8::timestamptz)
-  AND ($9::timestamptz IS NULL
-       OR created_at <= $9::timestamptz)
+  AND ($10::timestamptz IS NULL
+       OR created_at >= $10::timestamptz)
+  AND ($11::timestamptz IS NULL
+       OR created_at <= $11::timestamptz)
 ORDER BY id DESC
-LIMIT $10
+LIMIT $12
 `
 
 type ListOperationsDescRow struct {
@@ -178,7 +192,7 @@ type ListOperationsDescRow struct {
 // rather than a CASE in the ORDER BY: the cursor comparison has to flip with
 // the sort (`<` here, `>` above) or the second page walks away from the rows
 // the caller asked for, and sqlc cannot parameterise either.
-func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error) {
+func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, stateEq *string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error) {
 	rows, err := q.db.Query(ctx, listOperationsDesc,
 		tenantID,
 		state,
@@ -186,6 +200,8 @@ func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, 
 		typeEq,
 		typeLike,
 		errorCodeEq,
+		stateEq,
+		done,
 		errorMessageNeq,
 		createdAtGte,
 		createdAtLte,
