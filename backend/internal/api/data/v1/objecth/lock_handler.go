@@ -236,7 +236,7 @@ func (h *LockHandler) resolve(ctx context.Context, collection, objectID, action 
 	}
 	obj, err := h.objects.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
-		return out, connect.NewError(connect.CodeNotFound, err)
+		return out, objectLookupError(err)
 	}
 	meta, err := h.objects.LookupBucketMeta(ctx, tenantID, collection, true) // lock write is a mutation
 	if err != nil {

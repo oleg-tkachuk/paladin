@@ -2,7 +2,6 @@ package objecth
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -66,7 +65,7 @@ func TestListVersionsResolvesTheParentUnderTheCallersTenant(t *testing.T) {
 	// is read. A repo that cannot find it means NotFound, not an empty list —
 	// "no versions" and "not yours" must not look the same.
 	versions := newFakeVersionRepo()
-	h, ctx, _ := versionListHandler(&versionListRepo{findErr: errors.New("no rows")}, versions)
+	h, ctx, _ := versionListHandler(&versionListRepo{findErr: ErrObjectNotFound}, versions)
 
 	_, _, err := h.ListVersions(ctx, ListVersionsInput{
 		Collection: "docs", ObjectID: uuid.Must(uuid.NewV7()).String(),

@@ -26,9 +26,21 @@ const (
 
 var knownTaintSignals = []string{TaintPromptInjection, TaintPII, TaintSecrets}
 
-// ErrObjectNotFound is the TaintRepository's answer for an object the
-// tenant does not have.
+// ErrObjectNotFound is the repositories' answer for an object the tenant
+// does not have.
 var ErrObjectNotFound = errors.New("object not found")
+
+// objectLookupError answers a failed object lookup. An object the tenant does
+// not have is NotFound, in those words; anything else is the store failing,
+// which is Internal. Mapping every error to NotFound handed the caller the
+// driver's own text ("no rows in result set") and reported a database outage
+// as a missing object.
+func objectLookupError(err error) error {
+	if errors.Is(err, ErrObjectNotFound) {
+		return connect.NewError(connect.CodeNotFound, ErrObjectNotFound)
+	}
+	return connect.NewError(connect.CodeInternal, err)
+}
 
 // ErrUnknownTaintSignal rejects a signal outside the closed set.
 var ErrUnknownTaintSignal = errors.New("unknown taint signal")
@@ -75,7 +87,7 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 	}
 	obj, err := h.objects.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, objectLookupError(err)
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpManage,
 		CapabilityObjectURI(tenantID, obj.Collection, obj.Key)); err != nil {

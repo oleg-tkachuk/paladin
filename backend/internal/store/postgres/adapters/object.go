@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -114,12 +115,18 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 	return r.getByID(ctx, args.TenantID, objectID)
 }
 
+// FindByName reads one of the tenant's objects; objecth.ErrObjectNotFound
+// when it has none by that id — an id that does not parse names none either.
 func (r *ObjectRepo) FindByName(ctx context.Context, tenantID uuid.UUID, collection, objectID string) (objecth.Object, error) {
 	id, err := uuid.Parse(objectID)
 	if err != nil {
-		return objecth.Object{}, fmt.Errorf("parse object_id: %w", err)
+		return objecth.Object{}, objecth.ErrObjectNotFound
 	}
-	return r.getByID(ctx, tenantID, id)
+	obj, err := r.getByID(ctx, tenantID, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return objecth.Object{}, objecth.ErrObjectNotFound
+	}
+	return obj, err
 }
 
 func (r *ObjectRepo) ObjectLock(ctx context.Context, tenantID, objectID uuid.UUID) (objecth.ObjectLock, error) {
