@@ -38,7 +38,7 @@ func TestCollectQuotas_CountsExactlyOnEachBoundary(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
 
-	base, err := platformstats.CollectRLS(ctx, pool)
+	base, err := platformstats.CollectRLS(ctx, pool, platformstats.TenantPage{})
 	if err != nil {
 		t.Fatalf("baseline census: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestCollectQuotas_CountsExactlyOnEachBoundary(t *testing.T) {
 	// nothing would object.
 	quota([4]int64{cap0, 0, 0, 0}, [4]int64{899, 0, 0, 0})
 
-	got, err := platformstats.CollectRLS(ctx, pool)
+	got, err := platformstats.CollectRLS(ctx, pool, platformstats.TenantPage{})
 	if err != nil {
 		t.Fatalf("CollectRLS: %v", err)
 	}

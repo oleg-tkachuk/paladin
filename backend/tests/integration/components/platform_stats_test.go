@@ -104,7 +104,7 @@ func TestCollectRLSObjects(t *testing.T) {
 	insert(big.tenantID, big.collection, "DELETED", 50)
 	insert(small.tenantID, small.collection, "FAILED", 7)
 
-	census, err := platformstats.CollectRLS(ctx, pool)
+	census, err := platformstats.CollectRLS(ctx, pool, platformstats.TenantPage{})
 	if err != nil {
 		t.Fatalf("CollectRLS: %v", err)
 	}
@@ -150,6 +150,59 @@ func assertDelta(t *testing.T, label string, before, after, want int64) {
 	t.Helper()
 	if got := after - before; got != want {
 		t.Errorf("%s delta = %d, want %d (before=%d after=%d)", label, got, want, before, after)
+	}
+}
+
+// TestCollectRLSPagesTheTenants walks the per-tenant breakdown one tenant per
+// page against the real GROUP BY: each of this test's tenants appears exactly
+// once, the busier first, and the walk ends. Other tests share the database,
+// so only these two tenants are asserted on.
+func TestCollectRLSPagesTheTenants(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	big := seedFixture(t, ctx, pool)
+	small := seedFixture(t, ctx, pool)
+
+	insert := func(tenantID uuid.UUID, collection string) {
+		t.Helper()
+		mustExec(t, ctx, pool,
+			`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm, size_bytes)
+		 SELECT $1, $2, c.id, $4, 'AVAILABLE', 'application/octet-stream', 0, 1
+		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
+			uuid.Must(uuid.NewV7()), tenantID, collection, "k-"+uuid.NewString()[:8])
+	}
+	insert(big.tenantID, big.collection)
+	insert(big.tenantID, big.collection)
+	insert(small.tenantID, small.collection)
+
+	const maxPages = 10_000 // far past any fleet a shared test database holds
+	var order []string
+	page := platformstats.TenantPage{Size: 1}
+	for n := 0; ; n++ {
+		if n == maxPages {
+			t.Fatal("the walk did not end")
+		}
+		census, err := platformstats.CollectRLS(ctx, pool, page)
+		if err != nil {
+			t.Fatalf("CollectRLS: %v", err)
+		}
+		if len(census.Objects.Tenants) > 1 {
+			t.Fatalf("page of %d tenants, want at most 1", len(census.Objects.Tenants))
+		}
+		for _, tn := range census.Objects.Tenants {
+			if tn.TenantID == big.tenantID.String() || tn.TenantID == small.tenantID.String() {
+				order = append(order, tn.TenantID)
+			}
+		}
+		if census.Objects.TenantsNext == "" {
+			break
+		}
+		page.After = census.Objects.TenantsNext
+	}
+	want := []string{big.tenantID.String(), small.tenantID.String()}
+	if len(order) != len(want) || order[0] != want[0] || order[1] != want[1] {
+		t.Errorf("walked %v, want %v — each once, busier first", order, want)
 	}
 }
 
@@ -243,7 +296,7 @@ func TestCollectRLSSiblings(t *testing.T) {
 		 VALUES ($1, $2, '', 'http', '{}'::jsonb, true)`,
 		uuid.New(), f.tenantID)
 
-	got, err := platformstats.CollectRLS(ctx, pool)
+	got, err := platformstats.CollectRLS(ctx, pool, platformstats.TenantPage{})
 	if err != nil {
 		t.Fatalf("CollectRLS: %v", err)
 	}
