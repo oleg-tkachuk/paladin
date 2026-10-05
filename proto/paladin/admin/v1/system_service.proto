@@ -5,6 +5,7 @@ package paladin.admin.v1;
 option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1";
 
 import "google/protobuf/timestamp.proto";
+import "paladin/common/v1/pagination.proto";
 
 // SystemService on the admin plane exposes operator-only diagnostics
 // that contain redacted-but-sensitive configuration. Distinct from
@@ -93,7 +94,14 @@ message SubscriptionDeliveryStat {
 }
 
 // ─── Platform census ────────────────────────────────────────────────────────
-message GetPlatformStatsRequest {}
+message GetPlatformStatsRequest {
+  // Pages the per-tenant object breakdown (rls.objects.tenants), biggest
+  // tenant first. page_size 0 or above the server's cap means the cap;
+  // page_token is rls.objects.tenants_next_page_token from the previous
+  // response. Every other field of the response is the whole fleet on
+  // every page.
+  paladin.common.v1.PageRequest tenant_page = 1;
+}
 
 // GetPlatformStatsResponse is the /stats page's whole payload. Split by
 // data source: the inventory fields come from the admin pod's own pool
@@ -293,11 +301,18 @@ message ObjectStats {
   repeated ObjectStateStat states = 2;
   int64 total_count = 3;
   int64 total_bytes = 4;
-  // Per-tenant breakdown, biggest total_count first. Capped server-side
-  // (see systemh.maxTenantObjectRows); `tenants_truncated` is the count
-  // of tenants omitted past the cap.
+  // Per-tenant breakdown, biggest total_count first, one page of it (see
+  // GetPlatformStatsRequest.tenant_page; the cap is
+  // platformstats.maxTenantRows). `tenants_truncated` is the count of
+  // tenants past this page.
+  //
+  // The cursor is over live counts: a tenant whose count crosses a page
+  // boundary between requests can repeat or be skipped. The rollup above
+  // is authoritative.
   repeated TenantObjectStats tenants = 5;
   int64 tenants_truncated = 6;
+  // Empty on the last page.
+  string tenants_next_page_token = 7;
 
   // Field 1 was `available`; it moved to RLSStats, which owns the one
   // flag for the whole worker-proxied leg.
