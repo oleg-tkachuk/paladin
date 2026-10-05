@@ -1438,20 +1438,6 @@ finding moving from "packages you import" to "your code is affected".
   with tests through the assembled data plane.
 - **Blockers:** none.
 
-### A disjunctive audit filter can return an empty page with a cursor
-
-- **Status:** Deferred.
-- **Reason:** `ListAuditLog` and `ExportAuditLog` push only top-level `&&`
-  conjuncts of the CEL filter into SQL and evaluate the rest on the fetched
-  page. A filter with `||` therefore reads one page of the whole log and can
-  hand back zero rows with a next-page token; the reader has to page through
-  the log to find matches. The tenant pages no longer depend on this
-  (`ListAuditLogRequest.tenant_id`), but `/audit` with a user filter does.
-- **Definition of Done:** either disjunctions over pushable fields reach SQL,
-  or the handler keeps reading until a page is full or the log is exhausted,
-  within a bound, with a test of a sparse match.
-- **Blockers:** none.
-
 ### Audit form (B): staging table + projector (latency mitigation only)
 
 - **Status:** Deferred — crash-durability is DONE via form (A)

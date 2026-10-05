@@ -168,6 +168,14 @@ type AuditRepository interface {
 	List(ctx context.Context, args ListAuditArgs) ([]AuditEntry, string, error)
 }
 
+// AuditCursor is the page token that resumes a listing after e: the log is
+// read newest first by (at, id), so the next page starts strictly below it.
+// ListAuditLog's handler and the store both cut pages, and both must spell
+// the token alike.
+func AuditCursor(e AuditEntry) string {
+	return e.At.UTC().Format(time.RFC3339Nano) + "/" + e.EntryID.String()
+}
+
 type ListAuditArgs struct {
 	ActorSubject  string
 	ActorTenantID uuid.UUID
