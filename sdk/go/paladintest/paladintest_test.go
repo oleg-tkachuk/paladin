@@ -7,11 +7,13 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -423,13 +425,7 @@ func getObject(p *paladin.Paladin, obj *datav1.Object) error {
 
 // calls counts the requests for procedure the fake received.
 func calls(srv *paladintest.Server, procedure string) int {
-	n := 0
-	for _, r := range srv.Requests() {
-		if r.Procedure == procedure {
-			n++
-		}
-	}
-	return n
+	return len(srv.Calls(procedure, nil))
 }
 
 // FailRPC answers the next calls with the code and the reason the server
@@ -719,6 +715,182 @@ func TestPresignDownloadRefusesWhatTheServerRefuses(t *testing.T) {
 			if _, err := presignDownload(p, tc.req); connect.CodeOf(err) != tc.code {
 				t.Errorf("err = %v, want %s", err, tc.code)
 			}
+		})
+	}
+}
+
+// Requests carries each call's message, so a test tells its calls apart by
+// what they named.
+func TestRequestsCarryTheMessage(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	mine := srv.Put(srv.Collection(), "mine", "text/plain", []byte("x"))
+	theirs := srv.Put(srv.Collection(), "theirs", "text/plain", []byte("y"))
+	for _, obj := range []*datav1.Object{mine, theirs, mine} {
+		if err := getObject(p, obj); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reqs := srv.Requests()
+	if len(reqs) != 3 {
+		t.Fatalf("requests = %d, want 3", len(reqs))
+	}
+	got, ok := reqs[1].Message.(*datav1.GetObjectRequest)
+	if !ok || got.GetName() != theirs.GetName() {
+		t.Errorf("second message = %v, want a GetObjectRequest for %s", reqs[1].Message, theirs.GetName())
+	}
+	named := func(name string) func(proto.Message) bool {
+		return func(m proto.Message) bool { return m.(*datav1.GetObjectRequest).GetName() == name }
+	}
+	if n := len(srv.Calls(paladindatav1connect.ObjectServiceGetObjectProcedure, named(mine.GetName()))); n != 2 {
+		t.Errorf("calls for mine = %d, want 2", n)
+	}
+	if n := len(srv.Calls(paladindatav1connect.ObjectServiceGetObjectProcedure, nil)); n != 3 {
+		t.Errorf("calls with no filter = %d, want 3", n)
+	}
+	if n := len(srv.Calls(paladindatav1connect.ObjectServiceLookupObjectProcedure, nil)); n != 0 {
+		t.Errorf("calls of another procedure = %d, want 0", n)
+	}
+}
+
+// The recorded message is a copy: changing what Requests returned changes
+// nothing a later Requests sees.
+func TestRequestsAreCopies(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
+	if err := getObject(p, obj); err != nil {
+		t.Fatal(err)
+	}
+	first := srv.Requests()[0]
+	first.Message.(*datav1.GetObjectRequest).Name = "changed"
+	first.Header.Set(paladin.HeaderUserAgent, "changed")
+	again := srv.Requests()[0]
+	if again.Message.(*datav1.GetObjectRequest).GetName() != obj.GetName() || again.Header.Get(paladin.HeaderUserAgent) == "changed" {
+		t.Errorf("a change to a returned request reached the fake: %v", again)
+	}
+}
+
+// getObjectNamed accepts a GetObject request for name.
+func getObjectNamed(name string) func(proto.Message) bool {
+	return func(m proto.Message) bool { return m.(*datav1.GetObjectRequest).GetName() == name }
+}
+
+// FailRPCIf fails only the calls its match accepts; the procedure's other
+// calls are served, and every call is recorded.
+func TestFailRPCIfFailsOnlyMatchingCalls(t *testing.T) {
+	const times = 2
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	mine := srv.Put(srv.Collection(), "mine", "text/plain", []byte("x"))
+	theirs := srv.Put(srv.Collection(), "theirs", "text/plain", []byte("y"))
+	srv.FailRPCIf(paladindatav1connect.ObjectServiceGetObjectProcedure, getObjectNamed(mine.GetName()), times, connect.CodeNotFound)
+	for i := range times {
+		if err := getObject(p, theirs); err != nil {
+			t.Fatalf("theirs, call %d: %v, want it served", i+1, err)
+		}
+		err := getObject(p, mine)
+		if !errors.Is(err, paladin.ErrNotFound) || paladin.Reason(err) != commonv1.ErrorReason_ERROR_REASON_NOT_FOUND {
+			t.Fatalf("mine, call %d: %v, want NotFound with its reason", i+1, err)
+		}
+	}
+	if err := getObject(p, mine); err != nil {
+		t.Errorf("mine past the failures: %v", err)
+	}
+	if n := len(srv.Calls(paladindatav1connect.ObjectServiceGetObjectProcedure, getObjectNamed(mine.GetName()))); n != times+1 {
+		t.Errorf("calls for mine = %d, want %d", n, times+1)
+	}
+}
+
+// Parallel tests on one fake each fail their own object, and neither takes
+// the other's failure.
+func TestFailRPCIfIsolatesParallelTests(t *testing.T) {
+	const (
+		tests = 8
+		times = 3
+	)
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	t.Run("group", func(t *testing.T) {
+		for i := range tests {
+			t.Run(strconv.Itoa(i), func(t *testing.T) {
+				t.Parallel()
+				obj := srv.Put(srv.Collection(), "k"+strconv.Itoa(i), "text/plain", []byte("x"))
+				srv.FailRPCIf(paladindatav1connect.ObjectServiceGetObjectProcedure, getObjectNamed(obj.GetName()), times, connect.CodeUnavailable)
+				for range times {
+					if err := getObject(p, obj); connect.CodeOf(err) != connect.CodeUnavailable {
+						t.Fatalf("err = %v, want this test's Unavailable", err)
+					}
+				}
+				if err := getObject(p, obj); err != nil {
+					t.Errorf("past this test's failures: %v", err)
+				}
+			})
+		}
+	})
+}
+
+// Conditional failures stack with each other and with FailRPC: the most
+// recent one that matches takes the call.
+func TestFailRPCIfStacks(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	a := srv.Put(srv.Collection(), "a", "text/plain", []byte("a"))
+	b := srv.Put(srv.Collection(), "b", "text/plain", []byte("b"))
+	srv.FailRPC(paladindatav1connect.ObjectServiceGetObjectProcedure, 1, connect.CodeUnavailable)
+	srv.FailRPCIf(paladindatav1connect.ObjectServiceGetObjectProcedure, getObjectNamed(a.GetName()), 1, connect.CodeNotFound)
+	srv.FailRPCIf(paladindatav1connect.ObjectServiceGetObjectProcedure, getObjectNamed(b.GetName()), 1, connect.CodePermissionDenied)
+	if err := getObject(p, b); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("b: %v, want its PermissionDenied", err)
+	}
+	if err := getObject(p, a); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Errorf("a: %v, want its NotFound", err)
+	}
+	if err := getObject(p, a); connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Errorf("a again: %v, want FailRPC's Unavailable", err)
+	}
+	if err := getObject(p, a); err != nil {
+		t.Errorf("a, every failure spent: %v", err)
+	}
+}
+
+func TestFailRPCIfReset(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
+	reset := srv.FailRPCIf(paladindatav1connect.ObjectServiceGetObjectProcedure, getObjectNamed(obj.GetName()), 5, connect.CodeUnavailable)
+	if err := getObject(p, obj); connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("before reset: %v", err)
+	}
+	reset()
+	if err := getObject(p, obj); err != nil {
+		t.Errorf("after reset: %v", err)
+	}
+}
+
+func TestFailRPCIfRefusesAMistake(t *testing.T) {
+	always := func(proto.Message) bool { return true }
+	cases := []struct {
+		name      string
+		procedure string
+		match     func(proto.Message) bool
+		times     int
+		code      connect.Code
+	}{
+		{"no match", paladindatav1connect.ObjectServiceGetObjectProcedure, nil, 1, connect.CodeUnavailable},
+		{"a procedure the fake does not serve", "/paladin.admin.v1.TenantService/ListTenants", always, 1, connect.CodeUnavailable},
+		{"zero times", paladindatav1connect.ObjectServiceGetObjectProcedure, always, 0, connect.CodeUnavailable},
+		{"no code", paladindatav1connect.ObjectServiceGetObjectProcedure, always, 1, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := paladintest.New(t)
+			defer func() {
+				if recover() == nil {
+					t.Error("FailRPCIf did not panic")
+				}
+			}()
+			srv.FailRPCIf(tc.procedure, tc.match, tc.times, tc.code)
 		})
 	}
 }

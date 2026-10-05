@@ -41,6 +41,15 @@ export type PresignedUrl = Message<"paladin.common.v1.PresignedUrl"> & {
   method: string;
 
   /**
+   * Headers the request must carry exactly as given: the signature covers
+   * them, and storage refuses a request without them. Content-Length and Host
+   * are among them because the signature covers them too, but an HTTP client
+   * sets both itself — Content-Length from the body, Host from the URL — and
+   * may refuse to take them from the caller, as a browser does. A client
+   * sends a body of exactly the Content-Length given here and lets its HTTP
+   * stack write the header; one that cannot (a streamed body its stack would
+   * send chunked) sets it from this value.
+   *
    * @generated from field: map<string, string> required_headers = 3;
    */
   requiredHeaders: { [key: string]: string };

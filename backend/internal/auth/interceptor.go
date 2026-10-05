@@ -52,10 +52,11 @@ type authInterceptor struct {
 	skipCapabilities bool
 }
 
-// isAPIToken reports whether the Authorization header carries a Paladin API token, which this
-// interceptor should defer to the PAT interceptor rather than verify as a JWT.
-func (a *authInterceptor) isAPIToken(authz string) bool {
-	return a.skipAPITokens && extractAPIToken("", authz) != ""
+// isAPIToken reports whether the request carries a Paladin API token — in
+// X-Paladin-API-Token or as a bearer — which this interceptor should defer to
+// the PAT interceptor rather than verify as a JWT.
+func (a *authInterceptor) isAPIToken(h http.Header) bool {
+	return a.skipAPITokens && extractAPIToken(h.Get(HeaderAPIToken), h.Get("Authorization")) != ""
 }
 
 // hasCapability reports whether the request presents a capability in either
@@ -67,7 +68,7 @@ func (a *authInterceptor) hasCapability(h http.Header) bool {
 
 func (a *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if a.isAPIToken(req.Header().Get("Authorization")) {
+		if a.isAPIToken(req.Header()) {
 			return next(ctx, req) // a PAT — leave it for the API-token interceptor
 		}
 		if a.hasCapability(req.Header()) {
@@ -110,7 +111,7 @@ func (a *authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 
 func (a *authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if a.isAPIToken(conn.RequestHeader().Get("Authorization")) {
+		if a.isAPIToken(conn.RequestHeader()) {
 			return next(ctx, conn) // a PAT — leave it for the API-token interceptor
 		}
 		if a.hasCapability(conn.RequestHeader()) {
