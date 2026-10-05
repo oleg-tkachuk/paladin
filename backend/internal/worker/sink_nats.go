@@ -49,7 +49,7 @@ import (
 // would carry the first sub's identity.
 type NatsConnPool struct {
 	mu    sync.Mutex
-	conns map[string]*nats.Conn
+	conns map[natsPoolKey]*nats.Conn
 	log   *zap.Logger
 }
 
@@ -60,16 +60,22 @@ func NewNatsConnPool(log *zap.Logger) *NatsConnPool {
 		log = zap.NewNop()
 	}
 	return &NatsConnPool{
-		conns: make(map[string]*nats.Conn),
+		conns: make(map[natsPoolKey]*nats.Conn),
 		log:   log,
 	}
 }
 
-// poolKey segregates connections by (url, credentialsRef) so two
-// subscriptions to the same cluster with different auth principals
-// don't share a single conn.
-func poolKey(url, credentialsRef string) string {
-	return url + "\x00" + credentialsRef
+// natsPoolKey segregates connections by (url, credentialsRef) so two
+// subscriptions to the same cluster with different auth principals don't
+// share a single conn. A struct rather than the two joined into a string, so
+// reading the URL back out — for a log line, for the status map — is a field
+// access and not a parse of a separator every reader has to agree on.
+type natsPoolKey struct {
+	url, credentialsRef string
+}
+
+func poolKey(url, credentialsRef string) natsPoolKey {
+	return natsPoolKey{url: url, credentialsRef: credentialsRef}
 }
 
 // get returns a connected *nats.Conn for the (url, credentialsRef)
@@ -126,20 +132,28 @@ func (p *NatsConnPool) Close() {
 		// The publish path is fire-and-forget today, so this is only
 		// non-trivial once async producer batching lands.
 		if err := c.Drain(); err != nil {
-			url, _, _ := strings.Cut(k, "\x00")
-			p.log.Warn("nats: drain failed", logfield.URL("url", url), zap.Error(err))
+			p.log.Warn("nats: drain failed", logfield.URL("url", k.url), zap.Error(err))
 		}
 		delete(p.conns, k)
 	}
 }
 
-// Warmup eagerly dials each (url, credentialsRef) pair. Errors are
+// Warmup eagerly dials each distinct (url, credentialsRef) pair. Errors are
 // reported per-pair and never abort the loop — pre-warm is best-effort.
 // Used by the dispatcher pod's boot sequence so the first delivery
 // doesn't pay the dial cost inside the hot tick loop, and so the
 // health probe has something to report before any row arrives.
+//
+// Duplicates are dropped here rather than by the caller: a failed dial is not
+// cached, so a pair listed twice would dial a dead server twice.
 func (p *NatsConnPool) Warmup(pairs []NatsTarget) {
+	seen := make(map[natsPoolKey]bool, len(pairs))
 	for _, t := range pairs {
+		key := poolKey(t.URL, t.CredentialsRef)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 		if _, err := p.get(t.URL, t.CredentialsRef); err != nil {
 			p.log.Warn("nats: pre-warm dial failed",
 				logfield.URL("url", t.URL),
@@ -156,6 +170,17 @@ type NatsTarget struct {
 	CredentialsRef string
 }
 
+// NatsTargetFromSinkConfig reads the pool target out of a nats subscription's
+// stored sink_config. ok is false for a config that does not decode or names
+// no URL — nothing a warmup could dial.
+func NatsTargetFromSinkConfig(raw []byte) (t NatsTarget, ok bool) {
+	var cfg natsSinkConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil || cfg.URL == "" {
+		return NatsTarget{}, false
+	}
+	return NatsTarget{URL: cfg.URL, CredentialsRef: cfg.CredentialsRef}, true
+}
+
 // Statuses returns a snapshot of (url, status) for every pooled conn.
 // The dispatcher's health probe walks this to surface per-server
 // connectivity in /system/health.json.
@@ -164,14 +189,9 @@ func (p *NatsConnPool) Statuses() map[string]nats.Status {
 	defer p.mu.Unlock()
 	out := make(map[string]nats.Status, len(p.conns))
 	for k, c := range p.conns {
-		// Strip the credentialsRef suffix from the key for the
-		// human-readable status map — we don't want the auth secret
-		// label leaking into operator-facing surfaces.
-		url := k
-		if i := strings.IndexByte(k, '\x00'); i >= 0 {
-			url = k[:i]
-		}
-		out[url] = c.Status()
+		// Keyed by URL alone: the credentials label stays out of the
+		// operator-facing status map.
+		out[k.url] = c.Status()
 	}
 	return out
 }
@@ -401,16 +421,16 @@ type natsBatchItem struct {
 // failing with the same error text as before batching. So do JetStream rows:
 // the batch is a core publish, which the stream neither acknowledges nor
 // deduplicates.
-func natsGroupTarget(sub admindomain.EventSubscription) (key string, ok bool) {
+func natsGroupTarget(sub admindomain.EventSubscription) (key natsPoolKey, ok bool) {
 	if sub.SinkKind != "nats" {
-		return "", false
+		return natsPoolKey{}, false
 	}
 	var cfg natsSinkConfig
 	if err := json.Unmarshal(sub.SinkConfig, &cfg); err != nil {
-		return "", false
+		return natsPoolKey{}, false
 	}
 	if cfg.URL == "" || cfg.Subject == "" || cfg.JetStream {
-		return "", false
+		return natsPoolKey{}, false
 	}
 	return poolKey(cfg.URL, cfg.CredentialsRef), true
 }

@@ -2,11 +2,13 @@ package worker
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 )
@@ -46,9 +48,11 @@ func TestPoolKey_SeparatesByCredentials(t *testing.T) {
 	if poolKey("nats://a:4222", "") == poolKey("nats://b:4222", "") {
 		t.Error("two clusters share a pool key")
 	}
-	if !strings.Contains(poolKey(url, "token:a"), "\x00") {
-		t.Error("the separator is gone — a url ending in the credentials " +
-			"prefix would collide with a different pair")
+	// Joined into one string, these two pairs were the same key: the boundary
+	// between url and credentials lived in a separator either side could
+	// contain.
+	if poolKey("nats://a\x00b", "") == poolKey("nats://a", "b") {
+		t.Error("pairs that differ only in where url ends and credentials begin share a pool key")
 	}
 }
 
@@ -76,7 +80,7 @@ func TestNatsGroupTarget_SeparatesByCredentials(t *testing.T) {
 			"over the first's connection")
 	}
 	if a != poolKey(url, "token:a") {
-		t.Errorf("the group key %q is not the pool key — rows would be batched "+
+		t.Errorf("the group key %+v is not the pool key — rows would be batched "+
 			"by one identity and connected by another", a)
 	}
 }
@@ -155,5 +159,68 @@ func TestCloudEventEnvelope_TimeIsNormalisedToUTC(t *testing.T) {
 	}
 	if env.Source != natsDefaultSource {
 		t.Errorf("source = %q, want %q", env.Source, natsDefaultSource)
+	}
+}
+
+func TestNatsTargetFromSinkConfig(t *testing.T) {
+	cases := []struct {
+		name   string
+		raw    string
+		want   NatsTarget
+		wantOK bool
+	}{
+		{"url and credentials", `{"url":"nats://a:4222","subject":"s","credentials_ref":"token:x"}`,
+			NatsTarget{URL: "nats://a:4222", CredentialsRef: "token:x"}, true},
+		{"anonymous", `{"url":"nats://a:4222","subject":"s"}`,
+			NatsTarget{URL: "nats://a:4222"}, true},
+		{"no url", `{"subject":"s"}`, NatsTarget{}, false},
+		{"not json", `{`, NatsTarget{}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := NatsTargetFromSinkConfig([]byte(tc.raw))
+			if ok != tc.wantOK || got != tc.want {
+				t.Errorf("got %+v, %v; want %+v, %v", got, ok, tc.want, tc.wantOK)
+			}
+		})
+	}
+}
+
+// A failed dial is not cached, so Warmup itself has to drop a pair listed
+// twice — the boot scan lists one per subscription — or it dials a dead
+// server once per subscription.
+func TestNatsConnPool_WarmupDialsEachPairOnce(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	pool := NewNatsConnPool(zap.New(core))
+	defer pool.Close()
+
+	// Nothing listens on port 1, so every dial fails and is logged.
+	const dead = "nats://127.0.0.1:1"
+	pool.Warmup([]NatsTarget{
+		{URL: dead, CredentialsRef: "token:a"},
+		{URL: dead, CredentialsRef: "token:a"},
+		{URL: dead, CredentialsRef: "token:b"},
+	})
+
+	if n := logs.FilterMessage("nats: pre-warm dial failed").Len(); n != 2 {
+		t.Errorf("failed dials = %d, want 2 (one per distinct url and credentials)", n)
+	}
+}
+
+// Two principals on one server are two connections, but the operator-facing
+// status map names the server once and never the credentials.
+func TestNatsConnPool_StatusesKeyByURLAlone(t *testing.T) {
+	url := runEmbeddedNATS(t)
+	pool := NewNatsConnPool(nil)
+	defer pool.Close()
+
+	pool.Warmup([]NatsTarget{{URL: url}, {URL: url, CredentialsRef: "token:secret-label"}})
+
+	got := pool.Statuses()
+	if len(got) != 1 {
+		t.Fatalf("Statuses() = %v, want one entry for %s", got, url)
+	}
+	if status, ok := got[url]; !ok || status != nats.CONNECTED {
+		t.Errorf("Statuses() = %v, want %s CONNECTED", got, url)
 	}
 }
