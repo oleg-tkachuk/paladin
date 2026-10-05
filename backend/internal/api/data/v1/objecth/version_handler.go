@@ -153,7 +153,7 @@ func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput)
 	// Confirm the parent object exists + the caller's tenant owns it.
 	parent, err := h.objects.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeNotFound, err)
+		return nil, "", objectLookupError(err)
 	}
 	if err := h.authorizeParent(ctx, tenantID, principal, parent, capability.OpGet, cedar.ActionGetObject); err != nil {
 		return nil, "", err
@@ -179,7 +179,7 @@ func (h *VersionHandler) GetVersion(ctx context.Context, name string) (*ObjectVe
 	// Tenant guard via parent Object lookup.
 	parent, err := h.objects.FindByName(ctx, tenantID, parsed.collection, parsed.objectID.String())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, objectLookupError(err)
 	}
 	if err := h.authorizeParent(ctx, tenantID, principal, parent, capability.OpGet, cedar.ActionGetObject); err != nil {
 		return nil, err
@@ -232,7 +232,7 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersi
 	}
 	parent, err := h.objects.FindByName(ctx, tenantID, parsed.collection, parsed.objectID.String())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, objectLookupError(err)
 	}
 	if err := h.authorizeParent(ctx, tenantID, principal, parent, capability.OpPut, cedar.ActionPutObject); err != nil {
 		return nil, err
