@@ -5,8 +5,8 @@
         obj = paladin.upload(p.data, parent=str(fake.collection()), …)
 
 It serves ObjectService (upload, complete, get, lookup, list, download,
-delete), MultipartUploadService, ListParts included, PresignService's
-RegenerateUploadUrl and StorageBootstrapService, with presigned URLs on its own storage; every other
+delete), MultipartUploadService, ListParts included, PresignService
+(RegenerateUploadUrl, PresignDownload) and StorageBootstrapService, with presigned URLs on its own storage; every other
 RPC answers Unimplemented, as a server that lacks it does. Like the server it
 binds every upload URL to the size and checksum the upload was registered
 with — its storage refuses a PUT without exactly the signed headers, a body of
@@ -14,7 +14,9 @@ another length or SHA-256, or an overwrite — records that checksum on the
 object, so a download verifies what it reads, and it answers Range and
 If-Match requests. ``requests()`` lists the RPCs it
 received, with their headers; ``storage_ops()`` the storage requests, and
-``fail_storage`` answers them with a fault — an expired URL, a busy store. It runs on the standard library's WSGI server,
+``fail_storage`` answers them with a fault — an expired URL, a busy store;
+``fail_rpc`` makes a procedure's next calls fail with a code as the server
+sends it. It runs on the standard library's WSGI server,
 in a thread, on loopback.
 """
 
@@ -28,16 +30,20 @@ import threading
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
+from connectrpc.request import RequestContext
+from google.protobuf import descriptor_pool
+from google.rpc import error_details_pb2
 
-from paladin.common.v1 import pagination_pb2, resource_pb2
+from paladin.common.v1 import error_reason_pb2, pagination_pb2, resource_pb2
 from paladin.connect import Endpoints, Paladin, connect
 from paladin.data.v1 import (
     multipart_service_pb2,
@@ -59,7 +65,8 @@ from paladin.data.v1.storage_bootstrap_service_connect import (
     StorageBootstrapServiceSync,
     StorageBootstrapServiceWSGIApplication,
 )
-from paladin.names import CollectionName, InvalidNameError
+from paladin.errors import ERROR_DOMAIN
+from paladin.names import CollectionName, InvalidNameError, ObjectName
 from paladin.transfer import CHECKSUM_SHA256
 
 if TYPE_CHECKING:  # annotations only: typing.Self is 3.11+
@@ -73,11 +80,22 @@ DEFAULT_PAGE_SIZE = 100
 """The page ``list_objects`` answers when asked for none."""
 EXPIRED_BODY = "<Error><Code>AccessDenied</Code><Message>Request has expired</Message></Error>"
 """What S3 answers, with 403, for a presigned URL past its expiry."""
+DEFAULT_DOWNLOAD_TTL = timedelta(minutes=15)
+"""How long a ``presign_download`` URL lives when the request names no TTL:
+the server's ``limits.presign.get_ttl``."""
+MAX_PRESIGN_TTL = timedelta(hours=168)
+"""The longest TTL a request may name: the server's ``limits.presign.max_ttl``.
+A longer one is refused, not shortened."""
 
 _LOOPBACK = "127.0.0.1"
 _EPHEMERAL_PORT = 0
 _STORAGE = "/storage/"
 _PART = "part"
+# Carries a download's Content-Disposition, as S3's presigned GET does.
+_DISPOSITION_QUERY = "response-content-disposition"
+_CONTENT_DISPOSITION = "Content-Disposition"
+# expires_at as the server formats it: RFC 3339, UTC, whole seconds.
+_RFC3339_UTC = "%Y-%m-%dT%H:%M:%SZ"
 _OBJECTS_SEP = "/objects/"
 _PUT = "PUT"
 _GET = "GET"
@@ -193,6 +211,62 @@ class _Multipart:
     bindings: dict[int, _Binding] = field(default_factory=dict)
 
 
+_SERVED_SERVICES = (
+    "paladin.data.v1.ObjectService",
+    "paladin.data.v1.MultipartUploadService",
+    "paladin.data.v1.PresignService",
+    "paladin.data.v1.StorageBootstrapService",
+)
+"""The services the fake mounts; ``fail_rpc`` takes a procedure of any of them,
+one the fake answers UNIMPLEMENTED included."""
+
+_SERVER_REASON: dict[Code, int] = {
+    Code.NOT_FOUND: error_reason_pb2.ERROR_REASON_NOT_FOUND,
+    Code.ABORTED: error_reason_pb2.ERROR_REASON_VERSION_CONFLICT,
+    Code.ALREADY_EXISTS: error_reason_pb2.ERROR_REASON_ALREADY_EXISTS,
+    Code.INVALID_ARGUMENT: error_reason_pb2.ERROR_REASON_INVALID_ARGUMENT,
+    Code.PERMISSION_DENIED: error_reason_pb2.ERROR_REASON_PERMISSION_DENIED,
+    Code.FAILED_PRECONDITION: error_reason_pb2.ERROR_REASON_FAILED_PRECONDITION,
+    Code.UNAUTHENTICATED: error_reason_pb2.ERROR_REASON_UNAUTHENTICATED,
+}
+"""The ``ErrorInfo`` reason the server attaches to a code, from the canonical
+table in backend/internal/api/apiutil/errmap.go; a code missing here —
+UNAVAILABLE, DATA_LOSS, INTERNAL — carries none."""
+
+
+def _served(procedure: str) -> bool:
+    """Whether ``procedure`` is an RPC of a service the fake mounts."""
+    service, sep, method = procedure.removeprefix("/").partition("/")
+    if not sep or service not in _SERVED_SERVICES:
+        return False
+    found = descriptor_pool.Default().FindServiceByName(service)
+    return method in found.methods_by_name
+
+
+@dataclass
+class _RPCFault:
+    """What ``fail_rpc`` set for one procedure: the code, and how many more
+    calls answer it."""
+
+    code: Code
+    remaining: int
+
+
+class _FailRPCs:
+    """The interceptor that raises what ``fail_rpc`` set, after the call is
+    recorded."""
+
+    def __init__(self, fake: FakePaladin) -> None:
+        self._fake = fake
+
+    def intercept_unary_sync(self, call_next, request, ctx: RequestContext):  # type: ignore[no-untyped-def]
+        method = ctx.method()
+        err = self._fake._take_rpc_fault(f"/{method.service_name}/{method.name}")
+        if err is not None:
+            raise err
+        return call_next(request, ctx)
+
+
 class _Quiet(WSGIRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         return None
@@ -217,16 +291,18 @@ class FakePaladin(
         self._fault: StorageFault | None = None
         self._after_store: StorageFault | None = None
         self._storage_ops: list[StorageOp] = []
+        self._rpc_faults: dict[str, _RPCFault] = {}
         self._httpd: WSGIServer | None = None
 
     # ─── Lifecycle ──────────────────────────────────────────────────────────
 
     def __enter__(self) -> Self:
+        faults = (_FailRPCs(self),)
         apps = [
-            ObjectServiceWSGIApplication(self),
-            MultipartUploadServiceWSGIApplication(self),
-            PresignServiceWSGIApplication(self),
-            StorageBootstrapServiceWSGIApplication(self),
+            ObjectServiceWSGIApplication(self, interceptors=faults),
+            MultipartUploadServiceWSGIApplication(self, interceptors=faults),
+            PresignServiceWSGIApplication(self, interceptors=faults),
+            StorageBootstrapServiceWSGIApplication(self, interceptors=faults),
         ]
 
         def route(environ, start_response):  # type: ignore[no-untyped-def]
@@ -293,6 +369,58 @@ class FakePaladin(
         412."""
         with self._lock:
             self._after_store = fault
+
+    def fail_rpc(self, procedure: str, times: int, code: Code) -> Callable[[], None]:
+        """Make the next ``times`` calls of ``procedure`` — e.g.
+        ``/paladin.data.v1.ObjectService/GetObject`` — answer ``code``, as the
+        server answers it: with the ``ErrorInfo`` reason the server attaches to
+        that code, so the SDK's typed errors and ``reason`` read it. Calls after
+        those are served as usual, and every failed one is in ``requests()``.
+        A later ``fail_rpc`` on the same procedure replaces this one; the
+        returned function clears this one's remaining failures, and nothing
+        else.
+
+        Raises ValueError for a procedure the fake does not serve or a
+        ``times`` below 1, and TypeError for a ``code`` that is not a ``Code``:
+        each is a mistake in the test, not a scenario."""
+        if not _served(procedure):
+            raise ValueError(f"fail_rpc: {procedure!r} is not a procedure the fake serves")
+        if times < 1:
+            raise ValueError(f"fail_rpc: times is {times}, want at least 1")
+        if not isinstance(code, Code):
+            raise TypeError(f"fail_rpc: {code!r} is not a connectrpc Code")
+        fault = _RPCFault(code, times)
+        with self._lock:
+            self._rpc_faults[procedure] = fault
+
+        def reset() -> None:
+            with self._lock:
+                if self._rpc_faults.get(procedure) is fault:
+                    del self._rpc_faults[procedure]
+
+        return reset
+
+    def _take_rpc_fault(self, procedure: str) -> ConnectError | None:
+        """The error ``fail_rpc`` set for ``procedure``'s next call, None when
+        there is none, counting the call against it."""
+        with self._lock:
+            fault = self._rpc_faults.get(procedure)
+            if fault is None:
+                return None
+            fault.remaining -= 1
+            if fault.remaining == 0:
+                del self._rpc_faults[procedure]
+        reason = _SERVER_REASON.get(fault.code)
+        details = (
+            [
+                error_details_pb2.ErrorInfo(
+                    reason=error_reason_pb2.ErrorReason.Name(reason), domain=ERROR_DOMAIN
+                )
+            ]
+            if reason is not None
+            else []
+        )
+        return ConnectError(fault.code, f"{procedure} failed by fail_rpc", details)
 
     def mark_failed(self, name: str) -> None:
         """Fail a PENDING object, as the server's reconciler does when its
@@ -501,6 +629,36 @@ class FakePaladin(
             url.required_headers.update(o.bound.headers())
             return presign_service_pb2.RegenerateUploadUrlResponse(upload_url=url)
 
+    def presign_download(self, request, ctx):  # type: ignore[no-untyped-def]
+        """Presigns a GET of an AVAILABLE object on the fake's storage, as the
+        server does: an absent TTL is ``DEFAULT_DOWNLOAD_TTL``, one that is
+        negative or above ``MAX_PRESIGN_TTL`` is INVALID_ARGUMENT, a name that
+        is not an object's INVALID_ARGUMENT, an unknown object NOT_FOUND, and
+        one that is not AVAILABLE FAILED_PRECONDITION."""
+        try:
+            ObjectName.parse(request.name)
+        except InvalidNameError as err:
+            raise ConnectError(Code.INVALID_ARGUMENT, str(err)) from err
+        ttl = request.ttl.ToTimedelta() if request.HasField("ttl") else timedelta(0)
+        if ttl < timedelta(0) or ttl > MAX_PRESIGN_TTL:
+            raise ConnectError(Code.INVALID_ARGUMENT, f"ttl {ttl} is outside 0..{MAX_PRESIGN_TTL}")
+        ttl = ttl or DEFAULT_DOWNLOAD_TTL
+        with self._lock:
+            o = self._get(request.name)
+            if o.msg.state != _AVAILABLE:
+                state = types_pb2.ObjectState.Name(o.msg.state)
+                raise ConnectError(
+                    Code.FAILED_PRECONDITION, f"object state {state} does not allow GET"
+                )
+            path = o.msg.object_id
+            if request.content_disposition:
+                path += "?" + urlencode({_DISPOSITION_QUERY: request.content_disposition})
+            url = self._signed(path, _GET)
+            url.expires_at_rfc3339 = (datetime.now(timezone.utc) + ttl).strftime(_RFC3339_UTC)
+            if request.require_etag_match:
+                url.required_headers[_IF_MATCH] = f'"{o.msg.etag}"'
+            return presign_service_pb2.PresignDownloadResponse(download_url=url)
+
     # ─── MultipartUploadService ─────────────────────────────────────────────
 
     def initiate_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
@@ -661,6 +819,9 @@ class FakePaladin(
             etag = f'"{o.msg.etag}"' if o is not None else ""
         if content is None:
             return _status(start_response, "404 Not Found")
+        headers = [("Content-Type", "application/octet-stream")]
+        if _DISPOSITION_QUERY in query:
+            headers.append((_CONTENT_DISPOSITION, query[_DISPOSITION_QUERY][0]))
         if_match = environ.get(_environ_key(_IF_MATCH), "")
         if if_match and if_match != etag:
             return _status(start_response, "412 Precondition Failed")
@@ -668,15 +829,9 @@ class FakePaladin(
         if ranged:
             first, _, last = ranged.removeprefix("bytes=").partition("-")
             part = content[int(first) : int(last) + 1 if last else len(content)]
-            start_response(
-                "206 Partial Content",
-                [("Content-Type", "application/octet-stream"), ("Content-Length", str(len(part)))],
-            )
+            start_response("206 Partial Content", [*headers, ("Content-Length", str(len(part)))])
             return [part]
-        start_response(
-            "200 OK",
-            [("Content-Type", "application/octet-stream"), ("Content-Length", str(len(content)))],
-        )
+        start_response("200 OK", [*headers, ("Content-Length", str(len(content)))])
         return [content]
 
 

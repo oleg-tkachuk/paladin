@@ -1679,19 +1679,6 @@ The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 - **Blockers:** client-side response headers on `RequestContext`, or a public
   way to chain `ResponseMetadata`, in connect-python.
 
-### The Python fake cannot fail an RPC or presign a download
-
-- **Status:** Deferred.
-- **Reason:** `paladintest` gained `FailRPC` and `PresignDownload`;
-  `paladin.testing.FakePaladin` has neither, so a Python consumer cannot
-  test its retries against an injected Connect error, and `presign_download`
-  answers `UNIMPLEMENTED`.
-- **Definition of Done:** `FakePaladin.fail_rpc(procedure, times, code)`
-  raising the code with the server's `ErrorInfo` reason, recorded in
-  `requests()`, with a reset; `presign_download` as the Go fake serves it;
-  both in the Python README's fake section, with tests.
-- **Blockers:** none.
-
 ### An occasional abort at interpreter exit with the Python SDK loaded
 
 - **Status:** Blocked (no reproduction).
