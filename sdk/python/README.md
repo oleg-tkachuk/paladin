@@ -393,8 +393,9 @@ with FakePaladin() as fake:
 ```
 
 It serves `ObjectService` (upload, complete, get, lookup, list, download,
-delete), `MultipartUploadService` and `StorageBootstrapService`; every
-other RPC answers `UNIMPLEMENTED`. Like the server it refuses a collection
+delete), `MultipartUploadService`, `PresignService` (`regenerate_upload_url`,
+`presign_download`) and `StorageBootstrapService`; every other RPC answers
+`UNIMPLEMENTED`. Like the server it refuses a collection
 named by the tenant's slug and a completion whose ETag, when given, is not
 the content's; completing a completed object returns it. Like the server it
 holds one object per key: an upload to a key another object holds, in any
@@ -409,6 +410,29 @@ reconciler does when its URL expired with nothing stored; `tenant` and `collecti
 its collections, all of which exist; `requests()` lists the RPCs received,
 each a `Request` with its `procedure` and `headers` by lower-case name, for a
 test of what the client sent.
+
+`presign_download` signs a GET on the fake's storage, as the server does: it
+expires after `DEFAULT_DOWNLOAD_TTL` (15 minutes) unless the request names a
+TTL up to `MAX_PRESIGN_TTL`, carries `If-Match` when `require_etag_match` is
+set, and answers with the request's `content_disposition`. A pending or
+failed object is `FAILED_PRECONDITION`, an unknown one `NOT_FOUND`.
+
+Failures are injected on both sides. `fail_rpc(procedure, times, code)` makes
+the next `times` calls of a procedure of a served service answer `code`, with
+the `ErrorInfo` reason the server attaches to it, so the typed errors and
+`paladin.reason` read it as they would the server's; calls after those are
+served, every failed one is in `requests()`, and the function it returns
+clears what is left:
+
+```python
+fake.fail_rpc("/paladin.data.v1.ObjectService/GetObject", 1, Code.UNAVAILABLE)
+# the first get_object is UNAVAILABLE, the second is served
+```
+
+`fail_storage` answers storage requests with a status of the test's choosing
+— an expired URL, a busy store — and `fail_storage_after_storing` loses a
+PUT's answer after storing its body; `storage_ops()` lists what storage
+received.
 
 ### Concurrency and asyncio
 
