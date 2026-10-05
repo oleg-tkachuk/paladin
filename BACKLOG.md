@@ -831,29 +831,6 @@ finding moving from "packages you import" to "your code is affected".
   counts — rather than on inspection.
 - **Blockers:** none; needs a real fleet to measure against.
 
-### connectshim/admin: a sampled 98%, and what a sample does not prove
-
-- **Status:** Deferred (the seam and the tests landed; this entry records the
-  residue and one lesson).
-- **What landed:** an interface per handler-backed server, declared by the
-  consumer; a table over all 66 RPCs asserting a handler failure reaches the
-  caller wrapping the original; one-step-fails doubles where a shim makes two
-  calls; recording doubles for the optional-field branches. 4% to 98% over an
-  eighty-mutation sample.
-- **What is left:** two equivalent mutants, deliberately not chased, because a
-  test for either could not fail: `len(t.Labels) > 0` guarding a
-  json.Unmarshal that errors on empty input either way (tenant_server.go:382),
-  and `idx <= 0` in decodeAuditCursor, where idx == 0 makes the following
-  time.Parse("") return the same zero value (audit_server.go:89).
-- **The lesson, which cost a near-miss:** the previous version of this entry
-  named `event_subscription_server.go`'s `if m.GetParent() != ""` as a
-  survivor. After the 98% run it did not appear in the survivor list — not
-  because it was held, but because a sample of eighty never selected it.
-  Mutating it by hand showed it still surviving. A sampled score is a
-  statement about the package, never about a particular line: to retire a
-  named survivor, mutate that line.
-- **Blockers:** none.
-
 ### connectshim/iam: exhausted, with three equivalent mutants left
 
 - **Status:** Deferred (the seam and the tests landed; this entry records why
@@ -973,6 +950,11 @@ finding moving from "packages you import" to "your code is affected".
   write tests for behaviour that is already held. `--test-cmd` exists for that,
   and a filter that matches the wrong test names produces a 0% which is also
   not a finding.
+- **A sampled score says nothing about a line.** connectshim/admin scored 98%
+  on an eighty-mutation sample and 86% exhaustively: 43 survivors the sample
+  never drew. To retire a named survivor, mutate that line; to call a package
+  done, give the run a budget above its mutation count, which the summary
+  line reports.
 - **A survivor is a question, not a defect.** The useful ones are guards whose
   whole purpose is to refuse something — that is where this found the JWT
   verifier with no test file, the unauthenticated allow-list with none, and the
