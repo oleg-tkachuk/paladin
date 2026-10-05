@@ -862,8 +862,9 @@ finding moving from "packages you import" to "your code is affected".
 
 ### internal/worker: what is left really is integration work — but less than claimed
 
-- **Status:** Deferred (partially addressed; this entry corrects its own earlier
-  diagnosis).
+- **Status:** Deferred (the integration work is done; what is left is the
+  fourth `poolKey` copy, the unkillable `Statuses` mutant, and two test files
+  nothing runs).
 - **The correction.** This entry used to say the remaining branches "need a
   transaction and a failing dependency, so they belong in
   tests/integration/components". That was true of the outbox runner and wrong of three
@@ -889,10 +890,22 @@ finding moving from "packages you import" to "your code is affected".
   `OutboxRunner.markDeliveryFailed`, and the existing
   TestDispatcher_MaxAttemptsTransitionsToFailed holds it for all four sinks
   (verified by mutating the single remaining copy).
-- **What is still genuinely left, and why it is integration work:**
-  OutboxRunner holds a concrete `*pgxpool.Pool`, so its tick, depth sampling
-  and mark-delivered paths cannot be driven without a database. The remaining
-  survivors live there.
+- **The OutboxRunner integration work is DONE (2026-10-05).** It held 17 of
+  its 49 mutants against both suites; it now holds 43, through tests in
+  tests/integration that drive the tick, the batch routing, the outcome writes,
+  `DeliveryStats` and the `Run` loop against Postgres, with no broker. The six
+  left are equivalent: the claim's `next_attempt_at <= now()`, the two
+  `MaxBackoff` comparisons in `backoffFor`, the 30s depth-sample boundary, and
+  the NATS and Kafka `pool != nil` halves of the batch routing, which both
+  paths fail or deliver identically (SQS is told apart by its error text).
+  Its defaults are named constants now (`DefaultOutbox*`,
+  `OutboxDepthWarnThreshold`).
+- **Two integration-tagged test files are run by nothing.**
+  `internal/worker/sqs_batch_integration_test.go` and
+  `internal/worker/lease/claim_integration_test.go` carry `//go:build
+  integration`, but `task backend:test:integration` and CI run that tag only
+  over `./tests/integration/...`, so both only ever compile. Either the task
+  widens its package list or the two move under tests/integration.
 - **A denominator trap specific to this repo:** there are TWO integration
   suites, `tests/integration/components` and `tests/integration`, and the dispatcher's
   own tests are in the second. A measurement whose --test-cmd names only the

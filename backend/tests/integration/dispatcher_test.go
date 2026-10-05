@@ -431,6 +431,13 @@ func TestDispatcher_RetryWithBackoff_5xx(t *testing.T) {
 	if !row.NextAttemptAt.After(startedAt) {
 		t.Errorf("next_attempt_at = %v, want > %v", row.NextAttemptAt, startedAt)
 	}
+	// ...and it is the backoff that sets it, not the claim's lease, which
+	// would hold the retry back for minutes. The runner's MaxBackoff is a
+	// second, well inside this bound; the lease is far outside it.
+	if retryBound := startedAt.Add(time.Minute); !row.NextAttemptAt.Before(retryBound) {
+		t.Errorf("next_attempt_at = %v, want before %v (the backoff, not the claim lease)",
+			row.NextAttemptAt, retryBound)
+	}
 
 	// Fast-forward and tick again.
 	f.fastForward(t, rowID)
