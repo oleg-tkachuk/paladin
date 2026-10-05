@@ -293,6 +293,9 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			// one has to run first.
 			capData,
 			auth.RequireAudience(auth.AudienceData),
+			// A platform admin's request acts on the tenant it names; everything
+			// below keys on that tenant, so it is set before any of them.
+			middleware.ActOnNamedTenant(),
 			// After auth so the tenant is known, and before the quota and
 			// idempotency work so a throttled caller is turned away before it
 			// costs a database round-trip.

@@ -176,3 +176,55 @@ func TestDataPlaneTenantBoundaries(t *testing.T) {
 		}
 	}
 }
+
+// The idempotency store keys a response on the tenant the request acts on.
+// It keyed on the caller's own, so a platform admin who reused one
+// Idempotency-Key in two tenants had the second call answered with the
+// first one's response, and the second write never happened.
+func TestDataPlaneAdminIdempotencyKeyIsPerTenant(t *testing.T) {
+	f := newActingTenantFixture(t)
+	admin := f.mint(f.platform, "platform.admin")
+	ctx, cancel := context.WithTimeout(context.Background(), actingTenantCallTimeout)
+	defer cancel()
+
+	const key = "admin-key-reused-across-tenants"
+	for _, c := range []struct {
+		tenant, object uuid.UUID
+	}{{f.target, f.inTarget}, {f.platform, f.inPlatform}} {
+		req := authed(admin, &pbdata.UpdateObjectRequest{
+			Name:            objectOf(c.tenant, c.object),
+			ResourceVersion: "1",
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
+			Tags:            map[string]string{"set-by": "platform-admin"},
+		})
+		req.Header().Set("Idempotency-Key", key)
+		resp, err := f.objects.UpdateObject(ctx, req)
+		if err != nil {
+			t.Fatalf("UpdateObject in %s: %v", c.tenant, err)
+		}
+		if got, want := resp.Msg.GetName(), objectOf(c.tenant, c.object); got != want {
+			t.Errorf("answered with %s, want %s — the key replayed another tenant's response", got, want)
+		}
+		if got := mustObjectTags(t, f.h.PoolMigrate, c.object); got["set-by"] != "platform-admin" {
+			t.Errorf("object %s was not written: tags %v", c.object, got)
+		}
+	}
+
+	// And within the tenant the key still does its job: a retry is answered
+	// from the first call, not run again. Keyed on the caller while the
+	// connection is scoped to the target, the row was refused by RLS and a
+	// retry ran the write twice.
+	retry := authed(admin, &pbdata.UpdateObjectRequest{
+		Name:            objectOf(f.target, f.inTarget),
+		ResourceVersion: "1",
+		UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
+		Tags:            map[string]string{"set-by": "a-retry-that-must-not-run"},
+	})
+	retry.Header().Set("Idempotency-Key", key)
+	if _, err := f.objects.UpdateObject(ctx, retry); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if got := mustObjectTags(t, f.h.PoolMigrate, f.inTarget); got["set-by"] != "platform-admin" {
+		t.Errorf("the retry ran the write again: tags %v", got)
+	}
+}

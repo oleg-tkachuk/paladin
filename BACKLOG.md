@@ -1426,16 +1426,13 @@ finding moving from "packages you import" to "your code is affected".
 
 - **Status:** Deferred.
 - **Reason:** the data plane acts on the tenant a platform admin names
-  (ADR-0022), but three things still key on the admin's own tenant. The data
-  plane has no audit interceptor at all, so the target tenant's audit page
-  never shows what an admin did to its objects. The tenant rate limit and
-  idempotency keys run before the name is parsed and count against the
-  admin's tenant: an admin's uploads do not draw on the target's rate budget,
-  and one Idempotency-Key reused against two tenants collides.
-- **Definition of Done:** data-plane mutations are audited, so the tenant's
-  trail (`audit_log.resource_tenant_id`, migration 040) picks them up; the
-  rate limiter and idempotency store key on the tenant the request acts on,
-  with tests through the assembled data plane.
+  (ADR-0022), and its rate limit and idempotency keys follow
+  (`middleware.ActOnNamedTenant`), but the data plane has no audit
+  interceptor, so the target tenant's audit page never shows what an admin
+  did to its objects.
+- **Definition of Done:** a platform admin's data-plane calls inside another
+  tenant are audited, so the tenant's trail (`audit_log.resource_tenant_id`,
+  migration 040) picks them up, with a test through the assembled data plane.
 - **Blockers:** none.
 
 ### A disjunctive audit filter can return an empty page with a cursor
