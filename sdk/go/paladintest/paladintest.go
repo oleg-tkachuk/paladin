@@ -16,9 +16,15 @@
 // a body of another length or checksum, or an overwrite — records that
 // checksum on the object, so Download verifies what it reads, and answers
 // Range and If-Match requests. Requests lists the RPCs it received, with
-// their headers. FailRPC makes a procedure's next calls fail with a code as
-// the server sends it, and FailStorage the storage requests, for a test of
-// how a program retries and maps errors.
+// their headers and messages, and Calls those of one procedure a test picks
+// out. FailRPC makes a procedure's next calls fail with a code as the server
+// sends it, FailRPCIf only the calls a test picks out, and FailStorage the
+// storage requests, for a test of how a program retries and maps errors.
+//
+// By default it serves every call, whatever credential it carries. With
+// WithStrictAuth it checks credentials as the server's data plane does,
+// accepting only those it issued — IssueBearerToken, IssueAPIToken,
+// IssueCapability — that were not revoked, for the tenant the call names.
 package paladintest
 
 import (
