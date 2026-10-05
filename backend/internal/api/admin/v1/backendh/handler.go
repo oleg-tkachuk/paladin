@@ -183,6 +183,9 @@ func (h *Handler) CreateBackend(ctx context.Context, b admindomain.StorageBacken
 	if err := h.repo.Create(ctx, b); err != nil {
 		return nil, apiutil.MapError(err)
 	}
+	// The request carries the id, not a name, so the audit row would name
+	// nothing.
+	apiutil.StashResource(ctx, backendResourceName(b.BackendID))
 	got, err := h.repo.Get(ctx, b.BackendID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

@@ -538,6 +538,9 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	}); err != nil {
 		return nil, apiutil.MapError(fmt.Errorf("create tenant: %w", err))
 	}
+	// The request carries the id (or none), not a name; the audit row needs
+	// the name to file the creation in the new tenant's trail.
+	apiutil.StashResource(ctx, apiutil.TenantNamePrefix+args.TenantID.String())
 	t, err := h.repo.Get(ctx, args.TenantID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create tenant: read back: %w", err))

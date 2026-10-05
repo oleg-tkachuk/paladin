@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
@@ -104,6 +105,19 @@ func TestCreateBackendAllowsPlatformAdmin(t *testing.T) {
 	}
 	if out.BackendID != "primary" {
 		t.Errorf("got %q", out.BackendID)
+	}
+}
+
+// The request carries the backend's id, not its name, so the audit row named
+// nothing.
+func TestCreateBackendNamesTheBackendForTheAuditLog(t *testing.T) {
+	h := NewHandler(fakeBackendRepo{}, allowAuthorizer{})
+	ctx := apiutil.WithResourceSlot(ctxWithRoles("platform.admin"))
+	if _, err := h.CreateBackend(ctx, admindomain.StorageBackend{BackendID: "primary", Kind: "s3-compatible"}); err != nil {
+		t.Fatalf("CreateBackend: %v", err)
+	}
+	if got, want := apiutil.ResourceFromContext(ctx), backendResourceName("primary"); got != want {
+		t.Errorf("resource = %q, want %q", got, want)
 	}
 }
 

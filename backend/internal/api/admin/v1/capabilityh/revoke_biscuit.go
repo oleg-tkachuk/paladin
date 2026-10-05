@@ -58,6 +58,7 @@ func (h *Handler) RevokeBiscuit(ctx context.Context, req *connect.Request[adminv
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	stashCapabilityInScope(ctx, c.CapabilityID)
 	return connect.NewResponse(&adminv1.CapabilityServiceRevokeBiscuitResponse{
 		CapabilityId: c.CapabilityID.String(),
 	}), nil
