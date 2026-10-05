@@ -76,11 +76,14 @@ func (s *SystemServer) GetDispatcherStats(ctx context.Context, _ *connect.Reques
 	return connect.NewResponse(out), nil
 }
 
-func (s *SystemServer) GetPlatformStats(ctx context.Context, _ *connect.Request[pb.GetPlatformStatsRequest]) (*connect.Response[pb.GetPlatformStatsResponse], error) {
+func (s *SystemServer) GetPlatformStats(ctx context.Context, req *connect.Request[pb.GetPlatformStatsRequest]) (*connect.Response[pb.GetPlatformStatsResponse], error) {
 	if s.H == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("system handler not wired"))
 	}
-	res, err := s.H.PlatformStats(ctx)
+	res, err := s.H.PlatformStats(ctx, platformstats.TenantPage{
+		Size:  int(req.Msg.GetTenantPage().GetPageSize()),
+		After: req.Msg.GetTenantPage().GetPageToken(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +143,7 @@ func (s *SystemServer) GetPlatformStats(ctx context.Context, _ *connect.Request[
 		out.Rls.Objects.TotalCount = oc.TotalCount
 		out.Rls.Objects.TotalBytes = oc.TotalBytes
 		out.Rls.Objects.TenantsTruncated = oc.TenantsCut
+		out.Rls.Objects.TenantsNextPageToken = oc.TenantsNext
 		out.Rls.Objects.Tenants = make([]*pb.TenantObjectStats, len(oc.Tenants))
 		for i, t := range oc.Tenants {
 			name := res.TenantNames[t.TenantID]
