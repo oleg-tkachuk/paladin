@@ -162,3 +162,76 @@ func TestOutboxRunner_ZeroBatchSizeUsesTheDefault(t *testing.T) {
 }
 
 var _ worker.SubscriptionStore = flakyStore{}
+
+// TestOutboxRunner_DeliveryStats pins the operator view: totals over every
+// row, one entry per subscription with work left (a subscription whose rows
+// were all delivered has nothing to report), and the most recent attempt's
+// failure as that entry's reason.
+func TestOutboxRunner_DeliveryStats(t *testing.T) {
+	t.Parallel()
+	f := setupDispatcher(t)
+	ctx := context.Background()
+
+	tenant := mustCreateTenant(t, f.h.PoolMigrate, "outbox-stats")
+	healthy := f.seedSubscription(t, tenant, subOpts{URL: "http://healthy.invalid"})
+	stuck := f.seedSubscription(t, tenant, subOpts{URL: "http://stuck.invalid"})
+	payload := eventPayload(t, tenant)
+
+	const (
+		olderError = "HTTP 503"
+		newerError = "HTTP 500"
+		newerCode  = 500
+	)
+	for _, row := range []struct {
+		sub                uuid.UUID
+		status, lastError  string
+		lastCode           int
+		lastAttemptMinsAgo int
+	}{
+		{healthy, "delivered", "", 200, 5},
+		{stuck, "pending", olderError, 503, 10},
+		{stuck, "failed", newerError, newerCode, 1},
+	} {
+		id := f.queueRow(t, tenant, row.sub, payload)
+		if _, err := f.h.PoolMigrate.Exec(ctx,
+			`UPDATE event_deliveries
+			    SET status = $2, last_error = NULLIF($3, ''), last_status_code = $4,
+			        last_attempt_at = now() - make_interval(mins => $5)
+			  WHERE id = $1`,
+			id, row.status, row.lastError, row.lastCode, row.lastAttemptMinsAgo,
+		); err != nil {
+			t.Fatalf("set row state: %v", err)
+		}
+	}
+
+	r := f.outboxRunner(f.dispatcher())
+	stats, err := r.DeliveryStats(ctx)
+	if err != nil {
+		t.Fatalf("DeliveryStats: %v", err)
+	}
+	if stats.Pending != 1 || stats.Failed != 1 {
+		t.Errorf("totals = %d pending / %d failed, want 1 / 1", stats.Pending, stats.Failed)
+	}
+	if len(stats.Subscriptions) != 1 {
+		t.Fatalf("subscriptions = %+v, want only the stuck one", stats.Subscriptions)
+	}
+	got := stats.Subscriptions[0]
+	if got.SubscriptionID != stuck.String() || got.TenantID != tenant.String() {
+		t.Errorf("entry = %s/%s, want %s/%s", got.TenantID, got.SubscriptionID, tenant, stuck)
+	}
+	if got.Pending != 1 || got.Failed != 1 {
+		t.Errorf("entry counts = %d pending / %d failed, want 1 / 1", got.Pending, got.Failed)
+	}
+	if got.LastError != newerError || got.LastStatusCode != newerCode || got.LastAttemptAt == "" {
+		t.Errorf("entry reason = %q/%d at %q, want the most recent attempt's %q/%d",
+			got.LastError, got.LastStatusCode, got.LastAttemptAt, newerError, newerCode)
+	}
+
+	pending, err := r.PendingCount(ctx)
+	if err != nil {
+		t.Fatalf("PendingCount: %v", err)
+	}
+	if pending != 1 {
+		t.Errorf("PendingCount = %d, want 1", pending)
+	}
+}
