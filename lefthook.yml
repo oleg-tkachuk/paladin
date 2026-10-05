@@ -86,7 +86,8 @@ pre-commit:
       root: backend/
       tags: [go, fmt]
       glob: "*.go"
-      run: gofmt -w {staged_files}
+      # -s, as backend:go:fmt:check gates: a file this hook leaves must pass it.
+      run: gofmt -s -w {staged_files}
       stage_fixed: true
 
     - name: backend-goimports
