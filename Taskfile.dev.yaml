@@ -206,8 +206,14 @@ tasks:
       - echo "{{._OK}} paladin · the commit gate passed"
 
   verify-backend:
-    desc: "The backend: tests, the tagged suites compiling, lint, sqlc, image metadata"
+    desc: "The backend: gofmt, tests, the tagged suites compiling, lint, sqlc, image metadata"
     cmds:
+      # As the capability module's and the Go SDK's gates do. The backend's
+      # formatting was left to lefthook's pre-commit gofmt, which a commit
+      # made without the hooks installed skips: an unsorted import reached
+      # main that way, and neither golangci-lint (no formatters configured)
+      # nor CI noticed.
+      - task: backend:go:fmt:check
       - task: backend:test
       # The tagged suites are excluded from `go test ./...` by their build tag,
       # so this is the only thing in the local gate that notices when one has
