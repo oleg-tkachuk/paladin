@@ -1,17 +1,13 @@
 "use client";
 
 // Tenant-scoped audit log. Same table shape as the cross-tenant
-// /audit page; the difference is a CEL filter pinned to this
-// tenant via `actor_tenant_id == X || resource_name.startsWith(
-// "tenants/X/")` — same OR the Overview's Recent activity uses,
-// because actions initiated by platform-admin against a tenant
-// resource would otherwise miss this feed.
+// /audit page; the difference is the tenant's trail, which the server
+// selects (ListAuditLogRequest.tenant_id): entries the tenant's
+// principals made, and entries on its resources — a platform admin's
+// work inside the tenant included.
 //
 // Free-text search filters client-side over the loaded page, same
-// affordance as /audit. CEL on the server side is reserved for the
-// tenant-scope predicate above; layering more CEL on top of an
-// already-CEL filter is doable but the loader hook builds a single
-// filter string — kept simple for now.
+// affordance as /audit.
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -60,21 +56,14 @@ function actionPalette(
   return "outline";
 }
 
+/** Entries per page of the tenant's trail. */
+const TENANT_AUDIT_PAGE_SIZE = 100;
+
 export default function TenantAuditLogPage() {
   const tenant = useTenant();
 
-  // Tenant-scope predicate. Quoting tenantId is fine because it's a
-  // UUID — no embedded `"`. If we ever take human-input slugs through
-  // here we'd need an escaper.
-  const filter = useMemo(
-    () =>
-      `actor_tenant_id == "${tenant.tenantId}" || ` +
-      `resource_name.startsWith("tenants/${tenant.tenantId}/")`,
-    [tenant.tenantId],
-  );
-
   const { entries, loading, error, nextCursor, refresh, loadMore } =
-    useAuditLogs(100, filter);
+    useAuditLogs(TENANT_AUDIT_PAGE_SIZE, "", tenant.tenantId);
 
   const [search, setSearch] = useState("");
 

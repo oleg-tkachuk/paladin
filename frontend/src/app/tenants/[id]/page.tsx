@@ -255,16 +255,11 @@ export default function TenantOverviewPage() {
     let cancelled = false;
     (async () => {
       try {
-        // CEL filter — match either the actor tenant OR a resource
-        // name owned by the tenant. The `||` is required: actions
-        // initiated by platform-admin against a tenant resource
-        // would otherwise miss the tenant feed.
-        const filter =
-          `actor_tenant_id == "${tenant.tenantId}" || ` +
-          `resource_name.startsWith("tenants/${tenant.tenantId}/")`;
+        // The tenant's trail, selected by the server: what its principals
+        // did and what was done to it, a platform admin's work included.
         const res = await auditClient.listAuditLog({
           page: { pageSize: 5, pageToken: "" },
-          filter,
+          tenantId: tenant.tenantId,
         });
         if (cancelled) return;
         setAuditEntries(res.entries);

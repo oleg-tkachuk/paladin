@@ -26,12 +26,18 @@ export interface UseAuditLogsResult {
   loadMore: () => Promise<void>;
 }
 
+/**
+ * `tenantId` narrows the log to that tenant's trail — what its principals did
+ * and what was done to it — in the server's query, so every page is full of
+ * the tenant's entries. Empty = every tenant.
+ */
 export function useAuditLogs(
   pageSize: number = 50,
   filter: string = "",
+  tenantId: string = "",
 ): UseAuditLogsResult {
   const query = useInfiniteQuery({
-    queryKey: ["auditLogs", pageSize, filter],
+    queryKey: ["auditLogs", pageSize, filter, tenantId],
     initialPageParam: "",
     queryFn: async ({ pageParam, signal }) => {
       try {
@@ -42,6 +48,7 @@ export function useAuditLogs(
               pageToken: pageParam,
             },
             filter,
+            tenantId,
           },
           { signal },
         );
