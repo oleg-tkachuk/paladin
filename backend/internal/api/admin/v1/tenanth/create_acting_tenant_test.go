@@ -2,11 +2,13 @@ package tenanth
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
@@ -88,5 +90,34 @@ func TestCreateDedicatedTenantActsAsTheTenantItCreates(t *testing.T) {
 	}
 	if seen != created {
 		t.Errorf("tx ran as %v, want the new tenant %v (caller was %v)", seen, created, caller)
+	}
+}
+
+// The request carries the new tenant's id, not a name, so the audit row named
+// nothing and the creation was in no tenant's trail — the new tenant's
+// included. The handler names it once the tenant exists.
+func TestCreateTenantNamesTheTenantForTheAuditLog(t *testing.T) {
+	created := uuid.New()
+	ctx := apiutil.WithResourceSlot(adminCtx(uuid.New()))
+	if _, err := NewHandler(&fakeRepo{}, allow()).CreateTenant(ctx, CreateTenantArgs{
+		TenantID: created, Slug: "acme",
+	}); err != nil {
+		t.Fatalf("CreateTenant: %v", err)
+	}
+	if got, want := apiutil.ResourceFromContext(ctx), apiutil.TenantNamePrefix+created.String(); got != want {
+		t.Errorf("resource = %q, want %q", got, want)
+	}
+
+	refused := apiutil.WithResourceSlot(adminCtx(uuid.New()))
+	failing := &fakeRepo{createTxFn: func(context.Context, pgx.Tx, CreateTenantArgs) error {
+		return errors.New("slug taken")
+	}}
+	if _, err := NewHandler(failing, allow()).CreateTenant(refused, CreateTenantArgs{
+		TenantID: uuid.New(), Slug: "acme",
+	}); err == nil {
+		t.Fatal("CreateTenant succeeded against a failing repository")
+	}
+	if got := apiutil.ResourceFromContext(refused); got != "" {
+		t.Errorf("resource = %q for a tenant that was not created, want none", got)
 	}
 }

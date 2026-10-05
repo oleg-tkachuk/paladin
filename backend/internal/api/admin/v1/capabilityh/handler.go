@@ -197,7 +197,7 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	_ = caller // reserved for future audit row attribution
+	apiutil.StashResource(ctx, capabilityResourceName(cap.Subject.TenantID, cap.ID))
 	return h.issued(cap, token)
 }
 
@@ -306,6 +306,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 		}
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	apiutil.StashResource(ctx, capabilityResourceName(cap.Subject.TenantID, cap.ID))
 	return h.issued(cap, token)
 }
 
@@ -340,6 +341,7 @@ func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.Capab
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	stashCapabilityInScope(ctx, id)
 	return connect.NewResponse(&adminv1.CapabilityServiceRevokeResponse{}), nil
 }
 
@@ -491,6 +493,26 @@ func protoToPrincipalKind(k adminv1.PrincipalKind) capability.PrincipalType {
 
 // issued answers Issue and Delegate: the capability, its JWT, and the same
 // capability as a Biscuit its holder can narrow offline.
+// capabilitiesSegment names a tenant's capabilities in a resource name.
+const capabilitiesSegment = "/capabilities/"
+
+// capabilityResourceName is the name the audit log files a capability under,
+// `tenants/{tenant}/capabilities/{id}`: the API addresses a capability by id
+// alone, which names no tenant, and the tenant is what puts the row in that
+// tenant's trail.
+func capabilityResourceName(tenantID, id uuid.UUID) string {
+	return apiutil.TenantNamePrefix + tenantID.String() + capabilitiesSegment + id.String()
+}
+
+// stashCapabilityInScope names, for the audit log, a capability the request
+// acted on by id. Its tenant is the one actOnCapabilitysTenant switched to,
+// or the caller's own — the only one a caller confined to it can act in.
+func stashCapabilityInScope(ctx context.Context, id uuid.UUID) {
+	if tenantID, err := auth.EffectiveTenant(ctx); err == nil {
+		apiutil.StashResource(ctx, capabilityResourceName(tenantID, id))
+	}
+}
+
 func (h *Handler) issued(cap *capability.Capability, token string) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
 	bisc, err := h.issuer.Biscuit(cap)
 	if err != nil {
