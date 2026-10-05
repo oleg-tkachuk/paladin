@@ -16,8 +16,12 @@ If-Match requests. ``requests()`` lists the RPCs it
 received, with their headers; ``storage_ops()`` the storage requests, and
 ``fail_storage`` answers them with a fault — an expired URL, a busy store;
 ``fail_rpc`` makes a procedure's next calls fail with a code as the server
-sends it. It runs on the standard library's WSGI server,
-in a thread, on loopback.
+sends it, and ``fail_rpc_if`` only the calls a test picks out by their
+message, which ``requests()`` and ``calls()`` carry. With
+``strict_auth=True`` it checks credentials as the server's data plane does,
+accepting only those it issued that were not revoked, for the tenant the call
+names. It runs on the standard library's WSGI server on loopback, each
+connection on its own thread.
 """
 
 from __future__ import annotations
