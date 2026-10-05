@@ -883,24 +883,19 @@ finding moving from "packages you import" to "your code is affected".
   decision, not a test gap.
 - **Blockers:** none.
 
-### connectshim/data: three error branches out of 83 still unheld
+### connectshim/data: response projections no test pins
 
-- **Status:** Deferred (80 of 83 hold; the rest are second-order).
-- **What landed:** a seam per server — seven interfaces, each declared by the
-  consumer and each with a compile-time assertion that the production handler
-  still satisfies it. Error-branch coverage across the package went from 12 of
-  48 on the five smaller servers to 80 of 83 overall.
-- **What is left:** `batch_server.go` lines 131 and 135, two checks inside
-  `resolveObjectIDs`, and `operation_server.go:65`, the re-read after a
-  successful cancel. Reaching the last one needs a double where Cancel succeeds
-  and GetOperation fails — the inverse of the pair already written.
-- **Worth knowing before adding more:** with a double that fails EVERYTHING, a
-  shim that makes two calls still returns an error when the first check is
-  removed, because the second call fails too. The mutation survives and the
-  test cannot see it. TestTheFAILINGStepIsTheOneReported exists for that: its
-  doubles fail exactly one step, which is what turns "an error came back" into
-  "the right error came back".
-- **Blockers:** none. Three cases, and the shape is written down.
+- **Status:** Deferred (every error branch is held; these are not error
+  branches).
+- **Reason:** `backend/scripts/mutate.py` over the package catches 129 of 141
+  mutants. The 12 survivors are conditions that shape a response or read a
+  name, which no test asserts: `operation_server.go` (the `operations/` name
+  check, `Done`, metadata, result, the list's sort order), `conv.go:214` and
+  `version_helpers.go:48,51` (when a lock is reported), and
+  `object_tag_server.go:79,125` (delete-all and the next page token).
+- **Definition of Done:** a test per projection that fails on its mutant, or a
+  line in the test file saying why the mutant is equivalent.
+- **Blockers:** none.
 
 ### internal/worker: what is left really is integration work — but less than claimed
 
