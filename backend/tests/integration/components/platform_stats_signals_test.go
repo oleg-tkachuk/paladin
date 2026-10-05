@@ -4,6 +4,9 @@ package components
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -197,5 +200,41 @@ func TestCollectSignalTenants_PagesLikeTheObjectTable(t *testing.T) {
 	if len(second.Tenants) != 1 || second.Tenants[0].TenantID != s.quiet.String() ||
 		second.TenantsCut != 0 || second.TenantsNext != "" {
 		t.Fatalf("second page = %+v, want quiet and the end", second)
+	}
+}
+
+// The worker endpoint serves exactly what CollectSignalTenants returns.
+func TestSignalTenantsHandler_ServesTheDrillDown(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	s := seedSignals(t, ctx, pool)
+
+	srv := httptest.NewServer(platformstats.SignalTenantsHandler(pool, func(err error) {
+		t.Errorf("handler reported %v", err)
+	}))
+	defer srv.Close()
+
+	q := platformstats.SignalQuery(platformstats.SignalQuotaAtLimit, platformstats.TenantPage{})
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		srv.URL+platformstats.SignalTenantsPath+"?"+q.Encode(), nil)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %s", res.Status)
+	}
+	var got platformstats.SignalTenants
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Signal != platformstats.SignalQuotaAtLimit || got.Unattributed != 1 ||
+		len(got.Tenants) != 1 || got.Tenants[0].TenantID != s.busy.String() {
+		t.Errorf("served %+v, want busy plus one unattributed", got)
 	}
 }
