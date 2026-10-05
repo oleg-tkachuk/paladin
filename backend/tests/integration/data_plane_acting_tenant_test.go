@@ -228,3 +228,60 @@ func TestDataPlaneAdminIdempotencyKeyIsPerTenant(t *testing.T) {
 		t.Errorf("the retry ran the write again: tags %v", got)
 	}
 }
+
+// A platform admin's data-plane work inside another tenant is in that
+// tenant's trail; its work in its own tenant, like any tenant's own
+// data-plane writes, is not audited.
+func TestDataPlaneAdminWorkIsInTheTenantsTrail(t *testing.T) {
+	f := newActingTenantFixture(t)
+	admin := f.mint(f.platform, "platform.admin")
+	ctx, cancel := context.WithTimeout(context.Background(), actingTenantCallTimeout)
+	defer cancel()
+
+	for _, c := range []struct {
+		tenant, object uuid.UUID
+	}{{f.target, f.inTarget}, {f.platform, f.inPlatform}} {
+		if _, err := f.objects.UpdateObject(ctx, authed(admin, &pbdata.UpdateObjectRequest{
+			Name:            objectOf(c.tenant, c.object),
+			ResourceVersion: "1",
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
+			Tags:            map[string]string{"set-by": "platform-admin"},
+		})); err != nil {
+			t.Fatalf("UpdateObject in %s: %v", c.tenant, err)
+		}
+	}
+
+	type row struct {
+		action, resource string
+		actor            uuid.UUID
+	}
+	rowsUnder := func(tenant uuid.UUID) []row {
+		rows, err := f.h.PoolMigrate.Query(ctx,
+			`SELECT action, resource_name, actor_tenant_id FROM audit_log
+			 WHERE resource_tenant_id = $1 AND action LIKE '%ObjectService/UpdateObject'`, tenant)
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		defer rows.Close()
+		var out []row
+		for rows.Next() {
+			var r row
+			if err := rows.Scan(&r.action, &r.resource, &r.actor); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			out = append(out, r)
+		}
+		return out
+	}
+
+	got := rowsUnder(f.target)
+	if len(got) != 1 {
+		t.Fatalf("%d rows in the target's trail, want 1", len(got))
+	}
+	if got[0].actor != f.platform || got[0].resource != objectOf(f.target, f.inTarget) {
+		t.Errorf("row = %+v, want the admin's tenant as actor and the object as resource", got[0])
+	}
+	if own := rowsUnder(f.platform); len(own) != 0 {
+		t.Errorf("the admin's work in its own tenant was audited: %+v", own)
+	}
+}

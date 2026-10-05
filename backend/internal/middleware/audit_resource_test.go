@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 )
@@ -106,10 +108,14 @@ func idempotencyOf(m protoreflect.MethodDescriptor) connect.IdempotencyLevel {
 }
 
 // recordingAuditWriter keeps the rows the interceptor writes.
-type recordingAuditWriter struct{ rows []admindomain.AuditEntry }
+type recordingAuditWriter struct {
+	rows []admindomain.AuditEntry
+	ctxs []context.Context
+}
 
-func (w *recordingAuditWriter) Insert(_ context.Context, e admindomain.AuditEntry) error {
+func (w *recordingAuditWriter) Insert(ctx context.Context, e admindomain.AuditEntry) error {
 	w.rows = append(w.rows, e)
+	w.ctxs = append(w.ctxs, ctx)
 	return nil
 }
 
@@ -146,6 +152,44 @@ func TestAuditRowNamesTheResourceTheHandlerStashed(t *testing.T) {
 			}
 			if got := w.rows[0].ResourceName; got != tc.want {
 				t.Errorf("row names %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// On the data plane only a principal's calls inside another tenant are
+// recorded: those are what the tenant's trail would miss. Its own
+// principals' writes, and an admin's in its own tenant, are not.
+func TestAuditActingElsewhere(t *testing.T) {
+	own, target := uuid.New(), uuid.New()
+	admin := auth.WithPrincipal(context.Background(), &auth.Principal{
+		TenantID: own, Subject: "ops", Roles: []string{apiutil.RolePlatformAdmin},
+	})
+	cases := map[string]struct {
+		ctx  context.Context
+		rows int
+	}{
+		"inside another tenant":      {auth.WithActingTenant(admin, target), 1},
+		"inside its own tenant":      {admin, 0},
+		"acting on its own, by name": {auth.WithActingTenant(admin, own), 0},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			w := &recordingAuditWriter{}
+			call := AuditActingElsewhere(w, auth.AudienceData).WrapUnary(
+				func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) { return nil, nil })
+			if _, err := call(tc.ctx, connect.NewRequest(&adminv1.ListAuditLogRequest{})); err != nil {
+				t.Fatalf("call: %v", err)
+			}
+			if len(w.rows) != tc.rows {
+				t.Fatalf("%d rows written, want %d", len(w.rows), tc.rows)
+			}
+			// audit_log admits a row only under its actor's tenant, so the
+			// insert must not run in the tenant the call acted on.
+			for _, ctx := range w.ctxs {
+				if scope, _ := auth.EffectiveTenant(ctx); scope != own {
+					t.Errorf("row inserted under %s, want the actor's tenant %s", scope, own)
+				}
 			}
 		})
 	}

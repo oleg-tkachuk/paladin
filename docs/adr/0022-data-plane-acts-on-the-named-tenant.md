@@ -37,7 +37,10 @@
     tenant's pages, under that tenant's policies and quotas.
   - A member naming another tenant in a version name gets `PermissionDenied`;
     it used to be served its own tenant silently.
-  - Still keyed on the admin's own tenant, and recorded in BACKLOG: the data
-    plane writes no audit rows, so the target's audit page does not show the
-    admin's work; the tenant rate limit and idempotency keys run before the
-    names are parsed.
+  - The tenant is decided before anything keys on it: `ActOnNamedTenant`
+    reads the names ahead of the rate limiter and the idempotency store, so
+    both count the admin's call against the target. (Until 2026-10-05 both
+    ran on the admin's own tenant.)
+  - The admin's data-plane work inside the target is audited and shows in the
+    target's trail (`AuditActingElsewhere`). A tenant's own principals' data-
+    plane writes are not audited; that is recorded in BACKLOG.

@@ -313,6 +313,9 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			middleware.NewQuotaSoftCheck(repos.Quota).WithBucketScope(repos.Object),
 			connect.UnaryInterceptorFunc(validateInterceptor),
 			idempotencyInterceptor,
+			// A platform admin's calls inside another tenant only: they are
+			// what that tenant's trail would miss (see AuditActingElsewhere).
+			middleware.AuditActingElsewhere(repos.Audit, auth.AudienceData),
 		),
 	)
 	// Every plane decodes JSON with the strict codec: an unknown request field

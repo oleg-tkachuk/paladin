@@ -107,6 +107,30 @@ type auditInterceptor struct {
 	audience    string
 	recordReads bool
 	mirror      AuditMirrorEmitter
+	// onlyElsewhere records only calls acting on a tenant other than the
+	// caller's own (AuditActingElsewhere).
+	onlyElsewhere bool
+}
+
+// AuditActingElsewhere audits only the calls a principal makes inside a
+// tenant other than its own — on the data plane, a platform admin's work in a
+// tenant it named (ActOnNamedTenant, which must run before it). Those are the
+// calls the tenant's trail would otherwise miss: its own principals' writes
+// are not audited on the data plane, and auditing every agent upload would
+// put a synchronous insert on the hot path.
+func AuditActingElsewhere(w AuditWriter, audience string) connect.Interceptor {
+	return &auditInterceptor{w: w, audience: audience, onlyElsewhere: true}
+}
+
+// actingElsewhere reports whether ctx acts on a tenant other than the
+// principal's own.
+func actingElsewhere(ctx context.Context) bool {
+	acting, ok := auth.ActingTenant(ctx)
+	if !ok {
+		return false
+	}
+	p, err := auth.PrincipalFromContext(ctx)
+	return err == nil && acting != p.TenantID
 }
 
 func (a *auditInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -116,7 +140,7 @@ func (a *auditInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		// after the handler returns (see preferCanonical).
 		ctx = apiutil.WithResourceSlot(ctx)
 		resp, err := next(ctx, req)
-		if a.shouldSkip(req.Spec()) {
+		if a.shouldSkip(req.Spec()) || (a.onlyElsewhere && !actingElsewhere(ctx)) {
 			return resp, err
 		}
 		// Best-effort in the sense that it never blocks or fails the RPC — NOT
@@ -145,7 +169,7 @@ func (a *auditInterceptor) WrapStreamingClient(next connect.StreamingClientFunc)
 func (a *auditInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		err := next(ctx, conn)
-		if a.shouldSkip(conn.Spec()) {
+		if a.shouldSkip(conn.Spec()) || (a.onlyElsewhere && !actingElsewhere(ctx)) {
 			return err
 		}
 		_ = a.writeStream(ctx, conn.Spec().Procedure, conn.RequestHeader().Get("X-Request-Id"), err)
@@ -208,7 +232,18 @@ func (a *auditInterceptor) write(ctx context.Context, req connect.AnyRequest, rp
 	// The audit row and its mirror event commit atomically: the mirror
 	// enqueues its outbox rows on the insert's own transaction (ADR-0003).
 	// nil mirror ⇒ nil hook ⇒ InsertWithOutbox degrades to a plain Insert.
-	return a.w.InsertWithOutbox(ctx, entry, a.mirrorHook(entry))
+	return a.w.InsertWithOutbox(asActor(ctx, entry.ActorTenantID), entry, a.mirrorHook(entry))
+}
+
+// asActor scopes the audit insert to its actor's tenant, which audit_log's
+// insert policy requires: a call acting inside another tenant
+// (AuditActingElsewhere) would otherwise insert under that tenant's scope and
+// be refused.
+func asActor(ctx context.Context, actorTenant uuid.UUID) context.Context {
+	if actorTenant == uuid.Nil {
+		return ctx
+	}
+	return auth.WithActingTenant(ctx, actorTenant)
 }
 
 // mirrorHook returns the transactional fan-out closure for entry, or nil
@@ -237,7 +272,7 @@ func (a *auditInterceptor) writeStream(ctx context.Context, procedure, requestID
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()
 	}
-	return a.w.InsertWithOutbox(ctx, entry, a.mirrorHook(entry))
+	return a.w.InsertWithOutbox(asActor(ctx, entry.ActorTenantID), entry, a.mirrorHook(entry))
 }
 
 func principalCoords(ctx context.Context) (subject string, tenantID uuid.UUID) {
