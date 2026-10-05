@@ -7,15 +7,18 @@
 //	obj, err := paladin.Upload(ctx, p.Data, paladin.UploadInput{Parent: srv.Collection().String(), …}, paladin.UploadOptions{})
 //
 // It serves ObjectService (upload, complete, get, lookup, list, download,
-// delete), MultipartUploadService, ListParts included, and
-// StorageBootstrapService; every other RPC of every plane answers
-// Unimplemented, as a server that lacks it does. Like the server it binds
+// delete), MultipartUploadService, ListParts included, PresignService
+// (RegenerateUploadUrl, PresignDownload) and StorageBootstrapService; every
+// other RPC of every plane answers Unimplemented, as a server that lacks it
+// does. Like the server it binds
 // every upload URL to the size and checksum the upload was registered with —
 // its storage refuses a PUT that does not carry exactly the signed headers,
 // a body of another length or checksum, or an overwrite — records that
 // checksum on the object, so Download verifies what it reads, and answers
 // Range and If-Match requests. Requests lists the RPCs it received, with
-// their headers.
+// their headers. FailRPC makes a procedure's next calls fail with a code as
+// the server sends it, and FailStorage the storage requests, for a test of
+// how a program retries and maps errors.
 package paladintest
 
 import (
@@ -28,6 +31,8 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,6 +42,9 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -56,8 +64,21 @@ const (
 	storagePath = "/storage/"
 	etagQuote   = `"`
 	partQuery   = "part"
+	// dispositionQuery carries a download's Content-Disposition, as S3's
+	// presigned GET does.
+	dispositionQuery = "response-content-disposition"
 	// maxParts is the most parts a multipart upload has, as in S3.
 	maxParts = 10000
+)
+
+// Presigned-URL lifetimes, the server's defaults (limits.presign).
+const (
+	// DefaultDownloadTTL is how long a PresignDownload URL lives when the
+	// request names no TTL: the server's get_ttl.
+	DefaultDownloadTTL = 15 * time.Minute
+	// MaxPresignTTL is the longest TTL a request may name: the server's
+	// max_ttl. A longer one is refused, not shortened.
+	MaxPresignTTL = 168 * time.Hour
 )
 
 // Headers a bound upload URL requires, as the real presigner signs them.
@@ -66,7 +87,10 @@ const (
 	headerContentType   = "Content-Type"
 	headerIfNoneMatch   = "If-None-Match"
 	headerIfMatch       = "If-Match"
-	ifNoneMatchAny      = "*"
+	// headerContentDisposition is what a GET answers with when its URL
+	// carries dispositionQuery.
+	headerContentDisposition = "Content-Disposition"
+	ifNoneMatchAny           = "*"
 )
 
 // checksumHeader is the header each algorithm's value is signed in.
@@ -166,6 +190,8 @@ type Server struct {
 	fault      StorageFault
 	afterStore StorageFault
 	storeOps   []StorageOp
+	// rpcFaults are the failures FailRPC set, by procedure.
+	rpcFaults map[string]*rpcFault
 }
 
 // StorageFault decides a storage request's answer before the fake does: a
@@ -207,6 +233,100 @@ func (s *Server) StorageOps() []StorageOp {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]StorageOp(nil), s.storeOps...)
+}
+
+// servedServices are the services Start mounts; FailRPC takes a procedure
+// of any of them, an RPC the fake answers Unimplemented included.
+var servedServices = []string{
+	paladindatav1connect.ObjectServiceName,
+	paladindatav1connect.MultipartUploadServiceName,
+	paladindatav1connect.StorageBootstrapServiceName,
+	paladindatav1connect.PresignServiceName,
+}
+
+// serverReason is the google.rpc.ErrorInfo reason the server attaches to a
+// code, from the canonical table in backend/internal/api/apiutil/errmap.go;
+// a code missing here — Unavailable, DataLoss, Internal — carries none.
+var serverReason = map[connect.Code]commonv1.ErrorReason{
+	connect.CodeNotFound:           commonv1.ErrorReason_ERROR_REASON_NOT_FOUND,
+	connect.CodeAborted:            commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT,
+	connect.CodeAlreadyExists:      commonv1.ErrorReason_ERROR_REASON_ALREADY_EXISTS,
+	connect.CodeInvalidArgument:    commonv1.ErrorReason_ERROR_REASON_INVALID_ARGUMENT,
+	connect.CodePermissionDenied:   commonv1.ErrorReason_ERROR_REASON_PERMISSION_DENIED,
+	connect.CodeFailedPrecondition: commonv1.ErrorReason_ERROR_REASON_FAILED_PRECONDITION,
+	connect.CodeUnauthenticated:    commonv1.ErrorReason_ERROR_REASON_UNAUTHENTICATED,
+}
+
+// rpcFault is what FailRPC set for one procedure: the code, and how many
+// more calls answer it.
+type rpcFault struct {
+	code      connect.Code
+	remaining int
+}
+
+// FailRPC makes the next times calls of procedure — e.g.
+// paladindatav1connect.ObjectServiceGetObjectProcedure — answer code, as the
+// server answers it: with the ErrorInfo reason the server attaches to that
+// code, so the SDK's typed errors and Reason read it. Calls after those are
+// served as usual. Every failed call is in Requests, so a test counts the
+// attempts. A later FailRPC on the same procedure replaces this one; reset
+// clears this one's remaining failures, and nothing else.
+//
+// It panics on a procedure the fake does not serve, a times below 1, or an
+// unknown code: each is a mistake in the test, not a scenario.
+func (s *Server) FailRPC(procedure string, times int, code connect.Code) (reset func()) {
+	if !served(procedure) {
+		panic(fmt.Sprintf("paladintest: FailRPC: %q is not a procedure the fake serves", procedure))
+	}
+	if times < 1 {
+		panic(fmt.Sprintf("paladintest: FailRPC: times is %d, want at least 1", times))
+	}
+	if code < connect.CodeCanceled || code > connect.CodeUnauthenticated {
+		panic(fmt.Sprintf("paladintest: FailRPC: %d is not a Connect error code", code))
+	}
+	f := &rpcFault{code: code, remaining: times}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rpcFaults[procedure] = f
+	return func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.rpcFaults[procedure] == f {
+			delete(s.rpcFaults, procedure)
+		}
+	}
+}
+
+// served reports whether procedure is an RPC of a service the fake mounts.
+func served(procedure string) bool {
+	service, method, ok := strings.Cut(strings.TrimPrefix(procedure, "/"), "/")
+	if !ok || !slices.Contains(servedServices, service) {
+		return false
+	}
+	_, err := protoregistry.GlobalFiles.FindDescriptorByName(protoreflect.FullName(service + "." + method))
+	return err == nil
+}
+
+// takeRPCFault is the error FailRPC set for procedure's next call, nil when
+// there is none, counting the call against it. The caller holds mu.
+func (s *Server) takeRPCFault(procedure string) error {
+	f, ok := s.rpcFaults[procedure]
+	if !ok {
+		return nil
+	}
+	f.remaining--
+	if f.remaining == 0 {
+		delete(s.rpcFaults, procedure)
+	}
+	err := connect.NewError(f.code, fmt.Errorf("paladintest: %s failed by FailRPC", procedure))
+	if reason, ok := serverReason[f.code]; ok {
+		detail, derr := connect.NewErrorDetail(&errdetails.ErrorInfo{Reason: reason.String(), Domain: paladin.ErrorDomain})
+		if derr != nil {
+			panic(fmt.Sprintf("paladintest: %v", derr)) // an ErrorInfo always marshals
+		}
+		err.AddDetail(detail)
+	}
+	return err
 }
 
 // Request is one RPC the fake received.
@@ -252,12 +372,19 @@ func Start() (*Server, func()) {
 		uploads: map[string]*multipart{},
 		buckets: map[string]bool{},
 		bound:   map[string]bool{},
+
+		rpcFaults: map[string]*rpcFault{},
 	}
 	record := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			procedure := req.Spec().Procedure
 			s.mu.Lock()
-			s.requests = append(s.requests, Request{Procedure: req.Spec().Procedure, Header: req.Header().Clone()})
+			s.requests = append(s.requests, Request{Procedure: procedure, Header: req.Header().Clone()})
+			err := s.takeRPCFault(procedure)
 			s.mu.Unlock()
+			if err != nil {
+				return nil, err
+			}
 			return next(ctx, req)
 		}
 	}))
@@ -567,6 +694,43 @@ func (s *Server) RegenerateUploadUrl(_ context.Context, req *connect.Request[dat
 	return connect.NewResponse(&datav1.RegenerateUploadUrlResponse{UploadUrl: url}), nil
 }
 
+// PresignDownload presigns a GET of an AVAILABLE object on the fake's
+// storage, as the server does: an absent TTL is DefaultDownloadTTL, one that
+// is negative or above MaxPresignTTL is InvalidArgument, a name that is not
+// an object's is InvalidArgument, an unknown object NotFound, and one that
+// is not AVAILABLE FailedPrecondition.
+func (s *Server) PresignDownload(_ context.Context, req *connect.Request[datav1.PresignDownloadRequest]) (*connect.Response[datav1.PresignDownloadResponse], error) {
+	if _, err := paladin.ParseObjectName(req.Msg.GetName()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	ttl := req.Msg.GetTtl().AsDuration()
+	if ttl < 0 || ttl > MaxPresignTTL {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("ttl %s is outside 0..%s", ttl, MaxPresignTTL))
+	}
+	if ttl == 0 {
+		ttl = DefaultDownloadTTL
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	o, err := s.lookup(req.Msg.GetName())
+	if err != nil {
+		return nil, err
+	}
+	if state := o.msg.GetState(); state != datav1.ObjectState_OBJECT_STATE_AVAILABLE {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("object state %s does not allow GET", state))
+	}
+	path := o.msg.GetObjectId()
+	if d := req.Msg.GetContentDisposition(); d != "" {
+		path += "?" + url.Values{dispositionQuery: {d}}.Encode()
+	}
+	signed := s.signed(path, http.MethodGet)
+	signed.ExpiresAtRfc3339 = time.Now().Add(ttl).UTC().Format(time.RFC3339)
+	if req.Msg.GetRequireEtagMatch() {
+		signed.RequiredHeaders = map[string]string{headerIfMatch: etagQuote + o.msg.GetEtag() + etagQuote}
+	}
+	return connect.NewResponse(&datav1.PresignDownloadResponse{DownloadUrl: signed}), nil
+}
+
 // ─── MultipartUploadService ────────────────────────────────────────────────
 
 func (s *Server) InitiateMultipartUpload(_ context.Context, req *connect.Request[datav1.InitiateMultipartUploadRequest]) (*connect.Response[datav1.InitiateMultipartUploadResponse], error) {
@@ -704,7 +868,7 @@ func (s *Server) EnsureTenantStorage(_ context.Context, req *connect.Request[dat
 
 // storage serves the presigned URLs: PUT /storage/{object-id} and
 // PUT /storage/{upload-id}?part=N store, GET /storage/{object-id} reads,
-// with Range.
+// with Range, and answers the Content-Disposition its URL carries.
 func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, storagePath)
 	s.mu.Lock()
@@ -782,6 +946,9 @@ func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 		}
 		// http.ServeContent compares If-Match with the ETag header it is given.
 		w.Header().Set("ETag", etagQuote+etag+etagQuote)
+		if d := r.URL.Query().Get(dispositionQuery); d != "" {
+			w.Header().Set(headerContentDisposition, d)
+		}
 		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(content))
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
