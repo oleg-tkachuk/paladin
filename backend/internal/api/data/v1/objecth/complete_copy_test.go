@@ -217,7 +217,7 @@ func TestCompleteObjectRequiresCollectionAndObjectID(t *testing.T) {
 }
 
 func TestCompleteObjectUnknownObjectIsNotFound(t *testing.T) {
-	h, _, ctx, _ := completeHandler(&completeRepo{findErr: errors.New("no rows")}, headStorage{})
+	h, _, ctx, _ := completeHandler(&completeRepo{findErr: ErrObjectNotFound}, headStorage{})
 
 	_, err := h.CompleteObject(ctx, CompleteObjectInput{Collection: "docs", ObjectID: uuid.NewString()})
 	if connect.CodeOf(err) != connect.CodeNotFound {
@@ -322,7 +322,7 @@ func TestCopyObjectRequiresBothEnds(t *testing.T) {
 }
 
 func TestCopyObjectUnknownSourceIsNotFound(t *testing.T) {
-	h, _, ctx, _ := completeHandler(&completeRepo{findErr: errors.New("no rows")}, headStorage{})
+	h, _, ctx, _ := completeHandler(&completeRepo{findErr: ErrObjectNotFound}, headStorage{})
 
 	_, err := h.CopyObject(ctx, CopyObjectInput{
 		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",

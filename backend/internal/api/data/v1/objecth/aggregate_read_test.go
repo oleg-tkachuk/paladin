@@ -229,7 +229,7 @@ func TestLookupObjectRequiresCollectionAndKey(t *testing.T) {
 }
 
 func TestLookupObjectUnknownKeyIsNotFound(t *testing.T) {
-	h, _, ctx, _ := aggregateHandler(&aggregateRepo{findErr: errors.New("no rows")})
+	h, _, ctx, _ := aggregateHandler(&aggregateRepo{findErr: ErrObjectNotFound})
 
 	_, err := h.LookupObject(ctx, "docs", "missing")
 	if connect.CodeOf(err) != connect.CodeNotFound {

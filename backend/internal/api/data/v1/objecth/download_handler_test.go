@@ -2,7 +2,6 @@ package objecth
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -180,7 +179,7 @@ func TestDownloadObjectRequiresCollectionAndObjectID(t *testing.T) {
 
 func TestDownloadObjectUnknownObjectIsNotFound(t *testing.T) {
 	h, _, _, ctx := downloadHandler(t, statemachine.StateAvailable)
-	h.repo = &downloadRepo{state: statemachine.StateAvailable, findErr: errors.New("no rows")}
+	h.repo = &downloadRepo{state: statemachine.StateAvailable, findErr: ErrObjectNotFound}
 
 	_, err := h.DownloadObject(ctx, "docs", "missing.pdf", 0, "", false)
 	if connect.CodeOf(err) != connect.CodeNotFound {
