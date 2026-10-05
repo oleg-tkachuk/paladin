@@ -23,6 +23,7 @@ func versionParent(ctx context.Context, name string) (context.Context, paladin.O
 	if err != nil {
 		return ctx, paladin.ObjectName{}, err
 	}
+	nameForAudit(ctx, n.String())
 	return ctx, n.ObjectName, nil
 }
 
