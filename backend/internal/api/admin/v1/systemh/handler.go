@@ -150,7 +150,7 @@ type TenantName struct {
 // (see platformstats' package doc for why the split exists). A dead
 // worker degrades that second leg to available=false; it does not fail
 // the RPC, so an operator still sees the fleet inventory.
-func (h *Handler) PlatformStats(ctx context.Context) (*PlatformStatsResult, error) {
+func (h *Handler) PlatformStats(ctx context.Context, page platformstats.TenantPage) (*PlatformStatsResult, error) {
 	if rerr := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); rerr != nil {
 		return nil, connect.NewError(connect.CodePermissionDenied, rerr)
 	}
@@ -169,7 +169,7 @@ func (h *Handler) PlatformStats(ctx context.Context) (*PlatformStatsResult, erro
 		out.ControlPlane = cp
 	}
 
-	census, ok := h.fetchRLSCensus(ctx)
+	census, ok := h.fetchRLSCensus(ctx, page)
 	if !ok {
 		return out, nil
 	}
@@ -193,15 +193,17 @@ func (h *Handler) PlatformStats(ctx context.Context) (*PlatformStatsResult, erro
 	return out, nil
 }
 
-// fetchRLSCensus GETs the worker's ops endpoint. Returns ok=false for
-// every degraded case (no URL configured, dial failure, non-200, bad
-// body) — the caller turns that into available=false.
-func (h *Handler) fetchRLSCensus(ctx context.Context) (*platformstats.RLSCensus, bool) {
+// fetchRLSCensus GETs the worker's ops endpoint for one page of the
+// per-tenant breakdown. Returns ok=false for every degraded case (no URL
+// configured, dial failure, non-200, bad body) — the caller turns that into
+// available=false. A worker older than the paging parameters answers with
+// its first page and no next token, which reads as the last page.
+func (h *Handler) fetchRLSCensus(ctx context.Context, page platformstats.TenantPage) (*platformstats.RLSCensus, bool) {
 	url := h.cfg.Worker.OpsURL
 	if url == "" {
 		return nil, false
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/system/rls-census.json", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/system/rls-census.json?"+page.Query().Encode(), nil)
 	if err != nil {
 		return nil, false
 	}
