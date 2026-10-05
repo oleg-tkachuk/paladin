@@ -9,10 +9,12 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -409,5 +411,175 @@ func TestTheFakeLooksUpAndFailsPendingObjects(t *testing.T) {
 	srv.MarkFailed(resp.Msg.GetObject().GetName())
 	if got := lookup(); got != datav1.ObjectState_OBJECT_STATE_FAILED {
 		t.Errorf("after MarkFailed = %s, want FAILED", got)
+	}
+}
+
+// getObject reads obj through GetObject, the RPC the FailRPC tests fail.
+func getObject(p *paladin.Paladin, obj *datav1.Object) error {
+	_, err := p.Data.Object.GetObject(context.Background(), connect.NewRequest(&datav1.GetObjectRequest{Name: obj.GetName()}))
+	return err
+}
+
+// calls counts the requests for procedure the fake received.
+func calls(srv *paladintest.Server, procedure string) int {
+	n := 0
+	for _, r := range srv.Requests() {
+		if r.Procedure == procedure {
+			n++
+		}
+	}
+	return n
+}
+
+// FailRPC answers the next calls with the code and the reason the server
+// attaches to it, records each, and then serves the RPC again.
+func TestFailRPC(t *testing.T) {
+	const getObjectRPC = paladindatav1connect.ObjectServiceGetObjectProcedure
+	cases := []struct {
+		name   string
+		times  int
+		code   connect.Code
+		kind   error
+		reason commonv1.ErrorReason
+	}{
+		{"one Unavailable", 1, connect.CodeUnavailable, nil, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
+		{"one NotFound", 1, connect.CodeNotFound, paladin.ErrNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND},
+		{"three Unavailable", 3, connect.CodeUnavailable, nil, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
+		{"DataLoss", 1, connect.CodeDataLoss, nil, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
+		{"Aborted", 1, connect.CodeAborted, paladin.ErrVersionConflict, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := paladintest.New(t)
+			p := srv.Connect()
+			obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
+			srv.FailRPC(getObjectRPC, tc.times, tc.code)
+			for i := range tc.times {
+				err := getObject(p, obj)
+				if connect.CodeOf(err) != tc.code {
+					t.Fatalf("call %d: err = %v, want %s", i+1, err, tc.code)
+				}
+				if tc.kind != nil && !errors.Is(err, tc.kind) {
+					t.Errorf("call %d: err = %v, want errors.Is %v", i+1, err, tc.kind)
+				}
+				if got := paladin.Reason(err); got != tc.reason {
+					t.Errorf("call %d: reason = %s, want %s", i+1, got, tc.reason)
+				}
+			}
+			if err := getObject(p, obj); err != nil {
+				t.Errorf("call %d, past the failures: %v", tc.times+1, err)
+			}
+			if got := calls(srv, getObjectRPC); got != tc.times+1 {
+				t.Errorf("requests = %d, want %d: every failed call is recorded", got, tc.times+1)
+			}
+		})
+	}
+}
+
+// A client that retries Unavailable reads through one failure, and the
+// fake shows both attempts.
+func TestFailRPCSeesTheRetry(t *testing.T) {
+	const (
+		attempts  = 3
+		baseDelay = time.Millisecond
+	)
+	srv := paladintest.New(t)
+	p := srv.Connect(paladin.WithRetries(attempts, baseDelay))
+	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
+	srv.FailRPC(paladindatav1connect.ObjectServiceGetObjectProcedure, 1, connect.CodeUnavailable)
+	if err := getObject(p, obj); err != nil {
+		t.Fatalf("the retried read: %v", err)
+	}
+	if got := calls(srv, paladindatav1connect.ObjectServiceGetObjectProcedure); got != 2 {
+		t.Errorf("requests = %d, want 2: the failure and the retry", got)
+	}
+}
+
+// The failure is the procedure's alone: another RPC of the same service is
+// served.
+func TestFailRPCFailsOnlyItsProcedure(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
+	srv.FailRPC(paladindatav1connect.ObjectServiceGetObjectProcedure, 1, connect.CodeUnavailable)
+	if _, err := paladin.LookupObject(context.Background(), p.Data, paladin.ObjectURI{Collection: srv.Collection(), Key: "k"}); err != nil {
+		t.Errorf("LookupObject: %v, want it served", err)
+	}
+	if err := getObject(p, obj); connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Errorf("GetObject: %v, want the failure still pending", err)
+	}
+}
+
+func TestFailRPCResetRestoresTheRPC(t *testing.T) {
+	const times = 5
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
+	reset := srv.FailRPC(paladindatav1connect.ObjectServiceGetObjectProcedure, times, connect.CodeUnavailable)
+	if err := getObject(p, obj); connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("before reset: %v, want Unavailable", err)
+	}
+	reset()
+	if err := getObject(p, obj); err != nil {
+		t.Errorf("after reset: %v, want the object", err)
+	}
+	reset() // twice is harmless
+}
+
+// A reset clears its own failure, not one a later FailRPC set on the same
+// procedure.
+func TestFailRPCResetLeavesALaterFailure(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
+	first := srv.FailRPC(paladindatav1connect.ObjectServiceGetObjectProcedure, 1, connect.CodeUnavailable)
+	srv.FailRPC(paladindatav1connect.ObjectServiceGetObjectProcedure, 1, connect.CodeNotFound)
+	first()
+	if err := getObject(p, obj); !errors.Is(err, paladin.ErrNotFound) {
+		t.Errorf("err = %v, want the later NotFound", err)
+	}
+}
+
+// Any procedure of a served service can fail, one the fake answers
+// Unimplemented included.
+func TestFailRPCOnAnUnimplementedProcedure(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	srv.FailRPC(paladindatav1connect.ObjectServiceCountObjectsProcedure, 1, connect.CodeUnavailable)
+	count := func() error {
+		_, err := p.Data.Object.CountObjects(context.Background(), connect.NewRequest(&datav1.CountObjectsRequest{}))
+		return err
+	}
+	if err := count(); connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Errorf("err = %v, want the injected Unavailable", err)
+	}
+	if err := count(); !errors.Is(err, paladin.ErrContractSkew) {
+		t.Errorf("err = %v, want Unimplemented once the failure is spent", err)
+	}
+}
+
+func TestFailRPCRefusesAMistake(t *testing.T) {
+	cases := []struct {
+		name      string
+		procedure string
+		times     int
+		code      connect.Code
+	}{
+		{"a procedure no service has", "/paladin.data.v1.ObjectService/NoSuchRPC", 1, connect.CodeUnavailable},
+		{"a service the fake does not serve", "/paladin.admin.v1.TenantService/ListTenants", 1, connect.CodeUnavailable},
+		{"not a procedure", "GetObject", 1, connect.CodeUnavailable},
+		{"zero times", paladindatav1connect.ObjectServiceGetObjectProcedure, 0, connect.CodeUnavailable},
+		{"no code", paladindatav1connect.ObjectServiceGetObjectProcedure, 1, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := paladintest.New(t)
+			defer func() {
+				if recover() == nil {
+					t.Error("FailRPC did not panic")
+				}
+			}()
+			srv.FailRPC(tc.procedure, tc.times, tc.code)
+		})
 	}
 }
