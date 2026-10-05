@@ -449,6 +449,33 @@ func TestGetEffectivePolicy(t *testing.T) {
 		}
 	})
 
+	// A collection with no policy of its own, in a bucket with none, still
+	// lists both: the tab shows what a request on it is subject to, and the
+	// answer "nothing more" is part of that. They were dropped, so picking
+	// a collection changed nothing on the page.
+	t.Run("empty bucket and collection layers are listed", func(t *testing.T) {
+		const bucket = "storageBackends/primary/buckets/shared"
+		fs := &fakeStore{fetchFn: func(context.Context, uuid.UUID, string) (cedar.Layers, []byte, string, error) {
+			return cedar.Layers{Tenant: `permit(principal, action, resource);`, BucketName: bucket}, nil, "", nil
+		}}
+		h := NewHandler(allowEngine(), fs)
+		out, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/"+tid.String()+"/collections/logs", tid)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		var sources []string
+		for _, l := range out.Layers {
+			sources = append(sources, l.Source)
+		}
+		want := []string{BuiltinLayerSource, "tenants/" + tid.String(), bucket, "tenants/" + tid.String() + "/collections/logs"}
+		if strings.Join(sources, ",") != strings.Join(want, ",") {
+			t.Fatalf("layers = %v, want %v", sources, want)
+		}
+		if out.Layers[2].CedarPolicy != "" || out.Layers[3].CedarPolicy != "" {
+			t.Errorf("empty layers carry text: %+v", out.Layers[2:])
+		}
+	})
+
 	t.Run("a name that is not one is InvalidArgument", func(t *testing.T) {
 		h := NewHandler(allowEngine(), &fakeStore{})
 		_, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/not-a-uuid", tid)
@@ -467,6 +494,23 @@ func TestParseSimulateResource(t *testing.T) {
 		}
 		if gotT != tenant || gotK != "logs" {
 			t.Fatalf("got (%v,%q), want %v/logs", gotT, gotK, tenant)
+		}
+	})
+
+	// A collection may contain '/'. Taking the next path segment read
+	// "e2e/logs" as "e2e" — another collection, with another policy.
+	t.Run("a collection containing a slash", func(t *testing.T) {
+		gotT, gotK, err := parseSimulateResource("tenants/"+tenant.String()+"/collections/e2e/logs", fallback)
+		if err != nil || gotT != tenant || gotK != "e2e/logs" {
+			t.Fatalf("got (%v,%q,%v), want %v/e2e/logs", gotT, gotK, err, tenant)
+		}
+	})
+
+	t.Run("an object in such a collection", func(t *testing.T) {
+		name := "tenants/" + tenant.String() + "/collections/e2e/logs/objects/" + uuid.NewString()
+		gotT, gotK, err := parseSimulateResource(name, fallback)
+		if err != nil || gotT != tenant || gotK != "e2e/logs" {
+			t.Fatalf("got (%v,%q,%v), want %v/e2e/logs", gotT, gotK, err, tenant)
 		}
 	})
 

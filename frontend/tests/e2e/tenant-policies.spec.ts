@@ -26,3 +26,36 @@ test("a tenant's Policies tab shows its effective policy", async ({
     page.getByText(`tenants/${tenant.tenantId}`, { exact: true }),
   ).toBeVisible();
 });
+
+// Picking a collection shows the layers a request on it also meets — its
+// bucket's and its own — even when, as for a fresh collection, they are
+// empty. They used to be dropped, so the page did not change.
+test("picking a collection adds its bucket's and its own layers", async ({
+  page,
+  makeTenant,
+  makeBucket,
+  makeCollection,
+}) => {
+  await loginAsAdmin(page);
+  const tenant = await makeTenant();
+  const bucket = await makeBucket();
+  const collection = await makeCollection({
+    tenantId: tenant.tenantId,
+    bucket,
+  });
+  await gotoSettled(page, `/tenants/${tenant.tenantId}/policies`);
+
+  await page.getByRole("combobox", { name: "Scope" }).click();
+  await page
+    .getByRole("option", { name: `Collection ${collection.collection}` })
+    .click();
+  await expect(
+    page.getByText(
+      `tenants/${tenant.tenantId}/collections/${collection.collection}`,
+      { exact: true },
+    ),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(
+    page.getByText(collection.bucket, { exact: true }),
+  ).toBeVisible();
+});
