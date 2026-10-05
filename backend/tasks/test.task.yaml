@@ -45,9 +45,15 @@ tasks:
       # binary and run in about a minute, so this is headroom for a loaded CI
       # runner, not a budget anything is close to.
       INTEGRATION_TIMEOUT: 20m
+      # Every package holding a test file behind the tag, found rather than
+      # listed. A fixed ./tests/integration/... left two such files under
+      # internal/ compiling and never running; a package that adds one now
+      # runs without anyone remembering this line.
+      INTEGRATION_PKGS:
+        sh: find . -name '*_test.go' -exec grep -l '^//go:build integration' {} + | xargs -n1 dirname | sort -u | tr '\n' ' '
     cmds:
-      # Both levels: the assembled application and components/.
-      - go test -tags=integration -count=1 -timeout={{.INTEGRATION_TIMEOUT}} ./tests/integration/...
+      - echo "integration packages - {{.INTEGRATION_PKGS}}"
+      - go test -tags=integration -count=1 -timeout={{.INTEGRATION_TIMEOUT}} {{.INTEGRATION_PKGS}}
 
   mutate:
     desc: "Mutation testing over one package: how much of it do the tests hold?"
