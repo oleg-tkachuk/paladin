@@ -62,11 +62,16 @@ func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UU
 	return nil
 }
 
+// maxFilteredBatches bounds how many store pages one ListAuditLog call reads
+// to fill a page whose filter the store could not apply. It caps the work a
+// filter that matches nothing can cause, at the cost of a short page with a
+// cursor once it is spent.
+const maxFilteredBatches = 10
+
 // ListAuditLog returns one page of audit entries. `filter` is an optional
 // CEL expression evaluated against AuditLogSchema; rows that fail the
-// predicate are dropped before the page is returned. The repo cursor is
-// preserved as-is so the caller can paginate even when most rows in a
-// page get filtered out.
+// predicate are dropped, and further store pages are read to fill the page
+// (up to maxFilteredBatches).
 func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditArgs, filter string) ([]admindomain.AuditEntry, string, error) {
 	caller, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
@@ -102,17 +107,44 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 	if filter == "" {
 		return page, next, nil
 	}
-	out := page[:0]
-	for i := range page {
-		match, err := celpkg.Match(prog, auditEntryRow(page[i]))
-		if err != nil {
-			return nil, "", connect.NewError(connect.CodeInternal, fmt.Errorf("filter eval: %w", err))
-		}
-		if match {
+	// Part of the filter ran after the fetch, so the batch may have kept
+	// few of its rows or none — a disjunction, which pushdown does not
+	// reach, keeps whatever happens to match among the newest rows of the
+	// whole log. Read on until the page is full, the log ends, or the scan
+	// bound is spent; past the bound the caller gets what was found and a
+	// cursor to go on from.
+	//
+	// A batch that came with a cursor was full, so its length is the page
+	// size the store applied — whatever args.PageSize asked for.
+	want := len(page)
+	var out []admindomain.AuditEntry
+	for batches := 1; ; batches++ {
+		for i := range page {
+			match, err := celpkg.Match(prog, auditEntryRow(page[i]))
+			if err != nil {
+				return nil, "", connect.NewError(connect.CodeInternal, fmt.Errorf("filter eval: %w", err))
+			}
+			if !match {
+				continue
+			}
 			out = append(out, page[i])
+			if len(out) == want {
+				// Full mid-batch: resume after the last row returned, not
+				// after the batch, or the rest of it would be skipped.
+				if i < len(page)-1 || next != "" {
+					return out, admindomain.AuditCursor(page[i]), nil
+				}
+				return out, "", nil
+			}
+		}
+		if next == "" || batches == maxFilteredBatches {
+			return out, next, nil
+		}
+		args.AfterAt, args.AfterID = decodeCursor(next)
+		if page, next, err = h.repo.List(ctx, args); err != nil {
+			return nil, "", err
 		}
 	}
-	return out, next, nil
 }
 
 // applyAuditPushdown extracts the SQL-expressible subset of the CEL
