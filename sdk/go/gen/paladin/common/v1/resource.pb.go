@@ -136,7 +136,15 @@ type PresignedUrl struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Url   string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	// HTTP method: PUT for upload, GET for download, POST for presigned POST.
-	Method          string            `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
+	Method string `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
+	// Headers the request must carry exactly as given: the signature covers
+	// them, and storage refuses a request without them. Content-Length and Host
+	// are among them because the signature covers them too, but an HTTP client
+	// sets both itself — Content-Length from the body, Host from the URL — and
+	// may refuse to take them from the caller, as a browser does. A client
+	// sends a body of exactly the Content-Length given here and lets its HTTP
+	// stack write the header; one that cannot (a streamed body its stack would
+	// send chunked) sets it from this value.
 	RequiredHeaders map[string]string `protobuf:"bytes,3,rep,name=required_headers,json=requiredHeaders,proto3" json:"required_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Populated only for presigned-POST uploads.
 	PostPolicy *PresignedPostPolicy `protobuf:"bytes,4,opt,name=post_policy,json=postPolicy,proto3" json:"post_policy,omitempty"`
