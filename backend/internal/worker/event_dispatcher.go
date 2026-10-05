@@ -931,7 +931,7 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 	}
 	sqsGroups := map[string][]sqsQueued{}
 	sqsCfgs := map[string]sqsSinkConfig{}
-	natsGroups := map[string][]natsQueued{}
+	natsGroups := map[natsPoolKey][]natsQueued{}
 	kafkaGroups := map[kafkaWriterKey][]kafkaQueued{}
 	for _, p := range batchRows {
 		evt := Event{}
