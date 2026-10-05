@@ -197,6 +197,7 @@ p, err := paladin.Connect(endpoints, paladin.WithTokens(session), paladin.WithTr
 | `WithTransferRewrite(func(*url.URL) *url.URL)` | The general form: any mapping, the signed Host still kept. |
 | `WithTransferHTTPClient(c)` | Sends through `c` — a proxy, a TLS configuration, instrumentation. Redirects are still refused. |
 | `(*Transfer).Put(ctx, signed, body, size)` | Sends one presigned PUT you drive yourself — a part of a multipart upload — and returns the ETag. |
+| `required_headers` | Every header a presigned URL lists is sent as given, except `Content-Length` and `Host`: the signature covers them too, but they are the body's length and the URL's host, which `net/http` writes itself. A request of your own sends a body of exactly the listed length; a browser refuses to set either and does not need to. |
 | `*TransferError` | A request storage refused, or answered with a redirect: `Method`, `Host` (the URL's query is the signature and is not kept), `Status`, and the first 512 bytes of the `Body`. |
 
 ### TLS and workload identity
@@ -395,7 +396,16 @@ created the first time and existing after, for any backend id. `Put` stores
 an object directly; `MarkFailed` fails a pending one, as the server's
 reconciler does when its URL expired with nothing stored; `Tenant` and `Collection` name the fake's tenant and its
 collections, all of which exist; `Requests` lists the RPCs received, each
-with its `Procedure` and `Header`, for a test of what the client sent.
+with its `Procedure`, `Header` and `Message` — a copy of the request — for a
+test of what the client sent. `Calls(procedure, match)` returns a
+procedure's requests whose message `match` accepts, so a test sharing the
+fake counts its own:
+
+```go
+mine := srv.Calls(paladindatav1connect.ObjectServiceGetObjectProcedure, func(m proto.Message) bool {
+	return m.(*datav1.GetObjectRequest).GetName() == obj.GetName()
+})
+```
 
 `PresignDownload` signs a GET on the fake's storage, as the server does: it
 expires after `DefaultDownloadTTL` (15 minutes) unless the request names a
@@ -415,9 +425,43 @@ srv.FailRPC(paladindatav1connect.ObjectServiceGetObjectProcedure, 1, connect.Cod
 // the first GetObject is Unavailable, the second is served
 ```
 
+`FailRPCIf(procedure, match, times, code)` fails only the calls whose request
+`match` accepts — one object, one collection — and serves the procedure's
+other calls, so parallel tests on one fake each fail their own. Its failures
+stack; the latest that matches takes a call, and a later `FailRPC` still
+replaces the earlier one.
+
 `FailStorage` answers storage requests with a status of the test's choosing
 — an expired URL, a busy store — and `FailStorageAfterStoring` loses a PUT's
 answer after storing its body; `StorageOps` lists what storage received.
+
+By default the fake serves every call, whatever credential it carries.
+`paladintest.New(t, paladintest.WithStrictAuth())` checks credentials as the
+data plane does. The data plane takes the tenant from the credential — there
+is no tenant header — so the fake issues the credentials it accepts, each
+for a tenant: `IssueBearerToken`, `IssueAPIToken` (with the server's
+`paladin_pat_` prefix) and `IssueCapability`. `Revoke(token)` revokes one.
+
+```go
+srv := paladintest.New(t, paladintest.WithStrictAuth())
+p := srv.Connect(paladin.WithBearerToken(srv.IssueBearerToken(srv.Tenant())))
+```
+
+It refuses as the server does, with the server's code and message and no
+`ErrorInfo` reason, since the server's authentication sends none:
+
+| Call | Answer |
+| --- | --- |
+| No credential, or an `Authorization` that is not a bearer token | `Unauthenticated` |
+| A bearer or API token the fake did not issue, or revoked | `Unauthenticated` |
+| A capability the fake did not issue, or revoked | `PermissionDenied` — the server's answer to any capability it cannot verify |
+| A `name` or `parent` in another tenant, or another tenant's multipart upload | `PermissionDenied` |
+
+It checks only that: the credential is one it issued, not revoked, and of
+the tenant the call names. It verifies no signature, Biscuit, caveat,
+scope, audience or expiry, and has no platform admin acting in another
+tenant. A refused call is in `Requests`, and is refused before `FailRPC`'s
+failures, which it does not spend.
 
 ### Concurrency
 
