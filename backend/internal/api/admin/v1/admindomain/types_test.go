@@ -2,6 +2,7 @@ package admindomain
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -20,5 +21,16 @@ func TestAuditEntryResourceTenant(t *testing.T) {
 		if got := (AuditEntry{ResourceName: name}).ResourceTenant(); got != want {
 			t.Errorf("ResourceTenant(%q) = %s, want %s", name, got, want)
 		}
+	}
+}
+
+// The cursor is cut by the store and by the audit handler, and read back by
+// both; the time is UTC so one instant is one token whatever zone it came in.
+func TestAuditCursor(t *testing.T) {
+	id := uuid.New()
+	at := time.Date(2026, 3, 4, 5, 6, 7, 890, time.FixedZone("UTC+3", 3*60*60))
+	got := AuditCursor(AuditEntry{EntryID: id, At: at})
+	if want := "2026-03-04T02:06:07.00000089Z/" + id.String(); got != want {
+		t.Errorf("AuditCursor = %q, want %q", got, want)
 	}
 }

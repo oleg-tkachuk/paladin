@@ -23,7 +23,8 @@ func (allowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ str
 type fakeAuditRepo struct {
 	pages [][]admindomain.AuditEntry // each call to List returns next page
 	calls int
-	args  admindomain.ListAuditArgs // the last List's arguments
+	args  admindomain.ListAuditArgs   // the last List's arguments
+	seen  []admindomain.ListAuditArgs // every List's arguments, in order
 }
 
 func (f *fakeAuditRepo) Insert(context.Context, admindomain.AuditEntry) error { return nil }
@@ -41,6 +42,7 @@ func (f *fakeAuditRepo) Get(context.Context, uuid.UUID) (admindomain.AuditEntry,
 }
 func (f *fakeAuditRepo) List(_ context.Context, args admindomain.ListAuditArgs) ([]admindomain.AuditEntry, string, error) {
 	f.args = args
+	f.seen = append(f.seen, args)
 	if f.calls >= len(f.pages) {
 		return nil, "", nil
 	}
@@ -246,4 +248,111 @@ func TestListAuditLogTrailTenant(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A filter the store cannot apply — a disjunction — keeps whatever matches
+// among the newest rows of the whole log. The handler reads on until the page
+// is full, so a match that is not among them is still found, and the page is
+// not handed back empty with a cursor.
+func TestListAuditLogFillsAPageAcrossBatches(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	entry := func(i int, subject string) admindomain.AuditEntry {
+		e := mkEntry(t0.Add(-time.Duration(i) * time.Second)) // newest first
+		e.ActorSubject = subject
+		return e
+	}
+	const filter = `actor_subject == "bob" || actor_subject == "carol"`
+
+	t.Run("matches spread over batches", func(t *testing.T) {
+		d, e := entry(3, "bob"), entry(4, "carol")
+		repo := &fakeAuditRepo{pages: [][]admindomain.AuditEntry{
+			{entry(0, "alice"), entry(1, "alice")},
+			{entry(2, "alice"), d},
+			{e, entry(5, "alice")},
+		}}
+		got, next, err := NewHandler(repo, allowAuthorizer{}).ListAuditLog(ctxWithPlatformAdmin(t),
+			admindomain.ListAuditArgs{PageSize: 2}, filter)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if len(got) != 2 || got[0].EntryID != d.EntryID || got[1].EntryID != e.EntryID {
+			t.Fatalf("got %v, want the two matches", subjects(got))
+		}
+		// Full in the middle of the third batch: the next page starts after
+		// the last row returned, not after the batch, whose last row was
+		// never looked at by the caller.
+		if want := admindomain.AuditCursor(e); next != want {
+			t.Errorf("cursor = %q, want %q", next, want)
+		}
+		// Each batch after the first resumes where the one before ended.
+		if len(repo.seen) != 3 || repo.seen[1].AfterID != repo.pages[0][1].EntryID ||
+			repo.seen[2].AfterID != repo.pages[1][1].EntryID {
+			t.Errorf("batches resumed at %v", afterIDs(repo.seen))
+		}
+	})
+
+	t.Run("the log ends first", func(t *testing.T) {
+		d := entry(1, "bob")
+		repo := &fakeAuditRepo{pages: [][]admindomain.AuditEntry{
+			{entry(0, "alice"), d},
+			{entry(2, "alice")},
+		}}
+		got, next, err := NewHandler(repo, allowAuthorizer{}).ListAuditLog(ctxWithPlatformAdmin(t),
+			admindomain.ListAuditArgs{PageSize: 2}, filter)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if len(got) != 1 || got[0].EntryID != d.EntryID || next != "" {
+			t.Errorf("got %v cursor %q, want the one match and no cursor", subjects(got), next)
+		}
+	})
+
+	t.Run("the last row of the log fills the page", func(t *testing.T) {
+		d, e := entry(0, "bob"), entry(1, "carol")
+		repo := &fakeAuditRepo{pages: [][]admindomain.AuditEntry{{d, e}}}
+		_, next, err := NewHandler(repo, allowAuthorizer{}).ListAuditLog(ctxWithPlatformAdmin(t),
+			admindomain.ListAuditArgs{PageSize: 2}, filter)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if next != "" {
+			t.Errorf("cursor = %q past the end of the log, want none", next)
+		}
+	})
+
+	t.Run("the scan bound is spent", func(t *testing.T) {
+		var pages [][]admindomain.AuditEntry
+		for b := 0; b < maxFilteredBatches+1; b++ {
+			pages = append(pages, []admindomain.AuditEntry{entry(2*b, "alice"), entry(2*b+1, "alice")})
+		}
+		repo := &fakeAuditRepo{pages: pages}
+		got, next, err := NewHandler(repo, allowAuthorizer{}).ListAuditLog(ctxWithPlatformAdmin(t),
+			admindomain.ListAuditArgs{PageSize: 2}, filter)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if repo.calls != maxFilteredBatches {
+			t.Errorf("read %d batches, want the bound of %d", repo.calls, maxFilteredBatches)
+		}
+		// Nothing found yet, but the log goes on: the caller can continue.
+		if len(got) != 0 || next == "" {
+			t.Errorf("got %v cursor %q, want an empty page with a cursor", subjects(got), next)
+		}
+	})
+}
+
+func subjects(es []admindomain.AuditEntry) []string {
+	out := make([]string, 0, len(es))
+	for _, e := range es {
+		out = append(out, e.ActorSubject)
+	}
+	return out
+}
+
+func afterIDs(as []admindomain.ListAuditArgs) []uuid.UUID {
+	out := make([]uuid.UUID, 0, len(as))
+	for _, a := range as {
+		out = append(out, a.AfterID)
+	}
+	return out
 }
