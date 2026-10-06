@@ -114,7 +114,7 @@ func (r *QuotaRepoV2) GetTenant(ctx context.Context, tenantID uuid.UUID) (admind
 		}
 		return admindomain.Quota{}, err
 	}
-	return quotaFromSQLC(row.Quota, row.BackendName, row.BucketName), nil
+	return quotaFromSQLC(row), nil
 }
 
 func (r *QuotaRepoV2) GetBucket(ctx context.Context, backendID, bucketName string) (admindomain.Quota, error) {
@@ -135,23 +135,32 @@ func getBucketQuota(ctx context.Context, qq *sqlc.Queries, backendID, bucketName
 		}
 		return admindomain.Quota{}, err
 	}
-	return quotaFromSQLC(row.Quota, row.BackendName, row.BucketName), nil
+	return bucketQuotaFromSQLC(row.BucketQuota, row.BackendName, row.BucketName, uuidFrom(row.OwnerTenantID)), nil
 }
 
 func (r *QuotaRepoV2) IncrementUsage(ctx context.Context, quotaID uuid.UUID, deltaBytes, deltaCount int64) error {
 	return r.q.IncrementQuotaUsage(ctx, pgUUID(quotaID), deltaBytes, deltaCount)
 }
 
-// GetByID reads a quota of either scope by its id.
+// GetByID reads a quota of either scope by its id. The two tables draw ids
+// from one uuid space (044_bucket_quotas.sql kept each moved row's id), so the
+// tenant table is tried first and the bucket table on a miss.
 func (r *QuotaRepoV2) GetByID(ctx context.Context, quotaID uuid.UUID) (admindomain.Quota, error) {
 	row, err := r.q.GetQuotaByID(ctx, pgUUID(quotaID))
+	if err == nil {
+		return quotaFromSQLC(row), nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return admindomain.Quota{}, err
+	}
+	brow, err := r.q.GetBucketQuotaByID(ctx, pgUUID(quotaID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return admindomain.Quota{}, admindomain.ErrNotFound
 		}
 		return admindomain.Quota{}, err
 	}
-	return quotaFromSQLC(row.Quota, row.BackendName, row.BucketName), nil
+	return bucketQuotaFromSQLC(brow.BucketQuota, brow.BackendName, brow.BucketName, uuidFrom(brow.OwnerTenantID)), nil
 }
 
 // ResetDaily clears the per-day counters. ErrNotFound when no row was
@@ -168,27 +177,64 @@ func (r *QuotaRepoV2) ResetDaily(ctx context.Context, quotaID uuid.UUID, at time
 	return nil
 }
 
-// OnObjectPromoted increments the tenant-scope usage counters by one
-// object plus its byte size. No-op when the tenant has no quota row —
-// quotas are opt-in. Errors are returned to the caller; they're treated
-// as non-fatal at the handler level (touchQuota suppresses).
-func (r *QuotaRepoV2) OnObjectPromoted(ctx context.Context, tenantID uuid.UUID, sizeBytes int64) error {
-	q, err := r.GetTenant(ctx, tenantID)
+// ResetBucketDaily clears a bucket quota's per-day counters; ErrNotFound when
+// no such quota exists.
+func (r *QuotaRepoV2) ResetBucketDaily(ctx context.Context, quotaID uuid.UUID, at time.Time) error {
+	n, err := r.q.ResetBucketQuotaDaily(ctx, pgUUID(quotaID), pgTS(at))
 	if err != nil {
-		if errors.Is(err, admindomain.ErrNotFound) {
-			return nil
-		}
 		return err
 	}
-	return r.IncrementUsage(ctx, q.QuotaID, sizeBytes, 1)
+	if n == 0 {
+		return admindomain.ErrNotFound
+	}
+	return nil
 }
 
-func quotaFromSQLC(q sqlc.Quota, backendName, bucketName string) admindomain.Quota {
+// OnObjectPromoted charges one object of sizeBytes to the tenant's quota and
+// to the quota of the bucket the object lives in. Either may be absent —
+// quotas are opt-in — and an absent one is skipped. Both are attempted; the
+// errors are joined and returned, and the handlers treat them as non-fatal
+// (touchQuota suppresses) because the reconciler corrects the totals.
+func (r *QuotaRepoV2) OnObjectPromoted(ctx context.Context, tenantID, objectID uuid.UUID, sizeBytes int64) error {
+	var tenantErr error
+	q, err := r.GetTenant(ctx, tenantID)
+	switch {
+	case errors.Is(err, admindomain.ErrNotFound):
+	case err != nil:
+		tenantErr = err
+	default:
+		tenantErr = r.IncrementUsage(ctx, q.QuotaID, sizeBytes, 1)
+	}
+	bucketErr := r.q.IncrementBucketQuotaUsageForObject(ctx, pgUUID(objectID), sizeBytes, 1)
+	return errors.Join(tenantErr, bucketErr)
+}
+
+func quotaFromSQLC(q sqlc.Quota) admindomain.Quota {
 	return admindomain.Quota{
 		QuotaID:           uuidFrom(q.ID),
 		TenantID:          uuidFrom(q.TenantID),
+		MaxTotalBytes:     q.MaxTotalBytes,
+		MaxObjectCount:    q.MaxObjectCount,
+		MaxBytesPerDay:    q.MaxBytesPerDay,
+		MaxObjectsPerDay:  q.MaxObjectsPerDay,
+		UsageTotalBytes:   q.UsageTotalBytes,
+		UsageObjectCount:  q.UsageObjectCount,
+		UsageBytesToday:   q.UsageBytesToday,
+		UsageObjectsToday: q.UsageObjectsToday,
+		LastResetAt:       timePtr(q.LastResetAt),
+		ResourceVersion:   q.ResourceVersion,
+		UpdatedAt:         timeFrom(q.UpdatedAt),
+	}
+}
+
+// bucketQuotaFromSQLC maps a bucket_quotas row. TenantID stays uuid.Nil: that
+// is how admindomain.Quota marks the bucket scope.
+func bucketQuotaFromSQLC(q sqlc.BucketQuota, backendName, bucketName string, owner uuid.UUID) admindomain.Quota {
+	return admindomain.Quota{
+		QuotaID:           uuidFrom(q.ID),
 		BackendID:         backendName,
 		BucketName:        bucketName,
+		OwnerTenantID:     owner,
 		MaxTotalBytes:     q.MaxTotalBytes,
 		MaxObjectCount:    q.MaxObjectCount,
 		MaxBytesPerDay:    q.MaxBytesPerDay,

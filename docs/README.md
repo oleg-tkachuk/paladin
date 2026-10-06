@@ -66,6 +66,9 @@ Numbered, immutable once accepted, superseded rather than edited. See
 | [0020](adr/0020-sdk-integration-grade.md) | The SDKs to integration grade |
 | [0021](adr/0021-biscuit-copies.md) | Biscuit copies — narrowed offline, revoked and counted by block |
 | [0022](adr/0022-data-plane-acts-on-the-named-tenant.md) | The data plane acts on the tenant a platform admin names |
+| [0023](adr/0023-one-metrics-contract.md) | One metrics contract from process to alert |
+| [0024](adr/0024-credential-actions-and-the-capability-issuer-grant.md) | Credential actions named per resource; the capability issuer's built-in grant |
+| [0025](adr/0025-bucket-quotas-are-platform-configuration.md) | Bucket quotas are platform configuration, outside RLS |
 
 ## Runbooks
 

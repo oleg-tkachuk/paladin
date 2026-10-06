@@ -483,23 +483,6 @@ finding moving from "packages you import" to "your code is affected".
   field set for callers holding it, and tests for both sides of the gate.
 - **Blockers:** deciding who counts as privileged on the data plane.
 
-### Bucket-scoped quotas are invisible to the runtime under RLS
-
-- **Status:** Open — found 2026-10-06, needs an RLS design decision.
-- **Reason:** a bucket-scoped quota row has `tenant_id IS NULL`, and the
-  `tenant_isolation` policy on `quotas` (`002_roles_and_rls.sql`) admits only
-  `tenant_id = paladin_session_tenant_id()` or the cross-tenant read flag. So
-  through the `paladin_app` pool `SetQuota` for a bucket fails WITH CHECK,
-  `GetBucketQuota` returns NotFound, and `QuotaSoftCheck` never sees the row —
-  a bucket cap is not enforced at runtime. The component tests missed it
-  because they run on the superuser pool. `ResetQuotaUsage` refuses bucket
-  scope with FailedPrecondition until this is settled.
-- **Definition of Done:** a migration giving bucket-scoped rows a policy (e.g.
-  readable by every tenant session and writable through the role-gated
-  handlers, or scoped to `buckets.owner_tenant_id`); set, read, enforce and
-  reset each covered through `rlsPool` in `tests/integration/components`.
-- **Blockers:** choosing who may read a shared bucket's aggregate usage.
-
 ### Console `/users`: no user detail page, no scope grants
 
 - **Status:** Deferred
@@ -921,28 +904,32 @@ finding moving from "packages you import" to "your code is affected".
   on-demand, not background: the page polls only while an operator has it open
   in a visible tab.
 
-### Announce that bucket-scoped and per-day quota caps now reject
+### Announce that bucket and per-day quota caps now reject
 
 - **Status:** Blocked (operator action — a coding session cannot send the
   announcement).
-- **Reason:** `QuotaSoftCheck` used to compare only `max_total_bytes` /
-  `max_object_count`, and only against the caller's tenant row. It now also
-  enforces `max_bytes_per_day` / `max_objects_per_day`, and checks the bucket
-  the upload's ObjectKey resolves to. Anyone who set one of those caps while
-  it was inert has a live rejection waiting: the caps were settable through
-  QuotaService and MCP the whole time, and the console displayed their usage,
-  so "nobody could have set one" is not a safe assumption.
+- **Reason:** bucket caps were never enforced: the rows sat under the tenant
+  RLS policy with `tenant_id` NULL, invisible to the upload check, and their
+  daily counters were never charged. Since `044_bucket_quotas.sql` they live in
+  `bucket_quotas`, are charged on every promote and are enforced. Per-day caps
+  on tenant quotas are enforced too. Anyone who set one of these caps while it
+  was inert has a live rejection waiting.
 - **Definition of Done:**
   - Run the over-cap query below against each environment before the rollout
     reaches it, and contact the owners of anything it returns:
 
     ```sql
-    SELECT quota_id, tenant_id, backend_id, bucket_name,
-           usage_total_bytes,  max_total_bytes,
-           usage_object_count, max_object_count,
-           usage_bytes_today,  max_bytes_per_day,
-           usage_objects_today, max_objects_per_day
-      FROM quotas
+    SELECT * FROM (
+        SELECT 'tenant' AS scope, id, tenant_id AS target,
+               usage_total_bytes, max_total_bytes, usage_object_count, max_object_count,
+               usage_bytes_today, max_bytes_per_day, usage_objects_today, max_objects_per_day
+          FROM quotas
+        UNION ALL
+        SELECT 'bucket', id, bucket_id,
+               usage_total_bytes, max_total_bytes, usage_object_count, max_object_count,
+               usage_bytes_today, max_bytes_per_day, usage_objects_today, max_objects_per_day
+          FROM bucket_quotas
+    ) q
      WHERE (max_total_bytes     > 0 AND usage_total_bytes   >= max_total_bytes)
         OR (max_object_count    > 0 AND usage_object_count  >= max_object_count)
         OR (max_bytes_per_day   > 0 AND usage_bytes_today   >= max_bytes_per_day)
@@ -950,7 +937,7 @@ finding moving from "packages you import" to "your code is affected".
     ```
 
     Run it as a BYPASSRLS role — `quotas` is RLS'd.
-  - Release note names both changes explicitly.
+  - Release note names the change explicitly.
 - **Blockers:** none technical. Deliberately left as a human step: the rollout
   is safe on dev (where this landed) and needs a heads-up before it reaches an
   environment with real tenants.

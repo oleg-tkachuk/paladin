@@ -29,19 +29,17 @@ const (
 // to the number on the card. Each returns (tenant_id text, count); a NULL
 // tenant_id is a row no tenant owns.
 var signalQueries = map[Signal]string{
-	// A bucket-scoped quota carries no tenant_id. It belongs to the tenant
-	// owning the bucket; a shared bucket has no owner, and its quota is
-	// counted as unattributed rather than dropped.
+	// A bucket quota belongs to the tenant owning the bucket; a shared
+	// bucket has no owner, and its quota is counted as unattributed rather
+	// than dropped.
 	SignalQuotaAtLimit: `
-		SELECT COALESCE(tenant_id, (SELECT b.owner_tenant_id FROM buckets b WHERE b.id = quotas.bucket_id))::text,
-		       count(*)
-		FROM quotas
+		SELECT owner_tenant_id::text, count(*)
+		FROM ` + allQuotaRowsSQL + `
 		WHERE ` + quotaAtLimitSQL + `
 		GROUP BY 1`,
 	SignalQuotaNearLimit: `
-		SELECT COALESCE(tenant_id, (SELECT b.owner_tenant_id FROM buckets b WHERE b.id = quotas.bucket_id))::text,
-		       count(*)
-		FROM quotas
+		SELECT owner_tenant_id::text, count(*)
+		FROM ` + allQuotaRowsSQL + `
 		WHERE ` + quotaNearLimitSQL + ` AND NOT ` + quotaAtLimitSQL + `
 		GROUP BY 1`,
 	SignalCapabilitiesExpiring: `

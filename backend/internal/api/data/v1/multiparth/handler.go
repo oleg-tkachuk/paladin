@@ -211,7 +211,7 @@ type VersionedObject struct {
 // one on object.Handler. Multipart and single-PUT promotions share usage
 // counters per tenant.
 type QuotaUpdater interface {
-	OnObjectPromoted(ctx context.Context, tenantID uuid.UUID, sizeBytes int64) error
+	OnObjectPromoted(ctx context.Context, tenantID, objectID uuid.UUID, sizeBytes int64) error
 }
 
 type Handler struct {
@@ -361,7 +361,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	// Suppressed errors: drift gets corrected by the nightly accounting job;
 	// a transient failure must not undo a successful state transition.
 	if changed && h.quota != nil {
-		if err := h.quota.OnObjectPromoted(ctx, sess.TenantID, size); err != nil {
+		if err := h.quota.OnObjectPromoted(ctx, sess.TenantID, sess.ObjectID, size); err != nil {
 			// Suppressed on purpose — a transient accounting failure must not
 			// undo a successful state transition, and the nightly job corrects
 			// drift. Logged because that correction is invisible otherwise:

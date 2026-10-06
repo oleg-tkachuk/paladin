@@ -362,6 +362,23 @@ type Bucket struct {
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type BucketQuota struct {
+	ID                pgtype.UUID        `json:"id"`
+	BucketID          pgtype.UUID        `json:"bucket_id"`
+	MaxTotalBytes     int64              `json:"max_total_bytes"`
+	MaxObjectCount    int64              `json:"max_object_count"`
+	MaxBytesPerDay    int64              `json:"max_bytes_per_day"`
+	MaxObjectsPerDay  int64              `json:"max_objects_per_day"`
+	UsageTotalBytes   int64              `json:"usage_total_bytes"`
+	UsageObjectCount  int64              `json:"usage_object_count"`
+	UsageBytesToday   int64              `json:"usage_bytes_today"`
+	UsageObjectsToday int64              `json:"usage_objects_today"`
+	LastResetAt       pgtype.Timestamptz `json:"last_reset_at"`
+	ResourceVersion   int64              `json:"resource_version"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CapabilityBiscuitRevocation struct {
 	RevocationID []byte             `json:"revocation_id"`
 	CapabilityID pgtype.UUID        `json:"capability_id"`
@@ -682,7 +699,6 @@ type PendingPurge struct {
 type Quota struct {
 	ID                pgtype.UUID        `json:"id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
-	BucketID          pgtype.UUID        `json:"bucket_id"`
 	MaxTotalBytes     int64              `json:"max_total_bytes"`
 	MaxObjectCount    int64              `json:"max_object_count"`
 	MaxBytesPerDay    int64              `json:"max_bytes_per_day"`

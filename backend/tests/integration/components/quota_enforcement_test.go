@@ -127,7 +127,7 @@ func TestBucketQuotaEnforcementEndToEnd(t *testing.T) {
 	// No tenant quota at all — this must be the BUCKET row doing the work,
 	// not a tenant row happening to reject.
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (id, bucket_id, max_object_count)
+		`INSERT INTO bucket_quotas (id, bucket_id, max_object_count)
 		 SELECT $1, (SELECT b.id FROM buckets b
 			  JOIN storage_backends sb ON sb.id = b.backend_id
 			 WHERE sb.name = $2 AND b.name = $3), 2`,
@@ -150,7 +150,7 @@ func TestBucketQuotaEnforcementEndToEnd(t *testing.T) {
 	// Raising the bucket cap unblocks it — proving the rejection tracked
 	// that row rather than some unrelated condition.
 	mustExec(t, ctx, pool,
-		`UPDATE quotas SET max_object_count = 10
+		`UPDATE bucket_quotas SET max_object_count = 10
 		 WHERE bucket_id = (SELECT b.id FROM buckets b
 		                      JOIN storage_backends sb ON sb.id = b.backend_id
 		                     WHERE sb.name = $1 AND b.name = $2)`,
