@@ -6,10 +6,13 @@ import asyncio
 import base64
 import hashlib
 import io
+import itertools
+import threading
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor
 from concurrent.futures import wait as wait_futures
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from typing import IO, Any, TypeVar
 
@@ -19,6 +22,7 @@ from google.protobuf.message import Message
 from google.rpc import code_pb2
 
 from paladin._retry import already_stored, awith_retries, with_retries
+from paladin.client import _own_keys, current_idempotency_key, idempotency_key
 from paladin.common.v1 import resource_pb2
 from paladin.data.v1 import (
     multipart_service_pb2,
@@ -450,14 +454,15 @@ def _upload_multipart(
             )
 
         def presign() -> resource_pb2.PresignedUrl:
-            return data.multipart_upload.presign_part(
-                multipart_service_pb2.PresignPartRequest(
-                    object_name=name,
-                    upload_id=upload_id,
-                    part_number=index + 1,
-                    checksum_value=checksum,
-                )
-            ).upload_url
+            with _own_keys():
+                return data.multipart_upload.presign_part(
+                    multipart_service_pb2.PresignPartRequest(
+                        object_name=name,
+                        upload_id=upload_id,
+                        part_number=index + 1,
+                        checksum_value=checksum,
+                    )
+                ).upload_url
 
         headers = {_HEADER_CONTENT_LENGTH: str(len(chunk))}
 
@@ -525,11 +530,12 @@ def download_stream(
     (``IntegrityError``)."""
     if offset < 0 or length < 0:
         raise ValueError("a range needs offset >= 0 and length >= 0")
-    resp = data.object.download_object(
-        # Bound to the object's ETag: a range, which the checksum cannot
-        # verify, never splices in another object written at the key.
-        object_service_pb2.DownloadObjectRequest(name=name, require_etag_match=True)
-    )
+    with _own_keys():
+        resp = data.object.download_object(
+            # Bound to the object's ETag: a range, which the checksum cannot
+            # verify, never splices in another object written at the key.
+            object_service_pb2.DownloadObjectRequest(name=name, require_etag_match=True)
+        )
     if not resp.download_url.url:
         raise TransferError(_GET, "", 0, "the server returned no download URL")
     ranged = offset != 0 or length != 0
@@ -541,9 +547,10 @@ def download_stream(
     def presign() -> resource_pb2.PresignedUrl:
         # Bound to the object's ETag as it is now: a replaced object is
         # reported, not read.
-        again = data.object.download_object(
-            object_service_pb2.DownloadObjectRequest(name=name, require_etag_match=True)
-        )
+        with _own_keys():
+            again = data.object.download_object(
+                object_service_pb2.DownloadObjectRequest(name=name, require_etag_match=True)
+            )
         if again.object.etag != resp.object.etag:
             raise ObjectChangedError(f"{name} changed while its download was retried")
         return again.download_url
@@ -720,14 +727,15 @@ async def _aupload_multipart(
             )
 
         async def presign() -> resource_pb2.PresignedUrl:
-            presigned = await data.multipart_upload.presign_part(
-                multipart_service_pb2.PresignPartRequest(
-                    object_name=name,
-                    upload_id=upload_id,
-                    part_number=index + 1,
-                    checksum_value=checksum,
+            with _own_keys():
+                presigned = await data.multipart_upload.presign_part(
+                    multipart_service_pb2.PresignPartRequest(
+                        object_name=name,
+                        upload_id=upload_id,
+                        part_number=index + 1,
+                        checksum_value=checksum,
+                    )
                 )
-            )
             return presigned.upload_url
 
         headers = {_HEADER_CONTENT_LENGTH: str(len(chunk))}
@@ -789,9 +797,10 @@ async def adownload_stream(
     """``download_stream`` for the async clients: an ``AsyncObjectReader``."""
     if offset < 0 or length < 0:
         raise ValueError("a range needs offset >= 0 and length >= 0")
-    resp = await data.object.download_object(
-        object_service_pb2.DownloadObjectRequest(name=name, require_etag_match=True)
-    )
+    with _own_keys():
+        resp = await data.object.download_object(
+            object_service_pb2.DownloadObjectRequest(name=name, require_etag_match=True)
+        )
     if not resp.download_url.url:
         raise TransferError(_GET, "", 0, "the server returned no download URL")
     ranged = offset != 0 or length != 0
@@ -802,9 +811,10 @@ async def adownload_stream(
 
     async def presign() -> resource_pb2.PresignedUrl:
         # As in the sync form: a replaced object is reported, not read.
-        again = await data.object.download_object(
-            object_service_pb2.DownloadObjectRequest(name=name, require_etag_match=True)
-        )
+        with _own_keys():
+            again = await data.object.download_object(
+                object_service_pb2.DownloadObjectRequest(name=name, require_etag_match=True)
+            )
         if again.object.etag != resp.object.etag:
             raise ObjectChangedError(f"{name} changed while its download was retried")
         return again.download_url
@@ -940,6 +950,26 @@ async def adownload_many(
         yield outcome
 
 
+def _item_keys() -> Callable[[], AbstractContextManager[None]]:
+    """The caller's ``idempotency_key``, if any, narrowed to one item at a time:
+    each call of the returned function opens a block keyed ``key/n`` for the
+    next item, in the order items are drawn. Without it every item would share
+    one key across different requests, which the server refuses. Read where
+    the caller's block is in force: a thread of ``_bounded`` does not see it."""
+    base = current_idempotency_key()
+    counter = itertools.count()
+    lock = threading.Lock()
+
+    def keyed() -> AbstractContextManager[None]:
+        if base is None:
+            return nullcontext()
+        with lock:
+            n = next(counter)
+        return idempotency_key(f"{base}/{n}")
+
+    return keyed
+
+
 def upload_many(
     data: DataPlane,
     items: Iterable[UploadItem],
@@ -958,19 +988,22 @@ def upload_many(
     whole body up to ``multipart_threshold`` or ``part_concurrency`` parts
     above it. A crashed upload to resume goes through ``upload``."""
 
+    keys = _item_keys()
+
     def one(item: UploadItem) -> types_pb2.Object:
-        return upload(
-            data,
-            parent=item.parent,
-            content_type=item.content_type,
-            body=item.body,
-            size=item.size,
-            key=item.key,
-            metadata=item.metadata,
-            tags=item.tags,
-            multipart_threshold=multipart_threshold,
-            part_concurrency=part_concurrency,
-        )
+        with keys():
+            return upload(
+                data,
+                parent=item.parent,
+                content_type=item.content_type,
+                body=item.body,
+                size=item.size,
+                key=item.key,
+                metadata=item.metadata,
+                tags=item.tags,
+                multipart_threshold=multipart_threshold,
+                part_concurrency=part_concurrency,
+            )
 
     return _bounded(one, items, concurrency)
 
@@ -985,19 +1018,22 @@ async def aupload_many(
 ) -> AsyncIterator[tuple[UploadItem, types_pb2.Object | BaseException]]:
     """``upload_many`` for the async clients."""
 
-    def one(item: UploadItem) -> Awaitable[types_pb2.Object]:
-        return aupload(
-            data,
-            parent=item.parent,
-            content_type=item.content_type,
-            body=item.body,
-            size=item.size,
-            key=item.key,
-            metadata=item.metadata,
-            tags=item.tags,
-            multipart_threshold=multipart_threshold,
-            part_concurrency=part_concurrency,
-        )
+    keys = _item_keys()
+
+    async def one(item: UploadItem) -> types_pb2.Object:
+        with keys():
+            return await aupload(
+                data,
+                parent=item.parent,
+                content_type=item.content_type,
+                body=item.body,
+                size=item.size,
+                key=item.key,
+                metadata=item.metadata,
+                tags=item.tags,
+                multipart_threshold=multipart_threshold,
+                part_concurrency=part_concurrency,
+            )
 
     async for outcome in _abounded(one, items, concurrency):
         yield outcome

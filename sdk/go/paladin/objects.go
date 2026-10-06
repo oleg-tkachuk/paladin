@@ -406,7 +406,7 @@ func sendPart(ctx context.Context, data *DataPlane, session UploadSession, store
 		return sentPart{etag: stored.GetEtag(), checksum: sum}, nil
 	}
 	presign := func(ctx context.Context) (*commonv1.PresignedUrl, error) {
-		signed, err := data.MultipartUpload.PresignPart(ctx, connect.NewRequest(&datav1.PresignPartRequest{
+		signed, err := data.MultipartUpload.PresignPart(ownKeys(ctx), connect.NewRequest(&datav1.PresignPartRequest{
 			ObjectName: session.ObjectName, UploadId: session.UploadID, PartNumber: int32(p.index + 1), //nolint:gosec // parts ≤ 10000 by the contract
 			ChecksumValue: sum,
 		}))

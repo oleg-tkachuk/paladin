@@ -89,11 +89,16 @@ _NO_KEY = ""
 
 @contextmanager
 def idempotency_key(key: str) -> Iterator[None]:
-    """Send ``key`` as the idempotency key on every call made inside the block.
+    """Send ``key`` as the idempotency key on the calls made inside the block
+    that the contract does not declare free of side effects or idempotent —
+    those never carry one.
 
-    The server replays the first response for a key it has already seen, so a
-    mutating call repeated with the same key is safe. Reuse a key only for the
-    same logical operation.
+    The server replays the first response to a request it has already seen
+    with that key, and refuses the key reused for a different request to the
+    same method, so a mutating call repeated with the same key is safe. Reuse
+    a key only for the same logical operation. ``upload``, ``download`` and
+    their ``_many`` forms keep it for the calls that create or complete an
+    object and give every other call its own.
 
     Without one, a call the contract does not declare free of side effects or
     idempotent gets a fresh key of its own — or the request's
@@ -116,6 +121,20 @@ def no_idempotency_key() -> Iterator[None]:
     than be answered with the first response. The server refuses a
     ``Create*`` or ``Issue*`` call without a key. The innermost block wins."""
     token = _idempotency_key.set(_NO_KEY)
+    try:
+        yield
+    finally:
+        _idempotency_key.reset(token)
+
+
+@contextmanager
+def _own_keys() -> Iterator[None]:
+    """Lift any ``idempotency_key`` or ``no_idempotency_key`` for the block,
+    so each call in it gets the default: a fresh key of its own. For the calls
+    a workflow makes more than once per operation — ``download_object`` on a
+    retry after a URL expired, ``presign_part`` per part — which one shared key
+    would make the server refuse."""
+    token = _idempotency_key.set(None)
     try:
         yield
     finally:
@@ -344,10 +363,14 @@ def _key_for(request: object, ctx: RequestContext) -> str | None:
     chosen = _idempotency_key.get()
     if chosen == _NO_KEY:
         return None
-    if chosen:
-        return chosen
+    # A call declared free of side effects or idempotent never carries one,
+    # not even the block's: the server does not memoise a read, and an
+    # idempotent call — regenerate_upload_url — must run again when repeated
+    # rather than hand back the URL it is replacing.
     if ctx.method().idempotency_level != IdempotencyLevel.UNKNOWN:
         return None
+    if chosen:
+        return chosen
     body = getattr(request, "idempotency_key", "")
     if isinstance(body, str) and body:
         return body

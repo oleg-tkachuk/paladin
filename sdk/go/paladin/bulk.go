@@ -3,6 +3,7 @@ package paladin
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -53,7 +54,9 @@ func DownloadMany(ctx context.Context, data *DataPlane, names []string, concurre
 // Up to concurrency uploads are in flight, each with up to
 // opts.PartConcurrency parts; a Stream input holds its parts in flight in
 // memory. opts.OnSession and opts.Resume are refused with ErrBulkSession:
-// an upload to resume after a crash goes through Upload.
+// an upload to resume after a crash goes through Upload. A WithIdempotencyKey
+// key on ctx becomes key + "/" + the input's index for each input, so
+// repeating the same UploadMany repeats each upload rather than colliding.
 func UploadMany(ctx context.Context, data *DataPlane, inputs []UploadInput, concurrency int,
 	opts UploadOptions,
 ) ([]*datav1.Object, map[int]error) {
@@ -66,7 +69,7 @@ func UploadMany(ctx context.Context, data *DataPlane, inputs []UploadInput, conc
 		return objects, failures
 	}
 	failures := bounded(ctx, len(inputs), concurrency, func(i int) error {
-		obj, err := Upload(ctx, data, inputs[i], opts)
+		obj, err := Upload(itemKey(ctx, strconv.Itoa(i)), data, inputs[i], opts)
 		objects[i] = obj
 		return err
 	})
