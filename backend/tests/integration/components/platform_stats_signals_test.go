@@ -54,7 +54,7 @@ func seedSignals(t *testing.T, ctx context.Context, pool *pgxpool.Pool) signalSe
 	bucketQuota := func(bucketID string, usage int64) {
 		t.Helper()
 		mustExec(t, ctx, pool,
-			`INSERT INTO quotas (bucket_id, max_object_count, usage_object_count) VALUES ($1, 100, $2)`,
+			`INSERT INTO bucket_quotas (bucket_id, max_object_count, usage_object_count) VALUES ($1, 100, $2)`,
 			bucketID, usage)
 	}
 	const (

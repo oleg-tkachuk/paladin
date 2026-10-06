@@ -107,7 +107,7 @@ func TestReconcileQuotaUsage_CoversBucketScopedRows(t *testing.T) {
 
 	bucketQuota := uuid.New()
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (id, bucket_id, max_total_bytes)
+		`INSERT INTO bucket_quotas (id, bucket_id, max_total_bytes)
 		 VALUES ($1, (SELECT b.id FROM buckets b
 		          JOIN storage_backends sb ON sb.id = b.backend_id
 		         WHERE sb.name = $2 AND b.name = $3), 100000)`, bucketQuota, backendID, bucketName)
@@ -119,7 +119,7 @@ func TestReconcileQuotaUsage_CoversBucketScopedRows(t *testing.T) {
 		`INSERT INTO buckets (backend_id, name)
 		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, backendID, "bkt-e-"+hex)
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (id, bucket_id, max_total_bytes)
+		`INSERT INTO bucket_quotas (id, bucket_id, max_total_bytes)
 		 VALUES ($1, (SELECT b.id FROM buckets b
 		          JOIN storage_backends sb ON sb.id = b.backend_id
 		         WHERE sb.name = $2 AND b.name = $3), 100000)`, emptyQuota, backendID, "bkt-e-"+hex)
@@ -198,6 +198,43 @@ func TestRollDailyCounters(t *testing.T) {
 	}
 }
 
+// Bucket quotas live in their own table (044_bucket_quotas.sql) and need the
+// same day-boundary roll; one tick rolls both tables and counts both.
+func TestRollDailyCounters_CoversBucketQuotas(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	f := seedFixture(t, ctx, pool)
+
+	tenantStale, bucketStale := uuid.New(), uuid.New()
+	mustExec(t, ctx, pool,
+		`INSERT INTO quotas (id, tenant_id, max_bytes_per_day, usage_bytes_today, last_reset_at)
+		 VALUES ($1, $2, 1000, 900, now() - interval '2 days')`, tenantStale, f.tenantID)
+	mustExec(t, ctx, pool,
+		`INSERT INTO bucket_quotas (id, bucket_id, max_bytes_per_day, usage_bytes_today, last_reset_at)
+		 SELECT $1, c.bucket_id, 1000, 900, now() - interval '2 days'
+		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
+		bucketStale, f.tenantID, f.collection)
+
+	dayStart := time.Now().UTC().Truncate(24 * time.Hour)
+	n, err := adapters.NewQuotaReconcileRepo(pool).RollDailyCounters(ctx, dayStart)
+	if err != nil {
+		t.Fatalf("RollDailyCounters: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("rolled %d rows, want 2 — one per table", n)
+	}
+	var bytesToday int64
+	if err := pool.QueryRow(ctx,
+		`SELECT usage_bytes_today FROM bucket_quotas WHERE id = $1`, bucketStale).
+		Scan(&bytesToday); err != nil {
+		t.Fatalf("read bucket quota: %v", err)
+	}
+	if bytesToday != 0 {
+		t.Errorf("bucket usage_bytes_today = %d after the roll, want 0", bytesToday)
+	}
+}
+
 // A quota idle since an earlier day keeps that day's reset stamp: the roll
 // skips rows with nothing to clear. Its first charge of today used to add to
 // that stale row, and the roll's next tick then saw an old stamp and nonzero
@@ -266,11 +303,14 @@ func insertObj(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture,
 		"k-"+uuid.NewString()[:8], state, size)
 }
 
+// quotaUsage reads a quota of either scope: the id is unique across both tables.
 func quotaUsage(t *testing.T, ctx context.Context, pool *pgxpool.Pool, quotaID uuid.UUID) (int64, int64) {
 	t.Helper()
 	var bytes, count int64
 	if err := pool.QueryRow(ctx,
-		`SELECT usage_total_bytes, usage_object_count FROM quotas WHERE id = $1`,
+		`SELECT usage_total_bytes, usage_object_count FROM quotas WHERE id = $1
+		 UNION ALL
+		 SELECT usage_total_bytes, usage_object_count FROM bucket_quotas WHERE id = $1`,
 		quotaID).Scan(&bytes, &count); err != nil {
 		t.Fatalf("read quota usage: %v", err)
 	}

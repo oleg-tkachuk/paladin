@@ -375,9 +375,8 @@ func collectObjects(ctx context.Context, pool *pgxpool.Pool, page TenantPage) (*
 // being silently averaged away.
 type QuotaCensus struct {
 	Total int64 `json:"total"`
-	// Scope split — the CHECK constraint on `quotas` makes these exclusive
-	// and exhaustive: tenant-scoped rows carry tenant_id, bucket-scoped
-	// rows carry bucket_id.
+	// Scope split: tenant-scoped rows live in `quotas`, bucket-scoped rows in
+	// `bucket_quotas` (044_bucket_quotas.sql).
 	TenantScoped int64 `json:"tenant_scoped"`
 	BucketScoped int64 `json:"bucket_scoped"`
 	// Rows with at least one non-zero cap. A row with every cap at 0 is
@@ -413,19 +412,43 @@ const quotaNearLimitSQL = `(
 	OR (max_bytes_per_day   > 0 AND usage_bytes_today    >= max_bytes_per_day   * $1::float8)
 	OR (max_objects_per_day > 0 AND usage_objects_today  >= max_objects_per_day * $1::float8))`
 
+// Quota scopes as allQuotaRowsSQL labels them.
+const (
+	quotaScopeTenant = "tenant"
+	quotaScopeBucket = "bucket"
+)
+
+// allQuotaRowsSQL is every quota row of both scopes as one relation, with the
+// tenant each belongs to: a tenant quota's own tenant, or the owner of a
+// bucket quota's bucket — NULL for a shared bucket, which no tenant owns. The
+// census and the drill-down both read it, so their counts agree.
+const allQuotaRowsSQL = `(
+	SELECT '` + quotaScopeTenant + `' AS scope, tenant_id AS owner_tenant_id,
+	       max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day,
+	       usage_total_bytes, usage_object_count, usage_bytes_today, usage_objects_today
+	  FROM quotas
+	UNION ALL
+	SELECT '` + quotaScopeBucket + `', b.owner_tenant_id,
+	       bq.max_total_bytes, bq.max_object_count, bq.max_bytes_per_day, bq.max_objects_per_day,
+	       bq.usage_total_bytes, bq.usage_object_count, bq.usage_bytes_today, bq.usage_objects_today
+	  FROM bucket_quotas bq
+	  JOIN buckets b ON b.id = bq.bucket_id
+) AS all_quotas`
+
 func collectQuotas(ctx context.Context, pool *pgxpool.Pool, out *QuotaCensus) error {
 	const atLimit, nearLimit = quotaAtLimitSQL, quotaNearLimitSQL
+	const isTenant = `scope = '` + quotaScopeTenant + `'`
 	err := pool.QueryRow(ctx, `
 		SELECT count(*),
-		       count(*) FILTER (WHERE tenant_id IS NOT NULL),
-		       count(*) FILTER (WHERE tenant_id IS NULL),
+		       count(*) FILTER (WHERE `+isTenant+`),
+		       count(*) FILTER (WHERE scope = '`+quotaScopeBucket+`'),
 		       count(*) FILTER (WHERE max_total_bytes > 0 OR max_object_count > 0
 		                           OR max_bytes_per_day > 0 OR max_objects_per_day > 0),
 		       count(*) FILTER (WHERE `+atLimit+`),
 		       count(*) FILTER (WHERE `+nearLimit+` AND NOT `+atLimit+`),
-		       COALESCE(sum(usage_object_count) FILTER (WHERE tenant_id IS NOT NULL), 0),
-		       COALESCE(sum(usage_total_bytes)  FILTER (WHERE tenant_id IS NOT NULL), 0)
-		FROM quotas`, nearLimitRatio,
+		       COALESCE(sum(usage_object_count) FILTER (WHERE `+isTenant+`), 0),
+		       COALESCE(sum(usage_total_bytes)  FILTER (WHERE `+isTenant+`), 0)
+		FROM `+allQuotaRowsSQL, nearLimitRatio,
 	).Scan(&out.Total, &out.TenantScoped, &out.BucketScoped, &out.WithLimits,
 		&out.AtLimit, &out.NearLimit, &out.UsageObjectCount, &out.UsageTotalBytes)
 	if err != nil {
