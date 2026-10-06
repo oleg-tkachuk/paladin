@@ -51,10 +51,18 @@ kube-state-metrics is told to export pod labels. The hook Jobs' pods
       Readiness probe failing — check /readyz on the {{ "{{ $labels.component }}" }} pod.
 {{- end }}
 {{- if $rules.oomKilled.enabled }}
+{{- /* A restart in the window whose last termination was an OOM kill. The
+       reason series is a gauge that holds 1 for as long as the last
+       termination was an OOM, so it cannot count kills on its own: an
+       increase() over it sees only a 0→1 edge, and misses every kill after
+       the first and a container's first kill when its series starts at 1.
+       The restart counter is what moves on each kill. */}}
 - alert: PaladinOOMKilled
   expr: |
     label_replace(
-      increase(kube_pod_container_status_last_terminated_reason{namespace="{{ $ns }}",container="{{ $container }}",reason="OOMKilled",pod=~"{{ $podPattern }}"}[{{ $rules.oomKilled.window }}]) > 0,
+      increase(kube_pod_container_status_restarts_total{namespace="{{ $ns }}",container="{{ $container }}",pod=~"{{ $podPattern }}"}[{{ $rules.oomKilled.window }}]) > 0
+      and on (namespace, pod, container)
+      kube_pod_container_status_last_terminated_reason{namespace="{{ $ns }}",container="{{ $container }}",reason="OOMKilled",pod=~"{{ $podPattern }}"} == 1,
       "component", "$1", "pod", "{{ $podPattern }}"
     )
   labels:
@@ -62,7 +70,7 @@ kube-state-metrics is told to export pod labels. The hook Jobs' pods
   annotations:
     summary: "Paladin {{ "{{ $labels.component }}" }} was OOMKilled"
     description: |
-      Pod {{ "{{ $labels.pod }}" }} was OOMKilled in the last {{ $rules.oomKilled.window }}.
+      Pod {{ "{{ $labels.pod }}" }} restarted in the last {{ $rules.oomKilled.window }}, last after an OOM kill.
       Bump deployments.{{ "{{ $labels.component }}" }}.resources.limits.memory in the env overlay,
       or chase the leak.
 {{- end }}

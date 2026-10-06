@@ -79,6 +79,15 @@ label_replace(
 )
 PROMQL
 )"
+check "defaults: PaladinOOMKilled expr" "$(rule defaults PaladinOOMKilled .expr)" "$(cat <<'PROMQL'
+label_replace(
+  increase(kube_pod_container_status_restarts_total{namespace="paladin",container="paladin-core",pod=~"paladin-core-(admin|api|dispatcher|mcp|worker)-.+"}[15m]) > 0
+  and on (namespace, pod, container)
+  kube_pod_container_status_last_terminated_reason{namespace="paladin",container="paladin-core",reason="OOMKilled",pod=~"paladin-core-(admin|api|dispatcher|mcp|worker)-.+"} == 1,
+  "component", "$1", "pod", "paladin-core-(admin|api|dispatcher|mcp|worker)-.+"
+)
+PROMQL
+)"
 check "defaults: PaladinOutboxNotDraining expr" "$(rule defaults PaladinOutboxNotDraining .expr)" "$(cat <<'PROMQL'
 min_over_time(max(paladin_outbox_pending)[15m:1m]) > 500
 PROMQL
