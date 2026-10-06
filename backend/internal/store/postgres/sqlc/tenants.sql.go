@@ -144,9 +144,9 @@ WHERE ($1::uuid IS NULL OR tenants.id > $1::uuid)
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
-  AND ($4::text IS NULL OR tenants.slug = $4::text)
+  AND ($4::text[] IS NULL OR tenants.slug = ANY($4::text[]))
   AND ($5::text IS NULL OR tenants.slug LIKE $5::text)
-  AND ($6::text IS NULL OR tenants.display_name = $6::text)
+  AND ($6::text[] IS NULL OR tenants.display_name = ANY($6::text[]))
   AND ($7::text IS NULL OR tenants.display_name LIKE $7::text)
   -- The derived ` + "`" + `search` + "`" + ` field, spelled to match cel.SearchText EXACTLY.
   -- ASCII-only folding via COLLATE "C": Go's strings.ToLower and Postgres
@@ -161,8 +161,8 @@ WHERE ($1::uuid IS NULL OR tenants.id > $1::uuid)
   -- Compared as text on purpose: the literal comes from a caller's filter, and
   -- casting an arbitrary string to the enum makes Postgres reject the whole
   -- query ("invalid input value for enum") instead of returning no rows.
-  AND ($9::text IS NULL
-       OR tenants.storage_layout::text = $9::text)
+  AND ($9::text[] IS NULL
+       OR tenants.storage_layout::text = ANY($9::text[]))
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.
@@ -185,17 +185,17 @@ type ListTenantsRow struct {
 // The boolean gating is inline-CASE so sqlc emits a single prepared
 // statement; planner uses the partial idx_tenants_active index on
 // the common path.
-func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugEq *string, slugLike *string, displayNameEq *string, displayNameLike *string, searchLike *string, storageLayout *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error) {
+func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugIn []string, slugLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, storageLayoutIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error) {
 	rows, err := q.db.Query(ctx, listTenants,
 		afterID,
 		onlyTrashed,
 		includeTrashed,
-		slugEq,
+		slugIn,
 		slugLike,
-		displayNameEq,
+		displayNameIn,
 		displayNameLike,
 		searchLike,
-		storageLayout,
+		storageLayoutIn,
 		createdAtGte,
 		createdAtLte,
 		pageSize,

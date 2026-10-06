@@ -162,9 +162,9 @@ func (r *OperationRepo) List(
 	// in the query, so a literal the enum does not hold matches nothing rather
 	// than failing the cast; the typed state argument above is validated.
 	pd := hints(cel.OperationSchema, filter)
-	typeEq, typeLike := pd.StringHint("type")
-	errorCodeEq, _ := pd.StringHint("error_code")
-	stateEq, _ := pd.StringHint("state")
+	typeIn, typeLike := pd.StringHint("type")
+	errorCodeIn, _ := pd.StringHint("error_code")
+	stateIn, _ := pd.StringHint("state")
 	done := pd.BoolHint("done")
 	// `error_message != ""` is how a caller asks for "operations that failed"
 	// — the dashboard's failed-ops widget does exactly that. Without the hint
@@ -179,7 +179,7 @@ func (r *OperationRepo) List(
 	out := make([]operationh.Operation, 0, pageSize)
 	if newestFirst {
 		rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
-			typeEq, typeLike, errorCodeEq, stateEq, done, errorMessageNeq,
+			typeIn, typeLike, errorCodeIn, stateIn, done, errorMessageNeq,
 			createdGTE, createdLTE, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list operations: %w", err)
@@ -189,7 +189,7 @@ func (r *OperationRepo) List(
 		}
 	} else {
 		rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
-			typeEq, typeLike, errorCodeEq, stateEq, done, errorMessageNeq,
+			typeIn, typeLike, errorCodeIn, stateIn, done, errorMessageNeq,
 			createdGTE, createdLTE, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list operations: %w", err)

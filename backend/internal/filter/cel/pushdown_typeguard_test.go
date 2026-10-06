@@ -58,8 +58,8 @@ func TestPushdown_TypeMismatchedConjunctsArePushedNowhere(t *testing.T) {
 // lands in the wrong bucket is caught too.
 func assertNoPredicates(t *testing.T, pd Pushdown, expr string) {
 	t.Helper()
-	for field, v := range pd.Eq {
-		t.Errorf("%s produced Eq[%q] = %q", expr, field, v)
+	for field, v := range pd.In {
+		t.Errorf("%s produced In[%q] = %q", expr, field, v)
 	}
 	for field, v := range pd.Neq {
 		t.Errorf("%s produced Neq[%q] = %q", expr, field, v)
@@ -93,8 +93,8 @@ func TestPushdown_WellTypedConjunctsStillPush(t *testing.T) {
 		t.Fatalf("ExtractPushdown: %v", err)
 	}
 
-	if got := pd.Eq["backend_id"]; got != "primary" {
-		t.Errorf("Eq[backend_id] = %q, want primary", got)
+	if got := pd.In["backend_id"]; len(got) != 1 || got[0] != "primary" {
+		t.Errorf("In[backend_id] = %q, want [primary]", got)
 	}
 	if got := pd.Neq["provider"]; got != "aws" {
 		t.Errorf("Neq[provider] = %q, want aws", got)
@@ -123,14 +123,14 @@ func TestPushdown_AMismatchedConjunctDoesNotPoisonItsNeighbours(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExtractPushdown: %v", err)
 	}
-	if got := pd.Eq["backend_id"]; got != "primary" {
-		t.Errorf("Eq[backend_id] = %q, want primary", got)
+	if got := pd.In["backend_id"]; len(got) != 1 || got[0] != "primary" {
+		t.Errorf("In[backend_id] = %q, want [primary]", got)
 	}
 	if got := pd.Prefix["region"]; got != "eu" {
 		t.Errorf("Prefix[region] = %q, want eu", got)
 	}
-	if v, ok := pd.Eq["enabled"]; ok {
-		t.Errorf("the mismatched conjunct produced Eq[enabled] = %q", v)
+	if v, ok := pd.In["enabled"]; ok {
+		t.Errorf("the mismatched conjunct produced In[enabled] = %q", v)
 	}
 	if v, ok := pd.BoolEq["enabled"]; ok {
 		t.Errorf("the mismatched conjunct produced BoolEq[enabled] = %v", v)

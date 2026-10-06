@@ -1,9 +1,20 @@
 package cel
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
+
+// wantValues checks the set of values a field was pushed to take; nil means
+// no value constraint at all.
+func wantValues(t *testing.T, p Pushdown, field string, want []string) {
+	t.Helper()
+	got, _ := p.StringHint(field)
+	if !slices.Equal(got, want) {
+		t.Errorf("%s in %q, want %q", field, got, want)
+	}
+}
 
 // The walk has to hold one line: a predicate either becomes a SQL hint that
 // means exactly what the CEL meant, or it becomes nothing. A hint that is
@@ -27,10 +38,8 @@ func TestExtractPushdown(t *testing.T) {
 				if predicates(p) != 2 {
 					t.Fatalf("recognised %d, want 2", predicates(p))
 				}
-				eq, like := p.StringHint("provider")
-				if eq == nil || *eq != "s3" {
-					t.Errorf("provider eq = %v, want s3", eq)
-				}
+				wantValues(t, p, "provider", []string{"s3"})
+				_, like := p.StringHint("provider")
 				if like != nil {
 					t.Errorf("provider like = %v, want none", *like)
 				}
@@ -74,10 +83,7 @@ func TestExtractPushdown(t *testing.T) {
 			expr:   `"FAILED" == state`,
 			check: func(t *testing.T, p Pushdown) {
 				t.Helper()
-				eq, _ := p.StringHint("state")
-				if eq == nil || *eq != "FAILED" {
-					t.Errorf("state eq = %v, want FAILED", eq)
-				}
+				wantValues(t, p, "state", []string{"FAILED"})
 			},
 		},
 		{
@@ -93,38 +99,75 @@ func TestExtractPushdown(t *testing.T) {
 				if got == nil || *got != "" {
 					t.Errorf("error_message neq = %v, want the empty literal", got)
 				}
-				if eq, _ := p.StringHint("error_message"); eq != nil {
-					t.Errorf("an inequality was recorded as an equality: %q", *eq)
-				}
+				wantValues(t, p, "error_message", nil)
 			},
 		},
 		{
-			name:   "a disjunction pushes nothing — either side may match",
+			name:   "a disjunction of one field's values is the set of them",
 			schema: OperationSchema,
-			expr:   `state == "FAILED" || state == "CANCELLED"`,
+			expr:   `state == "FAILED" || "CANCELLED" == state || state == "FAILED"`,
+			check: func(t *testing.T, p Pushdown) {
+				t.Helper()
+				wantValues(t, p, "state", []string{"FAILED", "CANCELLED"})
+			},
+		},
+		{
+			name:   "in is the same set, and mixes with equalities in a disjunction",
+			schema: OperationSchema,
+			expr:   `state in ["FAILED", "RUNNING"] || state == "PENDING"`,
+			check: func(t *testing.T, p Pushdown) {
+				t.Helper()
+				wantValues(t, p, "state", []string{"FAILED", "RUNNING", "PENDING"})
+			},
+		},
+		{
+			name:   "a disjunction across two fields pushes nothing — either side may match",
+			schema: OperationSchema,
+			expr:   `state == "FAILED" || type == "BatchCopy"`,
 			check: func(t *testing.T, p Pushdown) {
 				t.Helper()
 				if predicates(p) != 0 {
-					t.Errorf("pushed %d predicates out of an OR", predicates(p))
-				}
-				if eq, _ := p.StringHint("state"); eq != nil {
-					t.Errorf("state eq = %q — one arm of an OR is not a filter", *eq)
+					t.Errorf("pushed %d predicates out of an OR over two fields", predicates(p))
 				}
 			},
 		},
 		{
-			name:   "an OR nested in an AND keeps the AND's own conjuncts",
+			name:   "a disjunction with anything but equalities pushes nothing",
+			schema: OperationSchema,
+			expr:   `state == "FAILED" || state.startsWith("RUN")`,
+			check: func(t *testing.T, p Pushdown) {
+				t.Helper()
+				if predicates(p) != 0 {
+					t.Errorf("pushed %d predicates out of an OR with a prefix arm", predicates(p))
+				}
+			},
+		},
+		{
+			name:   "an in over anything but string literals pushes nothing",
+			schema: OperationSchema,
+			expr:   `state in ["FAILED", type]`,
+			check: func(t *testing.T, p Pushdown) {
+				t.Helper()
+				wantValues(t, p, "state", nil)
+			},
+		},
+		{
+			name:   "an empty in is left to the authoritative pass",
+			schema: OperationSchema,
+			expr:   `state in []`,
+			check: func(t *testing.T, p Pushdown) {
+				t.Helper()
+				wantValues(t, p, "state", nil)
+			},
+		},
+		{
+			name:   "an OR nested in an AND joins the AND's own conjuncts",
 			schema: OperationSchema,
 			expr:   `type == "BatchCopy" && (state == "FAILED" || state == "RUNNING")`,
 			check: func(t *testing.T, p Pushdown) {
 				t.Helper()
-				eq, _ := p.StringHint("type")
-				if eq == nil || *eq != "BatchCopy" {
-					t.Errorf("type eq = %v, want BatchCopy", eq)
-				}
-				if eq, _ := p.StringHint("state"); eq != nil {
-					t.Errorf("state eq = %q, from inside an OR", *eq)
-				}
+				wantValues(t, p, "type", []string{"BatchCopy"})
+				wantValues(t, p, "state", []string{"FAILED", "RUNNING"})
 			},
 		},
 		{
@@ -167,10 +210,7 @@ func TestExtractPushdown(t *testing.T) {
 			expr:   `state == "FAILED" && state == "RUNNING"`,
 			check: func(t *testing.T, p Pushdown) {
 				t.Helper()
-				eq, _ := p.StringHint("state")
-				if eq == nil || *eq != "FAILED" {
-					t.Errorf("state eq = %v, want the first conjunct", eq)
-				}
+				wantValues(t, p, "state", []string{"FAILED"})
 			},
 		},
 		{
@@ -387,6 +427,57 @@ func TestPushdownNeverExcludesARowTheFilterAccepts(t *testing.T) {
 // predicates counts what a pushdown would put into SQL: every field it holds a
 // predicate or a bound for.
 func predicates(p Pushdown) int {
-	return len(p.Eq) + len(p.Neq) + len(p.BoolEq) + len(p.Prefix) +
+	return len(p.In) + len(p.Neq) + len(p.BoolEq) + len(p.Prefix) +
 		len(p.Contains) + len(p.TimeGTE) + len(p.TimeLTE)
+}
+
+// The same invariant for value sets: whatever `in` or a one-field disjunction
+// pushes, a row the filter accepts is among the rows the query fetches.
+func TestPushdownValueSetsNeverExcludeARowTheFilterAccepts(t *testing.T) {
+	at := mustTime(t, "2026-03-01T12:00:00Z")
+	rows := []map[string]any{}
+	for _, slug := range []string{"a", "b", "c"} {
+		for _, layout := range []string{"shared", "dedicated"} {
+			rows = append(rows, map[string]any{
+				"tenant_id": "t-" + slug, "slug": slug, "display_name": slug,
+				"storage_layout": layout, "labels": map[string]string{},
+				"created_at": at, "updated_at": at,
+			})
+		}
+	}
+	filters := []string{
+		`slug in ["a", "b"]`,
+		`slug == "a" || slug == "c"`,
+		`slug == "a" || storage_layout == "dedicated"`,
+		`(slug == "a" || slug == "b") && slug == "b"`,
+		`slug in ["a"] && slug == "b"`,
+		`slug in ["a", "b"] && storage_layout in ["dedicated"]`,
+		`!(slug in ["a"])`,
+	}
+
+	ev := NewEvaluator()
+	for _, expr := range filters {
+		t.Run(expr, func(t *testing.T) {
+			pd, err := ExtractPushdown(TenantSchema, expr)
+			if err != nil {
+				t.Fatalf("ExtractPushdown: %v", err)
+			}
+			for _, row := range rows {
+				kept, err := FilterPage(ev, TenantSchema, expr, []map[string]any{row},
+					func(r map[string]any) map[string]any { return r })
+				if err != nil {
+					t.Fatalf("FilterPage: %v", err)
+				}
+				fetched := true
+				for field, values := range pd.In {
+					if !slices.Contains(values, row[field].(string)) {
+						fetched = false
+					}
+				}
+				if len(kept) == 1 && !fetched {
+					t.Errorf("row %v is accepted by the filter but excluded by the pushed sets %v", row, pd.In)
+				}
+			}
+		})
+	}
 }

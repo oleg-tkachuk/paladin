@@ -25,7 +25,7 @@ func TestHintsNarrowsNothingOnBadInput(t *testing.T) {
 	// The point of the function: a filter the extractor understands must
 	// actually produce hints, or every List silently falls back to paging
 	// through the whole table in memory.
-	if got := hints(cel.ObjectSchema, `key == "a"`); got.Eq["key"] != "a" {
+	if got := hints(cel.ObjectSchema, `key == "a"`); len(got.In["key"]) != 1 || got.In["key"][0] != "a" {
 		t.Error("hints(key == \"a\") is empty — nothing would be pushed into SQL")
 	}
 }
