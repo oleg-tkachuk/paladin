@@ -215,10 +215,14 @@ func (e AuditEntry) ResourceTenant() uuid.UUID {
 // ─── Quota ──────────────────────────────────────────────────────────────────
 
 type Quota struct {
-	QuotaID           uuid.UUID
-	TenantID          uuid.UUID // uuid.Nil → bucket-scoped
-	BackendID         string    // empty → tenant-scoped
-	BucketName        string
+	QuotaID    uuid.UUID
+	TenantID   uuid.UUID // uuid.Nil → bucket-scoped
+	BackendID  string    // empty → tenant-scoped
+	BucketName string
+	// OwnerTenantID is the tenant owning a bucket quota's bucket; uuid.Nil
+	// for a shared bucket and for every tenant quota. It is where the
+	// bucket quota's events go, not its scope.
+	OwnerTenantID     uuid.UUID
 	MaxTotalBytes     int64
 	MaxObjectCount    int64
 	MaxBytesPerDay    int64

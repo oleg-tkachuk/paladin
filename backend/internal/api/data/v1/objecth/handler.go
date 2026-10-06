@@ -469,7 +469,7 @@ type StateMachine interface {
 // QuotaUpdater is the post-promote accounting hook. Returns nil on missing
 // quota — quotas are opt-in. Implementations live in postgres adapters.
 type QuotaUpdater interface {
-	OnObjectPromoted(ctx context.Context, tenantID uuid.UUID, sizeBytes int64) error
+	OnObjectPromoted(ctx context.Context, tenantID, objectID uuid.UUID, sizeBytes int64) error
 }
 
 // SetQuotaUpdater attaches the optional usage hook. Wired by main.
@@ -1974,7 +1974,7 @@ func (h *Handler) touchQuota(ctx context.Context, obj Object) {
 	if h.quota == nil {
 		return
 	}
-	_ = h.quota.OnObjectPromoted(ctx, obj.TenantID, obj.SizeBytes)
+	_ = h.quota.OnObjectPromoted(ctx, obj.TenantID, obj.ObjectID, obj.SizeBytes)
 }
 
 func (h *Handler) authorize(

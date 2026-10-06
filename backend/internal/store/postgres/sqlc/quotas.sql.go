@@ -12,132 +12,168 @@ import (
 )
 
 const getBucketQuota = `-- name: GetBucketQuota :one
-SELECT quotas.id, quotas.tenant_id, quotas.bucket_id, quotas.max_total_bytes, quotas.max_object_count, quotas.max_bytes_per_day, quotas.max_objects_per_day, quotas.usage_total_bytes, quotas.usage_object_count, quotas.usage_bytes_today, quotas.usage_objects_today, quotas.last_reset_at, quotas.resource_version, quotas.created_at, quotas.updated_at,
-       COALESCE(sb.name, '') AS backend_name,
-       COALESCE(b.name, '')  AS bucket_name
-FROM quotas
-LEFT JOIN buckets b           ON b.id = quotas.bucket_id
-LEFT JOIN storage_backends sb ON sb.id = b.backend_id
-WHERE bucket_id = (SELECT b.id FROM buckets b
-                  JOIN storage_backends sb ON sb.id = b.backend_id
-                 WHERE sb.name = $1 AND b.name = $2)
+SELECT bucket_quotas.id, bucket_quotas.bucket_id, bucket_quotas.max_total_bytes, bucket_quotas.max_object_count, bucket_quotas.max_bytes_per_day, bucket_quotas.max_objects_per_day, bucket_quotas.usage_total_bytes, bucket_quotas.usage_object_count, bucket_quotas.usage_bytes_today, bucket_quotas.usage_objects_today, bucket_quotas.last_reset_at, bucket_quotas.resource_version, bucket_quotas.created_at, bucket_quotas.updated_at,
+       sb.name AS backend_name,
+       b.name  AS bucket_name,
+       b.owner_tenant_id
+FROM bucket_quotas
+JOIN buckets b           ON b.id = bucket_quotas.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = $1::text AND b.name = $2::text
 `
 
 type GetBucketQuotaRow struct {
-	Quota       Quota  `json:"quota"`
-	BackendName string `json:"backend_name"`
-	BucketName  string `json:"bucket_name"`
+	BucketQuota   BucketQuota `json:"bucket_quota"`
+	BackendName   string      `json:"backend_name"`
+	BucketName    string      `json:"bucket_name"`
+	OwnerTenantID pgtype.UUID `json:"owner_tenant_id"`
 }
 
-// LEFT JOIN: a tenant-scoped quota has no bucket, and must still come back.
-func (q *Queries) GetBucketQuota(ctx context.Context, name string, name_2 string) (GetBucketQuotaRow, error) {
-	row := q.db.QueryRow(ctx, getBucketQuota, name, name_2)
+func (q *Queries) GetBucketQuota(ctx context.Context, backend string, bucket string) (GetBucketQuotaRow, error) {
+	row := q.db.QueryRow(ctx, getBucketQuota, backend, bucket)
 	var i GetBucketQuotaRow
 	err := row.Scan(
-		&i.Quota.ID,
-		&i.Quota.TenantID,
-		&i.Quota.BucketID,
-		&i.Quota.MaxTotalBytes,
-		&i.Quota.MaxObjectCount,
-		&i.Quota.MaxBytesPerDay,
-		&i.Quota.MaxObjectsPerDay,
-		&i.Quota.UsageTotalBytes,
-		&i.Quota.UsageObjectCount,
-		&i.Quota.UsageBytesToday,
-		&i.Quota.UsageObjectsToday,
-		&i.Quota.LastResetAt,
-		&i.Quota.ResourceVersion,
-		&i.Quota.CreatedAt,
-		&i.Quota.UpdatedAt,
+		&i.BucketQuota.ID,
+		&i.BucketQuota.BucketID,
+		&i.BucketQuota.MaxTotalBytes,
+		&i.BucketQuota.MaxObjectCount,
+		&i.BucketQuota.MaxBytesPerDay,
+		&i.BucketQuota.MaxObjectsPerDay,
+		&i.BucketQuota.UsageTotalBytes,
+		&i.BucketQuota.UsageObjectCount,
+		&i.BucketQuota.UsageBytesToday,
+		&i.BucketQuota.UsageObjectsToday,
+		&i.BucketQuota.LastResetAt,
+		&i.BucketQuota.ResourceVersion,
+		&i.BucketQuota.CreatedAt,
+		&i.BucketQuota.UpdatedAt,
 		&i.BackendName,
 		&i.BucketName,
+		&i.OwnerTenantID,
+	)
+	return i, err
+}
+
+const getBucketQuotaByID = `-- name: GetBucketQuotaByID :one
+SELECT bucket_quotas.id, bucket_quotas.bucket_id, bucket_quotas.max_total_bytes, bucket_quotas.max_object_count, bucket_quotas.max_bytes_per_day, bucket_quotas.max_objects_per_day, bucket_quotas.usage_total_bytes, bucket_quotas.usage_object_count, bucket_quotas.usage_bytes_today, bucket_quotas.usage_objects_today, bucket_quotas.last_reset_at, bucket_quotas.resource_version, bucket_quotas.created_at, bucket_quotas.updated_at,
+       sb.name AS backend_name,
+       b.name  AS bucket_name,
+       b.owner_tenant_id
+FROM bucket_quotas
+JOIN buckets b           ON b.id = bucket_quotas.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE bucket_quotas.id = $1
+`
+
+type GetBucketQuotaByIDRow struct {
+	BucketQuota   BucketQuota `json:"bucket_quota"`
+	BackendName   string      `json:"backend_name"`
+	BucketName    string      `json:"bucket_name"`
+	OwnerTenantID pgtype.UUID `json:"owner_tenant_id"`
+}
+
+func (q *Queries) GetBucketQuotaByID(ctx context.Context, id pgtype.UUID) (GetBucketQuotaByIDRow, error) {
+	row := q.db.QueryRow(ctx, getBucketQuotaByID, id)
+	var i GetBucketQuotaByIDRow
+	err := row.Scan(
+		&i.BucketQuota.ID,
+		&i.BucketQuota.BucketID,
+		&i.BucketQuota.MaxTotalBytes,
+		&i.BucketQuota.MaxObjectCount,
+		&i.BucketQuota.MaxBytesPerDay,
+		&i.BucketQuota.MaxObjectsPerDay,
+		&i.BucketQuota.UsageTotalBytes,
+		&i.BucketQuota.UsageObjectCount,
+		&i.BucketQuota.UsageBytesToday,
+		&i.BucketQuota.UsageObjectsToday,
+		&i.BucketQuota.LastResetAt,
+		&i.BucketQuota.ResourceVersion,
+		&i.BucketQuota.CreatedAt,
+		&i.BucketQuota.UpdatedAt,
+		&i.BackendName,
+		&i.BucketName,
+		&i.OwnerTenantID,
 	)
 	return i, err
 }
 
 const getQuotaByID = `-- name: GetQuotaByID :one
-SELECT quotas.id, quotas.tenant_id, quotas.bucket_id, quotas.max_total_bytes, quotas.max_object_count, quotas.max_bytes_per_day, quotas.max_objects_per_day, quotas.usage_total_bytes, quotas.usage_object_count, quotas.usage_bytes_today, quotas.usage_objects_today, quotas.last_reset_at, quotas.resource_version, quotas.created_at, quotas.updated_at,
-       COALESCE(sb.name, '') AS backend_name,
-       COALESCE(b.name, '')  AS bucket_name
-FROM quotas
-LEFT JOIN buckets b           ON b.id = quotas.bucket_id
-LEFT JOIN storage_backends sb ON sb.id = b.backend_id
-WHERE quotas.id = $1
+SELECT id, tenant_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day, usage_total_bytes, usage_object_count, usage_bytes_today, usage_objects_today, last_reset_at, resource_version, created_at, updated_at FROM quotas WHERE id = $1
 `
 
-type GetQuotaByIDRow struct {
-	Quota       Quota  `json:"quota"`
-	BackendName string `json:"backend_name"`
-	BucketName  string `json:"bucket_name"`
-}
-
-// Either scope. Under RLS the caller sees its own tenant's rows; a platform
-// admin's cross-tenant read sees every row.
-func (q *Queries) GetQuotaByID(ctx context.Context, id pgtype.UUID) (GetQuotaByIDRow, error) {
+// Tenant scope only. Under RLS the caller sees its own tenant's row; a
+// platform admin's cross-tenant read sees every row.
+func (q *Queries) GetQuotaByID(ctx context.Context, id pgtype.UUID) (Quota, error) {
 	row := q.db.QueryRow(ctx, getQuotaByID, id)
-	var i GetQuotaByIDRow
+	var i Quota
 	err := row.Scan(
-		&i.Quota.ID,
-		&i.Quota.TenantID,
-		&i.Quota.BucketID,
-		&i.Quota.MaxTotalBytes,
-		&i.Quota.MaxObjectCount,
-		&i.Quota.MaxBytesPerDay,
-		&i.Quota.MaxObjectsPerDay,
-		&i.Quota.UsageTotalBytes,
-		&i.Quota.UsageObjectCount,
-		&i.Quota.UsageBytesToday,
-		&i.Quota.UsageObjectsToday,
-		&i.Quota.LastResetAt,
-		&i.Quota.ResourceVersion,
-		&i.Quota.CreatedAt,
-		&i.Quota.UpdatedAt,
-		&i.BackendName,
-		&i.BucketName,
+		&i.ID,
+		&i.TenantID,
+		&i.MaxTotalBytes,
+		&i.MaxObjectCount,
+		&i.MaxBytesPerDay,
+		&i.MaxObjectsPerDay,
+		&i.UsageTotalBytes,
+		&i.UsageObjectCount,
+		&i.UsageBytesToday,
+		&i.UsageObjectsToday,
+		&i.LastResetAt,
+		&i.ResourceVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getTenantQuota = `-- name: GetTenantQuota :one
-SELECT quotas.id, quotas.tenant_id, quotas.bucket_id, quotas.max_total_bytes, quotas.max_object_count, quotas.max_bytes_per_day, quotas.max_objects_per_day, quotas.usage_total_bytes, quotas.usage_object_count, quotas.usage_bytes_today, quotas.usage_objects_today, quotas.last_reset_at, quotas.resource_version, quotas.created_at, quotas.updated_at,
-       COALESCE(sb.name, '') AS backend_name,
-       COALESCE(b.name, '')  AS bucket_name
-FROM quotas
-LEFT JOIN buckets b           ON b.id = quotas.bucket_id
-LEFT JOIN storage_backends sb ON sb.id = b.backend_id
-WHERE tenant_id = $1
+SELECT id, tenant_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day, usage_total_bytes, usage_object_count, usage_bytes_today, usage_objects_today, last_reset_at, resource_version, created_at, updated_at FROM quotas WHERE tenant_id = $1
 `
 
-type GetTenantQuotaRow struct {
-	Quota       Quota  `json:"quota"`
-	BackendName string `json:"backend_name"`
-	BucketName  string `json:"bucket_name"`
-}
-
-// LEFT JOIN: a tenant-scoped quota has no bucket, and must still come back.
-func (q *Queries) GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (GetTenantQuotaRow, error) {
+func (q *Queries) GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (Quota, error) {
 	row := q.db.QueryRow(ctx, getTenantQuota, tenantID)
-	var i GetTenantQuotaRow
+	var i Quota
 	err := row.Scan(
-		&i.Quota.ID,
-		&i.Quota.TenantID,
-		&i.Quota.BucketID,
-		&i.Quota.MaxTotalBytes,
-		&i.Quota.MaxObjectCount,
-		&i.Quota.MaxBytesPerDay,
-		&i.Quota.MaxObjectsPerDay,
-		&i.Quota.UsageTotalBytes,
-		&i.Quota.UsageObjectCount,
-		&i.Quota.UsageBytesToday,
-		&i.Quota.UsageObjectsToday,
-		&i.Quota.LastResetAt,
-		&i.Quota.ResourceVersion,
-		&i.Quota.CreatedAt,
-		&i.Quota.UpdatedAt,
-		&i.BackendName,
-		&i.BucketName,
+		&i.ID,
+		&i.TenantID,
+		&i.MaxTotalBytes,
+		&i.MaxObjectCount,
+		&i.MaxBytesPerDay,
+		&i.MaxObjectsPerDay,
+		&i.UsageTotalBytes,
+		&i.UsageObjectCount,
+		&i.UsageBytesToday,
+		&i.UsageObjectsToday,
+		&i.LastResetAt,
+		&i.ResourceVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const incrementBucketQuotaUsageForObject = `-- name: IncrementBucketQuotaUsageForObject :exec
+UPDATE bucket_quotas
+SET usage_total_bytes   = usage_total_bytes + $2,
+    usage_object_count  = usage_object_count + $3,
+    usage_bytes_today   = CASE WHEN last_reset_at >= date_trunc('day', now(), 'UTC')
+                               THEN usage_bytes_today + $2 ELSE $2 END,
+    usage_objects_today = CASE WHEN last_reset_at >= date_trunc('day', now(), 'UTC')
+                               THEN usage_objects_today + $3 ELSE $3 END,
+    last_reset_at       = GREATEST(last_reset_at, date_trunc('day', now(), 'UTC'))
+WHERE bucket_id = (SELECT c.bucket_id
+                     FROM objects o
+                     JOIN collections c ON c.id = o.collection_id
+                    WHERE o.id = $1)
+`
+
+// Charges the quota of the bucket an object's collection is bound to — the
+// same object→collection→bucket hop the reconciler sums over — with the
+// day-roll of IncrementQuotaUsage. Updates nothing when the bucket has no
+// quota: quotas are opt-in. The lookup runs under the caller's RLS session,
+// which sees its own object and collection.
+func (q *Queries) IncrementBucketQuotaUsageForObject(ctx context.Context, iD pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error {
+	_, err := q.db.Exec(ctx, incrementBucketQuotaUsageForObject, iD, usageTotalBytes, usageObjectCount)
+	return err
 }
 
 const incrementQuotaUsage = `-- name: IncrementQuotaUsage :exec
@@ -152,7 +188,7 @@ SET usage_total_bytes   = usage_total_bytes + $2,
 WHERE id = $1
 `
 
-// Atomic add. tenant_id-scoped quota when bucket fields are NULL.
+// Atomic add.
 // The first charge of a UTC day restarts the per-day counters and stamps the
 // day. The daily roll skips rows with nothing to clear, so an idle row keeps
 // an older stamp, and the roll's next tick would otherwise zero what this day
@@ -160,6 +196,22 @@ WHERE id = $1
 func (q *Queries) IncrementQuotaUsage(ctx context.Context, iD pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error {
 	_, err := q.db.Exec(ctx, incrementQuotaUsage, iD, usageTotalBytes, usageObjectCount)
 	return err
+}
+
+const resetBucketQuotaDaily = `-- name: ResetBucketQuotaDaily :execrows
+UPDATE bucket_quotas
+SET usage_bytes_today = 0,
+    usage_objects_today = 0,
+    last_reset_at = $2
+WHERE id = $1
+`
+
+func (q *Queries) ResetBucketQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, resetBucketQuotaDaily, iD, lastResetAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const resetQuotaDaily = `-- name: ResetQuotaDaily :execrows
@@ -181,22 +233,23 @@ func (q *Queries) ResetQuotaDaily(ctx context.Context, iD pgtype.UUID, lastReset
 }
 
 const upsertBucketQuota = `-- name: UpsertBucketQuota :one
-INSERT INTO quotas (id, bucket_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
+INSERT INTO bucket_quotas (id, bucket_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
 VALUES ($1, (SELECT b.id FROM buckets b
                   JOIN storage_backends sb ON sb.id = b.backend_id
                  WHERE sb.name = $2 AND b.name = $3), $4, $5, $6, $7)
-ON CONFLICT (bucket_id) WHERE tenant_id IS NULL DO UPDATE SET
+ON CONFLICT (bucket_id) DO UPDATE SET
     max_total_bytes     = EXCLUDED.max_total_bytes,
     max_object_count    = EXCLUDED.max_object_count,
     max_bytes_per_day   = EXCLUDED.max_bytes_per_day,
     max_objects_per_day = EXCLUDED.max_objects_per_day,
-    resource_version    = quotas.resource_version + 1,
+    resource_version    = bucket_quotas.resource_version + 1,
     updated_at          = now()
-WHERE quotas.resource_version = $8::bigint
+WHERE bucket_quotas.resource_version = $8::bigint
 RETURNING resource_version
 `
 
-// Same OCC contract as UpsertTenantQuota.
+// Same OCC contract as UpsertTenantQuota. bucket_quotas has no RLS
+// (044_bucket_quotas.sql): the handler's role and Cedar checks gate the write.
 func (q *Queries) UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64, expectedVersion int64) (int64, error) {
 	row := q.db.QueryRow(ctx, upsertBucketQuota,
 		iD,
@@ -216,7 +269,7 @@ func (q *Queries) UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name st
 const upsertTenantQuota = `-- name: UpsertTenantQuota :one
 INSERT INTO quotas (id, tenant_id, max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (tenant_id) WHERE bucket_id IS NULL DO UPDATE SET
+ON CONFLICT (tenant_id) DO UPDATE SET
     max_total_bytes     = EXCLUDED.max_total_bytes,
     max_object_count    = EXCLUDED.max_object_count,
     max_bytes_per_day   = EXCLUDED.max_bytes_per_day,

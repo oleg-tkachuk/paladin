@@ -40,7 +40,7 @@ func TestQuotaFromSQLC(t *testing.T) {
 		LastResetAt:       pgTS(reset),
 		ResourceVersion:   11,
 		UpdatedAt:         pgTS(updated),
-	}, "backend-name", "bucket-name")
+	})
 
 	checks := []struct {
 		field string
@@ -49,8 +49,8 @@ func TestQuotaFromSQLC(t *testing.T) {
 	}{
 		{"QuotaID", got.QuotaID, id},
 		{"TenantID", got.TenantID, tenant},
-		{"BackendID", got.BackendID, "backend-name"},
-		{"BucketName", got.BucketName, "bucket-name"},
+		{"BackendID", got.BackendID, ""},
+		{"BucketName", got.BucketName, ""},
 		{"MaxTotalBytes", got.MaxTotalBytes, int64(1 << 10)},
 		{"MaxObjectCount", got.MaxObjectCount, int64(1 << 11)},
 		{"MaxBytesPerDay", got.MaxBytesPerDay, int64(1 << 12)},
@@ -76,7 +76,7 @@ func TestQuotaFromSQLC(t *testing.T) {
 	// A quota that has never been reset has no reset instant; the zero time
 	// would read as "reset at the beginning of the epoch", which is a date,
 	// not an absence.
-	if got := quotaFromSQLC(sqlc.Quota{}, "b", "n"); got.LastResetAt != nil {
+	if got := quotaFromSQLC(sqlc.Quota{}); got.LastResetAt != nil {
 		t.Errorf("LastResetAt on an unreset quota = %v, want nil", got.LastResetAt)
 	}
 }
@@ -84,6 +84,59 @@ func TestQuotaFromSQLC(t *testing.T) {
 // versionFromSQLC carries three *string columns through derefStr and two
 // JSONB columns through decodeMap. A version whose tags are served as its
 // metadata is wrong on every read of that object.
+// A bucket quota keeps uuid.Nil as its tenant: that is how the domain type
+// tells the bucket scope from the tenant scope.
+func TestBucketQuotaFromSQLC(t *testing.T) {
+	id := uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+	bucket := uuid.MustParse("8ba7b810-9dad-11d1-80b4-00c04fd430c8")
+	owner := uuid.MustParse("9ba7b810-9dad-11d1-80b4-00c04fd430c8")
+	reset := time.Date(2026, 5, 6, 7, 8, 9, 0, time.UTC)
+
+	got := bucketQuotaFromSQLC(sqlc.BucketQuota{
+		ID:                pgUUID(id),
+		BucketID:          pgUUID(bucket),
+		MaxTotalBytes:     1 << 10,
+		MaxObjectCount:    1 << 11,
+		MaxBytesPerDay:    1 << 12,
+		MaxObjectsPerDay:  1 << 13,
+		UsageTotalBytes:   1 << 14,
+		UsageObjectCount:  1 << 15,
+		UsageBytesToday:   1 << 16,
+		UsageObjectsToday: 1 << 17,
+		LastResetAt:       pgTS(reset),
+		ResourceVersion:   11,
+	}, "backend-name", "bucket-name", owner)
+
+	checks := []struct {
+		field string
+		got   any
+		want  any
+	}{
+		{"QuotaID", got.QuotaID, id},
+		{"TenantID", got.TenantID, uuid.Nil},
+		{"OwnerTenantID", got.OwnerTenantID, owner},
+		{"BackendID", got.BackendID, "backend-name"},
+		{"BucketName", got.BucketName, "bucket-name"},
+		{"MaxTotalBytes", got.MaxTotalBytes, int64(1 << 10)},
+		{"MaxObjectCount", got.MaxObjectCount, int64(1 << 11)},
+		{"MaxBytesPerDay", got.MaxBytesPerDay, int64(1 << 12)},
+		{"MaxObjectsPerDay", got.MaxObjectsPerDay, int64(1 << 13)},
+		{"UsageTotalBytes", got.UsageTotalBytes, int64(1 << 14)},
+		{"UsageObjectCount", got.UsageObjectCount, int64(1 << 15)},
+		{"UsageBytesToday", got.UsageBytesToday, int64(1 << 16)},
+		{"UsageObjectsToday", got.UsageObjectsToday, int64(1 << 17)},
+		{"ResourceVersion", got.ResourceVersion, int64(11)},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %v, want %v", c.field, c.got, c.want)
+		}
+	}
+	if got.LastResetAt == nil || !got.LastResetAt.Equal(reset) {
+		t.Errorf("LastResetAt = %v, want %v", got.LastResetAt, reset)
+	}
+}
+
 func TestVersionFromSQLC(t *testing.T) {
 	versionID := uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 	objectID := uuid.MustParse("7ba7b810-9dad-11d1-80b4-00c04fd430c8")
