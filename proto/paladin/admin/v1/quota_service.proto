@@ -20,8 +20,10 @@ service QuotaService {
   rpc SetQuota(SetQuotaRequest) returns (Quota) {
     option idempotency_level = IDEMPOTENT;
   }
-  // ResetUsage zeroes the usage counters without touching the limits. For
-  // recovering from a drifted counter, not for granting capacity.
+  // ResetUsage zeroes today's admission counters (bytes and objects today)
+  // without touching the limits or the stored totals; the totals are
+  // recomputed from live objects by the quota reconciler. Answers with the
+  // quota as it is after the reset.
   rpc ResetUsage(ResetUsageRequest) returns (Quota) {
     option idempotency_level = IDEMPOTENT;
   }
@@ -48,7 +50,8 @@ message SetQuotaRequest {
 }
 
 message ResetUsageRequest {
-  // Used at month/day boundaries by the accounting worker; available
-  // via RPC for ops emergencies.
+  // Quota resource name (see Quota.name docstring for forms). The daily
+  // roll at the UTC day boundary does this on its own; the RPC is for an
+  // operator who needs it sooner.
   string name = 1 [(buf.validate.field).string.min_len = 1];
 }

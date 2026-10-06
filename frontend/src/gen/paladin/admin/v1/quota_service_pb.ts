@@ -94,8 +94,9 @@ export const SetQuotaRequestSchema: GenMessage<SetQuotaRequest> =
 export type ResetUsageRequest =
   Message<"paladin.admin.v1.ResetUsageRequest"> & {
     /**
-     * Used at month/day boundaries by the accounting worker; available
-     * via RPC for ops emergencies.
+     * Quota resource name (see Quota.name docstring for forms). The daily
+     * roll at the UTC day boundary does this on its own; the RPC is for an
+     * operator who needs it sooner.
      *
      * @generated from field: string name = 1;
      */
@@ -139,8 +140,10 @@ export const QuotaService: GenService<{
     output: typeof QuotaSchema;
   };
   /**
-   * ResetUsage zeroes the usage counters without touching the limits. For
-   * recovering from a drifted counter, not for granting capacity.
+   * ResetUsage zeroes today's admission counters (bytes and objects today)
+   * without touching the limits or the stored totals; the totals are
+   * recomputed from live objects by the quota reconciler. Answers with the
+   * quota as it is after the reset.
    *
    * @generated from rpc paladin.admin.v1.QuotaService.ResetUsage
    */
