@@ -1,28 +1,27 @@
-# Grafana dashboards and alerts
+# Grafana dashboards
 
-Committed dashboards and Prometheus alerting rules for the OpenTelemetry
-baseline (ADR-0001). Import a dashboard's JSON via Grafana → Dashboards →
-Import and pick your Prometheus datasource when prompted; load a rule file
-through `rule_files:` or as the `spec.groups` of a `PrometheusRule`.
+Committed dashboards for the OpenTelemetry baseline (ADR-0001). Import a
+dashboard's JSON via Grafana → Dashboards → Import and pick your Prometheus
+datasource when prompted.
+
+The alerting rules ship in the backend chart's PrometheusRule
+(`metrics.alerts`, ADR-0023), not here. Without Prometheus Operator, render
+the chart and take `spec.groups` from it as a rule file:
+
+    helm template paladin-core backend/deploy/chart -f <your values> \
+      --set metrics.alerts.enabled=true \
+      --show-only templates/prometheusrule.yaml | yq '.spec'
 
 | File | Contents |
 |------|----------|
 | `paladin-rpc-red.json` | RPC rate, errors and duration per service and method |
 | `paladin-operations.json` | outbox, workers, Postgres, rate limiting, presigns, capability charges, overdue uploads |
-| `worker-alerts.yaml` | a worker that stopped ticking, or fails every tick |
-| `paladin-alerts.yaml` | outbox not draining, rate limiting failing open, refused capability charges, throttled tenants, read replica out of sync, uploads the reconciler cannot settle |
 
-`task -t Taskfile.dev.yaml verify:grafana-rules` parses every rule file and
-dashboard query with `promtool`, and runs the alert unit tests in
-`*-alerts.test.yaml`. Metric names are the Prometheus rendering of the
-instruments in the code (`paladin.outbox.pending` →
-`paladin_outbox_pending`); all of them exist only with `otel.enabled: true`.
-
-These files are separate from the api chart's own `PrometheusRule`
-(`backend/deploy/chart/templates/prometheusrule.yaml`, off unless
-`metrics.alerts.enabled`), which carries the api role's lifecycle alerts
-(`PaladinApiCrashLooping`, `PaladinApiNotReady`, `PaladinApiOOMKilled`) and
-two traffic alerts (`PaladinApiHighErrorRate`, `PaladinApiHighLatency`).
+`task -t Taskfile.dev.yaml verify:grafana-dashboards` parses every dashboard
+query with `promtool`; `verify:chart-alerts` checks the rules. Metric names
+are the Prometheus rendering of the instruments in the code
+(`paladin.outbox.pending` → `paladin_outbox_pending`); all of them exist only
+with `otel.enabled: true`.
 
 ## Datasource provisioning + log↔trace correlation
 
@@ -75,23 +74,6 @@ metrics stay aggregated by service/method. Exemplars (SDK-default,
 trace-based) link a histogram bucket back to a sampled trace when the
 backend supports them.
 
-## `worker-alerts.yaml` — background-worker alerts
-
-Prometheus alerting rules for the periodic workers (reconciler, purgers,
-reapers, lifecycle, replication). Two rules, each fanned out per `worker`
-label so there is no per-worker threshold to maintain:
-
-- **`PaladinWorkerStalled`** — no completed tick in >5× the worker's own
-  `paladin_worker_interval_seconds`.
-- **`PaladinWorkerTicksAllFailing`** — only `outcome="error"` and zero successes
-  over 15m.
-
-Signal: the `paladin_worker_*` instruments emitted by `internal/worker.RunTicker`
-(tick count + outcome, duration, last-run timestamp, interval). Same caveat as the
-dashboard — only live when `otel.enabled: true`. Drop the file
-into Prometheus `rule_files:` or wrap it in a `PrometheusRule` CR. Response
-procedure: [`docs/runbooks/worker-stalled.md`](../../docs/runbooks/worker-stalled.md).
-
 ## `paladin-operations.json` — Operations
 
 The work that does not show up in RPC metrics.
@@ -108,19 +90,3 @@ The work that does not show up in RPC metrics.
 
 `tenant_id` appears on the rate-limit and capability-charge series only; the
 outbox gauge carries the deepest tenant's depth, not a per-tenant series.
-
-## `paladin-alerts.yaml` — outbox, rate limiting, charges, read replica, uploads
-
-| Alert | Fires when | Severity |
-|-------|-----------|----------|
-| `PaladinOutboxNotDraining` | the minimum outbox depth over 15m is above 500, for 10m | critical |
-| `PaladinRateLimitFailingOpen` | either limiter admitted a request because its storage failed, in the last 10m | critical |
-| `PaladinCapabilityChargesRefused` | over 90% of a tenant's charges were refused for 15m | warning |
-| `PaladinTenantThrottled` | the per-tenant limiter refused over 1 req/s for 10m | warning |
-| `PaladinReadReplicaOutOfSync` | the read replica is enabled and no pod has routed a read to it for 15m | warning |
-| `PaladinUploadsNotSettling` | the oldest overdue PENDING object has been past the reconciler's deadline over 30m, for 15m ([runbook](../../docs/runbooks/uploads-not-settling.md)) | warning |
-
-The counters behind the charge and throttling rules exist only after their
-path has run once, and the replica gauge only where the replica is enabled.
-The fail-open rule treats an absent counter as zero; none of the rules alert
-on absence.
