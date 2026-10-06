@@ -53,6 +53,8 @@ import type {
 } from "@/gen/paladin/admin/v1/system_service_pb";
 import { formatCount, formatTime } from "@/lib/format/locale";
 import { errorMessage } from "@/hooks/errorContract";
+import { PlatformStatsSignal } from "@/gen/paladin/admin/v1/system_service_pb";
+import { SignalTenantsSheet } from "./SignalTenantsSheet";
 
 // Poll cadence. Slower than /health's 15s: this is inventory, which moves
 // on operator actions and bulk uploads rather than second-to-second, and
@@ -646,24 +648,38 @@ export default function StatsPage() {
                 value={num(rls?.quotas?.withLimits)}
               />
               <Separator className="my-2" />
-              <Row
-                label="At / over limit"
-                value={num(rls?.quotas?.atLimit)}
-                accent={
-                  (rls?.quotas?.atLimit ?? 0n) > 0n
-                    ? "text-destructive"
-                    : undefined
-                }
-              />
-              <Row
-                label="Near limit (≥90%)"
-                value={num(rls?.quotas?.nearLimit)}
-                accent={
-                  (rls?.quotas?.nearLimit ?? 0n) > 0n
-                    ? "text-chart-3"
-                    : undefined
-                }
-              />
+              <SignalTenantsSheet
+                signal={PlatformStatsSignal.QUOTA_AT_LIMIT}
+                title="Quotas at / over limit"
+                tab="quotas"
+                count={rls?.quotas?.atLimit}
+              >
+                <Row
+                  label="At / over limit"
+                  value={num(rls?.quotas?.atLimit)}
+                  accent={
+                    (rls?.quotas?.atLimit ?? 0n) > 0n
+                      ? "text-destructive"
+                      : undefined
+                  }
+                />
+              </SignalTenantsSheet>
+              <SignalTenantsSheet
+                signal={PlatformStatsSignal.QUOTA_NEAR_LIMIT}
+                title="Quotas near limit"
+                tab="quotas"
+                count={rls?.quotas?.nearLimit}
+              >
+                <Row
+                  label="Near limit (≥90%)"
+                  value={num(rls?.quotas?.nearLimit)}
+                  accent={
+                    (rls?.quotas?.nearLimit ?? 0n) > 0n
+                      ? "text-chart-3"
+                      : undefined
+                  }
+                />
+              </SignalTenantsSheet>
               <Separator className="my-2" />
               <QuotaDrift
                 quotas={rls?.quotas}
@@ -680,15 +696,22 @@ export default function StatsPage() {
                 label="Delegated"
                 value={num(rls?.capabilities?.delegated)}
               />
-              <Row
-                label="Expiring < 24h"
-                value={num(rls?.capabilities?.expiringSoon)}
-                accent={
-                  (rls?.capabilities?.expiringSoon ?? 0n) > 0n
-                    ? "text-chart-3"
-                    : undefined
-                }
-              />
+              <SignalTenantsSheet
+                signal={PlatformStatsSignal.CAPABILITIES_EXPIRING}
+                title="Capabilities expiring < 24h"
+                tab="capabilities"
+                count={rls?.capabilities?.expiringSoon}
+              >
+                <Row
+                  label="Expiring < 24h"
+                  value={num(rls?.capabilities?.expiringSoon)}
+                  accent={
+                    (rls?.capabilities?.expiringSoon ?? 0n) > 0n
+                      ? "text-chart-3"
+                      : undefined
+                  }
+                />
+              </SignalTenantsSheet>
               <Separator className="my-2" />
               <div className={cn(T.label, "pb-1")}>Active by principal</div>
               <MapRows
@@ -702,15 +725,22 @@ export default function StatsPage() {
               <Row label="Expired" value={num(rls?.apiTokens?.expired)} />
               <Row label="Revoked" value={num(rls?.apiTokens?.revoked)} />
               <Separator className="my-2" />
-              <Row
-                label="Expiring < 7d"
-                value={num(rls?.apiTokens?.expiringSoon)}
-                accent={
-                  (rls?.apiTokens?.expiringSoon ?? 0n) > 0n
-                    ? "text-chart-3"
-                    : undefined
-                }
-              />
+              <SignalTenantsSheet
+                signal={PlatformStatsSignal.API_TOKENS_EXPIRING}
+                title="M2M tokens expiring < 7d"
+                tab="m2m-tokens"
+                count={rls?.apiTokens?.expiringSoon}
+              >
+                <Row
+                  label="Expiring < 7d"
+                  value={num(rls?.apiTokens?.expiringSoon)}
+                  accent={
+                    (rls?.apiTokens?.expiringSoon ?? 0n) > 0n
+                      ? "text-chart-3"
+                      : undefined
+                  }
+                />
+              </SignalTenantsSheet>
               <Row
                 label="Never used"
                 value={num(rls?.apiTokens?.neverUsed)}

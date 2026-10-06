@@ -1155,24 +1155,6 @@ finding moving from "packages you import" to "your code is affected".
   is safe on dev (where this landed) and needs a heads-up before it reaches an
   environment with real tenants.
 
-### Platform Stats: no per-tenant breakdown for quotas / capabilities / tokens / subscriptions
-
-- **Status:** Deferred (scope cut, deliberate).
-- **Reason:** The four RLS'd censuses added alongside objects are fleet-wide
-  aggregates — "12 capabilities expiring in 24h" without saying whose. That
-  matches how the inventory cards (backends, buckets) already read, and the
-  per-tenant table on the page is object-shaped: bolting four more dimensions
-  onto it would make the busiest surface on the page unreadable. The queries
-  themselves would be trivial to group by tenant_id; the UI is the hard part.
-- **Definition of Done:**
-  - Either a per-tenant drill-down (click a card → filtered table) or a second
-    table keyed by tenant with a column group per census.
-  - The ops payload carries per-tenant rows for whichever censuses the UI
-    actually drills into — not all four speculatively, since each multiplies
-    the payload by the tenant count.
-- **Blockers:** none. Wants a design pass on the page first — it already
-  carries five cards plus a wide table.
-
 ### UI/UX refactor (2026-07-24): flatten the deep tenant→bucket→surface URLs
 
 - **Status:** Deferred (the identity + navigation-legibility pass landed this
