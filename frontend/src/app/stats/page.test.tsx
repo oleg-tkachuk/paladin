@@ -4,9 +4,15 @@ import { render, screen } from "@/test/utils";
 
 // The page is one RPC deep: mock adminSystemClient.getPlatformStats and assert
 // on what the operator actually reads off the screen.
-const h = vi.hoisted(() => ({ getPlatformStats: vi.fn() }));
+const h = vi.hoisted(() => ({
+  getPlatformStats: vi.fn(),
+  listPlatformStatsTenants: vi.fn(),
+}));
 vi.mock("@/lib/connect/client", () => ({
-  adminSystemClient: { getPlatformStats: h.getPlatformStats },
+  adminSystemClient: {
+    getPlatformStats: h.getPlatformStats,
+    listPlatformStatsTenants: h.listPlatformStatsTenants,
+  },
 }));
 // PageHeader renders Breadcrumbs, which reads the router — stub navigation
 // rather than the header itself so the page's own title stays under test.
@@ -17,6 +23,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import StatsPage from "./page";
+import { PlatformStatsSignal } from "@/gen/paladin/admin/v1/system_service_pb";
 
 const state = (s: string, count: bigint, bytes: bigint) => ({
   $typeName: "paladin.admin.v1.ObjectStateStat",
@@ -126,6 +133,7 @@ function rlsStats(overrides: Record<string, unknown> = {}) {
 describe("StatsPage", () => {
   beforeEach(() => {
     h.getPlatformStats.mockReset();
+    h.listPlatformStatsTenants.mockReset();
   });
 
   it("renders the inventory census and the per-tenant object table", async () => {
@@ -312,5 +320,111 @@ describe("StatsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Show more" }),
     ).not.toBeInTheDocument();
+  });
+
+  describe("drill-down behind a flagged count", () => {
+    const signalPage = (overrides: Record<string, unknown> = {}) => ({
+      $typeName: "paladin.admin.v1.ListPlatformStatsTenantsResponse",
+      tenants: [
+        {
+          $typeName: "paladin.admin.v1.SignalTenant",
+          tenantId: "11111111-1111-1111-1111-111111111111",
+          slug: "acme-prod",
+          displayName: "Acme Production",
+          count: 1n,
+        },
+      ],
+      page: { nextPageToken: "" },
+      tenantsTruncated: 0n,
+      unattributed: 0n,
+      ...overrides,
+    });
+
+    it("lists whose quotas are at limit, linking to each tenant's quotas", async () => {
+      h.getPlatformStats.mockResolvedValue(response());
+      h.listPlatformStatsTenants.mockResolvedValue(
+        signalPage({ unattributed: 2n }),
+      );
+      render(<StatsPage />);
+
+      const trigger = await screen.findByRole("button", {
+        name: "Quotas at / over limit: show tenants",
+      });
+      // Asked only when the operator asks, not on every poll.
+      expect(h.listPlatformStatsTenants).not.toHaveBeenCalled();
+
+      await userEvent.click(trigger);
+
+      const link = await screen.findByRole("link", { name: /acme-prod/ });
+      expect(link).toHaveAttribute("href", "/tenants/acme-prod/quotas");
+      expect(h.listPlatformStatsTenants).toHaveBeenCalledWith(
+        expect.objectContaining({
+          signal: PlatformStatsSignal.QUOTA_AT_LIMIT,
+        }),
+      );
+      expect(
+        screen.getByText(/2 on shared buckets, owned by no tenant/),
+      ).toBeInTheDocument();
+    });
+
+    it("sends each signal to its own tenant tab", async () => {
+      h.getPlatformStats.mockResolvedValue(response());
+      h.listPlatformStatsTenants.mockResolvedValue(signalPage());
+      render(<StatsPage />);
+
+      await userEvent.click(
+        await screen.findByRole("button", {
+          name: "M2M tokens expiring < 7d: show tenants",
+        }),
+      );
+      expect(
+        await screen.findByRole("link", { name: /acme-prod/ }),
+      ).toHaveAttribute("href", "/tenants/acme-prod/m2m-tokens");
+      expect(h.listPlatformStatsTenants).toHaveBeenCalledWith(
+        expect.objectContaining({
+          signal: PlatformStatsSignal.API_TOKENS_EXPIRING,
+        }),
+      );
+    });
+
+    it("offers nothing to drill into at zero, or while the census is down", async () => {
+      h.getPlatformStats.mockResolvedValue(
+        response({
+          rls: rlsStats({
+            quotas: {
+              total: 1n,
+              tenantScoped: 1n,
+              bucketScoped: 0n,
+              withLimits: 1n,
+              atLimit: 0n,
+              nearLimit: 1n,
+              usageObjectCount: 0n,
+              usageTotalBytes: 0n,
+            },
+          }),
+        }),
+      );
+      const { unmount } = render(<StatsPage />);
+      await screen.findByRole("button", {
+        name: "Quotas near limit: show tenants",
+      });
+      expect(
+        screen.queryByRole("button", {
+          name: "Quotas at / over limit: show tenants",
+        }),
+      ).not.toBeInTheDocument();
+      unmount();
+
+      h.getPlatformStats.mockResolvedValue(
+        response({ rls: rlsStats({ available: false }) }),
+      );
+      render(<StatsPage />);
+      // The counts are still in the payload; only the flag says they are
+      // not live.
+      await screen.findAllByText("unavailable");
+      expect(
+        screen.queryByRole("button", { name: /show tenants/ }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

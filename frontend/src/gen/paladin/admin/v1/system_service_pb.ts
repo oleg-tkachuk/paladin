@@ -3,18 +3,21 @@
 /* eslint-disable */
 
 import type {
+  GenEnum,
   GenFile,
   GenMessage,
   GenService,
 } from "@bufbuild/protobuf/codegenv2";
 import {
+  enumDesc,
   fileDesc,
   messageDesc,
   serviceDesc,
 } from "@bufbuild/protobuf/codegenv2";
+import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { PageRequest } from "../../common/v1/pagination_pb";
+import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
 import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -24,9 +27,119 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_system_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiVwYWxhZGluL2FkbWluL3YxL3N5c3RlbV9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIhIKEEdldENvbmZpZ1JlcXVlc3QiNgoRR2V0Q29uZmlnUmVzcG9uc2USDAoEeWFtbBgBIAEoCRITCgtzb3VyY2VfcGF0aBgCIAEoCSIbChlHZXREaXNwYXRjaGVyU3RhdHNSZXF1ZXN0IrMBChpHZXREaXNwYXRjaGVyU3RhdHNSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSDwoHcGVuZGluZxgCIAEoAxIOCgZmYWlsZWQYAyABKAMSHgoWb2xkZXN0X3BlbmRpbmdfc2Vjb25kcxgEIAEoAxJBCg1zdWJzY3JpcHRpb25zGAUgAygLMioucGFsYWRpbi5hZG1pbi52MS5TdWJzY3JpcHRpb25EZWxpdmVyeVN0YXQirgEKGFN1YnNjcmlwdGlvbkRlbGl2ZXJ5U3RhdBIXCg9zdWJzY3JpcHRpb25faWQYASABKAkSEQoJdGVuYW50X2lkGAIgASgJEg8KB3BlbmRpbmcYAyABKAMSDgoGZmFpbGVkGAQgASgDEhIKCmxhc3RfZXJyb3IYBSABKAkSGAoQbGFzdF9zdGF0dXNfY29kZRgGIAEoBRIXCg9sYXN0X2F0dGVtcHRfYXQYByABKAkiTgoXR2V0UGxhdGZvcm1TdGF0c1JlcXVlc3QSMwoLdGVuYW50X3BhZ2UYASABKAsyHi5wYWxhZGluLmNvbW1vbi52MS5QYWdlUmVxdWVzdCL6AgoYR2V0UGxhdGZvcm1TdGF0c1Jlc3BvbnNlEi4KB3RlbmFudHMYASABKAsyHS5wYWxhZGluLmFkbWluLnYxLlRlbmFudFN0YXRzEjAKCGJhY2tlbmRzGAIgASgLMh4ucGFsYWRpbi5hZG1pbi52MS5CYWNrZW5kU3RhdHMSLgoHYnVja2V0cxgDIAEoCzIdLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0U3RhdHMSNgoLY29sbGVjdGlvbnMYBCABKAsyIS5wYWxhZGluLmFkbWluLnYxLkNvbGxlY3Rpb25TdGF0cxIqCgV1c2VycxgFIAEoCzIbLnBhbGFkaW4uYWRtaW4udjEuVXNlclN0YXRzEjAKDGNvbGxlY3RlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDcmxzGAggASgLMhoucGFsYWRpbi5hZG1pbi52MS5STFNTdGF0c0oECAYQB1IHb2JqZWN0cyKlAgoIUkxTU3RhdHMSEQoJYXZhaWxhYmxlGAEgASgIEi4KB29iamVjdHMYAiABKAsyHS5wYWxhZGluLmFkbWluLnYxLk9iamVjdFN0YXRzEiwKBnF1b3RhcxgDIAEoCzIcLnBhbGFkaW4uYWRtaW4udjEuUXVvdGFTdGF0cxI3CgxjYXBhYmlsaXRpZXMYBCABKAsyIS5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTdGF0cxIzCgphcGlfdG9rZW5zGAUgASgLMh8ucGFsYWRpbi5hZG1pbi52MS5BUElUb2tlblN0YXRzEjoKDXN1YnNjcmlwdGlvbnMYBiABKAsyIy5wYWxhZGluLmFkbWluLnYxLlN1YnNjcmlwdGlvblN0YXRzIrsBCgpRdW90YVN0YXRzEg0KBXRvdGFsGAEgASgDEhUKDXRlbmFudF9zY29wZWQYAiABKAMSFQoNYnVja2V0X3Njb3BlZBgDIAEoAxITCgt3aXRoX2xpbWl0cxgEIAEoAxIQCghhdF9saW1pdBgFIAEoAxISCgpuZWFyX2xpbWl0GAYgASgDEhoKEnVzYWdlX29iamVjdF9jb3VudBgHIAEoAxIZChF1c2FnZV90b3RhbF9ieXRlcxgIIAEoAyKHAgoPQ2FwYWJpbGl0eVN0YXRzEg0KBXRvdGFsGAEgASgDEg4KBmFjdGl2ZRgCIAEoAxIPCgdleHBpcmVkGAMgASgDEg8KB3Jldm9rZWQYBCABKAMSEQoJZGVsZWdhdGVkGAUgASgDEhUKDWV4cGlyaW5nX3Nvb24YBiABKAMSUQoRYnlfcHJpbmNpcGFsX2tpbmQYByADKAsyNi5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTdGF0cy5CeVByaW5jaXBhbEtpbmRFbnRyeRo2ChRCeVByaW5jaXBhbEtpbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBInsKDUFQSVRva2VuU3RhdHMSDQoFdG90YWwYASABKAMSDgoGYWN0aXZlGAIgASgDEg8KB2V4cGlyZWQYAyABKAMSDwoHcmV2b2tlZBgEIAEoAxIVCg1leHBpcmluZ19zb29uGAUgASgDEhIKCm5ldmVyX3VzZWQYBiABKAMi2AEKEVN1YnNjcmlwdGlvblN0YXRzEg0KBXRvdGFsGAEgASgDEg8KB2VuYWJsZWQYAiABKAMSEAoIZGlzYWJsZWQYAyABKAMSEwoLd2l0aF9maWx0ZXIYBCABKAMSSQoMYnlfc2lua19raW5kGAUgAygLMjMucGFsYWRpbi5hZG1pbi52MS5TdWJzY3JpcHRpb25TdGF0cy5CeVNpbmtLaW5kRW50cnkaMQoPQnlTaW5rS2luZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEijwEKC1RlbmFudFN0YXRzEg0KBXRvdGFsGAEgASgDEg4KBmFjdGl2ZRgCIAEoAxIPCgd0cmFzaGVkGAMgASgDEhUKDXNoYXJlZF9sYXlvdXQYBCABKAMSGAoQZGVkaWNhdGVkX2xheW91dBgFIAEoAxIfChd3aXRob3V0X2RlZmF1bHRfYmluZGluZxgGIAEoAyLUAQoMQmFja2VuZFN0YXRzEg0KBXRvdGFsGAEgASgDEg8KB2VuYWJsZWQYAiABKAMSEAoIZGlzYWJsZWQYAyABKAMSEQoJcmVhZF9vbmx5GAQgASgDEhMKC21haW50ZW5hbmNlGAUgASgDEjsKB2J5X2tpbmQYBiADKAsyKi5wYWxhZGluLmFkbWluLnYxLkJhY2tlbmRTdGF0cy5CeUtpbmRFbnRyeRotCgtCeUtpbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBIpYDCgtCdWNrZXRTdGF0cxINCgV0b3RhbBgBIAEoAxJPChJieV9wcm92aXNpb25fc3RhdGUYAiADKAsyMy5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldFN0YXRzLkJ5UHJvdmlzaW9uU3RhdGVFbnRyeRJACgpieV9iYWNrZW5kGAMgAygLMiwucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRTdGF0cy5CeUJhY2tlbmRFbnRyeRIUCgx0ZW5hbnRfb3duZWQYBCABKAMSDgoGc2hhcmVkGAUgASgDEhoKEnZlcnNpb25pbmdfZW5hYmxlZBgGIAEoAxIbChNvYmplY3RfbG9ja19lbmFibGVkGAcgASgDEhsKE3JlcGxpY2F0aW9uX2VuYWJsZWQYCCABKAMaNwoVQnlQcm92aXNpb25TdGF0ZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEaMAoOQnlCYWNrZW5kRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASKpAQoPQ29sbGVjdGlvblN0YXRzEg0KBXRvdGFsGAEgASgDEkQKCmJ5X2JhY2tlbmQYAiADKAsyMC5wYWxhZGluLmFkbWluLnYxLkNvbGxlY3Rpb25TdGF0cy5CeUJhY2tlbmRFbnRyeRIPCgd1bmJvdW5kGAMgASgDGjAKDkJ5QmFja2VuZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEiLAoJVXNlclN0YXRzEg0KBXRvdGFsGAEgASgDEhAKCGRpc2FibGVkGAIgASgDIj4KD09iamVjdFN0YXRlU3RhdBINCgVzdGF0ZRgBIAEoCRINCgVjb3VudBgCIAEoAxINCgVieXRlcxgDIAEoAyKnAQoRVGVuYW50T2JqZWN0U3RhdHMSEQoJdGVuYW50X2lkGAEgASgJEgwKBHNsdWcYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEjEKBnN0YXRlcxgEIAMoCzIhLnBhbGFkaW4uYWRtaW4udjEuT2JqZWN0U3RhdGVTdGF0EhMKC3RvdGFsX2NvdW50GAUgASgDEhMKC3RvdGFsX2J5dGVzGAYgASgDIu0BCgtPYmplY3RTdGF0cxIxCgZzdGF0ZXMYAiADKAsyIS5wYWxhZGluLmFkbWluLnYxLk9iamVjdFN0YXRlU3RhdBITCgt0b3RhbF9jb3VudBgDIAEoAxITCgt0b3RhbF9ieXRlcxgEIAEoAxI0Cgd0ZW5hbnRzGAUgAygLMiMucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRPYmplY3RTdGF0cxIZChF0ZW5hbnRzX3RydW5jYXRlZBgGIAEoAxIfChd0ZW5hbnRzX25leHRfcGFnZV90b2tlbhgHIAEoCUoECAEQAlIJYXZhaWxhYmxlMtACCg1TeXN0ZW1TZXJ2aWNlElkKCUdldENvbmZpZxIiLnBhbGFkaW4uYWRtaW4udjEuR2V0Q29uZmlnUmVxdWVzdBojLnBhbGFkaW4uYWRtaW4udjEuR2V0Q29uZmlnUmVzcG9uc2UiA5ACARJ0ChJHZXREaXNwYXRjaGVyU3RhdHMSKy5wYWxhZGluLmFkbWluLnYxLkdldERpc3BhdGNoZXJTdGF0c1JlcXVlc3QaLC5wYWxhZGluLmFkbWluLnYxLkdldERpc3BhdGNoZXJTdGF0c1Jlc3BvbnNlIgOQAgESbgoQR2V0UGxhdGZvcm1TdGF0cxIpLnBhbGFkaW4uYWRtaW4udjEuR2V0UGxhdGZvcm1TdGF0c1JlcXVlc3QaKi5wYWxhZGluLmFkbWluLnYxLkdldFBsYXRmb3JtU3RhdHNSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
-    [file_google_protobuf_timestamp, file_paladin_common_v1_pagination],
+    "CiVwYWxhZGluL2FkbWluL3YxL3N5c3RlbV9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIpIBCh9MaXN0UGxhdGZvcm1TdGF0c1RlbmFudHNSZXF1ZXN0EkEKBnNpZ25hbBgBIAEoDjIlLnBhbGFkaW4uYWRtaW4udjEuUGxhdGZvcm1TdGF0c1NpZ25hbEIKukgHggEEEAEgABIsCgRwYWdlGAIgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QiswEKIExpc3RQbGF0Zm9ybVN0YXRzVGVuYW50c1Jlc3BvbnNlEi8KB3RlbmFudHMYASADKAsyHi5wYWxhZGluLmFkbWluLnYxLlNpZ25hbFRlbmFudBItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlEhkKEXRlbmFudHNfdHJ1bmNhdGVkGAMgASgDEhQKDHVuYXR0cmlidXRlZBgEIAEoAyJUCgxTaWduYWxUZW5hbnQSEQoJdGVuYW50X2lkGAEgASgJEgwKBHNsdWcYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEg0KBWNvdW50GAQgASgDIhIKEEdldENvbmZpZ1JlcXVlc3QiNgoRR2V0Q29uZmlnUmVzcG9uc2USDAoEeWFtbBgBIAEoCRITCgtzb3VyY2VfcGF0aBgCIAEoCSIbChlHZXREaXNwYXRjaGVyU3RhdHNSZXF1ZXN0IrMBChpHZXREaXNwYXRjaGVyU3RhdHNSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSDwoHcGVuZGluZxgCIAEoAxIOCgZmYWlsZWQYAyABKAMSHgoWb2xkZXN0X3BlbmRpbmdfc2Vjb25kcxgEIAEoAxJBCg1zdWJzY3JpcHRpb25zGAUgAygLMioucGFsYWRpbi5hZG1pbi52MS5TdWJzY3JpcHRpb25EZWxpdmVyeVN0YXQirgEKGFN1YnNjcmlwdGlvbkRlbGl2ZXJ5U3RhdBIXCg9zdWJzY3JpcHRpb25faWQYASABKAkSEQoJdGVuYW50X2lkGAIgASgJEg8KB3BlbmRpbmcYAyABKAMSDgoGZmFpbGVkGAQgASgDEhIKCmxhc3RfZXJyb3IYBSABKAkSGAoQbGFzdF9zdGF0dXNfY29kZRgGIAEoBRIXCg9sYXN0X2F0dGVtcHRfYXQYByABKAkiTgoXR2V0UGxhdGZvcm1TdGF0c1JlcXVlc3QSMwoLdGVuYW50X3BhZ2UYASABKAsyHi5wYWxhZGluLmNvbW1vbi52MS5QYWdlUmVxdWVzdCL6AgoYR2V0UGxhdGZvcm1TdGF0c1Jlc3BvbnNlEi4KB3RlbmFudHMYASABKAsyHS5wYWxhZGluLmFkbWluLnYxLlRlbmFudFN0YXRzEjAKCGJhY2tlbmRzGAIgASgLMh4ucGFsYWRpbi5hZG1pbi52MS5CYWNrZW5kU3RhdHMSLgoHYnVja2V0cxgDIAEoCzIdLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0U3RhdHMSNgoLY29sbGVjdGlvbnMYBCABKAsyIS5wYWxhZGluLmFkbWluLnYxLkNvbGxlY3Rpb25TdGF0cxIqCgV1c2VycxgFIAEoCzIbLnBhbGFkaW4uYWRtaW4udjEuVXNlclN0YXRzEjAKDGNvbGxlY3RlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDcmxzGAggASgLMhoucGFsYWRpbi5hZG1pbi52MS5STFNTdGF0c0oECAYQB1IHb2JqZWN0cyKlAgoIUkxTU3RhdHMSEQoJYXZhaWxhYmxlGAEgASgIEi4KB29iamVjdHMYAiABKAsyHS5wYWxhZGluLmFkbWluLnYxLk9iamVjdFN0YXRzEiwKBnF1b3RhcxgDIAEoCzIcLnBhbGFkaW4uYWRtaW4udjEuUXVvdGFTdGF0cxI3CgxjYXBhYmlsaXRpZXMYBCABKAsyIS5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTdGF0cxIzCgphcGlfdG9rZW5zGAUgASgLMh8ucGFsYWRpbi5hZG1pbi52MS5BUElUb2tlblN0YXRzEjoKDXN1YnNjcmlwdGlvbnMYBiABKAsyIy5wYWxhZGluLmFkbWluLnYxLlN1YnNjcmlwdGlvblN0YXRzIrsBCgpRdW90YVN0YXRzEg0KBXRvdGFsGAEgASgDEhUKDXRlbmFudF9zY29wZWQYAiABKAMSFQoNYnVja2V0X3Njb3BlZBgDIAEoAxITCgt3aXRoX2xpbWl0cxgEIAEoAxIQCghhdF9saW1pdBgFIAEoAxISCgpuZWFyX2xpbWl0GAYgASgDEhoKEnVzYWdlX29iamVjdF9jb3VudBgHIAEoAxIZChF1c2FnZV90b3RhbF9ieXRlcxgIIAEoAyKHAgoPQ2FwYWJpbGl0eVN0YXRzEg0KBXRvdGFsGAEgASgDEg4KBmFjdGl2ZRgCIAEoAxIPCgdleHBpcmVkGAMgASgDEg8KB3Jldm9rZWQYBCABKAMSEQoJZGVsZWdhdGVkGAUgASgDEhUKDWV4cGlyaW5nX3Nvb24YBiABKAMSUQoRYnlfcHJpbmNpcGFsX2tpbmQYByADKAsyNi5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTdGF0cy5CeVByaW5jaXBhbEtpbmRFbnRyeRo2ChRCeVByaW5jaXBhbEtpbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBInsKDUFQSVRva2VuU3RhdHMSDQoFdG90YWwYASABKAMSDgoGYWN0aXZlGAIgASgDEg8KB2V4cGlyZWQYAyABKAMSDwoHcmV2b2tlZBgEIAEoAxIVCg1leHBpcmluZ19zb29uGAUgASgDEhIKCm5ldmVyX3VzZWQYBiABKAMi2AEKEVN1YnNjcmlwdGlvblN0YXRzEg0KBXRvdGFsGAEgASgDEg8KB2VuYWJsZWQYAiABKAMSEAoIZGlzYWJsZWQYAyABKAMSEwoLd2l0aF9maWx0ZXIYBCABKAMSSQoMYnlfc2lua19raW5kGAUgAygLMjMucGFsYWRpbi5hZG1pbi52MS5TdWJzY3JpcHRpb25TdGF0cy5CeVNpbmtLaW5kRW50cnkaMQoPQnlTaW5rS2luZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEijwEKC1RlbmFudFN0YXRzEg0KBXRvdGFsGAEgASgDEg4KBmFjdGl2ZRgCIAEoAxIPCgd0cmFzaGVkGAMgASgDEhUKDXNoYXJlZF9sYXlvdXQYBCABKAMSGAoQZGVkaWNhdGVkX2xheW91dBgFIAEoAxIfChd3aXRob3V0X2RlZmF1bHRfYmluZGluZxgGIAEoAyLUAQoMQmFja2VuZFN0YXRzEg0KBXRvdGFsGAEgASgDEg8KB2VuYWJsZWQYAiABKAMSEAoIZGlzYWJsZWQYAyABKAMSEQoJcmVhZF9vbmx5GAQgASgDEhMKC21haW50ZW5hbmNlGAUgASgDEjsKB2J5X2tpbmQYBiADKAsyKi5wYWxhZGluLmFkbWluLnYxLkJhY2tlbmRTdGF0cy5CeUtpbmRFbnRyeRotCgtCeUtpbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBIpYDCgtCdWNrZXRTdGF0cxINCgV0b3RhbBgBIAEoAxJPChJieV9wcm92aXNpb25fc3RhdGUYAiADKAsyMy5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldFN0YXRzLkJ5UHJvdmlzaW9uU3RhdGVFbnRyeRJACgpieV9iYWNrZW5kGAMgAygLMiwucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRTdGF0cy5CeUJhY2tlbmRFbnRyeRIUCgx0ZW5hbnRfb3duZWQYBCABKAMSDgoGc2hhcmVkGAUgASgDEhoKEnZlcnNpb25pbmdfZW5hYmxlZBgGIAEoAxIbChNvYmplY3RfbG9ja19lbmFibGVkGAcgASgDEhsKE3JlcGxpY2F0aW9uX2VuYWJsZWQYCCABKAMaNwoVQnlQcm92aXNpb25TdGF0ZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEaMAoOQnlCYWNrZW5kRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASKpAQoPQ29sbGVjdGlvblN0YXRzEg0KBXRvdGFsGAEgASgDEkQKCmJ5X2JhY2tlbmQYAiADKAsyMC5wYWxhZGluLmFkbWluLnYxLkNvbGxlY3Rpb25TdGF0cy5CeUJhY2tlbmRFbnRyeRIPCgd1bmJvdW5kGAMgASgDGjAKDkJ5QmFja2VuZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEiLAoJVXNlclN0YXRzEg0KBXRvdGFsGAEgASgDEhAKCGRpc2FibGVkGAIgASgDIj4KD09iamVjdFN0YXRlU3RhdBINCgVzdGF0ZRgBIAEoCRINCgVjb3VudBgCIAEoAxINCgVieXRlcxgDIAEoAyKnAQoRVGVuYW50T2JqZWN0U3RhdHMSEQoJdGVuYW50X2lkGAEgASgJEgwKBHNsdWcYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEjEKBnN0YXRlcxgEIAMoCzIhLnBhbGFkaW4uYWRtaW4udjEuT2JqZWN0U3RhdGVTdGF0EhMKC3RvdGFsX2NvdW50GAUgASgDEhMKC3RvdGFsX2J5dGVzGAYgASgDIu0BCgtPYmplY3RTdGF0cxIxCgZzdGF0ZXMYAiADKAsyIS5wYWxhZGluLmFkbWluLnYxLk9iamVjdFN0YXRlU3RhdBITCgt0b3RhbF9jb3VudBgDIAEoAxITCgt0b3RhbF9ieXRlcxgEIAEoAxI0Cgd0ZW5hbnRzGAUgAygLMiMucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRPYmplY3RTdGF0cxIZChF0ZW5hbnRzX3RydW5jYXRlZBgGIAEoAxIfChd0ZW5hbnRzX25leHRfcGFnZV90b2tlbhgHIAEoCUoECAEQAlIJYXZhaWxhYmxlKvIBChNQbGF0Zm9ybVN0YXRzU2lnbmFsEiUKIVBMQVRGT1JNX1NUQVRTX1NJR05BTF9VTlNQRUNJRklFRBAAEigKJFBMQVRGT1JNX1NUQVRTX1NJR05BTF9RVU9UQV9BVF9MSU1JVBABEioKJlBMQVRGT1JNX1NUQVRTX1NJR05BTF9RVU9UQV9ORUFSX0xJTUlUEAISLworUExBVEZPUk1fU1RBVFNfU0lHTkFMX0NBUEFCSUxJVElFU19FWFBJUklORxADEi0KKVBMQVRGT1JNX1NUQVRTX1NJR05BTF9BUElfVE9LRU5TX0VYUElSSU5HEAQy2QMKDVN5c3RlbVNlcnZpY2USWQoJR2V0Q29uZmlnEiIucGFsYWRpbi5hZG1pbi52MS5HZXRDb25maWdSZXF1ZXN0GiMucGFsYWRpbi5hZG1pbi52MS5HZXRDb25maWdSZXNwb25zZSIDkAIBEnQKEkdldERpc3BhdGNoZXJTdGF0cxIrLnBhbGFkaW4uYWRtaW4udjEuR2V0RGlzcGF0Y2hlclN0YXRzUmVxdWVzdBosLnBhbGFkaW4uYWRtaW4udjEuR2V0RGlzcGF0Y2hlclN0YXRzUmVzcG9uc2UiA5ACARJuChBHZXRQbGF0Zm9ybVN0YXRzEikucGFsYWRpbi5hZG1pbi52MS5HZXRQbGF0Zm9ybVN0YXRzUmVxdWVzdBoqLnBhbGFkaW4uYWRtaW4udjEuR2V0UGxhdGZvcm1TdGF0c1Jlc3BvbnNlIgOQAgEShgEKGExpc3RQbGF0Zm9ybVN0YXRzVGVuYW50cxIxLnBhbGFkaW4uYWRtaW4udjEuTGlzdFBsYXRmb3JtU3RhdHNUZW5hbnRzUmVxdWVzdBoyLnBhbGFkaW4uYWRtaW4udjEuTGlzdFBsYXRmb3JtU3RhdHNUZW5hbnRzUmVzcG9uc2UiA5ACAUJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_timestamp,
+      file_paladin_common_v1_pagination,
+    ],
   );
+
+/**
+ * @generated from message paladin.admin.v1.ListPlatformStatsTenantsRequest
+ */
+export type ListPlatformStatsTenantsRequest =
+  Message<"paladin.admin.v1.ListPlatformStatsTenantsRequest"> & {
+    /**
+     * @generated from field: paladin.admin.v1.PlatformStatsSignal signal = 1;
+     */
+    signal: PlatformStatsSignal;
+
+    /**
+     * page_size 0 or above the server's cap means the cap; page_token is
+     * page.next_page_token from the previous response.
+     *
+     * @generated from field: paladin.common.v1.PageRequest page = 2;
+     */
+    page?: PageRequest | undefined;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListPlatformStatsTenantsRequest.
+ * Use `create(ListPlatformStatsTenantsRequestSchema)` to create a new message.
+ */
+export const ListPlatformStatsTenantsRequestSchema: GenMessage<ListPlatformStatsTenantsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 0);
+
+/**
+ * @generated from message paladin.admin.v1.ListPlatformStatsTenantsResponse
+ */
+export type ListPlatformStatsTenantsResponse =
+  Message<"paladin.admin.v1.ListPlatformStatsTenantsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.SignalTenant tenants = 1;
+     */
+    tenants: SignalTenant[];
+
+    /**
+     * next_page_token is empty on the last page.
+     *
+     * @generated from field: paladin.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+
+    /**
+     * Tenants after this page.
+     *
+     * @generated from field: int64 tenants_truncated = 3;
+     */
+    tenantsTruncated: bigint;
+
+    /**
+     * Rows behind the signal that belong to no tenant: quotas on a shared
+     * bucket. The same on every page.
+     *
+     * @generated from field: int64 unattributed = 4;
+     */
+    unattributed: bigint;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListPlatformStatsTenantsResponse.
+ * Use `create(ListPlatformStatsTenantsResponseSchema)` to create a new message.
+ */
+export const ListPlatformStatsTenantsResponseSchema: GenMessage<ListPlatformStatsTenantsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 1);
+
+/**
+ * SignalTenant is one tenant's share of a signal.
+ *
+ * @generated from message paladin.admin.v1.SignalTenant
+ */
+export type SignalTenant = Message<"paladin.admin.v1.SignalTenant"> & {
+  /**
+   * @generated from field: string tenant_id = 1;
+   */
+  tenantId: string;
+
+  /**
+   * slug / display_name are joined in by the admin pod; empty when the
+   * tenant row is gone but its rows linger.
+   *
+   * @generated from field: string slug = 2;
+   */
+  slug: string;
+
+  /**
+   * @generated from field: string display_name = 3;
+   */
+  displayName: string;
+
+  /**
+   * @generated from field: int64 count = 4;
+   */
+  count: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.SignalTenant.
+ * Use `create(SignalTenantSchema)` to create a new message.
+ */
+export const SignalTenantSchema: GenMessage<SignalTenant> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.GetConfigRequest
@@ -40,7 +153,7 @@ export type GetConfigRequest =
  */
 export const GetConfigRequestSchema: GenMessage<GetConfigRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 0);
+  messageDesc(file_paladin_admin_v1_system_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.GetConfigResponse
@@ -71,7 +184,7 @@ export type GetConfigResponse =
  */
 export const GetConfigResponseSchema: GenMessage<GetConfigResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 1);
+  messageDesc(file_paladin_admin_v1_system_service, 4);
 
 /**
  * @generated from message paladin.admin.v1.GetDispatcherStatsRequest
@@ -85,7 +198,7 @@ export type GetDispatcherStatsRequest =
  */
 export const GetDispatcherStatsRequestSchema: GenMessage<GetDispatcherStatsRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 2);
+  messageDesc(file_paladin_admin_v1_system_service, 5);
 
 /**
  * @generated from message paladin.admin.v1.GetDispatcherStatsResponse
@@ -135,7 +248,7 @@ export type GetDispatcherStatsResponse =
  */
 export const GetDispatcherStatsResponseSchema: GenMessage<GetDispatcherStatsResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 3);
+  messageDesc(file_paladin_admin_v1_system_service, 6);
 
 /**
  * @generated from message paladin.admin.v1.SubscriptionDeliveryStat
@@ -189,7 +302,7 @@ export type SubscriptionDeliveryStat =
  */
 export const SubscriptionDeliveryStatSchema: GenMessage<SubscriptionDeliveryStat> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 4);
+  messageDesc(file_paladin_admin_v1_system_service, 7);
 
 /**
  * ─── Platform census ────────────────────────────────────────────────────────
@@ -216,7 +329,7 @@ export type GetPlatformStatsRequest =
  */
 export const GetPlatformStatsRequestSchema: GenMessage<GetPlatformStatsRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 5);
+  messageDesc(file_paladin_admin_v1_system_service, 8);
 
 /**
  * GetPlatformStatsResponse is the /stats page's whole payload. Split by
@@ -280,7 +393,7 @@ export type GetPlatformStatsResponse =
  */
 export const GetPlatformStatsResponseSchema: GenMessage<GetPlatformStatsResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 6);
+  messageDesc(file_paladin_admin_v1_system_service, 9);
 
 /**
  * RLSStats bundles every aggregate that lives behind row-level security.
@@ -332,7 +445,7 @@ export type RLSStats = Message<"paladin.admin.v1.RLSStats"> & {
  */
 export const RLSStatsSchema: GenMessage<RLSStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 7);
+  messageDesc(file_paladin_admin_v1_system_service, 10);
 
 /**
  * QuotaStats counts quota rows and how close they sit to their caps.
@@ -406,7 +519,7 @@ export type QuotaStats = Message<"paladin.admin.v1.QuotaStats"> & {
  */
 export const QuotaStatsSchema: GenMessage<QuotaStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 8);
+  messageDesc(file_paladin_admin_v1_system_service, 11);
 
 /**
  * CapabilityStats counts issued capability tokens by disposition.
@@ -465,7 +578,7 @@ export type CapabilityStats = Message<"paladin.admin.v1.CapabilityStats"> & {
  */
 export const CapabilityStatsSchema: GenMessage<CapabilityStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 9);
+  messageDesc(file_paladin_admin_v1_system_service, 12);
 
 /**
  * APITokenStats counts hashed-bearer M2M tokens. Same exclusive
@@ -517,7 +630,7 @@ export type APITokenStats = Message<"paladin.admin.v1.APITokenStats"> & {
  */
 export const APITokenStatsSchema: GenMessage<APITokenStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 10);
+  messageDesc(file_paladin_admin_v1_system_service, 13);
 
 /**
  * SubscriptionStats is the event-subscription inventory. The dispatcher's
@@ -565,7 +678,7 @@ export type SubscriptionStats =
  */
 export const SubscriptionStatsSchema: GenMessage<SubscriptionStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 11);
+  messageDesc(file_paladin_admin_v1_system_service, 14);
 
 /**
  * @generated from message paladin.admin.v1.TenantStats
@@ -616,7 +729,7 @@ export type TenantStats = Message<"paladin.admin.v1.TenantStats"> & {
  */
 export const TenantStatsSchema: GenMessage<TenantStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 12);
+  messageDesc(file_paladin_admin_v1_system_service, 15);
 
 /**
  * @generated from message paladin.admin.v1.BackendStats
@@ -664,7 +777,7 @@ export type BackendStats = Message<"paladin.admin.v1.BackendStats"> & {
  */
 export const BackendStatsSchema: GenMessage<BackendStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 13);
+  messageDesc(file_paladin_admin_v1_system_service, 16);
 
 /**
  * @generated from message paladin.admin.v1.BucketStats
@@ -726,7 +839,7 @@ export type BucketStats = Message<"paladin.admin.v1.BucketStats"> & {
  */
 export const BucketStatsSchema: GenMessage<BucketStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 14);
+  messageDesc(file_paladin_admin_v1_system_service, 17);
 
 /**
  * @generated from message paladin.admin.v1.CollectionStats
@@ -759,7 +872,7 @@ export type CollectionStats = Message<"paladin.admin.v1.CollectionStats"> & {
  */
 export const CollectionStatsSchema: GenMessage<CollectionStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 15);
+  messageDesc(file_paladin_admin_v1_system_service, 18);
 
 /**
  * @generated from message paladin.admin.v1.UserStats
@@ -782,7 +895,7 @@ export type UserStats = Message<"paladin.admin.v1.UserStats"> & {
  */
 export const UserStatsSchema: GenMessage<UserStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 16);
+  messageDesc(file_paladin_admin_v1_system_service, 19);
 
 /**
  * ObjectStateStat is one (state, count, bytes) triple. Carried as a
@@ -817,7 +930,7 @@ export type ObjectStateStat = Message<"paladin.admin.v1.ObjectStateStat"> & {
  */
 export const ObjectStateStatSchema: GenMessage<ObjectStateStat> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 17);
+  messageDesc(file_paladin_admin_v1_system_service, 20);
 
 /**
  * @generated from message paladin.admin.v1.TenantObjectStats
@@ -865,7 +978,7 @@ export type TenantObjectStats =
  */
 export const TenantObjectStatsSchema: GenMessage<TenantObjectStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 18);
+  messageDesc(file_paladin_admin_v1_system_service, 21);
 
 /**
  * @generated from message paladin.admin.v1.ObjectStats
@@ -921,7 +1034,54 @@ export type ObjectStats = Message<"paladin.admin.v1.ObjectStats"> & {
  */
 export const ObjectStatsSchema: GenMessage<ObjectStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 19);
+  messageDesc(file_paladin_admin_v1_system_service, 22);
+
+/**
+ * PlatformStatsSignal is a census count the console flags for attention.
+ *
+ * @generated from enum paladin.admin.v1.PlatformStatsSignal
+ */
+export enum PlatformStatsSignal {
+  /**
+   * @generated from enum value: PLATFORM_STATS_SIGNAL_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Quota rows at or over a cap (QuotaStats.at_limit).
+   *
+   * @generated from enum value: PLATFORM_STATS_SIGNAL_QUOTA_AT_LIMIT = 1;
+   */
+  QUOTA_AT_LIMIT = 1,
+
+  /**
+   * Quota rows near a cap and not at one (QuotaStats.near_limit).
+   *
+   * @generated from enum value: PLATFORM_STATS_SIGNAL_QUOTA_NEAR_LIMIT = 2;
+   */
+  QUOTA_NEAR_LIMIT = 2,
+
+  /**
+   * Active capabilities inside the expiry window (CapabilityStats.expiring_soon).
+   *
+   * @generated from enum value: PLATFORM_STATS_SIGNAL_CAPABILITIES_EXPIRING = 3;
+   */
+  CAPABILITIES_EXPIRING = 3,
+
+  /**
+   * Active API tokens inside the expiry window (APITokenStats.expiring_soon).
+   *
+   * @generated from enum value: PLATFORM_STATS_SIGNAL_API_TOKENS_EXPIRING = 4;
+   */
+  API_TOKENS_EXPIRING = 4,
+}
+
+/**
+ * Describes the enum paladin.admin.v1.PlatformStatsSignal.
+ */
+export const PlatformStatsSignalSchema: GenEnum<PlatformStatsSignal> =
+  /*@__PURE__*/
+  enumDesc(file_paladin_admin_v1_system_service, 0);
 
 /**
  * SystemService on the admin plane exposes operator-only diagnostics
@@ -984,5 +1144,23 @@ export const SystemService: GenService<{
     methodKind: "unary";
     input: typeof GetPlatformStatsRequestSchema;
     output: typeof GetPlatformStatsResponseSchema;
+  };
+  /**
+   * ListPlatformStatsTenants answers "whose" for one of the census counts
+   * GetPlatformStats flags for attention: the tenants behind it, biggest
+   * share first, paged like the object table. The counts are computed from
+   * the same predicates as the census, so a full walk plus `unattributed`
+   * adds up to the number GetPlatformStats reported at the same instant.
+   *
+   * Proxied from the worker like the census, but with no degraded answer:
+   * UNAVAILABLE when the worker leg is unconfigured or unreachable, because
+   * an empty list would read as "nobody". Read-only, no audit row.
+   *
+   * @generated from rpc paladin.admin.v1.SystemService.ListPlatformStatsTenants
+   */
+  listPlatformStatsTenants: {
+    methodKind: "unary";
+    input: typeof ListPlatformStatsTenantsRequestSchema;
+    output: typeof ListPlatformStatsTenantsResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_system_service, 0);

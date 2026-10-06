@@ -1,14 +1,61 @@
 import datetime
 
+from buf.validate import validate_pb2 as _validate_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from paladin.common.v1 import pagination_pb2 as _pagination_pb2
 from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
+
+class PlatformStatsSignal(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    PLATFORM_STATS_SIGNAL_UNSPECIFIED: _ClassVar[PlatformStatsSignal]
+    PLATFORM_STATS_SIGNAL_QUOTA_AT_LIMIT: _ClassVar[PlatformStatsSignal]
+    PLATFORM_STATS_SIGNAL_QUOTA_NEAR_LIMIT: _ClassVar[PlatformStatsSignal]
+    PLATFORM_STATS_SIGNAL_CAPABILITIES_EXPIRING: _ClassVar[PlatformStatsSignal]
+    PLATFORM_STATS_SIGNAL_API_TOKENS_EXPIRING: _ClassVar[PlatformStatsSignal]
+PLATFORM_STATS_SIGNAL_UNSPECIFIED: PlatformStatsSignal
+PLATFORM_STATS_SIGNAL_QUOTA_AT_LIMIT: PlatformStatsSignal
+PLATFORM_STATS_SIGNAL_QUOTA_NEAR_LIMIT: PlatformStatsSignal
+PLATFORM_STATS_SIGNAL_CAPABILITIES_EXPIRING: PlatformStatsSignal
+PLATFORM_STATS_SIGNAL_API_TOKENS_EXPIRING: PlatformStatsSignal
+
+class ListPlatformStatsTenantsRequest(_message.Message):
+    __slots__ = ("signal", "page")
+    SIGNAL_FIELD_NUMBER: _ClassVar[int]
+    PAGE_FIELD_NUMBER: _ClassVar[int]
+    signal: PlatformStatsSignal
+    page: _pagination_pb2.PageRequest
+    def __init__(self, signal: _Optional[_Union[PlatformStatsSignal, str]] = ..., page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ...) -> None: ...
+
+class ListPlatformStatsTenantsResponse(_message.Message):
+    __slots__ = ("tenants", "page", "tenants_truncated", "unattributed")
+    TENANTS_FIELD_NUMBER: _ClassVar[int]
+    PAGE_FIELD_NUMBER: _ClassVar[int]
+    TENANTS_TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    UNATTRIBUTED_FIELD_NUMBER: _ClassVar[int]
+    tenants: _containers.RepeatedCompositeFieldContainer[SignalTenant]
+    page: _pagination_pb2.PageResponse
+    tenants_truncated: int
+    unattributed: int
+    def __init__(self, tenants: _Optional[_Iterable[_Union[SignalTenant, _Mapping]]] = ..., page: _Optional[_Union[_pagination_pb2.PageResponse, _Mapping]] = ..., tenants_truncated: _Optional[int] = ..., unattributed: _Optional[int] = ...) -> None: ...
+
+class SignalTenant(_message.Message):
+    __slots__ = ("tenant_id", "slug", "display_name", "count")
+    TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    SLUG_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FIELD_NUMBER: _ClassVar[int]
+    tenant_id: str
+    slug: str
+    display_name: str
+    count: int
+    def __init__(self, tenant_id: _Optional[str] = ..., slug: _Optional[str] = ..., display_name: _Optional[str] = ..., count: _Optional[int] = ...) -> None: ...
 
 class GetConfigRequest(_message.Message):
     __slots__ = ()

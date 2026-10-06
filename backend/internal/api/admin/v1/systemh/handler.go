@@ -8,6 +8,7 @@ package systemh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -220,6 +221,58 @@ func (h *Handler) fetchRLSCensus(ctx context.Context, page platformstats.TenantP
 		return nil, false
 	}
 	return &census, true
+}
+
+// SignalTenantsResult is one page of the tenants behind a flagged census
+// count, labelled the way PlatformStatsResult labels the object table.
+type SignalTenantsResult struct {
+	Tenants     *platformstats.SignalTenants
+	TenantNames map[string]TenantName
+}
+
+// PlatformStatsTenants answers "whose" for one of the census counts the
+// console flags. Unlike PlatformStats it has no degraded answer: it is only
+// asked for once the census has shown the count, so a worker that cannot
+// answer is Unavailable rather than an empty list that reads as "nobody".
+func (h *Handler) PlatformStatsTenants(ctx context.Context, signal platformstats.Signal, page platformstats.TenantPage) (*SignalTenantsResult, error) {
+	if rerr := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); rerr != nil {
+		return nil, connect.NewError(connect.CodePermissionDenied, rerr)
+	}
+	base := h.cfg.Worker.OpsURL
+	if base == "" {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("worker ops endpoint is not configured"))
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		base+platformstats.SignalTenantsPath+"?"+platformstats.SignalQuery(signal, page).Encode(), nil)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	res, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("worker census: %s", res.Status))
+	}
+	var tenants platformstats.SignalTenants
+	if err := json.NewDecoder(res.Body).Decode(&tenants); err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
+	}
+
+	out := &SignalTenantsResult{Tenants: &tenants, TenantNames: map[string]TenantName{}}
+	if h.pool != nil && len(tenants.Tenants) > 0 {
+		ids := make([]string, 0, len(tenants.Tenants))
+		for _, t := range tenants.Tenants {
+			ids = append(ids, t.TenantID)
+		}
+		names, err := h.tenantNames(ctx, ids)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		out.TenantNames = names
+	}
+	return out, nil
 }
 
 // tenantNames resolves slug + display name for the supplied tenant ids.
