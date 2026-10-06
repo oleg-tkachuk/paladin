@@ -62,6 +62,9 @@ flowchart TB
 What each role reaches. Every role but `mcp` (in its default bridge mode)
 uses PostgreSQL; `ingest` also receives storage notifications, over a webhook,
 NATS, RabbitMQ or SQS. The S3 calls each role makes are in [Storage](#storage).
+`admin` also reads two roles' ops listeners: the worker's for the console's
+`/stats` census, the dispatcher's for its queue view (see
+[Isolation](#how-a-request-is-authorised)).
 
 ```mermaid
 flowchart LR
@@ -84,6 +87,8 @@ flowchart LR
     ingest --> pg
     dispatcher --> pg
     dispatcher --> sinks
+    admin -. "ops: /stats census" .-> worker
+    admin -. "ops: queue stats" .-> dispatcher
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
@@ -138,7 +143,13 @@ Four mechanisms, applied in order, each answering a different question.
    control, not defence in depth. Connection pools are split by trust
    level for that reason: the RLS pool carries tenant context, and the
    BYPASSRLS pool that background jobs use is a separate pool entirely, so
-   a worker cannot inherit a request's scope by accident.
+   a worker cannot inherit a request's scope by accident. The admin plane
+   holds no BYPASSRLS pool: the cross-tenant census on the console's
+   `/stats` page, and the list of tenants behind each count it flags, are
+   computed by the worker on its pool (`internal/platformstats`) and
+   proxied by admin's `SystemService` (`GetPlatformStats`,
+   `ListPlatformStatsTenants`) from `worker.ops_url`, behind the
+   platform-admin check.
 
 Budgets sit alongside all four. A capability carries a spend ceiling, and
 usage is metered per call against the lineage that spent it — which run,
@@ -264,6 +275,8 @@ docs/         ADRs, runbooks, configuration reference
 specs/        spec-driven-development artifacts per feature
 proto/        the API contract the backend, console and SDKs generate from
 sdk/          the Go and Python SDKs; sdk/testdata holds what both are tested against
+deploy/       Grafana dashboards and alert rules
+scripts/      repository-wide contract checks, release and stack helpers
 BACKLOG.md    deferred work, with reasons
 ```
 
