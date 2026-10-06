@@ -234,7 +234,7 @@ func TestCollectRLSSiblings(t *testing.T) {
 		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`,
 		backendOf(t, ctx, pool, f), "bkt-q-"+hex)
 	mustExec(t, ctx, pool,
-		`INSERT INTO quotas (id, bucket_id, max_total_bytes, usage_total_bytes)
+		`INSERT INTO bucket_quotas (id, bucket_id, max_total_bytes, usage_total_bytes)
 		 VALUES ($1, (SELECT b.id FROM buckets b
 		          JOIN storage_backends sb ON sb.id = b.backend_id
 		         WHERE sb.name = $2 AND b.name = $3), 1000, 950)`,
