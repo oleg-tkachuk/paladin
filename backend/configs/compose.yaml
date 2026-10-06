@@ -153,6 +153,9 @@ worker:
   ops:
     <<: *http_defaults
     addr: "0.0.0.0:8090"
+  # Where the admin plane reaches this listener for the /stats census; the
+  # compose service name and the addr above.
+  ops_url: "http://paladin-worker:8090"
   jobs:
     reconciler:
       interval: 30s
@@ -232,6 +235,11 @@ api_token:
 # Ingest plane is ON by default in compose so SeaweedFS-uploaded files
 # auto-promote PENDING → AVAILABLE without an explicit Complete RPC.
 # Webhook driver is the smallest setup — no MQ infra required.
+# The dispatcher drains the outbox (serve dispatcher, its own container in
+# deploy/docker-compose.yaml); the admin plane reads its queue stats here.
+dispatcher:
+  ops_url: "http://paladin-dispatcher:8099"
+
 ingest:
   enabled: true
   driver: webhook

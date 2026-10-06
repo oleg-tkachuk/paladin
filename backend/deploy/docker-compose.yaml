@@ -9,9 +9,11 @@
 # the integrated repo. To bring up backend only: `--scale paladin-console=0`.
 #
 # Boot order via `condition: service_completed_successfully`:
-#   postgres healthy → paladin-migrate (one-shot) → paladin-bootstrap (one-shot)
+#   postgres healthy → paladin-migrate (one-shot) → paladin-promote-app-role
+#                    (one-shot) → paladin-bootstrap (one-shot)
 #                                              → paladin-api / paladin-admin /
-#                                                paladin-worker / paladin-mcp
+#                                                paladin-worker / paladin-dispatcher /
+#                                                paladin-mcp / paladin-ingest
 #                                              → paladin-console (waits for api+admin)
 #
 # Verify the planes + UI:
@@ -30,8 +32,10 @@ x-build-meta: &build-meta
 x-paladin-base: &paladin-base
   image: paladin-core
   build:
-    context: ..
-    dockerfile: ./deploy/Dockerfile
+    # The repository root: the image also needs the sibling capability/
+    # module, as the backend Taskfile's DOCKER_CONTEXT says.
+    context: ../..
+    dockerfile: backend/deploy/Dockerfile
     network: host
     args: *build-meta
   volumes:
@@ -90,9 +94,42 @@ services:
     container_name: paladin-migrate
     restart: "no"
     command: ["migrate", "--config", "/app/configs/compose.yaml"]
+    environment:
+      # The owner, for this service only: `paladin migrate` opens the runtime
+      # pool before it touches migrate_dsn, and paladin_app cannot log in
+      # until 002 has created it and paladin-promote-app-role has given it a
+      # password.
+      PALADIN_DATASTORES_POSTGRES_DSN: postgres://paladin:paladin@postgres:5432/paladin?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
+
+  # One-shot: gives paladin_app a way to log in. 002 creates the role NOLOGIN —
+  # production provisions its credential out of band — and every service below
+  # connects as it (configs/compose.yaml), so on a fresh volume nothing could
+  # start without this. Same step as the e2e stack's promote-app-role.
+  paladin-promote-app-role:
+    image: postgres:16
+    container_name: paladin-promote-app-role
+    restart: "no"
+    environment:
+      PGPASSWORD: paladin
+    # dev-only credential, same class as everything else in this file.
+    command:
+      - psql
+      - -h
+      - postgres
+      - -U
+      - paladin
+      - -d
+      - paladin
+      - -v
+      - ON_ERROR_STOP=1
+      - -c
+      - ALTER ROLE paladin_app WITH LOGIN PASSWORD 'paladin_app';
+    depends_on:
+      paladin-migrate:
+        condition: service_completed_successfully
 
   # One-shot: provisions the platform admin user + storage backend rows.
   # Idempotent — safe to re-run on every `up`.
@@ -102,7 +139,7 @@ services:
     restart: "no"
     command: ["bootstrap", "--config", "/app/configs/compose.yaml"]
     depends_on:
-      paladin-migrate:
+      paladin-promote-app-role:
         condition: service_completed_successfully
 
   paladin-api:
@@ -143,6 +180,18 @@ services:
         condition: service_completed_successfully
       seaweedfs:
         condition: service_started
+
+  # Drains the event_deliveries outbox to subscriptions' sinks. Without it the
+  # stack wrote outbox rows that nothing ever delivered.
+  paladin-dispatcher:
+    <<: *paladin-base
+    container_name: paladin-dispatcher
+    init: true
+    restart: on-failure
+    command: ["serve", "dispatcher", "--config", "/app/configs/compose.yaml"]
+    depends_on:
+      paladin-bootstrap:
+        condition: service_completed_successfully
 
   paladin-mcp:
     <<: *paladin-base

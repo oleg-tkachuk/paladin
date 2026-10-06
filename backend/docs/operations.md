@@ -13,8 +13,8 @@ on Kubernetes is in [docs/install.md](../../docs/install.md).
 
 ## Run locally
 
-The compose stack runs the api, admin, worker, mcp and ingest roles (not the
-dispatcher), PostgreSQL, SeaweedFS and the console:
+The compose stack runs every role — api, admin, worker, dispatcher, mcp and
+ingest — with PostgreSQL, SeaweedFS and the console:
 
 ```bash
 task stack:up      # from the repository root
