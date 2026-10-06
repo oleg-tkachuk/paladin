@@ -241,9 +241,10 @@ class Client:
 
         ``user_agent_suffix`` — ``"worker/2.1"`` — is appended to the SDK's
         User-Agent. ``hooks`` are told of every retry. ``interceptors`` run
-        outside the SDK's own, so one that times or traces a call — such as
-        connectrpc-otel's ``OpenTelemetryInterceptor(client=True)`` — covers
-        its retries; give sync or async ones to match the clients.
+        outside the SDK's own, so one that times or traces a call covers its
+        retries; give sync or async ones to match the clients. (connectrpc-otel
+        0.2.0 is not one to use here: it fails on connect-python 0.9.0 — see
+        the README's OpenTelemetry section.)
 
         ``dpop_key`` — a ``cryptography`` Ed25519 or P-256 private key — proves
         possession of the key a ``capability`` is bound to: each call, each
