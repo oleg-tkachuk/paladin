@@ -43,6 +43,15 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a reused `Idempotency-Key` with a different request is refused
+
+- **The same `Idempotency-Key` sent with a different request to the same
+  method answers `InvalidArgument`** instead of replaying the first request's
+  response. Before, a client reusing one key — the SDKs' context key does,
+  inside their download and multipart helpers — got one object's download URL
+  under every name. Use one key per request; a retry of the same request
+  still replays.
+
 ## Unreleased — `housekeeping.pending_ttl` and `delete_orphaned_parts` are removed
 
 - **A config that sets `worker.jobs.housekeeping.pending_ttl` or

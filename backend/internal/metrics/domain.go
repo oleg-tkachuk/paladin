@@ -161,10 +161,11 @@ func init() {
 	if idempotencyLookups, err = meterDomain.Int64Counter(
 		"paladin_idempotency_lookups_total",
 		metric.WithDescription(
-			"Idempotency-key lookups by outcome (replayed|miss|unreplayable). "+
+			"Idempotency-key lookups by outcome (replayed|miss|unreplayable|refused|key_reused). "+
 				"`unreplayable` means the key WAS cached but the response could not "+
 				"be reconstructed, so the handler ran a second time — the one outcome "+
-				"here that can produce a duplicate side effect."),
+				"here that can produce a duplicate side effect. `key_reused` is a key "+
+				"sent again with a different request, refused rather than replayed."),
 	); err != nil {
 		otel.Handle(err)
 	}
@@ -302,7 +303,7 @@ func RecordLoginAttempt(ctx context.Context, outcome string) {
 }
 
 // RecordIdempotencyLookup counts one key lookup by outcome:
-// replayed|miss|unreplayable.
+// replayed|miss|unreplayable|refused|key_reused.
 //
 // method is the RPC procedure, which is bounded by the service surface — the
 // KEY is not, and never becomes a label.
