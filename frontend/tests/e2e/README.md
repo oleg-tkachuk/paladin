@@ -1,8 +1,8 @@
 # Paladin Frontend E2E (Playwright)
 
-Operator-facing UI regression guards for the Paladin admin UI. 15
-test scenarios across 5 user stories. Design rationale + the
-SDD audit trail live at
+Operator-facing UI regression guards for the Paladin admin UI, one spec
+file per console surface. The first five user stories, their design
+rationale and the SDD audit trail live at
 [`specs/001-frontend-playwright-e2e/`](../../../specs/001-frontend-playwright-e2e/).
 
 ## Quick start
@@ -15,16 +15,23 @@ SDD audit trail live at
 #     registry.local/paladin/paladin-console:latest
 #     (`task -t Taskfile.dev.yaml verify-e2e` from the repo root rebuilds both; or
 #     `task -d backend release:image:build` / `task -d frontend release:image:build`)
-#   - pnpm 12.7.0 (the `packageManager` pin): `npm install -g pnpm@12.7.0`
+#   - pnpm at the version `packageManager` pins in package.json
 #   - Chromium binary: `pnpm exec playwright install chromium`
 
 cd frontend
 
 # Run the suite. Playwright's webServer config brings up the
 # docker-compose test stack — Postgres, SeaweedFS and the Paladin planes —
-# and tears it down on exit.
+# with `docker compose up --wait`, which exits once the stack is healthy, so
+# the stack is still up when the run ends; a later local run reuses it.
 pnpm run test:e2e
+
+# Remove it, volumes included:
+pnpm run test:e2e:stack:down
 ```
+
+`task -t Taskfile.dev.yaml verify-e2e` (`frontend/scripts/verify-e2e.sh`) removes the
+stack before and after the run itself.
 
 There is nothing else to arrange: no cluster, no port-forward, no
 credential export.
@@ -107,16 +114,21 @@ tests/e2e/
 │   ├── credentials.ts     # seeded admin user (NEVER-in-prod marker)
 │   ├── unique.ts          # uniqueSlug() — UUID-suffixed identifiers
 │   ├── auth.ts            # loginAsAdmin(), logout() — UI-driven
+│   ├── navigate.ts        # gotoSettled(), clickWhenSettled()
+│   ├── resources.ts       # the `test` whose fixtures delete what they made
 │   └── seed.ts            # seedTenant, seedBucket, seedCollection,
-│                          # seedCapability — Connect-RPC direct
+│                          # seedCapability, … — Connect-RPC direct
 ├── environment.setup.ts   # runs first, gates the rest — see below
-├── auth.spec.ts           # US1 — login + AuthGate redirect (4 tests)
-├── scope.spec.ts          # US2 — scope picker behavior (3 tests)
-├── buckets.spec.ts        # US3 — bucket → Collection navigation (3 tests)
-├── capabilities.spec.ts   # US4 — capability lifecycle + FR-008 (3 tests)
-├── trash.spec.ts          # US5 — tenant restore from trash (2 tests)
-└── docker-compose.test.yaml   # 6 services: postgres, migrate,
-                                 # bootstrap, api, admin, ui
+├── auth.spec.ts           # US1 — login + AuthGate redirect
+├── scope.spec.ts          # US2 — scope picker behavior
+├── buckets.spec.ts        # US3 — bucket → Collection navigation
+├── capabilities.spec.ts   # US4 — capability lifecycle + FR-008
+├── trash.spec.ts          # US5 — tenant restore from trash
+├── *.spec.ts              # one per further console surface
+├── seaweedfs-s3.json      # SeaweedFS S3 identity for the dev credentials
+└── docker-compose.test.yaml   # seaweedfs, seaweedfs-setup, postgres,
+                               # migrate, promote-app-role, bootstrap,
+                               # api (data + iam), admin, ui
 ```
 
 ## The environment gate
@@ -188,12 +200,10 @@ pnpm exec playwright show-trace test-results/<failed-test-dir>/trace.zip
 
 ## Troubleshooting
 
-| Symptom                                          | Likely cause                    | Fix                                                        |
-| ------------------------------------------------ | ------------------------------- | ---------------------------------------------------------- |
-| `webServer` times out                            | Paladin backend image not built | `task -d backend release:image:build`                      |
-| `required variable PALADIN_E2E_S3_ACCESS_KEY`    | Garage creds not exported       | Re-run the two `export` commands in Quick start            |
-| Backend logs `dial tcp 3900: connection refused` | port-forward not running        | `kubectl port-forward -n garage svc/garage-s3 3900:3900 &` |
-| Tests pass once, fail on second run              | Stale postgres data             | `pnpm run test:e2e:stack:down` then `:stack`               |
+| Symptom                             | Likely cause                    | Fix                                          |
+| ----------------------------------- | ------------------------------- | -------------------------------------------- |
+| `webServer` times out               | Paladin backend image not built | `task -d backend release:image:build`        |
+| Tests pass once, fail on second run | Stale postgres data             | `pnpm run test:e2e:stack:down` then `:stack` |
 
 For the full troubleshooting table + SDD context, see
 [`specs/001-frontend-playwright-e2e/quickstart.md`](../../../specs/001-frontend-playwright-e2e/quickstart.md).
