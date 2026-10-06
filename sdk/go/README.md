@@ -113,9 +113,10 @@ and `Issue*` calls and answers a repeated key with the first response.
 
 | Name | Does |
 | --- | --- |
-| `NewSession(ctx, iamURL, subject, password, opts...) (*Session, error)` | Signs in at the IAM plane and keeps the refresh token. `Token(ctx, audience)` returns that plane's access token: the IAM one by refreshing, the others by `ExchangeAudience`. Each is cached until `TokenRefreshMargin` (30s) before it expires. When the refresh token itself is refused, the session signs in again. Safe for concurrent use; concurrent callers wait for one mint. |
+| `NewSession(ctx, iamURL, subject, password, opts...) (*Session, error)` | Signs in at the IAM plane and keeps the refresh token. `Token(ctx, audience)` returns that plane's access token: the IAM one by refreshing, the others by `ExchangeAudience`. Each is cached until `TokenRefreshMargin` (30s) before it expires. When the refresh token itself is refused, the session signs in again. Safe for concurrent use; concurrent callers wait for one mint, and a cached token is served while another audience's is minted. A token that cannot be had because IAM is down fails the call as `Unavailable`, not `Unauthenticated`. |
 | `SessionFromRefreshToken(iamURL, refreshToken, opts...)` | Resumes from a stored refresh token; cannot sign in again when it expires. `(*Session).RefreshToken()` is the current one to store — refreshing rotates it. |
 | `WithSessionClock(now)` | Replaces `time.Now`, for tests. |
+| `WithSessionClientOptions(opts...)` | Configures the client the session reaches IAM with, as `New`'s options do any other: `WithTLS` for an IAM behind mTLS, `WithRetries`, `WithHTTPClient`, `WithHooks`. |
 | `StaticToken(token)` | The same token for every plane: an API token, or a JWT from elsewhere. |
 | A `TokenSource` of your own | `Token(ctx, audience)` is asked on every call, with that call's context. An empty token and no error sends the call without `Authorization`, for a caller authenticated by a capability alone. |
 | `WithTokens(ts)` | With `Connect`: each plane gets `ts`'s token for its own audience. `New` refuses it with `ErrNoAudience`. |
