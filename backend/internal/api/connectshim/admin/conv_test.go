@@ -281,28 +281,6 @@ func TestBucketNameParts(t *testing.T) {
 	}
 }
 
-// tenantIDFromName tolerates a child segment because callers pass both the
-// bare tenant name and deeper resource names.
-func TestTenantIDFromName(t *testing.T) {
-	if got, err := tenantIDFromName("tenants/acme"); err != nil || got != "acme" {
-		t.Errorf("got %q, %v", got, err)
-	}
-	if got, err := tenantIDFromName("tenants/acme/eventSubscriptions/s1"); err != nil || got != "acme" {
-		t.Errorf("child segment must be trimmed, got %q, %v", got, err)
-	}
-	for label, n := range map[string]string{
-		"empty":        "",
-		"prefix only":  "tenants/",
-		"wrong prefix": "orgs/acme",
-	} {
-		t.Run(label, func(t *testing.T) {
-			if _, err := tenantIDFromName(n); err == nil {
-				t.Errorf("want an error for %q", n)
-			}
-		})
-	}
-}
-
 func TestSubscriptionIDFromName(t *testing.T) {
 	// The tenant segment is returned now, not discarded — the handler needs
 	// it to scope the connection before reading an RLS-isolated row.

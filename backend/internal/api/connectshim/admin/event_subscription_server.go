@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/eventsubh"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
@@ -24,12 +22,6 @@ type EventSubscriptionServer struct {
 	// Subscriptions are RLS-isolated, so the handler needs the tenant's id
 	// before it can read the row — see eventsubh.Handler.Get.
 	Tenants TenantResolver
-}
-
-// TenantResolver is the slug → id lookup this server needs, kept as an
-// interface so it does not depend on the whole tenant handler.
-type TenantResolver interface {
-	GetTenantBySlug(ctx context.Context, slug string) (*tenanth.Tenant, error)
 }
 
 func NewEventSubscriptionServer(h *eventsubh.Handler, tenants TenantResolver) *EventSubscriptionServer {
@@ -48,29 +40,18 @@ func (s *EventSubscriptionServer) resolveSubscriptionName(ctx context.Context, n
 	if err != nil {
 		return uuid.Nil, uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	if ref.HasID() {
-		return ref.ID, id, nil
-	}
-	if s.Tenants == nil {
-		return uuid.Nil, uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("subscription name must use the tenant uuid here"))
-	}
-	t, err := s.Tenants.GetTenantBySlug(ctx, ref.Slug)
+	tenantID, err := resolveTenantRef(ctx, s.Tenants, ref)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
 	}
-	return t.TenantID, id, nil
+	return tenantID, id, nil
 }
 
 func (s *EventSubscriptionServer) CreateSubscription(ctx context.Context, req *connect.Request[pb.CreateSubscriptionRequest]) (*connect.Response[pb.EventSubscription], error) {
 	m := req.Msg
-	tenantStr, err := tenantIDFromName(m.GetParent())
+	tenantID, err := resolveTenantName(ctx, s.Tenants, m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	tenantID, err := uuid.Parse(tenantStr)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	src := m.GetSubscription()
 	kind, cfg := sinkToConfig(src.GetSink())
@@ -155,12 +136,13 @@ func (s *EventSubscriptionServer) DeleteSubscription(ctx context.Context, req *c
 func (s *EventSubscriptionServer) ListSubscriptions(ctx context.Context, req *connect.Request[pb.ListSubscriptionsRequest]) (*connect.Response[pb.ListSubscriptionsResponse], error) {
 	m := req.Msg
 	args := admindomain.ListEventSubscriptionsArgs{PageSize: m.GetPage().GetPageSize()}
+	// An unresolvable parent is an error, never an unscoped listing.
 	if m.GetParent() != "" {
-		if tStr, err := tenantIDFromName(m.GetParent()); err == nil {
-			if id, perr := uuid.Parse(tStr); perr == nil {
-				args.TenantID = id
-			}
+		id, err := resolveTenantName(ctx, s.Tenants, m.GetParent())
+		if err != nil {
+			return nil, err
 		}
+		args.TenantID = id
 	}
 	if tok := m.GetPage().GetPageToken(); tok != "" {
 		if id, err := uuid.Parse(tok); err == nil {
