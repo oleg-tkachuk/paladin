@@ -551,9 +551,10 @@ type QuotaReconcile struct {
 }
 
 // Dispatcher is the per-role config block for the `serve dispatcher`
-// binary — the durable webhook fan-out loop introduced by migration
-// 028 (event_deliveries outbox). Producer (admin pod) writes rows;
-// this loop consumes them.
+// binary — the durable event fan-out loop over the event_deliveries
+// outbox (001_initial_schema.sql, ADR-0003). Every producer — the data
+// and admin planes, ingest, the bucket reconciler — writes rows in the
+// transaction of its state change; this loop delivers them to the sinks.
 //
 // Per-knob notes:
 //
