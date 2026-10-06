@@ -44,8 +44,11 @@ what idempotent means.
 Idempotency-Key: my-service-tenant-<tenant-id>
 ```
 
-The replay is cached per (tenant, method, key). Failures are not memoized — a
-call that errored can be retried and succeed.
+The replay is cached per (tenant, method, key), together with a fingerprint
+of the request. The same key with the same request replays; the same key with
+a different request to that method is `InvalidArgument` — a key names one
+request, not a session. Failures are not memoized — a call that errored can be
+retried and succeed.
 
 Two exceptions to the replay (`backend/internal/middleware/idempotency_skip.go`):
 `AuthService` `Login`, `RefreshToken`, `ExchangeAudience` and `SwitchTenant`

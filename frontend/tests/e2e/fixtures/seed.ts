@@ -506,16 +506,20 @@ export interface SeededCapability {
  * only care that the row materialises in `/capabilities`.
  *
  * `opts.idempotencyKey` is the FR-008 hook: when set, the Issue
- * RPC is fired with that exact header value. A second call with the
- * same key is refused with AlreadyExists — Issue's response carries a
- * credential, which the idempotency cache does not store.
+ * RPC is fired with that exact header value. The same request again
+ * with the same key is refused with AlreadyExists — Issue's response
+ * carries a credential, which the idempotency cache does not store; a
+ * different request with that key is InvalidArgument. `opts.subject`
+ * fixes the subject, which is otherwise unique per call, so a test can
+ * send the identical request twice.
  */
 export async function seedCapability(opts: {
   tenantId: string;
   subjectPrefix?: string;
+  subject?: string;
   idempotencyKey?: string;
 }): Promise<SeededCapability> {
-  const subject = uniqueSlug(opts.subjectPrefix ?? "e2e-agent");
+  const subject = opts.subject ?? uniqueSlug(opts.subjectPrefix ?? "e2e-agent");
   const client = capabilityAdminClient({
     idempotencyKey: opts.idempotencyKey,
   });

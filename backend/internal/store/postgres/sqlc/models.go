@@ -525,6 +525,7 @@ type IdempotencyKey struct {
 	ResponseSha []byte             `json:"response_sha"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	RequestHash []byte             `json:"request_hash"`
 }
 
 type IdempotencyKeysDefault struct {

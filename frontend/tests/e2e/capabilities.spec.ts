@@ -78,19 +78,30 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
     await loginAsAdmin(page);
     const tenant = await makeTenant();
 
-    // Same key for both calls — that's the entire point.
+    // The same request with the same key, twice — a double-submit. The
+    // subject is fixed, or the fixture would make the two requests differ,
+    // and a key reused for a different request is refused as InvalidArgument.
     const sharedKey = crypto.randomUUID();
+    const subject = `e2e-twin-${crypto.randomUUID().slice(0, 8)}`;
     const first = await seedCapability({
       tenantId: tenant.tenantId,
-      subjectPrefix: "e2e-twin",
+      subject,
       idempotencyKey: sharedKey,
     });
     const second = seedCapability({
       tenantId: tenant.tenantId,
-      subjectPrefix: "e2e-twin",
+      subject,
       idempotencyKey: sharedKey,
     });
     await expect(second).rejects.toMatchObject({ code: Code.AlreadyExists });
+    const different = seedCapability({
+      tenantId: tenant.tenantId,
+      subject: `${subject}-other`,
+      idempotencyKey: sharedKey,
+    });
+    await expect(different).rejects.toMatchObject({
+      code: Code.InvalidArgument,
+    });
 
     // And the UI shows the one capability. exact:true matches the ID cell
     // only — not the "Actions for capability <id>" sr-only label.
