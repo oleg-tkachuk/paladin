@@ -54,7 +54,11 @@ spec:
         checksum/secrets: {{ printf "%s%s"
           (include (print $.Template.BasePath "/secret-bootstrap-admin.yaml") $)
           (include (print $.Template.BasePath "/secret-s3-credentials.yaml") $) | sha256sum }}
-        {{- with default $defaults.podAnnotations $spec.podAnnotations }}
+        {{- $podAnnotations := default $defaults.podAnnotations $spec.podAnnotations }}
+        {{- with $podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with include "chart.metricsAnnotations" (dict "ctx" $ "role" $role "podAnnotations" $podAnnotations) | fromJson }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:

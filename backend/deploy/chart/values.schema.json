@@ -2076,6 +2076,13 @@
           },
           "type": "object"
         },
+        "discovery": {
+          "enum": [
+            "podMonitor",
+            "annotations"
+          ],
+          "type": "string"
+        },
         "mode": {
           "enum": [
             "push",

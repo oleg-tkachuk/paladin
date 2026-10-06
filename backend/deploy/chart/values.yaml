@@ -475,6 +475,15 @@ podDisruptionBudget:
 metrics:
   mode: push
   port: 9095
+  # How the scraper finds the pods, with mode: scrape.
+  #
+  #   podMonitor   a PodMonitor for Prometheus Operator (and anything that
+  #                reads its CRD).
+  #   annotations  prometheus.io/scrape, port and path on each role that
+  #                serves /metrics, for scrapers that discover by annotation
+  #                (Alloy, vmagent, a kubernetes_sd job). The chart owns those
+  #                keys then and refuses them in podAnnotations.
+  discovery: podMonitor
   podMonitor:
     # Namespace the PodMonitor lands in, where the Prometheus CR looks for
     # it. Empty = release namespace.
