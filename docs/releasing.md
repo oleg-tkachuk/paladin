@@ -11,14 +11,14 @@ that touch it ([`release.config.cjs`](../release.config.cjs)).
 | `capability/vX.Y.Z` | semantic-release, in the same run | the tag, for `go get`, and a GitHub release | the commits that touch `capability/` |
 | `api/vX.Y.Z` | a maintainer, by hand | nothing; the baseline `buf breaking` compares against | the API contract |
 
-The module releases' notes list only their own `feat` and `fix` commits
-(`scripts/stream-release-notes.sh`), and none is marked latest: that stays the
-product's release.
+The module releases' notes list only their own `feat`, `fix`, `perf`,
+`security` and `revert` commits (`scripts/stream-release-notes.sh`), and
+none is marked latest: that stays the product's release.
 
 A commit counts for every stream whose files it touches, and its type
 decides the bump on each. The backend compiles `capability/` and `sdk/go/`
 through `replace` and its image copies both, so a change there releases the
-product as well as its own module — `feat` a minor, `fix`/`perf`/`security` a patch.
+product as well as its own module — `feat` a minor, `fix`/`perf`/`revert`/`security` a patch.
 The SDK and the capability module are pre-1.0, so a breaking change is a
 minor on their streams until they reach 1.0. A breaking change confined to
 `sdk/go/` or `capability/` breaks that module's API, not the product's, so it
@@ -45,7 +45,7 @@ the meantime, that run releases nothing, and the newer commit's own checks
 release both. The GitHub
 release is created last, and only when every image and chart was pushed; if a
 push fails, the tag stays without a release until the failed jobs are re-run.
-`feat` is a minor release, `fix`, `perf` and `security` a patch, a breaking
+`feat` is a minor release, `fix`, `perf`, `revert` and `security` a patch, a breaking
 change (`!` or a `BREAKING CHANGE:` footer) a major. Any other type — `docs`,
 `style`, `refactor`, `test`, `build`, `ci`, `chore` — releases nothing on its
 own.

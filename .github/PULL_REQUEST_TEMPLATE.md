@@ -13,7 +13,8 @@ verification step.
       build, tagged-suite compile
 - [ ] `task -t Taskfile.dev.yaml verify-deep` — the slow one: Postgres-backed
       integration suites, then the RPC surface, the Go admin e2e suite, S3
-      conformance and `dev-bootstrap.sh` against a freshly built stack. ~3 min
+      conformance, `dev-bootstrap.sh` and both SDKs' conformance scenarios
+      against a freshly built stack. ~3 min
       and a Docker daemon. Skipping it is how a suite that compiles but fails
       reaches `main`.
 - [ ] `task -t Taskfile.dev.yaml verify-e2e` (if the console or a plane's wire
