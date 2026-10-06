@@ -242,10 +242,8 @@ worker:
       batch_size: 100
     housekeeping:                       # audit-log reaper
       interval: 1h                      # how often the reaper loop runs
-      pending_ttl: 24h                  # PENDING objects older than this are GC'd
       multipart_ttl: 72h                # abandoned multipart sessions
       audit_log_ttl: 8760h              # 365 days
-      delete_orphaned_parts: false      # WARNING: enable in prod to reclaim S3 storage
       # Lifecycle hard-delete cascade: after this cooling-off window
       # the LifecycleHardDeleter calls storage.DeleteObject AND drops
       # the Paladin row. 0 disables (audit-only, dev default). 7d-30d in

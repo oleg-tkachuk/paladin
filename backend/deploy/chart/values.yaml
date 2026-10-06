@@ -923,7 +923,6 @@ config:
         batch_size: 100
       housekeeping:
         interval: 1h
-        pending_ttl: 24h
         multipart_ttl: 72h
         audit_log_ttl: 8760h
         # Terminal operation rows older than this are reaped. 0 disables the
@@ -942,7 +941,6 @@ config:
         # schema default too, so this line agrees with CUE rather than
         # overriding it.
         operations_ttl: 336h
-        delete_orphaned_parts: false
       refresh_token_reap:
         interval: 1h
       lifecycle:
