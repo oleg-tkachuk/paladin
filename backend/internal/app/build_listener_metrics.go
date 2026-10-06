@@ -62,8 +62,8 @@ func BuildMetricsListener(deps *SharedDeps) *HTTPListener {
 // dispatcher and ingest. A nil *MetricsListener is valid and does nothing, so
 // those roles need no branch for "metrics are pushed, not pulled".
 type MetricsListener struct {
-	srv  *http.Server
-	addr net.Addr
+	srv *http.Server
+	ln  net.Listener
 }
 
 // StartMetricsListener binds BuildMetricsListener's endpoint and serves it in
@@ -83,8 +83,8 @@ func StartMetricsListener(ctx context.Context, deps *SharedDeps, l *zap.Logger) 
 	if err != nil {
 		return nil, fmt.Errorf("metrics listener %s: %w", m.Server.Addr, err)
 	}
-	ml := &MetricsListener{srv: m.Server, addr: ln.Addr()}
-	l.Info("metrics listener", zap.String("addr", ml.addr.String()))
+	ml := &MetricsListener{srv: m.Server, ln: ln}
+	l.Info("metrics listener", zap.String("addr", ln.Addr().String()))
 	go func() {
 		if err := ml.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			l.Error("metrics listener exited", zap.Error(err))
@@ -98,13 +98,23 @@ func (m *MetricsListener) Addr() net.Addr {
 	if m == nil {
 		return nil
 	}
-	return m.addr
+	return m.ln.Addr()
 }
 
 // Shutdown stops the listener, waiting for in-flight scrapes up to ctx.
+//
+// It closes the socket itself as well as the server. http.Server.Shutdown
+// closes only the listeners Serve has already registered, and Serve runs in a
+// goroutine that may not have started yet; until it does, the bound socket
+// stays open and the kernel completes connections on it, so the port would
+// outlive a Shutdown that had already returned.
 func (m *MetricsListener) Shutdown(ctx context.Context) error {
 	if m == nil {
 		return nil
 	}
-	return m.srv.Shutdown(ctx)
+	err := m.srv.Shutdown(ctx)
+	if cerr := m.ln.Close(); cerr != nil && !errors.Is(cerr, net.ErrClosed) {
+		err = errors.Join(err, fmt.Errorf("close metrics socket: %w", cerr))
+	}
+	return err
 }
