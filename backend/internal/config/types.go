@@ -667,8 +667,11 @@ type Replication struct {
 	LookbackWindow time.Duration `yaml:"lookback_window" json:"lookback_window"`
 }
 
+// Housekeeping has no pending_ttl and no delete_orphaned_parts: both were read
+// by nothing. A PENDING object expires with its presigned URL
+// (limits.presign.put_ttl), and an abandoned multipart upload's parts are
+// freed when MultipartReaper aborts it after MultipartTTL.
 type Housekeeping struct {
-	PendingTTL   time.Duration `yaml:"pending_ttl" json:"pending_ttl"`
 	MultipartTTL time.Duration `yaml:"multipart_ttl" json:"multipart_ttl"`
 	AuditLogTTL  time.Duration `yaml:"audit_log_ttl" json:"audit_log_ttl"`
 	// OperationsTTL bounds how long a terminal-state operation row is
@@ -692,8 +695,7 @@ type Housekeeping struct {
 	// HardDeleteBatchSize caps rows per sweep. 0 → 100.
 	HardDeleteBatchSize int32 `yaml:"hard_delete_batch_size" json:"hard_delete_batch_size"`
 
-	Interval            time.Duration `yaml:"interval" json:"interval"`
-	DeleteOrphanedParts bool          `yaml:"delete_orphaned_parts" json:"delete_orphaned_parts"`
+	Interval time.Duration `yaml:"interval" json:"interval"`
 }
 
 // Middleware bundles the four cross-cutting interceptor knobs so an
