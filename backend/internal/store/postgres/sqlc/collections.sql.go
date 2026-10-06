@@ -195,9 +195,9 @@ WHERE collections.tenant_id = $1
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
-  AND ($3::text IS NULL OR collections.name = $3::text)
+  AND ($3::text[] IS NULL OR collections.name = ANY($3::text[]))
   AND ($4::text IS NULL OR collections.name LIKE $4::text)
-  AND ($5::text IS NULL OR collections.display_name = $5::text)
+  AND ($5::text[] IS NULL OR collections.display_name = ANY($5::text[]))
   AND ($6::text IS NULL OR collections.display_name LIKE $6::text)
   -- The derived ` + "`" + `search` + "`" + ` field, spelled to match cel.SearchText EXACTLY.
   -- ASCII-only folding via COLLATE "C" on both columns: Go's strings.ToLower
@@ -207,7 +207,7 @@ WHERE collections.tenant_id = $1
   AND ($7::text IS NULL
        OR lower(collections.name COLLATE "C") || chr(10) || lower(coalesce(collections.display_name, '') COLLATE "C")
           LIKE $7::text)
-  AND ($8::text IS NULL OR sb.name = $8::text)
+  AND ($8::text[] IS NULL OR sb.name = ANY($8::text[]))
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.
@@ -225,16 +225,16 @@ type ListCollectionsRow struct {
 	BucketName  string     `json:"bucket_name"`
 }
 
-func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, searchLike *string, backendEq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error) {
+func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, backendIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error) {
 	rows, err := q.db.Query(ctx, listCollections,
 		tenantID,
 		afterID,
-		nameEq,
+		nameIn,
 		nameLike,
-		displayNameEq,
+		displayNameIn,
 		displayNameLike,
 		searchLike,
-		backendEq,
+		backendIn,
 		createdAtGte,
 		createdAtLte,
 		pageSize,

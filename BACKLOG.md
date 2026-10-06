@@ -907,18 +907,22 @@ finding moving from "packages you import" to "your code is affected".
 
 ### List filters push down only the conjuncts SQL can express
 
-- **Status:** Deferred, narrowed 2026-08-28 (timestamps) and 2026-10-05
-  (operation `state` and `done`).
+- **Status:** Deferred, narrowed 2026-08-28 (timestamps), 2026-10-05
+  (operation `state` and `done`) and 2026-10-06 (value sets).
 - **Reason:** The filterable list RPCs extract the SQL-expressible subset of
   the caller's CEL (`cel.ExtractPushdown`) and hand it to the query, so
   `filter` selects from the table rather than from whichever page the cursor
   landed on. The walk understands the top-level `&&` chain of string equality,
   `startsWith`, `contains`, booleans, and — as of 2026-08-28 — `created_at`
-  ranges, threaded into all seven list queries. Strict `>` / `<` are widened
+  ranges, threaded into all seven list queries. As of 2026-10-06 a string
+  field's equality is a set of values, pushed as `= ANY(…)`: `field in [...]`
+  and a disjunction of equalities on that one field reach the table too, in
+  the six queries the generic walk serves (objects and audit keep their own
+  walkers, and the object walk already split disjunctions into branches). Strict `>` / `<` are widened
   to their inclusive forms deliberately: the pushdown may only narrow, so an
   extra boundary row is free and a missing one is a wrong answer.
-  What still reaches only the in-memory pass: disjunctions, `labels[…]`,
-  functions, and `updated_at` — which is left out on purpose rather than
+  What still reaches only the in-memory pass: disjunctions across fields or
+  over anything but equalities, `labels[…]`, functions, and `updated_at` — which is left out on purpose rather than
   forgotten, since a mutable column pushed into the query can exclude a row
   that the CEL pass, running microseconds later against a row someone just
   touched, would have accepted. A filter made entirely of those reads the

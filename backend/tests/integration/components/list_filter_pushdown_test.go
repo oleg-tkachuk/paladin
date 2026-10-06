@@ -68,15 +68,26 @@ func TestPushdown_Backends(t *testing.T) {
 		}
 	}
 
-	// A predicate the walk cannot express must not narrow anything: the repo
-	// returns the page and the handler's CEL pass decides.
-	got, _, err = repo.List(ctx, 100, "", `backend_id == "a" || backend_id == "b"`)
+	// A disjunction on one field is a set of values, and reaches the table
+	// like a single one: both ends of the name order on one two-row page.
+	first := fmt.Sprintf("%s-00", prefix)
+	got, _, err = repo.List(ctx, 2, "", fmt.Sprintf(`backend_id == %q || backend_id == %q`, last, first))
 	if err != nil {
 		t.Fatalf("list disjunction: %v", err)
 	}
+	if len(got) != 2 || got[0].BackendID != first || got[1].BackendID != last {
+		t.Fatalf("a one-field disjunction returned %v, want [%s %s]", names(got), first, last)
+	}
+
+	// A predicate the walk cannot express must not narrow anything: the repo
+	// returns the page and the handler's CEL pass decides.
+	got, _, err = repo.List(ctx, 100, "", `backend_id == "a" || provider == "b"`)
+	if err != nil {
+		t.Fatalf("list cross-field disjunction: %v", err)
+	}
 	if len(got) < 5 {
-		t.Errorf("a disjunction narrowed the scan to %d rows — pushdown must "+
-			"only narrow what it fully understands", len(got))
+		t.Errorf("a disjunction over two fields narrowed the scan to %d rows — "+
+			"pushdown must only narrow what it fully understands", len(got))
 	}
 }
 
@@ -203,6 +214,11 @@ func TestPushdown_OperationsStateAndDone(t *testing.T) {
 		{`!done`, pageSize, func(o operationRow) bool { return !o.done }},
 		// Not a value of the enum: no row, and no error from a failed cast.
 		{`state == "NOT_A_STATE"`, 0, func(operationRow) bool { return false }},
+		// A set of values, written as `in` or as a disjunction on the one
+		// field, is pushed as one.
+		{`state in ["FAILED", "CANCELLED"]`, 2, func(o operationRow) bool { return o.state == "FAILED" }},
+		{`state == "CANCELLED" || state == "FAILED"`, 2, func(o operationRow) bool { return o.state == "FAILED" }},
+		{`state in ["NOT_A_STATE", "FAILED"]`, 2, func(o operationRow) bool { return o.state == "FAILED" }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.filter, func(t *testing.T) {

@@ -292,13 +292,14 @@ func (r *BucketRepoV2) List(ctx context.Context, args admindomain.ListBucketsArg
 	pd := hints(cel.PhysicalBucketSchema, args.Filter)
 	if backendFilter == nil {
 		// `backend_id == "x"` in the filter narrows the same way the typed
-		// field does; the typed field wins when both are set.
-		if eq, _ := pd.StringHint("backend_id"); eq != nil {
-			backendFilter = eq
+		// field does; the typed field wins when both are set. The typed field
+		// is one backend, so a set of several is left to the CEL pass.
+		if in, _ := pd.StringHint("backend_id"); len(in) == 1 {
+			backendFilter = &in[0]
 		}
 	}
-	nameEq, nameLike := pd.StringHint("bucket_id")
-	displayEq, displayLike := pd.StringHint("display_name")
+	nameIn, nameLike := pd.StringHint("bucket_id")
+	displayIn, displayLike := pd.StringHint("display_name")
 
 	createdGTE, createdLTE := createdBounds(pd)
 
@@ -309,7 +310,7 @@ func (r *BucketRepoV2) List(ctx context.Context, args admindomain.ListBucketsArg
 	_, searchLike := pd.StringHint("search")
 
 	rows, err := r.q.ListBucketsV2(ctx, backendFilter, ownerFilter,
-		nameEq, nameLike, displayEq, displayLike, searchLike,
+		nameIn, nameLike, displayIn, displayLike, searchLike,
 		pd.BoolHint("versioning_enabled"), pd.BoolHint("object_lock_enabled"),
 		pd.BoolHint("replication_enabled"),
 		createdGTE, createdLTE,

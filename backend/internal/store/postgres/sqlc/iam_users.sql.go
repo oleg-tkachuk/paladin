@@ -248,9 +248,9 @@ WHERE ($1::uuid IS NULL
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
-  AND ($2::text IS NULL OR subject = $2::text)
+  AND ($2::text[] IS NULL OR subject = ANY($2::text[]))
   AND ($3::text IS NULL OR subject LIKE $3::text)
-  AND ($4::text IS NULL OR display_name = $4::text)
+  AND ($4::text[] IS NULL OR display_name = ANY($4::text[]))
   AND ($5::text IS NULL OR display_name LIKE $5::text)
   AND ($6::bool IS NULL OR disabled = $6::bool)
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
@@ -268,12 +268,12 @@ LIMIT $9::int
 // pattern as ListUsersByTenant — without the IS-NULL guard the
 // /users page renders empty even when there are rows, because the
 // adapter sends pgUUID(uuid.Nil) which maps to SQL NULL.
-func (q *Queries) ListUsersAll(ctx context.Context, afterID pgtype.UUID, subjectEq *string, subjectLike *string, displayNameEq *string, displayNameLike *string, disabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]User, error) {
+func (q *Queries) ListUsersAll(ctx context.Context, afterID pgtype.UUID, subjectIn []string, subjectLike *string, displayNameIn []string, displayNameLike *string, disabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]User, error) {
 	rows, err := q.db.Query(ctx, listUsersAll,
 		afterID,
-		subjectEq,
+		subjectIn,
 		subjectLike,
-		displayNameEq,
+		displayNameIn,
 		displayNameLike,
 		disabled,
 		createdAtGte,
@@ -322,9 +322,9 @@ WHERE tenant_id = $1
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
-  AND ($3::text IS NULL OR subject = $3::text)
+  AND ($3::text[] IS NULL OR subject = ANY($3::text[]))
   AND ($4::text IS NULL OR subject LIKE $4::text)
-  AND ($5::text IS NULL OR display_name = $5::text)
+  AND ($5::text[] IS NULL OR display_name = ANY($5::text[]))
   AND ($6::text IS NULL OR display_name LIKE $6::text)
   AND ($7::bool IS NULL OR disabled = $7::bool)
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
@@ -343,13 +343,13 @@ LIMIT $10::int
 // NULL` return zero rows. pgUUID() maps uuid.Nil → pgtype.UUID{
 // Valid:false} → SQL NULL, so the guard is the contract callers
 // rely on.
-func (q *Queries) ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, subjectEq *string, subjectLike *string, displayNameEq *string, displayNameLike *string, disabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]User, error) {
+func (q *Queries) ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, subjectIn []string, subjectLike *string, displayNameIn []string, displayNameLike *string, disabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]User, error) {
 	rows, err := q.db.Query(ctx, listUsersByTenant,
 		tenantID,
 		afterID,
-		subjectEq,
+		subjectIn,
 		subjectLike,
-		displayNameEq,
+		displayNameIn,
 		displayNameLike,
 		disabled,
 		createdAtGte,

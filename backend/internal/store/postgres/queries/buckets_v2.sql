@@ -86,9 +86,9 @@ WHERE (sqlc.narg('backend_name')::text IS NULL OR sb.name = sqlc.narg('backend_n
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
-  AND (sqlc.narg('name_eq')::text IS NULL OR b.name = sqlc.narg('name_eq')::text)
+  AND (sqlc.narg('name_in')::text[] IS NULL OR b.name = ANY(sqlc.narg('name_in')::text[]))
   AND (sqlc.narg('name_like')::text IS NULL OR b.name LIKE sqlc.narg('name_like')::text)
-  AND (sqlc.narg('display_name_eq')::text IS NULL OR b.display_name = sqlc.narg('display_name_eq')::text)
+  AND (sqlc.narg('display_name_in')::text[] IS NULL OR b.display_name = ANY(sqlc.narg('display_name_in')::text[]))
   AND (sqlc.narg('display_name_like')::text IS NULL OR b.display_name LIKE sqlc.narg('display_name_like')::text)
   -- The derived `search` field, spelled to match cel.SearchText EXACTLY.
   -- ASCII-only folding via COLLATE "C" on both columns: Go's strings.ToLower
