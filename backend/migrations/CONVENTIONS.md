@@ -4,19 +4,20 @@
 > built the schema up to this point were replaced by `001`–`003`. That is a
 > deliberate, one-time exception to the immutability rule below, and it is only
 > defensible because every deployment reprovisions rather than upgrades
-> (pre-1.0, Constitution IV) — a database that had applied the old history
-> would refuse the new checksums, which is the correct outcome: it should be
-> rebuilt, not migrated. The old files remain in git history. **The rule below
+> (pre-1.0, Constitution IV) — goose tracks applied versions by number, so a
+> database that had applied the old history would treat the new `001`–`003`
+> as already applied and never run them; it has to be rebuilt, not migrated. The old files remain in git history. **The rule below
 > applies again from `004` onward.**
 
 Goose migrations in this directory are **append-only and immutable once
-merged**: goose records a checksum per file, so editing an applied migration
-makes every existing database refuse to start. Fixes go in a *new*
+merged**: goose records only the version number of each applied file, not its
+content, so an edit to an applied migration never reaches an existing
+database — it silently diverges from a freshly built one. Fixes go in a *new*
 higher-numbered file, never by rewriting history.
 
 ## How migrations run in production (rollout gating)
 
-`paladin migrate` (see `cmd/server/migrate.go`) is the only path that applies the
+`paladin-core migrate` (see `cmd/server/migrate.go`) is the only path that applies the
 schema — the `serve` subcommands never migrate at startup. The Helm chart
 runs it as a **`pre-install,pre-upgrade` hook Job** (`templates/job-migrate.yaml`,
 `hook-weight: 0`), so:
@@ -44,6 +45,11 @@ for more than a moment. Concretely:
   must be marked `-- +goose NO TRANSACTION` and must be in its **own file**
   (no other statements — a CONCURRENTLY failure leaves an INVALID index that
   a following statement in the same file would never reach to clean up).
+  An index on a table created in the same migration needs neither: the table
+  is empty and carries no traffic. Postgres cannot build an index
+  concurrently on a partitioned table, so one on `audit_log` or
+  `idempotency_keys` is a plain, preferably partial, `CREATE INDEX` (as in
+  `042`).
 - **Adding a column:** add it `NULL` with no default (or a *constant*
   default — Postgres ≥11 makes a constant default a metadata-only change).
   Never add `NOT NULL` + a volatile/computed default in one step against a
@@ -56,7 +62,7 @@ for more than a moment. Concretely:
 - **Type changes / rewrites:** prefer add-new-column + backfill + swap over
   an in-place `ALTER COLUMN … TYPE` that rewrites the table.
 - For anything that is unavoidably a long table rewrite, run it **out of
-  band** in a maintenance window (a one-off `paladin migrate`-style Job gated
+  band** in a maintenance window (a one-off `paladin-core migrate`-style Job gated
   separately) rather than on the deploy hot path, and note it in the PR.
 
 ## Before the baseline
