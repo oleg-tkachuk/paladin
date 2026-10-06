@@ -139,8 +139,9 @@ func (x *SetQuotaRequest) GetQuota() *Quota {
 
 type ResetUsageRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Used at month/day boundaries by the accounting worker; available
-	// via RPC for ops emergencies.
+	// Quota resource name (see Quota.name docstring for forms). The daily
+	// roll at the UTC day boundary does this on its own; the RPC is for an
+	// operator who needs it sooner.
 	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

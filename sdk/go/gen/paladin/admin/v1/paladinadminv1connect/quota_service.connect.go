@@ -49,8 +49,10 @@ type QuotaServiceClient interface {
 	// SetQuota replaces the tenant's limits. Lowering a limit below current usage
 	// is allowed — it blocks further growth rather than deleting anything.
 	SetQuota(context.Context, *connect.Request[v1.SetQuotaRequest]) (*connect.Response[v1.Quota], error)
-	// ResetUsage zeroes the usage counters without touching the limits. For
-	// recovering from a drifted counter, not for granting capacity.
+	// ResetUsage zeroes today's admission counters (bytes and objects today)
+	// without touching the limits or the stored totals; the totals are
+	// recomputed from live objects by the quota reconciler. Answers with the
+	// quota as it is after the reset.
 	ResetUsage(context.Context, *connect.Request[v1.ResetUsageRequest]) (*connect.Response[v1.Quota], error)
 }
 
@@ -118,8 +120,10 @@ type QuotaServiceHandler interface {
 	// SetQuota replaces the tenant's limits. Lowering a limit below current usage
 	// is allowed — it blocks further growth rather than deleting anything.
 	SetQuota(context.Context, *connect.Request[v1.SetQuotaRequest]) (*connect.Response[v1.Quota], error)
-	// ResetUsage zeroes the usage counters without touching the limits. For
-	// recovering from a drifted counter, not for granting capacity.
+	// ResetUsage zeroes today's admission counters (bytes and objects today)
+	// without touching the limits or the stored totals; the totals are
+	// recomputed from live objects by the quota reconciler. Answers with the
+	// quota as it is after the reset.
 	ResetUsage(context.Context, *connect.Request[v1.ResetUsageRequest]) (*connect.Response[v1.Quota], error)
 }
 

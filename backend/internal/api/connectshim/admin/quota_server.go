@@ -74,20 +74,26 @@ func (s *QuotaServer) ResetUsage(ctx context.Context, req *connect.Request[pb.Re
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	// Need quota_id to reset; load first.
-	var q *admindomain.Quota
-	if scope.tenantID != uuid.Nil {
-		q, err = s.H.GetTenantQuota(ctx, scope.tenantID)
-	} else {
-		q, err = s.H.GetBucketQuota(ctx, scope.backendID, scope.bucketName)
+	// Need quota_id to reset; load first, then read again so the response
+	// carries the cleared counters rather than the ones just reset.
+	load := func() (*admindomain.Quota, error) {
+		if scope.tenantID != uuid.Nil {
+			return s.H.GetTenantQuota(ctx, scope.tenantID)
+		}
+		return s.H.GetBucketQuota(ctx, scope.backendID, scope.bucketName)
 	}
+	q, err := load()
 	if err != nil {
 		return nil, err
 	}
 	if err := s.H.ResetUsage(ctx, q.QuotaID); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(quotaToProto(q)), nil
+	after, err := load()
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(quotaToProto(after)), nil
 }
 
 var _ paladinadminv1connect.QuotaServiceHandler = (*QuotaServer)(nil)
