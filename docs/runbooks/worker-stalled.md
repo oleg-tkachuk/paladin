@@ -22,9 +22,8 @@ emits, per `worker` label:
 
 They leave the process like every other Paladin metric — pushed over OTLP or
 scraped, per `otel.metrics_exporter`
-([observability.md](../../backend/docs/observability.md)). On the worker pod
-the scrape endpoint is `/metrics` on the ops listener (`worker.ops.addr`),
-not `otel.metrics_addr`. With
+([observability.md](../../backend/docs/observability.md)). The scrape
+endpoint is `/metrics` on `otel.metrics_addr`, as on every role. With
 `otel.enabled: false` they are no-ops, so the alerts only have data where
 metrics are collected.
 

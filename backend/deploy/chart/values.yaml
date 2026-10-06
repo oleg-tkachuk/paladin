@@ -622,11 +622,10 @@ config:
     # Local overlay flips this back on.
     insecure: false
     # How metrics leave the process: otlp (push, beside traces), prometheus
-    # (a /metrics endpoint for a scraper) or none. With prometheus the api and
-    # admin roles listen on metrics_addr; worker, dispatcher and ingest serve
-    # /metrics on their ops listener. The NetworkPolicies read both keys to
-    # open the scrape port, so they are stated here rather than left to the
-    # config schema's defaults.
+    # (a /metrics endpoint for a scraper) or none. With prometheus every role
+    # but mcp serves /metrics on metrics_addr. The NetworkPolicies read both
+    # keys to open the scrape port, so they are stated here rather than left
+    # to the config schema's defaults.
     metrics_exporter: otlp
     metrics_addr: "0.0.0.0:9095"
 

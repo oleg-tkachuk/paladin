@@ -20,7 +20,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
-	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -180,6 +179,7 @@ func runDispatcher(
 	// workCtx bounds the outbox loop; cancelled OnStop so runner.Run returns.
 	workCtx, cancel := context.WithCancel(context.Background())
 	runErr := make(chan error, 1)
+	var metricsLn *app.MetricsListener
 
 	l.Info("starting dispatcher",
 		zap.String("version", version),
@@ -188,7 +188,12 @@ func runDispatcher(
 	)
 
 	lc.Append(fx.Hook{
-		OnStart: func(context.Context) error {
+		OnStart: func(startCtx context.Context) error {
+			ml, err := app.StartMetricsListener(startCtx, deps, l)
+			if err != nil {
+				return err
+			}
+			metricsLn = ml
 			// Pre-warm: scan event_subscriptions once at boot and dial each
 			// unique sink URL. Drops first-delivery latency from a cold
 			// TLS+SASL handshake to a queue-and-flush inside the hot tick
@@ -213,6 +218,7 @@ func runDispatcher(
 			shutdownCtx, c := context.WithTimeout(context.Background(), defaultShutdownGrace)
 			defer c()
 			_ = opsSrv.Shutdown(shutdownCtx)
+			_ = metricsLn.Shutdown(shutdownCtx)
 			// Wait for the runner to drain its in-flight batch (bounded by
 			// per-delivery HTTP timeouts).
 			if err := <-runErr; err != nil && !errorsIsCancelled(err) {
@@ -331,11 +337,8 @@ func dispatcherOpsMux(deps *app.SharedDeps, runner *worker.OutboxRunner, natsPoo
 	mux := http.NewServeMux()
 	healthH.Register(mux)
 
-	// /metrics beside the health endpoints: this ops listener is already plain
-	// HTTP and cluster-internal, which is what the scraper needs.
-	if h := metricsHandler(deps); h != nil {
-		mux.Handle(middleware.PathMetrics, h)
-	}
+	// No /metrics here: it is served by app.StartMetricsListener on
+	// otel.metrics_addr, the one scrape port every role shares (ADR-0023).
 
 	// Backwards-compat alias for chart probe paths that historically
 	// hit /healthz on worker-class pods.

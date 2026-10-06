@@ -18,7 +18,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
-	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
@@ -163,6 +162,9 @@ func runWorker(
 	// returns and releases leadership.
 	workCtx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
+	// The worker owns paladin_worker_* and the outbox gauges, the series the
+	// stall alerts are built from.
+	var metricsLn *app.MetricsListener
 
 	l.Info("starting worker",
 		zap.String("version", version),
@@ -171,7 +173,12 @@ func runWorker(
 	)
 
 	lc.Append(fx.Hook{
-		OnStart: func(context.Context) error {
+		OnStart: func(startCtx context.Context) error {
+			ml, err := app.StartMetricsListener(startCtx, deps, l)
+			if err != nil {
+				return err
+			}
+			metricsLn = ml
 			for _, lj := range leaseJobs {
 				wg.Add(1)
 				go func(lj leaseJob) {
@@ -202,6 +209,7 @@ func runWorker(
 			shutdownCtx, c := context.WithTimeout(context.Background(), defaultShutdownGrace)
 			defer c()
 			_ = opsSrv.Shutdown(shutdownCtx)
+			_ = metricsLn.Shutdown(shutdownCtx)
 			wg.Wait()
 			deps.StopWatchers() // release the Cedar LISTEN conn before pool close
 			// Close ReaperPool only when it's a distinct pool — in the dev
@@ -251,14 +259,8 @@ func workerOpsMux(cfg config.Runtime, deps *app.SharedDeps, l *zap.Logger) (http
 	mux := http.NewServeMux()
 	healthH.Register(mux)
 
-	// The worker's ops listener is already plain HTTP and cluster-internal,
-	// which is what a scraper needs — so /metrics goes here rather than on a
-	// listener of its own. It matters most on this pod: the worker owns
-	// paladin_worker_* and the outbox depth gauges, which are the series a
-	// stall alert is built from.
-	if h := metricsHandler(deps); h != nil {
-		mux.Handle(middleware.PathMetrics, h)
-	}
+	// No /metrics here: it is served by app.StartMetricsListener on
+	// otel.metrics_addr, the one scrape port every role shares (ADR-0023).
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		r2 := r.Clone(r.Context())
 		r2.URL.Path = "/livez"
@@ -315,13 +317,4 @@ func errorsIsCancelled(err error) bool {
 		return true
 	}
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
-}
-
-// metricsHandler returns the Prometheus handler when one was built, nil
-// otherwise. Split out so the mount reads the same on every role.
-func metricsHandler(deps *app.SharedDeps) http.Handler {
-	if deps == nil || deps.Metrics == nil {
-		return nil
-	}
-	return deps.Metrics
 }

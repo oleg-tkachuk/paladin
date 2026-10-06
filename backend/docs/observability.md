@@ -24,10 +24,11 @@ sets `otel.endpoint: otel-collector:4318` (the OTLP/HTTP port) and
 
 `otel.metrics_exporter` picks how metrics leave the process: `otlp` (the
 default) pushes them with the traces; `none` sends traces only; `prometheus`
-serves them for a scrape. With `prometheus` the api and admin roles listen on
-`otel.metrics_addr` (default `0.0.0.0:9095`), a plain-HTTP listener of its own
-so a scraper does not need to trust the planes' internal CA; the worker,
-dispatcher and ingest roles serve `/metrics` on their ops listener.
+serves them for a scrape. With `prometheus` every role except mcp serves
+`/metrics` on `otel.metrics_addr` (default `0.0.0.0:9095`), a plain-HTTP
+listener of its own so a scraper does not need to trust the planes' internal
+CA, and on no other port (ADR-0023). mcp holds no instruments of its own and
+serves none.
 
 Instruments defined in `internal/metrics`:
 
