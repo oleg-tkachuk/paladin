@@ -17,6 +17,12 @@ from paladin.auth import (
     StaticToken,
 )
 from paladin.biscuit import attenuate
+from paladin.capability_cache import (
+    CAPABILITY_REFRESH_MARGIN,
+    AsyncCapabilityCache,
+    CapabilityCache,
+    NoCapabilityKeyError,
+)
 from paladin.client import (
     DEFAULT_RETRY_BASE_DELAY,
     DEFAULT_RETRY_MAX_DELAY,
@@ -38,6 +44,7 @@ from paladin.client import (
 )
 from paladin.connect import AsyncPaladin, Endpoints, Paladin, connect, connect_async
 from paladin.dpop import HEADER_DPOP, dpop_thumbprint
+from paladin.ensure import aensure, ensure
 from paladin.errors import (
     ERROR_DOMAIN,
     HEADER_SERVER_VERSION,
@@ -149,6 +156,7 @@ __all__ = [
     "AUDIENCE_ADMIN",
     "AUDIENCE_DATA",
     "AUDIENCE_IAM",
+    "CAPABILITY_REFRESH_MARGIN",
     "CHECKSUM_CRC32C",
     "CHECKSUM_MD5",
     "CHECKSUM_SHA256",
@@ -183,10 +191,12 @@ __all__ = [
     "TOKEN_REFRESH_MARGIN",
     "URI_SCHEME",
     "AlreadyExistsError",
+    "AsyncCapabilityCache",
     "AsyncObjectReader",
     "AsyncPaladin",
     "AsyncSession",
     "BucketName",
+    "CapabilityCache",
     "Client",
     "CollectionName",
     "ContractSkewError",
@@ -197,6 +207,7 @@ __all__ = [
     "InvalidArgumentError",
     "InvalidNameError",
     "NoCAError",
+    "NoCapabilityKeyError",
     "NoPartSplitError",
     "NotFoundError",
     "ObjectChangedError",
@@ -238,6 +249,7 @@ __all__ = [
     "adownload_many",
     "adownload_stream",
     "adownload_uri",
+    "aensure",
     "alookup_object",
     "already_stored",
     "apages",
@@ -258,6 +270,7 @@ __all__ = [
     "download_stream",
     "download_uri",
     "dpop_thumbprint",
+    "ensure",
     "expired",
     "idempotency_key",
     "lookup_object",
