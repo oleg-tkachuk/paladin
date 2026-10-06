@@ -147,6 +147,28 @@ const (
 	// BillingService (admin plane) over the charges ledger from
 	// the schema baseline (001_initial_schema.sql).
 	ActionReadBilling = "ReadBilling"
+
+	// Capability actions (admin plane, CapabilityService). Resource is the
+	// CALLER's own Tenant entity: which tenant a call may reach beyond its own
+	// is decided in the handler (capabilityh.spansTenants), not here. Read
+	// covers List, GetUsage and GetBiscuitUsage; Revoke covers RevokeBiscuit.
+	ActionIssueCapability    = "IssueCapability"
+	ActionDelegateCapability = "DelegateCapability"
+	ActionRevokeCapability   = "RevokeCapability"
+	ActionReadCapability     = "ReadCapability"
+
+	// API-token actions (admin plane, APITokenService). Named apart from the
+	// capability actions on purpose: a grant to revoke or read one credential
+	// type must not carry over to the other. Resource is the caller's own
+	// Tenant; another tenant's tokens are handler-gated to platform.admin.
+	ActionCreateAPIToken = "CreateAPIToken"
+	ActionRevokeAPIToken = "RevokeAPIToken"
+	ActionReadAPIToken   = "ReadAPIToken"
+
+	// InspectMCP gates the read-only MCP inspection surface (MCPInspectService:
+	// live sessions, profiles and tool catalog, bridge status). Resource is the
+	// caller's own Tenant.
+	ActionInspectMCP = "InspectMCP"
 )
 
 // Entity type names — must match the Cedar schema exactly.
@@ -768,6 +790,42 @@ permit (
 )
 when {
   principal has roles && principal.roles.contains("platform.tenant-provisioner")
+};
+
+// Built-in: capability issuing. A principal holding
+// "platform.capability-issuer" may issue a capability, revoke one, and read
+// capabilities and their usage — and nothing else.
+//
+// It exists for a consumer serving many tenants: it mints a short-lived,
+// tenant-scoped capability per tenant instead of holding a long-lived
+// credential per tenant or platform.admin. Until this permit the role was
+// named in the handlers and the roles list but granted nothing here, so every
+// CapabilityService call it made was denied before the handler's cross-tenant
+// check ran, and only platform.admin could issue.
+//
+// Cedar sees the CALLER's own tenant as the resource. Reaching another
+// tenant's capabilities is decided by the handler (capabilityh.spansTenants),
+// which admits this role; this permit only says the role may perform the
+// action at all.
+//
+// The action list is exhaustive by intent, and the omissions are the point:
+// no DelegateCapability (the admin delegate path reads the parent under the
+// caller's own tenant, so it cannot reach the capabilities this role issues
+// for others; a consumer narrows by issuing a narrower capability), no
+// API-token action (it cannot mint, revoke or read a long-lived credential),
+// no tenant, bucket, collection or IAM action, and no data-plane reach.
+// A tenant policy can still forbid it (first-forbid wins).
+permit (
+  principal,
+  action in [
+    Action::"IssueCapability",
+    Action::"RevokeCapability",
+    Action::"ReadCapability"
+  ],
+  resource
+)
+when {
+  principal has roles && principal.roles.contains("platform.capability-issuer")
 };
 
 // Built-in: OPT-IN resource-scope enforcement. A principal that carries a

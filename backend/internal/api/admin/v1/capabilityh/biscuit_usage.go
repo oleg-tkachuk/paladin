@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -24,7 +25,7 @@ func (h *Handler) WithCopyUsage(reader capability.CopyUsageReader) *Handler {
 // GetUsage: a caller confined to its own tenant learns nothing about another
 // tenant's capability, not even that it exists.
 func (h *Handler) GetBiscuitUsage(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceGetBiscuitUsageRequest]) (*connect.Response[adminv1.CapabilityServiceGetBiscuitUsageResponse], error) {
-	caller, err := h.authorize(ctx, "list")
+	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
 	if err != nil {
 		return nil, err
 	}

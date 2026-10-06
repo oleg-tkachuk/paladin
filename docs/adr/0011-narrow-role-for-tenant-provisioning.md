@@ -4,7 +4,7 @@
   built-in Cedar permit, gates on `CreateTenant` / cross-tenant `GetTenant` /
   policy-only `UpdateTenant` / cross-tenant object-key create+get, tests).
   Same shape as `platform.capability-issuer`
-  ([ADR-0010](0010-capability-as-establishing-credential.md)).
+  ([ADR-0024](0024-credential-actions-and-the-capability-issuer-grant.md)).
 
 - **Context:** a consumer that creates accounts needs the matching Paladin tenant to
   exist before its first upload, and it cannot wait for an operator to run a
@@ -19,9 +19,11 @@
   document, and mint further credentials. The blast radius of its leak is every
   tenant's data — for a job whose entire purpose is to *add* rows.
 
-  ADR-0010 already faced this and answered it with a role named for exactly one
-  job: `platform.capability-issuer` may mint a capability for any tenant and do
-  nothing else. Provisioning is the same problem one step earlier.
+  Capability issuing faced this and answered it with a role named for exactly
+  one job: `platform.capability-issuer` may mint a capability for any tenant and
+  do nothing else (its built-in permit is
+  [ADR-0024](0024-credential-actions-and-the-capability-issuer-grant.md)).
+  Provisioning is the same problem one step earlier.
 
 - **Decision:** add `platform.tenant-provisioner`. It may create a tenant, its
   bucket, its object keys (and bind them), read those resources, and set a
