@@ -22,8 +22,12 @@ network boundary without subscriber cooperation.
 
 Every delivery carries a stable **event id** that is the same across every retry
 of the same event (it is the outbox delivery-row id). Dedup on it: keep a
-short-lived set of processed ids (a TTL slightly longer than your sink's
-`max_attempts × backoff` window is enough) and drop a duplicate.
+short-lived set of processed ids and drop a duplicate. A TTL slightly longer
+than one row's retry span is enough: the dispatcher retries a row after
+`dispatcher.base_backoff` (default 5s), doubling per attempt up to
+`dispatcher.max_backoff` (default 1h), for up to the sink's `max_attempts`
+(`dispatcher.default_max_attempts`, default 5, when unset) —
+`OutboxRunner.backoffFor` in `internal/worker/event_dispatcher.go`.
 
 Where to read the id, per format:
 
@@ -35,7 +39,7 @@ Where to read the id, per format:
 Every HTTP delivery — **both** formats — also sets:
 
 - `X-Paladin-Event-Id` — the dedup key described above.
-- `X-Paladin-Event-Type` — e.g. `paladin.object.available`, `paladin.audit.create_tenant`.
+- `X-Paladin-Event-Type` — e.g. `paladin.object.uploaded`, `paladin.audit.create_tenant`.
 - `X-Paladin-Subscription-Id` — the subscription that matched.
 
 For the broker sinks (NATS / SQS / Kafka / RabbitMQ) the payload is always the
