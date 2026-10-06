@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import io
 import threading
 from collections.abc import Iterator
@@ -17,6 +18,12 @@ from data_plane_fake import Fake, serving
 from paladin.iam.v1 import auth_service_pb2, health_service_pb2
 from paladin.iam.v1.auth_service_connect import AuthServiceSync, AuthServiceWSGIApplication
 from paladin.iam.v1.health_service_connect import HealthServiceSync, HealthServiceWSGIApplication
+
+# The modules that make TLS connections, through the tls extra's HTTP stack or
+# a server built on it; a wheel installed without the extra skips them, and
+# test_tls_extra.py checks what such an install does instead.
+_NEEDS_TLS_EXTRA = ["test_tls.py", "test_tls_http.py", "test_tls_identity.py", "test_lifecycle.py"]
+collect_ignore = [] if importlib.util.find_spec("httpcore") else _NEEDS_TLS_EXTRA
 
 # Any free port.
 _EPHEMERAL_PORT = 0
