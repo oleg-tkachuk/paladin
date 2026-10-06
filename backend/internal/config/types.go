@@ -295,8 +295,8 @@ type Limits struct {
 // AuthService.Login / RefreshToken; the same SigningKey is used for both
 // signing (issuer) and verification (interceptor on each plane).
 //
-// JWKSURL is reserved for federated-IdP scenarios (slice 6+); v1 uses HMAC
-// only and rejects unset SigningKey at startup.
+// JWKSURL, when set, switches token verification on the planes and the MCP
+// edge to that JWKS; SigningKey stays required for the tokens Paladin mints.
 type Auth struct {
 	Issuer            string        `yaml:"issuer" json:"issuer"`
 	JWKSURL           string        `yaml:"jwks_url" json:"jwks_url"`
@@ -959,9 +959,9 @@ type MCP struct {
 }
 
 // MCPOAuth configures the MCP server's OAuth 2.1 Resource-Server posture
-// (ADR-0008). The Authorization Server itself (the /authorize + /token +
-// registration endpoints) is a separate, deferred phase; this block only
-// makes the MCP server discoverable + enforce bearer auth at its edge.
+// (ADR-0008). The Authorization Server itself (/authorize, /token,
+// registration) lives in internal/auth/oauth (ADR-0009); this block only
+// makes the MCP server discoverable and enforce bearer auth at its edge.
 type MCPOAuth struct {
 	// Enabled gates the whole RS behaviour: the 401 challenge and the
 	// metadata endpoints. When false the transport behaves exactly as
@@ -986,7 +986,7 @@ type MCPOAuth struct {
 	// /.well-known/oauth-authorization-server — the Paladin-IAM-is-the-AS case
 	// (same origin). Leave Issuer empty when delegating to an external IdP
 	// that serves its own metadata. The endpoint paths it advertises are
-	// the contract the deferred AS phase fulfils.
+	// the contract internal/auth/oauth serves (ADR-0009).
 	AuthorizationServer MCPOAuthAS `yaml:"authorization_server" json:"authorization_server"`
 }
 

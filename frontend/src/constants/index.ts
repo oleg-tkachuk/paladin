@@ -3,11 +3,11 @@
  * pages, and the RPC bridge.
  */
 
-/** Default page size for list-style RPCs. */
 /** Where an operator learns how to turn capabilities on; they are off by default. */
 export const CAPABILITIES_DOCS_URL =
   "https://github.com/oleg-tkachuk/paladin/blob/main/docs/install.md#capabilities";
 
+/** Default page size for list-style RPCs. */
 export const API_LIMIT_DEFAULT = 20;
 
 /** Maximum page size accepted by the backend `*.List*` validators. */

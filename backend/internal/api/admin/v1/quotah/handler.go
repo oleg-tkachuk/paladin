@@ -247,8 +247,8 @@ func (h *Handler) ResetUsage(ctx context.Context, quotaID uuid.UUID) error {
 	}
 	// Cedar second guard. ResetQuotaUsage doesn't carry tenant/bucket
 	// coordinates pre-load, so we only attach the principal — policies
-	// that want to gate by quota_id can reference it via the action's
-	// future Quota entity (slice 20+).
+	// that want to gate by quota coordinates see an empty Quota entity
+	// (BACKLOG: ResetQuotaUsage authorises against an empty Quota).
 	ctx, err := h.authorize(ctx, cedar.ActionResetQuotaUsage, admindomain.Quota{})
 	if err != nil {
 		return err

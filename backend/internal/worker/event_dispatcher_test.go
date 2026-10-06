@@ -707,8 +707,9 @@ func TestDispatcher_NATSMissingConfig(t *testing.T) {
 	}
 }
 
-// TestParseNatsCredentials_Schemes locks the v1 contract: token works,
-// nkey/jwt are explicitly deferred, unknown schemes reject.
+// TestParseNatsCredentials_Schemes locks the credential-ref contract: token,
+// nkey and jwt schemes parse, malformed or half-empty forms and unknown
+// schemes reject.
 func TestParseNatsCredentials_Schemes(t *testing.T) {
 	cases := []struct {
 		ref     string

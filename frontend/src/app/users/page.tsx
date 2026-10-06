@@ -2,10 +2,9 @@
 
 // /users — platform-wide user index. Cross-tenant listing via
 // IAM.ListUsers(parent="") gated to platform.admin server-side.
-// Operators can see who has which roles across all tenants, jump
-// to per-user detail (deferred: detail page itself), and trigger
-// role changes via GrantScopes/RevokeScopes when those become
-// reachable from the UI (BACKLOG).
+// Operators can see who has which roles across all tenants. There is
+// no per-user detail page and no GrantScopes/RevokeScopes action here
+// yet (BACKLOG: console /users).
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
