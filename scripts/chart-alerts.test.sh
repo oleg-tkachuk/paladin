@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # chart-alerts.test.sh — the backend chart's PrometheusRule, checked on the
-# rendered manifest.
+# rendered manifest. It carries every Paladin alert (ADR-0023).
 #
 # A traffic alert over a series Paladin does not export loads cleanly and
 # never fires: the rule reads as written, the dashboard of firing alerts stays
@@ -24,6 +24,8 @@ readonly RULE_TESTS=scripts/chart-alerts.promtool.yaml
 readonly RENDERED_RULES=prometheusrule.yaml
 readonly RUNBOOKS=docs/runbooks
 readonly SELECTOR='namespace="paladin"'
+# Every rule the chart ships, all enabled by default.
+readonly RULE_COUNT=13
 
 for tool in helm yq promtool; do
     command -v "$tool" >/dev/null 2>&1 || {
@@ -63,15 +65,30 @@ check() {
 # ─── expressions ─────────────────────────────────────────────────────────────
 
 render defaults
-check "defaults: PaladinApiCrashLooping expr" "$(rule defaults PaladinApiCrashLooping .expr)" "$(cat <<'PROMQL'
-increase(kube_pod_container_status_restarts_total{namespace="paladin",container="paladin-core"}[15m]) > 2
+check "defaults: PaladinCrashLooping expr" "$(rule defaults PaladinCrashLooping .expr)" "$(cat <<'PROMQL'
+label_replace(
+  increase(kube_pod_container_status_restarts_total{namespace="paladin",container="paladin-core",pod=~"paladin-core-(admin|api|dispatcher|mcp|worker)-.+"}[15m]) > 2,
+  "component", "$1", "pod", "paladin-core-(admin|api|dispatcher|mcp|worker)-.+"
+)
 PROMQL
 )"
-check "defaults: PaladinApiNotReady expr" "$(rule defaults PaladinApiNotReady .expr)" "$(cat <<'PROMQL'
-kube_pod_status_ready{namespace="paladin",condition="true"} == 0
-and on (pod, namespace) kube_pod_labels{label_app_kubernetes_io_component="api"}
+check "defaults: PaladinNotReady expr" "$(rule defaults PaladinNotReady .expr)" "$(cat <<'PROMQL'
+label_replace(
+  kube_pod_status_ready{namespace="paladin",condition="true",pod=~"paladin-core-(admin|api|dispatcher|mcp|worker)-.+"} == 0,
+  "component", "$1", "pod", "paladin-core-(admin|api|dispatcher|mcp|worker)-.+"
+)
 PROMQL
 )"
+check "defaults: PaladinOutboxNotDraining expr" "$(rule defaults PaladinOutboxNotDraining .expr)" "$(cat <<'PROMQL'
+min_over_time(max(paladin_outbox_pending)[15m:1m]) > 500
+PROMQL
+)"
+check "defaults: PaladinWorkerStalled expr" "$(rule defaults PaladinWorkerStalled .expr)" "$(cat <<'PROMQL'
+(time() - paladin_worker_last_run_timestamp_seconds)
+  > 5 * paladin_worker_interval_seconds
+PROMQL
+)"
+check "defaults: rules rendered" "$(yq -r '[.groups[].rules[]] | length' "$scratch/defaults.yaml")" "$RULE_COUNT"
 check "defaults: PaladinApiHighErrorRate expr" "$(rule defaults PaladinApiHighErrorRate .expr)" "$(cat <<'PROMQL'
 (
   sum(rate(rpc_server_call_duration_seconds_count{error_type=~"UNKNOWN|DEADLINE_EXCEEDED|UNIMPLEMENTED|INTERNAL|UNAVAILABLE|DATA_LOSS"}[5m]))
@@ -89,13 +106,25 @@ PROMQL
 )"
 
 render selector -f "$CHART/values-prod.yaml" --set-string "metrics.alerts.rpcSelector=$SELECTOR" \
-    --set metrics.alerts.rules.crashLooping.restarts=5 --set metrics.alerts.rules.crashLooping.window=30m
-check "selector: PaladinApiCrashLooping expr" "$(rule selector PaladinApiCrashLooping .expr)" "$(cat <<'PROMQL'
-increase(kube_pod_container_status_restarts_total{namespace="paladin",container="paladin-core"}[30m]) > 5
+    --set metrics.alerts.rules.crashLooping.restarts=5 --set metrics.alerts.rules.crashLooping.window=30m \
+    --set deployments.ingest.enabled=true --set metrics.alerts.rules.outboxNotDraining.rows=2000 \
+    --set metrics.alerts.rules.workerStalled.intervals=3
+check "selector: PaladinCrashLooping expr" "$(rule selector PaladinCrashLooping .expr)" "$(cat <<'PROMQL'
+label_replace(
+  increase(kube_pod_container_status_restarts_total{namespace="paladin",container="paladin-core",pod=~"paladin-core-(admin|api|dispatcher|ingest|mcp|worker)-.+"}[30m]) > 5,
+  "component", "$1", "pod", "paladin-core-(admin|api|dispatcher|ingest|mcp|worker)-.+"
+)
 PROMQL
 )"
-check "selector: PaladinApiCrashLooping description" "$(rule selector PaladinApiCrashLooping .annotations.description | sed -n 2p)" \
+check "selector: PaladinCrashLooping description" "$(rule selector PaladinCrashLooping .annotations.description | sed -n 2p)" \
     "has restarted more than 5 times in 30m. Likely panic on startup,"
+check "selector: PaladinOutboxNotDraining summary" "$(rule selector PaladinOutboxNotDraining .annotations.summary)" \
+    "Paladin outbox has not drained below 2000 rows in 15m"
+check "selector: PaladinWorkerStalled expr" "$(rule selector PaladinWorkerStalled .expr)" "$(cat <<'PROMQL'
+(time() - paladin_worker_last_run_timestamp_seconds)
+  > 3 * paladin_worker_interval_seconds
+PROMQL
+)"
 check "selector: PaladinApiHighErrorRate expr" "$(rule selector PaladinApiHighErrorRate .expr)" "$(cat <<'PROMQL'
 (
   sum(rate(rpc_server_call_duration_seconds_count{namespace="paladin",error_type=~"UNKNOWN|DEADLINE_EXCEEDED|UNIMPLEMENTED|INTERNAL|UNAVAILABLE|DATA_LOSS"}[5m]))
@@ -121,7 +150,7 @@ fi
 # ─── runbooks ────────────────────────────────────────────────────────────────
 
 base=$(yq -r '.metrics.alerts.runbookBaseUrl' "$CHART/values.yaml")
-for alert in PaladinApiHighErrorRate PaladinApiHighLatency; do
+for alert in $(yq -r '.groups[].rules[] | select(.annotations.runbook_url) | .alert' "$scratch/defaults.yaml"); do
     cases=$((cases + 1))
     url=$(rule defaults "$alert" '.annotations.runbook_url')
     file=${url#"$base/"}

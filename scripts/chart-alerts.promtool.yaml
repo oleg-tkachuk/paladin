@@ -1,45 +1,48 @@
 # promtool unit tests for the backend chart's alerts, run by
-# chart-alerts.test.sh against the rules rendered with the chart's defaults.
-# The traffic series are otelconnect's rpc.server.call.duration as Prometheus
-# names them; each rule tested here has a case where it fires and one where it
-# does not.
+# chart-alerts.test.sh against the rules rendered with the chart's defaults
+# (release paladin-core in namespace paladin). Every rule has a case where it
+# fires and one where it does not.
 rule_files:
   - prometheusrule.yaml
 
 evaluation_interval: 1m
 
 tests:
-  # Three restarts in 15m → more than the default 2; fires after `for: 5m`.
+  # A worker pod restarts three times in 15m → more than the default 2; fires
+  # after `for: 5m`, labelled with the role read from the pod name. The
+  # migrate Job's pod restarts as often and belongs to no role.
   - interval: 1m
     input_series:
-      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-api-0"}'
+      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-migrate-xk2p9"}'
+        values: "0 0 0 0 0 1 1 1 2 2 2 3 3 3 3 3 3 3 3 3 3"
+      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-worker-7d9f8-abcde"}'
         values: "0 0 0 0 0 1 1 1 2 2 2 3 3 3 3 3 3 3 3 3 3"
     alert_rule_test:
       - eval_time: 20m
-        alertname: PaladinApiCrashLooping
+        alertname: PaladinCrashLooping
         exp_alerts:
           - exp_labels:
               severity: critical
-              service: paladin-api
+              component: worker
               namespace: paladin
               container: paladin-core
-              pod: paladin-core-api-0
+              pod: paladin-core-worker-7d9f8-abcde
             exp_annotations:
-              summary: "Paladin api pod is crash-looping"
+              summary: "Paladin worker pod is crash-looping"
               description: |
-                Pod paladin-core-api-0 in namespace paladin
+                Pod paladin-core-worker-7d9f8-abcde in namespace paladin
                 has restarted more than 2 times in 15m. Likely panic on startup,
                 failed Postgres dial, or OOM. Inspect:
-                  kubectl -n paladin logs <pod> --previous
+                  kubectl -n paladin logs paladin-core-worker-7d9f8-abcde --previous
 
   # Two restarts in 15m — a rollout and a drain — stay under the threshold.
   - interval: 1m
     input_series:
-      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-api-0"}'
+      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-api-6c4b7-q8r2t"}'
         values: "0 0 0 0 0 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 2"
     alert_rule_test:
       - eval_time: 20m
-        alertname: PaladinApiCrashLooping
+        alertname: PaladinCrashLooping
         exp_alerts: []
 
   # Half the calls fail INTERNAL → fires once the 5m window has filled and
@@ -114,3 +117,318 @@ tests:
       - eval_time: 20m
         alertname: PaladinApiHighLatency
         exp_alerts: []
+
+  # ── lifecycle: NotReady and OOM ──
+
+  # An admin pod NotReady past `for: 10m` fires with component admin; an api
+  # pod that recovered in between does not.
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_status_ready{namespace="paladin", condition="true", pod="paladin-core-admin-5f6d7-z9y8x"}'
+        values: "0x20"
+      - series: 'kube_pod_status_ready{namespace="paladin", condition="true", pod="paladin-core-api-6c4b7-q8r2t"}'
+        values: "0x5 1x15"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PaladinNotReady
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: admin
+              namespace: paladin
+              condition: "true"
+              pod: paladin-core-admin-5f6d7-z9y8x
+            exp_annotations:
+              summary: "Paladin admin pod stuck NotReady"
+              description: |
+                Pod paladin-core-admin-5f6d7-z9y8x has been NotReady for 10m.
+                Readiness probe failing — check /readyz on the admin pod.
+
+  # A dispatcher container OOMKilled once → fires straight away.
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_container_status_last_terminated_reason{namespace="paladin", container="paladin-core", reason="OOMKilled", pod="paladin-core-dispatcher-8a9b0-m3n4p"}'
+        values: "0 0 0 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PaladinOOMKilled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: dispatcher
+              namespace: paladin
+              container: paladin-core
+              reason: OOMKilled
+              pod: paladin-core-dispatcher-8a9b0-m3n4p
+            exp_annotations:
+              summary: "Paladin dispatcher was OOMKilled"
+              description: |
+                Pod paladin-core-dispatcher-8a9b0-m3n4p was OOMKilled in the last 15m.
+                Bump deployments.dispatcher.resources.limits.memory in the env overlay,
+                or chase the leak.
+
+  # Never OOMKilled.
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_container_status_last_terminated_reason{namespace="paladin", container="paladin-core", reason="OOMKilled", pod="paladin-core-dispatcher-8a9b0-m3n4p"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PaladinOOMKilled
+        exp_alerts: []
+
+  # ── workers ──
+
+  # The reconciler last ran at t=0 with a 60s interval: at 10m it is 600s
+  # behind, over 5 intervals, and `for: 2m` has passed. The purger keeps
+  # ticking and stays silent.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_worker_last_run_timestamp_seconds{worker="reconciler"}'
+        values: "0x10"
+      - series: 'paladin_worker_interval_seconds{worker="reconciler"}'
+        values: "60x10"
+      - series: 'paladin_worker_last_run_timestamp_seconds{worker="audit_purger"}'
+        values: "0+60x10"
+      - series: 'paladin_worker_interval_seconds{worker="audit_purger"}'
+        values: "60x10"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PaladinWorkerStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              worker: reconciler
+            exp_annotations:
+              summary: "Paladin worker reconciler stalled"
+              description: >-
+                Worker reconciler has not completed a tick in over 5× its
+                configured interval (10m 0s since the last
+                run). Background maintenance it owns (reconciliation, purges,
+                reaping, lifecycle, replication) is not running.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/worker-stalled.md"
+
+  # The reconciler fails every tick; the purger fails some and succeeds some.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_worker_runs_total{worker="reconciler", outcome="error"}'
+        values: "0+1x40"
+      - series: 'paladin_worker_runs_total{worker="audit_purger", outcome="error"}'
+        values: "0+1x40"
+      - series: 'paladin_worker_runs_total{worker="audit_purger", outcome="success"}'
+        values: "0+1x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PaladinWorkerTicksAllFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              worker: reconciler
+            exp_annotations:
+              summary: "Paladin worker reconciler failing every tick"
+              description: >-
+                Worker reconciler has logged only error outcomes and no
+                successes in the last 15m. The loop is alive but every tick is
+                failing.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/worker-stalled.md"
+
+  # Every tick succeeds.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_worker_runs_total{worker="reconciler", outcome="success"}'
+        values: "0+1x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PaladinWorkerTicksAllFailing
+        exp_alerts: []
+
+  # ── operations ──
+  # Outbox floor stays above 500 → fires after the 15m window plus `for: 10m`.
+  - interval: 1m
+    input_series:
+      - series: paladin_outbox_pending
+        values: "800x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PaladinOutboxNotDraining
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Paladin outbox has not drained below 500 rows in 15m"
+              description: >-
+                The dispatcher is not clearing pending outbox rows. Check the
+                dispatcher logs, and the deepest-tenant line on the Operations
+                dashboard to tell a dispatcher problem from one tenant's sink.
+
+  # Bursts above 500 that drain back down once per window do not fire.
+  - interval: 1m
+    input_series:
+      - series: paladin_outbox_pending
+        values: "900 900 900 900 900 900 900 900 900 900 0 900 900 900 900 900 900 900 900 900 900 900 900 900 900 0 900 900 900 900 900 900 900 900 900 900 900 900 900 900 0"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: PaladinOutboxNotDraining
+        exp_alerts: []
+
+  # The tenant limiter failed open; the token limiter series does not exist.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_tenant_ratelimit_fail_open_total{tenant_id="t1"}'
+        values: "0+1x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PaladinRateLimitFailingOpen
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Paladin rate limiting is failing open"
+              description: >-
+                Requests are admitted without a rate-limit decision; the per-tenant
+                or per-token ceiling is not in force. Check the limiter's Postgres
+                tables and the api logs.
+
+  # Neither fail-open counter moves.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_tenant_ratelimit_fail_open_total{tenant_id="t1"}'
+        values: "3x20"
+      - series: paladin_api_token_ratelimit_fail_open_total
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PaladinRateLimitFailingOpen
+        exp_alerts: []
+
+  # t1: every charge refused → fires. t2: charges succeed → silent.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_capability_charges_total{tenant_id="t1", outcome="tenant_exhausted"}'
+        values: "0+10x60"
+      - series: 'paladin_capability_charges_total{tenant_id="t2", outcome="charged"}'
+        values: "0+10x60"
+      - series: 'paladin_capability_charges_total{tenant_id="t2", outcome="capability_exhausted"}'
+        values: "0+1x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: PaladinCapabilityChargesRefused
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tenant_id: t1
+            exp_annotations:
+              summary: "Tenant t1 has nearly every capability charge refused"
+              description: >-
+                Over 90% of charge attempts were refused for 15m. Check the
+                tenant's quota and the issuing capability's budget.
+
+  # t1 refused at 2 req/s → fires. t2 refused at 0.5 req/s → silent.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_tenant_ratelimit_decisions_total{tenant_id="t1", allowed="false"}'
+        values: "0+120x40"
+      - series: 'paladin_tenant_ratelimit_decisions_total{tenant_id="t2", allowed="false"}'
+        values: "0+30x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PaladinTenantThrottled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tenant_id: t1
+            exp_annotations:
+              summary: "Tenant t1 is rate-limited steadily"
+              description: >-
+                The per-tenant limiter has refused more than 1 request/s for 10m.
+                Either a client is looping or middleware.rate_limit is too low for
+                this tenant.
+
+  # Both pods out of sync for 20m → fires.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_db_replica_in_sync{pod="api-a"}'
+        values: "0x30"
+      - series: 'paladin_db_replica_in_sync{pod="api-b"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinReadReplicaOutOfSync
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Paladin read replica has served no reads for 15m"
+              description: >-
+                Every pod is sending listing reads to the primary. The health page's
+                postgres-replica row says why (unreachable, lag, not probed);
+                paladin_db_replica_lag_seconds shows how far behind it is.
+
+  # One pod still in sync → the replica works; a single pod's view is not
+  # an outage. And with the replica disabled there is no series at all.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_db_replica_in_sync{pod="api-a"}'
+        values: "0x30"
+      - series: 'paladin_db_replica_in_sync{pod="api-b"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinReadReplicaOutOfSync
+        exp_alerts: []
+
+  # Overdue uploads waiting an hour past the deadline, in one of two pods →
+  # fires once the 15m `for:` has passed.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_objects_pending_overdue_age_seconds{instance="worker-0"}'
+        values: "3600+60x30"
+      - series: 'paladin_objects_pending_overdue_age_seconds{instance="worker-1"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinUploadsNotSettling
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Paladin has uploads the reconciler cannot settle"
+              description: >-
+                The oldest overdue PENDING object is 1h 20m 0s
+                past the reconciler's deadline. Those objects cannot be downloaded
+                until it completes or fails them. Check the worker logs for failed
+                HEADs and paladin_objects_pending_overdue for how many are waiting.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/uploads-not-settling.md"
+
+  # A reconciler keeping up: objects fall due every tick and are settled
+  # within it, so the age stays under a minute.
+  - interval: 1m
+    input_series:
+      - series: paladin_objects_pending_overdue_age_seconds
+        values: "0 30 0 45 0 20 0 0 50 0 30 0 45 0 20 0 0 50 0 30 0 45 0 20 0 0 50 0 30 0"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PaladinUploadsNotSettling
+        exp_alerts: []
+
+  # A backlog past one batch, worked down steadily: overdue, but never by
+  # 30m. Below the threshold however long it lasts.
+  - interval: 1m
+    input_series:
+      - series: paladin_objects_pending_overdue_age_seconds
+        values: "600x45"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: PaladinUploadsNotSettling
+        exp_alerts: []
+
+  # Overdue for 30m+ but recovering before `for:` runs out does not fire.
+  - interval: 1m
+    input_series:
+      - series: paladin_objects_pending_overdue_age_seconds
+        values: "2000x10 0x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinUploadsNotSettling
+        exp_alerts: []
+
