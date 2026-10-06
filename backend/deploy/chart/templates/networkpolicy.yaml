@@ -20,9 +20,9 @@
   networkPolicies.kubeAPIPorts anywhere (K8s API for the secret resolver),
   Postgres, and the OTLP collector on the port config.otel.endpoint names.
 
-  With config.otel.metrics_exporter: prometheus, api and admin also admit the
-  monitoring namespace on the port of config.otel.metrics_addr — their scrape
-  listener is a port of its own, not one of the plane ports above.
+  With metrics.mode: scrape, every role that serves /metrics also admits the
+  monitoring namespace on metrics.port — the scrape listener is a port of its
+  own, not one of the plane or ops ports.
 
   Kubelet liveness/readiness probes originate on the node and bypass policy
   enforcement in mainstream CNIs, so default-deny ingress does not break
@@ -56,10 +56,9 @@
 */}}
 {{- $otlpPort := splitList ":" .Values.config.otel.endpoint | last | int }}
 {{- $otlp := dict "ports" (list (dict "protocol" "TCP" "port" $otlpPort)) }}
-{{/* The api / admin scrape listener, when metrics are pulled. */}}
-{{- $metricsPulled := and .Values.config.otel.enabled (eq .Values.config.otel.metrics_exporter "prometheus") }}
-{{- $metricsPort := splitList ":" .Values.config.otel.metrics_addr | last | int }}
-{{- $scrape := dict "from" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" .Values.networkPolicies.monitoring.namespace)))) "ports" (list (dict "protocol" "TCP" "port" $metricsPort)) }}
+{{/* The scrape listener every metrics role opens, when metrics are scraped. */}}
+{{- $metricsPulled := include "chart.metricsScraped" . }}
+{{- $scrape := dict "from" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" .Values.networkPolicies.monitoring.namespace)))) "ports" (list (dict "protocol" "TCP" "port" (int .Values.metrics.port))) }}
 {{- $common = list $dns $https $pg $otlp }}
 {{- $storageEgress := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.storage.namespace)))) }}
 {{- $natsEgress := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.nats.namespace)))) "ports" (list (dict "protocol" "TCP" "port" $np.nats.port)) }}
@@ -210,6 +209,9 @@ spec:
               app.kubernetes.io/component: admin
       ports:
         - { protocol: TCP, port: 8090 }
+    {{- if $metricsPulled }}
+    - {{ $scrape | toJson }}
+    {{- end }}
   egress:
     {{- range $r := $common }}
     - {{ $r | toJson }}
@@ -241,6 +243,9 @@ spec:
               app.kubernetes.io/component: admin
       ports:
         - { protocol: TCP, port: 8099 }
+    {{- if $metricsPulled }}
+    - {{ $scrape | toJson }}
+    {{- end }}
   # Open egress by design: the dispatcher delivers to CUSTOMER sinks —
   # webhooks, brokers, queues — on arbitrary endpoints and ports. The
   # blast-radius win of the role split is that ONLY this pod needs it.
@@ -272,6 +277,9 @@ spec:
         - {{ $fromUI | toJson }}
       ports:
         - { protocol: TCP, port: 8100 }
+    {{- if $metricsPulled }}
+    - {{ $scrape | toJson }}
+    {{- end }}
   egress:
     {{- range $r := $common }}
     - {{ $r | toJson }}

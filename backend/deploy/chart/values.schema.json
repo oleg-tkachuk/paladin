@@ -1873,12 +1873,17 @@
           },
           "type": "object"
         },
-        "serviceMonitor": {
+        "mode": {
+          "enum": [
+            "push",
+            "scrape",
+            "off"
+          ],
+          "type": "string"
+        },
+        "podMonitor": {
           "additionalProperties": false,
           "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
             "interval": {
               "type": "string"
             },
@@ -1896,9 +1901,6 @@
             "namespace": {
               "type": "string"
             },
-            "path": {
-              "type": "string"
-            },
             "relabelings": {
               "type": "array"
             },
@@ -1907,6 +1909,11 @@
             }
           },
           "type": "object"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
         }
       },
       "type": "object"

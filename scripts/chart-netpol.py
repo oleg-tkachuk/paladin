@@ -40,12 +40,12 @@ ROLES = ["api", "admin", "worker", "dispatcher", "mcp", "ingest"]
 # mismatch rather than passing by coincidence.
 OBSERVED = {
     "config.otel.enabled": "true",
-    "config.otel.metrics_exporter": "prometheus",
-    "config.otel.metrics_addr": "0.0.0.0:19095",
+    "metrics.mode": "scrape",
+    "metrics.port": "19095",
     "config.otel.endpoint": "collector.observability:14318",
     "networkPolicies.monitoring.namespace": "scrapers",
 }
-METRICS_PORT = int(OBSERVED["config.otel.metrics_addr"].rsplit(":", 1)[1])
+METRICS_PORT = int(OBSERVED["metrics.port"])
 OTLP_PORT = int(OBSERVED["config.otel.endpoint"].rsplit(":", 1)[1])
 MONITORING_NS = OBSERVED["networkPolicies.monitoring.namespace"]
 # An API server port other than the chart's default, as OrbStack's is: every
@@ -54,9 +54,9 @@ MONITORING_NS = OBSERVED["networkPolicies.monitoring.namespace"]
 # networkPolicies.kubeAPIPorts leaves the pod crash-looping on its first read.
 KUBE_API_PORT = 26443
 KUBE_API = {"networkPolicies.kubeAPIPorts": f"{{{KUBE_API_PORT}}}"}
-# The roles whose scrape listener is a port of its own (config.otel.metrics_addr);
-# the others serve /metrics on an ops port their policy already opens.
-SCRAPE_LISTENER_ROLES = ("api", "admin")
+# The roles that serve /metrics, each on the metrics port alone (ADR-0023);
+# mcp serves none.
+SCRAPE_LISTENER_ROLES = ("api", "admin", "worker", "dispatcher", "ingest")
 
 
 def render(chart: Path, extra: dict[str, str] | None = None) -> list[dict]:
