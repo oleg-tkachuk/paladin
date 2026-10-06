@@ -412,7 +412,7 @@ erDiagram
     objects ||--o{ object_versions : versions
     object_versions ||--o| object_locks : locks
     objects ||--o{ multipart_uploads : uploads
-    buckets ||--o{ quotas : limits
+    buckets ||--o| bucket_quotas : limits
     buckets ||--o{ tenant_default_bindings : target
 ```
 

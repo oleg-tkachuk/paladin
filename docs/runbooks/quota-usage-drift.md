@@ -58,14 +58,15 @@ wedges. That is the failure this runbook covers.
           count(o.id)                FILTER (WHERE o.state = 'AVAILABLE')     AS live_count
      FROM quotas q
      LEFT JOIN objects o ON o.tenant_id = q.tenant_id
-    WHERE q.tenant_id IS NOT NULL
     GROUP BY q.id, q.tenant_id, q.usage_total_bytes, q.usage_object_count
    HAVING q.usage_total_bytes  <> COALESCE(sum(o.size_bytes) FILTER (WHERE o.state = 'AVAILABLE'), 0)
        OR q.usage_object_count <> count(o.id) FILTER (WHERE o.state = 'AVAILABLE');
    ```
 
    Run it on a BYPASSRLS role (`paladin_migrate` / `paladin_reaper`) — both tables
-   are RLS'd, so `paladin_app` without a tenant GUC returns nothing.
+   are RLS'd, so `paladin_app` without a tenant GUC returns nothing. Bucket caps
+   live in `bucket_quotas` and reach their objects through `collections.bucket_id`;
+   the reconciler corrects both tables on the same tick.
 
 ## Fixes
 
