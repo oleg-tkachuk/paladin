@@ -1425,22 +1425,6 @@ The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 - **Blockers:** where the part size lives — on `Object`, or derived from the
   upload session — is a contract decision.
 
-### SDK helpers consumers wrote for themselves
-
-- **Status:** Deferred — the fixes shipped first; these are additions to shape
-  against the consumers that need them.
-- **Reason:** agentic-rag, caryon and local-iac each work around a missing
-  helper: agentic-rag hand-writes the control half of a browser-driven
-  multipart upload (initiate, presign parts on demand, complete with a
-  read-back, abort); caryon writes an ensure helper for admin resources (get,
-  else create with a key, AlreadyExists tolerated) and a capability cache with
-  in-flight dedup; the Python SDK has no `capability_source` (Go has
-  `WithCapabilitySource`).
-- **Definition of Done:** each helper in both SDKs where it fits, designed by
-  deleting the consumer's own code and making it compile against the helper;
-  README rows and tests.
-- **Blockers:** none.
-
 ### The SDK fakes do not hold every RPC the server serves
 
 - **Status:** Deferred

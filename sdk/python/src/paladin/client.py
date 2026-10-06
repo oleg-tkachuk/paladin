@@ -235,6 +235,7 @@ class Client:
         bearer_token: str | None = None,
         api_token: str | None = None,
         capability: str | None = None,
+        capability_source: Callable[[], Any] | None = None,
         retry: Retry | None = None,
         headers: dict[str, str] | None = None,
         token_source: Any = None,
@@ -250,7 +251,11 @@ class Client:
         token (``paladin_pat_…``) and an OIDC JWT are both accepted there.
         ``api_token`` is sent in ``X-Paladin-API-Token``, for a proxy that
         strips ``Authorization``. ``capability`` is sent in
-        ``X-Paladin-Capability``. ``headers`` are sent on every call and
+        ``X-Paladin-Capability``. ``capability_source`` is called for each
+        call — an async client awaits what it returns — and its token sent
+        there instead, for a client that acts for many callers: read the
+        caller from a ``contextvars.ContextVar``. One that returns nothing
+        leaves ``capability``'s, if any. ``headers`` are sent on every call and
         replace what the SDK would send there, the User-Agent included.
 
         ``token_source`` — a ``StaticToken``, ``Session`` or ``AsyncSession``
@@ -290,6 +295,7 @@ class Client:
         self._headers = sent
         self._retry = retry
         self._token_source = token_source
+        self._capability_source = capability_source
         self._audience = audience or ""
         self._hooks = hooks
         self._extra = list(interceptors)
@@ -324,6 +330,9 @@ class Client:
             _HeadersSync(self._headers),
             _IdempotencySync(),
         ]
+        if self._capability_source is not None:
+            # Before DPoP, which signs over the capability it sets.
+            result.append(_CapabilitySync(self._capability_source))
         if self._token_source is not None:
             result.append(_TokensSync(self._token_source, self._audience))
         if self._retry is not None:
@@ -342,6 +351,8 @@ class Client:
             _HeadersAsync(self._headers),
             _IdempotencyAsync(),
         ]
+        if self._capability_source is not None:
+            result.append(_CapabilityAsync(self._capability_source))
         if self._token_source is not None:
             result.append(_TokensAsync(self._token_source, self._audience))
         if self._retry is not None:
@@ -349,6 +360,36 @@ class Client:
         if self._dpop is not None:
             result.append(self._dpop[1])
         return result
+
+
+class _CapabilitySync:
+    """Sends the token ``capability_source`` returns for each call."""
+
+    def __init__(self, source: Callable[[], Any]) -> None:
+        self._source = source
+
+    def on_start_sync(self, ctx: RequestContext) -> None:
+        token = self._source()
+        if token:
+            ctx.request_headers()[HEADER_CAPABILITY] = token
+
+    def on_end_sync(self, token: None, ctx: RequestContext, error: Exception | None) -> None:
+        return None
+
+
+class _CapabilityAsync:
+    def __init__(self, source: Callable[[], Any]) -> None:
+        self._source = source
+
+    async def on_start(self, ctx: RequestContext) -> None:
+        token = self._source()
+        if asyncio.iscoroutine(token):
+            token = await token
+        if token:
+            ctx.request_headers()[HEADER_CAPABILITY] = token
+
+    async def on_end(self, token: None, ctx: RequestContext, error: Exception | None) -> None:
+        return None
 
 
 def _apply_headers(headers: dict[str, str], ctx: RequestContext) -> None:

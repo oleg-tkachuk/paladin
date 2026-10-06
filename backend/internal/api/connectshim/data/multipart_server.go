@@ -93,14 +93,20 @@ func (s *MultipartServer) CompleteMultipartUpload(ctx context.Context, req *conn
 	if err != nil {
 		return nil, badName(err)
 	}
-	if err := s.H.CompleteMultipartUpload(ctx, multiparth.CompleteArgs{
+	obj, err := s.H.CompleteMultipartUpload(ctx, multiparth.CompleteArgs{
 		UploadID: m.GetUploadId(),
 		Parts:    parts,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, err
 	}
-	// Return a minimal Object — the caller fetches full state via GetObject.
-	return connect.NewResponse(&pb.Object{Name: m.GetObjectName()}), nil
+	// The object as stored, as CompleteObject answers. It used to be the name
+	// alone, so every client read it back with GetObject. A read that failed
+	// after the completion leaves only the name, which is all that is sure.
+	if obj.Collection == "" {
+		return connect.NewResponse(&pb.Object{Name: m.GetObjectName()}), nil
+	}
+	return connect.NewResponse(objectToProto(&obj)), nil
 }
 
 func (s *MultipartServer) AbortMultipartUpload(ctx context.Context, req *connect.Request[pb.AbortMultipartUploadRequest]) (*connect.Response[pb.AbortMultipartUploadResponse], error) {

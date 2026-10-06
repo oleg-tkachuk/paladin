@@ -58,8 +58,8 @@ func (failingMultipart) PresignPart(context.Context, string, int32, time.Duratio
 func (failingMultipart) ListParts(context.Context, string, int32, string, multiparth.SessionRef) ([]multiparth.Part, string, error) {
 	return nil, "", errBoom
 }
-func (failingMultipart) CompleteMultipartUpload(context.Context, multiparth.CompleteArgs) error {
-	return errBoom
+func (failingMultipart) CompleteMultipartUpload(context.Context, multiparth.CompleteArgs) (objecth.Object, error) {
+	return objecth.Object{}, errBoom
 }
 func (failingMultipart) AbortMultipartUpload(context.Context, string, multiparth.SessionRef) error {
 	return errBoom

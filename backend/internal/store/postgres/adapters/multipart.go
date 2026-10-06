@@ -30,6 +30,12 @@ func NewMultipartRepo(q *sqlc.Queries, pool *pgxpool.Pool) *MultipartRepo {
 
 var _ multiparth.Repository = (*MultipartRepo)(nil)
 
+// Object reads the object a completed upload produced, through the object
+// repository's own read, so both answer with the same row.
+func (r *MultipartRepo) Object(ctx context.Context, tenantID, objectID uuid.UUID) (objecth.Object, error) {
+	return NewObjectRepo(r.q, r.pool).getByID(ctx, tenantID, objectID)
+}
+
 const multipartSessionTTL = 24 * time.Hour
 
 func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (multiparth.Session, error) {
