@@ -491,18 +491,6 @@ func bucketNameParts(name string) (backend, bucket string, err error) {
 	return parts[1], parts[3], nil
 }
 
-func tenantIDFromName(name string) (string, error) {
-	const prefix = "tenants/"
-	if !strings.HasPrefix(name, prefix) || len(name) <= len(prefix) {
-		return "", fmt.Errorf("invalid tenant name %q", name)
-	}
-	rest := name[len(prefix):]
-	if i := strings.IndexByte(rest, '/'); i >= 0 {
-		return rest[:i], nil
-	}
-	return rest, nil
-}
-
 // subscriptionFromName splits "tenants/{tenant}/eventSubscriptions/{id}".
 // The tenant segment is returned, not discarded: the handler authorises
 // against it and scopes the connection to it before reading, so a

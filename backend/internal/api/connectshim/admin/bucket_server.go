@@ -18,9 +18,13 @@ import (
 type BucketServer struct {
 	paladinadminv1connect.UnimplementedBucketServiceHandler
 	H bucketHandler
+	// Tenants resolves the slug form of ListAccessibleBuckets' tenant name.
+	Tenants TenantResolver
 }
 
-func NewBucketServer(h *bucketh.Handler) *BucketServer { return &BucketServer{H: h} }
+func NewBucketServer(h *bucketh.Handler, tenants TenantResolver) *BucketServer {
+	return &BucketServer{H: h, Tenants: tenants}
+}
 
 func (s *BucketServer) CreateBucket(ctx context.Context, req *connect.Request[pb.CreateBucketRequest]) (*connect.Response[pb.Bucket], error) {
 	if err := requireCompilablePolicy(req.Msg.GetBucket().GetCedarPolicy()); err != nil {
@@ -109,13 +113,9 @@ func (s *BucketServer) ListBuckets(ctx context.Context, req *connect.Request[pb.
 
 func (s *BucketServer) ListAccessibleBuckets(ctx context.Context, req *connect.Request[pb.ListAccessibleBucketsRequest]) (*connect.Response[pb.ListBucketsResponse], error) {
 	m := req.Msg
-	tID, err := tenantIDFromName(m.GetTenant())
+	id, err := resolveTenantName(ctx, s.Tenants, m.GetTenant())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	id, err := uuid.Parse(tID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	afterBackend, afterName := splitBucketCursor(m.GetPage().GetPageToken())
 	list, next, err := s.H.ListAccessibleBuckets(ctx, id, m.GetPage().GetPageSize(), afterBackend, afterName)
