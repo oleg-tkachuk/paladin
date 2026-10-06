@@ -159,10 +159,8 @@ worker:
       min_object_age: 2h
       batch_size: 100
     housekeeping:
-      pending_ttl: "24h"
       multipart_ttl: "72h"
       interval: "1h"
-      delete_orphaned_parts: false
     refresh_token_reap:
       interval: 1h
     lifecycle:

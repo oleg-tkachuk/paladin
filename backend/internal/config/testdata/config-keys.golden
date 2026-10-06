@@ -404,14 +404,12 @@ worker.jobs.capability.expired_for
 worker.jobs.capability.interval
 worker.jobs.housekeeping
 worker.jobs.housekeeping.audit_log_ttl
-worker.jobs.housekeeping.delete_orphaned_parts
 worker.jobs.housekeeping.event_deliveries_ttl
 worker.jobs.housekeeping.hard_delete_after
 worker.jobs.housekeeping.hard_delete_batch_size
 worker.jobs.housekeeping.interval
 worker.jobs.housekeeping.multipart_ttl
 worker.jobs.housekeeping.operations_ttl
-worker.jobs.housekeeping.pending_ttl
 worker.jobs.lifecycle
 worker.jobs.lifecycle.enabled
 worker.jobs.lifecycle.interval

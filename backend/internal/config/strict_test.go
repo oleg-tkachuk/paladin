@@ -127,21 +127,28 @@ func TestValidateNoUnknownKeys_RealConfigPasses(t *testing.T) {
 	}
 }
 
-// security.reject_tenant_mismatch once gated a REST middleware that returned
-// 403 for a tenant mismatch; the middleware went with the move to Connect,
-// and the key lived on, read by nothing and set to true in every config —
-// a control that looked enabled. It was removed outright, so a config still
-// carrying it must fail to load rather than keep implying the check exists.
-func TestValidateNoUnknownKeys_RemovedTenantMismatchSwitchFails(t *testing.T) {
-	path := writeYAML(t, `
-security:
-  reject_tenant_mismatch: true
-`)
-	err := validateNoUnknownKeys(path)
-	if err == nil {
-		t.Fatal("expected the removed security.reject_tenant_mismatch to be refused")
+// Keys removed because nothing read them. Each looked like a working control:
+// security.reject_tenant_mismatch (true everywhere) once gated a REST
+// middleware that went with the move to Connect; housekeeping.pending_ttl
+// claimed to expire PENDING objects, which expire with their presigned URL;
+// housekeeping.delete_orphaned_parts warned to enable it in prod to reclaim
+// storage the multipart reaper already reclaims. A config still carrying one
+// must fail to load rather than keep implying the knob exists.
+func TestValidateNoUnknownKeys_RemovedDeadKeysFail(t *testing.T) {
+	cases := map[string]string{
+		"security.reject_tenant_mismatch":                "security:\n  reject_tenant_mismatch: true\n",
+		"worker.jobs.housekeeping.pending_ttl":           "worker:\n  jobs:\n    housekeeping:\n      pending_ttl: 24h\n",
+		"worker.jobs.housekeeping.delete_orphaned_parts": "worker:\n  jobs:\n    housekeeping:\n      delete_orphaned_parts: true\n",
 	}
-	if !strings.Contains(err.Error(), "security.reject_tenant_mismatch") {
-		t.Errorf("error must name the removed key, got: %v", err)
+	for key, body := range cases {
+		t.Run(key, func(t *testing.T) {
+			err := validateNoUnknownKeys(writeYAML(t, body))
+			if err == nil {
+				t.Fatalf("expected the removed %s to be refused", key)
+			}
+			if !strings.Contains(err.Error(), key) {
+				t.Errorf("error must name the removed key, got: %v", err)
+			}
+		})
 	}
 }
