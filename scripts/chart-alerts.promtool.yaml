@@ -260,6 +260,7 @@ tests:
                 The dispatcher is not clearing pending outbox rows. Check the
                 dispatcher logs, and the deepest-tenant line on the Operations
                 dashboard to tell a dispatcher problem from one tenant's sink.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/outbox-not-draining.md"
 
   # Bursts above 500 that drain back down once per window do not fire.
   - interval: 1m
@@ -286,8 +287,10 @@ tests:
               summary: "Paladin rate limiting is failing open"
               description: >-
                 Requests are admitted without a rate-limit decision; the per-tenant
-                or per-token ceiling is not in force. Check the limiter's Postgres
-                tables and the api logs.
+                or per-token ceiling is not in force. The limiters log nothing when
+                they fail open: check that the planes can write tenant_rate_buckets
+                and api_token_rate_buckets.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/rate-limit-failing-open.md"
 
   # Neither fail-open counter moves.
   - interval: 1m
@@ -321,7 +324,8 @@ tests:
               summary: "Tenant t1 has nearly every capability charge refused"
               description: >-
                 Over 90% of charge attempts were refused for 15m. Check the
-                tenant's quota and the issuing capability's budget.
+                tenant's budget and the issuing capability's budget.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/capability-charges-refused.md"
 
   # t1 refused at 2 req/s → fires. t2 refused at 0.5 req/s → silent.
   - interval: 1m
@@ -343,6 +347,7 @@ tests:
                 The per-tenant limiter has refused more than 1 request/s for 10m.
                 Either a client is looping or middleware.rate_limit is too low for
                 this tenant.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/tenant-throttled.md"
 
   # Both pods out of sync for 20m → fires.
   - interval: 1m
@@ -363,6 +368,7 @@ tests:
                 Every pod is sending listing reads to the primary. The health page's
                 postgres-replica row says why (unreachable, lag, not probed);
                 paladin_db_replica_lag_seconds shows how far behind it is.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/read-replica-out-of-sync.md"
 
   # One pod still in sync → the replica works; a single pod's view is not
   # an outage. And with the replica disabled there is no series at all.
