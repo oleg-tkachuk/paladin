@@ -30,6 +30,14 @@ listener of its own so a scraper does not need to trust the planes' internal
 CA, and on no other port (ADR-0023). mcp holds no instruments of its own and
 serves none.
 
+Under the Helm chart neither key is set directly: `metrics.mode`
+(`push` | `scrape` | `off`) and `metrics.port` render them, together with the
+container port, the scrape discovery (`metrics.discovery`: a PodMonitor or
+`prometheus.io/*` annotations) and the NetworkPolicy rule, and the chart
+refuses `config.otel.metrics_exporter` and `metrics_addr` so the two cannot
+disagree. The alerting rules over these series ship in the chart's
+PrometheusRule (`metrics.alerts`). See [docs/install.md](../../docs/install.md#metrics-and-alerts).
+
 Instruments defined in `internal/metrics`:
 
 | Metric | Kind | What it counts |

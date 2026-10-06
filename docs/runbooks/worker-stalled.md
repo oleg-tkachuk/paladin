@@ -23,9 +23,9 @@ emits, per `worker` label:
 - `paladin_worker_interval_seconds{worker}` — configured interval (published at startup).
 
 They leave the process like every other Paladin metric — pushed over OTLP or
-scraped, per `otel.metrics_exporter`
+scraped, per the chart's `metrics.mode`
 ([observability.md](../../backend/docs/observability.md)). The scrape
-endpoint is `/metrics` on `otel.metrics_addr`, as on every role. With
+endpoint is `/metrics` on `metrics.port`, as on every role. With
 `otel.enabled: false` they are no-ops, so the alerts only have data where
 metrics are collected.
 
