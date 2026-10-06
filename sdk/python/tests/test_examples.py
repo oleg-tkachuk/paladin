@@ -52,6 +52,7 @@ def test_split_horizon() -> None:
     assert load("split_horizon").build().data is not None
 
 
+@pytest.mark.skipif(importlib.util.find_spec("httpcore") is None, reason="needs the tls extra")
 def test_mtls_reads_its_files_at_start_up() -> None:
     with pytest.raises(FileNotFoundError):
         load("mtls").build()

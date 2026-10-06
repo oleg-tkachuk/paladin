@@ -534,7 +534,7 @@ jobs:
   # another, and this is where a range that admits a runtime the stubs refuse
   # fails.
   py-sdk-compat:
-    name: Python SDK (${{ matrix.python }}, ${{ matrix.with }})
+    name: Python SDK (${{ matrix.python }}, ${{ matrix.with }}${{ matrix.without_tls == true && ', no tls extra' || '' }})
     needs: [changes]
     if: contains(fromJSON(needs.changes.outputs.groups), 'sdk')
     strategy:
@@ -560,7 +560,15 @@ jobs:
         env:
           PYTHON: ${{ matrix.python }}
           WITH: ${{ matrix.with }}
-        run: ./scripts/py-sdk-compat.sh "$PYTHON" "$WITH"
+          # A cell without the key reads as null, which GitHub's expressions
+          # count equal to false: only an explicit true drops the extra.
+          WITHOUT_TLS: ${{ matrix.without_tls == true }}
+        run: |
+          if [[ $WITHOUT_TLS == true ]]; then
+            ./scripts/py-sdk-compat.sh --without-tls "$PYTHON" "$WITH"
+          else
+            ./scripts/py-sdk-compat.sh "$PYTHON" "$WITH"
+          fi
 
   # A consumer saw a process abort at exit on macOS with the SDK loaded
   # (recursive_mutex lock failed). sdk/python/tests/test_lifecycle.py makes and

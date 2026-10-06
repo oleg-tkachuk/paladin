@@ -36,7 +36,7 @@ from connectrpc.interceptor import Interceptor, InterceptorSync
 from connectrpc.method import IdempotencyLevel
 from connectrpc.request import RequestContext
 
-from paladin._tls_http import call_deadline
+from paladin._http_settings import call_deadline
 from paladin.dpop import DPoPAsync, DPoPSync
 from paladin.errors import convert
 from paladin.observe import Hooks, RetryEvent, report_retry

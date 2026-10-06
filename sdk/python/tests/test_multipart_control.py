@@ -48,9 +48,9 @@ def _chunks(part_size: int, total: int):  # type: ignore[no-untyped-def]
         yield i + 1, chunk, base64.b64encode(hashlib.sha256(chunk).digest()).decode()
 
 
-# agentic-rag wrote this half itself; it is the SDK's now. The ETags arrive
-# quoted, as a header carries them, and a part is presigned twice, as one
-# whose URL expired would be.
+# A browser sends the parts while this process holds the credentials. The
+# ETags arrive quoted, as a header carries them, and a part is presigned twice,
+# as one whose URL expired would be.
 def test_a_browser_upload_through_the_control_half(fake: FakePaladin) -> None:
     data = fake.connect().data
     session = begin_multipart(
