@@ -19,6 +19,10 @@ import (
 // the Connect code, so they hold for an error the server sent no reason
 // with; the reason, when there is one, is on the *Error.
 var (
+	// ErrInvalidArgument is a malformed request, or one naming something
+	// invalid: it fails the same way however often it is sent. The *Error's
+	// Reason says which rule it broke.
+	ErrInvalidArgument    = errors.New("paladin: invalid argument")
 	ErrNotFound           = errors.New("paladin: not found")
 	ErrAlreadyExists      = errors.New("paladin: already exists")
 	ErrPermissionDenied   = errors.New("paladin: permission denied")
@@ -35,6 +39,7 @@ var (
 
 // kinds maps a Connect code to the kind of failure it is.
 var kinds = map[connect.Code]error{
+	connect.CodeInvalidArgument:    ErrInvalidArgument,
 	connect.CodeNotFound:           ErrNotFound,
 	connect.CodeAlreadyExists:      ErrAlreadyExists,
 	connect.CodePermissionDenied:   ErrPermissionDenied,

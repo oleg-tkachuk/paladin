@@ -69,6 +69,11 @@ class NotFoundError(PaladinError):
     """``NOT_FOUND``."""
 
 
+class InvalidArgumentError(PaladinError):
+    """The request is malformed or names something invalid; it will fail the
+    same way however often it is sent. ``reason`` says which rule it broke."""
+
+
 class AlreadyExistsError(PaladinError):
     """``ALREADY_EXISTS``."""
 
@@ -107,6 +112,7 @@ class ContractSkewError(PaladinError):
 
 
 _KINDS: Mapping[Code, type[PaladinError]] = {
+    Code.INVALID_ARGUMENT: InvalidArgumentError,
     Code.NOT_FOUND: NotFoundError,
     Code.ALREADY_EXISTS: AlreadyExistsError,
     Code.PERMISSION_DENIED: PermissionDeniedError,
@@ -149,13 +155,12 @@ def convert(
     sdk_version: str,
     parse_retry_after: Any,
 ) -> ConnectError:
-    """``err`` as the ``PaladinError`` for its code; a ``ConnectError`` whose
-    code has no kind is returned as it is."""
+    """``err`` as the ``PaladinError`` for its code — the base class for a
+    code with no kind of its own, so ``reason``, ``retry_after`` and both
+    releases are there whatever the code, as in the Go SDK."""
     if isinstance(err, PaladinError):
         return err
-    kind = _KINDS.get(err.code)
-    if kind is None:
-        return err
+    kind = _KINDS.get(err.code, PaladinError)
     found, decoded = _decode(err.details)
     after = headers.get("retry-after")
     return kind(

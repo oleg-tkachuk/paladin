@@ -67,6 +67,7 @@ func TestErrorsMatchTheirKindAndCarryTheReason(t *testing.T) {
 		{"not found, with its reason", withInfo(connect.CodeNotFound, paladin.ErrorDomain, bucket.String()), paladin.ErrNotFound, bucket},
 		{"a reason this SDK predates", withInfo(connect.CodeNotFound, paladin.ErrorDomain, "ERROR_REASON_FROM_THE_FUTURE"), paladin.ErrNotFound, 0},
 		{"another domain's reason", withInfo(connect.CodeNotFound, "elsewhere", bucket.String()), paladin.ErrNotFound, 0},
+		{"invalid argument, with its reason", withInfo(connect.CodeInvalidArgument, paladin.ErrorDomain, commonv1.ErrorReason_ERROR_REASON_INVALID_ARGUMENT.String()), paladin.ErrInvalidArgument, commonv1.ErrorReason_ERROR_REASON_INVALID_ARGUMENT},
 		{"no detail at all", connect.NewError(connect.CodeAlreadyExists, errors.New("x")), paladin.ErrAlreadyExists, 0},
 		{"permission denied", connect.NewError(connect.CodePermissionDenied, errors.New("x")), paladin.ErrPermissionDenied, 0},
 		{"failed precondition", connect.NewError(connect.CodeFailedPrecondition, errors.New("x")), paladin.ErrFailedPrecondition, 0},
@@ -89,7 +90,7 @@ func TestErrorsMatchTheirKindAndCarryTheReason(t *testing.T) {
 			if !errors.As(err, &pe) || pe.ServerVersion != testServerVersion || pe.Procedure != paladiniamv1connect.HealthServiceGetVersionProcedure {
 				t.Errorf("*Error = %+v; want the procedure and the server's release", pe)
 			}
-			for _, other := range []error{paladin.ErrNotFound, paladin.ErrAlreadyExists, paladin.ErrContractSkew} {
+			for _, other := range []error{paladin.ErrInvalidArgument, paladin.ErrNotFound, paladin.ErrAlreadyExists, paladin.ErrContractSkew} {
 				if other != tc.kind && errors.Is(err, other) {
 					t.Errorf("also matches %v", other)
 				}
