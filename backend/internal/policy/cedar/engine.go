@@ -615,10 +615,11 @@ var constantResourceAttrs = map[string]bool{
 	// read a genuinely per-object attr (tags/state/size/…) still trigger per-row
 	// eval on that attr; this entry only neutralizes the built-in's own read.
 	"scope_keys": true,
-	// subject belongs to the User resource of the settings and user actions,
-	// never to an Object, so on a ListObjects page it is absent for every row
-	// alike. Listed so the own-settings built-in, which reads it, does not
-	// force per-row evaluation on every list.
+	// user_id and subject belong to the User resource of the settings and user
+	// actions, never to an Object, so on a ListObjects page they are absent for
+	// every row alike. Listed so the own-settings built-in, which reads
+	// user_id, does not force per-row evaluation on every list.
+	"user_id": true,
 	"subject": true,
 }
 
@@ -758,10 +759,10 @@ when {
 };
 
 // Built-in: a user may read and change its OWN settings — self-service like
-// ReadTenant above. The resource is the target User; it is the caller when the
-// subjects match within one tenant. A login subject is unique only inside a
-// tenant, so the tenant comparison is what keeps a same-named user elsewhere
-// out.
+// ReadTenant above. The resource is the target User; it is the caller when its
+// user_id is the principal's subject, which an IAM token carries as the user's
+// UUID (ADR-0017) — not the login name, which is resource.subject. The tenant
+// comparison keeps the grant inside the caller's own tenant regardless.
 //
 // Not "principal == resource": the principal's UID is its subject and the
 // resource's is tenant/user-id, so the two never match. The default tenant
@@ -774,8 +775,8 @@ permit (
   resource
 )
 when {
-  resource has subject &&
-  principal.subject == resource.subject &&
+  resource has user_id &&
+  principal.subject == resource.user_id &&
   resource has tenant_id &&
   principal.tenant_id == resource.tenant_id
 };
