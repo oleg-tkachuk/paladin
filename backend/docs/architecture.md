@@ -33,7 +33,8 @@ plane runs without `BYPASSRLS`, so a missing policy is a missing wall.
 - **S3-compatible storage** — object bytes only (SeaweedFS, MinIO, Garage,
   AWS S3).
 - **OpenTelemetry collector** — traces over OTLP; metrics over OTLP or a
-  Prometheus scrape (`otel.metrics_exporter`).
+  Prometheus scrape (`otel.metrics_exporter`, rendered by the chart from
+  `metrics.mode`; ADR-0023).
 - **Event sinks** — HTTP, NATS (core or JetStream), Kafka, RabbitMQ, SQS;
   reached by the dispatcher only.
 
