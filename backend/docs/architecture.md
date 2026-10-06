@@ -64,16 +64,19 @@ package and token audience. All three run as the `paladin_app` database role
 
 | Plane | Package | Serves |
 |-------|---------|--------|
-| **data** | `paladin.data.v1` | Object lifecycle, multipart, presign, batch, tags, operations |
-| **admin** | `paladin.admin.v1` | Tenants, buckets, backends, collections, quotas, policy, capabilities, audit, billing |
+| **data** | `paladin.data.v1` | Object lifecycle, multipart, presign, batch, tags, operations, storage bootstrap |
+| **admin** | `paladin.admin.v1` | Tenants, buckets, backends, collections, quotas, policy, CEL, capabilities, API tokens, tenant budgets, event subscriptions, audit, billing, platform operations, MCP inspection, system |
 | **iam** | `paladin.iam.v1` | Auth, users, user settings, health |
 
 Each plane's handlers live under `internal/api/connectshim/<plane>/`, one
-file per service — `object_server.go`, `collection_server.go`, and so on.
+file per service — `object_server.go`, `multipart_server.go`, and so on.
 Those are thin: they translate protobuf to and from the domain types and
 delegate to the handlers in `internal/api/<plane>/v1/<resource>h/`, which
-hold the logic and know nothing about Connect. That split is what lets the same
-handler be driven by the MCP bridge as well as by RPC.
+hold the logic and know nothing about Connect. The MCP server does not call
+those handlers directly: it goes through Connect clients — over HTTP in bridge
+mode, over an in-process transport (`mcp.NewInlineTransport`) with
+`--embedded` — so an MCP tool call passes the same interceptor chain as any
+other RPC.
 
 ### Shared Components
 
@@ -98,31 +101,39 @@ constraints:
 4. **API token** — verifies `paladin_pat_…` and establishes the principal
 5. **Capability** — same, for capability credentials
 6. **RequireAudience** — after 3–5, since it reads the principal they set
-7. **Tenant rate limit** — per-tenant token bucket, before any database work
-8. **Log context** — adds trace, request and tenant ids to handler logs
-9. **QuotaSoftCheck** — tenant and bucket scope
-10. **Validation** — `buf.validate` rules via `protovalidate`
-11. **Idempotency** — `idempotency_keys` for replayable writes
+7. **ActOnNamedTenant** — a platform admin's request acts on the tenant it
+   names; everything below keys on that tenant
+8. **Tenant rate limit** — per-tenant token bucket, before any database work
+9. **Log context** — adds trace, request and tenant ids to handler logs
+10. **QuotaSoftCheck** — tenant and bucket scope
+11. **Validation** — `buf.validate` rules via `protovalidate`
+12. **Idempotency** — `idempotency_keys` for replayable writes
+13. **AuditActingElsewhere** — audits a platform admin's calls inside another
+    tenant, the ones that tenant's own trail would miss
 
-The admin and iam chains differ in credentials and audience; audit is written
-by the handlers that change state.
+The admin and iam chains differ in credentials and audience, and each ends in
+an audit interceptor (`middleware.AuditWithMirror`) that writes the row for a
+mutation before the RPC returns (ADR-0004). The iam chain lets `Login`,
+`RefreshToken` and `ExchangeAudience` through anonymously and adds a login
+rate limit; the admin chain requires an `Idempotency-Key` on every `Create*` and
+`Issue*` RPC.
 
 ## Runtime Entry Points
 
 One binary, several roles. `cmd/server/` defines a subcommand per role, and
-a deployment runs whichever ones it needs — separately in a cluster, or
-together on a laptop:
+each role runs as its own process — the chart deploys one Deployment per
+role; there is no all-in-one mode:
 
 | Command | Role |
 |---------|------|
 | `serve api` | Data plane (`paladin.data.v1`) + IAM (`paladin.iam.v1`) |
 | `serve admin` | Admin plane (`paladin.admin.v1`) |
-| `serve worker` | Reapers, partition maintainer, purge drainer, quota reconciler, bucket reconciler |
+| `serve worker` | Background jobs under leases: reapers, purgers, lifecycle, reconcilers, operations; also serves the `/stats` census ([ops-housekeeping.md](ops-housekeeping.md)) |
 | `serve dispatcher` | Outbox drain → sinks |
 | `serve ingest` | Storage notifications: webhook, NATS, RabbitMQ, SQS |
 | `serve mcp` | MCP bridge (`--embedded` hosts the handlers in-process) |
 | `migrate` | Apply the migrations |
-| `bootstrap` | Create the platform admin |
+| `bootstrap` | Create the platform admin and mirror configured storage backends into the database |
 
 Composition lives in `internal/app/` — `build_listeners_*.go` assemble the
 serving planes, `build_jobs.go` the background workers, `build_deps.go` the
@@ -164,11 +175,23 @@ See [configuration.md](configuration.md) for the field reference.
   and SQS drivers, parse, dedup, promote to `AVAILABLE`.
 - `internal/policy/cedar/` — Cedar engine, policy cache, LISTEN/NOTIFY
   invalidation.
-- `internal/capability/` — Capability issuance, verification, usage counters.
-- `internal/middleware/` — Interceptors: auth, quota, idempotency, rate limit,
-  validation, logging.
-- `internal/worker/` — Background jobs: outbox dispatcher, reapers, partition
-  maintainer, purge drainer, quota reconciler.
+- `internal/capability/postgres/` — The Postgres store behind the standalone
+  `capability/` module: records, revocations, usage counters, reservations,
+  Biscuit copies.
+- `internal/auth/` — The authentication interceptors (JWT, API token,
+  capability), audiences, and the principal they establish.
+- `internal/middleware/` — The other interceptors: acting tenant, quota,
+  idempotency, rate limits, validation, logging, audit, server version.
+- `internal/filter/cel/` — CEL list filters, and the subset pushed down into
+  the SQL query.
+- `internal/platformstats/` — The cross-tenant census for the console's
+  `/stats` page and its per-signal tenant drill-down, served from the
+  worker's ops listener and proxied by the admin plane.
+- `internal/auditstream/` — The live audit stream (`LISTEN paladin_audit`).
+- `internal/mcp/` — The MCP server: tools, profiles, bridge and inline
+  transports.
+- `internal/worker/` — Background jobs and the outbox dispatcher with its
+  sinks; `lease/` holds the per-job lease.
 - `internal/statemachine/` — Legal object-state transitions, in one place.
 - `internal/app/`, `internal/wire/` — Composition: what each plane builds and
   which dependencies it gets.
@@ -180,7 +203,9 @@ See [configuration.md](configuration.md) for the field reference.
   [CONVENTIONS.md](../migrations/CONVENTIONS.md).
 - `tests/integration/` — Postgres-backed suites behind the `integration`
   build tag: the assembled application at the top level, one component
-  against real Postgres or S3 in `components/`.
+  against real Postgres or S3 in `components/`. A few packages
+  (`internal/worker`, `internal/worker/lease`) carry tagged tests of their
+  own; CI runs every package with the tag.
 
 ## Related documents
 
