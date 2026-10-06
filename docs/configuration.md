@@ -206,9 +206,9 @@ roles and policies and is not supported.
 
 ### Storage backend auth modes
 
-`storage.backends.<name>.auth.mode` selects how a backend authenticates. Set
-it explicitly: when it is omitted the CUE schema fills `default_chain`, the
-AWS SDK's default credential chain, before `Config.Validate()` runs.
+`storage.backends.<name>.auth.mode` selects how a backend authenticates. It
+has no default: a backend that names none fails to load, rather than taking
+whatever the AWS SDK's default credential chain finds.
 
 | Mode | Requires | Rejects |
 | --- | --- | --- |
