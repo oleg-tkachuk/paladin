@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"time"
 
@@ -25,7 +26,7 @@ func NewIdempotencyRepo(q *sqlc.Queries) *IdempotencyRepo { return &IdempotencyR
 
 var _ middleware.IdempotencyStore = (*IdempotencyRepo)(nil)
 
-// Get returns (response, sha, found=true) when a non-expired row exists.
+// Get returns (record, found=true) when a non-expired row exists.
 // The SQL `expires_at > now()` filter means an expired row reports
 // found=false here; the middleware will re-execute the RPC and Put will
 // upsert via ON CONFLICT DO NOTHING — which, after the worker purges
@@ -33,15 +34,15 @@ var _ middleware.IdempotencyStore = (*IdempotencyRepo)(nil)
 // the store contract; (nil, nil, false, nil) means "not cached, run the
 // RPC", and any non-nil err propagates as InternalError to the caller
 // (rare — only pgx I/O failures).
-func (r *IdempotencyRepo) Get(ctx context.Context, tenantID uuid.UUID, method, key string) ([]byte, []byte, bool, error) {
+func (r *IdempotencyRepo) Get(ctx context.Context, tenantID uuid.UUID, method, key string) (middleware.IdempotencyRecord, bool, error) {
 	row, err := r.q.GetIdempotencyKey(ctx, pgUUID(tenantID), method, key)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil, false, nil
+			return middleware.IdempotencyRecord{}, false, nil
 		}
-		return nil, nil, false, err
+		return middleware.IdempotencyRecord{}, false, err
 	}
-	return row.Response, row.ResponseSha, true, nil
+	return middleware.IdempotencyRecord{Response: row.Response, RequestHash: row.RequestHash}, true, nil
 }
 
 // Put memoises a serialised response. The underlying SQL uses
@@ -53,6 +54,7 @@ func (r *IdempotencyRepo) Get(ctx context.Context, tenantID uuid.UUID, method, k
 // upstream guards that, but the DB has no CHECK constraint so a stray
 // empty would silently coalesce per-tenant. Audit the call site if
 // you add a second caller in the future.
-func (r *IdempotencyRepo) Put(ctx context.Context, tenantID uuid.UUID, method, key string, response, sha []byte, expiresAt time.Time) error {
-	return r.q.PutIdempotencyKey(ctx, pgUUID(tenantID), method, key, response, sha, pgTS(expiresAt))
+func (r *IdempotencyRepo) Put(ctx context.Context, tenantID uuid.UUID, method, key string, rec middleware.IdempotencyRecord, expiresAt time.Time) error {
+	sum := sha256.Sum256(rec.Response)
+	return r.q.PutIdempotencyKey(ctx, pgUUID(tenantID), method, key, rec.Response, sum[:], rec.RequestHash, pgTS(expiresAt))
 }

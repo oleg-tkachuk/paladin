@@ -74,7 +74,7 @@ func TestCredentialResponsesAreStoredRedacted(t *testing.T) {
 		t.Fatalf("cached %d responses, want 1", len(store.data))
 	}
 	for _, e := range store.data {
-		if strings.Contains(string(e.body), generatedPassword) {
+		if strings.Contains(string(e.Response), generatedPassword) {
 			t.Fatal("the cached response holds the generated password")
 		}
 	}

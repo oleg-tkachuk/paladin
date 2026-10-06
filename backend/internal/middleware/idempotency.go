@@ -48,6 +48,7 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -104,10 +105,49 @@ func RegisterResponseFactory[T any, PT protoPtr[T]](method string) {
 	}))
 }
 
+// IdempotencyRecord is one memoised call: the response it produced and the
+// fingerprint of the request that produced it.
+type IdempotencyRecord struct {
+	Response []byte
+	// RequestHash is requestFingerprint of the request. Empty for a row
+	// written before fingerprints existed; such a row matches any request.
+	RequestHash []byte
+}
+
 // IdempotencyStore persists and returns cached responses.
 type IdempotencyStore interface {
-	Get(ctx context.Context, tenantID uuid.UUID, method, key string) (response []byte, sha []byte, found bool, err error)
-	Put(ctx context.Context, tenantID uuid.UUID, method, key string, response, sha []byte, expiresAt time.Time) error
+	Get(ctx context.Context, tenantID uuid.UUID, method, key string) (rec IdempotencyRecord, found bool, err error)
+	Put(ctx context.Context, tenantID uuid.UUID, method, key string, rec IdempotencyRecord, expiresAt time.Time) error
+}
+
+// errKeyReused answers a key already used, within its TTL, for a different
+// request to the same method. Replaying would hand back a response to a
+// question the caller did not ask — another object's download URL, another
+// part's presigned PUT — and nothing downstream could tell.
+var errKeyReused = connect.NewError(connect.CodeInvalidArgument, errors.New(
+	"idempotency: this Idempotency-Key was already used for a different request to this method; "+
+		"use a new key for a new request"))
+
+// requestFingerprint identifies a request's content: SHA-256 over its
+// deterministic protobuf encoding, so a JSON and a binary client sending the
+// same message produce the same fingerprint.
+func requestFingerprint(req connect.AnyRequest) ([]byte, error) {
+	msg, ok := req.Any().(proto.Message)
+	if !ok {
+		return nil, errors.New("idempotency: request message is not a proto.Message")
+	}
+	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(b)
+	return sum[:], nil
+}
+
+// sameRequest reports whether a stored fingerprint admits this request. A row
+// with no fingerprint predates them and is trusted, as it always was.
+func sameRequest(stored, current []byte) bool {
+	return len(stored) == 0 || bytes.Equal(stored, current)
 }
 
 // IdempotencyConfig tunes the interceptor.
@@ -266,7 +306,18 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 		// resource handler is expected to use its own ON CONFLICT
 		// guard on the natural key. Without that guard we'd be at
 		// risk regardless of this cache.
-		cached, _, found, err := i.store.Get(ctx, tenantID, method, key)
+		fingerprint, ferr := requestFingerprint(req)
+		if ferr != nil {
+			// Cannot tell one request from another, so cannot memoise
+			// safely; run the handler unmemoised.
+			return next(ctx, req)
+		}
+		rec, found, err := i.store.Get(ctx, tenantID, method, key)
+		if err == nil && found && !sameRequest(rec.RequestHash, fingerprint) {
+			metrics.RecordIdempotencyLookup(ctx, method, lookupKeyReused)
+			return nil, errKeyReused
+		}
+		cached := rec.Response
 		if err == nil && found {
 			// Preferred: generic factory (no reflection).
 			if f, ok := responseFactories.Load(method); ok {
@@ -313,18 +364,18 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 		// store Put is ON CONFLICT DO NOTHING so concurrent
 		// first-time writers race harmlessly.
 		i.respTypes.Store(method, reflect.TypeOf(resp))
-		bytes, merr := marshalResponse(resp)
+		body, merr := marshalResponse(resp)
 		if merr != nil {
 			// Marshal failure means we can't memoize this method.
 			// The original response still flows back to the caller;
 			// just log-and-skip (no logger plumbed here, so skip).
 			return resp, nil
 		}
-		sum := sha256.Sum256(bytes)
 		// Put errors are non-fatal — losing the cache write means
 		// the next retry will re-run the handler. The caller still
 		// gets their fresh response.
-		_ = i.store.Put(ctx, tenantID, method, key, bytes, sum[:], time.Now().Add(i.cfg.TTL))
+		_ = i.store.Put(ctx, tenantID, method, key,
+			IdempotencyRecord{Response: body, RequestHash: fingerprint}, time.Now().Add(i.cfg.TTL))
 		return resp, nil
 	}
 }
@@ -356,6 +407,9 @@ func marshalResponse(resp connect.AnyResponse) ([]byte, error) {
 // lookupRefused is the idempotency lookup outcome for a repeated key whose
 // response carried a credential and is not replayed.
 const lookupRefused = "refused"
+
+// lookupKeyReused is the outcome for a key repeated with a different request.
+const lookupKeyReused = "key_reused"
 
 // errCredentialNotReplayed answers a repeated key whose response type carries
 // a credential. The cached copy has it cleared, and a success without it

@@ -4,7 +4,7 @@
 -- LIMIT 1 keeps this :one-safe even if two concurrent first-writers raced
 -- and each inserted a row (they differ only in expires_at — see Put). The
 -- freshest live row wins; the loser ages out with its partition.
-SELECT tenant_id, method, key, response, response_sha, created_at, expires_at
+SELECT tenant_id, method, key, response, response_sha, request_hash, created_at, expires_at
 FROM idempotency_keys
 WHERE tenant_id = $1 AND method = $2 AND key = $3
   AND expires_at > now()
@@ -29,8 +29,8 @@ LIMIT 1;
 -- expires_at, new partition); GetIdempotencyKey filters the expired one and
 -- the daily DROP PARTITION reclaims it — so the old expired-overwrite
 -- DO UPDATE is no longer needed.
-INSERT INTO idempotency_keys (tenant_id, method, key, response, response_sha, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO idempotency_keys (tenant_id, method, key, response, response_sha, request_hash, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (tenant_id, method, key, expires_at) DO NOTHING;
 
 -- name: PurgeExpiredIdempotencyKeys :execrows
