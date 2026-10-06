@@ -433,7 +433,10 @@ storage: {
     public_endpoint:  string | *""
     force_path_style: bool   | *true
     auth: {
-      mode:                    "static_keys" | "default_chain" | "assume_role" | "web_identity" | *"default_chain"
+      // No default: a backend that names no mode must not fall through to
+      // the AWS credential chain (node role, IRSA, env). "" is admitted here
+      // only so Config.Validate can refuse it with a message naming the modes.
+      mode:                    "" | "static_keys" | "default_chain" | "assume_role" | "web_identity" | *""
       access_key:              string | *""
       access_key_secret?:      #SecretRef
       secret_key:              string | *""

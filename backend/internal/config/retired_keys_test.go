@@ -35,7 +35,7 @@ auth:
   signing_key: "dev-secret-change-me-32-bytes-min"
 storage:
   backends:
-    primary: {}
+    primary: { auth: { mode: default_chain } }
 ` + tc.extra
 			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 				t.Fatal(err)
