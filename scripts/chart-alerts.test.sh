@@ -63,6 +63,15 @@ check() {
 # ─── expressions ─────────────────────────────────────────────────────────────
 
 render defaults
+check "defaults: PaladinApiCrashLooping expr" "$(rule defaults PaladinApiCrashLooping .expr)" "$(cat <<'PROMQL'
+increase(kube_pod_container_status_restarts_total{namespace="paladin",container="paladin-core"}[15m]) > 2
+PROMQL
+)"
+check "defaults: PaladinApiNotReady expr" "$(rule defaults PaladinApiNotReady .expr)" "$(cat <<'PROMQL'
+kube_pod_status_ready{namespace="paladin",condition="true"} == 0
+and on (pod, namespace) kube_pod_labels{label_app_kubernetes_io_component="api"}
+PROMQL
+)"
 check "defaults: PaladinApiHighErrorRate expr" "$(rule defaults PaladinApiHighErrorRate .expr)" "$(cat <<'PROMQL'
 (
   sum(rate(rpc_server_call_duration_seconds_count{error_type=~"UNKNOWN|DEADLINE_EXCEEDED|UNIMPLEMENTED|INTERNAL|UNAVAILABLE|DATA_LOSS"}[5m]))
@@ -79,7 +88,14 @@ histogram_quantile(
 PROMQL
 )"
 
-render selector -f "$CHART/values-prod.yaml" --set-string "metrics.alerts.rpcSelector=$SELECTOR"
+render selector -f "$CHART/values-prod.yaml" --set-string "metrics.alerts.rpcSelector=$SELECTOR" \
+    --set metrics.alerts.rules.crashLooping.restarts=5 --set metrics.alerts.rules.crashLooping.window=30m
+check "selector: PaladinApiCrashLooping expr" "$(rule selector PaladinApiCrashLooping .expr)" "$(cat <<'PROMQL'
+increase(kube_pod_container_status_restarts_total{namespace="paladin",container="paladin-core"}[30m]) > 5
+PROMQL
+)"
+check "selector: PaladinApiCrashLooping description" "$(rule selector PaladinApiCrashLooping .annotations.description | sed -n 2p)" \
+    "has restarted more than 5 times in 30m. Likely panic on startup,"
 check "selector: PaladinApiHighErrorRate expr" "$(rule selector PaladinApiHighErrorRate .expr)" "$(cat <<'PROMQL'
 (
   sum(rate(rpc_server_call_duration_seconds_count{namespace="paladin",error_type=~"UNKNOWN|DEADLINE_EXCEEDED|UNIMPLEMENTED|INTERNAL|UNAVAILABLE|DATA_LOSS"}[5m]))

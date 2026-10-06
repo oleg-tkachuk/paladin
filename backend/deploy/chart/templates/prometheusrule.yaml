@@ -25,7 +25,9 @@ which scopes to the chart's selector — actual implementation reuses
 the api selector here as starter; tune by adding per-role rules.
 */}}
 {{- if .Values.metrics.alerts.enabled -}}
-{{- $apiFullname := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+{{- /* The role these rules watch; roleLabels stamps it as app.kubernetes.io/component. */ -}}
+{{- $apiRole := "api" -}}
+{{- $apiFullname := include "chart.roleFullname" (dict "ctx" . "role" $apiRole) -}}
 {{- $rules := .Values.metrics.alerts.rules -}}
 {{- $runbookBase := trimSuffix "/" .Values.metrics.alerts.runbookBaseUrl -}}
 {{- /* otelconnect's rpc.server.call.duration as Prometheus names it. */ -}}
@@ -40,7 +42,7 @@ kind: PrometheusRule
 metadata:
   name: {{ $apiFullname }}
   labels:
-    {{- include "chart.roleLabels" (dict "ctx" . "role" "api") | nindent 4 }}
+    {{- include "chart.roleLabels" (dict "ctx" . "role" $apiRole) | nindent 4 }}
     {{- with .Values.metrics.alerts.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -49,18 +51,19 @@ spec:
     - name: {{ $apiFullname }}.lifecycle
       rules:
         {{- if $rules.crashLooping.enabled }}
+        {{- $crash := $rules.crashLooping }}
         - alert: PaladinApiCrashLooping
           expr: |
-            increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}",container="{{ .Chart.Name }}"}[15m]) > 2
-          for: {{ $rules.crashLooping.for }}
+            increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}",container="{{ .Chart.Name }}"}[{{ $crash.window }}]) > {{ $crash.restarts }}
+          for: {{ $crash.for }}
           labels:
-            severity: {{ $rules.crashLooping.severity }}
+            severity: {{ $crash.severity }}
             service: paladin-api
           annotations:
             summary: "Paladin api pod is crash-looping"
             description: |
               Pod {{ "{{ $labels.pod }}" }} in namespace {{ .Release.Namespace }}
-              has restarted more than 2 times in 15m. Likely panic on startup,
+              has restarted more than {{ $crash.restarts }} times in {{ $crash.window }}. Likely panic on startup,
               failed Postgres dial, or OOM. Inspect:
                 kubectl -n {{ .Release.Namespace }} logs <pod> --previous
         {{- end }}
@@ -68,7 +71,7 @@ spec:
         - alert: PaladinApiNotReady
           expr: |
             kube_pod_status_ready{namespace="{{ .Release.Namespace }}",condition="true"} == 0
-            and on (pod, namespace) kube_pod_labels{label_app_kubernetes_io_component="api"}
+            and on (pod, namespace) kube_pod_labels{label_app_kubernetes_io_component="{{ $apiRole }}"}
           for: {{ $rules.notReady.for }}
           labels:
             severity: {{ $rules.notReady.severity }}
