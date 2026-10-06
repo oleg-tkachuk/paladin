@@ -48,73 +48,7 @@ import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb"
 import type { PolicyLayer } from "@/gen/paladin/admin/v1/policy_service_pb";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { TestSuite } from "./_TestSuite";
-
-// Curated Cedar policy starters surfaced via the "Load template"
-// dropdown above the editor textarea. Pure UI constants — never round-
-// tripped through the backend. Loading a template replaces the editor
-// buffer (with a confirm dialog when there's unsaved content).
-const POLICY_TEMPLATES: {
-  id: string;
-  label: string;
-  description: string;
-  cedar: string;
-}[] = [
-  {
-    id: "read-only-auditor",
-    label: "Read-only auditor",
-    description:
-      "Permits Get/List against any resource in the active tenant; forbids any write.",
-    cedar: `permit (
-  principal in Role::"tenant.auditor",
-  action in [Action::"GetObject", Action::"ListObjects", Action::"GetTenant", Action::"ListBuckets"],
-  resource
-);
-forbid (
-  principal,
-  action in [Action::"PutObject", Action::"DeleteObject", Action::"SetObjectTags", Action::"SetQuota"],
-  resource
-);`,
-  },
-  {
-    id: "tenant-uploader",
-    label: "Tenant uploader (bucket-scoped)",
-    description:
-      "Lets a service account PUT/Complete objects under one bucket only.",
-    cedar: `permit (
-  principal in Role::"tenant.uploader",
-  action in [Action::"UploadObject", Action::"CompleteObject", Action::"PresignDownload"],
-  resource in Bucket::"tenants/{tenant_id}/buckets/{bucket}"
-);`,
-  },
-  {
-    id: "agent-with-budget",
-    label: "Agent with capability budget",
-    description:
-      "Restricts an agent principal to read+presign on one object_key, with capability caveats enforcing the budget separately.",
-    cedar: `permit (
-  principal in Role::"agent",
-  action in [Action::"GetObject", Action::"PresignDownload", Action::"ListObjects"],
-  resource in Collection::"tenants/{tenant_id}/collections/{object_key}"
-);`,
-  },
-  {
-    id: "forbid-destructive-non-admin",
-    label: "Forbid destructive ops to non-admin principals",
-    description:
-      "A forbid rule that vetoes DeleteObject / DeleteBucket / PurgeObject for any principal not in the platform.admin role. Pair with one or more permit rules that grant the rest of the surface to lower-privileged roles — Cedar evaluates forbid first, so this acts as a hard ceiling regardless of what permits allow.",
-    cedar: `// Forbid destructive ops unless the caller is platform.admin.
-// Cedar evaluates forbid before permit, so this acts as a hard
-// ceiling — pair with permits for the rest of the action surface.
-forbid (
-  principal,
-  action in [Action::"DeleteObject", Action::"DeleteBucket", Action::"PurgeObject"],
-  resource
-)
-unless {
-  principal in Role::"platform.admin"
-};`,
-  },
-];
+import { POLICY_TEMPLATES } from "./templates";
 
 // Cedar policy editor: pick a scope (tenant / bucket / object_key), load
 // its current cedar text + the merged effective stack, edit + validate
