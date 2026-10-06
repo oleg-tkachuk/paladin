@@ -39,9 +39,14 @@ Four layers are concatenated, in this order, and compiled together:
    - any principal may consent to an OAuth client (`AuthorizeOAuth`);
    - a member may read its own tenant (`ReadTenant`) and ensure its own
      storage (`EnsureTenantStorage`);
+   - a user may read and change its own settings (`ReadUserSettings`,
+     `ManageUserSettings`) — the target user's `subject` and `tenant_id`
+     match the principal's;
    - a machine principal (`kind` is `api_key`, `service_account` or
      `capability`) may delete and restore objects in its own tenant;
    - `platform.tenant-provisioner` may create tenants and their storage;
+   - `platform.capability-issuer` may issue, revoke and read capabilities
+     (`IssueCapability`, `RevokeCapability`, `ReadCapability`);
    - a principal with a non-empty scope set that does not contain `*` is
      confined to resources those scopes admit (a `forbid`).
 2. **Tenant** — `tenants.inherited_cedar_policy`. A tenant created without one
@@ -77,6 +82,7 @@ use:
 |------|------------|-------|
 | `platform.admin` | built-in | everything |
 | `platform.tenant-provisioner` | built-in | create tenants, their buckets and collections |
+| `platform.capability-issuer` | built-in | issue, revoke and read capabilities for any tenant |
 | `tenant.admin` | default policy | users, user settings, quotas, audit, subscriptions in its own tenant; `InspectPolicy` |
 | `bucket.admin` | default policy | bucket configuration |
 | `compliance.officer` | default policy | `ConfigureLock` |
@@ -106,6 +112,7 @@ is checked against the most specific one the request names — for example,
 | `ManageQuota` `ReadQuota` | `Tenant`, `Bucket` |
 | `ManageTenant` `ReadTenant` `ResetQuotaUsage` `ReadAuditLog` `ExportAuditLog` `ManageSubscription` `ReadSubscription` `TestSubscription` `ReadOperation` `CancelOperation` `ReadBilling` `EnsureTenantStorage` `AuthorizeOAuth` | `Tenant` |
 | `InspectPolicy` | `Tenant`, `Collection` |
+| `IssueCapability` `DelegateCapability` `RevokeCapability` `ReadCapability` `CreateAPIToken` `RevokeAPIToken` `ReadAPIToken` `InspectMCP` | `Tenant` (the caller's own) |
 | `ManageUser` `ResetPassword` `GrantScopes` `ManageUserSettings` | `User` |
 | `ReadUser` `ReadUserSettings` | `User`, `Tenant` |
 
