@@ -6,6 +6,7 @@ import asyncio
 import io
 import threading
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
@@ -123,7 +124,12 @@ class Served:
 
 @pytest.fixture
 def iam() -> Iterator[Served]:
-    fake = FakeIAM()
+    with _serve(FakeIAM()) as served:
+        yield served
+
+
+@contextmanager
+def _serve(fake: FakeIAM) -> Iterator[Served]:
     apps = [AuthServiceWSGIApplication(fake), HealthServiceWSGIApplication(fake)]
 
     def route(environ, start_response):  # type: ignore[no-untyped-def]
@@ -251,3 +257,63 @@ def test_async_session(iam: Served) -> None:
     asyncio.run(run())
     assert len(iam.iam.seen_tokens) == 2
     assert iam.iam.exchanges == 1
+
+
+class _RecordingIAM(FakeIAM):
+    """Keeps the headers each login arrived with."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.login_headers: list[dict[str, str]] = []
+
+    def login(self, request, ctx):  # type: ignore[no-untyped-def]
+        self.login_headers.append(dict(ctx.request_headers().items()))
+        return super().login(request, ctx)
+
+
+class _HeldIAM(FakeIAM):
+    """Holds every exchange until released."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def exchange_audience(self, request, ctx):  # type: ignore[no-untyped-def]
+        self.entered.set()
+        self.release.wait()
+        return super().exchange_audience(request, ctx)
+
+
+# A Session reached IAM over a client with the defaults, whatever the caller's
+# planes used: no CA, no client certificate, no retry policy. It takes
+# connect's options now.
+def test_session_client_options_reach_iam() -> None:
+    probe, value = "x-session-probe", "set-by-the-caller"
+    fake = _RecordingIAM()
+    with _serve(fake) as served:
+        Session.sign_in(served.url, "admin", "secret", headers={probe: value})
+    assert [h.get(probe) for h in fake.login_headers] == [value]
+
+
+# Every token() held the session's lock across its call to IAM, so one slow
+# exchange stalled threads whose token was already cached.
+def test_session_serves_a_cached_token_while_another_is_minted() -> None:
+    fake = _HeldIAM()
+    with _serve(fake) as served:
+        s = Session.sign_in(served.url, "admin", "secret")
+        cached = s.token(AUDIENCE_IAM)
+        minting = threading.Thread(target=s.token, args=(AUDIENCE_DATA,), daemon=True)
+        minting.start()
+        assert fake.entered.wait(timeout=5)
+
+        got: list[str] = []
+        reader = threading.Thread(target=lambda: got.append(s.token(AUDIENCE_IAM)), daemon=True)
+        reader.start()
+        reader.join(timeout=1)
+        # Read before the exchange is released: once it is, a reader that had
+        # been waiting on it finishes too, and the check would prove nothing.
+        served_while_held = list(got)
+        fake.release.set()
+        minting.join(timeout=5)
+    assert served_while_held == [cached], "a cached token waited for another audience's exchange"
