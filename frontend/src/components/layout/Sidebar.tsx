@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { canUseAdminPlane } from "@/constants/roles";
 import { routeNeedsAdminPlane } from "@/lib/adminPlaneRoutes";
+import { BuildVersion } from "@/components/layout/BuildVersion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -291,21 +292,36 @@ function SidebarBody({
     <div className="flex h-full w-full flex-col">
       {/* Brand */}
       <div className="flex h-14 shrink-0 items-center border-b border-sidebar-border px-4">
-        <Link href="/" className="flex min-w-0 items-center gap-2.5">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {/* The logo and the name both go home; the line under the name is
+              the running release, which links to /health. Siblings rather
+              than one link, since a link cannot hold another. */}
+          <Link
+            href="/"
+            aria-label="Paladin home"
+            tabIndex={collapsed ? undefined : -1}
+            className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground"
+          >
             <CubeTransparentIcon className="size-5" />
-          </div>
+          </Link>
           {!collapsed && (
             <div className="min-w-0 leading-tight">
-              <div className="text-sm font-semibold tracking-tight">
+              <Link
+                href="/"
+                className="block text-sm font-semibold tracking-tight"
+              >
                 Paladin
-              </div>
-              <div className="text-tiny font-medium uppercase tracking-wider text-muted-foreground">
-                Control Plane
-              </div>
+              </Link>
+              <BuildVersion
+                fallback={
+                  <div className="text-tiny font-medium uppercase tracking-wider text-muted-foreground">
+                    Control Plane
+                  </div>
+                }
+              />
             </div>
           )}
-        </Link>
+        </div>
       </div>
 
       {/* Scope picker now lives in the TopBar (see TopBar.tsx) so the
