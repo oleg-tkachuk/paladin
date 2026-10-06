@@ -16,7 +16,7 @@ import (
 // The control half of a multipart upload whose bytes a browser sends: the
 // server opens it, signs each part for the checksum the browser computed,
 // and completes it with the ETags the browser read — quoted, as a header
-// carries them. agentic-rag wrote this itself; it is the SDK's now.
+// carries them.
 func TestMultipartControlDrivesABrowserUpload(t *testing.T) {
 	srv := paladintest.New(t)
 	p := srv.Connect()
