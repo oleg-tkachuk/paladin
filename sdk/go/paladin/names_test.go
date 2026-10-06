@@ -136,3 +136,34 @@ func TestDownloadURILooksTheObjectUpByKey(t *testing.T) {
 		t.Errorf("err = %v, want ErrInvalidName", err)
 	}
 }
+
+func TestBucketNameRoundTrips(t *testing.T) {
+	n := paladin.BucketName{Backend: "primary", Bucket: "paladin-shared"}
+	if got := n.String(); got != "storageBackends/primary/buckets/paladin-shared" {
+		t.Fatalf("String = %q", got)
+	}
+	back, err := paladin.ParseBucketName(n.String())
+	if err != nil || back != n {
+		t.Fatalf("ParseBucketName = (%+v, %v), want %+v", back, err, n)
+	}
+}
+
+func TestParseBucketNameRefusesOtherShapes(t *testing.T) {
+	for _, s := range []string{
+		"", "storageBackends/primary", "storageBackends//buckets/b", "storageBackends/p/buckets/",
+		"buckets/b", "storageBackends/p/buckets/b/extra", "tenants/t/collections/c",
+	} {
+		if _, err := paladin.ParseBucketName(s); !errors.Is(err, paladin.ErrInvalidName) {
+			t.Errorf("ParseBucketName(%q) = %v, want ErrInvalidName", s, err)
+		}
+	}
+}
+
+// The server checks a capability's resource against this exact shape; the
+// consumers that grant on a key prefix spelled it by hand.
+func TestObjectResource(t *testing.T) {
+	const tenant = "7ba7b810-9dad-11d1-80b4-00c04fd430c8"
+	if got, want := paladin.ObjectResource(tenant, "docs", "reports/"), "object://"+tenant+"/docs/reports/"; got != want {
+		t.Errorf("ObjectResource = %q, want %q", got, want)
+	}
+}

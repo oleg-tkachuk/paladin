@@ -99,7 +99,7 @@ func CapabilityObjectURI(tenantID uuid.UUID, collection, key string) string {
 }
 
 // capabilityObjectURIPrefix starts every object URI a capability names.
-const capabilityObjectURIPrefix = "object://"
+const capabilityObjectURIPrefix = paladin.ObjectResourceScheme
 
 // parseCapabilityObjectURI splits "object://<tenant>/<collection>/<key>".
 // The key may itself contain "/"; the tenant and collection may not.

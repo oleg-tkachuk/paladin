@@ -79,7 +79,7 @@ from paladin.data.v1.storage_bootstrap_service_connect import (
     StorageBootstrapServiceWSGIApplication,
 )
 from paladin.errors import ERROR_DOMAIN
-from paladin.names import CollectionName, InvalidNameError, ObjectName
+from paladin.names import API_TOKEN_PREFIX, CollectionName, InvalidNameError, ObjectName
 from paladin.transfer import CHECKSUM_SHA256
 
 if TYPE_CHECKING:  # annotations only: typing.Self is 3.11+
@@ -309,7 +309,7 @@ class _Calls:
 
 # ─── Strict auth ──────────────────────────────────────────────────────────────
 
-_API_TOKEN_PREFIX = "paladin_pat_"
+_API_TOKEN_PREFIX = API_TOKEN_PREFIX
 """An API token carries the server's prefix, so a client tells it from a
 bearer token as it does against the server."""
 _BEARER_TOKEN_PREFIX = "paladintest_jwt_"

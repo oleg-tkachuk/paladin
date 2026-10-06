@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
@@ -255,7 +257,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	// `total_parts`. Computing them here is what makes those promises true:
 	// they were left zero, so a caller had nothing to slice the file by and
 	// PresignPart rejected every part number as out of range.
-	objectURI := "object://" + tenantID.String() + "/" + args.Collection + "/" + args.Key
+	objectURI := paladin.ObjectResource(tenantID.String(), args.Collection, args.Key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
@@ -315,7 +317,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	if err != nil {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + sess.Collection + "/" + sess.Key
+	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return err
 	}
@@ -396,7 +398,7 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, wan
 	if err := assertSessionMatches(sess, want); err != nil {
 		return err
 	}
-	objectURI := "object://" + tenantID.String() + "/" + sess.Collection + "/" + sess.Key
+	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, objectURI); err != nil {
 		return err
 	}
@@ -471,7 +473,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err := checksum.Validate(sess.ChecksumAlgo, checksumValue); err != nil {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("checksum_value: %w", err))
 	}
-	objectURI := "object://" + tenantID.String() + "/" + sess.Collection + "/" + sess.Key
+	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
 	// Presigned part URL grants Put on the underlying object; gate on
 	// both OpPresign (the act of issuing a URL) and OpPut (the op the
 	// URL ultimately authorises). Either failure short-circuits.
@@ -578,7 +580,7 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	// The parts all belong to the session's one object, so that object is
 	// the resource the listing touches.
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList,
-		"object://"+tenantID.String()+"/"+sess.Collection+"/"+sess.Key); err != nil {
+		paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)); err != nil {
 		return nil, "", err
 	}
 	// Session-anchored (backend, bucket) → authz enforces bucket:/collection:
