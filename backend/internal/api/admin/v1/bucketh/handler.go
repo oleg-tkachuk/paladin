@@ -45,12 +45,6 @@ type Repository interface {
 	MarkDeletingTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string, expectedVersion int64) error
 }
 
-// Cedar action names — must match policies/schema.cedarschema.
-const (
-	actionManageBucket = "ManageBucket"
-	actionReadBucket   = "ReadBucket"
-)
-
 // Provisioner provisions/de-provisions the underlying S3 bucket. nil-safe:
 // when not wired, CreateBucket(provision_on_backend=true) returns Unavailable.
 type Provisioner interface {
@@ -137,7 +131,7 @@ func bucketResourceName(tenantID uuid.UUID, backendID, bucketName string) string
 // authorize evaluates Cedar against the Bucket resource. The Bucket entity
 // is anchored under StorageBackend, so the engine sees both the backend
 // and the bucket attributes.
-func (h *Handler) authorize(ctx context.Context, action, backendID, bucketName string, ownerTenantID uuid.UUID) error {
+func (h *Handler) authorize(ctx context.Context, action cedar.Action, backendID, bucketName string, ownerTenantID uuid.UUID) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)
@@ -187,7 +181,7 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 	if err := in.Bucket.Constraints.Validate(); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("constraints: %w", err))
 	}
-	if err := h.authorize(ctx, actionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
+	if err := h.authorize(ctx, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
 		return nil, err
 	}
 	// Refuse binding a bucket to a disabled backend (feature 002). The
@@ -366,7 +360,7 @@ func (h *Handler) GetBucket(ctx context.Context, backendID, bucketName string) (
 		return nil, mapNotFound(err)
 	}
 	// Cedar runs after the read so the engine sees authoritative ownership.
-	if err := h.authorize(ctx, actionReadBucket, b.BackendID, b.BucketName, b.OwnerTenantID); err != nil {
+	if err := h.authorize(ctx, cedar.ActionReadBucket, b.BackendID, b.BucketName, b.OwnerTenantID); err != nil {
 		return nil, err
 	}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && !apiutil.HasRole(ctx, apiutil.RoleBucketAdmin) {
@@ -451,7 +445,7 @@ func (h *Handler) UpdateBucket(ctx context.Context, in UpdateBucketInput) (*admi
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, actionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
+	if err := h.authorize(ctx, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
 		return nil, err
 	}
 	// Update + paladin.bucket.updated in one tx (ADR-0003). GetTx reads the
@@ -622,7 +616,7 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return err
 	}
-	if err := h.authorize(ctx, actionManageBucket, in.BackendID, in.BucketName, uuid.Nil); err != nil {
+	if err := h.authorize(ctx, cedar.ActionManageBucket, in.BackendID, in.BucketName, uuid.Nil); err != nil {
 		return err
 	}
 	// Refuse while anything still holds this bucket under ON DELETE RESTRICT.

@@ -54,7 +54,7 @@ func readCtx(ctx context.Context) context.Context {
 	return auth.WithCrossTenantRead(ctx)
 }
 
-func (h *Handler) authorize(ctx context.Context, action string, target authstore.User) error {
+func (h *Handler) authorize(ctx context.Context, action cedar.Action, target authstore.User) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)

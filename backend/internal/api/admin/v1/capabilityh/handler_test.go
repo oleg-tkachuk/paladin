@@ -23,14 +23,14 @@ import (
 // fell back to the admin path).
 type allowAuthorizer struct{ called int }
 
-func (a *allowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (a *allowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ cedar.Action, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	a.called++
 	return cedar.DecisionAllow, nil
 }
 
 type denyAuthorizer struct{ called int }
 
-func (d *denyAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (d *denyAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ cedar.Action, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	d.called++
 	return cedar.DecisionDeny, nil
 }

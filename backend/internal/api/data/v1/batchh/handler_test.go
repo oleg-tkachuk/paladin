@@ -87,12 +87,12 @@ func newHandler(sub Submitter, az cedar.Authorizer) *Handler {
 // source check and deny the destination one. It records the actions and the
 // resources (in call order) for assertions.
 type fakeAuthorizer struct {
-	fn        func(action string) (cedar.Decision, error)
-	actions   []string
+	fn        func(action cedar.Action) (cedar.Decision, error)
+	actions   []cedar.Action
 	resources []*cedar.Resource
 }
 
-func (f *fakeAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, action string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (f *fakeAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, action cedar.Action, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	f.actions = append(f.actions, action)
 	if r != nil {
 		cp := *r
@@ -105,12 +105,12 @@ func (f *fakeAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, act
 }
 
 func allowAll() *fakeAuthorizer {
-	return &fakeAuthorizer{fn: func(string) (cedar.Decision, error) { return cedar.DecisionAllow, nil }}
+	return &fakeAuthorizer{fn: func(cedar.Action) (cedar.Decision, error) { return cedar.DecisionAllow, nil }}
 }
 
 // denyAction denies exactly one action and allows every other.
-func denyAction(deny string) *fakeAuthorizer {
-	return &fakeAuthorizer{fn: func(a string) (cedar.Decision, error) {
+func denyAction(deny cedar.Action) *fakeAuthorizer {
+	return &fakeAuthorizer{fn: func(a cedar.Action) (cedar.Decision, error) {
 		if a == deny {
 			return cedar.DecisionDeny, nil
 		}
@@ -121,7 +121,7 @@ func denyAction(deny string) *fakeAuthorizer {
 // engineErr simulates a policy-engine fault (fetch/compile), which the
 // handler must surface as CodeInternal, distinct from a plain deny.
 func engineErr() *fakeAuthorizer {
-	return &fakeAuthorizer{fn: func(string) (cedar.Decision, error) {
+	return &fakeAuthorizer{fn: func(cedar.Action) (cedar.Decision, error) {
 		return cedar.DecisionDeny, errors.New("policy fetch failed")
 	}}
 }

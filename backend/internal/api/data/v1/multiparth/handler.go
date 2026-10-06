@@ -618,7 +618,7 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 // bucket:/collection:-scoped PAT to its own bucket. Empty backendID/bucket
 // leaves the resource without those scope keys, which only ever denies a
 // scoped principal — unscoped/roles-only callers are unaffected.
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, key, backendID, bucket, action string, sizeBytes int64, contentType string) error {
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, key, backendID, bucket string, action cedar.Action, sizeBytes int64, contentType string) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
 		action,

@@ -392,7 +392,7 @@ func (h *Handler) ClearDefaultBinding(ctx context.Context, tenantID uuid.UUID) e
 }
 
 // authorize evaluates Cedar against the Tenant resource.
-func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UUID) error {
+func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID uuid.UUID) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)

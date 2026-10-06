@@ -149,12 +149,12 @@ type fakeAuthorizer struct {
 	err      error
 
 	calls         int
-	lastAction    string
+	lastAction    cedar.Action
 	lastResource  cedar.Resource
 	lastPrincipal cedar.Principal
 }
 
-func (f *fakeAuthorizer) IsAuthorized(_ context.Context, p *cedar.Principal, action string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (f *fakeAuthorizer) IsAuthorized(_ context.Context, p *cedar.Principal, action cedar.Action, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	f.calls++
 	f.lastAction = action
 	if p != nil {

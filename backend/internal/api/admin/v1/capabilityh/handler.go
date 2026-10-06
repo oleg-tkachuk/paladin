@@ -5,8 +5,10 @@
 //
 // Authorisation:
 //
-//   - Issue / Revoke / List / GetUsage require platform.admin (Cedar).
-//   - Delegate accepts EITHER a platform.admin (Cedar) OR a capability-
+//   - Issue / Revoke / List / GetUsage are gated by Cedar (IssueCapability,
+//     RevokeCapability, ReadCapability). The built-in policy grants them to
+//     platform.admin and platform.capability-issuer.
+//   - Delegate accepts EITHER a Cedar DelegateCapability grant OR a capability-
 //     authenticated caller whose own capability includes OpShare AND
 //     whose ID matches the requested parent_id. The latter is the
 //     MCP `share`-tool path — agents minting sub-capabilities for
@@ -77,10 +79,12 @@ func hasOp(ops []capability.Op, want capability.Op) bool {
 	return false
 }
 
-// authorize gates an RPC against Cedar. Capability operations are
-// platform-tier (admin) for now; per-tenant delegation routes through a
-// non-admin Cedar action when MCP integration lands.
-func (h *Handler) authorize(ctx context.Context, action string) (*auth.Principal, error) {
+// authorize gates an RPC against Cedar, with the caller's own tenant as the
+// resource. platform.admin and platform.capability-issuer are admitted by the
+// built-in policy (cedar.builtinPolicy); a tenant policy may grant the actions
+// to its own members. Reaching another tenant is the handler's call
+// (spansTenants), never Cedar's.
+func (h *Handler) authorize(ctx context.Context, action cedar.Action) (*auth.Principal, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
@@ -96,7 +100,7 @@ func (h *Handler) authorize(ctx context.Context, action string) (*auth.Principal
 	}
 	if decision != cedar.DecisionAllow {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("capability %s denied", action))
+			fmt.Errorf("%s denied", action))
 	}
 	return p, nil
 }
@@ -132,9 +136,10 @@ func (h *Handler) actOnCapabilitysTenant(ctx context.Context, caller *auth.Princ
 	return auth.WithActingTenant(ctx, c.Subject.TenantID), nil
 }
 
-// Issue mints a top-level capability. Caller must be platform-admin.
+// Issue mints a top-level capability. Gated by IssueCapability; issuing for
+// another tenant additionally requires a role that spans tenants.
 func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceIssueRequest]) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
-	caller, err := h.authorize(ctx, "issue")
+	caller, err := h.authorize(ctx, cedar.ActionIssueCapability)
 	if err != nil {
 		return nil, err
 	}
@@ -147,9 +152,9 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 	// Issuing FOR another tenant is a platform operation.
 	//
 	// The subject's tenant is chosen by the caller and Cedar authorises
-	// `capability:issue` against the CALLER's own tenant policy, which says
+	// IssueCapability against the CALLER's own tenant policy, which says
 	// nothing about the tenant named in the subject. So without this check any
-	// tenant granted `issue` in its own policy could mint a capability for any
+	// tenant granted IssueCapability in its own policy could mint a capability for any
 	// other tenant — and since ADR-0010 a capability authenticates as its
 	// subject's tenant, that is a full cross-tenant escalation, not merely an
 	// extra restriction on an existing caller.
@@ -204,8 +209,9 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 // Delegate narrows a parent capability. Two authentication paths are
 // accepted:
 //
-//  1. Platform-admin (JWT/admin) — Cedar action "delegate" gates the
-//     call. Admin may delegate from any parent in the store.
+//  1. Admin (JWT or role-bearing API token) — Cedar action
+//     DelegateCapability gates the call. The parent is read under the
+//     caller's own tenant, so only that tenant's capabilities are reachable.
 //
 //  2. Capability-bearing caller (the agent share-tool path) — caller
 //     must present a verified capability via the X-Paladin-Capability
@@ -247,7 +253,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 		parent = callerCap
 	} else {
 		// Path 1: admin. Re-use the existing Cedar gate.
-		if _, err := h.authorize(ctx, "delegate"); err != nil {
+		if _, err := h.authorize(ctx, cedar.ActionDelegateCapability); err != nil {
 			return nil, err
 		}
 		if parent, err = h.store.Get(ctx, parentID); err != nil {
@@ -313,7 +319,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 // Revoke adds the capability ID to the revocation list. Idempotent for a
 // capability the caller can see; NotFound for one it cannot.
 func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceRevokeRequest]) (*connect.Response[adminv1.CapabilityServiceRevokeResponse], error) {
-	caller, err := h.authorize(ctx, "revoke")
+	caller, err := h.authorize(ctx, cedar.ActionRevokeCapability)
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +353,7 @@ func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.Capab
 
 // List enumerates capabilities issued to a principal.
 func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceListRequest]) (*connect.Response[adminv1.CapabilityServiceListResponse], error) {
-	caller, err := h.authorize(ctx, "list")
+	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +362,7 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
 	}
-	// Same gate as Issue: `list` in a tenant's own policy must not become a
+	// Same gate as Issue: ReadCapability in a tenant's own policy must not become a
 	// read of every other tenant's capabilities. Cedar above authorised the
 	// ACTION against the caller's own tenant, not against this one.
 	if tenantID != caller.TenantID && !spansTenants(caller) {
@@ -400,7 +406,7 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 // the operator who can List a tenant's caps can also see their
 // usage.
 func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceGetUsageRequest]) (*connect.Response[adminv1.CapabilityServiceGetUsageResponse], error) {
-	caller, err := h.authorize(ctx, "list")
+	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
 	if err != nil {
 		return nil, err
 	}

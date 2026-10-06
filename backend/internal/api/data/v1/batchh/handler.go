@@ -321,7 +321,7 @@ func (h *Handler) assertCopy(ctx context.Context, tenantID uuid.UUID, args Batch
 // scope-enforcement forbid never fires for them), scoped principals stay
 // fail-closed. write=false: the scope key is independent of the drain gate,
 // and this is a submit-time authz probe, not the mutation itself.
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, action string) error {
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection string, action cedar.Action) error {
 	var backendID, bucket string
 	if h.buckets != nil {
 		backendID, bucket, _ = h.buckets.LookupBucket(ctx, tenantID, collection, false)

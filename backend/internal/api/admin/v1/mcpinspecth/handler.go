@@ -73,7 +73,7 @@ func NewHandler(cfg config.MCP, policy cedar.Authorizer) *Handler {
 }
 
 // authorize gates an RPC against Cedar with the tenant-resource
-// shape every other admin handler uses. Action is "read" — the
+// shape every other admin handler uses. Action is InspectMCP — the
 // inspect surface is read-only.
 func (h *Handler) authorize(ctx context.Context) error {
 	p, err := auth.PrincipalFromContext(ctx)
@@ -82,7 +82,7 @@ func (h *Handler) authorize(ctx context.Context) error {
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
-		"read",
+		cedar.ActionInspectMCP,
 		&cedar.Resource{TenantID: p.TenantID, TenantSlug: p.TenantSlug},
 		cedar.RequestContext{},
 	)

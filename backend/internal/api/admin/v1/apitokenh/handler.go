@@ -66,17 +66,17 @@ func NewHandler(
 	return &Handler{issuer: issuer, store: store, limiter: limiter, policy: policy}
 }
 
-// authorize gates an RPC against Cedar under the resource kind
-// `api_token`. Mirrors capabilityh's pattern; admin actions live in
-// `api_token:create / revoke / list`.
-func (h *Handler) authorize(ctx context.Context, action string) (*auth.Principal, error) {
+// authorize gates an RPC against Cedar, with the caller's own tenant as the
+// resource: CreateAPIToken, RevokeAPIToken or ReadAPIToken. Reaching another
+// tenant's tokens is handler-gated to platform.admin.
+func (h *Handler) authorize(ctx context.Context, action cedar.Action) (*auth.Principal, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
-		"api_token:"+action,
+		action,
 		&cedar.Resource{TenantID: p.TenantID, TenantSlug: p.TenantSlug},
 		cedar.RequestContext{},
 	)
@@ -85,14 +85,14 @@ func (h *Handler) authorize(ctx context.Context, action string) (*auth.Principal
 	}
 	if decision != cedar.DecisionAllow {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("api_token %s denied", action))
+			fmt.Errorf("%s denied", action))
 	}
 	return p, nil
 }
 
 // Create mints an API token and returns the plaintext exactly once.
 func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITokenServiceCreateRequest]) (*connect.Response[adminv1.APITokenServiceCreateResponse], error) {
-	caller, err := h.authorize(ctx, "create")
+	caller, err := h.authorize(ctx, cedar.ActionCreateAPIToken)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITo
 	// RLS tenant from the token being written (it must, or provisioning a new
 	// tenant's first credential would be impossible through this RPC), so the
 	// database no longer refuses a cross-tenant write on its own. Cedar
-	// authorises `api_token:create` against the CALLER's tenant, which says
+	// authorises CreateAPIToken against the CALLER's tenant, which says
 	// nothing about the tenant named in the request — so without this, a
 	// tenant-level admin allowed to mint their own tokens could mint one for
 	// any tenant whose id they can guess.
@@ -222,7 +222,7 @@ func scopeToTenant(ctx context.Context, caller *auth.Principal, tenantID uuid.UU
 
 // Revoke marks an API token as revoked. Idempotent.
 func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.APITokenServiceRevokeRequest]) (*connect.Response[adminv1.APITokenServiceRevokeResponse], error) {
-	caller, err := h.authorize(ctx, "revoke")
+	caller, err := h.authorize(ctx, cedar.ActionRevokeAPIToken)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.APITo
 // List enumerates API tokens for a tenant. Token plaintext / hash are
 // never returned; callers see metadata only.
 func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.APITokenServiceListRequest]) (*connect.Response[adminv1.APITokenServiceListResponse], error) {
-	caller, err := h.authorize(ctx, "list")
+	caller, err := h.authorize(ctx, cedar.ActionReadAPIToken)
 	if err != nil {
 		return nil, err
 	}
@@ -291,11 +291,11 @@ func (h *Handler) GetSelf(ctx context.Context, _ *connect.Request[adminv1.APITok
 }
 
 // GetUsage returns a readonly rate-limit snapshot for a token. Cedar-
-// gated under api_token:read so admin-tier callers can inspect any
+// gated under ReadAPIToken so admin-tier callers can inspect any
 // tenant's tokens without a separate per-token authorisation rule.
 // Web UI consumes this from token-detail cards; safe to poll.
 func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.APITokenServiceGetUsageRequest]) (*connect.Response[adminv1.APITokenServiceGetUsageResponse], error) {
-	caller, err := h.authorize(ctx, "read")
+	caller, err := h.authorize(ctx, cedar.ActionReadAPIToken)
 	if err != nil {
 		return nil, err
 	}

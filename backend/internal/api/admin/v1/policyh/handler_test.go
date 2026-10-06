@@ -19,17 +19,17 @@ import (
 // the action, letting a test allow the InspectPolicy gate but deny the
 // simulated action).
 type fakeEngine struct {
-	authzFn func(action string, r *cedar.Resource, p *cedar.Principal) (cedar.Decision, error)
+	authzFn func(action cedar.Action, r *cedar.Resource, p *cedar.Principal) (cedar.Decision, error)
 	calls   []engineCall
 }
 
 type engineCall struct {
-	action   string
+	action   cedar.Action
 	resource *cedar.Resource
 	princ    *cedar.Principal
 }
 
-func (f *fakeEngine) IsAuthorized(_ context.Context, p *cedar.Principal, action string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (f *fakeEngine) IsAuthorized(_ context.Context, p *cedar.Principal, action cedar.Action, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	f.calls = append(f.calls, engineCall{action: action, resource: r, princ: p})
 	if f.authzFn != nil {
 		return f.authzFn(action, r, p)
@@ -43,7 +43,7 @@ func allowEngine() *fakeEngine { return &fakeEngine{} }
 // denyEngine denies every call (drives the PermissionDenied branch of the
 // InspectPolicy gate).
 func denyEngine() *fakeEngine {
-	return &fakeEngine{authzFn: func(string, *cedar.Resource, *cedar.Principal) (cedar.Decision, error) {
+	return &fakeEngine{authzFn: func(cedar.Action, *cedar.Resource, *cedar.Principal) (cedar.Decision, error) {
 		return cedar.DecisionDeny, nil
 	}}
 }
@@ -51,7 +51,7 @@ func denyEngine() *fakeEngine {
 // errEngine fails the InspectPolicy gate with an engine-level error (drives
 // the Internal branch).
 func errEngine() *fakeEngine {
-	return &fakeEngine{authzFn: func(string, *cedar.Resource, *cedar.Principal) (cedar.Decision, error) {
+	return &fakeEngine{authzFn: func(cedar.Action, *cedar.Resource, *cedar.Principal) (cedar.Decision, error) {
 		return cedar.DecisionDeny, errors.New("engine boom")
 	}}
 }
@@ -224,8 +224,25 @@ func TestSimulateAuthz(t *testing.T) {
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
+	// A name the schema does not declare is a malformed question. Answering
+	// Deny would tell the caller its policy refuses an action no policy can name.
+	t.Run("undeclared action → invalid argument, simulated call never made", func(t *testing.T) {
+		fe := allowEngine()
+		h := NewHandler(fe, &fakeStore{})
+		_, err := h.SimulateAuthz(authedCtx(tid), SimulateAuthzInput{
+			Action:       "issue",
+			ResourceName: "tenants/" + tid.String(),
+		})
+		wantCode(t, err, connect.CodeInvalidArgument)
+		for _, c := range fe.calls {
+			if c.action != cedar.ActionInspectPolicy {
+				t.Fatalf("the engine was asked about %q; only the inspect gate may run", c.action)
+			}
+		}
+	})
+
 	t.Run("engine error on the simulated call is wrapped", func(t *testing.T) {
-		fe := &fakeEngine{authzFn: func(action string, _ *cedar.Resource, _ *cedar.Principal) (cedar.Decision, error) {
+		fe := &fakeEngine{authzFn: func(action cedar.Action, _ *cedar.Resource, _ *cedar.Principal) (cedar.Decision, error) {
 			if action == cedar.ActionInspectPolicy {
 				return cedar.DecisionAllow, nil // gate passes
 			}
@@ -233,7 +250,7 @@ func TestSimulateAuthz(t *testing.T) {
 		}}
 		h := NewHandler(fe, &fakeStore{})
 		_, err := h.SimulateAuthz(authedCtx(tid), SimulateAuthzInput{
-			Action:       cedar.ActionGetObject,
+			Action:       cedar.ActionGetObject.String(),
 			ResourceName: "tenants/" + tid.String(),
 		})
 		if err == nil || !strings.Contains(err.Error(), "authz") {
@@ -248,7 +265,7 @@ func TestSimulateAuthz(t *testing.T) {
 		in := SimulateAuthzInput{
 			PrincipalSubject: "svc-1",
 			PrincipalRoles:   []string{"tenant.admin"},
-			Action:           cedar.ActionGetObject,
+			Action:           cedar.ActionGetObject.String(),
 			ResourceName:     "tenants/" + objTenant.String() + "/collections/logs",
 		}
 		out, err := h.SimulateAuthz(authedCtx(tid), in)
@@ -258,7 +275,7 @@ func TestSimulateAuthz(t *testing.T) {
 		if !out.Allowed {
 			t.Fatal("expected Allowed=true")
 		}
-		if !strings.Contains(out.Explanation, cedar.ActionGetObject) || !strings.Contains(out.Explanation, in.ResourceName) {
+		if !strings.Contains(out.Explanation, cedar.ActionGetObject.String()) || !strings.Contains(out.Explanation, in.ResourceName) {
 			t.Fatalf("explanation missing action/resource: %q", out.Explanation)
 		}
 		// Call 0 is the InspectPolicy gate; call 1 is the simulated action.
@@ -284,7 +301,7 @@ func TestSimulateAuthz(t *testing.T) {
 	})
 
 	t.Run("denied decision → Allowed=false, no error", func(t *testing.T) {
-		fe := &fakeEngine{authzFn: func(action string, _ *cedar.Resource, _ *cedar.Principal) (cedar.Decision, error) {
+		fe := &fakeEngine{authzFn: func(action cedar.Action, _ *cedar.Resource, _ *cedar.Principal) (cedar.Decision, error) {
 			if action == cedar.ActionInspectPolicy {
 				return cedar.DecisionAllow, nil // gate passes
 			}
@@ -292,7 +309,7 @@ func TestSimulateAuthz(t *testing.T) {
 		}}
 		h := NewHandler(fe, &fakeStore{})
 		out, err := h.SimulateAuthz(authedCtx(tid), SimulateAuthzInput{
-			Action:       cedar.ActionDeleteObject,
+			Action:       cedar.ActionDeleteObject.String(),
 			ResourceName: "tenants/" + tid.String(),
 		})
 		if err != nil {

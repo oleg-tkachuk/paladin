@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,44 +31,82 @@ const (
 	DecisionAllow
 )
 
+// Action names a Cedar action. Its one field is unexported, so the only
+// values that exist are the ones declared below: a handler cannot pass a bare
+// string the schema does not know, which is how CapabilityService once asked
+// Cedar about "issue" — an action no policy could name, so every role but
+// platform.admin was denied. The zero Action is never valid; the engine
+// refuses it rather than deny it quietly.
+type Action struct{ name string }
+
+// String is the action's Cedar name, as `Action::"<name>"` spells it.
+func (a Action) String() string { return a.name }
+
+// declared is every action in declaration order; the schema tests hold it
+// equal to the actions policies/schema.cedarschema declares.
+var declared []Action
+
+func declare(name string) Action {
+	a := Action{name: name}
+	declared = append(declared, a)
+	return a
+}
+
+// Actions returns every declared action.
+func Actions() []Action { return slices.Clone(declared) }
+
+// LookupAction resolves a Cedar action name supplied at run time — a policy
+// simulation request — to its declared Action.
+func LookupAction(name string) (Action, bool) {
+	for _, a := range declared {
+		if a.name == name {
+			return a, true
+		}
+	}
+	return Action{}, false
+}
+
+// ErrUndeclaredAction is returned for the zero Action.
+var ErrUndeclaredAction = errors.New("cedar: undeclared action")
+
 // Action identifiers mirror the Cedar schema (policies/schema.cedarschema).
-const (
+var (
 	// Object-scoped actions (data plane).
-	ActionPutObject     = "PutObject"
-	ActionPresignPut    = "PresignPut"
-	ActionGetObject     = "GetObject"
-	ActionPresignGet    = "PresignGet"
-	ActionHeadObject    = "HeadObject"
-	ActionDeleteObject  = "DeleteObject"
-	ActionRestoreObject = "RestoreObject"
-	ActionUpdateObject  = "UpdateObject"
-	ActionCopyObject    = "CopyObject"
+	ActionPutObject     = declare("PutObject")
+	ActionPresignPut    = declare("PresignPut")
+	ActionGetObject     = declare("GetObject")
+	ActionPresignGet    = declare("PresignGet")
+	ActionHeadObject    = declare("HeadObject")
+	ActionDeleteObject  = declare("DeleteObject")
+	ActionRestoreObject = declare("RestoreObject")
+	ActionUpdateObject  = declare("UpdateObject")
+	ActionCopyObject    = declare("CopyObject")
 
 	// Object Lock (ADR-0013). Separate from UpdateObject: a COMPLIANCE
 	// retention window cannot be shortened by anyone, so this action lets its
 	// holder make an object permanently undeletable. Write access to a
 	// collection must not imply it. Legal hold is split off again because it
 	// is reversible and so safe to delegate more widely.
-	ActionSetObjectRetention = "SetObjectRetention"
-	ActionSetObjectLegalHold = "SetObjectLegalHold"
-	ActionReadObjectLock     = "ReadObjectLock"
+	ActionSetObjectRetention = declare("SetObjectRetention")
+	ActionSetObjectLegalHold = declare("SetObjectLegalHold")
+	ActionReadObjectLock     = declare("ReadObjectLock")
 
 	// SetObjectTaint flags or clears an object's taint signals. Its own
 	// action: clearing a flag re-opens content to agents whose capability
 	// lacks AllowTaintedRead, which write access must not imply.
-	ActionSetObjectTaint = "SetObjectTaint"
+	ActionSetObjectTaint = declare("SetObjectTaint")
 
 	// Collection-scoped actions (admin plane).
-	ActionManageCollection       = "ManageCollection"
-	ActionBindCollectionToBucket = "BindCollectionToBucket"
+	ActionManageCollection       = declare("ManageCollection")
+	ActionBindCollectionToBucket = declare("BindCollectionToBucket")
 
 	// Backend-scoped actions.
-	ActionManageBackend = "ManageBackend"
-	ActionReadBackend   = "ReadBackend"
+	ActionManageBackend = declare("ManageBackend")
+	ActionReadBackend   = declare("ReadBackend")
 
 	// Bucket-scoped actions.
-	ActionManageBucket = "ManageBucket"
-	ActionReadBucket   = "ReadBucket"
+	ActionManageBucket = declare("ManageBucket")
+	ActionReadBucket   = declare("ReadBucket")
 
 	// EnsureTenantStorage — data-plane self-provisioning. A tenant member
 	// (including an api_token principal, aud=data) idempotently ensures its
@@ -75,78 +114,100 @@ const (
 	// The handler forces the resource tenant to the caller's own tenant, so
 	// the default-policy permit is self-scoped via `principal in Tenant`
 	// membership — the same gate that admits the PAT for PresignPut.
-	ActionEnsureTenantStorage = "EnsureTenantStorage"
+	ActionEnsureTenantStorage = declare("EnsureTenantStorage")
 
 	// Granular bucket sub-actions. Splitting ManageBucket lets compliance
 	// roles get fine-grained authority — e.g. ConfigureLock without
 	// SetReplication (data-residency risk) — without granting full bucket
 	// ownership.
-	ActionConfigureBucketPolicy = "ConfigureBucketPolicy"
-	ActionConfigureLifecycle    = "ConfigureLifecycle"
-	ActionConfigureLock         = "ConfigureLock"
-	ActionConfigureVersioning   = "ConfigureVersioning"
-	ActionConfigureReplication  = "ConfigureReplication"
+	ActionConfigureBucketPolicy = declare("ConfigureBucketPolicy")
+	ActionConfigureLifecycle    = declare("ConfigureLifecycle")
+	ActionConfigureLock         = declare("ConfigureLock")
+	ActionConfigureVersioning   = declare("ConfigureVersioning")
+	ActionConfigureReplication  = declare("ConfigureReplication")
 
 	// Sensitive backend ops. Separate action so a "secrets.rotator" role
 	// can rotate credentials without inheriting full ManageBackend rights.
-	ActionRotateBackendCredentials = "RotateBackendCredentials"
+	ActionRotateBackendCredentials = declare("RotateBackendCredentials")
 
 	// Policy engine introspection. Gates ValidatePolicy / SimulateAuthz /
 	// GetEffectivePolicy — these leak schema/policy text and shouldn't be
 	// open to any authenticated principal.
-	ActionInspectPolicy = "InspectPolicy"
+	ActionInspectPolicy = declare("InspectPolicy")
 
 	// Tenant-scoped actions.
-	ActionManageTenant = "ManageTenant"
-	ActionReadTenant   = "ReadTenant"
+	ActionManageTenant = declare("ManageTenant")
+	ActionReadTenant   = declare("ReadTenant")
 
 	// IAM User-scoped actions (manage other users, not the principal).
-	ActionManageUser    = "ManageUser"
-	ActionReadUser      = "ReadUser"
-	ActionResetPassword = "ResetPassword"
-	ActionGrantScopes   = "GrantScopes"
+	ActionManageUser    = declare("ManageUser")
+	ActionReadUser      = declare("ReadUser")
+	ActionResetPassword = declare("ResetPassword")
+	ActionGrantScopes   = declare("GrantScopes")
 
 	// User-settings actions. Resource is the User entity (the user whose
 	// settings are read/written). The principal-as-target case (a user
 	// editing their own settings) is the common path — handlers short-circuit
 	// to allow without a Cedar round-trip when subject matches. Cedar still
 	// gates the cross-user case (admin viewing a teammate's timezone).
-	ActionReadUserSettings   = "ReadUserSettings"
-	ActionManageUserSettings = "ManageUserSettings"
+	ActionReadUserSettings   = declare("ReadUserSettings")
+	ActionManageUserSettings = declare("ManageUserSettings")
 
 	// Quota-scoped actions. Resource is the Tenant or Bucket entity (no
 	// dedicated Quota entity — quota config attaches 1:1 to the parent).
-	ActionManageQuota     = "ManageQuota"
-	ActionReadQuota       = "ReadQuota"
-	ActionResetQuotaUsage = "ResetQuotaUsage"
+	ActionManageQuota     = declare("ManageQuota")
+	ActionReadQuota       = declare("ReadQuota")
+	ActionResetQuotaUsage = declare("ResetQuotaUsage")
 
 	// AuditLog-scoped actions. Resource is the Tenant entity (audit lines
 	// are tenant-scoped via actor_tenant_id).
-	ActionReadAuditLog   = "ReadAuditLog"
-	ActionExportAuditLog = "ExportAuditLog"
+	ActionReadAuditLog   = declare("ReadAuditLog")
+	ActionExportAuditLog = declare("ExportAuditLog")
 
 	// EventSubscription-scoped actions. Resource is the Tenant entity.
-	ActionManageSubscription = "ManageSubscription"
-	ActionReadSubscription   = "ReadSubscription"
-	ActionTestSubscription   = "TestSubscription"
+	ActionManageSubscription = declare("ManageSubscription")
+	ActionReadSubscription   = declare("ReadSubscription")
+	ActionTestSubscription   = declare("TestSubscription")
 
 	// Operation-scoped actions (long-running async ops: BatchDelete /
 	// BatchCopy / etc.). Resource is the Tenant entity carrying the
 	// op's tenant_id.
-	ActionReadOperation   = "ReadOperation"
-	ActionCancelOperation = "CancelOperation"
+	ActionReadOperation   = declare("ReadOperation")
+	ActionCancelOperation = declare("CancelOperation")
 
 	// OAuth consent (ADR-0009). Checked at /oauth/authorize when a user
 	// approves an OAuth client. Resource is the Tenant entity; the request
 	// context carries oauth_client_id + oauth_scopes so a tenant policy can
 	// forbid specific clients/scopes. Permitted by default for any
 	// authenticated principal via the built-in policy.
-	ActionAuthorizeOAuth = "AuthorizeOAuth"
+	ActionAuthorizeOAuth = declare("AuthorizeOAuth")
 
 	// Billing-scoped actions. Resource is the Tenant entity. Used by
 	// BillingService (admin plane) over the charges ledger from
 	// the schema baseline (001_initial_schema.sql).
-	ActionReadBilling = "ReadBilling"
+	ActionReadBilling = declare("ReadBilling")
+
+	// Capability actions (admin plane, CapabilityService). Resource is the
+	// CALLER's own Tenant entity: which tenant a call may reach beyond its own
+	// is decided in the handler (capabilityh.spansTenants), not here. Read
+	// covers List, GetUsage and GetBiscuitUsage; Revoke covers RevokeBiscuit.
+	ActionIssueCapability    = declare("IssueCapability")
+	ActionDelegateCapability = declare("DelegateCapability")
+	ActionRevokeCapability   = declare("RevokeCapability")
+	ActionReadCapability     = declare("ReadCapability")
+
+	// API-token actions (admin plane, APITokenService). Named apart from the
+	// capability actions on purpose: a grant to revoke or read one credential
+	// type must not carry over to the other. Resource is the caller's own
+	// Tenant; another tenant's tokens are handler-gated to platform.admin.
+	ActionCreateAPIToken = declare("CreateAPIToken")
+	ActionRevokeAPIToken = declare("RevokeAPIToken")
+	ActionReadAPIToken   = declare("ReadAPIToken")
+
+	// InspectMCP gates the read-only MCP inspection surface (MCPInspectService:
+	// live sessions, profiles and tool catalog, bridge status). Resource is the
+	// caller's own Tenant.
+	ActionInspectMCP = declare("InspectMCP")
 )
 
 // Entity type names — must match the Cedar schema exactly.
@@ -388,12 +449,15 @@ func (e *Engine) flushCompiled() {
 // Authorizer is the narrow interface handlers depend on. *Engine is the
 // production implementation; tests inject a permissive or recording fake.
 type Authorizer interface {
-	IsAuthorized(ctx context.Context, p *Principal, action string, r *Resource, rc RequestContext) (Decision, error)
+	IsAuthorized(ctx context.Context, p *Principal, action Action, r *Resource, rc RequestContext) (Decision, error)
 }
 
 // Returns DecisionAllow only when ≥1 `permit` matches AND no `forbid` matches.
 // Errors indicate engine faults (policy fetch/compile), not denials.
-func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, r *Resource, rc RequestContext) (Decision, error) {
+func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action Action, r *Resource, rc RequestContext) (Decision, error) {
+	if action == (Action{}) {
+		return DecisionDeny, ErrUndeclaredAction
+	}
 	// compiledFor loads the resource-tenant's policy by the TRUSTED UUID and
 	// returns that tenant's DB-authoritative slug. The slug — never the
 	// JWT-supplied one — keys tenant membership in the entity graph (ADR-0016),
@@ -414,7 +478,7 @@ func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, 
 	entities := e.buildEntities(p, r, authSlug)
 	req := cedartypes.Request{
 		Principal: userUID(p),
-		Action:    actionUID(action),
+		Action:    actionUID(action.String()),
 		Resource:  e.resourceUID(r, authSlug),
 		Context:   buildContext(rc),
 	}
@@ -428,7 +492,7 @@ func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action string, 
 		// broken policy gets fixed rather than silently mis-authorising.
 		e.m.evalErrs.Add(1)
 		e.log.Warn("cedar: policy evaluation errors; denying (fail-closed)",
-			zap.String("action", action),
+			zap.Stringer("action", action),
 			zap.Int("error_count", len(diag.Errors)),
 			zap.String("errors", fmt.Sprint(diag.Errors)),
 		)
@@ -770,6 +834,42 @@ when {
   principal has roles && principal.roles.contains("platform.tenant-provisioner")
 };
 
+// Built-in: capability issuing. A principal holding
+// "platform.capability-issuer" may issue a capability, revoke one, and read
+// capabilities and their usage — and nothing else.
+//
+// It exists for a consumer serving many tenants: it mints a short-lived,
+// tenant-scoped capability per tenant instead of holding a long-lived
+// credential per tenant or platform.admin. Until this permit the role was
+// named in the handlers and the roles list but granted nothing here, so every
+// CapabilityService call it made was denied before the handler's cross-tenant
+// check ran, and only platform.admin could issue.
+//
+// Cedar sees the CALLER's own tenant as the resource. Reaching another
+// tenant's capabilities is decided by the handler (capabilityh.spansTenants),
+// which admits this role; this permit only says the role may perform the
+// action at all.
+//
+// The action list is exhaustive by intent, and the omissions are the point:
+// no DelegateCapability (the admin delegate path reads the parent under the
+// caller's own tenant, so it cannot reach the capabilities this role issues
+// for others; a consumer narrows by issuing a narrower capability), no
+// API-token action (it cannot mint, revoke or read a long-lived credential),
+// no tenant, bucket, collection or IAM action, and no data-plane reach.
+// A tenant policy can still forbid it (first-forbid wins).
+permit (
+  principal,
+  action in [
+    Action::"IssueCapability",
+    Action::"RevokeCapability",
+    Action::"ReadCapability"
+  ],
+  resource
+)
+when {
+  principal has roles && principal.roles.contains("platform.capability-issuer")
+};
+
 // Built-in: OPT-IN resource-scope enforcement. A principal that carries a
 // NON-EMPTY scopes set (and not the "*" wildcard) is confined to resources
 // whose admitting scope-strings intersect its scopes. Principals with an EMPTY
@@ -868,7 +968,7 @@ func EvaluatedLayers(l Layers) ([]EvaluatedLayer, string) {
 	return layers, text
 }
 
-func evaluatedLayer(name, stored, repair string) EvaluatedLayer {
+func evaluatedLayer(name, stored string, repair Action) EvaluatedLayer {
 	out := EvaluatedLayer{Name: name, Stored: stored, Evaluated: stored}
 	if stored != "" && layerParses(stored) != nil {
 		out.Evaluated, out.Frozen = freezeExcept(repair), true
@@ -953,10 +1053,10 @@ func layerParses(text string) error {
 }
 
 // freezeExcept renders the replacement for a layer that will not parse.
-func freezeExcept(action string) string {
+func freezeExcept(action Action) string {
 	return "// --- layer did not parse; frozen except its own repair ---\n" +
 		"forbid(principal, action, resource)\n" +
-		"unless { action == Action::\"" + action + "\" };\n"
+		"unless { action == Action::\"" + action.String() + "\" };\n"
 }
 
 // Validate parses the policy text and returns the parser error (or nil).

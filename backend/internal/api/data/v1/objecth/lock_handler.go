@@ -224,7 +224,7 @@ type resolved struct {
 
 // resolve runs the shared preamble: caller identity, the object, its bucket,
 // the Cedar decision, and the version the lock attaches to.
-func (h *LockHandler) resolve(ctx context.Context, collection, objectID, action string) (resolved, error) {
+func (h *LockHandler) resolve(ctx context.Context, collection, objectID string, action cedar.Action) (resolved, error) {
 	var out resolved
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
@@ -277,7 +277,7 @@ func (h *LockHandler) authorizeLock(
 	tenantID uuid.UUID,
 	obj Object,
 	meta BucketMeta,
-	action string,
+	action cedar.Action,
 ) error {
 	if h.policy == nil {
 		return nil

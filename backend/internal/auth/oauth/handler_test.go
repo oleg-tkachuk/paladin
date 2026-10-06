@@ -420,7 +420,7 @@ func TestFullFlow_AuthorizeTokenRefresh(t *testing.T) {
 // fakeAuthorizer gates the consent step for the Cedar wiring test.
 type fakeAuthorizer struct{ allow bool }
 
-func (f fakeAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (f fakeAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ cedar.Action, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	if f.allow {
 		return cedar.DecisionAllow, nil
 	}
