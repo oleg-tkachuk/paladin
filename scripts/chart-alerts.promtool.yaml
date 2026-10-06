@@ -1,13 +1,47 @@
-# promtool unit tests for the backend chart's traffic alerts, run by
+# promtool unit tests for the backend chart's alerts, run by
 # chart-alerts.test.sh against the rules rendered with the chart's defaults.
-# The series are otelconnect's rpc.server.call.duration as Prometheus names
-# them; each rule has a case where it fires and one where it does not.
+# The traffic series are otelconnect's rpc.server.call.duration as Prometheus
+# names them; each rule tested here has a case where it fires and one where it
+# does not.
 rule_files:
   - prometheusrule.yaml
 
 evaluation_interval: 1m
 
 tests:
+  # Three restarts in 15m → more than the default 2; fires after `for: 5m`.
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-api-0"}'
+        values: "0 0 0 0 0 1 1 1 2 2 2 3 3 3 3 3 3 3 3 3 3"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinApiCrashLooping
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: paladin-api
+              namespace: paladin
+              container: paladin-core
+              pod: paladin-core-api-0
+            exp_annotations:
+              summary: "Paladin api pod is crash-looping"
+              description: |
+                Pod paladin-core-api-0 in namespace paladin
+                has restarted more than 2 times in 15m. Likely panic on startup,
+                failed Postgres dial, or OOM. Inspect:
+                  kubectl -n paladin logs <pod> --previous
+
+  # Two restarts in 15m — a rollout and a drain — stay under the threshold.
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-api-0"}'
+        values: "0 0 0 0 0 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 2"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinApiCrashLooping
+        exp_alerts: []
+
   # Half the calls fail INTERNAL → fires once the 5m window has filled and
   # `for: 10m` has passed.
   - interval: 1m
