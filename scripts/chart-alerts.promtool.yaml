@@ -144,13 +144,17 @@ tests:
                 Pod paladin-core-admin-5f6d7-z9y8x has been NotReady for 10m.
                 Readiness probe failing — check /readyz on the admin pod.
 
-  # A dispatcher container OOMKilled once → fires straight away.
+  # A dispatcher container killed for OOM over and over: the reason series is
+  # 1 from its first sample and never moves, so only the restart counter shows
+  # each kill. An increase() over the reason alone saw nothing here.
   - interval: 1m
     input_series:
+      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-dispatcher-8a9b0-m3n4p"}'
+        values: "0 0 1 1 2 2 3 3 4 4"
       - series: 'kube_pod_container_status_last_terminated_reason{namespace="paladin", container="paladin-core", reason="OOMKilled", pod="paladin-core-dispatcher-8a9b0-m3n4p"}'
-        values: "0 0 0 1 1 1 1 1 1 1"
+        values: "1x10"
     alert_rule_test:
-      - eval_time: 5m
+      - eval_time: 9m
         alertname: PaladinOOMKilled
         exp_alerts:
           - exp_labels:
@@ -158,22 +162,38 @@ tests:
               component: dispatcher
               namespace: paladin
               container: paladin-core
-              reason: OOMKilled
               pod: paladin-core-dispatcher-8a9b0-m3n4p
             exp_annotations:
               summary: "Paladin dispatcher was OOMKilled"
               description: |
-                Pod paladin-core-dispatcher-8a9b0-m3n4p was OOMKilled in the last 15m.
+                Pod paladin-core-dispatcher-8a9b0-m3n4p restarted in the last 15m, last after an OOM kill.
                 Bump deployments.dispatcher.resources.limits.memory in the env overlay,
                 or chase the leak.
 
-  # Never OOMKilled.
+  # An OOM kill long ago: the reason still reads OOMKilled, but nothing has
+  # restarted in the window.
   - interval: 1m
     input_series:
+      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-dispatcher-8a9b0-m3n4p"}'
+        values: "1x30"
       - series: 'kube_pod_container_status_last_terminated_reason{namespace="paladin", container="paladin-core", reason="OOMKilled", pod="paladin-core-dispatcher-8a9b0-m3n4p"}'
-        values: "0x10"
+        values: "1x30"
     alert_rule_test:
-      - eval_time: 5m
+      - eval_time: 30m
+        alertname: PaladinOOMKilled
+        exp_alerts: []
+
+  # A restart for another reason: the OOMKilled series reads 0.
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-worker-7d9f8-abcde"}'
+        values: "0 0 0 1 1 1 1 1 1 1"
+      - series: 'kube_pod_container_status_last_terminated_reason{namespace="paladin", container="paladin-core", reason="OOMKilled", pod="paladin-core-worker-7d9f8-abcde"}'
+        values: "0x10"
+      - series: 'kube_pod_container_status_last_terminated_reason{namespace="paladin", container="paladin-core", reason="Error", pod="paladin-core-worker-7d9f8-abcde"}'
+        values: "0 0 0 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 9m
         alertname: PaladinOOMKilled
         exp_alerts: []
 
