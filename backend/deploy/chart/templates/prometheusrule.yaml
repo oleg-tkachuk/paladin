@@ -3,10 +3,17 @@ PrometheusRule — baseline alerts for the api role (the public-facing
 Connect listener). Five rules cover the SRE Golden-Signals + lifecycle:
 
   - CrashLooping: kube_pod_container_status_restarts_total spikes
-  - HighErrorRate: 5xx response fraction over a 5m window
-  - HighLatency: p99 Connect-RPC latency over threshold
+  - HighErrorRate: fraction of Connect RPCs failing with a server-fault code
+  - HighLatency: a quantile of Connect RPC latency over threshold
   - NotReady: pod sustained in NotReady state
   - OOMKilled: any OOMKill in the last `window`
+
+The traffic rules read otelconnect's `rpc.server.call.duration` histogram,
+rendered by Prometheus as rpc_server_call_duration_seconds_{bucket,count}:
+`rpc_method` names the RPC and `error_type` carries the upper-case Connect
+code of a failed call. It covers every Connect listener, so the api and admin
+planes alike; `metrics.alerts.rpcSelector` narrows it where the metrics
+pipeline adds labels that tell them apart.
 
 Requires Prometheus Operator (monitoring.coreos.com/v1). Gated by
 .Values.metrics.alerts.enabled.
@@ -20,6 +27,14 @@ the api selector here as starter; tune by adding per-role rules.
 {{- if .Values.metrics.alerts.enabled -}}
 {{- $apiFullname := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
 {{- $rules := .Values.metrics.alerts.rules -}}
+{{- $runbookBase := trimSuffix "/" .Values.metrics.alerts.runbookBaseUrl -}}
+{{- /* otelconnect's rpc.server.call.duration as Prometheus names it. */ -}}
+{{- $rpcCalls := "rpc_server_call_duration_seconds_count" -}}
+{{- $rpcBuckets := "rpc_server_call_duration_seconds_bucket" -}}
+{{- $rpcErrorLabel := "error_type" -}}
+{{- $rpcSelector := .Values.metrics.alerts.rpcSelector -}}
+{{- $rpcMatchers := ternary (printf "%s," $rpcSelector) "" (ne $rpcSelector "") -}}
+{{- $rpcBraced := ternary (printf "{%s}" $rpcSelector) "" (ne $rpcSelector "") -}}
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -81,38 +96,42 @@ spec:
     - name: {{ $apiFullname }}.traffic
       rules:
         {{- if $rules.highErrorRate.enabled }}
+        {{- $errors := $rules.highErrorRate }}
         - alert: PaladinApiHighErrorRate
           expr: |
             (
-              sum(rate(promhttp_metric_handler_requests_total{code=~"5..",service="{{ $apiFullname }}"}[5m]))
+              sum(rate({{ $rpcCalls }}{ {{- $rpcMatchers -}} {{ $rpcErrorLabel }}=~"{{ join "|" $errors.serverErrorCodes }}"}[{{ $errors.window }}]))
               /
-              sum(rate(promhttp_metric_handler_requests_total{service="{{ $apiFullname }}"}[5m]))
-            ) > {{ $rules.highErrorRate.threshold }}
-          for: {{ $rules.highErrorRate.for }}
+              sum(rate({{ $rpcCalls }}{{ $rpcBraced }}[{{ $errors.window }}]))
+            ) > {{ $errors.threshold }}
+          for: {{ $errors.for }}
           labels:
-            severity: {{ $rules.highErrorRate.severity }}
+            severity: {{ $errors.severity }}
             service: paladin-api
           annotations:
-            summary: "Paladin api error rate above {{ $rules.highErrorRate.threshold | mulf 100.0 }}%"
+            summary: "Paladin api error rate above {{ $errors.threshold | mulf 100.0 }}%"
             description: |
-              Sustained 5xx rate over 5m exceeded {{ $rules.highErrorRate.threshold | mulf 100.0 }}%
-              for {{ $rules.highErrorRate.for }}.
+              More than {{ $errors.threshold | mulf 100.0 }}% of Connect RPCs over {{ $errors.window }} failed
+              with a server-fault code ({{ join ", " $errors.serverErrorCodes }}) for {{ $errors.for }}.
+            runbook_url: "{{ $runbookBase }}/{{ $errors.runbook }}"
         {{- end }}
         {{- if $rules.highLatency.enabled }}
+        {{- $latency := $rules.highLatency }}
         - alert: PaladinApiHighLatency
           expr: |
             histogram_quantile(
-              0.99,
-              sum by (le) (rate(promhttp_metric_handler_request_duration_seconds_bucket{service="{{ $apiFullname }}"}[5m]))
-            ) > {{ $rules.highLatency.thresholdSeconds }}
-          for: {{ $rules.highLatency.for }}
+              {{ $latency.quantile }},
+              sum by (le) (rate({{ $rpcBuckets }}{{ $rpcBraced }}[{{ $latency.window }}]))
+            ) > {{ $latency.thresholdSeconds }}
+          for: {{ $latency.for }}
           labels:
-            severity: {{ $rules.highLatency.severity }}
+            severity: {{ $latency.severity }}
             service: paladin-api
           annotations:
-            summary: "Paladin api p99 latency > {{ $rules.highLatency.thresholdSeconds }}s"
+            summary: "Paladin api p{{ $latency.quantile | mulf 100.0 }} latency > {{ $latency.thresholdSeconds }}s"
             description: |
-              p99 latency exceeded {{ $rules.highLatency.thresholdSeconds }}s for
-              {{ $rules.highLatency.for }}. Check Postgres + SeaweedFS responsiveness.
+              p{{ $latency.quantile | mulf 100.0 }} Connect RPC latency over {{ $latency.window }} exceeded
+              {{ $latency.thresholdSeconds }}s for {{ $latency.for }}.
+            runbook_url: "{{ $runbookBase }}/{{ $latency.runbook }}"
         {{- end }}
 {{- end }}
