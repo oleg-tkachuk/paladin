@@ -15,7 +15,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0003](0003-transactional-outbox.md) | Transactional event outbox | Accepted |
 | [0004](0004-table-backed-audit-outbox.md) | Crash-durable (table-backed) audit outbox | Accepted |
 | [0005](0005-cnpg-ha-ownership.md) | CNPG Postgres HA ownership & verify-full TLS | Accepted |
-| [0006](0006-deferred-roadmap.md) | Deferred roadmap (single-binary planes, event sinks, …) | Accepted |
+| [0006](0006-deferred-roadmap.md) | Deferred roadmap (single-binary planes, event sinks, …) | Superseded by BACKLOG.md, 0009, 0015 |
 | [0007](0007-postgres-connection-headroom.md) | Postgres connection headroom & pooling ownership | Accepted |
 | [0008](0008-mcp-oauth-resource-server.md) | MCP server as an OAuth 2.1 Resource Server | Accepted |
 | [0009](0009-oauth-authorization-server.md) | OAuth 2.1 Authorization Server (IAM-as-AS) | Accepted |

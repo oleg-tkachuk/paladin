@@ -4,7 +4,7 @@
 
 **Created**: 2026-05-27
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Frontend Playwright E2E test suite for the Paladin admin UI — automated regression coverage for the critical operator journeys (login, AuthGate, tenant scope switching, bucket browsing, capability lifecycle, tenant restore from trash). Replaces today's manual smoke testing on minikube. Must be reliable, fast, and authored in the same TypeScript flavour as the application."
 

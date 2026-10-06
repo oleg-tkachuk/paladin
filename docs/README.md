@@ -49,7 +49,7 @@ Numbered, immutable once accepted, superseded rather than edited. See
 | [0003](adr/0003-transactional-outbox.md) | Transactional event outbox |
 | [0004](adr/0004-table-backed-audit-outbox.md) | Crash-durable (table-backed) audit outbox |
 | [0005](adr/0005-cnpg-ha-ownership.md) | CNPG Postgres HA ownership & verify-full TLS |
-| [0006](adr/0006-deferred-roadmap.md) | Deferred roadmap |
+| [0006](adr/0006-deferred-roadmap.md) | Deferred roadmap (superseded by BACKLOG.md) |
 | [0007](adr/0007-postgres-connection-headroom.md) | Postgres connection headroom & pooling ownership |
 | [0008](adr/0008-mcp-oauth-resource-server.md) | MCP server as an OAuth 2.1 Resource Server |
 | [0009](adr/0009-oauth-authorization-server.md) | OAuth 2.1 Authorization Server (IAM-as-AS) |
