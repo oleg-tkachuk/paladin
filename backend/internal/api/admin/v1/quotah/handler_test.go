@@ -42,6 +42,12 @@ type fakeQuotaRepo struct {
 	upsertBucket int
 	resetCalls   int
 	resetErr     error
+	// byID is what GetByID returns; byIDErr overrides it. byIDCtx and
+	// resetCtx keep the contexts each call ran under.
+	byID     admindomain.Quota
+	byIDErr  error
+	byIDCtx  context.Context
+	resetCtx context.Context
 }
 
 func (f *fakeQuotaRepo) UpsertTenant(context.Context, admindomain.Quota) error { return nil }
@@ -53,9 +59,14 @@ func (f *fakeQuotaRepo) GetBucket(context.Context, string, string) (admindomain.
 	return f.bucketQuota, nil
 }
 func (f *fakeQuotaRepo) IncrementUsage(context.Context, uuid.UUID, int64, int64) error { return nil }
-func (f *fakeQuotaRepo) ResetDaily(context.Context, uuid.UUID, time.Time) error {
+func (f *fakeQuotaRepo) ResetDaily(ctx context.Context, _ uuid.UUID, _ time.Time) error {
 	f.resetCalls++
+	f.resetCtx = ctx
 	return f.resetErr
+}
+func (f *fakeQuotaRepo) GetByID(ctx context.Context, _ uuid.UUID) (admindomain.Quota, error) {
+	f.byIDCtx = ctx
+	return f.byID, f.byIDErr
 }
 
 func (f *fakeQuotaRepo) RunInTx(ctx context.Context, fn func(context.Context, pgx.Tx) error) error {
@@ -82,6 +93,18 @@ func ctxAs(tenant uuid.UUID, roles ...string) context.Context {
 }
 
 func codeOf(err error) connect.Code { return connect.CodeOf(err) }
+
+// recordingAuthorizer allows everything and keeps the resource it was asked
+// about, so a test can see what Cedar was shown.
+type recordingAuthorizer struct {
+	decision cedar.Decision
+	resource *cedar.Resource
+}
+
+func (r *recordingAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, res *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+	r.resource = res
+	return r.decision, nil
+}
 
 // ─── GetTenantQuota ──────────────────────────────────────────────────────────
 
@@ -244,10 +267,100 @@ func TestResetUsage_RequiresPlatformAdmin(t *testing.T) {
 }
 
 func TestResetUsage_PlatformAdminResets(t *testing.T) {
-	repo := &fakeQuotaRepo{}
+	owner := uuid.New()
+	repo := &fakeQuotaRepo{byID: admindomain.Quota{QuotaID: uuid.New(), TenantID: owner}}
 	h := NewHandler(repo, allowAuthorizer{})
-	if err := h.ResetUsage(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), uuid.New()); err != nil {
+	if err := h.ResetUsage(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), repo.byID.QuotaID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.resetCalls != 1 {
+		t.Fatalf("ResetDaily calls = %d, want 1", repo.resetCalls)
+	}
+}
+
+// The quota is loaded before Cedar runs, so a policy sees which tenant's
+// quota is being reset rather than an empty entity.
+func TestResetUsage_CedarSeesTheQuotasTenant(t *testing.T) {
+	owner := uuid.New()
+	repo := &fakeQuotaRepo{byID: admindomain.Quota{QuotaID: uuid.New(), TenantID: owner}}
+	authz := &recordingAuthorizer{decision: cedar.DecisionAllow}
+	h := NewHandler(repo, authz)
+	if err := h.ResetUsage(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), repo.byID.QuotaID); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if authz.resource == nil || authz.resource.TenantID != owner {
+		t.Fatalf("Cedar resource = %+v, want TenantID %s", authz.resource, owner)
+	}
+}
+
+// The quota belongs to another tenant, so it is read cross-tenant and reset
+// acting as its owner — under RLS the caller's own scope matches no row.
+func TestResetUsage_ReadsCrossTenantAndResetsAsTheOwner(t *testing.T) {
+	owner := uuid.New()
+	repo := &fakeQuotaRepo{byID: admindomain.Quota{QuotaID: uuid.New(), TenantID: owner}}
+	h := NewHandler(repo, allowAuthorizer{})
+	if err := h.ResetUsage(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), repo.byID.QuotaID); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !auth.CrossTenantRead(repo.byIDCtx) {
+		t.Error("GetByID ran without the cross-tenant read flag")
+	}
+	if got, ok := auth.ActingTenant(repo.resetCtx); !ok || got != owner {
+		t.Errorf("ResetDaily acting tenant = (%s, %v), want %s", got, ok, owner)
+	}
+	if auth.CrossTenantRead(repo.resetCtx) {
+		t.Error("ResetDaily ran with the cross-tenant read flag; the write must be tenant-scoped")
+	}
+}
+
+func TestResetUsage_CedarDeniedResetsNothing(t *testing.T) {
+	repo := &fakeQuotaRepo{byID: admindomain.Quota{QuotaID: uuid.New(), TenantID: uuid.New()}}
+	h := NewHandler(repo, denyAuthorizer{})
+	err := h.ResetUsage(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), repo.byID.QuotaID)
+	if codeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("code = %v, want PermissionDenied", codeOf(err))
+	}
+	if repo.resetCalls != 0 {
+		t.Errorf("ResetDaily calls = %d after a deny, want 0", repo.resetCalls)
+	}
+}
+
+func TestResetUsage_UnknownQuotaIsNotFound(t *testing.T) {
+	repo := &fakeQuotaRepo{byIDErr: admindomain.ErrNotFound}
+	h := NewHandler(repo, allowAuthorizer{})
+	err := h.ResetUsage(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), uuid.New())
+	if codeOf(err) != connect.CodeNotFound {
+		t.Fatalf("code = %v, want NotFound", codeOf(err))
+	}
+	if repo.resetCalls != 0 {
+		t.Errorf("ResetDaily calls = %d, want 0", repo.resetCalls)
+	}
+}
+
+// A reset that matched no row reports it rather than succeeding silently.
+func TestResetUsage_ResetMissingRowIsNotFound(t *testing.T) {
+	repo := &fakeQuotaRepo{
+		byID:     admindomain.Quota{QuotaID: uuid.New(), TenantID: uuid.New()},
+		resetErr: admindomain.ErrNotFound,
+	}
+	h := NewHandler(repo, allowAuthorizer{})
+	err := h.ResetUsage(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), repo.byID.QuotaID)
+	if codeOf(err) != connect.CodeNotFound {
+		t.Fatalf("code = %v, want NotFound", codeOf(err))
+	}
+}
+
+func TestResetUsage_BucketScopedQuotaIsRefused(t *testing.T) {
+	repo := &fakeQuotaRepo{byID: admindomain.Quota{
+		QuotaID: uuid.New(), BackendID: "primary", BucketName: "shared",
+	}}
+	h := NewHandler(repo, allowAuthorizer{})
+	err := h.ResetUsage(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), repo.byID.QuotaID)
+	if codeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v, want FailedPrecondition", codeOf(err))
+	}
+	if repo.resetCalls != 0 {
+		t.Errorf("ResetDaily calls = %d, want 0", repo.resetCalls)
 	}
 }
 

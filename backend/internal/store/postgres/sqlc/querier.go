@@ -257,6 +257,9 @@ type Querier interface {
 	// used to issue 1000 sequential SELECTs before any state mutation).
 	GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, column2 []pgtype.UUID) ([]GetObjectsByIDsRow, error)
 	GetOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
+	// Either scope. Under RLS the caller sees its own tenant's rows; a platform
+	// admin's cross-tenant read sees every row.
+	GetQuotaByID(ctx context.Context, id pgtype.UUID) (GetQuotaByIDRow, error)
 	GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshToken, error)
 	GetReplicationWatermark(ctx context.Context, name string, name_2 string) (pgtype.Timestamptz, error)
 	GetStorageBackendV2(ctx context.Context, name string) (GetStorageBackendV2Row, error)
@@ -641,7 +644,9 @@ type Querier interface {
 	// worker so a crash between the storage call and this update cannot lose the
 	// count.
 	ReschedulePendingPurge(ctx context.Context, iD pgtype.UUID, lastError *string, column3 pgtype.Interval) error
-	ResetQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) error
+	// Rows, not exec: under RLS a row outside the session's tenant is filtered
+	// out rather than refused, so zero rows is the only sign the reset missed.
+	ResetQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) (int64, error)
 	ResolveCollectionID(ctx context.Context, tenantID pgtype.UUID, name string) (pgtype.UUID, error)
 	// Longest registered collection name that is a prefix of the candidate (the
 	// recombined "<collection>/<path>" tail of an ingest event) for the tenant. Multi-segment

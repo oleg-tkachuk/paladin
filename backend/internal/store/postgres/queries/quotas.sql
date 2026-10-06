@@ -72,7 +72,20 @@ SET usage_total_bytes   = usage_total_bytes + $2,
     last_reset_at       = GREATEST(last_reset_at, date_trunc('day', now(), 'UTC'))
 WHERE id = $1;
 
--- name: ResetQuotaDaily :exec
+-- name: GetQuotaByID :one
+-- Either scope. Under RLS the caller sees its own tenant's rows; a platform
+-- admin's cross-tenant read sees every row.
+SELECT sqlc.embed(quotas),
+       COALESCE(sb.name, '') AS backend_name,
+       COALESCE(b.name, '')  AS bucket_name
+FROM quotas
+LEFT JOIN buckets b           ON b.id = quotas.bucket_id
+LEFT JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE quotas.id = $1;
+
+-- name: ResetQuotaDaily :execrows
+-- Rows, not exec: under RLS a row outside the session's tenant is filtered
+-- out rather than refused, so zero rows is the only sign the reset missed.
 UPDATE quotas
 SET usage_bytes_today = 0,
     usage_objects_today = 0,
