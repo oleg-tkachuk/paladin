@@ -253,6 +253,7 @@ tasks:
       - task: verify:chart-reads
       - task: verify:chart-netpol
       - task: verify:chart-defaults
+      - task: verify:chart-alerts
       - task: verify:taskfile-vars
       - task: verify:taskfile-drift
       - task: verify:publish-target
@@ -462,6 +463,11 @@ tasks:
     desc: "Fail when the backend chart stops wiring what a fresh install needs"
     cmds:
       - ./scripts/chart-defaults.test.sh
+
+  verify:chart-alerts:
+    desc: "Fail when the chart's alerts stop reading Paladin's RPC metrics, or do not fire"
+    cmds:
+      - ./scripts/chart-alerts.test.sh
 
   verify:chart-netpol:
     desc: "Fail when a role has no NetworkPolicy and the baseline does not cover it"

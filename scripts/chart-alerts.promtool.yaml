@@ -1,0 +1,82 @@
+# promtool unit tests for the backend chart's traffic alerts, run by
+# chart-alerts.test.sh against the rules rendered with the chart's defaults.
+# The series are otelconnect's rpc.server.call.duration as Prometheus names
+# them; each rule has a case where it fires and one where it does not.
+rule_files:
+  - prometheusrule.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # Half the calls fail INTERNAL → fires once the 5m window has filled and
+  # `for: 10m` has passed.
+  - interval: 1m
+    input_series:
+      - series: 'rpc_server_call_duration_seconds_count{rpc_method="paladin.data.v1.ObjectService/GetObject", rpc_response_status_code="OK"}'
+        values: "0+10x30"
+      - series: 'rpc_server_call_duration_seconds_count{rpc_method="paladin.data.v1.ObjectService/GetObject", rpc_response_status_code="INTERNAL", error_type="INTERNAL"}'
+        values: "0+10x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinApiHighErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: paladin-api
+            exp_annotations:
+              summary: "Paladin api error rate above 5%"
+              description: |
+                More than 5% of Connect RPCs over 5m failed
+                with a server-fault code (UNKNOWN, DEADLINE_EXCEEDED, UNIMPLEMENTED, INTERNAL, UNAVAILABLE, DATA_LOSS) for 10m.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/api-high-error-rate.md"
+
+  # Half the calls fail, but with client-fault codes: not an outage.
+  - interval: 1m
+    input_series:
+      - series: 'rpc_server_call_duration_seconds_count{rpc_method="paladin.data.v1.ObjectService/GetObject", rpc_response_status_code="OK"}'
+        values: "0+10x30"
+      - series: 'rpc_server_call_duration_seconds_count{rpc_method="paladin.data.v1.ObjectService/GetObject", rpc_response_status_code="NOT_FOUND", error_type="NOT_FOUND"}'
+        values: "0+5x30"
+      - series: 'rpc_server_call_duration_seconds_count{rpc_method="paladin.iam.v1.AuthService/Login", rpc_response_status_code="UNAUTHENTICATED", error_type="UNAUTHENTICATED"}'
+        values: "0+5x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinApiHighErrorRate
+        exp_alerts: []
+
+  # Every call lands between 1s and 2.5s → p99 interpolates to ~2.5s > 1.5s.
+  - interval: 1m
+    input_series:
+      - series: 'rpc_server_call_duration_seconds_bucket{rpc_method="paladin.data.v1.ObjectService/GetObject", le="1"}'
+        values: "0x30"
+      - series: 'rpc_server_call_duration_seconds_bucket{rpc_method="paladin.data.v1.ObjectService/GetObject", le="2.5"}'
+        values: "0+10x30"
+      - series: 'rpc_server_call_duration_seconds_bucket{rpc_method="paladin.data.v1.ObjectService/GetObject", le="+Inf"}'
+        values: "0+10x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinApiHighLatency
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: paladin-api
+            exp_annotations:
+              summary: "Paladin api p99 latency > 1.5s"
+              description: |
+                p99 Connect RPC latency over 5m exceeded
+                1.5s for 10m.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/api-high-latency.md"
+
+  # Every call finishes under 100ms.
+  - interval: 1m
+    input_series:
+      - series: 'rpc_server_call_duration_seconds_bucket{rpc_method="paladin.data.v1.ObjectService/GetObject", le="0.1"}'
+        values: "0+10x30"
+      - series: 'rpc_server_call_duration_seconds_bucket{rpc_method="paladin.data.v1.ObjectService/GetObject", le="2.5"}'
+        values: "0+10x30"
+      - series: 'rpc_server_call_duration_seconds_bucket{rpc_method="paladin.data.v1.ObjectService/GetObject", le="+Inf"}'
+        values: "0+10x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: PaladinApiHighLatency
+        exp_alerts: []
