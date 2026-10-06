@@ -492,6 +492,10 @@ metrics:
       crashLooping:
         enabled: true
         severity: critical
+        # Fires when a container restarts more than `restarts` times within
+        # `window`: one restart is a rollout or a node drain, several are a loop.
+        restarts: 2
+        window: 15m
         for: 5m
       highErrorRate:
         enabled: true
