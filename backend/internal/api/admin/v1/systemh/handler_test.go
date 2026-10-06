@@ -245,3 +245,78 @@ func TestPlatformStats_ForwardsTheTenantPage(t *testing.T) {
 		t.Errorf("next token = %q, want the worker's", res.RLS.Objects.TenantsNext)
 	}
 }
+
+func TestPlatformStatsTenants_RequiresPlatformAdmin(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Worker.OpsURL = "http://127.0.0.1:1"
+	_, err := New(cfg, "").PlatformStatsTenants(ctxAs("tenant-admin"),
+		platformstats.SignalQuotaAtLimit, platformstats.TenantPage{})
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("err = %v, want PermissionDenied", err)
+	}
+}
+
+// The drill-down is only opened from a count the census just showed, so a
+// worker that cannot answer is an error, not an empty list reading "nobody".
+func TestPlatformStatsTenants_NoWorkerAnswerIsUnavailable(t *testing.T) {
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer failing.Close()
+	garbled := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("{not json"))
+	}))
+	defer garbled.Close()
+
+	for name, opsURL := range map[string]string{
+		"unconfigured": "",
+		"unreachable":  "http://127.0.0.1:1", // nothing listens there
+		"non-200":      failing.URL,
+		"bad body":     garbled.URL,
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := config.Config{}
+			cfg.Worker.OpsURL = opsURL
+			_, err := New(cfg, "").PlatformStatsTenants(ctxAs(apiutil.RolePlatformAdmin),
+				platformstats.SignalQuotaAtLimit, platformstats.TenantPage{})
+			if connect.CodeOf(err) != connect.CodeUnavailable {
+				t.Errorf("err = %v, want Unavailable", err)
+			}
+		})
+	}
+}
+
+func TestPlatformStatsTenants_ProxiesTheSignalAndPage(t *testing.T) {
+	const tenant = "11111111-1111-1111-1111-111111111111"
+	page := platformstats.TenantPage{Size: 5, After: "cursor"}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != platformstats.SignalTenantsPath {
+			t.Errorf("proxied path = %q, want %q", r.URL.Path, platformstats.SignalTenantsPath)
+		}
+		sig, gotPage, ok := platformstats.SignalFromQuery(r.URL.Query())
+		if !ok || sig != platformstats.SignalCapabilitiesExpiring || gotPage != page {
+			t.Errorf("forwarded %q %+v, want %q %+v", sig, gotPage, platformstats.SignalCapabilitiesExpiring, page)
+		}
+		_, _ = w.Write([]byte(`{"signal":"capabilities_expiring",
+			"tenants":[{"tenant_id":"` + tenant + `","count":3}],
+			"tenants_truncated":2,"tenants_next_page_token":"next","unattributed":0}`))
+	}))
+	defer srv.Close()
+
+	cfg := config.Config{}
+	cfg.Worker.OpsURL = srv.URL
+	res, err := New(cfg, "").PlatformStatsTenants(ctxAs(apiutil.RolePlatformAdmin),
+		platformstats.SignalCapabilitiesExpiring, page)
+	if err != nil {
+		t.Fatalf("PlatformStatsTenants: %v", err)
+	}
+	got := res.Tenants
+	if len(got.Tenants) != 1 || got.Tenants[0].TenantID != tenant || got.Tenants[0].Count != 3 ||
+		got.TenantsCut != 2 || got.TenantsNext != "next" {
+		t.Errorf("tenants = %+v, want the worker's page as sent", got)
+	}
+	// No pool wired → no labels, but the page still comes through.
+	if len(res.TenantNames) != 0 {
+		t.Errorf("tenant names = %v, want empty without a pool", res.TenantNames)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
@@ -190,6 +191,51 @@ func (s *SystemServer) GetPlatformStats(ctx context.Context, req *connect.Reques
 			WithFilter: r.Subscriptions.WithFilter,
 			BySinkKind: r.Subscriptions.BySinkKind,
 		}
+	}
+	return connect.NewResponse(out), nil
+}
+
+// signalFromPB maps the wire enum onto the census signal it names.
+var signalFromPB = map[pb.PlatformStatsSignal]platformstats.Signal{
+	pb.PlatformStatsSignal_PLATFORM_STATS_SIGNAL_QUOTA_AT_LIMIT:        platformstats.SignalQuotaAtLimit,
+	pb.PlatformStatsSignal_PLATFORM_STATS_SIGNAL_QUOTA_NEAR_LIMIT:      platformstats.SignalQuotaNearLimit,
+	pb.PlatformStatsSignal_PLATFORM_STATS_SIGNAL_CAPABILITIES_EXPIRING: platformstats.SignalCapabilitiesExpiring,
+	pb.PlatformStatsSignal_PLATFORM_STATS_SIGNAL_API_TOKENS_EXPIRING:   platformstats.SignalAPITokensExpiring,
+}
+
+func (s *SystemServer) ListPlatformStatsTenants(ctx context.Context, req *connect.Request[pb.ListPlatformStatsTenantsRequest]) (*connect.Response[pb.ListPlatformStatsTenantsResponse], error) {
+	if s.H == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("system handler not wired"))
+	}
+	// The validation interceptor refuses UNSPECIFIED and unknown values
+	// first; this keeps a request that skipped it from reaching the worker
+	// as an empty signal.
+	signal, ok := signalFromPB[req.Msg.GetSignal()]
+	if !ok {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("signal must name a census count with a drill-down"))
+	}
+	res, err := s.H.PlatformStatsTenants(ctx, signal, platformstats.TenantPage{
+		Size:  int(req.Msg.GetPage().GetPageSize()),
+		After: req.Msg.GetPage().GetPageToken(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListPlatformStatsTenantsResponse{
+		Tenants:          make([]*pb.SignalTenant, 0, len(res.Tenants.Tenants)),
+		Page:             convx.PageResponseProto(res.Tenants.TenantsNext),
+		TenantsTruncated: res.Tenants.TenantsCut,
+		Unattributed:     res.Tenants.Unattributed,
+	}
+	for _, t := range res.Tenants.Tenants {
+		name := res.TenantNames[t.TenantID]
+		out.Tenants = append(out.Tenants, &pb.SignalTenant{
+			TenantId:    t.TenantID,
+			Slug:        name.Slug,
+			DisplayName: name.DisplayName,
+			Count:       t.Count,
+		})
 	}
 	return connect.NewResponse(out), nil
 }

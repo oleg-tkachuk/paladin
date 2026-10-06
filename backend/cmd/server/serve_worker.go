@@ -293,6 +293,10 @@ func workerOpsMux(cfg config.Runtime, deps *app.SharedDeps, l *zap.Logger) (http
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(census)
 	})
+	// The tenants behind one flagged census count, for the /stats
+	// drill-down. Same pool and same trust posture as the census above.
+	mux.HandleFunc("GET "+platformstats.SignalTenantsPath, platformstats.SignalTenantsHandler(
+		deps.ReaperPool, func(err error) { l.Warn("RLS census drill-down failed", zap.Error(err)) }))
 	return mux, healthH
 }
 

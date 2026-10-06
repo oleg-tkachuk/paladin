@@ -281,6 +281,86 @@ func TestSystemStatsCarryWhatTheHandlerReported(t *testing.T) {
 	}
 }
 
+// signalRecorder answers PlatformStatsTenants with one labelled tenant and
+// records what it was asked.
+type signalRecorder struct {
+	failingSystem
+	signal *platformstats.Signal
+	page   *platformstats.TenantPage
+}
+
+func (r signalRecorder) PlatformStatsTenants(_ context.Context, sig platformstats.Signal, page platformstats.TenantPage) (*systemh.SignalTenantsResult, error) {
+	*r.signal, *r.page = sig, page
+	const id = "11111111-1111-1111-1111-111111111111"
+	return &systemh.SignalTenantsResult{
+		Tenants: &platformstats.SignalTenants{
+			Signal:       sig,
+			Tenants:      []platformstats.TenantCount{{TenantID: id, Count: 4}},
+			TenantsCut:   2,
+			TenantsNext:  "next",
+			Unattributed: 1,
+		},
+		TenantNames: map[string]systemh.TenantName{id: {Slug: "acme", DisplayName: "Acme"}},
+	}, nil
+}
+
+func TestListPlatformStatsTenants_MapsEverySignal(t *testing.T) {
+	for wire, want := range signalFromPB {
+		t.Run(wire.String(), func(t *testing.T) {
+			var gotSig platformstats.Signal
+			var gotPage platformstats.TenantPage
+			srv := &SystemServer{H: signalRecorder{signal: &gotSig, page: &gotPage}}
+			res, err := srv.ListPlatformStatsTenants(context.Background(), connect.NewRequest(&pb.ListPlatformStatsTenantsRequest{
+				Signal: wire,
+				Page:   &commonv1.PageRequest{PageSize: 3, PageToken: "cursor"},
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gotSig != want {
+				t.Errorf("handler asked for %q, want %q", gotSig, want)
+			}
+			if wantPage := (platformstats.TenantPage{Size: 3, After: "cursor"}); gotPage != wantPage {
+				t.Errorf("handler asked for page %+v, want %+v", gotPage, wantPage)
+			}
+			m := res.Msg
+			if len(m.GetTenants()) != 1 {
+				t.Fatalf("tenants = %v, want one", m.GetTenants())
+			}
+			tn := m.GetTenants()[0]
+			if tn.GetSlug() != "acme" || tn.GetDisplayName() != "Acme" || tn.GetCount() != 4 {
+				t.Errorf("tenant = %v, want acme/Acme with 4", tn)
+			}
+			if m.GetPage().GetNextPageToken() != "next" || m.GetTenantsTruncated() != 2 || m.GetUnattributed() != 1 {
+				t.Errorf("page = next %q truncated %d unattributed %d; want next, 2, 1",
+					m.GetPage().GetNextPageToken(), m.GetTenantsTruncated(), m.GetUnattributed())
+			}
+		})
+	}
+	if len(signalFromPB) != len(pb.PlatformStatsSignal_name)-1 {
+		t.Errorf("%d signals mapped, but the enum has %d besides UNSPECIFIED",
+			len(signalFromPB), len(pb.PlatformStatsSignal_name)-1)
+	}
+}
+
+func TestListPlatformStatsTenants_RefusesAnUnnamedSignal(t *testing.T) {
+	var sig platformstats.Signal
+	var page platformstats.TenantPage
+	srv := &SystemServer{H: signalRecorder{signal: &sig, page: &page}}
+	const unknownSignal = 99
+	for _, wire := range []pb.PlatformStatsSignal{
+		pb.PlatformStatsSignal_PLATFORM_STATS_SIGNAL_UNSPECIFIED, unknownSignal,
+	} {
+		_, err := srv.ListPlatformStatsTenants(context.Background(), connect.NewRequest(&pb.ListPlatformStatsTenantsRequest{Signal: wire}))
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("signal %v: err = %v, want InvalidArgument", wire, err)
+		}
+	}
+	if sig != "" {
+		t.Errorf("the handler was asked for %q", sig)
+	}
+}
+
 // ─── tenant budgets ────────────────────────────────────────────────────────
 
 func TestTenantBudgetSetForwardsThePeriodEnd(t *testing.T) {

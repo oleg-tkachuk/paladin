@@ -224,6 +224,9 @@ func (failingSystem) MarshalRedacted(context.Context) (string, string, error) {
 func (failingSystem) PlatformStats(context.Context, platformstats.TenantPage) (*systemh.PlatformStatsResult, error) {
 	return nil, errBoom
 }
+func (failingSystem) PlatformStatsTenants(context.Context, platformstats.Signal, platformstats.TenantPage) (*systemh.SignalTenantsResult, error) {
+	return nil, errBoom
+}
 
 type failingTenant struct{}
 
@@ -607,6 +610,12 @@ func TestEveryAdminShimPropagatesHandlerErrors(t *testing.T) {
 		}},
 		{"System.GetPlatformStats", func() error {
 			_, err := sysSrv.GetPlatformStats(ctx, connect.NewRequest(&pb.GetPlatformStatsRequest{}))
+			return err
+		}},
+		{"System.ListPlatformStatsTenants", func() error {
+			_, err := sysSrv.ListPlatformStatsTenants(ctx, connect.NewRequest(&pb.ListPlatformStatsTenantsRequest{
+				Signal: pb.PlatformStatsSignal_PLATFORM_STATS_SIGNAL_QUOTA_AT_LIMIT,
+			}))
 			return err
 		}},
 
