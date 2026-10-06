@@ -87,6 +87,13 @@ for a, b in zip(pythons, pythons[1:]):
     if b.minor != a.minor + 1:
         failures.append(f"the matrix skips Python between {a} and {b}")
 
+# The tls extra is optional, so one cell must run without it.
+if not any(c.get("tls") is False for c in matrix["include"]):
+    failures.append("no matrix cell runs without the tls extra")
+optional = {name for name in project.get("optional-dependencies", {})}
+if "tls" not in optional:
+    failures.append("the tls extra the matrix installs is not declared")
+
 if failures:
     print("!!! the Python SDK's ranges, stubs and matrix disagree:", file=sys.stderr)
     for f in failures:

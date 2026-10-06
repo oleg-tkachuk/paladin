@@ -1438,17 +1438,6 @@ The contract-side half of ADR-0018. The client-side layers are in both SDKs.
   protovalidate on every request — in both fakes, with tests.
 - **Blockers:** none.
 
-### The Python SDK installs `httpcore` and its TLS layer for everyone
-
-- **Status:** Deferred — a packaging change, so a decision rather than a fix.
-- **Reason:** `paladin._tls_http` (about 540 lines) and
-  `httpcore[http2,asyncio]` exist only for `TLS(server_id=…)` and
-  `min_version`, which pyqwest cannot do, yet every install carries them.
-- **Definition of Done:** a `tls` extra holding them, a clear error when `TLS`
-  is used without it, and the compat matrix covering both installs.
-- **Blockers:** a consumer that uses `TLS` without naming the extra breaks on
-  upgrade; announce it with the release.
-
 ### Python reads response headers through a transport of its own
 
 - **Status:** Deferred.
