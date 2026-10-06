@@ -77,6 +77,16 @@ For when something is already on fire.
   above the alert's quantile threshold.
 - [worker-stalled.md](runbooks/worker-stalled.md) — background worker
   stalled or failing.
+- [outbox-not-draining.md](runbooks/outbox-not-draining.md) — event
+  deliveries pile up faster than the dispatcher clears them.
+- [rate-limit-failing-open.md](runbooks/rate-limit-failing-open.md) — the
+  per-tenant or per-token limiter admits requests it cannot count.
+- [capability-charges-refused.md](runbooks/capability-charges-refused.md) — a
+  tenant's capability charges are refused for budget nearly every time.
+- [tenant-throttled.md](runbooks/tenant-throttled.md) — a tenant held at its
+  request ceiling steadily.
+- [read-replica-out-of-sync.md](runbooks/read-replica-out-of-sync.md) —
+  listings stopped reading from the replica.
 - [uploads-not-settling.md](runbooks/uploads-not-settling.md) — uploads
   the reconciler should have settled stay PENDING.
 - [quota-usage-drift.md](runbooks/quota-usage-drift.md) — a tenant hits

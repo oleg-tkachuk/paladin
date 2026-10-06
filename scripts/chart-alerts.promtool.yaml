@@ -144,13 +144,17 @@ tests:
                 Pod paladin-core-admin-5f6d7-z9y8x has been NotReady for 10m.
                 Readiness probe failing — check /readyz on the admin pod.
 
-  # A dispatcher container OOMKilled once → fires straight away.
+  # A dispatcher container killed for OOM over and over: the reason series is
+  # 1 from its first sample and never moves, so only the restart counter shows
+  # each kill. An increase() over the reason alone saw nothing here.
   - interval: 1m
     input_series:
+      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-dispatcher-8a9b0-m3n4p"}'
+        values: "0 0 1 1 2 2 3 3 4 4"
       - series: 'kube_pod_container_status_last_terminated_reason{namespace="paladin", container="paladin-core", reason="OOMKilled", pod="paladin-core-dispatcher-8a9b0-m3n4p"}'
-        values: "0 0 0 1 1 1 1 1 1 1"
+        values: "1x10"
     alert_rule_test:
-      - eval_time: 5m
+      - eval_time: 9m
         alertname: PaladinOOMKilled
         exp_alerts:
           - exp_labels:
@@ -158,22 +162,38 @@ tests:
               component: dispatcher
               namespace: paladin
               container: paladin-core
-              reason: OOMKilled
               pod: paladin-core-dispatcher-8a9b0-m3n4p
             exp_annotations:
               summary: "Paladin dispatcher was OOMKilled"
               description: |
-                Pod paladin-core-dispatcher-8a9b0-m3n4p was OOMKilled in the last 15m.
+                Pod paladin-core-dispatcher-8a9b0-m3n4p restarted in the last 15m, last after an OOM kill.
                 Bump deployments.dispatcher.resources.limits.memory in the env overlay,
                 or chase the leak.
 
-  # Never OOMKilled.
+  # An OOM kill long ago: the reason still reads OOMKilled, but nothing has
+  # restarted in the window.
   - interval: 1m
     input_series:
+      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-dispatcher-8a9b0-m3n4p"}'
+        values: "1x30"
       - series: 'kube_pod_container_status_last_terminated_reason{namespace="paladin", container="paladin-core", reason="OOMKilled", pod="paladin-core-dispatcher-8a9b0-m3n4p"}'
-        values: "0x10"
+        values: "1x30"
     alert_rule_test:
-      - eval_time: 5m
+      - eval_time: 30m
+        alertname: PaladinOOMKilled
+        exp_alerts: []
+
+  # A restart for another reason: the OOMKilled series reads 0.
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_container_status_restarts_total{namespace="paladin", container="paladin-core", pod="paladin-core-worker-7d9f8-abcde"}'
+        values: "0 0 0 1 1 1 1 1 1 1"
+      - series: 'kube_pod_container_status_last_terminated_reason{namespace="paladin", container="paladin-core", reason="OOMKilled", pod="paladin-core-worker-7d9f8-abcde"}'
+        values: "0x10"
+      - series: 'kube_pod_container_status_last_terminated_reason{namespace="paladin", container="paladin-core", reason="Error", pod="paladin-core-worker-7d9f8-abcde"}'
+        values: "0 0 0 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 9m
         alertname: PaladinOOMKilled
         exp_alerts: []
 
@@ -260,6 +280,7 @@ tests:
                 The dispatcher is not clearing pending outbox rows. Check the
                 dispatcher logs, and the deepest-tenant line on the Operations
                 dashboard to tell a dispatcher problem from one tenant's sink.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/outbox-not-draining.md"
 
   # Bursts above 500 that drain back down once per window do not fire.
   - interval: 1m
@@ -286,8 +307,10 @@ tests:
               summary: "Paladin rate limiting is failing open"
               description: >-
                 Requests are admitted without a rate-limit decision; the per-tenant
-                or per-token ceiling is not in force. Check the limiter's Postgres
-                tables and the api logs.
+                or per-token ceiling is not in force. The limiters log nothing when
+                they fail open: check that the planes can write tenant_rate_buckets
+                and api_token_rate_buckets.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/rate-limit-failing-open.md"
 
   # Neither fail-open counter moves.
   - interval: 1m
@@ -321,7 +344,8 @@ tests:
               summary: "Tenant t1 has nearly every capability charge refused"
               description: >-
                 Over 90% of charge attempts were refused for 15m. Check the
-                tenant's quota and the issuing capability's budget.
+                tenant's budget and the issuing capability's budget.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/capability-charges-refused.md"
 
   # t1 refused at 2 req/s → fires. t2 refused at 0.5 req/s → silent.
   - interval: 1m
@@ -343,6 +367,7 @@ tests:
                 The per-tenant limiter has refused more than 1 request/s for 10m.
                 Either a client is looping or middleware.rate_limit is too low for
                 this tenant.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/tenant-throttled.md"
 
   # Both pods out of sync for 20m → fires.
   - interval: 1m
@@ -363,6 +388,7 @@ tests:
                 Every pod is sending listing reads to the primary. The health page's
                 postgres-replica row says why (unreachable, lag, not probed);
                 paladin_db_replica_lag_seconds shows how far behind it is.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/read-replica-out-of-sync.md"
 
   # One pod still in sync → the replica works; a single pod's view is not
   # an outage. And with the replica disabled there is no series at all.

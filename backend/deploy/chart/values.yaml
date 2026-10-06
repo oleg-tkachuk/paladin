@@ -562,11 +562,13 @@ metrics:
         window: 15m
         step: 1m
         for: 10m
+        runbook: outbox-not-draining.md
       rateLimitFailingOpen:
         enabled: true
         severity: critical
         window: 10m
         for: 5m
+        runbook: rate-limit-failing-open.md
       capabilityChargesRefused:
         enabled: true
         severity: warning
@@ -580,16 +582,19 @@ metrics:
         minRate: 0.001
         window: 15m
         for: 15m
+        runbook: capability-charges-refused.md
       tenantThrottled:
         enabled: true
         severity: warning
         refusalsPerSecond: 1
         window: 10m
         for: 10m
+        runbook: tenant-throttled.md
       readReplicaOutOfSync:
         enabled: true
         severity: warning
         for: 15m
+        runbook: read-replica-out-of-sync.md
       uploadsNotSettling:
         enabled: true
         severity: warning
