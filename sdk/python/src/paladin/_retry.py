@@ -64,15 +64,25 @@ def retryable(err: BaseException) -> bool:
     return isinstance(err, _TRANSPORT_ERRORS)
 
 
-def usable(signed: Any, now: float | None = None) -> bool:
-    """Whether a presigned URL still has ``PRESIGN_EXPIRY_SKEW`` left; one with
-    no expiry, or an unreadable one, is taken as usable."""
+def presign_expiry(signed: Any) -> datetime | None:
+    """When a presigned URL stops working, from its ``expires_at_rfc3339``, as
+    an aware UTC ``datetime``; None when the server sent none or one that does
+    not parse. Treat it as an upper bound: the signer may clamp a TTL further."""
     raw = getattr(signed, "expires_at_rfc3339", "")
     if not raw:
-        return True
+        return None
     try:
         exp = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
+        return None
+    return exp if exp.tzinfo is not None else exp.replace(tzinfo=timezone.utc)
+
+
+def usable(signed: Any, now: float | None = None) -> bool:
+    """Whether a presigned URL still has ``PRESIGN_EXPIRY_SKEW`` left; one with
+    no expiry, or an unreadable one, is taken as usable."""
+    exp = presign_expiry(signed)
+    if exp is None:
         return True
     current = datetime.now(timezone.utc).timestamp() if now is None else now
     return exp.timestamp() - current > PRESIGN_EXPIRY_SKEW

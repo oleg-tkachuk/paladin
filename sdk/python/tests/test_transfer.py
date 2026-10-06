@@ -7,11 +7,13 @@ import base64
 import hashlib
 import io
 from collections.abc import Iterator
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 import pytest
 from data_plane_fake import PARENT, Fake
 
+import paladin
 import paladin.transfer as transfer_module
 from paladin import (
     CHECKSUM_CRC32C,
@@ -27,6 +29,7 @@ from paladin import (
     download_stream,
     upload,
 )
+from paladin.common.v1 import resource_pb2
 from paladin.data.v1 import types_pb2
 from paladin.transfer import ERROR_BODY_LIMIT
 
@@ -312,3 +315,19 @@ def test_crc32c_is_not_verified_without_the_extra(
     fake.described.checksum.algorithm = CHECKSUM_CRC32C
     fake.described.checksum.value = _b64(b"\x00\x01\x02\x03")
     assert download(data, obj.name) == BODY
+
+
+# Consumers parsed expires_at_rfc3339 themselves; presign_expiry is the reading
+# the SDK's own retry logic uses.
+@pytest.mark.parametrize(
+    ("raw", "want"),
+    [
+        ("2026-10-06T12:00:00Z", datetime(2026, 10, 6, 12, tzinfo=timezone.utc)),
+        ("2026-10-06T15:00:00+03:00", datetime(2026, 10, 6, 12, tzinfo=timezone.utc)),
+        ("", None),
+        ("tomorrow", None),
+    ],
+    ids=["an RFC 3339 instant", "an offset", "none sent", "not a time"],
+)
+def test_presign_expiry(raw: str, want: datetime | None) -> None:
+    assert paladin.presign_expiry(resource_pb2.PresignedUrl(expires_at_rfc3339=raw)) == want

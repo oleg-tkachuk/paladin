@@ -73,18 +73,26 @@ func retryable(ctx context.Context, err error) bool {
 	return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
 }
 
-// usable reports whether a presigned URL still has PresignExpirySkew left; a
-// URL with no expiry is taken as usable.
-func usable(signed *commonv1.PresignedUrl, now time.Time) bool {
+// PresignExpiry is when a presigned URL stops working, from its
+// expires_at_rfc3339; ok is false when the server sent none or one that does
+// not parse. Treat it as an upper bound: the signer may clamp a TTL further.
+func PresignExpiry(signed *commonv1.PresignedUrl) (time.Time, bool) {
 	raw := signed.GetExpiresAtRfc3339()
 	if raw == "" {
-		return true
+		return time.Time{}, false
 	}
 	exp, err := time.Parse(time.RFC3339, raw)
 	if err != nil {
-		return true
+		return time.Time{}, false
 	}
-	return exp.Sub(now) > PresignExpirySkew
+	return exp, true
+}
+
+// usable reports whether a presigned URL still has PresignExpirySkew left; a
+// URL with no expiry, or an unreadable one, is taken as usable.
+func usable(signed *commonv1.PresignedUrl, now time.Time) bool {
+	exp, ok := PresignExpiry(signed)
+	return !ok || exp.Sub(now) > PresignExpirySkew
 }
 
 // backoff is the wait before attempt n (1-based, after the first failure).
