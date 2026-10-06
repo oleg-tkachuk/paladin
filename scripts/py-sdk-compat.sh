@@ -28,7 +28,7 @@ if (($# < 1)); then
 fi
 
 if [[ $1 == --matrix ]]; then
-    jq -r '(.python[] as $p | .with[] as $w | [$p, $w, true]), (.include[] | [.python, .with, .tls != false]) | @tsv' "$MATRIX" |
+    jq -r '(.python[] as $p | .with[] as $w | [$p, $w, true]), (.include[] | [.python, .with, .without_tls != true]) | @tsv' "$MATRIX" |
         while IFS=$'\t' read -r python with tls; do
             echo "=== python $python, $with, tls extra $tls"
             if [[ $tls == true ]]; then
