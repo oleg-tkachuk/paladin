@@ -44,7 +44,7 @@ func TestResetQuotaUsage_ReachesAnotherTenantsQuotaUnderRLS(t *testing.T) {
 		 VALUES ($1, $2, $3, $3)`, tenantQuota, ownerTenant, usedToday)
 	bucketQuota := uuid.New()
 	mustExec(t, ctx, admin,
-		`INSERT INTO quotas (id, bucket_id, usage_bytes_today)
+		`INSERT INTO bucket_quotas (id, bucket_id, usage_bytes_today)
 		 SELECT $1, b.id, $2 FROM buckets b WHERE b.name = 'acting-bucket'`, bucketQuota, usedToday)
 
 	pool := rlsPool(t, ctx, admin)
@@ -78,10 +78,18 @@ func TestResetQuotaUsage_ReachesAnotherTenantsQuotaUnderRLS(t *testing.T) {
 		}
 	})
 
-	t.Run("a bucket-scoped quota is refused, not silently skipped", func(t *testing.T) {
-		err := h.ResetUsage(asPlatformAdmin, bucketQuota)
-		if connect.CodeOf(err) != connect.CodeFailedPrecondition {
-			t.Fatalf("code = %v, want FailedPrecondition", connect.CodeOf(err))
+	t.Run("a bucket quota is reset, outside any tenant's scope", func(t *testing.T) {
+		if err := h.ResetUsage(asPlatformAdmin, bucketQuota); err != nil {
+			t.Fatalf("ResetUsage: %v", err)
+		}
+		var bytesToday int64
+		if err := admin.QueryRow(ctx,
+			`SELECT usage_bytes_today FROM bucket_quotas WHERE id = $1`,
+			bucketQuota).Scan(&bytesToday); err != nil {
+			t.Fatalf("read back: %v", err)
+		}
+		if bytesToday != 0 {
+			t.Errorf("bucket usage_bytes_today = %d, want 0", bytesToday)
 		}
 	})
 }

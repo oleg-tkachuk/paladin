@@ -13,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
 // ─── Test doubles ────────────────────────────────────────────────────────────
@@ -41,6 +42,7 @@ type fakeQuotaRepo struct {
 	upsertTenant int
 	upsertBucket int
 	resetCalls   int
+	bucketResets int
 	resetErr     error
 	// byID is what GetByID returns; byIDErr overrides it. byIDCtx and
 	// resetCtx keep the contexts each call ran under.
@@ -62,6 +64,10 @@ func (f *fakeQuotaRepo) IncrementUsage(context.Context, uuid.UUID, int64, int64)
 func (f *fakeQuotaRepo) ResetDaily(ctx context.Context, _ uuid.UUID, _ time.Time) error {
 	f.resetCalls++
 	f.resetCtx = ctx
+	return f.resetErr
+}
+func (f *fakeQuotaRepo) ResetBucketDaily(context.Context, uuid.UUID, time.Time) error {
+	f.bucketResets++
 	return f.resetErr
 }
 func (f *fakeQuotaRepo) GetByID(ctx context.Context, _ uuid.UUID) (admindomain.Quota, error) {
@@ -255,6 +261,52 @@ func TestSetQuota_CedarDenied(t *testing.T) {
 	}
 }
 
+// recordingEvents keeps the tenant each event was fanned out to.
+type recordingEvents struct{ tenants []string }
+
+func (r *recordingEvents) Dispatch(_ context.Context, tenantID string, _ worker.Event) (int, error) {
+	r.tenants = append(r.tenants, tenantID)
+	return 1, nil
+}
+
+func (r *recordingEvents) DispatchTx(_ context.Context, _ pgx.Tx, tenantID string, _ worker.Event) (int, error) {
+	r.tenants = append(r.tenants, tenantID)
+	return 1, nil
+}
+
+// A bucket quota's paladin.quota.set goes to the tenant owning the bucket.
+func TestSetQuota_BucketScopeNotifiesTheBucketOwner(t *testing.T) {
+	owner := uuid.New()
+	repo := &fakeQuotaRepo{bucketQuota: admindomain.Quota{
+		BackendID: "primary", BucketName: "dedicated", OwnerTenantID: owner,
+	}}
+	events := &recordingEvents{}
+	h := NewHandler(repo, allowAuthorizer{})
+	h.SetEventProducer(events)
+	if _, err := h.SetQuota(ctxAs(uuid.New(), apiutil.RolePlatformAdmin),
+		admindomain.Quota{BackendID: "primary", BucketName: "dedicated"}, nil); err != nil {
+		t.Fatalf("SetQuota: %v", err)
+	}
+	if len(events.tenants) != 1 || events.tenants[0] != owner.String() {
+		t.Errorf("events went to %v, want [%s]", events.tenants, owner)
+	}
+}
+
+// A shared bucket has no owner, so its quota change notifies nobody.
+func TestSetQuota_SharedBucketNotifiesNobody(t *testing.T) {
+	repo := &fakeQuotaRepo{bucketQuota: admindomain.Quota{BackendID: "primary", BucketName: "shared"}}
+	events := &recordingEvents{}
+	h := NewHandler(repo, allowAuthorizer{})
+	h.SetEventProducer(events)
+	if _, err := h.SetQuota(ctxAs(uuid.New(), apiutil.RolePlatformAdmin),
+		admindomain.Quota{BackendID: "primary", BucketName: "shared"}, nil); err != nil {
+		t.Fatalf("SetQuota: %v", err)
+	}
+	if len(events.tenants) != 0 {
+		t.Errorf("events went to %v, want none", events.tenants)
+	}
+}
+
 // ─── ResetUsage ──────────────────────────────────────────────────────────────
 
 func TestResetUsage_RequiresPlatformAdmin(t *testing.T) {
@@ -350,17 +402,22 @@ func TestResetUsage_ResetMissingRowIsNotFound(t *testing.T) {
 	}
 }
 
-func TestResetUsage_BucketScopedQuotaIsRefused(t *testing.T) {
+// A bucket quota resets through the bucket table, and Cedar sees the bucket.
+func TestResetUsage_BucketScopedQuotaResetsTheBucketRow(t *testing.T) {
 	repo := &fakeQuotaRepo{byID: admindomain.Quota{
 		QuotaID: uuid.New(), BackendID: "primary", BucketName: "shared",
 	}}
-	h := NewHandler(repo, allowAuthorizer{})
-	err := h.ResetUsage(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), repo.byID.QuotaID)
-	if codeOf(err) != connect.CodeFailedPrecondition {
-		t.Fatalf("code = %v, want FailedPrecondition", codeOf(err))
+	authz := &recordingAuthorizer{decision: cedar.DecisionAllow}
+	h := NewHandler(repo, authz)
+	if err := h.ResetUsage(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), repo.byID.QuotaID); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if repo.resetCalls != 0 {
-		t.Errorf("ResetDaily calls = %d, want 0", repo.resetCalls)
+	if repo.bucketResets != 1 || repo.resetCalls != 0 {
+		t.Errorf("bucket resets = %d, tenant resets = %d; want 1 and 0",
+			repo.bucketResets, repo.resetCalls)
+	}
+	if authz.resource == nil || authz.resource.BucketName != "shared" || authz.resource.BackendID != "primary" {
+		t.Errorf("Cedar resource = %+v, want backend primary, bucket shared", authz.resource)
 	}
 }
 

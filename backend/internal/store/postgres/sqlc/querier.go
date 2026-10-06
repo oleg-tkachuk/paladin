@@ -219,8 +219,8 @@ type Querier interface {
 	FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
 	GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error)
 	GetBucket(ctx context.Context, name string, name_2 string) (GetBucketRow, error)
-	// LEFT JOIN: a tenant-scoped quota has no bucket, and must still come back.
-	GetBucketQuota(ctx context.Context, name string, name_2 string) (GetBucketQuotaRow, error)
+	GetBucketQuota(ctx context.Context, backend string, bucket string) (GetBucketQuotaRow, error)
+	GetBucketQuotaByID(ctx context.Context, id pgtype.UUID) (GetBucketQuotaByIDRow, error)
 	// v2 bucket queries — full surface for admin/v1.BucketService.
 	GetBucketV2(ctx context.Context, name string, name_2 string) (GetBucketV2Row, error)
 	GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (GetCapabilityUsageRow, error)
@@ -257,9 +257,9 @@ type Querier interface {
 	// used to issue 1000 sequential SELECTs before any state mutation).
 	GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, column2 []pgtype.UUID) ([]GetObjectsByIDsRow, error)
 	GetOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
-	// Either scope. Under RLS the caller sees its own tenant's rows; a platform
-	// admin's cross-tenant read sees every row.
-	GetQuotaByID(ctx context.Context, id pgtype.UUID) (GetQuotaByIDRow, error)
+	// Tenant scope only. Under RLS the caller sees its own tenant's row; a
+	// platform admin's cross-tenant read sees every row.
+	GetQuotaByID(ctx context.Context, id pgtype.UUID) (Quota, error)
 	GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshToken, error)
 	GetReplicationWatermark(ctx context.Context, name string, name_2 string) (pgtype.Timestamptz, error)
 	GetStorageBackendV2(ctx context.Context, name string) (GetStorageBackendV2Row, error)
@@ -270,8 +270,7 @@ type Querier interface {
 	GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (GetTenantBudgetRow, error)
 	GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error)
 	GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (GetTenantDefaultBindingRow, error)
-	// LEFT JOIN: a tenant-scoped quota has no bucket, and must still come back.
-	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (GetTenantQuotaRow, error)
+	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (Quota, error)
 	// The successor a rotation of $1 minted and nobody has presented yet: what a
 	// client that lost the rotation response never received. A revoked successor
 	// (its family killed) is not offered.
@@ -303,7 +302,13 @@ type Querier interface {
 	// Unconditional physical delete. Used by PurgeTenant.
 	// expected_version=0 → no OCC guard; non-zero → strict match.
 	HardDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
-	// Atomic add. tenant_id-scoped quota when bucket fields are NULL.
+	// Charges the quota of the bucket an object's collection is bound to — the
+	// same object→collection→bucket hop the reconciler sums over — with the
+	// day-roll of IncrementQuotaUsage. Updates nothing when the bucket has no
+	// quota: quotas are opt-in. The lookup runs under the caller's RLS session,
+	// which sees its own object and collection.
+	IncrementBucketQuotaUsageForObject(ctx context.Context, iD pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error
+	// Atomic add.
 	// The first charge of a UTC day restarts the per-day counters and stamps the
 	// day. The daily roll skips rows with nothing to clear, so an idle row keeps
 	// an older stamp, and the roll's next tick would otherwise zero what this day
@@ -644,6 +649,7 @@ type Querier interface {
 	// worker so a crash between the storage call and this update cannot lose the
 	// count.
 	ReschedulePendingPurge(ctx context.Context, iD pgtype.UUID, lastError *string, column3 pgtype.Interval) error
+	ResetBucketQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) (int64, error)
 	// Rows, not exec: under RLS a row outside the session's tenant is filtered
 	// out rather than refused, so zero rows is the only sign the reset missed.
 	ResetQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) (int64, error)
@@ -858,7 +864,8 @@ type Querier interface {
 	UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)
 	UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) error
-	// Same OCC contract as UpsertTenantQuota.
+	// Same OCC contract as UpsertTenantQuota. bucket_quotas has no RLS
+	// (044_bucket_quotas.sql): the handler's role and Cedar checks gate the write.
 	UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64, expectedVersion int64) (int64, error)
 	// Monotonic upsert: never moves the watermark backwards. Concurrent
 	// replicas may try to advance with stale values; the GREATEST() guard
