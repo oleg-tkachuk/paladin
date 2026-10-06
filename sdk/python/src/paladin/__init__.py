@@ -6,7 +6,7 @@ client for every service of each plane; ``paladin.client`` holds what every
 call needs, and ``paladin.auth`` the tokens.
 """
 
-from paladin._retry import PRESIGN_EXPIRY_SKEW, already_stored, expired
+from paladin._retry import PRESIGN_EXPIRY_SKEW, already_stored, expired, presign_expiry
 from paladin.auth import (
     AUDIENCE_ADMIN,
     AUDIENCE_DATA,
@@ -239,6 +239,7 @@ __all__ = [
     "no_idempotency_key",
     "pages",
     "parse_retry_after",
+    "presign_expiry",
     "reason",
     "sdk_version",
     "sign_webhook",
