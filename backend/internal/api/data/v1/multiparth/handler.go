@@ -183,6 +183,9 @@ type Repository interface {
 	// LookupBucketMeta is LookupBucket plus the bucket's upload constraints,
 	// for the paths that admit an upload or mint its URLs.
 	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error)
+	// Object reads the object a completed upload produced, to answer
+	// CompleteMultipartUpload with it as CompleteObject answers with its own.
+	Object(ctx context.Context, tenantID, objectID uuid.UUID) (objecth.Object, error)
 }
 
 // VersionRecorder is the optional hook that records a versions-row when the
@@ -306,47 +309,51 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	return &session, nil
 }
 
-func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs) error {
+// CompleteMultipartUpload assembles the parts and promotes the object, and
+// returns it as stored. A read of it that fails after the completion
+// succeeded returns a zero Object rather than an error: the upload is done,
+// and a caller told otherwise would retry a session that no longer exists.
+func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs) (objecth.Object, error) {
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
-		return err
+		return objecth.Object{}, err
 	}
 	args.TenantID = tenantID
 
 	sess, err := h.repo.GetSession(ctx, args.UploadID)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err)
+		return objecth.Object{}, connect.NewError(connect.CodeNotFound, err)
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
-		return err
+		return objecth.Object{}, err
 	}
 	// The session anchored its (backend, bucket) at initiate time; pass it to
 	// authz so a bucket:/collection:-scoped PAT enforces on complete.
 	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionPutObject, 0, ""); err != nil {
-		return err
+		return objecth.Object{}, err
 	}
 	backendID, bucket := sess.BackendID, sess.Bucket
 	if bucket == "" {
 		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.Collection, true) // multipart complete (mutation)
 		if err != nil {
-			return objecth.MapResolveErr(err)
+			return objecth.Object{}, objecth.MapResolveErr(err)
 		}
 	}
 	if err := sess.checkParts(args.Parts); err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return objecth.Object{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, sess.ChecksumAlgo, args.Parts)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
+		return objecth.Object{}, connect.NewError(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
 	}
 	// No sequencer from multipart completion — events will supply one later.
 	changed, err := h.sm.PromoteToAvailable(ctx, sess.ObjectID, etag, size, "", "", statemachine.SourceRPC)
 	if errors.Is(err, statemachine.ErrContentMismatch) {
-		return h.discardMismatched(ctx, sess, backendID, bucket, args.UploadID, err)
+		return objecth.Object{}, h.discardMismatched(ctx, sess, backendID, bucket, args.UploadID, err)
 	}
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return objecth.Object{}, connect.NewError(connect.CodeInternal, err)
 	}
 	if changed && h.versions != nil {
 		_ = h.versions.OnPromote(ctx, VersionedObject{
@@ -383,7 +390,13 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 		logger.FromContext(ctx).Warn("multipart session not deleted after complete",
 			zap.String("upload_id", args.UploadID), zap.Error(err))
 	}
-	return nil
+	obj, err := h.repo.Object(ctx, tenantID, sess.ObjectID)
+	if err != nil {
+		logger.FromContext(ctx).Warn("completed object not read back",
+			zap.String("upload_id", args.UploadID), zap.Error(err))
+		return objecth.Object{}, nil
+	}
+	return obj, nil
 }
 
 func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, want SessionRef) error {
