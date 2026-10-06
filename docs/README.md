@@ -71,6 +71,10 @@ Numbered, immutable once accepted, superseded rather than edited. See
 
 For when something is already on fire.
 
+- [api-high-error-rate.md](runbooks/api-high-error-rate.md) — Connect RPCs
+  failing with server-fault codes.
+- [api-high-latency.md](runbooks/api-high-latency.md) — Connect RPC latency
+  above the alert's quantile threshold.
 - [worker-stalled.md](runbooks/worker-stalled.md) — background worker
   stalled or failing.
 - [uploads-not-settling.md](runbooks/uploads-not-settling.md) — uploads
