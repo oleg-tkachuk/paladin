@@ -249,7 +249,7 @@ type EventSubscription struct {
 	SubscriptionID  uuid.UUID
 	TenantID        uuid.UUID
 	CELFilter       string
-	SinkKind        string // "http" | "kafka" | "sqs"
+	SinkKind        string // "http" | "nats" | "kafka" | "sqs" | "rabbitmq"
 	SinkConfig      []byte // JSONB; shape varies by kind
 	Disabled        bool
 	ResourceVersion int64
