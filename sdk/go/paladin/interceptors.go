@@ -21,8 +21,12 @@ type idempotencyChoice struct {
 	none bool
 }
 
-// WithIdempotencyKey attaches key to every call made with the returned
-// context. Reuse the same key when repeating the same logical operation.
+// WithIdempotencyKey attaches key to the calls made with the returned context
+// that the contract does not declare free of side effects or idempotent —
+// those never carry a key. Reuse the same key when repeating the same logical
+// operation; the server refuses one key reused for a different request to the
+// same method. Upload, Download and their Many forms keep the key for the
+// calls that create or complete an object and give every other call its own.
 //
 // Without one, a call the contract does not declare free of side effects or
 // idempotent gets a fresh key of its own — or the request's idempotency_key
@@ -53,6 +57,27 @@ func IdempotencyKey(ctx context.Context) (string, bool) {
 func withoutKey(ctx context.Context) bool {
 	choice, _ := ctx.Value(idempotencyKeyCtx{}).(idempotencyChoice)
 	return choice.none
+}
+
+// ownKeys returns ctx with any WithIdempotencyKey or WithoutIdempotencyKey
+// lifted, so each call made with it gets the default: a fresh key of its own.
+// The helpers use it for calls they make more than once per operation —
+// DownloadObject on a retry after a URL expired, PresignPart per part — which
+// one shared key would make the server refuse or, before it compared
+// requests, answer with the first call's response.
+func ownKeys(ctx context.Context) context.Context {
+	return context.WithValue(ctx, idempotencyKeyCtx{}, idempotencyChoice{})
+}
+
+// itemKey returns ctx with the caller's key, if any, narrowed to one item of
+// a bulk operation: key + "/" + item. Without it every item of UploadMany
+// would share one key across different requests.
+func itemKey(ctx context.Context, item string) context.Context {
+	key, ok := IdempotencyKey(ctx)
+	if !ok {
+		return ctx
+	}
+	return WithIdempotencyKey(ctx, key+"/"+item)
 }
 
 // headerInterceptor sets the credentials on every request, and the
@@ -86,11 +111,15 @@ func idempotencyKeyFor(ctx context.Context, req connect.AnyRequest) (string, boo
 	if withoutKey(ctx) {
 		return "", false
 	}
-	if key, ok := IdempotencyKey(ctx); ok {
-		return key, true
-	}
+	// A call the contract declares free of side effects or idempotent never
+	// carries one, not even the context's: the server does not memoise a
+	// read, and an idempotent call — RegenerateUploadUrl — must run again
+	// when repeated rather than hand back the URL it is replacing.
 	if req.Spec().IdempotencyLevel != connect.IdempotencyUnknown {
 		return "", false
+	}
+	if key, ok := IdempotencyKey(ctx); ok {
+		return key, true
 	}
 	if body, ok := req.Any().(bodyIdempotencyKey); ok && body.GetIdempotencyKey() != "" {
 		return body.GetIdempotencyKey(), true

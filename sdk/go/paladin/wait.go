@@ -46,8 +46,14 @@ func (e *OperationError) Code() connect.Code { return connect.Code(e.Status.GetC
 //
 //	op, err := paladin.Wait(ctx, func(ctx context.Context) (*datav1.Operation, error) {
 //		r, err := p.Data.Operation.GetOperation(ctx, connect.NewRequest(&datav1.GetOperationRequest{Name: name}))
-//		return r.Msg, err
+//		if err != nil {
+//			return nil, err
+//		}
+//		return r.Msg, nil
 //	})
+//
+// get must not read a response when the call failed: a Connect client returns
+// a nil response with its error. ExampleWait is the same, compiled.
 func Wait[Op Operation](ctx context.Context, get func(context.Context) (Op, error)) (Op, error) {
 	return waitWith(ctx, get, DefaultPollInterval, DefaultMaxPollInterval)
 }

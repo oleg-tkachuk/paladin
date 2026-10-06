@@ -204,6 +204,15 @@ type Server struct {
 	// issued, by token.
 	strictAuth  bool
 	credentials map[string]*credential
+	// replays are the responses memoised per procedure and idempotency key,
+	// with the fingerprint of the request each answered — as the server keeps.
+	replays map[string]replay
+}
+
+// replay is one memoised call.
+type replay struct {
+	fingerprint []byte
+	response    connect.AnyResponse
 }
 
 // StorageFault decides a storage request's answer before the fake does: a
@@ -448,6 +457,7 @@ func Start(opts ...Option) (*Server, func()) {
 		rpcFaults: map[string][]*rpcFault{},
 
 		credentials: map[string]*credential{},
+		replays:     map[string]replay{},
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -467,7 +477,7 @@ func Start(opts ...Option) (*Server, func()) {
 			if err := s.takeRPCFault(procedure, msg); err != nil {
 				return nil, err
 			}
-			return next(ctx, req)
+			return s.memoise(ctx, req, msg, next)
 		}
 	}))
 	mux := http.NewServeMux()

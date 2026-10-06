@@ -170,6 +170,23 @@ func TestIdempotencyKeyReachesTheServer(t *testing.T) {
 	}
 }
 
+// The context's key went on every call, reads included. A call the contract
+// declares free of side effects or idempotent must not carry it: the server
+// would refuse the key on the next, different request, and an idempotent
+// call must run again rather than be answered from a cache.
+func TestContextKeySkipsADeclaredRead(t *testing.T) {
+	rec := &recorder{}
+	health, _ := clients(t, serve(t, rec))
+
+	ctx := paladin.WithIdempotencyKey(context.Background(), "key-1")
+	if _, err := health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.last().Get(paladin.HeaderIdempotencyKey); got != "" {
+		t.Fatalf("%s = %q on a NO_SIDE_EFFECTS call, want none", paladin.HeaderIdempotencyKey, got)
+	}
+}
+
 func TestIdempotencyKeyEmptyIsAbsent(t *testing.T) {
 	if _, ok := paladin.IdempotencyKey(paladin.WithIdempotencyKey(context.Background(), "")); ok {
 		t.Fatal("an empty key reported as present")

@@ -11,6 +11,11 @@ dependencies = [
     # Pre-1.0: a minor may change the API the generated clients call, so the
     # range stops at the next one. CI tests the floor.
     "connect-python>=0.9.0,<0.10",
+    # The HTTP client under the generated clients, and under Transfer and the
+    # relay transports, which this package builds directly — not only through
+    # connect-python, whose own floor (0.4.1) predates what is used here.
+    # Pre-1.0: the range stops at the next minor.
+    "pyqwest>=0.11.0,<0.12",
     # Both majors: workers that share an image with protobuf-6 libraries
     # (grpcio-tools, hatchet-sdk) can install the SDK. The floor is the gencode
     # version of the protoc in grpcio-tools below, and the one

@@ -65,9 +65,16 @@ func WithTokenSource(ts TokenSource, audience string) Option {
 // it: the IAM token by refreshing, the others by exchange. Access tokens are
 // cached until TokenRefreshMargin before they expire. Safe for concurrent use.
 type Session struct {
-	auth    paladiniamv1connect.AuthServiceClient
-	now     func() time.Time
-	login   *iamv1.LoginRequest // nil when the session started from a refresh token
+	auth  paladiniamv1connect.AuthServiceClient
+	now   func() time.Time
+	login *iamv1.LoginRequest // nil when the session started from a refresh token
+	// clientOpts configure the IAM client the session signs in with.
+	clientOpts []Option
+	// mintMu serialises the calls to IAM: a refresh rotates the refresh token,
+	// so two at once would race to spend it. mu guards the state and is never
+	// held across a call, so a cached token is served while another audience's
+	// is being minted.
+	mintMu  sync.Mutex
 	mu      sync.Mutex
 	refresh string
 	cached  map[string]cachedToken
@@ -86,6 +93,14 @@ func WithSessionClock(now func() time.Time) SessionOption {
 	return func(s *Session) { s.now = now }
 }
 
+// WithSessionClientOptions configures the client the session reaches the IAM
+// plane with, as New's options configure any other: WithTLS for an IAM behind
+// mTLS, WithHTTPClient, WithRetries, WithHooks. Without it the session signs
+// in over a client with New's defaults.
+func WithSessionClientOptions(opts ...Option) SessionOption {
+	return func(s *Session) { s.clientOpts = append(s.clientOpts, opts...) }
+}
+
 // NewSession signs in at the IAM plane (iamURL) as subject. The password is
 // kept so the session can sign in again once its refresh token expires.
 func NewSession(ctx context.Context, iamURL, subject, password string, opts ...SessionOption) (*Session, error) {
@@ -94,8 +109,8 @@ func NewSession(ctx context.Context, iamURL, subject, password string, opts ...S
 		return nil, err
 	}
 	s.login = &iamv1.LoginRequest{Subject: subject, Password: password, RequestedAudience: AudienceIAM}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mintMu.Lock()
+	defer s.mintMu.Unlock()
 	if err := s.signIn(ctx); err != nil {
 		return nil, err
 	}
@@ -117,18 +132,15 @@ func SessionFromRefreshToken(iamURL, refreshToken string, opts ...SessionOption)
 }
 
 func newSession(iamURL string, opts ...SessionOption) (*Session, error) {
-	c, err := New(iamURL)
-	if err != nil {
-		return nil, err
-	}
-	s := &Session{
-		auth:   paladiniamv1connect.NewAuthServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...),
-		now:    time.Now,
-		cached: map[string]cachedToken{},
-	}
+	s := &Session{now: time.Now, cached: map[string]cachedToken{}}
 	for _, opt := range opts {
 		opt(s)
 	}
+	c, err := New(iamURL, s.clientOpts...)
+	if err != nil {
+		return nil, err
+	}
+	s.auth = paladiniamv1connect.NewAuthServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...)
 	return s, nil
 }
 
@@ -142,10 +154,14 @@ func (s *Session) RefreshToken() string {
 
 // Token returns a valid access token for audience.
 func (s *Session) Token(ctx context.Context, audience string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if c, ok := s.cached[audience]; ok && s.now().Add(TokenRefreshMargin).Before(c.expires) {
-		return c.token, nil
+	if token, ok := s.fresh(audience); ok {
+		return token, nil
+	}
+	s.mintMu.Lock()
+	defer s.mintMu.Unlock()
+	// Another caller may have minted it while this one waited.
+	if token, ok := s.fresh(audience); ok {
+		return token, nil
 	}
 	err := s.mint(ctx, audience)
 	if connect.CodeOf(err) == connect.CodeUnauthenticated && s.login != nil {
@@ -157,7 +173,27 @@ func (s *Session) Token(ctx context.Context, audience string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return s.cached[audience].token, nil
+	token, _ := s.fresh(audience)
+	return token, nil
+}
+
+// fresh returns the cached token for audience while it has more than
+// TokenRefreshMargin left.
+func (s *Session) fresh(audience string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.cached[audience]
+	if !ok || !s.now().Add(TokenRefreshMargin).Before(c.expires) {
+		return "", false
+	}
+	return c.token, true
+}
+
+// refreshToken reads the refresh token under mu.
+func (s *Session) refreshToken() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.refresh
 }
 
 // Invalidate drops the cached token for audience; the next Token mints one.
@@ -167,7 +203,7 @@ func (s *Session) Invalidate(audience string) {
 	delete(s.cached, audience)
 }
 
-// signIn logs in and caches the IAM token. Called with mu held.
+// signIn logs in and caches the IAM token. Called with mintMu held.
 func (s *Session) signIn(ctx context.Context) error {
 	resp, err := s.auth.Login(ctx, connect.NewRequest(s.login))
 	if err != nil {
@@ -176,11 +212,12 @@ func (s *Session) signIn(ctx context.Context) error {
 	return s.keepPair(resp.Msg.GetTokens())
 }
 
-// mint obtains an access token for audience. Called with mu held.
+// mint obtains an access token for audience. Called with mintMu held.
 func (s *Session) mint(ctx context.Context, audience string) error {
+	refresh := s.refreshToken()
 	if audience == AudienceIAM {
 		resp, err := s.auth.RefreshToken(ctx, connect.NewRequest(&iamv1.RefreshTokenRequest{
-			RefreshToken: s.refresh, RequestedAudience: AudienceIAM,
+			RefreshToken: refresh, RequestedAudience: AudienceIAM,
 		}))
 		if err != nil {
 			return fmt.Errorf("paladin: refresh: %w", err)
@@ -188,7 +225,7 @@ func (s *Session) mint(ctx context.Context, audience string) error {
 		return s.keepPair(resp.Msg.GetTokens())
 	}
 	resp, err := s.auth.ExchangeAudience(ctx, connect.NewRequest(&iamv1.ExchangeAudienceRequest{
-		RefreshToken: s.refresh, TargetAudience: audience,
+		RefreshToken: refresh, TargetAudience: audience,
 	}))
 	if err != nil {
 		return fmt.Errorf("paladin: exchange for %s: %w", audience, err)
@@ -202,12 +239,16 @@ func (s *Session) keepPair(p *iamv1.TokenPair) error {
 	if p.GetAccessToken() == "" || p.GetRefreshToken() == "" {
 		return fmt.Errorf("paladin: sign in: %w", ErrNoToken)
 	}
+	s.mu.Lock()
 	s.refresh = p.GetRefreshToken()
+	s.mu.Unlock()
 	s.keep(AudienceIAM, p.GetAccessToken(), p.GetAccessExpiresInSeconds())
 	return nil
 }
 
 func (s *Session) keep(audience, token string, expiresInSeconds int32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.cached[audience] = cachedToken{
 		token:   token,
 		expires: s.now().Add(time.Duration(expiresInSeconds) * time.Second),
@@ -226,7 +267,7 @@ type tokenAuth struct {
 func (a *tokenAuth) set(ctx context.Context, h http.Header) error {
 	token, err := a.source.Token(ctx, a.audience)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return tokenError(err)
 	}
 	if token == "" {
 		h.Del(HeaderAuthorization)
@@ -234,6 +275,27 @@ func (a *tokenAuth) set(ctx context.Context, h http.Header) error {
 	}
 	h.Set(HeaderAuthorization, bearerScheme+" "+token)
 	return nil
+}
+
+// tokenError is what a call answers when its token could not be had. Only a
+// refusal is Unauthenticated: no token at all, or IAM rejecting the
+// credential. IAM being down or slow keeps its own code — Unavailable,
+// DeadlineExceeded — so the caller can tell an outage from bad credentials and
+// retry it; a failure with no Connect code (the connection itself) is
+// Unavailable.
+func tokenError(err error) error {
+	switch code := connect.CodeOf(err); {
+	case errors.Is(err, ErrNoToken), code == connect.CodeUnauthenticated:
+		return connect.NewError(connect.CodeUnauthenticated, err)
+	case errors.Is(err, context.Canceled):
+		return connect.NewError(connect.CodeCanceled, err)
+	case errors.Is(err, context.DeadlineExceeded):
+		return connect.NewError(connect.CodeDeadlineExceeded, err)
+	case code == connect.CodeUnknown:
+		return connect.NewError(connect.CodeUnavailable, err)
+	default:
+		return connect.NewError(code, err)
+	}
 }
 
 func (a *tokenAuth) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {

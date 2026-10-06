@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
@@ -125,7 +127,7 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 		return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("object state %s does not allow GET", state))
 	}
-	objectURI := "object://" + tenantID.String() + "/" + collection + "/" + key
+	objectURI := paladin.ObjectResource(tenantID.String(), collection, key)
 	// Presigned GET URL grants OpGet on the underlying object; gate
 	// on both OpPresign (the act of issuing a URL) and OpGet (the op
 	// the URL ultimately authorises).
@@ -227,7 +229,7 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 		return UploadURL{}, connect.NewError(connect.CodeFailedPrecondition,
 			errors.New("object was registered without a size and checksum; start a new upload"))
 	}
-	objectURI := "object://" + tenantID.String() + "/" + collection + "/" + key
+	objectURI := paladin.ObjectResource(tenantID.String(), collection, key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
 		return UploadURL{}, err
 	}

@@ -43,6 +43,26 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — SDK idempotency keys, errors and names
+
+- **A context or block idempotency key no longer goes on calls the contract
+  declares side-effect free or idempotent**, and the helpers give their
+  repeated calls (DownloadObject on a retry, PresignPart per part) keys of
+  their own; `UploadMany` / `upload_many` narrow the key to `key/<n>` per
+  input. Code that relied on one key reaching every call made with it now
+  sees it only on the mutating ones.
+- **Python raises `PaladinError` for every failed call**: a code with no kind
+  of its own (`UNAVAILABLE`, `INTERNAL`) was a bare `ConnectError`. An
+  `isinstance(err, PaladinError)` used to tell the two apart is now always
+  true; `InvalidArgumentError` (Go: `ErrInvalidArgument`) is new.
+- **Python name constructors check their parts** as `.parse` does:
+  `CollectionName("acme", "docs")` raises `InvalidNameError` (the tenant must
+  be its id) instead of building a name the server refuses.
+- Sessions take client options (`WithSessionClientOptions`; Python
+  `transport=`, `tls=`, `**client_options`), serve a cached token while
+  another is minted, and the Go SDK reports an IAM outage as `Unavailable`
+  rather than `Unauthenticated`.
+
 ## Unreleased — a reused `Idempotency-Key` with a different request is refused
 
 - **The same `Idempotency-Key` sent with a different request to the same
@@ -51,6 +71,8 @@ tree with itself and passes without checking anything.
   inside their download and multipart helpers — got one object's download URL
   under every name. Use one key per request; a retry of the same request
   still replays.
+||||||| parent of 4f8da27e (docs: record the SDK changes consumers can observe, and the gaps left open)
+
 
 ## Unreleased — `housekeeping.pending_ttl` and `delete_orphaned_parts` are removed
 

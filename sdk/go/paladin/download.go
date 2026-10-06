@@ -169,7 +169,7 @@ func Download(ctx context.Context, data *DataPlane, name string, opts DownloadOp
 	// Bound to the object's ETag: the URL serves only the bytes this
 	// response describes, so a range read — which the checksum cannot
 	// verify — never splices in a different object written at the key.
-	resp, err := data.Object.DownloadObject(ctx, connect.NewRequest(&datav1.DownloadObjectRequest{Name: name, RequireEtagMatch: true}))
+	resp, err := data.Object.DownloadObject(ownKeys(ctx), connect.NewRequest(&datav1.DownloadObjectRequest{Name: name, RequireEtagMatch: true}))
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +184,7 @@ func Download(ctx context.Context, data *DataPlane, name string, opts DownloadOp
 	// A retry asks for a fresh URL; it is bound to the object's ETag as it is
 	// then, so an object replaced in between is reported, not read.
 	presign := func(ctx context.Context) (*commonv1.PresignedUrl, error) {
-		again, err := data.Object.DownloadObject(ctx, connect.NewRequest(&datav1.DownloadObjectRequest{Name: name, RequireEtagMatch: true}))
+		again, err := data.Object.DownloadObject(ownKeys(ctx), connect.NewRequest(&datav1.DownloadObjectRequest{Name: name, RequireEtagMatch: true}))
 		if err != nil {
 			return nil, err
 		}
