@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"go.uber.org/zap"
@@ -78,7 +79,7 @@ auth:
   signing_key: "dev-secret-change-me-32-bytes-min"
 storage:
   backends:
-    primary: {}
+    primary: { auth: { mode: default_chain } }
 `)
 	if err := os.WriteFile(path, body, 0o600); err != nil {
 		t.Fatalf("write: %v", err)
@@ -94,15 +95,42 @@ storage:
 	if cfg.API.Server.Data.Addr == cfg.Admin.Server.Addr {
 		t.Errorf("data and admin defaulted to the same addr: %q", cfg.API.Server.Data.Addr)
 	}
-	// Storage backend disjunctions must default — no static-keys credentials
-	// supplied, so default_chain is the only auth.mode that won't be rejected
-	// by Validate().
+	// Storage backend disjunctions default, except auth.mode, which the
+	// config has to name (TestLoad_BackendWithoutAuthModeIsRefused).
 	be := cfg.Storage.Backends["primary"]
 	if be.Kind == "" {
 		t.Error("storage.backends[primary].kind not defaulted")
 	}
-	if be.Auth.Mode == "" {
-		t.Error("storage.backends[primary].auth.mode not defaulted")
+}
+
+// A backend that names no auth.mode used to load as default_chain: the schema
+// defaulted the field, so Validate's "auth.mode is required" never fired and
+// a backend configured without credentials quietly took whatever the AWS
+// chain found — env, the node's role, IRSA. It must fail to load instead.
+func TestLoad_BackendWithoutAuthModeIsRefused(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "no-mode.yaml")
+	body := []byte(`
+app:
+  name: paladin
+  env: local
+datastores:
+  postgres:
+    dsn: "postgres://localhost/test"
+auth:
+  signing_key: "dev-secret-change-me-32-bytes-min"
+storage:
+  backends:
+    primary: {}
+`)
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	_, err := Load([]string{path}, zap.NewNop())
+	if err == nil {
+		t.Fatal("Load accepted a backend with no auth.mode")
+	}
+	if !strings.Contains(err.Error(), "storage.backends.primary.auth.mode is required") {
+		t.Errorf("error should name the backend and the missing mode, got: %v", err)
 	}
 }
 
