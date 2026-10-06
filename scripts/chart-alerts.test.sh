@@ -26,6 +26,10 @@ readonly RUNBOOKS=docs/runbooks
 readonly SELECTOR='namespace="paladin"'
 # Every rule the chart ships, all enabled by default.
 readonly RULE_COUNT=13
+# The lifecycle rules have no runbook of their own: their descriptions say
+# what to inspect. Every other rule links one.
+readonly LIFECYCLE_RULES=3
+readonly RUNBOOK_COUNT=$((RULE_COUNT - LIFECYCLE_RULES))
 
 for tool in helm yq promtool; do
     command -v "$tool" >/dev/null 2>&1 || {
@@ -75,6 +79,15 @@ PROMQL
 check "defaults: PaladinNotReady expr" "$(rule defaults PaladinNotReady .expr)" "$(cat <<'PROMQL'
 label_replace(
   kube_pod_status_ready{namespace="paladin",condition="true",pod=~"paladin-core-(admin|api|dispatcher|mcp|worker)-.+"} == 0,
+  "component", "$1", "pod", "paladin-core-(admin|api|dispatcher|mcp|worker)-.+"
+)
+PROMQL
+)"
+check "defaults: PaladinOOMKilled expr" "$(rule defaults PaladinOOMKilled .expr)" "$(cat <<'PROMQL'
+label_replace(
+  increase(kube_pod_container_status_restarts_total{namespace="paladin",container="paladin-core",pod=~"paladin-core-(admin|api|dispatcher|mcp|worker)-.+"}[15m]) > 0
+  and on (namespace, pod, container)
+  kube_pod_container_status_last_terminated_reason{namespace="paladin",container="paladin-core",reason="OOMKilled",pod=~"paladin-core-(admin|api|dispatcher|mcp|worker)-.+"} == 1,
   "component", "$1", "pod", "paladin-core-(admin|api|dispatcher|mcp|worker)-.+"
 )
 PROMQL
@@ -149,6 +162,8 @@ fi
 
 # ─── runbooks ────────────────────────────────────────────────────────────────
 
+check "defaults: rules with a runbook" \
+    "$(yq -r '[.groups[].rules[] | select(.annotations.runbook_url)] | length' "$scratch/defaults.yaml")" "$RUNBOOK_COUNT"
 base=$(yq -r '.metrics.alerts.runbookBaseUrl' "$CHART/values.yaml")
 for alert in $(yq -r '.groups[].rules[] | select(.annotations.runbook_url) | .alert' "$scratch/defaults.yaml"); do
     cases=$((cases + 1))
