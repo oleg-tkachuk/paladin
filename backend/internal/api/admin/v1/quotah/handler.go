@@ -95,7 +95,7 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 // reads the quota rows the caller was just authorised for rather than the
 // caller's own. A bucket-scoped quota carries no tenant; the context is
 // returned unchanged there and the caller's own scope applies.
-func (h *Handler) authorize(ctx context.Context, action string, q admindomain.Quota) (context.Context, error) {
+func (h *Handler) authorize(ctx context.Context, action cedar.Action, q admindomain.Quota) (context.Context, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return ctx, connect.NewError(connect.CodeUnauthenticated, err)

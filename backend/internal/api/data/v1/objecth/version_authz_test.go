@@ -99,7 +99,7 @@ func TestVersionRPCsAskCedarForTheObjectActions(t *testing.T) {
 	cases := []struct {
 		name   string
 		call   func(versionFixture) error
-		action string
+		action cedar.Action
 	}{
 		{"ListVersions", versionFixture.list, cedar.ActionGetObject},
 		{"GetVersion", versionFixture.get, cedar.ActionGetObject},

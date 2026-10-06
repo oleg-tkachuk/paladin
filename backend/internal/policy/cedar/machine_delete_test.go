@@ -23,7 +23,7 @@ const (
 // sameTenant chooses whether the object belongs to the principal's own tenant.
 // The tenant policy is EMPTY: the grant has to come from the built-in, or a
 // tenant provisioned before this existed would never get it.
-func authzDelete(t *testing.T, kind, action string, sameTenant bool) Decision {
+func authzDelete(t *testing.T, kind string, action Action, sameTenant bool) Decision {
 	t.Helper()
 	tid := uuid.New()
 	resourceTenant := tid
@@ -51,8 +51,8 @@ func authzDelete(t *testing.T, kind, action string, sameTenant bool) Decision {
 // carries none by design — so without this the delete simply never worked.
 func TestMachineDelete_AllowedInItsOwnTenant(t *testing.T) {
 	for _, kind := range []string{kindAPIKey, kindServiceAccount, kindCapability} {
-		for _, action := range []string{ActionDeleteObject, ActionRestoreObject} {
-			t.Run(kind+"/"+action, func(t *testing.T) {
+		for _, action := range []Action{ActionDeleteObject, ActionRestoreObject} {
+			t.Run(kind+"/"+action.String(), func(t *testing.T) {
 				if got := authzDelete(t, kind, action, true); got != DecisionAllow {
 					t.Fatalf("%s %s = %v, want Allow", kind, action, got)
 				}
@@ -65,8 +65,8 @@ func TestMachineDelete_AllowedInItsOwnTenant(t *testing.T) {
 // may not casually delete" is the default this permit must not erode — it widens
 // what MACHINES may do, nothing else.
 func TestMachineDelete_StillDeniedForAUser(t *testing.T) {
-	for _, action := range []string{ActionDeleteObject, ActionRestoreObject} {
-		t.Run(action, func(t *testing.T) {
+	for _, action := range []Action{ActionDeleteObject, ActionRestoreObject} {
+		t.Run(action.String(), func(t *testing.T) {
 			if got := authzDelete(t, kindUser, action, true); got != DecisionDeny {
 				t.Fatalf("user %s = %v, want Deny", action, got)
 			}
@@ -100,8 +100,8 @@ func TestMachineDelete_DeniedCrossTenant(t *testing.T) {
 // grant to "whatever a machine might want" is how a narrow permit stops being
 // narrow.
 func TestMachineDelete_DoesNotWidenToOtherMutations(t *testing.T) {
-	for _, action := range []string{ActionUpdateObject, ActionCopyObject} {
-		t.Run(action, func(t *testing.T) {
+	for _, action := range []Action{ActionUpdateObject, ActionCopyObject} {
+		t.Run(action.String(), func(t *testing.T) {
 			if got := authzDelete(t, kindCapability, action, true); got != DecisionDeny {
 				t.Fatalf("capability %s = %v, want Deny", action, got)
 			}

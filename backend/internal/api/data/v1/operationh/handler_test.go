@@ -74,7 +74,7 @@ func (f *fakeRepo) ClaimNext(context.Context) (Operation, error) {
 // authzCall captures what the handler forwarded to the Cedar authorizer so
 // tests can assert the action name and the resource tenant that gate each RPC.
 type authzCall struct {
-	action    string
+	action    cedar.Action
 	principal cedar.Principal
 	resource  cedar.Resource
 }
@@ -87,7 +87,7 @@ type recordingAuthorizer struct {
 	calls    []authzCall
 }
 
-func (a *recordingAuthorizer) IsAuthorized(_ context.Context, p *cedar.Principal, action string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (a *recordingAuthorizer) IsAuthorized(_ context.Context, p *cedar.Principal, action cedar.Action, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	a.calls = append(a.calls, authzCall{action: action, principal: *p, resource: *r})
 	return a.decision, a.err
 }

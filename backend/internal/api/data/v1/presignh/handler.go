@@ -280,7 +280,7 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 // fail-closed on the write/read path. Empty backendID/bucket (binding not
 // resolvable) leaves the resource without those scope keys, which only ever
 // denies a scoped principal — unscoped/roles-only callers are unaffected.
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, key, backendID, bucket, action string) error {
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, key, backendID, bucket string, action cedar.Action) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
 		action,

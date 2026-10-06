@@ -22,10 +22,10 @@ import (
 // recordingAuthorizer captures the last Resource/action handed to the engine.
 type recordingAuthorizer struct {
 	lastResource *cedar.Resource
-	lastAction   string
+	lastAction   cedar.Action
 }
 
-func (a *recordingAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, action string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (a *recordingAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, action cedar.Action, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	a.lastAction = action
 	// Copy: the handler may reuse/mutate the pointer after the call returns.
 	cp := *r

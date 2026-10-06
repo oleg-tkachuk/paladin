@@ -48,13 +48,6 @@ const (
 	roleTenantAdmin   = "tenant.admin"
 )
 
-// Cedar action names — must match policies/schema.cedarschema. Centralised
-// here so handler call-sites can't typo them silently.
-const (
-	actionManageBackend = "ManageBackend"
-	actionReadBackend   = "ReadBackend"
-)
-
 // BackendProber runs a read-only reachability + auth probe against a backend's
 // storage endpoint (a ListBuckets). Implemented in the app layer: config
 // backends use their pre-built client; a dynamic backend is resolved from its
@@ -131,7 +124,7 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, eventType, res
 
 // authorize runs Cedar against the StorageBackend resource (`r.BackendID` is
 // the natural key — backends are tenant-agnostic infra).
-func (h *Handler) authorize(ctx context.Context, action, backendID string) error {
+func (h *Handler) authorize(ctx context.Context, action cedar.Action, backendID string) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)
@@ -158,7 +151,7 @@ func (h *Handler) CreateBackend(ctx context.Context, b admindomain.StorageBacken
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, actionManageBackend, b.BackendID); err != nil {
+	if err := h.authorize(ctx, cedar.ActionManageBackend, b.BackendID); err != nil {
 		return nil, err
 	}
 	if b.BackendID == "" {
@@ -199,7 +192,7 @@ func (h *Handler) GetBackend(ctx context.Context, backendID string) (*admindomai
 	if err := requireAnyRole(ctx, rolePlatformAdmin, roleBucketAdmin, roleTenantAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, actionReadBackend, backendID); err != nil {
+	if err := h.authorize(ctx, cedar.ActionReadBackend, backendID); err != nil {
 		return nil, err
 	}
 	b, err := h.repo.Get(ctx, backendID)
@@ -282,7 +275,7 @@ func (h *Handler) UpdateBackend(ctx context.Context, b admindomain.StorageBacken
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, actionManageBackend, b.BackendID); err != nil {
+	if err := h.authorize(ctx, cedar.ActionManageBackend, b.BackendID); err != nil {
 		return nil, err
 	}
 	if err := h.repo.Update(ctx, b, expectedVersion, mask); err != nil {
@@ -309,7 +302,7 @@ func (h *Handler) SetBackendEnabled(ctx context.Context, backendID string, enabl
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, actionManageBackend, backendID); err != nil {
+	if err := h.authorize(ctx, cedar.ActionManageBackend, backendID); err != nil {
 		return nil, err
 	}
 	// No default-backend guard: there is no default backend to protect. An
@@ -337,7 +330,7 @@ func (h *Handler) SetBackendReadOnly(ctx context.Context, backendID string, read
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, actionManageBackend, backendID); err != nil {
+	if err := h.authorize(ctx, cedar.ActionManageBackend, backendID); err != nil {
 		return nil, err
 	}
 	if err := h.repo.SetReadOnly(ctx, backendID, readOnly, expectedVersion); err != nil {
@@ -360,7 +353,7 @@ func (h *Handler) SetBackendMaintenance(ctx context.Context, backendID string, m
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, actionManageBackend, backendID); err != nil {
+	if err := h.authorize(ctx, cedar.ActionManageBackend, backendID); err != nil {
 		return nil, err
 	}
 	if err := h.repo.SetMaintenance(ctx, backendID, maintenance, expectedVersion); err != nil {
@@ -419,7 +412,7 @@ func (h *Handler) DeleteBackend(ctx context.Context, backendID string, expectedV
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return err
 	}
-	if err := h.authorize(ctx, actionManageBackend, backendID); err != nil {
+	if err := h.authorize(ctx, cedar.ActionManageBackend, backendID); err != nil {
 		return err
 	}
 	if err := h.repo.Delete(ctx, backendID, expectedVersion); err != nil {
@@ -441,7 +434,7 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, actionReadBackend, backendID); err != nil {
+	if err := h.authorize(ctx, cedar.ActionReadBackend, backendID); err != nil {
 		return nil, err
 	}
 	// Existence first — a probe against an unknown backend id is a 404, not

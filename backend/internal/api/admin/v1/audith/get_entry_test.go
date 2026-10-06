@@ -28,7 +28,7 @@ import (
 // tenant is necessary but not sufficient.
 type denyAuthorizer struct{}
 
-func (denyAuthorizer) IsAuthorized(context.Context, *cedar.Principal, string, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
+func (denyAuthorizer) IsAuthorized(context.Context, *cedar.Principal, cedar.Action, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
 	return cedar.DecisionDeny, nil
 }
 

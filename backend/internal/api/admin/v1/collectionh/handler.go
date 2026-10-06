@@ -599,7 +599,7 @@ func splitBucketResourceName(name string) (backend, bucket string, err error) {
 // them would require the pre-authz row read we deliberately avoid. Create /
 // BindCollectionToBucket carry the binding in the request and use authorizeFull,
 // so they get the canonical EUID when the flag is on.
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, action string) error {
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection string, action cedar.Action) error {
 	return h.authorizeFull(ctx, p, tenantID, collection, "", "", action)
 }
 
@@ -611,7 +611,7 @@ func (h *Handler) authorizeFull(
 	ctx context.Context,
 	p *auth.Principal,
 	tenantID uuid.UUID,
-	collection, backendID, bucketName, action string,
+	collection, backendID, bucketName string, action cedar.Action,
 ) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipalFor(p, tenantID),

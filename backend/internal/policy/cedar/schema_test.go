@@ -1,12 +1,7 @@
 package cedar
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"slices"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -24,12 +19,6 @@ import (
 // ManageObjectKey and an ObjectKey entity, and a policy written from it
 // matched nothing. These tests hold it to what the engine actually emits.
 
-// engineSource is the file whose Action* constants are the engine's actions.
-const engineSource = "engine.go"
-
-// actionConstPrefix marks an action constant in engineSource.
-const actionConstPrefix = "Action"
-
 // tagValuesAttr is the one attribute the schema cannot declare: a Record whose
 // keys are the object's tag names. Cedar records are closed, so the schema
 // documents it in a comment and entity validation skips it.
@@ -44,45 +33,21 @@ func loadSchema(t *testing.T) *resolved.Schema {
 	return r
 }
 
-// engineActions reads the Action* string constants from engineSource.
-func engineActions(t *testing.T) []string {
-	t.Helper()
-	f, err := parser.ParseFile(token.NewFileSet(), engineSource, nil, 0)
-	if err != nil {
-		t.Fatalf("parse %s: %v", engineSource, err)
-	}
+// engineActions is every action the engine can be asked about. Action has no
+// exported constructor, so this is the complete set a caller can pass.
+func engineActions() []string {
 	var out []string
-	for _, decl := range f.Decls {
-		gd, ok := decl.(*ast.GenDecl)
-		if !ok || gd.Tok != token.CONST {
-			continue
-		}
-		for _, spec := range gd.Specs {
-			vs := spec.(*ast.ValueSpec)
-			for i, name := range vs.Names {
-				if !strings.HasPrefix(name.Name, actionConstPrefix) || i >= len(vs.Values) {
-					continue
-				}
-				lit, ok := vs.Values[i].(*ast.BasicLit)
-				if !ok || lit.Kind != token.STRING {
-					continue
-				}
-				v, err := strconv.Unquote(lit.Value)
-				if err != nil {
-					t.Fatalf("%s: %v", name.Name, err)
-				}
-				out = append(out, v)
-			}
-		}
+	for _, a := range Actions() {
+		out = append(out, a.String())
 	}
 	return out
 }
 
 func TestSchemaDeclaresExactlyTheEngineActions(t *testing.T) {
 	s := loadSchema(t)
-	engine := engineActions(t)
+	engine := engineActions()
 	if len(engine) == 0 {
-		t.Fatalf("found no %s* constants in %s", actionConstPrefix, engineSource)
+		t.Fatal("the engine declares no actions")
 	}
 
 	var declared []string

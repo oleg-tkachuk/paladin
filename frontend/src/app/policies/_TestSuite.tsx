@@ -87,6 +87,11 @@ interface CaseResult {
 
 const STORAGE_PREFIX = "paladin:policies:testSuite";
 
+// DEFAULT_ACTION seeds a new case. It has to be an action the Cedar schema
+// declares (backend/policies/schema.cedarschema): the server refuses any other
+// name, so a seed that drifts from the schema makes every fresh case fail.
+export const DEFAULT_ACTION = "GetObject";
+
 function newId(): string {
   return `tc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -98,7 +103,7 @@ function defaultCase(seed?: TestCase, defaultResource?: string): TestCase {
     principalSubject: seed?.principalSubject ?? "",
     principalTenantId: seed?.principalTenantId ?? "",
     rolesText: seed?.rolesText ?? "platform.admin",
-    action: seed?.action ?? "ReadObject",
+    action: seed?.action ?? DEFAULT_ACTION,
     resourceName: seed?.resourceName ?? defaultResource ?? "",
     expected: seed?.expected ?? "any",
   };
@@ -485,7 +490,7 @@ function CaseRow({
               <Input
                 value={tc.action}
                 onChange={(e) => onUpdate({ action: e.target.value })}
-                placeholder="ReadObject"
+                placeholder={DEFAULT_ACTION}
                 className="font-mono text-xs"
               />
             </Field>

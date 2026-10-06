@@ -33,7 +33,7 @@ type AuditWriter interface {
 // (ActionAuthorizeOAuth). Optional — a nil Authorizer skips the policy check
 // (scope-subset + authentication still apply), so the AS runs standalone.
 type Authorizer interface {
-	IsAuthorized(ctx context.Context, p *cedar.Principal, action string, r *cedar.Resource, rc cedar.RequestContext) (cedar.Decision, error)
+	IsAuthorized(ctx context.Context, p *cedar.Principal, action cedar.Action, r *cedar.Resource, rc cedar.RequestContext) (cedar.Decision, error)
 }
 
 // UserResolver is the slice of the IAM user store the AS needs: look a user up

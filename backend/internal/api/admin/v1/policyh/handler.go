@@ -152,7 +152,14 @@ func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*Si
 		Kind:     in.PrincipalKind,
 		Roles:    in.PrincipalRoles,
 	}
-	decision, err := h.engine.IsAuthorized(ctx, princ, in.Action, res, cedar.RequestContext{Now: time.Now()})
+	// The action comes from the request, so it is resolved against the declared
+	// set: an unknown name is a malformed question, not a "no" — answering Deny
+	// would tell the caller its policy refuses something no policy can name.
+	action, ok := cedar.LookupAction(in.Action)
+	if !ok {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("action %q is not declared in the schema", in.Action))
+	}
+	decision, err := h.engine.IsAuthorized(ctx, princ, action, res, cedar.RequestContext{Now: time.Now()})
 	if err != nil {
 		return nil, fmt.Errorf("authz: %w", err)
 	}
