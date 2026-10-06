@@ -1,6 +1,6 @@
 # ADR-0023: One metrics contract from process to alert
 
-- **Status:** Proposed 2026-10-06.
+- **Status:** Accepted 2026-10-06; implemented from paladin-core 12.0.0 on.
 
 - **Context.** ADR-0001 settled what Paladin measures: otelconnect's RPC
   histogram, otelpgx, and the `paladin_*` instruments. That layer works. What

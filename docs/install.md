@@ -207,6 +207,33 @@ is on. Or leave `ingress.enabled` off and point your own ingress or gateway at
 the `paladin-core-api` Service: port 8085 for `/paladin.iam.v1.*`, 8080 for the
 rest.
 
+## Metrics and alerts
+
+Metrics need `config.otel.enabled: true`; how they leave the pods is one
+value, `metrics.mode` ([ADR-0023](adr/0023-one-metrics-contract.md)):
+
+| `metrics.mode` | What the chart renders |
+|---|---|
+| `push` (default) | OTLP to `config.otel.endpoint`, beside the traces |
+| `scrape` | `/metrics` on `metrics.port` (9095) in every role but mcp, plain HTTP, with the container port, the NetworkPolicy rule for `networkPolicies.monitoring.namespace`, and the discovery below |
+| `off` | traces only |
+
+With `scrape`, `metrics.discovery` says how the scraper finds the pods:
+`podMonitor` (default) renders a PodMonitor for Prometheus Operator, labelled
+with `metrics.podMonitor.labels` for its selector; `annotations` renders
+`prometheus.io/scrape`, `port` and `path` on each scraped role, for Alloy,
+vmagent or a `kubernetes_sd` job. Do not set `config.otel.metrics_exporter` or
+`metrics_addr`, or write `prometheus.io/*` pod annotations alongside
+`annotations` discovery: the chart renders them and refuses a second copy.
+
+`metrics.alerts.enabled: true` renders every Paladin alert into one
+PrometheusRule — lifecycle per role, Connect RPC error rate and latency, the
+outbox, rate limiting, capability charges, the read replica, uploads and
+background workers. Thresholds, windows and `for` are values under
+`metrics.alerts.rules`; `metrics.alerts.labels` carries the label your
+Prometheus selects rules by. Without Prometheus Operator, render the chart and
+load `spec.groups` of the PrometheusRule as a rule file.
+
 ## TLS between the planes
 
 Off by default: the planes speak plain HTTP inside the cluster. To turn it on,
