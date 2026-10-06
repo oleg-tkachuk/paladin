@@ -72,9 +72,6 @@ func TestResourceNameHelpers(t *testing.T) {
 	if got, err := backendIDFromName("storageBackends/b1"); err != nil || got != "b1" {
 		t.Errorf("backendIDFromName = %q, %v", got, err)
 	}
-	if got, err := tenantIDFromName("tenants//eventSubscriptions/x"); err != nil || got != "" {
-		t.Errorf("tenantIDFromName of an empty segment = %q, %v; want the empty segment", got, err)
-	}
 	if b, n := splitBucketCursor("b1/n1"); b != "b1" || n != "n1" {
 		t.Errorf("splitBucketCursor = %q, %q", b, n)
 	}

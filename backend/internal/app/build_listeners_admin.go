@@ -266,7 +266,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	mux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(mux)
 	mux.Handle(paladinadminv1connect.NewBackendServiceHandler(admin.NewBackendServer(backendH), adminOpts))
-	mux.Handle(paladinadminv1connect.NewBucketServiceHandler(admin.NewBucketServer(bucketV2H), adminOpts))
+	mux.Handle(paladinadminv1connect.NewBucketServiceHandler(admin.NewBucketServer(bucketV2H, tenantH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewTenantServiceHandler(admin.NewTenantServer(tenantH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewCollectionServiceHandler(admin.NewCollectionServer(collectionH, repos.Tenant, tenantH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewPolicyServiceHandler(admin.NewPolicyServer(policyH), adminOpts))
