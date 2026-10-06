@@ -366,18 +366,7 @@ func tenantDomainToProto(t *tenanth.Tenant) *pb.Tenant {
 // RPC that names one tenant goes through it, so a slug works wherever the
 // proto documents the name.
 func (s *TenantServer) resolveTenantID(ctx context.Context, name string) (uuid.UUID, error) {
-	ref, err := apiutil.ParseTenantNameRef(name)
-	if err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	if ref.HasID() {
-		return ref.ID, nil
-	}
-	t, err := s.H.GetTenantBySlug(ctx, ref.Slug)
-	if err != nil {
-		return uuid.Nil, err
-	}
-	return t.TenantID, nil
+	return resolveTenantName(ctx, s.H, name)
 }
 
 func (s *TenantServer) GetTenantDefaultBinding(ctx context.Context, req *connect.Request[pb.GetTenantDefaultBindingRequest]) (*connect.Response[pb.TenantDefaultBinding], error) {
