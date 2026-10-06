@@ -1,6 +1,6 @@
 {{/*
-PodMonitor — one for the release, rendered with metrics.mode: scrape
-(ADR-0023). It selects every pod of the release and scrapes the container
+PodMonitor — one for the release, rendered with metrics.mode: scrape and
+metrics.discovery: podMonitor (ADR-0023). It selects every pod of the release and scrapes the container
 port named by chart.metricsPortName, which only the roles that serve
 /metrics declare: a role without the port yields no target rather than a
 down one, and a new role is scraped by declaring it.
@@ -9,7 +9,7 @@ Requires the Prometheus Operator CRD (monitoring.coreos.com/v1). Plain HTTP:
 the metrics listener is not TLS, so the scraper needs no trust in the
 planes' internal CA.
 */}}
-{{- if include "chart.metricsScraped" . -}}
+{{- if and (include "chart.metricsScraped" .) (eq .Values.metrics.discovery "podMonitor") -}}
 {{- $pm := .Values.metrics.podMonitor -}}
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
