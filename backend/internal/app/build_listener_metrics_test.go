@@ -94,19 +94,28 @@ func TestStartMetricsListener_ServesOnlyMetrics(t *testing.T) {
 	}
 }
 
+// shutdownRaceRounds is how many start/stop pairs the Shutdown test runs. A
+// Shutdown issued before the serving goroutine starts left the socket open
+// in a few runs out of a hundred; enough rounds make that window show up in a
+// single test run instead of as an occasional CI failure.
+const shutdownRaceRounds = 200
+
 func TestStartMetricsListener_Shutdown(t *testing.T) {
-	ml, err := app.StartMetricsListener(context.Background(), pulledDeps(anyLoopbackPort), zap.NewNop())
-	if err != nil {
-		t.Fatalf("StartMetricsListener: %v", err)
-	}
-	addr := ml.Addr().String()
-	if err := ml.Shutdown(context.Background()); err != nil {
-		t.Fatalf("Shutdown: %v", err)
-	}
 	var d net.Dialer
-	if conn, err := d.DialContext(context.Background(), "tcp", addr); err == nil {
-		_ = conn.Close()
-		t.Errorf("%s still accepts connections after Shutdown", addr)
+	for range shutdownRaceRounds {
+		ml, err := app.StartMetricsListener(context.Background(), pulledDeps(anyLoopbackPort), zap.NewNop())
+		if err != nil {
+			t.Fatalf("StartMetricsListener: %v", err)
+		}
+		addr := ml.Addr().String()
+		// Immediately, as a role stopping during start-up would.
+		if err := ml.Shutdown(context.Background()); err != nil {
+			t.Fatalf("Shutdown: %v", err)
+		}
+		if conn, err := d.DialContext(context.Background(), "tcp", addr); err == nil {
+			_ = conn.Close()
+			t.Fatalf("%s still accepts connections after Shutdown", addr)
+		}
 	}
 }
 
