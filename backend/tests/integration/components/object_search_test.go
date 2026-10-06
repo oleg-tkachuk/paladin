@@ -1,6 +1,6 @@
 //go:build integration
 
-// Object search under row-level security (migrations 026–029).
+// Object search under row-level security (migrations 025–029).
 //
 // The runtime role cannot use the trigram and GIN indexes directly: `@>` and
 // LIKE are not LEAKPROOF, so RLS keeps them out of the plan. ListObjects

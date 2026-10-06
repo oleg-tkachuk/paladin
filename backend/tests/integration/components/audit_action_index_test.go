@@ -1,8 +1,8 @@
 //go:build integration
 
 // Closes the BACKLOG "AuditLog action-prefix index: planner validation" entry
-// with evidence, not assumption. Migration 040 added
-// idx_audit_log_action_at = (action text_pattern_ops, at DESC). This asserts,
+// with evidence, not assumption. `001_initial_schema.sql` creates
+// idx_audit_log_action_at = (action, at DESC). This asserts,
 // via EXPLAIN, which query shapes actually use it:
 //
 //   - PREFIX-RANGE  (action LIKE 'admin.Bucket%' AND at >= cutoff

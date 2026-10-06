@@ -1,7 +1,8 @@
 # ADR-0008: MCP server as an OAuth 2.1 Resource Server
 
-- **Status:** Accepted (RS phase implemented 2026-06-27; AS phase deferred
-  — see BACKLOG)
+- **Status:** Accepted (RS phase implemented 2026-06-27). The AS phase it
+  deferred is superseded by [ADR-0009](0009-oauth-authorization-server.md),
+  implemented 2026-06-27.
 - **Context:** The streamable-HTTP MCP server authenticated requests with a
   non-standard `X-Paladin-Token` header — a bearer the operator pasted into the
   agent host's config. Standard MCP clients (Claude Desktop, Cursor)

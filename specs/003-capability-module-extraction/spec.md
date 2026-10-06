@@ -4,7 +4,7 @@
 
 **Created**: 2026-07-23
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Extract the capability authorisation primitive (internal/capability) from the Paladin monorepo into a standalone, independently-consumable Go module. The module must be importable by third parties who do not use object storage at all, with Paladin remaining the reference implementation that consumes it."
 

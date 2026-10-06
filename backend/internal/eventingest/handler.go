@@ -195,13 +195,9 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		return nil
 
 	case EventTypeDeleted:
-		// Soft-delete via state machine. Idempotent — re-delivery
-		// hits state='DELETED' guard and is a no-op.
-		// SoftDelete signature lives next to PromoteToAvailable; the
-		// concrete name varies — we don't import it directly here so
-		// this branch logs intent for now and lets a follow-up wire
-		// the actual call. Keeps the surface compiling without
-		// stretching this commit's scope into delete-cascade design.
+		// Logged only: the row is not soft-deleted here, so the
+		// reconciler settles it once the bytes are gone (BACKLOG:
+		// storage-ingest delete events).
 		logger.Info("delete event noted; soft-delete wiring deferred",
 			zap.String("object_id", objectID.String()),
 		)

@@ -131,7 +131,7 @@ datastores: {
     // Optional separate DSN for the worker's cross-tenant background DML
     // jobs (purgers, lifecycle reapers, dispatcher outbox). Its user should
     // resolve to a dedicated least-privilege BYPASSRLS role (`paladin_reaper`,
-    // migration 058) — DML-only, no DDL. Empty → fall back to `migrate_dsn`.
+    // `002_roles_and_rls.sql`) — DML-only, no DDL. Empty → fall back to `migrate_dsn`.
     reaper_dsn:               string | *""
     reaper_password:          string | *""
     reaper_password_secret?:  #SecretRef
@@ -197,8 +197,9 @@ limits: {
 // Auth is the Paladin IAM-plane JWT issuer + verifier. The same signing_key is
 // used to mint tokens (Login / RefreshToken) and to verify them on each
 // plane interceptor; three audiences are recognised: paladin-data, paladin-admin,
-// paladin-iam. JWKSURL is reserved for federated IdP integration and unused
-// in the current release — leave it empty.
+// paladin-iam. When jwks_url is set the planes and the MCP edge verify
+// tokens against that JWKS instead; signing_key still mints and verifies the
+// bootstrap admin's tokens.
 auth: {
   issuer:               string | *"paladin"
   signing_key:          string | *""
@@ -238,7 +239,7 @@ security: {
   // Retired: never read. Accepted so existing configs load; Load warns on true.
   log_sensitive: bool | *false
   // RLS is not configurable — see types.go.Security. The runtime
-  // always installs the BeforeAcquire hook because migration 023
+  // always installs the BeforeAcquire hook because `002_roles_and_rls.sql`
   // makes RLS unavoidable at the DB layer.
 }
 

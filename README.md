@@ -194,7 +194,7 @@ planes, and what to set when ArgoCD renders the charts.
 | [sdk/go/](sdk/go) | the Go SDK |
 | [sdk/python/](sdk/python) | the Python SDK |
 | [deploy/](deploy) | Grafana dashboards and alerts |
-| [scripts/](scripts) | the repository's own contract checks, run by `verify-all` |
+| [scripts/](scripts) | the repository's own contract checks, run by `verify-all`, and the release and stack helpers |
 | [specs/](specs) | spec-driven-development artifacts, per feature |
 | [docs/](docs) | the documents above |
 

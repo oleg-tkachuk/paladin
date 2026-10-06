@@ -93,9 +93,9 @@ Two things follow from this that are easy to miss:
 - **The type drives releases.** Once CI passes on a push to `main`, it
   dispatches `.github/workflows/release.yaml`, where `semantic-release` reads
   the history and computes the next version from it. A `feat:` that should
-  have been a `fix:` publishes a minor release. `fix`, `perf` and `security`
-  publish a patch; `docs`, `ci`, `chore`, `refactor`, `test`, `build` and
-  `style` publish nothing on their own.
+  have been a `fix:` publishes a minor release. `fix`, `perf`, `revert` and
+  `security` publish a patch; `docs`, `ci`, `chore`, `refactor`, `test`,
+  `build` and `style` publish nothing on their own.
 - **One scope per commit.** A commit that touches auth and the console and
   the chart is three commits. It is what makes `git log` a usable audit
   trail for a system whose whole subject is authorisation.
@@ -150,8 +150,9 @@ correction or a small feature needs none of this.
 - Run `task -t Taskfile.dev.yaml verify-deep` before you ask for a merge. It
   needs Docker and takes about fifteen minutes, which is why it is not the
   pre-commit gate — but it is the only thing that runs the integration suites,
-  the whole-contract RPC gate, the Go admin e2e suite, the S3 conformance suite
-  and `dev-bootstrap.sh` against a stack built from your branch. Every one of those
+  the whole-contract RPC gate, the Go admin e2e suite, the S3 conformance suite,
+  `dev-bootstrap.sh` and both SDKs' conformance scenarios against a stack built
+  from your branch. Every one of those
   has silently rotted at least once while `verify-all` stayed green; a compile
   check cannot catch a suite that builds and then fails.
 - Run `task -t Taskfile.dev.yaml verify-e2e` too if you touched the console or

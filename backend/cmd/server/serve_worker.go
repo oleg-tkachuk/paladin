@@ -30,7 +30,8 @@ import (
 // lease is held by exactly one pod at a time; the loser sleeps and races to
 // claim on the winner's death (or stuck-process renew failure).
 //
-// An ops listener on cfg.Worker.Ops.Addr (defaults to :8099) exposes
+// An ops listener on cfg.Worker.Ops.Addr (schema.cue defaults it to
+// 0.0.0.0:8090) exposes
 // /healthz and /readyz so kube-proxy keeps the pod in its endpoint slice until
 // SIGTERM. We do NOT reuse the data / iam handlers here — workers don't speak
 // Connect, so the worker role composes app.BaseModule with its own fx
@@ -71,7 +72,7 @@ func runWorker(
 	// Background jobs are cross-tenant with no request principal, so they must
 	// bypass RLS — a query on the RLS runtime pool without a paladin.tenant_id GUC
 	// returns ZERO rows and every job silently no-ops. Two BYPASSRLS pools,
-	// split by privilege (migration 058):
+	// split by privilege (`002_roles_and_rls.sql`):
 	//
 	//   - PartitionPool (paladin_migrate): the ONE background job that needs DDL —
 	//     PartitionMaintainer (CREATE/ATTACH/DROP PARTITION) — runs here; the
@@ -266,7 +267,7 @@ func workerOpsMux(cfg config.Runtime, deps *app.SharedDeps, l *zap.Logger) (http
 	// Cross-tenant census of every RLS'd table (objects, quotas,
 	// capability records, API tokens, event subscriptions) for the
 	// console's /stats page. Computed HERE, not in the admin pod, because
-	// migration 023 puts those tables behind row-level security and only
+	// `002_roles_and_rls.sql` puts those tables behind row-level security and only
 	// this pod holds a BYPASSRLS pool. The admin plane's
 	// SystemService.GetPlatformStats proxies this endpoint behind its
 	// platform-admin gate; the ops listener itself stays cluster-internal,

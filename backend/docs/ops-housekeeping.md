@@ -10,8 +10,8 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 |---|---|---|---|
 | `reconciler` | promotes `PENDING` objects whose bytes arrived; fails ones whose upload URL expired | `reconciler.interval`, `.min_object_age` | `30s`, `2h` |
 | `bucket_reconciler` | creates and deletes buckets on their backend, from the outbox | `reconciler.interval` | `30s` |
-| `multipart_reaper` | aborts multipart sessions older than the TTL | `housekeeping.multipart_ttl` | `72h` |
-| `multipart_abort_drainer` | retries aborts S3 refused (`pending_multipart_aborts`) | `purge_drain.interval` | `1m` |
+| `multipart_reaper` | aborts multipart sessions older than the TTL; ticks on `housekeeping.interval` | `housekeeping.multipart_ttl` | `72h` |
+| `multipart_abort_drainer` | pays the abort debt a cascade delete recorded in `pending_multipart_aborts`; runs only while `multipart_ttl` is non-zero | `purge_drain.interval` | `1m` |
 | `purge_drainer` | deletes the bytes of permanently deleted objects (`pending_purges`) | `purge_drain.interval` | `1m` |
 | `lifecycle` | applies per-bucket CEL expiration rules | `lifecycle.enabled`, `.interval` | `true`, `30m` |
 | `lifecycle_hard_delete` | after the cooling-off window, deletes the row, then the bytes (a failure stays queued for `purge_drainer`) | `housekeeping.hard_delete_after` | `0` (off) |
@@ -24,15 +24,21 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 | `tenant_rate_bucket_sweeper` | drops elapsed per-tenant rate-limit windows | `housekeeping.interval` | `1h` |
 | `refresh_token_reaper` | deletes expired refresh tokens | `refresh_token_reap.interval` | `1h` |
 | `api_token_purger` | deletes API tokens expired for longer than the grace | `api_token.interval`, `.expired_for` | `1h`, `168h` |
-| `capability_purger` | deletes capabilities expired for longer than the grace | `capability.interval`, `.expired_for` | `1h`, `24h` |
-| `storage-migration` | runs operator-started tenant storage migrations | `operations.interval` | `5s` |
-| `stale_operation_reclaimer` | fails operations no worker has touched for `stale_after` | `operations.stale_after` | `15m` |
+| `capability_purger` | releases expired budget reservations, deletes capabilities expired for longer than the grace, and drops DPoP proof ids (`dpop_seen_jti`) past their window | `capability.interval`, `.expired_for` | `1h`, `24h` |
+| `storage-migration` | runs operator-started tenant storage migrations; always registered, idle without an active migration | none — `StorageMigrationWorker` default | `30s` |
+| `stale_operation_reclaimer` | fails operations no worker has touched for `stale_after`; ticks every `housekeeping.interval`, at most `stale_after / 3`, at least `1m` | `operations.stale_after` | `15m` (so a `5m` tick) |
 | `replication` | cross-backend replication; dry-run | `replication.enabled`, `.interval` | `false`, `5m` |
 
+The operations runner, which executes queued batch operations (`BatchDelete`,
+`BatchCopy`, `BatchUpdateTags`, `BatchRestoreObjects`), is a worker job too
+(`operations.interval`, default `5s`; `0` disables it and the reclaimer). It
+runs its own ticker, so it has no `paladin_worker_*` series.
+
 `housekeeping.interval` also paces the audit, operations and event-delivery
-purgers, and the hard-deleter: its first sweep runs one interval after the
-worker starts. A sweep with nothing past the window logs nothing; each object
-it removes logs `hard-deleted`.
+purgers, the multipart reaper and the hard-deleter. Every job's first tick
+comes one interval after the worker starts, not at startup. A hard-delete
+sweep with nothing past the window logs nothing; each object it removes logs
+`hard-deleted`.
 
 `hard_delete_after` is a retention decision, so the default stays `0`: a
 soft-deleted object keeps its bytes until someone chooses how long. Production
@@ -56,8 +62,8 @@ disk_budget = rows_per_day × bytes_per_row × ttl_days × overhead_factor
 ```
 
 `overhead_factor` accounts for indexes + WAL + bloat between vacuums.
-Empirically `1.6` works for `audit_log` (one BTREE on `at`, JSONB columns
-stay close to row size) and `1.3` for `operations` (smaller, fewer
+Empirically `1.6` works for `audit_log` (five B-tree indexes, each ending in
+`at`; JSONB columns stay close to row size) and `1.3` for `operations` (smaller, fewer
 indexes).
 
 Solve for `ttl_days`:

@@ -20,9 +20,9 @@ their parent, and children that hold their parent hostage.
 
 | Parent | `ON DELETE CASCADE` — vanishes silently | `ON DELETE RESTRICT` — blocks the delete |
 | --- | --- | --- |
-| `tenants` | `quotas`, `tenant_budgets`, `api_tokens`, `refresh_tokens`, `oauth_authorization_codes`, `operations`, `event_subscriptions`, `event_deliveries`, `object_locks`, `object_tags`, `multipart_uploads`, `capability_records`, `idempotency_keys` (every partition), `tenant_default_bindings`, `tenant_storage_migrations`, `tenant_slug_history`, `tenant_rate_buckets` | `users`, `user_settings`, `buckets.owner_tenant_id`, `collections`, `charges` |
+| `tenants` | `quotas`, `tenant_budgets`, `api_tokens`, `refresh_tokens`, `oauth_authorization_codes`, `operations`, `event_subscriptions`, `event_deliveries`, `object_locks`, `object_tags`, `multipart_uploads`, `capability_records`, `capability_reservations`, `idempotency_keys` (every partition), `tenant_default_bindings`, `tenant_storage_migrations`, `tenant_slug_history`, `tenant_rate_buckets` | `users`, `user_settings`, `buckets.owner_tenant_id`, `collections`, `charges`, `charge_refunds` |
 | `storage_backends` | `storage_backend_health` | `buckets` |
-| `buckets` | `replication_state`, `quotas` | `collections`, `tenant_default_bindings`, `tenant_storage_migrations`, `multipart_uploads`, `pending_purges` |
+| `buckets` | `replication_state`, `quotas` | `collections`, `tenant_default_bindings`, `tenant_storage_migrations`, `multipart_uploads`, `pending_purges`, `pending_multipart_aborts` |
 | `collections` | — | `objects` |
 | `objects` | `object_versions`, `multipart_uploads` | — |
 
@@ -60,7 +60,7 @@ nothing asks again. Two entries deserve attention before you run it:
 `DeleteBackend` counts the buckets that reference the backend and refuses while
 any exist. There is no override: `buckets.backend_id` is `ON DELETE RESTRICT`,
 so the database refuses whatever the caller asks for. The count exists to say
-how many and which, in a sentence an operator can act on, rather than as a
+how many, in a sentence an operator can act on, rather than as a
 SQLSTATE.
 
 Deleting a backend never touches the object storage it points at. It removes

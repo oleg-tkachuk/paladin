@@ -52,7 +52,9 @@ uploads* panel on the Operations dashboard shows both.
    | `failed to promote object` | Postgres refused the transition. |
    | `failed to mark object as failed` | As above, for an upload whose bytes never arrived. |
    | `failed to delete mismatched object bytes` | Stored bytes broke the object's registration and could not be removed; the row waits for that. |
+   | `failed to mark mismatched object as failed` | The mismatched bytes were deleted but Postgres refused to fail the row; it stays PENDING. |
    | `failed to scan pending objects` | The reconciler cannot read `objects` at all. |
+   | `failed to sample overdue pending objects` | The gauges were not updated this tick, so the alert reads the last sample. |
 
 3. **Which backend?** Overdue objects by collection, the oldest first:
 

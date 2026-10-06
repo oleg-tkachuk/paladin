@@ -94,7 +94,8 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenanth.Creat
 	); err != nil {
 		// Map UNIQUE violations to typed sentinels so the handler can
 		// surface ALREADY_EXISTS with the offending field. Constraint
-		// names match migrations 001 (PK), 009 (slug), 033 (display_name).
+		// names match `001_initial_schema.sql` (the PK and the live-tenant
+		// unique indexes on slug and display_name).
 		if pgerr.Is(err, pgerr.UniqueViolation) {
 			switch pgerr.Constraint(err) {
 			case schema.TenantsPK:
@@ -520,7 +521,7 @@ func (r *TenantRepo) Rename(ctx context.Context, args tenanth.RenameTenantSlugAr
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Migration 033 added a BEFORE UPDATE trigger that blocks
+	// `003_triggers.sql` installs a BEFORE UPDATE trigger that blocks
 	// slug changes unless the tx opts in via this session GUC.
 	// Set it once at the top of the rename tx so the UPDATE below
 	// passes the trigger; the LOCAL scope means it's gone the moment

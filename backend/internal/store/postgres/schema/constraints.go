@@ -34,8 +34,8 @@ const (
 	TenantsImmutableColumnsTrigger = "tenants_block_immutable_columns"
 )
 
-// collections table constraint names — see the schema baseline (001_initial_schema.sql) (FK to
-// buckets), 030 (multi-segment path CHECK).
+// collections table constraint names — see the schema baseline
+// (001_initial_schema.sql): FK to buckets, multi-segment path CHECK.
 const (
 	// CollectionsPK — composite primary key (tenant_id, collection).
 	CollectionsPK = "collections_pkey"
@@ -81,7 +81,7 @@ const (
 	TenantDefaultBindingsBucketFK = "tenant_default_bindings_bucket_id_fkey"
 )
 
-// buckets table constraint names — see migration 003.
+// buckets table constraint names — see `001_initial_schema.sql`.
 const (
 	// BucketsPK — composite (backend_id, bucket_name).
 	BucketsPK = "buckets_pkey"

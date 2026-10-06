@@ -1,9 +1,11 @@
 # ADR-0015: Per-tenant physical S3 bucket layout (hybrid with the shared layout)
 
-- **Status:** Proposed 2026-07-02 — design ratified on explicit request (the
+- **Status:** Accepted — Phases 1 and 2 and the Phase 3 copy job have shipped
+  (see *Implementation status* below); what remains of Phase 3 is in
+  [`BACKLOG.md`](../../BACKLOG.md). Originally Proposed 2026-07-02 — design ratified on explicit request (the
   BACKLOG entry *"Per-tenant S3 bucket layout"* was held **do-not-design until
-  the user signals go**; that signal was given). **No implementation has
-  landed.** This ADR records the design so that when the product green-light to
+  the user signals go**; that signal was given). No implementation had
+  landed then. This ADR records the design so that when the product green-light to
   build arrives it can be executed coherently and in phases, rather than
   piecemeal. The *decision to roll it out* remains product-gated; the
   *architecture* is settled here.

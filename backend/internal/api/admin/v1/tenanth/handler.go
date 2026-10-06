@@ -427,8 +427,8 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	if args.TenantID == uuid.Nil {
 		args.TenantID = uuid.Must(uuid.NewV7())
 	}
-	// Slug is required. Migration 033 makes the column NOT NULL UNIQUE
-	// and the API contract follows: no auto-derivation from tenant_id.
+	// Slug is required. `001_initial_schema.sql` makes the column NOT NULL
+	// and UNIQUE among live tenants, and the API contract follows: no auto-derivation from tenant_id.
 	// Operators who don't have a slug yet must pick one before they
 	// can land a tenant — matches the user-facing identity model where
 	// tenant_id is a UUID and slug is the human handle.

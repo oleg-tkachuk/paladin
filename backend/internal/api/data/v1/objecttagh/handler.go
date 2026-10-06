@@ -1,6 +1,6 @@
 // Package objecttag implements ObjectTagService business logic. Object tags
 // are tenant-scoped taxonomy entries; objects are not FK-linked to them
-// (see migration 002).
+// (see `001_initial_schema.sql`).
 package objecttagh
 
 import (

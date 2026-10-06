@@ -55,7 +55,8 @@ spelling parses and then fails every Cedar policy check.
 frontend/
 ├── src/
 │   ├── app/              routes — one directory per console surface
-│   │   ├── api/          the BFF: /api/rpc proxy, auth, health, audit stream
+│   │   ├── api/          the BFF: /api/rpc proxy, auth, health, audit stream,
+│   │   │                 shell (the console chrome's state in one call)
 │   │   ├── tenants/      tenants and everything scoped under one
 │   │   ├── buckets/  collections/  upload/  trash/
 │   │   ├── policies/     Cedar policy editing and simulation
@@ -63,8 +64,12 @@ frontend/
 │   │   ├── audit/  billing/  stats/  ops/  health/
 │   │   └── storage-backends/  users/  profile/  oauth/  login/  config/
 │   ├── components/       shared UI (shadcn/ui + Tailwind)
+│   ├── context/          React providers: auth, scope, shell, stats
+│   ├── hooks/            data hooks; error contract in hooks/README.md
+│   ├── constants/        API contract constants, role names
 │   ├── gen/              GENERATED Connect-ES stubs — do not hand-edit
 │   ├── lib/              client helpers, auth plumbing, formatting
+│   ├── proxy.ts          redirects to /login without a refresh cookie
 │   └── config.ts         loads configs/config.yaml (uiMetadata only), via zod
 ├── configs/config.yaml   dev-bootstrap's JWT; the app reads only uiMetadata
 ├── tests/e2e/            Playwright suite + its compose stack
@@ -91,6 +96,7 @@ pnpm lint
 npx tsc --noEmit
 ```
 
-`pnpm run test:e2e` brings its own stack up and tears it down — Postgres,
-SeaweedFS and the Paladin planes. It needs nothing but Docker and the two locally
-built images; see [`tests/e2e/README.md`](tests/e2e/README.md).
+`pnpm run test:e2e` brings its own stack up — Postgres, SeaweedFS and the
+Paladin planes — and leaves it running for the next run;
+`pnpm run test:e2e:stack:down` removes it. It needs nothing but Docker and the
+two locally built images; see [`tests/e2e/README.md`](tests/e2e/README.md).

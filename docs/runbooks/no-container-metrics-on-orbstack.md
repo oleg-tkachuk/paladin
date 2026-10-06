@@ -31,9 +31,8 @@ returns thousands.
 
 Questions of the form "was the api pod CPU-starved when that TLS handshake
 timed out?" cannot be answered on this cluster. That is exactly the question
-that first surfaced this — see the api-pod plain-HTTP entry in
-[BACKLOG.md](../../BACKLOG.md), which stayed open partly because the resource
-data to settle it does not exist here.
+that first surfaced this — see the `container_*` metrics entry under
+"Tooling and observability" in [BACKLOG.md](../../BACKLOG.md).
 
 What still works, and is usually enough:
 

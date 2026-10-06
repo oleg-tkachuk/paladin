@@ -59,7 +59,17 @@ auth:
     namespace: paladin          # defaults to the pod's namespace
 ```
 
-A bare string is accepted as shorthand for `{name: <string>}`.
+A bare string is accepted as shorthand for `{name: <string>}`. A few
+fields take the same reference under a `_ref` name instead (`shared_secret_ref`,
+`token_ref`, `url_ref`).
+
+Resolution happens only when `KUBERNETES_SERVICE_HOST` is set:
+`K8sSecretResolver` (`backend/internal/config/resolver.go`) reads each
+referenced Secret through the API with the pod's ServiceAccount and replaces
+the inline value. Every Secret name must be listed in the chart's
+`rbac.secretReader.secretNames`. Outside a cluster the references are not
+resolved and the inline values are used. See also
+[security.md](../backend/docs/security.md#5-secret-management).
 
 **Setting both the inline field and its `_secret` sibling is a load
 error.** Which one wins is not a question the runtime should have to
@@ -106,10 +116,10 @@ comment. What each top-level block owns:
 | Block | Owns |
 | --- | --- |
 | `app` | name and `env` — `env` drives several safety gates, so it is not cosmetic |
-| `logger` | level, encoding, sampling, static fields |
+| `logger` | level, encoding, sampling, static fields ([observability.md](../backend/docs/observability.md)) |
 | `otel` | traces and metrics export (ADR-0001); disabled costs nothing |
 | `runtime` | process-wide HTTP flags, shutdown timeout, `health_snapshot_token` |
-| `api` | the data (`:8080`) and iam (`:8085`) listeners |
+| `api` | the data and iam (`:8085`) listeners; data is `:8080` in the chart and compose, `:8083` by default on the host (`#LocalDataPort` in `schema.cue`) |
 | `admin` | the admin listener (`:8090`) |
 | `datastores` | Postgres DSN, the separate migrate / reaper credentials, the opt-in read replica |
 | `limits` | object and multipart size ceilings, part sizes, content types, presign lifetimes |
@@ -117,11 +127,11 @@ comment. What each top-level block owns:
 | `security` | `reject_tenant_mismatch` (`log_sensitive` is retired: accepted, ignored, warned about) |
 | `bootstrap` | the platform admin provisioned by `paladin bootstrap` |
 | `middleware` | interceptor defaults shared by every plane |
-| `worker` | job intervals, leases, reaper batch sizes |
+| `worker` | job intervals, leases, reaper batch sizes ([ops-housekeeping.md](../backend/docs/ops-housekeeping.md)) |
 | `dispatcher` | outbox drain loop and sink behaviour |
-| `storage` | backends, routing, SSE, per-backend auth mode |
-| `ingest` | the storage-notification receiver: driver, webhook, dedup |
-| `cedar` | policy engine sources and evaluation |
+| `storage` | backends, routing, SSE, per-backend auth mode ([backend-registry.md](../backend/docs/backend-registry.md)) |
+| `ingest` | the storage-notification receiver: driver, webhook, dedup ([storage-ingest.md](storage-ingest.md)) |
+| `cedar` | policy cache TTL, canonical collection entity UIDs ([cedar-authoring.md](../backend/docs/cedar-authoring.md)) |
 | `mcp` | the MCP server and its upstreams |
 | `capability` | issuer, signing key, verification, budgets |
 | `api_token` | the HMAC key for token lookup digests |
@@ -196,9 +206,9 @@ roles and policies and is not supported.
 
 ### Storage backend auth modes
 
-`storage.backends.<name>.auth.mode` is mandatory — there is no default,
-because an implicit fallback to the AWS credential chain is the kind of
-mistake you find in production:
+`storage.backends.<name>.auth.mode` selects how a backend authenticates. Set
+it explicitly: when it is omitted the CUE schema fills `default_chain`, the
+AWS SDK's default credential chain, before `Config.Validate()` runs.
 
 | Mode | Requires | Rejects |
 | --- | --- | --- |
@@ -217,9 +227,15 @@ the plane does. Leaving `public_endpoint` empty reuses `endpoint`.
 ## Frontend configuration
 
 The console's BFF takes its upstreams from environment variables the chart
-sets: `PALADIN_DATA_URL`, `PALADIN_IAM_URL` and `PALADIN_ADMIN_URL`, plus
-`PALADIN_BFF_MAX_CONNECTIONS` and the health snapshot token (the backend's
-`runtime.health_snapshot_token`). The chart mounts that token from
+sets: `PALADIN_DATA_URL`, `PALADIN_IAM_URL` and `PALADIN_ADMIN_URL` for the
+three planes; `PALADIN_WORKER_URL`, `PALADIN_DISPATCHER_URL`,
+`PALADIN_INGEST_URL`, `PALADIN_MCP_URL` and `PALADIN_HEALTH_ROLES` for the
+health aggregator; and the health snapshot token (the backend's
+`runtime.health_snapshot_token`). `PALADIN_BFF_MAX_CONNECTIONS` caps the
+BFF's upstream connections (default 16, `frontend/src/lib/server/upstream.ts`);
+the chart does not set it, so it comes through `extraEnv`.
+
+The chart mounts the health snapshot token from
 `healthSnapshotTokenSecret` as a file and names it in
 `PALADIN_HEALTH_SNAPSHOT_TOKEN_FILE`, so it is not in the pod's environment;
 `PALADIN_HEALTH_SNAPSHOT_TOKEN` carries it inline for local development.

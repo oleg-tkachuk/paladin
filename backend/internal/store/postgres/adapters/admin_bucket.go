@@ -278,8 +278,8 @@ func (r *BucketRepoV2) List(ctx context.Context, args admindomain.ListBucketsArg
 	}
 	// OwnerTenantID is forwarded to sqlc as a pgtype.UUID. The
 	// query treats Valid=false as "no tenant filter" so the existing
-	// cross-tenant listing path is unchanged. Migration 006 already
-	// created a partial index on buckets(owner_tenant_id) for the
+	// cross-tenant listing path is unchanged. `001_initial_schema.sql`
+	// creates an index on buckets(owner_tenant_id) for the
 	// filtered case.
 	var ownerFilter pgtype.UUID
 	if args.OwnerTenantID != nil {

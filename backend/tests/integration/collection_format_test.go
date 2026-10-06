@@ -35,7 +35,7 @@ func TestCollectionFormat_SegmentLengths(t *testing.T) {
 
 	valid := []string{
 		"a",                  // 1-char segment
-		"eu",                 // 2-char segment — the migration-045 fix
+		"eu",                 // 2-char segment — once rejected by the DB
 		"qa",                 // 2-char
 		"us-west",            // hyphenated
 		"abc",                // 3-char

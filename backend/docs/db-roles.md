@@ -1,11 +1,12 @@
-# PostgreSQL role split — `paladin_migrate` and `paladin_app`
+# PostgreSQL role split — `paladin_migrate`, `paladin_app`, `paladin_reaper`
 
-Paladin uses **two distinct database roles** at runtime:
+Paladin uses **three distinct database roles**:
 
 | Role          | Used by                        | Privileges                                  |
 |---------------|--------------------------------|---------------------------------------------|
-| `paladin_migrate` | goose (schema migrations)      | DDL on the Paladin database. Owns objects.      |
-| `paladin_app`     | the running service            | DML only (`SELECT`/`INSERT`/`UPDATE`/`DELETE`). |
+| `paladin_migrate` | goose (schema migrations); the worker's partition maintenance | DDL on the Paladin database. Owns objects. `BYPASSRLS`. |
+| `paladin_app`     | the running service (every request path) | DML only (`SELECT`/`INSERT`/`UPDATE`/`DELETE`). Subject to RLS. |
+| `paladin_reaper`  | cross-tenant background work: worker jobs, the dispatcher's outbox drain, ingest | DML only. `BYPASSRLS`. |
 
 The split is a defence-in-depth measure: a SQL-injection bug or a
 compromised pod credential can only do what `paladin_app` is allowed to do —
@@ -19,9 +20,11 @@ returns object ids only, for the session's own tenant, and the rows are
 then read under `paladin_app`'s RLS as usual — see ADR-0019. A runtime role
 not named `paladin_app` needs the same grant.
 
-In **dev**, both can be the same superuser — `migrate_dsn` defaults to
+In **dev**, all three can be the same superuser — `migrate_dsn` defaults to
 empty and goose runs as the runtime role. In **production**, the
-`migrate_dsn` must point at `paladin_migrate` and `dsn` at `paladin_app`.
+`migrate_dsn` must point at `paladin_migrate` and `dsn` at `paladin_app`;
+`reaper_dsn` should point at `paladin_reaper`, and falls back to
+`migrate_dsn` when empty.
 
 ---
 
@@ -58,14 +61,16 @@ ALTER ROLE paladin_app WITH LOGIN PASSWORD '<from-secret>';
 That's all the manual SQL you need. Migration `002_roles_and_rls.sql` grants
 `paladin_app` and `paladin_reaper` their DML when goose runs as
 `paladin_migrate`. Only a superuser can grant `BYPASSRLS`, so the migration
-cannot do it for you when it runs as `paladin_migrate`; without it, migrations
-fail at the first row-level-security policy.
+only *attempts* it and tolerates being refused when it runs as
+`paladin_migrate`. Without it nothing fails loudly: the worker, dispatcher and
+ingest pools, which have no session tenant, silently see zero rows, because
+RLS filters rather than errors.
 
 ---
 
 ## 2. What `paladin_app` can do
 
-After migration 011 applies:
+After migration `002` applies:
 
 ```sql
 -- as paladin_app:
@@ -87,16 +92,17 @@ CREATE ROLE evil WITH LOGIN ...;         -- ✗ no CREATEROLE
 GRANT ALL ON tenants TO PUBLIC;          -- ✗ not the table owner
 ```
 
-Triggers continue to work because they execute as the **table owner**
-(`paladin_migrate`), not the connecting role — `bump_resource_version` still
-fires correctly even though `paladin_app` couldn't define it.
+Triggers continue to work: a trigger fires for every writer of its table,
+whoever defined it — `bump_resource_version` still fires for `paladin_app`
+even though `paladin_app` couldn't define it.
 
 ---
 
 ## 3. Adding new tables in future migrations
 
-`ALTER DEFAULT PRIVILEGES` (set up by migration 011) auto-grants the DML
-set to `paladin_app` for every table the migration role creates afterwards.
+`ALTER DEFAULT PRIVILEGES` (set up by migration `002`) auto-grants the DML
+set to `paladin_app` and `paladin_reaper` for every table the migration role
+creates afterwards.
 Migration authors **don't need to** repeat the GRANTs — they're inherited.
 
 If a future migration creates an object via a different role (e.g. an
@@ -127,11 +133,20 @@ datastores:
       name: paladin-postgresql-migrate-user
       key: password
       namespace: database
+
+    # Cross-tenant background DML: paladin_reaper (BYPASSRLS, no DDL)
+    reaper_dsn: "postgres://paladin_reaper@host:5432/paladin?sslmode=verify-full"
+    reaper_password_secret:
+      name: paladin-postgresql-reaper-user
+      key: password
+      namespace: database
 ```
 
-`migrate_dsn` and `migrate_password_secret` are **optional**. Empty
-`migrate_dsn` falls back to the runtime DSN — fine for `make dev`, unsafe
-for production.
+`migrate_dsn`, `reaper_dsn` and their password references are **optional**.
+Empty `migrate_dsn` falls back to the runtime DSN — fine for local
+development, unsafe for production. Empty `reaper_dsn` falls back to
+`migrate_dsn`; with neither set, the background jobs run on the RLS-scoped
+runtime pool and find zero rows (the worker logs a warning).
 
 The two passwords MUST be stored in **separate** Kubernetes secrets so a
 compromised RBAC binding granting access to the runtime secret does not
@@ -144,8 +159,11 @@ further into separate namespaces or even separate secret stores.
 
 ### Helm
 
-The chart builds both DSNs and both `password_secret` references from its
-`postgres` block — see [docs/install.md](../../docs/install.md).
+The chart builds `dsn`, `migrate_dsn` and their `password_secret`
+references from its `postgres` block — see
+[docs/install.md](../../docs/install.md). It does not template `reaper_dsn`;
+set it under `config.datastores.postgres` or let it fall back to
+`migrate_dsn`.
 `helm upgrade --install` does not create the DB roles — that's a one-time DBA
 step (§1).
 
@@ -181,7 +199,7 @@ psql "postgres://paladin_migrate:…@host/paladin" -c "\dp tenants"
 
 ## 6. Connection tagging
 
-Both connection paths set `application_name` so DBAs can tell traffic
+Every connection path sets `application_name` so DBAs can tell traffic
 apart in `pg_stat_activity`:
 
 ```sql
@@ -192,8 +210,12 @@ GROUP BY 1;
 --  application_name | count
 -- ------------------+-------
 --  paladin              |    18    -- runtime queries
---  paladin-migrate      |     1    -- goose session at startup
+--  paladin-migrate      |     1    -- goose session (the migrate Job)
 ```
+
+The cross-tenant pools add `paladin-dispatcher`, `paladin-ingest`,
+`paladin-reaper` (worker jobs) and `paladin-worker-ddl` (partition
+maintenance on the migrate role).
 
 This is independent of the role split — even on dev where both share a
 DSN the labels still differ.
@@ -201,11 +223,6 @@ DSN the labels still differ.
 ---
 
 ## 7. What's NOT covered (yet)
-
-- **Row-level security (RLS).** Tracked in BACKLOG ("RLS as
-  defence-in-depth"). The role split is a prerequisite — `paladin_app`
-  cannot bypass RLS once the policies are authored, because we never
-  granted it `BYPASSRLS`.
 
 - **Per-tenant DEKs / envelope encryption.** Tracked in BACKLOG.
 

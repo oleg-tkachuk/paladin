@@ -4,7 +4,7 @@ Two Helm charts, published to GHCR with every release:
 
 | Chart | What it runs |
 | --- | --- |
-| `oci://ghcr.io/oleg-tkachuk/charts/paladin-core` | the backend: api, admin, worker, mcp and dispatcher Deployments, plus the migrate and bootstrap Jobs |
+| `oci://ghcr.io/oleg-tkachuk/charts/paladin-core` | the backend: api, admin, worker, mcp and dispatcher Deployments, an ingest Deployment when `deployments.ingest.enabled` is set, plus the migrate and bootstrap Jobs |
 | `oci://ghcr.io/oleg-tkachuk/charts/paladin-console` | the web console and its BFF |
 
 The charts do not run PostgreSQL or the object store. Bring both.
@@ -103,9 +103,9 @@ Everything else has a default:
 
 - `config.app.env` is `prod`: weak secrets, ephemeral signing keys and an
   unauthenticated ingest webhook are refused at boot.
-- The access-token signing key is generated into
-  `<release>-paladin-core-auth-signing-key` and kept across upgrades. The
-  issuer defaults to the release name.
+- The access-token signing key is generated into `<fullname>-auth-signing-key`
+  (`paladin-core-auth-signing-key` for a release named `paladin-core`) and
+  kept across upgrades. The issuer defaults to the same full name.
 - A platform admin is created on first install, with a generated password in
   the `paladin-bootstrap-admin` Secret.
 - The Secrets the chart reads are allowed by a namespaced Role. If one lives in

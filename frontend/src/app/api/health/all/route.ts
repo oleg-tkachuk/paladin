@@ -51,7 +51,7 @@ const ROLES: { name: string; envKey: string; defaultUrl: string }[] = [
     defaultUrl: "http://paladin-core-mcp:8095",
   },
   // Dispatcher pod — durable webhook fan-out (event_deliveries outbox,
-  // migration 028). Same ops shape as worker; the BFF aggregator just
+  // `001_initial_schema.sql`). Same ops shape as worker; the BFF aggregator just
   // needs a /system/health.json endpoint.
   {
     name: "dispatcher",

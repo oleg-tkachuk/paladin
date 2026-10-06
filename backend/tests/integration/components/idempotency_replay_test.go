@@ -2,8 +2,9 @@
 
 // Regression guard for the FR-008 idempotency-replay bug.
 //
-// Migration 042 range-partitioned idempotency_keys on expires_at, which
-// widened the primary key to (tenant_id, method, key, expires_at). But
+// Range-partitioning idempotency_keys on expires_at (now in
+// `001_initial_schema.sql`) widened its unique key to
+// (tenant_id, method, key, expires_at). But
 // PutIdempotencyKey's ON CONFLICT still targeted the old 3-column
 // (tenant_id, method, key) tuple — no longer a unique constraint on a
 // partitioned table — so every write raised 42P10 ("no unique or exclusion
@@ -81,7 +82,7 @@ func TestIdempotencyReplayAgainstPartitionedTable(t *testing.T) {
 		t.Fatalf("dialect: %v", err)
 	}
 	goose.SetBaseFS(migrations.FS)
-	// Apply EVERY migration — including 042's partitioning — so the schema
+	// Apply EVERY migration — including the baseline's partitioning — so the schema
 	// matches production exactly.
 	if err := goose.Up(db, "."); err != nil {
 		t.Fatalf("apply migrations: %v", err)

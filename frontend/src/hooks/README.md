@@ -52,15 +52,19 @@ try {
 it pulls `ConnectError.rawMessage` (or `Error.message`) so callers don't
 re-implement it.
 
-Two gates keep the contract from drifting, both reading the source rather
+Three gates keep the contract from drifting, all reading the source rather
 than trusting review:
 
 - `queryErrorContract.test.ts` — every call site that takes a list from one
   of these hooks also takes its `error`, or is listed with the reason its
   emptiness claims nothing.
-- `src/lib/queryErrorsRead.test.ts` — every `useQuery` outside the hooks has
-  its `error` read somewhere in the same file, so a failed read is rendered
-  (`ListLoadError`) instead of falling through to "no items yet".
+- `src/lib/queryErrorsRead.test.ts` — every `useQuery` / `useInfiniteQuery`
+  under `src/` (generated code aside, hooks included) has its `error` or
+  `isError` read somewhere in the same file, or is listed with what its
+  failure renders, so a failed read is rendered (`ListLoadError`) instead of
+  falling through to "no items yet".
+- `errorMessageUse.test.ts` — no file outside a short allow-list reads
+  `.rawMessage` itself; everything else goes through `errorMessage()`.
 
 `errorContract.test.ts` pins `errorMessage`'s unwrap and fallback; the hooks'
 own `*.test.tsx` files exercise the behaviour with `renderHook`.

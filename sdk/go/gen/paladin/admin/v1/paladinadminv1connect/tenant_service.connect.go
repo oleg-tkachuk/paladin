@@ -110,9 +110,9 @@ type TenantServiceClient interface {
 	// policy is InvalidArgument, not a tenant that denies everything.
 	SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error)
 	// RestoreTenant clears `deleted_at` on a soft-deleted row, returning
-	// it to the active set. Slug + display_name UNIQUE constraints still
-	// apply across both active and trashed rows (see migration 036
-	// commentary) — if a new tenant claimed the slug while this one was
+	// it to the active set. Slug + display_name are unique among live
+	// tenants (`001_initial_schema.sql`), and a trashed row keeps both —
+	// if a new tenant claimed the slug while this one was
 	// trashed, restore fails with ALREADY_EXISTS and the operator must
 	// rename one side first.
 	RestoreTenant(context.Context, *connect.Request[v1.RestoreTenantRequest]) (*connect.Response[v1.Tenant], error)
@@ -398,9 +398,9 @@ type TenantServiceHandler interface {
 	// policy is InvalidArgument, not a tenant that denies everything.
 	SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error)
 	// RestoreTenant clears `deleted_at` on a soft-deleted row, returning
-	// it to the active set. Slug + display_name UNIQUE constraints still
-	// apply across both active and trashed rows (see migration 036
-	// commentary) — if a new tenant claimed the slug while this one was
+	// it to the active set. Slug + display_name are unique among live
+	// tenants (`001_initial_schema.sql`), and a trashed row keeps both —
+	// if a new tenant claimed the slug while this one was
 	// trashed, restore fails with ALREADY_EXISTS and the operator must
 	// rename one side first.
 	RestoreTenant(context.Context, *connect.Request[v1.RestoreTenantRequest]) (*connect.Response[v1.Tenant], error)
