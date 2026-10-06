@@ -644,6 +644,7 @@ dependencies = [
     { name = "googleapis-common-protos" },
     { name = "httpcore", extra = ["asyncio", "http2"] },
     { name = "protobuf" },
+    { name = "pyqwest" },
 ]
 
 [package.optional-dependencies]
@@ -679,6 +680,7 @@ requires-dist = [
     { name = "googleapis-common-protos", specifier = ">=1.75.5,<2" },
     { name = "httpcore", extras = ["asyncio", "http2"], specifier = ">=1.0.9,<2" },
     { name = "protobuf", specifier = ">=6.33.5,<8" },
+    { name = "pyqwest", specifier = ">=0.11.0,<0.12" },
 ]
 provides-extras = ["biscuit", "crc32c", "dpop"]
 

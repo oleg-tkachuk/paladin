@@ -14,7 +14,9 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -352,4 +354,29 @@ func newTransferAt(t *testing.T, st *storage, signed string) (*dataPlane, string
 	t.Helper()
 	internal := newStorageServer(t, st)
 	return &dataPlane{storageURL: signed, completed: map[string]string{}, checksums: map[string]string{}}, internal
+}
+
+// Consumers parsed expires_at_rfc3339 themselves; PresignExpiry is the one
+// reading the SDK's own retry logic uses.
+func TestPresignExpiry(t *testing.T) {
+	want := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name   string
+		raw    string
+		want   time.Time
+		wantOK bool
+	}{
+		{"an RFC 3339 instant", "2026-10-06T12:00:00Z", want, true},
+		{"an offset", "2026-10-06T15:00:00+03:00", want, true},
+		{"none sent", "", time.Time{}, false},
+		{"not a time", "tomorrow", time.Time{}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := paladin.PresignExpiry(&commonv1.PresignedUrl{ExpiresAtRfc3339: tc.raw})
+			if ok != tc.wantOK || !got.Equal(tc.want) {
+				t.Errorf("PresignExpiry(%q) = (%v, %v), want (%v, %v)", tc.raw, got, ok, tc.want, tc.wantOK)
+			}
+		})
+	}
 }

@@ -45,6 +45,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+
 	"github.com/google/uuid"
 )
 
@@ -57,7 +59,7 @@ const (
 	// opposite: a public, documented format marker that secret scanners
 	// pin so they can FIND real tokens. Suppressed per-site rather than
 	// repo-wide so a genuine literal secret still trips the linter.
-	TokenPrefix = "paladin_pat_" // #nosec G101 -- a public token prefix, not a credential
+	TokenPrefix = paladin.APITokenPrefix // the SDK's, so clients and server spell it once
 	PrefixLen   = 8
 	// SecretBytes is the random-byte length encoded after the literal
 	// prefix. 32 bytes = 256 bits of entropy = sufficient even with

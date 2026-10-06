@@ -53,6 +53,10 @@ class TenantName:
 
     tenant: str
 
+    def __post_init__(self) -> None:
+        if not self.tenant or "/" in self.tenant:
+            raise _invalid("tenant", self.tenant, "want a tenant id or slug, without '/'")
+
     def __str__(self) -> str:
         return _TENANTS_PREFIX + self.tenant
 
@@ -70,6 +74,16 @@ class CollectionName:
 
     tenant: str
     collection: str
+
+    def __post_init__(self) -> None:
+        # Checked here as parse checks it, so a name built from parts is one
+        # the server accepts: the tenant is its id, kept in canonical form.
+        tenant_id = _uuid(self.tenant)
+        if tenant_id is None:
+            raise _invalid("collection", self.tenant, "the tenant must be its id, a UUID")
+        if not self.collection:
+            raise _invalid("collection", self.collection, "the collection is empty")
+        object.__setattr__(self, "tenant", tenant_id)
 
     def __str__(self) -> str:
         return f"{_TENANTS_PREFIX}{self.tenant}{_COLLECTIONS_SEP}{self.collection}"
@@ -94,6 +108,12 @@ class ObjectName:
     collection: CollectionName
     object: str
 
+    def __post_init__(self) -> None:
+        object_id = _uuid(self.object)
+        if object_id is None:
+            raise _invalid("object", self.object, "the object must be its id, a UUID")
+        object.__setattr__(self, "object", object_id)
+
     def __str__(self) -> str:
         return f"{self.collection}{_OBJECTS_SEP}{self.object}"
 
@@ -115,6 +135,12 @@ class ObjectVersionName:
 
     object: ObjectName
     version: str
+
+    def __post_init__(self) -> None:
+        version_id = _uuid(self.version)
+        if version_id is None:
+            raise _invalid("object version", self.version, "the version must be its id, a UUID")
+        object.__setattr__(self, "version", version_id)
 
     def __str__(self) -> str:
         return f"{self.object}{_VERSIONS_SEP}{self.version}"
@@ -143,6 +169,10 @@ class ObjectURI:
 
     collection: CollectionName
     key: str
+
+    def __post_init__(self) -> None:
+        if not self.key:
+            raise _invalid("object URI", self.key, "the key is empty")
 
     @property
     def parent(self) -> str:
@@ -173,3 +203,52 @@ class ObjectURI:
         if not collection or not key:
             raise _invalid("object URI", value, want)
         return cls(CollectionName(tenant_id, collection), key)
+
+
+_STORAGE_BACKENDS_PREFIX = "storageBackends/"
+_BUCKETS_SEP = "/buckets/"
+
+
+@dataclass(frozen=True)
+class BucketName:
+    """``storageBackends/{backend}/buckets/{bucket}``: the name the admin plane
+    gives a physical bucket, and a bucket quota's parent."""
+
+    backend: str
+    bucket: str
+
+    def __post_init__(self) -> None:
+        for part in (self.backend, self.bucket):
+            if not part or "/" in part:
+                raise _invalid("bucket", part, "want a backend and a bucket, each without '/'")
+
+    def __str__(self) -> str:
+        return f"{_STORAGE_BACKENDS_PREFIX}{self.backend}{_BUCKETS_SEP}{self.bucket}"
+
+    @classmethod
+    def parse(cls, value: str) -> BucketName:
+        want = "want storageBackends/{backend}/buckets/{bucket}"
+        rest = value.removeprefix(_STORAGE_BACKENDS_PREFIX)
+        backend, found, bucket = rest.partition(_BUCKETS_SEP)
+        if rest == value or not found:
+            raise _invalid("bucket", value, want)
+        try:
+            return cls(backend, bucket)
+        except InvalidNameError:
+            raise _invalid("bucket", value, want) from None
+
+
+API_TOKEN_PREFIX = "paladin_pat_"
+"""Starts every Paladin API token: the server tells an API token from a JWT by
+it, and secret scanners find one by it."""
+
+OBJECT_RESOURCE_SCHEME = "object://"
+"""The scheme of the resource a capability grants on objects."""
+
+
+def object_resource(tenant: str, collection: str, key: str) -> str:
+    """The resource a capability names for an object, or for every object under
+    a key prefix when ``key`` is one: the server checks a capability's resource
+    against ``object://{tenant-id}/{collection}/{key}``. The tenant is the id,
+    a UUID; give ``"reports/"`` to cover the keys under ``reports/``."""
+    return f"{OBJECT_RESOURCE_SCHEME}{tenant}/{collection}/{key}"

@@ -122,7 +122,7 @@ requires one on `Create*` and `Issue*` calls.
 
 | Function | Does |
 | --- | --- |
-| `idempotency_key(key)` | A context manager: every call inside the block sends `Idempotency-Key: <key>`. The server replays the first response for a key it has seen, so repeating a mutating call with the same key is safe. Reuse a key only for the same logical operation. Scoped with `contextvars`, so it follows `asyncio` tasks. |
+| `idempotency_key(key)` | A context manager: every call inside the block that the contract does not declare side-effect free or idempotent sends `Idempotency-Key: <key>`. The server replays the first response to the same request with a key it has seen, so repeating a mutating call with the same key is safe; the same key with a different request to that method is `InvalidArgument`. `upload`, `download` and their `_many` forms keep the key for the calls that create or complete an object — per item, as `key/<n>`, in `upload_many` — and give every other call its own. Reuse a key only for the same logical operation. Scoped with `contextvars`, so it follows `asyncio` tasks. |
 | `current_idempotency_key()` | The key set for the current context; an empty key counts as none. |
 | `no_idempotency_key()` | A context manager: every call inside the block goes out with no key — not the default one, not the request's field — and so is never retried, unless the contract declares it side-effect free or idempotent. For an operation that must run again when repeated rather than be answered with the first response. The server refuses `Create*` and `Issue*` without a key. The innermost block wins. |
 
@@ -130,8 +130,8 @@ requires one on `Create*` and `Issue*` calls.
 
 | Name | Does |
 | --- | --- |
-| `Session.sign_in(iam_url, subject, password, *, clock=time.monotonic)` | Signs in at the IAM plane and keeps the refresh token. `token(audience)` returns that plane's access token: the IAM one by refreshing, the others by `ExchangeAudience`. Each is cached until `TOKEN_REFRESH_MARGIN` (30s) before it expires. When the refresh token itself is refused, the session signs in again. Thread-safe; concurrent callers wait for one mint. |
-| `Session.from_refresh_token(iam_url, refresh_token)` | Resumes from a stored refresh token; cannot sign in again when it expires. `refresh_token` is the current one to store — refreshing rotates it. |
+| `Session.sign_in(iam_url, subject, password, *, clock=time.monotonic, transport=None, tls=None, **client_options)` | Signs in at the IAM plane, reached with `connect`'s `transport`, `tls` and `Client` options — a CA bundle and client certificate for an IAM behind mTLS, a `retry`, `timeout_ms` — and keeps the refresh token. `token(audience)` returns that plane's access token: the IAM one by refreshing, the others by `ExchangeAudience`. Each is cached until `TOKEN_REFRESH_MARGIN` (30s) before it expires. When the refresh token itself is refused, the session signs in again. Thread-safe; concurrent callers wait for one mint, and a cached token is served while another audience's is minted. |
+| `Session.from_refresh_token(iam_url, refresh_token, *, transport=None, tls=None, **client_options)` | Resumes from a stored refresh token; cannot sign in again when it expires. `refresh_token` is the current one to store — refreshing rotates it. |
 | `AsyncSession` | The same for asyncio: `await AsyncSession.sign_in(...)`, `await session.token(audience)`. |
 | `StaticToken(token)` | The same token for every plane: an API token, or a JWT from elsewhere. |
 | `Client(..., token_source=…, audience=…)` | Sends `token_source`'s token for `audience` on every call. A call refused as unauthenticated is made once more with a fresh one — the server authenticates before anything else, so the first attempt changed nothing. `connect` sets `audience` per plane. |
@@ -189,6 +189,7 @@ capability's JWT keep working; `revoke` stops them all.
 | `upload(p.data, *, parent, content_type, body, size, key="", metadata=None, tags=None, multipart_threshold=8 MiB, part_concurrency=3, on_session=None, resume=None)` | Uploads exactly `size` bytes of `body` (0 is an empty object) and completes the object. `body` is bytes or a binary file, seekable or not (a pipe, a response body); it is read once, front to back. Every upload URL is signed for its body's size and SHA-256, so a body is hashed before it is presigned and held in memory while it is sent: the whole object up to the threshold, in one presigned PUT whose checksum is recorded on the object; above it multipart, one part per request and `part_concurrency` parts in flight, aborted if any part fails. `checksum(algorithm, data)` computes the value for a caller that presigns itself. `on_session` receives the open multipart session as an `UploadSession` (`object_name`, `upload_id`, `part_size`, `total_parts`) and leaves a failed upload open; `resume=session` continues it, sending only the parts storage does not hold. Synchronous; from asyncio, run it with `asyncio.to_thread`. |
 | `download_stream(p.data, name, *, offset=0, length=0)` | The object's content as a file-like `ObjectReader` — `read`, `readinto`, `chunks()`, `content_type`, `content_length`, `object` — streamed, never held whole; use it in `with`. `offset`/`length` read a byte range (`RangeIgnoredError` when storage answers with the whole object). A whole read is verified: the read that reaches the end raises `IntegrityError` when the size or the recorded checksum (SHA-256, MD5; CRC32C with the `crc32c` extra) does not match. A retried request goes through a URL bound to the object's ETag as it was first read: `ObjectChangedError` when the object was replaced in between. |
 | `download(p.data, name, *, offset=0, length=0)` | `download_stream` read whole, as bytes. |
+| `presign_expiry(url)` | When a presigned URL stops working, from its `expires_at_rfc3339`, as an aware UTC `datetime`; None when the server sent none. An upper bound: the signer may clamp a TTL further. |
 
 ### Transfers
 
@@ -275,6 +276,7 @@ codes or messages:
 
 | Exception | Code | Means |
 | --- | --- | --- |
+| `InvalidArgumentError` | `INVALID_ARGUMENT` | The request fails the same way however often it is sent; `reason` says which rule it broke. |
 | `NotFoundError` | `NOT_FOUND` | |
 | `AlreadyExistsError` | `ALREADY_EXISTS` | |
 | `PermissionDeniedError` | `PERMISSION_DENIED` | |
@@ -283,6 +285,7 @@ codes or messages:
 | `ResourceExhaustedError` | `RESOURCE_EXHAUSTED` | `retry_after` is how long the server asked to wait, in seconds. |
 | `UnauthenticatedError` | `UNAUTHENTICATED` | |
 | `ContractSkewError` | `UNIMPLEMENTED` | The server does not implement the call: it is older than the SDK. The message names the procedure, the server's release (`HEADER_SERVER_VERSION`) and the SDK's. |
+| `PaladinError` | any other | The base class, for a code with no kind of its own — `UNAVAILABLE`, `INTERNAL`, … — with the same fields. |
 
 Each carries `procedure`, the server's `reason` (a
 `paladin.common.v1.error_reason_pb2.ErrorReason` value, from the
@@ -310,7 +313,9 @@ The server's naming rules, as types (`paladin.names`): a name built here is
 one it accepts, and a name parsed here is one it would. Under a tenant a
 name takes the tenant's **id**, a UUID, not its slug; a collection may
 contain `/`; object and version ids are UUIDs. `InvalidNameError` (a
-`ValueError`) for anything else. `str(name)` prints it; `.parse` reads it.
+`ValueError`) for anything else — from `.parse` and from the constructor
+alike, so a name built from parts is checked too. `str(name)` prints it;
+`.parse` reads it.
 
 | Type | Form |
 | --- | --- |
@@ -319,6 +324,11 @@ contain `/`; object and version ids are UUIDs. `InvalidNameError` (a
 | `ObjectName` | `…/collections/{collection}/objects/{object-id}` |
 | `ObjectVersionName` | `…/objects/{object-id}/versions/{version-id}` |
 | `ObjectURI` | `paladin://tenants/{tenant-id}/collections/{collection}/keys/{key}` — an object by its key; the collection and the key are escaped path segments |
+| `BucketName` | `storageBackends/{backend}/buckets/{bucket}` — a physical bucket on the admin plane, and a bucket quota's parent |
+
+`object_resource(tenant, collection, key)` is the resource a capability grants
+on an object, or on every object under a key prefix: `object://{tenant-id}/{collection}/{key}`.
+`API_TOKEN_PREFIX` (`paladin_pat_`) starts every API token.
 
 `lookup_object(p.data, uri)` finds the object an `ObjectURI` (or its string)
 names, and `download_uri(p.data, uri, offset=0, length=0)` streams it.

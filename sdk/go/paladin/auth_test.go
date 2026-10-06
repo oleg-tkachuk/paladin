@@ -303,3 +303,117 @@ func TestStaticToken(t *testing.T) {
 		t.Errorf("a call without a token reached the server")
 	}
 }
+
+// blockingIAM holds every ExchangeAudience until released, and can be told to
+// fail them with a code.
+type blockingIAM struct {
+	fakeIAM
+	hold    chan struct{}
+	entered chan struct{}
+	failing connect.Code
+}
+
+func (b *blockingIAM) ExchangeAudience(ctx context.Context, req *connect.Request[iamv1.ExchangeAudienceRequest]) (*connect.Response[iamv1.ExchangeAudienceResponse], error) {
+	if b.failing != 0 {
+		return nil, connect.NewError(b.failing, errors.New("iam is down"))
+	}
+	if b.entered != nil {
+		b.entered <- struct{}{}
+	}
+	if b.hold != nil {
+		<-b.hold
+	}
+	return b.fakeIAM.ExchangeAudience(ctx, req)
+}
+
+// Every Token held the session's lock across its call to IAM, so one slow
+// exchange stalled callers whose token was already cached.
+func TestSessionServesACachedTokenWhileAnotherIsMinted(t *testing.T) {
+	b := &blockingIAM{hold: make(chan struct{}), entered: make(chan struct{}, 1)}
+	mux := http.NewServeMux()
+	mux.Handle(paladiniamv1connect.NewAuthServiceHandler(b))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	s, err := paladin.NewSession(context.Background(), srv.URL, "admin", "secret")
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	cached := mustToken(t, s, paladin.AudienceIAM)
+
+	minted := make(chan error, 1)
+	go func() {
+		_, err := s.Token(context.Background(), paladin.AudienceData)
+		minted <- err
+	}()
+	<-b.entered // the data exchange is now in flight, and held
+
+	done := make(chan string, 1)
+	go func() { done <- mustToken(t, s, paladin.AudienceIAM) }()
+	select {
+	case got := <-done:
+		if got != cached {
+			t.Errorf("IAM token = %q, want the cached %q", got, cached)
+		}
+	case <-time.After(time.Second):
+		// Release the exchange first, or the server cannot close.
+		close(b.hold)
+		t.Fatal("a cached token waited for another audience's exchange")
+	}
+	close(b.hold)
+	if err := <-minted; err != nil {
+		t.Fatalf("data token: %v", err)
+	}
+}
+
+// IAM being down was reported as Unauthenticated, which reads as bad
+// credentials and is not worth retrying. It keeps its own code now.
+func TestSessionReportsAnIAMOutageAsUnavailable(t *testing.T) {
+	b := &blockingIAM{failing: connect.CodeUnavailable}
+	mux := http.NewServeMux()
+	mux.Handle(paladiniamv1connect.NewAuthServiceHandler(b))
+	mux.Handle(paladiniamv1connect.NewHealthServiceHandler(b))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	s, err := paladin.NewSession(context.Background(), srv.URL, "admin", "secret")
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	c, err := paladin.New(srv.URL, paladin.WithTokenSource(s, paladin.AudienceData))
+	if err != nil {
+		t.Fatal(err)
+	}
+	health := paladiniamv1connect.NewHealthServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...)
+	_, err = health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{}))
+	if connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("code = %v, want Unavailable for an IAM outage", connect.CodeOf(err))
+	}
+	if errors.Is(err, paladin.ErrUnauthenticated) {
+		t.Error("an IAM outage matched ErrUnauthenticated")
+	}
+}
+
+// The session reached IAM over a client with New's defaults, whatever the
+// caller's planes used — no CA, no client certificate, no retries.
+func TestSessionClientOptionsReachIAM(t *testing.T) {
+	const header, value = "X-Session-Probe", "set-by-the-caller"
+	var seen string
+	f := &fakeIAM{}
+	mux := http.NewServeMux()
+	path, h := paladiniamv1connect.NewAuthServiceHandler(f)
+	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Get(header)
+		h.ServeHTTP(w, r)
+	}))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	if _, err := paladin.NewSession(context.Background(), srv.URL, "admin", "secret",
+		paladin.WithSessionClientOptions(paladin.WithHeader(header, value))); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	if seen != value {
+		t.Errorf("%s = %q at IAM, want %q", header, seen, value)
+	}
+}

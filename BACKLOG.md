@@ -1411,6 +1411,60 @@ finding moving from "packages you import" to "your code is affected".
 
 The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 
+### A multipart download's checksum is not verified
+
+- **Status:** Deferred
+- **Reason:** both SDKs verify a whole download against the object's size and
+  recorded checksum, but a multipart object's checksum is a composite of its
+  parts' and does not decode to a digest of the whole, so only the size is
+  checked — for exactly the objects large enough for corruption to matter.
+  Verifying it needs the part boundaries, which `Object` does not carry.
+- **Definition of Done:** the server records (or returns) the part size of a
+  multipart object; both SDKs recompute the composite while streaming and fail
+  the read on a mismatch, with tests on both fakes.
+- **Blockers:** where the part size lives — on `Object`, or derived from the
+  upload session — is a contract decision.
+
+### SDK helpers consumers wrote for themselves
+
+- **Status:** Deferred — the fixes shipped first; these are additions to shape
+  against the consumers that need them.
+- **Reason:** agentic-rag, caryon and local-iac each work around a missing
+  helper: agentic-rag hand-writes the control half of a browser-driven
+  multipart upload (initiate, presign parts on demand, complete with a
+  read-back, abort); caryon writes an ensure helper for admin resources (get,
+  else create with a key, AlreadyExists tolerated) and a capability cache with
+  in-flight dedup; the Python SDK has no `capability_source` (Go has
+  `WithCapabilitySource`).
+- **Definition of Done:** each helper in both SDKs where it fits, designed by
+  deleting the consumer's own code and making it compile against the helper;
+  README rows and tests.
+- **Blockers:** none.
+
+### The SDK fakes do not hold every RPC the server serves
+
+- **Status:** Deferred
+- **Reason:** `paladintest` and `paladin.testing` serve 16 data-plane RPCs;
+  ObjectTag, Operation (and so Batch), Copy, versions, Update, Restore and
+  Count answer `Unimplemented`. `ListObjects` ignores `filter`, `order_by` and
+  `sort_order`, and `DeleteObject` ignores `resource_version`, so a test passes
+  where the server would filter or conflict. Neither runs protovalidate.
+- **Definition of Done:** the missing services, or an explicit refusal of the
+  parameters the fake does not honour; `resource_version` checked on delete;
+  protovalidate on every request — in both fakes, with tests.
+- **Blockers:** none.
+
+### The Python SDK installs `httpcore` and its TLS layer for everyone
+
+- **Status:** Deferred — a packaging change, so a decision rather than a fix.
+- **Reason:** `paladin._tls_http` (about 540 lines) and
+  `httpcore[http2,asyncio]` exist only for `TLS(server_id=…)` and
+  `min_version`, which pyqwest cannot do, yet every install carries them.
+- **Definition of Done:** a `tls` extra holding them, a clear error when `TLS`
+  is used without it, and the compat matrix covering both installs.
+- **Blockers:** a consumer that uses `TLS` without naming the extra breaks on
+  upgrade; announce it with the release.
+
 ### Python reads response headers through a transport of its own
 
 - **Status:** Deferred.

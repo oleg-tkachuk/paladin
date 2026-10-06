@@ -459,3 +459,33 @@ func Example_migratingFromConnectJSON() {
 	fmt.Println(errors.Is(err, paladin.ErrNotFound))
 	// Output: true
 }
+
+// Waiting on a long-running operation — a batch, a storage migration — by name.
+// The getter returns before touching the response when the call failed: a
+// Connect client returns a nil response with its error.
+func ExampleWait() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	p, err := paladin.Connect(paladin.Endpoints{Data: "https://paladin.example.com"},
+		paladin.WithTokenSource(paladin.StaticToken("paladin_pat_…"), paladin.AudienceData))
+	if err != nil {
+		panic(err)
+	}
+	name := "tenants/7f3c…/operations/01a…"
+	op, err := paladin.Wait(ctx, func(ctx context.Context) (*datav1.Operation, error) {
+		r, err := p.Data.Operation.GetOperation(ctx, connect.NewRequest(&datav1.GetOperationRequest{Name: name}))
+		if err != nil {
+			return nil, err
+		}
+		return r.Msg, nil
+	})
+	var failed *paladin.OperationError
+	switch {
+	case errors.As(err, &failed):
+		fmt.Println("operation failed:", failed.Code())
+	case err != nil:
+		fmt.Println("could not wait:", err)
+	default:
+		fmt.Println("done:", op.GetName())
+	}
+}

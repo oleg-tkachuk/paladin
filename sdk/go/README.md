@@ -104,7 +104,7 @@ and `Issue*` calls and answers a repeated key with the first response.
 
 | Function | Does |
 | --- | --- |
-| `WithIdempotencyKey(ctx, key) context.Context` | Every call made with the returned context sends `Idempotency-Key: <key>`. The server replays the first response for a key it has seen, so repeating a mutating call with the same key is safe. A response that carries a credential (a minted API or capability token, a generated password) is not replayed: the repeat returns `AlreadyExists`, because the credential is delivered once and not stored. Reuse the key only for the same logical operation. |
+| `WithIdempotencyKey(ctx, key) context.Context` | Every call made with the returned context that the contract does not declare side-effect free or idempotent sends `Idempotency-Key: <key>`. The server replays the first response to the same request with a key it has seen, so repeating a mutating call with the same key is safe; the same key with a different request to that method is `InvalidArgument`. `Upload`, `Download` and their `Many` forms keep the key for the calls that create or complete an object — per input, as `key/<index>`, in `UploadMany` — and give every other call its own. A response that carries a credential (a minted API or capability token, a generated password) is not replayed: the repeat returns `AlreadyExists`, because the credential is delivered once and not stored. Reuse the key only for the same logical operation. |
 | `IdempotencyKey(ctx) (string, bool)` | The key attached to `ctx`; an empty key counts as none. |
 | `WithoutIdempotencyKey(ctx) context.Context` | Every call made with the returned context goes out with no key — not the default one, not the request's field — and so is never retried, unless the contract declares it side-effect free or idempotent. For an operation that must run again when repeated rather than be answered with the first response. The server refuses `Create*` and `Issue*` without a key. The last `WithIdempotencyKey` or `WithoutIdempotencyKey` on a context wins. |
 | `WithRetryable(func(error) bool) Option` | Replaces `DefaultRetryable` (`Unavailable`, `ResourceExhausted`) as the test of which failures `WithRetries` retries. It cannot make an unsafe call retried: the rule above still applies. |
@@ -113,9 +113,10 @@ and `Issue*` calls and answers a repeated key with the first response.
 
 | Name | Does |
 | --- | --- |
-| `NewSession(ctx, iamURL, subject, password, opts...) (*Session, error)` | Signs in at the IAM plane and keeps the refresh token. `Token(ctx, audience)` returns that plane's access token: the IAM one by refreshing, the others by `ExchangeAudience`. Each is cached until `TokenRefreshMargin` (30s) before it expires. When the refresh token itself is refused, the session signs in again. Safe for concurrent use; concurrent callers wait for one mint. |
+| `NewSession(ctx, iamURL, subject, password, opts...) (*Session, error)` | Signs in at the IAM plane and keeps the refresh token. `Token(ctx, audience)` returns that plane's access token: the IAM one by refreshing, the others by `ExchangeAudience`. Each is cached until `TokenRefreshMargin` (30s) before it expires. When the refresh token itself is refused, the session signs in again. Safe for concurrent use; concurrent callers wait for one mint, and a cached token is served while another audience's is minted. A token that cannot be had because IAM is down fails the call as `Unavailable`, not `Unauthenticated`. |
 | `SessionFromRefreshToken(iamURL, refreshToken, opts...)` | Resumes from a stored refresh token; cannot sign in again when it expires. `(*Session).RefreshToken()` is the current one to store — refreshing rotates it. |
 | `WithSessionClock(now)` | Replaces `time.Now`, for tests. |
+| `WithSessionClientOptions(opts...)` | Configures the client the session reaches IAM with, as `New`'s options do any other: `WithTLS` for an IAM behind mTLS, `WithRetries`, `WithHTTPClient`, `WithHooks`. |
 | `StaticToken(token)` | The same token for every plane: an API token, or a JWT from elsewhere. |
 | A `TokenSource` of your own | `Token(ctx, audience)` is asked on every call, with that call's context. An empty token and no error sends the call without `Authorization`, for a caller authenticated by a capability alone. |
 | `WithTokens(ts)` | With `Connect`: each plane gets `ts`'s token for its own audience. `New` refuses it with `ErrNoAudience`. |
@@ -172,6 +173,7 @@ capability's JWT keep working; `Revoke` stops them all.
 | `Mask[M](paths...) (*fieldmaskpb.FieldMask, error)` | An update mask for `M` from proto field names, nested ones with `.`, each checked against `M`'s descriptor: `ErrUnknownMaskPath` for one it lacks. |
 | `Upload(ctx, p.Data, UploadInput, UploadOptions) (*datav1.Object, error)` | Uploads exactly `Size` bytes (0 is an empty object) from exactly one of `Body` (an `io.ReaderAt`: `*os.File`, `*bytes.Reader`) and `Stream` (an `io.Reader` read once: a pipe, a response body) and completes the object. Every upload URL is signed for its body's size and SHA-256, so each body is hashed before it is presigned: `Body` is read twice and never held whole; `Stream` is held in memory while it is hashed and sent — the whole object below the threshold, the parts in flight above it. Up to `MultipartThreshold` (default `DefaultMultipartThreshold`, 8 MiB) one presigned PUT, whose checksum is recorded on the object; above it multipart, `PartConcurrency` parts at a time (default 3), aborted if any part fails. `ErrUploadBody` for neither or both. `Checksum(algo, r)` computes the value for a caller that presigns itself. Each presigned request is retried — on a busy store, a transport failure or an expired URL, up to `DefaultTransferAttempts` (`WithTransferAttempts`) — through a freshly presigned URL, and a URL within `PresignExpirySkew` of its expiry is presigned again before it is sent; a single PUT whose retry meets an object already stored (412, the URL's If-None-Match) completes. `UploadOptions.OnSession` hands over the open multipart session and leaves a failed upload open; `UploadOptions.Resume` continues it, sending only the parts storage does not hold. |
 | `Download(ctx, p.Data, name, DownloadOptions) (*ObjectReader, error)` | Streams the object's content; close the reader. `DownloadOptions{Offset, Length}` reads a byte range (`ErrRangeIgnored` when storage answers with the whole object). A whole read is verified: the last `Read` returns an `*IntegrityError` instead of `io.EOF` when the size or the recorded checksum (SHA-256, CRC32C, MD5) does not match. `ObjectReader` carries the `Object`, `ContentType` and `ContentLength`. The request is retried as an upload is, each attempt through a URL bound to the object's ETag as it was first read: `ErrObjectChanged` when the object was replaced in between. |
+| `PresignExpiry(url) (time.Time, bool)` | When a presigned URL stops working, from its `expires_at_rfc3339`; false when the server sent none. An upper bound: the signer may clamp a TTL further. |
 
 ### Transfers
 
@@ -267,6 +269,7 @@ failure with `errors.Is`. Match on these, not on codes or messages:
 
 | Kind | Code | Means |
 | --- | --- | --- |
+| `ErrInvalidArgument` | `InvalidArgument` | The request fails the same way however often it is sent; `Reason` says which rule it broke. |
 | `ErrNotFound` | `NotFound` | |
 | `ErrAlreadyExists` | `AlreadyExists` | |
 | `ErrPermissionDenied` | `PermissionDenied` | |
@@ -334,6 +337,12 @@ and version ids are UUIDs. `ErrInvalidName` for anything else.
 | `ObjectName`, `ParseObjectName` | `…/collections/{collection}/objects/{object-id}` |
 | `ObjectVersionName`, `ParseObjectVersionName` | `…/objects/{object-id}/versions/{version-id}` |
 | `ObjectURI`, `ParseObjectURI` | `paladin://tenants/{tenant-id}/collections/{collection}/keys/{key}` — an object by its key; the collection and the key are escaped path segments |
+| `BucketName`, `ParseBucketName` | `storageBackends/{backend}/buckets/{bucket}` — a physical bucket on the admin plane, and a bucket quota's parent |
+
+`ObjectResource(tenant, collection, key)` is the resource a capability grants
+on an object, or on every object under a key prefix: `object://{tenant-id}/{collection}/{key}`.
+`APITokenPrefix` (`paladin_pat_`) starts every API token; the server reads
+both from here.
 
 `LookupObject(ctx, p.Data, uri)` finds the object an `ObjectURI` names, and
 `DownloadURI(ctx, p.Data, "paladin://…", opts)` downloads it. The URI extends

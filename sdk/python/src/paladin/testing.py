@@ -44,12 +44,18 @@ from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
+from connectrpc.method import IdempotencyLevel
 from connectrpc.request import RequestContext
 from google.protobuf import descriptor_pool
 from google.protobuf.message import Message
 from google.rpc import error_details_pb2
 
-from paladin.client import HEADER_API_TOKEN, HEADER_AUTHORIZATION, HEADER_CAPABILITY
+from paladin.client import (
+    HEADER_API_TOKEN,
+    HEADER_AUTHORIZATION,
+    HEADER_CAPABILITY,
+    HEADER_IDEMPOTENCY_KEY,
+)
 from paladin.common.v1 import error_reason_pb2, pagination_pb2, resource_pb2
 from paladin.connect import Endpoints, Paladin, connect
 from paladin.data.v1 import (
@@ -73,7 +79,7 @@ from paladin.data.v1.storage_bootstrap_service_connect import (
     StorageBootstrapServiceWSGIApplication,
 )
 from paladin.errors import ERROR_DOMAIN
-from paladin.names import CollectionName, InvalidNameError, ObjectName
+from paladin.names import API_TOKEN_PREFIX, CollectionName, InvalidNameError, ObjectName
 from paladin.transfer import CHECKSUM_SHA256
 
 if TYPE_CHECKING:  # annotations only: typing.Self is 3.11+
@@ -298,12 +304,12 @@ class _Calls:
         err = self._fake._take_rpc_fault(procedure, request)
         if err is not None:
             raise err
-        return call_next(request, ctx)
+        return self._fake._memoise(procedure, request, ctx, call_next)
 
 
 # ─── Strict auth ──────────────────────────────────────────────────────────────
 
-_API_TOKEN_PREFIX = "paladin_pat_"
+_API_TOKEN_PREFIX = API_TOKEN_PREFIX
 """An API token carries the server's prefix, so a client tells it from a
 bearer token as it does against the server."""
 _BEARER_TOKEN_PREFIX = "paladintest_jwt_"
@@ -328,6 +334,10 @@ _CAPABILITY_REVOKED = "capability: revoked"
 _TENANT_MISMATCH = "URL tenant does not match token tenant"
 _NAMES_SPAN_TENANTS = "resource names in one request must name the same tenant"
 _UPLOAD_TENANT_MISMATCH = "tenant mismatch"
+_KEY_REUSED = (
+    "idempotency: this Idempotency-Key was already used for a different request to this method; "
+    "use a new key for a new request"
+)
 
 
 @dataclass
@@ -414,6 +424,9 @@ class FakePaladin(
         self._storage_ops: list[StorageOp] = []
         self._rpc_faults: dict[str, list[_RPCFault]] = {}
         self._credentials: dict[str, _Credential] = {}
+        # Responses memoised per (procedure, idempotency key), with the
+        # fingerprint of the request each answered — as the server keeps.
+        self._replays: dict[tuple[str, str], tuple[bytes, Any]] = {}
         self._httpd: WSGIServer | None = None
 
     # ─── Lifecycle ──────────────────────────────────────────────────────────
@@ -730,6 +743,30 @@ class FakePaladin(
         """The storage requests received, oldest first."""
         with self._lock:
             return list(self._storage_ops)
+
+    def _memoise(self, procedure: str, request: Message, ctx: RequestContext, call_next):  # type: ignore[no-untyped-def]
+        """Answer as the server's idempotency interceptor does: a call
+        declared free of side effects runs as it is; one with a key replays
+        the response first given to the same request with that key, and is
+        refused when the key last went with a different request. A test that
+        shares one key across requests fails here as against Paladin."""
+        if ctx.method().idempotency_level == IdempotencyLevel.NO_SIDE_EFFECTS:
+            return call_next(request, ctx)
+        key = ctx.request_headers().get(HEADER_IDEMPOTENCY_KEY.lower(), "")
+        if not key:
+            return call_next(request, ctx)
+        fingerprint = hashlib.sha256(request.SerializeToString(deterministic=True)).digest()
+        slot = (procedure, key)
+        with self._lock:
+            prior = self._replays.get(slot)
+        if prior is not None:
+            if prior[0] != fingerprint:
+                raise ConnectError(Code.INVALID_ARGUMENT, _KEY_REUSED)
+            return prior[1]
+        response = call_next(request, ctx)
+        with self._lock:
+            self._replays[slot] = (fingerprint, response)
+        return response
 
     def _record(self, request: Request) -> None:
         with self._lock:

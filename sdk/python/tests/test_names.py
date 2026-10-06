@@ -11,6 +11,8 @@ import pytest
 from data_plane_fake import Fake
 
 from paladin import (
+    API_TOKEN_PREFIX,
+    BucketName,
     CollectionName,
     Endpoints,
     InvalidNameError,
@@ -20,6 +22,7 @@ from paladin import (
     TenantName,
     connect,
     download_uri,
+    object_resource,
     upload,
 )
 
@@ -89,3 +92,56 @@ def test_download_uri_looks_the_object_up_by_key(fake: Fake) -> None:
     assert fake.looked_up == [f"tenants/{TENANT}/collections/c|k"]
     with pytest.raises(InvalidNameError):
         download_uri(data, "paladin://docs/k")
+
+
+TENANT_ID = "7ba7b810-9dad-11d1-80b4-00c04fd430c8"
+
+
+# A name built from parts was checked only by parse, so consumers validated by
+# parse(str(Name(...))). The constructor now refuses what the server refuses,
+# and keeps an id in its canonical form.
+def test_collection_name_checks_its_parts() -> None:
+    assert CollectionName(TENANT_ID.upper(), "docs").tenant == TENANT_ID
+    with pytest.raises(InvalidNameError):
+        CollectionName("acme", "docs")  # a slug, which the server refuses under a tenant
+    with pytest.raises(InvalidNameError):
+        CollectionName(TENANT_ID, "")
+
+
+def test_object_and_uri_names_check_their_parts() -> None:
+    collection = CollectionName(TENANT_ID, "docs")
+    with pytest.raises(InvalidNameError):
+        ObjectName(collection, "not-a-uuid")
+    with pytest.raises(InvalidNameError):
+        ObjectURI(collection, "")
+    with pytest.raises(InvalidNameError):
+        TenantName("a/b")
+
+
+def test_bucket_name_round_trips() -> None:
+    name = BucketName("primary", "paladin-shared")
+    assert str(name) == "storageBackends/primary/buckets/paladin-shared"
+    assert BucketName.parse(str(name)) == name
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "storageBackends/primary",
+        "storageBackends//buckets/b",
+        "storageBackends/p/buckets/",
+        "buckets/b",
+        "storageBackends/p/buckets/b/extra",
+    ],
+)
+def test_bucket_name_refuses_other_shapes(value: str) -> None:
+    with pytest.raises(InvalidNameError):
+        BucketName.parse(value)
+
+
+# The server checks a capability's resource against this exact shape; the
+# consumers that grant on a key prefix spelled it by hand.
+def test_object_resource() -> None:
+    assert object_resource(TENANT_ID, "docs", "reports/") == f"object://{TENANT_ID}/docs/reports/"
+    assert API_TOKEN_PREFIX == "paladin_pat_"

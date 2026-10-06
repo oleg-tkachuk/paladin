@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
 	"connectrpc.com/connect"
@@ -630,7 +632,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("checksum_value: %w", err))
 	}
 
-	objectURI := "object://" + tenantID.String() + "/" + in.Collection + "/" + in.Key
+	objectURI := paladin.ObjectResource(tenantID.String(), in.Collection, in.Key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
@@ -814,7 +816,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	if err != nil {
 		return nil, objectLookupError(err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
+	objectURI := paladin.ObjectResource(tenantID.String(), obj.Collection, obj.Key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
@@ -1175,7 +1177,7 @@ func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (*
 	if err != nil {
 		return nil, objectLookupError(err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
+	objectURI := paladin.ObjectResource(tenantID.String(), obj.Collection, obj.Key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
 		return nil, err
 	}
@@ -1224,7 +1226,7 @@ func (h *Handler) LookupObject(ctx context.Context, collection, key string) (*Ob
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
+	objectURI := paladin.ObjectResource(tenantID.String(), obj.Collection, obj.Key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
 		return nil, err
 	}
@@ -1278,7 +1280,7 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	if err != nil {
 		return nil, objectLookupError(err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
+	objectURI := paladin.ObjectResource(tenantID.String(), obj.Collection, obj.Key)
 	// Download issues a presigned URL — capability needs OpPresign and
 	// OpGet (the underlying op the URL grants). Two assertions, one per
 	// caveat axis; either failure short-circuits.
@@ -1373,7 +1375,7 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	if err != nil {
 		return nil, objectLookupError(err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + in.Collection + "/" + cur.Key
+	objectURI := paladin.ObjectResource(tenantID.String(), in.Collection, cur.Key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
 		return nil, err
 	}
@@ -1449,7 +1451,7 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 	if err != nil {
 		return objectLookupError(err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + collection + "/" + obj.Key
+	objectURI := paladin.ObjectResource(tenantID.String(), collection, obj.Key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, objectURI); err != nil {
 		return err
 	}
@@ -1726,7 +1728,7 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	if err != nil {
 		return nil, objectLookupError(err)
 	}
-	objectURI := "object://" + tenantID.String() + "/" + obj.Collection + "/" + obj.Key
+	objectURI := paladin.ObjectResource(tenantID.String(), obj.Collection, obj.Key)
 	// Restore is conceptually a Put (re-creates the live object from a
 	// soft-deleted row). Capability gate on OpPut.
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
@@ -1839,7 +1841,7 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	// to the caller; we don't separately gate OpGet on it because the
 	// underlying access model treats source-readable-and-dest-writable
 	// as the union of the same Cedar policy below.
-	destURI := "object://" + tenantID.String() + "/" + in.DestCollection + "/" + destKey
+	destURI := paladin.ObjectResource(tenantID.String(), in.DestCollection, destKey)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, destURI); err != nil {
 		return nil, err
 	}
