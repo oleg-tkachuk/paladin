@@ -1778,6 +1778,19 @@
                     },
                     "threshold": {
                       "type": "number"
+                    },
+                    "window": {
+                      "type": "string"
+                    },
+                    "runbook": {
+                      "type": "string"
+                    },
+                    "serverErrorCodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "minItems": 1
                     }
                   },
                   "type": "object"
@@ -1796,6 +1809,17 @@
                     },
                     "thresholdSeconds": {
                       "type": "number"
+                    },
+                    "window": {
+                      "type": "string"
+                    },
+                    "runbook": {
+                      "type": "string"
+                    },
+                    "quantile": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "exclusiveMaximum": 1
                     }
                   },
                   "type": "object"
@@ -1832,6 +1856,12 @@
                 }
               },
               "type": "object"
+            },
+            "runbookBaseUrl": {
+              "type": "string"
+            },
+            "rpcSelector": {
+              "type": "string"
             }
           },
           "type": "object"

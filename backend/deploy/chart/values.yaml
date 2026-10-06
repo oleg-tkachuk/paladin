@@ -480,6 +480,14 @@ metrics:
   alerts:
     enabled: false
     labels: {}
+    # Where the runbook_url annotations point; each rule names its file.
+    runbookBaseUrl: https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks
+    # Label matchers ANDed into the Connect RPC series selector of the traffic
+    # rules, e.g. `namespace="paladin"`. Empty by default: which labels the
+    # series carry depends on the metrics pipeline (otel.metrics_exporter, the
+    # collector's processors), and a matcher on a label it does not produce
+    # silences the rule.
+    rpcSelector: ""
     rules:
       crashLooping:
         enabled: true
@@ -488,13 +496,31 @@ metrics:
       highErrorRate:
         enabled: true
         severity: warning
+        # Fraction of RPCs failing with one of serverErrorCodes.
         threshold: 0.05
+        window: 5m
         for: 10m
+        # The Connect codes connect-go answers with an HTTP 5xx. Client faults
+        # (NOT_FOUND, PERMISSION_DENIED, RESOURCE_EXHAUSTED, ...) are excluded:
+        # a credential-stuffing run or a throttled tenant is not an outage.
+        serverErrorCodes:
+          - UNKNOWN
+          - DEADLINE_EXCEEDED
+          - UNIMPLEMENTED
+          - INTERNAL
+          - UNAVAILABLE
+          - DATA_LOSS
+        runbook: api-high-error-rate.md
       highLatency:
         enabled: true
         severity: warning
+        quantile: 0.99
+        # otelconnect's buckets close at 0.75, 1 and 2.5s around the
+        # thresholds in use; a value between two bounds is interpolated.
         thresholdSeconds: 1.5
+        window: 5m
         for: 10m
+        runbook: api-high-latency.md
       notReady:
         enabled: true
         severity: warning
