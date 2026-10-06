@@ -97,7 +97,7 @@ ignore `Retry-After`, and the first such error warns with a `RuntimeWarning`.
 
 | Member | Does |
 | --- | --- |
-| `Client(base_url, *, bearer_token=None, api_token=None, capability=None, retry=None, headers=None, token_source=None, audience=None, dpop_key=None)` | A client for the plane at `base_url`. Raises `ValueError` unless it is an absolute `http`/`https` URL. A trailing `/` is dropped. `bearer_token` is sent as `Authorization: Bearer <token>` — an API token (`paladin_pat_…`) and an OIDC JWT are both accepted. `api_token` is sent in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. `capability` is sent in `X-Paladin-Capability`: the JWT, or the `biscuit` that `CapabilityService.Issue` returns beside it. `dpop_key` — a `cryptography` Ed25519 or P-256 private key, with the `dpop` extra installed — proves possession of the key a capability is bound to: each call, each retry included, carries a fresh RFC 9449 proof in `DPoP`; issue the capability with `confirmation_jkt=dpop_thumbprint(key.public_key())`. `headers` are sent on every call and replace what the SDK would send there — `User-Agent` included, which is `paladin-sdk-python/<version>` by default. |
+| `Client(base_url, *, bearer_token=None, api_token=None, capability=None, retry=None, headers=None, token_source=None, audience=None, user_agent_suffix=None, hooks=None, interceptors=(), dpop_key=None)` | A client for the plane at `base_url`. Raises `ValueError` unless it is an absolute `http`/`https` URL. A trailing `/` is dropped. `bearer_token` is sent as `Authorization: Bearer <token>` — an API token (`paladin_pat_…`) and an OIDC JWT are both accepted. `api_token` is sent in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. `capability` is sent in `X-Paladin-Capability`: the JWT, or the `biscuit` that `CapabilityService.Issue` returns beside it. `dpop_key` — a `cryptography` Ed25519 or P-256 private key, with the `dpop` extra installed — proves possession of the key a capability is bound to: each call, each retry included, carries a fresh RFC 9449 proof in `DPoP`; issue the capability with `confirmation_jkt=dpop_thumbprint(key.public_key())`. `headers` are sent on every call and replace what the SDK would send there — `User-Agent` included, which is `paladin-sdk-python/<version>` by default. |
 | `base_url` | First argument of every generated client. |
 | `interceptors()` | Interceptors for a generated `…ClientSync`. |
 | `async_interceptors()` | Interceptors for a generated async `…Client`. |
@@ -214,10 +214,10 @@ p = paladin.connect(endpoints, token_source=session, transfer=transfer)
 
 | Name | Does |
 | --- | --- |
-| `Transfer(*, split_horizon=None, rewrite=None, connect_timeout=10.0, read_timeout=30.0, pool_max_idle_per_host=32, transport=None, attempts=4)` | With no arguments: a connection timeout and a read timeout (`DEFAULT_TRANSFER_…`), but no bound on a whole transfer; 32 connections per host kept for reuse; redirects refused; `DEFAULT_TRANSFER_ATTEMPTS` attempts per presigned request (`ValueError` below 1). Thread-safe, and meant to be shared. |
+| `Transfer(*, split_horizon=None, rewrite=None, connect_timeout=10.0, read_timeout=30.0, pool_max_idle_per_host=32, tls=None, hooks=None, otel=False, tracer_provider=None, transport=None, async_transport=None, attempts=4)` | With no arguments: a connection timeout and a read timeout (`DEFAULT_TRANSFER_…`), but no bound on a whole transfer; 32 connections per host kept for reuse; redirects refused; `DEFAULT_TRANSFER_ATTEMPTS` attempts per presigned request (`ValueError` below 1). Thread-safe, and meant to be shared. |
 | `split_horizon=(signed_origin, internal_origin)` | A URL signed for `signed_origin` is sent to `internal_origin`, keeping `Host: <signed host>`: the signature covers the header, not the address. Other origins go as signed. `ValueError` for anything but `scheme://host[:port]`. |
 | `rewrite=fn` | The general form: any URL to any URL, the signed Host still kept. Not with `split_horizon`. |
-| `transport=` | A `pyqwest.SyncHTTPTransport` of your own — a proxy, TLS settings. Build it with `follow_redirects=False`: one that follows them cannot be stopped from here. |
+| `transport=`, `async_transport=` | A `pyqwest.SyncHTTPTransport` of your own for the sync workflows, and a `pyqwest.HTTPTransport` for the async ones — a proxy, TLS settings. Build it with `follow_redirects=False`: one that follows them cannot be stopped from here. |
 | `connect(…, transfer=t)` | Every `upload` and `download` through that data plane uses `t`; without it, a shared default. |
 | `stream(method, signed, headers=None, content=None)`, `astream(…)` | One presigned request of your own — a URL the server signed that the workflows do not send, such as a PUT minted for another service. A context manager yielding storage's 2xx `pyqwest` response, unread; `method` applies when `signed.method` is empty. The signed Host and `signed.required_headers` are sent, and the rewrite applied; `Content-Length` among them too, since a streamed body has no length the HTTP client could find — send a body of exactly that length. Any other status is a `TransferError`, reported to the hooks; on success report it yourself with `ended(method, host_of(signed), moved, started, None)`, `started` from `time.monotonic()` before the call. |
 | `TransferError` | A request storage refused, or answered with a redirect: `method`, `host` (the URL's query is the signature and is not kept), `status`, and the first 512 bytes of the `body`. |
@@ -513,7 +513,7 @@ tests hold its parsers to as well. Where they differ, it is on purpose:
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
 | Webhook signatures | `VerifyWebhook`, options for the window and clock | `verify_webhook`, keyword arguments | Each language's idiom; both run the vectors in `sdk/testdata/webhook_signatures.json`. |
 | Biscuit attenuation | `capability.Attenuate`, from the capability module | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
-| OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0 (BACKLOG). |
+| OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0. |
 | Bulk transfers | `DownloadMany`, a callback per reader; `UploadMany`, objects in input order and failures by index | `download_many` / `adownload_many` and `upload_many` / `aupload_many`, iterators of results as each finishes | Each language's idiom. |
 | asyncio | — | An `a…` form of every workflow | Go has goroutines. |
 
@@ -624,7 +624,7 @@ major on every Python, and beside `hatchet-sdk`, and runs the tests there
 
 The stubs are generated with an older `grpcio-tools` on purpose: a stub
 refuses a protobuf runtime older than the protoc that generated it, so the
-generator's version *is* the floor. `scripts/py-sdk-compat.test.sh` fails when
+generator's version *is* the floor. [`scripts/py-sdk-compat.test.sh`](../../scripts/py-sdk-compat.test.sh) fails when
 the stubs, the declared floor and the matrix disagree.
 
 ## Versioning
