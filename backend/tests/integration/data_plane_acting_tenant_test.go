@@ -210,22 +210,34 @@ func TestDataPlaneAdminIdempotencyKeyIsPerTenant(t *testing.T) {
 		}
 	}
 
-	// And within the tenant the key still does its job: a retry is answered
-	// from the first call, not run again. Keyed on the caller while the
-	// connection is scoped to the target, the row was refused by RLS and a
-	// retry ran the write twice.
+	// And within the tenant the key still does its job: a retry — the same
+	// request — is answered from the first call, not run again. Keyed on the
+	// caller while the connection is scoped to the target, the row was
+	// refused by RLS and a retry ran the write twice.
 	retry := authed(admin, &pbdata.UpdateObjectRequest{
 		Name:            objectOf(f.target, f.inTarget),
 		ResourceVersion: "1",
 		UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
-		Tags:            map[string]string{"set-by": "a-retry-that-must-not-run"},
+		Tags:            map[string]string{"set-by": "platform-admin"},
 	})
 	retry.Header().Set("Idempotency-Key", key)
 	if _, err := f.objects.UpdateObject(ctx, retry); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
+
+	// The key sent with a different request is refused, and writes nothing.
+	other := authed(admin, &pbdata.UpdateObjectRequest{
+		Name:            objectOf(f.target, f.inTarget),
+		ResourceVersion: "1",
+		UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
+		Tags:            map[string]string{"set-by": "a-different-request-that-must-not-run"},
+	})
+	other.Header().Set("Idempotency-Key", key)
+	if _, err := f.objects.UpdateObject(ctx, other); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("a different request under the key: %v, want InvalidArgument", err)
+	}
 	if got := mustObjectTags(t, f.h.PoolMigrate, f.inTarget); got["set-by"] != "platform-admin" {
-		t.Errorf("the retry ran the write again: tags %v", got)
+		t.Errorf("a request under a reused key ran: tags %v", got)
 	}
 }
 
