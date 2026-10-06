@@ -40,8 +40,8 @@ Four layers are concatenated, in this order, and compiled together:
    - a member may read its own tenant (`ReadTenant`) and ensure its own
      storage (`EnsureTenantStorage`);
    - a user may read and change its own settings (`ReadUserSettings`,
-     `ManageUserSettings`) — the target user's `subject` and `tenant_id`
-     match the principal's;
+     `ManageUserSettings`) — the target user's `user_id` is the
+     principal's `subject` and its `tenant_id` the principal's;
    - a machine principal (`kind` is `api_key`, `service_account` or
      `capability`) may delete and restore objects in its own tenant;
    - `platform.tenant-provisioner` may create tenants and their storage;
@@ -245,7 +245,9 @@ inside a policy; compare against `resource.scope_keys` instead.
   that also applies to an entity without them (§4, §5) without `has`.
 - `Tenant::"<uuid>"` for a tenant that has a slug — the UID is the slug.
 - `principal == resource` to mean "the caller's own user" — the two UIDs never
-  match; compare `principal.subject == resource.subject`.
+  match. Compare `principal.subject == resource.user_id`: a user's token
+  carries its user id as the subject, and `resource.subject` is the login
+  name, which matches nothing.
 - An empty tenant policy: everything outside the built-in grants is denied.
 
 ## 9. Workflow
