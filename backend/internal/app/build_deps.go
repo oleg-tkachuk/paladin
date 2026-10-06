@@ -37,9 +37,9 @@ type SharedDeps struct {
 	DB     *postgres.DB
 	Pool   *pgxpool.Pool
 	// Metrics is the /metrics handler, non-nil only when
-	// otel.metrics_exporter = "prometheus". Mounted on each plane's mux
-	// beside the health endpoints — the scraper reaches a pod through
-	// whichever port it advertises, so every listener has to serve it.
+	// otel.metrics_exporter = "prometheus". Served by the metrics listener
+	// alone (BuildMetricsListener, StartMetricsListener), on
+	// otel.metrics_addr in every role, so a scraper has one port to find.
 	Metrics observability.MetricsHandler
 	// ReaperPool is an optional BYPASSRLS pool for the worker's cross-tenant
 	// background DML jobs (least-privilege paladin_reaper in prod; paladin_migrate in
