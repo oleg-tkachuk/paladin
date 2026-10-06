@@ -858,19 +858,15 @@ config:
     refresh_token_ttl: 168h
     scoped_token_max_ttl: 24h
 
-  security:
-    # The X-Tenant-Id header is a Login-time disambiguator only —
-    # password verification still gates the request. There is no
-    # "trust header without JWT" mode; the trust_tenant_id_from_request
-    # flag that used to live here was dead code and was removed in
-    # the post-2026-05 security audit.
-    reject_tenant_mismatch: true
-    # RLS is not a knob — the runtime unconditionally installs the
-    # BeforeAcquire hook that stamps paladin.tenant_id GUC. Migration
-    # 023 makes RLS unavoidable at the DB layer (per-table policies
-    # on objects/object_tags/quotas/etc), and paladin_app is
-    # NOBYPASSRLS by design, so any "off" position would break
-    # every write. See internal/config/types.go for rationale.
+  # security: nothing to set. The X-Tenant-Id header is a Login-time
+  # disambiguator only — password verification still gates the request —
+  # and a request naming another tenant is refused unconditionally.
+  #
+  # RLS is not a knob either — the runtime unconditionally installs the
+  # BeforeAcquire hook that stamps the paladin.tenant_id GUC,
+  # `002_roles_and_rls.sql` makes RLS unavoidable at the DB layer, and
+  # paladin_app is NOBYPASSRLS by design, so any "off" position would break
+  # every write. See internal/config/types.go for the rationale.
 
   bootstrap:
     admin:
