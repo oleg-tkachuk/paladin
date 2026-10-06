@@ -13,7 +13,7 @@ import (
 
 const getIdempotencyKey = `-- name: GetIdempotencyKey :one
 
-SELECT tenant_id, method, key, response, response_sha, created_at, expires_at
+SELECT tenant_id, method, key, response, response_sha, request_hash, created_at, expires_at
 FROM idempotency_keys
 WHERE tenant_id = $1 AND method = $2 AND key = $3
   AND expires_at > now()
@@ -27,6 +27,7 @@ type GetIdempotencyKeyRow struct {
 	Key         string             `json:"key"`
 	Response    []byte             `json:"response"`
 	ResponseSha []byte             `json:"response_sha"`
+	RequestHash []byte             `json:"request_hash"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 }
@@ -44,6 +45,7 @@ func (q *Queries) GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, m
 		&i.Key,
 		&i.Response,
 		&i.ResponseSha,
+		&i.RequestHash,
 		&i.CreatedAt,
 		&i.ExpiresAt,
 	)
@@ -70,8 +72,8 @@ func (q *Queries) PurgeExpiredIdempotencyKeys(ctx context.Context) (int64, error
 }
 
 const putIdempotencyKey = `-- name: PutIdempotencyKey :exec
-INSERT INTO idempotency_keys (tenant_id, method, key, response, response_sha, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO idempotency_keys (tenant_id, method, key, response, response_sha, request_hash, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (tenant_id, method, key, expires_at) DO NOTHING
 `
 
@@ -92,13 +94,14 @@ ON CONFLICT (tenant_id, method, key, expires_at) DO NOTHING
 // expires_at, new partition); GetIdempotencyKey filters the expired one and
 // the daily DROP PARTITION reclaims it — so the old expired-overwrite
 // DO UPDATE is no longer needed.
-func (q *Queries) PutIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string, response []byte, responseSha []byte, expiresAt pgtype.Timestamptz) error {
+func (q *Queries) PutIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string, response []byte, responseSha []byte, requestHash []byte, expiresAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, putIdempotencyKey,
 		tenantID,
 		method,
 		key,
 		response,
 		responseSha,
+		requestHash,
 		expiresAt,
 	)
 	return err

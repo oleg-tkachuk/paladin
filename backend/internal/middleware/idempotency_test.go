@@ -121,10 +121,7 @@ type memStore struct {
 	data map[string]memEntry
 }
 
-type memEntry struct {
-	body []byte
-	sha  []byte
-}
+type memEntry = IdempotencyRecord
 
 func newMemStore() *memStore { return &memStore{data: make(map[string]memEntry)} }
 
@@ -132,20 +129,17 @@ func (s *memStore) key(tenantID uuid.UUID, method, k string) string {
 	return tenantID.String() + "|" + method + "|" + k
 }
 
-func (s *memStore) Get(_ context.Context, tenantID uuid.UUID, method, k string) ([]byte, []byte, bool, error) {
+func (s *memStore) Get(_ context.Context, tenantID uuid.UUID, method, k string) (IdempotencyRecord, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	e, ok := s.data[s.key(tenantID, method, k)]
-	if !ok {
-		return nil, nil, false, nil
-	}
-	return e.body, e.sha, true, nil
+	return e, ok, nil
 }
 
-func (s *memStore) Put(_ context.Context, tenantID uuid.UUID, method, k string, body, sha []byte, _ time.Time) error {
+func (s *memStore) Put(_ context.Context, tenantID uuid.UUID, method, k string, rec IdempotencyRecord, _ time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.data[s.key(tenantID, method, k)] = memEntry{body: body, sha: sha}
+	s.data[s.key(tenantID, method, k)] = rec
 	return nil
 }
 
@@ -364,5 +358,74 @@ func TestCredentialMintersAreSkipped(t *testing.T) {
 	// TestCredentialResponsesAreStoredRedacted.
 	if CredentialMintingProcedures["/paladin.admin.v1.CapabilityService/Issue"] {
 		t.Error("CapabilityService/Issue must stay memoizable")
+	}
+}
+
+// A key used for one request and then sent with a different one used to get
+// the first request's response back: the cache was keyed (tenant, method,
+// key) and nothing compared the requests. A download helper reusing one key
+// handed back the first object's URL under every name. It must be refused,
+// and the handler must not run for it.
+func TestKeyReusedWithADifferentRequestIsRefused(t *testing.T) {
+	store := newMemStore()
+	client, svc, cleanup := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
+	defer cleanup()
+
+	key := uuid.NewString()
+	first := connect.NewRequest(&iamv1.UpdateMineRequest{Timezone: "Europe/Kyiv"})
+	first.Header().Set("Idempotency-Key", key)
+	if _, err := client.UpdateMine(context.Background(), first); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+
+	other := connect.NewRequest(&iamv1.UpdateMineRequest{Timezone: "Europe/Warsaw"})
+	other.Header().Set("Idempotency-Key", key)
+	_, err := client.UpdateMine(context.Background(), other)
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument for a key reused with another request", connect.CodeOf(err))
+	}
+	if svc.calls != 1 {
+		t.Errorf("handler ran %d times, want 1 — the refused call must not reach it", svc.calls)
+	}
+
+	// The same request with the same key still replays.
+	again := connect.NewRequest(&iamv1.UpdateMineRequest{Timezone: "Europe/Kyiv"})
+	again.Header().Set("Idempotency-Key", key)
+	if _, err := client.UpdateMine(context.Background(), again); err != nil {
+		t.Fatalf("replay of the same request: %v", err)
+	}
+	if svc.calls != 1 {
+		t.Errorf("handler ran %d times after a same-request replay, want 1", svc.calls)
+	}
+}
+
+// A row written before fingerprints were stored carries none, and replays for
+// any request with its key, as every row did before — refusing it would turn
+// a deploy into a burst of InvalidArgument for keys already in flight.
+func TestRecordWithoutFingerprintStillReplays(t *testing.T) {
+	store := newMemStore()
+	client, svc, cleanup := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
+	defer cleanup()
+
+	key := uuid.NewString()
+	seed := connect.NewRequest(&iamv1.UpdateMineRequest{Timezone: "Europe/Kyiv"})
+	seed.Header().Set("Idempotency-Key", key)
+	if _, err := client.UpdateMine(context.Background(), seed); err != nil {
+		t.Fatalf("seed call: %v", err)
+	}
+	store.mu.Lock()
+	for k, rec := range store.data {
+		rec.RequestHash = nil
+		store.data[k] = rec
+	}
+	store.mu.Unlock()
+
+	other := connect.NewRequest(&iamv1.UpdateMineRequest{Timezone: "Europe/Warsaw"})
+	other.Header().Set("Idempotency-Key", key)
+	if _, err := client.UpdateMine(context.Background(), other); err != nil {
+		t.Fatalf("legacy row must replay, got %v", err)
+	}
+	if svc.calls != 1 {
+		t.Errorf("handler ran %d times, want 1 (replayed)", svc.calls)
 	}
 }

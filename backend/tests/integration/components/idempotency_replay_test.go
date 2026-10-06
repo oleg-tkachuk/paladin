@@ -33,6 +33,7 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
@@ -98,31 +99,51 @@ func TestIdempotencyReplayAgainstPartitionedTable(t *testing.T) {
 	repo := adapters.NewIdempotencyRepo(sqlc.New(pool))
 	const method = "/paladin.admin.v1.CapabilityService/Issue"
 	key := uuid.NewString()
-	resp := []byte("capability-response-bytes")
-	sha := []byte("sha-32-bytes-placeholder--------")
+	rec := middleware.IdempotencyRecord{
+		Response:    []byte("capability-response-bytes"),
+		RequestHash: []byte("request-fingerprint-32-bytes----"),
+	}
 	exp := time.Now().Add(time.Hour)
 
 	// First write. Before the fix this raised 42P10 and the row never landed.
-	if err := repo.Put(ctx, tenant, method, key, resp, sha, exp); err != nil {
+	if err := repo.Put(ctx, tenant, method, key, rec, exp); err != nil {
 		t.Fatalf("Put must succeed against the partitioned table; got %v", err)
 	}
 
 	// The second submit (same Idempotency-Key) must read the memoized
-	// response — this is the replay that collapses a double-submit.
-	got, gotSha, found, err := repo.Get(ctx, tenant, method, key)
+	// response — this is the replay that collapses a double-submit — and the
+	// fingerprint the interceptor compares before replaying.
+	got, found, err := repo.Get(ctx, tenant, method, key)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
 	if !found {
 		t.Fatal("memoized response must be found on replay — Put silently failed (the FR-008 bug)")
 	}
-	if string(got) != string(resp) || string(gotSha) != string(sha) {
-		t.Fatalf("replayed payload mismatch: resp=%q sha=%q", got, gotSha)
+	if string(got.Response) != string(rec.Response) || string(got.RequestHash) != string(rec.RequestHash) {
+		t.Fatalf("replayed record mismatch: response=%q request_hash=%q", got.Response, got.RequestHash)
 	}
 
 	// A racing first-writer (same key, same expiry) must be a no-op, not an
 	// error — DO NOTHING on the full-PK conflict.
-	if err := repo.Put(ctx, tenant, method, key, resp, sha, exp); err != nil {
+	if err := repo.Put(ctx, tenant, method, key, rec, exp); err != nil {
 		t.Fatalf("repeat Put must be a no-op, not an error; got %v", err)
+	}
+
+	// A row written before request_hash existed reads back with no
+	// fingerprint, which the interceptor treats as matching any request.
+	legacyKey := uuid.NewString()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO idempotency_keys (tenant_id, method, key, response, response_sha, expires_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		tenant, method, legacyKey, rec.Response, []byte("sha"), exp); err != nil {
+		t.Fatalf("seed legacy row: %v", err)
+	}
+	legacy, found, err := repo.Get(ctx, tenant, method, legacyKey)
+	if err != nil || !found {
+		t.Fatalf("legacy Get = (found %v, %v)", found, err)
+	}
+	if len(legacy.RequestHash) != 0 {
+		t.Errorf("legacy row request_hash = %x, want empty", legacy.RequestHash)
 	}
 }

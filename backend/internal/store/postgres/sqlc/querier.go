@@ -604,7 +604,7 @@ type Querier interface {
 	// expires_at, new partition); GetIdempotencyKey filters the expired one and
 	// the daily DROP PARTITION reclaims it — so the old expired-overwrite
 	// DO UPDATE is no longer needed.
-	PutIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string, response []byte, responseSha []byte, expiresAt pgtype.Timestamptz) error
+	PutIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string, response []byte, responseSha []byte, requestHash []byte, expiresAt pgtype.Timestamptz) error
 	// Fails operations left RUNNING by a worker that went away.
 	//
 	// ClaimNext only ever selects PENDING, and there is no lease to expire, so a
