@@ -23,8 +23,10 @@ import (
 // does not survive the walk (a disjunction, an unrecognised function, a field
 // the query does not carry) costs a wider scan and never a wrong answer.
 type Pushdown struct {
-	// Eq holds `field == "literal"` for string-typed fields.
-	Eq map[string]string
+	// In holds the values a string-typed field must take: one for
+	// `field == "x"`, several for `field in ["x", "y"]` or a disjunction of
+	// such on the one field (`field == "x" || field == "y"`).
+	In map[string][]string
 	// Neq holds `field != "literal"`. Kept apart from Eq because the SQL is
 	// not a negation of it: the domain projects a NULL column to "" before CEL
 	// sees it, so the predicate is over coalesce(col, ''), not over col.
@@ -88,6 +90,10 @@ func (p *Pushdown) walk(e celast.Expr, schema *Schema) {
 		}
 		return
 	}
+	if c.FunctionName() == "_||_" {
+		p.recogniseDisjunction(e, schema)
+		return
+	}
 	p.recognise(c, schema)
 }
 
@@ -110,7 +116,7 @@ func (p *Pushdown) recognise(c celast.CallExpr, schema *Schema) {
 			if !ok {
 				return
 			}
-			p.setEq(field, s)
+			p.setValues(field, []string{s})
 		case typeBool:
 			b, ok := lit.(bool)
 			if !ok {
@@ -133,7 +139,12 @@ func (p *Pushdown) recognise(c celast.CallExpr, schema *Schema) {
 		if !ok {
 			return
 		}
-		p.setIn(&p.Neq, field, v)
+		p.setOnce(&p.Neq, field, v)
+
+	case "@in":
+		if field, values, ok := inValues(c, schema); ok {
+			p.setValues(field, values)
+		}
 
 	case "!_":
 		// `!disabled` is how a filter author writes `disabled == false`.
@@ -183,10 +194,10 @@ func (p *Pushdown) recognise(c celast.CallExpr, schema *Schema) {
 			return
 		}
 		if c.FunctionName() == "startsWith" {
-			p.setIn(&p.Prefix, field, lit)
+			p.setOnce(&p.Prefix, field, lit)
 			return
 		}
-		p.setIn(&p.Contains, field, lit)
+		p.setOnce(&p.Contains, field, lit)
 	}
 }
 
@@ -200,17 +211,112 @@ func (p *Pushdown) recogniseIdent(e celast.Expr, schema *Schema) {
 	p.setBool(field, true)
 }
 
-func (p *Pushdown) setEq(field, lit string) {
-	if p.Eq == nil {
-		p.Eq = map[string]string{}
+// recogniseDisjunction pushes `a || b || …` only when every operand is an
+// equality or an `in` on the SAME string field: the union of their values is
+// then exactly the set the field must take. Anything else in the chain — a
+// second field, a prefix, a function — and the disjunction is left to the CEL
+// pass whole, since narrowing on one branch would drop rows another accepts.
+func (p *Pushdown) recogniseDisjunction(e celast.Expr, schema *Schema) {
+	var field string
+	var values []string
+	seen := map[string]bool{}
+	var collect func(celast.Expr) bool
+	collect = func(e celast.Expr) bool {
+		if e == nil || e.Kind() != celast.CallKind {
+			return false
+		}
+		c := e.AsCall()
+		if c.FunctionName() == "_||_" {
+			for _, a := range c.Args() {
+				if !collect(a) {
+					return false
+				}
+			}
+			return true
+		}
+		f, vals, ok := equalityValues(c, schema)
+		if !ok || (field != "" && f != field) {
+			return false
+		}
+		field = f
+		for _, v := range vals {
+			if !seen[v] {
+				seen[v] = true
+				values = append(values, v)
+			}
+		}
+		return true
 	}
-	// Two equalities on one field cannot both hold; leaving the first in
-	// place keeps the pushdown a subset of the predicate, which is all the
-	// contract requires.
-	if _, seen := p.Eq[field]; seen {
+	if collect(e) {
+		p.setValues(field, values)
+	}
+}
+
+// equalityValues reads `field == "x"` (either operand order) or
+// `field in ["x", …]` over a string-typed field.
+func equalityValues(c celast.CallExpr, schema *Schema) (string, []string, bool) {
+	switch c.FunctionName() {
+	case "_==_":
+		args := c.Args()
+		if len(args) != 2 {
+			return "", nil, false
+		}
+		field, lit, ok := identAndLiteral(args[0], args[1])
+		if !ok || fieldType(schema, field) != typeString {
+			return "", nil, false
+		}
+		s, ok := lit.(string)
+		if !ok {
+			return "", nil, false
+		}
+		return field, []string{s}, true
+	case "@in":
+		return inValues(c, schema)
+	}
+	return "", nil, false
+}
+
+// inValues reads `field in ["x", …]` over a string-typed field. An empty list
+// is not pushed: it matches nothing, which the CEL pass reports on its own.
+func inValues(c celast.CallExpr, schema *Schema) (string, []string, bool) {
+	args := c.Args()
+	if len(args) != 2 {
+		return "", nil, false
+	}
+	field, ok := identName(args[0])
+	if !ok || fieldType(schema, field) != typeString {
+		return "", nil, false
+	}
+	if args[1] == nil || args[1].Kind() != celast.ListKind {
+		return "", nil, false
+	}
+	elems := args[1].AsList().Elements()
+	if len(elems) == 0 {
+		return "", nil, false
+	}
+	values := make([]string, 0, len(elems))
+	for _, el := range elems {
+		v, ok := stringLiteral(el)
+		if !ok {
+			return "", nil, false
+		}
+		values = append(values, v)
+	}
+	return field, values, true
+}
+
+// setValues records the values a field must take. Two such constraints on one
+// field both hold only on their intersection; keeping the first in place keeps
+// the pushdown a superset of the predicate's rows, which is all the contract
+// requires.
+func (p *Pushdown) setValues(field string, values []string) {
+	if p.In == nil {
+		p.In = map[string][]string{}
+	}
+	if _, seen := p.In[field]; seen {
 		return
 	}
-	p.Eq[field] = lit
+	p.In[field] = values
 }
 
 func (p *Pushdown) setBool(field string, v bool) {
@@ -223,7 +329,7 @@ func (p *Pushdown) setBool(field string, v bool) {
 	p.BoolEq[field] = v
 }
 
-func (p *Pushdown) setIn(m *map[string]string, field, lit string) {
+func (p *Pushdown) setOnce(m *map[string]string, field, lit string) {
 	if *m == nil {
 		*m = map[string]string{}
 	}
@@ -233,8 +339,8 @@ func (p *Pushdown) setIn(m *map[string]string, field, lit string) {
 	(*m)[field] = lit
 }
 
-// StringHint returns the SQL narrowing hints for one text column: an exact
-// value and a LIKE pattern, either of which may be nil.
+// StringHint returns the SQL narrowing hints for one text column: the values
+// it must take and a LIKE pattern, either of which may be nil.
 //
 // A literal carrying LIKE metacharacters (%, _, \) is dropped rather than
 // escaped: the authoritative CEL pass still runs, so a dropped hint only
@@ -268,10 +374,8 @@ func (p Pushdown) TimeHint(field string) (gte *time.Time, lte *time.Time) {
 	return gte, lte
 }
 
-func (p Pushdown) StringHint(field string) (eq *string, like *string) {
-	if v, ok := p.Eq[field]; ok {
-		eq = &v
-	}
+func (p Pushdown) StringHint(field string) (in []string, like *string) {
+	in = p.In[field]
 	if v, ok := p.Prefix[field]; ok && likeSafe(v) {
 		pat := v + "%"
 		like = &pat
@@ -279,7 +383,7 @@ func (p Pushdown) StringHint(field string) (eq *string, like *string) {
 		pat := "%" + v + "%"
 		like = &pat
 	}
-	return eq, like
+	return in, like
 }
 
 // NeqHint returns the `field != literal` hint for one text column, to be

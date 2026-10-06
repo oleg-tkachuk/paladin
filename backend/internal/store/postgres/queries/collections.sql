@@ -72,9 +72,9 @@ WHERE collections.tenant_id = $1
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
-  AND (sqlc.narg('name_eq')::text IS NULL OR collections.name = sqlc.narg('name_eq')::text)
+  AND (sqlc.narg('name_in')::text[] IS NULL OR collections.name = ANY(sqlc.narg('name_in')::text[]))
   AND (sqlc.narg('name_like')::text IS NULL OR collections.name LIKE sqlc.narg('name_like')::text)
-  AND (sqlc.narg('display_name_eq')::text IS NULL OR collections.display_name = sqlc.narg('display_name_eq')::text)
+  AND (sqlc.narg('display_name_in')::text[] IS NULL OR collections.display_name = ANY(sqlc.narg('display_name_in')::text[]))
   AND (sqlc.narg('display_name_like')::text IS NULL OR collections.display_name LIKE sqlc.narg('display_name_like')::text)
   -- The derived `search` field, spelled to match cel.SearchText EXACTLY.
   -- ASCII-only folding via COLLATE "C" on both columns: Go's strings.ToLower
@@ -84,7 +84,7 @@ WHERE collections.tenant_id = $1
   AND (sqlc.narg('search_like')::text IS NULL
        OR lower(collections.name COLLATE "C") || chr(10) || lower(coalesce(collections.display_name, '') COLLATE "C")
           LIKE sqlc.narg('search_like')::text)
-  AND (sqlc.narg('backend_eq')::text IS NULL OR sb.name = sqlc.narg('backend_eq')::text)
+  AND (sqlc.narg('backend_in')::text[] IS NULL OR sb.name = ANY(sqlc.narg('backend_in')::text[]))
   -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.

@@ -465,9 +465,9 @@ func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]
 	// Pushdown: see admin_bucket.go — the handler's CEL pass over the page
 	// stays authoritative, these only narrow the scan.
 	pd := hints(cel.TenantSchema, args.Filter)
-	slugEq, slugLike := pd.StringHint("slug")
-	displayEq, displayLike := pd.StringHint("display_name")
-	layoutEq, _ := pd.StringHint("storage_layout")
+	slugIn, slugLike := pd.StringHint("slug")
+	displayIn, displayLike := pd.StringHint("display_name")
+	layoutIn, _ := pd.StringHint("storage_layout")
 	// Only the `like` half — the derived field exists for a search box, which
 	// emits `contains`. See admin_bucket.go.
 	_, searchLike := pd.StringHint("search")
@@ -477,7 +477,7 @@ func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]
 		pgUUID(args.AfterID),
 		args.OnlyTrashed,
 		args.IncludeTrashed,
-		slugEq, slugLike, displayEq, displayLike, searchLike, layoutEq,
+		slugIn, slugLike, displayIn, displayLike, searchLike, layoutIn,
 		createdGTE, createdLTE,
 		pageSize,
 	)

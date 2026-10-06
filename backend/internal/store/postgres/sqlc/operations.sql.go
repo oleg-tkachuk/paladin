@@ -84,13 +84,13 @@ WHERE tenant_id = $1
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
-  AND ($4::text IS NULL OR type = $4::text)
+  AND ($4::text[] IS NULL OR type = ANY($4::text[]))
   AND ($5::text IS NULL OR type LIKE $5::text)
-  AND ($6::text IS NULL OR error_code = $6::text)
+  AND ($6::text[] IS NULL OR error_code = ANY($6::text[]))
   -- The filter's ` + "`" + `state == "…"` + "`" + ` compares as text, not as a cast to the enum:
   -- a literal the enum does not hold then matches no row, as the CEL pass
   -- would decide, instead of failing the whole query.
-  AND ($7::text IS NULL OR state::text = $7::text)
+  AND ($7::text[] IS NULL OR state::text = ANY($7::text[]))
   -- ` + "`" + `done` + "`" + ` is what the domain derives from done_at (operationh.handler).
   AND ($8::bool IS NULL OR (done_at IS NOT NULL) = $8::bool)
   AND ($9::text IS NULL
@@ -111,15 +111,15 @@ type ListOperationsRow struct {
 }
 
 // Oldest first. The cursor compares `>`, so paging walks forward in time.
-func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, stateEq *string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error) {
+func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error) {
 	rows, err := q.db.Query(ctx, listOperations,
 		tenantID,
 		state,
 		afterID,
-		typeEq,
+		typeIn,
 		typeLike,
-		errorCodeEq,
-		stateEq,
+		errorCodeIn,
+		stateIn,
 		done,
 		errorMessageNeq,
 		createdAtGte,
@@ -162,13 +162,13 @@ FROM operations
 WHERE tenant_id = $1
   AND ($2::operation_state IS NULL OR state = $2::operation_state)
   AND ($3::uuid IS NULL OR id < $3::uuid)
-  AND ($4::text IS NULL OR type = $4::text)
+  AND ($4::text[] IS NULL OR type = ANY($4::text[]))
   AND ($5::text IS NULL OR type LIKE $5::text)
-  AND ($6::text IS NULL OR error_code = $6::text)
+  AND ($6::text[] IS NULL OR error_code = ANY($6::text[]))
   -- The filter's ` + "`" + `state == "…"` + "`" + ` compares as text, not as a cast to the enum:
   -- a literal the enum does not hold then matches no row, as the CEL pass
   -- would decide, instead of failing the whole query.
-  AND ($7::text IS NULL OR state::text = $7::text)
+  AND ($7::text[] IS NULL OR state::text = ANY($7::text[]))
   -- ` + "`" + `done` + "`" + ` is what the domain derives from done_at (operationh.handler).
   AND ($8::bool IS NULL OR (done_at IS NOT NULL) = $8::bool)
   AND ($9::text IS NULL
@@ -192,15 +192,15 @@ type ListOperationsDescRow struct {
 // rather than a CASE in the ORDER BY: the cursor comparison has to flip with
 // the sort (`<` here, `>` above) or the second page walks away from the rows
 // the caller asked for, and sqlc cannot parameterise either.
-func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, stateEq *string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error) {
+func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error) {
 	rows, err := q.db.Query(ctx, listOperationsDesc,
 		tenantID,
 		state,
 		afterID,
-		typeEq,
+		typeIn,
 		typeLike,
-		errorCodeEq,
-		stateEq,
+		errorCodeIn,
+		stateIn,
 		done,
 		errorMessageNeq,
 		createdAtGte,

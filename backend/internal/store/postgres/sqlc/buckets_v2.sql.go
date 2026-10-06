@@ -238,9 +238,9 @@ WHERE ($1::text IS NULL OR sb.name = $1::text)
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
-  AND ($3::text IS NULL OR b.name = $3::text)
+  AND ($3::text[] IS NULL OR b.name = ANY($3::text[]))
   AND ($4::text IS NULL OR b.name LIKE $4::text)
-  AND ($5::text IS NULL OR b.display_name = $5::text)
+  AND ($5::text[] IS NULL OR b.display_name = ANY($5::text[]))
   AND ($6::text IS NULL OR b.display_name LIKE $6::text)
   -- The derived ` + "`" + `search` + "`" + ` field, spelled to match cel.SearchText EXACTLY.
   -- ASCII-only folding via COLLATE "C" on both columns: Go's strings.ToLower
@@ -296,13 +296,13 @@ type ListBucketsV2Row struct {
 // Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
 // (the schema baseline (001_initial_schema.sql)) makes the per-tenant filter cheap; the WHERE clause
 // below is plain equality so the planner uses the partial index.
-func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, searchLike *string, versioningEnabled *bool, objectLockEnabled *bool, replicationEnabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
+func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, versioningEnabled *bool, objectLockEnabled *bool, replicationEnabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
 	rows, err := q.db.Query(ctx, listBucketsV2,
 		backendName,
 		ownerTenantID,
-		nameEq,
+		nameIn,
 		nameLike,
-		displayNameEq,
+		displayNameIn,
 		displayNameLike,
 		searchLike,
 		versioningEnabled,

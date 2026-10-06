@@ -234,10 +234,10 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID, filte
 	// The filter's SQL-expressible conjuncts narrow the scan; the handler's
 	// CEL pass over the returned page stays authoritative.
 	pd := hints(cel.StorageBackendSchema, filter)
-	nameEq, nameLike := pd.StringHint("backend_id")
-	displayEq, displayLike := pd.StringHint("display_name")
-	providerEq, _ := pd.StringHint("provider")
-	regionEq, _ := pd.StringHint("region")
+	nameIn, nameLike := pd.StringHint("backend_id")
+	displayIn, displayLike := pd.StringHint("display_name")
+	providerIn, _ := pd.StringHint("provider")
+	regionIn, _ := pd.StringHint("region")
 
 	createdGTE, createdLTE := createdBounds(pd)
 	// Only the `like` half — the derived field exists for a search box, which
@@ -245,7 +245,7 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID, filte
 	_, searchLike := pd.StringHint("search")
 
 	rows, err := r.q.ListStorageBackends(ctx, afterPtr,
-		nameEq, nameLike, displayEq, displayLike, searchLike, providerEq, regionEq,
+		nameIn, nameLike, displayIn, displayLike, searchLike, providerIn, regionIn,
 		pd.BoolHint("enabled"), pd.BoolHint("read_only"), pd.BoolHint("maintenance"),
 		createdGTE, createdLTE,
 		pageSize)
