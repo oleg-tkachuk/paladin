@@ -38,6 +38,7 @@ type Repository interface {
 	UpsertTenantTx(ctx context.Context, tx pgx.Tx, q admindomain.Quota) error
 	UpsertBucketTx(ctx context.Context, tx pgx.Tx, q admindomain.Quota) error
 	GetBucketTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string) (admindomain.Quota, error)
+	GetByID(ctx context.Context, quotaID uuid.UUID) (admindomain.Quota, error)
 }
 
 type Handler struct {
@@ -245,13 +246,23 @@ func (h *Handler) ResetUsage(ctx context.Context, quotaID uuid.UUID) error {
 	if err := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); err != nil {
 		return err
 	}
-	// Cedar second guard. ResetQuotaUsage doesn't carry tenant/bucket
-	// coordinates pre-load, so we only attach the principal — policies
-	// that want to gate by quota coordinates see an empty Quota entity
-	// (BACKLOG: ResetQuotaUsage authorises against an empty Quota).
-	ctx, err := h.authorize(ctx, cedar.ActionResetQuotaUsage, admindomain.Quota{})
+	// The request names only the quota id, so load the row first: Cedar then
+	// sees its tenant or bucket, and the reset runs as that tenant. The read
+	// is cross-tenant because the quota usually belongs to someone other
+	// than the platform admin calling.
+	q, err := h.repo.GetByID(auth.WithCrossTenantRead(ctx), quotaID)
+	if err != nil {
+		return apiutil.MapError(err)
+	}
+	if q.TenantID == uuid.Nil {
+		// RLS hides bucket-scoped rows from every tenant session, so the
+		// reset could not reach this row (BACKLOG: bucket-scoped quotas).
+		return connect.NewError(connect.CodeFailedPrecondition,
+			errors.New("resetting a bucket-scoped quota is not supported"))
+	}
+	ctx, err = h.authorize(ctx, cedar.ActionResetQuotaUsage, q)
 	if err != nil {
 		return err
 	}
-	return h.repo.ResetDaily(ctx, quotaID, time.Now().UTC())
+	return apiutil.MapError(h.repo.ResetDaily(ctx, quotaID, time.Now().UTC()))
 }

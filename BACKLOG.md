@@ -483,16 +483,22 @@ finding moving from "packages you import" to "your code is affected".
   field set for callers holding it, and tests for both sides of the gate.
 - **Blockers:** deciding who counts as privileged on the data plane.
 
-### `ResetQuotaUsage` authorises against an empty Quota entity
+### Bucket-scoped quotas are invisible to the runtime under RLS
 
-- **Status:** Deferred
-- **Reason:** [quotah/handler.go](backend/internal/api/admin/v1/quotah/handler.go)
-  authorises before loading the quota, so Cedar sees `admindomain.Quota{}` and
-  a policy cannot gate the reset by tenant, bucket or quota id.
-- **Definition of Done:** load the quota first and authorise against its
-  coordinates, with a Cedar test that a tenant-scoped policy can permit or
-  forbid the reset.
-- **Blockers:** none.
+- **Status:** Open — found 2026-10-06, needs an RLS design decision.
+- **Reason:** a bucket-scoped quota row has `tenant_id IS NULL`, and the
+  `tenant_isolation` policy on `quotas` (`002_roles_and_rls.sql`) admits only
+  `tenant_id = paladin_session_tenant_id()` or the cross-tenant read flag. So
+  through the `paladin_app` pool `SetQuota` for a bucket fails WITH CHECK,
+  `GetBucketQuota` returns NotFound, and `QuotaSoftCheck` never sees the row —
+  a bucket cap is not enforced at runtime. The component tests missed it
+  because they run on the superuser pool. `ResetQuotaUsage` refuses bucket
+  scope with FailedPrecondition until this is settled.
+- **Definition of Done:** a migration giving bucket-scoped rows a policy (e.g.
+  readable by every tenant session and writable through the role-gated
+  handlers, or scoped to `buckets.owner_tenant_id`); set, read, enforce and
+  reset each covered through `rlsPool` in `tests/integration/components`.
+- **Blockers:** choosing who may read a shared bucket's aggregate usage.
 
 ### Console `/users`: no user detail page, no scope grants
 

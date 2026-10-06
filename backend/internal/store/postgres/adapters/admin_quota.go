@@ -142,8 +142,30 @@ func (r *QuotaRepoV2) IncrementUsage(ctx context.Context, quotaID uuid.UUID, del
 	return r.q.IncrementQuotaUsage(ctx, pgUUID(quotaID), deltaBytes, deltaCount)
 }
 
+// GetByID reads a quota of either scope by its id.
+func (r *QuotaRepoV2) GetByID(ctx context.Context, quotaID uuid.UUID) (admindomain.Quota, error) {
+	row, err := r.q.GetQuotaByID(ctx, pgUUID(quotaID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return admindomain.Quota{}, admindomain.ErrNotFound
+		}
+		return admindomain.Quota{}, err
+	}
+	return quotaFromSQLC(row.Quota, row.BackendName, row.BucketName), nil
+}
+
+// ResetDaily clears the per-day counters. ErrNotFound when no row was
+// updated: RLS filters a row outside the session's tenant instead of refusing
+// the write, so a silent no-op would otherwise read as success.
 func (r *QuotaRepoV2) ResetDaily(ctx context.Context, quotaID uuid.UUID, at time.Time) error {
-	return r.q.ResetQuotaDaily(ctx, pgUUID(quotaID), pgTS(at))
+	n, err := r.q.ResetQuotaDaily(ctx, pgUUID(quotaID), pgTS(at))
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return admindomain.ErrNotFound
+	}
+	return nil
 }
 
 // OnObjectPromoted increments the tenant-scope usage counters by one

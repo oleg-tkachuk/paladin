@@ -55,6 +55,49 @@ func (q *Queries) GetBucketQuota(ctx context.Context, name string, name_2 string
 	return i, err
 }
 
+const getQuotaByID = `-- name: GetQuotaByID :one
+SELECT quotas.id, quotas.tenant_id, quotas.bucket_id, quotas.max_total_bytes, quotas.max_object_count, quotas.max_bytes_per_day, quotas.max_objects_per_day, quotas.usage_total_bytes, quotas.usage_object_count, quotas.usage_bytes_today, quotas.usage_objects_today, quotas.last_reset_at, quotas.resource_version, quotas.created_at, quotas.updated_at,
+       COALESCE(sb.name, '') AS backend_name,
+       COALESCE(b.name, '')  AS bucket_name
+FROM quotas
+LEFT JOIN buckets b           ON b.id = quotas.bucket_id
+LEFT JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE quotas.id = $1
+`
+
+type GetQuotaByIDRow struct {
+	Quota       Quota  `json:"quota"`
+	BackendName string `json:"backend_name"`
+	BucketName  string `json:"bucket_name"`
+}
+
+// Either scope. Under RLS the caller sees its own tenant's rows; a platform
+// admin's cross-tenant read sees every row.
+func (q *Queries) GetQuotaByID(ctx context.Context, id pgtype.UUID) (GetQuotaByIDRow, error) {
+	row := q.db.QueryRow(ctx, getQuotaByID, id)
+	var i GetQuotaByIDRow
+	err := row.Scan(
+		&i.Quota.ID,
+		&i.Quota.TenantID,
+		&i.Quota.BucketID,
+		&i.Quota.MaxTotalBytes,
+		&i.Quota.MaxObjectCount,
+		&i.Quota.MaxBytesPerDay,
+		&i.Quota.MaxObjectsPerDay,
+		&i.Quota.UsageTotalBytes,
+		&i.Quota.UsageObjectCount,
+		&i.Quota.UsageBytesToday,
+		&i.Quota.UsageObjectsToday,
+		&i.Quota.LastResetAt,
+		&i.Quota.ResourceVersion,
+		&i.Quota.CreatedAt,
+		&i.Quota.UpdatedAt,
+		&i.BackendName,
+		&i.BucketName,
+	)
+	return i, err
+}
+
 const getTenantQuota = `-- name: GetTenantQuota :one
 SELECT quotas.id, quotas.tenant_id, quotas.bucket_id, quotas.max_total_bytes, quotas.max_object_count, quotas.max_bytes_per_day, quotas.max_objects_per_day, quotas.usage_total_bytes, quotas.usage_object_count, quotas.usage_bytes_today, quotas.usage_objects_today, quotas.last_reset_at, quotas.resource_version, quotas.created_at, quotas.updated_at,
        COALESCE(sb.name, '') AS backend_name,
@@ -119,7 +162,7 @@ func (q *Queries) IncrementQuotaUsage(ctx context.Context, iD pgtype.UUID, usage
 	return err
 }
 
-const resetQuotaDaily = `-- name: ResetQuotaDaily :exec
+const resetQuotaDaily = `-- name: ResetQuotaDaily :execrows
 UPDATE quotas
 SET usage_bytes_today = 0,
     usage_objects_today = 0,
@@ -127,9 +170,14 @@ SET usage_bytes_today = 0,
 WHERE id = $1
 `
 
-func (q *Queries) ResetQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) error {
-	_, err := q.db.Exec(ctx, resetQuotaDaily, iD, lastResetAt)
-	return err
+// Rows, not exec: under RLS a row outside the session's tenant is filtered
+// out rather than refused, so zero rows is the only sign the reset missed.
+func (q *Queries) ResetQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, resetQuotaDaily, iD, lastResetAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertBucketQuota = `-- name: UpsertBucketQuota :one
