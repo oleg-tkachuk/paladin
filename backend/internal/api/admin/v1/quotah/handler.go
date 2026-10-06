@@ -39,6 +39,7 @@ type Repository interface {
 	UpsertBucketTx(ctx context.Context, tx pgx.Tx, q admindomain.Quota) error
 	GetBucketTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string) (admindomain.Quota, error)
 	GetByID(ctx context.Context, quotaID uuid.UUID) (admindomain.Quota, error)
+	ResetBucketDaily(ctx context.Context, quotaID uuid.UUID, at time.Time) error
 }
 
 type Handler struct {
@@ -210,10 +211,9 @@ func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []stri
 		}
 		return &got, nil
 	}
-	// Bucket scope: the fan-out target is the bucket's owner tenant_id,
-	// which only the stored row carries — so the upsert + the owner read-
-	// back + the event all run on one tx (ADR-0003). `got` is reused for
-	// the response.
+	// Bucket scope: the fan-out target is the bucket's owner, which the
+	// read-back joins from `buckets` — so the upsert, the read-back and the
+	// event all run on one tx (ADR-0003). `got` is reused for the response.
 	var got admindomain.Quota
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		if e := h.repo.UpsertBucketTx(ctx, tx, q); e != nil {
@@ -224,10 +224,11 @@ func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []stri
 		if e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, got.TenantID, "paladin.quota.set",
-			fmt.Sprintf("tenants/%s/buckets/%s/%s/quota", got.TenantID, got.BackendID, got.BucketName),
+		// A shared bucket has no owner, so its quota has nobody to tell.
+		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, "paladin.quota.set",
+			fmt.Sprintf("tenants/%s/buckets/%s/%s/quota", got.OwnerTenantID, got.BackendID, got.BucketName),
 			map[string]any{
-				"tenant_id":           got.TenantID.String(),
+				"tenant_id":           got.OwnerTenantID.String(),
 				"scope":               "bucket",
 				"backend_id":          got.BackendID,
 				"bucket_name":         got.BucketName,
@@ -254,15 +255,15 @@ func (h *Handler) ResetUsage(ctx context.Context, quotaID uuid.UUID) error {
 	if err != nil {
 		return apiutil.MapError(err)
 	}
-	if q.TenantID == uuid.Nil {
-		// RLS hides bucket-scoped rows from every tenant session, so the
-		// reset could not reach this row (BACKLOG: bucket-scoped quotas).
-		return connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("resetting a bucket-scoped quota is not supported"))
-	}
 	ctx, err = h.authorize(ctx, cedar.ActionResetQuotaUsage, q)
 	if err != nil {
 		return err
 	}
-	return apiutil.MapError(h.repo.ResetDaily(ctx, quotaID, time.Now().UTC()))
+	now := time.Now().UTC()
+	if q.TenantID == uuid.Nil {
+		// A bucket quota is platform configuration outside RLS
+		// (044_bucket_quotas.sql); there is no tenant to act as.
+		return apiutil.MapError(h.repo.ResetBucketDaily(ctx, quotaID, now))
+	}
+	return apiutil.MapError(h.repo.ResetDaily(ctx, quotaID, now))
 }

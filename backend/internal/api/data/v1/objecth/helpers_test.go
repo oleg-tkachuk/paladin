@@ -231,7 +231,7 @@ func TestSetLoggerIgnoresNil(t *testing.T) {
 
 type fakeQuota struct{ calls int }
 
-func (q *fakeQuota) OnObjectPromoted(context.Context, uuid.UUID, int64) error {
+func (q *fakeQuota) OnObjectPromoted(context.Context, uuid.UUID, uuid.UUID, int64) error {
 	q.calls++
 	return nil
 }
