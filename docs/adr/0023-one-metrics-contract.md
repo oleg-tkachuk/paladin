@@ -46,10 +46,11 @@
   - **One chart switch.** `metrics.mode: push | scrape | off` replaces
     `metrics.serviceMonitor.*` and the chart's `config.otel.metrics_exporter`
     and `metrics_addr`. The chart renders the exporter (`otlp`, `prometheus`,
-    `none`) and the address from it, so the two cannot disagree. `push` and
-    `scrape` require `config.otel.enabled: true`, which also gates the
-    MeterProvider; the chart refuses the combination rather than rendering a
-    switch that does nothing. Default `push`, the behaviour today.
+    `none`) and the address from it, so the two cannot disagree. `scrape`
+    requires `config.otel.enabled: true`, which also gates the MeterProvider;
+    the chart refuses the combination rather than render a PodMonitor and
+    ports for a listener that never opens. Default `push`, the behaviour
+    today; with OTel off it renders nothing, as the traces do.
   - **One scrape object.** In `scrape` mode the chart renders a single
     PodMonitor selecting the release's pods by the container port named
     `metrics`, path `/metrics`, plain HTTP. Every scraped role declares that
