@@ -254,6 +254,7 @@ tasks:
       - task: verify:chart-netpol
       - task: verify:chart-defaults
       - task: verify:chart-alerts
+      - task: verify:chart-metrics
       - task: verify:taskfile-vars
       - task: verify:taskfile-drift
       - task: verify:publish-target
@@ -468,6 +469,11 @@ tasks:
     desc: "Fail when the chart's alerts stop reading Paladin's RPC metrics, or do not fire"
     cmds:
       - ./scripts/chart-alerts.test.sh
+
+  verify:chart-metrics:
+    desc: "Fail when metrics.mode and what the chart renders from it disagree"
+    cmds:
+      - ./scripts/chart-metrics.test.sh
 
   verify:chart-netpol:
     desc: "Fail when a role has no NetworkPolicy and the baseline does not cover it"

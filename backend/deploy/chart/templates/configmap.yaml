@@ -35,6 +35,13 @@ data:
     # (e.g. `values-local.yaml`) can simply flip create=false and
     # NOT carry a `null` literal that CUE rejects on optional refs.
     {{- $cfg := deepCopy .Values.config }}
+    {{- /* metrics.mode and metrics.port decide these (ADR-0023); an
+           operator-set copy would silently disagree with the PodMonitor. */}}
+    {{- if or (hasKey $cfg.otel "metrics_exporter") (hasKey $cfg.otel "metrics_addr") }}
+    {{- fail "config.otel.metrics_exporter and config.otel.metrics_addr are rendered from metrics.mode and metrics.port; set those instead" }}
+    {{- end }}
+    {{- $_ := set $cfg.otel "metrics_exporter" (include "chart.metricsExporter" .) }}
+    {{- $_ := set $cfg.otel "metrics_addr" (include "chart.metricsAddr" .) }}
     {{- range $backend, $sec := fromJson (include "chart.s3CredentialSecrets" .) }}
     {{- if and $sec.active (hasKey $cfg.storage.backends $backend) }}
     {{- $b := index $cfg.storage.backends $backend }}

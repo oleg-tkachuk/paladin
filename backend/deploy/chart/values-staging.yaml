@@ -70,8 +70,8 @@ deployments:
       targetCPUUtilizationPercentage: 70
 
 metrics:
-  serviceMonitor:
-    enabled: true
+  mode: scrape
+  podMonitor:
     labels:
       release: kube-prometheus-stack
   alerts:
