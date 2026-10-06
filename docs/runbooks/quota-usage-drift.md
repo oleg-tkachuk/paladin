@@ -16,7 +16,7 @@ not a measurement. Two things write them:
 
 | Writer | When | Behaviour |
 |--------|------|-----------|
-| `touchQuota` (object + multipart handlers) | after a successful promote | **increment only**, and errors are swallowed on purpose so a DB blip cannot undo a committed state transition |
+| `touchQuota` (`CompleteObject` / `CopyObject` in the object handler) | after a successful promote | **increment only**, and errors are swallowed on purpose so a DB blip cannot undo a committed state transition |
 | `worker.QuotaReconciler` | every `worker.jobs.quota_reconcile.interval` (default 15m) | recomputes both columns from live `objects`, and rolls the per-day counters at midnight UTC |
 
 `middleware.QuotaSoftCheck` rejects uploads by comparing those columns
@@ -30,7 +30,7 @@ wedges. That is the failure this runbook covers.
 1. **Is the reconciler configured?**
 
    ```bash
-   kubectl -n <ns> get cm paladin-core -o yaml | grep -A 2 quota_reconcile
+   kubectl -n <ns> get cm paladin-core-config -o yaml | grep -A 2 quota_reconcile
    ```
 
    `interval: 0` (or a missing block on a hand-rolled config) disables it.
@@ -55,13 +55,13 @@ wedges. That is the failure this runbook covers.
    ```sql
    SELECT q.tenant_id, q.usage_total_bytes, q.usage_object_count,
           COALESCE(sum(o.size_bytes) FILTER (WHERE o.state = 'AVAILABLE'), 0) AS live_bytes,
-          count(o.object_id)         FILTER (WHERE o.state = 'AVAILABLE')     AS live_count
+          count(o.id)                FILTER (WHERE o.state = 'AVAILABLE')     AS live_count
      FROM quotas q
      LEFT JOIN objects o ON o.tenant_id = q.tenant_id
     WHERE q.tenant_id IS NOT NULL
-    GROUP BY q.quota_id, q.tenant_id, q.usage_total_bytes, q.usage_object_count
+    GROUP BY q.id, q.tenant_id, q.usage_total_bytes, q.usage_object_count
    HAVING q.usage_total_bytes  <> COALESCE(sum(o.size_bytes) FILTER (WHERE o.state = 'AVAILABLE'), 0)
-       OR q.usage_object_count <> count(o.object_id) FILTER (WHERE o.state = 'AVAILABLE');
+       OR q.usage_object_count <> count(o.id) FILTER (WHERE o.state = 'AVAILABLE');
    ```
 
    Run it on a BYPASSRLS role (`paladin_migrate` / `paladin_reaper`) — both tables
@@ -72,15 +72,20 @@ wedges. That is the failure this runbook covers.
 - **Reconciler disabled or wedged** → set a non-zero
   `worker.jobs.quota_reconcile.interval` and make sure a worker pod is
   healthy. The next tick corrects every drifted row; no manual step needed.
-- **Need it corrected now** (the reconciler's next tick is too far out for an
-  outage) → `QuotaService.ResetUsage` zeroes one quota's counters, and the
-  next reconcile tick refills them from live objects. Zeroing temporarily
-  under-counts, which fails *open* — acceptable while unblocking a customer.
-- **Counter keeps drifting despite a healthy reconciler** → the log line
-  `corrected drifted quota usage` carries a `rows` count on every tick. A
-  steady-state fleet reconciles 0. A persistently non-zero count means the
-  increment path is losing writes faster than deletes explain; check for
-  `touchQuota` errors in the api-plane logs.
+- **Need it corrected now** → there is no RPC for the stored totals.
+  `QuotaService.ResetUsage` only zeroes the **per-day** counters
+  (`usage_bytes_today` / `usage_objects_today`, query `ResetQuotaDaily`), so
+  it clears a `*_per_day` rejection but leaves a drifted `usage_total_bytes`
+  / `usage_object_count` as it is. For those the fix is the next reconcile
+  tick, at most one `interval` away (`RunTicker` waits one interval before
+  its first tick, so restarting the worker does not bring it forward).
+- **Counter keeps drifting despite a healthy reconciler** → the worker logs
+  `corrected drifted quota usage` with a `rows` count on every tick that
+  corrected anything; a steady-state fleet reconciles 0 and logs nothing. The
+  line on most ticks means the increment path is losing writes faster than
+  deletes explain. `touchQuota` discards its error without logging it, so
+  nothing in the api-plane logs records the lost writes. A tick that fails
+  outright logs `failed to reconcile quota usage`.
 
 ## What each cap does
 

@@ -9,9 +9,10 @@ the same PROMOTE the data plane would have.
 
 This is a safety net for the "someone wrote straight to S3" case (a legacy
 pipeline, `mc cp`, another service). Without it Paladin's DB would never learn the
-object exists. The data-plane **Reconciler** is the second safety net — it
-re-promotes `PENDING` rows on a schedule regardless of events — so a missed or
-absent notification degrades *latency*, not correctness.
+object exists. The worker's **Reconciler** (`internal/worker/reconciler.go`)
+is the second safety net — it HEADs `PENDING` rows on a schedule regardless
+of events — so a missed or absent notification for an upload made through
+Paladin degrades *latency*, not correctness.
 
 ---
 
@@ -23,21 +24,23 @@ Two orthogonal seams. Pick one **driver** (transport) and one **source**
 ```
 Driver (transport)          Source (format)
   ─ webhook   (HTTP)          ─ seaweedfs        (SF webhook JSON)
-  ─ nats      (JetStream)     ─ seaweedfs_nats   (SF gob+protobuf)
+  ─ nats      (core / JS)     ─ seaweedfs_nats   (SF gob+protobuf)
   ─ rabbitmq  (AMQP)          ─ s3 / minio       (AWS S3 event JSON)
-        \                     ─ cloudevents      (CE 1.0 passthrough)
-         ─→ Worker.Dispatch ←─
+  ─ sqs       (AWS SQS)       ─ cloudevents      (CE 1.0 passthrough)
+        \                    /
+         ─→ Worker.Deliver ←─
                  │
                  ▼
         dedup (ingested_events) → Handler → PromoteToAvailable
 ```
 
-- **Driver** — where events arrive. Config: `ingest.driver` = `nats` |
-  `webhook` | `rabbitmq`. See `IngestNATS` / `IngestWebhook` /
-  `IngestRabbitMQ` in `internal/config/types.go`.
-- **Source** — how to decode the bytes. Config: `ingest.nats.source_format`
-  (or the webhook route). Selected by `pickSource` in
-  `cmd/server/serve_ingest.go`.
+- **Driver** — where events arrive. Config: `ingest.driver` = `webhook` |
+  `nats` | `rabbitmq` | `sqs`. See `IngestWebhook` / `IngestNATS` /
+  `IngestRabbitMQ` / `IngestSQS` in `internal/config/types.go`.
+- **Source** — how to decode the bytes. Config:
+  `ingest.<nats|rabbitmq|sqs>.source_format` (the webhook driver picks per
+  route instead). Selected by `pickSource` in `cmd/server/serve_ingest.go`;
+  `sqs` defaults to `s3` when unset, the others require it.
 
 ### Transport × source — what actually pairs
 
@@ -47,6 +50,9 @@ Driver (transport)          Source (format)
 | `seaweedfs_nats` | — | ✅ | — | — | SeaweedFS `[notification.gocdk_pub_sub]` → NATS |
 | `s3` / `minio` | ✅ `/webhook/s3`, `/webhook/minio` | ✅ | ✅ | ✅ | AWS S3, MinIO, any S3-compatible |
 | `cloudevents` | ✅ `/webhook/cloudevents` | ✅ | ✅ | — | anything speaking CE 1.0 |
+
+`nats`, `rabbitmq` and `sqs` accept any `source_format` `pickSource` knows;
+the table marks the pairings a publisher actually emits.
 
 The **`sqs`** driver is the native AWS S3 path: S3 → SQS delivers the same S3
 event JSON, the driver long-polls and deletes on success (details below).
@@ -142,8 +148,14 @@ Two publishers disagree on the leading path:
 The NATS path observes the **full filer namespace**, where the S3 gateway
 materialises bucket-rooted objects under `/buckets/<bucket>/…`. So
 `parseSeaweedFSPath` strips a leading `buckets/` *before* the bucket-prefix
-check, making both shapes parse identically. A path missing the configured
-bucket prefix is **ignored** (wrong source / misconfig), not an error.
+check, making both shapes parse identically. A path missing the bucket
+prefix is **ignored** (wrong source / misconfig), not an error.
+
+The bucket is not configurable today: `pickSource` hard-codes
+`paladin-primary` for the `seaweedfs` / `seaweedfs_nats` sources on the
+`nats` / `rabbitmq` / `sqs` drivers, and the webhook driver registers
+`/webhook/seaweedfs` with **no** bucket, so that route expects a bare
+`<tenant>/<collection>/<key>` path.
 
 > ⚠️ **Drift risk.** The `buckets/` strip was inferred from observed live
 > paths on the current SeaweedFS version. A future SF release that drops the
@@ -279,11 +291,13 @@ layer (e.g. SeaweedFS) and use that layer's `source_format`.
 
 ## Dedup & delivery semantics
 
-**Dedup.** Every event passes through the `ingested_events` table keyed on
-`ID` before the handler runs (at-least-once safe). Sources must pick an `ID`
-stable across replays — a broker message-id where available, else a
-deterministic content hash. Ignored events (`ErrIgnoredEvent`) skip the dedup
-write to avoid no-op rows.
+**Dedup.** Every event claims a row in `ingested_events`, unique on
+`(source, event_id)`, before the handler runs (`Worker.Deliver`,
+`worker.go`); a duplicate claim skips the handler and acks. If the handler
+fails, the claim is released so the broker's redelivery is processed rather
+than skipped. Sources must pick an `ID` stable across replays — a broker
+message-id where available, else a deterministic content hash. Ignored events
+(`ErrIgnoredEvent`) never reach `Deliver`, so they write no dedup row.
 
 **Delivery (NATS driver).** Two modes (`ingest.nats.jetstream`):
 
@@ -291,8 +305,10 @@ write to avoid no-op rows.
   caught by the reconciler's HEAD of `PENDING` objects.
 - `true` — JetStream durable consumer, at-least-once. ACK after the pipeline
   returns nil; NAK → redelivery; unparseable → term (dead-letter). Requires
-  the stream to be pre-provisioned out-of-band (the driver errors if it's
-  absent). See `driver_nats.go` `runJetStream` and its integration
+  `durable_name` and a stream pre-provisioned out-of-band, named after the
+  subject with dots replaced by underscores (`seaweedfs.filer` →
+  `seaweedfs_filer`, `streamFromSubject`); the driver errors if it is
+  absent. See `driver_nats.go` `runJetStream` and its integration
   coverage in `driver_nats_jetstream_test.go`.
 
 **`Nats-Msg-Id` override.** When a NATS message carries `Nats-Msg-Id`, the
