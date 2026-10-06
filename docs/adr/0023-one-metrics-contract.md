@@ -51,13 +51,21 @@
     the chart refuses the combination rather than render a PodMonitor and
     ports for a listener that never opens. Default `push`, the behaviour
     today; with OTel off it renders nothing, as the traces do.
-  - **One scrape object.** In `scrape` mode the chart renders a single
-    PodMonitor selecting the release's pods by the container port named
-    `metrics`, path `/metrics`, plain HTTP. Every scraped role declares that
-    port; no Service changes, and a new role is scraped by declaring it. The
-    port name, the port number and the role list each live in one
-    `_helpers.tpl` definition that the Deployment, PodMonitor and
-    NetworkPolicy templates all read.
+  - **One way to find the pods, chosen explicitly.** In `scrape` mode
+    `metrics.discovery` says how the scraper finds them. `podMonitor` (the
+    default) renders a single PodMonitor selecting the release's pods by the
+    container port named `metrics`, path `/metrics`, plain HTTP.
+    `annotations` renders `prometheus.io/scrape`, `port` and `path` on each
+    role that serves `/metrics` instead, for scrapers without Prometheus
+    Operator (Alloy, vmagent, a `kubernetes_sd` job); the chart then owns
+    those keys and refuses them in `podAnnotations`, so the port is never
+    written twice. Discovery is a choice, not detected from the cluster's
+    APIs: under ArgoCD those depend on what the render is told, and a
+    detection that comes back empty renders nothing without a word. Every
+    scraped role declares the port; no Service changes, and a new role is
+    scraped by declaring it. The port name, number, path and role list each
+    live in one `_helpers.tpl` definition that the Deployment, PodMonitor,
+    annotations and NetworkPolicy all read.
   - **Every alert in the chart.** The rule files move under the chart and
     are rendered into the PrometheusRule as templates, so each threshold,
     window and `for` is a value under `metrics.alerts.rules`, and each alert

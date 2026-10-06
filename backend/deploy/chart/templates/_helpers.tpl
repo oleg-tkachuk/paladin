@@ -334,3 +334,34 @@ instruments of its own (serve_mcp.go).
 {{- define "chart.metricsRoles" -}}
 {{- list "api" "admin" "worker" "dispatcher" "ingest" | toJson -}}
 {{- end -}}
+
+{{/*
+The pod annotations a role carries for annotation-based discovery
+(metrics.discovery: annotations), as JSON: prometheus.io/scrape, port and
+path for a role that serves /metrics while metrics are scraped, {} otherwise.
+Read by scrapers without Prometheus Operator — Alloy, vmagent, a Prometheus
+kubernetes_sd job — from the same port and path the PodMonitor would use.
+
+The chart owns the prometheus.io/* keys then, so a podAnnotations entry under
+that prefix is refused rather than left to disagree with them.
+
+Caller passes { "ctx": ., "role": "api", "podAnnotations": <the role's> }.
+*/}}
+{{- define "chart.metricsAnnotations" -}}
+{{- $ctx := .ctx -}}
+{{- $prefix := "prometheus.io/" -}}
+{{- $out := dict -}}
+{{- if and (include "chart.metricsScraped" $ctx) (eq $ctx.Values.metrics.discovery "annotations") -}}
+{{- range $key, $_ := .podAnnotations -}}
+{{- if hasPrefix $prefix $key -}}
+{{- fail (printf "deployments.%s.podAnnotations sets %s, which metrics.discovery: annotations renders; drop it" $.role $key) -}}
+{{- end -}}
+{{- end -}}
+{{- if has .role (include "chart.metricsRoles" $ctx | fromJsonArray) -}}
+{{- $_ := set $out (printf "%sscrape" $prefix) "true" -}}
+{{- $_ := set $out (printf "%sport" $prefix) (toString $ctx.Values.metrics.port) -}}
+{{- $_ := set $out (printf "%spath" $prefix) (include "chart.metricsPath" $ctx) -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end -}}

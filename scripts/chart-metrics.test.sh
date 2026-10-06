@@ -3,7 +3,8 @@
 #
 # ADR-0023: one switch decides how metrics leave the process, and the chart
 # derives everything else from it — the exporter the application runs, the
-# address it listens on, the container port, the PodMonitor. Each piece used
+# address it listens on, the container port, and how the scraper finds the
+# pods (a PodMonitor, or prometheus.io/* annotations). Each piece used
 # to be its own value, and the shipped overlays combined them into a scrape of
 # a TLS port at a path nothing served. So the pieces are checked against each
 # other here, per mode, and the combinations that cannot work must be refused.
@@ -30,6 +31,9 @@ readonly METRICS_ROLES=(api admin worker dispatcher ingest)
 readonly UNSCRAPED_ROLE=mcp
 readonly ALL_ROLES=(--set deployments.ingest.enabled=true --set deployments.mcp.enabled=true)
 readonly OTEL_ON=(--set config.otel.enabled=true)
+readonly SCRAPE_ANNOTATION=prometheus.io/scrape
+readonly PORT_ANNOTATION=prometheus.io/port
+readonly PATH_ANNOTATION=prometheus.io/path
 
 for tool in helm yq; do
     command -v "$tool" >/dev/null 2>&1 || {
@@ -78,6 +82,12 @@ metrics_port() {
         "$scratch/$1.yaml"
 }
 
+# annotation <name> <role> <key> — one pod-template annotation of the role.
+annotation() {
+    yq -r 'select(.kind == "Deployment" and .metadata.name == "'"$RELEASE-$2"'")
+        | .spec.template.metadata.annotations["'"$3"'"] // ""' "$scratch/$1.yaml"
+}
+
 # pod_monitors <name> — how many PodMonitors the render carries.
 pod_monitors() {
     yq -r 'select(.kind == "PodMonitor") | .metadata.name' "$scratch/$1.yaml" | grep -c . || true
@@ -121,6 +131,30 @@ for role in "${METRICS_ROLES[@]}"; do
     check "custom port: $role metrics port" "$(metrics_port custom "$role")" "$CUSTOM_PORT"
 done
 
+for role in "${METRICS_ROLES[@]}"; do
+    check "scrape, podMonitor: $role has no scrape annotation" "$(annotation scrape "$role" "$SCRAPE_ANNOTATION")" ""
+done
+
+# ─── scrape, discovered by annotation ────────────────────────────────────────
+
+render annotated "${ALL_ROLES[@]}" "${OTEL_ON[@]}" --set metrics.mode=scrape --set metrics.discovery=annotations \
+    --set metrics.port=$CUSTOM_PORT
+check "annotations: no PodMonitor" "$(pod_monitors annotated)" "0"
+for role in "${METRICS_ROLES[@]}"; do
+    check "annotations: $role scrape" "$(annotation annotated "$role" "$SCRAPE_ANNOTATION")" "true"
+    check "annotations: $role port" "$(annotation annotated "$role" "$PORT_ANNOTATION")" "$CUSTOM_PORT"
+    check "annotations: $role path" "$(annotation annotated "$role" "$PATH_ANNOTATION")" "$METRICS_PATH"
+    check "annotations: $role metrics port" "$(metrics_port annotated "$role")" "$CUSTOM_PORT"
+done
+check "annotations: $UNSCRAPED_ROLE is not annotated" "$(annotation annotated "$UNSCRAPED_ROLE" "$SCRAPE_ANNOTATION")" ""
+
+# Pushing, nothing is served to scrape, so nothing is annotated for it: a
+# scraper told to keep these pods would find every target down.
+render annotated-push "${ALL_ROLES[@]}" "${OTEL_ON[@]}" --set metrics.discovery=annotations
+for role in "${METRICS_ROLES[@]}"; do
+    check "annotations, push: $role has no scrape annotation" "$(annotation annotated-push "$role" "$SCRAPE_ANNOTATION")" ""
+done
+
 # ─── off ─────────────────────────────────────────────────────────────────────
 
 render off "${OTEL_ON[@]}" --set metrics.mode=off
@@ -144,6 +178,10 @@ refused "address under config" "rendered from metrics.mode and metrics.port" \
     --set-string config.otel.metrics_addr=0.0.0.0:$CUSTOM_PORT
 refused "unknown mode" "/metrics/mode" --set metrics.mode=pull
 refused "the removed ServiceMonitor" "serviceMonitor" --set metrics.serviceMonitor.enabled=true
+refused "unknown discovery" "/metrics/discovery" --set metrics.discovery=consul
+refused "hand-written scrape annotation" "which metrics.discovery: annotations renders" \
+    "${OTEL_ON[@]}" --set metrics.mode=scrape --set metrics.discovery=annotations \
+    --set-string 'defaults.podAnnotations.prometheus\.io/port=8090'
 
 if [[ $fail -ne 0 ]]; then
     exit 1
