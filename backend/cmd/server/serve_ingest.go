@@ -20,7 +20,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/eventingest"
-	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
@@ -179,9 +178,15 @@ func runIngest(
 	// the in-flight event to drain before closing the pools.
 	workCtx, cancel := context.WithCancel(context.Background())
 	workerDone := make(chan struct{})
+	var metricsLn *app.MetricsListener
 
 	lc.Append(fx.Hook{
-		OnStart: func(context.Context) error {
+		OnStart: func(startCtx context.Context) error {
+			ml, err := app.StartMetricsListener(startCtx, deps, l)
+			if err != nil {
+				return err
+			}
+			metricsLn = ml
 			go func() {
 				if err := reaper.Run(workCtx); err != nil && !errorsIsCancelled(err) {
 					l.Warn("ingest reaper exited", zap.Error(err))
@@ -221,6 +226,9 @@ func runIngest(
 		OnStop: func(context.Context) error {
 			cancel() // stop the worker, reaper, and ops listener
 			<-workerDone
+			shutdownCtx, c := context.WithTimeout(context.Background(), defaultShutdownGrace)
+			defer c()
+			_ = metricsLn.Shutdown(shutdownCtx)
 			if ownPool != nil {
 				ownPool.Close()
 			}
@@ -253,6 +261,26 @@ func runIngest(
 //     always healthy. Postgres + the shared default checks still
 //     run.
 func runIngestOpsServer(ctx context.Context, addr string, deps *app.SharedDeps, drv eventingest.Driver, l *zap.Logger) {
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           ingestOpsMux(deps, drv, l),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() { // #nosec G118 -- detached ctx is intentional; the parent ctx is already canceled at shutdown time
+		<-ctx.Done()
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutCtx)
+	}()
+	l.Info("ingest ops listener", zap.String("addr", addr))
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		l.Warn("ingest ops listener exited", zap.Error(err))
+	}
+}
+
+// ingestOpsMux is the ops surface runIngestOpsServer serves: the health
+// endpoints and the driver's subscriber check.
+func ingestOpsMux(deps *app.SharedDeps, drv eventingest.Driver, l *zap.Logger) http.Handler {
 	healthH := app.NewHealthHandler(deps.DB, deps.Cfg.Runtime, l).WithRole("ingest")
 
 	if natsDrv, ok := drv.(*eventingest.NATSDriver); ok {
@@ -267,11 +295,10 @@ func runIngestOpsServer(ctx context.Context, addr string, deps *app.SharedDeps, 
 	mux := http.NewServeMux()
 	healthH.Register(mux)
 
-	// /metrics beside the health endpoints: this ops listener is already plain
-	// HTTP and cluster-internal, which is what the scraper needs.
-	if h := metricsHandler(deps); h != nil {
-		mux.Handle(middleware.PathMetrics, h)
-	}
+	// No /metrics here: it is served by app.StartMetricsListener on
+	// otel.metrics_addr, the one scrape port every role shares (ADR-0023).
+	// This listener runs only for the nats and rabbitmq drivers, so the
+	// webhook driver had no scrape endpoint while /metrics lived here.
 
 	// Backwards-compat alias — chart probes hit `/healthz` (the
 	// historical Kubernetes path), but health.Handler.Register
@@ -283,21 +310,7 @@ func runIngestOpsServer(ctx context.Context, addr string, deps *app.SharedDeps, 
 		r2.URL.Path = "/livez"
 		mux.ServeHTTP(w, r2)
 	})
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	go func() { // #nosec G118 -- detached ctx is intentional; the parent ctx is already canceled at shutdown time
-		<-ctx.Done()
-		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(shutCtx)
-	}()
-	l.Info("ingest ops listener", zap.String("addr", addr))
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		l.Warn("ingest ops listener exited", zap.Error(err))
-	}
+	return mux
 }
 
 // buildIngestDriver selects the transport based on cfg.Ingest.Driver
