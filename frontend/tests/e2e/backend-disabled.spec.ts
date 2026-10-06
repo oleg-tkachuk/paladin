@@ -1,8 +1,5 @@
 /**
- * US3 / feature 002 — disabled storage backends in the UI.
- *
- * Spec: specs/002-backend-enable-disable/spec.md §"User Story 3"
- * (SC-006, SC-007). A disabled backend must be visibly badged, must NOT
+ * Disabled storage backends in the UI. A disabled backend must be visibly badged, must NOT
  * be selectable as a working scope in the ScopePicker, and the operator
  * must be able to toggle its state from the /storage-backends admin page
  * with the change reflected promptly.

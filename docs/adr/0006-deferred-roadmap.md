@@ -1,6 +1,11 @@
 # ADR-0006: Deferred roadmap
 
-- **Status:** Accepted (living index)
+- **Status:** Superseded by [`BACKLOG.md`](../../BACKLOG.md),
+  [ADR-0009](0009-oauth-authorization-server.md) and
+  [ADR-0015](0015-per-tenant-bucket-layout.md) (2026-10-06). Most of what it
+  lists has shipped — the event sinks, JetStream ingest, the OAuth
+  authorization server, per-tenant buckets; BACKLOG.md is the deferred-work
+  register. Original status: Accepted (living index).
 - **Context:** Beyond the production-readiness fixes and the items now
   promoted to ADRs 0001–0005, the remaining backlog is feature/roadmap
   work that is deliberately deferred. This ADR records *that they are
