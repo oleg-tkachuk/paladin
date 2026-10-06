@@ -30,7 +30,8 @@ import (
 // lease is held by exactly one pod at a time; the loser sleeps and races to
 // claim on the winner's death (or stuck-process renew failure).
 //
-// An ops listener on cfg.Worker.Ops.Addr (defaults to :8099) exposes
+// An ops listener on cfg.Worker.Ops.Addr (schema.cue defaults it to
+// 0.0.0.0:8090) exposes
 // /healthz and /readyz so kube-proxy keeps the pod in its endpoint slice until
 // SIGTERM. We do NOT reuse the data / iam handlers here — workers don't speak
 // Connect, so the worker role composes app.BaseModule with its own fx

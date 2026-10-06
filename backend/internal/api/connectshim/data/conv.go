@@ -233,8 +233,8 @@ func objectToProto(o *objecth.Object) *pb.Object {
 		}
 	}
 	out.Taint = taintToProto(o.Taint)
-	// PhysicalPlacement only surfaced for privileged callers — slice 4 wires
-	// the role check; for now we leave it unset.
+	// Placement stays unset: it is for privileged callers only, and the data
+	// plane has no role check for that yet (BACKLOG).
 	return out
 }
 

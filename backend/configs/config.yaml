@@ -156,7 +156,7 @@ auth:
   issuer: "paladin-dev"
   signing_key: "dev-secret-change-me-32-bytes-min"  # must be ≥ 32 bytes
   # signing_key_secret: { name: paladin-iam, key: signing_key }   # set in staging/prod; mutually exclusive with signing_key
-  jwks_url: ""                                      # reserved for federated IdP; unused today
+  jwks_url: ""                                      # set to verify tokens against a JWKS instead of signing_key
   leeway: 30s
   access_token_ttl: 15m
   refresh_token_ttl: 168h               # 7 days

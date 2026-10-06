@@ -190,10 +190,9 @@ func ProvideUserHandler(repos Repos, pe *policy.Engine) *userh.Handler {
 }
 
 // tenantSlugLookup adapts the tenant.Repository to the Slug-resolver shape
-// authh expects. Lightweight cache: per-tenant slugs are
-// effectively immutable (rename is a deferred admin RPC — see BACKLOG),
-// so a single Get round-trip per token mint is the worst case for now.
-// If the mint volume warrants it, drop in a sync.Map cache here.
+// authh expects. No cache: RenameTenantSlug can change a slug, and a
+// single Get round-trip per token mint is cheap. A cache added here would
+// need invalidating on rename.
 func tenantSlugLookup(tr tenanth.Repository) func(ctx context.Context, tenantID uuid.UUID) (string, error) {
 	if tr == nil {
 		return nil

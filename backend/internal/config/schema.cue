@@ -197,8 +197,9 @@ limits: {
 // Auth is the Paladin IAM-plane JWT issuer + verifier. The same signing_key is
 // used to mint tokens (Login / RefreshToken) and to verify them on each
 // plane interceptor; three audiences are recognised: paladin-data, paladin-admin,
-// paladin-iam. JWKSURL is reserved for federated IdP integration and unused
-// in the current release — leave it empty.
+// paladin-iam. When jwks_url is set the planes and the MCP edge verify
+// tokens against that JWKS instead; signing_key still mints and verifies the
+// bootstrap admin's tokens.
 auth: {
   issuer:               string | *"paladin"
   signing_key:          string | *""
