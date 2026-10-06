@@ -88,7 +88,7 @@ for a, b in zip(pythons, pythons[1:]):
         failures.append(f"the matrix skips Python between {a} and {b}")
 
 # The tls extra is optional, so one cell must run without it.
-if not any(c.get("tls") is False for c in matrix["include"]):
+if not any(c.get("without_tls") is True for c in matrix["include"]):
     failures.append("no matrix cell runs without the tls extra")
 optional = {name for name in project.get("optional-dependencies", {})}
 if "tls" not in optional:
