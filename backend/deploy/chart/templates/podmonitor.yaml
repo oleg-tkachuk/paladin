@@ -1,0 +1,48 @@
+{{/*
+PodMonitor — one for the release, rendered with metrics.mode: scrape
+(ADR-0023). It selects every pod of the release and scrapes the container
+port named by chart.metricsPortName, which only the roles that serve
+/metrics declare: a role without the port yields no target rather than a
+down one, and a new role is scraped by declaring it.
+
+Requires the Prometheus Operator CRD (monitoring.coreos.com/v1). Plain HTTP:
+the metrics listener is not TLS, so the scraper needs no trust in the
+planes' internal CA.
+*/}}
+{{- if include "chart.metricsScraped" . -}}
+{{- $pm := .Values.metrics.podMonitor -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "chart.fullname" . }}
+  {{- with $pm.namespace }}
+  namespace: {{ . }}
+  {{- end }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+    {{- with $pm.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "chart.selectorLabels" . | nindent 6 }}
+  {{- if $pm.namespace }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  {{- end }}
+  podMetricsEndpoints:
+    - port: {{ include "chart.metricsPortName" . }}
+      path: {{ include "chart.metricsPath" . }}
+      interval: {{ $pm.interval }}
+      scrapeTimeout: {{ $pm.scrapeTimeout }}
+      {{- with $pm.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $pm.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

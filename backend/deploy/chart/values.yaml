@@ -458,22 +458,31 @@ podDisruptionBudget:
 
 # ─── Observability (Prometheus Operator) ───────────────────────────────────
 #
-# Backend api / admin / worker / dispatcher / ingest expose Prometheus
-# metrics. ServiceMonitor + PrometheusRule render only when the
-# Prometheus Operator CRDs are installed AND `metrics.*.enabled` flipped
-# in an env overlay — the chart stays installable in clusters without
-# the operator.
+# How metrics leave the process, and the one place that decides it
+# (ADR-0023). The chart renders config.otel.metrics_exporter and
+# metrics_addr from these; setting them under config is refused.
+#
+#   push    OTLP to config.otel.endpoint, beside the traces.
+#   scrape  every role but mcp serves /metrics on `port`, plain HTTP; the
+#           chart renders the container port, a PodMonitor and the
+#           NetworkPolicy rule for it. Needs config.otel.enabled and the
+#           Prometheus Operator CRDs.
+#   off     traces only.
+#
+# Nothing here takes effect while config.otel.enabled is false: the
+# MeterProvider is off with it. The PrometheusRule below is separate and
+# needs only the operator.
 metrics:
-  serviceMonitor:
-    enabled: false
-    # Namespace where Prometheus Operator's Prometheus CR runs. Empty =
-    # release namespace.
+  mode: push
+  port: 9095
+  podMonitor:
+    # Namespace the PodMonitor lands in, where the Prometheus CR looks for
+    # it. Empty = release namespace.
     namespace: ""
     interval: 30s
     scrapeTimeout: 10s
-    path: /v1/metrics
     # `release: <prometheus-release>` is the common label Prometheus
-    # Operator uses to discover ServiceMonitors. Override per env.
+    # Operator uses to discover monitors. Override per env.
     labels: {}
     relabelings: []
     metricRelabelings: []
@@ -625,13 +634,6 @@ config:
     # insecure off by default — prod OTel collector terminates TLS.
     # Local overlay flips this back on.
     insecure: false
-    # How metrics leave the process: otlp (push, beside traces), prometheus
-    # (a /metrics endpoint for a scraper) or none. With prometheus every role
-    # but mcp serves /metrics on metrics_addr. The NetworkPolicies read both
-    # keys to open the scrape port, so they are stated here rather than left
-    # to the config schema's defaults.
-    metrics_exporter: otlp
-    metrics_addr: "0.0.0.0:9095"
 
   runtime:
     # Gin mode `release` — debug skipped in prod.
@@ -1436,7 +1438,8 @@ networkPolicies:
     namespace: networking
     podLabels:
       app.kubernetes.io/name: traefik
-  # Prometheus (ServiceMonitor scraper) allowed to reach the ops/metrics ports.
+  # Prometheus allowed to reach the metrics port (metrics.mode: scrape) and
+  # the worker-class ops ports.
   monitoring:
     namespace: monitoring
   # The UI (BFF) pods — same namespace, separate chart.

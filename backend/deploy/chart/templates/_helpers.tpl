@@ -284,3 +284,53 @@ written otherwise. Returns JSON.
 {{- end -}}
 {{- $probe | toJson -}}
 {{- end -}}
+
+{{/*
+Metrics — one contract from the process to the scraper (ADR-0023).
+`metrics.mode` is the only switch: the exporter the application runs, the
+container port, the PodMonitor and the NetworkPolicy scrape rule are all read
+from these helpers, so no two of them can disagree.
+*/}}
+
+{{/* otel.metrics_exporter for each metrics.mode. */}}
+{{- define "chart.metricsExporter" -}}
+{{- $exporters := dict "push" "otlp" "scrape" "prometheus" "off" "none" -}}
+{{- index $exporters .Values.metrics.mode -}}
+{{- end -}}
+
+{{/*
+"true" when metrics are scraped, empty otherwise. Refuses scrape without
+config.otel.enabled: the MeterProvider is off then, and the PodMonitor and
+ports would point at a listener that never opens.
+*/}}
+{{- define "chart.metricsScraped" -}}
+{{- if eq .Values.metrics.mode "scrape" -}}
+{{- if not .Values.config.otel.enabled -}}
+{{- fail "metrics.mode: scrape needs config.otel.enabled: true — without it no role opens the metrics port" -}}
+{{- end -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/* The container port name the PodMonitor selects on. */}}
+{{- define "chart.metricsPortName" -}}
+metrics
+{{- end -}}
+
+{{/* The path the server mounts the exporter on (middleware.PathMetrics). */}}
+{{- define "chart.metricsPath" -}}
+/metrics
+{{- end -}}
+
+{{/* otel.metrics_addr: every interface, on metrics.port. */}}
+{{- define "chart.metricsAddr" -}}
+{{- printf "0.0.0.0:%d" (int .Values.metrics.port) -}}
+{{- end -}}
+
+{{/*
+The roles that serve /metrics, as JSON. mcp is not one: it holds no
+instruments of its own (serve_mcp.go).
+*/}}
+{{- define "chart.metricsRoles" -}}
+{{- list "api" "admin" "worker" "dispatcher" "ingest" | toJson -}}
+{{- end -}}

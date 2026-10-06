@@ -225,8 +225,8 @@ podDisruptionBudget:
   minAvailable: 2
 
 metrics:
-  serviceMonitor:
-    enabled: true
+  mode: scrape
+  podMonitor:
     interval: 30s
     labels:
       release: kube-prometheus-stack

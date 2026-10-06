@@ -9,6 +9,8 @@
   are merged via `default`.
 */}}
 {{- $defaults := .Values.defaults -}}
+{{- $metricsScraped := include "chart.metricsScraped" . -}}
+{{- $metricsRoles := include "chart.metricsRoles" . | fromJsonArray -}}
 {{- range $role, $spec := .Values.deployments }}
 {{- if $spec.enabled }}
 {{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) }}
@@ -100,6 +102,10 @@ spec:
           {{- end }}
           ports:
             {{- toYaml $spec.ports | nindent 12 }}
+            {{- if and $metricsScraped (has $role $metricsRoles) }}
+            - name: {{ include "chart.metricsPortName" $ }}
+              containerPort: {{ $.Values.metrics.port }}
+            {{- end }}
           {{- with $spec.livenessProbe }}
           livenessProbe:
             {{- toYaml (include "chart.probe" (dict "ctx" $ "role" $role "probe" .) | fromJson) | nindent 12 }}
