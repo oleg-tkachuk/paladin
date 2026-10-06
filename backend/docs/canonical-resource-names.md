@@ -10,7 +10,7 @@ in [ADR-0014](../../docs/adr/0014-canonical-resource-names.md).
 |---|---|---|
 | **A — canonical** | `storageBackends/{b}/buckets/{bk}/tenants/{tid}/collections/{ok}` | stored rows, events, SDKs that normalise |
 | **C — tenant-first** | `tenants/{tid}/collections/{ok}` | the console, most API calls |
-| **B — bare** | `{ok}` | quick commands; needs a tenant default binding |
+| **B — bare** | `{ok}` | quick commands; the tenant comes from the credential |
 
 `{ok}` may contain `/`. `{tid}` is the tenant UUID.
 
@@ -21,17 +21,25 @@ bucket it is `<tenant_id>/<collection>/<key>`
 
 ## Resolution
 
-Every connectshim handler that needs the `(tenant, collection)` pair calls
+All three shapes are accepted by the `CollectionService` RPCs that name one
+collection — `GetCollection`, `UpdateCollection`, `DeleteCollection`,
+`SetCollectionPolicy`, `BindCollectionToBucket` — which call
 `resolve.ResolveCollectionName` (`internal/api/connectshim/resolve`):
 
 - **A** carries the backend and bucket; they are used as given.
 - **C** carries the tenant; the backend and bucket are looked up from the
   Collection row when a handler needs them.
-- **B** takes the tenant from the caller's credential and the backend and
-  bucket from the tenant's default binding (`tenant_default_bindings`, set on
-  the console's *Default Route* tab or with `TenantService.SetTenantDefaultBinding`).
-  With no binding the call fails with `FailedPrecondition`, reason
-  `NO_DEFAULT_BINDING`.
+- **B** takes the tenant from the caller's credential, and is otherwise
+  handled like C.
+
+The data plane parses only shape C, for collections and for
+`tenants/{tid}/collections/{ok}/objects/{object}`, with the Go SDK's
+`paladin.ParseCollectionName` / `ParseObjectName`.
+
+`resolve.ResolveCollectionNameWithBinding` completes a bare name from the
+tenant's default binding (`tenant_default_bindings`, set on the console's
+*Default Route* tab or with `TenantService.SetTenantDefaultBinding`) and fails
+with `ErrNoDefaultBinding` when there is none. No RPC calls it yet.
 
 Each resolution increments `paladin_resource_name_shape_total{shape}`, the
 measurement a later deprecation of a shape depends on.
@@ -45,8 +53,9 @@ measurement a later deprecation of a shape depends on.
   table instead of building names themselves.
 - **Events.** Ingested storage events carry the canonical name
   (`internal/eventingest`).
-- **Cedar.** With `cedar.canonical_collection_euid: true` (the default) the
-  engine builds the A-shape entity UID when the backend and bucket are known.
+- **Cedar.** With `cedar.canonical_collection_euid: true` (set in every shipped
+  config and in the chart; the schema default is `false`) the engine builds
+  the A-shape entity UID when the backend and bucket are known.
   No shipped policy matches an entity UID literally, so the switch changes no
   decision; turn it off only if a policy pins a literal UID.
 
