@@ -264,7 +264,7 @@ func (h *Handler) subjectToUserID(ctx context.Context, p *auth.Principal) (uuid.
 	return u.UserID, nil
 }
 
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, action string, target authstore.User) error {
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, action cedar.Action, target authstore.User) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
 		action,
@@ -284,7 +284,7 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, action strin
 	return nil
 }
 
-func (h *Handler) authorizeTenant(ctx context.Context, p *auth.Principal, action string, tenantID uuid.UUID) error {
+func (h *Handler) authorizeTenant(ctx context.Context, p *auth.Principal, action cedar.Action, tenantID uuid.UUID) error {
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
 		action,

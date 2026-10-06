@@ -96,15 +96,15 @@ func (s *lockObjectStub) LookupBucketMeta(context.Context, uuid.UUID, string, bo
 
 type denyAll struct{}
 
-func (denyAll) IsAuthorized(context.Context, *cedar.Principal, string, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
+func (denyAll) IsAuthorized(context.Context, *cedar.Principal, cedar.Action, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
 	return cedar.DecisionDeny, nil
 }
 
 // actionRecorder captures which Cedar action the handler asked about, which is
 // the whole point of giving object lock its own actions.
-type actionRecorder struct{ last string }
+type actionRecorder struct{ last cedar.Action }
 
-func (a *actionRecorder) IsAuthorized(_ context.Context, _ *cedar.Principal, action string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (a *actionRecorder) IsAuthorized(_ context.Context, _ *cedar.Principal, action cedar.Action, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	a.last = action
 	return cedar.DecisionAllow, nil
 }
@@ -225,7 +225,7 @@ func TestLockRPCsUseTheirOwnCedarActions(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		call   func(h *LockHandler, ctx context.Context) error
-		action string
+		action cedar.Action
 	}{
 		{"retention", func(h *LockHandler, ctx context.Context) error {
 			_, err := h.SetRetention(ctx, SetRetentionInput{

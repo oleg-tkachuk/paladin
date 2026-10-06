@@ -60,7 +60,7 @@ func (h *VersionHandler) authorizeParent(
 	principal *auth.Principal,
 	parent Object,
 	op capability.Op,
-	action string,
+	action cedar.Action,
 ) error {
 	if err := auth.AssertCapabilityOp(ctx, op, CapabilityObjectURI(tenantID, parent.Collection, parent.Key)); err != nil {
 		return err

@@ -16,6 +16,7 @@
 // Roles (canonical dot-form, mirrored in defaultpolicy.go):
 //   platform.admin             — cross-tenant superuser
 //   platform.tenant-provisioner — creates tenants and their storage
+//   platform.capability-issuer — issues capabilities for any tenant
 //   tenant.admin               — tenant-scoped admin
 //   bucket.admin               — bucket configuration
 //   compliance.officer         — Object Lock / immutability
@@ -24,7 +25,8 @@
 //
 // Action plane mapping:
 //   * Admin (control plane) — backends, buckets, tenants, collections, quotas,
-//     subscriptions, audit log, operations, billing.
+//     subscriptions, audit log, operations, billing, capabilities, API tokens,
+//     MCP inspection.
 //   * Data plane — object operations, Object Lock, tenant storage bootstrap.
 //   * IAM (iam plane) — users, user settings, OAuth consent.
 //   * Inspection — policy validation / simulation / effective-policy lookup.
@@ -189,6 +191,26 @@ action "ManageQuota", "ReadQuota" appliesTo {
 action "InspectPolicy" appliesTo {
   principal: [User],
   resource: [Tenant, Collection],
+  context: RequestContext
+};
+
+// Capabilities and API tokens (admin plane). Checked against the CALLER's own
+// tenant; which other tenants a call may reach is decided in the handler.
+// The two credential types have separate actions so a grant on one never
+// carries over to the other.
+action "IssueCapability", "DelegateCapability", "RevokeCapability",
+       "ReadCapability",
+       "CreateAPIToken", "RevokeAPIToken", "ReadAPIToken" appliesTo {
+  principal: [User],
+  resource: [Tenant],
+  context: RequestContext
+};
+
+// MCP inspection (admin plane): sessions, profiles, tool catalog, bridge
+// status. Read-only; checked against the caller's own tenant.
+action "InspectMCP" appliesTo {
+  principal: [User],
+  resource: [Tenant],
   context: RequestContext
 };
 

@@ -23,7 +23,7 @@ import (
 // authorize() internal-error branch (mapped to CodeInternal).
 type errAuthorizer struct{}
 
-func (errAuthorizer) IsAuthorized(context.Context, *cedar.Principal, string, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
+func (errAuthorizer) IsAuthorized(context.Context, *cedar.Principal, cedar.Action, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
 	return cedar.DecisionDeny, errors.New("cedar engine boom")
 }
 

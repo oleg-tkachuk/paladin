@@ -94,7 +94,7 @@ func NewHandler(repo Repository, policy cedar.Authorizer) *Handler {
 // authorize gates operation RPCs against Cedar with the operation's
 // tenant_id (an operation is owned by the tenant whose principal spawned
 // it; cross-tenant Get/Cancel is denied at the repo layer too).
-func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UUID) error {
+func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID uuid.UUID) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)

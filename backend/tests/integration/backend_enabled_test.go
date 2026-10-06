@@ -318,7 +318,7 @@ func TestBackendDisabled_CreateBucketRefused(t *testing.T) {
 // exercises the disabled-backend gate, not the policy layer.
 type allowAll struct{}
 
-func (allowAll) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (allowAll) IsAuthorized(_ context.Context, _ *cedar.Principal, _ cedar.Action, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	return cedar.DecisionAllow, nil
 }
 

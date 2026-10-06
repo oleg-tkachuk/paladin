@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
 	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -438,7 +439,7 @@ func tenantCtx(tenant uuid.UUID) context.Context {
 
 // Since ADR-0010 a capability authenticates AS its subject's tenant, so minting
 // one for another tenant is a full cross-tenant grant. Cedar authorises
-// `capability:issue` against the caller's own tenant policy and says nothing
+// IssueCapability against the caller's own tenant policy and says nothing
 // about the subject's tenant, so the handler has to.
 func TestIssue_NonPlatformAdminCannotIssueForAnotherTenant(t *testing.T) {
 	store := &fakeStore{}
@@ -479,10 +480,11 @@ func TestIssue_TenantAdminMayIssueForItsOwnTenant(t *testing.T) {
 }
 
 // A platform admin still mints for anybody — that is how a consumer serving
-// many tenants gets per-tenant credentials.
+// many tenants gets per-tenant credentials. Through the real engine and an
+// empty tenant policy: the grant has to come from the built-in policy.
 func TestIssue_PlatformAdminMayIssueForAnotherTenant(t *testing.T) {
 	store := &fakeStore{}
-	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
+	h := NewHandler(mkIssuer(t, store), store, nil, cedartest.Engine(""))
 
 	_, err := h.Issue(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
@@ -508,9 +510,13 @@ func issuerCtx(tenant uuid.UUID) context.Context {
 
 // The whole point of the narrow role: a consumer serving many tenants mints
 // per-tenant capabilities without holding platform.admin.
+//
+// Through the real engine, not a stub that allows everything: with the stub
+// this test passed for as long as no policy granted the role anything, while
+// every Issue it made in a cluster was denied.
 func TestIssue_CapabilityIssuerMayIssueForAnotherTenant(t *testing.T) {
 	store := &fakeStore{}
-	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
+	h := NewHandler(mkIssuer(t, store), store, nil, cedartest.Engine(""))
 
 	_, err := h.Issue(issuerCtx(uuid.New()), connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
@@ -552,19 +558,23 @@ func TestRevokeAndGetUsageActOnTheCapabilitysTenant(t *testing.T) {
 	owner := uuid.New()
 	target := mkParent(owner, capability.OpGet)
 
+	// The roles are admitted by the built-in policy alone; the tenant-confined
+	// caller holds no role, so its own tenant's policy has to grant it.
+	const tenantGrant = `permit(principal, action in [Action::"RevokeCapability", Action::"ReadCapability"], resource);`
 	cases := map[string]struct {
-		ctx        context.Context
-		wantActing bool
+		ctx          context.Context
+		tenantPolicy string
+		wantActing   bool
 	}{
-		"platform admin":         {callerCtx(uuid.New(), "platform.admin"), true},
-		"capability issuer":      {callerCtx(uuid.New(), "platform.capability-issuer"), true},
-		"tenant-confined caller": {callerCtx(uuid.New()), false},
+		"platform admin":         {callerCtx(uuid.New(), "platform.admin"), "", true},
+		"capability issuer":      {callerCtx(uuid.New(), "platform.capability-issuer"), "", true},
+		"tenant-confined caller": {callerCtx(uuid.New()), tenantGrant, false},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
 			usage := &fakeUsage{out: capability.Usage{CapabilityID: target.ID}}
-			h := NewHandler(mkIssuer(t, &store.fakeStore), store, usage, &allowAuthorizer{})
+			h := NewHandler(mkIssuer(t, &store.fakeStore), store, usage, cedartest.Engine(tc.tenantPolicy))
 
 			if _, err := h.Revoke(tc.ctx, connect.NewRequest(&adminv1.CapabilityServiceRevokeRequest{
 				Id: target.ID.String(),

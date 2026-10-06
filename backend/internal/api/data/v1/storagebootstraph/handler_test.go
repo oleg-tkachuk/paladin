@@ -24,10 +24,10 @@ type recordingAuthorizer struct {
 	allow          bool
 	gotResource    *cedar.Resource
 	gotPrincipalTN uuid.UUID
-	gotAction      string
+	gotAction      cedar.Action
 }
 
-func (a *recordingAuthorizer) IsAuthorized(_ context.Context, p *cedar.Principal, action string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (a *recordingAuthorizer) IsAuthorized(_ context.Context, p *cedar.Principal, action cedar.Action, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	a.gotResource = r
 	a.gotPrincipalTN = p.TenantID
 	a.gotAction = action
@@ -268,7 +268,7 @@ func TestEnsureTenantStorage_CapabilityOp(t *testing.T) {
 			if connect.CodeOf(err) != tc.want {
 				t.Fatalf("err code = %v, want %v (err=%v)", connect.CodeOf(err), tc.want, err)
 			}
-			if authz.gotAction != "" || backends.gotID != "" || buckets.calls != 0 {
+			if authz.gotAction != (cedar.Action{}) || backends.gotID != "" || buckets.calls != 0 {
 				t.Error("a refused capability must short-circuit before Cedar and any provisioning")
 			}
 		})

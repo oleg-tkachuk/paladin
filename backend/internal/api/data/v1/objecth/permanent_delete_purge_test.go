@@ -90,7 +90,7 @@ func (s *failingDeleteStorage) DeleteObject(context.Context, string, string, uui
 
 type allowAll struct{}
 
-func (allowAll) IsAuthorized(context.Context, *cedar.Principal, string, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
+func (allowAll) IsAuthorized(context.Context, *cedar.Principal, cedar.Action, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
 	return cedar.DecisionAllow, nil
 }
 

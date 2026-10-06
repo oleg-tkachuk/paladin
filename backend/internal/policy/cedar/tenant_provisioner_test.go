@@ -20,7 +20,7 @@ const roleTenantProvisioner = "platform.tenant-provisioner"
 // The tenant policy is empty on purpose: the grant has to come from the
 // built-in policy, or a freshly created tenant — whose stored policy is written
 // only after provisioning — could never be provisioned at all.
-func authzAsProvisioner(t *testing.T, action string) Decision {
+func authzAsProvisioner(t *testing.T, action Action) Decision {
 	t.Helper()
 	e := NewEngine(fakeStore{}, time.Minute)
 	dec, err := e.IsAuthorized(context.Background(),
@@ -44,7 +44,7 @@ func authzAsProvisioner(t *testing.T, action string) Decision {
 // the object keys, and the policy write (which routes through ManageTenant).
 // Cross-tenant by design — the caller is provisioning somebody else's tenant.
 func TestTenantProvisioner_MayProvision(t *testing.T) {
-	for _, action := range []string{
+	for _, action := range []Action{
 		ActionManageTenant,
 		ActionReadTenant,
 		ActionManageBucket,
@@ -52,7 +52,7 @@ func TestTenantProvisioner_MayProvision(t *testing.T) {
 		ActionManageCollection,
 		ActionBindCollectionToBucket,
 	} {
-		t.Run(action, func(t *testing.T) {
+		t.Run(action.String(), func(t *testing.T) {
 			if got := authzAsProvisioner(t, action); got != DecisionAllow {
 				t.Fatalf("%s = %v, want Allow", action, got)
 			}
@@ -64,7 +64,7 @@ func TestTenantProvisioner_MayProvision(t *testing.T) {
 // A leaked provisioner credential must not be able to read or destroy a single
 // object, mint a credential, or touch a storage backend.
 func TestTenantProvisioner_MayNotReachData(t *testing.T) {
-	for _, action := range []string{
+	for _, action := range []Action{
 		ActionGetObject,
 		ActionPutObject,
 		ActionDeleteObject,
@@ -79,7 +79,7 @@ func TestTenantProvisioner_MayNotReachData(t *testing.T) {
 		ActionGrantScopes,
 		ActionReadAuditLog,
 	} {
-		t.Run(action, func(t *testing.T) {
+		t.Run(action.String(), func(t *testing.T) {
 			if got := authzAsProvisioner(t, action); got != DecisionDeny {
 				t.Fatalf("%s = %v, want Deny — the provisioner role must not carry it", action, got)
 			}

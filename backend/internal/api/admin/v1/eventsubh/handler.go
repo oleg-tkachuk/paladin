@@ -38,7 +38,7 @@ func NewHandler(r admindomain.EventSubscriptionRepository, policy cedar.Authoriz
 // it become one step that cannot be half-done.
 //
 // existing role + tenant-isolation guards stay as defense-in-depth.
-func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UUID) (context.Context, error) {
+func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID uuid.UUID) (context.Context, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return ctx, connect.NewError(connect.CodeUnauthenticated, err)

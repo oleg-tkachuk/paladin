@@ -21,13 +21,13 @@ import (
 // fires first) from the Cedar guard (which fires second).
 type allowAuthorizer struct{}
 
-func (allowAuthorizer) IsAuthorized(context.Context, *cedar.Principal, string, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
+func (allowAuthorizer) IsAuthorized(context.Context, *cedar.Principal, cedar.Action, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
 	return cedar.DecisionAllow, nil
 }
 
 type denyAuthorizer struct{}
 
-func (denyAuthorizer) IsAuthorized(context.Context, *cedar.Principal, string, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
+func (denyAuthorizer) IsAuthorized(context.Context, *cedar.Principal, cedar.Action, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
 	return cedar.DecisionDeny, nil
 }
 
@@ -101,7 +101,7 @@ type recordingAuthorizer struct {
 	resource *cedar.Resource
 }
 
-func (r *recordingAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, res *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (r *recordingAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ cedar.Action, res *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	r.resource = res
 	return r.decision, nil
 }

@@ -42,7 +42,7 @@ func NewHandler(r admindomain.AuditRepository, policy cedar.Authorizer) *Handler
 // authorize gates an audit-log RPC against Cedar. The Resource is a Tenant
 // (audit lines are tenant-scoped); compliance roles can be granted
 // cross-tenant read by writing a permit without the tenant_id match.
-func (h *Handler) authorize(ctx context.Context, action string, tenantID uuid.UUID) error {
+func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID uuid.UUID) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err)
