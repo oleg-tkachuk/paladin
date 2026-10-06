@@ -122,7 +122,7 @@ requires one on `Create*` and `Issue*` calls.
 
 | Function | Does |
 | --- | --- |
-| `idempotency_key(key)` | A context manager: every call inside the block sends `Idempotency-Key: <key>`. The server replays the first response for a key it has seen, so repeating a mutating call with the same key is safe. Reuse a key only for the same logical operation. Scoped with `contextvars`, so it follows `asyncio` tasks. |
+| `idempotency_key(key)` | A context manager: every call inside the block that the contract does not declare side-effect free or idempotent sends `Idempotency-Key: <key>`. The server replays the first response to the same request with a key it has seen, so repeating a mutating call with the same key is safe; the same key with a different request to that method is `InvalidArgument`. `upload`, `download` and their `_many` forms keep the key for the calls that create or complete an object — per item, as `key/<n>`, in `upload_many` — and give every other call its own. Reuse a key only for the same logical operation. Scoped with `contextvars`, so it follows `asyncio` tasks. |
 | `current_idempotency_key()` | The key set for the current context; an empty key counts as none. |
 | `no_idempotency_key()` | A context manager: every call inside the block goes out with no key — not the default one, not the request's field — and so is never retried, unless the contract declares it side-effect free or idempotent. For an operation that must run again when repeated rather than be answered with the first response. The server refuses `Create*` and `Issue*` without a key. The innermost block wins. |
 
