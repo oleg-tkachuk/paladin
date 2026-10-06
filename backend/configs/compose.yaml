@@ -113,9 +113,6 @@ auth:
   login_rate_limit_per_subject_per_minute: 100000
   login_rate_limit_per_ip_per_minute: 100000
 
-security:
-  reject_tenant_mismatch: false
-
 # Bootstrap on first boot. Running `paladin bootstrap` once with this
 # config provisions a `platform/admin` user + the primary storage
 # backend row. Smoke tests authenticate with these credentials.
