@@ -45,8 +45,9 @@ on absence.
     summary: "Paladin rate limiting is failing open"
     description: >-
       Requests are admitted without a rate-limit decision; the per-tenant
-      or per-token ceiling is not in force. Check the limiter's Postgres
-      tables and the api logs.
+      or per-token ceiling is not in force. The limiters log nothing when
+      they fail open: check that the planes can write tenant_rate_buckets
+      and api_token_rate_buckets.
     {{- include "chart.alerts.runbook" (dict "ctx" . "rule" $failOpen) | nindent 4 }}
 {{- end }}
 {{- if $rules.capabilityChargesRefused.enabled }}
@@ -66,7 +67,7 @@ on absence.
     summary: "Tenant {{ "{{ $labels.tenant_id }}" }} has nearly every capability charge refused"
     description: >-
       Over {{ $charges.refusedFraction | mulf 100.0 }}% of charge attempts were refused for {{ $charges.for }}. Check the
-      tenant's quota and the issuing capability's budget.
+      tenant's budget and the issuing capability's budget.
     {{- include "chart.alerts.runbook" (dict "ctx" . "rule" $charges) | nindent 4 }}
 {{- end }}
 {{- if $rules.tenantThrottled.enabled }}

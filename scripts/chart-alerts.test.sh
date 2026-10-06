@@ -26,6 +26,10 @@ readonly RUNBOOKS=docs/runbooks
 readonly SELECTOR='namespace="paladin"'
 # Every rule the chart ships, all enabled by default.
 readonly RULE_COUNT=13
+# The lifecycle rules have no runbook of their own: their descriptions say
+# what to inspect. Every other rule links one.
+readonly LIFECYCLE_RULES=3
+readonly RUNBOOK_COUNT=$((RULE_COUNT - LIFECYCLE_RULES))
 
 for tool in helm yq promtool; do
     command -v "$tool" >/dev/null 2>&1 || {
@@ -149,6 +153,8 @@ fi
 
 # ─── runbooks ────────────────────────────────────────────────────────────────
 
+check "defaults: rules with a runbook" \
+    "$(yq -r '[.groups[].rules[] | select(.annotations.runbook_url)] | length' "$scratch/defaults.yaml")" "$RUNBOOK_COUNT"
 base=$(yq -r '.metrics.alerts.runbookBaseUrl' "$CHART/values.yaml")
 for alert in $(yq -r '.groups[].rules[] | select(.annotations.runbook_url) | .alert' "$scratch/defaults.yaml"); do
     cases=$((cases + 1))
