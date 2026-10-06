@@ -126,3 +126,22 @@ func TestValidateNoUnknownKeys_RealConfigPasses(t *testing.T) {
 		t.Errorf("configs/local.yaml has unknown keys?\n%v", err)
 	}
 }
+
+// security.reject_tenant_mismatch once gated a REST middleware that returned
+// 403 for a tenant mismatch; the middleware went with the move to Connect,
+// and the key lived on, read by nothing and set to true in every config —
+// a control that looked enabled. It was removed outright, so a config still
+// carrying it must fail to load rather than keep implying the check exists.
+func TestValidateNoUnknownKeys_RemovedTenantMismatchSwitchFails(t *testing.T) {
+	path := writeYAML(t, `
+security:
+  reject_tenant_mismatch: true
+`)
+	err := validateNoUnknownKeys(path)
+	if err == nil {
+		t.Fatal("expected the removed security.reject_tenant_mismatch to be refused")
+	}
+	if !strings.Contains(err.Error(), "security.reject_tenant_mismatch") {
+		t.Errorf("error must name the removed key, got: %v", err)
+	}
+}

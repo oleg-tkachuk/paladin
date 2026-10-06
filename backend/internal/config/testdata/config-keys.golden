@@ -353,7 +353,6 @@ runtime.mode
 runtime.shutdown_timeout
 security
 security.log_sensitive
-security.reject_tenant_mismatch
 storage
 storage.backends
 storage.backends.*

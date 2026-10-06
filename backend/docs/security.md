@@ -56,9 +56,9 @@ Applied in order on every request:
 
 The tenant comes from the credential, never from a request header. The one
 header that names a tenant, `X-Tenant-Id`, is a disambiguation hint for
-`AuthService.Login`, which still requires the password.
-`security.reject_tenant_mismatch` is accepted by the loader but read by
-nothing.
+`AuthService.Login`, which still requires the password. There is no switch
+that relaxes this: a request naming another tenant is refused, or for a
+platform admin acted on and audited (ADR-0022), unconditionally.
 
 ## 3. Storage
 

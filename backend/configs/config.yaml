@@ -163,12 +163,13 @@ auth:
   scoped_token_max_ttl: 24h
 
 # ─── Security ───────────────────────────────────────────────────────────────
-security:
-  reject_tenant_mismatch: true          # 403 when JWT tenant != header tenant
-  # RLS isn't a knob — runtime always installs the BeforeAcquire
-  # hook. `002_roles_and_rls.sql` enables per-table policies
-  # unconditionally and paladin_app is NOBYPASSRLS, so disabling the hook would break
-  # every write. See internal/config/types.go for the rationale.
+# Nothing to set: the tenant comes from the credential, and a request naming
+# another tenant is refused unconditionally.
+#
+# RLS isn't a knob either — the runtime always installs the BeforeAcquire
+# hook. `002_roles_and_rls.sql` enables per-table policies unconditionally and
+# paladin_app is NOBYPASSRLS, so disabling the hook would break every write.
+# See internal/config/types.go for the rationale.
 
 # ─── Bootstrap (one-shot startup steps; opt-in) ────────────────────────────
 # ArgoCD-style platform-admin provisioning. The password is resolved at

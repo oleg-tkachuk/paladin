@@ -85,9 +85,6 @@ auth:
   refresh_token_ttl: 168h
   scoped_token_max_ttl: 24h
 
-security:
-  reject_tenant_mismatch: false
-
 middleware:
   timeouts:
     fast_operation: 5s

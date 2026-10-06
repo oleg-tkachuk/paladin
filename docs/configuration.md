@@ -124,7 +124,7 @@ comment. What each top-level block owns:
 | `datastores` | Postgres DSN, the separate migrate / reaper credentials, the opt-in read replica |
 | `limits` | object and multipart size ceilings, part sizes, content types, presign lifetimes |
 | `auth` | JWT signing, token TTLs, login rate limiting |
-| `security` | `reject_tenant_mismatch` (`log_sensitive` is retired: accepted, ignored, warned about) |
+| `security` | nothing to set: `log_sensitive` is retired (accepted, ignored, warned about) |
 | `bootstrap` | the platform admin provisioned by `paladin bootstrap` |
 | `middleware` | interceptor defaults shared by every plane |
 | `worker` | job intervals, leases, reaper batch sizes ([ops-housekeeping.md](../backend/docs/ops-housekeeping.md)) |

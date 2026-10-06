@@ -43,6 +43,15 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — `security.reject_tenant_mismatch` is removed
+
+- **A config that sets `security.reject_tenant_mismatch` no longer loads.**
+  The key was read by nothing: the REST middleware it once switched went with
+  the move to Connect, and since then a request naming another tenant has
+  been refused (or, for a platform admin, acted on and audited) whatever the
+  key said. The strict loader rejects it now, so delete it from any values
+  file or overlay before upgrading. Nothing about tenant checks changes.
+
 ## Unreleased — a multipart upload to a taken key is `AlreadyExists`
 
 - **`InitiateMultipartUpload` at a key another object holds answers
