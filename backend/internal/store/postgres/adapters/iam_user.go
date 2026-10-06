@@ -161,15 +161,15 @@ func (r *UserRepo) List(ctx context.Context, args authstore.ListUsersArgs) ([]au
 	// Pushdown: see admin_bucket.go — userh still evaluates the whole CEL
 	// expression over the page, these only narrow the scan.
 	pd := hints(cel.UserSchema, args.Filter)
-	subjectEq, subjectLike := pd.StringHint("subject")
-	displayEq, displayLike := pd.StringHint("display_name")
+	subjectIn, subjectLike := pd.StringHint("subject")
+	displayIn, displayLike := pd.StringHint("display_name")
 	disabled := pd.BoolHint("disabled")
 	createdGTE, createdLTE := createdBounds(pd)
 
 	var rows []sqlc.User
 	if args.TenantID == uuid.Nil {
 		got, err := r.q.ListUsersAll(ctx, pgUUID(afterID),
-			subjectEq, subjectLike, displayEq, displayLike, disabled,
+			subjectIn, subjectLike, displayIn, displayLike, disabled,
 			createdGTE, createdLTE, limit)
 		if err != nil {
 			return nil, "", err
@@ -177,7 +177,7 @@ func (r *UserRepo) List(ctx context.Context, args authstore.ListUsersArgs) ([]au
 		rows = got
 	} else {
 		got, err := r.q.ListUsersByTenant(ctx, pgUUID(args.TenantID), pgUUID(afterID),
-			subjectEq, subjectLike, displayEq, displayLike, disabled,
+			subjectIn, subjectLike, displayIn, displayLike, disabled,
 			createdGTE, createdLTE, limit)
 		if err != nil {
 			return nil, "", err

@@ -61,9 +61,9 @@ WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenants.id > sqlc.narg('after_id')
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
-  AND (sqlc.narg('slug_eq')::text IS NULL OR tenants.slug = sqlc.narg('slug_eq')::text)
+  AND (sqlc.narg('slug_in')::text[] IS NULL OR tenants.slug = ANY(sqlc.narg('slug_in')::text[]))
   AND (sqlc.narg('slug_like')::text IS NULL OR tenants.slug LIKE sqlc.narg('slug_like')::text)
-  AND (sqlc.narg('display_name_eq')::text IS NULL OR tenants.display_name = sqlc.narg('display_name_eq')::text)
+  AND (sqlc.narg('display_name_in')::text[] IS NULL OR tenants.display_name = ANY(sqlc.narg('display_name_in')::text[]))
   AND (sqlc.narg('display_name_like')::text IS NULL OR tenants.display_name LIKE sqlc.narg('display_name_like')::text)
   -- The derived `search` field, spelled to match cel.SearchText EXACTLY.
   -- ASCII-only folding via COLLATE "C": Go's strings.ToLower and Postgres
@@ -78,8 +78,8 @@ WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenants.id > sqlc.narg('after_id')
   -- Compared as text on purpose: the literal comes from a caller's filter, and
   -- casting an arbitrary string to the enum makes Postgres reject the whole
   -- query ("invalid input value for enum") instead of returning no rows.
-  AND (sqlc.narg('storage_layout')::text IS NULL
-       OR tenants.storage_layout::text = sqlc.narg('storage_layout')::text)
+  AND (sqlc.narg('storage_layout_in')::text[] IS NULL
+       OR tenants.storage_layout::text = ANY(sqlc.narg('storage_layout_in')::text[]))
   -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.

@@ -343,7 +343,7 @@ type Querier interface {
 	// Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
 	// (the schema baseline (001_initial_schema.sql)) makes the per-tenant filter cheap; the WHERE clause
 	// below is plain equality so the planner uses the partial index.
-	ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, searchLike *string, versioningEnabled *bool, objectLockEnabled *bool, replicationEnabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
+	ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, versioningEnabled *bool, objectLockEnabled *bool, replicationEnabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
 	// Returns only buckets with a non-empty lifecycle_rules array. The worker
 	// ticks against this set; sweeping all buckets on every tick would be
 	// wasteful when most carry no rules.
@@ -369,7 +369,7 @@ type Querier interface {
 	// not a per-event query on the ingest hot path. collections is small per tenant
 	// (bounded by the tenant's namespace layout), so the unbounded read is cheap.
 	ListCollectionNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
-	ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, searchLike *string, backendEq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error)
+	ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, backendIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error)
 	// ListDuePurges claims work for one drainer tick. FOR UPDATE SKIP LOCKED so
 	// concurrent worker replicas divide the backlog instead of colliding on it —
 	// the same claim discipline the event-delivery outbox uses.
@@ -431,12 +431,12 @@ type Querier interface {
 	// still checked against every row.
 	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *ObjectState, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
 	// Oldest first. The cursor compares `>`, so paging walks forward in time.
-	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, stateEq *string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
+	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
 	// Newest first, for a caller showing current activity. A separate query
 	// rather than a CASE in the ORDER BY: the cursor comparison has to flip with
 	// the sort (`<` here, `>` above) or the second page walks away from the rows
 	// the caller asked for, and sqlc cannot parameterise either.
-	ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeEq *string, typeLike *string, errorCodeEq *string, stateEq *string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error)
+	ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error)
 	// Worker query for the delete path. Picks 'deleting' rows plus
 	// 'deletion_failed' rows whose retry budget hasn't run out.
 	ListPendingBucketDeletions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketDeletionsRow, error)
@@ -469,7 +469,7 @@ type Querier interface {
 	// the first page, and a bare `name > NULL` evaluates to NULL → zero rows
 	// (the same trap that bit ListUsersByTenant). Keep the
 	// `sqlc.narg(after_id) IS NULL OR …` shape on every cursor query here.
-	ListStorageBackends(ctx context.Context, afterID *string, nameEq *string, nameLike *string, displayNameEq *string, displayNameLike *string, searchLike *string, providerEq *string, regionEq *string, enabled *bool, readOnly *bool, maintenance *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListStorageBackendsRow, error)
+	ListStorageBackends(ctx context.Context, afterID *string, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, providerIn []string, regionIn []string, enabled *bool, readOnly *bool, maintenance *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListStorageBackendsRow, error)
 	// Cross-tenant join of tenant_budgets ⨝ tenants. Returns slug +
 	// display_name so the dashboard's BudgetAlerts widget doesn't need a
 	// follow-up read.
@@ -488,7 +488,7 @@ type Querier interface {
 	// The boolean gating is inline-CASE so sqlc emits a single prepared
 	// statement; planner uses the partial idx_tenants_active index on
 	// the common path.
-	ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugEq *string, slugLike *string, displayNameEq *string, displayNameLike *string, searchLike *string, storageLayout *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error)
+	ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugIn []string, slugLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, storageLayoutIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error)
 	// Admin-side: surface configured settings across a tenant for support and
 	// compliance flows ("which users opted into the dark theme?").
 	ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, limit int32) ([]ListUserSettingsByTenantRow, error)
@@ -496,13 +496,13 @@ type Querier interface {
 	// pattern as ListUsersByTenant — without the IS-NULL guard the
 	// /users page renders empty even when there are rows, because the
 	// adapter sends pgUUID(uuid.Nil) which maps to SQL NULL.
-	ListUsersAll(ctx context.Context, afterID pgtype.UUID, subjectEq *string, subjectLike *string, displayNameEq *string, displayNameLike *string, disabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]User, error)
+	ListUsersAll(ctx context.Context, afterID pgtype.UUID, subjectIn []string, subjectLike *string, displayNameIn []string, displayNameLike *string, disabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]User, error)
 	// after_id is NULL on first page (no page token). The IS-NULL guard
 	// prevents the NULL-propagation that would make a bare `id >
 	// NULL` return zero rows. pgUUID() maps uuid.Nil → pgtype.UUID{
 	// Valid:false} → SQL NULL, so the guard is the contract callers
 	// rely on.
-	ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, subjectEq *string, subjectLike *string, displayNameEq *string, displayNameLike *string, disabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]User, error)
+	ListUsersByTenant(ctx context.Context, tenantID pgtype.UUID, afterID pgtype.UUID, subjectIn []string, subjectLike *string, displayNameIn []string, displayNameLike *string, disabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]User, error)
 	// The bucket reconciler holds this row lock across the backend delete, so the
 	// state it checks is the state the delete runs under.
 	LockBucketForDeletion(ctx context.Context, name string, name_2 string) (LockBucketForDeletionRow, error)
