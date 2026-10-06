@@ -1760,6 +1760,13 @@
                     },
                     "severity": {
                       "type": "string"
+                    },
+                    "restarts": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "window": {
+                      "type": "string"
                     }
                   },
                   "type": "object"
