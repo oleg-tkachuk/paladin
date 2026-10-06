@@ -49,15 +49,14 @@ permit (
 // cedar.builtinPolicy — so it applies to every tenant uniformly, including
 // existing ones whose stored policy predates it, without a per-tenant seed.)
 
-// User settings — every authenticated user reads/writes their own settings
-// without further check. Cross-user access (admin viewing a teammate's
-// timezone) is platform-admin or tenant-admin only.
+// User settings — cross-user access (an admin viewing a teammate's timezone)
+// is platform-admin or tenant-admin only. A user's OWN settings are a
+// built-in permit (cedar.builtinPolicy), keyed on subject and tenant.
 permit (
     principal,
     action in [Action::"ReadUserSettings", Action::"ManageUserSettings"],
     resource
 ) when {
-    principal == resource ||
     principal.roles.contains("platform.admin") ||
     (principal.roles.contains("tenant.admin") &&
      principal.tenant_id == resource.tenant_id)

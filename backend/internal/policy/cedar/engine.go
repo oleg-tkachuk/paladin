@@ -615,6 +615,11 @@ var constantResourceAttrs = map[string]bool{
 	// read a genuinely per-object attr (tags/state/size/…) still trigger per-row
 	// eval on that attr; this entry only neutralizes the built-in's own read.
 	"scope_keys": true,
+	// subject belongs to the User resource of the settings and user actions,
+	// never to an Object, so on a ListObjects page it is absent for every row
+	// alike. Listed so the own-settings built-in, which reads it, does not
+	// force per-row evaluation on every list.
+	"subject": true,
 }
 
 // policyReadsPerObjectResourceAttr walks every policy in the set (via its Cedar
@@ -748,6 +753,29 @@ permit (
 )
 when {
   principal has tenant_id &&
+  resource has tenant_id &&
+  principal.tenant_id == resource.tenant_id
+};
+
+// Built-in: a user may read and change its OWN settings — self-service like
+// ReadTenant above. The resource is the target User; it is the caller when the
+// subjects match within one tenant. A login subject is unique only inside a
+// tenant, so the tenant comparison is what keeps a same-named user elsewhere
+// out.
+//
+// Not "principal == resource": the principal's UID is its subject and the
+// resource's is tenant/user-id, so the two never match. The default tenant
+// policy said exactly that and so admitted nobody to their own settings.
+// Built-in rather than per-tenant so the fix reaches tenants whose stored
+// policy was frozen at creation. A tenant policy can still forbid it.
+permit (
+  principal,
+  action in [Action::"ReadUserSettings", Action::"ManageUserSettings"],
+  resource
+)
+when {
+  resource has subject &&
+  principal.subject == resource.subject &&
   resource has tenant_id &&
   principal.tenant_id == resource.tenant_id
 };
