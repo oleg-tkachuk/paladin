@@ -340,9 +340,8 @@ type ListBucketsRequest struct {
 	// owner_tenant_id narrows the listing to buckets owned by exactly
 	// this tenant (matches buckets.owner_tenant_id). UUID or slug;
 	// empty = no tenant filter (cross-tenant listing for platform-
-	// admin). Backed by the partial index on
-	// buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
-	// (migration 006), so per-tenant lookups are cheap.
+	// admin). Backed by the index on buckets(owner_tenant_id)
+	// (`001_initial_schema.sql`), so per-tenant lookups are cheap.
 	OwnerTenantId string `protobuf:"bytes,4,opt,name=owner_tenant_id,json=ownerTenantId,proto3" json:"owner_tenant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

@@ -335,8 +335,8 @@ export const TenantBudgetServiceSummarizeResponseSchema: GenMessage<TenantBudget
 
 /**
  * TenantBudgetService manages the per-tenant aggregate USD spend cap
- * for the capability subsystem (cfg.Capability.* + migration 025
- * `tenant_budgets`). Distinct from QuotaService — quotas are bytes /
+ * for the capability subsystem (cfg.Capability.* + `tenant_budgets` in
+ * `001_initial_schema.sql`). Distinct from QuotaService — quotas are bytes /
  * object counts; budgets are capability-spend dollars.
  *
  * Naming: methods carry the `TenantBudgetService` prefix on their

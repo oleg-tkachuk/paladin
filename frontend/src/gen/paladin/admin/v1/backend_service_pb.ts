@@ -491,7 +491,7 @@ export const BackendService: GenService<{
   };
   /**
    * SetBackendReadOnly flips the backend's read-only "drain" state
-   * (migration 047). Idempotent, OCC-guarded via resource_version. Only
+   * (`001_initial_schema.sql`). Idempotent, OCC-guarded via resource_version. Only
    * meaningful on an enabled backend: reads keep working, mutations are
    * refused so an operator can migrate data off before disabling.
    *
@@ -504,7 +504,7 @@ export const BackendService: GenService<{
   };
   /**
    * SetBackendMaintenance raises/clears the operator-set, advisory
-   * maintenance flag (migration 049). Idempotent, OCC-guarded via
+   * maintenance flag (`001_initial_schema.sql`). Idempotent, OCC-guarded via
    * resource_version. Advisory — it does not gate operations.
    *
    * @generated from rpc paladin.admin.v1.BackendService.SetBackendMaintenance

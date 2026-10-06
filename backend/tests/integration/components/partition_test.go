@@ -4,7 +4,7 @@
 // idempotency_keys (daily, by `expires_at`) — have the shape the rest of the
 // system assumes, and that PartitionMaintainer actually populates them.
 //
-// This used to test the 040→042 rewrite migrations that converted these
+// This used to test the pre-baseline rewrite migrations that converted these
 // tables in place. Those migrations no longer exist: the consolidated
 // baseline creates both tables partitioned from the start, so there is no
 // copy to verify. What still needs verifying is everything the rewrite was

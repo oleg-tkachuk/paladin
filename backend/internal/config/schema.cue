@@ -131,7 +131,7 @@ datastores: {
     // Optional separate DSN for the worker's cross-tenant background DML
     // jobs (purgers, lifecycle reapers, dispatcher outbox). Its user should
     // resolve to a dedicated least-privilege BYPASSRLS role (`paladin_reaper`,
-    // migration 058) — DML-only, no DDL. Empty → fall back to `migrate_dsn`.
+    // `002_roles_and_rls.sql`) — DML-only, no DDL. Empty → fall back to `migrate_dsn`.
     reaper_dsn:               string | *""
     reaper_password:          string | *""
     reaper_password_secret?:  #SecretRef
@@ -239,7 +239,7 @@ security: {
   // Retired: never read. Accepted so existing configs load; Load warns on true.
   log_sensitive: bool | *false
   // RLS is not configurable — see types.go.Security. The runtime
-  // always installs the BeforeAcquire hook because migration 023
+  // always installs the BeforeAcquire hook because `002_roles_and_rls.sql`
   // makes RLS unavoidable at the DB layer.
 }
 

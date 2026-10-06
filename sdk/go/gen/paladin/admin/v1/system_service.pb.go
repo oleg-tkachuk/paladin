@@ -641,11 +641,11 @@ func (x *GetPlatformStatsRequest) GetTenantPage() *v1.PageRequest {
 
 // GetPlatformStatsResponse is the /stats page's whole payload. Split by
 // data source: the inventory fields come from the admin pod's own pool
-// (tenants / storage_backends / buckets / collections / users are
-// deliberately NOT RLS'd — migration 023 — precisely so platform-admin
-// reads span tenants). Everything under `rls` covers tables that ARE
-// row-level-secured, so it arrives via the worker pod's BYPASSRLS ops
-// endpoint and degrades to rls.available=false.
+// (tenants / storage_backends / buckets are not RLS'd; collections and users
+// are, and are read under the platform admin's cross-tenant session flag —
+// `002_roles_and_rls.sql`, `017_users_rls.sql`). Everything under `rls` comes
+// from the worker pod's BYPASSRLS ops endpoint and degrades to
+// rls.available=false.
 type GetPlatformStatsResponse struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Tenants     *TenantStats           `protobuf:"bytes,1,opt,name=tenants,proto3" json:"tenants,omitempty"`

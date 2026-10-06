@@ -304,7 +304,7 @@ export interface SeededTenant {
 /**
  * Create a tenant via TenantService.CreateTenant. Slug +
  * display name are UUID-suffixed by default to satisfy the
- * UNIQUE constraints from migration 033. Pass overrides only
+ * live-tenant UNIQUE indexes in `001_initial_schema.sql`. Pass overrides only
  * when a specific shape matters (e.g. US2 wants the prefixes
  * "acme" and "globex" so the topbar selector test has
  * predictable labels).

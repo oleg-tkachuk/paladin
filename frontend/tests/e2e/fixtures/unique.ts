@@ -5,7 +5,7 @@
  *
  * The test stack runs ONE shared Postgres for the entire suite.
  * Tests run in parallel (Playwright default ~4 workers). With slug
- * + display_name UNIQUE constraints from migration 033, two tests
+ * + display_name UNIQUE indexes in `001_initial_schema.sql`, two tests
  * that both try to create "Acme E2E" would collide. The fix is
  * trivially cheap: every seeded identifier gets an 8-hex-char
  * suffix derived from `crypto.randomUUID()`. 8 hex = 32 bits = ~4.3

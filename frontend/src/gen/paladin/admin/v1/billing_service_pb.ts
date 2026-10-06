@@ -246,7 +246,7 @@ export const TimeBucketSchema: GenMessage<TimeBucket> =
 
 /**
  * BillingService surfaces per-tenant capability spend over the
- * charges ledger (migration 027). Distinct from TenantBudgetService —
+ * charges ledger (`001_initial_schema.sql`). Distinct from TenantBudgetService —
  * that one manages the cap; this one renders the spend.
  *
  * Authorization: platform-admin / tenant-admin only. Cedar action

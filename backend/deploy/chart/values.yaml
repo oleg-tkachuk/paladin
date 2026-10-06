@@ -361,7 +361,7 @@ deployments:
         mountPath: /tmp
 
   # Dispatcher plane — durable webhook fan-out. Consumes the
-  # event_deliveries outbox (migration 028). Producer (admin pod)
+  # event_deliveries outbox (`001_initial_schema.sql`). Producer (admin pod)
   # writes rows; this Deployment polls them via FOR UPDATE SKIP LOCKED
   # and POSTs to customer sinks. Multiple replicas safe — SKIP LOCKED
   # hands each row to exactly one replica per cycle. HPA-friendly when
@@ -677,7 +677,7 @@ config:
       # when the DSN needs more than host, port, database and sslmode.
       # reaper_dsn / reaper_password_secret: the worker's cross-tenant
       # background DML jobs connect here, as a dedicated least-privilege
-      # BYPASSRLS role (paladin_reaper, migration 058 — DML-only, no DDL). Empty
+      # BYPASSRLS role (paladin_reaper, `002_roles_and_rls.sql` — DML-only, no DDL). Empty
       # (dev default) → the worker reuses migrate_dsn. Prod overlays set both
       # and add reaper_password_secret.name to rbac.secretReader.secretNames.
       # Example (prod overlay):
@@ -866,7 +866,7 @@ config:
         interval: 15m
 
   # Dispatcher role — durable webhook fan-out. The pod polls the
-  # event_deliveries outbox (migration 028) and POSTs to customer
+  # event_deliveries outbox (`001_initial_schema.sql`) and POSTs to customer
   # sinks. See backend/configs/config.yaml for full inline docs on
   # each knob. Cross-tenant note: production deploys MUST point
   # datastores.postgres.migrate_dsn at a BYPASSRLS role (paladin_migrate)

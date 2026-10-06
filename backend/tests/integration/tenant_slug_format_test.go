@@ -1,7 +1,7 @@
 //go:build integration
 
 // Pins tenants_slug_format after the schema baseline (001_initial_schema.sql) added the explicit 3-char floor
-// so the DB CHECK matches ValidateTenantSlug (the migration-009 regex alone
+// so the DB CHECK matches ValidateTenantSlug (the earlier regex alone
 // accepted a 1-char slug the API rejects). Pure DB-constraint behaviour, so it
 // can only be verified against the real schema.
 package integration
@@ -43,7 +43,7 @@ func TestTenantSlugFormat_MinLength(t *testing.T) {
 
 	invalid := []string{
 		"",           // empty
-		"a",          // 1-char — the migration-046 fix (was accepted by the DB)
+		"a",          // 1-char — once accepted by the DB
 		"ab",         // 2-char — intentionally below the 3-char floor
 		"ABC",        // uppercase
 		"1abc",       // must start with a letter

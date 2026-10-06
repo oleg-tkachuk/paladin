@@ -265,9 +265,8 @@ func TestCollectRLSSiblings(t *testing.T) {
 	// ─── api tokens ─────────────────────────────────────────────────────
 	insertToken := func(expiresIn string, revokedAt any, lastUsed any) {
 		t.Helper()
-		// token_hmac (the schema baseline (001_initial_schema.sql)) replaced the legacy token_hash column,
-		// which the schema baseline (001_initial_schema.sql) dropped. It carries a UNIQUE constraint, so
-		// derive a distinct value per row from a fresh UUID.
+		// token_hmac (`001_initial_schema.sql`) is the token digest column.
+		// Derive a distinct value per row from a fresh UUID.
 		id := uuid.New()
 		hmac := id[:] // 16 distinct bytes per row
 		mustExec(t, ctx, pool,

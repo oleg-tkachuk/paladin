@@ -392,7 +392,7 @@ type Security struct {
 	// it is set to true.
 	LogSensitive bool `yaml:"log_sensitive" json:"log_sensitive"`
 
-	// RLS is intentionally not configurable here. Migration 023
+	// RLS is intentionally not configurable here. `002_roles_and_rls.sql`
 	// enables per-table policies unconditionally; the runtime always
 	// installs the PrepareConn hook that stamps paladin.tenant_id GUC
 	// (cmd/server/common.go). Operator-visible knob would only

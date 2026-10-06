@@ -53,9 +53,9 @@ service TenantService {
   }
 
   // RestoreTenant clears `deleted_at` on a soft-deleted row, returning
-  // it to the active set. Slug + display_name UNIQUE constraints still
-  // apply across both active and trashed rows (see migration 036
-  // commentary) — if a new tenant claimed the slug while this one was
+  // it to the active set. Slug + display_name are unique among live
+  // tenants (`001_initial_schema.sql`), and a trashed row keeps both —
+  // if a new tenant claimed the slug while this one was
   // trashed, restore fails with ALREADY_EXISTS and the operator must
   // rename one side first.
   rpc RestoreTenant(RestoreTenantRequest) returns (Tenant);
@@ -126,8 +126,8 @@ service TenantService {
 message CreateTenantRequest {
   // tenant_id — optional. When empty the server generates a fresh
   // UUIDv7. When non-empty it must be a valid RFC 4122 UUID and not
-  // the zero UUID. Immutable post-create (enforced by migration 033's
-  // tenants_immutable_columns trigger).
+  // the zero UUID. Immutable post-create (enforced by the
+  // tenants_block_immutable_columns trigger in `003_triggers.sql`).
   string tenant_id = 1;
   // tenant.slug is required and validated against ValidateTenantSlug.
   // tenant.display_name is optional; defaults to slug at create time.
@@ -287,7 +287,7 @@ message StorageMigrationStatus {
 }
 
 // TenantDefaultBinding is a tenant's default (backend, bucket) route for the
-// bare collection name shape (ADR-0014 Phase 3 / migration 034).
+// bare collection name shape (ADR-0014 Phase 3 / `001_initial_schema.sql`).
 message TenantDefaultBinding {
   // name — "tenants/{tenant_id}/defaultBinding".
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];

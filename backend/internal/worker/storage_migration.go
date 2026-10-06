@@ -23,7 +23,8 @@ import (
 // `failed`; transient errors (a DB blip, one failed CopyObject) are retried on
 // the next tick without abandoning the migration.
 
-// Migration states (mirror the CHECK constraint in the schema baseline (001_initial_schema.sql) + 057).
+// Migration states. tenant_storage_migrations.state (`001_initial_schema.sql`)
+// is plain text with no CHECK, so this list is the only definition of the set.
 const (
 	MigStateProvisioning = "provisioning"
 	MigStateCopying      = "copying"

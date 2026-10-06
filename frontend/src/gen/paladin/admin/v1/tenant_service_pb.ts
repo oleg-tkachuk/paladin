@@ -50,8 +50,8 @@ export type CreateTenantRequest =
     /**
      * tenant_id — optional. When empty the server generates a fresh
      * UUIDv7. When non-empty it must be a valid RFC 4122 UUID and not
-     * the zero UUID. Immutable post-create (enforced by migration 033's
-     * tenants_immutable_columns trigger).
+     * the zero UUID. Immutable post-create (enforced by the
+     * tenants_block_immutable_columns trigger in `003_triggers.sql`).
      *
      * @generated from field: string tenant_id = 1;
      */
@@ -560,7 +560,7 @@ export const StorageMigrationStatusSchema: GenMessage<StorageMigrationStatus> =
 
 /**
  * TenantDefaultBinding is a tenant's default (backend, bucket) route for the
- * bare collection name shape (ADR-0014 Phase 3 / migration 034).
+ * bare collection name shape (ADR-0014 Phase 3 / `001_initial_schema.sql`).
  *
  * @generated from message paladin.admin.v1.TenantDefaultBinding
  */
@@ -770,9 +770,9 @@ export const TenantService: GenService<{
   };
   /**
    * RestoreTenant clears `deleted_at` on a soft-deleted row, returning
-   * it to the active set. Slug + display_name UNIQUE constraints still
-   * apply across both active and trashed rows (see migration 036
-   * commentary) — if a new tenant claimed the slug while this one was
+   * it to the active set. Slug + display_name are unique among live
+   * tenants (`001_initial_schema.sql`), and a trashed row keeps both —
+   * if a new tenant claimed the slug while this one was
    * trashed, restore fails with ALREADY_EXISTS and the operator must
    * rename one side first.
    *

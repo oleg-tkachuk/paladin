@@ -16,7 +16,7 @@ import (
 const wipeTimeout = 2 * time.Second
 
 // EnableRLS configures the pool so each acquired connection sets the
-// `paladin.tenant_id` GUC from the request's auth context. Migration 023
+// `paladin.tenant_id` GUC from the request's auth context. `002_roles_and_rls.sql`
 // wires per-table RLS policies that key on this GUC; together they
 // give us closed-by-default tenant isolation at the DB layer.
 //

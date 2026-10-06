@@ -4,7 +4,7 @@
 //
 // Filtering strategy: pushes `owner_tenant_id == tenantId` to the
 // server via ListBucketsRequest.owner_tenant_id (backed by the
-// partial index on buckets.owner_tenant_id from migration 006).
+// index on buckets.owner_tenant_id in `001_initial_schema.sql`).
 // The cross-tenant /buckets page omits the filter; the same
 // useBuckets hook serves both.
 //
