@@ -32,14 +32,15 @@ import ssl
 import threading
 import zlib
 from collections.abc import AsyncIterator, Callable, Iterator
-from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from time import monotonic
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpcore
 import pyqwest
+
+from paladin._http_settings import Settings, call_deadline
 
 # How the HTTP stack names the protocol a response came over.
 _HTTP2 = b"HTTP/2"
@@ -61,27 +62,6 @@ _GZIP_WBITS = 16 + zlib.MAX_WBITS
 _SSL_OBJECT = "ssl_object"
 # The OpenTelemetry instrumentation scope of the spans made here.
 _TRACER_NAME = "paladin.tls"
-
-# The deadline of the RPC being sent, as time.monotonic(); set by the SDK's
-# interceptors, which see the call's timeout. pyqwest hands a sync transport
-# the timeout only through a private module, so it is carried here instead.
-call_deadline: ContextVar[float | None] = ContextVar("paladin_call_deadline", default=None)
-
-
-@dataclass(frozen=True)
-class Settings:
-    """The transport settings ``TLS`` honours; pyqwest's names, so that a
-    caller's ``Transfer`` settings mean the same over TLS."""
-
-    connect_timeout: float | None = None
-    read_timeout: float | None = None
-    pool_idle_timeout: float | None = None
-    pool_max_idle_per_host: int | None = None
-    enable_otel: bool = True
-    tracer_provider: Any = None
-    # pyqwest follows redirects by default; httpcore never does.
-    follow_redirects: bool = field(default=False)
-
 
 # ─── Verification at the handshake ──────────────────────────────────────────
 
