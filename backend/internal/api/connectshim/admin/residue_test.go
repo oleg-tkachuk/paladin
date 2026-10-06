@@ -172,6 +172,40 @@ func TestResetUsageRoutesByScopeAndReportsTheReset(t *testing.T) {
 	}
 }
 
+// resettingQuota keeps a quota whose daily counters ResetUsage clears.
+type resettingQuota struct {
+	failingQuota
+	q admindomain.Quota
+}
+
+func (r *resettingQuota) GetTenantQuota(context.Context, uuid.UUID) (*admindomain.Quota, error) {
+	q := r.q
+	return &q, nil
+}
+
+func (r *resettingQuota) ResetUsage(context.Context, uuid.UUID) error {
+	r.q.UsageBytesToday, r.q.UsageObjectsToday = 0, 0
+	return nil
+}
+
+// The response is the quota after the reset. It used to be the row loaded to
+// find the quota id, so a caller saw the counters it had just cleared.
+func TestResetUsageAnswersWithTheClearedCounters(t *testing.T) {
+	const bytesToday, objectsToday = 900, 9
+	h := &resettingQuota{q: admindomain.Quota{
+		QuotaID: uuid.New(), UsageBytesToday: bytesToday, UsageObjectsToday: objectsToday,
+	}}
+	resp, err := (&QuotaServer{H: h}).ResetUsage(context.Background(),
+		connect.NewRequest(&pb.ResetUsageRequest{Name: "tenants/" + uuid.NewString() + "/quota"}))
+	if err != nil {
+		t.Fatalf("ResetUsage: %v", err)
+	}
+	if u := resp.Msg.GetUsage(); u.GetBytesToday() != 0 || u.GetObjectsToday() != 0 {
+		t.Errorf("response usage today = %d bytes / %d objects, want 0 / 0",
+			u.GetBytesToday(), u.GetObjectsToday())
+	}
+}
+
 func TestParseQuotaNameNeedsTheTenantsPrefix(t *testing.T) {
 	if _, err := parseQuotaName("collections/" + uuid.NewString() + "/quota"); err == nil {
 		t.Error("a three-segment name that is not a tenant's was read as one")
