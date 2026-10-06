@@ -17,13 +17,13 @@ import (
 // build a denyAuthorizer instead.
 type allowAuthorizer struct{}
 
-func (allowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (allowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ cedar.Action, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	return cedar.DecisionAllow, nil
 }
 
 type denyAuthorizer struct{}
 
-func (denyAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (denyAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ cedar.Action, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	return cedar.DecisionDeny, nil
 }
 

@@ -21,7 +21,7 @@ import (
 // row the reset reaches under RLS, not about policy.
 type quotaResetAllow struct{}
 
-func (quotaResetAllow) IsAuthorized(context.Context, *cedar.Principal, string, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
+func (quotaResetAllow) IsAuthorized(context.Context, *cedar.Principal, cedar.Action, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
 	return cedar.DecisionAllow, nil
 }
 

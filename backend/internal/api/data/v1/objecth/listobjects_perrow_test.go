@@ -40,7 +40,7 @@ type perRowAuthorizer struct {
 	denyTag   string
 }
 
-func (a perRowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (a perRowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ cedar.Action, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	if r.Key == "" { // the up-front collection-scoped check
 		return cedar.DecisionAllow, nil
 	}

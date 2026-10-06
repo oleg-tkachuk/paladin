@@ -25,12 +25,12 @@ type fakeAuthorizer struct {
 	decision cedar.Decision
 	err      error
 
-	gotAction    string
+	gotAction    cedar.Action
 	gotPrincipal *cedar.Principal
 	calls        int
 }
 
-func (a *fakeAuthorizer) IsAuthorized(_ context.Context, p *cedar.Principal, action string, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (a *fakeAuthorizer) IsAuthorized(_ context.Context, p *cedar.Principal, action cedar.Action, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	a.calls++
 	a.gotAction, a.gotPrincipal = action, p
 	return a.decision, a.err

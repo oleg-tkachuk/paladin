@@ -2,7 +2,8 @@
 
 - **Status:** Accepted — implemented 2026-10-06 (`cedar.Action*Capability`,
   `cedar.Action*APIToken`, `cedar.ActionInspectMCP`, schema entries, built-in
-  permit for `platform.capability-issuer`, tests on the real engine).
+  permit for `platform.capability-issuer`, typed `cedar.Action`, tests on the
+  real engine).
 - **Related:** [ADR-0010](0010-capability-as-establishing-credential.md) (a
   capability establishes identity), [ADR-0011](0011-narrow-role-for-tenant-provisioning.md)
   (the same shape for tenant provisioning).
@@ -40,6 +41,12 @@
   3. Cross-tenant reach stays a handler decision (`capabilityh.spansTenants`).
      Cedar sees the caller's own tenant as the resource and answers only
      whether the role may perform the action at all.
+  4. `cedar.Action` is a type with an unexported field, and the declared
+     actions are its only values. A handler cannot pass a string the schema
+     does not know: it does not compile. A name that arrives at run time — a
+     policy simulation — goes through `cedar.LookupAction` and is refused as
+     `InvalidArgument` when undeclared, instead of being answered Deny. The
+     zero `Action` is an engine error, not a denial.
 
 - **Consequences:**
   - A consumer can issue per-tenant capabilities with a credential whose leak
@@ -48,3 +55,6 @@
   - A tenant can still refuse it: first-forbid wins over the built-in permit.
   - The tests for these handlers run on the real engine, so an action no policy
     grants fails there rather than in a cluster.
+  - The schema gate compares the schema with `cedar.Actions()`, which is every
+    value a caller can pass, rather than with the constants found by parsing a
+    source file.

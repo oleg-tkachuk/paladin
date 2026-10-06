@@ -23,7 +23,7 @@ const rolePlatformAdmin = "platform.admin"
 // The principal carries no credential kind, so the machine-delete built-in
 // (ADR-0012), which admits any machine credential to its own tenant's objects,
 // stays out of the answer: what is measured is the role's grant alone.
-func authzWithRoles(t *testing.T, action string, roles ...string) Decision {
+func authzWithRoles(t *testing.T, action Action, roles ...string) Decision {
 	t.Helper()
 	tenant := uuid.New()
 	e := NewEngine(fakeStore{}, time.Minute)
@@ -43,12 +43,12 @@ func authzWithRoles(t *testing.T, action string, roles ...string) Decision {
 // granted it a single action, so every Issue it made was denied and only
 // platform.admin could issue. This is that regression.
 func TestCapabilityIssuer_MayIssueRevokeAndRead(t *testing.T) {
-	for _, action := range []string{
+	for _, action := range []Action{
 		ActionIssueCapability,
 		ActionRevokeCapability,
 		ActionReadCapability,
 	} {
-		t.Run(action, func(t *testing.T) {
+		t.Run(action.String(), func(t *testing.T) {
 			if got := authzWithRoles(t, action, roleCapabilityIssuer); got != DecisionAllow {
 				t.Fatalf("%s = %v, want Allow", action, got)
 			}
@@ -60,7 +60,7 @@ func TestCapabilityIssuer_MayIssueRevokeAndRead(t *testing.T) {
 // leaked issuer credential must not mint or read a long-lived credential,
 // reshape a tenant, or touch a single object.
 func TestCapabilityIssuer_CarriesNothingElse(t *testing.T) {
-	for _, action := range []string{
+	for _, action := range []Action{
 		ActionDelegateCapability,
 		ActionCreateAPIToken,
 		ActionRevokeAPIToken,
@@ -77,7 +77,7 @@ func TestCapabilityIssuer_CarriesNothingElse(t *testing.T) {
 		ActionPutObject,
 		ActionDeleteObject,
 	} {
-		t.Run(action, func(t *testing.T) {
+		t.Run(action.String(), func(t *testing.T) {
 			if got := authzWithRoles(t, action, roleCapabilityIssuer); got != DecisionDeny {
 				t.Fatalf("%s = %v, want Deny — the capability issuer must not carry it", action, got)
 			}
@@ -121,7 +121,7 @@ when { principal has roles && principal.roles.contains("platform.capability-issu
 
 // platform.admin keeps every credential action, over an empty tenant policy.
 func TestPlatformAdmin_HoldsEveryCredentialAction(t *testing.T) {
-	for _, action := range []string{
+	for _, action := range []Action{
 		ActionIssueCapability,
 		ActionDelegateCapability,
 		ActionRevokeCapability,
@@ -131,7 +131,7 @@ func TestPlatformAdmin_HoldsEveryCredentialAction(t *testing.T) {
 		ActionReadAPIToken,
 		ActionInspectMCP,
 	} {
-		t.Run(action, func(t *testing.T) {
+		t.Run(action.String(), func(t *testing.T) {
 			if got := authzWithRoles(t, action, rolePlatformAdmin); got != DecisionAllow {
 				t.Fatalf("%s = %v, want Allow", action, got)
 			}

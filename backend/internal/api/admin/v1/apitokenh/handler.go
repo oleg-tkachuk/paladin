@@ -69,7 +69,7 @@ func NewHandler(
 // authorize gates an RPC against Cedar, with the caller's own tenant as the
 // resource: CreateAPIToken, RevokeAPIToken or ReadAPIToken. Reaching another
 // tenant's tokens is handler-gated to platform.admin.
-func (h *Handler) authorize(ctx context.Context, action string) (*auth.Principal, error) {
+func (h *Handler) authorize(ctx context.Context, action cedar.Action) (*auth.Principal, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)

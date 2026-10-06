@@ -24,7 +24,7 @@ type fakeAuthz struct {
 	decision cedar.Decision
 	err      error
 
-	lastAction   string
+	lastAction   cedar.Action
 	lastResource uuid.UUID
 	calls        int
 }
@@ -32,7 +32,7 @@ type fakeAuthz struct {
 func allow() *fakeAuthz { return &fakeAuthz{decision: cedar.DecisionAllow} }
 func deny() *fakeAuthz  { return &fakeAuthz{decision: cedar.DecisionDeny} }
 
-func (f *fakeAuthz) IsAuthorized(_ context.Context, _ *cedar.Principal, action string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (f *fakeAuthz) IsAuthorized(_ context.Context, _ *cedar.Principal, action cedar.Action, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	f.calls++
 	f.lastAction = action
 	if r != nil {

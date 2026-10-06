@@ -1982,7 +1982,7 @@ func (h *Handler) authorize(
 	principal *auth.Principal,
 	tenantID uuid.UUID,
 	res *cedar.Resource,
-	action string,
+	action cedar.Action,
 	sizeBytes int64,
 	contentType string,
 ) error {

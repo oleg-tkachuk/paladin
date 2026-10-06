@@ -19,7 +19,7 @@ import (
 // allowInspect admits the inspection; the gate is not what this test is about.
 type allowInspect struct{}
 
-func (allowInspect) IsAuthorized(context.Context, *cedar.Principal, string, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
+func (allowInspect) IsAuthorized(context.Context, *cedar.Principal, cedar.Action, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
 	return cedar.DecisionAllow, nil
 }
 

@@ -43,7 +43,7 @@ func platformAdmin(tenantID uuid.UUID) *Principal {
 	}
 }
 
-func decideOn(t *testing.T, e *Engine, p *Principal, action string, tenantID uuid.UUID, collection string) Decision {
+func decideOn(t *testing.T, e *Engine, p *Principal, action Action, tenantID uuid.UUID, collection string) Decision {
 	t.Helper()
 	d, err := e.IsAuthorized(context.Background(), p, action,
 		&Resource{TenantID: tenantID, TenantSlug: "acme", Collection: collection},

@@ -140,11 +140,11 @@ func (f *fakeStorage) PresignPut(_ context.Context, a objecth.PresignPutArgs) (s
 type fakePolicy struct {
 	decision    cedar.Decision
 	err         error
-	gotAction   string
+	gotAction   cedar.Action
 	gotResource *cedar.Resource
 }
 
-func (f *fakePolicy) IsAuthorized(_ context.Context, _ *cedar.Principal, action string, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+func (f *fakePolicy) IsAuthorized(_ context.Context, _ *cedar.Principal, action cedar.Action, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
 	f.gotAction = action
 	if r != nil {
 		cp := *r

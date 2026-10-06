@@ -84,7 +84,7 @@ func hasOp(ops []capability.Op, want capability.Op) bool {
 // built-in policy (cedar.builtinPolicy); a tenant policy may grant the actions
 // to its own members. Reaching another tenant is the handler's call
 // (spansTenants), never Cedar's.
-func (h *Handler) authorize(ctx context.Context, action string) (*auth.Principal, error) {
+func (h *Handler) authorize(ctx context.Context, action cedar.Action) (*auth.Principal, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
