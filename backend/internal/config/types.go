@@ -378,15 +378,11 @@ type OAuthSeedClient struct {
 }
 
 type Security struct {
-	// trust_tenant_id_from_request used to live here but was dead code —
-	// the field was declared but never read anywhere in the Go tree, and
-	// the only consumer of the X-Tenant-Id header (AuthService.Login)
-	// uses it unconditionally as a tenant-disambiguation hint while
-	// still requiring a valid password. Removed in the post-2026-05
-	// security audit. Operators relying on it for trust-bypass were
-	// never actually getting that behaviour — Login was always
-	// password-gated.
-	RejectTenantMismatch bool `yaml:"reject_tenant_mismatch" json:"reject_tenant_mismatch"`
+	// No tenant switch lives here: the tenant comes from the credential, and
+	// a request naming another tenant is refused (or, for a platform admin,
+	// acted on and audited) unconditionally. trust_tenant_id_from_request and
+	// reject_tenant_mismatch were both such switches, read by nothing, and
+	// were removed rather than left looking like controls.
 	// LogSensitive is retired: it was never read, and no secret is logged
 	// whatever it says. Accepted so existing configs load; Load warns when
 	// it is set to true.
