@@ -1,6 +1,8 @@
 # Runbook: Paladin background worker stalled / failing
 
-Covers the two alerts in [`deploy/grafana/worker-alerts.yaml`](../../deploy/grafana/worker-alerts.yaml):
+Covers the two alerts in the backend chart's PrometheusRule
+([`_alerts-workers.tpl`](../../backend/deploy/chart/templates/_alerts-workers.tpl),
+`metrics.alerts.rules.workerStalled` / `workerTicksAllFailing`):
 
 | Alert | Fires when | Meaning |
 |-------|-----------|---------|

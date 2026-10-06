@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# grafana-rules.test.sh — the alert rules and dashboard queries under
-# deploy/grafana must parse, and the alerts must fire when they should.
+# grafana-dashboards.test.sh — every dashboard query under deploy/grafana
+# must parse.
 #
-# A rule or panel with a PromQL syntax error is loaded by nobody and reported
-# by nothing: the alert never fires and the panel shows "no data", which reads
-# the same as a quiet system. promtool parses every rule file, runs the unit
-# tests beside them, and parses every dashboard query wrapped as a recording
-# rule.
+# A panel with a PromQL syntax error shows "no data", which reads the same as
+# a quiet system. promtool parses every dashboard query wrapped as a recording
+# rule. The alerting rules live in the backend chart and are checked by
+# chart-alerts.test.sh.
 #
 # Runs from `task -t Taskfile.dev.yaml verify-all` — no network, no Docker.
 
@@ -16,19 +15,14 @@ root=$(git rev-parse --show-toplevel)
 cd "$root/deploy/grafana"
 
 command -v promtool >/dev/null 2>&1 || {
-    echo "!!! promtool is not installed; the Grafana rules and queries went unchecked" >&2
+    echo "!!! promtool is not installed; the Grafana dashboard queries went unchecked" >&2
     exit 1
 }
 
-readonly RULE_FILES=(*-alerts.yaml)
-readonly RULE_TESTS=(*-alerts.test.yaml)
 # Grafana variables are not PromQL. Parsing needs a literal range for
 # $__rate_interval, and the "All" regex for a templated label filter.
 readonly RATE_INTERVAL_STANDIN="5m"
 readonly ALL_VALUES_STANDIN=".*"
-
-promtool check rules "${RULE_FILES[@]}"
-promtool test rules "${RULE_TESTS[@]}"
 
 queries=$(mktemp -t dashboard-queries.XXXXXX.yaml)
 trap 'rm -f "$queries"' EXIT

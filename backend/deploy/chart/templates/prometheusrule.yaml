@@ -1,140 +1,43 @@
 {{/*
-PrometheusRule — baseline alerts for the api role (the public-facing
-Connect listener). Five rules cover the SRE Golden-Signals + lifecycle:
+PrometheusRule — every Paladin alert, for the whole release (ADR-0023).
+Four groups, each a named template in its own file:
 
-  - CrashLooping: kube_pod_container_status_restarts_total spikes
-  - HighErrorRate: fraction of Connect RPCs failing with a server-fault code
-  - HighLatency: a quantile of Connect RPC latency over threshold
-  - NotReady: pod sustained in NotReady state
-  - OOMKilled: any OOMKill in the last `window`
+  - lifecycle   (_alerts-lifecycle.tpl)   crash loops, NotReady, OOM kills,
+                                          one rule each, fanned out per role
+  - traffic     (_alerts-traffic.tpl)     Connect RPC error rate and latency
+  - operations  (_alerts-operations.tpl)  outbox, rate limiting, capability
+                                          charges, read replica, uploads
+  - workers     (_alerts-workers.tpl)     background workers stalled or
+                                          failing every tick
 
-The traffic rules read otelconnect's `rpc.server.call.duration` histogram,
-rendered by Prometheus as rpc_server_call_duration_seconds_{bucket,count}:
-`rpc_method` names the RPC and `error_type` carries the upper-case Connect
-code of a failed call. It covers every Connect listener, so the api and admin
-planes alike; `metrics.alerts.rpcSelector` narrows it where the metrics
-pipeline adds labels that tell them apart.
+Every threshold, window and `for` is a value under metrics.alerts.rules; a
+rule's runbook_url is rendered when it names a runbook.
 
 Requires Prometheus Operator (monitoring.coreos.com/v1). Gated by
 .Values.metrics.alerts.enabled.
-
-Worker / dispatcher / ingest get separate alert rules in a future
-expansion when their /metrics surface stabilizes. For now they're
-covered by the lifecycle group (CrashLooping / NotReady / OOMKilled)
-which scopes to the chart's selector — actual implementation reuses
-the api selector here as starter; tune by adding per-role rules.
 */}}
 {{- if .Values.metrics.alerts.enabled -}}
-{{- /* The role these rules watch; roleLabels stamps it as app.kubernetes.io/component. */ -}}
-{{- $apiRole := "api" -}}
-{{- $apiFullname := include "chart.roleFullname" (dict "ctx" . "role" $apiRole) -}}
-{{- $rules := .Values.metrics.alerts.rules -}}
-{{- $runbookBase := trimSuffix "/" .Values.metrics.alerts.runbookBaseUrl -}}
-{{- /* otelconnect's rpc.server.call.duration as Prometheus names it. */ -}}
-{{- $rpcCalls := "rpc_server_call_duration_seconds_count" -}}
-{{- $rpcBuckets := "rpc_server_call_duration_seconds_bucket" -}}
-{{- $rpcErrorLabel := "error_type" -}}
-{{- $rpcSelector := .Values.metrics.alerts.rpcSelector -}}
-{{- $rpcMatchers := ternary (printf "%s," $rpcSelector) "" (ne $rpcSelector "") -}}
-{{- $rpcBraced := ternary (printf "{%s}" $rpcSelector) "" (ne $rpcSelector "") -}}
+{{- $fullname := include "chart.fullname" . -}}
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: {{ $apiFullname }}
+  name: {{ $fullname }}
   labels:
-    {{- include "chart.roleLabels" (dict "ctx" . "role" $apiRole) | nindent 4 }}
+    {{- include "chart.labels" . | nindent 4 }}
     {{- with .Values.metrics.alerts.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   groups:
-    - name: {{ $apiFullname }}.lifecycle
+    {{- range $group := list "lifecycle" "traffic" "operations" "workers" }}
+    {{- $rules := include (printf "chart.alerts.%s" $group) $ | trim }}
+    - name: {{ $fullname }}.{{ $group }}
+      {{- if $rules }}
       rules:
-        {{- if $rules.crashLooping.enabled }}
-        {{- $crash := $rules.crashLooping }}
-        - alert: PaladinApiCrashLooping
-          expr: |
-            increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}",container="{{ .Chart.Name }}"}[{{ $crash.window }}]) > {{ $crash.restarts }}
-          for: {{ $crash.for }}
-          labels:
-            severity: {{ $crash.severity }}
-            service: paladin-api
-          annotations:
-            summary: "Paladin api pod is crash-looping"
-            description: |
-              Pod {{ "{{ $labels.pod }}" }} in namespace {{ .Release.Namespace }}
-              has restarted more than {{ $crash.restarts }} times in {{ $crash.window }}. Likely panic on startup,
-              failed Postgres dial, or OOM. Inspect:
-                kubectl -n {{ .Release.Namespace }} logs <pod> --previous
-        {{- end }}
-        {{- if $rules.notReady.enabled }}
-        - alert: PaladinApiNotReady
-          expr: |
-            kube_pod_status_ready{namespace="{{ .Release.Namespace }}",condition="true"} == 0
-            and on (pod, namespace) kube_pod_labels{label_app_kubernetes_io_component="{{ $apiRole }}"}
-          for: {{ $rules.notReady.for }}
-          labels:
-            severity: {{ $rules.notReady.severity }}
-            service: paladin-api
-          annotations:
-            summary: "Paladin api pod stuck NotReady"
-            description: |
-              Pod {{ "{{ $labels.pod }}" }} has been NotReady for {{ $rules.notReady.for }}.
-              Readiness probe failing — check /readyz on the api Service.
-        {{- end }}
-        {{- if $rules.oomKilled.enabled }}
-        - alert: PaladinApiOOMKilled
-          expr: |
-            increase(kube_pod_container_status_last_terminated_reason{namespace="{{ .Release.Namespace }}",container="{{ .Chart.Name }}",reason="OOMKilled"}[{{ $rules.oomKilled.window }}]) > 0
-          labels:
-            severity: {{ $rules.oomKilled.severity }}
-            service: paladin-api
-          annotations:
-            summary: "Paladin api was OOMKilled"
-            description: |
-              Container {{ .Chart.Name }} was OOMKilled in the last {{ $rules.oomKilled.window }}.
-              Bump deployments.api.resources.limits.memory in the env overlay,
-              or chase the leak.
-        {{- end }}
-    - name: {{ $apiFullname }}.traffic
-      rules:
-        {{- if $rules.highErrorRate.enabled }}
-        {{- $errors := $rules.highErrorRate }}
-        - alert: PaladinApiHighErrorRate
-          expr: |
-            (
-              sum(rate({{ $rpcCalls }}{ {{- $rpcMatchers -}} {{ $rpcErrorLabel }}=~"{{ join "|" $errors.serverErrorCodes }}"}[{{ $errors.window }}]))
-              /
-              sum(rate({{ $rpcCalls }}{{ $rpcBraced }}[{{ $errors.window }}]))
-            ) > {{ $errors.threshold }}
-          for: {{ $errors.for }}
-          labels:
-            severity: {{ $errors.severity }}
-            service: paladin-api
-          annotations:
-            summary: "Paladin api error rate above {{ $errors.threshold | mulf 100.0 }}%"
-            description: |
-              More than {{ $errors.threshold | mulf 100.0 }}% of Connect RPCs over {{ $errors.window }} failed
-              with a server-fault code ({{ join ", " $errors.serverErrorCodes }}) for {{ $errors.for }}.
-            runbook_url: "{{ $runbookBase }}/{{ $errors.runbook }}"
-        {{- end }}
-        {{- if $rules.highLatency.enabled }}
-        {{- $latency := $rules.highLatency }}
-        - alert: PaladinApiHighLatency
-          expr: |
-            histogram_quantile(
-              {{ $latency.quantile }},
-              sum by (le) (rate({{ $rpcBuckets }}{{ $rpcBraced }}[{{ $latency.window }}]))
-            ) > {{ $latency.thresholdSeconds }}
-          for: {{ $latency.for }}
-          labels:
-            severity: {{ $latency.severity }}
-            service: paladin-api
-          annotations:
-            summary: "Paladin api p{{ $latency.quantile | mulf 100.0 }} latency > {{ $latency.thresholdSeconds }}s"
-            description: |
-              p{{ $latency.quantile | mulf 100.0 }} Connect RPC latency over {{ $latency.window }} exceeded
-              {{ $latency.thresholdSeconds }}s for {{ $latency.for }}.
-            runbook_url: "{{ $runbookBase }}/{{ $latency.runbook }}"
-        {{- end }}
+        {{- $rules | nindent 8 }}
+      {{- else }}
+      {{- /* Every rule in the group disabled: an empty list, not a null. */}}
+      rules: []
+      {{- end }}
+    {{- end }}
 {{- end }}

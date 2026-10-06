@@ -197,7 +197,7 @@ row (never critical — a replica that is down fails nothing, so it never fails
 readiness) says why reads are on the primary; the metrics
 `paladin_db_replica_in_sync`, `paladin_db_replica_lag_seconds` and
 `paladin_db_replica_reads_total{served_by,reason}` show it over time; and
-`PaladinReadReplicaOutOfSync` (`deploy/grafana/paladin-alerts.yaml`) fires when
+`PaladinReadReplicaOutOfSync` (the backend chart's PrometheusRule) fires when
 no pod has used the replica for 15 minutes.
 
 Outside CNPG set `dsn` explicitly. The replica must be a physical standby,

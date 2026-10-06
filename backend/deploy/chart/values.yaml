@@ -489,7 +489,8 @@ metrics:
   alerts:
     enabled: false
     labels: {}
-    # Where the runbook_url annotations point; each rule names its file.
+    # Where the runbook_url annotations point; a rule with a `runbook` names
+    # its file there, and one without renders no runbook_url.
     runbookBaseUrl: https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks
     # Label matchers ANDed into the Connect RPC series selector of the traffic
     # rules, e.g. `namespace="paladin"`. Empty by default: which labels the
@@ -542,6 +543,67 @@ metrics:
         enabled: true
         severity: warning
         window: 15m
+      # ── operations ──
+      outboxNotDraining:
+        enabled: true
+        severity: critical
+        # The outbox floor — the minimum depth over `window`, sampled every
+        # `step` — stayed above `rows`.
+        rows: 500
+        window: 15m
+        step: 1m
+        for: 10m
+      rateLimitFailingOpen:
+        enabled: true
+        severity: critical
+        window: 10m
+        for: 5m
+      capabilityChargesRefused:
+        enabled: true
+        severity: warning
+        # A tenant's share of charges refused with one of refusedOutcomes.
+        refusedFraction: 0.9
+        refusedOutcomes:
+          - capability_exhausted
+          - tenant_exhausted
+        # Floor under the charge rate, so a tenant with no charges divides
+        # by it instead of by zero.
+        minRate: 0.001
+        window: 15m
+        for: 15m
+      tenantThrottled:
+        enabled: true
+        severity: warning
+        refusalsPerSecond: 1
+        window: 10m
+        for: 10m
+      readReplicaOutOfSync:
+        enabled: true
+        severity: warning
+        for: 15m
+      uploadsNotSettling:
+        enabled: true
+        severity: warning
+        # How long past the reconciler's deadline the oldest overdue PENDING
+        # object may wait. A reconciler keeping up holds it under a minute.
+        overdueSeconds: 1800
+        for: 15m
+        runbook: uploads-not-settling.md
+      # ── workers ──
+      workerStalled:
+        enabled: true
+        severity: warning
+        # No completed tick in more than this many of the worker's own
+        # intervals.
+        intervals: 5
+        for: 2m
+        runbook: worker-stalled.md
+      workerTicksAllFailing:
+        enabled: true
+        severity: warning
+        window: 15m
+        for: 10m
+        runbook: worker-stalled.md
 
 # ─── Lifecycle Jobs ────────────────────────────────────────────────────────
 #
