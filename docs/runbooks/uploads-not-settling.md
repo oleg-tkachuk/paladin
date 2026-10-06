@@ -1,7 +1,8 @@
 # Runbook: uploads the reconciler cannot settle
 
-Covers `PaladinUploadsNotSettling` in
-[`deploy/grafana/paladin-alerts.yaml`](../../deploy/grafana/paladin-alerts.yaml).
+Covers `PaladinUploadsNotSettling` in the backend chart's PrometheusRule
+([`_alerts-operations.tpl`](../../backend/deploy/chart/templates/_alerts-operations.tpl),
+`metrics.alerts.rules.uploadsNotSettling`).
 
 | Fires when | Meaning |
 |-----------|---------|

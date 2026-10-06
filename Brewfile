@@ -55,7 +55,7 @@ brew "cosign"           # release signing; skip with COSIGN_SIGN=0
 # ─── policy scans: verify:checkov, verify:chart-scan ────────────────────────
 brew "pipx"             # runs the pinned checkov (CHECKOV_VERSION)
 brew "trivy"            # also task sec:trivy
-brew "prometheus"       # bin: promtool — verify:grafana-rules
+brew "prometheus"       # bin: promtool — verify:chart-alerts, verify:grafana-dashboards
 
 # ─── opt-in scans: task sec:* ───────────────────────────────────────────────
 # Not wired into any gate on purpose — these are here to be run, not to change

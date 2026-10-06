@@ -268,7 +268,7 @@ tasks:
       - task: verify:image-uid
       - task: verify:image-sources
       - task: verify:admin-audience-roles
-      - task: verify:grafana-rules
+      - task: verify:grafana-dashboards
       - task: verify:private-refs
       - task: verify:checkov
       # hadolint over both images; the checkov Dockerfile scan does not lint
@@ -466,7 +466,7 @@ tasks:
       - ./scripts/chart-defaults.test.sh
 
   verify:chart-alerts:
-    desc: "Fail when the chart's alerts stop reading Paladin's RPC metrics, or do not fire"
+    desc: "Fail when a chart alert does not parse, does not fire, or drifts from its pinned expression"
     cmds:
       - ./scripts/chart-alerts.test.sh
 
@@ -529,10 +529,10 @@ tasks:
     cmds:
       - ./scripts/frontend-gen.test.sh
 
-  verify:grafana-rules:
-    desc: "Fail when an alert rule or dashboard query does not parse, or an alert does not fire"
+  verify:grafana-dashboards:
+    desc: "Fail when a dashboard query does not parse"
     cmds:
-      - ./scripts/grafana-rules.test.sh
+      - ./scripts/grafana-dashboards.test.sh
 
   verify:admin-audience-roles:
     desc: "Fail when the console and IAM disagree on which roles reach the admin plane"

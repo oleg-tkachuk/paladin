@@ -14,7 +14,7 @@ import (
 //
 // Workers that previously hand-rolled `time.NewTicker` + for/select adopt this
 // so the whole worker fleet is uniformly observable and the "stalled worker"
-// alert (see deploy/observability/worker-alerts.yaml) has data to fire on.
+// alert (the chart's templates/_alerts-workers.tpl) has data to fire on.
 //
 // fn returning an error marks the tick as failed for metrics only — it does
 // NOT stop the loop. Workers keep their own log-and-continue behaviour; they
