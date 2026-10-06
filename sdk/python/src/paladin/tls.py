@@ -23,13 +23,17 @@ import warnings
 from collections.abc import Callable
 from dataclasses import fields
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pyqwest
-from cryptography import x509
-from cryptography.x509.oid import ExtensionOID
 
-from paladin._tls_http import AsyncTLSTransport, Settings, SyncTLSTransport
+from paladin._http_settings import Settings
+
+if TYPE_CHECKING:
+    from cryptography import x509
+
+EXTRA_HINT = "paladin: TLS needs the 'tls' extra: pip install 'paladin-sdk[tls]'"
+"""What ``TLS`` raises, as an ``ImportError``, without the ``tls`` extra."""
 
 DEFAULT_TLS_RELOAD_INTERVAL = 30.0
 """Seconds between checks of the TLS files for a change."""
@@ -94,9 +98,23 @@ def parse_spiffe_id(value: str) -> str:
     return value
 
 
+def _extra() -> Any:
+    """The ``tls`` extra's modules: the SDK's transports over httpcore, and
+    ``cryptography`` to read the server's certificate."""
+    try:
+        from cryptography import x509
+        from cryptography.x509.oid import ExtensionOID
+
+        from paladin import _tls_http
+    except ImportError as err:
+        raise ImportError(EXTRA_HINT) from err
+    return _tls_http, x509, ExtensionOID
+
+
 def _verify_svid(leaf: x509.Certificate, server_id: str) -> None:
     """The X.509-SVID rules for a leaf, then its ID against ``server_id``.
     The chain was verified against the trust bundle by OpenSSL already."""
+    _, x509, ExtensionOID = _extra()
     try:
         sans = leaf.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
         uris = sans.value.get_values_for_type(x509.UniformResourceIdentifier)
@@ -160,6 +178,7 @@ class TLS:
         verify_peer: Callable[[x509.Certificate], None] | None = None,
         min_version: ssl.TLSVersion = DEFAULT_TLS_MIN_VERSION,
     ) -> None:
+        _extra()
         if (cert_file is None) != (key_file is None):
             raise TLSKeyPairError("a client certificate needs both cert_file and key_file")
         if min_version not in _ALLOWED_MIN_VERSIONS:
@@ -197,14 +216,14 @@ class TLS:
         legacy = _legacy(self, settings)
         if legacy is not None:
             return _RotatingPyqwest(self, pyqwest.SyncHTTPTransport, legacy)
-        return SyncTLSTransport(_Files(self), _settings(settings))
+        return _extra()[0].SyncTLSTransport(_Files(self), _settings(settings))
 
     def async_transport(self, **settings: Any) -> Any:
         """``sync_transport`` for the async clients."""
         legacy = _legacy(self, settings)
         if legacy is not None:
             return _RotatingPyqwest(self, pyqwest.HTTPTransport, legacy)
-        return AsyncTLSTransport(_Files(self), _settings(settings))
+        return _extra()[0].AsyncTLSTransport(_Files(self), _settings(settings))
 
 
 _SETTINGS = frozenset(f.name for f in fields(Settings))
@@ -249,6 +268,7 @@ class _Files:
 
     def _load(self) -> tuple[tuple[int, ...], ssl.SSLContext]:
         tls = self._tls
+        _, x509, _ = _extra()
         mtimes = tuple(p.stat().st_mtime_ns for p in tls._paths())
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)  # verifies chain and host
         context.minimum_version = tls.min_version
@@ -293,7 +313,7 @@ class _Files:
         der = peer.getpeercert(True)
         if der is None:
             raise ssl.SSLCertVerificationError("paladin: the server sent no certificate")
-        leaf = x509.load_der_x509_certificate(der)
+        leaf = _extra()[1].load_der_x509_certificate(der)
         if tls.server_id is not None:
             _verify_svid(leaf, tls.server_id)
         if tls.verify_peer is not None:

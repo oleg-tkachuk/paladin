@@ -640,9 +640,7 @@ name = "paladin-sdk"
 source = { editable = "." }
 dependencies = [
     { name = "connect-python" },
-    { name = "cryptography" },
     { name = "googleapis-common-protos" },
-    { name = "httpcore", extra = ["asyncio", "http2"] },
     { name = "protobuf" },
     { name = "pyqwest" },
 ]
@@ -657,6 +655,10 @@ crc32c = [
 dpop = [
     { name = "cryptography" },
 ]
+tls = [
+    { name = "cryptography" },
+    { name = "httpcore", extra = ["asyncio", "http2"] },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -664,6 +666,7 @@ dev = [
     { name = "cryptography" },
     { name = "google-crc32c" },
     { name = "grpcio-tools" },
+    { name = "httpcore", extra = ["asyncio", "http2"] },
     { name = "opentelemetry-sdk" },
     { name = "protoc-gen-connect-python" },
     { name = "pytest" },
@@ -674,15 +677,15 @@ dev = [
 requires-dist = [
     { name = "biscuit-python", marker = "extra == 'biscuit'", specifier = ">=0.4.0,<0.5" },
     { name = "connect-python", specifier = ">=0.9.0,<0.10" },
-    { name = "cryptography", specifier = ">=41" },
     { name = "cryptography", marker = "extra == 'dpop'", specifier = ">=41" },
+    { name = "cryptography", marker = "extra == 'tls'", specifier = ">=41" },
     { name = "google-crc32c", marker = "extra == 'crc32c'", specifier = ">=1.9.0,<2" },
     { name = "googleapis-common-protos", specifier = ">=1.75.5,<2" },
-    { name = "httpcore", extras = ["asyncio", "http2"], specifier = ">=1.0.9,<2" },
+    { name = "httpcore", extras = ["asyncio", "http2"], marker = "extra == 'tls'", specifier = ">=1.0.9,<2" },
     { name = "protobuf", specifier = ">=6.33.5,<8" },
     { name = "pyqwest", specifier = ">=0.11.0,<0.12" },
 ]
-provides-extras = ["biscuit", "crc32c", "dpop"]
+provides-extras = ["biscuit", "crc32c", "dpop", "tls"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -690,6 +693,7 @@ dev = [
     { name = "cryptography", specifier = "==50.0.2" },
     { name = "google-crc32c", specifier = "==1.9.0" },
     { name = "grpcio-tools", specifier = "==1.81.1" },
+    { name = "httpcore", extras = ["http2", "asyncio"], specifier = "==1.0.9" },
     { name = "opentelemetry-sdk", specifier = "==1.45.0" },
     { name = "protoc-gen-connect-python", specifier = "==0.9.0" },
     { name = "pytest", specifier = "==9.1.1" },

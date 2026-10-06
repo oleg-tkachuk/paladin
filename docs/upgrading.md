@@ -43,6 +43,15 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the Python SDK's `TLS` needs the `tls` extra
+
+- **`paladin.TLS(...)` raises `ImportError` unless the SDK is installed with
+  the `tls` extra**: `paladin-sdk[tls] @ git+…`. `httpcore`, `h2`, `anyio` and
+  `cryptography` are no longer installed for everyone; plaintext clients and
+  pyqwest's own TLS need none of them.
+- **`cryptography` moved to the `tls` and `dpop` extras.** A client given
+  `dpop_key=` needs `paladin-sdk[dpop]`, which it was already documented to.
+
 ## Unreleased — `CompleteMultipartUpload` returns the stored object
 
 - **`CompleteMultipartUpload` answers with the whole object** — collection,

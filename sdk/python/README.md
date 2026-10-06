@@ -11,6 +11,11 @@ pip install "paladin-sdk @ git+https://github.com/oleg-tkachuk/paladin@sdk/go/vX
 In a `requirements.txt` or `pyproject.toml`, the same `paladin-sdk @ git+…`
 line. Pin the tag: a branch moves under a lock file.
 
+Extras, named as `paladin-sdk[tls,dpop] @ git+…`: `tls` for `TLS` — mutual
+TLS, a server's SPIFFE ID, a protocol floor — `dpop` for key-bound
+capabilities, `biscuit` for offline attenuation, `crc32c` to verify CRC32C
+checksums. Plaintext connections and pyqwest's own TLS need none of them.
+
 Where the build has no git — a slim image, a vendored copy — install the
 tag's source archive instead; `git archive` records the version in it:
 
@@ -233,7 +238,9 @@ expected server identity, re-read whenever the files change on disk, so
 certificates a workload-identity agent rotates are picked up without a
 restart. Give it to `connect` for the connections to Paladin, and to a
 `Transfer` for those to storage. It matches the Go SDK's `TLS`: the same
-fields, defaults, checks and errors.
+fields, defaults, checks and errors. It needs the `tls` extra, which installs
+the HTTP stack its connections run on; without it `TLS(...)` raises
+`ImportError` naming the extra.
 
 ```python
 identity = paladin.TLS(
@@ -521,7 +528,7 @@ tests hold its parsers to as well. Where they differ, it is on purpose:
 | | Go | Python | Why |
 | --- | --- | --- | --- |
 | Typed errors | `errors.Is(err, paladin.ErrNotFound)`, `*paladin.Error` | `except paladin.NotFoundError`, `PaladinError` | Each language's idiom; the same kinds, fields and reasons. |
-| Server identity over TLS | `TLS.ServerID`: the SPIFFE ID, checked by `go-spiffe` | `TLS(server_id=…)`: the same check, after the handshake and before any request byte | Python's connections under `TLS` run on `ssl` and httpcore, because `pyqwest` has no peer-verification hook. |
+| Server identity over TLS | `TLS.ServerID`: the SPIFFE ID, checked by `go-spiffe` | `TLS(server_id=…)`: the same check, after the handshake and before any request byte | Python's connections under `TLS` run on `ssl` and httpcore, because `pyqwest` has no peer-verification hook; they are the `tls` extra. |
 | Minimum TLS version | `TLS.MinVersion`, 1.2 by default | `TLS(min_version=…)`, `ssl.TLSVersion.TLSv1_2` by default | |
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
 | Webhook signatures | `VerifyWebhook`, options for the window and clock | `verify_webhook`, keyword arguments | Each language's idiom; both run the vectors in `sdk/testdata/webhook_signatures.json`. |
