@@ -43,6 +43,15 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — `housekeeping.pending_ttl` and `delete_orphaned_parts` are removed
+
+- **A config that sets `worker.jobs.housekeeping.pending_ttl` or
+  `worker.jobs.housekeeping.delete_orphaned_parts` no longer loads.** Neither
+  was read. A PENDING object expires with its presigned URL
+  (`limits.presign.put_ttl`), and an abandoned multipart upload's parts are
+  freed when the multipart reaper aborts it after `multipart_ttl` — whatever
+  `delete_orphaned_parts` said. Delete both keys before upgrading.
+
 ## Unreleased — `storage.backends.<name>.auth.mode` has no default
 
 - **A storage backend that names no `auth.mode` no longer loads.** The schema
@@ -50,6 +59,7 @@ tree with itself and passes without checking anything.
   quietly used whatever the AWS chain found — environment, the node's role,
   IRSA. Name the mode on every backend; the chart's `primary` already does
   (`static_keys`).
+||||||| parent of 8b21df7d (fix(config)!: remove housekeeping.pending_ttl and delete_orphaned_parts)
 
 ## Unreleased — `security.reject_tenant_mismatch` is removed
 
