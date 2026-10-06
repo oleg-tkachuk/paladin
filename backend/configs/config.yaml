@@ -90,7 +90,7 @@ admin:
 datastores:
   postgres:
     # Runtime DSN — must point at the minimum-privilege role (`paladin_app`).
-    # See migrations/011_app_role.sql + docs/db-roles.md for what that role
+    # See migrations/002_roles_and_rls.sql + docs/db-roles.md for what that role
     # is allowed to do (DML only, no DDL, no role management).
     dsn: "postgres://paladin_app@paladin-postgresql-rw.database.svc.cluster.local:5432/paladin?sslmode=disable"
     password: ""                        # prefer password_secret in non-local
@@ -166,8 +166,8 @@ auth:
 security:
   reject_tenant_mismatch: true          # 403 when JWT tenant != header tenant
   # RLS isn't a knob — runtime always installs the BeforeAcquire
-  # hook. Migration 023 enables per-table policies unconditionally
-  # and paladin_app is NOBYPASSRLS, so disabling the hook would break
+  # hook. `002_roles_and_rls.sql` enables per-table policies
+  # unconditionally and paladin_app is NOBYPASSRLS, so disabling the hook would break
   # every write. See internal/config/types.go for the rationale.
 
 # ─── Bootstrap (one-shot startup steps; opt-in) ────────────────────────────
@@ -217,7 +217,7 @@ middleware:
 
 # ─── worker role: ops listener + background jobs ───────────────────────────
 # `serve worker` opens a single ops listener for kube-proxy probes
-# (/healthz + /readyz) and runs the background-job fan defined under
+# (/livez, /readyz, /startupz; /healthz aliases /livez) and runs the background-job fan defined under
 # `jobs:`. The ops listener defaults to :8090 — same number the chart's
 # admin and worker Deployments expose — so a single containerPort
 # definition matches both roles.
@@ -228,7 +228,7 @@ worker:
   # Where the ADMIN pod reaches this ops listener. The console's /stats
   # page needs a cross-tenant census of every RLS'd table (objects,
   # quotas, capability records, API tokens, event subscriptions —
-  # migration 023) and only the worker holds a BYPASSRLS pool, so it
+  # `002_roles_and_rls.sql`) and only the worker holds a BYPASSRLS pool, so it
   # computes the census and admin's SystemService.GetPlatformStats
   # proxies <ops_url>/system/rls-census.json. Empty (the default here;
   # the chart sets the in-cluster Service URL) disables the proxy and the
@@ -285,7 +285,7 @@ worker:
       interval: 15m
 
 # ─── dispatcher role: durable webhook fan-out ──────────────────────────────
-# `serve dispatcher` polls the event_deliveries outbox (migration 028) and
+# `serve dispatcher` polls the event_deliveries outbox (`001_initial_schema.sql`) and
 # POSTs to customer sinks. Producer (admin pod) writes rows on each event;
 # this loop drains them via FOR UPDATE SKIP LOCKED so multiple replicas can
 # run concurrently. Per-row retry curve is BaseBackoff * 2^attempts capped

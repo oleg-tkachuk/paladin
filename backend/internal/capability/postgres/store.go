@@ -31,7 +31,8 @@ import (
 // one disagree about what "not found" is.
 var ErrNotFound = capability.ErrNotFound
 
-// Store implements capability.Store against the migration-016 tables.
+// Store implements capability.Store against the capability tables in
+// `001_initial_schema.sql`.
 type Store struct {
 	pool *pgxpool.Pool
 }

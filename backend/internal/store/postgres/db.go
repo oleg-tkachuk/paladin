@@ -45,7 +45,7 @@ type DB struct {
 type Option func(*pgxpool.Config) *pgxpool.Config
 
 // WithRLS turns on tenant-isolating PrepareConn / AfterRelease hooks
-// that set / wipe `paladin.tenant_id` per acquisition. Migration 023
+// that set / wipe `paladin.tenant_id` per acquisition. `002_roles_and_rls.sql`
 // installs the matching per-table policies. The runtime DSN must
 // connect as `paladin_app` (NOBYPASSRLS); workers / migrations as
 // `paladin_migrate` (BYPASSRLS).

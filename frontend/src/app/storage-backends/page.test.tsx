@@ -102,7 +102,7 @@ describe("StorageBackendsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("drains an enabled backend via setBackendReadOnly (migration 047)", async () => {
+  it("drains an enabled backend via setBackendReadOnly (001_initial_schema.sql)", async () => {
     h.backends = [makeBackend({ enabled: true, readOnly: false })];
     render(<StorageBackendsPage />);
     await userEvent.click(screen.getByRole("button", { name: "Drain" }));
@@ -122,7 +122,7 @@ describe("StorageBackendsPage", () => {
     expect(screen.queryByRole("button", { name: "Drain" })).toBeNull();
   });
 
-  // Health badges (migration 048) — derived from the last TestBackend probe.
+  // Health badges (`001_initial_schema.sql`) — derived from the last TestBackend probe.
   it("shows a Healthy badge when the last probe succeeded", () => {
     h.backends = [makeBackend({ healthStatus: "ok" })];
     render(<StorageBackendsPage />);
@@ -214,7 +214,7 @@ describe("StorageBackendsPage", () => {
     expect(screen.queryByRole("button", { name: "Bulk disable" })).toBeNull();
   });
 
-  // Operator-set maintenance flag (migration 049) — advisory, orthogonal.
+  // Operator-set maintenance flag (`001_initial_schema.sql`) — advisory, orthogonal.
   it("flags a backend for maintenance via setBackendMaintenance", async () => {
     h.backends = [makeBackend({ maintenance: false, resourceVersion: "7" })];
     render(<StorageBackendsPage />);

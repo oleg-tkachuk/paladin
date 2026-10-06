@@ -34,7 +34,7 @@ import { formatCompactCount } from "@/lib/format/locale";
 import { errorMessage } from "@/hooks/errorContract";
 
 // /billing — per-tenant capability spend dashboard. Reads the
-// charges ledger (migration 027) via BillingService:
+// charges ledger (`001_initial_schema.sql`) via BillingService:
 //
 //   - Summary tile row (total, count, budget remaining)
 //   - Time-series chart (Sparkline over date_trunc'd buckets)

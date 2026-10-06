@@ -153,7 +153,7 @@ func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb
 	}
 	args := tenanth.UpdateTenantArgs{TenantID: id, ExpectedVersion: rv}
 	mask := m.GetUpdateMask().GetPaths()
-	// Reject attempts to mutate immutable fields. Migration 033 also
+	// Reject attempts to mutate immutable fields. `003_triggers.sql` also
 	// enforces this at the DB level via a trigger, but catching it
 	// here gives a clearer error and avoids burning a tx.
 	for _, path := range mask {

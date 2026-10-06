@@ -172,7 +172,7 @@ export default function TenantOverviewPage() {
     (async () => {
       try {
         // Server-side narrow via owner_tenant_id (backed by the
-        // partial index from migration 006). Skips the cross-backend
+        // index in `001_initial_schema.sql`). Skips the cross-backend
         // scan + client-side filter the previous version did.
         const res = await bucketClient.listBuckets({
           parent: "",

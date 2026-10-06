@@ -161,7 +161,7 @@ export type StorageBackend = Message<"paladin.admin.v1.StorageBackend"> & {
   previousCredentialsValidUntil?: Timestamp | undefined;
 
   /**
-   * Read-only "drain" state (migration 047). Only meaningful when enabled=true:
+   * Read-only "drain" state (`001_initial_schema.sql`). Only meaningful when enabled=true:
    * reads / presign-GET / HEAD / list still resolve, but mutations
    * (PUT / POST / multipart-init / copy-dest / update / delete / version
    * writes) are refused (FailedPrecondition) so an operator can migrate data
@@ -173,7 +173,7 @@ export type StorageBackend = Message<"paladin.admin.v1.StorageBackend"> & {
   readOnly: boolean;
 
   /**
-   * Derived, advisory health from the last TestBackend probe (migration 048).
+   * Derived, advisory health from the last TestBackend probe (`001_initial_schema.sql`).
    * "unknown" | "ok" | "error". Surfaced in the UI; NOT a gate. health_message
    * carries the probe error when status is "error"; health_checked_at is the
    * instant of the last probe (unset until first probed).
@@ -193,7 +193,7 @@ export type StorageBackend = Message<"paladin.admin.v1.StorageBackend"> & {
   healthCheckedAt?: Timestamp | undefined;
 
   /**
-   * Operator-set, advisory maintenance flag (migration 049): "under
+   * Operator-set, advisory maintenance flag (`001_initial_schema.sql`): "under
    * maintenance". Surfaced in the UI; NOT a gate (unlike enabled/read_only)
    * and operator-set (unlike the derived health_*). Managed via
    * SetBackendMaintenance; NOT mirrored from static config.
@@ -206,7 +206,7 @@ export type StorageBackend = Message<"paladin.admin.v1.StorageBackend"> & {
    * Vendor/implementation behind `kind` — a free-form slug ("garage" |
    * "seaweedfs" | "minio" | "aws" | "gcp" | "digitalocean" | …). `kind` is
    * too coarse (every self-hosted S3 is S3_COMPATIBLE); `provider` records
-   * which one, for UI display. Mirrored from static config (migration 055);
+   * which one, for UI display. Mirrored from static config (`001_initial_schema.sql`);
    * empty when unset (the UI falls back to an endpoint heuristic).
    *
    * @generated from field: string provider = 24;

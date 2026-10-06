@@ -47,21 +47,21 @@ message StorageBackend {
   // render "rotated — old key valid for another N".
   string previous_credentials_secret_ref = 17;
   google.protobuf.Timestamp previous_credentials_valid_until = 18 [(google.api.field_behavior) = OUTPUT_ONLY];
-  // Read-only "drain" state (migration 047). Only meaningful when enabled=true:
+  // Read-only "drain" state (`001_initial_schema.sql`). Only meaningful when enabled=true:
   // reads / presign-GET / HEAD / list still resolve, but mutations
   // (PUT / POST / multipart-init / copy-dest / update / delete / version
   // writes) are refused (FailedPrecondition) so an operator can migrate data
   // off before disabling. Operator-managed via SetBackendReadOnly; NOT
   // mirrored from static config.
   bool read_only = 19;
-  // Derived, advisory health from the last TestBackend probe (migration 048).
+  // Derived, advisory health from the last TestBackend probe (`001_initial_schema.sql`).
   // "unknown" | "ok" | "error". Surfaced in the UI; NOT a gate. health_message
   // carries the probe error when status is "error"; health_checked_at is the
   // instant of the last probe (unset until first probed).
   string health_status = 20;
   string health_message = 21;
   google.protobuf.Timestamp health_checked_at = 22 [(google.api.field_behavior) = OUTPUT_ONLY];
-  // Operator-set, advisory maintenance flag (migration 049): "under
+  // Operator-set, advisory maintenance flag (`001_initial_schema.sql`): "under
   // maintenance". Surfaced in the UI; NOT a gate (unlike enabled/read_only)
   // and operator-set (unlike the derived health_*). Managed via
   // SetBackendMaintenance; NOT mirrored from static config.
@@ -69,7 +69,7 @@ message StorageBackend {
   // Vendor/implementation behind `kind` — a free-form slug ("garage" |
   // "seaweedfs" | "minio" | "aws" | "gcp" | "digitalocean" | …). `kind` is
   // too coarse (every self-hosted S3 is S3_COMPATIBLE); `provider` records
-  // which one, for UI display. Mirrored from static config (migration 055);
+  // which one, for UI display. Mirrored from static config (`001_initial_schema.sql`);
   // empty when unset (the UI falls back to an endpoint heuristic).
   string provider = 24;
 }
