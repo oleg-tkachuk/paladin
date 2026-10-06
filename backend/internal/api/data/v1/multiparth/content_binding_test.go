@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
@@ -107,7 +108,7 @@ func TestCompleteRefusesAnIncompletePartList(t *testing.T) {
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
 			storage := &fakeStorage{}
-			err := newHandler(sessionRepo(tid), storage, allow()).
+			_, err := newHandler(sessionRepo(tid), storage, allow()).
 				CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: mutate(completeParts())})
 			wantCode(t, err, connect.CodeInvalidArgument)
 			if storage.lastComplete.storageUploadID != "" {
@@ -121,7 +122,7 @@ func TestCompleteForwardsPartChecksums(t *testing.T) {
 	tid := uuid.New()
 	storage := &fakeStorage{}
 	h := NewHandler(sessionRepo(tid), storage, allow(), &fakeSM{}, testTTLPolicy(), testUploadLimits)
-	if err := h.CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: completeParts()}); err != nil {
+	if _, err := h.CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: completeParts()}); err != nil {
 		t.Fatal(err)
 	}
 	if storage.lastComplete.checksumAlgo != checksum.SHA256 || storage.lastComplete.parts[0].ChecksumValue != testPartChecksum {
@@ -138,7 +139,7 @@ func TestCompleteDiscardsAMismatchedObject(t *testing.T) {
 	repo := sessionRepo(tid)
 	h := NewHandler(repo, storage, allow(), sm, testTTLPolicy(), testUploadLimits)
 
-	err := h.CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: completeParts()})
+	_, err := h.CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: completeParts()})
 	wantCode(t, err, connect.CodeFailedPrecondition)
 	if !errors.Is(err, statemachine.ErrContentMismatch) {
 		t.Fatalf("err = %v, want the mismatch named", err)
@@ -159,7 +160,7 @@ func TestCompleteKeepsTheRowPendingWhenTheDeleteFails(t *testing.T) {
 	sm := &fakeSM{promoteErr: &statemachine.ContentMismatchError{Field: "size"}}
 	h := NewHandler(sessionRepo(tid), storage, allow(), sm, testTTLPolicy(), testUploadLimits)
 
-	err := h.CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: completeParts()})
+	_, err := h.CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: completeParts()})
 	wantCode(t, err, connect.CodeInternal)
 	if sm.failedReason != "" {
 		t.Fatal("the row was failed although its bytes are still stored")
@@ -174,5 +175,38 @@ func TestSessionPartLength(t *testing.T) {
 	}
 	if total != s.SizeBytes {
 		t.Fatalf("parts sum to %d, the object is %d", total, s.SizeBytes)
+	}
+}
+
+// Completion answered with the object's name alone, so every client read the
+// object back with GetObject. It answers with the object as stored now.
+func TestCompleteReturnsTheStoredObject(t *testing.T) {
+	tid := uuid.New()
+	repo := sessionRepo(tid)
+	repo.object = objecth.Object{Collection: "docs", Key: "big.bin", SizeBytes: 1 << 20}
+	h := NewHandler(repo, &fakeStorage{}, allow(), &fakeSM{}, testTTLPolicy(), testUploadLimits)
+	got, err := h.CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: completeParts()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Collection != "docs" || got.Key != "big.bin" || got.SizeBytes != 1<<20 {
+		t.Errorf("returned %+v, want the stored object", got)
+	}
+}
+
+// A read that fails after the completion succeeded is not an error: the
+// upload is done, and a caller told otherwise would retry a session that no
+// longer exists.
+func TestCompleteSucceedsWhenTheReadBackFails(t *testing.T) {
+	tid := uuid.New()
+	repo := sessionRepo(tid)
+	repo.objectErr = errors.New("read failed")
+	h := NewHandler(repo, &fakeStorage{}, allow(), &fakeSM{}, testTTLPolicy(), testUploadLimits)
+	got, err := h.CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: completeParts()})
+	if err != nil {
+		t.Fatalf("a completed upload reported %v", err)
+	}
+	if got.Collection != "" {
+		t.Errorf("returned %+v, want the zero object", got)
 	}
 }

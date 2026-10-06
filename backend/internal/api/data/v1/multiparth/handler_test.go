@@ -31,6 +31,9 @@ type fakeRepo struct {
 	getSessionFn      func(ctx context.Context, uploadID string) (Session, error)
 	deleteSessionFn   func(ctx context.Context, uploadID string) error
 	lookupBucketFn    func(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error)
+	// object is what Object reads back; objectErr fails the read.
+	object    objecth.Object
+	objectErr error
 	// constraints are the bucket constraints LookupBucketMeta reports.
 	constraints uploadpolicy.BucketConstraints
 
@@ -83,6 +86,10 @@ func (f *fakeRepo) DeleteSession(ctx context.Context, uploadID string) error {
 		return f.deleteSessionFn(ctx, uploadID)
 	}
 	return nil
+}
+
+func (f *fakeRepo) Object(context.Context, uuid.UUID, uuid.UUID) (objecth.Object, error) {
+	return f.object, f.objectErr
 }
 
 func (f *fakeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error) {
@@ -474,7 +481,7 @@ func TestCompleteMultipartUpload(t *testing.T) {
 	}
 
 	t.Run("unauthenticated", func(t *testing.T) {
-		err := newHandler(&fakeRepo{}, &fakeStorage{}, allow()).
+		_, err := newHandler(&fakeRepo{}, &fakeStorage{}, allow()).
 			CompleteMultipartUpload(context.Background(), CompleteArgs{UploadID: "up-1"})
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
@@ -483,20 +490,20 @@ func TestCompleteMultipartUpload(t *testing.T) {
 		repo := &fakeRepo{getSessionFn: func(context.Context, string) (Session, error) {
 			return Session{}, errors.New("no session")
 		}}
-		err := newHandler(repo, &fakeStorage{}, allow()).
+		_, err := newHandler(repo, &fakeStorage{}, allow()).
 			CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1"})
 		wantCode(t, err, connect.CodeNotFound)
 	})
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
 		ctx := authedCtxWithCap(tid, capability.OpGet) // no OpPut
-		err := newHandler(okSession(), &fakeStorage{}, allow()).
+		_, err := newHandler(okSession(), &fakeStorage{}, allow()).
 			CompleteMultipartUpload(ctx, CompleteArgs{UploadID: "up-1"})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
-		err := newHandler(okSession(), &fakeStorage{}, &fakeAuthorizer{decision: cedar.DecisionDeny}).
+		_, err := newHandler(okSession(), &fakeStorage{}, &fakeAuthorizer{decision: cedar.DecisionDeny}).
 			CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1"})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
@@ -512,7 +519,7 @@ func TestCompleteMultipartUpload(t *testing.T) {
 				return "", "", errors.New("gone")
 			},
 		}
-		err := newHandler(repo, &fakeStorage{}, allow()).
+		_, err := newHandler(repo, &fakeStorage{}, allow()).
 			CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1"})
 		wantCode(t, err, connect.CodeNotFound)
 	})
@@ -523,7 +530,7 @@ func TestCompleteMultipartUpload(t *testing.T) {
 			return "", 0, errors.New("multipart complete rejected")
 		}}
 		authz := allow()
-		err := newHandler(okSession(), storage, authz).
+		_, err := newHandler(okSession(), storage, authz).
 			CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: parts})
 		wantCode(t, err, connect.CodeInternal)
 		if len(storage.lastComplete.parts) != testTotalParts || storage.lastComplete.parts[1].ETag != "e2" {

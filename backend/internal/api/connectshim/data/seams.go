@@ -38,7 +38,7 @@ type multipartHandler interface {
 	InitiateMultipartUpload(ctx context.Context, args multiparth.InitiateArgs) (*multiparth.Session, error)
 	PresignPart(ctx context.Context, uploadID string, partNumber int32, ttl time.Duration, checksumValue string, want multiparth.SessionRef) (string, map[string]string, time.Time, error)
 	ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string, want multiparth.SessionRef) ([]multiparth.Part, string, error)
-	CompleteMultipartUpload(ctx context.Context, args multiparth.CompleteArgs) error
+	CompleteMultipartUpload(ctx context.Context, args multiparth.CompleteArgs) (objecth.Object, error)
 	AbortMultipartUpload(ctx context.Context, uploadID string, want multiparth.SessionRef) error
 }
 
