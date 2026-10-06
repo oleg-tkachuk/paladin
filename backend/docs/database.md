@@ -60,6 +60,8 @@ Migrations run under [Goose](https://github.com/pressly/goose) as
 | `038` | `capability_biscuit_revocations` |
 | `039` | `capability_copy_usage` and `charges.copy_ids` |
 | `040`–`042` | `audit_log.resource_tenant_id`, its backfill and index |
+| `043` | `rabbitmq` in the `event_sink_kind` enum |
+| `044` | `bucket_quotas`: bucket caps move out of `quotas`, outside RLS ([ADR-0025](../../docs/adr/0025-bucket-quotas-are-platform-configuration.md)) |
 
 Each file's header comment says why it exists.
 
@@ -104,7 +106,9 @@ soft deletion. `objects.current_version_id` carries a deferred composite FK
 to `object_versions (object_id, id)`, so the two rows can be written in
 either order within one transaction but can never disagree at commit.
 
-**Governance** — `quotas`, `capability_records`, `capability_revocations`,
+**Governance** — `quotas` (one per tenant), `bucket_quotas` (one per bucket,
+deliberately not RLS'd: a bucket's cap is platform configuration, like the
+bucket), `capability_records`, `capability_revocations`,
 `capability_biscuit_revocations` (revoked copies of a capability's Biscuit,
 by block revocation id), `capability_usage`, `capability_copy_usage` (the
 counters of Biscuit copies with limits of their own),
