@@ -54,13 +54,17 @@ from paladin.errors import (
     reason,
 )
 from paladin.names import (
+    API_TOKEN_PREFIX,
+    OBJECT_RESOURCE_SCHEME,
     URI_SCHEME,
+    BucketName,
     CollectionName,
     InvalidNameError,
     ObjectName,
     ObjectURI,
     ObjectVersionName,
     TenantName,
+    object_resource,
 )
 from paladin.observe import LOGGER_NAME, Hooks, RetryEvent, TransferEvent
 from paladin.relay import RelaySyncTransport, RelayTransport
@@ -130,6 +134,7 @@ from paladin.workflows import (
 )
 
 __all__ = [
+    "API_TOKEN_PREFIX",
     "AUDIENCE_ADMIN",
     "AUDIENCE_DATA",
     "AUDIENCE_IAM",
@@ -161,6 +166,7 @@ __all__ = [
     "HEADER_USER_AGENT",
     "HEADER_WEBHOOK_SIGNATURE",
     "LOGGER_NAME",
+    "OBJECT_RESOURCE_SCHEME",
     "PRESIGN_EXPIRY_SKEW",
     "TLS",
     "TOKEN_REFRESH_MARGIN",
@@ -169,6 +175,7 @@ __all__ = [
     "AsyncObjectReader",
     "AsyncPaladin",
     "AsyncSession",
+    "BucketName",
     "Client",
     "CollectionName",
     "ContractSkewError",
@@ -237,6 +244,7 @@ __all__ = [
     "lookup_object",
     "mask",
     "no_idempotency_key",
+    "object_resource",
     "pages",
     "parse_retry_after",
     "presign_expiry",

@@ -180,3 +180,49 @@ func ParseObjectURI(s string) (ObjectURI, error) {
 	}
 	return ObjectURI{Collection: CollectionName{Tenant: tenant, Collection: collection}, Key: key}, nil
 }
+
+// Admin-plane name segments: a bucket lives under its storage backend.
+const (
+	storageBackendsPrefix = "storageBackends/"
+	bucketsSep            = "/buckets/"
+)
+
+// BucketName is storageBackends/{backend}/buckets/{bucket}, the name the admin
+// plane gives a physical bucket and a bucket quota's parent.
+type BucketName struct {
+	Backend string
+	Bucket  string
+}
+
+func (n BucketName) String() string { return storageBackendsPrefix + n.Backend + bucketsSep + n.Bucket }
+
+// ParseBucketName parses storageBackends/{backend}/buckets/{bucket}.
+func ParseBucketName(s string) (BucketName, error) {
+	const want = "want storageBackends/{backend}/buckets/{bucket}"
+	rest, ok := strings.CutPrefix(s, storageBackendsPrefix)
+	if !ok {
+		return BucketName{}, invalid("bucket", s, want)
+	}
+	backend, bucket, found := strings.Cut(rest, bucketsSep)
+	if !found || backend == "" || bucket == "" || strings.Contains(backend, "/") || strings.Contains(bucket, "/") {
+		return BucketName{}, invalid("bucket", s, want)
+	}
+	return BucketName{Backend: backend, Bucket: bucket}, nil
+}
+
+// APITokenPrefix starts every Paladin API token, paladin_pat_…: the server
+// tells an API token from a JWT by it, and secret scanners find one by it.
+const APITokenPrefix = "paladin_pat_" // #nosec G101 -- a public prefix, not a credential
+
+// ObjectResourceScheme is the scheme of the resource a capability grants on
+// objects, object://{tenant-id}/{collection}/{key}.
+const ObjectResourceScheme = "object://"
+
+// ObjectResource is the resource a capability names for an object, or for
+// every object under a key prefix when key is one: the server checks a
+// capability's resource against object://{tenant-id}/{collection}/{key}. The
+// tenant is the id, a UUID; a prefix ends where the caller wants it to, so
+// give "reports/" to cover the keys under reports/.
+func ObjectResource(tenant, collection, key string) string {
+	return ObjectResourceScheme + tenant + "/" + collection + "/" + key
+}

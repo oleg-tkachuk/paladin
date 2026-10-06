@@ -313,7 +313,9 @@ The server's naming rules, as types (`paladin.names`): a name built here is
 one it accepts, and a name parsed here is one it would. Under a tenant a
 name takes the tenant's **id**, a UUID, not its slug; a collection may
 contain `/`; object and version ids are UUIDs. `InvalidNameError` (a
-`ValueError`) for anything else. `str(name)` prints it; `.parse` reads it.
+`ValueError`) for anything else — from `.parse` and from the constructor
+alike, so a name built from parts is checked too. `str(name)` prints it;
+`.parse` reads it.
 
 | Type | Form |
 | --- | --- |
@@ -322,6 +324,11 @@ contain `/`; object and version ids are UUIDs. `InvalidNameError` (a
 | `ObjectName` | `…/collections/{collection}/objects/{object-id}` |
 | `ObjectVersionName` | `…/objects/{object-id}/versions/{version-id}` |
 | `ObjectURI` | `paladin://tenants/{tenant-id}/collections/{collection}/keys/{key}` — an object by its key; the collection and the key are escaped path segments |
+| `BucketName` | `storageBackends/{backend}/buckets/{bucket}` — a physical bucket on the admin plane, and a bucket quota's parent |
+
+`object_resource(tenant, collection, key)` is the resource a capability grants
+on an object, or on every object under a key prefix: `object://{tenant-id}/{collection}/{key}`.
+`API_TOKEN_PREFIX` (`paladin_pat_`) starts every API token.
 
 `lookup_object(p.data, uri)` finds the object an `ObjectURI` (or its string)
 names, and `download_uri(p.data, uri, offset=0, length=0)` streams it.

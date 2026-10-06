@@ -337,6 +337,12 @@ and version ids are UUIDs. `ErrInvalidName` for anything else.
 | `ObjectName`, `ParseObjectName` | `…/collections/{collection}/objects/{object-id}` |
 | `ObjectVersionName`, `ParseObjectVersionName` | `…/objects/{object-id}/versions/{version-id}` |
 | `ObjectURI`, `ParseObjectURI` | `paladin://tenants/{tenant-id}/collections/{collection}/keys/{key}` — an object by its key; the collection and the key are escaped path segments |
+| `BucketName`, `ParseBucketName` | `storageBackends/{backend}/buckets/{bucket}` — a physical bucket on the admin plane, and a bucket quota's parent |
+
+`ObjectResource(tenant, collection, key)` is the resource a capability grants
+on an object, or on every object under a key prefix: `object://{tenant-id}/{collection}/{key}`.
+`APITokenPrefix` (`paladin_pat_`) starts every API token; the server reads
+both from here.
 
 `LookupObject(ctx, p.Data, uri)` finds the object an `ObjectURI` names, and
 `DownloadURI(ctx, p.Data, "paladin://…", opts)` downloads it. The URI extends
