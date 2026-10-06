@@ -59,11 +59,6 @@ frontend/src/gen/** linguist-generated=true
 Brewfile -linguist-detectable
 
 # ─── Vendored tooling ────────────────────────────────────────────────────
-# Spec-Kit's own scripts and templates, 192 KB, including every one of the
-# four PowerShell files in the tree — a language this project does not
-# otherwise use and does not want on its bar. The directory is upstream's,
-# carried here so a feature plan resolves offline.
-
 # The shared Task library's module bodies, 159 KB, committed so `task --offline`
 # resolves every include from this repository instead of cloning. They are
 # another repository's source, kept verbatim — see .gitignore for why the

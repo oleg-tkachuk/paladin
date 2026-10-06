@@ -114,8 +114,8 @@ export function useTenantResolve(id: string): {
           : (res.tenantId ?? id);
         // Tenant proto carries `slug` (UNIQUE kebab-case handle,
         // populated by the server from `tenants.slug`). Empty
-        // shouldn't happen after migration-009 backfilled every
-        // row, but fall back to the UUID so the breadcrumb still
+        // shouldn't happen — `001_initial_schema.sql` makes the
+        // column NOT NULL — but fall back to the UUID so the breadcrumb still
         // renders rather than going blank if it does.
         const slug = res.slug || tenantId;
         const tenant: ResolvedTenant = {

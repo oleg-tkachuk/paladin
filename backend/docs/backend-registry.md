@@ -10,7 +10,8 @@ one S3 client per backend id, built from `storage.backends.<id>` in the config
 on first use and cached for the life of the process.
 
 - `Warmup` builds every configured backend at boot, so a misconfigured one
-  stops the process instead of failing its first request.
+  stops the process instead of failing its first request. An empty
+  `storage.backends` is itself a boot error.
 - `For(id)` requires an id. An empty or unknown id is an error; there is no
   default backend to fall back to.
 - `Invalidate(id)` drops a cached client so the next call rebuilds it, after

@@ -2,9 +2,9 @@
 // (ADR-0008). This is the RS half only: it makes the MCP server
 // *discoverable* by standard MCP clients (Claude Desktop / Cursor) and
 // *enforces* a bearer token at the edge. The Authorization Server itself
-// (/authorize, /token, dynamic client registration) is a separate, deferred
-// phase — here we only advertise where it lives and validate the tokens it
-// (or a federated IdP) mints.
+// (/authorize, /token, dynamic client registration) lives in
+// internal/auth/oauth (ADR-0009) — here we only advertise where it lives and
+// validate the tokens it (or a federated IdP) mints.
 //
 // Flow a compliant client runs against this:
 //
@@ -96,8 +96,8 @@ type authorizationServerMetadata struct {
 // Paladin-as-AS endpoints. Only mounted when cfg.AuthorizationServer.Issuer is
 // set (the same-origin AS case); when delegating to an external IdP the
 // client fetches that IdP's own metadata instead. PKCE S256 is mandatory and
-// auth-code + refresh are the advertised grants — the contract the deferred
-// AS phase implements.
+// auth-code + refresh are the advertised grants — the contract
+// internal/auth/oauth implements.
 func AuthorizationServerMetadataHandler(as config.MCPOAuthAS) http.Handler {
 	doc := authorizationServerMetadata{
 		Issuer:                            as.Issuer,

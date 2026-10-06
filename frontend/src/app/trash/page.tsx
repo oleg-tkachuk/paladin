@@ -1,7 +1,7 @@
 "use client";
 
-// /trash — recovery view for soft-deleted tenants. Migration 036 added
-// the `deleted_at` column; TenantService gained RestoreTenant and
+// /trash — recovery view for soft-deleted tenants, marked by the
+// `deleted_at` column (`001_initial_schema.sql`); TenantService gained RestoreTenant and
 // PurgeTenant RPCs to drive recovery + hard-delete from the trash.
 // This page uses ListTenants(only_trashed=true) for the source list
 // and the two new RPCs for the row actions.

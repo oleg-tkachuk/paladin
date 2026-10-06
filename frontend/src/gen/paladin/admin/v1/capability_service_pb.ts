@@ -769,7 +769,7 @@ export const PrincipalKindSchema: GenEnum<PrincipalKind> =
  * CapabilityService manages capability tokens — short-lived, signed,
  * delegable, individually revocable authorisation primitives for agent
  * runtimes. See internal/capability for the in-process types and
- * migrations/016_capabilities.sql for the schema.
+ * migrations/001_initial_schema.sql for the schema.
  *
  * Audience semantics: capabilities are issued by the admin plane and
  * presented by callers to data / admin / mcp planes. The interceptor

@@ -1,7 +1,7 @@
 //go:build integration
 
 // Regression guard for the multi-segment Collection ingest disambiguation.
-// Migration 030 allows multi-segment collections (`invoices/2026/q1`), which
+// `001_initial_schema.sql` allows multi-segment collections (`invoices/2026/q1`), which
 // makes the naive "the OK is the first path segment" split ambiguous. The
 // ResolveCollectionPrefix query resolves it by longest registered prefix; this
 // pins that precedence against the real schema (the logic is pure SQL, so a

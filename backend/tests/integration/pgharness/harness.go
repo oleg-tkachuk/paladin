@@ -297,7 +297,7 @@ func preconfigureMigrateRole(ctx context.Context, dsn string) error {
 }
 
 // promoteAppRole sets a password on paladin_app and gives it LOGIN so
-// the test pool can connect. Migration 011 creates the role NOLOGIN
+// the test pool can connect. `002_roles_and_rls.sql` creates the role NOLOGIN
 // (production: DBA sets the password out-of-band); the harness
 // provides one inline.
 func promoteAppRole(ctx context.Context, dsn string) error {

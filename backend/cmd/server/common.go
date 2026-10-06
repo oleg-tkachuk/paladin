@@ -92,8 +92,8 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB, observ
 		otelShutdown = func(context.Context) error { return nil }
 	}
 
-	// RLS is non-optional. Migration 023 enables per-table policies
-	// unconditionally and the runtime DSN connects as paladin_app
+	// RLS is non-optional. `002_roles_and_rls.sql` enables per-table
+	// policies unconditionally and the runtime DSN connects as paladin_app
 	// (NOBYPASSRLS), so the PrepareConn hook that stamps
 	// paladin.tenant_id is the only place tenant context reaches the
 	// session GUC. Without it, every INSERT fails 'new row violates

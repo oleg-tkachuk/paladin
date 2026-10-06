@@ -21,8 +21,10 @@ emits, per `worker` label:
 - `paladin_worker_interval_seconds{worker}` — configured interval (published at startup).
 
 They leave the process like every other Paladin metric — pushed over OTLP or
-scraped from `otel.metrics_addr`, per `otel.metrics_exporter`
-([observability.md](../../backend/docs/observability.md)). With
+scraped, per `otel.metrics_exporter`
+([observability.md](../../backend/docs/observability.md)). On the worker pod
+the scrape endpoint is `/metrics` on the ops listener (`worker.ops.addr`),
+not `otel.metrics_addr`. With
 `otel.enabled: false` they are no-ops, so the alerts only have data where
 metrics are collected.
 
@@ -42,6 +44,12 @@ metrics are collected.
    Look for `running job under lease` (claimed leadership) and the worker's own
    log lines. No `running job under lease` for that job ⇒ nobody holds the
    lease — see step 4.
+
+   The lease is not named after the metric label: it is `paladin.` plus the
+   job's Go type (`jobLeaseName` in `cmd/server/serve_worker.go`), so the
+   `quota_reconciler` series belongs to lease `paladin.QuotaReconciler` and
+   `reconciler` to `paladin.ReconcilerV2`. Grep the log's `name` field and the
+   `worker_leases.name` column for that form.
 
 3. **`PaladinWorkerStalled` — the loop is wedged.** A tick is blocked (slow/locked
    query, downstream S3/NATS hang, deadlock). Confirm with

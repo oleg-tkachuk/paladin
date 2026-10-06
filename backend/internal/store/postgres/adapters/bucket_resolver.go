@@ -38,7 +38,7 @@ const resolveBucketQuery = `
 
 // bucketOpAllowed applies the three gates to an already-read row. `write`
 // splits them by operation class: a disabled backend refuses everything,
-// while the read-only drain (migration 047) and the provisioning gate refuse
+// while the read-only drain (`001_initial_schema.sql`) and the provisioning gate refuse
 // mutations only — reads keep resolving, which is the entire point of a
 // drain.
 //

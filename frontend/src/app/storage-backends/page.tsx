@@ -104,7 +104,8 @@ export default function StorageBackendsPage() {
     }
   };
 
-  // handleDrain flips a backend's read-only "drain" state (migration 047).
+  // handleDrain flips a backend's read-only "drain" state
+  // (`001_initial_schema.sql`).
   // Draining keeps reads working while refusing mutations, so an operator can
   // migrate data off before disabling. OCC-guarded like enable/disable.
   const handleDrain = async (
@@ -134,7 +135,7 @@ export default function StorageBackendsPage() {
   };
 
   // handleMaintenance raises/clears the operator-set maintenance flag
-  // (migration 049) — an advisory label, OCC-guarded like enable/drain.
+  // (`001_initial_schema.sql`) — an advisory label, OCC-guarded like enable/drain.
   const handleMaintenance = async (
     backendId: string,
     nextMaintenance: boolean,
@@ -572,7 +573,7 @@ export default function StorageBackendsPage() {
                           </Badge>
                         )}
                         {/* Derived health from the last TestBackend probe
-                            (migration 048). Advisory — does not gate ops. */}
+                            (001_initial_schema.sql). Advisory — does not gate ops. */}
                         {b.healthStatus === "error" ? (
                           <Badge
                             variant="destructive"

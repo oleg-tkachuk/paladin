@@ -6,8 +6,8 @@
 //  2. For each replicated bucket, walk recently-AVAILABLE objects via the
 //     shared LifecycleObjectIter (newest-first cursor; a per-bucket
 //     `replicated_until` watermark caps the scan).
-//  3. CEL `replication.filter` selection (slice 14+) — for now, all
-//     AVAILABLE objects are copied.
+//  3. CEL `replication.filter` is not evaluated yet (BACKLOG: replication)
+//     — all AVAILABLE objects are copied.
 //  4. For each match, call StorageReplicator.Replicate which copies the
 //     bytes from the source bucket to `replication.destination_bucket`
 //     using the same collection prefix.

@@ -101,7 +101,7 @@ the same commit. Treat this file like a runtime invariant.
   stay admin-only. UserSettingsService is not bridged on purpose — it holds a
   console user's display preferences, which mean nothing to an agent. What is
   still **not** reachable from an MCP agent, pending a product decision:
-  - **Lifecycle writes** on Backend / Bucket / ObjectKey / Tenant
+  - **Lifecycle writes** on Backend / Bucket / Collection / Tenant
     (create/update/delete) — Tenant lifecycle is intentionally human-only
     (denylist); the others are gaps if agent-driven provisioning is wanted.
   - **`RedriveFailedDeliveries`** — re-sends a subscription's failed events;
@@ -279,8 +279,8 @@ the same commit. Treat this file like a runtime invariant.
 
 - **Status:** First consumer SHIPPED (2026-07-02) — the dedicated role stays
   trigger-gated on connection volume.
-- **Shipped — live audit feed:** migration 050 NOTIFYs on every `audit_log`
-  insert; `internal/auditstream.Hub` (one LISTEN connection per admin pod,
+- **Shipped — live audit feed:** `013_audit_stream_notify.sql` NOTIFYs on
+  every `audit_log` insert; `internal/auditstream.Hub` (one LISTEN connection per admin pod,
   per-tenant fan-out, slow consumers drop instead of back-pressuring) serves
   `GET /audit/stream` as bearer-authenticated SSE scoped to the JWT tenant.
   The UI consumes it through the BFF proxy (`/api/audit/stream`, session
@@ -337,10 +337,10 @@ open deliberately — each notes why._
 - **Status:** Won't-do (for now) — not on the roadmap (2026-06-30).
 - **Reason:** Paladin is engineer-operated and owns its own IAM (see the
   withdrawn *Phase 5b.1* above), so accepting tokens minted by an
-  external IdP is **not needed now**. `auth.jwks_url` + the stub
-  `auth.NewJWKSVerifier` constructor (wired in `cmd/server/root.go`)
-  stay inert and harmless — every JWT today is HS256 minted by the IAM
-  plane itself.
+  external IdP is **not needed now**. `auth.jwks_url` switches the planes
+  (`internal/app/build_listeners_common.go`) and the MCP edge
+  (`cmd/server/serve_mcp.go`) to `auth.NewJWKSVerifier`, but nothing sets it:
+  every JWT today is HS256 minted by the IAM plane itself.
 - **Reconsider only if:** a customer mandates SSO against their own IdP.
   Then finish the verifier (cache + rotation grace window, required
   `kid` matched against the active key set, role-claim mapping such as
@@ -431,17 +431,78 @@ finding moving from "packages you import" to "your code is affected".
 
 - **Status:** Aspirational
 - **Reason:** [internal/worker/replication.go](backend/internal/worker/replication.go)
-  walks replicated buckets and logs intent; [cmd/server/root.go](backend/cmd/server/root.go)
-  injects `Replicator: nil` so the worker is dry-run only.
+  walks replicated buckets and logs intent; [internal/app/build_jobs.go](backend/internal/app/build_jobs.go)
+  injects `Replicator: nil` so the worker is dry-run only, and every
+  AVAILABLE object is selected — the CEL `replication.filter` is not
+  evaluated yet.
 - **Definition of Done:**
   - `StorageReplicator` impl that performs cross-backend `CopyObject`
     via S3 SDK (AWS-native CRR for same-account, manual stream-copy
     otherwise).
   - Watermark advance + retry-with-exponential-backoff on transient
     errors.
+  - Evaluate `replication.filter` (CEL) when selecting objects.
   - Integration test across two backends — the suites bring up two
     SeaweedFS instances for exactly this.
 - **Blockers:** scope decision — same-cloud only vs. cross-cloud.
+
+### Lifecycle transition rules are not applied
+
+- **Status:** Deferred
+- **Reason:** [internal/worker/lifecycle.go](backend/internal/worker/lifecycle.go)
+  applies `Expiration` only; a rule's transition (storage-class change) is
+  accepted and stored but has no effect until it maps onto the backend's own
+  S3 lifecycle configuration.
+- **Definition of Done:** transitions either drive the backend's lifecycle
+  configuration or are refused at write time, with tests for both the rule
+  validation and the worker.
+- **Blockers:** which backends expose storage classes worth transitioning to.
+
+### Storage-ingest delete events are only logged
+
+- **Status:** Deferred
+- **Reason:** [internal/eventingest/handler.go](backend/internal/eventingest/handler.go)
+  promotes on an upload event but logs a delete event and returns; an object
+  deleted straight from the bucket keeps its AVAILABLE row until the
+  reconciler finds the bytes missing.
+- **Definition of Done:** a delete event soft-deletes the matching object row
+  through the state machine (idempotent on redelivery), with handler and
+  integration tests.
+- **Blockers:** none; needs the delete-cascade semantics in
+  [docs/deletion-semantics.md](docs/deletion-semantics.md) applied to this path.
+
+### `Object.placement` is never populated
+
+- **Status:** Deferred
+- **Reason:** `PhysicalPlacement` (backend, bucket, storage path) exists in
+  `proto/paladin/data/v1/types.proto`, but
+  [connectshim/data/conv.go](backend/internal/api/connectshim/data/conv.go)
+  leaves it unset: it should reach only privileged callers, and no role check
+  for that exists on the data plane.
+- **Definition of Done:** a role (or Cedar action) that gates placement, the
+  field set for callers holding it, and tests for both sides of the gate.
+- **Blockers:** deciding who counts as privileged on the data plane.
+
+### `ResetQuotaUsage` authorises against an empty Quota entity
+
+- **Status:** Deferred
+- **Reason:** [quotah/handler.go](backend/internal/api/admin/v1/quotah/handler.go)
+  authorises before loading the quota, so Cedar sees `admindomain.Quota{}` and
+  a policy cannot gate the reset by tenant, bucket or quota id.
+- **Definition of Done:** load the quota first and authorise against its
+  coordinates, with a Cedar test that a tenant-scoped policy can permit or
+  forbid the reset.
+- **Blockers:** none.
+
+### Console `/users`: no user detail page, no scope grants
+
+- **Status:** Deferred
+- **Reason:** `/users` lists users across tenants, but there is no per-user
+  page and `UserService.GrantScopes` / `RevokeScopes` are not reachable from
+  the console; an operator changes scopes through the API or an SDK.
+- **Definition of Done:** a user detail page showing roles and scopes, with
+  grant and revoke actions, and page tests.
+- **Blockers:** none.
 
 ### `ResetPassword` — self-service email delivery
 
@@ -522,204 +583,15 @@ finding moving from "packages you import" to "your code is affected".
       validate the cardinality assumption holds for their
       tenant.
 
-### Event dispatcher: Kafka sink
+### Event dispatcher: per-tenant Kafka topic prefix
 
-- **Status:** Partially done — core sink SHIPPED 2026-06-30; SASL/SCRAM + TLS/
-  mTLS auth SHIPPED 2026-07-01; only the real-broker integration test (+ the
-  optional per-tenant topic prefix) remain.
-- **Shipped:** `KafkaSink{brokers, topic}` (already in the proto) wired
-  end-to-end — `internal/worker/sink_kafka.go` with `KafkaWriterPool` (one
-  `segmentio/kafka-go` writer cached per (brokers, topic), `RequireAll` acks,
-  `Hash` balancer); `deliverKafka` publishes the CloudEvents 1.0 envelope with
-  the **tenant id as the message key** (per-tenant partition ordering); wired
-  into `deliver()` + the delivery dispatcher; conv.go round-trip already
-  mapped; unit tests (`sink_kafka_test.go`) via a `kafkaWriter` seam covering
-  envelope/key, broker-list trimming, pool reuse, error + missing-config + nil
-  -pool paths. Chose `segmentio/kafka-go` (pure-Go, no CGO) over franz-go.
-- **Shipped (2026-07-01) — SASL/SCRAM + TLS/mTLS auth:** `KafkaSink` gains
-  `sasl_mechanism` ("" | plain | scram-sha-256 | scram-sha-512),
-  `sasl_username`, `sasl_password`, `tls_enabled`, and `tls_client_cert` /
-  `tls_client_key` (PEM, mTLS). `buildKafkaTransport` maps the config to a
-  `kafka.Transport{SASL, TLS}` (nil = plaintext); the writer pool now keys by
-  `(brokers, topic, auth-hash)` so distinct-credential sinks never share a
-  writer; unsupported mechanism / bad mTLS keypair fail the delivery with a
-  clear error. Admin form exposes the SASL mechanism + username/password + a
-  TLS toggle; mTLS client-cert/key stay API/config-only (PEM key material in a
-  browser form is a security smell). Unit-tested transport construction (SASL
-  mechanisms, TLS, mTLS keypair incl. a generated cert, error paths) + the
-  cache-key uniqueness + delivery threading. Inline creds are lab-grade — a
-  secret-store-resolved ref is the remaining hardening (shared with NATS).
-- **Shipped (2026-07-02) — broker verify + secret-store creds:**
-  `TestKafkaSinkDelivery_SCRAM` (tests/integration/components, tags=integration) runs
-  DeliverOne against a real redpanda with SASL/SCRAM-SHA-256 + authorization
-  enabled — handshake, per-tenant message key, and CloudEvents envelope all
-  consumed back; passed locally against Docker. Credential fields
-  (`sasl_username/password`, `tls_client_cert/key`) now accept
-  `k8s:<name>/<key>` Secret refs resolved at delivery time
-  (worker/sink_secrets.go; TTL-cached, pool key hashes the RESOLVED material
-  so rotation dials a fresh writer).
-- **Shipped (2026-07-02) — SASL_SSL vs certs-mounted broker + private CA:**
-  `KafkaSink.tls_ca_cert` (PEM bundle; also accepts a k8s: Secret ref)
-  verifies brokers behind a private CA — setting it implies TLS and keys the
-  writer pool. `TestKafkaSinkDelivery_SASL_SSL` runs DeliverOne over
-  SCRAM-SHA-256 + TLS against a redpanda mounted with a generated server
-  cert, verified via tls_ca_cert; PASSED locally against Docker.
-- **Shipped (2026-07-02) — mTLS vs require_client_auth broker:**
-  `TestKafkaSinkDelivery_MTLSRequireClientAuth` hand-rolls the redpanda
-  module's two-phase config trick (the module's embedded template can't
-  express client-auth) to run a broker with `require_client_auth: true` +
-  a truststore: the sink delivers with `tls_client_cert/key`, and the same
-  transport WITHOUT the keypair is refused at the handshake (negative
-  pinned). PASSED locally against Docker.
-- **Shipped (2026-07-05) — batch fan-in (NATS + Kafka):** the OutboxRunner now
-  groups a tick's rows by sink target and flushes each group once, matching the
-  SQS `SendMessageBatch` path. Kafka: `kafkaGroupTarget` keys by
-  brokers+topic+auth-hash and `deliverKafkaBatch` sends one `WriteMessages(msgs
-  ...)` per group (kafka-go batches to the broker internally; a `WriteErrors`
-  slice maps partial failures per-row, any other error fails the whole group
-  retryably). NATS: `natsGroupTarget` keys by the CONNECTION (url + raw
-  credentials_ref, NOT subject — one Flush per conn covers every subject), and
-  `deliverNATSBatch` does N publishes + ONE `FlushTimeout` (a publish error
-  fails just that row; a flush error fails every row that published). Grouping is
-  over RAW config so it never merges distinct-credential sinks; malformed rows
-  fall back to the per-row `deliver()` path unchanged. Every row keeps its own
-  attempts/backoff/permanent bookkeeping via the per-row outcome map. Unit tests
-  (`sink_batch_test.go`): kafka one-call-per-group / partial-failure / whole-call
-  -fail + group-key identity; nats embedded-server multi-subject delivery +
-  no-pool + group-key (subject-independent).
-- **Definition of Done (remaining):**
-  - Optional: per-tenant topic prefix vs operator-defined topic — operator
-    -defined shipped; revisit if a customer needs auto-fan-out by tenant.
-- **Blockers:** none — incremental; driven by a customer's auth posture.
-
-### Event dispatcher: RabbitMQ sink
-
-- **Status:** Partially done — core sink + health probe + UI form SHIPPED
-  (through 2026-07-01); only the real-broker integration test + AMQPS
-  client-certs remain.
-- **Shipped:** `RabbitMqSink{url, exchange, routing_key}` added to the
-  proto `EventSink.oneof` (field 5) + frontend types regenerated;
-  `internal/worker/sink_rabbitmq.go` — `RabbitMQConnPool` (dial-per-URL,
-  cached, redial on a dropped/closed connection), channel-per-publish with
-  **publisher-confirms** (`deliverRabbitMQ` only returns success after the
-  broker ACKs) and persistent delivery mode; wired into `deliver()` + the
-  delivery dispatcher in `serve_dispatcher.go`; conv.go round-trip mapping;
-  unit tests (`sink_rabbitmq_test.go`) via a `rabbitPublisher` seam covering
-  envelope/routing, error mapping, and the redial-on-unhealthy path. Auth
-  rides in the AMQP URL (`amqp(s)://user:pass@host/vhost`).
-- **Shipped (2026-07-01) — health probe:** the dispatcher's
-  `/system/health.json` gains a non-critical `rabbitmq` subsystem check
-  (mirrors the `nats` one): `RabbitMQConnPool.Statuses()` reports each dialed
-  broker's connection health, and a dropped/closed connection fails the probe
-  (empty pool → healthy-but-empty). `preWarmRabbitMQ` scans rabbitmq-sink
-  subscriptions at boot and dials each broker so the row is populated before
-  the first delivery. `RabbitMQConnPool.Warmup` + `Statuses` unit-tested.
-- **Shipped (2026-07-01) — UI connector form:** RabbitMQ is now a `SinkType`
-  option in the `/events` subscription editor (it wasn't even selectable
-  before). AMQP URL + exchange + routing-key fields wired to `RabbitMqSink`
-  (`_form.ts` build/hydrate/validate + `SubscriptionEditorDialog`); the stale
-  "Kafka/SQS are roadmap stubs" Target hint was corrected (all sinks are
-  delivery-wired). `_form.test.ts` covers build + hydrate + validation.
-- **Shipped (2026-07-02) — broker verify + secret URL:**
-  `TestRabbitMQSinkDelivery` (tests/integration/components, tags=integration) runs
-  DeliverOne against a real rabbitmq:4.0 — publisher-confirmed publish
-  consumed back as the CloudEvents envelope; passed locally against Docker.
-  The AMQP URL (credentials embedded) now accepts a `k8s:<name>/<key>`
-  Secret ref resolved at delivery time.
-- **Shipped (2026-07-02) — AMQPS client certs:** `RabbitMqSink` gains
-  `tls_client_cert` / `tls_client_key` / `tls_ca_cert` (PEM; each also
-  accepts a k8s: Secret ref). `buildRabbitTLS` mirrors the Kafka transport
-  build; the conn pool now keys by URL + TLS material so same-URL sinks
-  with different certs never share a connection (Warmup covers URL-auth
-  sinks only — client-cert sinks dial lazily).
-  `TestRabbitMQSinkDelivery_AMQPSClientCert` runs DeliverOne against a
-  RabbitMQ whose TLS listener REQUIRES a client cert (verify_peer +
-  fail_if_no_peer_cert), including the negative (no client cert → handshake
-  refused); PASSED locally against Docker.
-- **Shipped (2026-07-02) — connection-drop recovery under the real
-  broker:** `TestRabbitMQSinkDelivery_ConnectionDropRedial` delivers, has
-  the broker force-close every AMQP connection (`rabbitmqctl
-  close_all_connections`), then proves deliveries either fail loudly
-  (retryable) or succeed after the pool's health-check redial — and drains
-  the queue to confirm every reported success actually landed (publisher
-  confirms → no silent losses). Entry complete — delete on next touch if
-  nothing new accrues.
-- **Trigger to do:** customer ask — banking / fintech enterprise already
-  running a RabbitMQ cluster as their event bus.
-
-### Storage event ingest pipeline — JetStream upgrade + integration coverage
-
-- **Status:** Deferred (parent concept SHIPPED — only follow-ups remain)
-- **Live in the lab cluster — re-verified 2026-07-05.** SeaweedFS is deployed as
-  the **`secondary`** backend (Garage is `primary`), and the SF filer→NATS→Paladin
-  ingest pipeline is running: a live S3 PUT to the SF gateway made the filer
-  publish to NATS `seaweedfs.filer` (broker `in_msgs` incremented), the broker
-  delivered to the `paladin-ingest` subscriber (`out_msgs` incremented), and the
-  ingest handler decoded the gob+protobuf envelope, classified it
-  `paladin.object.uploaded`, parsed the `<bucket>/<tenant_uuid>/<object_key>/<key>`
-  path, and ran the DB lookup (logged `ingest.handler "no matching object for
-  event; skipping"` for a probe with no matching Paladin row). Transport + decode +
-  parse + lookup all confirmed. (An earlier note calling this "dormant under
-  Garage" was wrong — corrected here and in the NATS-auth item above.)
-- **State as of 2026-05-10:** Full SF → NATS → Paladin ingest pipeline
-  works end-to-end on the local cluster, **including PROMOTE on
-  a real Paladin data-plane upload**. Verified live:
-    1. `seed-fixture smoke-upload` → UploadObject creates a
-       PENDING row, hands back a presigned PUT.
-    2. PUT to the SF S3 gateway → 200, bytes land.
-    3. SF fires filer event on `seaweedfs.filer`.
-    4. Ingest pod's NATS subscriber decodes the gob+protobuf
-       envelope (`source_seaweedfs_nats.go`), parses the path
-       through the new `buckets/`-prefix-tolerant
-       `parseSeaweedFSPath`.
-    5. PromoteHandler.Lookup runs through a BYPASSRLS pool
-       (mirroring dispatcher's pattern — same `MigrateDSN`
-       wiring), finds the row, calls `PromoteToAvailable`.
-    6. Row state flips PENDING → AVAILABLE.
-  Ingest log line proves it: `"promote outcome … changed=true"`.
-- **What's left (low priority, not blocking):**
-  - ~~**JetStream upgrade** — flip ingest from core pubsub
-    (at-most-once) to a durable consumer (at-least-once).~~
-    **DONE (2026-07-06):** `runJetStream` in `driver_nats.go` now
-    has integration coverage (`driver_nats_jetstream_test.go`:
-    deliver+ack, NAK→redelivery, ignored→ack, `Nats-Msg-Id`
-    override), and the lab is live in JetStream mode. gitops:
-    `base/nats/nats/seaweedfs-filer-stream.yaml` provisions the
-    `seaweedfs_filer` stream (512MB; PALADIN_EVENTS capped 5GB→3GiB so
-    the two share the 5Gi file store — a single stream reserving
-    the whole budget fails 10047), and the ingest overlay sets
-    `jetstream: true` + `durable_name: paladin-ingest-sf`. Verified:
-    consumer bound, a live filer event delivered + acked (stream
-    seq 1, 0 redelivered). Landed stream-first to avoid crashloop.
-  - ~~**MinIO / S3 source** — decode S3-compatible bucket
-    notifications.~~ **DONE (2026-07-06):** generalised the MinIO
-    adapter into the canonical `S3EventSource` (`source_s3.go`) —
-    parses the AWS S3 event-notification JSON emitted by AWS S3,
-    MinIO, and any S3-compatible store; proper `url.QueryUnescape`
-    key decoding (AWS-literal-slash + MinIO-`%2F` + `+`→space).
-    `source_format` `s3` and `minio` both resolve to it (distinct
-    labels); `/webhook/s3` + `/webhook/minio` routes. Covered by
-    `source_s3_test.go` (13 cases: AWS+MinIO shapes, event
-    variants, url-decode, bucket filter, non-Paladin key, id
-    stability) + `pick_source_test.go`. **Garage is explicitly
-    rejected** — it emits no notifications (Get/PutBucketNotification
-    Configuration are 501; no non-S3 event mechanism), so
-    `pickSource` errors with a directive pointing at the Reconciler.
-    The native **SQS driver** (AWS S3 → SQS, long-polled) landed too
-    (`driver_sqs.go`, `driver=sqs`): delete-on-success/ignore,
-    leave-on-transient-error (→ redrive-policy DLQ), drop-poison on
-    unrecognised, optional SNS unwrap, IRSA/AssumeRole/endpoint config;
-    covered by `driver_sqs_test.go` + `build_sqs_driver_test.go`. All
-    documented in [`docs/storage-ingest.md`](docs/storage-ingest.md).
-  - ~~`buckets/` prefix observation — document the wire-format contract.~~
-    **DONE (2026-06-29):** [`docs/storage-ingest.md`](docs/storage-ingest.md)
-    documents the SF→NATS path contract (`<tenant>/<object_key>/<key>`), why
-    the `buckets/` prefix is stripped (two publishers disagree on it), the
-    drift risk, delivery semantics, and the MinIO path.
-- **Trigger to act:** customer pipeline that writes directly
-  to the storage bucket bypassing Paladin RPCs (the entire
-  raison d'être of the ingest plane), or production at-least-
-  once requirement that needs JetStream.
+- **Status:** Deferred — the Kafka sink, its SASL/SCRAM and mTLS auth, secret
+  refs and real-broker tests (`tests/integration/components/broker_sinks_test.go`)
+  have shipped; the topic is operator-defined per subscription.
+- **Reason:** nobody has asked for automatic fan-out by tenant.
+- **Definition of Done:** an optional per-tenant topic prefix on `KafkaSink`,
+  with the delivery and pool-key tests that cover it.
+- **Blockers:** a customer whose consumers need one topic per tenant.
 
 ### The Python SDK is not published
 
@@ -805,14 +677,15 @@ finding moving from "packages you import" to "your code is affected".
 ### Index candidates considered and rejected (2026-08-18 audit)
 
 - **Status:** Deferred — decisions recorded so the audit is not repeated from
-  scratch. Migrations 064–068 added the five indexes this pass judged worth
+  scratch. Pre-consolidation migrations 064–068 added the five indexes this pass judged worth
   their write cost; these are the ones it did not.
 - **Reason (per candidate):**
   - **`objects (tenant_id, state) INCLUDE (size_bytes)`** — would turn the
     /stats object census and the quota reconciler's recompute into index-only
     scans. Rejected: `state` is UPDATEd on every PENDING→AVAILABLE promote and
     every delete, so the index makes the hottest write path's UPDATEs non-HOT,
-    working directly against the `fillfactor` tuning migration 008 applied for
+    working directly against the `objects` `fillfactor` tuning in
+    `001_initial_schema.sql`, applied for
     that exact reason. Paying on every upload to speed a 15-minute background
     job and a dashboard poll is the wrong trade.
   - **`audit_log (at DESC, entry_id DESC)`** — ListAuditEntries pages by that
@@ -823,8 +696,8 @@ finding moving from "packages you import" to "your code is affected".
   - **`objects (tenant_id, object_key, key text_pattern_ops)`** — would make
     ListObjects' `key LIKE 'prefix%'` a range scan instead of a recheck.
     Rejected for now: the `(tenant_id, object_key)` equality already bounds
-    the scan to one ObjectKey, so the recheck is over a page, not the table.
-    Revisit if a single ObjectKey grows large enough that prefix browsing
+    the scan to one collection, so the recheck is over a page, not the table.
+    Revisit if a single collection grows large enough that prefix browsing
     shows up in `pg_stat_statements`.
 - **Definition of Done:** revisit each when there is production evidence —
   `pg_stat_statements` mean_exec_time, or `pg_stat_user_tables` seq_scan
@@ -1031,7 +904,7 @@ finding moving from "packages you import" to "your code is affected".
     INCLUDE (size_bytes)` to turn the seq scan into an index-only scan.
     Measure both sides before committing — `state` is a key column and it is
     UPDATEd on every promote, so the index makes those writes non-HOT, which
-    works against migration 008's deliberate `fillfactor` tuning.
+    works against the deliberate `fillfactor` tuning in `001_initial_schema.sql`.
   - Only if that is not enough: persist the reconciler's per-tenant rollup and
     read it from `/stats`, with the staleness window shown in the UI ("as of"
     already has the slot).
@@ -1139,10 +1012,9 @@ finding moving from "packages you import" to "your code is affected".
   kept for detail.
 - **Status:** Open — gated on real-world shape-distribution data. The Phase-2
   central resolver is DONE: `internal/api/connectshim/resolve` exports
-  `ResolveObjectKeyName(ctx, name) (CanonicalRef, error)` handling all three
-  shapes (canonical A / tenant C / bare B; bare takes the tenant from ctx)
-  plus `ResolveTenantParent`, and every objectKey call site in
-  `connectshim/admin/object_key_server.go` swapped to it.
+  `ResolveCollectionName(ctx, name) (CanonicalRef, error)` handling all three
+  shapes (canonical A / tenant C / bare B; bare takes the tenant from ctx),
+  and every collection call site goes through it.
 - **2026-06-29 — metric is now actually exported.** The
   `paladin_resource_name_shape_total{shape}` counter was registered on the
   Prometheus *default registry*, which Paladin never serves (no `/metrics`
@@ -1167,7 +1039,7 @@ finding moving from "packages you import" to "your code is affected".
 - **2026-06-30 — reviewed, still blocked.** Both halves were re-assessed:
   the shape-deprecation decision is unchanged (data-gated — no real traffic).
   The optional data-plane parser-fold was examined: `conv.go`'s
-  `objectKeyNameParts` parses ONLY the C-shape with an INLINE `assertJWTTenant`
+  `objectNameParts` parses ONLY the C-shape with an INLINE `assertJWTTenant`
   cross-tenant guard, whereas the central resolver accepts all three shapes
   and defers authz to handlers. Folding them is therefore a wire-contract +
   authz-placement change, not a mechanical dedupe — security-sensitive (cf.
@@ -1335,9 +1207,9 @@ finding moving from "packages you import" to "your code is affected".
   end-to-end against two real MinIO backends (#124). Maintenance workers
   route by backend id (#125 bucket reconciler, #126 reconciler probe /
   hard-deleter / multipart reaper) and multipart uploads are anchored to
-  their initiate-time (backend, bucket) — migration 053 (#127).
+  their initiate-time (backend, bucket) (#127).
 - **Shipped — Phase 1 (dedicated layout):** `tenants.storage_layout`
-  (migration 054, proto field 12, end-to-end #128); CreateTenant with
+  (proto field 12, end-to-end #128); CreateTenant with
   `dedicated` provisions a pending tenant-owned bucket + default binding
   in the same tx, physically created by the (backend-routed) reconciler
   (#129); mutations are gated on `provision_state='ready'` with a clean
@@ -1346,7 +1218,7 @@ finding moving from "packages you import" to "your code is affected".
   to `ready`, so a backend that accepts `CreateBucket` without yielding a
   writable bucket keeps the gate closed and surfaces `provision_error`
   instead of 500-ing every upload.
-- **Shipped — Phase 3 slice 1 (same-backend copy job):** migration 056
+- **Shipped — Phase 3 slice 1 (same-backend copy job):**
   `tenant_storage_migrations` (resumable state machine + cursor); admin RPC
   `MigrateTenantStorageLayout` + `GetTenantStorageMigration` (provision the
   dedicated bucket + record the migration); `StorageMigrationWorker` (leased
@@ -1355,7 +1227,7 @@ finding moving from "packages you import" to "your code is affected".
   flip→verify→completed. Cross-backend pairs fail loudly (deferred to the
   stream-through slice). Source copies are RETAINED (cleanup is a later slice).
   Unit-tested state machine (happy path, bucket-wait, cross-backend fail).
-- **Shipped — Phase 3 slice 2 (retention-gated cleanup):** migration 057 adds
+- **Shipped — Phase 3 slice 2 (retention-gated cleanup):** adds
   `cleanup_retention_seconds` / `cleanup_after` / `cleaned_at` + a `cleaned`
   state. On completion the worker sets `cleanup_after = now() + retention`
   (default 24h, overridable via the RPC's `cleanup_retention_seconds`), and once

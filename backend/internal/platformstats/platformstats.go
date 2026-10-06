@@ -5,9 +5,9 @@
 // visibility rules (the schema baseline (001_initial_schema.sql)):
 //
 //   - ControlPlane covers `tenants`, `storage_backends`, `buckets`,
-//     `collections` and `users` — deliberately NOT RLS'd, precisely so
-//     platform-admin reads span tenants. The admin pod runs these on its
-//     own request pool.
+//     `collections` and `users`. The first three are not RLS'd; the last
+//     two are, and the admin pod reads them on its own request pool under
+//     auth.WithCrossTenantRead (`paladin.cross_tenant`, 002_roles_and_rls.sql).
 //
 //   - ObjectCensus covers `objects`, which IS RLS'd per tenant. A query
 //     on the admin pod's `paladin_app` pool sees only the caller's tenant (or

@@ -96,7 +96,7 @@ func runIngest(
 	var ownPool *pgxpool.Pool // non-nil only when we opened a dedicated BYPASSRLS pool
 	// The ingest Lookup + state-machine transitions run cross-tenant (pure DML),
 	// so the BYPASSRLS pool uses the least-privilege paladin_reaper role (reaper_dsn),
-	// falling back to paladin_migrate when unset (dev parity). See migration 058.
+	// falling back to paladin_migrate when unset (dev parity). See `002_roles_and_rls.sql`.
 	if bypassDSN, bypassPwd := bypassRLSConn(cfg); bypassDSN != "" {
 		pool, err := newDispatcherPool(
 			context.Background(),

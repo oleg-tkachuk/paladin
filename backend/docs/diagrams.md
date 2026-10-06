@@ -91,7 +91,10 @@ handler returns from a domain sentinel goes out with a `google.rpc.ErrorInfo`
 whose reason is a `paladin.common.v1.ErrorReason` (`apiutil.MapError`). The iam plane lets `Login`,
 `RefreshToken` and `ExchangeAudience` through anonymously and adds a login rate
 limit and an audit of mutations; the admin plane accepts API tokens only when
-they carry roles, and audits its mutations too.
+they carry roles, and audits its mutations too. On the data plane a platform
+admin's request acts on the tenant it names (`middleware.ActOnNamedTenant`),
+which every later step keys on, and such calls inside another tenant are
+audited there (`middleware.AuditActingElsewhere`).
 
 ```mermaid
 flowchart TB
@@ -102,8 +105,10 @@ flowchart TB
         obs["otel · outcome log"]
         authn["<b>authenticate</b><br/>JWT · API token · capability → Principal"]
         aud["audience must be this plane"]
+        act["platform admin: act on the named tenant"]
         lim["tenant rate limit · quota soft check"]
         val["protovalidate · idempotency key"]
+        aae["audit a platform admin acting elsewhere"]
     end
     h["<b>handler</b>"]
     cedar["<b>Cedar</b><br/>tenant · bucket · collection policies<br/>+ built-in scope forbid"]
@@ -114,7 +119,7 @@ flowchart TB
 
     err["<b>MapError</b><br/>Connect code + ErrorInfo reason"]
 
-    req --> ver --> obs --> authn --> aud --> lim --> val --> h
+    req --> ver --> obs --> authn --> aud --> act --> lim --> val --> aae --> h
     h --> cedar
     h --> cap
     h --> adp --> pool --> pg
@@ -127,7 +132,7 @@ flowchart TB
     classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     class req client
-    class ver,obs,authn,aud,lim,val,h,cedar,cap,adp,pool,err role
+    class ver,obs,authn,aud,act,lim,val,aae,h,cedar,cap,adp,pool,err role
     class pg store
     style ic fill:#F8FAFC,stroke:#16A34A
 ```
@@ -371,9 +376,11 @@ Both SDKs run the same scenarios against the stack in CI
 
 ## Schema
 
-The core tables and their foreign keys, from `backend/migrations`. Rate
-buckets, idempotency keys, OAuth, leases, ingest dedup and the audit log
-(partitioned monthly) are left out.
+The core tables and their foreign keys, from `backend/migrations`. Left out:
+rate buckets, idempotency keys, OAuth, DPoP replay (`dpop_seen_jti`), leases,
+ingest dedup, the audit log (partitioned monthly), the tag catalogue
+(`object_tags`), slug history, backend health, replication state, and the
+purge and multipart-abort queues (`pending_purges`, `pending_multipart_aborts`).
 
 Identity and access:
 
@@ -381,6 +388,7 @@ Identity and access:
 erDiagram
     tenants ||--o{ users : has
     users ||--o{ refresh_tokens : holds
+    users ||--o| user_settings : has
     tenants ||--o{ api_tokens : has
     tenants ||--o{ capability_records : issues
     capability_records ||--o| capability_revocations : revokes
@@ -389,6 +397,7 @@ erDiagram
     capability_records ||--o{ capability_copy_usage : "counts a copy"
     capability_records ||--o{ capability_reservations : holds
     capability_records ||--o{ charges : meters
+    charges ||--o{ charge_refunds : refunds
     tenants ||--o| tenant_budgets : caps
 ```
 
@@ -450,9 +459,14 @@ flowchart TB
     s3[("<b>S3 backend</b><br/>external")]
 
     ingress -- "/paladin.iam.v1.* → :8085<br/>rest → :8080" --> api
+    ingress -- "/paladin.admin.v1.* → :8090<br/>IngressRoute only" --> admin
     ingress --> console
     console --> api
     console --> admin
+    mcp -- "bridge mode" --> api & admin
+    admin -. "ops :8099 · /stats census" .-> worker
+    admin -. "ops :8099 · queue stats" .-> dispatcher
+    admin -. "MCP sessions" .-> mcp
     core --> pg
     jobs --> pg
     api --> s3
@@ -475,8 +489,25 @@ flowchart TB
     style core fill:#F8FAFC,stroke:#16A34A
 ```
 
-The admin plane has no Ingress route; the console reaches it inside the
-cluster. Every role except `mcp` uses PostgreSQL; `api`, `admin` and `worker`
-call S3. The chart also creates Secrets for the signing key, the bootstrap
+The standard Ingress routes only the api role. The Traefik IngressRoute also
+routes `/paladin.admin.v1.*` to `admin` on the shared host, or moves the admin
+plane to its own host when `traefik.planes.admin.hosts` is set; either way the
+console reaches `admin` inside the cluster. Every role except `mcp` (in bridge
+mode, as the chart runs it) uses PostgreSQL; `api`, `admin` and `worker` call
+S3.
+
+`admin` proxies three views the console reads from other roles' listeners —
+the stats behind the platform-admin role, the sessions behind a Cedar check:
+the cross-tenant `/stats` census and
+the tenants behind each count it flags, from the worker
+(`SystemService.GetPlatformStats` and `ListPlatformStatsTenants` →
+`worker.ops_url` → `/system/rls-census.json` and
+`/system/rls-census/tenants.json`, served by `internal/platformstats` on the
+worker's BYPASSRLS pool); the outbox queue view, from the dispatcher
+(`GetDispatcherStats` → `dispatcher.ops_url`); and live MCP sessions, from
+`mcp` (`MCPInspectService.ListSessions` → `mcp.http.sessions_url`). The
+worker's Service publishes `:8099` and targets container port `:8090`.
+
+The chart also creates Secrets for the signing key, the bootstrap
 admin and the S3 credentials, and reads the PostgreSQL ones you supply. See
 [docs/install.md](../../docs/install.md).

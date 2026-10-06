@@ -219,7 +219,7 @@ export function useBackends(autoFetch: boolean = true) {
   );
 
   // setBackendReadOnly — flips a backend's read-only "drain" state via
-  // BackendService.SetBackendReadOnly (migration 047). OCC-guarded on
+  // BackendService.SetBackendReadOnly (`001_initial_schema.sql`). OCC-guarded on
   // resourceVersion. Draining keeps reads working while refusing mutations,
   // so an operator can migrate data off before disabling. Unlike disable,
   // the default backend may be drained.
@@ -250,7 +250,7 @@ export function useBackends(autoFetch: boolean = true) {
   );
 
   // setBackendMaintenance — raises/clears the operator-set maintenance flag
-  // via BackendService.SetBackendMaintenance (migration 049). OCC-guarded.
+  // via BackendService.SetBackendMaintenance (`001_initial_schema.sql`). OCC-guarded.
   // Advisory only — it does not gate operations.
   const setBackendMaintenance = useCallback(
     async (

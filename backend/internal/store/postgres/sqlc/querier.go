@@ -579,19 +579,19 @@ type Querier interface {
 	// idx_operations_terminal_done_at (added in the schema baseline (001_initial_schema.sql)) so the planner
 	// never scans the live PENDING/RUNNING tail.
 	PurgeTerminalOperations(ctx context.Context, doneAt pgtype.Timestamptz) (int64, error)
-	// The ON CONFLICT target MUST match a real unique constraint. Migration 042
-	// range-partitioned this table on expires_at, which widened the PK to
-	// (tenant_id, method, key, expires_at) — a partitioned table requires the
-	// partition key in every unique constraint, so a 3-column (tenant, method,
-	// key) constraint cannot exist. Targeting the old 3-column tuple raised
+	// The ON CONFLICT target MUST match a real unique constraint.
+	// `001_initial_schema.sql` range-partitions this table on expires_at, so its
+	// unique key is (tenant_id, method, key, expires_at) — a partitioned
+	// table requires the partition key in every unique constraint, so a
+	// 3-column (tenant, method, key) constraint cannot exist. Targeting the old 3-column tuple raised
 	// 42P10 ("no unique or exclusion constraint matching the ON CONFLICT") on
 	// EVERY write; the interceptor swallowed that error, so memoization silently
 	// never happened and admin double-submits duplicated resources (FR-008).
 	//
-	// We target the full PK with DO NOTHING. The interceptor's Get-before-Put
-	// already short-circuits sequential retries (the common double-submit /
+	// We target that full unique key with DO NOTHING. The interceptor's
+	// Get-before-Put already short-circuits sequential retries (the common double-submit /
 	// auto-retry case), so Put runs only on a genuine cache miss; DO NOTHING is
-	// just a safety net for the astronomically-rare same-instant exact-PK race.
+	// just a safety net for the astronomically-rare same-instant exact-key race.
 	// A retried Create after the prior row's TTL lapsed lands a fresh row (new
 	// expires_at, new partition); GetIdempotencyKey filters the expired one and
 	// the daily DROP PARTITION reclaims it — so the old expired-overwrite

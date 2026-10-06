@@ -14,13 +14,13 @@ import (
 )
 
 // TestAPITokensPreAuthLookup is the regression test whose absence let the
-// api_tokens RLS bug ship: the RLS baseline (002_roles_and_rls.sql) placed api_tokens under a plain
+// api_tokens RLS bug ship: an earlier migration placed api_tokens under a plain
 // tenant_isolation policy, which filtered the PRE-AUTH verify lookup to zero
 // rows (the token is what establishes the tenant, so no paladin.tenant_id GUC is
 // set yet) — breaking data-plane API-token auth for every tenant.
 //
-// Migration 060 keeps RLS ON for writes (tenant_isolation WITH CHECK) but adds
-// a permissive SELECT policy so ONLY the read path — the unavoidable
+// `002_roles_and_rls.sql` keeps RLS ON for writes (tenant_isolation WITH CHECK)
+// but adds a permissive SELECT policy (api_tokens_preauth_read) so ONLY the read path — the unavoidable
 // tenant-less digest lookup — is open. This test locks that access pattern:
 // reads work with no tenant GUC; writes still require the matching tenant.
 func TestAPITokensPreAuthLookup(t *testing.T) {

@@ -28,8 +28,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
-// serveDispatcherCmd runs the durable webhook fan-out loop introduced
-// by migration 028. Producer (admin pod) writes one event_deliveries
+// serveDispatcherCmd runs the durable webhook fan-out loop over the
+// outbox in `001_initial_schema.sql`. Producer (admin pod) writes one event_deliveries
 // row per matching subscription on each inbound event; this loop polls
 // the outbox via FOR UPDATE SKIP LOCKED, posts to sinks, and updates
 // status / attempts / next_attempt_at. Multiple replicas safe — the
@@ -91,7 +91,7 @@ func runDispatcher(
 	// The dispatcher drains event_deliveries cross-tenant (no request principal
 	// → no paladin.tenant_id GUC), so it needs BYPASSRLS. That's pure DML, so it
 	// runs on the least-privilege paladin_reaper role (reaper_dsn); falls back to
-	// paladin_migrate when reaper_dsn is unset (dev parity). See migration 058.
+	// paladin_migrate when reaper_dsn is unset (dev parity). See `002_roles_and_rls.sql`.
 	if bypassDSN, bypassPwd := bypassRLSConn(cfg); bypassDSN != "" {
 		// Pass the password explicitly — the runtime path (postgres.New for the
 		// deps.Pool) injects cfg.Password into pgxpool.ConnConfig.Password after
@@ -245,7 +245,7 @@ func runDispatcher(
 // least-privilege paladin_reaper role (reaper_dsn) — those loops are pure DML, so
 // they don't need the DDL owner — and falls back to paladin_migrate when reaper_dsn
 // is unset (dev parity). Returns ("","") when neither is configured, so the
-// caller degrades to the RLS runtime pool. See migration 058 / serve_worker.
+// caller degrades to the RLS runtime pool. See `002_roles_and_rls.sql` / serve_worker.
 func bypassRLSConn(cfg config.Config) (dsn, password string) {
 	if cfg.Datastores.Postgres.ReaperDSN != "" {
 		return cfg.Datastores.Postgres.ReaperDSN, cfg.Datastores.Postgres.ReaperPassword

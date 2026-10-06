@@ -6,7 +6,9 @@ page covers what a policy can refer to and how a policy reaches the engine.
 The reference is [`policies/schema.cedarschema`](../policies/schema.cedarschema).
 `internal/policy/cedar/schema_test.go` checks it against what the engine
 emits — actions, entities, request context — and validates the built-in
-policy, the default tenant policy and the examples against it.
+policy against it; `internal/api/admin/v1/tenanth/defaultpolicy_test.go`
+validates the default tenant policy, and `policies/policies_test.go` every
+file in `policies/examples/`.
 
 ---
 
@@ -15,9 +17,9 @@ policy, the default tenant policy and the examples against it.
 | Slot      | Value |
 |-----------|-------|
 | principal | Always a `User`, keyed by the token subject. API tokens and capabilities are `User`s too; `principal.kind` tells them apart. |
-| action    | One of 46 actions (§3). |
+| action    | One of 47 actions (§4). |
 | resource  | The most specific entity the request names: `Object`, `Collection`, `Bucket`, `StorageBackend`, `User` or `Tenant`. |
-| context   | The same record for every action (§5). |
+| context   | The same record for every action (§6). |
 
 Handlers call `Engine.IsAuthorized`. A request is allowed when at least one
 `permit` matches and no `forbid` does.
@@ -40,8 +42,8 @@ Four layers are concatenated, in this order, and compiled together:
    - a machine principal (`kind` is `api_key`, `service_account` or
      `capability`) may delete and restore objects in its own tenant;
    - `platform.tenant-provisioner` may create tenants and their storage;
-   - a principal with a non-empty scope set is confined to resources those
-     scopes admit (a `forbid`).
+   - a principal with a non-empty scope set that does not contain `*` is
+     confined to resources those scopes admit (a `forbid`).
 2. **Tenant** — `tenants.inherited_cedar_policy`. A tenant created without one
    gets [`policies/examples/default.cedar`](../policies/examples/default.cedar),
    with `placeholder` replaced by the tenant's slug (its UUID when it has none).
@@ -75,12 +77,12 @@ use:
 |------|------------|-------|
 | `platform.admin` | built-in | everything |
 | `platform.tenant-provisioner` | built-in | create tenants, their buckets and collections |
-| `tenant.admin` | default policy | users, quotas, audit, subscriptions, operations in its own tenant |
+| `tenant.admin` | default policy | users, user settings, quotas, audit, subscriptions in its own tenant; `InspectPolicy` |
 | `bucket.admin` | default policy | bucket configuration |
 | `compliance.officer` | default policy | `ConfigureLock` |
 | `secrets.rotator` | default policy | `RotateBackendCredentials` |
 | `policy.author` | default policy | `InspectPolicy` |
-| `collection:admin` | default policy | delete and restore objects |
+| `collection:admin` | default policy | delete, restore, update, copy and taint objects |
 
 `iam.admin` is checked in Go by the IAM handlers, not by Cedar.
 
@@ -94,7 +96,7 @@ is checked against the most specific one the request names — for example,
 |---------|----------|
 | `PutObject` `GetObject` `DeleteObject` `RestoreObject` `UpdateObject` `CopyObject` | `Object`, `Collection` |
 | `PresignPut` `PresignGet` `HeadObject` | `Object` |
-| `SetObjectRetention` `SetObjectLegalHold` `ReadObjectLock` | `Object` |
+| `SetObjectRetention` `SetObjectLegalHold` `ReadObjectLock` `SetObjectTaint` | `Object` |
 | `ManageCollection` | `Collection`, `Tenant` |
 | `BindCollectionToBucket` | `Collection` |
 | `ManageBucket` `ConfigureBucketPolicy` `ConfigureLifecycle` `ConfigureLock` `ConfigureVersioning` `ConfigureReplication` | `Bucket` |
@@ -111,6 +113,8 @@ An object action reaches Cedar on the `Collection` when no key is known at
 authorization time: batch operations (a batch copy checks `PutObject` on the
 destination collection), listing, counting. `ConfigureLock` (the bucket's default lock) is separate
 from `SetObjectRetention` (one object's lock), so each can be granted alone.
+`SetObjectTaint` (setting or clearing an object's taint signals) is separate
+from `UpdateObject`, because clearing a signal re-opens the content.
 
 ## 5. Attributes
 
@@ -195,7 +199,7 @@ users in every tenant.
 ```cedar
 forbid (principal, action in [Action::"PutObject", Action::"PresignPut"], resource)
 when {
-    context.size_bytes > 5368709120 ||
+    context.size_bytes > 5368709120 ||   // 5 GiB
     (resource has key && resource.key like "*.exe")
 };
 ```
@@ -204,7 +208,7 @@ when {
 
 ```cedar
 forbid (principal, action == Action::"ManageBackend", resource)
-unless { context.now >= 1767225600 && context.now < 1767229200 };
+unless { context.now >= 1767225600 && context.now < 1767229200 };   // 2026-01-01 00:00–01:00 UTC
 ```
 
 ### Hold on a tag
@@ -242,13 +246,15 @@ inside a policy; compare against `resource.scope_keys` instead.
 1. Start from [`default.cedar`](../policies/examples/default.cedar) or another
    file in [`policies/examples/`](../policies/examples/).
 2. `PolicyService.Validate` (requires `InspectPolicy`) compiles the text and
-   type-checks it against the schema. A compile failure is an error. A schema
-   finding — an unknown action, an attribute the entity lacks, a read that
+   type-checks it against the schema. A compile failure is an `error`
+   diagnostic. A schema finding — an unknown action, an attribute the entity lacks, a read that
    needs `has` — is a warning: the policy can still be saved, because the
    schema cannot declare `tag_values`.
-3. `PolicyService.SimulateAuthz` evaluates a request against a policy without
-   storing it; `PolicyService.GetEffectivePolicy` returns the merged layers for
-   a tenant or collection.
-4. Store it with `TenantService.SetInheritedPolicy` or
-   `CollectionService.SetCollectionPolicy`.
+3. Store it with `TenantService.SetInheritedPolicy`,
+   `BucketService.SetBucketPolicy` or `CollectionService.SetCollectionPolicy`.
+4. `PolicyService.SimulateAuthz` asks the engine whether a hypothetical
+   principal (subject, tenant, roles, kind) may take an action on a resource
+   under the stored policies, without performing it;
+   `PolicyService.GetEffectivePolicy` returns the merged text and the layers,
+   built-in first, for a tenant or collection.
 5. Running replicas pick it up on the `policy_changed` notification.
