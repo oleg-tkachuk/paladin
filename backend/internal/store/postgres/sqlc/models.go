@@ -57,10 +57,11 @@ func (ns NullBackendHealthStatus) Value() (driver.Value, error) {
 type EventSinkKind string
 
 const (
-	EventSinkKindHttp  EventSinkKind = "http"
-	EventSinkKindNats  EventSinkKind = "nats"
-	EventSinkKindKafka EventSinkKind = "kafka"
-	EventSinkKindSqs   EventSinkKind = "sqs"
+	EventSinkKindHttp     EventSinkKind = "http"
+	EventSinkKindNats     EventSinkKind = "nats"
+	EventSinkKindKafka    EventSinkKind = "kafka"
+	EventSinkKindSqs      EventSinkKind = "sqs"
+	EventSinkKindRabbitmq EventSinkKind = "rabbitmq"
 )
 
 func (e *EventSinkKind) Scan(src interface{}) error {
