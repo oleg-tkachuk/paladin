@@ -275,6 +275,7 @@ codes or messages:
 
 | Exception | Code | Means |
 | --- | --- | --- |
+| `InvalidArgumentError` | `INVALID_ARGUMENT` | The request fails the same way however often it is sent; `reason` says which rule it broke. |
 | `NotFoundError` | `NOT_FOUND` | |
 | `AlreadyExistsError` | `ALREADY_EXISTS` | |
 | `PermissionDeniedError` | `PERMISSION_DENIED` | |
@@ -283,6 +284,7 @@ codes or messages:
 | `ResourceExhaustedError` | `RESOURCE_EXHAUSTED` | `retry_after` is how long the server asked to wait, in seconds. |
 | `UnauthenticatedError` | `UNAUTHENTICATED` | |
 | `ContractSkewError` | `UNIMPLEMENTED` | The server does not implement the call: it is older than the SDK. The message names the procedure, the server's release (`HEADER_SERVER_VERSION`) and the SDK's. |
+| `PaladinError` | any other | The base class, for a code with no kind of its own — `UNAVAILABLE`, `INTERNAL`, … — with the same fields. |
 
 Each carries `procedure`, the server's `reason` (a
 `paladin.common.v1.error_reason_pb2.ErrorReason` value, from the

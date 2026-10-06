@@ -267,6 +267,7 @@ failure with `errors.Is`. Match on these, not on codes or messages:
 
 | Kind | Code | Means |
 | --- | --- | --- |
+| `ErrInvalidArgument` | `InvalidArgument` | The request fails the same way however often it is sent; `Reason` says which rule it broke. |
 | `ErrNotFound` | `NotFound` | |
 | `ErrAlreadyExists` | `AlreadyExists` | |
 | `ErrPermissionDenied` | `PermissionDenied` | |

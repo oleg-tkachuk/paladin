@@ -28,6 +28,7 @@ from paladin import (
     ContractSkewError,
     Endpoints,
     FailedPreconditionError,
+    InvalidArgumentError,
     NotFoundError,
     PaladinError,
     PermissionDeniedError,
@@ -52,6 +53,7 @@ PROCEDURE = "/paladin.iam.v1.HealthService/GetVersion"
 _LOOPBACK = "127.0.0.1"
 _EPHEMERAL_PORT = 0
 _BUCKET = error_reason_pb2.ERROR_REASON_BUCKET_NOT_FOUND
+_INVALID = error_reason_pb2.ERROR_REASON_INVALID_ARGUMENT
 _UNSPECIFIED = error_reason_pb2.ERROR_REASON_UNSPECIFIED
 # Keeps retry tests fast.
 FAST = Retry(attempts=3, base_delay=0.001, max_delay=0.001)
@@ -148,6 +150,12 @@ def _call(url: str, retry: Retry | None = None) -> None:
             NotFoundError,
             _UNSPECIFIED,
         ),
+        (
+            Code.INVALID_ARGUMENT,
+            [info(ERROR_DOMAIN, error_reason_pb2.ErrorReason.Name(_INVALID))],
+            InvalidArgumentError,
+            _INVALID,
+        ),
         (Code.ALREADY_EXISTS, [], AlreadyExistsError, _UNSPECIFIED),
         (Code.PERMISSION_DENIED, [], PermissionDeniedError, _UNSPECIFIED),
         (Code.FAILED_PRECONDITION, [], FailedPreconditionError, _UNSPECIFIED),
@@ -158,6 +166,7 @@ def _call(url: str, retry: Retry | None = None) -> None:
         "not found, with its reason",
         "a reason this SDK predates",
         "another domain's reason",
+        "invalid argument, with its reason",
         "already exists",
         "permission denied",
         "failed precondition",
@@ -186,11 +195,18 @@ def test_resource_exhausted_carries_retry_after(serve) -> None:  # type: ignore[
     assert err.value.retry_after == 7.0
 
 
-def test_a_code_with_no_kind_stays_a_connect_error(serve) -> None:  # type: ignore[no-untyped-def]
-    url = serve(Failing(ConnectError(Code.INTERNAL, "boom")))
-    with pytest.raises(ConnectError) as err:
+# A code with no kind of its own was returned as a bare ConnectError, so an
+# INTERNAL or UNAVAILABLE lost the server's version and Retry-After — the two
+# things worth having when the server fails. It is the base PaladinError now,
+# still a ConnectError, as the Go SDK's *Error is for any code.
+def test_a_code_with_no_kind_is_the_base_error(serve) -> None:  # type: ignore[no-untyped-def]
+    url = serve(Failing(ConnectError(Code.UNAVAILABLE, "boom"), retry_after="3"))
+    with pytest.raises(PaladinError) as err:
         _call(url)
-    assert not isinstance(err.value, PaladinError)
+    assert type(err.value) is PaladinError
+    assert isinstance(err.value, ConnectError) and err.value.code == Code.UNAVAILABLE
+    assert err.value.retry_after == 3.0
+    assert err.value.server_version == SERVER_VERSION
 
 
 def test_contract_skew_names_the_procedure_and_both_versions(serve) -> None:  # type: ignore[no-untyped-def]
