@@ -11,17 +11,23 @@ OpenTelemetry, exported over OTLP. Every Connect RPC gets a server span
 
 | Key | Default | Meaning |
 |---|---|---|
-| `otel.enabled` | `false` | turn on once a collector is reachable |
-| `otel.endpoint` | `otel-collector:4317` | collector `host:port` (gRPC) or URL (HTTP) |
+| `otel.enabled` | `false` | turn on once a collector is reachable; while off, no traces or metrics leave the process |
+| `otel.endpoint` | `""` | collector `host:port` (gRPC) or URL (HTTP) |
 | `otel.protocol` | `http` | `grpc` or `http` |
 | `otel.insecure` | `true` | plaintext to the collector |
 
+Defaults are those of `internal/config/schema.cue`. The chart's `values.yaml`
+sets `otel.endpoint: otel-collector:4318` (the OTLP/HTTP port) and
+`otel.insecure: false`.
+
 ## Metrics
 
-`otel.metrics_exporter` picks how metrics leave the process: `otlp` pushes
-them with the traces; `prometheus` serves them for a scrape on
-`otel.metrics_addr` (`:9095` in the chart), a plain-HTTP listener of its own
-so a scraper does not need to trust the planes' internal CA.
+`otel.metrics_exporter` picks how metrics leave the process: `otlp` (the
+default) pushes them with the traces; `none` sends traces only; `prometheus`
+serves them for a scrape. With `prometheus` the api and admin roles listen on
+`otel.metrics_addr` (default `0.0.0.0:9095`), a plain-HTTP listener of its own
+so a scraper does not need to trust the planes' internal CA; the worker,
+dispatcher and ingest roles serve `/metrics` on their ops listener.
 
 Instruments defined in `internal/metrics`:
 
@@ -42,6 +48,27 @@ Instruments defined in `internal/metrics`:
 | `paladin_worker_run_duration_seconds` | histogram | background job duration |
 | `paladin_worker_last_run_timestamp_seconds` | gauge | last run per job |
 | `paladin_worker_interval_seconds` | gauge | configured interval per job |
+
+Instruments defined beside the code they measure, by their OTel name (the
+Prometheus rendering replaces dots with underscores and adds unit and
+`_total` suffixes, e.g. `paladin.outbox.pending` → `paladin_outbox_pending`):
+
+| Metric | Kind | What it counts | Defined in |
+|---|---|---|---|
+| `paladin_object_transitions` | counter | object state transitions, by source signal | `internal/statemachine/metrics.go` |
+| `paladin.outbox.pending` | gauge | `event_deliveries` rows pending, cluster-wide | `internal/worker/metrics.go` |
+| `paladin.outbox.pending.max_per_tenant` | gauge | the deepest single tenant's pending backlog | `internal/worker/metrics.go` |
+| `paladin.objects.pending_overdue` | gauge | `PENDING` objects past their presign expiry plus the reconciler's grace | `internal/worker/metrics.go` |
+| `paladin.objects.pending_overdue.age` | gauge | how far past that deadline the oldest one is, in seconds | `internal/worker/metrics.go` |
+| `paladin.tenant.ratelimit.decisions` | counter | per-tenant rate-limit decisions | `internal/middleware/tenant_ratelimit.go` |
+| `paladin.tenant.ratelimit.fail_open` | counter | requests admitted because the bucket store failed | `internal/middleware/tenant_ratelimit.go` |
+| `paladin.api_token.verify.duration_ms` | histogram | API-token verify latency | `internal/auth/api_token_metrics.go` |
+| `paladin.api_token.ratelimit.decisions` | counter | per-token rate-limit decisions | `internal/auth/api_token_metrics.go` |
+| `paladin.api_token.ratelimit.weighted_ratio` | histogram | weighted window count over capacity; above 1 is denied | `internal/auth/api_token_metrics.go` |
+| `paladin.api_token.ratelimit.fail_open` | counter | requests admitted because the limiter failed | `internal/auth/api_token_metrics.go` |
+| `paladin.db.replica.in_sync` | gauge | 1 while lag-tolerant reads go to the read replica | `internal/store/postgres/replica.go` |
+| `paladin.db.replica.lag` | gauge | replica replay lag at the last probe, in seconds | `internal/store/postgres/replica.go` |
+| `paladin.db.replica.reads` | counter | lag-tolerant reads, by `served_by` and `reason` | `internal/store/postgres/replica.go` |
 
 RPC latency and counts come from `otelconnect`'s standard `rpc.server.*`
 instruments.

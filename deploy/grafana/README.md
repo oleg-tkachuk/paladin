@@ -18,6 +18,12 @@ dashboard query with `promtool`, and runs the alert unit tests in
 instruments in the code (`paladin.outbox.pending` →
 `paladin_outbox_pending`); all of them exist only with `otel.enabled: true`.
 
+These files are separate from the api chart's own `PrometheusRule`
+(`backend/deploy/chart/templates/prometheusrule.yaml`, off unless
+`metrics.alerts.enabled`), which carries the api role's lifecycle alerts
+(`PaladinApiCrashLooping`, `PaladinApiNotReady`, `PaladinApiOOMKilled`) and
+two traffic alerts (`PaladinApiHighErrorRate`, `PaladinApiHighLatency`).
+
 ## Datasource provisioning + log↔trace correlation
 
 [`datasources.example.yaml`](datasources.example.yaml) is a reference Grafana
@@ -44,7 +50,7 @@ is an operator concern (see ADR-0001).
 Rate / Errors / Duration for every Paladin Connect RPC across all three planes
 (data / iam / admin). The signal comes from the `otelconnect` interceptor's
 `rpc.server.call.duration` histogram, which only emit once OTel is **enabled**
-(`otel.enabled: true`, `otel.endpoint: otel-collector:4317`) — see ADR-0001.
+(`otel.enabled: true`, with `otel.endpoint` naming the collector) — see ADR-0001.
 
 ### Assumptions (adjust if your pipeline differs)
 

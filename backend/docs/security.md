@@ -11,10 +11,10 @@ a kind, a tenant and a role set.
 
 | Credential | Format | Issued by | Notes |
 |---|---|---|---|
-| User access token | JWT, HS256, one per audience (`paladin-data`, `paladin-admin`, `paladin-iam`) | `AuthService.Login`, `RefreshToken`, `ExchangeAudience` | signed with `auth.signing_key` (`internal/auth/issuer`) |
+| User access token | JWT, HS256, one per audience (`paladin-data`, `paladin-admin`, `paladin-iam`) | `AuthService.Login`, `RefreshToken`, `ExchangeAudience`, `SwitchTenant` | signed with `auth.signing_key` (`internal/auth/issuer`); with `auth.jwks_url` set the planes verify against that JWKS instead |
 | Refresh token | JWT, HS256, audience `paladin-iam` | `Login`, rotation in `RefreshToken` | stored by jti in `refresh_tokens`; rotation and reuse detection below |
 | API token | opaque, `TokenPrefix` + random body (`internal/auth/api_token/format.go`) | `APITokenService.Create` | stored as a keyed SHA-256 digest; per-token rate limit in `api_token_rate_buckets` |
-| Capability token | JWT, EdDSA (Ed25519), in `X-Paladin-Capability` or the bearer slot | `CapabilityService.Issue` | budgeted, delegable only by narrowing, revocable; the [`capability`](../../capability/) module |
+| Capability token | JWT, EdDSA (Ed25519), `typ: paladin-cap+jwt`, or its Biscuit form; in `X-Paladin-Capability` or `Authorization: Capability <token>` | `CapabilityService.Issue` | budgeted, delegable only by narrowing, revocable (a Biscuit copy can be revoked alone); a key-bound capability (`cnf.jkt`) also needs a DPoP proof; the [`capability`](../../capability/) module |
 
 For MCP clients, the api role serves an OAuth 2.1 authorization server under
 `/oauth/*` ([ADR-0009](../../docs/adr/0009-oauth-authorization-server.md)) and
@@ -43,16 +43,22 @@ Applied in order on every request:
 1. **Cedar policy.** Platform defaults in [`backend/policies/`](../policies/),
    tenant policies in the database. Authoring guide:
    [cedar-authoring.md](cedar-authoring.md).
-2. **Scope.** CEL expressions narrow an API token or capability to a prefix,
-   an operation set or a source range.
+2. **Scope.** A principal's scopes (`tenant:`, `backend:`, `bucket:`,
+   `collection:`; `internal/auth/scope.go`) narrow what it reaches, and a
+   capability's caveats narrow further: an operation set, resource prefixes or
+   URIs, source CIDRs, request and budget ceilings, tainted-object reads and a
+   required idempotency key (`capability/types.go`).
 3. **Row-level security.** Tenant tables are `FORCE ROW LEVEL SECURITY`. The
    runtime role `paladin_app` is `NOBYPASSRLS`; each transaction sets
    `paladin.tenant_id` (or `paladin.cross_tenant` for an authorised
    cross-tenant read) and a missing setting yields zero rows. Background jobs
    use a separate BYPASSRLS pool. Roles: [db-roles.md](db-roles.md).
 
-`security.reject_tenant_mismatch` (default `true`) answers 403 when the token's
-tenant differs from the tenant header on the request.
+The tenant comes from the credential, never from a request header. The one
+header that names a tenant, `X-Tenant-Id`, is a disambiguation hint for
+`AuthService.Login`, which still requires the password.
+`security.reject_tenant_mismatch` is accepted by the loader but read by
+nothing.
 
 ## 3. Storage
 
@@ -62,8 +68,9 @@ tenant differs from the tenant header on the request.
   under `limits.presign` are the defaults, and a caller asking for more than
   `max_ttl` (at most 168h, the SigV4 ceiling) is refused with
   `InvalidArgument` rather than shortened.
-- **Server-side encryption.** Per backend, `storage.backends.<name>.sse`
-  selects none, `AES256` or `aws:kms`; the S3 adapter sets it on writes.
+- **Server-side encryption.** Per backend, `storage.backends.<name>.sse.type`
+  selects none, `AES256` or `aws:kms` (with `sse.key_id`); the S3 adapter sets
+  it on writes.
 
 ## 4. Input validation
 
@@ -87,20 +94,24 @@ At boot the `K8sSecretResolver` reads the pod's ServiceAccount token and
 resolves every `*_secret` / `*_ref` field in the config to its plaintext
 value in-memory, then clears the ref. The resolvable references are:
 
-- `datastores.postgres.password_secret` (runtime role) and
-  `migrate_password_secret` (DDL role)
-- `bootstrap.admin.password_secret`
+- `datastores.postgres.password_secret` (runtime role),
+  `migrate_password_secret` (DDL role), `reaper_password_secret` (cross-tenant
+  DML role) and `replica.password_secret` (when the replica is enabled)
+- `bootstrap.admin.password_secret` (when the step is enabled)
 - `storage.backends.<name>.auth.{access_key,secret_key,session_token}_secret`
 - `auth.signing_key_secret` — the HMAC key that signs + verifies every JWT
+- `api_token.hmac_key_secret` — the server-side key of the API-token digest
+- `runtime.health_snapshot_token_secret` — the `/system/health.json` token
 - `ingest.webhook.shared_secret_ref` — the storage-event webhook HMAC key
 
 Every referenced Secret name must appear in
-`rbac.secretReader.secretNames` (the chart auto-appends the primary-storage
-credential Secret); a missing name surfaces as a **403 at boot**, not a
+`rbac.secretReader.secretNames` (the chart appends the ones it wires itself:
+the Postgres passwords, the S3 credentials, the bootstrap admin and the
+generated signing key); a missing name surfaces as a **403 at boot**, not a
 silent skip. Out-of-cluster (no SA token) the resolver no-ops and inline
-values are used instead. `signing_key` / `signing_key_secret` (and the
-webhook's inline vs ref) are mutually exclusive — setting both is a startup
-error.
+values are used instead. An inline value and its `*_secret` reference (`signing_key` /
+`signing_key_secret`, `password` / `password_secret`, and the webhook's inline
+vs ref) are mutually exclusive — setting both is a startup error.
 
 ### SealedSecrets (kubeseal) runbook
 
@@ -145,11 +156,11 @@ repository.
 
 ## 6. Bootstrap admin (ArgoCD-style)
 
-A fresh install has no users. The server provisions a platform admin on first
-boot from a Kubernetes Secret, the way ArgoCD's `argocd-initial-admin-secret`
-works. Both switches are on by default: `bootstrap.admin.enabled` (the chart
-creates the Secret) and `config.bootstrap.admin.enabled` (the server runs the
-step). A GitOps install that ships its own Secret sets the first to `false`.
+A fresh install has no users. The chart's bootstrap Job provisions a platform
+admin from a Kubernetes Secret, the way ArgoCD's `argocd-initial-admin-secret`
+works. Both switches are on in the chart by default: `bootstrap.admin.enabled`
+(the chart creates the Secret) and `config.bootstrap.admin.enabled` (the Job
+runs the step). A GitOps install that ships its own Secret sets the first to `false`.
 
 The Helm chart **creates the Secret itself** — operators don't pre-create
 it. The password is resolved by the same `K8sSecretResolver` that handles
@@ -186,8 +197,10 @@ shred -u /tmp/admin.pw
 
 ### What the boot step does
 
-After migrations, before any listener accepts traffic,
-[`internal/bootstrap.EnsureAdmin`](../internal/bootstrap/admin.go):
+The `bootstrap` subcommand runs as a `pre-install,pre-upgrade` hook Job after
+the migrate Job (hook weight `10` against `0`), before the Deployments roll
+out. It calls
+[`internal/bootstrap.EnsureAdmin`](../internal/bootstrap/admin.go), which:
 
 1. Reads `cfg.Bootstrap.Admin.Password`. In-cluster the value is filled
    by `K8sSecretResolver` from the Secret coordinates in
@@ -199,8 +212,8 @@ After migrations, before any listener accepts traffic,
    `users` with role `platform.admin` (cross-tenant via Cedar).
 4. Writes an audit entry under action `iam.bootstrap_admin.create`.
 
-The step is **idempotent**: subsequent boots see the user already exists
-and skip silently (logged at INFO).
+The step is **idempotent**: subsequent runs see the user already exists
+and skip (logged at INFO).
 
 ### Password rotation
 
@@ -214,8 +227,8 @@ helm upgrade paladin ./deploy/chart \
   --reuse-values \
   --set config.bootstrap.admin.force_reset=true
 
-# 3. After the rollout completes, flip the flag back so the server
-#    doesn't re-hash on every restart (logged WARN; harmless but noisy):
+# 3. After the rollout completes, flip the flag back so the bootstrap Job
+#    doesn't re-hash on every upgrade (logged WARN; harmless but noisy):
 helm upgrade paladin ./deploy/chart \
   --reuse-values \
   --set config.bootstrap.admin.force_reset=false
