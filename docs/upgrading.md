@@ -43,6 +43,17 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — `CompleteMultipartUpload` returns the stored object
+
+- **`CompleteMultipartUpload` answers with the whole object** — collection,
+  key, size, checksum, timestamps — where it carried the name alone. A client
+  that read the object back with `GetObject` after completing can stop; the
+  SDKs' `CompleteMultipart` / `complete_multipart` still do it against a
+  server that answers with the name only.
+- New in both SDKs: the control half of a browser-sent multipart upload
+  (`BeginMultipart`, `PresignPart`, `CompleteMultipart`, `AbortMultipart`),
+  `Ensure`, and a per-key `CapabilityCache`; Python gains `capability_source`.
+
 ## Unreleased — SDK idempotency keys, errors and names
 
 - **A context or block idempotency key no longer goes on calls the contract

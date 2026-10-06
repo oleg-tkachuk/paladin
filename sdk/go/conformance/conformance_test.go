@@ -113,6 +113,11 @@ var scenarios = map[string]func(*testing.T, env){
 	"upload_multipart": func(t *testing.T, e env) {
 		body := random(t, multipartSize)
 		obj := put(t, e, key(t), body, multipartThreshold)
+		// The server answered a completed multipart upload with the name
+		// alone; it answers with the object as stored now.
+		if obj.GetSizeBytes() != int64(len(body)) || obj.GetCollection() == "" {
+			t.Errorf("Upload returned %v, want the stored object", obj)
+		}
 		if !bytes.Equal(get(t, e, obj.GetName(), paladin.DownloadOptions{}), body) {
 			t.Error("the content read back differs")
 		}
