@@ -1,8 +1,14 @@
 package app
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
@@ -49,4 +55,56 @@ func BuildMetricsListener(deps *SharedDeps) *HTTPListener {
 		// port is not exposed beyond the pod network.
 		TLS: config.TLS{Enabled: false},
 	}
+}
+
+// MetricsListener is a running scrape endpoint, for the roles that manage
+// their own listeners instead of handing an HTTPListener to RunApp: worker,
+// dispatcher and ingest. A nil *MetricsListener is valid and does nothing, so
+// those roles need no branch for "metrics are pushed, not pulled".
+type MetricsListener struct {
+	srv  *http.Server
+	addr net.Addr
+}
+
+// StartMetricsListener binds BuildMetricsListener's endpoint and serves it in
+// the background. It returns nil, nil when metrics are not exported by pull.
+// ctx bounds the bind only; the listener runs until Shutdown.
+//
+// The bind happens here rather than in the goroutine, so a port already in
+// use fails the role's start instead of leaving a pod that is Ready and
+// cannot be scraped.
+func StartMetricsListener(ctx context.Context, deps *SharedDeps, l *zap.Logger) (*MetricsListener, error) {
+	m := BuildMetricsListener(deps)
+	if m == nil {
+		return nil, nil
+	}
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", m.Server.Addr)
+	if err != nil {
+		return nil, fmt.Errorf("metrics listener %s: %w", m.Server.Addr, err)
+	}
+	ml := &MetricsListener{srv: m.Server, addr: ln.Addr()}
+	l.Info("metrics listener", zap.String("addr", ml.addr.String()))
+	go func() {
+		if err := ml.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			l.Error("metrics listener exited", zap.Error(err))
+		}
+	}()
+	return ml, nil
+}
+
+// Addr is the address the listener is bound to.
+func (m *MetricsListener) Addr() net.Addr {
+	if m == nil {
+		return nil
+	}
+	return m.addr
+}
+
+// Shutdown stops the listener, waiting for in-flight scrapes up to ctx.
+func (m *MetricsListener) Shutdown(ctx context.Context) error {
+	if m == nil {
+		return nil
+	}
+	return m.srv.Shutdown(ctx)
 }
