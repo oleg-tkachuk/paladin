@@ -11,7 +11,9 @@ change can reach — `verify-backend`, `verify-capability`, `verify-sdk`,
 with actionlint and zizmor. A change the `sdk` group reaches also installs the
 Python SDK's wheel beside each protobuf major and Python it supports, one job
 per cell of [`sdk/python/compat.json`](../sdk/python/compat.json)
-(`verify-py-sdk-compat` locally). [`scripts/ci-groups.sh`](../scripts/ci-groups.sh)
+(`verify-py-sdk-compat` locally), and runs the client lifecycle stress in
+`sdk/python/tests/test_lifecycle.py` at a count high enough to catch an
+intermittent abort at exit. [`scripts/ci-groups.sh`](../scripts/ci-groups.sh)
 decides which groups a set of paths reaches; a console-only change does not
 run the backend's tests. Run by hand, it runs every group. A final `All checks
 passed` job is the one check branch protection requires, so a group that was
@@ -36,7 +38,7 @@ cut by hand. See [releasing.md](releasing.md).
 flowchart LR
     chg["<b>Changed paths</b><br/>ci-groups.sh"]
     v["<b>Verify</b><br/>one job per group"]
-    py["<b>Python SDK</b><br/>wheel × Python × protobuf"]
+    py["<b>Python SDK</b><br/>wheel × Python × protobuf<br/>lifecycle stress"]
     img["<b>End-to-end images</b>"]
     e2e["<b>End-to-end</b><br/>shards 1/2 · 2/2"]
     deep["<b>Deep</b><br/>integration · stack<br/>(stack runs both SDKs' scenarios)"]
@@ -81,7 +83,9 @@ change reaches the backend or an SDK. The `All checks passed` check that `main` 
 Every check `ci.yaml` runs has a local task. The verify groups, `verify-e2e` and
 `verify-deep` are those tasks; its Workflow syntax and Workflow audit jobs
 (actionlint, zizmor) are `task -t Taskfile.dev.yaml verify:workflows`, at the
-versions `ci.yaml` pins. Three things have no local form, by their nature:
+versions `ci.yaml` pins. The Python SDK lifecycle job is `py-sdk:test` with
+`PALADIN_LIFECYCLE_RUNS` raised; the test suite runs a few of the same cycles
+every time. Three things have no local form, by their nature:
 CodeQL ([`codeql.yaml`](../.github/workflows/codeql.yaml)), which is GitHub's
 own analysis and reports to the repository's code-scanning alerts; the
 publishing workflow, [`release.yaml`](../.github/workflows/release.yaml), which
