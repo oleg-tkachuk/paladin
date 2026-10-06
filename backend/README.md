@@ -33,10 +33,13 @@ Every role serves `/livez`, `/readyz` and `/startupz`, plus a
 backend/
 ├── cmd/server/       one file per subcommand; fx wiring lives in fxboot.go
 ├── internal/
-│   ├── api/          Connect handlers, one package per service
+│   ├── api/          Connect handlers: admin/v1, data/v1, iam/v1, one package per service; connectshim/ adapts them
 │   ├── app/          fx modules — the composition root for each role
 │   ├── auth/         JWT, API tokens, capability principals, context plumbing
-│   ├── policy/       Cedar engine + CEL scope evaluation
+│   ├── middleware/   Connect interceptors: idempotency, quota, audit, rate limits
+│   ├── policy/       Cedar engine (policy/cedar)
+│   ├── filter/       CEL list filters and their SQL pushdown (filter/cel)
+│   ├── platformstats/ the cross-tenant census behind SystemService's stats RPCs
 │   ├── capability/   the Paladin-side adapter over the standalone capability module
 │   ├── store/        sqlc-generated queries + hand-written SQL mapping
 │   ├── storage/      S3 backend routing, presign, multipart, migration
@@ -61,10 +64,12 @@ API surfaces:
   backend, MCP inspection, CEL, operation, system.
 - `paladin/iam/v1` — auth, users, user settings, health.
 
-Regenerate Go stubs with `task backend:generate`. The frontend regenerates its
-Connect-ES stubs from the same directory via `cd frontend && pnpm run
-generate` — proto changes are cross-cutting, which is why both halves
-live in one repository.
+The Go stubs live in the Go SDK (`sdk/go/gen`) and are regenerated with
+`task -t Taskfile.dev.yaml go-sdk-gen:proto` (or `gen` for every stub at
+once); `task backend:generate` covers only mocks and sqlc. The frontend
+regenerates its Connect-ES stubs from the same directory via `cd frontend &&
+pnpm run generate` — proto changes are cross-cutting, which is why both
+halves live in one repository.
 
 ## Database
 
@@ -116,8 +121,8 @@ modules through `replace` directives, which `go install …@version` refuses.
 `configs/config.yaml` is the base; `configs/local.yaml` and
 `configs/compose.yaml` are overlays. Keys are validated three ways: a CUE
 schema, a strict unknown-key check that fails on typos rather than
-ignoring them, and `Config.Validate()` for cross-field invariants
-([docs/configuration.md](docs/configuration.md)).
+ignoring them, and `Config.Validate()` for cross-field invariants. Full
+reference: [`docs/configuration.md`](../docs/configuration.md).
 
 Environment overrides use the `PALADIN_` prefix. The name is resolved against
 the schema, so keys with underscores of their own work too:
@@ -127,8 +132,6 @@ the schema, so keys with underscores of their own work too:
 
 Committed credentials are development defaults and are rejected outside
 an allow-listed disposable `app.env`; see `internal/config/weak_secrets.go`.
-
-Full reference: [`docs/configuration.md`](../docs/configuration.md).
 
 ## The capability module
 
@@ -148,13 +151,13 @@ If you are adding code that needs Postgres or S3, it belongs in
 | --- | --- |
 | [architecture.md](docs/architecture.md) | planes, interceptor chain, source index |
 | [diagrams.md](docs/diagrams.md) | context, upload sequence, schema, deployment |
-| [API.md](docs/API.md) | RPC surface and HTTP mappings |
+| [API.md](docs/API.md) | RPC surface, required headers, errors, list filters |
 | [security.md](docs/security.md) | credentials, authorization order, secrets, bootstrap admin |
 | [database.md](docs/database.md) · [db-roles.md](docs/db-roles.md) | schema, RLS, roles |
 | [cedar-authoring.md](docs/cedar-authoring.md) | writing policies |
 | [canonical-resource-names.md](docs/canonical-resource-names.md) | the three resource-name shapes |
 | [backend-registry.md](docs/backend-registry.md) | storage backends at runtime |
-| [configuration.md](docs/configuration.md) | the config loader |
+| [configuration.md](../docs/configuration.md) | the config loader, every block, secrets |
 | [observability.md](docs/observability.md) | traces, metrics, logs, health |
 | [ops-housekeeping.md](docs/ops-housekeeping.md) | background jobs and their knobs |
 | [operations.md](docs/operations.md) | running, testing and building locally |
