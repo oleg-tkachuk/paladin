@@ -485,3 +485,19 @@ func TestDownloadIsBoundToTheETag(t *testing.T) {
 		t.Fatal("no DownloadObject call recorded")
 	}
 }
+
+// Every part URL is signed for the size the server recommended, so a sender
+// cannot pick a split of its own: an answer naming none is refused, and the
+// upload it opened is aborted rather than left for the sweep.
+func TestBeginMultipartRefusesAnAnswerWithNoSplit(t *testing.T) {
+	data, dp, _ := newTransfer(t, 0) // the fake recommends no part size
+	_, err := paladin.BeginMultipart(context.Background(), data, paladin.MultipartInput{
+		Parent: testParent, Key: "k", ContentType: "application/octet-stream", Size: 10,
+	})
+	if !errors.Is(err, paladin.ErrNoPartSplit) {
+		t.Fatalf("err = %v, want ErrNoPartSplit", err)
+	}
+	if dp.aborted != 1 {
+		t.Errorf("aborted %d uploads, want the one opened", dp.aborted)
+	}
+}

@@ -209,14 +209,12 @@ func uploadMultipart(ctx context.Context, data *DataPlane, in UploadInput, opts 
 	if err != nil {
 		return nil, err
 	}
-	name, uploadID := session.ObjectName, session.UploadID
 	resumable := opts.OnSession != nil || opts.Resume != nil
 	defer func() {
 		if err != nil && !resumable {
 			// Best effort, and past a cancelled ctx: a session left open is
 			// swept by the server, and must not mask the error that ended it.
-			_, _ = data.MultipartUpload.AbortMultipartUpload(context.WithoutCancel(ctx),
-				connect.NewRequest(&datav1.AbortMultipartUploadRequest{ObjectName: name, UploadId: uploadID}))
+			_ = AbortMultipart(context.WithoutCancel(ctx), data, session)
 		}
 	}()
 
@@ -230,13 +228,7 @@ func uploadMultipart(ctx context.Context, data *DataPlane, in UploadInput, opts 
 	for i, p := range sent {
 		completed[i] = &datav1.CompletedPart{PartNumber: int32(i + 1), Etag: p.etag, ChecksumValue: p.checksum} //nolint:gosec // parts ≤ 10000 by the contract
 	}
-	done, err := data.MultipartUpload.CompleteMultipartUpload(ctx, connect.NewRequest(&datav1.CompleteMultipartUploadRequest{
-		ObjectName: name, UploadId: uploadID, Parts: completed,
-	}))
-	if err != nil {
-		return nil, err
-	}
-	return done.Msg, nil
+	return CompleteMultipart(ctx, data, session, completed)
 }
 
 // openSession opens the multipart upload, or takes up the one opts.Resume
@@ -406,17 +398,7 @@ func sendPart(ctx context.Context, data *DataPlane, session UploadSession, store
 		return sentPart{etag: stored.GetEtag(), checksum: sum}, nil
 	}
 	presign := func(ctx context.Context) (*commonv1.PresignedUrl, error) {
-		signed, err := data.MultipartUpload.PresignPart(ownKeys(ctx), connect.NewRequest(&datav1.PresignPartRequest{
-			ObjectName: session.ObjectName, UploadId: session.UploadID, PartNumber: int32(p.index + 1), //nolint:gosec // parts ≤ 10000 by the contract
-			ChecksumValue: sum,
-		}))
-		if err != nil {
-			return nil, err
-		}
-		if signed.Msg.GetUploadUrl().GetUrl() == "" {
-			return nil, ErrNoUploadURL
-		}
-		return signed.Msg.GetUploadUrl(), nil
+		return PresignPart(ctx, data, session, int32(p.index+1), sum) //nolint:gosec // parts ≤ 10000 by the contract
 	}
 	transfer := data.Transfer()
 	var etag string

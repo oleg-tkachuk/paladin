@@ -96,6 +96,9 @@ def upload_small(e: Env) -> None:
 def upload_multipart(e: Env) -> None:
     body = secrets.token_bytes(MULTIPART_SIZE)
     obj = _put(e, _key("multipart"), body, MULTIPART_THRESHOLD)
+    # The server answered a completed multipart upload with the name alone;
+    # it answers with the object as stored now.
+    assert obj.size_bytes == len(body) and obj.collection  # type: ignore[attr-defined]
     assert download(e.data, obj.name) == body  # type: ignore[arg-type]
 
 
