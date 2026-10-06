@@ -104,16 +104,17 @@ func TestAuthorizePolicyErrorIsInternal(t *testing.T) {
 	}
 }
 
-// The inspect surface is read-only, so it must never request a mutating action.
-func TestAuthorizeRequestsReadAction(t *testing.T) {
+// The inspect surface is read-only, so it asks for its own read-only action —
+// one the schema declares, not a bare word no policy could ever name.
+func TestAuthorizeRequestsInspectMCP(t *testing.T) {
 	az := allowAll()
 	h := NewHandler(config.MCP{}, az)
 
 	if _, err := h.Inspect(ctxAs("admin"), connect.NewRequest(&adminv1.MCPInspectRequest{})); err != nil {
 		t.Fatalf("Inspect: %v", err)
 	}
-	if az.gotAction != "read" {
-		t.Errorf("action = %q, want read", az.gotAction)
+	if az.gotAction != cedar.ActionInspectMCP {
+		t.Errorf("action = %q, want %q", az.gotAction, cedar.ActionInspectMCP)
 	}
 	if az.gotPrincipal == nil || az.gotPrincipal.Subject != "tester" || az.gotPrincipal.TenantSlug != "acme" {
 		t.Errorf("principal not forwarded: %+v", az.gotPrincipal)

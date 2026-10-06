@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -29,7 +30,7 @@ func (h *Handler) WithBiscuitCopies(copier BiscuitCopier, copies capability.Bisc
 // tenant cannot revoke a copy of another tenant's capability, and learns
 // nothing about it either.
 func (h *Handler) RevokeBiscuit(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceRevokeBiscuitRequest]) (*connect.Response[adminv1.CapabilityServiceRevokeBiscuitResponse], error) {
-	caller, err := h.authorize(ctx, "revoke")
+	caller, err := h.authorize(ctx, cedar.ActionRevokeCapability)
 	if err != nil {
 		return nil, err
 	}
