@@ -43,6 +43,14 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — `storage.backends.<name>.auth.mode` has no default
+
+- **A storage backend that names no `auth.mode` no longer loads.** The schema
+  used to fill `default_chain`, so a backend configured without credentials
+  quietly used whatever the AWS chain found — environment, the node's role,
+  IRSA. Name the mode on every backend; the chart's `primary` already does
+  (`static_keys`).
+
 ## Unreleased — `security.reject_tenant_mismatch` is removed
 
 - **A config that sets `security.reject_tenant_mismatch` no longer loads.**
