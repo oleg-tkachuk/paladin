@@ -172,3 +172,50 @@ func TestDefaultPolicyValidatesAgainstTheSchema(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// ─── Own user settings through the real Cedar engine ─────────────────────────
+//
+// The default policy admitted a user to its own settings with
+// `principal == resource`, which never holds: the principal's UID is its
+// subject and the resource's is tenant/user-id. So a plain member reading its
+// own settings by id was denied. The grant is now a built-in keyed on
+// subject and tenant, which also reaches tenants whose stored policy predates
+// the fix.
+func TestDefaultPolicy_OwnUserSettings(t *testing.T) {
+	tid := uuid.MustParse("0a8c0000-0000-7000-8000-000000000f12")
+	foreign := uuid.MustParse("0a8c0000-0000-7000-8000-00000000beef")
+	engine := cedar.NewEngine(staticPolicyStore{text: renderDefaultPolicy(tid, "acme"), slug: "acme"}, time.Minute)
+
+	authz := func(action cedar.Action, roles []string, targetTenant uuid.UUID, targetSubject string) cedar.Decision {
+		t.Helper()
+		dec, err := engine.IsAuthorized(context.Background(),
+			&cedar.Principal{Subject: "alice", TenantID: tid, TenantSlug: "acme", Kind: "user", Roles: roles},
+			action,
+			&cedar.Resource{TenantID: targetTenant, TargetUserID: uuid.New(), TargetSubject: targetSubject},
+			cedar.RequestContext{Now: time.Now()},
+		)
+		if err != nil {
+			t.Fatalf("IsAuthorized: %v", err)
+		}
+		return dec
+	}
+	member := []string{"tenant.user"}
+
+	for _, action := range []cedar.Action{cedar.ActionReadUserSettings, cedar.ActionManageUserSettings} {
+		t.Run(action.String(), func(t *testing.T) {
+			if got := authz(action, member, tid, "alice"); got != cedar.DecisionAllow {
+				t.Errorf("member on its OWN settings = %v, want Allow", got)
+			}
+			if got := authz(action, member, tid, "bob"); got != cedar.DecisionDeny {
+				t.Errorf("member on a teammate's settings = %v, want Deny", got)
+			}
+			// The same login name in another tenant is another person.
+			if got := authz(action, member, foreign, "alice"); got != cedar.DecisionDeny {
+				t.Errorf("member on a same-named user in ANOTHER tenant = %v, want Deny", got)
+			}
+			if got := authz(action, []string{"tenant.admin"}, tid, "bob"); got != cedar.DecisionAllow {
+				t.Errorf("tenant.admin on a teammate's settings = %v, want Allow", got)
+			}
+		})
+	}
+}
