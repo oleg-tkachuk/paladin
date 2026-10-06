@@ -39,7 +39,8 @@ single click pivots between them:
   RED histogram bucket to the sampled trace behind an outlier latency.
 
 It's an *example* — Paladin is backend-agnostic: traces go out over OTLP, and
-metrics over OTLP or a Prometheus scrape (`otel.metrics_exporter`).
+metrics over OTLP or a Prometheus scrape (`metrics.mode` in the chart,
+`otel.metrics_exporter` in the application config).
 Tempo / Loki / Prometheus are the OSS reference set; swap the types/uids for
 Honeycomb / Datadog / etc. The collector that bridges OTLP → these backends
 is an operator concern (see ADR-0001).
@@ -54,8 +55,8 @@ Rate / Errors / Duration for every Paladin Connect RPC across all three planes
 ### Assumptions (adjust if your pipeline differs)
 
 - **Datasource:** Prometheus, holding either the collector's export of the
-  OTLP metrics or a direct scrape of each role's `otel.metrics_addr`
-  (`otel.metrics_exporter: prometheus`).
+  OTLP metrics (`metrics.mode: push`) or a direct scrape of every role's
+  `/metrics` on `metrics.port` (`metrics.mode: scrape`).
 - **Metric name:** `rpc_server_call_duration_seconds_{bucket,sum,count}`, the
   Prometheus rendering of OTel `rpc.server.call.duration` (unit `s`,
   semconv 1.43, emitted by otelconnect v0.10.0).

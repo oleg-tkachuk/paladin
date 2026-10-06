@@ -63,3 +63,6 @@ Endpoint / enable flow from `config.otel` (`endpoint`, `protocol`,
   an operator/backend concern; no extra Paladin code is required.
 - Collector choice (Tempo / Honeycomb / Datadog) is an operator concern
   — Paladin only speaks OTLP.
+- **Delivery and alerting (2026-10-06):** how metrics leave the pods, how a
+  scraper finds them and where the alerting rules live are settled in
+  [ADR-0023](0023-one-metrics-contract.md).
