@@ -17,7 +17,7 @@ SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
        versioning_enabled, versioning_keep_deletes_forever,
        replication_enabled, replication_destination, replication_filter,
-       provision_state,
+       provision_state, public_read, public_base_url,
        resource_version, created_at, updated_at
 FROM buckets
 WHERE replication_enabled = TRUE
@@ -38,7 +38,7 @@ SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
        versioning_enabled, versioning_keep_deletes_forever,
        replication_enabled, replication_destination, replication_filter,
-       provision_state,
+       provision_state, public_read, public_base_url,
        resource_version, created_at, updated_at
 FROM buckets
 WHERE jsonb_array_length(lifecycle_rules) > 0

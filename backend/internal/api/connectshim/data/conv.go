@@ -208,6 +208,7 @@ func objectToProto(o *objecth.Object) *pb.Object {
 		Metadata:         o.Metadata,
 		Tags:             o.Tags,
 		ExternalRef:      o.ExternalRef,
+		PublicUrl:        o.PublicURL,
 		ResourceVersion:  convx.ResourceVersion(o.ResourceVersion),
 		CreatedAt:        convx.TsProto(o.CreatedAt),
 		UpdatedAt:        convx.TsProto(o.UpdatedAt),

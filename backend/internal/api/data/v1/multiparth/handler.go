@@ -165,6 +165,9 @@ type InitiateArgs struct {
 	// single-shot sibling, and as a column — just not on the path between
 	// them.
 	ExternalRef string
+	// PublicURL is the object's address in a public collection (ADR-0027);
+	// "" elsewhere. Set by Initiate, never by the caller.
+	PublicURL string
 }
 
 type CompleteArgs struct {

@@ -44,6 +44,9 @@ func (s *BucketServer) CreateBucket(ctx context.Context, req *connect.Request[pb
 		Labels:      src.GetLabels(),
 		CedarPolicy: src.GetCedarPolicy(),
 		Constraints: constraintsFromProto(src.GetConstraints()),
+		// ADR-0027: fixed here, at creation, and never again.
+		PublicRead:    src.GetPublicRead(),
+		PublicBaseURL: src.GetPublicBaseUrl(),
 	}
 	if t := src.GetOwnerTenantId(); t != "" {
 		if id, perr := uuid.Parse(t); perr == nil {

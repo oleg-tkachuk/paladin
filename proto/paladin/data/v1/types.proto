@@ -47,6 +47,10 @@ message Object {
   // capability without allow_tainted_read cannot read a tainted object.
   // Populated by GetObject and LookupObject; set with SetObjectTaint.
   repeated TaintSignal taint = 23 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // For an object in a PUBLIC_READ collection, the URL anyone can read it
+  // at, unsigned (ADR-0027) — stable for the object's life, so store it
+  // rather than build it. Empty for every other object.
+  string public_url = 24 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 // TaintSignal is a reason an object's content must not reach an agent that

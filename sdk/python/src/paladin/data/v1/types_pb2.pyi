@@ -37,7 +37,7 @@ OBJECT_STATE_FAILED: ObjectState
 OBJECT_STATE_DELETED: ObjectState
 
 class Object(_message.Message):
-    __slots__ = ("name", "object_id", "tenant_id", "collection", "key", "state", "content_type", "size_bytes", "etag", "checksum", "sequencer", "metadata", "tags", "external_ref", "resource_version", "created_at", "updated_at", "committed_at", "terminated_at", "presign_expires_at", "lock", "placement", "taint")
+    __slots__ = ("name", "object_id", "tenant_id", "collection", "key", "state", "content_type", "size_bytes", "etag", "checksum", "sequencer", "metadata", "tags", "external_ref", "resource_version", "created_at", "updated_at", "committed_at", "terminated_at", "presign_expires_at", "lock", "placement", "taint", "public_url")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -75,6 +75,7 @@ class Object(_message.Message):
     LOCK_FIELD_NUMBER: _ClassVar[int]
     PLACEMENT_FIELD_NUMBER: _ClassVar[int]
     TAINT_FIELD_NUMBER: _ClassVar[int]
+    PUBLIC_URL_FIELD_NUMBER: _ClassVar[int]
     name: str
     object_id: str
     tenant_id: str
@@ -98,7 +99,8 @@ class Object(_message.Message):
     lock: ObjectLockState
     placement: PhysicalPlacement
     taint: _containers.RepeatedScalarFieldContainer[TaintSignal]
-    def __init__(self, name: _Optional[str] = ..., object_id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., collection: _Optional[str] = ..., key: _Optional[str] = ..., state: _Optional[_Union[ObjectState, str]] = ..., content_type: _Optional[str] = ..., size_bytes: _Optional[int] = ..., etag: _Optional[str] = ..., checksum: _Optional[_Union[ChecksumDigest, _Mapping]] = ..., sequencer: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ..., tags: _Optional[_Mapping[str, str]] = ..., external_ref: _Optional[str] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., committed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., terminated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., presign_expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., lock: _Optional[_Union[ObjectLockState, _Mapping]] = ..., placement: _Optional[_Union[PhysicalPlacement, _Mapping]] = ..., taint: _Optional[_Iterable[_Union[TaintSignal, str]]] = ...) -> None: ...
+    public_url: str
+    def __init__(self, name: _Optional[str] = ..., object_id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., collection: _Optional[str] = ..., key: _Optional[str] = ..., state: _Optional[_Union[ObjectState, str]] = ..., content_type: _Optional[str] = ..., size_bytes: _Optional[int] = ..., etag: _Optional[str] = ..., checksum: _Optional[_Union[ChecksumDigest, _Mapping]] = ..., sequencer: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ..., tags: _Optional[_Mapping[str, str]] = ..., external_ref: _Optional[str] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., committed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., terminated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., presign_expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., lock: _Optional[_Union[ObjectLockState, _Mapping]] = ..., placement: _Optional[_Union[PhysicalPlacement, _Mapping]] = ..., taint: _Optional[_Iterable[_Union[TaintSignal, str]]] = ..., public_url: _Optional[str] = ...) -> None: ...
 
 class ChecksumDigest(_message.Message):
     __slots__ = ("algorithm", "value", "part_size_bytes")
