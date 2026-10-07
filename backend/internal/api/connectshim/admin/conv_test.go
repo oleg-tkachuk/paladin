@@ -173,10 +173,10 @@ func TestBackendToProtoBuildsResourceName(t *testing.T) {
 // be read back from a client-supplied message.
 func TestBackendFromProtoIgnoresServerOwnedFlags(t *testing.T) {
 	got := backendFromProto(&pb.StorageBackend{
-		BackendId: "primary", Enabled: true, ReadOnly: true, Maintenance: true,
+		BackendId: "primary", Enabled: true, ReadOnly: true, Maintenance: true, Declared: true,
 		HealthStatus: "healthy", ResourceVersion: "9",
 	})
-	if got.Enabled || got.ReadOnly || got.Maintenance || got.HealthStatus != "" {
+	if got.Enabled || got.ReadOnly || got.Maintenance || got.Declared || got.HealthStatus != "" {
 		t.Errorf("server-owned flags must not be read back: %+v", got)
 	}
 }
@@ -478,5 +478,12 @@ func TestLifecycleOmitsAbsentArms(t *testing.T) {
 	}))
 	if got[0].Transition != nil {
 		t.Errorf("transition = %+v, want nil", got[0].Transition)
+	}
+}
+
+// Whether a backend can hold a bucket reaches the client.
+func TestBackendToProtoCarriesDeclared(t *testing.T) {
+	if !backendToProto(&admindomain.StorageBackend{BackendID: "primary", Declared: true}).GetDeclared() {
+		t.Error("Declared dropped")
 	}
 }
