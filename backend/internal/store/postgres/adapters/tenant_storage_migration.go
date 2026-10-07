@@ -50,6 +50,7 @@ func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenanth.Sta
 		"", []byte("{}"),      // cedar_policy, constraints
 		"pending",
 		false, "", // public_read, public_base_url: a migration target is private
+		true, // created_on_backend: the reconciler creates this bucket, named for the tenant
 	); err != nil && !isUniqueViolation(err) {
 		return tenanth.StorageMigration{}, fmt.Errorf("provision dedicated bucket: %w", err)
 	}

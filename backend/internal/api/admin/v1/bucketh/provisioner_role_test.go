@@ -13,7 +13,7 @@ import (
 // to run without a human (ADR-0011). Creating a bucket only adds a destination.
 func TestCreateBucket_AllowsTenantProvisioner(t *testing.T) {
 	b := validBucket()
-	h := NewHandler(&fakeRepo{backendEnabled: true, getTxBucket: b}, okProvisioner{}, allowAuthorizer{})
+	h := NewHandler(&fakeRepo{backendEnabled: true, getTxBucket: b}, okProvisioner{onBackend: true}, allowAuthorizer{})
 
 	if _, err := h.CreateBucket(ctxAs(apiutil.RoleTenantProvisioner),
 		CreateBucketInput{Bucket: b}); err != nil {

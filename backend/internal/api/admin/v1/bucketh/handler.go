@@ -51,6 +51,8 @@ type Repository interface {
 type Provisioner interface {
 	CreateBucket(ctx context.Context, backendID, bucketName, region string) error
 	DeleteBucket(ctx context.Context, backendID, bucketName string) error
+	// BucketExists reports whether the backend holds the bucket, whoever owns it.
+	BucketExists(ctx context.Context, backendID, bucketName string) (bool, error)
 }
 
 type Handler struct {
@@ -69,6 +71,8 @@ type Handler struct {
 	// a bucket on any other backend could be neither provisioned nor reached.
 	// nil (unset) refuses nothing; wiring always sets it.
 	configured map[string]bool
+	// reserved are the buckets Paladin uses itself; see SetReservedBuckets.
+	reserved ReservedBuckets
 }
 
 func NewHandler(r Repository, p Provisioner, policyEngine cedar.Authorizer) *Handler {
@@ -210,12 +214,18 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 				"build their storage clients from the configuration only, so a bucket on it "+
 				"could not be provisioned or reached — declare the backend there first", in.Bucket.BackendID))
 	}
+	if err := h.checkOwnership(ctx, in.Bucket.BackendID, in.Bucket.BucketName, in.ProvisionOnBackend); err != nil {
+		return nil, err
+	}
 	// Outbox model: the DB row is the source of truth. When the caller
 	// asked us to create the physical bucket too, we mark the row
 	// 'pending' and let the reconciler worker drive the backend
 	// CreateBucket — that way a DB-write failure can never leave an
 	// orphan in S3, and a backend-side failure is observable on the row
 	// instead of being lost to a 5xx that never made it to the client.
+	// Paladin creates a bucket it provisions — checkOwnership saw the backend
+	// without it — so that bucket is Paladin's to delete there.
+	in.Bucket.CreatedOnBackend = in.ProvisionOnBackend
 	if in.ProvisionOnBackend {
 		if h.provisioner == nil {
 			return nil, connect.NewError(connect.CodeUnavailable,
@@ -308,6 +318,12 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 		return nil, false, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("backend %q is disabled", in.Bucket.BackendID))
 	}
+	// A tenant creates its shared bucket; it never takes one that exists —
+	// that would hand it a bucket it does not own — nor Paladin's own.
+	if err := h.checkOwnership(ctx, in.Bucket.BackendID, in.Bucket.BucketName, in.ProvisionOnBackend); err != nil {
+		return nil, false, err
+	}
+	in.Bucket.CreatedOnBackend = in.ProvisionOnBackend
 	if in.ProvisionOnBackend {
 		if h.provisioner == nil {
 			return nil, false, connect.NewError(connect.CodeUnavailable,
@@ -680,6 +696,17 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 	// terminal logic there keeps the handler simple.
 	if in.DeleteOnBackend && h.provisioner == nil {
 		return connect.NewError(connect.CodeUnavailable, errors.New("backend provisioning not wired"))
+	}
+	if in.DeleteOnBackend {
+		current, err := h.repo.Get(ctx, in.BackendID, in.BucketName)
+		if err != nil {
+			return apiutil.MapError(err)
+		}
+		if !current.CreatedOnBackend {
+			return apiutil.MapError(fmt.Errorf(
+				"%w: %q holds data Paladin did not write; delete the row only, and the bucket out of band",
+				ErrBucketNotCreatedByPaladin, in.BucketName))
+		}
 	}
 	if !in.DeleteOnBackend {
 		// Operator says S3 cleanup is their problem — physically delete

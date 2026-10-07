@@ -205,10 +205,15 @@ func (f *fakeRepo) MarkDeletingTx(context.Context, pgx.Tx, string, string, int64
 	return f.markDeletingTxErr
 }
 
-type okProvisioner struct{}
+// okProvisioner succeeds at everything; onBackend is whether the backend
+// already holds the bucket a test names.
+type okProvisioner struct{ onBackend bool }
 
 func (okProvisioner) CreateBucket(context.Context, string, string, string) error { return nil }
 func (okProvisioner) DeleteBucket(context.Context, string, string) error         { return nil }
+func (p okProvisioner) BucketExists(context.Context, string, string) (bool, error) {
+	return p.onBackend, nil
+}
 
 func ctxAs(roles ...string) context.Context {
 	return auth.WithPrincipal(context.Background(), &auth.Principal{
@@ -265,7 +270,7 @@ func TestCreateBucket_BackendDisabled(t *testing.T) {
 // the bucket is created, with the reason.
 func TestCreateBucket_BackendNotConfigured(t *testing.T) {
 	repo := &fakeRepo{backendEnabled: true, getTxBucket: validBucket()}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 
 	h.SetConfiguredBackends([]string{"elsewhere"})
 	_, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: validBucket()})
@@ -295,7 +300,7 @@ func TestCreateBucket_ProvisionWithoutProvisioner(t *testing.T) {
 func TestCreateBucket_NoProvisionMarksReady(t *testing.T) {
 	b := validBucket()
 	repo := &fakeRepo{backendEnabled: true, getTxBucket: b}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	got, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin),
 		CreateBucketInput{Bucket: b, ProvisionOnBackend: false})
 	if err != nil {
@@ -340,7 +345,7 @@ func TestCreateBucket_ConflictMapped(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &fakeRepo{backendEnabled: true, createTxErr: tc.err}
-			h := NewHandler(repo, nil, allowAuthorizer{})
+			h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 			_, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: validBucket()})
 			if code(err) != tc.want {
 				t.Fatalf("code = %v, want %v", code(err), tc.want)
@@ -360,7 +365,7 @@ func TestEnsureBucket_LostRaceReturnsTheExistingBucket(t *testing.T) {
 		createTxErr:      fmt.Errorf("wrapped: %w", admindomain.ErrAlreadyExists),
 		getBucket:        admindomain.Bucket{BackendID: "primary", BucketName: "acme"},
 	}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	got, created, err := h.EnsureBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: validBucket()})
 	if err != nil {
 		t.Fatalf("a lost race must be success, got %v", err)
@@ -386,7 +391,7 @@ func TestCreateBucket_CedarDenied(t *testing.T) {
 
 func TestGetBucket_NotFound(t *testing.T) {
 	repo := &fakeRepo{getErr: admindomain.ErrNotFound}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	_, err := h.GetBucket(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme")
 	if code(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", code(err))
@@ -400,7 +405,7 @@ func TestGetBucket_TenantAdminRedacted(t *testing.T) {
 		Replication: admindomain.BucketReplication{DestinationBucket: "dr-bucket"},
 	}
 	repo := &fakeRepo{getBucket: full}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	got, err := h.GetBucket(ctxAs(apiutil.RoleTenantAdmin), "primary", "acme")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -420,7 +425,7 @@ func TestGetBucket_BucketAdminSeesFull(t *testing.T) {
 		Replication: admindomain.BucketReplication{DestinationBucket: "dr-bucket"},
 	}
 	repo := &fakeRepo{getBucket: full}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	got, err := h.GetBucket(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -443,7 +448,7 @@ func TestDeleteBucket_DeleteOnBackendWithoutProvisioner(t *testing.T) {
 
 func TestDeleteBucket_VersionMismatchAborts(t *testing.T) {
 	repo := &fakeRepo{deleteTxErr: admindomain.ErrVersionMismatch}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	// DeleteOnBackend=false → physical row delete path (DeleteTx) under OCC.
 	err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
 		DeleteBucketInput{BackendID: "primary", BucketName: "acme", ExpectedVersion: 1})
@@ -497,7 +502,7 @@ func TestDeleteBucket_RefusesForANonCollectionHolder(t *testing.T) {
 		{Relation: "collections", Count: 0},
 		{Relation: "tenant_default_bindings", Count: 1},
 	}}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
 		DeleteBucketInput{BackendID: "primary", BucketName: "acme"})
 	if code(err) != connect.CodeFailedPrecondition {
@@ -521,7 +526,7 @@ func TestDeleteBucket_RefusesForANonCollectionHolder(t *testing.T) {
 // Measured against a live paladin_app session before this guard was written.
 func TestDeleteBucket_CountsReferencesCrossTenant(t *testing.T) {
 	repo := &fakeRepo{}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	if err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
 		DeleteBucketInput{BackendID: "primary", BucketName: "acme"}); err != nil {
 		t.Fatalf("delete with no references: %v", err)

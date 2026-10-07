@@ -367,20 +367,16 @@ export interface SeededBucket {
  * given backend. Defaults to the chart-default `primary`
  * backend the bootstrap container provisions.
  *
- * `provisionOnBackend` defaults to false: the metadata tests —
- * scope picker, bucket lists, collection binding — assert rows,
- * not S3 I/O, and skipping provision shaves ~1s per call.
- *
- * Pass `provision: true` when the test will actually move bytes.
- * A presigned PUT against an unprovisioned bucket fails with
- * NoSuchBucket, which reads as a broken URL rather than a bucket
- * that was never created.
+ * The bucket is provisioned: Paladin registers without provisioning only
+ * a bucket the backend already holds, and these names are new. In a
+ * stack without the worker plane it stays provisioning, which the
+ * metadata tests — scope picker, bucket lists, collection binding — do
+ * not mind; a test that moves bytes uses seedPhysicalBucket.
  */
 export async function seedBucket(opts?: {
   backendId?: string;
   bucketIdPrefix?: string;
   displayNamePrefix?: string;
-  provision?: boolean;
   // Bind the bucket to one tenant. Unset (the default, and what every caller
   // before the default-route spec wanted) leaves it shared. The default-route
   // picker lists tenant-owned buckets only, so a shared bucket is invisible
@@ -405,7 +401,7 @@ export async function seedBucket(opts?: {
       cedarPolicy: "",
       ownerTenantId: opts?.ownerTenantId ?? "",
     },
-    provisionOnBackend: opts?.provision ?? false,
+    provisionOnBackend: true,
   });
   return { backendId, bucketId, displayName };
 }
@@ -434,11 +430,17 @@ export async function seedPhysicalBucket(): Promise<SeededBucket> {
   } catch (e) {
     // Already registered by an earlier test in this run. The conflict
     // surfaces as FailedPrecondition rather than AlreadyExists — the admin
-    // plane reports it as a state conflict — so both are tolerated.
+    // plane reports it as a state conflict — so both are tolerated, but only
+    // once the bucket is there: a refusal of another kind hid behind them.
     const conflict =
       e instanceof ConnectError &&
       (e.code === Code.AlreadyExists || e.code === Code.FailedPrecondition);
     if (!conflict) throw e;
+    await bucketAdminClient()
+      .getBucket({ name: `storageBackends/${backendId}/buckets/${bucketId}` })
+      .catch(() => {
+        throw e;
+      });
   }
   return { backendId, bucketId, displayName: "E2E physical bucket" };
 }
@@ -1772,7 +1774,9 @@ export async function deleteBuckets(items: SeededBucket[]): Promise<void> {
       await client.deleteBucket({
         name,
         resourceVersion: current.resourceVersion,
-        deleteOnBackend: false,
+        // A bucket the test made is removed from the backend too; an adopted
+        // one — the shared physical bucket — never is.
+        deleteOnBackend: current.createdOnBackend,
       });
     }),
   );

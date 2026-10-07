@@ -200,7 +200,7 @@ class EventSourceConfig(_message.Message):
     def __init__(self, enabled: _Optional[bool] = ..., target: _Optional[_Union[EventTarget, str]] = ..., queue_url: _Optional[str] = ..., poll_interval: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ...) -> None: ...
 
 class Bucket(_message.Message):
-    __slots__ = ("name", "backend_id", "bucket_id", "display_name", "region", "owner_tenant_id", "cedar_policy", "constraints", "lifecycle_rules", "object_lock", "versioning", "replication", "labels", "resource_version", "created_at", "updated_at", "provision_state", "public_read", "public_base_url")
+    __slots__ = ("name", "backend_id", "bucket_id", "display_name", "region", "owner_tenant_id", "cedar_policy", "constraints", "lifecycle_rules", "object_lock", "versioning", "replication", "labels", "resource_version", "created_at", "updated_at", "provision_state", "public_read", "public_base_url", "created_on_backend")
     class LabelsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -227,6 +227,7 @@ class Bucket(_message.Message):
     PROVISION_STATE_FIELD_NUMBER: _ClassVar[int]
     PUBLIC_READ_FIELD_NUMBER: _ClassVar[int]
     PUBLIC_BASE_URL_FIELD_NUMBER: _ClassVar[int]
+    CREATED_ON_BACKEND_FIELD_NUMBER: _ClassVar[int]
     name: str
     backend_id: str
     bucket_id: str
@@ -246,7 +247,8 @@ class Bucket(_message.Message):
     provision_state: str
     public_read: bool
     public_base_url: str
-    def __init__(self, name: _Optional[str] = ..., backend_id: _Optional[str] = ..., bucket_id: _Optional[str] = ..., display_name: _Optional[str] = ..., region: _Optional[str] = ..., owner_tenant_id: _Optional[str] = ..., cedar_policy: _Optional[str] = ..., constraints: _Optional[_Union[BucketConstraints, _Mapping]] = ..., lifecycle_rules: _Optional[_Iterable[_Union[LifecycleRule, _Mapping]]] = ..., object_lock: _Optional[_Union[ObjectLockConfig, _Mapping]] = ..., versioning: _Optional[_Union[BucketVersioning, _Mapping]] = ..., replication: _Optional[_Union[BucketReplication, _Mapping]] = ..., labels: _Optional[_Mapping[str, str]] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., provision_state: _Optional[str] = ..., public_read: _Optional[bool] = ..., public_base_url: _Optional[str] = ...) -> None: ...
+    created_on_backend: bool
+    def __init__(self, name: _Optional[str] = ..., backend_id: _Optional[str] = ..., bucket_id: _Optional[str] = ..., display_name: _Optional[str] = ..., region: _Optional[str] = ..., owner_tenant_id: _Optional[str] = ..., cedar_policy: _Optional[str] = ..., constraints: _Optional[_Union[BucketConstraints, _Mapping]] = ..., lifecycle_rules: _Optional[_Iterable[_Union[LifecycleRule, _Mapping]]] = ..., object_lock: _Optional[_Union[ObjectLockConfig, _Mapping]] = ..., versioning: _Optional[_Union[BucketVersioning, _Mapping]] = ..., replication: _Optional[_Union[BucketReplication, _Mapping]] = ..., labels: _Optional[_Mapping[str, str]] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., provision_state: _Optional[str] = ..., public_read: _Optional[bool] = ..., public_base_url: _Optional[str] = ..., created_on_backend: _Optional[bool] = ...) -> None: ...
 
 class BucketConstraints(_message.Message):
     __slots__ = ("max_object_size_bytes", "min_part_size_bytes", "max_part_size_bytes", "max_parts", "allowed_content_types", "max_presign_put_ttl", "max_presign_get_ttl", "required_checksum_algorithm")

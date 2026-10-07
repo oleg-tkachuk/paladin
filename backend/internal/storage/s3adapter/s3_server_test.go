@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/md5" // #nosec G501 — mirrors the adapter's content digest, not a secret
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -302,26 +303,72 @@ func TestClientCreateBucketOmitsUSEast1Constraint(t *testing.T) {
 	}
 }
 
-// An "already owned" CreateBucket is the idempotent re-run of a reconciler
-// pass and must not surface as an error.
-func TestClientCreateBucketIdempotent(t *testing.T) {
-	for _, code := range []string{"BucketAlreadyOwnedByYou", "BucketAlreadyExists"} {
-		t.Run(code, func(t *testing.T) {
+// An "already owned" CreateBucket is the reconciler's re-run of its own
+// earlier attempt and must not surface as an error.
+func TestClientCreateBucketToleratesItsOwnBucket(t *testing.T) {
+	f := newFakeS3(t)
+	f.route = func(w http.ResponseWriter, r *http.Request, _, key string) bool {
+		if r.Method == http.MethodPut && key == "" {
+			writeS3Error(w, http.StatusConflict, codeBucketOwnedByYou, "exists")
+			return true
+		}
+		return false
+	}
+	c := newTestClient(t, f.srv.URL)
+
+	if err := c.CreateBucket(testCtx, "primary", "b", ""); err != nil {
+		t.Fatalf("%s must be tolerated, got %v", codeBucketOwnedByYou, err)
+	}
+	if len(f.requestsFor(http.MethodHead, "")) != 1 {
+		t.Error("still must confirm reachability after tolerating the conflict")
+	}
+}
+
+// A name another account holds was taken as success, and Paladin went on to
+// manage a bucket it does not own.
+func TestClientCreateBucketRefusesAnotherOwnersName(t *testing.T) {
+	f := newFakeS3(t)
+	f.route = func(w http.ResponseWriter, r *http.Request, _, key string) bool {
+		if r.Method == http.MethodPut && key == "" {
+			writeS3Error(w, http.StatusConflict, codeBucketExists, "taken")
+			return true
+		}
+		return false
+	}
+	c := newTestClient(t, f.srv.URL)
+
+	if err := c.CreateBucket(testCtx, "primary", "b", ""); !errors.Is(err, ErrBucketOwnedElsewhere) {
+		t.Fatalf("err = %v, want ErrBucketOwnedElsewhere", err)
+	}
+}
+
+// BucketExists tells a bucket the store holds — refused to us or not — from
+// one it does not, and an unexplained failure from both.
+func TestClientBucketExists(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  int
+		want    bool
+		wantErr bool
+	}{
+		{"present", http.StatusOK, true, false},
+		{"absent", http.StatusNotFound, false, false},
+		{"another owner's", http.StatusForbidden, true, false},
+		{"the store failed", http.StatusInternalServerError, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			f := newFakeS3(t)
 			f.route = func(w http.ResponseWriter, r *http.Request, _, key string) bool {
-				if r.Method == http.MethodPut && key == "" {
-					writeS3Error(w, http.StatusConflict, code, "exists")
+				if r.Method == http.MethodHead && key == "" {
+					w.WriteHeader(tc.status)
 					return true
 				}
 				return false
 			}
 			c := newTestClient(t, f.srv.URL)
-
-			if err := c.CreateBucket(testCtx, "primary", "b", ""); err != nil {
-				t.Fatalf("%s must be tolerated, got %v", code, err)
-			}
-			if len(f.requestsFor(http.MethodHead, "")) != 1 {
-				t.Error("still must confirm reachability after tolerating the conflict")
+			got, err := c.BucketExists(testCtx, "primary", "b")
+			if (err != nil) != tc.wantErr || got != tc.want {
+				t.Fatalf("BucketExists = %v, %v; want %v, error %v", got, err, tc.want, tc.wantErr)
 			}
 		})
 	}

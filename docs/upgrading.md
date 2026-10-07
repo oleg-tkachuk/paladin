@@ -62,6 +62,24 @@ tree with itself and passes without checking anything.
 - `connectrpc_otel.OpenTelemetryInterceptor(client=True)` now works in
   `interceptors`, and traces each RPC.
 
+## Unreleased — Paladin registers only the buckets it means to manage
+
+- `CreateBucket` with `provision_on_backend` refuses a bucket the backend
+  already holds (`ALREADY_EXISTS`, `BUCKET_EXISTS_ON_BACKEND`); register an
+  existing bucket with `provision_on_backend` false, which in turn refuses one
+  the backend does not hold (`BUCKET_NOT_ON_BACKEND`); a bucket registered
+  that way is never public. The feature probe's scratch buckets cannot be
+  registered (`BUCKET_RESERVED`).
+- `EnsureTenantStorage` refuses a bucket that exists on the backend but is not
+  registered: have an operator register it first. Registered buckets are
+  unaffected.
+- `Bucket.created_on_backend` says whether Paladin created the bucket. A
+  delete with `delete_on_backend` is refused for any other
+  (`BUCKET_NOT_CREATED_BY_PALADIN`); buckets registered before this release
+  count as not created by Paladin.
+- A CreateBucket on a name another S3 account owns now fails instead of
+  being taken as success.
+
 ## Unreleased — background jobs pass a trashed tenant by
 
 - Lifecycle expiry, replication, the object-trash hard-deleter, the pending

@@ -53,4 +53,14 @@ enum ErrorReason {
   // The request breaks a rule of public collections (ADR-0027): a key the
   // client chose, a delete to the trash, a mutable visibility.
   ERROR_REASON_PUBLIC_COLLECTION_RULE = 27;
+  // provision_on_backend asked Paladin to create a bucket the backend already
+  // holds. Register an existing bucket with provision_on_backend false.
+  ERROR_REASON_BUCKET_EXISTS_ON_BACKEND = 28;
+  // The bucket is a feature probe's scratch bucket, Paladin's own, and cannot
+  // be registered.
+  ERROR_REASON_BUCKET_RESERVED = 29;
+  // provision_on_backend false names a bucket the backend does not hold.
+  ERROR_REASON_BUCKET_NOT_ON_BACKEND = 30;
+  // A delete on the backend of a bucket Paladin did not create there.
+  ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN = 31;
 }
