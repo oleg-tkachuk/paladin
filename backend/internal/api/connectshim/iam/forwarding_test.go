@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/usersettingsh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 
@@ -155,7 +156,7 @@ type resettingUser struct {
 	generated string
 }
 
-func (r resettingUser) ResetPassword(context.Context, uuid.UUID, string) (string, error) {
+func (r resettingUser) ResetPassword(context.Context, userh.UserRef, string) (string, error) {
 	return r.generated, nil
 }
 

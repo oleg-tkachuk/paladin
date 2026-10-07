@@ -63,22 +63,22 @@ type failingUser struct{}
 func (failingUser) CreateUser(context.Context, userh.CreateUserInput) (*authstore.User, error) {
 	return nil, errBoom
 }
-func (failingUser) DeleteUser(context.Context, uuid.UUID, int64) error {
+func (failingUser) DeleteUser(context.Context, userh.UserRef, int64) error {
 	return errBoom
 }
-func (failingUser) GetUser(context.Context, uuid.UUID) (*authstore.User, error) {
+func (failingUser) GetUser(context.Context, userh.UserRef) (*authstore.User, error) {
 	return nil, errBoom
 }
-func (failingUser) GrantScopes(context.Context, uuid.UUID, []auth.Scope) (*authstore.User, error) {
+func (failingUser) GrantScopes(context.Context, userh.UserRef, []auth.Scope) (*authstore.User, error) {
 	return nil, errBoom
 }
 func (failingUser) ListUsers(context.Context, userh.ListUsersInput) ([]authstore.User, string, error) {
 	return nil, "", errBoom
 }
-func (failingUser) ResetPassword(context.Context, uuid.UUID, string) (string, error) {
+func (failingUser) ResetPassword(context.Context, userh.UserRef, string) (string, error) {
 	return "", errBoom
 }
-func (failingUser) RevokeScopes(context.Context, uuid.UUID, []auth.Scope) (*authstore.User, error) {
+func (failingUser) RevokeScopes(context.Context, userh.UserRef, []auth.Scope) (*authstore.User, error) {
 	return nil, errBoom
 }
 func (failingUser) UpdateUser(context.Context, userh.UpdateUserInput) (*authstore.User, error) {
