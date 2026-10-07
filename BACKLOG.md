@@ -1382,18 +1382,6 @@ share one message with that mutation hazard ruled out, and this entry goes.
 
 ## Capability module
 
-### A user named without its tenant escapes the freeze
-
-- **Status:** Deferred
-- **Reason:** the IAM plane accepts a user by its short name, `users/{id}`,
-  besides `tenants/{tenant}/users/{id}`. The freeze finds the tenant a call
-  acts on in the names it carries, so a platform admin updating, deleting,
-  granting scopes to or resetting the password of a trashed tenant's user by
-  the short name is not refused.
-- **Definition of Done:** the freeze resolves a user's tenant from a short
-  name (or the short form is retired), with a test on each user RPC.
-- **Blockers:** none.
-
 ### No retention for the tenant trash
 
 - **Status:** Deferred

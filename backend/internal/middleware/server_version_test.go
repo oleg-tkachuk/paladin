@@ -52,14 +52,14 @@ func TestServerVersionStampsEveryResponse(t *testing.T) {
 			if tc.mounted {
 				server := connect.NewServer()
 				paladiniamv1connect.RegisterHealthServiceHandler(server, versionHealth{fail: tc.fail})
-				connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(0))
+				connecthttp.Mount(mux, server)
 			}
 			srv := httptest.NewServer(ServerVersion(tc.version, mux))
 			defer srv.Close()
 			// The response headers are the call's, whether it succeeded or
 			// failed.
 			ctx, info := connect.NewClientContext(context.Background())
-			_, err := paladiniamv1connect.NewHealthServiceClient(connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL, connecthttp.WithReadMaxBytes(0)))).
+			_, err := paladiniamv1connect.NewHealthServiceClient(connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL))).
 				GetVersion(ctx, &iamv1.GetVersionRequest{})
 			if tc.wantCode != 0 && connect.CodeOf(err) != tc.wantCode {
 				t.Fatalf("err = %v, want %v", err, tc.wantCode)

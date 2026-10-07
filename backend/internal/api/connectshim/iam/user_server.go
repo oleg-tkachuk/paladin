@@ -101,11 +101,11 @@ func (s *UserServer) CreateUser(ctx context.Context, req *pb.CreateUserRequest) 
 }
 
 func (s *UserServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.User, error) {
-	id, err := userIDFromName(req.GetName())
+	ref, err := s.userRef(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		return nil, err
 	}
-	u, err := s.H.GetUser(ctx, id)
+	u, err := s.H.GetUser(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -117,9 +117,9 @@ var updateUserPaths = []string{"display_name", "disabled", "roles"}
 
 func (s *UserServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb.User, error) {
 	m := req
-	id, err := userIDFromName(m.GetName())
+	ref, err := s.userRef(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		return nil, err
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
@@ -129,7 +129,7 @@ func (s *UserServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) 
 		return nil, err
 	}
 	out, err := s.H.UpdateUser(ctx, userh.UpdateUserInput{
-		UserID:          id,
+		User:            ref,
 		ExpectedVersion: rv,
 		UpdateMask:      m.GetUpdateMask().GetPaths(),
 		DisplayName:     m.GetDisplayName(),
@@ -143,15 +143,15 @@ func (s *UserServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) 
 }
 
 func (s *UserServer) DeleteUser(ctx context.Context, req *pb.DeleteUserRequest) (*pb.DeleteUserResponse, error) {
-	id, err := userIDFromName(req.GetName())
+	ref, err := s.userRef(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		return nil, err
 	}
 	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
 		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
-	if err := s.H.DeleteUser(ctx, id, rv); err != nil {
+	if err := s.H.DeleteUser(ctx, ref, rv); err != nil {
 		return nil, err
 	}
 	return &pb.DeleteUserResponse{}, nil
@@ -185,11 +185,11 @@ func (s *UserServer) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*
 }
 
 func (s *UserServer) GrantScopes(ctx context.Context, req *pb.GrantScopesRequest) (*pb.User, error) {
-	id, err := userIDFromName(req.GetName())
+	ref, err := s.userRef(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		return nil, err
 	}
-	u, err := s.H.GrantScopes(ctx, id, scopesFromProto(req.GetScopes()))
+	u, err := s.H.GrantScopes(ctx, ref, scopesFromProto(req.GetScopes()))
 	if err != nil {
 		return nil, err
 	}
@@ -197,11 +197,11 @@ func (s *UserServer) GrantScopes(ctx context.Context, req *pb.GrantScopesRequest
 }
 
 func (s *UserServer) RevokeScopes(ctx context.Context, req *pb.RevokeScopesRequest) (*pb.User, error) {
-	id, err := userIDFromName(req.GetName())
+	ref, err := s.userRef(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		return nil, err
 	}
-	u, err := s.H.RevokeScopes(ctx, id, scopesFromProto(req.GetScopes()))
+	u, err := s.H.RevokeScopes(ctx, ref, scopesFromProto(req.GetScopes()))
 	if err != nil {
 		return nil, err
 	}
@@ -209,11 +209,11 @@ func (s *UserServer) RevokeScopes(ctx context.Context, req *pb.RevokeScopesReque
 }
 
 func (s *UserServer) ResetPassword(ctx context.Context, req *pb.ResetPasswordRequest) (*pb.ResetPasswordResponse, error) {
-	id, err := userIDFromName(req.GetName())
+	ref, err := s.userRef(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		return nil, err
 	}
-	pw, err := s.H.ResetPassword(ctx, id, req.GetNewPassword())
+	pw, err := s.H.ResetPassword(ctx, ref, req.GetNewPassword())
 	if err != nil {
 		return nil, err
 	}
@@ -231,11 +231,30 @@ var _ = authstore.User{}
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-func userIDFromName(name string) (uuid.UUID, error) {
-	// Format: tenants/{tenant_id}/users/{user_id}
+// userNameParts splits tenants/{tenant_id_or_slug}/users/{user_id} into its
+// tenant parent and the user's id.
+func userNameParts(name string) (parent string, id uuid.UUID, err error) {
 	parts := strings.Split(name, "/")
 	if len(parts) != 4 || parts[0] != "tenants" || parts[2] != "users" {
-		return uuid.Nil, fmt.Errorf("invalid user name %q", name)
+		return "", uuid.Nil, fmt.Errorf("invalid user name %q", name)
 	}
-	return uuid.Parse(parts[3])
+	id, err = uuid.Parse(parts[3])
+	if err != nil {
+		return "", uuid.Nil, fmt.Errorf("invalid user name %q: %w", name, err)
+	}
+	return apiutil.TenantNamePrefix + parts[1], id, nil
+}
+
+// userRef resolves a user's resource name, its tenant by id or slug, so the
+// handler can check the user is that tenant's.
+func (s *UserServer) userRef(ctx context.Context, name string) (userh.UserRef, error) {
+	parent, id, err := userNameParts(name)
+	if err != nil {
+		return userh.UserRef{}, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	}
+	tenant, err := s.tenantParent(ctx, parent)
+	if err != nil {
+		return userh.UserRef{}, err
+	}
+	return userh.UserRef{TenantID: tenant, UserID: id}, nil
 }

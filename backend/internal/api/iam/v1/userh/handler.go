@@ -5,6 +5,7 @@ package userh
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -139,15 +140,53 @@ func (h *Handler) CreateUser(ctx context.Context, in CreateUserInput) (*authstor
 	return &u, nil
 }
 
+// UserRef names a user as its resource name does: its tenant and its id.
+type UserRef struct {
+	TenantID uuid.UUID
+	UserID   uuid.UUID
+}
+
+// errUserNotFound answers a user that does not exist under the tenant named.
+var errUserNotFound = errors.New("user not found")
+
+// load reads the user ref names, and refuses one that is not the named
+// tenant's as not found: no user exists at that name. The tenant in the name
+// is what the tenant freeze judges a call by, so a name pairing a live tenant
+// with another tenant's user would otherwise act on a trashed tenant's user
+// past the freeze.
+func (h *Handler) load(ctx context.Context, ref UserRef) (authstore.User, error) {
+	u, err := h.users.GetByID(readCtx(ctx), ref.UserID)
+	if err != nil {
+		return authstore.User{}, err
+	}
+	if u.TenantID != ref.TenantID {
+		return authstore.User{}, connect.NewError(connect.CodeNotFound, errUserNotFound.Error()).WithCause(errUserNotFound)
+	}
+	return u, nil
+}
+
+// notFound maps a failed load: its own NotFound as it is, a store error as
+// not found.
+func notFound(err error) error {
+	var cerr *connect.Error
+	if errors.As(err, &cerr) {
+		return cerr
+	}
+	return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+}
+
 // ─── Read ───────────────────────────────────────────────────────────────────
 
-func (h *Handler) GetUser(ctx context.Context, id uuid.UUID) (*authstore.User, error) {
+func (h *Handler) GetUser(ctx context.Context, ref UserRef) (*authstore.User, error) {
 	caller, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	u, err := h.users.GetByID(readCtx(ctx), id)
+	u, err := h.load(ctx, ref)
 	if err != nil {
+		if cerr := new(connect.Error); errors.As(err, &cerr) {
+			return nil, cerr
+		}
 		return nil, apiutil.MapError(err)
 	}
 	p, _ := auth.PrincipalFromContext(ctx)
@@ -163,7 +202,7 @@ func (h *Handler) GetUser(ctx context.Context, id uuid.UUID) (*authstore.User, e
 // ─── Update ─────────────────────────────────────────────────────────────────
 
 type UpdateUserInput struct {
-	UserID          uuid.UUID
+	User            UserRef
 	ExpectedVersion int64
 	UpdateMask      []string
 	DisplayName     string
@@ -176,9 +215,9 @@ func (h *Handler) UpdateUser(ctx context.Context, in UpdateUserInput) (*authstor
 	if err != nil {
 		return nil, err
 	}
-	current, err := h.users.GetByID(readCtx(ctx), in.UserID)
+	current, err := h.load(ctx, in.User)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, notFound(err)
 	}
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !hasPlatformAdmin(p) && current.TenantID != caller {
@@ -206,14 +245,14 @@ func (h *Handler) UpdateUser(ctx context.Context, in UpdateUserInput) (*authstor
 
 // ─── Delete ─────────────────────────────────────────────────────────────────
 
-func (h *Handler) DeleteUser(ctx context.Context, id uuid.UUID, expectedVersion int64) error {
+func (h *Handler) DeleteUser(ctx context.Context, ref UserRef, expectedVersion int64) error {
 	caller, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return err
 	}
-	u, err := h.users.GetByID(readCtx(ctx), id)
+	u, err := h.load(ctx, ref)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return notFound(err)
 	}
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !hasPlatformAdmin(p) && u.TenantID != caller {
@@ -222,7 +261,7 @@ func (h *Handler) DeleteUser(ctx context.Context, id uuid.UUID, expectedVersion 
 	if err := h.authorize(ctx, cedar.ActionManageUser, u); err != nil {
 		return err
 	}
-	if err := h.users.Delete(auth.WithActingTenant(ctx, u.TenantID), id, expectedVersion); err != nil {
+	if err := h.users.Delete(auth.WithActingTenant(ctx, u.TenantID), u.UserID, expectedVersion); err != nil {
 		return apiutil.MapError(err)
 	}
 	return nil
@@ -335,10 +374,10 @@ func userRow(u authstore.User) map[string]any {
 
 // ─── GrantScopes / RevokeScopes ─────────────────────────────────────────────
 
-func (h *Handler) GrantScopes(ctx context.Context, id uuid.UUID, scopes []auth.Scope) (*authstore.User, error) {
-	current, err := h.users.GetByID(readCtx(ctx), id)
+func (h *Handler) GrantScopes(ctx context.Context, ref UserRef, scopes []auth.Scope) (*authstore.User, error) {
+	current, err := h.load(ctx, ref)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, notFound(err)
 	}
 	if err := h.authorize(ctx, cedar.ActionGrantScopes, current); err != nil {
 		return nil, err
@@ -351,10 +390,10 @@ func (h *Handler) GrantScopes(ctx context.Context, id uuid.UUID, scopes []auth.S
 	return &updated, nil
 }
 
-func (h *Handler) RevokeScopes(ctx context.Context, id uuid.UUID, scopes []auth.Scope) (*authstore.User, error) {
-	current, err := h.users.GetByID(readCtx(ctx), id)
+func (h *Handler) RevokeScopes(ctx context.Context, ref UserRef, scopes []auth.Scope) (*authstore.User, error) {
+	current, err := h.load(ctx, ref)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, notFound(err)
 	}
 	if err := h.authorize(ctx, cedar.ActionGrantScopes, current); err != nil {
 		return nil, err
@@ -369,10 +408,10 @@ func (h *Handler) RevokeScopes(ctx context.Context, id uuid.UUID, scopes []auth.
 
 // ─── ResetPassword ──────────────────────────────────────────────────────────
 
-func (h *Handler) ResetPassword(ctx context.Context, id uuid.UUID, newPassword string) (string, error) {
-	current, err := h.users.GetByID(readCtx(ctx), id)
+func (h *Handler) ResetPassword(ctx context.Context, ref UserRef, newPassword string) (string, error) {
+	current, err := h.load(ctx, ref)
 	if err != nil {
-		return "", connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return "", notFound(err)
 	}
 	if err := h.authorize(ctx, cedar.ActionResetPassword, current); err != nil {
 		return "", err
@@ -384,7 +423,7 @@ func (h *Handler) ResetPassword(ctx context.Context, id uuid.UUID, newPassword s
 	if err != nil {
 		return "", connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	if err := h.users.UpdatePasswordHash(auth.WithActingTenant(ctx, current.TenantID), id, hash); err != nil {
+	if err := h.users.UpdatePasswordHash(auth.WithActingTenant(ctx, current.TenantID), current.UserID, hash); err != nil {
 		return "", rpcerr.New(connect.CodeInternal, fmt.Errorf("reset password: %w", err))
 	}
 	return newPassword, nil

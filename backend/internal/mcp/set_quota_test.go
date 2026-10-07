@@ -38,7 +38,7 @@ func callSetQuota(t *testing.T, plane *quotaPlane, args map[string]any) *mcpsdk.
 	mux := http.NewServeMux()
 	server := connect.NewServer()
 	adminv1connect.RegisterQuotaServiceHandler(server, plane)
-	connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(0))
+	connecthttp.Mount(mux, server)
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
 	cs := dialInProcess(t, mustClients(t)(NewClients(ts.Client(), ts.URL, ts.URL, ts.URL, "tok")))
