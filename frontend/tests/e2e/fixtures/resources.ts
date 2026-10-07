@@ -50,7 +50,6 @@ export type MakeBucket = (opts?: {
   backendId?: string;
   bucketIdPrefix?: string;
   displayNamePrefix?: string;
-  provision?: boolean;
   ownerTenantId?: string;
 }) => Promise<SeededBucket>;
 export type MakeCollection = (opts: {

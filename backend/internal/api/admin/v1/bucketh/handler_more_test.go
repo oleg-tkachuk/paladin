@@ -89,7 +89,7 @@ func TestListBuckets_CedarDenied(t *testing.T) {
 func TestListBuckets_ForwardsArgsAndReturns(t *testing.T) {
 	want := []admindomain.Bucket{{BackendID: "primary", BucketName: "a"}, {BackendID: "primary", BucketName: "b"}}
 	repo := &fakeRepo{listResult: want, listToken: "next-page"}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	args := admindomain.ListBucketsArgs{BackendID: "primary", PageSize: 7, AfterName: "a"}
 	got, token, err := h.ListBuckets(ctxAs(apiutil.RolePlatformAdmin), args)
 	if err != nil {
@@ -129,7 +129,7 @@ func TestListAccessibleBuckets_PlatformAdminCrossTenantForwards(t *testing.T) {
 	target := uuid.New()
 	want := []admindomain.Bucket{{BackendID: "primary", BucketName: "shared"}}
 	repo := &fakeRepo{listAccResult: want, listAccToken: "tok"}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	got, token, err := h.ListAccessibleBuckets(ctxTenant(caller, apiutil.RolePlatformAdmin), target, 5, "primary", "shared")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -149,7 +149,7 @@ func TestListAccessibleBuckets_PlatformAdminCrossTenantForwards(t *testing.T) {
 func TestListAccessibleBuckets_SameTenantAllowed(t *testing.T) {
 	caller := uuid.New()
 	repo := &fakeRepo{listAccResult: []admindomain.Bucket{{BucketName: "own"}}}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	got, _, err := h.ListAccessibleBuckets(ctxTenant(caller, apiutil.RoleTenantAdmin), caller, 3, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -191,7 +191,7 @@ func TestUpdateBucket_ForwardsArgsAndReturnsReadBack(t *testing.T) {
 	in := validBucket()
 	readBack := admindomain.Bucket{BackendID: "primary", BucketName: "acme-logs", ResourceVersion: 9}
 	repo := &fakeRepo{getTxBucket: readBack}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	got, err := h.UpdateBucket(ctxAs(apiutil.RoleBucketAdmin), UpdateBucketInput{
 		Bucket: in, ExpectedVersion: 4, UpdateMask: []string{"region"},
 	})
@@ -211,7 +211,7 @@ func TestUpdateBucket_ForwardsArgsAndReturnsReadBack(t *testing.T) {
 
 func TestUpdateBucket_VersionMismatchAborts(t *testing.T) {
 	repo := &fakeRepo{updateBasicTxErr: admindomain.ErrVersionMismatch}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	_, err := h.UpdateBucket(ctxAs(apiutil.RoleBucketAdmin), UpdateBucketInput{Bucket: validBucket(), ExpectedVersion: 1})
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
@@ -238,7 +238,7 @@ func TestSetPolicy_CedarDenied(t *testing.T) {
 
 func TestSetPolicy_ForwardsArgs(t *testing.T) {
 	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	got, err := h.SetPolicy(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", "permit(principal,action,resource);", 3)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -256,7 +256,7 @@ func TestSetPolicy_ForwardsArgs(t *testing.T) {
 
 func TestSetPolicy_VersionMismatchAborts(t *testing.T) {
 	repo := &fakeRepo{setPolicyErr: admindomain.ErrVersionMismatch}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	_, err := h.SetPolicy(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", "permit();", 1)
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
@@ -283,7 +283,7 @@ func TestSetLifecycleRules_CedarDenied(t *testing.T) {
 
 func TestSetLifecycleRules_InvalidCELRejected(t *testing.T) {
 	repo := &fakeRepo{}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	// A non-bool CEL expression must be rejected up front (Validate requires bool).
 	rules := []admindomain.LifecycleRule{{ID: "r1", Match: "1 + 1"}}
 	_, err := h.SetLifecycleRules(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", rules, 1)
@@ -297,7 +297,7 @@ func TestSetLifecycleRules_InvalidCELRejected(t *testing.T) {
 
 func TestSetLifecycleRules_ValidRulesForwarded(t *testing.T) {
 	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	// Empty Match is the "match everything" sentinel — valid.
 	rules := []admindomain.LifecycleRule{{ID: "expire-30d", Match: ""}, {ID: "expire-90d", Match: ""}}
 	got, err := h.SetLifecycleRules(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", rules, 2)
@@ -314,7 +314,7 @@ func TestSetLifecycleRules_ValidRulesForwarded(t *testing.T) {
 
 func TestSetLifecycleRules_VersionMismatchAborts(t *testing.T) {
 	repo := &fakeRepo{setLifecycleErr: admindomain.ErrVersionMismatch}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	_, err := h.SetLifecycleRules(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", nil, 1)
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
@@ -338,7 +338,7 @@ func TestSetObjectLock_ForwardsArgs(t *testing.T) {
 		BucketName: "acme",
 		Versioning: admindomain.BucketVersioning{Enabled: true},
 	}}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	lock := admindomain.ObjectLockConfig{Enabled: true, DefaultMode: "COMPLIANCE"}
 	if _, err := h.SetObjectLock(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", lock, 1); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -355,7 +355,7 @@ func TestSetObjectLock_ForwardsArgs(t *testing.T) {
 // fails on "no current version".
 func TestSetObjectLock_RequiresVersioning(t *testing.T) {
 	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}} // versioning off
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	_, err := h.SetObjectLock(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme",
 		admindomain.ObjectLockConfig{Enabled: true}, 1)
 	if code(err) != connect.CodeFailedPrecondition {
@@ -371,7 +371,7 @@ func TestSetObjectLock_RequiresVersioning(t *testing.T) {
 // somehow already off — otherwise a misconfigured bucket has no way back.
 func TestSetObjectLock_DisableNeedsNoVersioning(t *testing.T) {
 	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	if _, err := h.SetObjectLock(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme",
 		admindomain.ObjectLockConfig{Enabled: false}, 1); err != nil {
 		t.Fatalf("disabling object lock was refused: %v", err)
@@ -387,7 +387,7 @@ func TestSetVersioning_RefusedWhileObjectLockOn(t *testing.T) {
 		BucketName: "acme",
 		ObjectLock: admindomain.ObjectLockConfig{Enabled: true},
 	}}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	_, err := h.SetVersioning(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme",
 		admindomain.BucketVersioning{Enabled: false}, 1)
 	if code(err) != connect.CodeFailedPrecondition {
@@ -397,7 +397,7 @@ func TestSetVersioning_RefusedWhileObjectLockOn(t *testing.T) {
 
 func TestSetObjectLock_VersionMismatchAborts(t *testing.T) {
 	repo := &fakeRepo{setLockErr: admindomain.ErrVersionMismatch}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	_, err := h.SetObjectLock(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", admindomain.ObjectLockConfig{}, 1)
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
@@ -416,7 +416,7 @@ func TestSetVersioning_RoleGate(t *testing.T) {
 
 func TestSetVersioning_ForwardsArgs(t *testing.T) {
 	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	v := admindomain.BucketVersioning{Enabled: true, KeepDeletesForever: true}
 	if _, err := h.SetVersioning(ctxAs(apiutil.RolePlatformAdmin), "primary", "acme", v, 1); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -428,7 +428,7 @@ func TestSetVersioning_ForwardsArgs(t *testing.T) {
 
 func TestSetVersioning_VersionMismatchAborts(t *testing.T) {
 	repo := &fakeRepo{setVersioningErr: admindomain.ErrVersionMismatch}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	_, err := h.SetVersioning(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", admindomain.BucketVersioning{}, 1)
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
@@ -447,7 +447,7 @@ func TestSetReplication_RoleGate(t *testing.T) {
 
 func TestSetReplication_ForwardsArgs(t *testing.T) {
 	repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	r := admindomain.BucketReplication{Enabled: true, DestinationBucket: "dr-bucket"}
 	if _, err := h.SetReplication(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", r, 1); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -459,7 +459,7 @@ func TestSetReplication_ForwardsArgs(t *testing.T) {
 
 func TestSetReplication_VersionMismatchAborts(t *testing.T) {
 	repo := &fakeRepo{setReplicationErr: admindomain.ErrVersionMismatch}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	_, err := h.SetReplication(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", admindomain.BucketReplication{}, 1)
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
@@ -488,9 +488,9 @@ func TestDeleteBucket_CedarDenied(t *testing.T) {
 
 func TestDeleteBucket_ImmediateSucceeds(t *testing.T) {
 	repo := &fakeRepo{getBucket: admindomain.Bucket{
-		BackendID: "primary", BucketName: "acme", OwnerTenantID: uuid.New(),
+		BackendID: "primary", BucketName: "acme", OwnerTenantID: uuid.New(), CreatedOnBackend: true,
 	}}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
 		DeleteBucketInput{BackendID: "primary", BucketName: "acme", DeleteOnBackend: false})
 	if err != nil {
@@ -504,7 +504,7 @@ func TestDeleteBucket_ImmediateSucceeds(t *testing.T) {
 
 func TestDeleteBucket_OutboxMarksDeleting(t *testing.T) {
 	repo := &fakeRepo{getBucket: admindomain.Bucket{
-		BackendID: "primary", BucketName: "acme", OwnerTenantID: uuid.New(),
+		BackendID: "primary", BucketName: "acme", OwnerTenantID: uuid.New(), CreatedOnBackend: true,
 	}}
 	h := NewHandler(repo, okProvisioner{}, allowAuthorizer{})
 	// DeleteOnBackend=true + provisioner wired → outbox path (MarkDeletingTx).
@@ -521,7 +521,7 @@ func TestDeleteBucket_OutboxMarksDeleting(t *testing.T) {
 
 func TestDeleteBucket_OutboxVersionMismatchAborts(t *testing.T) {
 	repo := &fakeRepo{
-		getBucket:         admindomain.Bucket{BackendID: "primary", BucketName: "acme"},
+		getBucket:         admindomain.Bucket{BackendID: "primary", BucketName: "acme", CreatedOnBackend: true},
 		markDeletingTxErr: admindomain.ErrVersionMismatch,
 	}
 	h := NewHandler(repo, okProvisioner{}, allowAuthorizer{})
@@ -539,7 +539,7 @@ func TestCreateBucket_DispatchesCreatedEvent(t *testing.T) {
 	readBack := admindomain.Bucket{BackendID: "primary", BucketName: "acme-logs", OwnerTenantID: owner, Region: "us-east-1"}
 	repo := &fakeRepo{backendEnabled: true, getTxBucket: readBack}
 	ev := &fakeEvents{}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	h.SetEventProducer(ev)
 
 	if _, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin),
@@ -567,7 +567,7 @@ func TestCreateBucket_DispatchesCreatedEvent(t *testing.T) {
 func TestCreateBucket_DispatchErrorRollsBack(t *testing.T) {
 	repo := &fakeRepo{backendEnabled: true, getTxBucket: validBucket()}
 	ev := &fakeEvents{dispatchTxErr: errors.New("outbox insert failed")}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	h.SetEventProducer(ev)
 
 	_, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: validBucket()})
@@ -584,7 +584,7 @@ func TestDeleteBucket_ImmediateDispatchesDeletedEvent(t *testing.T) {
 	owner := uuid.New()
 	repo := &fakeRepo{getBucket: admindomain.Bucket{BackendID: "primary", BucketName: "acme", OwnerTenantID: owner}}
 	ev := &fakeEvents{}
-	h := NewHandler(repo, nil, allowAuthorizer{})
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
 	h.SetEventProducer(ev)
 
 	if err := h.DeleteBucket(ctxAs(apiutil.RoleBucketAdmin),
@@ -601,7 +601,7 @@ func TestDeleteBucket_ImmediateDispatchesDeletedEvent(t *testing.T) {
 
 func TestDeleteBucket_OutboxDispatchesDeletingEvent(t *testing.T) {
 	owner := uuid.New()
-	repo := &fakeRepo{getBucket: admindomain.Bucket{BackendID: "primary", BucketName: "acme", OwnerTenantID: owner}}
+	repo := &fakeRepo{getBucket: admindomain.Bucket{BackendID: "primary", BucketName: "acme", OwnerTenantID: owner, CreatedOnBackend: true}}
 	ev := &fakeEvents{}
 	h := NewHandler(repo, okProvisioner{}, allowAuthorizer{})
 	h.SetEventProducer(ev)

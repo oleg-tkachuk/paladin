@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	// probeBucketPrefix names the scratch bucket a probe creates and removes.
-	probeBucketPrefix = "paladin-probe-"
+	// ProbeBucketPrefix names the scratch bucket a probe creates and removes.
+	ProbeBucketPrefix = "paladin-probe-"
 	// probeKeyPrefix is where a probe writes when it has no scratch bucket.
 	// No tenant key can start with it: every tenant key starts with a UUID.
 	probeKeyPrefix = ".paladin-probe/"
@@ -103,7 +103,7 @@ func (p *featureProbe) run(ctx context.Context) {
 		}
 		return
 	}
-	scratch := probeBucketPrefix + run
+	scratch := ProbeBucketPrefix + run
 	createErr := p.c.CreateBucket(ctx, "", scratch, "")
 	if createErr == nil {
 		p.bucket = scratch

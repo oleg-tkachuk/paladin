@@ -88,7 +88,7 @@ SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
        versioning_enabled, versioning_keep_deletes_forever,
        replication_enabled, replication_destination, replication_filter,
-       provision_state, public_read, public_base_url,
+       provision_state, public_read, public_base_url, created_on_backend,
        resource_version, created_at, updated_at
 FROM buckets
 WHERE jsonb_array_length(lifecycle_rules) > 0
@@ -118,6 +118,7 @@ type ListBucketsWithLifecycleRow struct {
 	ProvisionState                    string             `json:"provision_state"`
 	PublicRead                        bool               `json:"public_read"`
 	PublicBaseUrl                     string             `json:"public_base_url"`
+	CreatedOnBackend                  bool               `json:"created_on_backend"`
 	ResourceVersion                   int64              `json:"resource_version"`
 	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
@@ -159,6 +160,7 @@ func (q *Queries) ListBucketsWithLifecycle(ctx context.Context) ([]ListBucketsWi
 			&i.ProvisionState,
 			&i.PublicRead,
 			&i.PublicBaseUrl,
+			&i.CreatedOnBackend,
 			&i.ResourceVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -182,7 +184,7 @@ SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
        versioning_enabled, versioning_keep_deletes_forever,
        replication_enabled, replication_destination, replication_filter,
-       provision_state, public_read, public_base_url,
+       provision_state, public_read, public_base_url, created_on_backend,
        resource_version, created_at, updated_at
 FROM buckets
 WHERE replication_enabled = TRUE
@@ -213,6 +215,7 @@ type ListBucketsWithReplicationRow struct {
 	ProvisionState                    string             `json:"provision_state"`
 	PublicRead                        bool               `json:"public_read"`
 	PublicBaseUrl                     string             `json:"public_base_url"`
+	CreatedOnBackend                  bool               `json:"created_on_backend"`
 	ResourceVersion                   int64              `json:"resource_version"`
 	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
@@ -259,6 +262,7 @@ func (q *Queries) ListBucketsWithReplication(ctx context.Context) ([]ListBuckets
 			&i.ProvisionState,
 			&i.PublicRead,
 			&i.PublicBaseUrl,
+			&i.CreatedOnBackend,
 			&i.ResourceVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,

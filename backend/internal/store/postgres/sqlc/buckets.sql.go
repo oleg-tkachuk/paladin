@@ -117,7 +117,7 @@ func (q *Queries) DeleteBucket(ctx context.Context, name string, name_2 string, 
 }
 
 const getBucket = `-- name: GetBucket :one
-SELECT buckets.id, buckets.backend_id, buckets.name, buckets.display_name, buckets.owner_tenant_id, buckets.region, buckets.labels, buckets.constraints, buckets.lifecycle_rules, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at, buckets.resource_version, buckets.created_at, buckets.updated_at, buckets.public_read, buckets.public_base_url,
+SELECT buckets.id, buckets.backend_id, buckets.name, buckets.display_name, buckets.owner_tenant_id, buckets.region, buckets.labels, buckets.constraints, buckets.lifecycle_rules, buckets.cedar_policy, buckets.cedar_policy_hash, buckets.object_lock_enabled, buckets.object_lock_default_mode, buckets.object_lock_default_retention_seconds, buckets.versioning_enabled, buckets.versioning_keep_deletes_forever, buckets.replication_enabled, buckets.replication_destination, buckets.replication_filter, buckets.provision_state, buckets.provision_error, buckets.provision_attempts, buckets.last_provision_at, buckets.resource_version, buckets.created_at, buckets.updated_at, buckets.public_read, buckets.public_base_url, buckets.created_on_backend,
        (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name
 FROM buckets
 WHERE id = (SELECT b2.id FROM buckets b2
@@ -162,13 +162,14 @@ func (q *Queries) GetBucket(ctx context.Context, name string, name_2 string) (Ge
 		&i.Bucket.UpdatedAt,
 		&i.Bucket.PublicRead,
 		&i.Bucket.PublicBaseUrl,
+		&i.Bucket.CreatedOnBackend,
 		&i.BackendName,
 	)
 	return i, err
 }
 
 const listBuckets = `-- name: ListBuckets :many
-SELECT b.id, b.backend_id, b.name, b.display_name, b.owner_tenant_id, b.region, b.labels, b.constraints, b.lifecycle_rules, b.cedar_policy, b.cedar_policy_hash, b.object_lock_enabled, b.object_lock_default_mode, b.object_lock_default_retention_seconds, b.versioning_enabled, b.versioning_keep_deletes_forever, b.replication_enabled, b.replication_destination, b.replication_filter, b.provision_state, b.provision_error, b.provision_attempts, b.last_provision_at, b.resource_version, b.created_at, b.updated_at, b.public_read, b.public_base_url, sb.name AS backend_name
+SELECT b.id, b.backend_id, b.name, b.display_name, b.owner_tenant_id, b.region, b.labels, b.constraints, b.lifecycle_rules, b.cedar_policy, b.cedar_policy_hash, b.object_lock_enabled, b.object_lock_default_mode, b.object_lock_default_retention_seconds, b.versioning_enabled, b.versioning_keep_deletes_forever, b.replication_enabled, b.replication_destination, b.replication_filter, b.provision_state, b.provision_error, b.provision_attempts, b.last_provision_at, b.resource_version, b.created_at, b.updated_at, b.public_read, b.public_base_url, b.created_on_backend, sb.name AS backend_name
 FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE ($1::text IS NULL OR sb.name = $1::text)
@@ -226,6 +227,7 @@ func (q *Queries) ListBuckets(ctx context.Context, backendID *string, afterName 
 			&i.Bucket.UpdatedAt,
 			&i.Bucket.PublicRead,
 			&i.Bucket.PublicBaseUrl,
+			&i.Bucket.CreatedOnBackend,
 			&i.BackendName,
 		); err != nil {
 			return nil, err

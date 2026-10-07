@@ -71,6 +71,16 @@ const (
 	// The request breaks a rule of public collections (ADR-0027): a key the
 	// client chose, a delete to the trash, a mutable visibility.
 	ErrorReason_ERROR_REASON_PUBLIC_COLLECTION_RULE ErrorReason = 27
+	// provision_on_backend asked Paladin to create a bucket the backend already
+	// holds. Register an existing bucket with provision_on_backend false.
+	ErrorReason_ERROR_REASON_BUCKET_EXISTS_ON_BACKEND ErrorReason = 28
+	// The bucket is Paladin's own on its backend — the backend's configured
+	// bucket, or a feature probe's scratch bucket — and cannot be registered.
+	ErrorReason_ERROR_REASON_BUCKET_RESERVED ErrorReason = 29
+	// provision_on_backend false names a bucket the backend does not hold.
+	ErrorReason_ERROR_REASON_BUCKET_NOT_ON_BACKEND ErrorReason = 30
+	// A delete on the backend of a bucket Paladin did not create there.
+	ErrorReason_ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN ErrorReason = 31
 )
 
 // Enum value maps for ErrorReason.
@@ -104,6 +114,10 @@ var (
 		25: "ERROR_REASON_TENANT_NOT_FOUND",
 		26: "ERROR_REASON_BACKEND_FEATURE_UNSUPPORTED",
 		27: "ERROR_REASON_PUBLIC_COLLECTION_RULE",
+		28: "ERROR_REASON_BUCKET_EXISTS_ON_BACKEND",
+		29: "ERROR_REASON_BUCKET_RESERVED",
+		30: "ERROR_REASON_BUCKET_NOT_ON_BACKEND",
+		31: "ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                    0,
@@ -134,6 +148,10 @@ var (
 		"ERROR_REASON_TENANT_NOT_FOUND":               25,
 		"ERROR_REASON_BACKEND_FEATURE_UNSUPPORTED":    26,
 		"ERROR_REASON_PUBLIC_COLLECTION_RULE":         27,
+		"ERROR_REASON_BUCKET_EXISTS_ON_BACKEND":       28,
+		"ERROR_REASON_BUCKET_RESERVED":                29,
+		"ERROR_REASON_BUCKET_NOT_ON_BACKEND":          30,
+		"ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN":  31,
 	}
 )
 
@@ -168,7 +186,7 @@ var File_paladin_common_v1_error_reason_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\x81\b\n" +
+	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\xa6\t\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ERROR_REASON_NOT_FOUND\x10\x01\x12!\n" +
@@ -198,7 +216,11 @@ const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"\x15ERROR_REASON_CONFLICT\x10\x18\x12!\n" +
 	"\x1dERROR_REASON_TENANT_NOT_FOUND\x10\x19\x12,\n" +
 	"(ERROR_REASON_BACKEND_FEATURE_UNSUPPORTED\x10\x1a\x12'\n" +
-	"#ERROR_REASON_PUBLIC_COLLECTION_RULE\x10\x1bBNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
+	"#ERROR_REASON_PUBLIC_COLLECTION_RULE\x10\x1b\x12)\n" +
+	"%ERROR_REASON_BUCKET_EXISTS_ON_BACKEND\x10\x1c\x12 \n" +
+	"\x1cERROR_REASON_BUCKET_RESERVED\x10\x1d\x12&\n" +
+	"\"ERROR_REASON_BUCKET_NOT_ON_BACKEND\x10\x1e\x12.\n" +
+	"*ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN\x10\x1fBNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_error_reason_proto_rawDescOnce sync.Once

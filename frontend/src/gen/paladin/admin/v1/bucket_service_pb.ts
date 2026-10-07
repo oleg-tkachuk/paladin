@@ -70,8 +70,12 @@ export type CreateBucketRequest =
     bucket?: Bucket | undefined;
 
     /**
-     * When true, Paladin also calls the backend to physically create the bucket.
-     * When false, the bucket is assumed to exist out-of-band.
+     * True: Paladin creates the bucket on the backend, and refuses a name the
+     * backend already holds (ALREADY_EXISTS, BUCKET_EXISTS_ON_BACKEND). False:
+     * Paladin takes an existing bucket under its management, and refuses one the
+     * backend does not hold (BUCKET_NOT_ON_BACKEND); such a bucket is never
+     * public and never deleted on the backend. Either way the backend's own
+     * configured bucket cannot be registered (BUCKET_RESERVED).
      *
      * @generated from field: bool provision_on_backend = 4;
      */
