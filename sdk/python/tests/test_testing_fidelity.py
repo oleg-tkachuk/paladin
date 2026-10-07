@@ -11,14 +11,21 @@ from connectrpc.code import Code
 from connectrpc.errors import ConnectError
 
 import paladin
-from paladin import IntegrityError, InvalidArgumentError, VersionConflictError, download
+from buf.validate import validate_pb2
+from paladin import (
+    IntegrityError,
+    InvalidArgumentError,
+    VersionConflictError,
+    download,
+    unpack_detail,
+)
 from paladin.common.v1 import error_reason_pb2, pagination_pb2, resource_pb2
 from paladin.data.v1 import object_service_pb2
 from paladin.testing import PART_SIZE, TESTING_EXTRA_HINT, FakePaladin, StorageOp
 
 CONTENT_TYPE = "application/octet-stream"
 """A test upload's content type: the server refuses an upload that names none."""
-VALIDATION_FAILED = "validation failed"
+VALIDATION_FAILED = "validation error"
 """How the server's answer to a request its contract's rules refuse begins."""
 BODY = b"x"
 
@@ -64,6 +71,10 @@ def test_the_fake_validates_every_request(fake: FakePaladin, case: str) -> None:
     with pytest.raises(InvalidArgumentError) as caught:
         _validation_cases(fake)[case]()
     assert VALIDATION_FAILED in str(caught.value)
+    # The violations travel as data, as from the server.
+    assert any(unpack_detail(d, validate_pb2.Violations) for d in caught.value.details), (
+        "no buf.validate.Violations detail"
+    )
 
 
 @pytest.mark.parametrize(
