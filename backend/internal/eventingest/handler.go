@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
@@ -77,6 +78,9 @@ type PromoteHandler struct {
 	Transitioner Promoter
 	Events       EventProducer
 	Logger       *zap.Logger
+	// Tenants, when set, skips the events of a tenant in the trash: it is
+	// frozen, and the reconciler settles its pending uploads on restore.
+	Tenants auth.TenantStateReader
 }
 
 func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
@@ -105,6 +109,18 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 			zap.Error(err),
 		)
 		return nil
+	}
+
+	if h.Tenants != nil {
+		state, err := h.Tenants.TenantState(ctx, tenantUUID)
+		if err != nil {
+			// Retried, as any other read failure.
+			return fmt.Errorf("tenant state: %w", err)
+		}
+		if state == auth.TenantTrashed {
+			logger.Debug("tenant is in the trash; skipping", zap.String("tenant_id", tenantUUID.String()))
+			return nil
+		}
 	}
 
 	tenantPg := pgtype.UUID{Bytes: tenantUUID, Valid: true}

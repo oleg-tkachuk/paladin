@@ -44,6 +44,14 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — background jobs pass a trashed tenant by
+
+- Lifecycle expiry, replication, the object-trash hard-deleter, the pending
+  upload reconciler and storage-event promotion, storage-layout migrations,
+  batch operations and event delivery skip a tenant in the trash, and resume
+  on restore. Its queued operations stay `PENDING` and its events stay
+  pending meanwhile; a purge removes both with the tenant.
+
 ## Unreleased — a delete helper in both SDKs
 
 - `paladin.Delete` (Go) and `paladin.delete` / `adelete` (Python) supply the
@@ -52,6 +60,7 @@ tree with itself and passes without checking anything.
   `DeleteAttempts` / `DELETE_ATTEMPTS`), and treat an object already gone as
   done. A consumer that called `DeleteObject` without a version — refused by
   the server and by both fakes — can switch to them.
+
 ## Unreleased — a tenant in the trash is frozen
 
 - Every change to a tenant in the trash is refused — `FAILED_PRECONDITION`,

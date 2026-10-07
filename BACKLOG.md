@@ -476,20 +476,19 @@ finding moving from "packages you import" to "your code is affected".
   otherwise delete this entry with that decision recorded.
 - **Blockers:** whether per-tenant egress is ever billed.
 
-### A storage backend's feature probe runs only on request
+### A storage backend is not probed until someone runs TestBackend
 
 - **Status:** Deferred
-- **Reason:** `TestBackend` is the only thing that probes a backend's S3
-  features ([ADR-0026](docs/adr/0026-storage-backend-features-are-probed.md)).
-  A backend nobody has tested shows every feature unknown, and a result goes
-  stale when the store is upgraded or reconfigured, with nothing re-checking
-  it.
-- **Definition of Done:** the worker probes every enabled backend at start and
-  on an interval, records the results the way `TestBackend` does, and the
-  console shows how old each result is; a test drives the worker against the
-  probe store.
-- **Blockers:** none; the interval and whether a probe's scratch bucket is
-  acceptable on a schedule for every store want a decision.
+- **Reason:** the feature probe ([ADR-0026](docs/adr/0026-storage-backend-features-are-probed.md))
+  runs only on `TestBackend`, so a newly registered backend shows every
+  feature unknown — and refuses a public bucket — until an operator probes it.
+  Re-probing on a schedule was considered and rejected: a store's behaviour
+  changes when someone upgrades or reconfigures it, and that someone can run
+  `TestBackend`.
+- **Definition of Done:** a backend is probed once, automatically, when it is
+  registered (`CreateBackend`, or the config bootstrap) and whenever it has
+  never been probed; a test covers both paths.
+- **Blockers:** none.
 
 ### Replication: real `StorageReplicator` implementation
 
@@ -1375,20 +1374,6 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** none.
 
 ## Capability module
-
-### Background jobs still work on a trashed tenant
-
-- **Status:** Deferred
-- **Reason:** the trash freezes a tenant against API calls
-  (`middleware.TenantFreeze`), but the workers do not consult it: the
-  lifecycle worker expires its objects, replication copies them, the
-  reconciler promotes its pending uploads, the dispatcher delivers its events.
-  A restore then returns something other than what was trashed.
-- **Definition of Done:** each worker that changes a tenant's data skips a
-  tenant in the trash (or the decision to let one run is recorded per worker),
-  with a test per worker.
-- **Blockers:** whether event delivery for a trashed tenant should stop or
-  drain.
 
 ### A user named without its tenant escapes the freeze
 
