@@ -48,11 +48,13 @@ ORDER BY name;
 -- name: ListCollectionBindingsForBucket :many
 -- Lists every (tenant_id, collection name) bound to a given bucket. Used by
 -- lifecycle + replication workers to scope their object scans.
+-- A tenant in the trash is frozen: its rows wait for a restore or a purge.
 SELECT c.tenant_id, c.name AS collection_name
 FROM collections c
 JOIN buckets b           ON b.id = c.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE sb.name = $1 AND b.name = $2
+  AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id = c.tenant_id AND t.deleted_at IS NOT NULL)
 ORDER BY c.tenant_id, c.name;
 
 -- name: IterateObjectsForLifecycle :many

@@ -182,6 +182,8 @@ JOIN storage_backends ssb ON ssb.id = sb.backend_id
 JOIN buckets tb           ON tb.id = m.target_bucket_id
 JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE m.state NOT IN ('cleaned', 'failed')
+  -- A tenant in the trash is frozen: its migration resumes on restore.
+  AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id = m.tenant_id AND t.deleted_at IS NOT NULL)
 ORDER BY m.updated_at
 LIMIT $1::int
 `
