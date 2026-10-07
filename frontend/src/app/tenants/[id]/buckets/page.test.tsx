@@ -30,6 +30,7 @@ vi.mock("@/hooks/useBackends", () => ({
   useBackends: () => ({ backends: [{ backendId: "be-1", features: [] }] }),
 }));
 vi.mock("../tenant-context", () => ({
+  useTenantChangesBlocked: () => null,
   useTenant: () => ({ tenantId: "t-1", displayName: "Acme" }),
 }));
 vi.mock("@/components/ui/Notification", () => ({

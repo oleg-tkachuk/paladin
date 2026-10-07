@@ -5,6 +5,7 @@
 // the object data-plane honours it (soft-deletes preserve prior versions); this
 // page is the operator switch + retention option.
 
+import { useTenantChangesBlocked } from "../../../../tenant-context";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { useBucket } from "../bucket-context";
 import { errorMessage } from "@/hooks/errorContract";
 
 export default function BucketVersioningPage() {
+  const changesBlocked = useTenantChangesBlocked();
   const { bucket, setBucket } = useBucket();
   const { showNotification } = useNotification();
 
@@ -101,7 +103,11 @@ export default function BucketVersioningPage() {
       </div>
 
       <div className="flex justify-end">
-        <Button onClick={save} disabled={!dirty || saving}>
+        <Button
+          onClick={save}
+          disabled={Boolean(changesBlocked) || !dirty || saving}
+          title={changesBlocked ?? undefined}
+        >
           {saving ? "Saving…" : "Save"}
         </Button>
       </div>

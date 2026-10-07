@@ -13,6 +13,7 @@
 // current tenant — operators can still un-set it via the cross-tenant
 // page if they want a shared bucket.
 
+import { useTenantChangesBlocked } from "../tenant-context";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTableSort } from "@/hooks/useTableSort";
 import Link from "next/link";
@@ -77,6 +78,7 @@ type SortColumn = "backend" | "name" | "region";
 const ALL_BACKENDS = "__all__";
 
 export default function TenantBucketsPage() {
+  const changesBlocked = useTenantChangesBlocked();
   const tenant = useTenant();
   const {
     buckets,
@@ -186,7 +188,12 @@ export default function TenantBucketsPage() {
             .
           </p>
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Button
+          size="sm"
+          onClick={() => setCreateOpen(true)}
+          disabled={Boolean(changesBlocked)}
+          title={changesBlocked ?? undefined}
+        >
           <PlusIcon className="size-4" />
           New bucket
         </Button>
@@ -294,6 +301,8 @@ export default function TenantBucketsPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => setCreateOpen(true)}
+                        disabled={Boolean(changesBlocked)}
+                        title={changesBlocked ?? undefined}
                       >
                         <PlusIcon className="size-4" />
                         Create the first bucket

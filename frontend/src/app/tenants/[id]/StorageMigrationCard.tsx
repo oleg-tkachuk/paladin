@@ -1,5 +1,6 @@
 "use client";
 
+import { useTenantChangesBlocked } from "./tenant-context";
 import { useCallback, useEffect, useState } from "react";
 import { parseBucketResourceName } from "@/lib/resources/bucket-name";
 
@@ -39,6 +40,7 @@ export function StorageMigrationCard({
   tenantId: string;
   storageLayout: string;
 }) {
+  const changesBlocked = useTenantChangesBlocked();
   const { getTenantStorageMigration, migrateTenantStorageLayout } =
     useTenants();
   const [mig, setMig] = useState<StorageMigrationStatus | null>(null);
@@ -132,7 +134,11 @@ export function StorageMigrationCard({
                 className="w-40"
               />
             </label>
-            <Button onClick={start} disabled={starting}>
+            <Button
+              onClick={start}
+              disabled={Boolean(changesBlocked) || starting}
+              title={changesBlocked ?? undefined}
+            >
               {starting ? "Starting…" : "Migrate to dedicated"}
             </Button>
           </div>
