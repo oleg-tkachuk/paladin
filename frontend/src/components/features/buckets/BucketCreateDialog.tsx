@@ -254,7 +254,7 @@ export function BucketCreateDialog({
               <Input
                 {...control}
                 autoFocus
-                placeholder="paladin-primary"
+                placeholder="media-assets"
                 className="font-mono text-xs"
                 value={name}
                 onChange={(e) => setName(e.target.value.toLowerCase())}
