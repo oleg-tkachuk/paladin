@@ -366,7 +366,7 @@ func TestTransferTLSReachesStorageThatRequiresAClientCertificate(t *testing.T) {
 
 	// Without the client certificate, storage refuses the handshake.
 	plain := mustTransfer(t, paladin.WithTransferTLS(paladin.TLS{CAFile: f.ca}))
-	if _, err := paladin.Upload(context.Background(), connectData(t, dp, paladin.WithTransfer(plain)), paladin.UploadInput{
+	if _, err := paladin.Upload(context.Background(), connectData(t, dp, paladin.WithTransfer(plain)), paladin.UploadInput{ContentType: testContentType,
 		Parent: testParent, Key: "k2", Size: 1, Body: bytes.NewReader([]byte("x")),
 	}, paladin.UploadOptions{}); err == nil {
 		t.Fatal("storage accepted a transfer with no client certificate")

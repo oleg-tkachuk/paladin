@@ -107,7 +107,7 @@ func TestStrictAuthServesTheWorkflows(t *testing.T) {
 	p := srv.Connect(paladin.WithBearerToken(srv.IssueBearerToken(srv.Tenant())))
 	ctx := context.Background()
 	body := bytes.Repeat([]byte("p"), 2*paladintest.PartSize+1)
-	obj, err := paladin.Upload(ctx, p.Data, paladin.UploadInput{
+	obj, err := paladin.Upload(ctx, p.Data, paladin.UploadInput{ContentType: testContentType,
 		Parent: srv.Collection().String(), Key: "k", Size: int64(len(body)), Body: bytes.NewReader(body),
 	}, paladin.UploadOptions{MultipartThreshold: paladintest.PartSize})
 	if err != nil {
@@ -216,7 +216,8 @@ func TestStrictAuthRefusesAnotherTenantsUpload(t *testing.T) {
 	ctx := context.Background()
 	mine := srv.Connect(paladin.WithBearerToken(srv.IssueBearerToken(srv.Tenant())))
 	up, err := mine.Data.MultipartUpload.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
-		Parent: srv.Collection().String(), Key: "k", SizeBytes: 1,
+		Parent: srv.Collection().String(), Key: "k", SizeBytes: 1, ContentType: testContentType,
+		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
 	}))
 	if err != nil {
 		t.Fatal(err)
