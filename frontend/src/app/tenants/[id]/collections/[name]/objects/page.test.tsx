@@ -21,6 +21,8 @@ const h = vi.hoisted(() => ({
   genUrl: vi.fn(() => Promise.resolve(undefined)),
   replace: vi.fn(),
   showNotification: vi.fn(),
+  // The collection's access: 2 is COLLECTION_ACCESS_PUBLIC_READ.
+  access: 0,
   objects: [] as Array<Record<string, unknown>>,
   // Last options useObjects was called with — lets the filter-wiring tests
   // assert the CEL filter + sort the page derives and feeds the data hook.
@@ -69,7 +71,9 @@ vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
 }));
 vi.mock("../collection-context", () => ({
-  useCollection: () => ({ collection: { collection: "ok-1", bucket: "b-1" } }),
+  useCollection: () => ({
+    collection: { collection: "ok-1", bucket: "b-1", access: h.access },
+  }),
 }));
 
 // Stub the heavy feature children — not under test here, and they drag in
@@ -111,8 +115,17 @@ vi.mock("@/components/features/objects/ObjectsFilterBar", () => ({
   ),
 }));
 vi.mock("@/components/features/objects/BulkActionsToolbar", () => ({
-  BulkActionsToolbar: ({ selectedCount }: { selectedCount: number }) => (
-    <div data-testid="bulk-toolbar">selected:{selectedCount}</div>
+  BulkActionsToolbar: ({
+    selectedCount,
+    onBulkDelete,
+  }: {
+    selectedCount: number;
+    onBulkDelete: () => void;
+  }) => (
+    <div data-testid="bulk-toolbar">
+      selected:{selectedCount}
+      <button onClick={onBulkDelete}>bulk delete</button>
+    </div>
   ),
 }));
 vi.mock("@/components/features/objects/SaveViewModal", () => ({
@@ -146,27 +159,33 @@ vi.mock("@/components/features/objects/ObjectTableRow", () => ({
     <tr>
       <td>{obj.key}</td>
       <td>
-        <button
-          onClick={() => onCopy({ key: obj.key, collection: obj.collection })}
-        >
-          copy {obj.key}
-        </button>
-        <button
-          onClick={() => onMove({ key: obj.key, collection: obj.collection })}
-        >
-          move {obj.key}
-        </button>
-        <button
-          onClick={() =>
-            onSoftDelete({
-              objectId: obj.objectId,
-              collection: obj.collection,
-              key: obj.key,
-            })
-          }
-        >
-          trash {obj.key}
-        </button>
+        {onCopy && (
+          <button
+            onClick={() => onCopy({ key: obj.key, collection: obj.collection })}
+          >
+            copy {obj.key}
+          </button>
+        )}
+        {onMove && (
+          <button
+            onClick={() => onMove({ key: obj.key, collection: obj.collection })}
+          >
+            move {obj.key}
+          </button>
+        )}
+        {onSoftDelete && (
+          <button
+            onClick={() =>
+              onSoftDelete({
+                objectId: obj.objectId,
+                collection: obj.collection,
+                key: obj.key,
+              })
+            }
+          >
+            trash {obj.key}
+          </button>
+        )}
         <button
           onClick={() =>
             onHardDelete({
@@ -184,6 +203,7 @@ vi.mock("@/components/features/objects/ObjectTableRow", () => ({
 }));
 
 import CollectionObjectsPage from "./page";
+import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
 
 const makeObj = (key: string) => ({
   objectId: "o1",
@@ -210,6 +230,7 @@ beforeEach(() => {
     h[k].mockClear();
   }
   h.objects = [makeObj("path/to/file.txt")];
+  h.access = 0;
   h.lastOpts = undefined;
   localStorage.clear();
 });
@@ -316,6 +337,37 @@ describe("CollectionObjectsPage", () => {
     await waitFor(
       () => expect(h.lastOpts?.filter).toContain('key.contains("hello")'),
       { timeout: 1500 },
+    );
+  });
+});
+
+// ADR-0027: a public collection has no trash and names its objects, so the
+// page offers neither a soft delete nor copy/move, and a bulk delete is
+// permanent — confirmed first, since nothing undoes it.
+describe("CollectionObjectsPage in a public collection", () => {
+  beforeEach(() => {
+    h.access = CollectionAccess.PUBLIC_READ;
+  });
+
+  it("offers only a permanent delete per object", () => {
+    render(<CollectionObjectsPage />);
+    expect(screen.getByText("purge path/to/file.txt")).toBeInTheDocument();
+    expect(
+      screen.queryByText("trash path/to/file.txt"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("copy path/to/file.txt")).not.toBeInTheDocument();
+    expect(screen.queryByText("move path/to/file.txt")).not.toBeInTheDocument();
+  });
+
+  it("deletes in bulk permanently, after a confirm", async () => {
+    render(<CollectionObjectsPage />);
+    await userEvent.click(screen.getByText("bulk delete"));
+    expect(h.bulkDelete).not.toHaveBeenCalled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete permanently" }),
+    );
+    await waitFor(() =>
+      expect(h.bulkDelete).toHaveBeenCalledWith([], { permanent: true }),
     );
   });
 });
