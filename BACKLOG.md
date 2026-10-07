@@ -408,6 +408,23 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Performance / Scale
 
+### One copy of the request per unary interceptor
+
+- **Status:** Deferred.
+- **Reason:** connect-go v2 hands a server interceptor a stream, so
+`internal/api/unary.Interceptor` receives the request itself and hands the
+next layer a copy (`proto.Merge`). The data plane runs five such interceptors
+(capability, acting tenant, quota, idempotency, audit), so a request is
+decoded once and copied five times. Request messages are metadata and small,
+so this is not measured as a cost; a batch request near `MaxRPCRequestBytes`
+is the case that would show it. Passing the message itself down would let a
+handler's mutation reach the audit and idempotency layers above it, which the
+copies prevent.
+- **Definition of Done:** allocation and latency of a maximum-size batch
+request measured through the data-plane chain; if the copies show, layers
+share one message with that mutation hazard ruled out, and this entry goes.
+- **Blockers:** none.
+
 ### Per-table autovacuum tuning
 
 - **Status:** Blocked
