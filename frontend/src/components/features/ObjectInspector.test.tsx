@@ -100,3 +100,24 @@ describe("ObjectInspector Full Details", () => {
     );
   });
 });
+
+// A public collection has no trash: the server refuses a soft delete there, so
+// the drawer offers none and shows the address a consumer stores.
+describe("ObjectInspector on a public object", () => {
+  const URL = "https://s3.example.test/pub/acme-uuid/docs/k";
+
+  it("shows the public URL and offers no trash", () => {
+    h.object = { ...h.object, publicUrl: URL };
+    renderInTenant();
+    expect(screen.getByText(URL)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Trash" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the trash for a private object", () => {
+    renderInTenant();
+    expect(screen.queryByText("Public URL")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Trash" })).toBeInTheDocument();
+  });
+});
