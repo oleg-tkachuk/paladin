@@ -2,7 +2,10 @@
 
 import { useObject } from "@/hooks/useObject";
 import { useScope } from "@/context/ScopeContext";
-import { useTenantOptional } from "@/app/tenants/[id]/tenant-context";
+import {
+  useTenantChangesBlocked,
+  useTenantOptional,
+} from "@/app/tenants/[id]/tenant-context";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
 import { useRouter } from "next/navigation";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
@@ -42,6 +45,7 @@ export function ObjectInspector({
   // object lookup: an operator browsing another tenant's page keeps the
   // picker on their own.
   const routedTenant = useTenantOptional();
+  const changesBlocked = useTenantChangesBlocked();
   const effectiveParent = parentCollection || scopedCollection;
   const { object, downloadUrl, loading, softDeleteObject, restoreObject } =
     useObject(collection || undefined, effectiveParent);
@@ -247,6 +251,8 @@ export function ObjectInspector({
                 variant="success"
                 size="sm"
                 className="w-full"
+                disabled={Boolean(changesBlocked)}
+                title={changesBlocked ?? undefined}
                 onClick={() => restoreObject()}
               >
                 <ArrowPathIcon className="size-4" />
@@ -283,6 +289,8 @@ export function ObjectInspector({
                   <Button
                     variant="destructive"
                     size="sm"
+                    disabled={Boolean(changesBlocked)}
+                    title={changesBlocked ?? undefined}
                     onClick={() => {
                       softDeleteObject();
                       onClose();

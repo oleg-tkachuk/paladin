@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useTenantChangesBlocked } from "@/app/tenants/[id]/tenant-context";
 import { T } from "@/lib/ui/typography";
 
 /**
@@ -29,6 +30,7 @@ export function ObjectTagsCard({
   onEditToggle: (editing: boolean) => void;
   onSave: (labels: Record<string, string>) => Promise<void>;
 }) {
+  const changesBlocked = useTenantChangesBlocked();
   const [editingLabels, setEditingLabels] = React.useState<
     Record<string, string>
   >({});
@@ -83,6 +85,8 @@ export function ObjectTagsCard({
         <Button
           variant="outline"
           size="sm"
+          disabled={!isEditing && Boolean(changesBlocked)}
+          title={isEditing ? undefined : (changesBlocked ?? undefined)}
           onClick={() => onEditToggle(!isEditing)}
         >
           {isEditing ? "Cancel" : "Edit"}
