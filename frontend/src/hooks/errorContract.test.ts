@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { errorMessage, isAbortError } from "./errorContract";
+import { create } from "@bufbuild/protobuf";
+
+import { ErrorInfoSchema } from "@/gen/google/rpc/error_details_pb";
+import { ErrorReason } from "@/gen/paladin/common/v1/error_reason_pb";
+import {
+  PALADIN_ERROR_DOMAIN,
+  errorMessage,
+  errorReason,
+  isAbortError,
+} from "./errorContract";
 
 // Pins the caller-facing half of the data-hook error contract (see
 // README.md): errorMessage is what every mutation caller uses to turn a
@@ -57,5 +66,51 @@ describe("isAbortError", () => {
   it("does not swallow a real failure", () => {
     expect(isAbortError(new ConnectError("boom", Code.Internal))).toBe(false);
     expect(isAbortError(new Error("boom"))).toBe(false);
+  });
+});
+
+/** A ConnectError carrying one ErrorInfo, as it arrives off the wire. */
+function withInfo(domain: string, reason: string): ConnectError {
+  const info = create(ErrorInfoSchema, { domain, reason });
+  return new ConnectError("refused", Code.FailedPrecondition, undefined, [
+    { desc: ErrorInfoSchema, value: info },
+  ]);
+}
+
+describe("errorReason", () => {
+  it("reads the server's reason", () => {
+    expect(
+      errorReason(
+        withInfo(PALADIN_ERROR_DOMAIN, "ERROR_REASON_TENANT_ALREADY_DELETED"),
+      ),
+    ).toBe(ErrorReason.TENANT_ALREADY_DELETED);
+    expect(
+      errorReason(
+        withInfo(PALADIN_ERROR_DOMAIN, "ERROR_REASON_PUBLIC_COLLECTION_RULE"),
+      ),
+    ).toBe(ErrorReason.PUBLIC_COLLECTION_RULE);
+  });
+
+  it("ignores another domain's reason", () => {
+    expect(
+      errorReason(
+        withInfo("googleapis.com", "ERROR_REASON_TENANT_ALREADY_DELETED"),
+      ),
+    ).toBe(ErrorReason.UNSPECIFIED);
+  });
+
+  it("reads a reason newer than the console as none", () => {
+    expect(
+      errorReason(
+        withInfo(PALADIN_ERROR_DOMAIN, "ERROR_REASON_FROM_THE_FUTURE"),
+      ),
+    ).toBe(ErrorReason.UNSPECIFIED);
+  });
+
+  it("has none for an error without details, or not a ConnectError", () => {
+    expect(errorReason(new ConnectError("x", Code.Internal))).toBe(
+      ErrorReason.UNSPECIFIED,
+    );
+    expect(errorReason(new Error("x"))).toBe(ErrorReason.UNSPECIFIED);
   });
 });

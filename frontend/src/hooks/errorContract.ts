@@ -1,5 +1,14 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 
+import { ErrorInfoSchema } from "@/gen/google/rpc/error_details_pb";
+import {
+  ErrorReason,
+  ErrorReasonSchema,
+} from "@/gen/paladin/common/v1/error_reason_pb";
+
+/** The ErrorInfo domain the server marks its own reasons with. */
+export const PALADIN_ERROR_DOMAIN = "paladin";
+
 /**
  * Data-hook error contract — the ONE rule every hook in this directory
  * follows. See src/hooks/README.md for the rationale.
@@ -50,4 +59,30 @@ export function isAbortError(err: unknown): boolean {
     return err.code === Code.Canceled;
   }
   return err instanceof DOMException && err.name === "AbortError";
+}
+
+/**
+ * Why a call failed, beyond its code: the ErrorReason the server attaches to
+ * every error it maps from a domain condition, in a google.rpc.ErrorInfo of
+ * the "paladin" domain. UNSPECIFIED for anything else — a transport failure,
+ * another domain's detail, or a reason newer than this console, which is
+ * read as the code alone.
+ *
+ * For deciding what to offer (a restore, a link to probe a backend), never
+ * for the text: errorMessage stays the message.
+ */
+export function errorReason(err: unknown): ErrorReason {
+  if (!(err instanceof ConnectError)) {
+    return ErrorReason.UNSPECIFIED;
+  }
+  for (const info of err.findDetails(ErrorInfoSchema)) {
+    if (info.domain !== PALADIN_ERROR_DOMAIN) {
+      continue;
+    }
+    const value = ErrorReasonSchema.values.find((v) => v.name === info.reason);
+    if (value) {
+      return value.number as ErrorReason;
+    }
+  }
+  return ErrorReason.UNSPECIFIED;
 }

@@ -6,11 +6,32 @@ vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
 }));
 
+import { create } from "@bufbuild/protobuf";
+import { Code, ConnectError } from "@connectrpc/connect";
+
 import { BucketCreateDialog } from "./BucketCreateDialog";
+import { ErrorInfoSchema } from "@/gen/google/rpc/error_details_pb";
+import {
+  FeatureSupport,
+  StorageFeature,
+} from "@/gen/paladin/admin/v1/types_pb";
+
+/** A backend as the dialog reads it, with the anonymous-read probe's result. */
+function backend(id: string, anonymousRead = FeatureSupport.UNKNOWN) {
+  return {
+    backendId: id,
+    features: [
+      {
+        feature: StorageFeature.ANONYMOUS_READ_POLICY,
+        support: anonymousRead,
+      },
+    ],
+  } as never;
+}
 
 function open(
   createBucket = vi.fn().mockResolvedValue({}),
-  backends = ["primary"],
+  backends = [backend("primary")],
 ) {
   const onOpenChange = vi.fn();
   render(
@@ -59,6 +80,8 @@ describe("BucketCreateDialog", () => {
         "logs-2026",
         "",
         "eu-central-1",
+        true,
+        null,
       ),
     );
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
@@ -106,5 +129,68 @@ describe("BucketCreateDialog", () => {
     expect(submit()).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(retry).toHaveBeenCalledOnce();
+  });
+
+  // ADR-0027: public read only where the backend's probe found anonymous
+  // reads enforced; the form says why otherwise and links to the probe.
+  it("offers public read only on a backend that enforces anonymous reads", () => {
+    open(undefined, [backend("primary")]);
+    expect(screen.getByRole("switch", { name: "Public read" })).toBeDisabled();
+    expect(
+      screen.getByRole("link", { name: "Probe its features" }),
+    ).toHaveAttribute("href", "/storage-backends/primary");
+  });
+
+  it("creates a public bucket with its content types and CDN address", async () => {
+    const { createBucket } = open(undefined, [
+      backend("primary", FeatureSupport.SUPPORTED),
+    ]);
+    fireEvent.change(name(), { target: { value: "photos" } });
+    fireEvent.click(screen.getByRole("switch", { name: "Public read" }));
+    // A public bucket must say what it serves before it can be created.
+    expect(submit()).toBeDisabled();
+    const types = screen.getByLabelText(/Allowed content types/);
+    fireEvent.change(types, { target: { value: "image/webp" } });
+    fireEvent.keyDown(types, { key: "Enter" });
+    fireEvent.change(screen.getByLabelText("CDN base URL"), {
+      target: { value: "https://cdn.example.com" },
+    });
+    fireEvent.submit(submit().closest("form")!);
+    await waitFor(() =>
+      expect(createBucket).toHaveBeenCalledWith(
+        "primary",
+        "photos",
+        "",
+        "",
+        true,
+        {
+          allowedContentTypes: ["image/webp"],
+          baseUrl: "https://cdn.example.com",
+        },
+      ),
+    );
+  });
+
+  it("points a refusal for a missing feature at the probe", async () => {
+    const refused = new ConnectError(
+      "backend primary: anonymous_read_policy is unknown",
+      Code.FailedPrecondition,
+      undefined,
+      [
+        {
+          desc: ErrorInfoSchema,
+          value: create(ErrorInfoSchema, {
+            domain: "paladin",
+            reason: "ERROR_REASON_BACKEND_FEATURE_UNSUPPORTED",
+          }),
+        },
+      ],
+    );
+    open(vi.fn().mockRejectedValue(refused));
+    fireEvent.change(name(), { target: { value: "photos" } });
+    fireEvent.submit(submit().closest("form")!);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Run Test connectivity on the backend's page/,
+    );
   });
 });

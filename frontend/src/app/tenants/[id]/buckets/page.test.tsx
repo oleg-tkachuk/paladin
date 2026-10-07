@@ -27,7 +27,7 @@ vi.mock("@/hooks/useBuckets", () => ({
   }),
 }));
 vi.mock("@/hooks/useBackends", () => ({
-  useBackends: () => ({ backends: [{ backendId: "be-1" }] }),
+  useBackends: () => ({ backends: [{ backendId: "be-1", features: [] }] }),
 }));
 vi.mock("../tenant-context", () => ({
   useTenant: () => ({ tenantId: "t-1", displayName: "Acme" }),
@@ -134,8 +134,10 @@ describe("TenantBucketsPage", () => {
       expect(h.createBucket).toHaveBeenCalledWith(
         "be-1",
         "my-bucket",
-        expect.anything(),
-        expect.anything(),
+        "",
+        "",
+        true,
+        null,
       ),
     );
   });

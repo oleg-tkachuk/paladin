@@ -98,3 +98,13 @@ export function compatibilityBadge(
   }
   return { label: "Unverified", variant: "secondary" };
 }
+
+/** Whether the backend's last probe found the feature supported. */
+export function supports(
+  backend: Pick<StorageBackend, "features">,
+  feature: StorageFeature,
+): boolean {
+  return backend.features.some(
+    (f) => f.feature === feature && f.support === FeatureSupport.SUPPORTED,
+  );
+}

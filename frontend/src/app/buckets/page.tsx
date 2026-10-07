@@ -55,6 +55,7 @@ import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
 import { useRefetchWhile } from "@/hooks/useRefetchWhile";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { BucketDeleteDialog } from "@/components/features/buckets/BucketDeleteDialog";
+import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import { ProvisionStateBadge } from "@/components/features/buckets/ProvisionStateBadge";
 
 type SortColumn = "backend" | "name" | "region";
@@ -351,6 +352,7 @@ export default function BucketsPage() {
                     </TableCell>
                     <TableCell>
                       <ProvisionStateBadge state={b.provisionState} />
+                      {b.publicRead && <PublicReadBadge />}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -401,7 +403,7 @@ export default function BucketsPage() {
       <BucketCreateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        backends={backends}
+        backends={backendRows}
         backendsFailed={failedRead(backendsError, fetchBackends)}
         createBucket={createBucket}
       />
