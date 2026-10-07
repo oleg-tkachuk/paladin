@@ -118,10 +118,15 @@ type Bucket struct {
 	PublicRead bool
 	// PublicBaseURL is where a CDN serves a public bucket; "" means the
 	// backend's public endpoint. Fixed at creation.
-	PublicBaseURL   string
-	ResourceVersion int64
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	PublicBaseURL string
+	// CreatedOnBackend: Paladin creates the bucket on its backend
+	// (provision_on_backend), rather than taking one that already existed.
+	// Only such a bucket may be deleted there. Set when the row is written;
+	// never client-settable.
+	CreatedOnBackend bool
+	ResourceVersion  int64
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // BucketProvisionRow is the worker's view of a bucket that owes the

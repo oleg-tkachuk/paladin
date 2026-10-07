@@ -362,6 +362,7 @@ type Bucket struct {
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
 	PublicRead                        bool               `json:"public_read"`
 	PublicBaseUrl                     string             `json:"public_base_url"`
+	CreatedOnBackend                  bool               `json:"created_on_backend"`
 }
 
 type BucketQuota struct {

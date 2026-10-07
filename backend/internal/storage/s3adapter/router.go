@@ -188,6 +188,15 @@ func (r *ProvisionerRouter) CreateBucket(ctx context.Context, backendID, bucketN
 	return c.CreateBucket(ctx, backendID, bucketName, region)
 }
 
+// BucketExists routes to the backend that would hold the bucket.
+func (r *ProvisionerRouter) BucketExists(ctx context.Context, backendID, bucketName string) (bool, error) {
+	c, err := r.reg.For(ctx, backendID)
+	if err != nil {
+		return false, err
+	}
+	return c.BucketExists(ctx, backendID, bucketName)
+}
+
 func (r *ProvisionerRouter) DeleteBucket(ctx context.Context, backendID, bucketName string) error {
 	c, err := r.reg.For(ctx, backendID)
 	if err != nil {

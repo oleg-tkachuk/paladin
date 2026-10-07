@@ -84,12 +84,14 @@ var skipFields = map[string]map[string]string{
 		"ObjectLock": "wired via Bucket.Constraints; no top-level read needed",
 		// ProvisionState is a server-computed status field; the
 		// client never sets it on create.
-		"ProvisionState": "server-computed (provision/active/error); not client-settable",
+		"ProvisionState":   "server-computed (provision/active/error); not client-settable",
+		"CreatedOnBackend": "set by the reconciler when it creates the bucket; not client-settable",
 	},
 	"UpdateBucket": {
-		"LifecycleRules": "managed via SetLifecycleRules RPC",
-		"ObjectLock":     "wired via Bucket.Constraints; no top-level read needed",
-		"ProvisionState": "server-computed; not client-settable on update",
+		"LifecycleRules":   "managed via SetLifecycleRules RPC",
+		"ObjectLock":       "wired via Bucket.Constraints; no top-level read needed",
+		"ProvisionState":   "server-computed; not client-settable on update",
+		"CreatedOnBackend": "set by the reconciler when it creates the bucket; not client-settable",
 	},
 	"CreateBackend": {
 		// Grace-window state is set only by RotateCredentials (with its own

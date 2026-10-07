@@ -20,6 +20,8 @@ package wire
 import (
 	"context"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
+
 	"errors"
 
 	"github.com/google/uuid"
@@ -234,6 +236,9 @@ func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine, cfg
 	// type, so assert to the wider local interface here.
 	h := bucketh.NewHandler(repos.BucketV2.(bucketh.Repository), storage.Provisioner, pe)
 	h.SetConfiguredBackends(declaredBackendIDs(cfg))
+	// The feature probe's scratch buckets are Paladin's own; no request
+	// registers them.
+	h.SetReservedBuckets(bucketh.ReservedBuckets{Prefix: s3adapter.ProbeBucketPrefix})
 	// A public bucket needs its backend's probed features (ADR-0027).
 	h.SetBackends(repos.BackendV2)
 	return h

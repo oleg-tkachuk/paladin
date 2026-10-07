@@ -40,6 +40,9 @@ export function BucketDeleteDialog({
   const { showNotification } = useNotification();
   const [deleteRemote, setDeleteRemote] = useState(false);
   const deleteTarget = target;
+  // Only a bucket Paladin created is deleted on the backend (ADR-0028): an
+  // adopted one holds data Paladin never wrote.
+  const canDeleteRemote = deleteTarget?.createdOnBackend ?? false;
   const close = () => {
     onClose();
     setDeleteRemote(false);
@@ -52,12 +55,12 @@ export function BucketDeleteDialog({
         deleteTarget.backendId,
         deleteTarget.bucketId,
         deleteTarget.resourceVersion,
-        deleteRemote,
+        canDeleteRemote && deleteRemote,
       );
       showNotification({
         type: "success",
         title: "Bucket deleted",
-        message: `${deleteTarget.bucketId}${deleteRemote ? " (incl. S3)" : ""}`,
+        message: `${deleteTarget.bucketId}${canDeleteRemote && deleteRemote ? " (incl. S3)" : ""}`,
       });
       close();
     } catch (err) {
@@ -91,9 +94,10 @@ export function BucketDeleteDialog({
             . Any Collection still bound to it must be removed first.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
           <Checkbox
-            checked={deleteRemote}
+            checked={canDeleteRemote && deleteRemote}
+            disabled={!canDeleteRemote}
             onCheckedChange={(v) => setDeleteRemote(v === true)}
             id="delete-remote"
             className="mt-0.5"
@@ -106,7 +110,9 @@ export function BucketDeleteDialog({
               Also delete the physical S3 bucket
             </Label>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              The S3 bucket must already be empty for this to succeed.
+              {canDeleteRemote
+                ? "The S3 bucket must already be empty for this to succeed."
+                : "Paladin did not create this bucket, so it does not delete it on the backend; only the registration goes."}
             </p>
           </div>
         </label>

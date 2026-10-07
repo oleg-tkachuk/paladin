@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -335,10 +336,14 @@ func (c *Client) CreateBucket(ctx context.Context, backendID, bucketName, region
 		}
 	}
 	if _, err := c.s3.CreateBucket(ctx, in); err != nil {
-		// Idempotency: ignore "already exists / already owned by you" and fall
-		// through to the reachability check below.
-		msg := err.Error()
-		if !strings.Contains(msg, "BucketAlreadyOwnedByYou") && !strings.Contains(msg, "BucketAlreadyExists") {
+		switch {
+		case bucketOwnedByUs(err):
+			// The reconciler's own earlier attempt created it: a retry, not an
+			// adoption — CreateBucket refused a bucket that existed before the
+			// row was written. Fall through to the reachability check.
+		case bucketOwnedElsewhere(err):
+			return fmt.Errorf("s3 create bucket %q: %w", bucketName, ErrBucketOwnedElsewhere)
+		default:
 			return fmt.Errorf("s3 create bucket %q: %w", bucketName, err)
 		}
 	}
@@ -354,6 +359,23 @@ func (c *Client) CreateBucket(ctx context.Context, backendID, bucketName, region
 		return fmt.Errorf("s3 create bucket %q: created but not reachable (HeadBucket): %w", bucketName, err)
 	}
 	return nil
+}
+
+// BucketExists reports whether the store holds bucketName. A refused
+// HeadBucket counts as present: a bucket another account owns exists all the
+// same, and is no more Paladin's to create.
+func (c *Client) BucketExists(ctx context.Context, backendID, bucketName string) (bool, error) {
+	_, err := c.s3.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(bucketName)})
+	switch {
+	case err == nil:
+		return true, nil
+	case bucketAbsent(err):
+		return false, nil
+	case httpStatus(err) == http.StatusForbidden:
+		return true, nil
+	default:
+		return false, fmt.Errorf("s3 head bucket %q: %w", bucketName, err)
+	}
 }
 
 // DeleteBucket removes a real S3 bucket. Caller is responsible for ensuring

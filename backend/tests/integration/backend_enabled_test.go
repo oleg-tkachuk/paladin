@@ -283,7 +283,9 @@ func TestBackendReadOnly_ResolverGate(t *testing.T) {
 func TestBackendDisabled_CreateBucketRefused(t *testing.T) {
 	h := pgharness.Setup(t)
 	q := sqlc.New(h.PoolMigrate)
-	handler := bucketh.NewHandler(adapters.NewBucketRepoV2(q, h.PoolMigrate), nil, allowAll{})
+	// The buckets this test registers already exist on the backend, as
+	// registering without provisioning requires (ADR-0028).
+	handler := bucketh.NewHandler(adapters.NewBucketRepoV2(q, h.PoolMigrate), existingBuckets{}, allowAll{})
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{
 		Subject: "tester", Roles: []string{"platform.admin"},
 	})
@@ -312,6 +314,15 @@ func TestBackendDisabled_CreateBucketRefused(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create bucket on enabled backend: %v", err)
 	}
+}
+
+// existingBuckets is a backend that holds every bucket asked about.
+type existingBuckets struct{}
+
+func (existingBuckets) CreateBucket(context.Context, string, string, string) error { return nil }
+func (existingBuckets) DeleteBucket(context.Context, string, string) error         { return nil }
+func (existingBuckets) BucketExists(context.Context, string, string) (bool, error) {
+	return true, nil
 }
 
 // allowAll is a permissive cedar.Authorizer stub so the integration test

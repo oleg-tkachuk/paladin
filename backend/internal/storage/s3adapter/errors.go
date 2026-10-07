@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
@@ -49,6 +50,54 @@ func bucketGone(err error) bool {
 	}
 	var coder interface{ ErrorCode() string }
 	return errors.As(err, &coder) && coder.ErrorCode() == codeNoSuchBucket
+}
+
+// Codes a CreateBucket answers for a name already taken, for a store that
+// sends the code without the SDK's typed error.
+const (
+	codeBucketOwnedByYou = "BucketAlreadyOwnedByYou"
+	codeBucketExists     = "BucketAlreadyExists"
+)
+
+// ErrBucketOwnedElsewhere is a CreateBucket for a name another account holds.
+var ErrBucketOwnedElsewhere = errors.New("the bucket name is taken by another owner")
+
+// bucketOwnedByUs reports a CreateBucket refused because this account already
+// owns the bucket.
+func bucketOwnedByUs(err error) bool {
+	var owned *s3types.BucketAlreadyOwnedByYou
+	return errors.As(err, &owned) || errorCode(err) == codeBucketOwnedByYou
+}
+
+// bucketOwnedElsewhere reports a CreateBucket refused because another
+// account owns the name.
+func bucketOwnedElsewhere(err error) bool {
+	var taken *s3types.BucketAlreadyExists
+	return errors.As(err, &taken) || errorCode(err) == codeBucketExists
+}
+
+// bucketAbsent reports a HeadBucket for a bucket the store does not hold. A
+// HEAD has no body, so the answer is the status as often as a code.
+func bucketAbsent(err error) bool {
+	var notFound *s3types.NotFound
+	return errors.As(err, &notFound) || bucketGone(err) || httpStatus(err) == http.StatusNotFound
+}
+
+func errorCode(err error) string {
+	var coder interface{ ErrorCode() string }
+	if errors.As(err, &coder) {
+		return coder.ErrorCode()
+	}
+	return ""
+}
+
+// httpStatus is the status of the response err came from, 0 without one.
+func httpStatus(err error) int {
+	var resp *awshttp.ResponseError
+	if errors.As(err, &resp) {
+		return resp.HTTPStatusCode()
+	}
+	return 0
 }
 
 // bucketLevelCodes are S3 error codes that mean "the container is wrong or
