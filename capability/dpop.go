@@ -424,7 +424,7 @@ func validateThumbprint(jkt string) error {
 		return nil
 	}
 	if raw, err := base64.RawURLEncoding.DecodeString(jkt); err != nil || len(raw) != sha256.Size {
-		return fmt.Errorf("capability: ConfirmationJKT %q is not a base64url SHA-256 thumbprint", jkt)
+		return invalidRequest("ConfirmationJKT %q is not a base64url SHA-256 thumbprint", jkt)
 	}
 	return nil
 }

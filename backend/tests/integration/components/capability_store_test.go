@@ -17,6 +17,7 @@ package components
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -521,5 +522,40 @@ func TestPurgeRunsWithoutARequestPrincipal(t *testing.T) {
 	}
 	if n != 1 {
 		t.Errorf("purged %d rows with the cross-tenant flag, want 1 — the background purger cannot do its job", n)
+	}
+}
+
+// An issuance for a tenant that does not exist reached the client as the
+// driver's foreign-key error, and one for a tenant in the trash succeeded:
+// the row exists, so the key admits it. Both are refused by name now — as the
+// application role, so the tenant lock runs with the privileges it has in
+// production.
+func TestInsertRefusesATenantItCannotIssueFor(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	admin := startPostgres(t)
+	store := newCapStore(t, rlsPool(t, ctx, admin))
+
+	live, _ := mkTenant(t, ctx, admin, "shared")
+	trashed, _ := mkTenant(t, ctx, admin, "shared")
+	mustExec(t, ctx, admin, `UPDATE tenants SET deleted_at = now() WHERE id = $1`, trashed)
+
+	for name, tc := range map[string]struct {
+		tenant uuid.UUID
+		want   error
+	}{
+		"a live tenant":     {live, nil},
+		"an unknown tenant": {uuid.New(), capability.ErrUnknownTenant},
+		"a tenant in trash": {trashed, capability.ErrTenantDeleted},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := store.Insert(ctx, mkCap(tc.tenant, "user:alice", time.Now().Add(time.Hour)), seedIssuer)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("insert: %v, want %v", err, tc.want)
+			}
+			if err != nil && strings.Contains(err.Error(), "SQLSTATE") {
+				t.Errorf("the refusal carries the driver's error: %v", err)
+			}
+		})
 	}
 }
