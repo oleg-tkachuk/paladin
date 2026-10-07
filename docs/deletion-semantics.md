@@ -43,6 +43,15 @@ with explicitly.
 | `DeleteTenant` | Moves to trash (`deleted_at` set). Nothing is destroyed. | `RestoreTenant` |
 | `PurgeTenant` | Hard delete of a **trashed** tenant. Refuses while the tenant owns anything (`RESTRICT`). | No |
 
+**A tenant in the trash is frozen.** Every change to it is refused with
+`FAILED_PRECONDITION` and reason `TENANT_ALREADY_DELETED`, whoever asks —
+platform admins included — so that restoring returns exactly what was
+trashed. What stays open: reading and downloading its data, taking access
+away (revoking tokens and capabilities, cancelling operations, aborting
+uploads), and the tenant's own lifecycle (`GetTenant`, `ListTenants`,
+`RestoreTenant`, `PurgeTenant`). To remove a tenant that already holds data
+in the trash, restore it, empty it, and trash and purge it.
+
 There is no one-shot hard delete. There used to be — `DeleteTenant(force=true)`
 — and it is gone: landing the tenant in a different state is a different
 transition, not a modifier on this one.
