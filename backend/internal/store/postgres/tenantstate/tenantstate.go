@@ -42,6 +42,23 @@ func (r *Reader) TenantState(ctx context.Context, tenantID uuid.UUID) (auth.Tena
 	return auth.TenantLive, nil
 }
 
+// TenantIDBySlug finds the tenant a slug names as GetTenantBySlug does: the
+// live tenant holding it, else the most recently trashed one.
+func (r *Reader) TenantIDBySlug(ctx context.Context, slug string) (uuid.UUID, bool, error) {
+	var id uuid.UUID
+	err := r.pool.QueryRow(ctx, `
+		SELECT id FROM tenants WHERE slug = $1
+		ORDER BY deleted_at IS NOT NULL, deleted_at DESC
+		LIMIT 1`, slug).Scan(&id)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return uuid.Nil, false, nil
+	case err != nil:
+		return uuid.Nil, false, fmt.Errorf("tenantstate: slug %q: %w", slug, err)
+	}
+	return id, true, nil
+}
+
 // NewWatcher builds a watcher that calls onChange — the cache's Clear —
 // whenever a tenant is trashed, restored or removed, and after every
 // reconnect.

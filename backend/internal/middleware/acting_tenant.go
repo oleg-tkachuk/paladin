@@ -70,33 +70,15 @@ func actingOnNamedTenant(ctx context.Context, msg any) context.Context {
 	return ctx
 }
 
-// namedTenants adds the tenant of every resource name in m to out.
+// namedTenants adds the tenant of every resource name in m to out — by id
+// only: a slug is the shim's to resolve.
 func namedTenants(m protoreflect.Message, out map[uuid.UUID]bool) {
-	m.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-		switch {
-		case fd.Kind() == protoreflect.MessageKind && fd.IsList():
-			list := v.List()
-			for i := 0; i < list.Len(); i++ {
-				namedTenants(list.Get(i).Message(), out)
-			}
-		case fd.Kind() == protoreflect.MessageKind && !fd.IsMap():
-			namedTenants(v.Message(), out)
-		case fd.Kind() == protoreflect.StringKind && nameFields[fd.Name()]:
-			if fd.IsList() {
-				list := v.List()
-				for i := 0; i < list.Len(); i++ {
-					addTenant(list.Get(i).String(), out)
-				}
-			} else {
-				addTenant(v.String(), out)
-			}
+	walkStrings(m, func(field protoreflect.Name, value string) {
+		if !nameFields[field] {
+			return
 		}
-		return true
+		if tenant, ok := apiutil.TenantInResourceName(value); ok {
+			out[tenant] = true
+		}
 	})
-}
-
-func addTenant(name string, out map[uuid.UUID]bool) {
-	if tenant, ok := apiutil.TenantInResourceName(name); ok {
-		out[tenant] = true
-	}
 }
