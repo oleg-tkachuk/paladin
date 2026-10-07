@@ -64,6 +64,12 @@ class ObjectLockMode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     OBJECT_LOCK_MODE_UNSPECIFIED: _ClassVar[ObjectLockMode]
     OBJECT_LOCK_MODE_GOVERNANCE: _ClassVar[ObjectLockMode]
     OBJECT_LOCK_MODE_COMPLIANCE: _ClassVar[ObjectLockMode]
+
+class CollectionAccess(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    COLLECTION_ACCESS_UNSPECIFIED: _ClassVar[CollectionAccess]
+    COLLECTION_ACCESS_PRIVATE: _ClassVar[CollectionAccess]
+    COLLECTION_ACCESS_PUBLIC_READ: _ClassVar[CollectionAccess]
 STORAGE_FEATURE_UNSPECIFIED: StorageFeature
 STORAGE_FEATURE_CONDITIONAL_PUT: StorageFeature
 STORAGE_FEATURE_CHECKSUM_SHA256: StorageFeature
@@ -95,6 +101,9 @@ EVENT_TARGET_REDIS: EventTarget
 OBJECT_LOCK_MODE_UNSPECIFIED: ObjectLockMode
 OBJECT_LOCK_MODE_GOVERNANCE: ObjectLockMode
 OBJECT_LOCK_MODE_COMPLIANCE: ObjectLockMode
+COLLECTION_ACCESS_UNSPECIFIED: CollectionAccess
+COLLECTION_ACCESS_PRIVATE: CollectionAccess
+COLLECTION_ACCESS_PUBLIC_READ: CollectionAccess
 
 class StorageBackend(_message.Message):
     __slots__ = ("name", "backend_id", "display_name", "kind", "endpoint", "public_endpoint", "region", "force_path_style", "credentials_secret_ref", "sse", "events", "cedar_policy", "resource_version", "created_at", "updated_at", "enabled", "previous_credentials_secret_ref", "previous_credentials_valid_until", "read_only", "health_status", "health_message", "health_checked_at", "maintenance", "provider", "features", "compatibility")
@@ -189,7 +198,7 @@ class EventSourceConfig(_message.Message):
     def __init__(self, enabled: _Optional[bool] = ..., target: _Optional[_Union[EventTarget, str]] = ..., queue_url: _Optional[str] = ..., poll_interval: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ...) -> None: ...
 
 class Bucket(_message.Message):
-    __slots__ = ("name", "backend_id", "bucket_id", "display_name", "region", "owner_tenant_id", "cedar_policy", "constraints", "lifecycle_rules", "object_lock", "versioning", "replication", "labels", "resource_version", "created_at", "updated_at", "provision_state")
+    __slots__ = ("name", "backend_id", "bucket_id", "display_name", "region", "owner_tenant_id", "cedar_policy", "constraints", "lifecycle_rules", "object_lock", "versioning", "replication", "labels", "resource_version", "created_at", "updated_at", "provision_state", "public_read", "public_base_url")
     class LabelsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -214,6 +223,8 @@ class Bucket(_message.Message):
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
     PROVISION_STATE_FIELD_NUMBER: _ClassVar[int]
+    PUBLIC_READ_FIELD_NUMBER: _ClassVar[int]
+    PUBLIC_BASE_URL_FIELD_NUMBER: _ClassVar[int]
     name: str
     backend_id: str
     bucket_id: str
@@ -231,7 +242,9 @@ class Bucket(_message.Message):
     created_at: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
     provision_state: str
-    def __init__(self, name: _Optional[str] = ..., backend_id: _Optional[str] = ..., bucket_id: _Optional[str] = ..., display_name: _Optional[str] = ..., region: _Optional[str] = ..., owner_tenant_id: _Optional[str] = ..., cedar_policy: _Optional[str] = ..., constraints: _Optional[_Union[BucketConstraints, _Mapping]] = ..., lifecycle_rules: _Optional[_Iterable[_Union[LifecycleRule, _Mapping]]] = ..., object_lock: _Optional[_Union[ObjectLockConfig, _Mapping]] = ..., versioning: _Optional[_Union[BucketVersioning, _Mapping]] = ..., replication: _Optional[_Union[BucketReplication, _Mapping]] = ..., labels: _Optional[_Mapping[str, str]] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., provision_state: _Optional[str] = ...) -> None: ...
+    public_read: bool
+    public_base_url: str
+    def __init__(self, name: _Optional[str] = ..., backend_id: _Optional[str] = ..., bucket_id: _Optional[str] = ..., display_name: _Optional[str] = ..., region: _Optional[str] = ..., owner_tenant_id: _Optional[str] = ..., cedar_policy: _Optional[str] = ..., constraints: _Optional[_Union[BucketConstraints, _Mapping]] = ..., lifecycle_rules: _Optional[_Iterable[_Union[LifecycleRule, _Mapping]]] = ..., object_lock: _Optional[_Union[ObjectLockConfig, _Mapping]] = ..., versioning: _Optional[_Union[BucketVersioning, _Mapping]] = ..., replication: _Optional[_Union[BucketReplication, _Mapping]] = ..., labels: _Optional[_Mapping[str, str]] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., provision_state: _Optional[str] = ..., public_read: _Optional[bool] = ..., public_base_url: _Optional[str] = ...) -> None: ...
 
 class BucketConstraints(_message.Message):
     __slots__ = ("max_object_size_bytes", "min_part_size_bytes", "max_part_size_bytes", "max_parts", "allowed_content_types", "max_presign_put_ttl", "max_presign_get_ttl", "required_checksum_algorithm")
@@ -345,7 +358,7 @@ class Tenant(_message.Message):
     def __init__(self, name: _Optional[str] = ..., tenant_id: _Optional[str] = ..., display_name: _Optional[str] = ..., labels: _Optional[_Mapping[str, str]] = ..., inherited_cedar_policy: _Optional[str] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., slug: _Optional[str] = ..., deleted_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., default_bucket: _Optional[str] = ..., storage_layout: _Optional[str] = ...) -> None: ...
 
 class Collection(_message.Message):
-    __slots__ = ("name", "tenant_id", "collection", "display_name", "bucket", "completion_mode", "cedar_policy", "constraints", "resource_version", "created_at", "updated_at")
+    __slots__ = ("name", "tenant_id", "collection", "display_name", "bucket", "completion_mode", "cedar_policy", "constraints", "resource_version", "created_at", "updated_at", "access", "cache_control")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     COLLECTION_FIELD_NUMBER: _ClassVar[int]
@@ -357,6 +370,8 @@ class Collection(_message.Message):
     RESOURCE_VERSION_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
+    ACCESS_FIELD_NUMBER: _ClassVar[int]
+    CACHE_CONTROL_FIELD_NUMBER: _ClassVar[int]
     name: str
     tenant_id: str
     collection: str
@@ -368,7 +383,9 @@ class Collection(_message.Message):
     resource_version: str
     created_at: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
-    def __init__(self, name: _Optional[str] = ..., tenant_id: _Optional[str] = ..., collection: _Optional[str] = ..., display_name: _Optional[str] = ..., bucket: _Optional[str] = ..., completion_mode: _Optional[_Union[_resource_pb2.CompletionMode, str]] = ..., cedar_policy: _Optional[str] = ..., constraints: _Optional[_Union[BucketConstraints, _Mapping]] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    access: CollectionAccess
+    cache_control: str
+    def __init__(self, name: _Optional[str] = ..., tenant_id: _Optional[str] = ..., collection: _Optional[str] = ..., display_name: _Optional[str] = ..., bucket: _Optional[str] = ..., completion_mode: _Optional[_Union[_resource_pb2.CompletionMode, str]] = ..., cedar_policy: _Optional[str] = ..., constraints: _Optional[_Union[BucketConstraints, _Mapping]] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., access: _Optional[_Union[CollectionAccess, str]] = ..., cache_control: _Optional[str] = ...) -> None: ...
 
 class Quota(_message.Message):
     __slots__ = ("name", "max_total_bytes", "max_object_count", "max_bytes_per_day", "max_objects_per_day", "usage", "resource_version", "updated_at")

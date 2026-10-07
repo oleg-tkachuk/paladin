@@ -164,7 +164,7 @@ func equalForBootstrap(a, b v1admindomain.StorageBackend) bool {
 func sseTypeYAMLToDomain(yaml string) string {
 	switch yaml {
 	case "aws:kms":
-		return "KMS"
+		return v1admindomain.SSETypeKMS
 	case "AES256":
 		return "AES256"
 	}

@@ -126,6 +126,11 @@ var (
 	ActionConfigureVersioning   = declare("ConfigureVersioning")
 	ActionConfigureReplication  = declare("ConfigureReplication")
 
+	// ConfigurePublicRead makes data readable by anyone with its URL: creating
+	// a public bucket or a public collection (ADR-0027). Its own action, so
+	// that holding ManageBucket or ManageCollection is not enough to publish.
+	ActionConfigurePublicRead = declare("ConfigurePublicRead")
+
 	// Sensitive backend ops. Separate action so a "secrets.rotator" role
 	// can rotate credentials without inheriting full ManageBackend rights.
 	ActionRotateBackendCredentials = declare("RotateBackendCredentials")
@@ -846,6 +851,9 @@ when {
 //
 // ManageCollection covers both reading and creating a collection: the
 // collection handler authorises Get with the same action as Create.
+// ConfigurePublicRead lets it provision a tenant's public bucket and
+// collections (ADR-0027) — publishing is a provisioning decision, made when
+// the tenant's storage is laid out, never a data-plane one.
 // A tenant policy can still forbid it (first-forbid wins).
 permit (
   principal,
@@ -855,7 +863,8 @@ permit (
     Action::"ManageBucket",
     Action::"ReadBucket",
     Action::"ManageCollection",
-    Action::"BindCollectionToBucket"
+    Action::"BindCollectionToBucket",
+    Action::"ConfigurePublicRead"
   ],
   resource
 )

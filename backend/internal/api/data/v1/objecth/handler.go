@@ -36,6 +36,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
+	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
@@ -77,6 +78,10 @@ type Storage interface {
 	// checksumAlgo, "" when the store keeps none for that algorithm.
 	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, checksumAlgo string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
 	CopyObject(ctx context.Context, src, dst Location) error
+	// PublicURL is where an object in a public collection is read unsigned
+	// (ADR-0027): under publicBaseURL when set, else the backend's public
+	// endpoint.
+	PublicURL(ctx context.Context, backendID, bucket, publicBaseURL string, tenantID uuid.UUID, collection, key string) (string, error)
 	// DeleteObject is optional — for permanent deletes only.
 	DeleteObject(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) error
 }
@@ -101,6 +106,12 @@ type BucketMeta struct {
 	// Constraints are the bucket's upload constraints (BucketService
 	// SetConstraints); they narrow limits.* for every object written here.
 	Constraints uploadpolicy.BucketConstraints
+	// PublicRead: the collection is public (ADR-0027) — the server names its
+	// objects, stores them with CacheControl, and gives each a public URL
+	// starting at PublicBaseURL ("" for the backend's public endpoint).
+	PublicRead    bool
+	CacheControl  string
+	PublicBaseURL string
 }
 
 // ObjectLock is the object row's lock state (object-level, distinct from
@@ -201,6 +212,11 @@ type Location struct {
 	Bucket     string // physical S3 bucket
 	Collection string // Paladin namespace within the bucket
 	Key        string // storage key inside the prefix
+	// CacheControl, on a copy's destination in a public collection, is what
+	// the copy is stored with, and ContentType is restated with it; both are
+	// ignored elsewhere (ADR-0027).
+	CacheControl string
+	ContentType  string
 }
 
 // PresignPutArgs describe the one body a PUT URL will accept: its exact
@@ -215,7 +231,10 @@ type PresignPutArgs struct {
 	SizeBytes     int64
 	ChecksumAlgo  string
 	ChecksumValue string // base64 digest, see internal/checksum
-	TTL           time.Duration
+	// CacheControl is bound into the upload in a public collection
+	// (ADR-0027); "" elsewhere.
+	CacheControl string
+	TTL          time.Duration
 }
 
 // PresignPostArgs are PresignPutArgs for a browser form upload: the POST
@@ -230,7 +249,10 @@ type PresignPostArgs struct {
 	SizeBytes     int64
 	ChecksumAlgo  string
 	ChecksumValue string
-	TTL           time.Duration
+	// CacheControl is bound into the upload in a public collection
+	// (ADR-0027); "" elsewhere.
+	CacheControl string
+	TTL          time.Duration
 }
 
 type PresignGetArgs struct {
@@ -370,6 +392,10 @@ type Object struct {
 	// Taint is the signals the content has been flagged with (taint_handler.go).
 	// Empty for a clean object.
 	Taint []string
+
+	// PublicURL is where anyone may read the object unsigned, for an object
+	// in a public collection (ADR-0027); "" otherwise.
+	PublicURL string
 }
 
 type CreateObjectArgs struct {
@@ -389,6 +415,9 @@ type CreateObjectArgs struct {
 	Tags             map[string]string
 	ExternalRef      string
 	PresignExpiresAt time.Time
+	// PublicURL is the object's address in a public collection (ADR-0027),
+	// fixed for its life; "" elsewhere.
+	PublicURL string
 }
 
 type UpdateMetadataArgs struct {
@@ -635,11 +664,6 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("checksum_value: %w", err))
 	}
 
-	objectURI := paladin.ObjectResource(tenantID.String(), in.Collection, in.Key)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
-		return nil, err
-	}
-
 	// 1. Resolve bucket binding + completion mode in ONE lookup, BEFORE the
 	//    Cedar check — the scope-enforcement built-in confines a bucket:/
 	//    collection:-scoped PAT to resources whose physical bucket it carries,
@@ -658,6 +682,15 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.Collection, true) // upload (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
+	}
+	// A public collection names the object; the capability check below is of
+	// the object that will exist.
+	if err := AdmitPublicUpload(meta, &in.Key, in.ContentType); err != nil {
+		return nil, err
+	}
+	objectURI := paladin.ObjectResource(tenantID.String(), in.Collection, in.Key)
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+		return nil, err
 	}
 	policy := uploadpolicy.For(h.presign.Limits, meta.Constraints)
 	if err := policy.CheckSingle(uploadpolicy.Upload{
@@ -719,6 +752,10 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 		return nil, err
 	}
 	presignExp := time.Now().Add(ttl)
+	publicURL, err := h.publicURL(ctx, meta, tenantID, in.Collection, key)
+	if err != nil {
+		return nil, err
+	}
 	obj, err := h.repo.CreateObject(ctx, CreateObjectArgs{
 		TenantID:         tenantID,
 		Collection:       in.Collection,
@@ -731,6 +768,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 		Tags:             in.Tags,
 		ExternalRef:      in.ExternalRef,
 		PresignExpiresAt: presignExp,
+		PublicURL:        publicURL,
 	})
 	if err != nil {
 		return nil, mapCreateErr(err)
@@ -754,6 +792,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 			ChecksumAlgo:  in.ChecksumAlgo,
 			ChecksumValue: in.ChecksumValue,
 			TTL:           ttl,
+			CacheControl:  meta.CacheControl,
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("presign POST: %w", err))
@@ -774,6 +813,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 			ChecksumAlgo:  in.ChecksumAlgo,
 			ChecksumValue: in.ChecksumValue,
 			TTL:           ttl,
+			CacheControl:  meta.CacheControl,
 		})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("presign PUT: %w", err))
@@ -1480,6 +1520,11 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 			fmt.Errorf("invalid resource_version: %w", err))
 	}
 	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, collection)
+	if !permanent && obj.PublicURL != "" {
+		// A public collection has no trash: a soft delete would leave the
+		// bytes served at the URL (ADR-0027).
+		return apiutil.MapError(publicread.Rulef("a public object is deleted with permanent=true; it has no trash"))
+	}
 	if !permanent {
 		// Soft-delete + paladin.object.deleted fan-out in one tx (ADR-0003):
 		// the event is atomic with the AVAILABLE→DELETED flip.
@@ -1835,7 +1880,22 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("cannot copy from state %s", src.State))
 	}
+	// Resolve the DESTINATION (backend, bucket) BEFORE the Cedar check so a
+	// bucket:/collection:-scoped write PAT enforces on the copy target — the
+	// authz Resource below is the destination (ActionCopyObject is checked
+	// against the dest). The same resolution is reused as the copy-dest
+	// Location; the source is resolved after authz as before.
+	dstMeta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.DestCollection, true) // copy dest (mutation)
+	if err != nil {
+		return nil, MapResolveErr(err)
+	}
+	dstBackendID, dstBucket := dstMeta.BackendID, dstMeta.BucketName
+	// A public destination names the copy itself; elsewhere an empty key
+	// keeps the source's.
 	destKey := in.DestKey
+	if err := AdmitPublicUpload(dstMeta, &destKey, src.ContentType); err != nil {
+		return nil, err
+	}
 	if destKey == "" {
 		destKey = src.Key
 	}
@@ -1848,16 +1908,6 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, destURI); err != nil {
 		return nil, err
 	}
-	// Resolve the DESTINATION (backend, bucket) BEFORE the Cedar check so a
-	// bucket:/collection:-scoped write PAT enforces on the copy target — the
-	// authz Resource below is the destination (ActionCopyObject is checked
-	// against the dest). The same resolution is reused as the copy-dest
-	// Location; the source is resolved after authz as before.
-	dstMeta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.DestCollection, true) // copy dest (mutation)
-	if err != nil {
-		return nil, MapResolveErr(err)
-	}
-	dstBackendID, dstBucket := dstMeta.BackendID, dstMeta.BucketName
 	// The copy creates an object in the destination bucket, so it obeys that
 	// bucket's limits like an upload would; otherwise a copy is the way
 	// around an allowlist or a size cap.
@@ -1879,6 +1929,10 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		return nil, MapResolveErr(err)
 	}
 
+	publicURL, err := h.publicURL(ctx, dstMeta, tenantID, in.DestCollection, destKey)
+	if err != nil {
+		return nil, err
+	}
 	// Insert the destination row up-front so the FK to collections is
 	// validated before we issue the S3 copy.
 	dst, err := h.repo.CreateObject(ctx, CreateObjectArgs{
@@ -1892,6 +1946,7 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		Tags:             coalesceMap(in.Tags, src.Tags),
 		ExternalRef:      src.ExternalRef,
 		PresignExpiresAt: time.Now().Add(h.presign.TTL.Default(presignttl.OpPut)),
+		PublicURL:        publicURL,
 	})
 	if err != nil {
 		return nil, mapCreateErr(err)
@@ -1900,6 +1955,7 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		BackendID: srcBackendID, TenantID: tenantID, Bucket: srcBucket, Collection: in.SourceCollection, Key: src.Key,
 	}, Location{
 		BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, Collection: in.DestCollection, Key: destKey,
+		CacheControl: dstMeta.CacheControl, ContentType: src.ContentType,
 	}); err != nil {
 		// Compensate: the destination row was created PENDING. Without this
 		// transition the row would linger forever, since the reconciler only

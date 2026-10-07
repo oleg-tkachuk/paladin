@@ -71,8 +71,12 @@ type StorageBackend struct {
 	UpdatedAt       time.Time
 }
 
+// SSETypeKMS is ServerSideEncryption.Type for SSE-KMS, whatever spelling
+// the configuration or the API used ("aws:kms", SSE_TYPE_KMS).
+const SSETypeKMS = "KMS"
+
 type ServerSideEncryption struct {
-	Type  string // "" | "AES256" | "KMS"
+	Type  string // "" | "AES256" | SSETypeKMS
 	KeyID string
 }
 
@@ -104,7 +108,13 @@ type Bucket struct {
 	// owes the backend a CreateBucket call; "failed" means a non-retryable
 	// error stopped the reconciler. Currently used only on Create input —
 	// Get / List do not populate it.
-	ProvisionState  string
+	ProvisionState string
+	// PublicRead: every object is served to unsigned GETs (ADR-0027). Fixed
+	// at creation.
+	PublicRead bool
+	// PublicBaseURL is where a CDN serves a public bucket; "" means the
+	// backend's public endpoint. Fixed at creation.
+	PublicBaseURL   string
 	ResourceVersion int64
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -124,6 +134,9 @@ type BucketProvisionRow struct {
 	// OwnerTenantID is the dedicated-bucket owner (uuid.Nil for shared buckets).
 	// The reconciler tags the bucket with it for cost attribution (ADR-0015).
 	OwnerTenantID uuid.UUID
+	// PublicRead: the reconciler sets the anonymous-read policy before it
+	// marks the bucket ready (ADR-0027).
+	PublicRead bool
 }
 
 // Provision-state constants — mirror the CHECK constraint in the

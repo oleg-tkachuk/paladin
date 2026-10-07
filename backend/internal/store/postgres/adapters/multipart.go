@@ -70,6 +70,7 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.Ini
 		encodeMap(args.Tags),
 		strPtrOrNil(args.ExternalRef),
 		pgTS(time.Now().Add(multipartSessionTTL)),
+		args.PublicURL,
 	); err != nil {
 		return multiparth.Session{}, fmt.Errorf("create multipart object row: %w", err)
 	}

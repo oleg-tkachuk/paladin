@@ -368,7 +368,9 @@ message CopyObjectRequest {
   string source_name = 1 [(buf.validate.field).string.min_len = 1];
   // Destination Collection resource name.
   string destination_collection = 2 [(buf.validate.field).string.min_len = 1];
-  string destination_key = 3 [(buf.validate.field).string.min_len = 1];
+  // Empty keeps the source's key. A PUBLIC_READ destination names the copy
+  // itself and refuses one (ADR-0027).
+  string destination_key = 3;
   optional MetadataOverride metadata_override = 4;
   optional TagsOverride tags_override = 5;
 }

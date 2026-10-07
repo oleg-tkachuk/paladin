@@ -56,6 +56,20 @@ const (
 	// query resolves it from the backend and bucket names by subquery, so an
 	// unknown bucket arrives as a NOT NULL violation on this column.
 	CollectionsBucketIDColumn = "bucket_id"
+
+	// The rules of public collections (049_public_collections.sql, ADR-0027).
+	// Raised by triggers, which name the rule as the error's constraint.
+	//
+	// CollectionsBucketVisibility — a collection's public_read equals its
+	// bucket's.
+	CollectionsBucketVisibility = "collections_bucket_visibility"
+	// CollectionsPublicReadFixed — public_read and cache_control never change.
+	CollectionsPublicReadFixed = "collections_public_read_fixed"
+	// CollectionsPublicBucketFixed — a public collection never rebinds.
+	CollectionsPublicBucketFixed = "collections_public_bucket_fixed"
+	// BucketsPublicReadFixed — a bucket's public_read and public_base_url
+	// never change.
+	BucketsPublicReadFixed = "buckets_public_read_fixed"
 )
 
 // object_tags table constraint names — see the schema baseline

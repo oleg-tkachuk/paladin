@@ -360,6 +360,8 @@ type Bucket struct {
 	ResourceVersion                   int64              `json:"resource_version"`
 	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
+	PublicRead                        bool               `json:"public_read"`
+	PublicBaseUrl                     string             `json:"public_base_url"`
 }
 
 type BucketQuota struct {
@@ -480,6 +482,8 @@ type Collection struct {
 	ResourceVersion int64              `json:"resource_version"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	PublicRead      bool               `json:"public_read"`
+	CacheControl    string             `json:"cache_control"`
 }
 
 type DpopSeenJti struct {
@@ -616,6 +620,7 @@ type Object struct {
 	PresignExpiresAt      pgtype.Timestamptz `json:"presign_expires_at"`
 	Taint                 []string           `json:"taint"`
 	ChecksumPartSizeBytes *int64             `json:"checksum_part_size_bytes"`
+	PublicUrl             string             `json:"public_url"`
 }
 
 type ObjectLock struct {
