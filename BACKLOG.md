@@ -368,27 +368,6 @@ open deliberately — each notes why._
 
 ## Dependencies
 
-### Migrate to connect-go v2
-
-- **Status:** Deferred — next up.
-- **Reason:** connect-go v2.0.0 (2026-10-07) is a new Go API: generated code
-takes and returns plain messages instead of `connect.Request[T]` /
-`connect.Response[T]`, handlers register on a `*connect.Server` mounted with
-`connecthttp`, interceptors split into server and client forms and wrap the
-whole call, and only a `*connect.Error` the code creates sends its message to
-the client. otelconnect v0.11 already requires it, so `backend/go.mod` and
-`sdk/go/go.mod` exclude `connectrpc.com/otelconnect v0.11.0` to keep
-`deps:update` on v0.10, the last release for v1. The wire protocol does not
-change; the Go SDK's public API does.
-- **Definition of Done:** the backend and the Go SDK on connect-go v2 with
-regenerated stubs; otelconnect, validate, grpchealth and grpcreflect at
-their v2-compatible releases; handler tests on `connectinprocess` where they
-now need an `httptest.Server`; every error that must reach the caller is a
-`*connect.Error`, with a test pinning that an internal error arrives without
-its text; the Go SDK released as a major with a migration note in
-`docs/upgrading.md`; both `exclude` lines and this entry deleted.
-- **Blockers:** none.
-
 ### Take grpc to the stable release carrying the GO-2026-6443 fix
 
 - **Status:** Open — waiting on upstream. There is nothing to bump to yet.
