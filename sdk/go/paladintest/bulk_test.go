@@ -101,7 +101,7 @@ func TestUploadManyStoresEveryInputAndReportsEachFailure(t *testing.T) {
 			Size: int64(len(body)), Body: bytes.NewReader(body),
 		})
 	}
-	inputs = append(inputs, paladin.UploadInput{Parent: srv.Collection().String(), Key: "bad", Size: 1}) // no body
+	inputs = append(inputs, paladin.UploadInput{ContentType: testContentType, Parent: srv.Collection().String(), Key: "bad", Size: 1}) // no body
 	objects, failures := paladin.UploadMany(context.Background(), p.Data, inputs, 2, paladin.UploadOptions{})
 	for i := range 6 {
 		got, ok := srv.Content(objects[i].GetName())
@@ -123,8 +123,8 @@ func TestUploadManyAbortsOnlyTheMultipartUploadThatFailed(t *testing.T) {
 	p := srv.Connect(paladin.WithTransfer(transfer))
 	body := bytes.Repeat([]byte("x"), paladintest.PartSize+1) // two parts
 	inputs := []paladin.UploadInput{
-		{Parent: srv.Collection().String(), Key: "good", Size: int64(len(body)), Body: bytes.NewReader(body)},
-		{Parent: srv.Collection().String(), Key: "bad", Size: int64(len(body)), Body: bytes.NewReader(body)},
+		{ContentType: testContentType, Parent: srv.Collection().String(), Key: "good", Size: int64(len(body)), Body: bytes.NewReader(body)},
+		{ContentType: testContentType, Parent: srv.Collection().String(), Key: "bad", Size: int64(len(body)), Body: bytes.NewReader(body)},
 	}
 	// One at a time, so the first upload's two parts are the first two PUTs;
 	// every later one is refused.
@@ -173,7 +173,7 @@ func TestUploadManyKeepsToItsConcurrency(t *testing.T) {
 	p := srv.Connect()
 	var inputs []paladin.UploadInput
 	for i := range 9 {
-		inputs = append(inputs, paladin.UploadInput{
+		inputs = append(inputs, paladin.UploadInput{ContentType: testContentType,
 			Parent: srv.Collection().String(), Key: fmt.Sprint(i), Size: 1, Body: bytes.NewReader([]byte("x")),
 		})
 	}
@@ -186,7 +186,7 @@ func TestUploadManyKeepsToItsConcurrency(t *testing.T) {
 func TestUploadManyRefusesSessionOptions(t *testing.T) {
 	srv := paladintest.New(t)
 	p := srv.Connect()
-	inputs := []paladin.UploadInput{{Parent: srv.Collection().String(), Size: 1, Body: bytes.NewReader([]byte("x"))}}
+	inputs := []paladin.UploadInput{{ContentType: testContentType, Parent: srv.Collection().String(), Size: 1, Body: bytes.NewReader([]byte("x"))}}
 	_, failures := paladin.UploadMany(context.Background(), p.Data, inputs, 1,
 		paladin.UploadOptions{OnSession: func(paladin.UploadSession) {}})
 	if !errors.Is(failures[0], paladin.ErrBulkSession) {
@@ -203,8 +203,8 @@ func TestUploadManyStopsStartingWhenCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	inputs := []paladin.UploadInput{
-		{Parent: srv.Collection().String(), Size: 1, Body: bytes.NewReader([]byte("x"))},
-		{Parent: srv.Collection().String(), Size: 1, Body: bytes.NewReader([]byte("y"))},
+		{ContentType: testContentType, Parent: srv.Collection().String(), Size: 1, Body: bytes.NewReader([]byte("x"))},
+		{ContentType: testContentType, Parent: srv.Collection().String(), Size: 1, Body: bytes.NewReader([]byte("y"))},
 	}
 	_, failures := paladin.UploadMany(ctx, p.Data, inputs, 1, paladin.UploadOptions{})
 	if len(failures) != 2 {

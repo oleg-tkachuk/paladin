@@ -145,7 +145,7 @@ func Example_resumableMultipart() {
 	ctx := context.Background()
 	body := bytes.Repeat([]byte("x"), 2*paladintest.PartSize+10)
 
-	init, err := p.Data.MultipartUpload.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
+	init, err := p.Data.MultipartUpload.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{ContentType: testContentType,
 		Parent: srv.Collection().String(), Key: "big.bin", SizeBytes: int64(len(body)),
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
 	}))

@@ -387,7 +387,7 @@ go through presigned URLs on its own storage, as against the real server.
 srv := paladintest.New(t)
 p := srv.Connect()
 obj, err := paladin.Upload(ctx, p.Data, paladin.UploadInput{
-	Parent: srv.Collection().String(), Key: "a.pdf", Size: n, Body: body,
+	Parent: srv.Collection().String(), Key: "a.pdf", ContentType: "application/pdf", Size: n, Body: body,
 }, paladin.UploadOptions{})
 data, _ := srv.Content(obj.GetName())
 ```
@@ -395,7 +395,13 @@ data, _ := srv.Content(obj.GetName())
 It serves `ObjectService` (upload, complete, get, lookup, list, download,
 delete), `MultipartUploadService`, `PresignService` (`RegenerateUploadUrl`,
 `PresignDownload`) and `StorageBootstrapService`; every other RPC answers
-`Unimplemented`. Like the server it refuses a collection
+`Unimplemented`. Like the server it runs protovalidate on every request,
+after authentication, so a request the contract's rules refuse is
+`ErrInvalidArgument`; it checks `DeleteObject`'s `resource_version` —
+`ErrVersionConflict` for one that is not the object's — and advances it on
+every change to the object. `ListObjects` refuses `filter`, `order_by` and
+`sort_order` as `Unimplemented` rather than list as if they were not set.
+Like the server it refuses a collection
 named by the tenant's slug and a completion whose ETag, when given, is not
 the content's; completing a completed object returns it. Like the server it
 holds one object per key: an upload to a key another object holds, in any
