@@ -49,6 +49,7 @@ export function ObjectInspector({
   if (!collection) return null;
 
   const isImage = object?.contentType?.startsWith("image/");
+  const publicObject = Boolean(object?.publicUrl);
 
   return (
     <>
@@ -159,6 +160,26 @@ export function ObjectInspector({
                     <span className="sr-only">{object.objectId}</span>
                   </dd>
 
+                  {/* ADR-0027: the unsigned address a consumer stores. */}
+                  {object.publicUrl && (
+                    <>
+                      <dt className="text-muted-foreground">Public URL</dt>
+                      <dd className="flex min-w-0 items-start gap-1">
+                        <span
+                          className="break-all font-mono text-xs"
+                          title={object.publicUrl}
+                        >
+                          {object.publicUrl}
+                        </span>
+                        <IdentifierCopy
+                          value={object.publicUrl}
+                          label="Public URL"
+                          iconOnly
+                        />
+                      </dd>
+                    </>
+                  )}
+
                   <dt className="text-muted-foreground">MIME Type</dt>
                   <dd className="font-mono text-xs">
                     {object.contentType || "—"}
@@ -232,7 +253,12 @@ export function ObjectInspector({
                 Restore Object
               </Button>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
+              <div
+                className={cn(
+                  "grid gap-2",
+                  publicObject ? "grid-cols-1" : "grid-cols-2",
+                )}
+              >
                 <Button
                   size="sm"
                   onClick={() => {
@@ -251,17 +277,21 @@ export function ObjectInspector({
                   <EyeIcon className="size-4" />
                   Full Details
                 </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => {
-                    softDeleteObject();
-                    onClose();
-                  }}
-                >
-                  <TrashIcon className="size-4" />
-                  Trash
-                </Button>
+                {/* A public collection has no trash (ADR-0027): its delete
+                    is permanent and confirmed on the full details page. */}
+                {!publicObject && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      softDeleteObject();
+                      onClose();
+                    }}
+                  >
+                    <TrashIcon className="size-4" />
+                    Trash
+                  </Button>
+                )}
               </div>
             )}
           </div>
