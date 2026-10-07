@@ -58,6 +58,9 @@ const GUARDED: Record<string, string> = {
     "ConfirmModal on each row",
   "components/features/ObjectDetailView.tsx::purgeObject": "ConfirmModal",
   "components/features/users/UserRowActions.tsx::deleteUser": "Modal",
+  "components/features/users/UserScopesCard.tsx::revokeScopes":
+    "ConfirmModal, which says when the last scope leaves the user unscoped",
+  "components/features/users/UserScopesCard.tsx::revoke": "ConfirmModal",
   "components/features/users/UserRowActions.tsx::resetPassword": "ConfirmModal",
 };
 
