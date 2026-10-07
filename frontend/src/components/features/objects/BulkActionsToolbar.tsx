@@ -2,6 +2,7 @@
 
 import { TagIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/utils";
+import { useTenantChangesBlocked } from "@/app/tenants/[id]/tenant-context";
 
 interface BulkActionsToolbarProps {
   selectedCount: number;
@@ -18,6 +19,7 @@ export function BulkActionsToolbar({
   onClearSelection,
   isProcessing,
 }: BulkActionsToolbarProps) {
+  const changesBlocked = useTenantChangesBlocked();
   if (selectedCount === 0) return null;
 
   const actions = [
@@ -75,11 +77,13 @@ export function BulkActionsToolbar({
             <button
               key={action.id}
               onClick={action.onClick}
-              disabled={isProcessing}
+              disabled={isProcessing || Boolean(changesBlocked)}
+              title={changesBlocked ?? undefined}
               className={cn(
                 "flex flex-col items-center gap-1.5 px-4 py-2 rounded-2xl transition-all border border-transparent active:scale-90 group/btn",
                 action.hover,
-                isProcessing && "opacity-50 cursor-not-allowed",
+                (isProcessing || changesBlocked) &&
+                  "opacity-50 cursor-not-allowed",
               )}
             >
               <action.icon

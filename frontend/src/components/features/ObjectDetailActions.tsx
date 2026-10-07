@@ -11,6 +11,7 @@ import {
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import { Button } from "@/components/ui/button";
 import { Dropdown } from "@/components/ui/Dropdown";
+import { useTenantChangesBlocked } from "@/app/tenants/[id]/tenant-context";
 
 /**
  * Header action bar for the object detail view, extracted from
@@ -38,9 +39,17 @@ export function ObjectDetailActions({
   onDownload: () => void;
   onAction: (action: "trash" | "purge" | "restore") => void;
 }) {
+  // Reads stay open on a trashed tenant; every change is held.
+  const changesBlocked = useTenantChangesBlocked();
   return (
     <div className="flex items-center gap-2">
-      <Button variant="outline" size="sm" onClick={onEdit}>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={Boolean(changesBlocked)}
+        title={changesBlocked ?? undefined}
+        onClick={onEdit}
+      >
         <PencilSquareIcon className="size-4" />
         <span className="hidden sm:inline">Edit Metadata</span>
       </Button>
@@ -53,8 +62,14 @@ export function ObjectDetailActions({
         Download
       </Button>
       <Dropdown align="right" width="w-56">
-        <Dropdown.Trigger>
-          <Button variant="outline" size="icon-sm" aria-label="Object actions">
+        <Dropdown.Trigger disabled={Boolean(changesBlocked)}>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="Object actions"
+            disabled={Boolean(changesBlocked)}
+            title={changesBlocked ?? undefined}
+          >
             <EllipsisHorizontalIcon className="size-4" />
           </Button>
         </Dropdown.Trigger>
