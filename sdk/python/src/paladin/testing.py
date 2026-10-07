@@ -1190,15 +1190,14 @@ class FakePaladin(
             return _status(start_response, HTTPStatus.FORBIDDEN, "anonymous access is read-only")
         url = self.url + environ["PATH_INFO"]
         with self._lock:
-            found = next(
-                (
-                    o
-                    for o in self._objects.values()
-                    if o.msg.public_url == url and o.msg.state == _AVAILABLE
-                ),
-                None,
-            )
-            body = found.body if found is not None else None
+            found = next((o for o in self._objects.values() if o.msg.public_url == url), None)
+            # The store knows nothing of the object's state: it serves what a
+            # PUT stored before CompleteObject as readily as the committed body.
+            body = None
+            if found is not None and found.msg.state == _AVAILABLE:
+                body = found.body
+            elif found is not None and found.msg.state == _PENDING:
+                body = found.put
             content_type = found.msg.content_type if found is not None else ""
         if body is None:
             return _status(start_response, HTTPStatus.NOT_FOUND, "no such key")

@@ -96,6 +96,20 @@ func (s *Server) publish(o *object, parent string) {
 	o.cacheControl = PublicCacheControl
 }
 
+// storedBytes is what the store holds for o: the committed body, or what a
+// PUT stored before CompleteObject — the store knows nothing of the object's
+// state, and serves either. nil when it holds nothing.
+func storedBytes(o *object) []byte {
+	switch o.msg.GetState() {
+	case datav1.ObjectState_OBJECT_STATE_AVAILABLE:
+		return o.body
+	case datav1.ObjectState_OBJECT_STATE_PENDING:
+		return o.put
+	default:
+		return nil
+	}
+}
+
 // refuseTrash: a public object is deleted permanently or not at all.
 func refuseTrash(o *object) error {
 	if o.msg.GetPublicUrl() != "" {
@@ -113,20 +127,16 @@ func (s *Server) servePublic(w http.ResponseWriter, r *http.Request) {
 	}
 	url := s.URL + r.URL.Path
 	s.mu.Lock()
-	var found *object
+	var body []byte
+	var contentType string
 	for _, o := range s.objects {
-		if o.msg.GetPublicUrl() == url && o.msg.GetState() == datav1.ObjectState_OBJECT_STATE_AVAILABLE {
-			found = o
+		if o.msg.GetPublicUrl() == url {
+			body, contentType = storedBytes(o), o.msg.GetContentType()
 			break
 		}
 	}
-	var body []byte
-	var contentType string
-	if found != nil {
-		body, contentType = found.body, found.msg.GetContentType()
-	}
 	s.mu.Unlock()
-	if found == nil {
+	if body == nil {
 		http.Error(w, errors.New("no such key").Error(), http.StatusNotFound)
 		return
 	}
