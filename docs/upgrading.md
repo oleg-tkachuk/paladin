@@ -46,10 +46,11 @@ tree with itself and passes without checking anything.
 ## Unreleased — a tenant in the trash is frozen
 
 - Every change to a tenant in the trash is refused — `FAILED_PRECONDITION`,
-  reason `TENANT_ALREADY_DELETED` — on the data and admin planes, for every
-  caller including platform admins: uploads, deletes, copies, tags,
-  collections, buckets, quotas, budgets, policies, subscriptions, new
-  credentials and `UpdateTenant`. Reads, downloads, revocations,
+  reason `TENANT_ALREADY_DELETED` — on the data, admin and IAM planes,
+  platform admins included: uploads, deletes, copies, tags, collections,
+  buckets, quotas, budgets, policies, subscriptions, users, new credentials
+  and `UpdateTenant`. (Any other principal was already refused by the tenant
+  gate, its own tenant being the trashed one.) Reads, downloads, revocations,
   cancellations and `Get`/`List`/`Restore`/`PurgeTenant` stay open. A tenant
   holding data is removed by restoring, emptying, trashing and purging it.
 - A slug a trashed tenant held and a live tenant has since taken names the

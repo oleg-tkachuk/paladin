@@ -31,15 +31,16 @@ type TenantSlugs interface {
 }
 
 // TenantFreeze refuses a change to a tenant in the trash — FailedPrecondition,
-// TENANT_ALREADY_DELETED — whoever asks for it. The trash is a tenant frozen
+// TENANT_ALREADY_DELETED — platform admins included. The trash is a tenant frozen
 // until someone decides: restoring returns exactly what was trashed, so
 // nothing new may enter meanwhile. Reads, withdrawals (revoking a credential,
 // cancelling work) and the tenant's own lifecycle stay open: an admin
 // inspects, exports, takes access away, restores or purges.
 //
-// The tenants a call acts on are the ones it names, in a resource name or a
-// tenant field; a call naming none is left to TenantGate, which has already
-// refused a trashed tenant's own credentials. A tenant that does not exist is
+// It concerns the platform roles, the only principals that act on a tenant by
+// naming it; any other principal is confined to its own tenant, which
+// TenantGate has already checked. The tenants a call acts on are the ones it
+// names, in a resource name or a tenant field. A tenant that does not exist is
 // left to the handler's NotFound. A state that cannot be read refuses the
 // change as Unavailable.
 //
@@ -57,6 +58,14 @@ func TenantFreeze(states auth.TenantStateReader, slugs TenantSlugs) connect.Unar
 }
 
 func checkFrozen(ctx context.Context, states auth.TenantStateReader, slugs TenantSlugs, procedure string, msg any) error {
+	// Only a platform role acts on a tenant it names. Anyone else is confined
+	// to its own tenant, which TenantGate has already checked; answering about
+	// another tenant here would tell them its state before the handler refuses
+	// to act on it.
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil || p == nil || !apiutil.HoldsPlatformRole(p) {
+		return nil
+	}
 	// An RPC nobody classified is treated as a change: fail closed.
 	if kind, ok := procedureKinds[procedure]; ok && kind != Changes {
 		return nil
