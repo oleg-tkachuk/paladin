@@ -1,5 +1,6 @@
 "use client";
 
+import { useTenantChangesBlocked } from "../tenant-context";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -106,6 +107,7 @@ function readLastBrowse(
 // we can add a per-row "Delegate" action.
 
 export default function CapabilitiesPage() {
+  const changesBlocked = useTenantChangesBlocked();
   // tenantId comes from the URL (TenantLayout). Legacy /capabilities
   // pulled it from useScope() so the page only listed caps issued
   // under the signed-in tenant; the new path lets platform-admins
@@ -322,7 +324,12 @@ export default function CapabilitiesPage() {
             <TrashIcon className="size-4" />
             Revoke a copy
           </Button>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <Button
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+            disabled={Boolean(changesBlocked)}
+            title={changesBlocked ?? undefined}
+          >
             <PlusIcon className="size-4" />
             Issue capability
           </Button>
@@ -452,6 +459,8 @@ export default function CapabilitiesPage() {
                       size="sm"
                       variant="outline"
                       onClick={() => setCreateOpen(true)}
+                      disabled={Boolean(changesBlocked)}
+                      title={changesBlocked ?? undefined}
                     >
                       <PlusIcon className="size-4" />
                       Issue one

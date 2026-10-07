@@ -11,6 +11,7 @@
 // tab: on success, push the returned resource into context so
 // sibling tabs see fresh data without a refetch.
 
+import { useTenantChangesBlocked } from "../../tenant-context";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import { useCallback, useEffect, useState } from "react";
 import { create } from "@bufbuild/protobuf";
@@ -57,6 +58,7 @@ function completionModeLabel(m: CompletionMode): string {
 }
 
 export default function CollectionOverviewPage() {
+  const changesBlocked = useTenantChangesBlocked();
   const { collection, setCollection } = useCollection();
   const { showNotification } = useNotification();
   const { buckets, error: bucketsError, fetchBuckets } = useBuckets();
@@ -206,7 +208,12 @@ export default function CollectionOverviewPage() {
             <Button
               size="sm"
               onClick={handleSaveDisplayName}
-              disabled={savingMeta || displayName === collection.displayName}
+              disabled={
+                Boolean(changesBlocked) ||
+                savingMeta ||
+                displayName === collection.displayName
+              }
+              title={changesBlocked ?? undefined}
             >
               {savingMeta ? "Saving…" : "Save"}
             </Button>
@@ -278,11 +285,13 @@ export default function CollectionOverviewPage() {
             size="sm"
             onClick={handleBind}
             disabled={
+              Boolean(changesBlocked) ||
               isPublic ||
               binding ||
               !bucketSelection ||
               bucketSelection === collection.bucket
             }
+            title={changesBlocked ?? undefined}
           >
             {binding ? "Binding…" : "Re-bind"}
           </Button>

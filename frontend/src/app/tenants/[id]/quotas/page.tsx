@@ -18,6 +18,7 @@
 //   - 0 caps mean "unlimited" per proto contract — same convention as
 //     TenantBudget.maxBudgetMicros. UI renders `∞ unlimited`.
 
+import { useTenantChangesBlocked } from "../tenant-context";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
@@ -75,6 +76,7 @@ function progressColour(pct: number): string {
 }
 
 export default function TenantQuotasPage() {
+  const changesBlocked = useTenantChangesBlocked();
   const tenant = useTenant();
   const quotaName = `tenants/${tenant.tenantId}/quota`;
   const { showNotification } = useNotification();
@@ -321,7 +323,8 @@ export default function TenantQuotasPage() {
               type="button"
               variant="outline"
               size="sm"
-              disabled={resetting || !quota}
+              disabled={Boolean(changesBlocked) || resetting || !quota}
+              title={changesBlocked ?? undefined}
               onClick={() => setConfirmReset(true)}
             >
               {resetting ? "Resetting…" : "Reset daily counters"}
@@ -332,7 +335,11 @@ export default function TenantQuotasPage() {
                 would carry "0" — which asserts "no quota row exists" and is
                 refused with a version mismatch if one does. The user sees
                 "Update failed" for a click that was simply too early. */}
-            <Button type="submit" disabled={submitting || loading}>
+            <Button
+              type="submit"
+              disabled={Boolean(changesBlocked) || submitting || loading}
+              title={changesBlocked ?? undefined}
+            >
               {submitting ? (
                 "Updating…"
               ) : loading ? (

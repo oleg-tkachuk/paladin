@@ -13,6 +13,7 @@ vi.mock("@/lib/connect/client", () => ({
   collectionClient: { listCollections: h.listCollections },
 }));
 vi.mock("../tenant-context", () => ({
+  useTenantChangesBlocked: () => null,
   useTenant: () => ({ tenantId: "t-1", slug: "acme", displayName: "Acme" }),
 }));
 vi.mock("@/context/AuthContext", () => ({

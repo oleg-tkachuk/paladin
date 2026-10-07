@@ -1,5 +1,6 @@
 "use client";
 
+import { useTenantChangesBlocked } from "../tenant-context";
 import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -44,6 +45,7 @@ import { EventSubscriptionSchema } from "@/gen/paladin/admin/v1/types_pb";
 
 // ─── Page ─────────────────────────────────────────────────────────────
 export default function EventsPage() {
+  const changesBlocked = useTenantChangesBlocked();
   // tenantId comes from the URL (TenantLayout). Legacy /events
   // pulled it from useScope() so the page only listed subscriptions
   // for the signed-in tenant; the new path lets platform-admins
@@ -293,7 +295,12 @@ export default function EventsPage() {
             is filtered by a CEL predicate over EventEnvelope.
           </p>
         </div>
-        <Button onClick={openCreate} size="sm">
+        <Button
+          onClick={openCreate}
+          size="sm"
+          disabled={Boolean(changesBlocked)}
+          title={changesBlocked ?? undefined}
+        >
           <PlusIcon className="size-4" />
           New subscription
         </Button>
@@ -346,7 +353,12 @@ export default function EventsPage() {
                         subject. Kafka / SQS sinks are roadmap stubs.
                       </p>
                     </div>
-                    <Button onClick={openCreate} size="sm">
+                    <Button
+                      onClick={openCreate}
+                      size="sm"
+                      disabled={Boolean(changesBlocked)}
+                      title={changesBlocked ?? undefined}
+                    >
                       <PlusIcon className="size-4" />
                       New subscription
                     </Button>

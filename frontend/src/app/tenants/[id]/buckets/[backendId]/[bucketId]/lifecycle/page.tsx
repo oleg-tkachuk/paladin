@@ -14,6 +14,7 @@
 //   - Optimistic concurrency via resourceVersion — on Aborted we
 //     refetch (via context.refetch) and ask the operator to retry.
 
+import { useTenantChangesBlocked } from "../../../../tenant-context";
 import React, { useCallback, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { DurationSchema } from "@bufbuild/protobuf/wkt";
@@ -246,6 +247,7 @@ function formToRule(form: RuleFormState): LifecycleRule {
 // ─── page ────────────────────────────────────────────────────────────────────
 
 export default function BucketLifecyclePage() {
+  const changesBlocked = useTenantChangesBlocked();
   const { bucket, setBucket, refetch } = useBucket();
   const { showNotification } = useNotification();
 
@@ -362,7 +364,12 @@ export default function BucketLifecyclePage() {
             CEL filter.
           </p>
         </div>
-        <Button size="sm" onClick={openCreate}>
+        <Button
+          size="sm"
+          onClick={openCreate}
+          disabled={Boolean(changesBlocked)}
+          title={changesBlocked ?? undefined}
+        >
           <PlusIcon className="size-4" />
           Add rule
         </Button>
@@ -377,7 +384,12 @@ export default function BucketLifecyclePage() {
             based on age and a CEL filter. Background workers evaluate rules on
             the configured cadence.
           </p>
-          <Button size="sm" onClick={openCreate}>
+          <Button
+            size="sm"
+            onClick={openCreate}
+            disabled={Boolean(changesBlocked)}
+            title={changesBlocked ?? undefined}
+          >
             <PlusIcon className="size-4" />
             Add rule
           </Button>

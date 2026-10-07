@@ -25,6 +25,7 @@ vi.mock("@/lib/connect/client", () => ({
   },
 }));
 vi.mock("../tenant-context", () => ({
+  useTenantChangesBlocked: () => null,
   useTenant: () => ({ tenantId: "t-1", slug: "acme", displayName: "Acme" }),
 }));
 vi.mock("@/hooks/useBuckets", () => ({

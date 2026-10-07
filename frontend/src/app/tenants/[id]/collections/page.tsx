@@ -7,6 +7,7 @@
 // tenant (useActingTenantId), so a platform admin manages another tenant's
 // collections from its page.
 
+import { useTenantChangesBlocked } from "../tenant-context";
 import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import React, { useEffect, useMemo, useState } from "react";
@@ -75,6 +76,7 @@ type SortColumn = "name" | "displayName" | "bucket";
 const TENANT_KEY_INDEX = 1;
 
 export default function TenantCollectionsPage() {
+  const changesBlocked = useTenantChangesBlocked();
   const tenant = useTenant();
   const { createCollection, deleteCollection } = useCollections();
   const {
@@ -240,7 +242,12 @@ export default function TenantCollectionsPage() {
             Tenant-scoped namespaces routed to a physical bucket.
           </p>
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Button
+          size="sm"
+          onClick={() => setCreateOpen(true)}
+          disabled={Boolean(changesBlocked)}
+          title={changesBlocked ?? undefined}
+        >
           <PlusIcon className="size-4" />
           New Collection
         </Button>
@@ -332,6 +339,8 @@ export default function TenantCollectionsPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => setCreateOpen(true)}
+                        disabled={Boolean(changesBlocked)}
+                        title={changesBlocked ?? undefined}
                       >
                         <PlusIcon className="size-4" />
                         Provision the first Collection

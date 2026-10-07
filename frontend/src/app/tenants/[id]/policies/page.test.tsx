@@ -32,6 +32,7 @@ vi.mock("@/lib/connect/client", () => ({
   collectionClient: { listCollections: h.listCollections },
 }));
 vi.mock("../tenant-context", () => ({
+  useTenantChangesBlocked: () => null,
   useTenant: () => ({ tenantId: h.tenantId, displayName: "Acme" }),
 }));
 
