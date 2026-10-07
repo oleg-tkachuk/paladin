@@ -108,10 +108,17 @@ func newFixture(t *testing.T) *fixture {
 		issuer = "paladin-dev"
 	}
 
-	// Mint a platform.admin JWT scoped to a fresh tenant_id. The tenant
-	// in the claim is the *caller's* tenant; the test creates fresh
-	// platform-scoped resources via this admin role.
-	jwt := mintJWT(t, secret, issuer, "paladin-admin", uuid.New().String(),
+	nonce := randomNonce(t, 4)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	// Mint a platform.admin JWT scoped to the stack's platform tenant: the
+	// tenant in the claim is the caller's own, and a credential of a tenant
+	// that does not exist is refused, as IAM never issues one. The tenant is
+	// read by its slug through a tenant-less platform JWT, which spans
+	// tenants.
+	platform := platformTenantID(ctx, t, secret, issuer, adminURL)
+	jwt := mintJWT(t, secret, issuer, "paladin-admin", platform,
 		"e2e-runner", []string{"platform.admin"}, 30*time.Minute)
 
 	httpClient := &http.Client{
@@ -121,10 +128,6 @@ func newFixture(t *testing.T) *fixture {
 			base: http.DefaultTransport,
 		},
 	}
-
-	nonce := randomNonce(t, 4)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	t.Cleanup(cancel)
 
 	return &fixture{
 		ctx:       ctx,
@@ -139,6 +142,32 @@ func newFixture(t *testing.T) *fixture {
 		collections: paladinadminv1connect.NewCollectionServiceClient(
 			httpClient, adminURL),
 	}
+}
+
+// envPlatformTenantSlug names the bootstrap tenant when the stack's config
+// uses another than defaultPlatformTenantSlug (backend/configs/compose.yaml,
+// bootstrap.tenant_slug).
+const (
+	envPlatformTenantSlug     = "PALADIN_E2E_PLATFORM_TENANT_SLUG"
+	defaultPlatformTenantSlug = "platform"
+)
+
+// platformTenantID is the id of the tenant the stack's bootstrap created.
+func platformTenantID(ctx context.Context, t *testing.T, secret, issuer, adminURL string) string {
+	t.Helper()
+	slug := os.Getenv(envPlatformTenantSlug)
+	if slug == "" {
+		slug = defaultPlatformTenantSlug
+	}
+	spanning := mintJWT(t, secret, issuer, "paladin-admin", "",
+		"e2e-runner", []string{"platform.admin"}, time.Minute)
+	hc := &http.Client{Timeout: 30 * time.Second, Transport: &authedTransport{jwt: spanning, base: http.DefaultTransport}}
+	got, err := paladinadminv1connect.NewTenantServiceClient(hc, adminURL).GetTenant(ctx,
+		connect.NewRequest(&pb.GetTenantRequest{Name: "tenants/" + slug}))
+	if err != nil {
+		t.Fatalf("read the platform tenant %q: %v", slug, err)
+	}
+	return got.Msg.GetTenantId()
 }
 
 // clientForTenant returns a fresh Collection client whose JWT is
