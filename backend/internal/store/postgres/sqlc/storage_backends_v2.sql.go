@@ -88,6 +88,18 @@ func (q *Queries) DeleteStorageBackend(ctx context.Context, name string, expecte
 	return result.RowsAffected(), nil
 }
 
+const deleteStorageBackendFeatures = `-- name: DeleteStorageBackendFeatures :exec
+DELETE FROM storage_backend_features
+WHERE backend_id = (SELECT id FROM storage_backends WHERE name = $1)
+`
+
+// First half of recording a probe (ADR-0026): the probe's rows replace every
+// earlier one, in the caller's transaction.
+func (q *Queries) DeleteStorageBackendFeatures(ctx context.Context, backendName string) error {
+	_, err := q.db.Exec(ctx, deleteStorageBackendFeatures, backendName)
+	return err
+}
+
 const getStorageBackendV2 = `-- name: GetStorageBackendV2 :one
 SELECT storage_backends.id, storage_backends.name, kind, endpoint, region, events_enabled, events_target,
        display_name, public_endpoint, force_path_style,
@@ -171,6 +183,66 @@ func (q *Queries) GetStorageBackendV2(ctx context.Context, name string) (GetStor
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const insertStorageBackendFeature = `-- name: InsertStorageBackendFeature :exec
+INSERT INTO storage_backend_features (backend_id, feature, support, message, checked_at)
+SELECT sb.id, $1, $2, $3, $4
+FROM storage_backends sb WHERE sb.name = $5
+`
+
+func (q *Queries) InsertStorageBackendFeature(ctx context.Context, feature string, support string, message string, checkedAt pgtype.Timestamptz, backendName string) error {
+	_, err := q.db.Exec(ctx, insertStorageBackendFeature,
+		feature,
+		support,
+		message,
+		checkedAt,
+		backendName,
+	)
+	return err
+}
+
+const listStorageBackendFeatures = `-- name: ListStorageBackendFeatures :many
+SELECT sb.name AS backend_name, f.feature, f.support, f.message, f.checked_at
+FROM storage_backend_features f
+JOIN storage_backends sb ON sb.id = f.backend_id
+WHERE sb.name = ANY($1::text[])
+ORDER BY sb.name, f.feature
+`
+
+type ListStorageBackendFeaturesRow struct {
+	BackendName string             `json:"backend_name"`
+	Feature     string             `json:"feature"`
+	Support     string             `json:"support"`
+	Message     string             `json:"message"`
+	CheckedAt   pgtype.Timestamptz `json:"checked_at"`
+}
+
+// Keyed by backend NAME, for a page of backends at once.
+func (q *Queries) ListStorageBackendFeatures(ctx context.Context, backendNames []string) ([]ListStorageBackendFeaturesRow, error) {
+	rows, err := q.db.Query(ctx, listStorageBackendFeatures, backendNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStorageBackendFeaturesRow
+	for rows.Next() {
+		var i ListStorageBackendFeaturesRow
+		if err := rows.Scan(
+			&i.BackendName,
+			&i.Feature,
+			&i.Support,
+			&i.Message,
+			&i.CheckedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listStorageBackends = `-- name: ListStorageBackends :many

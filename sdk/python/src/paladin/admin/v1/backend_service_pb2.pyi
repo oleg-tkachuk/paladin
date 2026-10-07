@@ -81,14 +81,18 @@ class TestBackendRequest(_message.Message):
     def __init__(self, name: _Optional[str] = ...) -> None: ...
 
 class TestBackendResponse(_message.Message):
-    __slots__ = ("reachable", "error_message", "latency_ms")
+    __slots__ = ("reachable", "error_message", "latency_ms", "features", "compatibility")
     REACHABLE_FIELD_NUMBER: _ClassVar[int]
     ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
     LATENCY_MS_FIELD_NUMBER: _ClassVar[int]
+    FEATURES_FIELD_NUMBER: _ClassVar[int]
+    COMPATIBILITY_FIELD_NUMBER: _ClassVar[int]
     reachable: bool
     error_message: str
     latency_ms: int
-    def __init__(self, reachable: _Optional[bool] = ..., error_message: _Optional[str] = ..., latency_ms: _Optional[int] = ...) -> None: ...
+    features: _containers.RepeatedCompositeFieldContainer[_types_pb2.StorageFeatureSupport]
+    compatibility: _types_pb2.StorageCompatibility
+    def __init__(self, reachable: _Optional[bool] = ..., error_message: _Optional[str] = ..., latency_ms: _Optional[int] = ..., features: _Optional[_Iterable[_Union[_types_pb2.StorageFeatureSupport, _Mapping]]] = ..., compatibility: _Optional[_Union[_types_pb2.StorageCompatibility, str]] = ...) -> None: ...
 
 class SetBackendEnabledRequest(_message.Message):
     __slots__ = ("name", "enabled", "resource_version")

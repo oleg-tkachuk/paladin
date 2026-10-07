@@ -210,11 +210,16 @@ func (s *BackendServer) TestBackend(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.TestBackendResponse{
+	resp := &pb.TestBackendResponse{
 		Reachable:    out.Reachable,
 		ErrorMessage: out.ErrorMessage,
 		LatencyMs:    out.LatencyMs,
-	}), nil
+	}
+	if out.Features != nil {
+		resp.Features = featuresToProto(out.Features)
+		resp.Compatibility = compatibilityToProto(out.Features)
+	}
+	return connect.NewResponse(resp), nil
 }
 
 var _ paladinadminv1connect.BackendServiceHandler = (*BackendServer)(nil)
