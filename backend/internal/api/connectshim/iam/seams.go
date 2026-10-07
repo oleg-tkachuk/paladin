@@ -29,12 +29,12 @@ var _ authHandler = (*authh.Handler)(nil)
 // userHandler is what UserServer needs from *userh.Handler.
 type userHandler interface {
 	CreateUser(ctx context.Context, in userh.CreateUserInput) (*authstore.User, error)
-	DeleteUser(ctx context.Context, id uuid.UUID, expectedVersion int64) error
-	GetUser(ctx context.Context, id uuid.UUID) (*authstore.User, error)
-	GrantScopes(ctx context.Context, id uuid.UUID, scopes []auth.Scope) (*authstore.User, error)
+	DeleteUser(ctx context.Context, ref userh.UserRef, expectedVersion int64) error
+	GetUser(ctx context.Context, ref userh.UserRef) (*authstore.User, error)
+	GrantScopes(ctx context.Context, ref userh.UserRef, scopes []auth.Scope) (*authstore.User, error)
 	ListUsers(ctx context.Context, in userh.ListUsersInput) ([]authstore.User, string, error)
-	ResetPassword(ctx context.Context, id uuid.UUID, newPassword string) (string, error)
-	RevokeScopes(ctx context.Context, id uuid.UUID, scopes []auth.Scope) (*authstore.User, error)
+	ResetPassword(ctx context.Context, ref userh.UserRef, newPassword string) (string, error)
+	RevokeScopes(ctx context.Context, ref userh.UserRef, scopes []auth.Scope) (*authstore.User, error)
 	UpdateUser(ctx context.Context, in userh.UpdateUserInput) (*authstore.User, error)
 }
 
