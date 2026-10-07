@@ -1308,17 +1308,17 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Capability module
 
-### A trashed tenant's credentials may keep working
+### A platform admin can act on a trashed tenant's data
 
 - **Status:** Deferred
-- **Reason:** issuance now refuses a tenant in the trash, but moving a tenant
-  there revokes nothing, and nothing found in the request path reads
-  `tenants.deleted_at`: its capabilities, API tokens and sessions may go on
-  authenticating until they expire. Not yet confirmed against a live call.
-- **Definition of Done:** a test that calls the data plane with each kind of
-  credential of a trashed tenant, and either a refusal at authentication
-  (`TENANT_ALREADY_DELETED`) or a recorded decision that restore depends on
-  them surviving.
+- **Reason:** the tenant gate refuses a credential whose own tenant is in the
+  trash, but a platform admin names the tenant it acts on per request
+  (`ActOnNamedTenant`, `WithActingTenant`), after the gate has run, and
+  nothing refuses that tenant being trashed. Admin work on a trashed tenant
+  (restore, purge, inspection) needs some of this to stay possible.
+- **Definition of Done:** a decision on which data-plane calls an admin may
+  make against a trashed tenant, enforced where the acting tenant is set,
+  with a test per plane.
 - **Blockers:** none.
 
 ### Capability module CI: deny network egress in the standalone job
