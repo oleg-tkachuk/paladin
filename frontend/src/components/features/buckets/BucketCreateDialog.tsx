@@ -67,6 +67,16 @@ export function bucketBackendBlock(
   return null;
 }
 
+/** What to do next, for the refusals that have one. */
+const REASON_HINTS: Partial<Record<ErrorReason, string>> = {
+  [ErrorReason.BACKEND_FEATURE_UNSUPPORTED]:
+    " Run Test connectivity on the backend's page to probe it.",
+  [ErrorReason.BUCKET_EXISTS_ON_BACKEND]:
+    " To manage it, turn on Register an existing bucket.",
+  [ErrorReason.BUCKET_NOT_ON_BACKEND]:
+    " Turn off Register an existing bucket to create it.",
+};
+
 /** The backend page, where its features are probed and shown. */
 const backendHref = (backendId: string) =>
   `/storage-backends/${encodeURIComponent(backendId)}`;
@@ -93,6 +103,9 @@ export function BucketCreateDialog({
   const [displayName, setDisplayName] = useState("");
   const [region, setRegion] = useState("");
   const [publicRead, setPublicRead] = useState(false);
+  // Register a bucket the backend already holds instead of creating one
+  // (ADR-0028). Such a bucket is never public.
+  const [adopt, setAdopt] = useState(false);
   const [allowedTypes, setAllowedTypes] = useState<string[]>([]);
   const [baseUrl, setBaseUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -116,6 +129,7 @@ export function BucketCreateDialog({
     displayName,
     region,
     publicRead,
+    adopt,
     allowedTypes,
     baseUrl,
   ]);
@@ -126,8 +140,9 @@ export function BucketCreateDialog({
   const canPublish =
     backend !== undefined &&
     supports(backend, StorageFeature.ANONYMOUS_READ_POLICY);
-  // A backend switched to one that cannot publish takes the setting with it.
-  if (publicRead && !canPublish) {
+  // A backend switched to one that cannot publish, or an adopted bucket,
+  // takes the setting with it.
+  if (publicRead && (!canPublish || adopt)) {
     setPublicRead(false);
   }
 
@@ -158,7 +173,7 @@ export function BucketCreateDialog({
         name,
         displayName,
         region,
-        true,
+        !adopt,
         publicRead ? { allowedContentTypes: allowedTypes, baseUrl } : null,
       );
       showNotification({
@@ -170,17 +185,14 @@ export function BucketCreateDialog({
       setDisplayName("");
       setRegion("");
       setPublicRead(false);
+      setAdopt(false);
       setAllowedTypes([]);
       setBaseUrl("");
       onOpenChange(false);
     } catch (err) {
       setErroredDraft(draft);
       const message = errorMessage(err, "Failed to create bucket.");
-      setSubmitError(
-        errorReason(err) === ErrorReason.BACKEND_FEATURE_UNSUPPORTED
-          ? `${message} Run Test connectivity on the backend's page to probe it.`
-          : message,
-      );
+      setSubmitError(`${message}${REASON_HINTS[errorReason(err)] ?? ""}`);
     } finally {
       setSubmitting(false);
     }
@@ -286,6 +298,23 @@ export function BucketCreateDialog({
           </FormField>
         </FormRow>
         <FormField
+          label="Register an existing bucket"
+          hint={
+            adopt
+              ? "Paladin manages a bucket the backend already holds. It never deletes it there, and it cannot be public."
+              : "Off: Paladin creates the bucket, and refuses a name the backend already holds."
+          }
+        >
+          {(control) => (
+            <Switch
+              id={control.id}
+              aria-describedby={control["aria-describedby"]}
+              checked={adopt}
+              onCheckedChange={setAdopt}
+            />
+          )}
+        </FormField>
+        <FormField
           label="Public read"
           hint={
             canPublish ? (
@@ -307,7 +336,7 @@ export function BucketCreateDialog({
               id={control.id}
               aria-describedby={control["aria-describedby"]}
               checked={publicRead}
-              disabled={!canPublish}
+              disabled={!canPublish || adopt}
               onCheckedChange={setPublicRead}
             />
           )}

@@ -14,13 +14,17 @@ const BUCKET = {
   backendId: "primary",
   bucketId: "paladin-a",
   resourceVersion: "7",
+  createdOnBackend: true,
 } as Bucket;
 
-function dialog(deleteBucket = vi.fn().mockResolvedValue(undefined)) {
+function dialog(
+  deleteBucket = vi.fn().mockResolvedValue(undefined),
+  target: Bucket = BUCKET,
+) {
   const onClose = vi.fn();
   render(
     <BucketDeleteDialog
-      target={BUCKET}
+      target={target}
       onClose={onClose}
       deleteBucket={deleteBucket}
     />,
@@ -75,6 +79,29 @@ describe("BucketDeleteDialog", () => {
           message: "collections still bound",
         }),
       ),
+    );
+  });
+
+  // An adopted bucket holds data Paladin never wrote; the server refuses to
+  // delete it on the backend, so the dialog does not offer to.
+  it("does not offer to delete a bucket Paladin did not create", async () => {
+    const { deleteBucket } = dialog(undefined, {
+      ...BUCKET,
+      createdOnBackend: false,
+    } as Bucket);
+    const remote = screen.getByRole("checkbox", { name: /physical S3 bucket/ });
+    expect(remote).toBeDisabled();
+    expect(
+      screen.getByText(/Paladin did not create this bucket/),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete bucket" }),
+    );
+    expect(deleteBucket).toHaveBeenCalledWith(
+      "primary",
+      "paladin-a",
+      "7",
+      false,
     );
   });
 });
