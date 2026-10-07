@@ -203,3 +203,12 @@ func (r *ProvisionerRouter) TagBucketOwner(ctx context.Context, backendID, bucke
 	}
 	return c.TagBucketOwner(ctx, backendID, bucketName, tenantID)
 }
+
+// SetAnonymousReadPolicy routes to the backend holding the bucket (ADR-0027).
+func (r *ProvisionerRouter) SetAnonymousReadPolicy(ctx context.Context, backendID, bucketName string) error {
+	c, err := r.reg.For(ctx, backendID)
+	if err != nil {
+		return err
+	}
+	return c.SetAnonymousReadPolicy(ctx, bucketName)
+}

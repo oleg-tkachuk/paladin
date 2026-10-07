@@ -3,7 +3,14 @@
 // is observed, never assumed from its name.
 package features
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+// ErrUnsupported is an operation refused because the backend's last probe
+// has not shown a feature it needs. Probing again may change the answer.
+var ErrUnsupported = errors.New("storage backend feature not supported")
 
 // Feature names one S3 behaviour Paladin relies on. The value is what
 // storage_backend_features.feature stores.

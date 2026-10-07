@@ -1,12 +1,16 @@
 package s3adapter
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
 	"text/template"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 // anonymousReadPolicySource is the bucket policy granting unsigned
@@ -55,4 +59,20 @@ func renderAnonymousReadPolicy(bucket, prefix string) (string, error) {
 		return "", fmt.Errorf("bucket policy: rendered an invalid document for %q", bucket)
 	}
 	return b.String(), nil
+}
+
+// SetAnonymousReadPolicy makes every object in bucketName readable by unsigned
+// GETs (ADR-0027): one statement over the whole bucket, replacing any policy
+// the bucket had. Listing and writes stay signed. Idempotent.
+func (c *Client) SetAnonymousReadPolicy(ctx context.Context, bucketName string) error {
+	policy, err := renderAnonymousReadPolicy(bucketName, "")
+	if err != nil {
+		return err
+	}
+	if _, err := c.s3.PutBucketPolicy(ctx, &s3.PutBucketPolicyInput{
+		Bucket: aws.String(bucketName), Policy: aws.String(policy),
+	}); err != nil {
+		return fmt.Errorf("s3 put bucket policy %q: %w", bucketName, err)
+	}
+	return nil
 }

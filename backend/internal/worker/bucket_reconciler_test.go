@@ -111,6 +111,13 @@ type fakeProvisioner struct {
 	tagged    int
 	created   int
 	removed   int
+	policyErr error
+	policies  int
+}
+
+func (f *fakeProvisioner) SetAnonymousReadPolicy(context.Context, string, string) error {
+	f.policies++
+	return f.policyErr
 }
 
 func (f *fakeProvisioner) CreateBucket(context.Context, string, string, string) error {
@@ -524,5 +531,38 @@ func TestBucketReconciler_RecreatedBucketKeepsItsBackendBucket(t *testing.T) {
 	}
 	if len(repo.delFailCalls) != 0 {
 		t.Errorf("a skipped delete was recorded as a failure: %v", repo.delFailCalls)
+	}
+}
+
+// A public bucket is ready only once its policy is set (ADR-0027): before
+// that it serves nobody, and a failure is a provisioning failure to retry,
+// unlike the best-effort tag.
+func TestBucketReconciler_PublicBucketGetsItsPolicy(t *testing.T) {
+	for name, tc := range map[string]struct {
+		public    bool
+		policyErr error
+		policies  int
+		ready     bool
+	}{
+		"a private bucket":                  {false, nil, 0, true},
+		"a public bucket":                   {true, nil, 1, true},
+		"a public bucket the store refuses": {true, errBackend, 1, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := &fakeBucketRepo{}
+			prov := &fakeProvisioner{policyErr: tc.policyErr}
+			row := provisionRow(uuid.Nil)
+			row.PublicRead = tc.public
+			newReconciler(repo, prov).reconcileOne(context.Background(), row)
+			if prov.policies != tc.policies {
+				t.Errorf("policy set %d times, want %d", prov.policies, tc.policies)
+			}
+			if got := len(repo.readyCalls) == 1; got != tc.ready {
+				t.Errorf("marked ready = %v, want %v (failures %v)", got, tc.ready, repo.provFailCalls)
+			}
+			if !tc.ready && len(repo.provFailCalls) != 1 {
+				t.Errorf("failures %v, want the policy failure recorded", repo.provFailCalls)
+			}
+		})
 	}
 }
