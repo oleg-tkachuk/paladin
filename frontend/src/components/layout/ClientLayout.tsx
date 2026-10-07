@@ -16,6 +16,7 @@ import { ScopeProvider } from "@/context/ScopeContext";
 import { ShellProvider } from "@/context/ShellContext";
 import { StatsProvider } from "@/context/StatsContext";
 import { RefreshProvider } from "@/context/RefreshContext";
+import { CrumbNamesProvider, useCrumbNames } from "@/context/CrumbNamesContext";
 
 import { pageTitle } from "./crumbs";
 
@@ -40,7 +41,20 @@ const STANDALONE_ROUTES = new Set<string>(["/login"]);
  *   - TopBar is `sticky top-0 z-30` (handled inside TopBar)
  *   - `<main>` is just regular flow — no overflow trap
  */
+/** The document title, with the names the page gave its id segments. */
+function PageTitle({ pathname }: { pathname: string }) {
+  return <title>{pageTitle(pathname, useCrumbNames())}</title>;
+}
+
 export function ClientLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <CrumbNamesProvider>
+      <Shell>{children}</Shell>
+    </CrumbNamesProvider>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   // Wire g-prefix navigation (g+d/t/b/s/p/a/u → routes). Inert in
@@ -51,7 +65,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   // Rendered here rather than as static metadata: every page is a client
   // component, so the root layout's one title used to name all of them, and
   // ten open tabs all read "Paladin". React hoists this into <head>.
-  const title = <title>{pageTitle(pathname)}</title>;
+  const title = <PageTitle pathname={pathname} />;
 
   if (STANDALONE_ROUTES.has(pathname)) {
     return (

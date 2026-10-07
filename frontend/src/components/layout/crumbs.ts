@@ -8,6 +8,7 @@
  */
 const ENTITY_PARENTS = new Set([
   "tenants",
+  "users",
   "buckets",
   "collections",
   "objects",
@@ -25,6 +26,10 @@ const SEGMENT_LABELS: Record<string, string> = {
   login: "Sign in",
 };
 
+/** A UUID segment is an id wherever it sits, never words to title-case. */
+const UUID_SEGMENT =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Past this, a resource id is cut and ends in an ellipsis.
 const MAX_ID_CHARS = 32;
 
@@ -38,7 +43,15 @@ export interface Crumb {
   label: string;
   /** A resource id rather than a route name. */
   mono: boolean;
+  /** Where the crumb leads, when not to its own path. */
+  href?: string;
 }
+
+/** What a page calls the segments of its path that are ids; see
+ *  CrumbNamesContext. */
+export type SegmentNames = Readonly<
+  Record<string, { label: string; href?: string }>
+>;
 
 function resolveLabel(segment: string, mono: boolean): string {
   if (mono) {
@@ -56,10 +69,15 @@ function resolveLabel(segment: string, mono: boolean): string {
   return segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, " ");
 }
 
-export function crumbs(pathname: string): Crumb[] {
+export function crumbs(pathname: string, names: SegmentNames = {}): Crumb[] {
   const segments = pathname.split("/").filter(Boolean);
   return segments.map((segment, i) => {
-    const mono = i > 0 && ENTITY_PARENTS.has(segments[i - 1]);
+    const named = names[segment];
+    if (named)
+      return { segment, label: named.label, mono: true, href: named.href };
+    const mono =
+      (i > 0 && ENTITY_PARENTS.has(segments[i - 1])) ||
+      UUID_SEGMENT.test(segment);
     return { segment, label: resolveLabel(segment, mono), mono };
   });
 }
@@ -69,8 +87,8 @@ export function crumbs(pathname: string): Crumb[] {
  * product. "Quotas · acme · Tenants · Paladin" — the part that tells two
  * tabs apart comes first, where a narrow tab still shows it.
  */
-export function pageTitle(pathname: string): string {
-  const labels = crumbs(pathname).map((c) => c.label);
+export function pageTitle(pathname: string, names: SegmentNames = {}): string {
+  const labels = crumbs(pathname, names).map((c) => c.label);
   if (labels.length === 0) labels.push(HOME_LABEL);
   return [...labels.reverse(), PRODUCT_NAME].join(TITLE_SEPARATOR);
 }
