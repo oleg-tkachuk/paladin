@@ -15,13 +15,17 @@ import (
 // watcher clears on every change. The watcher holds a pooled connection for
 // the process lifetime, so it runs on its own context, which StopWatchers
 // cancels before the pool is closed — as the revocation watcher does.
-func buildTenantGate(deps *SharedDeps) (connect.Interceptor, error) {
-	states := middleware.NewCachedTenantStates(tenantstate.NewReader(deps.Pool), middleware.DefaultTenantStateTTL)
+//
+// The same cache serves the freeze, which refuses a change to a trashed tenant
+// whoever asks for it.
+func buildTenantGate(deps *SharedDeps) (gate, freeze connect.Interceptor, err error) {
+	reader := tenantstate.NewReader(deps.Pool)
+	states := middleware.NewCachedTenantStates(reader, middleware.DefaultTenantStateTTL)
 	watchCtx, stopWatch := context.WithCancel(context.Background())
 	if err := tenantstate.NewWatcher(deps.Pool, states.Clear).Start(watchCtx); err != nil {
 		stopWatch()
-		return nil, fmt.Errorf("app: tenant state watch: %w", err)
+		return nil, nil, fmt.Errorf("app: tenant state watch: %w", err)
 	}
 	deps.RegisterWatcherStop(stopWatch)
-	return middleware.TenantGate(states), nil
+	return middleware.TenantGate(states), middleware.TenantFreeze(states, reader), nil
 }

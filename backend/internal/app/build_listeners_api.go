@@ -251,7 +251,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	if err != nil {
 		l.Fatal("otelconnect interceptor", zap.Error(err))
 	}
-	tenantGate, err := buildTenantGate(deps)
+	tenantGate, tenantFreeze, err := buildTenantGate(deps)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -305,6 +305,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			// interceptor that establishes a principal, before validation and
 			// idempotency, so a refused call is never answered from memo.
 			tenantGate,
+			// Refuses a change to a tenant in the trash, whoever asks.
+			tenantFreeze,
 			// A platform admin's request acts on the tenant it names; everything
 			// below keys on that tenant, so it is set before any of them.
 			middleware.ActOnNamedTenant(),
@@ -357,6 +359,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			// interceptor that establishes a principal, before validation and
 			// idempotency, so a refused call is never answered from memo.
 			tenantGate,
+			// Refuses a change to a tenant in the trash, whoever asks.
+			tenantFreeze,
 			middleware.NewLoginRateLimiter(
 				cfg.Auth.LoginRateLimitPerSubjectPerMinute,
 				cfg.Auth.LoginRateLimitPerIPPerMinute,

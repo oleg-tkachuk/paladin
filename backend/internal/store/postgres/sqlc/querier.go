@@ -271,6 +271,10 @@ type Querier interface {
 	// so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
 	GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, error)
 	GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (GetTenantBudgetRow, error)
+	// A slug is unique among live tenants only (tenants_slug_live_key), so a
+	// trashed tenant's slug can be taken by a live one. The slug names the live
+	// tenant when there is one, else the most recently trashed: deterministic,
+	// and what middleware.TenantFreeze resolves too (tenantstate.TenantIDBySlug).
 	GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error)
 	GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (GetTenantDefaultBindingRow, error)
 	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (Quota, error)
@@ -872,6 +876,9 @@ type Querier interface {
 	// FAILED, is not overwritten by the runner's late progress or result.
 	UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error)
 	UpdateStorageBackend(ctx context.Context, displayName *string, endpoint *string, publicEndpoint *string, region *string, forcePathStyle *bool, credentialsSecretRef *string, sseType *string, sseKeyID *string, eventsEnabled *bool, eventsTarget *string, eventsQueueUrl *string, eventsPollIntervalMs *int64, cedarPolicy *string, name string, expectedVersion int64) (int64, error)
+	// A tenant in the trash takes no changes (middleware.TenantFreeze); this is
+	// the same rule where the row is written, for a caller the freeze could not
+	// resolve.
 	UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)
 	UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) error
