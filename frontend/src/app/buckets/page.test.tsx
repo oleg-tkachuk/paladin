@@ -184,7 +184,9 @@ describe("BucketsPage search", () => {
 describe("BucketsPage create dialog", () => {
   beforeEach(() => {
     h.buckets.buckets = [];
-    h.backends.backends = [{ backendId: "primary", displayName: "" }];
+    h.backends.backends = [
+      { backendId: "primary", displayName: "", features: [] },
+    ];
   });
 
   // The dialog's own behaviour is BucketCreateDialog.test.tsx.
@@ -220,5 +222,35 @@ describe("BucketsPage provisioning", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ADR-0027: a public bucket is marked wherever it is listed.
+describe("BucketsPage public read", () => {
+  it("marks a public bucket and not a private one", () => {
+    h.backends.backends = [];
+    h.buckets.buckets = [
+      {
+        backendId: "primary",
+        bucketId: "photos",
+        displayName: "",
+        region: "",
+        provisionState: "",
+        publicRead: true,
+      },
+      {
+        backendId: "primary",
+        bucketId: "docs",
+        displayName: "",
+        region: "",
+        provisionState: "",
+        publicRead: false,
+      },
+    ];
+    render(<BucketsPage />);
+    expect(screen.getAllByText("public")).toHaveLength(1);
+    expect(screen.getByText("public").closest("tr")).toHaveTextContent(
+      "photos",
+    );
   });
 });

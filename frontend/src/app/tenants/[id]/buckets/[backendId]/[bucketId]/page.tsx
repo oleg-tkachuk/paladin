@@ -13,6 +13,7 @@ import Link from "next/link";
 import { ClockIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
 
 import { Card } from "@/components/ui/Card";
+import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import { Badge } from "@/components/ui/badge";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
@@ -69,6 +70,33 @@ export default function BucketOverviewPage() {
                 </span>
               )}
             </Field>
+            <Field label="Public read">
+              {bucket.publicRead ? (
+                <PublicReadBadge />
+              ) : (
+                <span className="text-muted-foreground">private</span>
+              )}
+            </Field>
+            {bucket.publicRead && (
+              <Field label="Public base URL">
+                {bucket.publicBaseUrl ? (
+                  <code className={cn(T.code, "break-all")}>
+                    {bucket.publicBaseUrl}
+                  </code>
+                ) : (
+                  <span className="text-muted-foreground italic">
+                    the backend&apos;s public endpoint
+                  </span>
+                )}
+              </Field>
+            )}
+            {bucket.publicRead && (
+              <Field label="Allowed content types">
+                <code className={T.code}>
+                  {bucket.constraints?.allowedContentTypes.join(", ") || "—"}
+                </code>
+              </Field>
+            )}
             <Field label="Resource version">
               <code className={T.code}>{bucket.resourceVersion || "—"}</code>
             </Field>

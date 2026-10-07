@@ -5,7 +5,10 @@ import { create } from "@bufbuild/protobuf";
 
 import { bucketClient } from "@/lib/connect/client";
 import type { Bucket } from "@/gen/paladin/admin/v1/types_pb";
-import { BucketSchema } from "@/gen/paladin/admin/v1/types_pb";
+import {
+  BucketConstraintsSchema,
+  BucketSchema,
+} from "@/gen/paladin/admin/v1/types_pb";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 import { errorMessage } from "@/hooks/errorContract";
@@ -31,6 +34,17 @@ const MAX_LIST_PAGES = 20;
 const backendParent = (backendId: string) => `storageBackends/${backendId}`;
 const bucketResourceName = (backendId: string, bucketId: string) =>
   `storageBackends/${backendId}/buckets/${bucketId}`;
+
+/**
+ * What makes a bucket public (ADR-0027): anyone reads its objects by URL.
+ * Only on a backend whose probe found anonymous reads enforced.
+ */
+export interface PublicReadSettings {
+  /** The content types the bucket serves; none a browser would execute. */
+  allowedContentTypes: string[];
+  /** Where a CDN serves the bucket; "" for the backend's public endpoint. */
+  baseUrl: string;
+}
 
 export function useBuckets() {
   const bumpRefresh = useBumpRefresh();
@@ -131,6 +145,7 @@ export function useBuckets() {
       displayName: string = "",
       region: string = "",
       provisionOnBackend: boolean = true,
+      publicRead: PublicReadSettings | null = null,
     ): Promise<Bucket> => {
       try {
         setError(null);
@@ -145,6 +160,15 @@ export function useBuckets() {
           lifecycleRules: [],
           labels: {},
           resourceVersion: "",
+          // ADR-0027: fixed at creation. A public bucket lists the content
+          // types it serves; the server refuses one that does not.
+          publicRead: publicRead !== null,
+          publicBaseUrl: publicRead?.baseUrl ?? "",
+          constraints: publicRead
+            ? create(BucketConstraintsSchema, {
+                allowedContentTypes: publicRead.allowedContentTypes,
+              })
+            : undefined,
         });
         const created = await bucketClient.createBucket({
           parent: backendParent(backendId),
