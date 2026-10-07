@@ -1411,20 +1411,6 @@ finding moving from "packages you import" to "your code is affected".
 
 The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 
-### A multipart download's checksum is not verified
-
-- **Status:** Deferred
-- **Reason:** both SDKs verify a whole download against the object's size and
-  recorded checksum, but a multipart object's checksum is a composite of its
-  parts' and does not decode to a digest of the whole, so only the size is
-  checked — for exactly the objects large enough for corruption to matter.
-  Verifying it needs the part boundaries, which `Object` does not carry.
-- **Definition of Done:** the server records (or returns) the part size of a
-  multipart object; both SDKs recompute the composite while streaming and fail
-  the read on a mismatch, with tests on both fakes.
-- **Blockers:** where the part size lives — on `Object`, or derived from the
-  upload session — is a contract decision.
-
 ### Python reads response headers through a transport of its own
 
 - **Status:** Deferred.

@@ -345,6 +345,64 @@ def default_transfer() -> Transfer:
         return _default
 
 
+_COMPOSITE_SEP = "-"
+"""Separates a composite checksum's digest from its part count."""
+
+
+class _Composite:
+    """Recomputes a multipart object's composite checksum from its bytes: the
+    digest restarts every ``part_size`` bytes, and the composite is the digest
+    of the parts' digests, in order."""
+
+    def __init__(self, new: Callable[[], Any], part_size: int) -> None:
+        self._new = new
+        self._part_size = part_size
+        self._part = new()
+        self._in_part = 0
+        self._parts = new()
+        self.count = 0
+
+    def update(self, piece: bytes) -> None:
+        while piece:
+            take = min(len(piece), self._part_size - self._in_part)
+            self._part.update(piece[:take])
+            self._in_part += take
+            piece = piece[take:]
+            if self._in_part == self._part_size:
+                self._end_part()
+
+    def _end_part(self) -> None:
+        self._parts.update(self._part.digest())
+        self._part, self._in_part = self._new(), 0
+        self.count += 1
+
+    def digest(self) -> bytes:
+        """The composite, ending a last part shorter than the rest."""
+        if self._in_part:
+            self._end_part()
+        return bytes(self._parts.digest())
+
+
+def _composite_value(digest: bytes, parts: int) -> str:
+    """A composite checksum as the server writes it."""
+    return f"{base64.b64encode(digest).decode()}{_COMPOSITE_SEP}{parts}"
+
+
+def _parse_composite(value: str, digest_size: int) -> tuple[bytes, int] | None:
+    """A composite checksum's digest and part count; None when ``value`` is
+    not one."""
+    encoded, sep, count = value.partition(_COMPOSITE_SEP)
+    if not sep or not count.isdigit() or int(count) < 1:
+        return None
+    try:
+        digest = base64.b64decode(encoded, validate=True)
+    except ValueError:
+        return None
+    if len(digest) != digest_size:
+        return None
+    return digest, int(count)
+
+
 class _Check:
     """What a whole read must match: the object's recorded size and, when the
     server recorded one this environment can compute, its checksum. Fed the
@@ -356,6 +414,9 @@ class _Check:
         self._digest: Any = None
         self._want_digest = b""
         self._algorithm = ""
+        # Set instead of _digest for a multipart object's composite.
+        self._composite: _Composite | None = None
+        self._want_parts = 0
         if verify:
             self._expect(obj)
 
@@ -366,13 +427,23 @@ class _Check:
         digest = new() if new else None
         if digest is None:
             return
+        size = len(digest.digest())
+        if obj.checksum.part_size_bytes > 0:
+            # A multipart object's composite, recomputed over the part size
+            # the server recorded beside it.
+            parsed = _parse_composite(obj.checksum.value, size)
+            if parsed is not None:
+                self._composite = _Composite(new, obj.checksum.part_size_bytes)  # type: ignore[arg-type]
+                self._want_digest, self._want_parts = parsed
+                self._algorithm = obj.checksum.algorithm
+            return
         try:
             want = base64.b64decode(obj.checksum.value, validate=True)
         except ValueError:
             return
-        # A multipart object's checksum is a composite of its parts': it does
-        # not decode to a digest of the algorithm's length, and is not checked.
-        if len(want) != len(digest.digest()):
+        # A composite with no part size, as a server that predates it reports,
+        # does not decode to a digest of the algorithm's length: not checked.
+        if len(want) != size:
             return
         self._digest, self._want_digest, self._algorithm = digest, want, obj.checksum.algorithm
 
@@ -380,6 +451,8 @@ class _Check:
         # bytes, not a view: google_crc32c accepts nothing else.
         if self._digest is not None:
             self._digest.update(piece)
+        if self._composite is not None:
+            self._composite.update(piece)
         self.read += len(piece)
 
     def finish(self) -> None:
@@ -392,6 +465,14 @@ class _Check:
                     self._algorithm,
                     base64.b64encode(self._want_digest).decode(),
                     base64.b64encode(got).decode(),
+                )
+        if self._composite is not None:
+            got = self._composite.digest()
+            if got != self._want_digest or self._composite.count != self._want_parts:
+                raise IntegrityError(
+                    self._algorithm,
+                    _composite_value(self._want_digest, self._want_parts),
+                    _composite_value(got, self._composite.count),
                 )
 
 
