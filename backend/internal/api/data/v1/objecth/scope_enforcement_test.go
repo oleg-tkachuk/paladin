@@ -159,3 +159,7 @@ func TestGetObjectScopeEnforcedByEngine(t *testing.T) {
 		}
 	})
 }
+
+func (noopStorage) PublicURL(context.Context, string, string, string, uuid.UUID, string, string) (string, error) {
+	return "", nil
+}

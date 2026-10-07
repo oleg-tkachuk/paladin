@@ -251,3 +251,7 @@ func TestDownloadObjectNormalizesContentDisposition(t *testing.T) {
 		}
 	})
 }
+
+func (*presignGetStorage) PublicURL(context.Context, string, string, string, uuid.UUID, string, string) (string, error) {
+	return "", nil
+}
