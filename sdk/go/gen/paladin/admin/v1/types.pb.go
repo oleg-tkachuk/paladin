@@ -419,6 +419,58 @@ func (ObjectLockMode) EnumDescriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{6}
 }
 
+// Who may read a collection's objects.
+type CollectionAccess int32
+
+const (
+	CollectionAccess_COLLECTION_ACCESS_UNSPECIFIED CollectionAccess = 0
+	// Reads are presigned downloads, authorised per call.
+	CollectionAccess_COLLECTION_ACCESS_PRIVATE CollectionAccess = 1
+	// Anyone with an object's public_url may read it, unsigned.
+	CollectionAccess_COLLECTION_ACCESS_PUBLIC_READ CollectionAccess = 2
+)
+
+// Enum value maps for CollectionAccess.
+var (
+	CollectionAccess_name = map[int32]string{
+		0: "COLLECTION_ACCESS_UNSPECIFIED",
+		1: "COLLECTION_ACCESS_PRIVATE",
+		2: "COLLECTION_ACCESS_PUBLIC_READ",
+	}
+	CollectionAccess_value = map[string]int32{
+		"COLLECTION_ACCESS_UNSPECIFIED": 0,
+		"COLLECTION_ACCESS_PRIVATE":     1,
+		"COLLECTION_ACCESS_PUBLIC_READ": 2,
+	}
+)
+
+func (x CollectionAccess) Enum() *CollectionAccess {
+	p := new(CollectionAccess)
+	*p = x
+	return p
+}
+
+func (x CollectionAccess) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CollectionAccess) Descriptor() protoreflect.EnumDescriptor {
+	return file_paladin_admin_v1_types_proto_enumTypes[7].Descriptor()
+}
+
+func (CollectionAccess) Type() protoreflect.EnumType {
+	return &file_paladin_admin_v1_types_proto_enumTypes[7]
+}
+
+func (x CollectionAccess) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CollectionAccess.Descriptor instead.
+func (CollectionAccess) EnumDescriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{7}
+}
+
 // ─── Storage backend ────────────────────────────────────────────────────────
 // StorageBackend is the physical S3-compatible target. Provisioned by
 // platform admins. Credentials are NEVER returned in responses — only
@@ -957,8 +1009,19 @@ type Bucket struct {
 	// upload to this bucket yet"; the row stays visible so admin tooling
 	// can render progress or surface a stuck operation.
 	ProvisionState string `protobuf:"bytes,17,opt,name=provision_state,json=provisionState,proto3" json:"provision_state,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Every object in the bucket is readable by anyone with its URL, unsigned
+	// (ADR-0027). Set at creation, never changed. Needs provision_on_backend,
+	// a backend whose probe found ANONYMOUS_READ_POLICY supported, and
+	// constraints.allowed_content_types naming only passive types. Only
+	// collections declared PUBLIC_READ bind to a public bucket.
+	PublicRead bool `protobuf:"varint,18,opt,name=public_read,json=publicRead,proto3" json:"public_read,omitempty"`
+	// Where a CDN serves this public bucket, e.g. "https://cdn.example.com".
+	// Object.public_url starts with it; empty means the backend's
+	// public_endpoint. Set at creation, never changed: consumers store the
+	// URLs built from it.
+	PublicBaseUrl string `protobuf:"bytes,19,opt,name=public_base_url,json=publicBaseUrl,proto3" json:"public_base_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Bucket) Reset() {
@@ -1106,6 +1169,20 @@ func (x *Bucket) GetUpdatedAt() *timestamppb.Timestamp {
 func (x *Bucket) GetProvisionState() string {
 	if x != nil {
 		return x.ProvisionState
+	}
+	return ""
+}
+
+func (x *Bucket) GetPublicRead() bool {
+	if x != nil {
+		return x.PublicRead
+	}
+	return false
+}
+
+func (x *Bucket) GetPublicBaseUrl() string {
+	if x != nil {
+		return x.PublicBaseUrl
 	}
 	return ""
 }
@@ -1767,8 +1844,17 @@ type Collection struct {
 	ResourceVersion string                 `protobuf:"bytes,9,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Who may read the collection's objects (ADR-0027). Set at creation, never
+	// changed; UNSPECIFIED creates a PRIVATE collection. A PUBLIC_READ
+	// collection binds only to a public bucket, never rebinds, names its
+	// objects itself and has no trash.
+	Access CollectionAccess `protobuf:"varint,12,opt,name=access,proto3,enum=paladin.admin.v1.CollectionAccess" json:"access,omitempty"`
+	// The Cache-Control every object of a PUBLIC_READ collection is stored
+	// with. Empty at creation means "public, max-age=31536000, immutable";
+	// a private collection has none.
+	CacheControl  string `protobuf:"bytes,13,opt,name=cache_control,json=cacheControl,proto3" json:"cache_control,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Collection) Reset() {
@@ -1876,6 +1962,20 @@ func (x *Collection) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *Collection) GetAccess() CollectionAccess {
+	if x != nil {
+		return x.Access
+	}
+	return CollectionAccess_COLLECTION_ACCESS_UNSPECIFIED
+}
+
+func (x *Collection) GetCacheControl() string {
+	if x != nil {
+		return x.CacheControl
+	}
+	return ""
 }
 
 // ─── Quota ──────────────────────────────────────────────────────────────────
@@ -2974,7 +3074,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x125\n" +
 	"\x06target\x18\x02 \x01(\x0e2\x1d.paladin.admin.v1.EventTargetR\x06target\x12\x1b\n" +
 	"\tqueue_url\x18\x03 \x01(\tR\bqueueUrl\x12>\n" +
-	"\rpoll_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fpollInterval\"\xa0\a\n" +
+	"\rpoll_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fpollInterval\"\xf3\a\n" +
 	"\x06Bucket\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\"\n" +
 	"\n" +
@@ -2999,7 +3099,10 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"created_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12>\n" +
 	"\n" +
 	"updated_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\x12'\n" +
-	"\x0fprovision_state\x18\x11 \x01(\tR\x0eprovisionState\x1a9\n" +
+	"\x0fprovision_state\x18\x11 \x01(\tR\x0eprovisionState\x12$\n" +
+	"\vpublic_read\x18\x12 \x01(\bB\x03\xe0A\x05R\n" +
+	"publicRead\x12+\n" +
+	"\x0fpublic_base_url\x18\x13 \x01(\tB\x03\xe0A\x05R\rpublicBaseUrl\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xef\x03\n" +
@@ -3058,7 +3161,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x0estorage_layout\x18\f \x01(\tB\x03\xe0A\x05R\rstorageLayout\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8d\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf8\x04\n" +
 	"\n" +
 	"Collection\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12 \n" +
@@ -3076,7 +3179,9 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"created_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12>\n" +
 	"\n" +
-	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\"\xf0\x02\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\x12?\n" +
+	"\x06access\x18\f \x01(\x0e2\".paladin.admin.v1.CollectionAccessB\x03\xe0A\x05R\x06access\x12(\n" +
+	"\rcache_control\x18\r \x01(\tB\x03\xe0A\x05R\fcacheControl\"\xf0\x02\n" +
 	"\x05Quota\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12&\n" +
 	"\x0fmax_total_bytes\x18\x02 \x01(\x03R\rmaxTotalBytes\x12(\n" +
@@ -3202,7 +3307,11 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x0eObjectLockMode\x12 \n" +
 	"\x1cOBJECT_LOCK_MODE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bOBJECT_LOCK_MODE_GOVERNANCE\x10\x01\x12\x1f\n" +
-	"\x1bOBJECT_LOCK_MODE_COMPLIANCE\x10\x02BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
+	"\x1bOBJECT_LOCK_MODE_COMPLIANCE\x10\x02*w\n" +
+	"\x10CollectionAccess\x12!\n" +
+	"\x1dCOLLECTION_ACCESS_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19COLLECTION_ACCESS_PRIVATE\x10\x01\x12!\n" +
+	"\x1dCOLLECTION_ACCESS_PUBLIC_READ\x10\x02BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_types_proto_rawDescOnce sync.Once
@@ -3216,7 +3325,7 @@ func file_paladin_admin_v1_types_proto_rawDescGZIP() []byte {
 	return file_paladin_admin_v1_types_proto_rawDescData
 }
 
-var file_paladin_admin_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_paladin_admin_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
 var file_paladin_admin_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_paladin_admin_v1_types_proto_goTypes = []any{
 	(StorageFeature)(0),           // 0: paladin.admin.v1.StorageFeature
@@ -3226,95 +3335,97 @@ var file_paladin_admin_v1_types_proto_goTypes = []any{
 	(SseType)(0),                  // 4: paladin.admin.v1.SseType
 	(EventTarget)(0),              // 5: paladin.admin.v1.EventTarget
 	(ObjectLockMode)(0),           // 6: paladin.admin.v1.ObjectLockMode
-	(*StorageBackend)(nil),        // 7: paladin.admin.v1.StorageBackend
-	(*StorageFeatureSupport)(nil), // 8: paladin.admin.v1.StorageFeatureSupport
-	(*ServerSideEncryption)(nil),  // 9: paladin.admin.v1.ServerSideEncryption
-	(*EventSourceConfig)(nil),     // 10: paladin.admin.v1.EventSourceConfig
-	(*Bucket)(nil),                // 11: paladin.admin.v1.Bucket
-	(*BucketConstraints)(nil),     // 12: paladin.admin.v1.BucketConstraints
-	(*LifecycleRule)(nil),         // 13: paladin.admin.v1.LifecycleRule
-	(*LifecycleTransition)(nil),   // 14: paladin.admin.v1.LifecycleTransition
-	(*LifecycleExpiration)(nil),   // 15: paladin.admin.v1.LifecycleExpiration
-	(*ObjectLockConfig)(nil),      // 16: paladin.admin.v1.ObjectLockConfig
-	(*BucketVersioning)(nil),      // 17: paladin.admin.v1.BucketVersioning
-	(*BucketReplication)(nil),     // 18: paladin.admin.v1.BucketReplication
-	(*Tenant)(nil),                // 19: paladin.admin.v1.Tenant
-	(*Collection)(nil),            // 20: paladin.admin.v1.Collection
-	(*Quota)(nil),                 // 21: paladin.admin.v1.Quota
-	(*QuotaUsage)(nil),            // 22: paladin.admin.v1.QuotaUsage
-	(*AuditLogEntry)(nil),         // 23: paladin.admin.v1.AuditLogEntry
-	(*EventSubscription)(nil),     // 24: paladin.admin.v1.EventSubscription
-	(*EventSink)(nil),             // 25: paladin.admin.v1.EventSink
-	(*HttpSink)(nil),              // 26: paladin.admin.v1.HttpSink
-	(*KafkaSink)(nil),             // 27: paladin.admin.v1.KafkaSink
-	(*SqsSink)(nil),               // 28: paladin.admin.v1.SqsSink
-	(*RabbitMqSink)(nil),          // 29: paladin.admin.v1.RabbitMqSink
-	(*NatsSink)(nil),              // 30: paladin.admin.v1.NatsSink
-	nil,                           // 31: paladin.admin.v1.Bucket.LabelsEntry
-	nil,                           // 32: paladin.admin.v1.Tenant.LabelsEntry
-	(*timestamppb.Timestamp)(nil), // 33: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 34: google.protobuf.Duration
-	(v1.ChecksumAlgorithm)(0),     // 35: paladin.common.v1.ChecksumAlgorithm
-	(v1.CompletionMode)(0),        // 36: paladin.common.v1.CompletionMode
+	(CollectionAccess)(0),         // 7: paladin.admin.v1.CollectionAccess
+	(*StorageBackend)(nil),        // 8: paladin.admin.v1.StorageBackend
+	(*StorageFeatureSupport)(nil), // 9: paladin.admin.v1.StorageFeatureSupport
+	(*ServerSideEncryption)(nil),  // 10: paladin.admin.v1.ServerSideEncryption
+	(*EventSourceConfig)(nil),     // 11: paladin.admin.v1.EventSourceConfig
+	(*Bucket)(nil),                // 12: paladin.admin.v1.Bucket
+	(*BucketConstraints)(nil),     // 13: paladin.admin.v1.BucketConstraints
+	(*LifecycleRule)(nil),         // 14: paladin.admin.v1.LifecycleRule
+	(*LifecycleTransition)(nil),   // 15: paladin.admin.v1.LifecycleTransition
+	(*LifecycleExpiration)(nil),   // 16: paladin.admin.v1.LifecycleExpiration
+	(*ObjectLockConfig)(nil),      // 17: paladin.admin.v1.ObjectLockConfig
+	(*BucketVersioning)(nil),      // 18: paladin.admin.v1.BucketVersioning
+	(*BucketReplication)(nil),     // 19: paladin.admin.v1.BucketReplication
+	(*Tenant)(nil),                // 20: paladin.admin.v1.Tenant
+	(*Collection)(nil),            // 21: paladin.admin.v1.Collection
+	(*Quota)(nil),                 // 22: paladin.admin.v1.Quota
+	(*QuotaUsage)(nil),            // 23: paladin.admin.v1.QuotaUsage
+	(*AuditLogEntry)(nil),         // 24: paladin.admin.v1.AuditLogEntry
+	(*EventSubscription)(nil),     // 25: paladin.admin.v1.EventSubscription
+	(*EventSink)(nil),             // 26: paladin.admin.v1.EventSink
+	(*HttpSink)(nil),              // 27: paladin.admin.v1.HttpSink
+	(*KafkaSink)(nil),             // 28: paladin.admin.v1.KafkaSink
+	(*SqsSink)(nil),               // 29: paladin.admin.v1.SqsSink
+	(*RabbitMqSink)(nil),          // 30: paladin.admin.v1.RabbitMqSink
+	(*NatsSink)(nil),              // 31: paladin.admin.v1.NatsSink
+	nil,                           // 32: paladin.admin.v1.Bucket.LabelsEntry
+	nil,                           // 33: paladin.admin.v1.Tenant.LabelsEntry
+	(*timestamppb.Timestamp)(nil), // 34: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 35: google.protobuf.Duration
+	(v1.ChecksumAlgorithm)(0),     // 36: paladin.common.v1.ChecksumAlgorithm
+	(v1.CompletionMode)(0),        // 37: paladin.common.v1.CompletionMode
 }
 var file_paladin_admin_v1_types_proto_depIdxs = []int32{
 	3,  // 0: paladin.admin.v1.StorageBackend.kind:type_name -> paladin.admin.v1.StorageKind
-	9,  // 1: paladin.admin.v1.StorageBackend.sse:type_name -> paladin.admin.v1.ServerSideEncryption
-	10, // 2: paladin.admin.v1.StorageBackend.events:type_name -> paladin.admin.v1.EventSourceConfig
-	33, // 3: paladin.admin.v1.StorageBackend.created_at:type_name -> google.protobuf.Timestamp
-	33, // 4: paladin.admin.v1.StorageBackend.updated_at:type_name -> google.protobuf.Timestamp
-	33, // 5: paladin.admin.v1.StorageBackend.previous_credentials_valid_until:type_name -> google.protobuf.Timestamp
-	33, // 6: paladin.admin.v1.StorageBackend.health_checked_at:type_name -> google.protobuf.Timestamp
-	8,  // 7: paladin.admin.v1.StorageBackend.features:type_name -> paladin.admin.v1.StorageFeatureSupport
+	10, // 1: paladin.admin.v1.StorageBackend.sse:type_name -> paladin.admin.v1.ServerSideEncryption
+	11, // 2: paladin.admin.v1.StorageBackend.events:type_name -> paladin.admin.v1.EventSourceConfig
+	34, // 3: paladin.admin.v1.StorageBackend.created_at:type_name -> google.protobuf.Timestamp
+	34, // 4: paladin.admin.v1.StorageBackend.updated_at:type_name -> google.protobuf.Timestamp
+	34, // 5: paladin.admin.v1.StorageBackend.previous_credentials_valid_until:type_name -> google.protobuf.Timestamp
+	34, // 6: paladin.admin.v1.StorageBackend.health_checked_at:type_name -> google.protobuf.Timestamp
+	9,  // 7: paladin.admin.v1.StorageBackend.features:type_name -> paladin.admin.v1.StorageFeatureSupport
 	2,  // 8: paladin.admin.v1.StorageBackend.compatibility:type_name -> paladin.admin.v1.StorageCompatibility
 	0,  // 9: paladin.admin.v1.StorageFeatureSupport.feature:type_name -> paladin.admin.v1.StorageFeature
 	1,  // 10: paladin.admin.v1.StorageFeatureSupport.support:type_name -> paladin.admin.v1.FeatureSupport
-	33, // 11: paladin.admin.v1.StorageFeatureSupport.checked_at:type_name -> google.protobuf.Timestamp
+	34, // 11: paladin.admin.v1.StorageFeatureSupport.checked_at:type_name -> google.protobuf.Timestamp
 	4,  // 12: paladin.admin.v1.ServerSideEncryption.type:type_name -> paladin.admin.v1.SseType
 	5,  // 13: paladin.admin.v1.EventSourceConfig.target:type_name -> paladin.admin.v1.EventTarget
-	34, // 14: paladin.admin.v1.EventSourceConfig.poll_interval:type_name -> google.protobuf.Duration
-	12, // 15: paladin.admin.v1.Bucket.constraints:type_name -> paladin.admin.v1.BucketConstraints
-	13, // 16: paladin.admin.v1.Bucket.lifecycle_rules:type_name -> paladin.admin.v1.LifecycleRule
-	16, // 17: paladin.admin.v1.Bucket.object_lock:type_name -> paladin.admin.v1.ObjectLockConfig
-	17, // 18: paladin.admin.v1.Bucket.versioning:type_name -> paladin.admin.v1.BucketVersioning
-	18, // 19: paladin.admin.v1.Bucket.replication:type_name -> paladin.admin.v1.BucketReplication
-	31, // 20: paladin.admin.v1.Bucket.labels:type_name -> paladin.admin.v1.Bucket.LabelsEntry
-	33, // 21: paladin.admin.v1.Bucket.created_at:type_name -> google.protobuf.Timestamp
-	33, // 22: paladin.admin.v1.Bucket.updated_at:type_name -> google.protobuf.Timestamp
-	34, // 23: paladin.admin.v1.BucketConstraints.max_presign_put_ttl:type_name -> google.protobuf.Duration
-	34, // 24: paladin.admin.v1.BucketConstraints.max_presign_get_ttl:type_name -> google.protobuf.Duration
-	35, // 25: paladin.admin.v1.BucketConstraints.required_checksum_algorithm:type_name -> paladin.common.v1.ChecksumAlgorithm
-	14, // 26: paladin.admin.v1.LifecycleRule.transition:type_name -> paladin.admin.v1.LifecycleTransition
-	15, // 27: paladin.admin.v1.LifecycleRule.expiration:type_name -> paladin.admin.v1.LifecycleExpiration
-	34, // 28: paladin.admin.v1.LifecycleTransition.after:type_name -> google.protobuf.Duration
-	34, // 29: paladin.admin.v1.LifecycleExpiration.after:type_name -> google.protobuf.Duration
+	35, // 14: paladin.admin.v1.EventSourceConfig.poll_interval:type_name -> google.protobuf.Duration
+	13, // 15: paladin.admin.v1.Bucket.constraints:type_name -> paladin.admin.v1.BucketConstraints
+	14, // 16: paladin.admin.v1.Bucket.lifecycle_rules:type_name -> paladin.admin.v1.LifecycleRule
+	17, // 17: paladin.admin.v1.Bucket.object_lock:type_name -> paladin.admin.v1.ObjectLockConfig
+	18, // 18: paladin.admin.v1.Bucket.versioning:type_name -> paladin.admin.v1.BucketVersioning
+	19, // 19: paladin.admin.v1.Bucket.replication:type_name -> paladin.admin.v1.BucketReplication
+	32, // 20: paladin.admin.v1.Bucket.labels:type_name -> paladin.admin.v1.Bucket.LabelsEntry
+	34, // 21: paladin.admin.v1.Bucket.created_at:type_name -> google.protobuf.Timestamp
+	34, // 22: paladin.admin.v1.Bucket.updated_at:type_name -> google.protobuf.Timestamp
+	35, // 23: paladin.admin.v1.BucketConstraints.max_presign_put_ttl:type_name -> google.protobuf.Duration
+	35, // 24: paladin.admin.v1.BucketConstraints.max_presign_get_ttl:type_name -> google.protobuf.Duration
+	36, // 25: paladin.admin.v1.BucketConstraints.required_checksum_algorithm:type_name -> paladin.common.v1.ChecksumAlgorithm
+	15, // 26: paladin.admin.v1.LifecycleRule.transition:type_name -> paladin.admin.v1.LifecycleTransition
+	16, // 27: paladin.admin.v1.LifecycleRule.expiration:type_name -> paladin.admin.v1.LifecycleExpiration
+	35, // 28: paladin.admin.v1.LifecycleTransition.after:type_name -> google.protobuf.Duration
+	35, // 29: paladin.admin.v1.LifecycleExpiration.after:type_name -> google.protobuf.Duration
 	6,  // 30: paladin.admin.v1.ObjectLockConfig.default_mode:type_name -> paladin.admin.v1.ObjectLockMode
-	34, // 31: paladin.admin.v1.ObjectLockConfig.default_retention:type_name -> google.protobuf.Duration
-	32, // 32: paladin.admin.v1.Tenant.labels:type_name -> paladin.admin.v1.Tenant.LabelsEntry
-	33, // 33: paladin.admin.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
-	33, // 34: paladin.admin.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
-	33, // 35: paladin.admin.v1.Tenant.deleted_at:type_name -> google.protobuf.Timestamp
-	36, // 36: paladin.admin.v1.Collection.completion_mode:type_name -> paladin.common.v1.CompletionMode
-	12, // 37: paladin.admin.v1.Collection.constraints:type_name -> paladin.admin.v1.BucketConstraints
-	33, // 38: paladin.admin.v1.Collection.created_at:type_name -> google.protobuf.Timestamp
-	33, // 39: paladin.admin.v1.Collection.updated_at:type_name -> google.protobuf.Timestamp
-	22, // 40: paladin.admin.v1.Quota.usage:type_name -> paladin.admin.v1.QuotaUsage
-	33, // 41: paladin.admin.v1.Quota.updated_at:type_name -> google.protobuf.Timestamp
-	33, // 42: paladin.admin.v1.QuotaUsage.last_reset_at:type_name -> google.protobuf.Timestamp
-	33, // 43: paladin.admin.v1.AuditLogEntry.at:type_name -> google.protobuf.Timestamp
-	25, // 44: paladin.admin.v1.EventSubscription.sink:type_name -> paladin.admin.v1.EventSink
-	33, // 45: paladin.admin.v1.EventSubscription.created_at:type_name -> google.protobuf.Timestamp
-	33, // 46: paladin.admin.v1.EventSubscription.updated_at:type_name -> google.protobuf.Timestamp
-	26, // 47: paladin.admin.v1.EventSink.http:type_name -> paladin.admin.v1.HttpSink
-	27, // 48: paladin.admin.v1.EventSink.kafka:type_name -> paladin.admin.v1.KafkaSink
-	28, // 49: paladin.admin.v1.EventSink.sqs:type_name -> paladin.admin.v1.SqsSink
-	30, // 50: paladin.admin.v1.EventSink.nats:type_name -> paladin.admin.v1.NatsSink
-	29, // 51: paladin.admin.v1.EventSink.rabbitmq:type_name -> paladin.admin.v1.RabbitMqSink
-	52, // [52:52] is the sub-list for method output_type
-	52, // [52:52] is the sub-list for method input_type
-	52, // [52:52] is the sub-list for extension type_name
-	52, // [52:52] is the sub-list for extension extendee
-	0,  // [0:52] is the sub-list for field type_name
+	35, // 31: paladin.admin.v1.ObjectLockConfig.default_retention:type_name -> google.protobuf.Duration
+	33, // 32: paladin.admin.v1.Tenant.labels:type_name -> paladin.admin.v1.Tenant.LabelsEntry
+	34, // 33: paladin.admin.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
+	34, // 34: paladin.admin.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
+	34, // 35: paladin.admin.v1.Tenant.deleted_at:type_name -> google.protobuf.Timestamp
+	37, // 36: paladin.admin.v1.Collection.completion_mode:type_name -> paladin.common.v1.CompletionMode
+	13, // 37: paladin.admin.v1.Collection.constraints:type_name -> paladin.admin.v1.BucketConstraints
+	34, // 38: paladin.admin.v1.Collection.created_at:type_name -> google.protobuf.Timestamp
+	34, // 39: paladin.admin.v1.Collection.updated_at:type_name -> google.protobuf.Timestamp
+	7,  // 40: paladin.admin.v1.Collection.access:type_name -> paladin.admin.v1.CollectionAccess
+	23, // 41: paladin.admin.v1.Quota.usage:type_name -> paladin.admin.v1.QuotaUsage
+	34, // 42: paladin.admin.v1.Quota.updated_at:type_name -> google.protobuf.Timestamp
+	34, // 43: paladin.admin.v1.QuotaUsage.last_reset_at:type_name -> google.protobuf.Timestamp
+	34, // 44: paladin.admin.v1.AuditLogEntry.at:type_name -> google.protobuf.Timestamp
+	26, // 45: paladin.admin.v1.EventSubscription.sink:type_name -> paladin.admin.v1.EventSink
+	34, // 46: paladin.admin.v1.EventSubscription.created_at:type_name -> google.protobuf.Timestamp
+	34, // 47: paladin.admin.v1.EventSubscription.updated_at:type_name -> google.protobuf.Timestamp
+	27, // 48: paladin.admin.v1.EventSink.http:type_name -> paladin.admin.v1.HttpSink
+	28, // 49: paladin.admin.v1.EventSink.kafka:type_name -> paladin.admin.v1.KafkaSink
+	29, // 50: paladin.admin.v1.EventSink.sqs:type_name -> paladin.admin.v1.SqsSink
+	31, // 51: paladin.admin.v1.EventSink.nats:type_name -> paladin.admin.v1.NatsSink
+	30, // 52: paladin.admin.v1.EventSink.rabbitmq:type_name -> paladin.admin.v1.RabbitMqSink
+	53, // [53:53] is the sub-list for method output_type
+	53, // [53:53] is the sub-list for method input_type
+	53, // [53:53] is the sub-list for extension type_name
+	53, // [53:53] is the sub-list for extension extendee
+	0,  // [0:53] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_types_proto_init() }
@@ -3338,7 +3449,7 @@ func file_paladin_admin_v1_types_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_types_proto_rawDesc), len(file_paladin_admin_v1_types_proto_rawDesc)),
-			NumEnums:      7,
+			NumEnums:      8,
 			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   0,

@@ -370,6 +370,10 @@ type Object struct {
 	// Taint is the signals the content has been flagged with (taint_handler.go).
 	// Empty for a clean object.
 	Taint []string
+
+	// PublicURL is where anyone may read the object unsigned, for an object
+	// in a public collection (ADR-0027); "" otherwise.
+	PublicURL string
 }
 
 type CreateObjectArgs struct {
@@ -389,6 +393,9 @@ type CreateObjectArgs struct {
 	Tags             map[string]string
 	ExternalRef      string
 	PresignExpiresAt time.Time
+	// PublicURL is the object's address in a public collection (ADR-0027),
+	// fixed for its life; "" elsewhere.
+	PublicURL string
 }
 
 type UpdateMetadataArgs struct {

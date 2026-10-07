@@ -92,6 +92,8 @@ func (r *BucketRepoV2) createWith(ctx context.Context, q *sqlc.Queries, b admind
 		b.CedarPolicy,
 		constraints,
 		state,
+		b.PublicRead,
+		b.PublicBaseURL,
 	); err != nil {
 		// Surface FK + unique violations as typed domain errors so the
 		// handler can map them to user-friendly Connect codes instead of
@@ -148,6 +150,7 @@ func (r *BucketRepoV2) ListPendingProvisions(ctx context.Context, maxAttempts, l
 			ProvisionAttempts: row.ProvisionAttempts,
 			LastProvisionAt:   timeFrom(row.LastProvisionAt),
 			OwnerTenantID:     uuidFrom(row.OwnerTenantID),
+			PublicRead:        row.PublicRead,
 		})
 	}
 	return out, nil
@@ -507,7 +510,7 @@ func bucketFromV2Row(row sqlc.GetBucketV2Row) admindomain.Bucket {
 		row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
 		row.VersioningEnabled, row.VersioningKeepDeletesForever,
 		row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
-		row.ProvisionState,
+		row.ProvisionState, row.PublicRead, row.PublicBaseUrl,
 		row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
 	)
 }
@@ -519,7 +522,7 @@ func bucketFromV2RowList(row sqlc.ListBucketsV2Row) admindomain.Bucket {
 		row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
 		row.VersioningEnabled, row.VersioningKeepDeletesForever,
 		row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
-		row.ProvisionState,
+		row.ProvisionState, row.PublicRead, row.PublicBaseUrl,
 		row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
 	)
 }
@@ -531,7 +534,7 @@ func bucketFromV2RowAccessible(row sqlc.ListAccessibleBucketsRow) admindomain.Bu
 		row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
 		row.VersioningEnabled, row.VersioningKeepDeletesForever,
 		row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
-		row.ProvisionState,
+		row.ProvisionState, row.PublicRead, row.PublicBaseUrl,
 		row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
 	)
 }
@@ -548,6 +551,7 @@ func decodeBucketRow(
 	versioningEnabled, keepDeletesForever bool,
 	replicationEnabled bool, replicationDest, replicationFilter string,
 	provisionState string,
+	publicRead bool, publicBaseURL string,
 	resourceVersion int64,
 	createdAt, updatedAt pgtype.Timestamptz,
 ) admindomain.Bucket {
@@ -580,6 +584,8 @@ func decodeBucketRow(
 			Filter:            replicationFilter,
 		},
 		ProvisionState:  provisionState,
+		PublicRead:      publicRead,
+		PublicBaseURL:   publicBaseURL,
 		ResourceVersion: resourceVersion,
 		CreatedAt:       timeFrom(createdAt),
 		UpdatedAt:       timeFrom(updatedAt),

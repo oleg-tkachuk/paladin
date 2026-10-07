@@ -37,13 +37,19 @@ type EventProducer interface {
 }
 
 type Collection struct {
-	TenantID        uuid.UUID
-	Collection      string
-	DisplayName     string
-	BackendID       string
-	BucketName      string
-	CedarPolicy     string
-	LifecycleRules  []byte // JSONB bytes; parsed by caller if needed
+	TenantID       uuid.UUID
+	Collection     string
+	DisplayName    string
+	BackendID      string
+	BucketName     string
+	CedarPolicy    string
+	LifecycleRules []byte // JSONB bytes; parsed by caller if needed
+	// PublicRead: anyone may read the objects by URL (ADR-0027). Fixed at
+	// creation, and equal to the bucket's.
+	PublicRead bool
+	// CacheControl is what a public collection stores objects with; "" for
+	// a private one.
+	CacheControl    string
 	ResourceVersion int64
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -64,6 +70,10 @@ type CreateCollectionArgs struct {
 	BucketName     string
 	CedarPolicy    string
 	LifecycleRules []byte
+	// PublicRead declares a public collection; CacheControl is its requested
+	// Cache-Control, "" for the default (ADR-0027).
+	PublicRead   bool
+	CacheControl string
 }
 
 type UpdateCollectionArgs struct {

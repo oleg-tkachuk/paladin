@@ -188,6 +188,8 @@ func bucketToProto(b *admindomain.Bucket) *pb.Bucket {
 		CreatedAt:       convx.TsProto(b.CreatedAt),
 		UpdatedAt:       convx.TsProto(b.UpdatedAt),
 		ProvisionState:  b.ProvisionState,
+		PublicRead:      b.PublicRead,
+		PublicBaseUrl:   b.PublicBaseURL,
 	}
 }
 

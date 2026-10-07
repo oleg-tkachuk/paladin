@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/resolve"
+	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
@@ -88,6 +89,11 @@ func (s *CollectionServer) CreateCollection(ctx context.Context, req *connect.Re
 	// own (backend, bucket), which the Get/Update/Delete paths resolve from the
 	// row, never from the tenant default.
 	if bucket == "" {
+		// A tenant's default binding is a private bucket; a public collection
+		// has to say which public bucket it lives in (ADR-0027).
+		if src.GetAccess() == pb.CollectionAccess_COLLECTION_ACCESS_PUBLIC_READ {
+			return nil, apiutil.MapError(publicread.Rulef("a public collection must name its public bucket"))
+		}
 		db, err := s.bindings.GetDefaultBinding(ctx, tenantID)
 		if err != nil {
 			if errors.Is(err, tenanth.ErrNotFound) {
@@ -99,12 +105,14 @@ func (s *CollectionServer) CreateCollection(ctx context.Context, req *connect.Re
 		backend, bucket = db.BackendName, db.BucketName
 	}
 	args := objectkey.CreateCollectionArgs{
-		TenantID:    tenantID,
-		Collection:  m.GetCollection(),
-		DisplayName: src.GetDisplayName(),
-		BackendID:   backend,
-		BucketName:  bucket,
-		CedarPolicy: src.GetCedarPolicy(),
+		TenantID:     tenantID,
+		Collection:   m.GetCollection(),
+		DisplayName:  src.GetDisplayName(),
+		BackendID:    backend,
+		BucketName:   bucket,
+		CedarPolicy:  src.GetCedarPolicy(),
+		PublicRead:   src.GetAccess() == pb.CollectionAccess_COLLECTION_ACCESS_PUBLIC_READ,
+		CacheControl: src.GetCacheControl(),
 	}
 	out, err := s.H.CreateCollection(ctx, args)
 	if err != nil {
@@ -294,7 +302,16 @@ func collectionDomainToProto(o *objectkey.Collection) *pb.Collection {
 		ResourceVersion: convx.ResourceVersion(o.ResourceVersion),
 		CreatedAt:       convx.TsProto(o.CreatedAt),
 		UpdatedAt:       convx.TsProto(o.UpdatedAt),
+		Access:          collectionAccessToProto(o.PublicRead),
+		CacheControl:    o.CacheControl,
 	}
+}
+
+func collectionAccessToProto(publicRead bool) pb.CollectionAccess {
+	if publicRead {
+		return pb.CollectionAccess_COLLECTION_ACCESS_PUBLIC_READ
+	}
+	return pb.CollectionAccess_COLLECTION_ACCESS_PRIVATE
 }
 
 // silence unused imports warning if needed

@@ -106,6 +106,7 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 		encodeMap(args.Tags),
 		strPtr(args.ExternalRef),
 		pgTS(args.PresignExpiresAt),
+		args.PublicURL,
 	); err != nil {
 		return objecth.Object{}, fmt.Errorf("create object: %w", err)
 	}
@@ -719,6 +720,7 @@ func objectFromSQLC(o sqlc.Object, collectionName string) objecth.Object {
 		TerminatedAt:          timePtr(o.TerminatedAt),
 		PresignExpiresAt:      timePtr(o.PresignExpiresAt),
 		Taint:                 o.Taint,
+		PublicURL:             o.PublicUrl,
 	}
 }
 

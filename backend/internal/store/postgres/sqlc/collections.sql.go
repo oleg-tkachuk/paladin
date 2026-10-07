@@ -42,14 +42,14 @@ const createCollection = `-- name: CreateCollection :exec
 
 INSERT INTO collections (
     tenant_id, name, display_name, bucket_id,
-    cedar_policy, lifecycle_rules
+    cedar_policy, lifecycle_rules, public_read, cache_control
 ) VALUES ($1, $2, $3, (SELECT b.id FROM buckets b
             JOIN storage_backends sb ON sb.id = b.backend_id
-           WHERE sb.name = $4 AND b.name = $5), $6, $7)
+           WHERE sb.name = $4 AND b.name = $5), $6, $7, $8, $9)
 `
 
 // Collection queries.
-func (q *Queries) CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName string, name_2 string, name_3 string, cedarPolicy string, lifecycleRules []byte) error {
+func (q *Queries) CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName string, name_2 string, name_3 string, cedarPolicy string, lifecycleRules []byte, publicRead bool, cacheControl string) error {
 	_, err := q.db.Exec(ctx, createCollection,
 		tenantID,
 		name,
@@ -58,6 +58,8 @@ func (q *Queries) CreateCollection(ctx context.Context, tenantID pgtype.UUID, na
 		name_3,
 		cedarPolicy,
 		lifecycleRules,
+		publicRead,
+		cacheControl,
 	)
 	return err
 }
@@ -78,7 +80,7 @@ func (q *Queries) DeleteCollection(ctx context.Context, tenantID pgtype.UUID, na
 }
 
 const getCollection = `-- name: GetCollection :one
-SELECT collections.id, collections.tenant_id, collections.name, collections.display_name, collections.bucket_id, collections.constraints, collections.lifecycle_rules, collections.cedar_policy, collections.cedar_policy_hash, collections.resource_version, collections.created_at, collections.updated_at,
+SELECT collections.id, collections.tenant_id, collections.name, collections.display_name, collections.bucket_id, collections.constraints, collections.lifecycle_rules, collections.cedar_policy, collections.cedar_policy_hash, collections.resource_version, collections.created_at, collections.updated_at, collections.public_read, collections.cache_control,
        sb.name AS backend_name,
        b.name  AS bucket_name
 FROM collections
@@ -112,6 +114,8 @@ func (q *Queries) GetCollection(ctx context.Context, tenantID pgtype.UUID, name 
 		&i.Collection.ResourceVersion,
 		&i.Collection.CreatedAt,
 		&i.Collection.UpdatedAt,
+		&i.Collection.PublicRead,
+		&i.Collection.CacheControl,
 		&i.BackendName,
 		&i.BucketName,
 	)
@@ -183,7 +187,7 @@ func (q *Queries) ListCollectionNamesForTenant(ctx context.Context, tenantID pgt
 }
 
 const listCollections = `-- name: ListCollections :many
-SELECT collections.id, collections.tenant_id, collections.name, collections.display_name, collections.bucket_id, collections.constraints, collections.lifecycle_rules, collections.cedar_policy, collections.cedar_policy_hash, collections.resource_version, collections.created_at, collections.updated_at,
+SELECT collections.id, collections.tenant_id, collections.name, collections.display_name, collections.bucket_id, collections.constraints, collections.lifecycle_rules, collections.cedar_policy, collections.cedar_policy_hash, collections.resource_version, collections.created_at, collections.updated_at, collections.public_read, collections.cache_control,
        sb.name AS backend_name,
        b.name  AS bucket_name
 FROM collections
@@ -259,6 +263,8 @@ func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, aft
 			&i.Collection.ResourceVersion,
 			&i.Collection.CreatedAt,
 			&i.Collection.UpdatedAt,
+			&i.Collection.PublicRead,
+			&i.Collection.CacheControl,
 			&i.BackendName,
 			&i.BucketName,
 		); err != nil {

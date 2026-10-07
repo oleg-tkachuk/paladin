@@ -47,4 +47,10 @@ enum ErrorReason {
   // The tenant a request names does not exist — one being provisioned may
   // exist shortly, so a caller that expects it can retry.
   ERROR_REASON_TENANT_NOT_FOUND = 25;
+  // The storage backend's last probe has not shown a feature the operation
+  // needs (ADR-0026). Probing it again with TestBackend may change that.
+  ERROR_REASON_BACKEND_FEATURE_UNSUPPORTED = 26;
+  // The request breaks a rule of public collections (ADR-0027): a key the
+  // client chose, a delete to the trash, a mutable visibility.
+  ERROR_REASON_PUBLIC_COLLECTION_RULE = 27;
 }
