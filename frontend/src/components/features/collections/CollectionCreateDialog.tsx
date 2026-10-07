@@ -79,8 +79,11 @@ export function CollectionCreateDialog({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // The default backend waits for the buckets: chosen before they arrive, it
+  // was the first backend whatever it held, often one with no bucket at all.
+  const [bucketsRead, setBucketsRead] = useState(false);
   useEffect(() => {
-    if (open) void fetchBuckets();
+    if (open) void fetchBuckets().finally(() => setBucketsRead(true));
   }, [open, fetchBuckets]);
 
   // Default to a backend that has buckets when one exists — a Collection binds
@@ -99,7 +102,7 @@ export function CollectionCreateDialog({
     [buckets, backendId],
   );
   // Render-phase adjust-on-condition, each converging in one extra render.
-  if (open && !backendId && defaultBackend) {
+  if (open && !backendId && defaultBackend && bucketsRead) {
     setBackendId(defaultBackend);
   }
   if (bucketId && !bucketsForBackend.some((b) => b.bucketId === bucketId)) {
@@ -110,6 +113,19 @@ export function CollectionCreateDialog({
       (bucketsForBackend.find((b) => !b.publicRead) ?? bucketsForBackend[0])
         .bucketId,
     );
+  }
+  // An error answers the request that was sent; once the form changes it no
+  // longer describes what Create would send.
+  const draft = JSON.stringify([
+    backendId,
+    bucketId,
+    path,
+    displayName,
+    cacheControl,
+  ]);
+  const [erroredDraft, setErroredDraft] = useState(draft);
+  if (submitError && draft !== erroredDraft) {
+    setSubmitError(null);
   }
   const publicBucket =
     bucketsForBackend.find((b) => b.bucketId === bucketId)?.publicRead ?? false;
@@ -151,6 +167,7 @@ export function CollectionCreateDialog({
       onOpenChange(false);
       onCreated?.();
     } catch (err) {
+      setErroredDraft(draft);
       setSubmitError(errorMessage(err, "Failed to create the Collection."));
     } finally {
       setSubmitting(false);
