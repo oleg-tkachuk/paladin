@@ -44,24 +44,35 @@ func (f fakeResolver) ResolveSecret(_ context.Context, ref *config.SecretRef) (s
 	return f.val[ref.Key], nil
 }
 
-// Exercises the dynamic-probe error paths that don't require a network dial.
-func TestProbeDynamic_Errors(t *testing.T) {
+// Exercises the dynamic-client error paths that don't require a network dial.
+func TestDynamicClient_Errors(t *testing.T) {
 	row := admindomain.StorageBackend{BackendID: "dyn", Kind: "s3-compatible", CredentialsSecretRef: "creds"}
 
-	if err := (&s3BackendProber{clients: map[string]*s3adapter.Client{}}).
-		probeDynamic(context.Background(), row); err == nil {
+	if _, err := (&s3BackendProber{clients: map[string]*s3adapter.Client{}}).
+		dynamicClient(context.Background(), row); err == nil {
 		t.Error("nil resolver should error")
 	}
 
 	bad := row
 	bad.CredentialsSecretRef = "vault://x"
-	if err := (&s3BackendProber{resolver: fakeResolver{}}).
-		probeDynamic(context.Background(), bad); err == nil {
+	if _, err := (&s3BackendProber{resolver: fakeResolver{}}).
+		dynamicClient(context.Background(), bad); err == nil {
 		t.Error("unsupported ref should error")
 	}
 
-	if err := (&s3BackendProber{resolver: fakeResolver{err: errors.New("k8s 403")}}).
-		probeDynamic(context.Background(), row); err == nil {
+	if _, err := (&s3BackendProber{resolver: fakeResolver{err: errors.New("k8s 403")}}).
+		dynamicClient(context.Background(), row); err == nil {
 		t.Error("resolver error should propagate")
+	}
+}
+
+// A backend no client can be built for has no feature results to report,
+// rather than a column of guesses.
+func TestProbeFeaturesWithoutAClient(t *testing.T) {
+	row := admindomain.StorageBackend{BackendID: "dyn", Kind: "s3-compatible", CredentialsSecretRef: "creds"}
+	got, err := (&s3BackendProber{clients: map[string]*s3adapter.Client{}}).
+		ProbeFeatures(context.Background(), row)
+	if err == nil || got != nil {
+		t.Errorf("ProbeFeatures = %v, %v; want no results and an error", got, err)
 	}
 }

@@ -495,10 +495,14 @@ func (x *TestBackendRequest) GetName() string {
 }
 
 type TestBackendResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Reachable     bool                   `protobuf:"varint,1,opt,name=reachable,proto3" json:"reachable,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	LatencyMs     int32                  `protobuf:"varint,3,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Reachable    bool                   `protobuf:"varint,1,opt,name=reachable,proto3" json:"reachable,omitempty"`
+	ErrorMessage string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	LatencyMs    int32                  `protobuf:"varint,3,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
+	// What this probe found for every S3 feature Paladin uses (ADR-0026). Also
+	// recorded on the backend. Empty when the backend was unreachable.
+	Features      []*StorageFeatureSupport `protobuf:"bytes,4,rep,name=features,proto3" json:"features,omitempty"`
+	Compatibility StorageCompatibility     `protobuf:"varint,5,opt,name=compatibility,proto3,enum=paladin.admin.v1.StorageCompatibility" json:"compatibility,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -552,6 +556,20 @@ func (x *TestBackendResponse) GetLatencyMs() int32 {
 		return x.LatencyMs
 	}
 	return 0
+}
+
+func (x *TestBackendResponse) GetFeatures() []*StorageFeatureSupport {
+	if x != nil {
+		return x.Features
+	}
+	return nil
+}
+
+func (x *TestBackendResponse) GetCompatibility() StorageCompatibility {
+	if x != nil {
+		return x.Compatibility
+	}
+	return StorageCompatibility_STORAGE_COMPATIBILITY_UNSPECIFIED
 }
 
 type SetBackendEnabledRequest struct {
@@ -766,12 +784,14 @@ const file_paladin_admin_v1_backend_service_proto_rawDesc = "" +
 	"\x0enew_secret_ref\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fnewSecretRef\x12!\n" +
 	"\fgrace_period\x18\x03 \x01(\tR\vgracePeriod\"1\n" +
 	"\x12TestBackendRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"w\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x8a\x02\n" +
 	"\x13TestBackendResponse\x12\x1c\n" +
 	"\treachable\x18\x01 \x01(\bR\treachable\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12\x1d\n" +
 	"\n" +
-	"latency_ms\x18\x03 \x01(\x05R\tlatencyMs\"\x85\x01\n" +
+	"latency_ms\x18\x03 \x01(\x05R\tlatencyMs\x12C\n" +
+	"\bfeatures\x18\x04 \x03(\v2'.paladin.admin.v1.StorageFeatureSupportR\bfeatures\x12L\n" +
+	"\rcompatibility\x18\x05 \x01(\x0e2&.paladin.admin.v1.StorageCompatibilityR\rcompatibility\"\x85\x01\n" +
 	"\x18SetBackendEnabledRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\x122\n" +
@@ -828,6 +848,8 @@ var file_paladin_admin_v1_backend_service_proto_goTypes = []any{
 	(*fieldmaskpb.FieldMask)(nil),        // 14: google.protobuf.FieldMask
 	(*v1.PageRequest)(nil),               // 15: paladin.common.v1.PageRequest
 	(*v1.PageResponse)(nil),              // 16: paladin.common.v1.PageResponse
+	(*StorageFeatureSupport)(nil),        // 17: paladin.admin.v1.StorageFeatureSupport
+	(StorageCompatibility)(0),            // 18: paladin.admin.v1.StorageCompatibility
 }
 var file_paladin_admin_v1_backend_service_proto_depIdxs = []int32{
 	13, // 0: paladin.admin.v1.CreateBackendRequest.backend:type_name -> paladin.admin.v1.StorageBackend
@@ -836,31 +858,33 @@ var file_paladin_admin_v1_backend_service_proto_depIdxs = []int32{
 	15, // 3: paladin.admin.v1.ListBackendsRequest.page:type_name -> paladin.common.v1.PageRequest
 	13, // 4: paladin.admin.v1.ListBackendsResponse.backends:type_name -> paladin.admin.v1.StorageBackend
 	16, // 5: paladin.admin.v1.ListBackendsResponse.page:type_name -> paladin.common.v1.PageResponse
-	0,  // 6: paladin.admin.v1.BackendService.CreateBackend:input_type -> paladin.admin.v1.CreateBackendRequest
-	1,  // 7: paladin.admin.v1.BackendService.GetBackend:input_type -> paladin.admin.v1.GetBackendRequest
-	2,  // 8: paladin.admin.v1.BackendService.UpdateBackend:input_type -> paladin.admin.v1.UpdateBackendRequest
-	3,  // 9: paladin.admin.v1.BackendService.DeleteBackend:input_type -> paladin.admin.v1.DeleteBackendRequest
-	5,  // 10: paladin.admin.v1.BackendService.ListBackends:input_type -> paladin.admin.v1.ListBackendsRequest
-	7,  // 11: paladin.admin.v1.BackendService.RotateCredentials:input_type -> paladin.admin.v1.RotateCredentialsRequest
-	8,  // 12: paladin.admin.v1.BackendService.TestBackend:input_type -> paladin.admin.v1.TestBackendRequest
-	10, // 13: paladin.admin.v1.BackendService.SetBackendEnabled:input_type -> paladin.admin.v1.SetBackendEnabledRequest
-	11, // 14: paladin.admin.v1.BackendService.SetBackendReadOnly:input_type -> paladin.admin.v1.SetBackendReadOnlyRequest
-	12, // 15: paladin.admin.v1.BackendService.SetBackendMaintenance:input_type -> paladin.admin.v1.SetBackendMaintenanceRequest
-	13, // 16: paladin.admin.v1.BackendService.CreateBackend:output_type -> paladin.admin.v1.StorageBackend
-	13, // 17: paladin.admin.v1.BackendService.GetBackend:output_type -> paladin.admin.v1.StorageBackend
-	13, // 18: paladin.admin.v1.BackendService.UpdateBackend:output_type -> paladin.admin.v1.StorageBackend
-	4,  // 19: paladin.admin.v1.BackendService.DeleteBackend:output_type -> paladin.admin.v1.DeleteBackendResponse
-	6,  // 20: paladin.admin.v1.BackendService.ListBackends:output_type -> paladin.admin.v1.ListBackendsResponse
-	13, // 21: paladin.admin.v1.BackendService.RotateCredentials:output_type -> paladin.admin.v1.StorageBackend
-	9,  // 22: paladin.admin.v1.BackendService.TestBackend:output_type -> paladin.admin.v1.TestBackendResponse
-	13, // 23: paladin.admin.v1.BackendService.SetBackendEnabled:output_type -> paladin.admin.v1.StorageBackend
-	13, // 24: paladin.admin.v1.BackendService.SetBackendReadOnly:output_type -> paladin.admin.v1.StorageBackend
-	13, // 25: paladin.admin.v1.BackendService.SetBackendMaintenance:output_type -> paladin.admin.v1.StorageBackend
-	16, // [16:26] is the sub-list for method output_type
-	6,  // [6:16] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	17, // 6: paladin.admin.v1.TestBackendResponse.features:type_name -> paladin.admin.v1.StorageFeatureSupport
+	18, // 7: paladin.admin.v1.TestBackendResponse.compatibility:type_name -> paladin.admin.v1.StorageCompatibility
+	0,  // 8: paladin.admin.v1.BackendService.CreateBackend:input_type -> paladin.admin.v1.CreateBackendRequest
+	1,  // 9: paladin.admin.v1.BackendService.GetBackend:input_type -> paladin.admin.v1.GetBackendRequest
+	2,  // 10: paladin.admin.v1.BackendService.UpdateBackend:input_type -> paladin.admin.v1.UpdateBackendRequest
+	3,  // 11: paladin.admin.v1.BackendService.DeleteBackend:input_type -> paladin.admin.v1.DeleteBackendRequest
+	5,  // 12: paladin.admin.v1.BackendService.ListBackends:input_type -> paladin.admin.v1.ListBackendsRequest
+	7,  // 13: paladin.admin.v1.BackendService.RotateCredentials:input_type -> paladin.admin.v1.RotateCredentialsRequest
+	8,  // 14: paladin.admin.v1.BackendService.TestBackend:input_type -> paladin.admin.v1.TestBackendRequest
+	10, // 15: paladin.admin.v1.BackendService.SetBackendEnabled:input_type -> paladin.admin.v1.SetBackendEnabledRequest
+	11, // 16: paladin.admin.v1.BackendService.SetBackendReadOnly:input_type -> paladin.admin.v1.SetBackendReadOnlyRequest
+	12, // 17: paladin.admin.v1.BackendService.SetBackendMaintenance:input_type -> paladin.admin.v1.SetBackendMaintenanceRequest
+	13, // 18: paladin.admin.v1.BackendService.CreateBackend:output_type -> paladin.admin.v1.StorageBackend
+	13, // 19: paladin.admin.v1.BackendService.GetBackend:output_type -> paladin.admin.v1.StorageBackend
+	13, // 20: paladin.admin.v1.BackendService.UpdateBackend:output_type -> paladin.admin.v1.StorageBackend
+	4,  // 21: paladin.admin.v1.BackendService.DeleteBackend:output_type -> paladin.admin.v1.DeleteBackendResponse
+	6,  // 22: paladin.admin.v1.BackendService.ListBackends:output_type -> paladin.admin.v1.ListBackendsResponse
+	13, // 23: paladin.admin.v1.BackendService.RotateCredentials:output_type -> paladin.admin.v1.StorageBackend
+	9,  // 24: paladin.admin.v1.BackendService.TestBackend:output_type -> paladin.admin.v1.TestBackendResponse
+	13, // 25: paladin.admin.v1.BackendService.SetBackendEnabled:output_type -> paladin.admin.v1.StorageBackend
+	13, // 26: paladin.admin.v1.BackendService.SetBackendReadOnly:output_type -> paladin.admin.v1.StorageBackend
+	13, // 27: paladin.admin.v1.BackendService.SetBackendMaintenance:output_type -> paladin.admin.v1.StorageBackend
+	18, // [18:28] is the sub-list for method output_type
+	8,  // [8:18] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_backend_service_proto_init() }

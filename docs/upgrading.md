@@ -43,6 +43,22 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a storage backend's S3 features are probed
+
+- `TestBackend` now also probes, on a reachable backend, each S3 feature
+  Paladin uses — conditional PUT, SHA-256 checksums, multipart upload,
+  server-side copy, form upload, bucket creation, an anonymous-read bucket
+  policy — and records what it found (migration 048). `StorageBackend` gains
+  `features` and `compatibility`; the console shows both, with a warning for
+  each unsupported feature.
+- The probe creates and deletes a scratch bucket named `paladin-probe-…`, and
+  sets and deletes a policy on it. Credentials that may not do so get those
+  features reported `UNKNOWN`; the object checks then run under
+  `.paladin-probe/` in the backend's configured bucket.
+- `TestBackend` takes longer: up to 20 seconds more on a slow store, inside
+  the admin listener's default 30-second write timeout. A deployment that
+  lowered `admin.server.write_timeout` below 25 seconds should raise it.
+
 ## Unreleased — a trashed tenant's credentials stop working
 
 - **Every plane refuses a credential whose tenant is in the trash** —

@@ -22,6 +22,7 @@ import (
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/features"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -55,7 +56,21 @@ const (
 // dynamic path has everything it needs. nil-safe at the handler.
 type BackendProber interface {
 	Probe(ctx context.Context, backend admindomain.StorageBackend) error
+	// ProbeFeatures exercises every S3 feature Paladin uses (ADR-0026). The
+	// error is only for a backend no client could be built for; what the
+	// store does is in the results.
+	ProbeFeatures(ctx context.Context, backend admindomain.StorageBackend) ([]features.Result, error)
 }
+
+const (
+	// reachabilityProbeTimeout bounds TestBackend's reachability check, so a
+	// wedged endpoint cannot hang the RPC.
+	reachabilityProbeTimeout = 5 * time.Second
+	// featureProbeTimeout bounds the feature probe that follows it. The two
+	// together stay inside the admin listener's default 30s write timeout; a
+	// feature the deadline cuts short is reported unknown.
+	featureProbeTimeout = 20 * time.Second
+)
 
 type Handler struct {
 	repo   Repository
@@ -423,11 +438,15 @@ func (h *Handler) DeleteBackend(ctx context.Context, backendID string, expectedV
 
 // ─── TestBackend ────────────────────────────────────────────────────────────
 
-// TestBackendOutput is the result of a connectivity probe.
+// TestBackendOutput is the result of a connectivity probe and, when the
+// backend answered, of the feature probe.
 type TestBackendOutput struct {
 	Reachable    bool
 	ErrorMessage string
 	LatencyMs    int32
+	// Features has one result per catalog feature; nil when the backend was
+	// unreachable, whose earlier results stay recorded.
+	Features []features.Result
 }
 
 func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBackendOutput, error) {
@@ -451,7 +470,7 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 		}, nil
 	}
 	// Bound the probe so a wedged endpoint can't hang the RPC.
-	pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	pctx, cancel := context.WithTimeout(ctx, reachabilityProbeTimeout)
 	defer cancel()
 	start := time.Now()
 	perr := h.prober.Probe(pctx, got)
@@ -473,7 +492,32 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 		logger.FromContext(ctx).Warn("failed to record backend health probe outcome",
 			zap.String("backend_id", backendID), zap.String("status", status), zap.Error(err))
 	}
+	if out.Reachable {
+		out.Features = h.probeFeatures(ctx, got)
+	}
 	return out, nil
+}
+
+// probeFeatures runs the feature probe and records what it found (ADR-0026).
+// Recording is best-effort like the health write: the caller still gets the
+// results.
+func (h *Handler) probeFeatures(ctx context.Context, b admindomain.StorageBackend) []features.Result {
+	fctx, cancel := context.WithTimeout(ctx, featureProbeTimeout)
+	defer cancel()
+	results, err := h.prober.ProbeFeatures(fctx, b)
+	if err != nil {
+		now := time.Now().UTC()
+		results = features.EveryFeature(nil)
+		for i := range results {
+			results[i].Message = err.Error()
+			results[i].CheckedAt = now
+		}
+	}
+	if err := h.repo.SetFeatures(ctx, b.BackendID, results); err != nil {
+		logger.FromContext(ctx).Warn("failed to record backend feature probe outcome",
+			zap.String("backend_id", b.BackendID), zap.Error(err))
+	}
+	return results
 }
 
 // ─── role helpers ──────────────────────────────────────────────────────────

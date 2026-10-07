@@ -43,6 +43,10 @@ import (
 type Client struct {
 	s3      *s3.Client
 	presign *s3.PresignClient
+	// anonymous is the internal client with no credentials: the SDK sends its
+	// requests unsigned. It is how the feature probe asks what a stranger is
+	// served (ADR-0026).
+	anonymous *s3.Client
 	// creds are the credentials presigned URLs are signed with; their
 	// expiry bounds every URL's lifetime (see presignTTL).
 	creds   aws.CredentialsProvider
@@ -127,19 +131,28 @@ func newClient(awsCfg aws.Config, backend config.StorageBackend) *Client {
 		}
 	})
 
+	anonymous := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.UsePathStyle = backend.ForcePathStyle
+		if backend.Endpoint != "" {
+			o.BaseEndpoint = aws.String(backend.Endpoint)
+		}
+		o.Credentials = aws.AnonymousCredentials{}
+	})
+
 	mode := objecth.CompletionModeExplicit
 	if backend.Events.Enabled {
 		mode = objecth.CompletionModeImplicit
 	}
 
 	return &Client{
-		s3:      s3c,
-		presign: s3.NewPresignClient(s3PresignBase),
-		creds:   awsCfg.Credentials,
-		cfg:     backend,
-		mode:    mode,
-		sseType: backend.SSE.Type,
-		sseKey:  backend.SSE.KeyID,
+		s3:        s3c,
+		presign:   s3.NewPresignClient(s3PresignBase),
+		anonymous: anonymous,
+		creds:     awsCfg.Credentials,
+		cfg:       backend,
+		mode:      mode,
+		sseType:   backend.SSE.Type,
+		sseKey:    backend.SSE.KeyID,
 
 		backendID: backendID,
 	}
