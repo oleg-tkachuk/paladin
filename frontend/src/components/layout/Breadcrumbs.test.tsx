@@ -11,6 +11,21 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { Breadcrumbs } from "./Breadcrumbs";
+import {
+  CrumbNamesProvider,
+  useNameCrumbs,
+  type CrumbNames,
+} from "@/context/CrumbNamesContext";
+
+const NAMED: CrumbNames = {
+  t: { label: "acme", href: "/tenants/acme" },
+  u: { label: "alice" },
+};
+
+function NamingPage() {
+  useNameCrumbs(NAMED);
+  return null;
+}
 
 beforeEach(() => {
   pathname = "/";
@@ -61,5 +76,21 @@ describe("Breadcrumbs", () => {
       encodeURIComponent("a/b/file.txt");
     render(<Breadcrumbs />);
     expect(screen.getByText("file.txt")).toBeInTheDocument();
+  });
+
+  // /users/<tenant> is no page: the page names the crumb and where it leads.
+  it("shows a page's names for its ids, with their links", () => {
+    pathname = "/users/t/u";
+    render(
+      <CrumbNamesProvider>
+        <NamingPage />
+        <Breadcrumbs />
+      </CrumbNamesProvider>,
+    );
+    expect(screen.getByRole("link", { name: "acme" })).toHaveAttribute(
+      "href",
+      "/tenants/acme",
+    );
+    expect(screen.getByText("alice")).toHaveAttribute("aria-current", "page");
   });
 });

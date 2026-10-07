@@ -65,3 +65,31 @@ describe("page titles", () => {
     expect(routes.length).toBeGreaterThan(30);
   });
 });
+
+// The user page's path is ids: /users/<tenant id>/<user id>. Its trail and
+// tab title showed them, title-cased with spaces for the dashes.
+describe("crumbs for ids", () => {
+  const TENANT = "01a0f4a9-7600-77a9-862e-11ea31d523ca";
+  const USER = "01a11719-b368-760c-82a0-1ec363e09e19";
+  const PATH = `/users/${TENANT}/${USER}`;
+
+  it("keeps a UUID an id, wherever it sits", () => {
+    const trail = crumbs(PATH);
+    expect(trail[2]).toMatchObject({
+      label: USER.slice(0, 29) + "…",
+      mono: true,
+    });
+    expect(trail[1].mono).toBe(true);
+  });
+
+  it("shows the names a page gives its segments, and where they lead", () => {
+    const names = {
+      [TENANT]: { label: "acme", href: "/tenants/acme" },
+      [USER]: { label: "alice" },
+    };
+    const trail = crumbs(PATH, names);
+    expect(trail.map((c) => c.label)).toEqual(["Users", "acme", "alice"]);
+    expect(trail[1].href).toBe("/tenants/acme");
+    expect(pageTitle(PATH, names)).toBe("alice · acme · Users · Paladin");
+  });
+});
