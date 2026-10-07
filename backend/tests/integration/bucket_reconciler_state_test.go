@@ -134,3 +134,38 @@ func mustBegin(t *testing.T, h *pgharness.Harness) pgx.Tx {
 	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
 	return tx
 }
+
+// A row records whether Paladin creates its bucket, as it is written: a
+// provisioned bucket is Paladin's to delete on the backend, an adopted one is
+// not — and stays so through provisioning.
+func TestABucketRecordsWhetherPaladinCreatesIt(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := pgharness.Setup(t)
+	repo := adapters.NewBucketRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
+	const backend = "be-created-on-backend"
+	seedBackend(t, h.PoolMigrate, backend)
+	for name, created := range map[string]bool{"provisioned": true, "adopted": false} {
+		state := admindomain.BucketProvisionStateReady
+		if created {
+			state = admindomain.BucketProvisionStatePending
+		}
+		if err := repo.Create(ctx, admindomain.Bucket{
+			BackendID: backend, BucketName: name, ProvisionState: state, CreatedOnBackend: created,
+		}); err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+	}
+	if err := repo.MarkProvisionReady(ctx, backend, "provisioned"); err != nil {
+		t.Fatalf("mark ready: %v", err)
+	}
+	for name, want := range map[string]bool{"provisioned": true, "adopted": false} {
+		b, err := repo.Get(ctx, backend, name)
+		if err != nil {
+			t.Fatalf("get %s: %v", name, err)
+		}
+		if b.CreatedOnBackend != want {
+			t.Errorf("%s: created_on_backend = %v, want %v", name, b.CreatedOnBackend, want)
+		}
+	}
+}

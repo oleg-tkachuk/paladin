@@ -125,6 +125,7 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenanth.Creat
 			"", []byte("{}"),      // cedar_policy, constraints
 			"pending", // provision_state
 			false, "", // public_read, public_base_url: a tenant's dedicated bucket is private
+			true, // created_on_backend: the reconciler creates this bucket, named for the tenant
 		); err != nil {
 			return fmt.Errorf("create tenant: provision dedicated bucket: %w", err)
 		}

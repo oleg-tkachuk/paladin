@@ -115,7 +115,7 @@ type Querier interface {
 	// CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
 	// so the API surface stays consistently retry-safe.
 	CreateBucket(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte) error
-	CreateBucketV2(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string, publicRead bool, publicBaseUrl string) error
+	CreateBucketV2(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string, publicRead bool, publicBaseUrl string, createdOnBackend bool) error
 	// Collection queries.
 	CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName string, name_2 string, name_3 string, cedarPolicy string, lifecycleRules []byte, publicRead bool, cacheControl string) error
 	CreateEventSubscription(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, celFilter string, sinkKind EventSinkKind, sinkConfig []byte, disabled bool) error

@@ -230,6 +230,11 @@ message Bucket {
   // public_endpoint. Set at creation, never changed: consumers store the
   // URLs built from it.
   string public_base_url = 19 [(google.api.field_behavior) = IMMUTABLE];
+  // Paladin creates the bucket on its backend (provision_on_backend), rather
+  // than taking one that already existed. Only such a bucket may be deleted
+  // there: an adopted one holds data Paladin never wrote. Set when the bucket
+  // is registered, never changed.
+  bool created_on_backend = 20 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message BucketConstraints {
