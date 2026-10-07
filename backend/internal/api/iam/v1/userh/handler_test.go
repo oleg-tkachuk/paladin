@@ -16,6 +16,9 @@ import (
 
 // ─── Test doubles ────────────────────────────────────────────────────────────
 
+// ref names u as its resource name does.
+func ref(u authstore.User) UserRef { return UserRef{TenantID: u.TenantID, UserID: u.UserID} }
+
 type allowAuthorizer struct{}
 
 func (allowAuthorizer) IsAuthorized(context.Context, *cedar.Principal, cedar.Action, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
@@ -39,6 +42,7 @@ type fakeUserRepo struct {
 	updateErr   error
 	updated     authstore.User
 	deleteErr   error
+	deletes     int
 	pwdHashSets int
 }
 
@@ -73,7 +77,10 @@ func (f *fakeUserRepo) Update(_ context.Context, u authstore.User, _ int64) (aut
 	}
 	return u, nil
 }
-func (f *fakeUserRepo) Delete(context.Context, uuid.UUID, int64) error { return f.deleteErr }
+func (f *fakeUserRepo) Delete(context.Context, uuid.UUID, int64) error {
+	f.deletes++
+	return f.deleteErr
+}
 func (f *fakeUserRepo) List(context.Context, authstore.ListUsersArgs) ([]authstore.User, string, error) {
 	return nil, "", nil
 }
@@ -190,7 +197,7 @@ func TestCreateUser_CedarDenied(t *testing.T) {
 
 func TestGetUser_NotFound(t *testing.T) {
 	h := NewHandler(&fakeUserRepo{getErr: authstore.ErrNotFound}, allowAuthorizer{})
-	_, err := h.GetUser(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), uuid.New())
+	_, err := h.GetUser(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), UserRef{UserID: uuid.New()})
 	if code(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", code(err))
 	}
@@ -200,7 +207,7 @@ func TestGetUser_CrossTenantHidden(t *testing.T) {
 	caller := uuid.New()
 	repo := &fakeUserRepo{user: authstore.User{UserID: uuid.New(), TenantID: uuid.New()}}
 	h := NewHandler(repo, allowAuthorizer{})
-	_, err := h.GetUser(ctxAs(caller, apiutil.RoleTenantAdmin), repo.user.UserID)
+	_, err := h.GetUser(ctxAs(caller, apiutil.RoleTenantAdmin), ref(repo.user))
 	if code(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound (cross-tenant hidden)", code(err))
 	}
@@ -211,7 +218,7 @@ func TestGetUser_Success(t *testing.T) {
 	id := uuid.New()
 	repo := &fakeUserRepo{user: authstore.User{UserID: id, TenantID: caller, Subject: "u1"}}
 	h := NewHandler(repo, allowAuthorizer{})
-	got, err := h.GetUser(ctxAs(caller, apiutil.RoleTenantAdmin), id)
+	got, err := h.GetUser(ctxAs(caller, apiutil.RoleTenantAdmin), ref(repo.user))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -227,7 +234,7 @@ func TestUpdateUser_CrossTenantDenied(t *testing.T) {
 	repo := &fakeUserRepo{user: authstore.User{UserID: uuid.New(), TenantID: uuid.New()}}
 	h := NewHandler(repo, allowAuthorizer{})
 	_, err := h.UpdateUser(ctxAs(caller, apiutil.RoleTenantAdmin),
-		UpdateUserInput{UserID: repo.user.UserID})
+		UpdateUserInput{User: ref(repo.user)})
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", code(err))
 	}
@@ -239,7 +246,7 @@ func TestUpdateUser_MaskAppliesDisplayName(t *testing.T) {
 	repo := &fakeUserRepo{user: authstore.User{UserID: id, TenantID: caller, DisplayName: "old"}}
 	h := NewHandler(repo, allowAuthorizer{})
 	_, err := h.UpdateUser(ctxAs(caller, apiutil.RolePlatformAdmin), UpdateUserInput{
-		UserID: id, UpdateMask: []string{"display_name"}, DisplayName: "new",
+		User: ref(repo.user), UpdateMask: []string{"display_name"}, DisplayName: "new",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -258,7 +265,7 @@ func TestUpdateUser_VersionMismatchAborts(t *testing.T) {
 	}
 	h := NewHandler(repo, allowAuthorizer{})
 	_, err := h.UpdateUser(ctxAs(caller, apiutil.RolePlatformAdmin),
-		UpdateUserInput{UserID: id, ExpectedVersion: 1})
+		UpdateUserInput{User: ref(repo.user), ExpectedVersion: 1})
 	if code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
 	}
@@ -274,7 +281,7 @@ func TestDeleteUser_VersionMismatchAborts(t *testing.T) {
 		deleteErr: authstore.ErrVersionMismatch,
 	}
 	h := NewHandler(repo, allowAuthorizer{})
-	if err := h.DeleteUser(ctxAs(caller, apiutil.RolePlatformAdmin), id, 1); code(err) != connect.CodeAborted {
+	if err := h.DeleteUser(ctxAs(caller, apiutil.RolePlatformAdmin), ref(repo.user), 1); code(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted", code(err))
 	}
 }
@@ -283,7 +290,7 @@ func TestDeleteUser_VersionMismatchAborts(t *testing.T) {
 
 func TestGrantScopes_NotFound(t *testing.T) {
 	h := NewHandler(&fakeUserRepo{getErr: authstore.ErrNotFound}, allowAuthorizer{})
-	_, err := h.GrantScopes(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), uuid.New(),
+	_, err := h.GrantScopes(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), UserRef{UserID: uuid.New()},
 		[]auth.Scope{{Type: auth.ScopeBucket, Value: "b1"}})
 	if code(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", code(err))
@@ -297,7 +304,7 @@ func TestGrantScopes_MergesAndPersists(t *testing.T) {
 		Scopes: []auth.Scope{{Type: auth.ScopeTenant, Value: "t1"}},
 	}}
 	h := NewHandler(repo, allowAuthorizer{})
-	_, err := h.GrantScopes(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), id,
+	_, err := h.GrantScopes(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), ref(repo.user),
 		[]auth.Scope{{Type: auth.ScopeBucket, Value: "b1"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -313,7 +320,7 @@ func TestResetPassword_GeneratesWhenEmpty(t *testing.T) {
 	id := uuid.New()
 	repo := &fakeUserRepo{user: authstore.User{UserID: id, TenantID: uuid.New()}}
 	h := NewHandler(repo, allowAuthorizer{})
-	pw, err := h.ResetPassword(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), id, "")
+	pw, err := h.ResetPassword(ctxAs(uuid.New(), apiutil.RolePlatformAdmin), ref(repo.user), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
