@@ -3,8 +3,8 @@
 Nothing is observed unless asked. Records go to the standard ``logging``
 logger ``paladin`` at debug level, failed transfers at warning, with their
 fields in ``extra`` for a structured formatter; hooks are for metrics of
-your own. Tracing goes through connect-python's own instrumentation — see
-the README's OpenTelemetry section.
+your own. Tracing goes through connectrpc-otel and pyqwest — see the
+README's OpenTelemetry section.
 """
 
 from __future__ import annotations

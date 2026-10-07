@@ -1,6 +1,6 @@
 """The HTTP stack under ``TLS``: pyqwest transports over httpcore and ``ssl``.
 
-pyqwest, the HTTP stack connect-python runs on, verifies a server's
+pyqwest, the HTTP stack connectrpc runs on, verifies a server's
 certificate inside Rust with no hook into it, and takes no protocol floor —
 so ``TLS(server_id=…)``, ``verify_peer`` and ``min_version`` cannot be had
 from it. These transports implement pyqwest's ``SyncTransport`` and
@@ -21,7 +21,7 @@ from it. These transports implement pyqwest's ``SyncTransport`` and
   connection made with replaced files.
 
 Plaintext connections stay on pyqwest. A response's ``Content-Encoding`` is
-decoded here, as pyqwest does, because connect-python leaves unary
+decoded here, as pyqwest does, because connectrpc leaves unary
 decompression to the HTTP stack.
 """
 
@@ -53,7 +53,7 @@ _CHUNKED = "chunked"
 # Methods that carry no body, so no Content-Length: 0 is sent with them.
 _BODILESS = frozenset({"GET", "HEAD", "DELETE", "OPTIONS"})
 # Response encodings decoded here: gzip and deflate by the standard library,
-# br and zstd by connect-python's own codecs when their packages are present.
+# br and zstd by connectrpc's own codecs when their packages are present.
 _GZIP = "gzip"
 _DEFLATE = "deflate"
 _IDENTITY = "identity"
@@ -241,7 +241,7 @@ def _decoder(encoding: str) -> Callable[[bytes, bool], bytes] | None:
 
 
 def _connect_codec(encoding: str) -> Any:
-    """connect-python's codec for ``br`` or ``zstd``, which it offers the
+    """connectrpc's codec for ``br`` or ``zstd``, which it offers the
     server only when the codec's package is installed."""
     if encoding == "br":
         from connectrpc.compression.brotli import BrotliCompression
@@ -277,7 +277,7 @@ def _response_parts(resp: httpcore.Response) -> tuple[Any, pyqwest.Headers, Any]
 # ─── Errors, as pyqwest's own transports raise them ─────────────────────────
 
 # httpcore's errors as pyqwest raises them, so a caller's except clauses — and
-# connect-python's, which turns a TimeoutError into DEADLINE_EXCEEDED — read
+# connectrpc's, which turns a TimeoutError into DEADLINE_EXCEEDED — read
 # the same over TLS as without it. Order matters: the first match wins.
 _ERRORS: tuple[tuple[type[Exception], type[Exception]], ...] = (
     (httpcore.ConnectTimeout, pyqwest.ConnectTimeout),

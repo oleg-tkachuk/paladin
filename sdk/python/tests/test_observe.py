@@ -139,3 +139,29 @@ def test_opentelemetry_on_the_presigned_leg(fake: Fake) -> None:
     upload(data, parent=PARENT, key="k", content_type="text/plain", body=b"x", size=1)
     assert fake.traceparents >= 1, "storage saw no traceparent"
     assert spans.get_finished_spans()
+
+
+def test_connectrpc_otel_traces_each_rpc(server) -> None:  # type: ignore[no-untyped-def]
+    # connectrpc-otel failed on connect-python 0.9, which had the context's
+    # fields as methods; on connectrpc it gives each RPC a span named for the
+    # procedure, through the interceptors a Client takes.
+    otel = pytest.importorskip("connectrpc_otel")
+    provider, spans = _provider()
+    connect(
+        Endpoints(iam=server.url),
+        interceptors=[otel.OpenTelemetryInterceptor(tracer_provider=provider, client=True)],
+    ).iam.health.get_version(health_service_pb2.GetVersionRequest())
+    names = [s.name for s in spans.get_finished_spans()]
+    assert "paladin.iam.v1.HealthService/GetVersion" in names, names
+    assert server.recorder.last.get("traceparent"), "the RPC carried no traceparent"
+
+
+def test_transport_options_reach_the_generated_clients(server) -> None:  # type: ignore[no-untyped-def]
+    # proto_json is gone with connect-python; a JSON codec for the
+    # google.protobuf stubs comes from connectrpc's compat layer.
+    from connectrpc.compat import google_protobuf_json_codec
+
+    connect(
+        Endpoints(iam=server.url), transport={"codec": google_protobuf_json_codec()}
+    ).iam.health.get_version(health_service_pb2.GetVersionRequest())
+    assert server.recorder.last.get("content-type") == "application/json"

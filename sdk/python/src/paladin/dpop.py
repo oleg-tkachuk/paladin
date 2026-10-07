@@ -92,11 +92,11 @@ def dpop_proof(key: Any, method: str, url: str, token: str, now: float | None = 
 
 
 def _stamp(key: Any, base_url: str, header_capability: str, ctx: RequestContext) -> None:
-    headers = ctx.request_headers()
+    headers = ctx.request_headers
     token = headers.get(header_capability)
     if not token:
         return
-    method = ctx.method()
+    method = ctx.method
     url = f"{base_url}/{method.service_name}/{method.name}"
     headers[HEADER_DPOP] = dpop_proof(key, "POST", url, token)
 

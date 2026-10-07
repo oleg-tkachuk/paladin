@@ -83,7 +83,7 @@ from paladin.data.v1.storage_bootstrap_service_connect import (
     StorageBootstrapServiceSync,
     StorageBootstrapServiceWSGIApplication,
 )
-from paladin.errors import ERROR_DOMAIN
+from paladin.errors import ERROR_DOMAIN, error_details
 from paladin.names import API_TOKEN_PREFIX, CollectionName, InvalidNameError, ObjectName
 from paladin.transfer import CHECKSUM_SHA256
 
@@ -320,9 +320,9 @@ class _Calls:
         self._fake = fake
 
     def intercept_unary_sync(self, call_next, request, ctx: RequestContext):  # type: ignore[no-untyped-def]
-        method = ctx.method()
+        method = ctx.method
         procedure = f"/{method.service_name}/{method.name}"
-        headers = dict(ctx.request_headers().items())
+        headers = dict(ctx.request_headers.items())
         self._fake._record(Request(procedure, headers, _copy_message(request)))
         if self._fake.strict_auth:
             self._fake._authenticate(headers, request)
@@ -793,9 +793,9 @@ class FakePaladin(
         the response first given to the same request with that key, and is
         refused when the key last went with a different request. A test that
         shares one key across requests fails here as against Paladin."""
-        if ctx.method().idempotency_level == IdempotencyLevel.NO_SIDE_EFFECTS:
+        if ctx.method.idempotency_level == IdempotencyLevel.NO_SIDE_EFFECTS:
             return call_next(request, ctx)
-        key = ctx.request_headers().get(HEADER_IDEMPOTENCY_KEY.lower(), "")
+        key = ctx.request_headers.get(HEADER_IDEMPOTENCY_KEY.lower(), "")
         if not key:
             return call_next(request, ctx)
         fingerprint = hashlib.sha256(request.SerializeToString(deterministic=True)).digest()
@@ -1285,14 +1285,16 @@ def _public_rule(what: str) -> ConnectError:
     return ConnectError(
         Code.FAILED_PRECONDITION,
         f"public collection: {what}",
-        [
-            error_details_pb2.ErrorInfo(
-                reason=error_reason_pb2.ErrorReason.Name(
-                    error_reason_pb2.ERROR_REASON_PUBLIC_COLLECTION_RULE
-                ),
-                domain=ERROR_DOMAIN,
-            )
-        ],
+        error_details(
+            [
+                error_details_pb2.ErrorInfo(
+                    reason=error_reason_pb2.ErrorReason.Name(
+                        error_reason_pb2.ERROR_REASON_PUBLIC_COLLECTION_RULE
+                    ),
+                    domain=ERROR_DOMAIN,
+                )
+            ]
+        ),
     )
 
 
@@ -1314,7 +1316,7 @@ def _with_reason(code: Code, message: str) -> ConnectError:
         if reason is not None
         else []
     )
-    return ConnectError(code, message, details)
+    return ConnectError(code, message, error_details(details))
 
 
 def _composite_sha256(parts: list[str]) -> str:

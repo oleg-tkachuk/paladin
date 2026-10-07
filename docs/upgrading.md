@@ -44,6 +44,24 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the Python SDK runs on connectrpc
+
+- The Python SDK depends on `connectrpc` 0.12 (connect-python's successor)
+  instead of `connect-python` 0.9. Messages stay `google.protobuf`: the stubs
+  are generated with the plugin's `protobuf=google` option.
+- An interceptor of your own reads `RequestContext` and `ResponseMetadata`
+  fields as properties: `ctx.request_headers`, `ctx.method`, `ctx.timeout_ms`,
+  `meta.headers` — no call.
+- `ConnectError.details` are connectrpc `ErrorDetail`s rather than
+  `google.protobuf.Any`. Read one with `paladin.unpack_detail(detail,
+  error_details_pb2.ErrorInfo)`; attach one with `paladin.error_detail(msg)`.
+- `proto_json=True` is gone from the client options: pass
+  `codec=connectrpc.compat.google_protobuf_json_codec()`. `protocol`,
+  `read_max_bytes` and the compression options reach every generated client
+  through `transport` as before.
+- `connectrpc_otel.OpenTelemetryInterceptor(client=True)` now works in
+  `interceptors`, and traces each RPC.
+
 ## Unreleased — background jobs pass a trashed tenant by
 
 - Lifecycle expiry, replication, the object-trash hard-deleter, the pending
