@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"google.golang.org/protobuf/reflect/protoregistry"
+
 	"github.com/jackc/pgx/v5"
 
 	"connectrpc.com/connect"
@@ -277,6 +279,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// See AssembleAPIMuxes.
 	mux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(mux)
+	adminServices := servicesIn(protoregistry.GlobalFiles, adminPackage)
+	mountGRPCStandards(mux, healthH.GRPCChecker(adminServices...), adminServices)
 	mux.Handle(paladinadminv1connect.NewBackendServiceHandler(admin.NewBackendServer(backendH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewBucketServiceHandler(admin.NewBucketServer(bucketV2H, tenantH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewTenantServiceHandler(admin.NewTenantServer(tenantH), adminOpts))

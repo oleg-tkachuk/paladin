@@ -7,6 +7,8 @@ require (
 	buf.build/go/protovalidate v1.4.0
 	cel.dev/cel-go v0.32.0
 	connectrpc.com/connect v1.21.0
+	connectrpc.com/grpchealth v1.5.0
+	connectrpc.com/grpcreflect v1.3.1
 	connectrpc.com/otelconnect v0.10.0
 	connectrpc.com/validate v0.7.0
 	cuelang.org/go v0.17.1
