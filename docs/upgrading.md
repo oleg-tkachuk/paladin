@@ -51,6 +51,16 @@ tree with itself and passes without checking anything.
   batch operations and event delivery skip a tenant in the trash, and resume
   on restore. Its queued operations stay `PENDING` and its events stay
   pending meanwhile; a purge removes both with the tenant.
+
+## Unreleased — a delete helper in both SDKs
+
+- `paladin.Delete` (Go) and `paladin.delete` / `adelete` (Python) supply the
+  `resource_version` every `DeleteObject` requires: they read the object,
+  delete it at that version, read it again if it changed meanwhile (up to
+  `DeleteAttempts` / `DELETE_ATTEMPTS`), and treat an object already gone as
+  done. A consumer that called `DeleteObject` without a version — refused by
+  the server and by both fakes — can switch to them.
+
 ## Unreleased — a tenant in the trash is frozen
 
 - Every change to a tenant in the trash is refused — `FAILED_PRECONDITION`,
