@@ -31,10 +31,6 @@ type BackendReader interface {
 // created: nothing shows the backend can serve it.
 func (h *Handler) SetBackends(r BackendReader) { h.backends = r }
 
-// kmsSSE is the SSE type whose objects an unsigned GET cannot read: the store
-// needs the caller's kms:Decrypt.
-const kmsSSE = "aws:kms"
-
 // publicBaseURLSchemes are the schemes a CDN address may use.
 var publicBaseURLSchemes = map[string]bool{"https": true, "http": true}
 
@@ -79,7 +75,9 @@ func (h *Handler) checkPublicBucket(ctx context.Context, in CreateBucketInput) e
 			"%w: backend %q: %s is %s; a public bucket needs it supported — run TestBackend to probe it",
 			features.ErrUnsupported, b.BackendID, features.AnonymousReadPolicy, got))
 	}
-	if strings.EqualFold(backend.SSE.Type, kmsSSE) {
+	// An unsigned GET cannot read an SSE-KMS object: the store needs the
+	// caller's kms:Decrypt.
+	if backend.SSE.Type == admindomain.SSETypeKMS {
 		return apiutil.MapError(fmt.Errorf(
 			"%w: backend %q encrypts with SSE-KMS, and an unsigned GET cannot decrypt",
 			features.ErrUnsupported, b.BackendID))

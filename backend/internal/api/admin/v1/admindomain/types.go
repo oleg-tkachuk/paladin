@@ -71,8 +71,12 @@ type StorageBackend struct {
 	UpdatedAt       time.Time
 }
 
+// SSETypeKMS is ServerSideEncryption.Type for SSE-KMS, whatever spelling
+// the configuration or the API used ("aws:kms", SSE_TYPE_KMS).
+const SSETypeKMS = "KMS"
+
 type ServerSideEncryption struct {
-	Type  string // "" | "AES256" | "KMS"
+	Type  string // "" | "AES256" | SSETypeKMS
 	KeyID string
 }
 
