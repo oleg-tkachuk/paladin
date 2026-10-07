@@ -43,6 +43,29 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — public collections
+
+- A bucket can be created **public** (`Bucket.public_read`, with
+  `provision_on_backend`) and a collection **public**
+  (`Collection.access = PUBLIC_READ`): anyone may read its objects, unsigned,
+  at `Object.public_url` ([ADR-0027](adr/0027-public-collections.md)). Both
+  are fixed at creation, need the new Cedar action `ConfigurePublicRead`
+  (built-in for `platform.admin` and `platform.tenant-provisioner`), and a
+  public bucket is refused (`BACKEND_FEATURE_UNSUPPORTED`) unless the
+  backend's probe found `ANONYMOUS_READ_POLICY` supported — run `TestBackend`
+  first.
+- In a public collection the server names objects: an upload, multipart
+  initiate or copy that supplies a key is refused (`PUBLIC_COLLECTION_RULE`),
+  as is a delete without `permanent=true`. `CopyObjectRequest.destination_key`
+  is now optional; empty keeps the source's key, as the handler always did.
+- A backend's `public_endpoint` is part of every public URL a consumer stored
+  while it hosts a public bucket without `public_base_url`; changing it breaks
+  them.
+- New error reasons: `BACKEND_FEATURE_UNSUPPORTED` (26),
+  `PUBLIC_COLLECTION_RULE` (27). Migration 049.
+- Both SDK fakes serve public collections (`PublicCollection`,
+  `public_collection`).
+
 ## Unreleased — a storage backend's S3 features are probed
 
 - `TestBackend` now also probes, on a reachable backend, each S3 feature

@@ -65,6 +65,12 @@ const (
 	// The tenant a request names does not exist — one being provisioned may
 	// exist shortly, so a caller that expects it can retry.
 	ErrorReason_ERROR_REASON_TENANT_NOT_FOUND ErrorReason = 25
+	// The storage backend's last probe has not shown a feature the operation
+	// needs (ADR-0026). Probing it again with TestBackend may change that.
+	ErrorReason_ERROR_REASON_BACKEND_FEATURE_UNSUPPORTED ErrorReason = 26
+	// The request breaks a rule of public collections (ADR-0027): a key the
+	// client chose, a delete to the trash, a mutable visibility.
+	ErrorReason_ERROR_REASON_PUBLIC_COLLECTION_RULE ErrorReason = 27
 )
 
 // Enum value maps for ErrorReason.
@@ -96,6 +102,8 @@ var (
 		23: "ERROR_REASON_OBJECT_VERSION_NOT_FOUND",
 		24: "ERROR_REASON_CONFLICT",
 		25: "ERROR_REASON_TENANT_NOT_FOUND",
+		26: "ERROR_REASON_BACKEND_FEATURE_UNSUPPORTED",
+		27: "ERROR_REASON_PUBLIC_COLLECTION_RULE",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                    0,
@@ -124,6 +132,8 @@ var (
 		"ERROR_REASON_OBJECT_VERSION_NOT_FOUND":       23,
 		"ERROR_REASON_CONFLICT":                       24,
 		"ERROR_REASON_TENANT_NOT_FOUND":               25,
+		"ERROR_REASON_BACKEND_FEATURE_UNSUPPORTED":    26,
+		"ERROR_REASON_PUBLIC_COLLECTION_RULE":         27,
 	}
 )
 
@@ -158,7 +168,7 @@ var File_paladin_common_v1_error_reason_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\xaa\a\n" +
+	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\x81\b\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ERROR_REASON_NOT_FOUND\x10\x01\x12!\n" +
@@ -186,7 +196,9 @@ const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"\x1eERROR_REASON_BACKEND_READ_ONLY\x10\x16\x12)\n" +
 	"%ERROR_REASON_OBJECT_VERSION_NOT_FOUND\x10\x17\x12\x19\n" +
 	"\x15ERROR_REASON_CONFLICT\x10\x18\x12!\n" +
-	"\x1dERROR_REASON_TENANT_NOT_FOUND\x10\x19BNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
+	"\x1dERROR_REASON_TENANT_NOT_FOUND\x10\x19\x12,\n" +
+	"(ERROR_REASON_BACKEND_FEATURE_UNSUPPORTED\x10\x1a\x12'\n" +
+	"#ERROR_REASON_PUBLIC_COLLECTION_RULE\x10\x1bBNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_error_reason_proto_rawDescOnce sync.Once

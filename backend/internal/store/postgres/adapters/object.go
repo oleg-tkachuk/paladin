@@ -106,6 +106,7 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 		encodeMap(args.Tags),
 		strPtr(args.ExternalRef),
 		pgTS(args.PresignExpiresAt),
+		args.PublicURL,
 	); err != nil {
 		return objecth.Object{}, fmt.Errorf("create object: %w", err)
 	}
@@ -504,7 +505,8 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		       bk.object_lock_default_mode,
 		       bk.object_lock_default_retention_seconds,
 		       c.constraints, sb.enabled, sb.read_only, sb.events_enabled,
-		       bk.provision_state, bk.constraints
+		       bk.provision_state, bk.constraints,
+		       c.public_read, c.cache_control, bk.public_base_url
 		FROM collections c
 		JOIN buckets bk          ON bk.id = c.bucket_id
 		JOIN storage_backends sb ON sb.id = bk.backend_id
@@ -524,6 +526,7 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		&meta.BackendID, &meta.BucketName, &meta.VersioningEnabled, &meta.ObjectLockEnabled,
 		&defaultMode, &retentionSeconds,
 		&constraintsJSON, &enabled, &readOnly, &meta.EventsEnabled, &provisionState, &bucketConstraint,
+		&meta.PublicRead, &meta.CacheControl, &meta.PublicBaseURL,
 	); err != nil {
 		if isNoRows(err) {
 			return objecth.BucketMeta{}, fmt.Errorf("collection %q not found", collection)
@@ -719,6 +722,7 @@ func objectFromSQLC(o sqlc.Object, collectionName string) objecth.Object {
 		TerminatedAt:          timePtr(o.TerminatedAt),
 		PresignExpiresAt:      timePtr(o.PresignExpiresAt),
 		Taint:                 o.Taint,
+		PublicURL:             o.PublicUrl,
 	}
 }
 

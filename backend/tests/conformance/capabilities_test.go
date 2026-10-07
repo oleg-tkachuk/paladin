@@ -66,7 +66,7 @@ func TestCapabilities(t *testing.T) {
 		// is a second line: whether the store also compares the completion
 		// list's checksums with the parts it recorded.
 		mkey := "conf/multi-checks"
-		uploadID, err := tg.client.InitiateMultipart(ctx, tg.bucket, tg.tenant, tg.collection, mkey, "application/octet-stream", checksum.SHA256)
+		uploadID, err := tg.client.InitiateMultipart(ctx, tg.bucket, tg.tenant, tg.collection, mkey, "application/octet-stream", "", checksum.SHA256)
 		if err != nil {
 			tg.record("multipart.complete_checks_part_checksums", "unknown", errText(err))
 			return

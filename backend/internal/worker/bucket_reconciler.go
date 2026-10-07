@@ -47,6 +47,10 @@ type BucketProvisioner interface {
 	// TagBucketOwner tags a dedicated bucket with its owner tenant_id for cost
 	// attribution (ADR-0015). Best-effort at the call site.
 	TagBucketOwner(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) error
+	// SetAnonymousReadPolicy opens a public bucket to unsigned GETs
+	// (ADR-0027). Unlike the tag, not best-effort: a public bucket without
+	// it serves nobody, so the bucket is not ready until it is set.
+	SetAnonymousReadPolicy(ctx context.Context, backendID, bucketName string) error
 }
 
 // BucketProvisionRepo is the subset of admindomain.BucketRepository the
@@ -186,6 +190,9 @@ func (r *BucketReconciler) reconcileOne(ctx context.Context, row admindomain.Buc
 	}
 
 	err := r.prov.CreateBucket(ctx, row.BackendID, row.BucketName, row.Region)
+	if err == nil && row.PublicRead {
+		err = r.prov.SetAnonymousReadPolicy(ctx, row.BackendID, row.BucketName)
+	}
 	if err == nil {
 		// Cost attribution (ADR-0015): tag a dedicated (owned) bucket with its
 		// tenant_id so cloud cost reports group bucket→tenant. Best-effort —

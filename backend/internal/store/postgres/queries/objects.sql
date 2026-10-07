@@ -5,11 +5,11 @@
 INSERT INTO objects (
     id, tenant_id, collection_id, path, state,
     content_type, size_bytes, checksum_algorithm, checksum,
-    metadata, tags, external_ref, presign_expires_at
+    metadata, tags, external_ref, presign_expires_at, public_url
 ) VALUES (
     $1, $2, $3, $4, $5::object_state,
     $6, $7, $8, $9,
-    $10, $11, $12, $13
+    $10, $11, $12, $13, $14
 );
 
 -- name: ResolveCollectionID :one

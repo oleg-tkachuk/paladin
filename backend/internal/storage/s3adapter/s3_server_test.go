@@ -716,7 +716,7 @@ func TestClientInitiateMultipart(t *testing.T) {
 	f := newFakeS3(t)
 	c := newTestClient(t, f.srv.URL)
 
-	id, err := c.InitiateMultipart(testCtx, "b", testTenant, "ok", "k", "application/pdf", checksum.SHA256)
+	id, err := c.InitiateMultipart(testCtx, "b", testTenant, "ok", "k", "application/pdf", "", checksum.SHA256)
 	if err != nil {
 		t.Fatalf("InitiateMultipart: %v", err)
 	}
@@ -743,7 +743,7 @@ func TestClientInitiateMultipartError(t *testing.T) {
 	}
 	c := newTestClient(t, f.srv.URL)
 
-	if _, err := c.InitiateMultipart(testCtx, "b", testTenant, "ok", "k", "", checksum.SHA256); err == nil {
+	if _, err := c.InitiateMultipart(testCtx, "b", testTenant, "ok", "k", "", "", checksum.SHA256); err == nil {
 		t.Fatal("initiate rejection: want error")
 	}
 }
@@ -1387,7 +1387,7 @@ func TestMultipartRouterDelegates(t *testing.T) {
 	reg := registryWith(map[string]*Client{"primary": newTestClient(t, f.srv.URL)})
 	rt := NewMultipartRouter(reg)
 
-	id, err := rt.InitiateMultipart(testCtx, "primary", "b", testTenant, "ok", "k", "text/plain", checksum.SHA256)
+	id, err := rt.InitiateMultipart(testCtx, "primary", "b", testTenant, "ok", "k", "text/plain", "", checksum.SHA256)
 	if err != nil {
 		t.Fatalf("InitiateMultipart: %v", err)
 	}
@@ -1415,7 +1415,7 @@ func TestMultipartRouterDelegates(t *testing.T) {
 func TestMultipartRouterUnknownBackend(t *testing.T) {
 	rt := NewMultipartRouter(registryWith(map[string]*Client{}))
 
-	if _, err := rt.InitiateMultipart(testCtx, "nope", "b", testTenant, "ok", "k", "", checksum.SHA256); err == nil {
+	if _, err := rt.InitiateMultipart(testCtx, "nope", "b", testTenant, "ok", "k", "", "", checksum.SHA256); err == nil {
 		t.Error("InitiateMultipart to unknown backend: want error")
 	}
 	if _, _, err := rt.CompleteMultipart(testCtx, "nope", "b", testTenant, "u", "ok", "k", checksum.SHA256, nil); err == nil {

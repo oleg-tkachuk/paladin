@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/schema"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -74,6 +75,8 @@ func (r *CollectionRepo) createWith(ctx context.Context, q *sqlc.Queries, args o
 		args.BucketName,
 		args.CedarPolicy,
 		rules,
+		args.PublicRead,
+		args.CacheControl,
 	); err != nil {
 		// A name the tenant already uses is an ordinary answer to an ordinary
 		// request. Unmapped it arrived as CodeInternal carrying
@@ -94,6 +97,9 @@ func (r *CollectionRepo) createWith(ctx context.Context, q *sqlc.Queries, args o
 			pgerr.Column(err) == schema.CollectionsBucketIDColumn {
 			return objectkey.Collection{}, fmt.Errorf("%w: %s/%s",
 				objectkey.ErrBucketNotFound, args.BackendID, args.BucketName)
+		}
+		if err := publicRuleError(err); err != nil {
+			return objectkey.Collection{}, err
 		}
 		return objectkey.Collection{}, fmt.Errorf("create collection: %w", err)
 	}
@@ -176,6 +182,9 @@ func (r *CollectionRepo) deleteWith(ctx context.Context, q *sqlc.Queries, tenant
 func (r *CollectionRepo) Rebind(ctx context.Context, tenantID uuid.UUID, collection, backendID, bucketName string, expectedVersion int64) error {
 	rows, err := r.q.BindCollectionToBucket(ctx, pgUUID(tenantID), collection, backendID, bucketName, expectedVersion)
 	if err != nil {
+		if rule := publicRuleError(err); rule != nil {
+			return rule
+		}
 		return fmt.Errorf("rebind collection: %w", err)
 	}
 	if rows == 0 {
@@ -233,8 +242,8 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 	// across tenants.
 	const filteredQ = `
 		SELECT c.tenant_id, c.name, c.display_name, c.bucket_id,
-		       c.cedar_policy, c.lifecycle_rules, c.resource_version,
-		       c.created_at, c.updated_at,
+		       c.cedar_policy, c.lifecycle_rules, c.public_read, c.cache_control,
+		       c.resource_version, c.created_at, c.updated_at,
 		       sb.name AS backend_name, b.name AS bucket_name
 		  FROM collections c
 		  JOIN buckets b           ON b.id = c.bucket_id
@@ -280,7 +289,7 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 		if err := rows.Scan(
 			&row.TenantID, &row.Name, &row.DisplayName,
 			&row.BucketID,
-			&row.CedarPolicy, &row.LifecycleRules,
+			&row.CedarPolicy, &row.LifecycleRules, &row.PublicRead, &row.CacheControl,
 			&row.ResourceVersion, &row.CreatedAt, &row.UpdatedAt,
 			&backendName, &bucketName,
 		); err != nil {
@@ -335,8 +344,28 @@ func collectionFromSQLC(b sqlc.Collection, backendName, bucketName string) objec
 		BucketName:      bucketName,
 		CedarPolicy:     b.CedarPolicy,
 		LifecycleRules:  b.LifecycleRules,
+		PublicRead:      b.PublicRead,
+		CacheControl:    b.CacheControl,
 		ResourceVersion: b.ResourceVersion,
 		CreatedAt:       timeFrom(b.CreatedAt),
 		UpdatedAt:       timeFrom(b.UpdatedAt),
 	}
+}
+
+// publicRuleError turns a violation of a public-collection rule the schema
+// enforces (049_public_collections.sql) into publicread.ErrRule, and returns
+// nil for any other error.
+func publicRuleError(err error) error {
+	if !pgerr.Is(err, pgerr.CheckViolation) {
+		return nil
+	}
+	switch {
+	case pgerr.ConstraintIs(err, schema.CollectionsBucketVisibility):
+		return publicread.Rulef("a public collection binds only to a public bucket, and a private one only to a private bucket")
+	case pgerr.ConstraintIs(err, schema.CollectionsPublicBucketFixed):
+		return publicread.Rulef("a public collection never moves to another bucket: its objects' URLs name it")
+	case pgerr.ConstraintIs(err, schema.CollectionsPublicReadFixed):
+		return publicread.Rulef("a collection's access and cache_control are fixed at creation")
+	}
+	return nil
 }

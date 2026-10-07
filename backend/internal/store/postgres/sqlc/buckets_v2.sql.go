@@ -15,12 +15,12 @@ const createBucketV2 = `-- name: CreateBucketV2 :exec
 INSERT INTO buckets (
     backend_id, name, display_name, region, labels,
     owner_tenant_id, cedar_policy, constraints,
-    provision_state
+    provision_state, public_read, public_base_url
 ) VALUES ((SELECT sb.id FROM storage_backends sb WHERE sb.name = $1),
-        $2, $3, $4, $5, $6, $7, $8, $9)
+        $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 `
 
-func (q *Queries) CreateBucketV2(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error {
+func (q *Queries) CreateBucketV2(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string, publicRead bool, publicBaseUrl string) error {
 	_, err := q.db.Exec(ctx, createBucketV2,
 		name,
 		name_2,
@@ -31,6 +31,8 @@ func (q *Queries) CreateBucketV2(ctx context.Context, name string, name_2 string
 		cedarPolicy,
 		constraints,
 		provisionState,
+		publicRead,
+		publicBaseUrl,
 	)
 	return err
 }
@@ -65,7 +67,7 @@ SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id
        object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
        versioning_enabled, versioning_keep_deletes_forever,
        replication_enabled, replication_destination, replication_filter,
-       provision_state,
+       provision_state, public_read, public_base_url,
        resource_version, created_at, updated_at
 FROM buckets
 WHERE id = (SELECT b.id FROM buckets b
@@ -93,6 +95,8 @@ type GetBucketV2Row struct {
 	ReplicationDestination            string             `json:"replication_destination"`
 	ReplicationFilter                 string             `json:"replication_filter"`
 	ProvisionState                    string             `json:"provision_state"`
+	PublicRead                        bool               `json:"public_read"`
+	PublicBaseUrl                     string             `json:"public_base_url"`
 	ResourceVersion                   int64              `json:"resource_version"`
 	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
@@ -122,6 +126,8 @@ func (q *Queries) GetBucketV2(ctx context.Context, name string, name_2 string) (
 		&i.ReplicationDestination,
 		&i.ReplicationFilter,
 		&i.ProvisionState,
+		&i.PublicRead,
+		&i.PublicBaseUrl,
 		&i.ResourceVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -137,7 +143,7 @@ SELECT sb.name AS backend_name,
        b.object_lock_enabled, b.object_lock_default_mode, b.object_lock_default_retention_seconds,
        b.versioning_enabled, b.versioning_keep_deletes_forever,
        b.replication_enabled, b.replication_destination, b.replication_filter,
-       b.provision_state,
+       b.provision_state, b.public_read, b.public_base_url,
        b.resource_version, b.created_at, b.updated_at
 FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
@@ -167,6 +173,8 @@ type ListAccessibleBucketsRow struct {
 	ReplicationDestination            string             `json:"replication_destination"`
 	ReplicationFilter                 string             `json:"replication_filter"`
 	ProvisionState                    string             `json:"provision_state"`
+	PublicRead                        bool               `json:"public_read"`
+	PublicBaseUrl                     string             `json:"public_base_url"`
 	ResourceVersion                   int64              `json:"resource_version"`
 	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
@@ -207,6 +215,8 @@ func (q *Queries) ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtyp
 			&i.ReplicationDestination,
 			&i.ReplicationFilter,
 			&i.ProvisionState,
+			&i.PublicRead,
+			&i.PublicBaseUrl,
 			&i.ResourceVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -229,7 +239,7 @@ SELECT sb.name AS backend_name,
        b.object_lock_enabled, b.object_lock_default_mode, b.object_lock_default_retention_seconds,
        b.versioning_enabled, b.versioning_keep_deletes_forever,
        b.replication_enabled, b.replication_destination, b.replication_filter,
-       b.provision_state,
+       b.provision_state, b.public_read, b.public_base_url,
        b.resource_version, b.created_at, b.updated_at
 FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
@@ -287,6 +297,8 @@ type ListBucketsV2Row struct {
 	ReplicationDestination            string             `json:"replication_destination"`
 	ReplicationFilter                 string             `json:"replication_filter"`
 	ProvisionState                    string             `json:"provision_state"`
+	PublicRead                        bool               `json:"public_read"`
+	PublicBaseUrl                     string             `json:"public_base_url"`
 	ResourceVersion                   int64              `json:"resource_version"`
 	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
@@ -341,6 +353,8 @@ func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerT
 			&i.ReplicationDestination,
 			&i.ReplicationFilter,
 			&i.ProvisionState,
+			&i.PublicRead,
+			&i.PublicBaseUrl,
 			&i.ResourceVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -407,7 +421,7 @@ func (q *Queries) ListPendingBucketDeletions(ctx context.Context, maxAttempts in
 
 const listPendingBucketProvisions = `-- name: ListPendingBucketProvisions :many
 SELECT sb.name AS backend_name, b.name AS bucket_name, b.region, b.provision_state,
-       b.provision_attempts, b.last_provision_at, b.owner_tenant_id
+       b.provision_attempts, b.last_provision_at, b.owner_tenant_id, b.public_read
 FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE b.provision_state = 'pending'
@@ -424,6 +438,7 @@ type ListPendingBucketProvisionsRow struct {
 	ProvisionAttempts int32              `json:"provision_attempts"`
 	LastProvisionAt   pgtype.Timestamptz `json:"last_provision_at"`
 	OwnerTenantID     pgtype.UUID        `json:"owner_tenant_id"`
+	PublicRead        bool               `json:"public_read"`
 }
 
 // Worker query: drag the next batch of buckets that need a backend
@@ -447,6 +462,7 @@ func (q *Queries) ListPendingBucketProvisions(ctx context.Context, maxAttempts i
 			&i.ProvisionAttempts,
 			&i.LastProvisionAt,
 			&i.OwnerTenantID,
+			&i.PublicRead,
 		); err != nil {
 			return nil, err
 		}

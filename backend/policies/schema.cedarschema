@@ -154,6 +154,13 @@ action "ReadBucket" appliesTo {
   context: RequestContext
 };
 
+// Publishing (ADR-0027): creating a public bucket, or a public collection.
+action "ConfigurePublicRead" appliesTo {
+  principal: [User],
+  resource: [Bucket, Collection],
+  context: RequestContext
+};
+
 // Collection (admin plane). ListCollections is checked against the Tenant.
 action "ManageCollection" appliesTo {
   principal: [User],

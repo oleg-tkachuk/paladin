@@ -49,6 +49,7 @@ func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenanth.Sta
 		pgUUID(args.TenantID), // owner_tenant_id
 		"", []byte("{}"),      // cedar_policy, constraints
 		"pending",
+		false, "", // public_read, public_base_url: a migration target is private
 	); err != nil && !isUniqueViolation(err) {
 		return tenanth.StorageMigration{}, fmt.Errorf("provision dedicated bucket: %w", err)
 	}

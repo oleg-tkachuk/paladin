@@ -214,6 +214,17 @@ message Bucket {
   // upload to this bucket yet"; the row stays visible so admin tooling
   // can render progress or surface a stuck operation.
   string provision_state = 17;
+  // Every object in the bucket is readable by anyone with its URL, unsigned
+  // (ADR-0027). Set at creation, never changed. Needs provision_on_backend,
+  // a backend whose probe found ANONYMOUS_READ_POLICY supported, and
+  // constraints.allowed_content_types naming only passive types. Only
+  // collections declared PUBLIC_READ bind to a public bucket.
+  bool public_read = 18 [(google.api.field_behavior) = IMMUTABLE];
+  // Where a CDN serves this public bucket, e.g. "https://cdn.example.com".
+  // Object.public_url starts with it; empty means the backend's
+  // public_endpoint. Set at creation, never changed: consumers store the
+  // URLs built from it.
+  string public_base_url = 19 [(google.api.field_behavior) = IMMUTABLE];
 }
 
 message BucketConstraints {
@@ -334,6 +345,24 @@ message Collection {
   string resource_version = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
   google.protobuf.Timestamp created_at = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
   google.protobuf.Timestamp updated_at = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // Who may read the collection's objects (ADR-0027). Set at creation, never
+  // changed; UNSPECIFIED creates a PRIVATE collection. A PUBLIC_READ
+  // collection binds only to a public bucket, never rebinds, names its
+  // objects itself and has no trash.
+  CollectionAccess access = 12 [(google.api.field_behavior) = IMMUTABLE];
+  // The Cache-Control every object of a PUBLIC_READ collection is stored
+  // with. Empty at creation means "public, max-age=31536000, immutable";
+  // a private collection has none.
+  string cache_control = 13 [(google.api.field_behavior) = IMMUTABLE];
+}
+
+// Who may read a collection's objects.
+enum CollectionAccess {
+  COLLECTION_ACCESS_UNSPECIFIED = 0;
+  // Reads are presigned downloads, authorised per call.
+  COLLECTION_ACCESS_PRIVATE = 1;
+  // Anyone with an object's public_url may read it, unsigned.
+  COLLECTION_ACCESS_PUBLIC_READ = 2;
 }
 
 // ─── Quota ──────────────────────────────────────────────────────────────────

@@ -331,3 +331,7 @@ func TestCopyObjectUnknownSourceIsNotFound(t *testing.T) {
 		t.Fatalf("code = %v, want NotFound", connect.CodeOf(err))
 	}
 }
+
+func (headStorage) PublicURL(context.Context, string, string, string, uuid.UUID, string, string) (string, error) {
+	return "", nil
+}

@@ -102,6 +102,20 @@ Object lock outranks all of it:
   server sets `paladin.bypass_governance_retention` for that transaction and a
   trigger on `object_locks` reads it before allowing the row to go.
 
+### In a public collection
+
+A public collection ([ADR-0027](adr/0027-public-collections.md)) has no trash.
+Its objects are served to anyone at their URL, and a soft delete leaves the
+bytes in storage, so the URL would keep answering: `DeleteObject` without
+`permanent=true` is refused (`FAILED_PRECONDITION`, reason
+`PUBLIC_COLLECTION_RULE`), and a batch delete reports each such object as
+failed. A permanent delete removes the bytes, and the store answers 404 at the
+URL from then on. A CDN in front of the bucket may keep serving its copy until
+its own TTL expires; that is between the CDN and whoever configured it.
+
+Moving the tenant to the trash does not touch any bytes, so its public objects
+stay readable until they are deleted.
+
 ## Multipart sessions
 
 An in-flight multipart upload holds parts on the storage backend that only

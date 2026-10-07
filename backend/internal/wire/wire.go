@@ -226,6 +226,8 @@ func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine, cfg
 		ids = append(ids, id)
 	}
 	h.SetConfiguredBackends(ids)
+	// A public bucket needs its backend's probed features (ADR-0027).
+	h.SetBackends(repos.BackendV2)
 	return h
 }
 

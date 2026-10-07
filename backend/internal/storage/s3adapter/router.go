@@ -122,12 +122,12 @@ type MultipartRouter struct{ reg *BackendRegistry }
 
 func NewMultipartRouter(reg *BackendRegistry) *MultipartRouter { return &MultipartRouter{reg: reg} }
 
-func (r *MultipartRouter) InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string) (string, error) {
+func (r *MultipartRouter) InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, cacheControl, checksumAlgo string) (string, error) {
 	c, err := r.reg.For(ctx, backendID)
 	if err != nil {
 		return "", err
 	}
-	return c.InitiateMultipart(ctx, bucket, tenantID, collection, key, contentType, checksumAlgo)
+	return c.InitiateMultipart(ctx, bucket, tenantID, collection, key, contentType, cacheControl, checksumAlgo)
 }
 
 func (r *MultipartRouter) CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key, checksumAlgo string, parts []multiparth.PartETag) (string, int64, error) {
@@ -202,4 +202,31 @@ func (r *ProvisionerRouter) TagBucketOwner(ctx context.Context, backendID, bucke
 		return err
 	}
 	return c.TagBucketOwner(ctx, backendID, bucketName, tenantID)
+}
+
+// SetAnonymousReadPolicy routes to the backend holding the bucket (ADR-0027).
+func (r *ProvisionerRouter) SetAnonymousReadPolicy(ctx context.Context, backendID, bucketName string) error {
+	c, err := r.reg.For(ctx, backendID)
+	if err != nil {
+		return err
+	}
+	return c.SetAnonymousReadPolicy(ctx, bucketName)
+}
+
+// PublicURL routes to the backend holding the bucket (ADR-0027).
+func (r *ObjectRouter) PublicURL(ctx context.Context, backendID, bucket, publicBaseURL string, tenantID uuid.UUID, collection, key string) (string, error) {
+	c, err := r.reg.For(ctx, backendID)
+	if err != nil {
+		return "", err
+	}
+	return c.PublicURL(ctx, bucket, publicBaseURL, tenantID, collection, key)
+}
+
+// PublicURL routes to the backend holding the bucket (ADR-0027).
+func (r *MultipartRouter) PublicURL(ctx context.Context, backendID, bucket, publicBaseURL string, tenantID uuid.UUID, collection, key string) (string, error) {
+	c, err := r.reg.For(ctx, backendID)
+	if err != nil {
+		return "", err
+	}
+	return c.PublicURL(ctx, bucket, publicBaseURL, tenantID, collection, key)
 }
