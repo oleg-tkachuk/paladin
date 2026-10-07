@@ -63,6 +63,10 @@ tree with itself and passes without checking anything.
   largest the server sends; connect-go v2 alone would stop at 4 MiB.
 - On the wire nothing changes: a client on connect-go v1, or any other Connect
   or gRPC client, keeps working against the server.
+- A method a plane does not serve, on a service it does, now passes the
+  plane's interceptors before it is answered `Unimplemented`: an
+  unauthenticated caller gets `Unauthenticated` first. An unknown service is
+  answered `Unimplemented` as before.
 
 ## Unreleased — the Python SDK runs on connectrpc
 
