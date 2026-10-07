@@ -241,4 +241,51 @@ describe("BucketCreateDialog", () => {
     fireEvent.change(name(), { target: { value: "taken-2" } });
     expect(screen.queryByText("BucketAlreadyExists")).not.toBeInTheDocument();
   });
+
+  // Creating and registering an existing bucket are different requests
+  // (ADR-0028): the switch registers, and an adopted bucket is never public.
+  it("registers an existing bucket without provisioning it", async () => {
+    const { createBucket } = open(undefined, [
+      backend("primary", FeatureSupport.SUPPORTED),
+    ]);
+    fireEvent.change(name(), { target: { value: "legacy-media" } });
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Register an existing bucket" }),
+    );
+    expect(screen.getByRole("switch", { name: "Public read" })).toBeDisabled();
+    fireEvent.submit(submit().closest("form")!);
+    await waitFor(() =>
+      expect(createBucket).toHaveBeenCalledWith(
+        "primary",
+        "legacy-media",
+        "",
+        "",
+        false,
+        null,
+      ),
+    );
+  });
+
+  it("points a bucket the backend already holds at registering it", async () => {
+    const refused = new ConnectError(
+      "the bucket already exists on the backend",
+      Code.AlreadyExists,
+      undefined,
+      [
+        {
+          desc: ErrorInfoSchema,
+          value: create(ErrorInfoSchema, {
+            domain: "paladin",
+            reason: "ERROR_REASON_BUCKET_EXISTS_ON_BACKEND",
+          }),
+        },
+      ],
+    );
+    open(vi.fn().mockRejectedValue(refused));
+    fireEvent.change(name(), { target: { value: "taken" } });
+    fireEvent.submit(submit().closest("form")!);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /turn on Register an existing bucket/,
+    );
+  });
 });
