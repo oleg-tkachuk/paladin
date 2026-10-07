@@ -3,10 +3,10 @@
 -- name: CreateCollection :exec
 INSERT INTO collections (
     tenant_id, name, display_name, bucket_id,
-    cedar_policy, lifecycle_rules
+    cedar_policy, lifecycle_rules, public_read, cache_control
 ) VALUES ($1, $2, $3, (SELECT b.id FROM buckets b
             JOIN storage_backends sb ON sb.id = b.backend_id
-           WHERE sb.name = $4 AND b.name = $5), $6, $7);
+           WHERE sb.name = $4 AND b.name = $5), $6, $7, $8, $9);
 
 -- name: GetCollection :one
 -- Returns the backend and bucket by NAME alongside the row: callers build

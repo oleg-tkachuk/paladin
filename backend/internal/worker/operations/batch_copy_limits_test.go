@@ -3,6 +3,7 @@ package operations
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
@@ -23,6 +25,8 @@ type limitsCopyRepo struct {
 	sources     []objecth.Object
 	constraints uploadpolicy.BucketConstraints
 	createdKeys []string
+	// public makes the destination a public collection (ADR-0027).
+	public bool
 }
 
 func (r *limitsCopyRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]objecth.Object, error) {
@@ -32,7 +36,7 @@ func (*limitsCopyRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (s
 	return "be", "src-bucket", nil
 }
 func (r *limitsCopyRepo) LookupBucketMeta(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
-	return objecth.BucketMeta{BackendID: "be", BucketName: "dst-bucket", Constraints: r.constraints}, nil
+	return objecth.BucketMeta{BackendID: "be", BucketName: "dst-bucket", Constraints: r.constraints, PublicRead: r.public}, nil
 }
 func (r *limitsCopyRepo) CreateObject(_ context.Context, a objecth.CreateObjectArgs) (objecth.Object, error) {
 	r.createdKeys = append(r.createdKeys, a.Key)
@@ -100,5 +104,30 @@ func TestExecuteRefusesWithoutLimits(t *testing.T) {
 	}
 	if _, err := e.Execute(context.Background(), operationh.Operation{}); err == nil || !strings.Contains(err.Error(), "limits") {
 		t.Fatalf("err = %v, want a limits error", err)
+	}
+}
+
+// A batch copy names its copies after their sources, and a public collection
+// names its objects itself, so the batch is refused whole and creates
+// nothing (ADR-0027).
+func TestBatchCopyRefusesAPublicDestination(t *testing.T) {
+	tenant := uuid.New()
+	src := objecth.Object{ObjectID: uuid.New(), Collection: "src", State: statemachine.StateAvailable, Key: "a.png", ContentType: "image/png", SizeBytes: 10}
+	repo := &limitsCopyRepo{sources: []objecth.Object{src}, public: true}
+	e := &BatchCopyExecutor{
+		Objects: repo, Storage: &copyFakeStorage{}, Transitions: &copyFakeTransitioner{},
+		PendingTTL: time.Minute, Limits: copyLimits,
+	}
+	meta, err := json.Marshal(batchh.BatchCopyArgs{
+		TenantID: tenant, SrcCollection: "src", DstCollection: "photos", ObjectIDs: []uuid.UUID{src.ObjectID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Execute(context.Background(), operationh.Operation{TenantID: tenant, Metadata: meta}); !errors.Is(err, publicread.ErrRule) {
+		t.Errorf("err = %v, want a public collection rule", err)
+	}
+	if len(repo.createdKeys) != 0 {
+		t.Errorf("created %v in a public collection", repo.createdKeys)
 	}
 }

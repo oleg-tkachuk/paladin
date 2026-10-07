@@ -58,6 +58,14 @@ const s3Port = "8333/tcp"
 // endpoint plus the credentials its identity file declares.
 func startS3(t *testing.T) (endpoint, accessKey, secretKey string) {
 	t.Helper()
+	return startS3With(t, s3TestIdentities)
+}
+
+// startS3With is startS3 with the given SeaweedFS identity file, for a test
+// that needs the store configured otherwise. The credentials returned are
+// still the paladin-test identity's, which identities must declare.
+func startS3With(t *testing.T, identities string) (endpoint, accessKey, secretKey string) {
+	t.Helper()
 	ctx := context.Background()
 	const user, pass = "paladin-test-access", "paladin-test-secret-key"
 	const configPath = "/etc/seaweedfs/s3.json"
@@ -69,7 +77,7 @@ func startS3(t *testing.T) (endpoint, accessKey, secretKey string) {
 				"-s3", "-s3.port=8333", "-s3.config=" + configPath,
 			},
 			Files: []testcontainers.ContainerFile{{
-				Reader:            strings.NewReader(s3TestIdentities),
+				Reader:            strings.NewReader(identities),
 				ContainerFilePath: configPath,
 				FileMode:          0o644,
 			}},

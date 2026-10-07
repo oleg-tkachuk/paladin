@@ -695,3 +695,29 @@ func TestBatchDeleteDefaultsToSoftWhenPermanentIsUnset(t *testing.T) {
 		t.Errorf("soft delete got rv %d, want 2", tr.softArgs[id])
 	}
 }
+
+// A batch soft delete leaves a public object alone and reports it: moved to
+// the trash, its bytes would stay served (ADR-0027).
+func TestBatchSoftDeleteRefusesPublicObjects(t *testing.T) {
+	tenant := uuid.New()
+	private, public := uuid.New(), uuid.New()
+	repo := &lookupRepo{objs: []objecth.Object{
+		{ObjectID: private, Collection: "k", ResourceVersion: 1},
+		{ObjectID: public, Collection: "k", ResourceVersion: 1, PublicURL: "https://cdn.example/x"},
+	}}
+	tr := newFakeTransitions()
+	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr}
+	body, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchDeleteArgs{
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{private, public},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := decodeDeleteResp(t, body)
+	if resp.Succeeded != 1 || resp.Failed != 1 || resp.Failures[0].ObjectID != public.String() {
+		t.Errorf("response %+v, want the public object refused and the private one deleted", resp)
+	}
+	if _, touched := tr.softArgs[public]; touched {
+		t.Error("the public object was moved to the trash")
+	}
+}

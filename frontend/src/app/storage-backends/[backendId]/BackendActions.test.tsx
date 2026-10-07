@@ -75,6 +75,24 @@ describe("BackendActions", () => {
     expect(await screen.findByText(/reachable · 12ms/i)).toBeInTheDocument();
   });
 
+  // The probe records the backend's S3 features; the page re-reads the
+  // backend so its feature table shows them.
+  it("tells the page a probe ran, so it can re-read the backend", async () => {
+    h.test.mockResolvedValue({
+      reachable: true,
+      errorMessage: "",
+      latencyMs: 3,
+    });
+    const onTested = vi.fn();
+    render(<BackendActions backend={backend} onTested={onTested} />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /test connectivity/i }),
+    );
+
+    await waitFor(() => expect(onTested).toHaveBeenCalledTimes(1));
+  });
+
   it("shows an unreachable badge when the probe fails to connect", async () => {
     h.test.mockResolvedValue({
       reachable: false,

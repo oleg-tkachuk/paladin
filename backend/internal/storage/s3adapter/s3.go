@@ -43,6 +43,10 @@ import (
 type Client struct {
 	s3      *s3.Client
 	presign *s3.PresignClient
+	// anonymous is the internal client with no credentials: the SDK sends its
+	// requests unsigned. It is how the feature probe asks what a stranger is
+	// served (ADR-0026).
+	anonymous *s3.Client
 	// creds are the credentials presigned URLs are signed with; their
 	// expiry bounds every URL's lifetime (see presignTTL).
 	creds   aws.CredentialsProvider
@@ -127,19 +131,28 @@ func newClient(awsCfg aws.Config, backend config.StorageBackend) *Client {
 		}
 	})
 
+	anonymous := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.UsePathStyle = backend.ForcePathStyle
+		if backend.Endpoint != "" {
+			o.BaseEndpoint = aws.String(backend.Endpoint)
+		}
+		o.Credentials = aws.AnonymousCredentials{}
+	})
+
 	mode := objecth.CompletionModeExplicit
 	if backend.Events.Enabled {
 		mode = objecth.CompletionModeImplicit
 	}
 
 	return &Client{
-		s3:      s3c,
-		presign: s3.NewPresignClient(s3PresignBase),
-		creds:   awsCfg.Credentials,
-		cfg:     backend,
-		mode:    mode,
-		sseType: backend.SSE.Type,
-		sseKey:  backend.SSE.KeyID,
+		s3:        s3c,
+		presign:   s3.NewPresignClient(s3PresignBase),
+		anonymous: anonymous,
+		creds:     awsCfg.Credentials,
+		cfg:       backend,
+		mode:      mode,
+		sseType:   backend.SSE.Type,
+		sseKey:    backend.SSE.KeyID,
 
 		backendID: backendID,
 	}
@@ -395,6 +408,10 @@ func (c *Client) PresignPut(ctx context.Context, args objecth.PresignPutArgs) (s
 		ContentLength: aws.Int64(args.SizeBytes),
 		IfNoneMatch:   aws.String(ifNoneMatchAny),
 	}
+	if args.CacheControl != "" {
+		// Signed, so the stored object carries exactly the collection's.
+		in.CacheControl = aws.String(args.CacheControl)
+	}
 	if err := setPutChecksum(in, args.ChecksumAlgo, args.ChecksumValue); err != nil {
 		return "", nil, time.Time{}, err
 	}
@@ -428,6 +445,9 @@ func (c *Client) PresignPost(ctx context.Context, args objecth.PresignPostArgs) 
 	extra := map[string]string{
 		contentTypeField: args.ContentType,
 		field:            args.ChecksumValue,
+	}
+	if args.CacheControl != "" {
+		extra[cacheControlField] = args.CacheControl
 	}
 	sse := &s3.PutObjectInput{}
 	c.applySSE(sse)
@@ -569,11 +589,19 @@ func (c *Client) confirmBucket(ctx context.Context, resolvedBucket string) error
 func (c *Client) CopyObject(ctx context.Context, src, dst objecth.Location) error {
 	srcBucket := c.resolveBucket(src.Bucket)
 	dstBucket := c.resolveBucket(dst.Bucket)
-	_, err := c.s3.CopyObject(ctx, &s3.CopyObjectInput{
+	in := &s3.CopyObjectInput{
 		Bucket:     aws.String(dstBucket),
 		Key:        aws.String(composeKey(dst.TenantID, dst.Collection, dst.Key)),
 		CopySource: aws.String(srcBucket + "/" + composeKey(src.TenantID, src.Collection, src.Key)),
-	})
+	}
+	if dst.CacheControl != "" {
+		// A copy into a public collection takes its Cache-Control. Replacing
+		// metadata replaces all of it, so the content type is restated.
+		in.MetadataDirective = s3types.MetadataDirectiveReplace
+		in.CacheControl = aws.String(dst.CacheControl)
+		in.ContentType = aws.String(dst.ContentType)
+	}
+	_, err := c.s3.CopyObject(ctx, in)
 	if err != nil {
 		return fmt.Errorf("copy: %w", err)
 	}
@@ -614,12 +642,15 @@ func (c *Client) CompletionMode(collection string) objecth.CompletionMode {
 
 // ─── multipart.Storage (methods; MultipartRouter satisfies the interface) ───
 
-func (c *Client) InitiateMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string) (string, error) {
+func (c *Client) InitiateMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType, cacheControl, checksumAlgo string) (string, error) {
 	in := &s3.CreateMultipartUploadInput{
 		Bucket:            aws.String(c.resolveBucket(bucket)),
 		Key:               aws.String(composeKey(tenantID, collection, key)),
 		ContentType:       aws.String(contentType),
 		ChecksumAlgorithm: multipartChecksumAlgorithm(checksumAlgo),
+	}
+	if cacheControl != "" {
+		in.CacheControl = aws.String(cacheControl)
 	}
 	c.applyMultipartSSE(in)
 	out, err := c.s3.CreateMultipartUpload(ctx, in)

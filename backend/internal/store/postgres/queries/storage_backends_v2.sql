@@ -219,3 +219,22 @@ SELECT count(*)::bigint AS count
 FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE sb.name = $1;
+
+-- name: DeleteStorageBackendFeatures :exec
+-- First half of recording a probe (ADR-0026): the probe's rows replace every
+-- earlier one, in the caller's transaction.
+DELETE FROM storage_backend_features
+WHERE backend_id = (SELECT id FROM storage_backends WHERE name = sqlc.arg('backend_name'));
+
+-- name: InsertStorageBackendFeature :exec
+INSERT INTO storage_backend_features (backend_id, feature, support, message, checked_at)
+SELECT sb.id, sqlc.arg('feature'), sqlc.arg('support'), sqlc.arg('message'), sqlc.arg('checked_at')
+FROM storage_backends sb WHERE sb.name = sqlc.arg('backend_name');
+
+-- name: ListStorageBackendFeatures :many
+-- Keyed by backend NAME, for a page of backends at once.
+SELECT sb.name AS backend_name, f.feature, f.support, f.message, f.checked_at
+FROM storage_backend_features f
+JOIN storage_backends sb ON sb.id = f.backend_id
+WHERE sb.name = ANY(sqlc.arg('backend_names')::text[])
+ORDER BY sb.name, f.feature;

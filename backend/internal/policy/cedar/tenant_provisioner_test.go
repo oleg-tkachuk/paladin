@@ -51,6 +51,8 @@ func TestTenantProvisioner_MayProvision(t *testing.T) {
 		ActionReadBucket,
 		ActionManageCollection,
 		ActionBindCollectionToBucket,
+		// Publishing a tenant's public bucket and collections (ADR-0027).
+		ActionConfigurePublicRead,
 	} {
 		t.Run(action.String(), func(t *testing.T) {
 			if got := authzAsProvisioner(t, action); got != DecisionAllow {

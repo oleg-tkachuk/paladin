@@ -427,6 +427,70 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Features
 
+### Public collections: the console cannot create or show them
+
+- **Status:** Deferred
+- **Reason:** public buckets and collections ([ADR-0027](docs/adr/0027-public-collections.md))
+  are created through the admin API only; the console neither offers the
+  settings nor marks a bucket or collection as public.
+- **Definition of Done:** the bucket and collection create dialogs offer
+  public read (the bucket's only on a backend whose probe found
+  `ANONYMOUS_READ_POLICY` supported, saying why otherwise), and the lists and
+  detail pages mark what is public and show `public_base_url`; covered by
+  component tests.
+- **Blockers:** none.
+
+### Public collections on a store without bucket policies
+
+- **Status:** Aspirational
+- **Reason:** a public bucket is opened with an anonymous-read bucket policy,
+  so a store that has none — Garage among them — cannot host one, and the
+  probe says so. Garage serves a whole bucket unsigned through its website
+  endpoint instead.
+- **Definition of Done:** a second mechanism for such stores (Garage website
+  mode on its own host), chosen by a probed feature, with the public URL built
+  for it and an integration test against Garage.
+- **Blockers:** whether any deployment publishes from Garage.
+
+### The compose stack's SeaweedFS serves every request unsigned
+
+- **Status:** Deferred
+- **Reason:** `backend/deploy/seaweedfs-s3.json` gives Paladin's credentials to
+  SeaweedFS' `anonymous` identity, which grants its actions to unsigned
+  requests too. Nothing in the stack is private at the store, and the feature
+  probe reports `ANONYMOUS_READ_POLICY` unsupported there, so public
+  collections cannot be tried on it.
+- **Definition of Done:** the compose stack uses a named identity, as the
+  integration suites and the e2e stack do, and its e2e run still passes.
+- **Blockers:** none; check that nothing in the dev stack reads storage
+  unsigned.
+
+### Anonymous reads of public objects are not counted
+
+- **Status:** Deferred
+- **Reason:** a public object is read straight from the store or a CDN, so no
+  Paladin process sees the read: egress is attributed to no tenant and appears
+  in no Paladin metric ([ADR-0027](docs/adr/0027-public-collections.md)).
+- **Definition of Done:** if egress per tenant matters, ingest the store's or
+  the CDN's access logs and attribute them by the tenant segment of the path;
+  otherwise delete this entry with that decision recorded.
+- **Blockers:** whether per-tenant egress is ever billed.
+
+### A storage backend's feature probe runs only on request
+
+- **Status:** Deferred
+- **Reason:** `TestBackend` is the only thing that probes a backend's S3
+  features ([ADR-0026](docs/adr/0026-storage-backend-features-are-probed.md)).
+  A backend nobody has tested shows every feature unknown, and a result goes
+  stale when the store is upgraded or reconfigured, with nothing re-checking
+  it.
+- **Definition of Done:** the worker probes every enabled backend at start and
+  on an interval, records the results the way `TestBackend` does, and the
+  console shows how old each result is; a test drives the worker against the
+  probe store.
+- **Blockers:** none; the interval and whether a probe's scratch bucket is
+  acceptable on a schedule for every store want a decision.
+
 ### Replication: real `StorageReplicator` implementation
 
 - **Status:** Aspirational
@@ -1261,6 +1325,10 @@ finding moving from "packages you import" to "your code is affected".
   - Live cross-backend run on the dev cluster (infra-dependent — needs the
     `secondary`/SeaweedFS backend back online; the integration test above is the
     code-side proof).
+  - Public collections stay where they are: the schema refuses to rebind
+    one (`collections_public_bucket_fixed`, ADR-0027), since its objects'
+    URLs name the bucket. The job skips them, or refuses a tenant that has
+    any before it starts, rather than failing halfway through the rebind.
 - **Deferred (smaller follow-ups):** per-tenant backend selection at
   CreateTenant (currently the config default backend); org-prefix in the
   derived bucket name for cross-account global uniqueness; bucket tagging
@@ -1308,17 +1376,53 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Capability module
 
-### A trashed tenant's credentials may keep working
+### Background jobs still work on a trashed tenant
 
 - **Status:** Deferred
-- **Reason:** issuance now refuses a tenant in the trash, but moving a tenant
-  there revokes nothing, and nothing found in the request path reads
-  `tenants.deleted_at`: its capabilities, API tokens and sessions may go on
-  authenticating until they expire. Not yet confirmed against a live call.
-- **Definition of Done:** a test that calls the data plane with each kind of
-  credential of a trashed tenant, and either a refusal at authentication
-  (`TENANT_ALREADY_DELETED`) or a recorded decision that restore depends on
-  them surviving.
+- **Reason:** the trash freezes a tenant against API calls
+  (`middleware.TenantFreeze`), but the workers do not consult it: the
+  lifecycle worker expires its objects, replication copies them, the
+  reconciler promotes its pending uploads, the dispatcher delivers its events.
+  A restore then returns something other than what was trashed.
+- **Definition of Done:** each worker that changes a tenant's data skips a
+  tenant in the trash (or the decision to let one run is recorded per worker),
+  with a test per worker.
+- **Blockers:** whether event delivery for a trashed tenant should stop or
+  drain.
+
+### A user named without its tenant escapes the freeze
+
+- **Status:** Deferred
+- **Reason:** the IAM plane accepts a user by its short name, `users/{id}`,
+  besides `tenants/{tenant}/users/{id}`. The freeze finds the tenant a call
+  acts on in the names it carries, so a platform admin updating, deleting,
+  granting scopes to or resetting the password of a trashed tenant's user by
+  the short name is not refused.
+- **Definition of Done:** the freeze resolves a user's tenant from a short
+  name (or the short form is retired), with a test on each user RPC.
+- **Blockers:** none.
+
+### No retention for the tenant trash
+
+- **Status:** Deferred
+- **Reason:** a trashed tenant stays in the trash, frozen, until someone
+  restores or purges it; nothing purges it after a period, and nothing says
+  how long it has been there.
+- **Definition of Done:** a configured retention after which a trashed tenant
+  is surfaced for purge (or purged, once its data is gone), with the console
+  showing the age of each trashed tenant.
+- **Blockers:** a product decision on the period and on automatic purge.
+
+### Check that PurgeTenant honours legal hold and COMPLIANCE retention
+
+- **Status:** Deferred
+- **Reason:** `PurgeTenant` refuses while the tenant owns collections, so
+  locked objects are protected by the order of operations rather than by a
+  check of their own. Nothing tests that purging cannot reach an object under
+  legal hold or COMPLIANCE retention by any path.
+- **Definition of Done:** a test that every path from a trashed tenant to its
+  removal refuses while it holds a locked object, and a fix where one does
+  not.
 - **Blockers:** none.
 
 ### Capability module CI: deny network egress in the standalone job

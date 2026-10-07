@@ -133,6 +133,10 @@ message TestBackendResponse {
   bool reachable = 1;
   string error_message = 2;
   int32 latency_ms = 3;
+  // What this probe found for every S3 feature Paladin uses (ADR-0026). Also
+  // recorded on the backend. Empty when the backend was unreachable.
+  repeated StorageFeatureSupport features = 4;
+  StorageCompatibility compatibility = 5;
 }
 
 message SetBackendEnabledRequest {

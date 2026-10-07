@@ -43,6 +43,73 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a tenant in the trash is frozen
+
+- Every change to a tenant in the trash is refused — `FAILED_PRECONDITION`,
+  reason `TENANT_ALREADY_DELETED` — on the data, admin and IAM planes,
+  platform admins included: uploads, deletes, copies, tags, collections,
+  buckets, quotas, budgets, policies, subscriptions, users, new credentials
+  and `UpdateTenant`. (Any other principal was already refused by the tenant
+  gate, its own tenant being the trashed one.) Reads, downloads, revocations,
+  cancellations and `Get`/`List`/`Restore`/`PurgeTenant` stay open. A tenant
+  holding data is removed by restoring, emptying, trashing and purging it.
+- A slug a trashed tenant held and a live tenant has since taken names the
+  live tenant everywhere; before, which one it resolved to was undefined.
+
+## Unreleased — public collections
+
+- A bucket can be created **public** (`Bucket.public_read`, with
+  `provision_on_backend`) and a collection **public**
+  (`Collection.access = PUBLIC_READ`): anyone may read its objects, unsigned,
+  at `Object.public_url` ([ADR-0027](adr/0027-public-collections.md)). Both
+  are fixed at creation, need the new Cedar action `ConfigurePublicRead`
+  (built-in for `platform.admin` and `platform.tenant-provisioner`), and a
+  public bucket is refused (`BACKEND_FEATURE_UNSUPPORTED`) unless the
+  backend's probe found `ANONYMOUS_READ_POLICY` supported — run `TestBackend`
+  first.
+- In a public collection the server names objects: an upload, multipart
+  initiate or copy that supplies a key is refused (`PUBLIC_COLLECTION_RULE`),
+  as is a delete without `permanent=true`. `CopyObjectRequest.destination_key`
+  is now optional; empty keeps the source's key, as the handler always did.
+- A backend's `public_endpoint` is part of every public URL a consumer stored
+  while it hosts a public bucket without `public_base_url`; changing it breaks
+  them.
+- New error reasons: `BACKEND_FEATURE_UNSUPPORTED` (26),
+  `PUBLIC_COLLECTION_RULE` (27). Migration 049.
+- Both SDK fakes serve public collections (`PublicCollection`,
+  `public_collection`).
+
+## Unreleased — a storage backend's S3 features are probed
+
+- `TestBackend` now also probes, on a reachable backend, each S3 feature
+  Paladin uses — conditional PUT, SHA-256 checksums, multipart upload,
+  server-side copy, form upload, bucket creation, an anonymous-read bucket
+  policy — and records what it found (migration 048). `StorageBackend` gains
+  `features` and `compatibility`; the console shows both, with a warning for
+  each unsupported feature.
+- The probe creates and deletes a scratch bucket named `paladin-probe-…`, and
+  sets and deletes a policy on it. Credentials that may not do so get those
+  features reported `UNKNOWN`; the object checks then run under
+  `.paladin-probe/` in the backend's configured bucket.
+- `TestBackend` takes longer: up to 20 seconds more on a slow store, inside
+  the admin listener's default 30-second write timeout. A deployment that
+  lowered `admin.server.write_timeout` below 25 seconds should raise it.
+
+## Unreleased — a trashed tenant's credentials stop working
+
+- **Every plane refuses a credential whose tenant is in the trash** —
+  `FAILED_PRECONDITION` with reason `TENANT_ALREADY_DELETED` — and one whose
+  tenant no longer exists, `UNAUTHENTICATED`. Moving a tenant to the trash
+  revokes nothing: restoring it makes its API tokens, capabilities and
+  sessions work again. A change reaches every replica at once through the
+  `tenant_state` notification (migration 047); a state that cannot be read
+  refuses the call as `UNAVAILABLE`.
+- Calls with no principal (`Login`, `RefreshToken`), and principals holding
+  a platform role (`platform.admin`, `platform.capability-issuer`,
+  `platform.tenant-provisioner`), are not affected: their authority is not
+  their tenant's, and a trashed platform tenant must not lock out the admins
+  who could restore it.
+
 ## Unreleased — an internal error no longer carries its cause
 
 - **An RPC that fails on the server's side answers `internal error; request

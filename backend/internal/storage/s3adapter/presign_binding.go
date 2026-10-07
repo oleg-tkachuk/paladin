@@ -22,6 +22,7 @@ const (
 	// POST policy vocabulary (AWS "Creating a POST policy").
 	contentLengthRange = "content-length-range"
 	contentTypeField   = "Content-Type"
+	cacheControlField  = "Cache-Control"
 	contentMD5Field    = "Content-MD5"
 	checksumSHA256Form = "x-amz-checksum-sha256"
 	checksumCRC32CForm = "x-amz-checksum-crc32c"

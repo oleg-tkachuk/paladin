@@ -53,17 +53,17 @@ const createObject = `-- name: CreateObject :exec
 INSERT INTO objects (
     id, tenant_id, collection_id, path, state,
     content_type, size_bytes, checksum_algorithm, checksum,
-    metadata, tags, external_ref, presign_expires_at
+    metadata, tags, external_ref, presign_expires_at, public_url
 ) VALUES (
     $1, $2, $3, $4, $5::object_state,
     $6, $7, $8, $9,
-    $10, $11, $12, $13
+    $10, $11, $12, $13, $14
 )
 `
 
 // Object queries.
 // collection_id is resolved by the caller via ResolveCollectionID.
-func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error {
+func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz, publicUrl string) error {
 	_, err := q.db.Exec(ctx, createObject,
 		iD,
 		tenantID,
@@ -78,6 +78,7 @@ func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgt
 		tags,
 		externalRef,
 		presignExpiresAt,
+		publicUrl,
 	)
 	return err
 }
@@ -102,7 +103,7 @@ func (q *Queries) ExtendPendingPresign(ctx context.Context, tenantID pgtype.UUID
 }
 
 const getObject = `-- name: GetObject :one
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, c.name AS collection_name
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 WHERE objects.tenant_id = $1 AND objects.id = $2
@@ -140,6 +141,7 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype
 		&i.Object.PresignExpiresAt,
 		&i.Object.Taint,
 		&i.Object.ChecksumPartSizeBytes,
+		&i.Object.PublicUrl,
 		&i.CollectionName,
 	)
 	return i, err
@@ -174,7 +176,7 @@ func (q *Queries) GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, 
 }
 
 const getObjectsByIDs = `-- name: GetObjectsByIDs :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, c.name AS collection_name
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 WHERE objects.tenant_id = $1 AND objects.id = ANY($2::uuid[])
@@ -221,6 +223,7 @@ func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, col
 			&i.Object.PresignExpiresAt,
 			&i.Object.Taint,
 			&i.Object.ChecksumPartSizeBytes,
+			&i.Object.PublicUrl,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err
@@ -371,7 +374,7 @@ func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Tim
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, $1::text AS collection_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, $1::text AS collection_name
 FROM objects o
 WHERE o.id = ANY (ARRAY(
         SELECT search_object_ids(
@@ -463,6 +466,7 @@ func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID p
 			&i.Object.PresignExpiresAt,
 			&i.Object.Taint,
 			&i.Object.ChecksumPartSizeBytes,
+			&i.Object.PublicUrl,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err
@@ -530,7 +534,7 @@ func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupO
 }
 
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, c.name AS collection_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, c.name AS collection_name
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
@@ -572,6 +576,7 @@ func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, n
 		&i.Object.PresignExpiresAt,
 		&i.Object.Taint,
 		&i.Object.ChecksumPartSizeBytes,
+		&i.Object.PublicUrl,
 		&i.CollectionName,
 	)
 	return i, err
@@ -642,7 +647,7 @@ func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, iD pg
 }
 
 const scanPendingExpired = `-- name: ScanPendingExpired :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, c.name AS collection_name
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 WHERE state = 'PENDING'
@@ -690,6 +695,7 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 			&i.Object.PresignExpiresAt,
 			&i.Object.Taint,
 			&i.Object.ChecksumPartSizeBytes,
+			&i.Object.PublicUrl,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err

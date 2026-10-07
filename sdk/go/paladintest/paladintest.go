@@ -134,6 +134,8 @@ type binding struct {
 	checksum    string
 	contentType string
 	noOverwrite bool
+	// cacheControl is bound into an upload into a public collection.
+	cacheControl string
 }
 
 // headers are the binding as the required headers a presigned URL carries.
@@ -147,6 +149,9 @@ func (b binding) headers() map[string]string {
 	}
 	if b.noOverwrite {
 		h[headerIfNoneMatch] = ifNoneMatchAny
+	}
+	if b.cacheControl != "" {
+		h[headerCacheControl] = b.cacheControl
 	}
 	return h
 }
@@ -199,6 +204,7 @@ type Server struct {
 	uploads  map[string]*multipart
 	buckets  map[string]bool // "backend/bucket"
 	bound    map[string]bool // collections EnsureTenantStorage created
+	public   map[string]bool // public collections, by name
 	requests []Request
 	// fault, when set, answers a storage request before the fake does;
 	// afterStore answers a PUT the fake has already stored.
@@ -438,6 +444,8 @@ type object struct {
 	put []byte
 	// bound is what the object's upload URL accepts.
 	bound binding
+	// cacheControl is what a public object is stored with; "" elsewhere.
+	cacheControl string
 }
 
 type multipart struct {
@@ -465,6 +473,7 @@ func Start(opts ...Option) (*Server, func()) {
 		uploads: map[string]*multipart{},
 		buckets: map[string]bool{},
 		bound:   map[string]bool{},
+		public:  map[string]bool{},
 
 		rpcFaults: map[string][]*rpcFault{},
 
@@ -506,6 +515,7 @@ func Start(opts ...Option) (*Server, func()) {
 	mux.Handle(paladindatav1connect.NewStorageBootstrapServiceHandler(s, record))
 	mux.Handle(paladindatav1connect.NewPresignServiceHandler(s, record))
 	mux.Handle(storagePath, http.HandlerFunc(s.storage))
+	mux.Handle(publicPath, http.HandlerFunc(s.servePublic))
 	srv := httptest.NewServer(mux)
 	s.URL = srv.URL
 	return s, srv.Close
@@ -537,6 +547,10 @@ func (s *Server) Connect(opts ...paladin.Option) *paladin.Paladin {
 func (s *Server) Put(collection paladin.CollectionName, key, contentType string, body []byte) *datav1.Object {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	key, err := s.publicKey(collection.String(), key)
+	if err != nil {
+		panic(fmt.Sprintf("paladintest: Put into %s: %v (pass an empty key)", collection, err))
+	}
 	o := s.newObject(collection.String(), key, contentType)
 	s.commit(o, body, "")
 	return o.msg
@@ -607,6 +621,7 @@ func (s *Server) newObject(parent, key, contentType string) *object {
 	if c, err := paladin.ParseCollectionName(parent); err == nil {
 		o.msg.Collection = c.Collection
 	}
+	s.publish(o, parent)
 	s.objects[o.msg.GetName()] = o
 	return o
 }
@@ -637,6 +652,10 @@ func checkVersion(o *object, version string) error {
 // holds — in any state, the trash included — as the server's unique path
 // does.
 func (s *Server) claim(parent, key, contentType string, metadata, tags map[string]string) (*object, error) {
+	key, err := s.publicKey(parent, key)
+	if err != nil {
+		return nil, err
+	}
 	if key != "" {
 		for _, o := range s.objects {
 			if strings.HasPrefix(o.msg.GetName(), parent+"/objects/") && o.msg.GetKey() == key {
@@ -741,7 +760,7 @@ func (s *Server) UploadObject(_ context.Context, req *connect.Request[datav1.Upl
 	}
 	o.bound = binding{
 		size: req.Msg.GetSizeHintBytes(), algo: algo, checksum: req.Msg.GetChecksumValue(),
-		contentType: req.Msg.GetContentType(), noOverwrite: true,
+		contentType: req.Msg.GetContentType(), noOverwrite: true, cacheControl: o.cacheControl,
 	}
 	url := s.signed(o.msg.GetObjectId(), http.MethodPut)
 	url.RequiredHeaders = o.bound.headers()
@@ -880,6 +899,9 @@ func (s *Server) DeleteObject(_ context.Context, req *connect.Request[datav1.Del
 		return nil, err
 	}
 	if err := checkVersion(o, req.Msg.GetResourceVersion()); err != nil {
+		return nil, err
+	}
+	if err := refuseTrash(o); err != nil {
 		return nil, err
 	}
 	o.msg.State = datav1.ObjectState_OBJECT_STATE_DELETED // in the trash, still holding its key

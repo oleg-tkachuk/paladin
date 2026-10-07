@@ -79,6 +79,8 @@ LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.id
 LEFT JOIN buckets b           ON b.id = tdb.bucket_id
 LEFT JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE tenants.slug = $1
+ORDER BY tenants.deleted_at IS NOT NULL, tenants.deleted_at DESC
+LIMIT 1
 `
 
 type GetTenantBySlugRow struct {
@@ -87,6 +89,10 @@ type GetTenantBySlugRow struct {
 	BucketName  string `json:"bucket_name"`
 }
 
+// A slug is unique among live tenants only (tenants_slug_live_key), so a
+// trashed tenant's slug can be taken by a live one. The slug names the live
+// tenant when there is one, else the most recently trashed: deterministic,
+// and what middleware.TenantFreeze resolves too (tenantstate.TenantIDBySlug).
 func (q *Queries) GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error) {
 	row := q.db.QueryRow(ctx, getTenantBySlug, slug)
 	var i GetTenantBySlugRow
@@ -284,8 +290,12 @@ SET display_name           = COALESCE($2, display_name),
                                   ELSE $5 END
 WHERE id = $1
   AND resource_version = $6
+  AND deleted_at IS NULL
 `
 
+// A tenant in the trash takes no changes (middleware.TenantFreeze); this is
+// the same rule where the row is written, for a caller the freeze could not
+// resolve.
 func (q *Queries) UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateTenant,
 		iD,
