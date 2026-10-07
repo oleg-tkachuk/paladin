@@ -1376,17 +1376,41 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Capability module
 
-### A platform admin can act on a trashed tenant's data
+### Background jobs still work on a trashed tenant
 
 - **Status:** Deferred
-- **Reason:** the tenant gate refuses a credential whose own tenant is in the
-  trash, but a platform admin names the tenant it acts on per request
-  (`ActOnNamedTenant`, `WithActingTenant`), after the gate has run, and
-  nothing refuses that tenant being trashed. Admin work on a trashed tenant
-  (restore, purge, inspection) needs some of this to stay possible.
-- **Definition of Done:** a decision on which data-plane calls an admin may
-  make against a trashed tenant, enforced where the acting tenant is set,
-  with a test per plane.
+- **Reason:** the trash freezes a tenant against API calls
+  (`middleware.TenantFreeze`), but the workers do not consult it: the
+  lifecycle worker expires its objects, replication copies them, the
+  reconciler promotes its pending uploads, the dispatcher delivers its events.
+  A restore then returns something other than what was trashed.
+- **Definition of Done:** each worker that changes a tenant's data skips a
+  tenant in the trash (or the decision to let one run is recorded per worker),
+  with a test per worker.
+- **Blockers:** whether event delivery for a trashed tenant should stop or
+  drain.
+
+### No retention for the tenant trash
+
+- **Status:** Deferred
+- **Reason:** a trashed tenant stays in the trash, frozen, until someone
+  restores or purges it; nothing purges it after a period, and nothing says
+  how long it has been there.
+- **Definition of Done:** a configured retention after which a trashed tenant
+  is surfaced for purge (or purged, once its data is gone), with the console
+  showing the age of each trashed tenant.
+- **Blockers:** a product decision on the period and on automatic purge.
+
+### Check that PurgeTenant honours legal hold and COMPLIANCE retention
+
+- **Status:** Deferred
+- **Reason:** `PurgeTenant` refuses while the tenant owns collections, so
+  locked objects are protected by the order of operations rather than by a
+  check of their own. Nothing tests that purging cannot reach an object under
+  legal hold or COMPLIANCE retention by any path.
+- **Definition of Done:** a test that every path from a trashed tenant to its
+  removal refuses while it holds a locked object, and a fix where one does
+  not.
 - **Blockers:** none.
 
 ### Capability module CI: deny network egress in the standalone job

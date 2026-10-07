@@ -169,7 +169,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	if err != nil {
 		l.Fatal("otelconnect interceptor", zap.Error(err))
 	}
-	tenantGate, err := buildTenantGate(deps)
+	tenantGate, tenantFreeze, err := buildTenantGate(deps)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -229,6 +229,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			// interceptor that establishes a principal, before validation and
 			// idempotency, so a refused call is never answered from memo.
 			tenantGate,
+			// Refuses a change to a tenant in the trash, whoever asks.
+			tenantFreeze,
 			connect.UnaryInterceptorFunc(validateInterceptor),
 			// Idempotency-Key gate. RequireOnCreate=true means every
 			// admin-plane Create*/Issue* RPC must carry an `Idempotency-Key`
