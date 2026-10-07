@@ -43,6 +43,18 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the SDK fakes refuse what the server refuses
+
+- **`paladintest` validates every request** with the contract's
+  protovalidate rules, as the server does: a test that uploads with no
+  content type, or deletes with no `resource_version`, now fails with
+  `ErrInvalidArgument` where it used to pass.
+- **`DeleteObject` checks `resource_version`**, and every change to an object
+  advances it: a stale version is `ErrVersionConflict`. A test that soft
+  deletes and then purges must use the version after the soft delete.
+- **`ListObjects` refuses `filter`, `order_by` and `sort_order`** as
+  `Unimplemented`; it used to list as if they were not set.
+
 ## Unreleased — the Python SDK's `TLS` needs the `tls` extra
 
 - **`paladin.TLS(...)` raises `ImportError` unless the SDK is installed with

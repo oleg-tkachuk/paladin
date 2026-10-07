@@ -10,7 +10,10 @@
 // delete), MultipartUploadService, ListParts included, PresignService
 // (RegenerateUploadUrl, PresignDownload) and StorageBootstrapService; every
 // other RPC of every plane answers Unimplemented, as a server that lacks it
-// does. Like the server it binds
+// does. Like the server it runs protovalidate on every request, after
+// authentication, and checks DeleteObject's resource_version; ListObjects
+// refuses a filter or an ordering as Unimplemented rather than ignore it.
+// Like the server it binds
 // every upload URL to the size and checksum the upload was registered with —
 // its storage refuses a PUT that does not carry exactly the signed headers,
 // a body of another length or checksum, or an overwrite — records that
@@ -46,6 +49,7 @@ import (
 	"testing"
 	"time"
 
+	"buf.build/go/protovalidate"
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -391,8 +395,12 @@ func (s *Server) takeRPCFault(procedure string, msg proto.Message) error {
 // failure is the error an injected failure answers with: code, and the
 // reason the server attaches to it.
 func failure(procedure string, code connect.Code) error {
-	err := connect.NewError(code, fmt.Errorf("paladintest: %s failed by FailRPC", procedure))
-	if reason, ok := serverReason[code]; ok {
+	return withReason(connect.NewError(code, fmt.Errorf("paladintest: %s failed by FailRPC", procedure)))
+}
+
+// withReason attaches the ErrorInfo reason the server attaches to err's code.
+func withReason(err *connect.Error) *connect.Error {
+	if reason, ok := serverReason[err.Code()]; ok {
 		detail, derr := connect.NewErrorDetail(&errdetails.ErrorInfo{Reason: reason.String(), Domain: paladin.ErrorDomain})
 		if derr != nil {
 			panic(fmt.Sprintf("paladintest: %v", derr)) // an ErrorInfo always marshals
@@ -462,6 +470,10 @@ func Start(opts ...Option) (*Server, func()) {
 	for _, opt := range opts {
 		opt(s)
 	}
+	validator, err := protovalidate.New()
+	if err != nil {
+		panic(fmt.Sprintf("paladintest: protovalidate: %v", err)) // the contract's own rules always compile
+	}
 	record := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			procedure := req.Spec().Procedure
@@ -473,6 +485,10 @@ func Start(opts ...Option) (*Server, func()) {
 				if err := s.authenticate(req.Header(), msg); err != nil {
 					return nil, err
 				}
+			}
+			// After authentication, as the server's interceptor chain runs it.
+			if err := validator.Validate(msg); err != nil {
+				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("validation failed: %w", err))
 			}
 			if err := s.takeRPCFault(procedure, msg); err != nil {
 				return nil, err
@@ -591,6 +607,28 @@ func (s *Server) newObject(parent, key, contentType string) *object {
 	return o
 }
 
+// bump advances the object's resource_version, as the server's trigger does
+// on every change to its row.
+func bump(o *object) {
+	n, err := strconv.ParseInt(o.msg.GetResourceVersion(), 10, 64)
+	if err != nil {
+		panic(fmt.Sprintf("paladintest: resource_version %q", o.msg.GetResourceVersion())) // the fake only writes integers
+	}
+	o.msg.ResourceVersion = strconv.FormatInt(n+1, 10)
+}
+
+// checkVersion refuses a resource_version that is not the object's, as the
+// server does: not a number is InvalidArgument, another one Aborted.
+func checkVersion(o *object, version string) error {
+	if _, err := strconv.ParseInt(version, 10, 64); err != nil {
+		return withReason(connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err)))
+	}
+	if version != o.msg.GetResourceVersion() {
+		return withReason(connect.NewError(connect.CodeAborted, errors.New("resource_version mismatch")))
+	}
+	return nil
+}
+
 // claim makes the object an upload registers, refusing a key another object
 // holds — in any state, the trash included — as the server's unique path
 // does.
@@ -614,6 +652,7 @@ func (s *Server) MarkFailed(name string) {
 	defer s.mu.Unlock()
 	if o, ok := s.objects[name]; ok && o.msg.GetState() == datav1.ObjectState_OBJECT_STATE_PENDING {
 		o.msg.State = datav1.ObjectState_OBJECT_STATE_FAILED
+		bump(o)
 	}
 }
 
@@ -626,6 +665,7 @@ func (s *Server) commitAs(o *object, body []byte, algo, checksum string) {
 	o.msg.Etag = etagOf(body)
 	o.msg.SizeBytes = int64(len(body))
 	o.msg.State = datav1.ObjectState_OBJECT_STATE_AVAILABLE
+	bump(o)
 	if checksum != "" {
 		o.msg.Checksum = &datav1.ChecksumDigest{Algorithm: algo, Value: checksum}
 	}
@@ -730,6 +770,10 @@ func (s *Server) LookupObject(_ context.Context, req *connect.Request[datav1.Loo
 }
 
 func (s *Server) ListObjects(_ context.Context, req *connect.Request[datav1.ListObjectsRequest]) (*connect.Response[datav1.ListObjectsResponse], error) {
+	if field := unhonouredListField(req.Msg); field != "" {
+		return nil, connect.NewError(connect.CodeUnimplemented,
+			fmt.Errorf("paladintest: ListObjects does not apply %s; the server does, so a test would pass on what it would not", field))
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var all []*datav1.Object
@@ -759,6 +803,20 @@ func (s *Server) ListObjects(_ context.Context, req *connect.Request[datav1.List
 	return connect.NewResponse(resp), nil
 }
 
+// unhonouredListField names a ListObjects parameter the fake does not apply,
+// or "" when the request sets none.
+func unhonouredListField(req *datav1.ListObjectsRequest) string {
+	switch {
+	case req.GetFilter() != "":
+		return "filter"
+	case req.GetOrderBy() != "":
+		return "order_by"
+	case req.GetSortOrder() != commonv1.SortOrder_SORT_ORDER_UNSPECIFIED:
+		return "sort_order"
+	}
+	return ""
+}
+
 func (s *Server) DownloadObject(_ context.Context, req *connect.Request[datav1.DownloadObjectRequest]) (*connect.Response[datav1.DownloadObjectResponse], error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -781,8 +839,12 @@ func (s *Server) DeleteObject(_ context.Context, req *connect.Request[datav1.Del
 	defer s.mu.Unlock()
 	if req.Msg.GetPermanent() {
 		// As the server: one in the trash is purged too, and the path is free.
-		if _, ok := s.objects[req.Msg.GetName()]; !ok {
+		o, ok := s.objects[req.Msg.GetName()]
+		if !ok {
 			return nil, notFound(req.Msg.GetName())
+		}
+		if err := checkVersion(o, req.Msg.GetResourceVersion()); err != nil {
+			return nil, err
 		}
 		delete(s.objects, req.Msg.GetName())
 		return connect.NewResponse(&datav1.DeleteObjectResponse{}), nil
@@ -791,7 +853,11 @@ func (s *Server) DeleteObject(_ context.Context, req *connect.Request[datav1.Del
 	if err != nil {
 		return nil, err
 	}
+	if err := checkVersion(o, req.Msg.GetResourceVersion()); err != nil {
+		return nil, err
+	}
 	o.msg.State = datav1.ObjectState_OBJECT_STATE_DELETED // in the trash, still holding its key
+	bump(o)
 	o.body = nil
 	return connect.NewResponse(&datav1.DeleteObjectResponse{}), nil
 }
