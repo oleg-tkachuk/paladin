@@ -3,6 +3,7 @@ import { EyeIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import type { ObjectVersion } from "@/gen/paladin/data/v1/object_service_pb";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
+import { useTenantChangesBlocked } from "@/app/tenants/[id]/tenant-context";
 import { Badge } from "@/components/ui/badge";
 import { T } from "@/lib/ui/typography";
 import { cn, formatBytes } from "@/lib/utils";
@@ -23,6 +24,7 @@ export function VersionRow({
   onView: () => void;
   onRestore: () => void;
 }) {
+  const changesBlocked = useTenantChangesBlocked();
   const dotClass = version.isCurrent ? "bg-chart-2" : "bg-muted-foreground/40";
   return (
     <Card className="p-4">
@@ -69,7 +71,13 @@ export function VersionRow({
             View
           </Button>
           {!version.isCurrent && !version.isDeleteMarker ? (
-            <Button variant="outline" size="sm" onClick={onRestore}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={Boolean(changesBlocked)}
+              title={changesBlocked ?? undefined}
+              onClick={onRestore}
+            >
               <ArrowPathIcon className="size-4" />
               Restore
             </Button>

@@ -21,6 +21,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { ObjectTagBadge } from "@/components/features/ObjectTagBadge";
 import { Dropdown } from "@/components/ui/Dropdown";
+import { useTenantChangesBlocked } from "@/app/tenants/[id]/tenant-context";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn, formatBytes, formatDate, timestampToDate } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -105,6 +106,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
   onMove,
   onGenerateDownloadUrl,
 }: ObjectTableRowProps) {
+  const changesBlocked = useTenantChangesBlocked();
   // Detail link is `<current-pathname>/<key>` — the row is rendered
   // inside the Collection Objects tab (/tenants/<id>/collections/<collection>/
   // objects) since Phase 5, so detail = same path + storage key.
@@ -236,10 +238,13 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
             <div
               onClick={(e) => {
                 e.stopPropagation();
-                onStartInlineEdit(obj);
+                if (!changesBlocked) onStartInlineEdit(obj);
               }}
-              className="cursor-text group/labels flex flex-wrap items-center gap-1"
-              title="Click to edit tags"
+              className={cn(
+                "group/labels flex flex-wrap items-center gap-1",
+                !changesBlocked && "cursor-text",
+              )}
+              title={changesBlocked ?? "Click to edit tags"}
             >
               {(() => {
                 const tagEntries = Object.entries(obj.tags || {});
@@ -353,15 +358,17 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                     Quick Inspect
                   </div>
                 </Dropdown.Item>
-                <Dropdown.Item
-                  className="p-0"
-                  onClick={() => onStartInlineEdit(obj)}
-                >
-                  <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition-colors">
-                    <TagIcon className="w-4 h-4 text-primary" />
-                    Apply Labels
-                  </div>
-                </Dropdown.Item>
+                {!changesBlocked && (
+                  <Dropdown.Item
+                    className="p-0"
+                    onClick={() => onStartInlineEdit(obj)}
+                  >
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition-colors">
+                      <TagIcon className="w-4 h-4 text-primary" />
+                      Apply Labels
+                    </div>
+                  </Dropdown.Item>
+                )}
                 <Dropdown.Item
                   className="p-0"
                   onClick={() => onCopyToClipboard(obj.objectId, "Object ID")}
@@ -390,7 +397,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                     Copy Download Link
                   </div>
                 </Dropdown.Item>
-                {onCopy && onMove && (
+                {onCopy && onMove && !changesBlocked && (
                   <>
                     <div className="h-px bg-border my-0.5" />
                     <Dropdown.Item
@@ -418,26 +425,34 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                   </>
                 )}
                 <div className="h-px bg-border my-0.5" />
-                {onSoftDelete && (
-                  <Dropdown.Item
-                    className="p-0"
-                    onClick={() => onSoftDelete(obj)}
-                  >
-                    <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-                      <TrashIcon className="w-4 h-4 text-destructive/60" />
-                      Soft Delete
-                    </div>
-                  </Dropdown.Item>
+                {changesBlocked ? (
+                  <p className="max-w-56 px-3 py-1.5 text-xs text-muted-foreground">
+                    {changesBlocked}
+                  </p>
+                ) : (
+                  <>
+                    {onSoftDelete && (
+                      <Dropdown.Item
+                        className="p-0"
+                        onClick={() => onSoftDelete(obj)}
+                      >
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                          <TrashIcon className="w-4 h-4 text-destructive/60" />
+                          Soft Delete
+                        </div>
+                      </Dropdown.Item>
+                    )}
+                    <Dropdown.Item
+                      className="p-0"
+                      onClick={() => onHardDelete(obj)}
+                    >
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/20 transition-colors">
+                        <ExclamationTriangleIcon className="w-4 h-4" />
+                        Hard Delete
+                      </div>
+                    </Dropdown.Item>
+                  </>
                 )}
-                <Dropdown.Item
-                  className="p-0"
-                  onClick={() => onHardDelete(obj)}
-                >
-                  <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/20 transition-colors">
-                    <ExclamationTriangleIcon className="w-4 h-4" />
-                    Hard Delete
-                  </div>
-                </Dropdown.Item>
               </Dropdown.Menu>
             </Dropdown>
           </div>

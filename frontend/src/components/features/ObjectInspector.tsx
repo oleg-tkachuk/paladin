@@ -2,6 +2,10 @@
 
 import { useObject } from "@/hooks/useObject";
 import { useScope } from "@/context/ScopeContext";
+import {
+  useTenantChangesBlocked,
+  useTenantOptional,
+} from "@/app/tenants/[id]/tenant-context";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
 import { useRouter } from "next/navigation";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
@@ -37,6 +41,11 @@ export function ObjectInspector({
   // this, the Inspector always queries `collection: "default"` and any
   // object outside the bootstrap default returns `not_found`.
   const { collection: scopedCollection, tenantId, tenant } = useScope();
+  // The page's own tenant wins over the scope picker, as it does for the
+  // object lookup: an operator browsing another tenant's page keeps the
+  // picker on their own.
+  const routedTenant = useTenantOptional();
+  const changesBlocked = useTenantChangesBlocked();
   const effectiveParent = parentCollection || scopedCollection;
   const { object, downloadUrl, loading, softDeleteObject, restoreObject } =
     useObject(collection || undefined, effectiveParent);
@@ -44,6 +53,7 @@ export function ObjectInspector({
   if (!collection) return null;
 
   const isImage = object?.contentType?.startsWith("image/");
+  const publicObject = Boolean(object?.publicUrl);
 
   return (
     <>
@@ -154,6 +164,26 @@ export function ObjectInspector({
                     <span className="sr-only">{object.objectId}</span>
                   </dd>
 
+                  {/* ADR-0027: the unsigned address a consumer stores. */}
+                  {object.publicUrl && (
+                    <>
+                      <dt className="text-muted-foreground">Public URL</dt>
+                      <dd className="flex min-w-0 items-start gap-1">
+                        <span
+                          className="break-all font-mono text-xs"
+                          title={object.publicUrl}
+                        >
+                          {object.publicUrl}
+                        </span>
+                        <IdentifierCopy
+                          value={object.publicUrl}
+                          label="Public URL"
+                          iconOnly
+                        />
+                      </dd>
+                    </>
+                  )}
+
                   <dt className="text-muted-foreground">MIME Type</dt>
                   <dd className="font-mono text-xs">
                     {object.contentType || "—"}
@@ -221,13 +251,20 @@ export function ObjectInspector({
                 variant="success"
                 size="sm"
                 className="w-full"
+                disabled={Boolean(changesBlocked)}
+                title={changesBlocked ?? undefined}
                 onClick={() => restoreObject()}
               >
                 <ArrowPathIcon className="size-4" />
                 Restore Object
               </Button>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
+              <div
+                className={cn(
+                  "grid gap-2",
+                  publicObject ? "grid-cols-1" : "grid-cols-2",
+                )}
+              >
                 <Button
                   size="sm"
                   onClick={() => {
@@ -235,7 +272,8 @@ export function ObjectInspector({
                     // in Phase 5: /tenants/<id>/collections/<collection>/
                     // objects/<key>. Prefer slug; fall back to UUID
                     // (resolver canonicalises on landing).
-                    const handle = tenant?.slug || tenantId || "";
+                    const handle =
+                      routedTenant?.slug || tenant?.slug || tenantId || "";
                     if (!handle) return;
                     router.push(
                       `/tenants/${encodeURIComponent(handle)}/collections/${encodeURIComponent(object.collection)}/objects/${encodeURIComponent(object.key)}`,
@@ -245,17 +283,23 @@ export function ObjectInspector({
                   <EyeIcon className="size-4" />
                   Full Details
                 </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => {
-                    softDeleteObject();
-                    onClose();
-                  }}
-                >
-                  <TrashIcon className="size-4" />
-                  Trash
-                </Button>
+                {/* A public collection has no trash (ADR-0027): its delete
+                    is permanent and confirmed on the full details page. */}
+                {!publicObject && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={Boolean(changesBlocked)}
+                    title={changesBlocked ?? undefined}
+                    onClick={() => {
+                      softDeleteObject();
+                      onClose();
+                    }}
+                  >
+                    <TrashIcon className="size-4" />
+                    Trash
+                  </Button>
+                )}
               </div>
             )}
           </div>

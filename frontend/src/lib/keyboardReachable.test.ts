@@ -50,7 +50,7 @@ const ALLOWED: Record<string, string> = {
     "drop zone; the Browse files button inside it is the keyboard path",
   "components/features/objects/ObjectTableRow.tsx#(e) => onToggleSelect(obj.objectId, e, obj.key)":
     "row click; the row's checkbox is the keyboard path",
-  "components/features/objects/ObjectTableRow.tsx#(e) => { e.stopPropagation(); onStartInlineEdit(obj); }":
+  "components/features/objects/ObjectTableRow.tsx#(e) => { e.stopPropagation(); if (!changesBlocked) onStartInlineEdit(obj); }":
     "tag cell; the row menu's Edit tags is the keyboard path",
   "components/ui/ChipInput.tsx#() => inputRef.current?.focus()":
     "focuses the input inside, which is itself reachable",
