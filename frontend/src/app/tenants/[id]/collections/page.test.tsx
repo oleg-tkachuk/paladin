@@ -37,6 +37,7 @@ vi.mock("@/components/ui/Notification", () => ({
 }));
 
 import TenantCollectionsPage from "./page";
+import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
 
 describe("TenantCollectionsPage failed list", () => {
   it("says the list could not be loaded, not that there are none", async () => {
@@ -132,5 +133,35 @@ describe("TenantCollectionsPage search", () => {
         { timeout: IN_FLIGHT_WINDOW_MS },
       ),
     ).rejects.toThrow();
+  });
+});
+
+// ADR-0027: a public Collection is marked wherever it is listed.
+describe("TenantCollectionsPage public read", () => {
+  it("marks a public Collection and not a private one", async () => {
+    h.listCollections.mockResolvedValue({
+      collections: [
+        {
+          collection: "photos",
+          displayName: "",
+          bucket: "pub",
+          resourceVersion: "1",
+          access: CollectionAccess.PUBLIC_READ,
+        },
+        {
+          collection: "docs",
+          displayName: "",
+          bucket: "priv",
+          resourceVersion: "1",
+          access: CollectionAccess.PRIVATE,
+        },
+      ],
+    });
+    render(<TenantCollectionsPage />);
+    await screen.findByText("docs");
+    expect(screen.getAllByText("public")).toHaveLength(1);
+    expect(screen.getByText("public").closest("tr")).toHaveTextContent(
+      "photos",
+    );
   });
 });
