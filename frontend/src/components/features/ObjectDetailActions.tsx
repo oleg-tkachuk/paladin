@@ -18,6 +18,9 @@ import { Dropdown } from "@/components/ui/Dropdown";
  * overflow menu (restore-or-trash depending on state, and permanent delete).
  * All behavior is delegated to the parent via callbacks; `onAction` opens the
  * parent's confirm modal.
+ *
+ * An object in a public collection has no trash (ADR-0027): its bytes would
+ * stay served at its URL, so only a permanent delete is offered.
  */
 export function ObjectDetailActions({
   state,
@@ -25,8 +28,11 @@ export function ObjectDetailActions({
   onShare,
   onDownload,
   onAction,
+  publicObject = false,
 }: {
   state: ObjectState;
+  /** The object is in a public collection: no trash. */
+  publicObject?: boolean;
   onEdit: () => void;
   onShare: () => void;
   onDownload: () => void;
@@ -60,7 +66,7 @@ export function ObjectDetailActions({
                 Restore Object
               </span>
             </Dropdown.Item>
-          ) : (
+          ) : publicObject ? null : (
             <Dropdown.Item onClick={() => onAction("trash")}>
               <span className="flex items-center gap-2">
                 <TrashIcon className="size-4" />
