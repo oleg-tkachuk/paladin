@@ -74,8 +74,8 @@ const (
 	// provision_on_backend asked Paladin to create a bucket the backend already
 	// holds. Register an existing bucket with provision_on_backend false.
 	ErrorReason_ERROR_REASON_BUCKET_EXISTS_ON_BACKEND ErrorReason = 28
-	// The bucket is Paladin's own on its backend — the backend's configured
-	// bucket, or a feature probe's scratch bucket — and cannot be registered.
+	// The bucket is a feature probe's scratch bucket, Paladin's own, and cannot
+	// be registered.
 	ErrorReason_ERROR_REASON_BUCKET_RESERVED ErrorReason = 29
 	// provision_on_backend false names a bucket the backend does not hold.
 	ErrorReason_ERROR_REASON_BUCKET_NOT_ON_BACKEND ErrorReason = 30

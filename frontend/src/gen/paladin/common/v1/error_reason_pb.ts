@@ -193,8 +193,8 @@ export enum ErrorReason {
   BUCKET_EXISTS_ON_BACKEND = 28,
 
   /**
-   * The bucket is Paladin's own on its backend — the backend's configured
-   * bucket, or a feature probe's scratch bucket — and cannot be registered.
+   * The bucket is a feature probe's scratch bucket, Paladin's own, and cannot
+   * be registered.
    *
    * @generated from enum value: ERROR_REASON_BUCKET_RESERVED = 29;
    */

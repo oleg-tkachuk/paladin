@@ -22,9 +22,10 @@
      `BUCKET_EXISTS_ON_BACKEND`. False adopts an existing bucket and refuses
      one the backend does not hold — `BUCKET_NOT_ON_BACKEND`. A bucket the
      backend answers for but refuses to us exists all the same.
-  2. **Paladin's own buckets are never registered:** each backend's
-     configured `bucket` and the feature probe's scratch buckets —
-     `BUCKET_RESERVED`.
+  2. **The feature probe's scratch buckets are never registered** —
+     `BUCKET_RESERVED`. A backend's configured `bucket` may be, by adoption
+     only: that is how its data is bound to collections, and adoption keeps
+     it private and on the backend.
   3. **A row records whether Paladin creates its bucket**
      (`created_on_backend`), set as the row is written and never changed.
      Only such a bucket is deleted on the backend; an adopted one keeps its

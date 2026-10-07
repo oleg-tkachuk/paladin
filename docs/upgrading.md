@@ -67,9 +67,9 @@ tree with itself and passes without checking anything.
 - `CreateBucket` with `provision_on_backend` refuses a bucket the backend
   already holds (`ALREADY_EXISTS`, `BUCKET_EXISTS_ON_BACKEND`); register an
   existing bucket with `provision_on_backend` false, which in turn refuses one
-  the backend does not hold (`BUCKET_NOT_ON_BACKEND`). A backend's configured
-  bucket and the feature probe's scratch buckets cannot be registered
-  (`BUCKET_RESERVED`).
+  the backend does not hold (`BUCKET_NOT_ON_BACKEND`); a bucket registered
+  that way is never public. The feature probe's scratch buckets cannot be
+  registered (`BUCKET_RESERVED`).
 - `EnsureTenantStorage` refuses a bucket that exists on the backend but is not
   registered: have an operator register it first. Registered buckets are
   unaffected.
