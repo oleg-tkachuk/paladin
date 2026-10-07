@@ -196,13 +196,22 @@ func (r *BucketRepoV2) markDeletingWith(ctx context.Context, q *sqlc.Queries, ba
 		return err
 	}
 	if rows == 0 {
-		// Either the row doesn't exist or the resource_version check
-		// failed. Surface as ErrVersionMismatch to match the rest of the
-		// repo — handlers can still decode "not found" via the prior
-		// Get.
-		return admindomain.ErrVersionMismatch
+		return r.missingOrStale(ctx, q, backendID, bucketName)
 	}
 	return nil
+}
+
+// missingOrStale says why a guarded write touched no row: the bucket is gone,
+// or it is there at another resource_version. Both used to come back as a
+// version mismatch, so deleting a bucket that does not exist with the version
+// check skipped answered ABORTED, which tells a caller to re-read and retry
+// what can never succeed. The re-read runs on the write's own queries, so
+// inside a tx it sees what the write saw.
+func (r *BucketRepoV2) missingOrStale(ctx context.Context, q *sqlc.Queries, backendID, bucketName string) error {
+	if _, err := r.getWith(ctx, q, backendID, bucketName); err != nil {
+		return err
+	}
+	return admindomain.ErrVersionMismatch
 }
 
 func (r *BucketRepoV2) ListPendingDeletions(ctx context.Context, maxAttempts, limit int32) ([]admindomain.BucketProvisionRow, error) {
@@ -381,7 +390,7 @@ func (r *BucketRepoV2) updateBasicWith(ctx context.Context, q *sqlc.Queries, b a
 		return err
 	}
 	if rows == 0 {
-		return admindomain.ErrVersionMismatch
+		return r.missingOrStale(ctx, q, b.BackendID, b.BucketName)
 	}
 	return nil
 }
@@ -392,7 +401,7 @@ func (r *BucketRepoV2) SetPolicy(ctx context.Context, backendID, bucketName, pol
 		return err
 	}
 	if rows == 0 {
-		return admindomain.ErrVersionMismatch
+		return r.missingOrStale(ctx, r.q, backendID, bucketName)
 	}
 	return nil
 }
@@ -404,7 +413,7 @@ func (r *BucketRepoV2) SetLifecycle(ctx context.Context, backendID, bucketName s
 		return err
 	}
 	if rows == 0 {
-		return admindomain.ErrVersionMismatch
+		return r.missingOrStale(ctx, r.q, backendID, bucketName)
 	}
 	return nil
 }
@@ -416,7 +425,7 @@ func (r *BucketRepoV2) SetObjectLock(ctx context.Context, backendID, bucketName 
 		return err
 	}
 	if rows == 0 {
-		return admindomain.ErrVersionMismatch
+		return r.missingOrStale(ctx, r.q, backendID, bucketName)
 	}
 	return nil
 }
@@ -427,7 +436,7 @@ func (r *BucketRepoV2) SetVersioning(ctx context.Context, backendID, bucketName 
 		return err
 	}
 	if rows == 0 {
-		return admindomain.ErrVersionMismatch
+		return r.missingOrStale(ctx, r.q, backendID, bucketName)
 	}
 	return nil
 }
@@ -438,7 +447,7 @@ func (r *BucketRepoV2) SetReplication(ctx context.Context, backendID, bucketName
 		return err
 	}
 	if rows == 0 {
-		return admindomain.ErrVersionMismatch
+		return r.missingOrStale(ctx, r.q, backendID, bucketName)
 	}
 	return nil
 }
@@ -450,7 +459,7 @@ func (r *BucketRepoV2) SetConstraints(ctx context.Context, backendID, bucketName
 		return err
 	}
 	if rows == 0 {
-		return admindomain.ErrVersionMismatch
+		return r.missingOrStale(ctx, r.q, backendID, bucketName)
 	}
 	return nil
 }
@@ -497,7 +506,7 @@ func (r *BucketRepoV2) deleteWith(ctx context.Context, q *sqlc.Queries, backendI
 		return err
 	}
 	if rows == 0 {
-		return admindomain.ErrVersionMismatch
+		return r.missingOrStale(ctx, q, backendID, bucketName)
 	}
 	return nil
 }
