@@ -272,6 +272,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	dataOpts := connect.WithOptions(
 		connect.WithCodec(codec.StrictJSON{}),
 		connect.WithInterceptors(
+			// Outermost of all: tracing and the failure log inside it see an
+			// internal error as it happened; the caller sees its code and a
+			// request id, not a driver's message.
+			middleware.ScrubInternal(),
 			otelInt,
 			// Outermost after tracing, and BEFORE auth on purpose: connect
 			// applies the first-listed interceptor outermost, so anything
@@ -324,6 +328,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	iamOpts := connect.WithOptions(
 		connect.WithCodec(codec.StrictJSON{}),
 		connect.WithInterceptors(
+			// Outermost of all: tracing and the failure log inside it see an
+			// internal error as it happened; the caller sees its code and a
+			// request id, not a driver's message.
+			middleware.ScrubInternal(),
 			otelInt,
 			// Outermost after tracing, and BEFORE auth on purpose: connect
 			// applies the first-listed interceptor outermost, so anything

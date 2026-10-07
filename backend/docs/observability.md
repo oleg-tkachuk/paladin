@@ -101,6 +101,13 @@ also carry `trace_id`, `span_id`, `request_id` and `tenant_id`
 refusal — is logged once with `rpc`, `code`, `took_ms` and `request_id`
 (`middleware.LogOutcome`); successful calls are left to tracing.
 
+The caller of an RPC that fails on the server's side — `internal`, `unknown`,
+`data_loss` — gets the code and `internal error; request id <id>`, never the
+error itself (`middleware.ScrubInternal`, outermost on every plane). The log
+line above, and the span, keep the original; the id is the caller's
+`X-Request-Id`, or one minted for the request and returned in that header.
+Find the cause by that id.
+
 ### `TLS handshake error ... client sent an HTTP request to an HTTPS server`
 
 One line per plain-HTTP request made to a listener serving TLS; the address
