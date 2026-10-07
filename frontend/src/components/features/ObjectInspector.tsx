@@ -2,6 +2,7 @@
 
 import { useObject } from "@/hooks/useObject";
 import { useScope } from "@/context/ScopeContext";
+import { useTenantOptional } from "@/app/tenants/[id]/tenant-context";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
 import { useRouter } from "next/navigation";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
@@ -37,6 +38,10 @@ export function ObjectInspector({
   // this, the Inspector always queries `collection: "default"` and any
   // object outside the bootstrap default returns `not_found`.
   const { collection: scopedCollection, tenantId, tenant } = useScope();
+  // The page's own tenant wins over the scope picker, as it does for the
+  // object lookup: an operator browsing another tenant's page keeps the
+  // picker on their own.
+  const routedTenant = useTenantOptional();
   const effectiveParent = parentCollection || scopedCollection;
   const { object, downloadUrl, loading, softDeleteObject, restoreObject } =
     useObject(collection || undefined, effectiveParent);
@@ -235,7 +240,8 @@ export function ObjectInspector({
                     // in Phase 5: /tenants/<id>/collections/<collection>/
                     // objects/<key>. Prefer slug; fall back to UUID
                     // (resolver canonicalises on landing).
-                    const handle = tenant?.slug || tenantId || "";
+                    const handle =
+                      routedTenant?.slug || tenant?.slug || tenantId || "";
                     if (!handle) return;
                     router.push(
                       `/tenants/${encodeURIComponent(handle)}/collections/${encodeURIComponent(object.collection)}/objects/${encodeURIComponent(object.key)}`,
