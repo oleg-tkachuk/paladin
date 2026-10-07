@@ -17,7 +17,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/celh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/mcpinspecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/codec"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auditstream"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -186,11 +185,10 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	}
 	tenantRL := middleware.NewTenantRateLimitInterceptor(tenantRLCfg)
 
-	// Every plane decodes JSON with the strict codec: an unknown request field
-	// is a 400, not a silent discard. See internal/api/codec for why the
-	// forward-compatibility the default buys is not worth its cost here.
-	adminOpts := connect.WithOptions(
-		connect.WithCodec(codec.StrictJSON{}),
+	// The codec, size limits, compression and panic recovery every plane
+	// shares: rpcHandlerOptions.
+	adminOpts := connect.WithHandlerOptions(
+		rpcHandlerOptions(l),
 		connect.WithInterceptors(
 			// Outermost of all: tracing and the failure log inside it see an
 			// internal error as it happened; the caller sees its code and a
