@@ -230,3 +230,22 @@ func (q *Queries) ListStaleMultipartUploads(ctx context.Context, createdAt pgtyp
 	}
 	return items, nil
 }
+
+const recordCompositeChecksum = `-- name: RecordCompositeChecksum :execrows
+UPDATE objects
+   SET checksum = $1,
+       checksum_part_size_bytes = $2
+ WHERE id = $3 AND state = 'PENDING'
+`
+
+// Records a multipart object's composite checksum and its part size before
+// the object store assembles it. Written while the row is PENDING, so it is
+// in place whichever promotes the object first: this upload's completion, or
+// the storage event, which carries no checksum.
+func (q *Queries) RecordCompositeChecksum(ctx context.Context, checksum *string, partSizeBytes *int64, objectID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, recordCompositeChecksum, checksum, partSizeBytes, objectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

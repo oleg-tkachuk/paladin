@@ -523,17 +523,18 @@ func (a *multipartVersionAdapter) OnPromote(ctx context.Context, vo multiparth.V
 		return nil
 	}
 	return a.v.OnPromote(ctx, objecth.Object{
-		ObjectID:     vo.ObjectID,
-		TenantID:     vo.TenantID,
-		Collection:   vo.Collection,
-		Key:          vo.Key,
-		ContentType:  vo.ContentType,
-		SizeBytes:    vo.SizeBytes,
-		ETag:         vo.ETag,
-		ChecksumAlgo: vo.ChecksumAlgo,
-		Checksum:     vo.Checksum,
-		Metadata:     vo.Metadata,
-		Tags:         vo.Tags,
+		ObjectID:              vo.ObjectID,
+		TenantID:              vo.TenantID,
+		Collection:            vo.Collection,
+		Key:                   vo.Key,
+		ContentType:           vo.ContentType,
+		SizeBytes:             vo.SizeBytes,
+		ETag:                  vo.ETag,
+		ChecksumAlgo:          vo.ChecksumAlgo,
+		Checksum:              vo.Checksum,
+		ChecksumPartSizeBytes: vo.ChecksumPartSizeBytes,
+		Metadata:              vo.Metadata,
+		Tags:                  vo.Tags,
 	})
 }
 

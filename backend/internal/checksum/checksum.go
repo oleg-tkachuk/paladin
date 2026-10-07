@@ -8,8 +8,14 @@
 package checksum
 
 import (
+	"crypto/md5" //nolint:gosec // S3's Content-MD5, an integrity check, not a security one
+	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"hash"
+	"hash/crc32"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +32,43 @@ var digestBytes = map[string]int{
 	CRC32C: 4,
 	SHA256: 32,
 	MD5:    16,
+}
+
+// newHash is each algorithm's digest.
+var newHash = map[string]func() hash.Hash{
+	CRC32C: func() hash.Hash { return crc32.New(crc32.MakeTable(crc32.Castagnoli)) },
+	SHA256: sha256.New,
+	MD5:    md5.New,
+}
+
+// compositeSep separates a composite's digest from its part count.
+const compositeSep = "-"
+
+// ErrNoParts is Composite given no part checksums.
+var ErrNoParts = errors.New("checksum: a composite needs at least one part")
+
+// Composite is the checksum of an object assembled from parts, in the form S3
+// calls COMPOSITE: the base64 of algo's digest of the parts' raw digests,
+// concatenated in part order, then "-" and the part count. Each part value
+// is the base64 digest the part was uploaded under, and is checked as
+// Validate checks one.
+func Composite(algo string, parts []string) (string, error) {
+	if len(parts) == 0 {
+		return "", ErrNoParts
+	}
+	algo = strings.ToUpper(algo)
+	if err := Validate(algo, parts[0]); err != nil {
+		return "", err
+	}
+	h := newHash[algo]()
+	for i, part := range parts {
+		if err := Validate(algo, part); err != nil {
+			return "", fmt.Errorf("part %d: %w", i+1, err)
+		}
+		raw, _ := base64.StdEncoding.DecodeString(part) // Validate decoded it
+		h.Write(raw)
+	}
+	return base64.StdEncoding.EncodeToString(h.Sum(nil)) + compositeSep + strconv.Itoa(len(parts)), nil
 }
 
 // Known reports whether algo is an algorithm Paladin accepts.

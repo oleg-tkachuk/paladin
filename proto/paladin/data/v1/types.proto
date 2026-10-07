@@ -71,7 +71,15 @@ enum ObjectState {
 
 message ChecksumDigest {
   string algorithm = 1; // CRC32C | SHA256 | MD5
-  string value = 2;     // base64-encoded
+  // base64-encoded. For an object assembled from a multipart upload it is a
+  // composite, in S3's COMPOSITE form: the base64 of the algorithm's digest
+  // of the parts' raw digests concatenated in part order, then "-" and the
+  // part count.
+  string value = 2;
+  // Set when value is a composite: every part is this many bytes, the last
+  // the remainder. A reader recomputes the composite by restarting the
+  // digest at each boundary. Zero when value is a digest of the whole.
+  int64 part_size_bytes = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message ObjectLockState {
