@@ -43,6 +43,7 @@ from paladin.client import (
     user_agent,
 )
 from paladin.connect import AsyncPaladin, Endpoints, Paladin, connect, connect_async
+from paladin.delete import DELETE_ATTEMPTS, adelete, delete
 from paladin.dpop import HEADER_DPOP, dpop_thumbprint
 from paladin.ensure import aensure, ensure
 from paladin.errors import (
@@ -174,6 +175,7 @@ __all__ = [
     "DEFAULT_TRANSFER_POOL_MAX_IDLE_PER_HOST",
     "DEFAULT_TRANSFER_READ_TIMEOUT",
     "DEFAULT_WEBHOOK_TOLERANCE",
+    "DELETE_ATTEMPTS",
     "ERROR_DOMAIN",
     "HEADER_API_TOKEN",
     "HEADER_AUTHORIZATION",
@@ -245,6 +247,7 @@ __all__ = [
     "abegin_multipart",
     "abort_multipart",
     "acomplete_multipart",
+    "adelete",
     "adownload",
     "adownload_many",
     "adownload_stream",
@@ -265,6 +268,7 @@ __all__ = [
     "connect_async",
     "current_idempotency_key",
     "default_retryable",
+    "delete",
     "download",
     "download_many",
     "download_stream",
