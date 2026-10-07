@@ -647,7 +647,7 @@ func bump(o *object) {
 // server does: not a number is InvalidArgument, another one Aborted.
 func checkVersion(o *object, version string) error {
 	if _, err := strconv.ParseInt(version, 10, 64); err != nil {
-		return withReason(connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err).Error()))
+		return withReason(connect.Errorf(connect.CodeInvalidArgument, "invalid resource_version: %v", err).WithCause(err))
 	}
 	if version != o.msg.GetResourceVersion() {
 		return withReason(connect.NewError(connect.CodeAborted, "resource_version mismatch"))
