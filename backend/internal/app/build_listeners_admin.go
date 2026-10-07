@@ -169,6 +169,10 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	if err != nil {
 		l.Fatal("otelconnect interceptor", zap.Error(err))
 	}
+	tenantGate, err := buildTenantGate(deps)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// Per-tenant request rate limit — same block, same semantics as the data
 	// plane (middleware.rate_limit). The admin plane needs it too: the console
@@ -221,6 +225,10 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			// See the data plane: after otel (span) and after auth (principal).
 			middleware.LogContextStreaming(l),
 			capAdmin,
+			// Refuses a trashed or purged tenant's credentials; after every
+			// interceptor that establishes a principal, before validation and
+			// idempotency, so a refused call is never answered from memo.
+			tenantGate,
 			connect.UnaryInterceptorFunc(validateInterceptor),
 			// Idempotency-Key gate. RequireOnCreate=true means every
 			// admin-plane Create*/Issue* RPC must carry an `Idempotency-Key`

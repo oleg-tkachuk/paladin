@@ -40,6 +40,24 @@ const (
 	RoleTenantProvisioner = "platform.tenant-provisioner"
 )
 
+// PlatformRoles act for any tenant: their authority is the platform's, not
+// the tenant their principal belongs to.
+var PlatformRoles = []string{
+	RolePlatformAdmin,
+	RoleCapabilityIssuer,
+	RoleTenantProvisioner,
+}
+
+// HoldsPlatformRole reports whether p holds any of PlatformRoles.
+func HoldsPlatformRole(p *auth.Principal) bool {
+	for _, role := range PlatformRoles {
+		if p.HasRole(role) {
+			return true
+		}
+	}
+	return false
+}
+
 // AdminAudienceRoles are the roles IAM issues the paladin-admin audience to:
 // each one's work is on the admin plane. tenant.user and mcp.operator have
 // none there. An explicit list rather than a name pattern, so a new role
