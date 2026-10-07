@@ -8,6 +8,7 @@
 // (filters, bulk operations, multipart upload state, copy/move
 // dialog, saved views) carries over verbatim.
 
+import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
 import React, { useEffect, useMemo, useState } from "react";
 
 import { useActions } from "@/context/ActionsContext";
@@ -36,6 +37,10 @@ import { ObjectsTable } from "./ObjectsTable";
 
 function CollectionObjectsContent() {
   const { collection: collectionResource } = useCollection();
+  // ADR-0027: a public collection has no trash and names its objects itself,
+  // so deletes are permanent and copy/move — which name the copy — are off.
+  const publicCollection =
+    collectionResource.access === CollectionAccess.PUBLIC_READ;
   // The "scope" of this listing — fixed by URL, supplied by context.
   const collection = collectionResource.collection;
 
@@ -301,6 +306,27 @@ function CollectionObjectsContent() {
       collection: o.collection,
     }));
     const ids = selectedItems.map((o) => o.objectId);
+    if (publicCollection) {
+      // No trash and no undo here, so it is confirmed first.
+      setConfirm({
+        open: true,
+        type: "danger",
+        title: `Permanently delete ${ids.length} objects?`,
+        message:
+          "This collection is public: its objects have no trash. They are deleted for good, and their public URLs stop answering — though a CDN may serve a cached copy until it expires.",
+        confirmText: "Delete permanently",
+        onConfirm: async () => {
+          await bulkDeleteObjects(deletePayload, { permanent: true });
+          setSelectedIds(new Set());
+          showNotification({
+            type: "success",
+            title: "Deleted permanently",
+            message: `${ids.length} objects deleted.`,
+          });
+        },
+      });
+      return;
+    }
     try {
       setIsBulkDeleting(true);
       await bulkDeleteObjects(deletePayload);
@@ -611,22 +637,26 @@ function CollectionObjectsContent() {
           onCancelInlineEdit: () => setEditingLabelsId(null),
           onEditLabelsValueChange: setEditLabelsValue,
           onCopyToClipboard: copyToClipboard,
-          onSoftDelete: handleSoftDelete,
+          onSoftDelete: publicCollection ? undefined : handleSoftDelete,
           onHardDelete: handleHardDelete,
-          onCopy: (o) =>
-            setCopyMove({
-              open: true,
-              type: "copy",
-              obj: o,
-              destKey: o.key + "-copy",
-            }),
-          onMove: (o) =>
-            setCopyMove({
-              open: true,
-              type: "move",
-              obj: o,
-              destKey: o.key,
-            }),
+          onCopy: publicCollection
+            ? undefined
+            : (o) =>
+                setCopyMove({
+                  open: true,
+                  type: "copy",
+                  obj: o,
+                  destKey: o.key + "-copy",
+                }),
+          onMove: publicCollection
+            ? undefined
+            : (o) =>
+                setCopyMove({
+                  open: true,
+                  type: "move",
+                  obj: o,
+                  destKey: o.key,
+                }),
           onGenerateDownloadUrl: async (key, collectionOfRow) => {
             const o = objects.find(
               (x) => x.key === key && x.collection === collectionOfRow,

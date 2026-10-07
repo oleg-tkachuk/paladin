@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
 }));
 vi.mock("@/hooks/useAuditLogs", () => ({ useAuditLogs: h.useAuditLogs }));
 vi.mock("../tenant-context", () => ({
+  useTenantChangesBlocked: () => null,
   useTenant: () => ({ tenantId: "t-1", displayName: "Acme" }),
 }));
 

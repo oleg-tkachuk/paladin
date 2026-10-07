@@ -15,6 +15,7 @@
 // tenant — the layout stays mounted. Each tab page renders its
 // own content area underneath.
 
+import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
 import {
   ArrowPathIcon,
@@ -97,6 +98,26 @@ export default function TenantLayout({
           description={`Tenant scope — slug: ${tenant.slug}`}
           showDefaultActions={false}
         />
+        {tenant.trashed && (
+          <div
+            role="status"
+            className="space-y-1 rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm"
+          >
+            <p className="font-medium text-warning">
+              This tenant is in the trash.
+            </p>
+            <p className="text-muted-foreground">
+              It is frozen until it is restored or purged: nothing in it
+              changes, its scheduled work and event deliveries wait, and its
+              credentials do not work. You can still read and download its data,
+              and revoke its access.{" "}
+              <Link href="/trash" className="text-primary underline">
+                Restore or purge it from the Trash
+              </Link>
+              .
+            </p>
+          </div>
+        )}
         {/* Tab strip uses slug-form URLs; if the page landed via a
             UUID, the resolver has already canonicalised the address
             bar by the time we render. */}

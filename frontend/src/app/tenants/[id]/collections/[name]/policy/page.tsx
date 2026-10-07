@@ -5,6 +5,7 @@
 // resource scope freely); this surface is the focused one for an
 // operator already inside the Collection context.
 
+import { useTenantChangesBlocked } from "../../../tenant-context";
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
@@ -27,6 +28,7 @@ import { useCollection } from "../collection-context";
 import { errorMessage } from "@/hooks/errorContract";
 
 export default function CollectionPolicyPage() {
+  const changesBlocked = useTenantChangesBlocked();
   const { collection, setCollection } = useCollection();
   const { showNotification } = useNotification();
 
@@ -110,7 +112,12 @@ export default function CollectionPolicyPage() {
           >
             {validating ? "Validating…" : "Validate"}
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving}>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={Boolean(changesBlocked) || saving}
+            title={changesBlocked ?? undefined}
+          >
             {saving ? "Saving…" : "Save"}
           </Button>
         </div>
