@@ -334,28 +334,31 @@ type PurgeDebt struct {
 }
 
 type Object struct {
-	ObjectID         uuid.UUID
-	TenantID         uuid.UUID
-	BackendID        string // FK column from collections; populated when JOINed
-	Bucket           string // physical S3 bucket; populated when JOINed
-	Collection       string
-	Key              string
-	State            statemachine.State
-	ContentType      string
-	SizeBytes        int64
-	ETag             string
-	ChecksumAlgo     string // CRC32C / SHA256 / MD5 — propagated from CreateObjectArgs
-	Checksum         string
-	Sequencer        string
-	Metadata         map[string]string
-	Tags             map[string]string
-	ExternalRef      string
-	ResourceVersion  int64
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	CommittedAt      *time.Time
-	TerminatedAt     *time.Time
-	PresignExpiresAt *time.Time
+	ObjectID     uuid.UUID
+	TenantID     uuid.UUID
+	BackendID    string // FK column from collections; populated when JOINed
+	Bucket       string // physical S3 bucket; populated when JOINed
+	Collection   string
+	Key          string
+	State        statemachine.State
+	ContentType  string
+	SizeBytes    int64
+	ETag         string
+	ChecksumAlgo string // CRC32C / SHA256 / MD5 — propagated from CreateObjectArgs
+	Checksum     string
+	// ChecksumPartSizeBytes is set when Checksum is a multipart object's
+	// composite: the size of every part but the last. Zero otherwise.
+	ChecksumPartSizeBytes int64
+	Sequencer             string
+	Metadata              map[string]string
+	Tags                  map[string]string
+	ExternalRef           string
+	ResourceVersion       int64
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	CommittedAt           *time.Time
+	TerminatedAt          *time.Time
+	PresignExpiresAt      *time.Time
 
 	// Lock is the object-lock state of the current version (ADR-0013).
 	// Populated on the single-object reads — GetObject, LookupObject — and

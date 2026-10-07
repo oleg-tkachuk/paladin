@@ -189,6 +189,13 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 // have called S3 — so the trigger records the obligation and
 // MultipartAbortDrainer discharges it. Without the flag this path would file a
 // debt against an upload it has just aborted.
+// RecordCompositeChecksum writes a PENDING object's composite checksum and
+// its part size.
+func (r *MultipartRepo) RecordCompositeChecksum(ctx context.Context, objectID uuid.UUID, composite string, partSizeBytes int64) error {
+	_, err := r.q.RecordCompositeChecksum(ctx, &composite, &partSizeBytes, pgUUID(objectID))
+	return err
+}
+
 func (r *MultipartRepo) DeleteSession(ctx context.Context, uploadID string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {

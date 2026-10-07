@@ -4,9 +4,9 @@
 -- name: InsertObjectVersion :exec
 INSERT INTO object_versions (
     id, object_id, is_delete_marker, storage_path,
-    size_bytes, etag, checksum_algorithm, checksum,
+    size_bytes, etag, checksum_algorithm, checksum, checksum_part_size_bytes,
     content_type, metadata, tags
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
 
 -- name: SetObjectRetention :one
 -- Applies or extends a retention window on a version (ADR-0013).

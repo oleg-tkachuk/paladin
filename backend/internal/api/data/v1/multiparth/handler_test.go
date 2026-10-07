@@ -34,6 +34,14 @@ type fakeRepo struct {
 	// object is what Object reads back; objectErr fails the read.
 	object    objecth.Object
 	objectErr error
+	// recorded is what RecordCompositeChecksum was last given; recordErr
+	// fails it.
+	recorded struct {
+		objectID      uuid.UUID
+		composite     string
+		partSizeBytes int64
+	}
+	recordErr error
 	// constraints are the bucket constraints LookupBucketMeta reports.
 	constraints uploadpolicy.BucketConstraints
 
@@ -90,6 +98,11 @@ func (f *fakeRepo) DeleteSession(ctx context.Context, uploadID string) error {
 
 func (f *fakeRepo) Object(context.Context, uuid.UUID, uuid.UUID) (objecth.Object, error) {
 	return f.object, f.objectErr
+}
+
+func (f *fakeRepo) RecordCompositeChecksum(_ context.Context, objectID uuid.UUID, composite string, partSizeBytes int64) error {
+	f.recorded.objectID, f.recorded.composite, f.recorded.partSizeBytes = objectID, composite, partSizeBytes
+	return f.recordErr
 }
 
 func (f *fakeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error) {

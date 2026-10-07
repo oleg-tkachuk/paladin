@@ -101,12 +101,14 @@ class Object(_message.Message):
     def __init__(self, name: _Optional[str] = ..., object_id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., collection: _Optional[str] = ..., key: _Optional[str] = ..., state: _Optional[_Union[ObjectState, str]] = ..., content_type: _Optional[str] = ..., size_bytes: _Optional[int] = ..., etag: _Optional[str] = ..., checksum: _Optional[_Union[ChecksumDigest, _Mapping]] = ..., sequencer: _Optional[str] = ..., metadata: _Optional[_Mapping[str, str]] = ..., tags: _Optional[_Mapping[str, str]] = ..., external_ref: _Optional[str] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., committed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., terminated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., presign_expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., lock: _Optional[_Union[ObjectLockState, _Mapping]] = ..., placement: _Optional[_Union[PhysicalPlacement, _Mapping]] = ..., taint: _Optional[_Iterable[_Union[TaintSignal, str]]] = ...) -> None: ...
 
 class ChecksumDigest(_message.Message):
-    __slots__ = ("algorithm", "value")
+    __slots__ = ("algorithm", "value", "part_size_bytes")
     ALGORITHM_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
+    PART_SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
     algorithm: str
     value: str
-    def __init__(self, algorithm: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    part_size_bytes: int
+    def __init__(self, algorithm: _Optional[str] = ..., value: _Optional[str] = ..., part_size_bytes: _Optional[int] = ...) -> None: ...
 
 class ObjectLockState(_message.Message):
     __slots__ = ("mode", "retain_until", "legal_hold")

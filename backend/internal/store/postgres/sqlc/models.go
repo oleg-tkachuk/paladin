@@ -593,28 +593,29 @@ type OauthClient struct {
 }
 
 type Object struct {
-	ID                pgtype.UUID        `json:"id"`
-	TenantID          pgtype.UUID        `json:"tenant_id"`
-	CollectionID      pgtype.UUID        `json:"collection_id"`
-	Path              string             `json:"path"`
-	State             ObjectState        `json:"state"`
-	ContentType       string             `json:"content_type"`
-	SizeBytes         *int64             `json:"size_bytes"`
-	Etag              *string            `json:"etag"`
-	ChecksumAlgorithm int16              `json:"checksum_algorithm"`
-	Checksum          *string            `json:"checksum"`
-	Sequencer         *string            `json:"sequencer"`
-	Metadata          []byte             `json:"metadata"`
-	Tags              []byte             `json:"tags"`
-	ExternalRef       *string            `json:"external_ref"`
-	CurrentVersionID  pgtype.UUID        `json:"current_version_id"`
-	ResourceVersion   int64              `json:"resource_version"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	CommittedAt       pgtype.Timestamptz `json:"committed_at"`
-	TerminatedAt      pgtype.Timestamptz `json:"terminated_at"`
-	PresignExpiresAt  pgtype.Timestamptz `json:"presign_expires_at"`
-	Taint             []string           `json:"taint"`
+	ID                    pgtype.UUID        `json:"id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	CollectionID          pgtype.UUID        `json:"collection_id"`
+	Path                  string             `json:"path"`
+	State                 ObjectState        `json:"state"`
+	ContentType           string             `json:"content_type"`
+	SizeBytes             *int64             `json:"size_bytes"`
+	Etag                  *string            `json:"etag"`
+	ChecksumAlgorithm     int16              `json:"checksum_algorithm"`
+	Checksum              *string            `json:"checksum"`
+	Sequencer             *string            `json:"sequencer"`
+	Metadata              []byte             `json:"metadata"`
+	Tags                  []byte             `json:"tags"`
+	ExternalRef           *string            `json:"external_ref"`
+	CurrentVersionID      pgtype.UUID        `json:"current_version_id"`
+	ResourceVersion       int64              `json:"resource_version"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	CommittedAt           pgtype.Timestamptz `json:"committed_at"`
+	TerminatedAt          pgtype.Timestamptz `json:"terminated_at"`
+	PresignExpiresAt      pgtype.Timestamptz `json:"presign_expires_at"`
+	Taint                 []string           `json:"taint"`
+	ChecksumPartSizeBytes *int64             `json:"checksum_part_size_bytes"`
 }
 
 type ObjectLock struct {
@@ -641,19 +642,20 @@ type ObjectTag struct {
 }
 
 type ObjectVersion struct {
-	ID                pgtype.UUID        `json:"id"`
-	TenantID          pgtype.UUID        `json:"tenant_id"`
-	ObjectID          pgtype.UUID        `json:"object_id"`
-	IsDeleteMarker    bool               `json:"is_delete_marker"`
-	StoragePath       string             `json:"storage_path"`
-	SizeBytes         *int64             `json:"size_bytes"`
-	Etag              *string            `json:"etag"`
-	ChecksumAlgorithm int16              `json:"checksum_algorithm"`
-	Checksum          *string            `json:"checksum"`
-	ContentType       *string            `json:"content_type"`
-	Metadata          []byte             `json:"metadata"`
-	Tags              []byte             `json:"tags"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	ID                    pgtype.UUID        `json:"id"`
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	ObjectID              pgtype.UUID        `json:"object_id"`
+	IsDeleteMarker        bool               `json:"is_delete_marker"`
+	StoragePath           string             `json:"storage_path"`
+	SizeBytes             *int64             `json:"size_bytes"`
+	Etag                  *string            `json:"etag"`
+	ChecksumAlgorithm     int16              `json:"checksum_algorithm"`
+	Checksum              *string            `json:"checksum"`
+	ContentType           *string            `json:"content_type"`
+	Metadata              []byte             `json:"metadata"`
+	Tags                  []byte             `json:"tags"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	ChecksumPartSizeBytes *int64             `json:"checksum_part_size_bytes"`
 }
 
 type Operation struct {
