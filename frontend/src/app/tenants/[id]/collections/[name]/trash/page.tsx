@@ -53,10 +53,12 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 
 import { useCollection } from "../collection-context";
+import { useTenantChangesBlocked } from "../../../tenant-context";
 import { formatDateTime } from "@/lib/format/locale";
 
 export default function CollectionTrashPage() {
   const { collection: collectionResource } = useCollection();
+  const changesBlocked = useTenantChangesBlocked();
   const collection = collectionResource.collection;
 
   const {
@@ -321,7 +323,8 @@ export default function CollectionTrashPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            disabled={!!busyId}
+                            disabled={Boolean(changesBlocked) || !!busyId}
+                            title={changesBlocked ?? undefined}
                             onClick={() => handleRestore(obj.objectId)}
                           >
                             <ArrowUturnLeftIcon className="size-3.5" />
@@ -338,7 +341,8 @@ export default function CollectionTrashPage() {
                             size="icon"
                             variant="ghost"
                             className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            disabled={!!busyId}
+                            disabled={Boolean(changesBlocked) || !!busyId}
+                            title={changesBlocked ?? undefined}
                             onClick={() => setConfirmDelete(obj.objectId)}
                             aria-label={`Purge ${obj.key} from storage`}
                           >
@@ -368,7 +372,8 @@ export default function CollectionTrashPage() {
             <Button
               size="sm"
               variant="outline"
-              disabled={bulkBusy}
+              disabled={Boolean(changesBlocked) || bulkBusy}
+              title={changesBlocked ?? undefined}
               onClick={handleBulkRestore}
             >
               <ArrowUturnLeftIcon className="size-4" />
@@ -377,7 +382,8 @@ export default function CollectionTrashPage() {
             <Button
               size="sm"
               variant="destructive"
-              disabled={bulkBusy}
+              disabled={Boolean(changesBlocked) || bulkBusy}
+              title={changesBlocked ?? undefined}
               onClick={() => setConfirmBulkDelete(true)}
             >
               <TrashIcon className="size-4" />

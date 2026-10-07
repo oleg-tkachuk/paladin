@@ -3,7 +3,10 @@ import { render, screen } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
-import { TenantProvider } from "@/app/tenants/[id]/tenant-context";
+import {
+  TenantProvider,
+  TRASHED_TENANT_BLOCK,
+} from "@/app/tenants/[id]/tenant-context";
 
 const h = vi.hoisted(() => ({
   object: null as Record<string, unknown> | null,
@@ -119,5 +122,23 @@ describe("ObjectInspector on a public object", () => {
     renderInTenant();
     expect(screen.queryByText("Public URL")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Trash" })).toBeInTheDocument();
+  });
+});
+
+describe("ObjectInspector on a trashed tenant", () => {
+  it("holds the trash and keeps the details open", () => {
+    render(
+      <TenantProvider value={{ ...TENANT, trashed: true }}>
+        <ObjectInspector
+          collection="report.pdf"
+          parentCollection="docs"
+          onClose={() => {}}
+        />
+      </TenantProvider>,
+    );
+    const trash = screen.getByRole("button", { name: "Trash" });
+    expect(trash).toBeDisabled();
+    expect(trash).toHaveAttribute("title", TRASHED_TENANT_BLOCK);
+    expect(screen.getByRole("button", { name: "Full Details" })).toBeEnabled();
   });
 });
