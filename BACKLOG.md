@@ -546,16 +546,6 @@ finding moving from "packages you import" to "your code is affected".
   field set for callers holding it, and tests for both sides of the gate.
 - **Blockers:** deciding who counts as privileged on the data plane.
 
-### Console `/users`: no user detail page, no scope grants
-
-- **Status:** Deferred
-- **Reason:** `/users` lists users across tenants, but there is no per-user
-  page and `UserService.GrantScopes` / `RevokeScopes` are not reachable from
-  the console; an operator changes scopes through the API or an SDK.
-- **Definition of Done:** a user detail page showing roles and scopes, with
-  grant and revoke actions, and page tests.
-- **Blockers:** none.
-
 ### `ResetPassword` — self-service email delivery
 
 - **Status:** Won't-do (2026-06-30) — out of scope by product direction.
