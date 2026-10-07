@@ -137,6 +137,8 @@ WHERE o.state = 'DELETED'
   AND o.terminated_at < $1
   AND NOT COALESCE(l.legal_hold, false)
   AND NOT (l.retain_until IS NOT NULL AND l.retain_until > now())
+  -- A tenant in the trash is frozen: its trash is not emptied meanwhile.
+  AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id = o.tenant_id AND t.deleted_at IS NOT NULL)
 ORDER BY o.terminated_at
 LIMIT sqlc.arg('batch_size');
 
@@ -157,7 +159,11 @@ WHERE objects.id = $1
   AND NOT EXISTS (
       SELECT 1 FROM object_locks l
        WHERE l.version_id = objects.current_version_id
-         AND (l.legal_hold OR l.retain_until > now()));
+         AND (l.legal_hold OR l.retain_until > now()))
+  -- The tenant may have gone to the trash since the row was listed.
+  AND NOT EXISTS (
+      SELECT 1 FROM tenants t
+       WHERE t.id = objects.tenant_id AND t.deleted_at IS NOT NULL);
 
 -- name: CheckLiveCollision :one
 -- True when a non-DELETED row already exists at (tenant, collection_id, path).

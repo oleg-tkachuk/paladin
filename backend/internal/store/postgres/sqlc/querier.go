@@ -379,6 +379,7 @@ type Querier interface {
 	ListBucketsWithReplication(ctx context.Context) ([]ListBucketsWithReplicationRow, error)
 	// Lists every (tenant_id, collection name) bound to a given bucket. Used by
 	// lifecycle + replication workers to scope their object scans.
+	// A tenant in the trash is frozen: its rows wait for a restore or a purge.
 	ListCollectionBindingsForBucket(ctx context.Context, name string, name_2 string) ([]ListCollectionBindingsForBucketRow, error)
 	// Every registered collection name for the tenant. Backs the in-process
 	// longest-prefix cache (eventingest.CachingLookup) so ResolveCollectionPrefix is

@@ -43,6 +43,14 @@ tree with itself and passes without checking anything.
 
 
 
+
+## Unreleased — background jobs pass a trashed tenant by
+
+- Lifecycle expiry, replication, the object-trash hard-deleter, the pending
+  upload reconciler and storage-event promotion, storage-layout migrations,
+  batch operations and event delivery skip a tenant in the trash, and resume
+  on restore. Its queued operations stay `PENDING` and its events stay
+  pending meanwhile; a purge removes both with the tenant.
 ## Unreleased — a tenant in the trash is frozen
 
 - Every change to a tenant in the trash is refused — `FAILED_PRECONDITION`,
