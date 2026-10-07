@@ -1,7 +1,7 @@
 package capabilityh
 
 import (
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/capability"

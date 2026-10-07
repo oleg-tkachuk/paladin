@@ -58,7 +58,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
@@ -223,15 +222,15 @@ func login(ctx context.Context, httpc *http.Client, iamURL, user, password, audi
 		return "", err
 	}
 	authClient := iam.Auth
-	resp, err := authClient.Login(ctx, connect.NewRequest(&iamv1.LoginRequest{
+	resp, err := authClient.Login(ctx, &iamv1.LoginRequest{
 		Subject:           user,
 		Password:          password,
 		RequestedAudience: audience,
-	}))
+	})
 	if err != nil {
 		return "", fmt.Errorf("login: %w", err)
 	}
-	tok := resp.Msg.GetTokens().GetAccessToken()
+	tok := resp.GetTokens().GetAccessToken()
 	if tok == "" {
 		return "", errors.New("login: empty access token")
 	}
@@ -400,14 +399,14 @@ func seedDemo(ctx context.Context, c *mcp.Clients) error {
 	// instead — bootstrap admin sees only their tenant unless they're
 	// platform.admin (in which case the first hit is fine because we
 	// only need ANY tenant scoped to the caller for RLS).
-	resp, err := c.Tenant.ListTenants(ctx, connect.NewRequest(&adminv1.ListTenantsRequest{}))
+	resp, err := c.Tenant.ListTenants(ctx, &adminv1.ListTenantsRequest{})
 	if err != nil {
 		return fmt.Errorf("list tenants: %w", err)
 	}
-	if len(resp.Msg.GetTenants()) == 0 {
+	if len(resp.GetTenants()) == 0 {
 		return errors.New("no tenants visible — bootstrap admin should at least see the Platform tenant")
 	}
-	tenant := resp.Msg.GetTenants()[0]
+	tenant := resp.GetTenants()[0]
 	fmt.Printf("tenant: %s (%s)\n", tenant.GetDisplayName(), tenant.GetTenantId())
 
 	subscriptions := []demoSubscription{
@@ -458,25 +457,25 @@ func teardownDemo(ctx context.Context, c *mcp.Clients) error {
 	// delete-by-display-name because EventSubscription has no
 	// display name in v1 — discriminating by sink config is what
 	// the seedDemo idempotency check uses too.
-	tenants, err := c.Tenant.ListTenants(ctx, connect.NewRequest(&adminv1.ListTenantsRequest{}))
+	tenants, err := c.Tenant.ListTenants(ctx, &adminv1.ListTenantsRequest{})
 	if err != nil {
 		return fmt.Errorf("list tenants: %w", err)
 	}
 	deleted := 0
-	for _, t := range tenants.Msg.GetTenants() {
+	for _, t := range tenants.GetTenants() {
 		parent := "tenants/" + t.GetTenantId()
 		listResp, err := c.EventSub.ListSubscriptions(ctx,
-			connect.NewRequest(&adminv1.ListSubscriptionsRequest{Parent: parent}),
+			&adminv1.ListSubscriptionsRequest{Parent: parent},
 		)
 		if err != nil {
 			return fmt.Errorf("list subs %s: %w", t.GetTenantId(), err)
 		}
-		for _, sub := range listResp.Msg.GetSubscriptions() {
+		for _, sub := range listResp.GetSubscriptions() {
 			if !isFixtureSink(sub.GetSink()) {
 				continue
 			}
 			if _, err := c.EventSub.DeleteSubscription(ctx,
-				connect.NewRequest(&adminv1.DeleteSubscriptionRequest{Name: sub.GetName()}),
+				&adminv1.DeleteSubscriptionRequest{Name: sub.GetName()},
 			); err != nil {
 				return fmt.Errorf("delete sub %s: %w", sub.GetName(), err)
 			}
@@ -529,19 +528,19 @@ func seedObjects(ctx context.Context, dc *mcp.Clients, parent, flavour string, c
 // completion and relies on the ingest pod).
 func uploadFixtureObject(ctx context.Context, dc *mcp.Clients, parent, key string) error {
 	payload := []byte("paladin-fixture " + key + "\n")
-	uresp, err := dc.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+	uresp, err := dc.Object.UploadObject(ctx, &datav1.UploadObjectRequest{
 		Parent:            parent,
 		Key:               key,
 		ContentType:       "text/plain",
 		SizeHintBytes:     int64(len(payload)),
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
 		ChecksumValue:     sha256Base64(payload),
-	}))
+	})
 	if err != nil {
 		return fmt.Errorf("UploadObject: %w", err)
 	}
-	obj := uresp.Msg.GetObject()
-	u := uresp.Msg.GetUploadUrl()
+	obj := uresp.GetObject()
+	u := uresp.GetUploadUrl()
 	req, err := http.NewRequestWithContext(ctx, u.GetMethod(), u.GetUrl(), bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("PUT build: %w", err)
@@ -558,10 +557,10 @@ func uploadFixtureObject(ctx context.Context, dc *mcp.Clients, parent, key strin
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("PUT %d: %s", resp.StatusCode, string(body))
 	}
-	if _, err := dc.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{
+	if _, err := dc.Object.CompleteObject(ctx, &datav1.CompleteObjectRequest{
 		Name: obj.GetName(),
 		Etag: strings.Trim(resp.Header.Get("ETag"), `"`),
-	})); err != nil {
+	}); err != nil {
 		return fmt.Errorf("CompleteObject: %w", err)
 	}
 	return nil
@@ -580,19 +579,19 @@ func listFixtureObjectNames(ctx context.Context, dc *mcp.Clients, parent, flavou
 	var names []string
 	token := ""
 	for {
-		resp, err := dc.Object.ListObjects(ctx, connect.NewRequest(&datav1.ListObjectsRequest{
+		resp, err := dc.Object.ListObjects(ctx, &datav1.ListObjectsRequest{
 			Parent: parent,
 			Page:   &commonv1.PageRequest{PageSize: 1000, PageToken: token},
-		}))
+		})
 		if err != nil {
 			return nil, fmt.Errorf("ListObjects: %w", err)
 		}
-		for _, o := range resp.Msg.GetObjects() {
+		for _, o := range resp.GetObjects() {
 			if isFixtureCollection(flavour, o.GetKey()) {
 				names = append(names, o.GetName())
 			}
 		}
-		token = resp.Msg.GetPage().GetNextPageToken()
+		token = resp.GetPage().GetNextPageToken()
 		if token == "" {
 			break
 		}
@@ -609,10 +608,10 @@ func teardownObjects(ctx context.Context, dc *mcp.Clients, parent, flavour strin
 		return err
 	}
 	for _, name := range names {
-		if _, err := dc.Object.DeleteObject(ctx, connect.NewRequest(&datav1.DeleteObjectRequest{
+		if _, err := dc.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{
 			Name:      name,
 			Permanent: true, // hard-delete so /objects is actually cleared
-		})); err != nil {
+		}); err != nil {
 			return fmt.Errorf("delete %s: %w", name, err)
 		}
 	}
@@ -653,18 +652,18 @@ type demoSubscription struct {
 func ensureSubscription(ctx context.Context, c *mcp.Clients, tenantID string, s demoSubscription) error {
 	parent := "tenants/" + tenantID
 	listResp, err := c.EventSub.ListSubscriptions(ctx,
-		connect.NewRequest(&adminv1.ListSubscriptionsRequest{Parent: parent}),
+		&adminv1.ListSubscriptionsRequest{Parent: parent},
 	)
 	if err != nil {
 		return fmt.Errorf("list: %w", err)
 	}
-	for _, sub := range listResp.Msg.GetSubscriptions() {
+	for _, sub := range listResp.GetSubscriptions() {
 		if subSinkMatches(sub.GetSink(), s.sink) {
 			return nil // already present, nothing to do
 		}
 	}
 	_, err = c.EventSub.CreateSubscription(ctx,
-		connect.NewRequest(&adminv1.CreateSubscriptionRequest{
+		&adminv1.CreateSubscriptionRequest{
 			Parent: parent,
 			Subscription: &adminv1.EventSubscription{
 				TenantId: tenantID,
@@ -672,7 +671,7 @@ func ensureSubscription(ctx context.Context, c *mcp.Clients, tenantID string, s 
 				Sink:     s.sink,
 				Disabled: s.disabled,
 			},
-		}),
+		},
 	)
 	if err != nil {
 		return fmt.Errorf("create: %w", err)
@@ -761,7 +760,7 @@ func runSmokeUpload(cmd *cobra.Command) error {
 	}
 	payload := []byte(fmt.Sprintf("smoke-promote-payload at %s\n", time.Now().UTC().Format(time.RFC3339Nano)))
 
-	uresp, err := dataClients.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+	uresp, err := dataClients.Object.UploadObject(ctx, &datav1.UploadObjectRequest{
 		Parent:        parent,
 		Key:           storageKey,
 		ContentType:   "text/plain",
@@ -770,12 +769,12 @@ func runSmokeUpload(cmd *cobra.Command) error {
 		// body.
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
 		ChecksumValue:     sha256Base64(payload),
-	}))
+	})
 	if err != nil {
 		return fmt.Errorf("UploadObject: %w", err)
 	}
-	obj := uresp.Msg.GetObject()
-	url := uresp.Msg.GetUploadUrl()
+	obj := uresp.GetObject()
+	url := uresp.GetUploadUrl()
 	fmt.Printf("UploadObject: object_id=%s state=%s key=%s\n",
 		obj.GetObjectId(), obj.GetState(), obj.GetKey())
 	fmt.Printf("Presigned PUT: %s\n", url.GetUrl())

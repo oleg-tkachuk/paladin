@@ -2,10 +2,9 @@ package storagebootstraph
 
 import (
 	"context"
-	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -219,7 +218,7 @@ func TestEnsureTenantStorage_NoPrincipal(t *testing.T) {
 // A bucket-ensure failure is surfaced (and object-keys are not touched).
 func TestEnsureTenantStorage_BucketEnsureError(t *testing.T) {
 	caller := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000a5")
-	buckets := &fakeBuckets{err: connect.NewError(connect.CodeUnavailable, errors.New("provisioning not wired"))}
+	buckets := &fakeBuckets{err: connect.NewError(connect.CodeUnavailable, "provisioning not wired")}
 	keys := &fakeCollections{createdKeys: map[string]bool{}}
 	h := newHandler(&recordingAuthorizer{allow: true}, &fakeBackends{enabled: true}, buckets, keys)
 

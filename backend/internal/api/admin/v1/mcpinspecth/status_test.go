@@ -6,8 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	mcppkg "github.com/oleg-tkachuk/paladin/backend/internal/mcp"
@@ -23,14 +21,14 @@ func TestGetBridgeStatus_UnreachableBridgeIsReported(t *testing.T) {
 	h := newTestHandler(t, "http://127.0.0.1:1/sessions") // nothing listens on port 1
 
 	res, err := h.GetBridgeStatus(ctxAs(apiutil.RolePlatformAdmin),
-		connect.NewRequest(&adminv1.GetBridgeStatusRequest{}))
+		&adminv1.GetBridgeStatusRequest{})
 	if err != nil {
 		t.Fatalf("GetBridgeStatus returned an error instead of a verdict: %v", err)
 	}
-	if res.Msg.GetReachable() {
+	if res.GetReachable() {
 		t.Error("reachable=true for a bridge that is not listening")
 	}
-	if res.Msg.GetError() == "" {
+	if res.GetError() == "" {
 		t.Error("no reason given — the reason is what the operator came for")
 	}
 }
@@ -41,14 +39,14 @@ func TestGetBridgeStatus_UnconfiguredSaysSo(t *testing.T) {
 	h := newTestHandler(t, "")
 
 	res, err := h.GetBridgeStatus(ctxAs(apiutil.RolePlatformAdmin),
-		connect.NewRequest(&adminv1.GetBridgeStatusRequest{}))
+		&adminv1.GetBridgeStatusRequest{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.Msg.GetReachable() {
+	if res.GetReachable() {
 		t.Error("reachable=true with no MCP server configured")
 	}
-	if got := res.Msg.GetError(); got == "" {
+	if got := res.GetError(); got == "" {
 		t.Error("unconfigured bridge reported no reason")
 	}
 }
@@ -73,21 +71,21 @@ func TestGetBridgeStatus_PassesThroughUpstreamHealth(t *testing.T) {
 
 	h := newTestHandler(t, srv.URL+"/sessions")
 	res, err := h.GetBridgeStatus(ctxAs(apiutil.RolePlatformAdmin),
-		connect.NewRequest(&adminv1.GetBridgeStatusRequest{}))
+		&adminv1.GetBridgeStatusRequest{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !res.Msg.GetReachable() {
-		t.Fatalf("reachable=false for a bridge that answered: %s", res.Msg.GetError())
+	if !res.GetReachable() {
+		t.Fatalf("reachable=false for a bridge that answered: %s", res.GetError())
 	}
-	if res.Msg.GetSessions() != 3 {
-		t.Errorf("sessions = %d, want 3", res.Msg.GetSessions())
+	if res.GetSessions() != 3 {
+		t.Errorf("sessions = %d, want 3", res.GetSessions())
 	}
-	if len(res.Msg.GetUpstreams()) != 2 {
-		t.Fatalf("upstreams = %d, want 2", len(res.Msg.GetUpstreams()))
+	if len(res.GetUpstreams()) != 2 {
+		t.Fatalf("upstreams = %d, want 2", len(res.GetUpstreams()))
 	}
 	var data *adminv1.MCPUpstreamHealth
-	for _, u := range res.Msg.GetUpstreams() {
+	for _, u := range res.GetUpstreams() {
 		if u.GetName() == "data" {
 			data = u
 		}

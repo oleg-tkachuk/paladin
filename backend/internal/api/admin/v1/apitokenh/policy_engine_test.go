@@ -3,7 +3,7 @@ package apitokenh
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
@@ -19,9 +19,9 @@ func TestCreate_PlatformAdminThroughTheRealEngine(t *testing.T) {
 	h := newHandler(iss, &fakeStore{}, cedartest.Engine(""))
 	target := uuid.New()
 
-	if _, err := h.Create(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+	if _, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
 		Parent: "tenants/" + target.String(), DisplayName: "acme-service",
-	})); err != nil {
+	}); err != nil {
 		t.Fatalf("Create as platform.admin: %v", err)
 	}
 	if iss.req.TenantID != target {
@@ -41,12 +41,12 @@ func TestTokenActions_CapabilityIssuerIsRefused(t *testing.T) {
 	h := newHandler(iss, store, cedartest.Engine(""))
 	tokenName := "tenants/" + own.String() + "/apiTokens/" + uuid.NewString()
 
-	_, createErr := h.Create(ctx, connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+	_, createErr := h.Create(ctx, &adminv1.APITokenServiceCreateRequest{
 		Parent: "tenants/" + own.String(), DisplayName: "escalation",
-	}))
-	_, revokeErr := h.Revoke(ctx, connect.NewRequest(&adminv1.APITokenServiceRevokeRequest{Name: tokenName}))
-	_, listErr := h.List(ctx, connect.NewRequest(&adminv1.APITokenServiceListRequest{Parent: "tenants/" + own.String()}))
-	_, usageErr := h.GetUsage(ctx, connect.NewRequest(&adminv1.APITokenServiceGetUsageRequest{Name: tokenName}))
+	})
+	_, revokeErr := h.Revoke(ctx, &adminv1.APITokenServiceRevokeRequest{Name: tokenName})
+	_, listErr := h.List(ctx, &adminv1.APITokenServiceListRequest{Parent: "tenants/" + own.String()})
+	_, usageErr := h.GetUsage(ctx, &adminv1.APITokenServiceGetUsageRequest{Name: tokenName})
 
 	for call, err := range map[string]error{
 		"Create": createErr, "Revoke": revokeErr, "List": listErr, "GetUsage": usageErr,

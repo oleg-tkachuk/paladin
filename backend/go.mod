@@ -9,8 +9,8 @@ require (
 	connectrpc.com/connect v1.21.0
 	connectrpc.com/grpchealth v1.5.0
 	connectrpc.com/grpcreflect v1.3.1
-	connectrpc.com/otelconnect v0.10.0
-	connectrpc.com/validate v0.7.0
+	connectrpc.com/otelconnect v0.11.0
+	connectrpc.com/validate v0.8.0-rc.1
 	cuelang.org/go v0.17.1
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/config v1.33.7
@@ -80,6 +80,9 @@ require (
 
 require (
 	cel.dev/expr v0.25.3 // indirect
+	connectrpc.com/connect/v2 v2.0.0 // indirect
+	connectrpc.com/grpchealth/v2 v2.0.0-rc.1 // indirect
+	connectrpc.com/grpcreflect/v2 v2.0.0-rc.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4 // indirect
@@ -261,8 +264,3 @@ require (
 replace github.com/oleg-tkachuk/paladin/capability => ../capability
 
 replace github.com/oleg-tkachuk/paladin/sdk/go => ../sdk/go
-
-// otelconnect v0.11 requires connect-go v2; v0.10 is the last release for
-// connect-go v1. Excluded so `go get -u` stops at v0.10 until the module
-// moves to connect-go v2 (BACKLOG: "Migrate to connect-go v2").
-exclude connectrpc.com/otelconnect v0.11.0

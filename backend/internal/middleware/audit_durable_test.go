@@ -5,10 +5,13 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 // recordingWriter captures Insert calls so the test can assert the audit
@@ -35,29 +38,40 @@ func (w *recordingWriter) InsertWithOutbox(ctx context.Context, e admindomain.Au
 	return nil
 }
 
-type auditMsg struct {
-	Name string `json:"name"`
+// auditedSpec is a mutation's Spec, which the audit interceptor records.
+var auditedSpec = connect.Spec{
+	StreamType: connect.StreamTypeUnary,
+	Procedure:  paladiniamv1connect.UserSettingsServiceUpdateMineProcedure,
+}
+
+// newAuditedRequest and newAuditedResponse are the mutation's messages.
+func newAuditedRequest() proto.Message  { return &iamv1.UpdateMineRequest{Timezone: "Europe/Kyiv"} }
+func newAuditedResponse() proto.Message { return &iamv1.UserSettings{Timezone: "Europe/Kyiv"} }
+
+// newAudit is the interceptor AuditWithMirror(w, "test", false, nil) builds,
+// held as itself so a test reaches its whole-call function.
+func newAudit(w AuditWriter) *auditInterceptor {
+	return &auditInterceptor{w: w, audience: "test"}
 }
 
 // TestAuditWrite_SynchronousDurable: the interceptor must Insert the audit
 // row before the wrapped handler call returns — there is no background
 // buffer to lose on a crash. We assert the writer saw exactly one Insert
-// by the time WrapUnary's func returns.
+// by the time the interceptor's whole-call func returns.
 func TestAuditWrite_SynchronousDurable(t *testing.T) {
 	t.Parallel()
 	w := &recordingWriter{}
-	ic := AuditWithMirror(w, "test", false, nil).(*auditInterceptor)
+	ic := newAudit(w)
 
-	next := func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	next := func(context.Context, connect.Spec, proto.Message) (proto.Message, error) {
 		// Handler has not returned yet → audit must not have run.
 		if w.calls != 0 {
 			t.Fatalf("audit wrote before handler returned: %d", w.calls)
 		}
-		return connect.NewResponse(&auditMsg{Name: "ok"}), nil
+		return newAuditedResponse(), nil
 	}
 
-	req := connect.NewRequest(&auditMsg{Name: "create"})
-	_, err := ic.WrapUnary(next)(context.Background(), req)
+	_, err := ic.unary(next)(context.Background(), auditedSpec, newAuditedRequest())
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -73,13 +87,12 @@ func TestAuditWrite_SynchronousDurable(t *testing.T) {
 func TestAuditWrite_InsertErrorDoesNotFailRPC(t *testing.T) {
 	t.Parallel()
 	w := &recordingWriter{err: errors.New("db down")}
-	ic := AuditWithMirror(w, "test", false, nil).(*auditInterceptor)
+	ic := newAudit(w)
 
-	next := func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-		return connect.NewResponse(&auditMsg{Name: "ok"}), nil
+	next := func(context.Context, connect.Spec, proto.Message) (proto.Message, error) {
+		return newAuditedResponse(), nil
 	}
-	req := connect.NewRequest(&auditMsg{Name: "create"})
-	resp, err := ic.WrapUnary(next)(context.Background(), req)
+	resp, err := ic.unary(next)(context.Background(), auditedSpec, newAuditedRequest())
 	if err != nil {
 		t.Fatalf("audit Insert error must not fail the RPC, got %v", err)
 	}

@@ -4,18 +4,21 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 // The audit row takes its resource from the request's `name` or `parent`
@@ -139,12 +142,12 @@ func TestAuditRowNamesTheResourceTheHandlerStashed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			w := &recordingAuditWriter{}
 			a := &auditInterceptor{w: w, audience: "paladin-admin"}
-			next := func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+			next := func(ctx context.Context, _ connect.Spec, _ proto.Message) (proto.Message, error) {
 				apiutil.StashResource(ctx, tc.stash)
 				return nil, nil
 			}
-			req := connect.NewRequest(&iamv1.GetUserRequest{Name: "tenants/from-the-request"})
-			if _, err := a.WrapUnary(next)(context.Background(), req); err != nil {
+			req := &iamv1.GetUserRequest{Name: "tenants/from-the-request"}
+			if _, err := a.unary(next)(context.Background(), auditedSpec, req); err != nil {
 				t.Fatalf("call: %v", err)
 			}
 			if len(w.rows) != 1 {
@@ -176,9 +179,11 @@ func TestAuditActingElsewhere(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			w := &recordingAuditWriter{}
-			call := AuditActingElsewhere(w, auth.AudienceData).WrapUnary(
-				func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) { return nil, nil })
-			if _, err := call(tc.ctx, connect.NewRequest(&adminv1.ListAuditLogRequest{})); err != nil {
+			client := paladiniamv1connect.NewUserSettingsServiceClient(unarytest.Client(func(s *connect.Server) {
+				paladiniamv1connect.RegisterUserSettingsServiceHandler(s, &stubSettings{})
+			}, AuditActingElsewhere(w, auth.AudienceData)))
+			// A mutation, so that only where it acts decides whether it is recorded.
+			if _, err := client.UpdateMine(tc.ctx, &iamv1.UpdateMineRequest{}); err != nil {
 				t.Fatalf("call: %v", err)
 			}
 			if len(w.rows) != tc.rows {

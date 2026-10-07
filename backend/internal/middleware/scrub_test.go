@@ -3,14 +3,16 @@ package middleware
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // leak is what a store failure carried to the caller before: the driver's
@@ -31,7 +33,7 @@ func TestScrubKeepsTheCodeAndDropsTheMessage(t *testing.T) {
 		{connect.CodeUnavailable, false},
 	} {
 		t.Run(tc.code.String(), func(t *testing.T) {
-			got := scrub(connect.NewError(tc.code, errors.New(leak)), id)
+			got := scrub(connect.NewError(tc.code, leak), id)
 			if connect.CodeOf(got) != tc.code {
 				t.Fatalf("code = %v, want %v", connect.CodeOf(got), tc.code)
 			}
@@ -45,20 +47,21 @@ func TestScrubKeepsTheCodeAndDropsTheMessage(t *testing.T) {
 	}
 }
 
-func TestScrubKeepsDetailsAndMetadata(t *testing.T) {
-	in := connect.NewError(connect.CodeInternal, errors.New(leak))
-	detail, err := connect.NewErrorDetail(&errdetails.ErrorInfo{Reason: "SOME_REASON", Domain: "paladin"})
+// Details are kept on the error. Metadata — Retry-After and the like — is the
+// response's headers, on the call's CallInfo rather than the error, and is
+// asserted through a handler below.
+func TestScrubKeepsDetails(t *testing.T) {
+	detail, err := connectproto.NewErrorDetail(&errdetails.ErrorInfo{Reason: "SOME_REASON", Domain: "paladin"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	in.AddDetail(detail)
-	in.Meta().Set("Retry-After", "3")
+	in := connect.NewError(connect.CodeInternal, leak).WithDetail(detail)
 	var out *connect.Error
 	if !errors.As(scrub(in, "req-1"), &out) {
 		t.Fatal("not a connect error")
 	}
-	if len(out.Details()) != 1 || out.Meta().Get("Retry-After") != "3" || out.Meta().Get(HeaderRequestID) != "req-1" {
-		t.Errorf("details %d, meta %v", len(out.Details()), out.Meta())
+	if len(out.Details()) != 1 {
+		t.Errorf("details %d, want 1", len(out.Details()))
 	}
 }
 
@@ -79,36 +82,32 @@ func TestScrubAPlainError(t *testing.T) {
 
 // Through a real handler: the interceptor outermost, LogOutcome's place
 // inside it seeing the original, the caller the scrubbed one, and both the
-// same request id — minted when the caller sent none.
+// same request id — minted when the caller sent none. The response headers
+// the handler set reach the caller alongside the id.
 func TestScrubInternalThroughAHandler(t *testing.T) {
+	const retryAfter = "3"
 	var innerErr error
 	var innerID string
-	inner := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			res, err := next(ctx, req)
-			innerErr, innerID = err, req.Header().Get(HeaderRequestID)
-			return res, err
+	inner := connect.ServerInterceptor(func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			err := next(ctx, spec, stream)
+			innerErr, innerID = err, unary.Info(ctx).RequestHeader().Get(HeaderRequestID)
+			return err
 		}
 	})
-	const procedure = "/test.v1.Svc/Fail"
-	mux := http.NewServeMux()
-	mux.Handle(procedure, connect.NewUnaryHandler(procedure,
-		func(context.Context, *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
-			return nil, connect.NewError(connect.CodeInternal, errors.New(leak))
-		},
-		connect.WithInterceptors(ScrubInternal(), inner),
-	))
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	client := connect.NewClient[emptypb.Empty, emptypb.Empty](srv.Client(), srv.URL+procedure)
+	probe := &unarytest.Probe{OnCall: func(ctx context.Context) error {
+		unary.Info(ctx).ResponseHeader().Set(paladin.HeaderRetryAfter, retryAfter)
+		return connect.NewError(connect.CodeInternal, leak)
+	}}
+	interceptors := []connect.ServerInterceptor{ScrubInternal(), inner}
 
 	for name, sent := range map[string]string{"an id the caller sent": "req-from-caller", "no id": ""} {
 		t.Run(name, func(t *testing.T) {
-			req := connect.NewRequest(&emptypb.Empty{})
+			var pairs []string
 			if sent != "" {
-				req.Header().Set(HeaderRequestID, sent)
+				pairs = append(pairs, HeaderRequestID, sent)
 			}
-			_, err := client.CallUnary(context.Background(), req)
+			header, err := unarytest.CallProbe(context.Background(), probe, interceptors, pairs...)
 			if connect.CodeOf(err) != connect.CodeInternal || strings.Contains(err.Error(), "SQLSTATE") {
 				t.Fatalf("caller got %v", err)
 			}
@@ -117,6 +116,12 @@ func TestScrubInternalThroughAHandler(t *testing.T) {
 			}
 			if innerID == "" || (sent != "" && innerID != sent) || !strings.Contains(err.Error(), innerID) {
 				t.Errorf("inner id %q, caller message %q, sent %q", innerID, err.Error(), sent)
+			}
+			if got := header.Get(HeaderRequestID); got != innerID {
+				t.Errorf("%s header = %q, want %q", HeaderRequestID, got, innerID)
+			}
+			if got := header.Get(paladin.HeaderRetryAfter); got != retryAfter {
+				t.Errorf("%s header = %q, want %q — the handler's metadata was lost", paladin.HeaderRetryAfter, got, retryAfter)
 			}
 		})
 	}

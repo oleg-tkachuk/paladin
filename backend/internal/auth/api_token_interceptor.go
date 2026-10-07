@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit"
 )
@@ -74,7 +74,7 @@ func WithAPIToken(ctx context.Context, t *api_token.Token) context.Context {
 // the interceptor calls Allow on every successful verify; on
 // Decision.Allowed=false it returns CodeResourceExhausted with a
 // Retry-After header so well-behaved clients back off.
-func APITokenInterceptor(verifier *api_token.Verifier, audience string) connect.Interceptor {
+func APITokenInterceptor(verifier *api_token.Verifier, audience string) connect.ServerInterceptor {
 	return APITokenInterceptorWithLimiter(verifier, nil, audience)
 }
 
@@ -82,11 +82,11 @@ func APITokenInterceptor(verifier *api_token.Verifier, audience string) connect.
 // Production wires both verifier and limiter from
 // internal/app.APITokenBundle; tests / dev deploys can pass nil
 // limiter and get verify-only semantics.
-func APITokenInterceptorWithLimiter(verifier *api_token.Verifier, limiter ratelimit.Limiter, audience string) connect.Interceptor {
+func APITokenInterceptorWithLimiter(verifier *api_token.Verifier, limiter ratelimit.Limiter, audience string) connect.ServerInterceptor {
 	if verifier == nil {
-		return passthroughInterceptor{}
+		return passthrough
 	}
-	return &apiTokenInterceptor{verifier: verifier, limiter: limiter, audience: audience}
+	return (&apiTokenInterceptor{verifier: verifier, limiter: limiter, audience: audience}).intercept
 }
 
 // APITokenAuthInterceptor is APITokenInterceptorWithLimiter that ALSO establishes an
@@ -103,11 +103,11 @@ func APITokenInterceptorWithLimiter(verifier *api_token.Verifier, limiter rateli
 // RequireAudience passes.
 // Additive: it only sets the principal when the context does not already carry one (a JWT
 // that already authenticated wins).
-func APITokenAuthInterceptor(verifier *api_token.Verifier, limiter ratelimit.Limiter, audience string) connect.Interceptor {
+func APITokenAuthInterceptor(verifier *api_token.Verifier, limiter ratelimit.Limiter, audience string) connect.ServerInterceptor {
 	if verifier == nil {
-		return passthroughInterceptor{}
+		return passthrough
 	}
-	return &apiTokenInterceptor{verifier: verifier, limiter: limiter, audience: audience, establishPrincipal: true}
+	return (&apiTokenInterceptor{verifier: verifier, limiter: limiter, audience: audience, establishPrincipal: true}).intercept
 }
 
 // APITokenRoleAuthInterceptor establishes the principal ONLY for a token that
@@ -122,15 +122,15 @@ func APITokenAuthInterceptor(verifier *api_token.Verifier, limiter ratelimit.Lim
 //
 // A roleless token therefore falls through exactly as before, and the JWT path
 // stays the only way to authenticate one on this plane.
-func APITokenRoleAuthInterceptor(verifier *api_token.Verifier, limiter ratelimit.Limiter, audience string) connect.Interceptor {
+func APITokenRoleAuthInterceptor(verifier *api_token.Verifier, limiter ratelimit.Limiter, audience string) connect.ServerInterceptor {
 	if verifier == nil {
-		return passthroughInterceptor{}
+		return passthrough
 	}
 
-	return &apiTokenInterceptor{
+	return (&apiTokenInterceptor{
 		verifier: verifier, limiter: limiter, audience: audience,
 		establishPrincipal: true, requireRolesToEstablish: true,
-	}
+	}).intercept
 }
 
 type apiTokenInterceptor struct {
@@ -240,10 +240,10 @@ func (i *apiTokenInterceptor) rateLimitGate(ctx context.Context, tok *api_token.
 	if d.Allowed {
 		return nil
 	}
-	ce := connect.NewError(connect.CodeResourceExhausted,
-		fmt.Errorf("api_token: rate limit %d rpm exceeded (weighted=%.1f)", tok.RateLimitRPM, d.WeightedCount))
+	ce := connect.Errorf(connect.CodeResourceExhausted,
+		"api_token: rate limit %d rpm exceeded (weighted=%.1f)", tok.RateLimitRPM, d.WeightedCount)
 	if d.RetryAfter > 0 {
-		ce.Meta().Set("Retry-After", strconv.Itoa(int(d.RetryAfter.Seconds())))
+		unary.Info(ctx).ResponseHeader().Set(paladin.HeaderRetryAfter, strconv.Itoa(int(d.RetryAfter.Seconds())))
 	}
 	return ce
 }
@@ -266,7 +266,7 @@ func (i *apiTokenInterceptor) rateLimitGate(ctx context.Context, tok *api_token.
 //
 // No token is not a failure. The context comes back unchanged with a nil
 // error so the request defers to whatever authenticates it downstream.
-func (i *apiTokenInterceptor) authenticate(ctx context.Context, hdr http.Header) (context.Context, error) {
+func (i *apiTokenInterceptor) authenticate(ctx context.Context, hdr *connect.Header) (context.Context, error) {
 	token := extractAPIToken(hdr.Get(HeaderAPIToken), hdr.Get("Authorization"))
 	if token == "" {
 		return ctx, nil
@@ -289,32 +289,19 @@ func (i *apiTokenInterceptor) authenticate(ctx context.Context, hdr http.Header)
 	}
 	idCtx, err := i.withTokenIdentity(ctx, t)
 	if err != nil {
-		return ctx, connect.NewError(connect.CodeUnauthenticated, err)
+		return ctx, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	return idCtx, nil
 }
 
-func (i *apiTokenInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		idCtx, err := i.authenticate(ctx, req.Header())
-		if err != nil {
-			return nil, err
-		}
-		return next(idCtx, req)
-	}
-}
-
-func (i *apiTokenInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (i *apiTokenInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		idCtx, err := i.authenticate(ctx, conn.RequestHeader())
+// intercept authenticates every call, unary or streaming, from its headers.
+func (i *apiTokenInterceptor) intercept(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		idCtx, err := i.authenticate(ctx, unary.Info(ctx).RequestHeader())
 		if err != nil {
 			return err
 		}
-		return next(idCtx, conn)
+		return next(idCtx, spec, stream)
 	}
 }
 
@@ -350,16 +337,16 @@ func extractAPIToken(xlegate, authz string) string {
 func mapAPITokenErr(err error) error {
 	switch {
 	case errors.Is(err, api_token.ErrTokenMalformed):
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	case errors.Is(err, api_token.ErrTokenNotFound):
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	case errors.Is(err, api_token.ErrTokenExpired):
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	case errors.Is(err, api_token.ErrTokenRevoked):
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	case errors.Is(err, api_token.ErrAudienceMismatch):
-		return connect.NewError(connect.CodePermissionDenied, err)
+		return connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
 	default:
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 }

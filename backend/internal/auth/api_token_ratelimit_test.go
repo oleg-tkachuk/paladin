@@ -3,15 +3,17 @@ package auth
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // recordingLimiter is the interceptor-side test stub. Tracks call count
@@ -78,29 +80,46 @@ func TestRateLimitGate_Allowed(t *testing.T) {
 }
 
 // TestRateLimitGate_Denied confirms a denied decision surfaces as
-// connect.CodeResourceExhausted with a Retry-After header on the
-// error's Meta. Connect-go propagates Meta to the response.
+// connect.CodeResourceExhausted with a Retry-After header on the call's
+// response header, which the transport sends with the error. The gate
+// writes that header to the server-side CallInfo, so it runs inside a
+// call that has one.
 func TestRateLimitGate_Denied(t *testing.T) {
 	t.Parallel()
+	const (
+		rpm        = 60
+		overLimit  = 65
+		retryAfter = 30 * time.Second
+	)
 	rl := &recordingLimiter{resp: ratelimit.Decision{
 		Allowed:       false,
-		WeightedCount: 65,
-		RetryAfter:    30 * time.Second,
+		WeightedCount: overLimit,
+		RetryAfter:    retryAfter,
 	}}
-	i := &apiTokenInterceptor{limiter: rl, audience: "data"}
-	tok := &api_token.Token{ID: uuid.New(), RateLimitRPM: 60}
-	err := i.rateLimitGate(context.Background(), tok)
-	if err == nil {
+	i := &apiTokenInterceptor{limiter: rl, audience: planeData}
+	tok := &api_token.Token{ID: uuid.New(), RateLimitRPM: rpm}
+	gate := func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			if err := i.rateLimitGate(ctx, tok); err != nil {
+				return err
+			}
+			return next(ctx, spec, stream)
+		}
+	}
+
+	c := callProbe(context.Background(), []connect.ServerInterceptor{gate})
+	if c.err == nil {
 		t.Fatal("expected denial error, got nil")
 	}
 	var ce *connect.Error
-	if !errors.As(err, &ce) {
-		t.Fatalf("expected *connect.Error, got %T", err)
+	if !errors.As(c.err, &ce) {
+		t.Fatalf("expected *connect.Error, got %T", c.err)
 	}
 	if ce.Code() != connect.CodeResourceExhausted {
 		t.Errorf("code: got %v, want ResourceExhausted", ce.Code())
 	}
-	if got := ce.Meta().Get("Retry-After"); got != "30" {
-		t.Errorf("Retry-After: got %q, want %q", got, "30")
+	want := strconv.Itoa(int(retryAfter.Seconds()))
+	if got := c.responseHeader.Get(paladin.HeaderRetryAfter); got != want {
+		t.Errorf("%s: got %q, want %q", paladin.HeaderRetryAfter, got, want)
 	}
 }

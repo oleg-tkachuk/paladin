@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	rpccode "google.golang.org/genproto/googleapis/rpc/code"
 
@@ -44,7 +43,7 @@ func TestListOperationsSortOrder(t *testing.T) {
 	} {
 		h := &recordingOperations{}
 		if _, err := (&OperationServer{H: h}).ListOperations(context.Background(),
-			connect.NewRequest(&pb.ListOperationsRequest{SortOrder: order})); err != nil {
+			&pb.ListOperationsRequest{SortOrder: order}); err != nil {
 			t.Fatal(err)
 		}
 		if h.newestFirst == nil || *h.newestFirst != newest {
@@ -165,9 +164,9 @@ func TestDeleteObjectTagsKeysSelectWhatIsDropped(t *testing.T) {
 	name := "tenants/" + tenantA.String() + "/collections/c1/objects/" + objUUID.String()
 	del := func(keys ...string) map[string]string {
 		h := &recordingTags{tags: map[string]string{"a": "1", "b": "2"}}
-		if _, err := (&ObjectTagServer{H: h}).DeleteObjectTags(ctx, connect.NewRequest(&pb.DeleteObjectTagsRequest{
+		if _, err := (&ObjectTagServer{H: h}).DeleteObjectTags(ctx, &pb.DeleteObjectTagsRequest{
 			Name: name, ResourceVersion: "1", Keys: keys,
-		})); err != nil {
+		}); err != nil {
 			t.Fatal(err)
 		}
 		return h.written
@@ -185,11 +184,11 @@ func TestListDistinctTagsNextPage(t *testing.T) {
 	parent := "tenants/" + tenantA.String() + "/collections/c1"
 	list := func(next string) *pb.ListDistinctTagsResponse {
 		resp, err := (&ObjectTagServer{H: &recordingTags{page: objecth.DistinctTagPage{NextKey: next}}}).
-			ListDistinctTags(ctx, connect.NewRequest(&pb.ListDistinctTagsRequest{Parent: parent}))
+			ListDistinctTags(ctx, &pb.ListDistinctTagsRequest{Parent: parent})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return resp.Msg
+		return resp
 	}
 	if got := list("k2").GetPage().GetNextPageToken(); got != "k2" {
 		t.Errorf("next page token = %q, want k2", got)

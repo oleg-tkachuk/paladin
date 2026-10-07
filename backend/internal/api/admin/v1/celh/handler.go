@@ -12,11 +12,10 @@ package celh
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	celfilter "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -41,35 +40,35 @@ func NewHandler() *Handler { return &Handler{} }
 //
 // Empty expression → valid (the match-all sentinel). Unknown schema →
 // InvalidArgument.
-func (h *Handler) Validate(ctx context.Context, req *connect.Request[pb.ValidateCELRequest]) (*connect.Response[pb.ValidateCELResponse], error) {
-	m := req.Msg
+func (h *Handler) Validate(ctx context.Context, req *pb.ValidateCELRequest) (*pb.ValidateCELResponse, error) {
+	m := req
 	schema := celfilter.SchemaByName(m.GetSchema())
 	if schema == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("unknown schema %q (want one of: Object, Collection, AuditLogEntry, EventEnvelope)", m.GetSchema()))
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"unknown schema %q (want one of: Object, Collection, AuditLogEntry, EventEnvelope)", m.GetSchema())
 	}
 
 	err := celfilter.CompileFirstError(schema, m.GetExpression())
 	if err == nil {
-		return connect.NewResponse(&pb.ValidateCELResponse{Valid: true}), nil
+		return &pb.ValidateCELResponse{Valid: true}, nil
 	}
 
 	var ce *celfilter.CompileError
 	if errors.As(err, &ce) {
-		return connect.NewResponse(&pb.ValidateCELResponse{
+		return &pb.ValidateCELResponse{
 			Valid:   false,
 			Message: ce.Message,
 			Line:    safecast.Int32(ce.Line),
 			Column:  safecast.Int32(ce.Column),
-		}), nil
+		}, nil
 	}
 	// Defence in depth — CompileFirstError always returns *CompileError
 	// or nil today, but keep a fallback so a future refactor doesn't
 	// silently surface a bare error string with no position info.
-	return connect.NewResponse(&pb.ValidateCELResponse{
+	return &pb.ValidateCELResponse{
 		Valid:   false,
 		Message: err.Error(),
-	}), nil
+	}, nil
 }
 
 var _ paladinadminv1connect.CELServiceHandler = (*Handler)(nil)

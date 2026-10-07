@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 // content_disposition used to go to the signer as the caller sent it, so a

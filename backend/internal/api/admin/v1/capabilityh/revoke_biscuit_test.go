@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -40,8 +40,8 @@ func (s *copyStore) RevokeBiscuit(ctx context.Context, args capability.RevokeBis
 	return s.err
 }
 
-func revokeBiscuitReq() *connect.Request[adminv1.CapabilityServiceRevokeBiscuitRequest] {
-	return connect.NewRequest(&adminv1.CapabilityServiceRevokeBiscuitRequest{Token: "biscuit", Reason: "leaked"})
+func revokeBiscuitReq() *adminv1.CapabilityServiceRevokeBiscuitRequest {
+	return &adminv1.CapabilityServiceRevokeBiscuitRequest{Token: "biscuit", Reason: "leaked"}
 }
 
 func TestRevokeBiscuitListsTheCopy(t *testing.T) {
@@ -56,8 +56,8 @@ func TestRevokeBiscuitListsTheCopy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RevokeBiscuit: %v", err)
 	}
-	if resp.Msg.GetCapabilityId() != target.ID.String() {
-		t.Errorf("capability_id = %q, want %s", resp.Msg.GetCapabilityId(), target.ID)
+	if resp.GetCapabilityId() != target.ID.String() {
+		t.Errorf("capability_id = %q, want %s", resp.GetCapabilityId(), target.ID)
 	}
 	if copier.token != "biscuit" {
 		t.Errorf("copier read %q, want the request's token", copier.token)

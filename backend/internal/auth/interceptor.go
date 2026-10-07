@@ -2,12 +2,11 @@ package auth
 
 import (
 	"context"
-	"errors"
-	"net/http"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -23,8 +22,8 @@ type TokenVerifier interface {
 // APITokenAuthInterceptor. Every other case is handled exactly like Interceptor — a JWT is
 // verified, and a missing/invalid non-PAT bearer is rejected — so auth stays mandatory.
 // Used on the data plane so a caller may authenticate with EITHER an OIDC JWT or a PAT.
-func InterceptorSkipAPITokens(v TokenVerifier) connect.Interceptor {
-	return &authInterceptor{verifier: v, skipAPITokens: true}
+func InterceptorSkipAPITokens(v TokenVerifier) connect.ServerInterceptor {
+	return (&authInterceptor{verifier: v, skipAPITokens: true}).intercept
 }
 
 // InterceptorSkipTokensAndCapabilities also passes through when the request
@@ -37,8 +36,8 @@ func InterceptorSkipAPITokens(v TokenVerifier) connect.Interceptor {
 // could authenticate it. Auth stays mandatory — a request with neither a
 // capability nor a bearer is still refused here, and a capability that fails
 // verification is refused downstream rather than falling back to anonymous.
-func InterceptorSkipTokensAndCapabilities(v TokenVerifier) connect.Interceptor {
-	return &authInterceptor{verifier: v, skipAPITokens: true, skipCapabilities: true}
+func InterceptorSkipTokensAndCapabilities(v TokenVerifier) connect.ServerInterceptor {
+	return (&authInterceptor{verifier: v, skipAPITokens: true, skipCapabilities: true}).intercept
 }
 
 type authInterceptor struct {
@@ -55,40 +54,36 @@ type authInterceptor struct {
 // isAPIToken reports whether the request carries a Paladin API token — in
 // X-Paladin-API-Token or as a bearer — which this interceptor should defer to
 // the PAT interceptor rather than verify as a JWT.
-func (a *authInterceptor) isAPIToken(h http.Header) bool {
+func (a *authInterceptor) isAPIToken(h *connect.Header) bool {
 	return a.skipAPITokens && extractAPIToken(h.Get(HeaderAPIToken), h.Get("Authorization")) != ""
 }
 
 // hasCapability reports whether the request presents a capability in either
 // accepted form, so this gate can step aside for it.
-func (a *authInterceptor) hasCapability(h http.Header) bool {
+func (a *authInterceptor) hasCapability(h *connect.Header) bool {
 	return a.skipCapabilities &&
 		extractCapabilityToken(h.Get(HeaderCapability), h.Get("Authorization")) != ""
 }
 
-func (a *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if a.isAPIToken(req.Header()) {
-			return next(ctx, req) // a PAT — leave it for the API-token interceptor
+// intercept authenticates every call, unary or streaming, from its headers.
+func (a *authInterceptor) intercept(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		h := unary.Info(ctx).RequestHeader()
+		if a.isAPIToken(h) {
+			return next(ctx, spec, stream) // a PAT — leave it for the API-token interceptor
 		}
-		if a.hasCapability(req.Header()) {
-			return next(ctx, req) // a capability — leave it for the capability interceptor
+		if a.hasCapability(h) {
+			return next(ctx, spec, stream) // a capability — leave it for the capability interceptor
 		}
-		p, err := principalFromHeaders(ctx, a.verifier, req.Header().Get("Authorization"))
+		p, err := principalFromHeaders(ctx, a.verifier, h.Get("Authorization"))
 		if err != nil {
-			return nil, err
+			return err
 		}
 		annotateSpan(ctx, p)
-		return next(WithPrincipal(ctx, p), req)
+		return next(WithPrincipal(ctx, p), spec, stream)
 	}
 }
 
-// annotateSpan stamps the caller's tenant onto the active RPC span (the
-// otelconnect server span, created upstream of this interceptor). ADR-0001
-// follow-up: gives traces a per-tenant dimension to filter on. tenant_id is
-// bounded-cardinality (one per tenant); collection is deliberately NOT set
-// here — it is per-request and unbounded, so it stays a handler concern.
-// No-op when OTel is disabled (the span is non-recording).
 func annotateSpan(ctx context.Context, p *Principal) {
 	if p == nil || p.TenantID == uuid.Nil {
 		return
@@ -104,43 +99,21 @@ func annotateSpan(ctx context.Context, p *Principal) {
 	span.SetAttributes(attrs...)
 }
 
-func (a *authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	// Server-side Paladin: no outbound calls. Pass through unchanged.
-	return next
-}
-
-func (a *authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if a.isAPIToken(conn.RequestHeader()) {
-			return next(ctx, conn) // a PAT — leave it for the API-token interceptor
-		}
-		if a.hasCapability(conn.RequestHeader()) {
-			return next(ctx, conn) // a capability — leave it for the capability interceptor
-		}
-		p, err := principalFromHeaders(ctx, a.verifier, conn.RequestHeader().Get("Authorization"))
-		if err != nil {
-			return err
-		}
-		annotateSpan(ctx, p)
-		return next(WithPrincipal(ctx, p), conn)
-	}
-}
-
 func principalFromHeaders(ctx context.Context, v TokenVerifier, authz string) (*Principal, error) {
 	if authz == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("missing Authorization header"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "missing Authorization header")
 	}
 	const bearer = "Bearer "
 	if !strings.HasPrefix(authz, bearer) {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("expected Bearer token"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "expected Bearer token")
 	}
 	token := strings.TrimSpace(authz[len(bearer):])
 	if token == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("empty token"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "empty token")
 	}
 	p, err := v.Verify(ctx, token)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	return p, nil
 }

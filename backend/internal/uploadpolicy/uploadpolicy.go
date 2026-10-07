@@ -19,9 +19,10 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 // BucketConstraints is a bucket's upload constraints as BucketService stores
@@ -242,7 +243,7 @@ type Upload struct {
 }
 
 func invalid(format string, args ...any) error {
-	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(format, args...))
+	return rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf(format, args...))
 }
 
 // ErrContentTypeNotAllowed is wrapped by every allowlist refusal.
@@ -258,8 +259,7 @@ func (p Policy) checkCommon(u Upload) error {
 			return invalid("content type %q: %w", u.ContentType, err)
 		}
 		if !slices.Contains(p.allowed, mt) {
-			return connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("%w: %q (accepted: %s)", ErrContentTypeNotAllowed, mt, strings.Join(p.allowed, ", ")))
+			return rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("%w: %q (accepted: %s)", ErrContentTypeNotAllowed, mt, strings.Join(p.allowed, ", ")))
 		}
 	}
 	if p.requiredChecksum != "" && !strings.EqualFold(u.ChecksumAlgorithm, p.requiredChecksum) {

@@ -6,7 +6,7 @@ import (
 	"math"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
@@ -81,9 +81,9 @@ func (f *fakeUsageStore) ListTenantBudgets(context.Context, capability.ListTenan
 func TestTenantBudgetServer_Get_NotFound(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
 	tenantID := uuid.New()
-	_, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
+	_, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
 		TenantId: tenantID.String(),
-	}))
+	})
 	if err == nil {
 		t.Fatal("expected NotFound error")
 	}
@@ -98,28 +98,28 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 	srv := NewTenantBudgetServer(store)
 	tenantID := uuid.New()
 
-	setRes, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	setRes, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID.String(),
 		MaxBudgetMicros: proto.Int64(100_000_000),
 		ResetSpend:      true,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got := setRes.Msg.GetBudget().GetMaxBudgetMicros(); got != 100_000_000 {
+	if got := setRes.GetBudget().GetMaxBudgetMicros(); got != 100_000_000 {
 		t.Errorf("max_budget_micros: got %d, want 100000000", got)
 	}
-	if got := setRes.Msg.GetBudget().GetUnitCode(); got != capability.DefaultUnitCode {
+	if got := setRes.GetBudget().GetUnitCode(); got != capability.DefaultUnitCode {
 		t.Errorf("unit_code: got %q, want %q (default)", got, capability.DefaultUnitCode)
 	}
 
-	getRes, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
+	getRes, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
 		TenantId: tenantID.String(),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got := getRes.Msg.GetBudget().GetTenantId(); got != tenantID.String() {
+	if got := getRes.GetBudget().GetTenantId(); got != tenantID.String() {
 		t.Errorf("tenant_id: got %q, want %q", got, tenantID)
 	}
 }
@@ -130,10 +130,10 @@ func TestTenantBudgetServer_Set_NamesTheBudgetForTheAuditLog(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
 	tenantID := uuid.New()
 	ctx := apiutil.WithResourceSlot(context.Background())
-	if _, err := srv.Set(ctx, connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	if _, err := srv.Set(ctx, &pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID.String(),
 		MaxBudgetMicros: proto.Int64(100_000_000),
-	})); err != nil {
+	}); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 	got := apiutil.ResourceFromContext(ctx)
@@ -161,16 +161,16 @@ func TestTenantBudgetServer_Set_RefusesTheRemovedDouble(t *testing.T) {
 	if err := proto.Unmarshal(raw, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := srv.Set(context.Background(), connect.NewRequest(old)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := srv.Set(context.Background(), old); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("err = %v, want InvalidArgument", err)
 	}
 }
 
 func TestTenantBudgetServer_NilUsageStore_Unavailable(t *testing.T) {
 	srv := NewTenantBudgetServer(nil)
-	_, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
+	_, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
 		TenantId: uuid.New().String(),
-	}))
+	})
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeUnavailable {
 		t.Errorf("expected CodeUnavailable on nil store, got %v", err)
@@ -185,16 +185,16 @@ func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
 	srv := NewTenantBudgetServer(store)
 	tenantID := uuid.New()
 
-	setRes, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	setRes, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID.String(),
 		MaxBudgetMicros: proto.Int64(250_000_000),
 		UnitCode:        "EUR",
 		ResetSpend:      true,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got := setRes.Msg.GetBudget().GetUnitCode(); got != "EUR" {
+	if got := setRes.GetBudget().GetUnitCode(); got != "EUR" {
 		t.Errorf("unit_code: got %q, want EUR", got)
 	}
 }
@@ -203,11 +203,11 @@ func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
 // the boundary with CodeInvalidArgument.
 func TestTenantBudgetServer_Set_BadUnit(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
-	_, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        uuid.New().String(),
 		MaxBudgetMicros: proto.Int64(1_000_000),
 		UnitCode:        "XYZ",
-	}))
+	})
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
 		t.Errorf("expected CodeInvalidArgument on unknown unit, got %v", err)
@@ -216,9 +216,9 @@ func TestTenantBudgetServer_Set_BadUnit(t *testing.T) {
 
 func TestTenantBudgetServer_BadTenantID(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
-	_, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
+	_, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
 		TenantId: "not-a-uuid",
-	}))
+	})
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
 		t.Errorf("expected CodeInvalidArgument, got %v", err)
@@ -229,14 +229,14 @@ func TestTenantBudgetServer_BadTenantID(t *testing.T) {
 // send on the next edit and every second write is a conflict.
 func TestTenantBudgetServer_Set_ReturnsNewVersion(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
-	res, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	res, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        uuid.New().String(),
 		MaxBudgetMicros: proto.Int64(10_000_000),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got := res.Msg.GetBudget().GetResourceVersion(); got != "1" {
+	if got := res.GetBudget().GetResourceVersion(); got != "1" {
 		t.Errorf("resource_version = %q, want \"1\"", got)
 	}
 }
@@ -249,18 +249,18 @@ func TestTenantBudgetServer_Set_StaleVersionIsAborted(t *testing.T) {
 	srv := NewTenantBudgetServer(store)
 	tenantID := uuid.New().String()
 
-	if _, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	if _, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID,
 		MaxBudgetMicros: proto.Int64(10_000_000),
-	})); err != nil {
+	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	_, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID,
 		MaxBudgetMicros: proto.Int64(999_000_000),
 		ResourceVersion: "1234",
-	}))
+	})
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeAborted {
 		t.Fatalf("err = %v, want CodeAborted", err)
@@ -270,11 +270,11 @@ func TestTenantBudgetServer_Set_StaleVersionIsAborted(t *testing.T) {
 // An unparseable version is a malformed request, not a conflict.
 func TestTenantBudgetServer_Set_BadVersionIsInvalidArgument(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
-	_, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        uuid.New().String(),
 		MaxBudgetMicros: proto.Int64(1_000_000),
 		ResourceVersion: "not-a-number",
-	}))
+	})
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
 		t.Fatalf("err = %v, want CodeInvalidArgument", err)

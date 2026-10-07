@@ -3,7 +3,7 @@ package backendh
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 // SetBackendReadOnly (drain, the schema baseline (001_initial_schema.sql)) mirrors SetBackendEnabled's

@@ -15,7 +15,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -24,6 +24,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
@@ -108,11 +109,11 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 		return "", nil, time.Time{}, err
 	}
 	if collection == "" || objectIDStr == "" {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
+		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
 	}
 	objectID, err := uuid.Parse(objectIDStr)
 	if err != nil {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+		return "", nil, time.Time{}, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
 	disposition, err = objecth.NormalizeContentDisposition(disposition)
 	if err != nil {
@@ -120,12 +121,12 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 	}
 	obj, err := h.repo.LookupObject(ctx, tenantID, collection, objectID)
 	if err != nil {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	collection, key, state := obj.Collection, obj.Key, obj.State
 	if state != "AVAILABLE" {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("object state %s does not allow GET", state))
+		return "", nil, time.Time{}, connect.Errorf(connect.CodeFailedPrecondition,
+			"object state %s does not allow GET", state)
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), collection, key)
 	// Presigned GET URL grants OpGet on the underlying object; gate
@@ -165,7 +166,7 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 	if requireETagMatch {
 		if obj.ETag == "" {
 			return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
-				errors.New("the object has no recorded ETag to bind the URL to"))
+				"the object has no recorded ETag to bind the URL to")
 		}
 		args.IfMatch = obj.ETag
 	}
@@ -204,30 +205,30 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 		return UploadURL{}, err
 	}
 	if collection == "" || objectIDStr == "" {
-		return UploadURL{}, connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
+		return UploadURL{}, connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
 	}
 	objectID, err := uuid.Parse(objectIDStr)
 	if err != nil {
-		return UploadURL{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+		return UploadURL{}, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
 	obj, err := h.repo.LookupObject(ctx, tenantID, collection, objectID)
 	if err != nil {
-		return UploadURL{}, connect.NewError(connect.CodeNotFound, err)
+		return UploadURL{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	collection, key := obj.Collection, obj.Key
 	// Only PENDING objects may receive a fresh upload URL. AVAILABLE objects
 	// would silently overwrite committed data; FAILED/DELETED rows are
 	// terminal and presigning a PUT against them is meaningless.
 	if obj.State != "PENDING" {
-		return UploadURL{}, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("object state %s does not allow PUT", obj.State))
+		return UploadURL{}, connect.Errorf(connect.CodeFailedPrecondition,
+			"object state %s does not allow PUT", obj.State)
 	}
 	// The new URL is bound to the size and checksum the object was
 	// registered with. A row without them predates that binding; it cannot
 	// get a bound URL, and an unbound one is what the binding exists to stop.
 	if obj.SizeBytes == nil || obj.ChecksumValue == "" {
 		return UploadURL{}, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("object was registered without a size and checksum; start a new upload"))
+			"object was registered without a size and checksum; start a new upload")
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), collection, key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
@@ -260,11 +261,11 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 		TTL: ttl,
 	})
 	if err != nil {
-		return UploadURL{}, connect.NewError(connect.CodeInternal, fmt.Errorf("presign PUT: %w", err))
+		return UploadURL{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("presign PUT: %w", err))
 	}
 	if err := h.repo.ExtendPendingPresign(ctx, tenantID, objectID, expires); err != nil {
 		if errors.Is(err, ErrNotPending) {
-			return UploadURL{}, connect.NewError(connect.CodeFailedPrecondition, err)
+			return UploadURL{}, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 		}
 		return UploadURL{}, apiutil.MapError(fmt.Errorf("extend presign deadline: %w", err))
 	}
@@ -293,7 +294,7 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }

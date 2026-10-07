@@ -7,8 +7,10 @@ import (
 	"slices"
 	"testing"
 
-	"connectrpc.com/grpchealth"
-	"connectrpc.com/grpcreflect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"connectrpc.com/grpchealth/v2"
+	"connectrpc.com/grpcreflect/v2"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
@@ -50,13 +52,13 @@ func TestAPlaneServesGRPCHealthAndReflection(t *testing.T) {
 	t.Cleanup(srv.Close)
 	ctx := context.Background()
 
-	resp, err := grpchealth.NewClient(srv.Client(), srv.URL).Check(ctx, &grpchealth.CheckRequest{Service: paladiniamv1connect.AuthServiceName})
+	resp, err := grpchealth.NewClient(connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL))).Check(ctx, &grpchealth.CheckRequest{Service: paladiniamv1connect.AuthServiceName})
 	if err != nil || resp.Status != grpchealth.StatusServing {
 		t.Fatalf("health = %v, %v; want serving", resp, err)
 	}
 
-	stream := grpcreflect.NewClient(srv.Client(), srv.URL).NewStream(ctx)
-	t.Cleanup(func() { _, _ = stream.Close() })
+	stream := grpcreflect.NewClient(connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL))).NewStream(ctx)
+	t.Cleanup(func() { _ = stream.Close() })
 	names, err := stream.ListServices()
 	if err != nil {
 		t.Fatal(err)

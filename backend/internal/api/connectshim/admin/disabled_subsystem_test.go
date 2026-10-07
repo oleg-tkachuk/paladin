@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -50,14 +50,14 @@ func TestBillingServer_NilHandler_Unavailable(t *testing.T) {
 	// guarded against.
 	tenantID := uuid.New().String()
 
-	_, err := srv.GetTenantSummary(ctx, connect.NewRequest(&pb.GetTenantSummaryRequest{
+	_, err := srv.GetTenantSummary(ctx, &pb.GetTenantSummaryRequest{
 		TenantId: tenantID,
-	}))
+	})
 	assertUnavailable(t, "GetTenantSummary", err)
 
-	_, err = srv.GetTenantTimeSeries(ctx, connect.NewRequest(&pb.GetTenantTimeSeriesRequest{
+	_, err = srv.GetTenantTimeSeries(ctx, &pb.GetTenantTimeSeriesRequest{
 		TenantId: tenantID,
-	}))
+	})
 	assertUnavailable(t, "GetTenantTimeSeries", err)
 }
 
@@ -65,17 +65,17 @@ func TestSystemServer_NilHandler_Unavailable(t *testing.T) {
 	srv := NewSystemServer(nil)
 	ctx := context.Background()
 
-	_, err := srv.GetConfig(ctx, connect.NewRequest(&pb.GetConfigRequest{}))
+	_, err := srv.GetConfig(ctx, &pb.GetConfigRequest{})
 	assertUnavailable(t, "GetConfig", err)
 
-	_, err = srv.GetDispatcherStats(ctx, connect.NewRequest(&pb.GetDispatcherStatsRequest{}))
+	_, err = srv.GetDispatcherStats(ctx, &pb.GetDispatcherStatsRequest{})
 	assertUnavailable(t, "GetDispatcherStats", err)
 
-	_, err = srv.GetPlatformStats(ctx, connect.NewRequest(&pb.GetPlatformStatsRequest{}))
+	_, err = srv.GetPlatformStats(ctx, &pb.GetPlatformStatsRequest{})
 	assertUnavailable(t, "GetPlatformStats", err)
 
-	_, err = srv.ListPlatformStatsTenants(ctx, connect.NewRequest(&pb.ListPlatformStatsTenantsRequest{
+	_, err = srv.ListPlatformStatsTenants(ctx, &pb.ListPlatformStatsTenantsRequest{
 		Signal: pb.PlatformStatsSignal_PLATFORM_STATS_SIGNAL_QUOTA_AT_LIMIT,
-	}))
+	})
 	assertUnavailable(t, "ListPlatformStatsTenants", err)
 }

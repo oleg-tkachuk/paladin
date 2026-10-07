@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
@@ -22,7 +22,7 @@ type slugTenant struct {
 
 func (f *slugTenant) GetTenantBySlug(_ context.Context, slug string) (*tenanth.Tenant, error) {
 	if slug != f.slug {
-		return nil, connect.NewError(connect.CodeNotFound, nil)
+		return nil, connect.NewError(connect.CodeNotFound, "")
 	}
 	return &tenanth.Tenant{TenantID: f.id, Slug: slug}, nil
 }
@@ -67,37 +67,37 @@ func TestTenantRPCsAcceptASlug(t *testing.T) {
 	)
 	cases := map[string]func(*TenantServer) error{
 		"DeleteTenant": func(s *TenantServer) error {
-			_, err := s.DeleteTenant(context.Background(), connect.NewRequest(&pb.DeleteTenantRequest{
+			_, err := s.DeleteTenant(context.Background(), &pb.DeleteTenantRequest{
 				Name: name, ResourceVersion: version,
-			}))
+			})
 			return err
 		},
 		"PurgeTenant": func(s *TenantServer) error {
-			_, err := s.PurgeTenant(context.Background(), connect.NewRequest(&pb.PurgeTenantRequest{Name: name}))
+			_, err := s.PurgeTenant(context.Background(), &pb.PurgeTenantRequest{Name: name})
 			return err
 		},
 		"RestoreTenant": func(s *TenantServer) error {
-			_, err := s.RestoreTenant(context.Background(), connect.NewRequest(&pb.RestoreTenantRequest{Name: name}))
+			_, err := s.RestoreTenant(context.Background(), &pb.RestoreTenantRequest{Name: name})
 			return err
 		},
 		"UpdateTenant": func(s *TenantServer) error {
-			_, err := s.UpdateTenant(context.Background(), connect.NewRequest(&pb.UpdateTenantRequest{
+			_, err := s.UpdateTenant(context.Background(), &pb.UpdateTenantRequest{
 				Name: name, ResourceVersion: version,
 				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"display_name"}},
 				Tenant:     &pb.Tenant{DisplayName: "Acme"},
-			}))
+			})
 			return err
 		},
 		"SetInheritedPolicy": func(s *TenantServer) error {
-			_, err := s.SetInheritedPolicy(context.Background(), connect.NewRequest(&pb.SetInheritedPolicyRequest{
+			_, err := s.SetInheritedPolicy(context.Background(), &pb.SetInheritedPolicyRequest{
 				Name: name, ResourceVersion: version,
-			}))
+			})
 			return err
 		},
 		"RenameTenantSlug": func(s *TenantServer) error {
-			_, err := s.RenameTenantSlug(context.Background(), connect.NewRequest(&pb.RenameTenantSlugRequest{
+			_, err := s.RenameTenantSlug(context.Background(), &pb.RenameTenantSlugRequest{
 				Name: name, ResourceVersion: version, NewSlug: "acme-2",
-			}))
+			})
 			return err
 		},
 	}
@@ -120,9 +120,9 @@ func TestTenantRPCsReportAnUnknownSlugAsNotFound(t *testing.T) {
 	t.Parallel()
 
 	s := &TenantServer{H: &slugTenant{slug: "acme", id: uuid.New()}}
-	_, err := s.DeleteTenant(context.Background(), connect.NewRequest(&pb.DeleteTenantRequest{
+	_, err := s.DeleteTenant(context.Background(), &pb.DeleteTenantRequest{
 		Name: "tenants/other", ResourceVersion: "1",
-	}))
+	})
 	if got := connect.CodeOf(err); got != connect.CodeNotFound {
 		t.Fatalf("code = %v, want %v (err: %v)", got, connect.CodeNotFound, err)
 	}

@@ -2,16 +2,16 @@ package middleware
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/reflect/protoreflect"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
@@ -32,31 +32,28 @@ type stubUsers struct {
 	calls int
 }
 
-func (s *stubUsers) ResetPassword(context.Context, *connect.Request[iamv1.ResetPasswordRequest]) (*connect.Response[iamv1.ResetPasswordResponse], error) {
+func (s *stubUsers) ResetPassword(context.Context, *iamv1.ResetPasswordRequest) (*iamv1.ResetPasswordResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
-	return connect.NewResponse(&iamv1.ResetPasswordResponse{GeneratedPassword: generatedPassword}), nil
+	return &iamv1.ResetPasswordResponse{GeneratedPassword: generatedPassword}, nil
 }
 
 func newUserServer(t *testing.T, store IdempotencyStore) (paladiniamv1connect.UserServiceClient, *stubUsers) {
 	t.Helper()
 	svc := &stubUsers{}
-	mux := http.NewServeMux()
-	path, handler := paladiniamv1connect.NewUserServiceHandler(svc, connect.WithInterceptors(
-		principalInjector(uuid.New()),
-		NewIdempotencyInterceptor(store, IdempotencyConfig{TTL: time.Minute}),
-	))
-	mux.Handle(path, handler)
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	return paladiniamv1connect.NewUserServiceClient(srv.Client(), srv.URL), svc
+	return paladiniamv1connect.NewUserServiceClient(unarytest.Client(func(s *connect.Server) {
+		paladiniamv1connect.RegisterUserServiceHandler(s, svc)
+	}, NewIdempotencyInterceptor(store, IdempotencyConfig{TTL: time.Minute}))), svc
 }
 
-func resetWithKey(client paladiniamv1connect.UserServiceClient, key string) (*connect.Response[iamv1.ResetPasswordResponse], error) {
-	req := connect.NewRequest(&iamv1.ResetPasswordRequest{Name: "users/alice"})
-	req.Header().Set("Idempotency-Key", key)
-	return client.ResetPassword(context.Background(), req)
+// resetTenant is the tenant every ResetPassword below is called in, so that
+// a repeated key finds the row the first call memoised.
+var resetTenant = uuid.New()
+
+func resetWithKey(client paladiniamv1connect.UserServiceClient, key string) (*iamv1.ResetPasswordResponse, error) {
+	req := &iamv1.ResetPasswordRequest{Name: "users/alice"}
+	return client.ResetPassword(withIdempotencyKey(principalCtx(resetTenant), key), req)
 }
 
 func TestCredentialResponsesAreStoredRedacted(t *testing.T) {
@@ -67,7 +64,7 @@ func TestCredentialResponsesAreStoredRedacted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first call: %v", err)
 	}
-	if first.Msg.GetGeneratedPassword() != generatedPassword {
+	if first.GetGeneratedPassword() != generatedPassword {
 		t.Fatal("the first caller did not receive the credential")
 	}
 	if len(store.data) != 1 {

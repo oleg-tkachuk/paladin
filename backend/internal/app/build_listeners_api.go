@@ -10,7 +10,8 @@ import (
 
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
 
@@ -147,7 +148,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// IAM plane intentionally has NO capability interceptor: capabilities
 	// don't have an "iam" audience (the audiences are data / admin /
 	// mcp). User-authn flows that go through iam are not the agent path.
-	var capData connect.Interceptor
+	var capData connect.ServerInterceptor
 	if deps.Capability != nil {
 		// Same opt-in event-emitter pattern as the admin pod —
 		// the api dispatcher fan-out into event_deliveries when
@@ -190,7 +191,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// own in build_listeners_admin.go. Audience-pinned per plane.
 	// Limiter wired so per-token rate caps apply on the data + iam
 	// planes (high-QPS surfaces); admin uses the same limiter.
-	var apiTokData, apiTokIAM connect.Interceptor
+	var apiTokData, apiTokIAM connect.ServerInterceptor
 	if deps.APIToken != nil {
 		// Data plane: the API-token interceptor ESTABLISHES the principal, so a service
 		// can authenticate uploads with a long-lived `paladin_pat_…` key alone
@@ -248,7 +249,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// on metrics it makes one time series per TCP connection, so
 	// rpc_server_duration grows without bound and the cost lands on whoever
 	// stores it.
-	otelInt, err := otelconnect.NewInterceptor()
+	otelInt, err := otelconnect.NewServerInterceptor()
 	if err != nil {
 		l.Fatal("otelconnect interceptor", zap.Error(err))
 	}
@@ -271,119 +272,119 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	}
 	tenantRL := middleware.NewTenantRateLimitInterceptor(tenantRLCfg)
 
-	// The codec, size limits, compression and panic recovery every plane
-	// shares: rpcHandlerOptions.
-	dataOpts := connect.WithHandlerOptions(
-		rpcHandlerOptions(l),
-		connect.WithInterceptors(
-			// Outermost of all: tracing and the failure log inside it see an
-			// internal error as it happened; the caller sees its code and a
-			// request id, not a driver's message.
-			middleware.ScrubInternal(),
-			otelInt,
-			// Outermost after tracing, and BEFORE auth on purpose: connect
-			// applies the first-listed interceptor outermost, so anything
-			// installed after auth cannot see auth's own rejections — and a
-			// wave of failed authentications leaving no log line was the
-			// widest part of this gap. Failures only; successes are otel's job.
-			middleware.LogOutcome(l),
-			// Auth: a JWT (OIDC/issuer) OR an `paladin_pat_…` API key. The JWT gate verifies
-			// non-PAT bearers and lets a PAT through; apiTokData then verifies the PAT and
-			// establishes the principal. Both paths land a principal before RequireAudience.
-			// Also steps aside for a capability: since ADR-0010 one may be the whole
-			// credential, and it rides in its own header — so a capability-only
-			// request has no Authorization at all and this gate used to refuse it
-			// as "missing Authorization header" before it could be authenticated.
-			auth.InterceptorSkipTokensAndCapabilities(verifierData),
-			apiTokData,
-			// capData BEFORE RequireAudience for the same reason apiTokData is: the
-			// audience check reads the principal, so a credential that establishes
-			// one has to run first.
-			capData,
-			auth.RequireAudience(auth.AudienceData),
-			// Refuses a trashed or purged tenant's credentials; after every
-			// interceptor that establishes a principal, before validation and
-			// idempotency, so a refused call is never answered from memo.
-			tenantGate,
-			// Refuses a change to a tenant in the trash, whoever asks.
-			tenantFreeze,
-			// A platform admin's request acts on the tenant it names; everything
-			// below keys on that tenant, so it is set before any of them.
-			middleware.ActOnNamedTenant(),
-			// After auth so the tenant is known, and before the quota and
-			// idempotency work so a throttled caller is turned away before it
-			// costs a database round-trip.
-			tenantRL,
-			// After otel (span exists) and after auth (principal known), so the
-			// request logger carries trace_id, span_id, request_id and tenant_id
-			// for every line the handlers write through logger.FromContext.
-			middleware.LogContextStreaming(l),
-			// Bucket-scoped enforcement is wired here: repos.Object.LookupBucket
-			// resolves the upload's Collection to its (backend, bucket) so a
-			// bucket quota row can be found. Without WithBucketScope those rows
-			// are maintained by the reconciler and shown on /stats but reject
-			// nothing. Both scopes cost a point lookup on the upload path —
-			// collections by PK, then quotas by its unique index.
-			middleware.NewQuotaSoftCheck(repos.Quota).WithBucketScope(repos.Object),
-			validateInterceptor,
-			idempotencyInterceptor,
-			// A platform admin's calls inside another tenant only: they are
-			// what that tenant's trail would miss (see AuditActingElsewhere).
-			middleware.AuditActingElsewhere(repos.Audit, auth.AudienceData),
-		),
+	// The plane's interceptors; the codec, size limits and compression it
+	// shares with the others are rpcMountOptions.
+	dataServer := connect.NewServer(
+		// Outermost of all: a panic anywhere below is answered as an
+		// internal error and logged with its stack.
+		middleware.Recover(l),
+		// Outermost of all: tracing and the failure log inside it see an
+		// internal error as it happened; the caller sees its code and a
+		// request id, not a driver's message.
+		middleware.ScrubInternal(),
+		otelInt,
+		// Outermost after tracing, and BEFORE auth on purpose: connect
+		// applies the first-listed interceptor outermost, so anything
+		// installed after auth cannot see auth's own rejections — and a
+		// wave of failed authentications leaving no log line was the
+		// widest part of this gap. Failures only; successes are otel's job.
+		middleware.LogOutcome(l),
+		// Auth: a JWT (OIDC/issuer) OR an `paladin_pat_…` API key. The JWT gate verifies
+		// non-PAT bearers and lets a PAT through; apiTokData then verifies the PAT and
+		// establishes the principal. Both paths land a principal before RequireAudience.
+		// Also steps aside for a capability: since ADR-0010 one may be the whole
+		// credential, and it rides in its own header — so a capability-only
+		// request has no Authorization at all and this gate used to refuse it
+		// as "missing Authorization header" before it could be authenticated.
+		auth.InterceptorSkipTokensAndCapabilities(verifierData),
+		apiTokData,
+		// capData BEFORE RequireAudience for the same reason apiTokData is: the
+		// audience check reads the principal, so a credential that establishes
+		// one has to run first.
+		capData,
+		auth.RequireAudience(auth.AudienceData),
+		// Refuses a trashed or purged tenant's credentials; after every
+		// interceptor that establishes a principal, before validation and
+		// idempotency, so a refused call is never answered from memo.
+		tenantGate,
+		// Refuses a change to a tenant in the trash, whoever asks.
+		tenantFreeze,
+		// A platform admin's request acts on the tenant it names; everything
+		// below keys on that tenant, so it is set before any of them.
+		middleware.ActOnNamedTenant(),
+		// After auth so the tenant is known, and before the quota and
+		// idempotency work so a throttled caller is turned away before it
+		// costs a database round-trip.
+		tenantRL.Intercept,
+		// After otel (span exists) and after auth (principal known), so the
+		// request logger carries trace_id, span_id, request_id and tenant_id
+		// for every line the handlers write through logger.FromContext.
+		middleware.LogContext(l),
+		// Bucket-scoped enforcement is wired here: repos.Object.LookupBucket
+		// resolves the upload's Collection to its (backend, bucket) so a
+		// bucket quota row can be found. Without WithBucketScope those rows
+		// are maintained by the reconciler and shown on /stats but reject
+		// nothing. Both scopes cost a point lookup on the upload path —
+		// collections by PK, then quotas by its unique index.
+		middleware.NewQuotaSoftCheck(repos.Quota).WithBucketScope(repos.Object).Interceptor(),
+		validateInterceptor,
+		idempotencyInterceptor,
+		// A platform admin's calls inside another tenant only: they are
+		// what that tenant's trail would miss (see AuditActingElsewhere).
+		middleware.AuditActingElsewhere(repos.Audit, auth.AudienceData),
 	)
-	// The codec, size limits, compression and panic recovery every plane
-	// shares: rpcHandlerOptions.
-	iamOpts := connect.WithHandlerOptions(
-		rpcHandlerOptions(l),
-		connect.WithInterceptors(
-			// Outermost of all: tracing and the failure log inside it see an
-			// internal error as it happened; the caller sees its code and a
-			// request id, not a driver's message.
-			middleware.ScrubInternal(),
-			otelInt,
-			// Outermost after tracing, and BEFORE auth on purpose: connect
-			// applies the first-listed interceptor outermost, so anything
-			// installed after auth cannot see auth's own rejections — and a
-			// wave of failed authentications leaving no log line was the
-			// widest part of this gap. Failures only; successes are otel's job.
-			middleware.LogOutcome(l),
-			auth.NewPermissiveInterceptor(verifierIAM,
-				"Login",
-				"RefreshToken",
-				"ExchangeAudience",
-			),
-			apiTokIAM,
-			// Refuses a trashed or purged tenant's credentials; after every
-			// interceptor that establishes a principal, before validation and
-			// idempotency, so a refused call is never answered from memo.
-			tenantGate,
-			// Refuses a change to a tenant in the trash, whoever asks.
-			tenantFreeze,
-			middleware.NewLoginRateLimiter(
-				cfg.Auth.LoginRateLimitPerSubjectPerMinute,
-				cfg.Auth.LoginRateLimitPerIPPerMinute,
-			),
-			// Audit IAM mutations (Login, CreateUser, RefreshToken, …).
-			// Placed after the permissive interceptor so
-			// anonymous/failed Login attempts are still recorded — a
-			// credential-misuse breach must leave a server-side trail
-			// (SOC 2 / ISO 27001 / PCI). No dispatcher mirror on this plane.
-			// Synchronous + crash-durable (ADR-0004): the row commits before
-			// the RPC returns, so a kill can't drop a credential-misuse trail.
-			middleware.AuditWithMirror(repos.Audit, auth.AudienceIAM, false, nil),
-			// Tenant-scoped IAM calls (memberships, password change) are charged
-			// to their tenant; Login and RefreshToken carry no tenant yet and are
-			// covered by the login limiter above.
-			tenantRL,
-			// See the data plane: after otel and after auth. On IAM the principal
-			// is often absent (Login, RefreshToken are permissive), so these lines
-			// carry trace and request id without a tenant — which is correct, not
-			// a gap. An anonymous failed login is exactly the line worth finding.
-			middleware.LogContextStreaming(l),
-			validateInterceptor,
-			idempotencyInterceptor,
-		),
+	// The plane's interceptors; the codec, size limits and compression it
+	// shares with the others are rpcMountOptions.
+	iamServer := connect.NewServer(
+		// Outermost of all: a panic anywhere below is answered as an
+		// internal error and logged with its stack.
+		middleware.Recover(l),
+		// Outermost of all: tracing and the failure log inside it see an
+		// internal error as it happened; the caller sees its code and a
+		// request id, not a driver's message.
+		middleware.ScrubInternal(),
+		otelInt,
+		// Outermost after tracing, and BEFORE auth on purpose: connect
+		// applies the first-listed interceptor outermost, so anything
+		// installed after auth cannot see auth's own rejections — and a
+		// wave of failed authentications leaving no log line was the
+		// widest part of this gap. Failures only; successes are otel's job.
+		middleware.LogOutcome(l),
+		auth.NewPermissiveInterceptor(verifierIAM,
+			"Login",
+			"RefreshToken",
+			"ExchangeAudience",
+		).Intercept,
+		apiTokIAM,
+		// Refuses a trashed or purged tenant's credentials; after every
+		// interceptor that establishes a principal, before validation and
+		// idempotency, so a refused call is never answered from memo.
+		tenantGate,
+		// Refuses a change to a tenant in the trash, whoever asks.
+		tenantFreeze,
+		middleware.NewLoginRateLimiter(
+			cfg.Auth.LoginRateLimitPerSubjectPerMinute,
+			cfg.Auth.LoginRateLimitPerIPPerMinute,
+		).Interceptor(),
+		// Audit IAM mutations (Login, CreateUser, RefreshToken, …).
+		// Placed after the permissive interceptor so
+		// anonymous/failed Login attempts are still recorded — a
+		// credential-misuse breach must leave a server-side trail
+		// (SOC 2 / ISO 27001 / PCI). No dispatcher mirror on this plane.
+		// Synchronous + crash-durable (ADR-0004): the row commits before
+		// the RPC returns, so a kill can't drop a credential-misuse trail.
+		middleware.AuditWithMirror(repos.Audit, auth.AudienceIAM, false, nil),
+		// Tenant-scoped IAM calls (memberships, password change) are charged
+		// to their tenant; Login and RefreshToken carry no tenant yet and are
+		// covered by the login limiter above.
+		tenantRL.Intercept,
+		// See the data plane: after otel and after auth. On IAM the principal
+		// is often absent (Login, RefreshToken are permissive), so these lines
+		// carry trace and request id without a tenant — which is correct, not
+		// a gap. An anonymous failed login is exactly the line worth finding.
+		middleware.LogContext(l),
+		validateInterceptor,
+		idempotencyInterceptor,
 	)
 
 	healthH = NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("api")
@@ -452,33 +453,29 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	healthH.Register(dataMux)
 	dataServices := servicesIn(protoregistry.GlobalFiles, dataPackage)
 	mountGRPCStandards(dataMux, healthH.GRPCChecker(dataServices...), dataServices)
-	dataMux.Handle(paladindatav1connect.NewObjectServiceHandler(
-		connectdata.NewObjectServer(objH, versionH).WithLocks(lockH).WithTaints(taintH), dataOpts))
-	dataMux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(connectdata.NewMultipartServer(mpH), dataOpts))
-	dataMux.Handle(paladindatav1connect.NewPresignServiceHandler(connectdata.NewPresignServer(presignH), dataOpts))
-	dataMux.Handle(paladindatav1connect.NewObjectTagServiceHandler(connectdata.NewObjectTagServer(objH), dataOpts))
-	dataMux.Handle(paladindatav1connect.NewBatchServiceHandler(connectdata.NewBatchServer(batchH), dataOpts))
-	dataMux.Handle(paladindatav1connect.NewOperationServiceHandler(connectdata.NewOperationServer(opH), dataOpts))
+	paladindatav1connect.RegisterObjectServiceHandler(dataServer, connectdata.NewObjectServer(objH, versionH).WithLocks(lockH).WithTaints(taintH))
+	paladindatav1connect.RegisterMultipartUploadServiceHandler(dataServer, connectdata.NewMultipartServer(mpH))
+	paladindatav1connect.RegisterPresignServiceHandler(dataServer, connectdata.NewPresignServer(presignH))
+	paladindatav1connect.RegisterObjectTagServiceHandler(dataServer, connectdata.NewObjectTagServer(objH))
+	paladindatav1connect.RegisterBatchServiceHandler(dataServer, connectdata.NewBatchServer(batchH))
+	paladindatav1connect.RegisterOperationServiceHandler(dataServer, connectdata.NewOperationServer(opH))
 	// StorageBootstrapService shares the data-plane interceptor stack
-	// (dataOpts) so the api_token principal + RequireAudience(data) apply — an
+	// (dataServer) so the api_token principal + RequireAudience(data) apply — an
 	// aud=data PAT can reach EnsureTenantStorage.
-	dataMux.Handle(paladindatav1connect.NewStorageBootstrapServiceHandler(connectdata.NewStorageBootstrapServer(storageBootstrapH), dataOpts))
+	paladindatav1connect.RegisterStorageBootstrapServiceHandler(dataServer, connectdata.NewStorageBootstrapServer(storageBootstrapH))
+	connecthttp.Mount(dataMux, dataServer, rpcMountOptions()...)
 
 	iamMux = http.NewServeMux()
 	iamMux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(iamMux)
 	iamServices := servicesIn(protoregistry.GlobalFiles, iamPackage)
 	mountGRPCStandards(iamMux, healthH.GRPCChecker(iamServices...), iamServices)
-	iamMux.Handle(paladiniamv1connect.NewAuthServiceHandler(connectiam.NewAuthServer(authH), iamOpts))
-	iamMux.Handle(paladiniamv1connect.NewUserServiceHandler(connectiam.NewUserServer(userH, repos.Tenant), iamOpts))
-	iamMux.Handle(paladiniamv1connect.NewHealthServiceHandler(
-		connectiam.NewSystemServer(meta.Version, meta.Commit, ParseBuildTime(meta.BuildTime), "api", healthH),
-		iamOpts,
-	))
-	iamMux.Handle(paladiniamv1connect.NewUserSettingsServiceHandler(
-		connectiam.NewUserSettingsServer(userSettingsH),
-		iamOpts,
-	))
+	paladiniamv1connect.RegisterAuthServiceHandler(iamServer, connectiam.NewAuthServer(authH))
+	paladiniamv1connect.RegisterUserServiceHandler(iamServer, connectiam.NewUserServer(userH, repos.Tenant))
+	paladiniamv1connect.RegisterHealthServiceHandler(iamServer, connectiam.NewSystemServer(meta.Version, meta.Commit, ParseBuildTime(meta.BuildTime), "api", healthH))
+
+	paladiniamv1connect.RegisterUserSettingsServiceHandler(iamServer, connectiam.NewUserSettingsServer(userSettingsH))
+	connecthttp.Mount(iamMux, iamServer, rpcMountOptions()...)
 
 	// OAuth 2.1 Authorization Server (ADR-0009): mount the raw-HTTP /oauth/*
 	// endpoints on the IAM mux and seed first-party clients. Reuses the same

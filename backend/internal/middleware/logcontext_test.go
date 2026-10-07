@@ -5,13 +5,14 @@ import (
 	"net/http"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
@@ -36,20 +37,19 @@ func fieldsFromHandlerLog(t *testing.T, ctx context.Context, header http.Header)
 	core, logs := observer.New(zapcore.InfoLevel)
 	base := zap.New(core)
 
-	var next connect.UnaryFunc = func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	probe := &unarytest.Probe{OnCall: func(ctx context.Context) error {
 		logger.FromContext(ctx).Info("handler line")
-		return connect.NewResponse(&struct{}{}), nil
-	}
+		return nil
+	}}
 
-	req := connect.NewRequest(&struct{}{})
+	var pairs []string
 	for k, vs := range header {
 		for _, v := range vs {
-			req.Header().Add(k, v)
+			pairs = append(pairs, k, v)
 		}
 	}
 
-	interceptor := LogContextStreaming(base)
-	if _, err := interceptor.WrapUnary(next)(ctx, req); err != nil {
+	if _, err := unarytest.CallProbe(ctx, probe, []connect.ServerInterceptor{LogContext(base)}, pairs...); err != nil {
 		t.Fatalf("interceptor: %v", err)
 	}
 	entries := logs.All()

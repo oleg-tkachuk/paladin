@@ -4,23 +4,24 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // The verify histogram is emitted from one place and consumed by nobody in
-// this repo, so nothing but a collector can tell whether it fires. It did not
-// fire for streaming RPCs at all: the streaming wrapper was a hand-copy of the
-// unary one that had never carried the metric line, and every behavioural test
-// passed either way. Both wrappers now go through apiTokenInterceptor.
-// authenticate, and this is what holds that they do.
+// this repo, so nothing but a collector can tell whether it fires. It once did
+// not fire for streaming RPCs at all: the streaming wrapper was a hand-copy of
+// the unary one that had never carried the metric line, and every behavioural
+// test passed either way. One interceptor function now serves both call
+// shapes through apiTokenInterceptor.authenticate, so there is no second copy
+// to drift; this holds that a verify, accepted or refused, is metered.
 //
 // ONE provider for the package, installed at init. OTel's global meter binds
 // its delegate once — instruments created against the no-op default before a
@@ -71,45 +72,22 @@ func verifyCountFor(t *testing.T, tenantID string, ok bool) uint64 {
 	return n
 }
 
-// Both call kinds in one test, because they are one claim: a verify is
-// metered, whatever wrapper reached it. Split across two tests, a regression
-// on one path reads as an unrelated failure rather than as the asymmetry it
-// would be.
-func TestVerifyIsMeteredOnBothCallKinds(t *testing.T) {
-	f := newStreamFixture(t)
+func TestVerifyIsMetered(t *testing.T) {
+	f := newTokenFixture(t)
 
-	t.Run("streaming handler", func(t *testing.T) {
+	t.Run("a verified call", func(t *testing.T) {
 		tenant := uuid.New()
 		tok := f.issue(t, api_token.IssueRequest{TenantID: tenant})
-		i := &apiTokenInterceptor{verifier: f.verifier, audience: "data"}
+		i := &apiTokenInterceptor{verifier: f.verifier, audience: planeData}
 
 		if got := verifyCountFor(t, tenant.String(), true); got != 0 {
 			t.Fatalf("fresh tenant already has %d samples", got)
 		}
 
-		conn := newStreamConn()
-		conn.header.Set("Authorization", "Bearer "+tok.Plaintext)
-		var called bool
-		var seen context.Context
-		if err := i.WrapStreamingHandler(streamNext(&called, &seen))(context.Background(), conn); err != nil {
-			t.Fatalf("stream should be admitted, got %v", err)
-		}
-
-		if got := verifyCountFor(t, tenant.String(), true); got != 1 {
-			t.Errorf("verify samples after one stream: got %d, want 1", got)
-		}
-	})
-
-	t.Run("unary handler", func(t *testing.T) {
-		tenant := uuid.New()
-		tok := f.issue(t, api_token.IssueRequest{TenantID: tenant})
-		i := &apiTokenInterceptor{verifier: f.verifier, audience: "data"}
-
-		next := func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			return connect.NewResponse(&emptypb.Empty{}), nil
-		}
-		if _, err := i.WrapUnary(next)(context.Background(), newReq("Bearer "+tok.Plaintext)); err != nil {
-			t.Fatalf("call should be admitted, got %v", err)
+		c := callProbe(context.Background(), []connect.ServerInterceptor{i.intercept},
+			paladin.HeaderAuthorization, bearerPrefix+tok.Plaintext)
+		if c.err != nil {
+			t.Fatalf("call should be admitted, got %v", c.err)
 		}
 
 		if got := verifyCountFor(t, tenant.String(), true); got != 1 {
@@ -119,17 +97,14 @@ func TestVerifyIsMeteredOnBothCallKinds(t *testing.T) {
 
 	// A refused token is metered too, with ok=false and no tenant — the
 	// failure rate is the half of this histogram an operator actually alerts
-	// on, and it is recorded before the error mapping on both paths.
-	t.Run("a refused verify is metered on the streaming path", func(t *testing.T) {
-		i := &apiTokenInterceptor{verifier: f.verifier, audience: "data"}
+	// on, and it is recorded before the error mapping.
+	t.Run("a refused verify", func(t *testing.T) {
+		i := &apiTokenInterceptor{verifier: f.verifier, audience: planeData}
 		before := verifyCountFor(t, "", false)
 
-		conn := newStreamConn()
-		conn.header.Set("Authorization", "Bearer "+api_token.TokenPrefix+
-			"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
-		var called bool
-		var seen context.Context
-		if err := i.WrapStreamingHandler(streamNext(&called, &seen))(context.Background(), conn); err == nil {
+		c := callProbe(context.Background(), []connect.ServerInterceptor{i.intercept},
+			paladin.HeaderAuthorization, bearerPrefix+unknownPAT)
+		if c.err == nil {
 			t.Fatal("expected the unknown token to be refused")
 		}
 

@@ -26,14 +26,13 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"connectrpc.com/connect"
-	"connectrpc.com/grpchealth"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/grpchealth/v2"
 	"go.uber.org/zap"
 )
 
@@ -236,7 +235,7 @@ type grpcChecker struct {
 
 func (c grpcChecker) Check(ctx context.Context, req *grpchealth.CheckRequest) (*grpchealth.CheckResponse, error) {
 	if req.Service != "" && !c.known[req.Service] {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("unknown service %q", req.Service))
+		return nil, connect.Errorf(connect.CodeNotFound, "unknown service %q", req.Service)
 	}
 	if c.h.shuttingDown.Load() {
 		return &grpchealth.CheckResponse{Status: grpchealth.StatusNotServing}, nil

@@ -9,14 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	mcppkg "github.com/oleg-tkachuk/paladin/backend/internal/mcp"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
 
 // ─── helpers ───────────────────────────────────────────────────────────────
@@ -78,7 +80,7 @@ func TestNewHandlerPanicsWithoutAuthorizer(t *testing.T) {
 func TestAuthorizeRejectsAnonymous(t *testing.T) {
 	h := NewHandler(config.MCP{}, allowAll())
 
-	_, err := h.Inspect(context.Background(), connect.NewRequest(&adminv1.MCPInspectRequest{}))
+	_, err := h.Inspect(context.Background(), &adminv1.MCPInspectRequest{})
 	if code(err) != connect.CodeUnauthenticated {
 		t.Fatalf("code = %v, want Unauthenticated", code(err))
 	}
@@ -88,7 +90,7 @@ func TestAuthorizeDeniedByPolicy(t *testing.T) {
 	az := &fakeAuthorizer{decision: cedar.DecisionDeny}
 	h := NewHandler(config.MCP{}, az)
 
-	_, err := h.Inspect(ctxAs("viewer"), connect.NewRequest(&adminv1.MCPInspectRequest{}))
+	_, err := h.Inspect(ctxAs("viewer"), &adminv1.MCPInspectRequest{})
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", code(err))
 	}
@@ -98,7 +100,7 @@ func TestAuthorizePolicyErrorIsInternal(t *testing.T) {
 	az := &fakeAuthorizer{err: errors.New("cedar exploded")}
 	h := NewHandler(config.MCP{}, az)
 
-	_, err := h.Inspect(ctxAs("admin"), connect.NewRequest(&adminv1.MCPInspectRequest{}))
+	_, err := h.Inspect(ctxAs("admin"), &adminv1.MCPInspectRequest{})
 	if code(err) != connect.CodeInternal {
 		t.Fatalf("code = %v, want Internal", code(err))
 	}
@@ -110,7 +112,7 @@ func TestAuthorizeRequestsInspectMCP(t *testing.T) {
 	az := allowAll()
 	h := NewHandler(config.MCP{}, az)
 
-	if _, err := h.Inspect(ctxAs("admin"), connect.NewRequest(&adminv1.MCPInspectRequest{})); err != nil {
+	if _, err := h.Inspect(ctxAs("admin"), &adminv1.MCPInspectRequest{}); err != nil {
 		t.Fatalf("Inspect: %v", err)
 	}
 	if az.gotAction != cedar.ActionInspectMCP {
@@ -124,7 +126,7 @@ func TestAuthorizeRequestsInspectMCP(t *testing.T) {
 func TestListSessionsIsGatedToo(t *testing.T) {
 	h := NewHandler(config.MCP{}, &fakeAuthorizer{decision: cedar.DecisionDeny})
 
-	_, err := h.ListSessions(ctxAs("viewer"), connect.NewRequest(&adminv1.ListSessionsRequest{}))
+	_, err := h.ListSessions(ctxAs("viewer"), &adminv1.ListSessionsRequest{})
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", code(err))
 	}
@@ -143,11 +145,11 @@ func TestInspectProjectsConfig(t *testing.T) {
 		},
 	}, allowAll())
 
-	res, err := h.Inspect(ctxAs("admin"), connect.NewRequest(&adminv1.MCPInspectRequest{}))
+	res, err := h.Inspect(ctxAs("admin"), &adminv1.MCPInspectRequest{})
 	if err != nil {
 		t.Fatalf("Inspect: %v", err)
 	}
-	msg := res.Msg
+	msg := res
 	if msg.Upstreams.AdminUrl != "http://admin:8090" ||
 		msg.Upstreams.DataUrl != "http://data:8080" ||
 		msg.Upstreams.IamUrl != "http://iam:8085" {
@@ -487,12 +489,12 @@ func TestSessionTargetsNilResolverFallsBack(t *testing.T) {
 func TestListSessionsEmptyWhenUnconfigured(t *testing.T) {
 	h := NewHandler(config.MCP{}, allowAll())
 
-	res, err := h.ListSessions(ctxAs("admin"), connect.NewRequest(&adminv1.ListSessionsRequest{}))
+	res, err := h.ListSessions(ctxAs("admin"), &adminv1.ListSessionsRequest{})
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
-	if len(res.Msg.Sessions) != 0 {
-		t.Errorf("want no sessions, got %d", len(res.Msg.Sessions))
+	if len(res.Sessions) != 0 {
+		t.Errorf("want no sessions, got %d", len(res.Sessions))
 	}
 }
 
@@ -514,26 +516,30 @@ func TestListSessionsProxiesAndSorts(t *testing.T) {
 	h.sessionsURL = srv.URL
 	h.httpClient = srv.Client()
 
-	req := connect.NewRequest(&adminv1.ListSessionsRequest{})
-	req.Header().Set("Authorization", "Bearer admin-jwt")
+	// In process, so the call carries the header and the principal both: the
+	// transport serves the handler on the caller's context.
+	client := paladinadminv1connect.NewMCPInspectServiceClient(unarytest.Client(func(s *connect.Server) {
+		paladinadminv1connect.RegisterMCPInspectServiceHandler(s, h)
+	}))
+	ctx := unarytest.WithHeader(ctxAs("admin"), "Authorization", "Bearer admin-jwt")
 
-	res, err := h.ListSessions(ctxAs("admin"), req)
+	res, err := client.ListSessions(ctx, &adminv1.ListSessionsRequest{})
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
-	if len(res.Msg.Sessions) != 2 {
-		t.Fatalf("want 2 sessions, got %d", len(res.Msg.Sessions))
+	if len(res.Sessions) != 2 {
+		t.Fatalf("want 2 sessions, got %d", len(res.Sessions))
 	}
 	// Sorted by StartedAt, so the older s1 comes first regardless of the
 	// order the replica returned them in.
-	if res.Msg.Sessions[0].Id != "s1" || res.Msg.Sessions[1].Id != "s2" {
-		t.Errorf("order = %s,%s, want s1,s2", res.Msg.Sessions[0].Id, res.Msg.Sessions[1].Id)
+	if res.Sessions[0].Id != "s1" || res.Sessions[1].Id != "s2" {
+		t.Errorf("order = %s,%s, want s1,s2", res.Sessions[0].Id, res.Sessions[1].Id)
 	}
-	if res.Msg.Sessions[0].ToolCallCount != 3 || res.Msg.Sessions[1].RequestCount != 5 {
-		t.Errorf("counters not projected: %+v", res.Msg.Sessions)
+	if res.Sessions[0].ToolCallCount != 3 || res.Sessions[1].RequestCount != 5 {
+		t.Errorf("counters not projected: %+v", res.Sessions)
 	}
-	if res.Msg.Sessions[0].StartedAt == nil || !res.Msg.Sessions[0].StartedAt.AsTime().Equal(t0) {
-		t.Errorf("StartedAt not projected: %v", res.Msg.Sessions[0].StartedAt)
+	if res.Sessions[0].StartedAt == nil || !res.Sessions[0].StartedAt.AsTime().Equal(t0) {
+		t.Errorf("StartedAt not projected: %v", res.Sessions[0].StartedAt)
 	}
 }
 
@@ -549,12 +555,12 @@ func TestListSessionsDegradesOnReplicaError(t *testing.T) {
 	h.sessionsURL = srv.URL
 	h.httpClient = srv.Client()
 
-	res, err := h.ListSessions(ctxAs("admin"), connect.NewRequest(&adminv1.ListSessionsRequest{}))
+	res, err := h.ListSessions(ctxAs("admin"), &adminv1.ListSessionsRequest{})
 	if err != nil {
 		t.Fatalf("a failing replica must not fail the RPC, got %v", err)
 	}
-	if len(res.Msg.Sessions) != 0 {
-		t.Errorf("want no sessions, got %d", len(res.Msg.Sessions))
+	if len(res.Sessions) != 0 {
+		t.Errorf("want no sessions, got %d", len(res.Sessions))
 	}
 }
 
@@ -574,14 +580,14 @@ func TestListSessionsDeduplicatesByFreshestLastSeen(t *testing.T) {
 	h.sessionsURL = srv.URL
 	h.httpClient = srv.Client()
 
-	res, err := h.ListSessions(ctxAs("admin"), connect.NewRequest(&adminv1.ListSessionsRequest{}))
+	res, err := h.ListSessions(ctxAs("admin"), &adminv1.ListSessionsRequest{})
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
-	if len(res.Msg.Sessions) != 1 {
-		t.Fatalf("want the duplicate collapsed, got %d", len(res.Msg.Sessions))
+	if len(res.Sessions) != 1 {
+		t.Fatalf("want the duplicate collapsed, got %d", len(res.Sessions))
 	}
-	if res.Msg.Sessions[0].RequestCount != 99 {
-		t.Errorf("kept the stale entry: %+v", res.Msg.Sessions[0])
+	if res.Sessions[0].RequestCount != 99 {
+		t.Errorf("kept the stale entry: %+v", res.Sessions[0])
 	}
 }

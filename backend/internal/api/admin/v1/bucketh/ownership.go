@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
@@ -68,11 +69,11 @@ func (h *Handler) checkOwnership(ctx context.Context, backendID, bucket string, 
 		return apiutil.MapError(fmt.Errorf("%w: %q on backend %q", ErrBucketReserved, bucket, backendID))
 	}
 	if h.provisioner == nil {
-		return connect.NewError(connect.CodeUnavailable, errors.New("backend provisioning not wired"))
+		return connect.NewError(connect.CodeUnavailable, "backend provisioning not wired")
 	}
 	exists, err := h.provisioner.BucketExists(ctx, backendID, bucket)
 	if err != nil {
-		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("check bucket on backend: %w", err))
+		return rpcerr.New(connect.CodeUnavailable, fmt.Errorf("check bucket on backend: %w", err))
 	}
 	switch {
 	case provision && exists:

@@ -12,13 +12,14 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
 
@@ -97,7 +98,7 @@ func NewHandler(repo Repository, policy cedar.Authorizer) *Handler {
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID uuid.UUID) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -109,7 +110,7 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID u
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }
@@ -117,7 +118,7 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID u
 func (h *Handler) GetOperation(ctx context.Context, opID uuid.UUID) (*Operation, error) {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, ""); err != nil {
 		return nil, err
@@ -127,7 +128,7 @@ func (h *Handler) GetOperation(ctx context.Context, opID uuid.UUID) (*Operation,
 	}
 	op, err := h.repo.Get(ctx, opID, tenantID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	return &op, nil
 }
@@ -135,7 +136,7 @@ func (h *Handler) GetOperation(ctx context.Context, opID uuid.UUID) (*Operation,
 func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpManage, ""); err != nil {
 		return err
@@ -144,8 +145,7 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 		return err
 	}
 	if err := h.repo.Cancel(ctx, opID, tenantID); err != nil {
-		return connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("operation not cancellable: %w", err))
+		return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("operation not cancellable: %w", err))
 	}
 	return nil
 }
@@ -157,7 +157,7 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int32, pageToken, filter string, newestFirst bool) ([]Operation, string, error) {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, "", connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
 		return nil, "", err
@@ -169,8 +169,7 @@ func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int
 	if pageToken != "" {
 		id, err := uuid.Parse(pageToken)
 		if err != nil {
-			return nil, "", connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("invalid page_token: %w", err))
+			return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid page_token: %w", err))
 		}
 		afterID = id
 	}
@@ -180,8 +179,7 @@ func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int
 	}
 	page, err = celpkg.FilterPage(h.cel, celpkg.OperationSchema, filter, page, operationRow)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("filter: %w", err))
+		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
 	return page, next, nil
 }
@@ -208,7 +206,7 @@ func operationRow(o Operation) map[string]any {
 func (h *Handler) Submit(ctx context.Context, opType string, metadata []byte) (uuid.UUID, error) {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return uuid.Nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	op := Operation{
 		OperationID: uuid.Must(uuid.NewV7()),
@@ -218,7 +216,7 @@ func (h *Handler) Submit(ctx context.Context, opType string, metadata []byte) (u
 		Metadata:    metadata,
 	}
 	if err := h.repo.Create(ctx, op); err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeInternal, err)
+		return uuid.Nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return op.OperationID, nil
 }

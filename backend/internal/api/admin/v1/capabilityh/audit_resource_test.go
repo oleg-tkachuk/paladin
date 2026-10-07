@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -28,18 +28,18 @@ func TestIssueNamesTheCapabilityUnderItsTenant(t *testing.T) {
 	tenant := uuid.New()
 
 	ctx := withSlot(callerCtx(uuid.New(), "platform.admin"))
-	resp, err := h.Issue(ctx, connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+	resp, err := h.Issue(ctx, &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: tenant.String(), Subject: "alice",
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
 		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
-	id := uuid.MustParse(resp.Msg.GetCapability().GetId())
+	id := uuid.MustParse(resp.GetCapability().GetId())
 	if got, want := apiutil.ResourceFromContext(ctx), capabilityResourceName(tenant, id); got != want {
 		t.Errorf("resource = %q, want %q", got, want)
 	}
@@ -52,14 +52,14 @@ func TestDelegateNamesTheChildUnderItsTenant(t *testing.T) {
 	h := NewHandler(mkIssuer(t, store), store, nil, &denyAuthorizer{})
 
 	ctx := withSlot(auth.WithCapability(context.Background(), &parent))
-	resp, err := h.Delegate(ctx, connect.NewRequest(&adminv1.CapabilityServiceDelegateRequest{
+	resp, err := h.Delegate(ctx, &adminv1.CapabilityServiceDelegateRequest{
 		ParentId:   parent.ID.String(),
 		TtlSeconds: 60,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Delegate: %v", err)
 	}
-	child := uuid.MustParse(resp.Msg.GetCapability().GetId())
+	child := uuid.MustParse(resp.GetCapability().GetId())
 	if got, want := apiutil.ResourceFromContext(ctx), capabilityResourceName(tenant, child); got != want {
 		t.Errorf("resource = %q, want %q", got, want)
 	}
@@ -79,9 +79,9 @@ func TestRevokeNamesTheCapabilityUnderItsTenant(t *testing.T) {
 			store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
 			h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 			ctx := withSlot(caller)
-			if _, err := h.Revoke(ctx, connect.NewRequest(&adminv1.CapabilityServiceRevokeRequest{
+			if _, err := h.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{
 				Id: target.ID.String(),
-			})); err != nil {
+			}); err != nil {
 				t.Fatalf("Revoke: %v", err)
 			}
 			if got, want := apiutil.ResourceFromContext(ctx), capabilityResourceName(owner, target.ID); got != want {
@@ -98,7 +98,7 @@ func TestRevokeRefusedNamesNothing(t *testing.T) {
 	store := &recordingStore{revokeErr: capability.ErrNotFound}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 	ctx := withSlot(callerCtx(uuid.New()))
-	_, err := h.Revoke(ctx, connect.NewRequest(&adminv1.CapabilityServiceRevokeRequest{Id: uuid.NewString()}))
+	_, err := h.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: uuid.NewString()})
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("err = %v, want NotFound", err)
 	}

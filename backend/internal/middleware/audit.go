@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
@@ -26,6 +26,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
@@ -93,13 +94,13 @@ type AuditMirrorEmitter interface {
 // Wiring at the app layer gates this on
 // cfg.Dispatcher.AuditMirrorEnabled (default off — even higher
 // cardinality than charge events because every mutation logs).
-func AuditWithMirror(w AuditWriter, audience string, recordReads bool, mirror AuditMirrorEmitter) connect.Interceptor {
-	return &auditInterceptor{
+func AuditWithMirror(w AuditWriter, audience string, recordReads bool, mirror AuditMirrorEmitter) connect.ServerInterceptor {
+	return (&auditInterceptor{
 		w:           w,
 		audience:    audience,
 		recordReads: recordReads,
 		mirror:      mirror,
-	}
+	}).interceptor()
 }
 
 type auditInterceptor struct {
@@ -118,8 +119,8 @@ type auditInterceptor struct {
 // calls the tenant's trail would otherwise miss: its own principals' writes
 // are not audited on the data plane, and auditing every agent upload would
 // put a synchronous insert on the hot path.
-func AuditActingElsewhere(w AuditWriter, audience string) connect.Interceptor {
-	return &auditInterceptor{w: w, audience: audience, onlyElsewhere: true}
+func AuditActingElsewhere(w AuditWriter, audience string) connect.ServerInterceptor {
+	return (&auditInterceptor{w: w, audience: audience, onlyElsewhere: true}).interceptor()
 }
 
 // actingElsewhere reports whether ctx acts on a tenant other than the
@@ -133,14 +134,20 @@ func actingElsewhere(ctx context.Context) bool {
 	return err == nil && acting != p.TenantID
 }
 
-func (a *auditInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+// interceptor records a unary call with its request message, and a stream
+// with what its headers say.
+func (a *auditInterceptor) interceptor() connect.ServerInterceptor {
+	return unary.Interceptor(a.unary, a.stream)
+}
+
+func (a *auditInterceptor) unary(next unary.Func) unary.Func {
+	return func(ctx context.Context, spec connect.Spec, req proto.Message) (proto.Message, error) {
 		// Install a mutable resource-name slot the handler can write
 		// the canonical (A-shape) name into. Audit row picks it up
 		// after the handler returns (see preferCanonical).
 		ctx = apiutil.WithResourceSlot(ctx)
-		resp, err := next(ctx, req)
-		if a.shouldSkip(req.Spec()) || (a.onlyElsewhere && !actingElsewhere(ctx)) {
+		resp, err := next(ctx, spec, req)
+		if a.shouldSkip(spec) || (a.onlyElsewhere && !actingElsewhere(ctx)) {
 			return resp, err
 		}
 		// Best-effort in the sense that it never blocks or fails the RPC — NOT
@@ -154,25 +161,21 @@ func (a *auditInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		// Error, not Warn. An audit write that fails is a defect with an
 		// external consequence, and the rate of these is something someone
 		// should be paged about.
-		if werr := a.write(ctx, req, err); werr != nil {
+		if werr := a.write(ctx, spec, req, err); werr != nil {
 			logger.FromContext(ctx).Error("audit entry not written",
-				zap.String("rpc", req.Spec().Procedure), zap.Error(werr))
+				zap.String("rpc", spec.Procedure), zap.Error(werr))
 		}
 		return resp, err
 	}
 }
 
-func (a *auditInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (a *auditInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		err := next(ctx, conn)
-		if a.shouldSkip(conn.Spec()) || (a.onlyElsewhere && !actingElsewhere(ctx)) {
+func (a *auditInterceptor) stream(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		err := next(ctx, spec, stream)
+		if a.shouldSkip(spec) || (a.onlyElsewhere && !actingElsewhere(ctx)) {
 			return err
 		}
-		_ = a.writeStream(ctx, conn.Spec().Procedure, conn.RequestHeader().Get("X-Request-Id"), err)
+		_ = a.writeStream(ctx, spec.Procedure, unary.Info(ctx).RequestHeader().Get(HeaderRequestID), err)
 		return err
 	}
 }
@@ -210,7 +213,7 @@ func (a *auditInterceptor) shouldSkip(spec connect.Spec) bool {
 	return false
 }
 
-func (a *auditInterceptor) write(ctx context.Context, req connect.AnyRequest, rpcErr error) error {
+func (a *auditInterceptor) write(ctx context.Context, spec connect.Spec, req proto.Message, rpcErr error) error {
 	subject, tenantID := principalCoords(ctx)
 	entry := admindomain.AuditEntry{
 		EntryID:       uuid.Must(uuid.NewV7()),
@@ -218,9 +221,9 @@ func (a *auditInterceptor) write(ctx context.Context, req connect.AnyRequest, rp
 		ActorSubject:  subject,
 		ActorTenantID: tenantID,
 		ActorAudience: a.audience,
-		Action:        req.Spec().Procedure,
-		ResourceName:  preferCanonical(ctx, req.Any()),
-		RequestID:     req.Header().Get("X-Request-Id"),
+		Action:        spec.Procedure,
+		ResourceName:  preferCanonical(ctx, req),
+		RequestID:     unary.Info(ctx).RequestHeader().Get(HeaderRequestID),
 		SourceIP:      sourceIP(ctx),
 		CapabilityID:  capabilityID(ctx),
 	}
@@ -228,7 +231,7 @@ func (a *auditInterceptor) write(ctx context.Context, req connect.AnyRequest, rp
 		entry.ErrorMessage = rpcErr.Error()
 	}
 	entry.BeforeJSON = beforeFromContext(ctx)
-	entry.AfterJSON = marshalAuditPayload(req.Any())
+	entry.AfterJSON = marshalAuditPayload(req)
 	// The audit row and its mirror event commit atomically: the mirror
 	// enqueues its outbox rows on the insert's own transaction (ADR-0003).
 	// nil mirror ⇒ nil hook ⇒ InsertWithOutbox degrades to a plain Insert.

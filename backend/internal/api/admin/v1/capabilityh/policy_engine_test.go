@@ -3,7 +3,7 @@ package capabilityh
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
@@ -22,9 +22,9 @@ func TestList_CapabilityIssuerMayListAnotherTenant(t *testing.T) {
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, cedartest.Engine(""))
 	other := uuid.New()
 
-	if _, err := h.List(callerCtx(uuid.New(), roleCapabilityIssuer), connect.NewRequest(&adminv1.CapabilityServiceListRequest{
+	if _, err := h.List(callerCtx(uuid.New(), roleCapabilityIssuer), &adminv1.CapabilityServiceListRequest{
 		TenantId: other.String(),
-	})); err != nil {
+	}); err != nil {
 		t.Fatalf("List as capability-issuer: %v", err)
 	}
 	if store.listArgs == nil || store.listArgs.TenantID != other {
@@ -40,9 +40,9 @@ func TestDelegate_CapabilityIssuerIsRefused(t *testing.T) {
 	store := &fakeStore{cap: &parent}
 	h := NewHandler(mkIssuer(t, store), store, nil, cedartest.Engine(""))
 
-	_, err := h.Delegate(callerCtx(uuid.New(), roleCapabilityIssuer), connect.NewRequest(&adminv1.CapabilityServiceDelegateRequest{
+	_, err := h.Delegate(callerCtx(uuid.New(), roleCapabilityIssuer), &adminv1.CapabilityServiceDelegateRequest{
 		ParentId: parent.ID.String(),
-	}))
+	})
 	if codeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", codeOf(err))
 	}
@@ -56,15 +56,15 @@ func TestCapabilityActions_DeniedWithoutAGrant(t *testing.T) {
 	own := uuid.New()
 	ctx := callerCtx(own)
 
-	_, issueErr := h.Issue(ctx, connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+	_, issueErr := h.Issue(ctx, &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: own.String(), Subject: "self",
 		},
 		Audience: []string{"paladin-data"}, TtlSeconds: 300,
 		Caveats: &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
-	}))
-	_, revokeErr := h.Revoke(ctx, connect.NewRequest(&adminv1.CapabilityServiceRevokeRequest{Id: uuid.New().String()}))
-	_, listErr := h.List(ctx, connect.NewRequest(&adminv1.CapabilityServiceListRequest{TenantId: own.String()}))
+	})
+	_, revokeErr := h.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: uuid.New().String()})
+	_, listErr := h.List(ctx, &adminv1.CapabilityServiceListRequest{TenantId: own.String()})
 
 	for call, err := range map[string]error{"Issue": issueErr, "Revoke": revokeErr, "List": listErr} {
 		if codeOf(err) != connect.CodePermissionDenied {

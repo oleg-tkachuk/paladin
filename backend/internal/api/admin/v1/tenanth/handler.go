@@ -16,7 +16,7 @@ import (
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
@@ -25,6 +25,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -367,7 +368,7 @@ func (h *Handler) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, buc
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal,
-			errors.New("set default binding: authorized request carries no principal"))
+			"set default binding: authorized request carries no principal")
 	}
 	// The admin plane writes this row for ANOTHER tenant, and WITH CHECK pins
 	// a write to the session tenant — so the session becomes that tenant for
@@ -395,7 +396,7 @@ func (h *Handler) ClearDefaultBinding(ctx context.Context, tenantID uuid.UUID) e
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID uuid.UUID) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -407,7 +408,7 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID u
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }
@@ -434,11 +435,10 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	// tenant_id is a UUID and slug is the human handle.
 	if args.Slug == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("slug is required"))
+			"slug is required")
 	}
 	if err := apiutil.ValidateTenantSlug(args.Slug); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("slug: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("slug: %w", err))
 	}
 	// display_name defaults to slug when omitted. Trim before checking
 	// so " " also triggers the default. Length + format are enforced
@@ -458,7 +458,7 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	if args.StorageLayout != "dedicated" &&
 		(args.DefaultBackendID == "") != (args.DefaultBucketName == "") {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("default_binding requires both backend and bucket"))
+			"default_binding requires both backend and bucket")
 	}
 	// storage_layout defaults to "shared"; "dedicated" (ADR-0015) is accepted
 	// and persisted here. The dedicated-bucket provisioning is wired in a
@@ -473,19 +473,19 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 		// (paladin-<tenant_uuid>), so a bucket name must NOT be supplied.
 		if args.DefaultBackendID == "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument,
-				errors.New("storage_layout 'dedicated' requires default_binding.backend_id naming the backend to provision on (there is no default backend)"))
+				"storage_layout 'dedicated' requires default_binding.backend_id naming the backend to provision on (there is no default backend)")
 		}
 		if args.DefaultBucketName != "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument,
-				errors.New("default_binding.bucket_name cannot be combined with storage_layout 'dedicated' (the bucket name is derived)"))
+				"default_binding.bucket_name cannot be combined with storage_layout 'dedicated' (the bucket name is derived)")
 		}
 		// Consume the caller's backend as the dedicated backend and clear the
 		// shared-binding fields so the dedicated provisioning path owns it.
 		args.DedicatedBackend = args.DefaultBackendID
 		args.DefaultBackendID = ""
 	default:
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("storage_layout: must be 'shared' or 'dedicated', got %q", args.StorageLayout))
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"storage_layout: must be 'shared' or 'dedicated', got %q", args.StorageLayout)
 	}
 	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
 		return nil, err
@@ -543,7 +543,7 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	apiutil.StashResource(ctx, apiutil.TenantNamePrefix+args.TenantID.String())
 	t, err := h.repo.Get(ctx, args.TenantID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create tenant: read back: %w", err))
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("create tenant: read back: %w", err))
 	}
 	return &t, nil
 }
@@ -551,7 +551,7 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 func (h *Handler) GetTenant(ctx context.Context, tenantID uuid.UUID) (*Tenant, error) {
 	callerTenant, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	// Non-admins may only view their own tenant. A provisioner reads the
 	// tenant it is about to provision — to learn whether it exists at all, and
@@ -567,7 +567,7 @@ func (h *Handler) GetTenant(ctx context.Context, tenantID uuid.UUID) (*Tenant, e
 	}
 	t, err := h.repo.Get(ctx, tenantID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	return &t, nil
 }
@@ -607,22 +607,22 @@ func (h *Handler) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, er
 		}
 	}
 	if _, err := auth.PrincipalFromContext(ctx); err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	callerTenant, _ := auth.TenantFromContext(ctx)
 	if lookupErr == nil && callerTenant != t.TenantID {
 		if err := requirePlatformAdmin(ctx); err != nil {
 			// Constant-time: same outcome shape as a missing row.
-			return nil, connect.NewError(connect.CodeNotFound, ErrNotFound)
+			return nil, connect.NewError(connect.CodeNotFound, ErrNotFound.Error()).WithCause(ErrNotFound)
 		}
 	}
 	if err := h.authorize(ctx, cedar.ActionReadTenant, target); err != nil {
 		// Same — opaque NotFound rather than PermissionDenied keeps
 		// existing-vs-missing slug indistinguishable.
-		return nil, connect.NewError(connect.CodeNotFound, ErrNotFound)
+		return nil, connect.NewError(connect.CodeNotFound, ErrNotFound.Error()).WithCause(ErrNotFound)
 	}
 	if lookupErr != nil {
-		return nil, connect.NewError(connect.CodeNotFound, lookupErr)
+		return nil, connect.NewError(connect.CodeNotFound, lookupErr.Error()).WithCause(lookupErr)
 	}
 	return &t, nil
 }
@@ -642,11 +642,11 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 
 	t, err := h.repo.Get(ctx, tenantID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	if t.StorageLayout != "shared" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("tenant is %q, not 'shared'; only shared tenants can migrate to dedicated", t.StorageLayout))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"tenant is %q, not 'shared'; only shared tenants can migrate to dedicated", t.StorageLayout)
 	}
 
 	// Source is where the tenant's objects physically live today — the
@@ -655,8 +655,7 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	// tenants whose keys carry explicit bindings.)
 	srcBackend, srcBucket, err := h.repo.TenantSourceBucket(ctx, tenantID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("cannot determine source bucket to migrate from: %w", err))
+		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("cannot determine source bucket to migrate from: %w", err))
 	}
 
 	targetBackend := targetBackendID
@@ -679,9 +678,9 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	m, err := h.repo.StartStorageMigration(ctx, args)
 	if err != nil {
 		if errors.Is(err, ErrStorageMigrationExists) {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &m, nil
 }
@@ -696,7 +695,7 @@ func (h *Handler) GetTenantStorageMigration(ctx context.Context, tenantID uuid.U
 	}
 	m, err := h.repo.GetStorageMigration(ctx, tenantID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	return &m, nil
 }
@@ -727,16 +726,16 @@ func (h *Handler) ResolveRenamedSlug(ctx context.Context, oldSlug string) (strin
 		}
 	}
 	if _, perr := auth.PrincipalFromContext(ctx); perr != nil {
-		return "", time.Time{}, connect.NewError(connect.CodeUnauthenticated, perr)
+		return "", time.Time{}, connect.NewError(connect.CodeUnauthenticated, perr.Error()).WithCause(perr)
 	}
 	if authErr := h.authorize(ctx, cedar.ActionReadTenant, target); authErr != nil {
-		return "", time.Time{}, connect.NewError(connect.CodeNotFound, ErrNotFound)
+		return "", time.Time{}, connect.NewError(connect.CodeNotFound, ErrNotFound.Error()).WithCause(ErrNotFound)
 	}
 	if lookupErr != nil {
-		return "", time.Time{}, connect.NewError(connect.CodeInternal, lookupErr)
+		return "", time.Time{}, connect.NewError(connect.CodeInternal, lookupErr.Error()).WithCause(lookupErr)
 	}
 	if !found {
-		return "", time.Time{}, connect.NewError(connect.CodeNotFound, ErrNotFound)
+		return "", time.Time{}, connect.NewError(connect.CodeNotFound, ErrNotFound.Error()).WithCause(ErrNotFound)
 	}
 	return res.NewSlug, res.RenamedAt, nil
 }
@@ -771,7 +770,7 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 		trimmed := strings.TrimSpace(*args.DisplayName)
 		if trimmed == "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument,
-				errors.New("display_name must not be empty"))
+				"display_name must not be empty")
 		}
 		args.DisplayName = &trimmed
 	}
@@ -883,11 +882,11 @@ func (h *Handler) PurgeTenant(ctx context.Context, tenantID uuid.UUID) error {
 	// destructive call lands.
 	t, err := h.repo.Get(ctx, tenantID)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err)
+		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	if t.DeletedAt.IsZero() {
 		return connect.NewError(connect.CodeFailedPrecondition,
-			errPurgeActiveTenant)
+			errPurgeActiveTenant.Error()).WithCause(errPurgeActiveTenant)
 	}
 	// expectedVersion=0 — the row is already trashed and OCC was
 	// enforced at SoftDelete time. Purge is monotonically destructive.
@@ -942,8 +941,7 @@ func (h *Handler) RenameTenantSlug(ctx context.Context, args RenameTenantSlugArg
 		return nil, err
 	}
 	if err := apiutil.ValidateTenantSlug(args.NewSlug); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("new_slug: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("new_slug: %w", err))
 	}
 	t, err := h.repo.Rename(ctx, args)
 	if err != nil {
@@ -962,8 +960,7 @@ func (h *Handler) ListTenants(ctx context.Context, args ListTenantsArgs, pageTok
 	if pageToken != "" {
 		id, err := uuid.Parse(pageToken)
 		if err != nil {
-			return nil, "", connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("invalid page_token: %w", err))
+			return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid page_token: %w", err))
 		}
 		args.AfterID = id
 	}
@@ -973,8 +970,7 @@ func (h *Handler) ListTenants(ctx context.Context, args ListTenantsArgs, pageTok
 	}
 	page, err = celpkg.FilterPage(h.cel, celpkg.TenantSchema, args.Filter, page, tenantRow)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("filter: %w", err))
+		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
 	return page, next, nil
 }
@@ -1020,11 +1016,11 @@ func requireProvisioningAuthority(ctx context.Context) error {
 func requirePlatformAdmin(ctx context.Context) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if !p.HasRole(apiutil.RolePlatformAdmin) {
 		return connect.NewError(connect.CodePermissionDenied,
-			errors.New("platform.admin role required"))
+			"platform.admin role required")
 	}
 	return nil
 }

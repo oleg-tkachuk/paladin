@@ -8,12 +8,11 @@ package systemh
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gopkg.in/yaml.v3"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -69,13 +69,12 @@ func (h *Handler) WithPool(pool *pgxpool.Pool) *Handler {
 // gating coverage test sees it (rather than tucked into the shim).
 func (h *Handler) MarshalRedacted(ctx context.Context) (yamlBlob string, sourcePath string, err error) {
 	if rerr := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); rerr != nil {
-		return "", "", connect.NewError(connect.CodePermissionDenied, rerr)
+		return "", "", connect.NewError(connect.CodePermissionDenied, rerr.Error()).WithCause(rerr)
 	}
 	redacted := h.cfg.Obfuscated()
 	out, err := yaml.Marshal(&redacted)
 	if err != nil {
-		return "", "", connect.NewError(connect.CodeInternal,
-			fmt.Errorf("marshal config: %w", err))
+		return "", "", rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal config: %w", err))
 	}
 	return string(out), h.sourcePath, nil
 }
@@ -92,7 +91,7 @@ func (h *Handler) MarshalRedacted(ctx context.Context) (yamlBlob string, sourceP
 // mcpinspecth.ListSessions.
 func (h *Handler) DispatcherStats(ctx context.Context) (stats *worker.DeliveryStats, available bool, err error) {
 	if rerr := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); rerr != nil {
-		return nil, false, connect.NewError(connect.CodePermissionDenied, rerr)
+		return nil, false, connect.NewError(connect.CodePermissionDenied, rerr.Error()).WithCause(rerr)
 	}
 	url := h.cfg.Dispatcher.OpsURL
 	if url == "" {
@@ -100,7 +99,7 @@ func (h *Handler) DispatcherStats(ctx context.Context) (stats *worker.DeliverySt
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/system/dispatcher-stats.json", nil)
 	if err != nil {
-		return nil, false, connect.NewError(connect.CodeInternal, err)
+		return nil, false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	res, err := h.httpClient.Do(req)
 	if err != nil {
@@ -113,8 +112,7 @@ func (h *Handler) DispatcherStats(ctx context.Context) (stats *worker.DeliverySt
 	}
 	var s worker.DeliveryStats
 	if err := json.NewDecoder(res.Body).Decode(&s); err != nil {
-		return nil, false, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("decode dispatcher stats: %w", err))
+		return nil, false, rpcerr.New(connect.CodeInternal, fmt.Errorf("decode dispatcher stats: %w", err))
 	}
 	return &s, true, nil
 }
@@ -153,7 +151,7 @@ type TenantName struct {
 // the RPC, so an operator still sees the fleet inventory.
 func (h *Handler) PlatformStats(ctx context.Context, page platformstats.TenantPage) (*PlatformStatsResult, error) {
 	if rerr := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); rerr != nil {
-		return nil, connect.NewError(connect.CodePermissionDenied, rerr)
+		return nil, connect.NewError(connect.CodePermissionDenied, rerr.Error()).WithCause(rerr)
 	}
 	out := &PlatformStatsResult{TenantNames: map[string]TenantName{}}
 
@@ -165,7 +163,7 @@ func (h *Handler) PlatformStats(ctx context.Context, page platformstats.TenantPa
 		// none — a wrong number on a page, with no error anywhere.
 		cp, err := platformstats.CollectControlPlane(auth.WithCrossTenantRead(ctx), h.pool)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		out.ControlPlane = cp
 	}
@@ -187,7 +185,7 @@ func (h *Handler) PlatformStats(ctx context.Context, page platformstats.TenantPa
 		}
 		names, err := h.tenantNames(ctx, ids)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		out.TenantNames = names
 	}
@@ -236,28 +234,28 @@ type SignalTenantsResult struct {
 // answer is Unavailable rather than an empty list that reads as "nobody".
 func (h *Handler) PlatformStatsTenants(ctx context.Context, signal platformstats.Signal, page platformstats.TenantPage) (*SignalTenantsResult, error) {
 	if rerr := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); rerr != nil {
-		return nil, connect.NewError(connect.CodePermissionDenied, rerr)
+		return nil, connect.NewError(connect.CodePermissionDenied, rerr.Error()).WithCause(rerr)
 	}
 	base := h.cfg.Worker.OpsURL
 	if base == "" {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("worker ops endpoint is not configured"))
+		return nil, connect.NewError(connect.CodeUnavailable, "worker ops endpoint is not configured")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		base+platformstats.SignalTenantsPath+"?"+platformstats.SignalQuery(signal, page).Encode(), nil)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	res, err := h.httpClient.Do(req)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
+		return nil, rpcerr.New(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("worker census: %s", res.Status))
+		return nil, connect.Errorf(connect.CodeUnavailable, "worker census: %s", res.Status)
 	}
 	var tenants platformstats.SignalTenants
 	if err := json.NewDecoder(res.Body).Decode(&tenants); err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
+		return nil, rpcerr.New(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
 	}
 
 	out := &SignalTenantsResult{Tenants: &tenants, TenantNames: map[string]TenantName{}}
@@ -268,7 +266,7 @@ func (h *Handler) PlatformStatsTenants(ctx context.Context, signal platformstats
 		}
 		names, err := h.tenantNames(ctx, ids)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		out.TenantNames = names
 	}

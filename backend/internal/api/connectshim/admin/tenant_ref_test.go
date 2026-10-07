@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -55,19 +55,19 @@ func TestSubscriptionParentAcceptsIDOrSlug(t *testing.T) {
 			t.Parallel()
 			h := &creatingSubs{}
 			srv := &EventSubscriptionServer{H: h, Tenants: &slugTenant{slug: refSlug, id: tenantID}}
-			_, err := srv.CreateSubscription(context.Background(), connect.NewRequest(&pb.CreateSubscriptionRequest{
+			_, err := srv.CreateSubscription(context.Background(), &pb.CreateSubscriptionRequest{
 				Parent:       tc.parent,
 				Subscription: &pb.EventSubscription{},
-			}))
+			})
 			assertTenantResolution(t, err, tc.wantCode, h.created.TenantID, tc.want)
 		})
 		t.Run("List/"+tc.label, func(t *testing.T) {
 			t.Parallel()
 			h := &recordingSubs{}
 			srv := &EventSubscriptionServer{H: h, Tenants: &slugTenant{slug: refSlug, id: tenantID}}
-			_, err := srv.ListSubscriptions(context.Background(), connect.NewRequest(&pb.ListSubscriptionsRequest{
+			_, err := srv.ListSubscriptions(context.Background(), &pb.ListSubscriptionsRequest{
 				Parent: tc.parent,
-			}))
+			})
 			assertTenantResolution(t, err, tc.wantCode, h.args.TenantID, tc.want)
 		})
 	}
@@ -79,10 +79,10 @@ func TestSubscriptionParentSlugWithoutResolver(t *testing.T) {
 	t.Parallel()
 
 	srv := &EventSubscriptionServer{H: &creatingSubs{}}
-	_, err := srv.CreateSubscription(context.Background(), connect.NewRequest(&pb.CreateSubscriptionRequest{
+	_, err := srv.CreateSubscription(context.Background(), &pb.CreateSubscriptionRequest{
 		Parent:       "tenants/" + refSlug,
 		Subscription: &pb.EventSubscription{},
-	}))
+	})
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 		t.Errorf("code = %v, want %v (err %v)", got, connect.CodeInvalidArgument, err)
 	}
@@ -119,9 +119,9 @@ func TestListAccessibleBucketsAcceptsIDOrSlug(t *testing.T) {
 			t.Parallel()
 			h := &accessibleBuckets{}
 			srv := &BucketServer{H: h, Tenants: &slugTenant{slug: refSlug, id: tenantID}}
-			_, err := srv.ListAccessibleBuckets(context.Background(), connect.NewRequest(&pb.ListAccessibleBucketsRequest{
+			_, err := srv.ListAccessibleBuckets(context.Background(), &pb.ListAccessibleBucketsRequest{
 				Tenant: tc.tenant,
-			}))
+			})
 			assertTenantResolution(t, err, tc.wantCode, h.tenant, tc.want)
 		})
 	}

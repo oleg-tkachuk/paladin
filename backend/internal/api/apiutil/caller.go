@@ -8,7 +8,7 @@ package apiutil
 import (
 	"context"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -21,11 +21,11 @@ import (
 func CallerContext(ctx context.Context) (uuid.UUID, *auth.Principal, error) {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	return tenantID, p, nil
 }
@@ -40,11 +40,11 @@ func CallerContext(ctx context.Context) (uuid.UUID, *auth.Principal, error) {
 func ActingContext(ctx context.Context) (uuid.UUID, *auth.Principal, error) {
 	tenantID, err := auth.EffectiveTenant(ctx)
 	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return uuid.Nil, nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	return tenantID, p, nil
 }

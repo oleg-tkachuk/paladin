@@ -18,7 +18,6 @@ package admin
 import (
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -29,7 +28,7 @@ import (
 // the proto, this test fails until the shim forwards it.
 func TestTenantServer_CreateTenant_FieldMapping(t *testing.T) {
 	tid := uuid.MustParse("0a8c0000-0000-7000-8000-000000000001")
-	req := connect.NewRequest(&pb.CreateTenantRequest{
+	req := &pb.CreateTenantRequest{
 		TenantId: tid.String(),
 		Tenant: &pb.Tenant{
 			Slug:                 "acme-prod",
@@ -38,7 +37,7 @@ func TestTenantServer_CreateTenant_FieldMapping(t *testing.T) {
 			InheritedCedarPolicy: "permit (principal, action, resource);",
 		},
 		DefaultBucket: "storageBackends/aws-eu/buckets/paladin-prod",
-	})
+	}
 
 	// We can't reach the real *tenant.Handler without spinning up
 	// auth + Cedar + a Repository; instead we lift the parsing
@@ -46,7 +45,7 @@ func TestTenantServer_CreateTenant_FieldMapping(t *testing.T) {
 	// output. The shim's responsibility surface IS exactly
 	// "translate Connect Request to handler Args" — no DB, no
 	// auth, no events.
-	args, err := parseCreateTenantArgs(req.Msg)
+	args, err := parseCreateTenantArgs(req)
 	if err != nil {
 		t.Fatalf("parseCreateTenantArgs: %v", err)
 	}

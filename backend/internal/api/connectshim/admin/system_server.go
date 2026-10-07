@@ -2,9 +2,8 @@ package admin
 
 import (
 	"context"
-	"errors"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
@@ -34,23 +33,23 @@ func NewSystemServer(h *systemh.Handler) *SystemServer {
 	return &SystemServer{H: h}
 }
 
-func (s *SystemServer) GetConfig(ctx context.Context, _ *connect.Request[pb.GetConfigRequest]) (*connect.Response[pb.GetConfigResponse], error) {
+func (s *SystemServer) GetConfig(ctx context.Context, _ *pb.GetConfigRequest) (*pb.GetConfigResponse, error) {
 	if s.H == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("system handler not wired"))
+		return nil, connect.NewError(connect.CodeUnavailable, "system handler not wired")
 	}
 	yamlBlob, sourcePath, err := s.H.MarshalRedacted(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.GetConfigResponse{
+	return &pb.GetConfigResponse{
 		Yaml:       yamlBlob,
 		SourcePath: sourcePath,
-	}), nil
+	}, nil
 }
 
-func (s *SystemServer) GetDispatcherStats(ctx context.Context, _ *connect.Request[pb.GetDispatcherStatsRequest]) (*connect.Response[pb.GetDispatcherStatsResponse], error) {
+func (s *SystemServer) GetDispatcherStats(ctx context.Context, _ *pb.GetDispatcherStatsRequest) (*pb.GetDispatcherStatsResponse, error) {
 	if s.H == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("system handler not wired"))
+		return nil, connect.NewError(connect.CodeUnavailable, "system handler not wired")
 	}
 	stats, available, err := s.H.DispatcherStats(ctx)
 	if err != nil {
@@ -74,16 +73,16 @@ func (s *SystemServer) GetDispatcherStats(ctx context.Context, _ *connect.Reques
 			}
 		}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *SystemServer) GetPlatformStats(ctx context.Context, req *connect.Request[pb.GetPlatformStatsRequest]) (*connect.Response[pb.GetPlatformStatsResponse], error) {
+func (s *SystemServer) GetPlatformStats(ctx context.Context, req *pb.GetPlatformStatsRequest) (*pb.GetPlatformStatsResponse, error) {
 	if s.H == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("system handler not wired"))
+		return nil, connect.NewError(connect.CodeUnavailable, "system handler not wired")
 	}
 	res, err := s.H.PlatformStats(ctx, platformstats.TenantPage{
-		Size:  int(req.Msg.GetTenantPage().GetPageSize()),
-		After: req.Msg.GetTenantPage().GetPageToken(),
+		Size:  int(req.GetTenantPage().GetPageSize()),
+		After: req.GetTenantPage().GetPageToken(),
 	})
 	if err != nil {
 		return nil, err
@@ -192,7 +191,7 @@ func (s *SystemServer) GetPlatformStats(ctx context.Context, req *connect.Reques
 			BySinkKind: r.Subscriptions.BySinkKind,
 		}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // signalFromPB maps the wire enum onto the census signal it names.
@@ -203,21 +202,21 @@ var signalFromPB = map[pb.PlatformStatsSignal]platformstats.Signal{
 	pb.PlatformStatsSignal_PLATFORM_STATS_SIGNAL_API_TOKENS_EXPIRING:   platformstats.SignalAPITokensExpiring,
 }
 
-func (s *SystemServer) ListPlatformStatsTenants(ctx context.Context, req *connect.Request[pb.ListPlatformStatsTenantsRequest]) (*connect.Response[pb.ListPlatformStatsTenantsResponse], error) {
+func (s *SystemServer) ListPlatformStatsTenants(ctx context.Context, req *pb.ListPlatformStatsTenantsRequest) (*pb.ListPlatformStatsTenantsResponse, error) {
 	if s.H == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("system handler not wired"))
+		return nil, connect.NewError(connect.CodeUnavailable, "system handler not wired")
 	}
 	// The validation interceptor refuses UNSPECIFIED and unknown values
 	// first; this keeps a request that skipped it from reaching the worker
 	// as an empty signal.
-	signal, ok := signalFromPB[req.Msg.GetSignal()]
+	signal, ok := signalFromPB[req.GetSignal()]
 	if !ok {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("signal must name a census count with a drill-down"))
+			"signal must name a census count with a drill-down")
 	}
 	res, err := s.H.PlatformStatsTenants(ctx, signal, platformstats.TenantPage{
-		Size:  int(req.Msg.GetPage().GetPageSize()),
-		After: req.Msg.GetPage().GetPageToken(),
+		Size:  int(req.GetPage().GetPageSize()),
+		After: req.GetPage().GetPageToken(),
 	})
 	if err != nil {
 		return nil, err
@@ -237,7 +236,7 @@ func (s *SystemServer) ListPlatformStatsTenants(ctx context.Context, req *connec
 			Count:       t.Count,
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 func statesToPB(in []platformstats.StateStat) []*pb.ObjectStateStat {

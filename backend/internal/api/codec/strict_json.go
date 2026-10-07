@@ -27,10 +27,13 @@ package codec
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -39,67 +42,72 @@ import (
 // codec: handlers select a codec by the name in the Content-Type, so
 // registering under any other name would leave the lenient one in place for
 // application/json and this one unreachable.
-const Name = "json"
+const Name = connect.CodecNameJSON
 
-// StrictJSON is a drop-in replacement for Connect's protoJSONCodec that fails
-// on unknown request fields.
+// StrictJSON is a drop-in replacement for connectproto's JSON codec that
+// fails on unknown request fields.
 //
-// It implements Codec plus the two optional extensions Connect probes for —
-// marshalAppender (envelope writes reuse a buffer) and stableCodec (required
-// for the Connect protocol's idempotent GET encoding). Implementing Codec
-// alone would compile and serve, then silently drop GET support and an
-// allocation optimisation, so the extras are not optional in practice.
+// It implements connect.StableCodec, not only connect.Codec: the Connect
+// protocol's idempotent GET encoding needs byte-stable output, and a codec
+// without it would compile and serve, then silently drop GET support.
 type StrictJSON struct{}
+
+var _ connect.StableCodec = StrictJSON{}
 
 func (StrictJSON) Name() string { return Name }
 
 func (StrictJSON) IsBinary() bool { return false }
 
-func (StrictJSON) Marshal(message any) ([]byte, error) {
+func (StrictJSON) MarshalWrite(_ context.Context, dst io.Writer, message any) error {
+	b, err := marshal(message)
+	if err != nil {
+		return err
+	}
+	_, err = dst.Write(b)
+	return err
+}
+
+// MarshalWriteStable mirrors the built-in codec: protojson emits inconsistent
+// whitespace, so the output is compacted to make it byte-stable.
+func (StrictJSON) MarshalWriteStable(_ context.Context, dst io.Writer, message any) error {
+	b, err := marshal(message)
+	if err != nil {
+		return err
+	}
+	var compacted bytes.Buffer
+	if err := json.Compact(&compacted, b); err != nil {
+		return err
+	}
+	_, err = compacted.WriteTo(dst)
+	return err
+}
+
+// UnmarshalRead is the whole point of this type: DiscardUnknown is false.
+func (StrictJSON) UnmarshalRead(_ context.Context, src io.Reader, message any) error {
+	m, ok := message.(proto.Message)
+	if !ok {
+		return errNotProto(message)
+	}
+	b, err := io.ReadAll(src)
+	if err != nil {
+		return err
+	}
+	if len(b) == 0 {
+		return errors.New("zero-length payload is not a valid JSON object")
+	}
+	if err := (protojson.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(b, m); err != nil {
+		return fmt.Errorf("unmarshal into %T: %w", message, err)
+	}
+	return nil
+}
+
+func marshal(message any) ([]byte, error) {
 	m, ok := message.(proto.Message)
 	if !ok {
 		return nil, errNotProto(message)
 	}
 	return protojson.MarshalOptions{}.Marshal(m)
 }
-
-func (StrictJSON) MarshalAppend(dst []byte, message any) ([]byte, error) {
-	m, ok := message.(proto.Message)
-	if !ok {
-		return nil, errNotProto(message)
-	}
-	return protojson.MarshalOptions{}.MarshalAppend(dst, m)
-}
-
-// Unmarshal is the whole point of this type: DiscardUnknown is false.
-func (StrictJSON) Unmarshal(binary []byte, message any) error {
-	m, ok := message.(proto.Message)
-	if !ok {
-		return errNotProto(message)
-	}
-	if len(binary) == 0 {
-		return errors.New("zero-length payload is not a valid JSON object")
-	}
-	if err := (protojson.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(binary, m); err != nil {
-		return fmt.Errorf("unmarshal into %T: %w", message, err)
-	}
-	return nil
-}
-
-// MarshalStable mirrors the built-in codec: protojson emits inconsistent
-// whitespace, so the output is compacted to make it byte-stable.
-func (c StrictJSON) MarshalStable(message any) ([]byte, error) {
-	b, err := c.Marshal(message)
-	if err != nil {
-		return nil, err
-	}
-	compacted := bytes.NewBuffer(b[:0])
-	if err := json.Compact(compacted, b); err != nil {
-		return nil, err
-	}
-	return compacted.Bytes(), nil
-}
-
 func errNotProto(message any) error {
 	if _, ok := message.(protoiface); ok {
 		return fmt.Errorf("%T uses github.com/golang/protobuf, but connect-go only supports google.golang.org/protobuf: see https://go.dev/blog/protobuf-apiv2", message)

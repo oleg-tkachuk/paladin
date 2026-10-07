@@ -4,14 +4,14 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 
 	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/capability/memstore"
@@ -70,37 +70,39 @@ func TestCapabilityBiscuit_OfflineAttenuationIsEnforced(t *testing.T) {
 
 	// The handler stands in for a data-plane RPC: it asserts the op and
 	// resource the request names, as the real handlers do.
-	const procedure = "/auth.biscuit.v1.Svc/Call"
-	mux := http.NewServeMux()
-	mux.Handle(procedure, connect.NewUnaryHandler(procedure,
-		func(ctx context.Context, req *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
-			op := capability.Op(req.Header().Get("X-Test-Op"))
-			if err := AssertCapabilityOp(ctx, op, req.Header().Get("X-Test-Resource")); err != nil {
-				return nil, err
-			}
-			return connect.NewResponse(&emptypb.Empty{}), nil
-		}, connect.WithInterceptors(CapabilityEstablishingInterceptor(verifier, capability.AudiencePlaneData, nil, 0, "", nil))))
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	client := connect.NewClient[emptypb.Empty, emptypb.Empty](srv.Client(), srv.URL+procedure)
-	call := func(token, op, resource string) error {
-		req := connect.NewRequest(&emptypb.Empty{})
-		req.Header().Set("X-Paladin-Capability", token)
-		req.Header().Set("X-Test-Op", op)
-		req.Header().Set("X-Test-Resource", resource)
-		_, err := client.CallUnary(context.Background(), req)
+	const (
+		headerTestOp       = "X-Test-Op"
+		headerTestResource = "X-Test-Resource"
+	)
+	probe := &unarytest.Probe{OnCall: func(ctx context.Context) error {
+		h := unary.Info(ctx).RequestHeader()
+		return AssertCapabilityOp(ctx, capability.Op(h.Get(headerTestOp)), h.Get(headerTestResource))
+	}}
+	interceptors := []connect.ServerInterceptor{
+		CapabilityEstablishingInterceptor(verifier, capability.AudiencePlaneData, nil, 0, "", nil),
+	}
+	call := func(token string, op capability.Op, resource string) error {
+		_, err := unarytest.CallProbe(context.Background(), probe, interceptors,
+			HeaderCapability, token, headerTestOp, string(op), headerTestResource, resource)
 		return err
 	}
 
-	if err := call(full, "delete", "corpus/private/x"); err != nil {
+	const (
+		privateObject = "corpus/private/x"
+		publicObject  = "corpus/public/x"
+	)
+	if err := call(full, capability.OpDelete, privateObject); err != nil {
 		t.Fatalf("full Biscuit refused what its capability allows: %v", err)
 	}
-	if err := call(readOnly, "get", "corpus/public/x"); err != nil {
+	if err := call(readOnly, capability.OpGet, publicObject); err != nil {
 		t.Fatalf("attenuated Biscuit refused inside its scope: %v", err)
 	}
-	for _, c := range []struct{ op, resource string }{
-		{"delete", "corpus/public/x"}, // an op attenuated away
-		{"get", "corpus/private/x"},   // a resource attenuated away
+	for _, c := range []struct {
+		op       capability.Op
+		resource string
+	}{
+		{capability.OpDelete, publicObject}, // an op attenuated away
+		{capability.OpGet, privateObject},   // a resource attenuated away
 	} {
 		if err := call(readOnly, c.op, c.resource); connect.CodeOf(err) != connect.CodePermissionDenied {
 			t.Errorf("%s %s with the attenuated Biscuit: err = %v, want PermissionDenied", c.op, c.resource, err)

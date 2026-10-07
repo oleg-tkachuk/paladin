@@ -6,17 +6,17 @@ package policyh
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/backend/policies"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -43,7 +43,7 @@ func NewHandler(engine cedar.Authorizer, store cedar.Store) *Handler {
 func (h *Handler) authorizeInspect(ctx context.Context, tenantID uuid.UUID, collection string) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.engine.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -55,7 +55,7 @@ func (h *Handler) authorizeInspect(ctx context.Context, tenantID uuid.UUID, coll
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }
@@ -100,7 +100,7 @@ func (h *Handler) ValidatePolicy(ctx context.Context, text string) (*ValidateOut
 	}
 	findings, err := policies.Check(validateName, []byte(text))
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("schema check: %w", err))
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("schema check: %w", err))
 	}
 	out := &ValidateOutput{OK: true}
 	for _, f := range findings {
@@ -157,7 +157,7 @@ func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*Si
 	// would tell the caller its policy refuses something no policy can name.
 	action, ok := cedar.LookupAction(in.Action)
 	if !ok {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("action %q is not declared in the schema", in.Action))
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "action %q is not declared in the schema", in.Action)
 	}
 	decision, err := h.engine.IsAuthorized(ctx, princ, action, res, cedar.RequestContext{Now: time.Now()})
 	if err != nil {
@@ -231,7 +231,7 @@ const BuiltinLayerSource = "built-in"
 func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, fallbackTenant uuid.UUID) (*EffectivePolicyOutput, error) {
 	tenantID, collection, err := parseSimulateResource(resourceName, fallbackTenant)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	if err := h.authorizeInspect(ctx, tenantID, collection); err != nil {
 		return nil, err
@@ -242,7 +242,7 @@ func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, f
 	// bucket's — an admin inspecting tenant X saw neither.
 	stored, _, _, err := h.store.Fetch(auth.WithActingTenant(ctx, tenantID), tenantID, collection)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("fetch policy: %w", err))
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("fetch policy: %w", err))
 	}
 	// Built by the engine's own join, so what this returns is what the
 	// authorizer compiles — the built-in layer and any freeze included.

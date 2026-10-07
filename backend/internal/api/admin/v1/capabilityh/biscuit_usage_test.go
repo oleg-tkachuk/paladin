@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -28,8 +28,8 @@ func (f *fakeCopyUsage) CopyUsage(ctx context.Context, ids [][]byte) ([]capabili
 	return f.out, f.err
 }
 
-func biscuitUsageReq() *connect.Request[adminv1.CapabilityServiceGetBiscuitUsageRequest] {
-	return connect.NewRequest(&adminv1.CapabilityServiceGetBiscuitUsageRequest{Token: "biscuit"})
+func biscuitUsageReq() *adminv1.CapabilityServiceGetBiscuitUsageRequest {
+	return &adminv1.CapabilityServiceGetBiscuitUsageRequest{Token: "biscuit"}
 }
 
 // Every limit in force is reported, innermost first, with its counters; a
@@ -54,10 +54,10 @@ func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBiscuitUsage: %v", err)
 	}
-	if resp.Msg.GetCapabilityId() != target.ID.String() || resp.Msg.GetUnitCode() != "EUR" {
-		t.Errorf("capability %q unit %q", resp.Msg.GetCapabilityId(), resp.Msg.GetUnitCode())
+	if resp.GetCapabilityId() != target.ID.String() || resp.GetUnitCode() != "EUR" {
+		t.Errorf("capability %q unit %q", resp.GetCapabilityId(), resp.GetUnitCode())
 	}
-	got := resp.Msg.GetCopies()
+	got := resp.GetCopies()
 	if len(got) != 2 {
 		t.Fatalf("copies = %v", got)
 	}
