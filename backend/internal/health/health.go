@@ -26,11 +26,14 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"connectrpc.com/connect"
+	"connectrpc.com/grpchealth"
 	"go.uber.org/zap"
 )
 
@@ -187,13 +190,7 @@ func (h *Handler) serveReady(w http.ResponseWriter, r *http.Request) {
 		h.respond(w, r, http.StatusServiceUnavailable, "draining", nil)
 		return
 	}
-	all := h.runChecks(r.Context(), h.Ready)
-	var critical []failure
-	for _, f := range all {
-		if f.Critical {
-			critical = append(critical, f)
-		}
-	}
+	all, critical := h.readiness(r.Context())
 	switch {
 	case len(critical) > 0:
 		h.respond(w, r, http.StatusServiceUnavailable, "unhealthy", all)
@@ -205,6 +202,49 @@ func (h *Handler) serveReady(w http.ResponseWriter, r *http.Request) {
 	default:
 		h.respond(w, r, http.StatusOK, "ok", nil)
 	}
+}
+
+// readiness runs the Ready checks: every failure, and the critical ones
+// among them, which take the replica out of service.
+func (h *Handler) readiness(ctx context.Context) (all, critical []failure) {
+	all = h.runChecks(ctx, h.Ready)
+	for _, f := range all {
+		if f.Critical {
+			critical = append(critical, f)
+		}
+	}
+	return all, critical
+}
+
+// GRPCChecker answers the standard gRPC health protocol as /readyz answers
+// the kubelet: NOT_SERVING while draining or while a critical check fails,
+// SERVING otherwise — degraded included, as /readyz keeps routing then.
+// services are the services the plane serves; the empty name asks for the
+// whole process, and any other is NotFound, as the protocol requires.
+func (h *Handler) GRPCChecker(services ...string) grpchealth.Checker {
+	known := make(map[string]bool, len(services))
+	for _, s := range services {
+		known[s] = true
+	}
+	return grpcChecker{h: h, known: known}
+}
+
+type grpcChecker struct {
+	h     *Handler
+	known map[string]bool
+}
+
+func (c grpcChecker) Check(ctx context.Context, req *grpchealth.CheckRequest) (*grpchealth.CheckResponse, error) {
+	if req.Service != "" && !c.known[req.Service] {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("unknown service %q", req.Service))
+	}
+	if c.h.shuttingDown.Load() {
+		return &grpchealth.CheckResponse{Status: grpchealth.StatusNotServing}, nil
+	}
+	if _, critical := c.h.readiness(ctx); len(critical) > 0 {
+		return &grpchealth.CheckResponse{Status: grpchealth.StatusNotServing}, nil
+	}
+	return &grpchealth.CheckResponse{Status: grpchealth.StatusServing}, nil
 }
 
 // serveStartup: 503 if any Startup check fails. Does NOT honour

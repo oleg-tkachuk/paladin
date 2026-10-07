@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"google.golang.org/protobuf/reflect/protoregistry"
+
 	"github.com/jackc/pgx/v5"
 
 	"connectrpc.com/connect"
@@ -17,7 +19,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/celh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/mcpinspecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/codec"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auditstream"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -186,11 +187,10 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	}
 	tenantRL := middleware.NewTenantRateLimitInterceptor(tenantRLCfg)
 
-	// Every plane decodes JSON with the strict codec: an unknown request field
-	// is a 400, not a silent discard. See internal/api/codec for why the
-	// forward-compatibility the default buys is not worth its cost here.
-	adminOpts := connect.WithOptions(
-		connect.WithCodec(codec.StrictJSON{}),
+	// The codec, size limits, compression and panic recovery every plane
+	// shares: rpcHandlerOptions.
+	adminOpts := connect.WithHandlerOptions(
+		rpcHandlerOptions(l),
 		connect.WithInterceptors(
 			// Outermost of all: tracing and the failure log inside it see an
 			// internal error as it happened; the caller sees its code and a
@@ -231,7 +231,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			tenantGate,
 			// Refuses a change to a tenant in the trash, whoever asks.
 			tenantFreeze,
-			connect.UnaryInterceptorFunc(validateInterceptor),
+			validateInterceptor,
 			// Idempotency-Key gate. RequireOnCreate=true means every
 			// admin-plane Create*/Issue* RPC must carry an `Idempotency-Key`
 			// header — the admin UI (frontend BFF) auto-injects a UUIDv7
@@ -279,6 +279,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// See AssembleAPIMuxes.
 	mux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(mux)
+	adminServices := servicesIn(protoregistry.GlobalFiles, adminPackage)
+	mountGRPCStandards(mux, healthH.GRPCChecker(adminServices...), adminServices)
 	mux.Handle(paladinadminv1connect.NewBackendServiceHandler(admin.NewBackendServer(backendH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewBucketServiceHandler(admin.NewBucketServer(bucketV2H, tenantH), adminOpts))
 	mux.Handle(paladinadminv1connect.NewTenantServiceHandler(admin.NewTenantServer(tenantH), adminOpts))

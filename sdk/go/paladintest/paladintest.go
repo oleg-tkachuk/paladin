@@ -501,7 +501,7 @@ func Start(opts ...Option) (*Server, func()) {
 			}
 			// After authentication, as the server's interceptor chain runs it.
 			if err := validator.Validate(msg); err != nil {
-				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("validation failed: %w", err))
+				return nil, invalidRequest(err)
 			}
 			if err := s.takeRPCFault(procedure, msg); err != nil {
 				return nil, err
@@ -1205,4 +1205,19 @@ func (s *Server) objectByID(id string) (*object, bool) {
 		}
 	}
 	return nil, false
+}
+
+// invalidRequest is the server's refusal of a request that breaks the
+// contract's rules, as connectrpc.com/validate builds it there:
+// InvalidArgument with protovalidate's message and the buf.validate.Violations
+// detail.
+func invalidRequest(err error) error {
+	cerr := connect.NewError(connect.CodeInvalidArgument, err)
+	var verr *protovalidate.ValidationError
+	if errors.As(err, &verr) {
+		if detail, derr := connect.NewErrorDetail(verr.ToProto()); derr == nil {
+			cerr.AddDetail(detail)
+		}
+	}
+	return cerr
 }
