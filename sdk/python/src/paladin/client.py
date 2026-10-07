@@ -266,9 +266,8 @@ class Client:
         ``user_agent_suffix`` — ``"worker/2.1"`` — is appended to the SDK's
         User-Agent. ``hooks`` are told of every retry. ``interceptors`` run
         outside the SDK's own, so one that times or traces a call covers its
-        retries; give sync or async ones to match the clients. (connectrpc-otel
-        0.2.0 is not one to use here: it fails on connect-python 0.9.0 — see
-        the README's OpenTelemetry section.)
+        retries; give sync or async ones to match the clients —
+        ``connectrpc_otel.OpenTelemetryInterceptor`` traces each RPC.
 
         ``dpop_key`` — a ``cryptography`` Ed25519 or P-256 private key — proves
         possession of the key a ``capability`` is bound to: each call, each
@@ -371,7 +370,7 @@ class _CapabilitySync:
     def on_start_sync(self, ctx: RequestContext) -> None:
         token = self._source()
         if token:
-            ctx.request_headers()[HEADER_CAPABILITY] = token
+            ctx.request_headers[HEADER_CAPABILITY] = token
 
     def on_end_sync(self, token: None, ctx: RequestContext, error: Exception | None) -> None:
         return None
@@ -386,7 +385,7 @@ class _CapabilityAsync:
         if asyncio.iscoroutine(token):
             token = await token
         if token:
-            ctx.request_headers()[HEADER_CAPABILITY] = token
+            ctx.request_headers[HEADER_CAPABILITY] = token
 
     async def on_end(self, token: None, ctx: RequestContext, error: Exception | None) -> None:
         return None
@@ -394,7 +393,7 @@ class _CapabilityAsync:
 
 def _apply_headers(headers: dict[str, str], ctx: RequestContext) -> None:
     for name, value in headers.items():
-        ctx.request_headers()[name] = value
+        ctx.request_headers[name] = value
 
 
 def _key_for(request: object, ctx: RequestContext) -> str | None:
@@ -408,7 +407,7 @@ def _key_for(request: object, ctx: RequestContext) -> str | None:
     # not even the block's: the server does not memoise a read, and an
     # idempotent call — regenerate_upload_url — must run again when repeated
     # rather than hand back the URL it is replacing.
-    if ctx.method().idempotency_level != IdempotencyLevel.UNKNOWN:
+    if ctx.method.idempotency_level != IdempotencyLevel.UNKNOWN:
         return None
     if chosen:
         return chosen
@@ -421,7 +420,7 @@ def _key_for(request: object, ctx: RequestContext) -> str | None:
 def _stamp(request: object, ctx: RequestContext) -> None:
     key = _key_for(request, ctx)
     if key:
-        ctx.request_headers()[HEADER_IDEMPOTENCY_KEY] = key
+        ctx.request_headers[HEADER_IDEMPOTENCY_KEY] = key
 
 
 def _retry_after(meta: Captured) -> float | None:
@@ -460,14 +459,14 @@ def _retryable(retry: Retry, err: ConnectError, ctx: RequestContext) -> bool:
     half is not the classifier's to decide."""
     if not (retry.retryable or default_retryable)(err):
         return False
-    if ctx.method().idempotency_level != IdempotencyLevel.UNKNOWN:
+    if ctx.method.idempotency_level != IdempotencyLevel.UNKNOWN:
         return True
-    return bool(ctx.request_headers().get(HEADER_IDEMPOTENCY_KEY))
+    return bool(ctx.request_headers.get(HEADER_IDEMPOTENCY_KEY))
 
 
 def _fits(wait: float, ctx: RequestContext) -> bool:
     """Whether a retry after ``wait`` seconds starts before the call's timeout."""
-    remaining = ctx.timeout_ms()
+    remaining = ctx.timeout_ms
     return remaining is None or wait * _MS_PER_SECOND < remaining
 
 
@@ -531,7 +530,7 @@ class _TokensSync:
     def intercept_unary_sync(
         self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
     ) -> RES:
-        ctx.request_headers()[HEADER_AUTHORIZATION] = _bearer(self._source.token(self._audience))
+        ctx.request_headers[HEADER_AUTHORIZATION] = _bearer(self._source.token(self._audience))
         try:
             return call_next(request, ctx)
         except ConnectError as err:
@@ -539,7 +538,7 @@ class _TokensSync:
             if err.code != Code.UNAUTHENTICATED or invalidate is None:
                 raise
             invalidate(self._audience)
-        ctx.request_headers()[HEADER_AUTHORIZATION] = _bearer(self._source.token(self._audience))
+        ctx.request_headers[HEADER_AUTHORIZATION] = _bearer(self._source.token(self._audience))
         return call_next(request, ctx)
 
 
@@ -558,7 +557,7 @@ class _TokensAsync:
         request: REQ,
         ctx: RequestContext,
     ) -> RES:
-        ctx.request_headers()[HEADER_AUTHORIZATION] = _bearer(await self._token())
+        ctx.request_headers[HEADER_AUTHORIZATION] = _bearer(await self._token())
         try:
             return await call_next(request, ctx)
         except ConnectError as err:
@@ -566,7 +565,7 @@ class _TokensAsync:
             if err.code != Code.UNAUTHENTICATED or invalidate is None:
                 raise
             invalidate(self._audience)
-        ctx.request_headers()[HEADER_AUTHORIZATION] = _bearer(await self._token())
+        ctx.request_headers[HEADER_AUTHORIZATION] = _bearer(await self._token())
         return await call_next(request, ctx)
 
 
@@ -624,7 +623,7 @@ class _RetryAsync:
 
 
 def _procedure(ctx: RequestContext) -> str:
-    method = ctx.method()
+    method = ctx.method
     return f"/{method.service_name}/{method.name}"
 
 
@@ -635,12 +634,12 @@ def _typed(err: ConnectError, ctx: RequestContext, meta: Captured) -> ConnectErr
 class _DeadlineSync:
     """Hands the attempt's deadline to the SDK's TLS transport, which pyqwest
     tells it only through a private module; an async call is cancelled by
-    connect-python instead."""
+    connectrpc instead."""
 
     def intercept_unary_sync(
         self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
     ) -> RES:
-        timeout_ms = ctx.timeout_ms()
+        timeout_ms = ctx.timeout_ms
         if timeout_ms is None:
             return call_next(request, ctx)
         token = call_deadline.set(time.monotonic() + timeout_ms / _MS_PER_SECOND)

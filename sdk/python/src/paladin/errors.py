@@ -11,12 +11,14 @@ releases.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
+from collections.abc import Iterable, Mapping
+from typing import Any, TypeVar
 
 from connectrpc.code import Code
-from connectrpc.errors import ConnectError
+from connectrpc.errors import ConnectError, ErrorDetail
+from google.protobuf.message import Message
 from google.rpc import error_details_pb2
+from protobuf.wkt import Any as DetailAny
 
 from paladin.common.v1 import error_reason_pb2
 
@@ -26,6 +28,37 @@ HEADER_SERVER_VERSION = "X-Paladin-Version"
 """The server's release, on every response."""
 _UNKNOWN_VERSION = "unknown version"
 _UNSPECIFIED = error_reason_pb2.ERROR_REASON_UNSPECIFIED
+TYPE_URL_PREFIX = "type.googleapis.com/"
+"""The prefix of an ``Any``'s type URL; the message's full name follows."""
+
+M = TypeVar("M", bound=Message)
+
+
+def error_detail(message: Message) -> ErrorDetail:
+    """A ``google.protobuf`` message as a ``ConnectError`` detail.
+
+    connectrpc packs details with its own Protobuf runtime, which cannot read a
+    ``google.protobuf`` message; the message travels as the bytes and the type
+    name an ``Any`` carries, which is all the wire holds anyway.
+    """
+    return ErrorDetail(
+        DetailAny(
+            type_url=TYPE_URL_PREFIX + message.DESCRIPTOR.full_name,
+            value=message.SerializeToString(),
+        )
+    )
+
+
+def unpack_detail(detail: ErrorDetail, message_type: type[M]) -> M | None:
+    """``detail`` as a ``message_type``, or None when it holds another type."""
+    if detail.type_name != message_type.DESCRIPTOR.full_name:
+        return None
+    return message_type.FromString(detail.message_bytes)
+
+
+def error_details(messages: Iterable[Message]) -> list[ErrorDetail]:
+    """Each of ``messages`` as a detail, for ``ConnectError(..., details)``."""
+    return [error_detail(m) for m in messages]
 
 
 class PaladinError(ConnectError):
@@ -134,11 +167,10 @@ def _decode(details: Any) -> tuple[int, list[Any]]:
     """The reason in the details' ErrorInfo, and every ErrorInfo decoded."""
     found = _UNSPECIFIED
     decoded: list[Any] = []
-    for packed in details:
-        if not packed.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
+    for detail in details:
+        info = unpack_detail(detail, error_details_pb2.ErrorInfo)
+        if info is None:
             continue
-        info = error_details_pb2.ErrorInfo()
-        packed.Unpack(info)
         decoded.append(info)
         if info.domain == ERROR_DOMAIN:
             try:

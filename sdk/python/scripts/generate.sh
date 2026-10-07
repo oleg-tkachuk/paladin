@@ -15,6 +15,9 @@ cd "$here"
 
 readonly CONTRACT=../../proto
 readonly OUT=src
+# Stubs against google.protobuf messages, which consumers already use, rather
+# than the generator's default protobuf-py runtime.
+readonly CONNECT_OPTIONS=protobuf=google
 readonly GENERATED=("$OUT/paladin/admin" "$OUT/paladin/common" "$OUT/paladin/data" "$OUT/paladin/iam" "$OUT/buf")
 
 deps=$(mktemp -d)
@@ -31,7 +34,8 @@ uv run python -m grpc_tools.protoc \
     --proto_path="$deps" \
     --python_out="$OUT" \
     --pyi_out="$OUT" \
-    --connect-python_out="$OUT" \
+    --connectrpc_out="$OUT" \
+    --connectrpc_opt="$CONNECT_OPTIONS" \
     "${files[@]}"
 
 # The facade's per-plane classes come from the services just generated. It

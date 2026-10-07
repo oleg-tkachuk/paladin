@@ -1,11 +1,11 @@
 """Response headers for the SDK's interceptors, read at the transport.
 
-An interceptor of connect-python sees no response headers, and its own
+A client interceptor of connectrpc sees no response headers, and its own
 ``ResponseMetadata`` would hide the headers from one the caller opened around
 the call. So the SDK reads them where the HTTP response passes: a ``pyqwest``
 transport wrapped in ``RelaySyncTransport`` or ``RelayTransport`` hands the
 headers of each response to every interceptor waiting on them, and leaves
-connect-python's own ``ResponseMetadata`` to the caller.
+connectrpc's own ``ResponseMetadata`` to the caller.
 
 ``connect``, ``connect_async`` and ``Client.http_client`` build their HTTP
 clients over these transports. A caller who brings an ``http_client`` of its
