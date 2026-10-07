@@ -103,7 +103,7 @@ DEFAULT_PAGE_SIZE = 100
 """The page ``list_objects`` answers when asked for none."""
 TESTING_EXTRA_HINT = "paladin.testing needs the 'testing' extra: pip install 'paladin-sdk[testing]'"
 """What ``FakePaladin`` raises, as an ``ImportError``, without the extra."""
-_VALIDATION_FAILED = "validation failed"
+_VALIDATION_FAILED = "validation error"
 """How the server's answer to a request its contract's rules refuse begins."""
 EXPIRED_BODY = "<Error><Code>AccessDenied</Code><Message>Request has expired</Message></Error>"
 """What S3 answers, with 403, for a presigned URL past its expiry."""
@@ -882,7 +882,8 @@ class FakePaladin(
 
     def _validate(self, request: Message) -> None:
         """Refuse a request the contract's rules refuse, as the server's
-        protovalidate interceptor does."""
+        validate interceptor does: protovalidate's message, and the
+        violations as a buf.validate.Violations detail."""
         try:
             self._validator.validate(request)
         except self._validation_error as err:
@@ -891,7 +892,13 @@ class FakePaladin(
                 ".".join(e.field_name for e in v.proto.field.elements) + f": {v.proto.message}"
                 for v in err.violations  # type: ignore[attr-defined]
             )
-            raise ConnectError(Code.INVALID_ARGUMENT, f"{_VALIDATION_FAILED}: {named}") from err
+            raise ConnectError(
+                Code.INVALID_ARGUMENT,
+                f"{_VALIDATION_FAILED}: {named}",
+                # protovalidate builds its Violations with connectrpc's own
+                # Protobuf runtime, which a ConnectError detail takes as is.
+                [err.to_proto()],  # type: ignore[attr-defined]
+            ) from err
 
     def _get(self, name: str) -> _Object:
         o = self._objects.get(name)
