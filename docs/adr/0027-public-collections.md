@@ -96,6 +96,10 @@
     publishing anything runs at least one more bucket per backend. Tenants
     may share a public bucket: what isolates them there is the unguessable
     key, which is the whole access model of a public object anyway.
+  - An object is readable at its URL as soon as its bytes reach the store,
+    before `CompleteObject` promotes it: the store knows nothing of Paladin's
+    states. Its key is unguessable and returned only to its uploader, so
+    nobody else can read it early.
   - A collection cannot be made public, or private, after the fact.
     Publishing private content is a copy into a public collection; taking
     content down is deleting it.
