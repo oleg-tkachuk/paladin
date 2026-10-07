@@ -1425,19 +1425,6 @@ The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 - **Blockers:** where the part size lives — on `Object`, or derived from the
   upload session — is a contract decision.
 
-### The SDK fakes do not hold every RPC the server serves
-
-- **Status:** Deferred
-- **Reason:** `paladintest` and `paladin.testing` serve 16 data-plane RPCs;
-  ObjectTag, Operation (and so Batch), Copy, versions, Update, Restore and
-  Count answer `Unimplemented`. `ListObjects` ignores `filter`, `order_by` and
-  `sort_order`, and `DeleteObject` ignores `resource_version`, so a test passes
-  where the server would filter or conflict. Neither runs protovalidate.
-- **Definition of Done:** the missing services, or an explicit refusal of the
-  parameters the fake does not honour; `resource_version` checked on delete;
-  protovalidate on every request — in both fakes, with tests.
-- **Blockers:** none.
-
 ### Python reads response headers through a transport of its own
 
 - **Status:** Deferred.

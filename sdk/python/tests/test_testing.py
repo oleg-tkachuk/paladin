@@ -35,7 +35,7 @@ from paladin import (
     upload,
 )
 from paladin.admin.v1 import tenant_service_pb2
-from paladin.common.v1 import error_reason_pb2
+from paladin.common.v1 import error_reason_pb2, resource_pb2
 from paladin.data.v1 import (
     multipart_service_pb2,
     object_service_pb2,
@@ -49,6 +49,9 @@ from paladin.testing import (
     PART_SIZE,
     FakePaladin,
 )
+
+# The content type of a test upload: the server refuses an upload that names none.
+CONTENT_TYPE = "application/octet-stream"
 
 UPLOAD_PROCEDURE = "/paladin.data.v1.ObjectService/UploadObject"
 GET_OBJECT_PROCEDURE = "/paladin.data.v1.ObjectService/GetObject"
@@ -110,7 +113,9 @@ def test_put_list_and_delete(fake: FakePaladin) -> None:
     ]
     assert keys == ["a", "b", "c"]
     obj = lookup_object(p.data, ObjectURI(fake.collection(), "b"))
-    p.data.object.delete_object(object_service_pb2.DeleteObjectRequest(name=obj.name))
+    p.data.object.delete_object(
+        object_service_pb2.DeleteObjectRequest(name=obj.name, resource_version=obj.resource_version)
+    )
     with pytest.raises(NotFoundError):
         p.data.object.get_object(object_service_pb2.GetObjectRequest(name=obj.name))
 
@@ -125,11 +130,16 @@ def test_the_fake_refuses_what_the_server_refuses(fake: FakePaladin) -> None:
     # An upload with no checksum to bind its URL to.
     with pytest.raises(ConnectError):
         p.data.object.upload_object(
-            object_service_pb2.UploadObjectRequest(parent=str(fake.collection()), key="k")
+            object_service_pb2.UploadObjectRequest(
+                content_type=CONTENT_TYPE, parent=str(fake.collection()), key="k"
+            )
         )
     up = p.data.object.upload_object(
         object_service_pb2.UploadObjectRequest(
-            parent=str(fake.collection()), key="k", checksum_value=EMPTY_SHA256
+            content_type=CONTENT_TYPE,
+            parent=str(fake.collection()),
+            key="k",
+            checksum_value=EMPTY_SHA256,
         )
     )
     with pytest.raises(FailedPreconditionError):
@@ -157,6 +167,7 @@ def test_complete_matches_the_server(fake: FakePaladin) -> None:
     body = b"no etag"
     up = p.data.object.upload_object(
         object_service_pb2.UploadObjectRequest(
+            content_type=CONTENT_TYPE,
             parent=str(fake.collection()),
             key="k",
             size_hint_bytes=len(body),
@@ -209,7 +220,10 @@ def test_requests_show_what_the_client_sent(fake: FakePaladin) -> None:
     p = fake.connect(bearer_token=token)
     p.data.object.upload_object(
         object_service_pb2.UploadObjectRequest(
-            parent=str(fake.collection()), key="k", checksum_value=EMPTY_SHA256
+            content_type=CONTENT_TYPE,
+            parent=str(fake.collection()),
+            key="k",
+            checksum_value=EMPTY_SHA256,
         )
     )
     [request] = fake.requests()
@@ -291,21 +305,27 @@ def test_the_fake_holds_one_object_per_key(fake: FakePaladin) -> None:
     with pytest.raises(paladin.AlreadyExistsError):
         data.multipart_upload.initiate_multipart_upload(  # type: ignore[union-attr]
             multipart_service_pb2.InitiateMultipartUploadRequest(
-                parent=str(fake.collection()), key="k", size_bytes=1
+                checksum_algorithm=resource_pb2.CHECKSUM_ALGORITHM_SHA256,
+                content_type=CONTENT_TYPE,
+                parent=str(fake.collection()),
+                key="k",
+                size_bytes=1,
             )
         )
 
-    def delete(permanent: bool) -> None:
+    def delete(version: str, permanent: bool) -> None:
         data.object.delete_object(  # type: ignore[union-attr]
             object_service_pb2.DeleteObjectRequest(
-                name=obj.name, resource_version=obj.resource_version, permanent=permanent
+                name=obj.name, resource_version=version, permanent=permanent
             )
         )
 
-    delete(False)
+    delete(obj.resource_version, False)
     with pytest.raises(paladin.AlreadyExistsError):
         put()
-    delete(True)
+    # The soft delete advanced the version by one, as the server's trigger
+    # does on every change to the row.
+    delete(str(int(obj.resource_version) + 1), True)
     put()
 
 
@@ -422,10 +442,14 @@ def test_fail_rpc_on_an_unimplemented_procedure(fake: FakePaladin) -> None:
     p = fake.connect()
     fake.fail_rpc(COUNT_OBJECTS_PROCEDURE, 1, Code.UNAVAILABLE)
     with pytest.raises(ConnectError) as caught:
-        p.data.object.count_objects(object_service_pb2.CountObjectsRequest())
+        p.data.object.count_objects(
+            object_service_pb2.CountObjectsRequest(parent=str(fake.collection()))
+        )
     assert caught.value.code == Code.UNAVAILABLE
     with pytest.raises(ContractSkewError):
-        p.data.object.count_objects(object_service_pb2.CountObjectsRequest())
+        p.data.object.count_objects(
+            object_service_pb2.CountObjectsRequest(parent=str(fake.collection()))
+        )
 
 
 @pytest.mark.parametrize(
@@ -522,7 +546,10 @@ def test_presign_download_refuses_what_the_server_refuses(fake: FakePaladin) -> 
     def register(key: str) -> str:
         return p.data.object.upload_object(
             object_service_pb2.UploadObjectRequest(
-                parent=str(fake.collection()), key=key, checksum_value=EMPTY_SHA256
+                content_type=CONTENT_TYPE,
+                parent=str(fake.collection()),
+                key=key,
+                checksum_value=EMPTY_SHA256,
             )
         ).object.name
 
