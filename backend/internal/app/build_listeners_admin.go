@@ -231,7 +231,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			tenantGate,
 			// Refuses a change to a tenant in the trash, whoever asks.
 			tenantFreeze,
-			connect.UnaryInterceptorFunc(validateInterceptor),
+			validateInterceptor,
 			// Idempotency-Key gate. RequireOnCreate=true means every
 			// admin-plane Create*/Issue* RPC must carry an `Idempotency-Key`
 			// header — the admin UI (frontend BFF) auto-injects a UUIDv7

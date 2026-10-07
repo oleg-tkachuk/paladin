@@ -3,10 +3,12 @@ module github.com/oleg-tkachuk/paladin/backend
 go 1.27.0
 
 require (
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
 	buf.build/go/protovalidate v1.4.0
 	cel.dev/cel-go v0.32.0
 	connectrpc.com/connect v1.21.0
 	connectrpc.com/otelconnect v0.10.0
+	connectrpc.com/validate v0.7.0
 	cuelang.org/go v0.17.1
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/config v1.33.6
@@ -75,7 +77,6 @@ require (
 )
 
 require (
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2 // indirect
 	cel.dev/expr v0.25.3 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect

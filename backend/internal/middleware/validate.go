@@ -11,46 +11,26 @@
 package middleware
 
 import (
-	"context"
-	"errors"
 	"fmt"
 
 	"buf.build/go/protovalidate"
 	"connectrpc.com/connect"
-	"google.golang.org/protobuf/proto"
+	"connectrpc.com/validate"
 )
 
-// ProtoValidate returns a Connect interceptor that runs protovalidate
-// against every unary request that carries a proto.Message body.
+// ProtoValidate returns the interceptor that runs protovalidate against every
+// request, unary and streamed, before a handler sees it: connect's own
+// validate module. A refusal is InvalidArgument with protovalidate's message
+// and the buf.validate.Violations detail, so a client reads which field broke
+// which rule without parsing text.
 //
-// Streaming RPCs are passed through untouched; their per-frame messages
-// are typically validated inside the handler instead.
-func ProtoValidate() (connect.UnaryInterceptorFunc, error) {
+// The validator is built here rather than taken from protovalidate's global
+// one so that a contract whose rules do not compile fails the server at
+// start, not on the first request.
+func ProtoValidate() (connect.Interceptor, error) {
 	v, err := protovalidate.New()
 	if err != nil {
 		return nil, fmt.Errorf("protovalidate: init: %w", err)
 	}
-
-	return func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			msg, ok := req.Any().(proto.Message)
-			if !ok {
-				return next(ctx, req)
-			}
-			if err := v.Validate(msg); err != nil {
-				var verr *protovalidate.ValidationError
-				if errors.As(err, &verr) {
-					return nil, connect.NewError(
-						connect.CodeInvalidArgument,
-						fmt.Errorf("validation failed: %w", verr),
-					)
-				}
-				return nil, connect.NewError(
-					connect.CodeInvalidArgument,
-					fmt.Errorf("validate: %w", err),
-				)
-			}
-			return next(ctx, req)
-		}
-	}, nil
+	return validate.NewInterceptor(validate.WithValidator(v)), nil
 }
