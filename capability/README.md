@@ -358,6 +358,14 @@ request to each ancestor as well, reading the ancestor's ceilings from its
 record. Code that only meters can depend on `Meter` alone; code that only
 administers tenant ceilings on `TenantBudgets` alone.
 
+`Store.Insert` should tell a missing tenant from a failure: return
+`ErrUnknownTenant` for a tenant it does not hold and `ErrTenantDeleted` for one
+in the trash. `Issue` and `Delegate` pass them through, wrapped, beside
+`ErrInvalidRequest`, which every check on the request itself matches — a
+missing tenant id, an empty audience entry, a negative TTL, a malformed
+thumbprint, invalid caveats. Anything else they return is the store's or the
+signer's failure, not the caller's.
+
 `Store` and `UsageStore` are **separate types**: both declare a method named
 `Get` with different signatures, so one type cannot satisfy both. `memstore`
 shows the split.

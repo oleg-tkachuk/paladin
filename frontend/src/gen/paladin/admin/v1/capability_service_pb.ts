@@ -790,6 +790,12 @@ export const CapabilityService: GenService<{
    * platform-admin or a delegating service. Returns the typed
    * capability metadata plus the compact JWT in `token`.
    *
+   * Errors: INVALID_ARGUMENT for a malformed request; NOT_FOUND with reason
+   * TENANT_NOT_FOUND when the subject's tenant does not exist (yet);
+   * FAILED_PRECONDITION with reason TENANT_ALREADY_DELETED when it is in the
+   * trash; INTERNAL when the store or the signer fails — a request worth
+   * retrying, not a bad one.
+   *
    * @generated from rpc paladin.admin.v1.CapabilityService.Issue
    */
   issue: {
@@ -801,6 +807,9 @@ export const CapabilityService: GenService<{
    * Delegate issues a strictly-narrower child capability under a
    * parent the caller already holds. Narrowing is enforced at issuance:
    * widening attempts fail before any token is emitted.
+   *
+   * Errors as Issue's, plus PERMISSION_DENIED for a child wider than its
+   * parent and FAILED_PRECONDITION for a parent revoked or expired.
    *
    * @generated from rpc paladin.admin.v1.CapabilityService.Delegate
    */

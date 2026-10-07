@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
 
@@ -43,6 +44,28 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 		return nil, errors.New("capability/postgres: pool required")
 	}
 	return &Store{pool: pool}, nil
+}
+
+// tenantForeignKey is capability_records' reference to its tenant, as
+// 001_initial_schema.sql names it.
+const tenantForeignKey = "capability_records_tenant_id_fkey"
+
+// lockLiveTenant refuses a capability for a tenant that does not exist or is
+// in the trash, and holds the tenant's row until the insert commits, so a
+// concurrent delete cannot land between the check and the insert. The
+// foreign key alone would admit a trashed tenant, whose row still exists.
+func lockLiveTenant(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error {
+	var deletedAt *time.Time
+	err := tx.QueryRow(ctx, `SELECT deleted_at FROM tenants WHERE id = $1 FOR SHARE`, tenantID).Scan(&deletedAt)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("%w: %s", capability.ErrUnknownTenant, tenantID)
+	case err != nil:
+		return fmt.Errorf("capability/postgres: lock tenant: %w", err)
+	case deletedAt != nil:
+		return fmt.Errorf("%w: %s", capability.ErrTenantDeleted, tenantID)
+	}
+	return nil
 }
 
 // Insert implements capability.Store.
@@ -110,6 +133,9 @@ INSERT INTO capability_records (
 	); err != nil {
 		return fmt.Errorf("capability/postgres: set tenant GUC: %w", err)
 	}
+	if err := lockLiveTenant(ctx, tx, c.Subject.TenantID); err != nil {
+		return err
+	}
 
 	if _, err := tx.Exec(ctx, stmt,
 		c.ID,
@@ -131,6 +157,12 @@ INSERT INTO capability_records (
 		issuedBy.Subject,
 		c.ConfirmationJKT,
 	); err != nil {
+		// The lock above makes this unreachable short of a tenant removed by
+		// something that ignores it; the constraint is the last word either
+		// way, and says nothing about the request.
+		if pgerr.Is(err, pgerr.ForeignKeyViolation) && pgerr.Constraint(err) == tenantForeignKey {
+			return fmt.Errorf("%w: %s", capability.ErrUnknownTenant, c.Subject.TenantID)
+		}
 		return fmt.Errorf("capability/postgres: insert: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
