@@ -108,13 +108,13 @@ type IssueRequest struct {
 // to log / display.
 func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Capability, string, error) {
 	if req.Subject.TenantID == uuid.Nil {
-		return nil, "", errors.New("capability: Issue requires Subject.TenantID")
+		return nil, "", invalidRequest("Issue requires Subject.TenantID")
 	}
 	if req.IssuedBy.Subject == "" {
-		return nil, "", errors.New("capability: IssuedBy is required")
+		return nil, "", invalidRequest("IssuedBy is required")
 	}
 	if req.Generation < 0 {
-		return nil, "", fmt.Errorf("capability: Generation %d is negative", req.Generation)
+		return nil, "", invalidRequest("Generation %d is negative", req.Generation)
 	}
 	if err := validateAudience(req.Audience); err != nil {
 		return nil, "", err
@@ -163,7 +163,7 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Capability, stri
 // request error rather than an already-expired capability.
 func (i *Issuer) expiry(now time.Time, ttl time.Duration) (time.Time, error) {
 	if ttl < 0 {
-		return time.Time{}, fmt.Errorf("capability: TTL %s is negative", ttl)
+		return time.Time{}, invalidRequest("TTL %s is negative", ttl)
 	}
 	if ttl == 0 {
 		ttl = i.defaultTTL
@@ -179,7 +179,7 @@ func setNotBefore(c *Capability, nbf time.Time) error {
 	}
 	nbf = nbf.UTC()
 	if !nbf.Before(c.ExpiresAt) {
-		return fmt.Errorf("capability: NotBefore %s is not before ExpiresAt %s", nbf, c.ExpiresAt)
+		return invalidRequest("NotBefore %s is not before ExpiresAt %s", nbf, c.ExpiresAt)
 	}
 	c.NotBefore = nbf
 	return nil
@@ -188,11 +188,11 @@ func setNotBefore(c *Capability, nbf time.Time) error {
 // validateAudience requires a non-empty audience of non-empty entries.
 func validateAudience(aud []string) error {
 	if len(aud) == 0 {
-		return errors.New("capability: non-empty Audience required")
+		return invalidRequest("non-empty Audience required")
 	}
 	for _, a := range aud {
 		if a == "" {
-			return errors.New("capability: Audience contains an empty entry")
+			return invalidRequest("Audience contains an empty entry")
 		}
 	}
 	return nil
@@ -227,7 +227,7 @@ type DelegateRequest struct {
 // nothing.
 func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (*Capability, string, error) {
 	if req.Parent.ID == uuid.Nil {
-		return nil, "", errors.New("capability: Delegate requires Parent.ID")
+		return nil, "", invalidRequest("Delegate requires Parent.ID")
 	}
 	if req.Subject.TenantID == uuid.Nil {
 		req.Subject.TenantID = req.Parent.Subject.TenantID
