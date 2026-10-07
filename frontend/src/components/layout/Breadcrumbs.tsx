@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronRightIcon, HomeIcon } from "@heroicons/react/20/solid";
 
 import { cn } from "@/lib/utils";
+import { useCrumbNames } from "@/context/CrumbNamesContext";
 
 import { crumbs } from "./crumbs";
 
@@ -22,7 +23,7 @@ import { crumbs } from "./crumbs";
 export function Breadcrumbs() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const trail = crumbs(pathname);
+  const trail = crumbs(pathname, useCrumbNames());
   const paths = trail.map((c) => c.segment);
 
   if (paths.length === 0) return null;
@@ -41,9 +42,9 @@ export function Breadcrumbs() {
         </li>
         {paths.map((path, index) => {
           const isLast = index === paths.length - 1;
-          const { label, mono } = trail[index];
+          const { label, mono, href: named } = trail[index];
 
-          let href = `/${paths.slice(0, index + 1).join("/")}`;
+          let href = named ?? `/${paths.slice(0, index + 1).join("/")}`;
           if (isLast && searchParams.toString()) {
             href += `?${searchParams.toString()}`;
           }
