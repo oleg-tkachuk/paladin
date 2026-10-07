@@ -540,6 +540,11 @@ type StorageBackend struct {
 	Features []*StorageFeatureSupport `protobuf:"bytes,25,rep,name=features,proto3" json:"features,omitempty"`
 	// features summarised over the required ones.
 	Compatibility StorageCompatibility `protobuf:"varint,26,opt,name=compatibility,proto3,enum=paladin.admin.v1.StorageCompatibility" json:"compatibility,omitempty"`
+	// The backend is declared in the server's storage.backends. The data plane
+	// and the worker build storage clients from that list only, so a bucket can
+	// be created only on a declared backend; one registered through the API
+	// alone is listed but cannot hold one.
+	Declared      bool `protobuf:"varint,27,opt,name=declared,proto3" json:"declared,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -754,6 +759,13 @@ func (x *StorageBackend) GetCompatibility() StorageCompatibility {
 		return x.Compatibility
 	}
 	return StorageCompatibility_STORAGE_COMPATIBILITY_UNSPECIFIED
+}
+
+func (x *StorageBackend) GetDeclared() bool {
+	if x != nil {
+		return x.Declared
+	}
+	return false
 }
 
 // One feature's probe outcome.
@@ -3026,7 +3038,7 @@ var File_paladin_admin_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x1cpaladin/admin/v1/types.proto\x12\x10paladin.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a paladin/common/v1/resource.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x81\n" +
+	"\x1cpaladin/admin/v1/types.proto\x12\x10paladin.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a paladin/common/v1/resource.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xa2\n" +
 	"\n" +
 	"\x0eStorageBackend\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1d\n" +
@@ -3058,7 +3070,8 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\vmaintenance\x18\x17 \x01(\bR\vmaintenance\x12\x1a\n" +
 	"\bprovider\x18\x18 \x01(\tR\bprovider\x12H\n" +
 	"\bfeatures\x18\x19 \x03(\v2'.paladin.admin.v1.StorageFeatureSupportB\x03\xe0A\x03R\bfeatures\x12Q\n" +
-	"\rcompatibility\x18\x1a \x01(\x0e2&.paladin.admin.v1.StorageCompatibilityB\x03\xe0A\x03R\rcompatibility\"\x9a\x02\n" +
+	"\rcompatibility\x18\x1a \x01(\x0e2&.paladin.admin.v1.StorageCompatibilityB\x03\xe0A\x03R\rcompatibility\x12\x1f\n" +
+	"\bdeclared\x18\x1b \x01(\bB\x03\xe0A\x03R\bdeclared\"\x9a\x02\n" +
 	"\x15StorageFeatureSupport\x12:\n" +
 	"\afeature\x18\x01 \x01(\x0e2 .paladin.admin.v1.StorageFeatureR\afeature\x12:\n" +
 	"\asupport\x18\x02 \x01(\x0e2 .paladin.admin.v1.FeatureSupportR\asupport\x12\x1a\n" +

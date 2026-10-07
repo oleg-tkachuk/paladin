@@ -54,6 +54,10 @@ type StorageBackend struct {
 	// read_only it does NOT gate operations; unlike Health it's operator-set,
 	// not derived. Operator-managed via SetBackendMaintenance; not config-mirrored.
 	Maintenance bool
+	// Declared reports the backend is in the server's storage.backends, the
+	// only backends the data plane and the worker build clients for. Set by
+	// the backend handler on every read; never stored.
+	Declared bool
 	// Health is the DERIVED, advisory health state (the schema baseline (001_initial_schema.sql)): the
 	// outcome of the last TestBackend probe. "unknown" | "ok" | "error".
 	// Surfaced in the UI but NOT a gate — the operator decides whether to

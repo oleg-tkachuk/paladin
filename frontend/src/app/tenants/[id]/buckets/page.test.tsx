@@ -27,7 +27,11 @@ vi.mock("@/hooks/useBuckets", () => ({
   }),
 }));
 vi.mock("@/hooks/useBackends", () => ({
-  useBackends: () => ({ backends: [{ backendId: "be-1", features: [] }] }),
+  useBackends: () => ({
+    backends: [
+      { backendId: "be-1", features: [], enabled: true, declared: true },
+    ],
+  }),
 }));
 vi.mock("../tenant-context", () => ({
   useTenantChangesBlocked: () => null,

@@ -107,6 +107,8 @@ var skipFields = map[string]map[string]string{
 		// Features are what TestBackend's probe found (ADR-0026) — output-only.
 		"Features":      "derived from TestBackend's feature probe; not client-settable",
 		"Compatibility": "derived from TestBackend's feature probe; not client-settable",
+		// Declared mirrors storage.backends in the server config — output-only.
+		"Declared": "derived from storage.backends; not client-settable",
 	},
 	"UpdateBackend": {
 		"PreviousCredentialsSecretRef":  "set by RotateCredentials; not client-settable",
@@ -117,6 +119,7 @@ var skipFields = map[string]map[string]string{
 		"Maintenance":                   "set via SetBackendMaintenance; not client-settable on create/update",
 		"Features":                      "derived from TestBackend's feature probe; not client-settable",
 		"Compatibility":                 "derived from TestBackend's feature probe; not client-settable",
+		"Declared":                      "derived from storage.backends; not client-settable",
 	},
 	"CreateCollection": {
 		// completion_mode is derived from the bucket → backend

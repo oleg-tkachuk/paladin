@@ -2,9 +2,8 @@
 
 // /users — platform-wide user index. Cross-tenant listing via
 // IAM.ListUsers(parent="") gated to platform.admin server-side.
-// Operators can see who has which roles across all tenants. There is
-// no per-user detail page and no GrantScopes/RevokeScopes action here
-// yet (BACKLOG: console /users).
+// Operators can see who has which roles across all tenants; each user
+// opens on a page of their own, where roles and scopes are edited.
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -23,6 +22,7 @@ import {
   type ResetTarget,
 } from "@/components/features/users/UserRowActions";
 import { userClient } from "@/lib/connect/client";
+import { userHref } from "@/lib/userPath";
 import { useTenants } from "@/hooks/useTenants";
 import { normalizeError } from "@/lib/connect/error";
 import { API_PAGE_SIZE_MAX } from "@/constants";
@@ -185,13 +185,16 @@ export default function UsersPage() {
                             .toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate font-medium">
+                          <Link
+                            href={userHref(u.name)}
+                            className="block truncate font-medium hover:text-primary hover:underline"
+                          >
                             {u.displayName || (
                               <span className="text-muted-foreground italic">
                                 (no name)
                               </span>
                             )}
-                          </p>
+                          </Link>
                           <p className="truncate font-mono text-caption text-muted-foreground">
                             {u.subject}
                           </p>
