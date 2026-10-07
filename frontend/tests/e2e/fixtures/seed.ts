@@ -430,11 +430,17 @@ export async function seedPhysicalBucket(): Promise<SeededBucket> {
   } catch (e) {
     // Already registered by an earlier test in this run. The conflict
     // surfaces as FailedPrecondition rather than AlreadyExists — the admin
-    // plane reports it as a state conflict — so both are tolerated.
+    // plane reports it as a state conflict — so both are tolerated, but only
+    // once the bucket is there: a refusal of another kind hid behind them.
     const conflict =
       e instanceof ConnectError &&
       (e.code === Code.AlreadyExists || e.code === Code.FailedPrecondition);
     if (!conflict) throw e;
+    await bucketAdminClient()
+      .getBucket({ name: `storageBackends/${backendId}/buckets/${bucketId}` })
+      .catch(() => {
+        throw e;
+      });
   }
   return { backendId, bucketId, displayName: "E2E physical bucket" };
 }

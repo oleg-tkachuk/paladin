@@ -12,10 +12,7 @@ import (
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
-const (
-	configuredBucket = "paladin-primary"
-	probePrefix      = "paladin-probe-"
-)
+const probePrefix = "paladin-probe-"
 
 var errStoreDown = errors.New("store down")
 
@@ -28,16 +25,13 @@ func (failingExists) BucketExists(context.Context, string, string) (bool, error)
 
 func ownershipHandler(repo *fakeRepo, p Provisioner) *Handler {
 	h := NewHandler(repo, p, allowAuthorizer{})
-	h.SetReservedBuckets(ReservedBuckets{
-		ByBackend: map[string]string{"primary": configuredBucket},
-		Prefix:    probePrefix,
-	})
+	h.SetReservedBuckets(ReservedBuckets{Prefix: probePrefix})
 	return h
 }
 
 // provision_on_backend took any bucket the backend held — the backend's own
 // included — and a public one then had anonymous reads set on everything in
-// it. A row is written only for a bucket Paladin means to take.
+// it; adopting is now explicit, and an adopted bucket is never public. A row is written only for a bucket Paladin means to take.
 func TestCreateBucketTakesOnlyWhatItMeansTo(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -53,9 +47,7 @@ func TestCreateBucketTakesOnlyWhatItMeansTo(t *testing.T) {
 		{"register an existing bucket", "acme-logs", false, true, 0, 0},
 		{"register one that does not exist", "acme-logs", false, false, connect.CodeFailedPrecondition,
 			commonv1.ErrorReason_ERROR_REASON_BUCKET_NOT_ON_BACKEND},
-		{"register the backend's own bucket", configuredBucket, false, true, connect.CodeFailedPrecondition,
-			commonv1.ErrorReason_ERROR_REASON_BUCKET_RESERVED},
-		{"create over the backend's own bucket", configuredBucket, true, true, connect.CodeFailedPrecondition,
+		{"create a probe's scratch bucket", probePrefix + "x", true, false, connect.CodeFailedPrecondition,
 			commonv1.ErrorReason_ERROR_REASON_BUCKET_RESERVED},
 		{"register a probe's scratch bucket", probePrefix + "x", false, true, connect.CodeFailedPrecondition,
 			commonv1.ErrorReason_ERROR_REASON_BUCKET_RESERVED},
@@ -117,10 +109,10 @@ func TestEnsureBucketCreatesButDoesNotAdopt(t *testing.T) {
 			t.Fatalf("err = %v, want the bucket refused as existing", err)
 		}
 	})
-	t.Run("the backend's own bucket", func(t *testing.T) {
+	t.Run("a probe's scratch bucket", func(t *testing.T) {
 		repo := &fakeRepo{backendEnabled: true, getErr: admindomain.ErrNotFound}
 		h := ownershipHandler(repo, okProvisioner{})
-		b := admindomain.Bucket{BackendID: "primary", BucketName: configuredBucket}
+		b := admindomain.Bucket{BackendID: "primary", BucketName: probePrefix + "x"}
 		_, _, err := h.EnsureBucket(ctxAs(apiutil.RoleBucketAdmin),
 			CreateBucketInput{Bucket: b, ProvisionOnBackend: true})
 		if reasonOf(t, err) != commonv1.ErrorReason_ERROR_REASON_BUCKET_RESERVED {

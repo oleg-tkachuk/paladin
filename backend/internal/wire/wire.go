@@ -236,15 +236,9 @@ func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine, cfg
 	// type, so assert to the wider local interface here.
 	h := bucketh.NewHandler(repos.BucketV2.(bucketh.Repository), storage.Provisioner, pe)
 	h.SetConfiguredBackends(declaredBackendIDs(cfg))
-	// Each backend's configured bucket and the feature probe's scratch
-	// buckets are Paladin's own; no request registers them.
-	reserved := bucketh.ReservedBuckets{ByBackend: map[string]string{}, Prefix: s3adapter.ProbeBucketPrefix}
-	for id, b := range cfg.Storage.Backends {
-		if b.Bucket != "" {
-			reserved.ByBackend[id] = b.Bucket
-		}
-	}
-	h.SetReservedBuckets(reserved)
+	// The feature probe's scratch buckets are Paladin's own; no request
+	// registers them.
+	h.SetReservedBuckets(bucketh.ReservedBuckets{Prefix: s3adapter.ProbeBucketPrefix})
 	// A public bucket needs its backend's probed features (ADR-0027).
 	h.SetBackends(repos.BackendV2)
 	return h

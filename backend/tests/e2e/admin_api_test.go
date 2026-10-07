@@ -428,6 +428,9 @@ func TestAdminAPI_E2E(t *testing.T) {
 					DisplayName: "E2E Bucket " + f.nonce,
 					Region:      "e2e",
 				},
+				// A new name: Paladin registers without provisioning only a
+				// bucket the backend already holds (ADR-0028).
+				ProvisionOnBackend: true,
 			}))
 		if err != nil {
 			t.Fatalf("CreateBucket: %v", err)

@@ -38,8 +38,8 @@ type CreateBucketRequest struct {
 	// backend already holds (ALREADY_EXISTS, BUCKET_EXISTS_ON_BACKEND). False:
 	// Paladin takes an existing bucket under its management, and refuses one the
 	// backend does not hold (BUCKET_NOT_ON_BACKEND); such a bucket is never
-	// public and never deleted on the backend. Either way the backend's own
-	// configured bucket cannot be registered (BUCKET_RESERVED).
+	// public and never deleted on the backend. Either way a feature probe's
+	// scratch bucket cannot be registered (BUCKET_RESERVED).
 	ProvisionOnBackend bool `protobuf:"varint,4,opt,name=provision_on_backend,json=provisionOnBackend,proto3" json:"provision_on_backend,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
