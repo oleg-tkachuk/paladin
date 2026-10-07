@@ -768,6 +768,14 @@ type StorageBackend struct {
 	UpdatedAt                     pgtype.Timestamptz `json:"updated_at"`
 }
 
+type StorageBackendFeature struct {
+	BackendID pgtype.UUID        `json:"backend_id"`
+	Feature   string             `json:"feature"`
+	Support   string             `json:"support"`
+	Message   string             `json:"message"`
+	CheckedAt pgtype.Timestamptz `json:"checked_at"`
+}
+
 type StorageBackendHealth struct {
 	ID        pgtype.UUID         `json:"id"`
 	BackendID pgtype.UUID         `json:"backend_id"`

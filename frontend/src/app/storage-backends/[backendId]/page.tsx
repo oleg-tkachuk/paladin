@@ -25,6 +25,7 @@ import { useBuckets } from "@/hooks/useBuckets";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
 import { BackendActions } from "./BackendActions";
+import { BackendFeatures } from "./BackendFeatures";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -138,7 +139,10 @@ export default function StorageBackendDetailPage() {
               <Row k="secret" v={backend.credentialsSecretRef} mono truncate />
             )}
             <div className="border-t border-border pt-3">
-              <BackendActions backend={backend} />
+              <BackendActions
+                backend={backend}
+                onTested={() => void fetchBackends()}
+              />
             </div>
           </CardContent>
         </Card>
@@ -161,6 +165,8 @@ export default function StorageBackendDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {backend && <BackendFeatures backend={backend} />}
 
       {/* Buckets on this backend */}
       <div className="flex items-center justify-between">

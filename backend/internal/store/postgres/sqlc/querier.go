@@ -175,6 +175,9 @@ type Querier interface {
 	DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
 	DeletePendingPurge(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteStorageBackend(ctx context.Context, name string, expectedVersion int64) (int64, error)
+	// First half of recording a probe (ADR-0026): the probe's rows replace every
+	// earlier one, in the caller's transaction.
+	DeleteStorageBackendFeatures(ctx context.Context, backendName string) error
 	DeleteUser(ctx context.Context, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// RegenerateUploadUrl hands a PENDING object a new PUT URL; the reaper's
@@ -324,6 +327,7 @@ type Querier interface {
 	InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, name string, name_2 string, collectionName string, path string) error
 	// parent_id is the token this one was rotated from, NULL for a login.
 	InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz, parentID pgtype.UUID) error
+	InsertStorageBackendFeature(ctx context.Context, feature string, support string, message string, checkedAt pgtype.Timestamptz, backendName string) error
 	// Streams a window of AVAILABLE-only objects under (tenant, collection)
 	// newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
 	// Lifecycle worker walks via repeated calls until empty page.
@@ -466,6 +470,8 @@ type Querier interface {
 	// which addresses buckets by name, and the collection name is a segment of the
 	// object's storage path.
 	ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error)
+	// Keyed by backend NAME, for a page of backends at once.
+	ListStorageBackendFeatures(ctx context.Context, backendNames []string) ([]ListStorageBackendFeaturesRow, error)
 	// Cursor pagination on the backend NAME, which is what the domain calls
 	// BackendID and what the caller round-trips as the page token. The surrogate
 	// `id` uuid is not usable here: its ordering is meaningless to a reader, and

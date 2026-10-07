@@ -9,6 +9,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/features"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 )
 
@@ -21,7 +22,7 @@ type secretResolver interface {
 // s3BackendProber satisfies backendh.BackendProber. It holds one S3 client per
 // runtime-configured backend (keyed by backend_id == the storage.backends.<id>
 // config key — see bootstrap.EnsureBackends) and runs a read-only ListBuckets
-// reachability check on TestBackend.
+// reachability check and the feature probe on TestBackend.
 //
 // Config-declared backends are probed via their pre-built client. A backend
 // created purely via CreateBackend (its credentials in a K8s Secret the process
@@ -56,34 +57,52 @@ func BuildBackendProber(ctx context.Context, storage config.Storage, l *zap.Logg
 // Probe runs the reachability check for a backend row. Config-declared backends
 // use their pre-built client; everything else is resolved dynamically.
 func (p *s3BackendProber) Probe(ctx context.Context, b admindomain.StorageBackend) error {
-	if c, ok := p.clients[b.BackendID]; ok {
-		return c.Probe(ctx)
+	c, err := p.clientFor(ctx, b)
+	if err != nil {
+		return err
 	}
-	return p.probeDynamic(ctx, b)
+	return c.Probe(ctx)
 }
 
-// probeDynamic resolves a dynamic backend's credentials from K8s, builds an
-// ephemeral S3 client, and probes it. The v1 credentials_secret_ref contract:
-// a K8s secret reference ("name" in the pod namespace, or "namespace/name")
-// whose data carries the keys access_key_id + secret_access_key. Scheme-
-// prefixed refs (vault://, csi://) are not supported yet and return a clear
-// error rather than a misleading "unreachable".
-func (p *s3BackendProber) probeDynamic(ctx context.Context, b admindomain.StorageBackend) error {
+// ProbeFeatures exercises every S3 feature Paladin uses against the backend
+// (ADR-0026). The error is only for a backend no client could be built for.
+func (p *s3BackendProber) ProbeFeatures(ctx context.Context, b admindomain.StorageBackend) ([]features.Result, error) {
+	c, err := p.clientFor(ctx, b)
+	if err != nil {
+		return nil, err
+	}
+	return c.ProbeFeatures(ctx), nil
+}
+
+func (p *s3BackendProber) clientFor(ctx context.Context, b admindomain.StorageBackend) (*s3adapter.Client, error) {
+	if c, ok := p.clients[b.BackendID]; ok {
+		return c, nil
+	}
+	return p.dynamicClient(ctx, b)
+}
+
+// dynamicClient resolves a dynamic backend's credentials from K8s and builds
+// an ephemeral S3 client. The v1 credentials_secret_ref contract: a K8s
+// secret reference ("name" in the pod namespace, or "namespace/name") whose
+// data carries the keys access_key_id + secret_access_key. Scheme-prefixed
+// refs (vault://, csi://) are not supported yet and return a clear error
+// rather than a misleading "unreachable".
+func (p *s3BackendProber) dynamicClient(ctx context.Context, b admindomain.StorageBackend) (*s3adapter.Client, error) {
 	if p.resolver == nil {
-		return fmt.Errorf("backend %q is not in the runtime config and no secret resolver is wired", b.BackendID)
+		return nil, fmt.Errorf("backend %q is not in the runtime config and no secret resolver is wired", b.BackendID)
 	}
 	ns, name, ok := parseDynamicCredsRef(b.CredentialsSecretRef)
 	if !ok {
-		return fmt.Errorf("backend %q: credentials_secret_ref %q is not a supported K8s secret reference "+
+		return nil, fmt.Errorf("backend %q: credentials_secret_ref %q is not a supported K8s secret reference "+
 			`(expected "name" or "namespace/name")`, b.BackendID, b.CredentialsSecretRef)
 	}
 	accessKey, err := p.resolver.ResolveSecret(ctx, &config.SecretRef{Namespace: ns, Name: name, Key: "access_key_id"})
 	if err != nil {
-		return fmt.Errorf("resolve access_key_id from secret %q: %w", name, err)
+		return nil, fmt.Errorf("resolve access_key_id from secret %q: %w", name, err)
 	}
 	secretKey, err := p.resolver.ResolveSecret(ctx, &config.SecretRef{Namespace: ns, Name: name, Key: "secret_access_key"})
 	if err != nil {
-		return fmt.Errorf("resolve secret_access_key from secret %q: %w", name, err)
+		return nil, fmt.Errorf("resolve secret_access_key from secret %q: %w", name, err)
 	}
 	client, err := s3adapter.New(ctx, config.StorageBackend{
 		Kind:           b.Kind,
@@ -98,9 +117,9 @@ func (p *s3BackendProber) probeDynamic(ctx context.Context, b admindomain.Storag
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("build ephemeral client for %q: %w", b.BackendID, err)
+		return nil, fmt.Errorf("build ephemeral client for %q: %w", b.BackendID, err)
 	}
-	return client.Probe(ctx)
+	return client, nil
 }
 
 // parseDynamicCredsRef splits a credentials_secret_ref into (namespace, name).
