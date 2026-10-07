@@ -12,17 +12,21 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	admin "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	data "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
+	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	iam "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 // frozenPlanes are the packages whose RPCs the freeze classifies.
 var frozenPlanes = []protoreflect.FullName{
 	datav1.File_paladin_data_v1_types_proto.Package(),
 	adminv1.File_paladin_admin_v1_types_proto.Package(),
+	iamv1.File_paladin_iam_v1_types_proto.Package(),
 }
 
 // eachMethod calls fn with every RPC of the frozen planes.
@@ -146,6 +150,14 @@ func TestTenantFreeze(t *testing.T) {
 			&adminv1.UpdateTenantRequest{Tenant: &adminv1.Tenant{Name: "tenants/" + trashed.String()}}, true},
 		"an unclassified RPC is a change": {"/paladin.data.v1.ObjectService/NotYetClassified",
 			&datav1.UploadObjectRequest{Parent: collection(trashed.String())}, true},
+		"a user created in a trashed tenant": {iam.UserServiceCreateUserProcedure,
+			&iamv1.CreateUserRequest{Parent: "tenants/" + trashed.String()}, true},
+		"a user of a trashed tenant updated": {iam.UserServiceUpdateUserProcedure,
+			&iamv1.UpdateUserRequest{Name: "tenants/" + trashed.String() + "/users/" + uuid.NewString()}, true},
+		"switching into a trashed tenant": {iam.AuthServiceSwitchTenantProcedure,
+			&iamv1.SwitchTenantRequest{TargetTenantId: trashed.String()}, true},
+		"revoking a user's scopes": {iam.UserServiceRevokeScopesProcedure,
+			&iamv1.RevokeScopesRequest{Name: "tenants/" + trashed.String() + "/users/u"}, false},
 		"a download":        {data.ObjectServiceDownloadObjectProcedure, &datav1.DownloadObjectRequest{Name: collection(trashed.String()) + "/objects/o"}, false},
 		"a presigned read":  {data.PresignServicePresignDownloadProcedure, &datav1.PresignDownloadRequest{Name: collection(trashed.String()) + "/objects/o"}, false},
 		"revoking a token":  {admin.APITokenServiceRevokeProcedure, &adminv1.APITokenServiceRevokeRequest{Name: "tenants/" + trashed.String() + "/apiTokens/x"}, false},
@@ -158,7 +170,7 @@ func TestTenantFreeze(t *testing.T) {
 		"a platform change": {admin.BackendServiceCreateBackendProcedure, &adminv1.CreateBackendRequest{}, false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			err := checkFrozen(context.Background(), states, slugs, tc.procedure, tc.msg)
+			err := checkFrozen(platformCtx(), states, slugs, tc.procedure, tc.msg)
 			if !tc.frozen {
 				if err != nil {
 					t.Fatalf("refused: %v", err)
@@ -176,7 +188,7 @@ func TestTenantFreeze(t *testing.T) {
 // change.
 func TestTenantFreezeReadsNothingForARead(t *testing.T) {
 	states := &fakeStates{err: errors.New("down")}
-	err := checkFrozen(context.Background(), states, fakeSlugs{err: errors.New("down")},
+	err := checkFrozen(platformCtx(), states, fakeSlugs{err: errors.New("down")},
 		data.ObjectServiceGetObjectProcedure, &datav1.GetObjectRequest{Name: "tenants/" + uuid.NewString() + "/collections/c/objects/o"})
 	if err != nil || states.reads != 0 {
 		t.Errorf("err = %v after %d reads, want a read let through unread", err, states.reads)
@@ -196,7 +208,7 @@ func TestTenantFreezeFailsClosed(t *testing.T) {
 		"slug unreadable":  {&fakeStates{}, fakeSlugs{err: down}, "tenants/acme"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			err := checkFrozen(context.Background(), tc.states, tc.slugs,
+			err := checkFrozen(platformCtx(), tc.states, tc.slugs,
 				admin.CollectionServiceCreateCollectionProcedure, &adminv1.CreateCollectionRequest{Parent: tc.parent})
 			if connect.CodeOf(err) != connect.CodeUnavailable {
 				t.Errorf("err = %v, want Unavailable", err)
@@ -238,4 +250,47 @@ func TestRequestTenants(t *testing.T) {
 			}
 		})
 	}
+}
+
+// platformCtx carries a platform admin of a tenant of its own.
+func platformCtx() context.Context {
+	return auth.WithPrincipal(context.Background(), &auth.Principal{
+		Subject: "admin", TenantID: uuid.New(), Roles: []string{apiutil.RolePlatformAdmin},
+	})
+}
+
+// A principal without a platform role is confined to its own tenant, so the
+// freeze tells it nothing about another tenant it names — not even by
+// looking it up. The handler refuses it as it always did.
+func TestTenantFreezeSaysNothingToATenantPrincipal(t *testing.T) {
+	trashed := uuid.New()
+	states := &fakeStates{states: map[uuid.UUID]auth.TenantState{trashed: auth.TenantTrashed}}
+	slugs := &countingSlugs{}
+	for name, ctx := range map[string]context.Context{
+		"no principal": context.Background(),
+		"a tenant admin": auth.WithPrincipal(context.Background(), &auth.Principal{
+			Subject: "u", TenantID: uuid.New(), Roles: []string{apiutil.RoleTenantAdmin},
+		}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, msg := range []proto.Message{
+				&datav1.UploadObjectRequest{Parent: "tenants/" + trashed.String() + "/collections/c"},
+				&adminv1.CreateCollectionRequest{Parent: "tenants/acme"},
+			} {
+				if err := checkFrozen(ctx, states, slugs, data.ObjectServiceUploadObjectProcedure, msg); err != nil {
+					t.Errorf("told %v", err)
+				}
+			}
+			if states.reads != 0 || slugs.calls != 0 {
+				t.Errorf("looked up %d states and %d slugs for a tenant principal", states.reads, slugs.calls)
+			}
+		})
+	}
+}
+
+type countingSlugs struct{ calls int }
+
+func (c *countingSlugs) TenantIDBySlug(context.Context, string) (uuid.UUID, bool, error) {
+	c.calls++
+	return uuid.Nil, false, nil
 }

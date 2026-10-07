@@ -3,6 +3,7 @@ package middleware
 import (
 	admin "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 	data "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
+	iam "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 // Kind is what an RPC does to the tenants it names, as the tenant freeze sees
@@ -25,7 +26,7 @@ const (
 	Changes
 )
 
-// procedureKinds classifies every data- and admin-plane RPC. Explicit, and
+// procedureKinds classifies every data-, admin- and IAM-plane RPC. Explicit, and
 // held complete by TestEveryRPCIsClassified: an idempotency level cannot do
 // it — DownloadObject and PresignDownload read and are not NO_SIDE_EFFECTS.
 var procedureKinds = map[string]Kind{
@@ -174,4 +175,34 @@ var procedureKinds = map[string]Kind{
 	admin.TenantServiceGetTenantDefaultBindingProcedure:    Reads,
 	admin.TenantServiceSetTenantDefaultBindingProcedure:    Changes,
 	admin.TenantServiceClearTenantDefaultBindingProcedure:  Changes,
+
+	// ─── IAM plane ─────────────────────────────────────────────────────────
+	// Login, RefreshToken and ExchangeAudience carry no principal and so
+	// pass; the gate refuses whatever they issue for a trashed tenant.
+	iam.AuthServiceLoginProcedure:             Changes,
+	iam.AuthServiceRefreshTokenProcedure:      Changes,
+	iam.AuthServiceRevokeProcedure:            Withdraws,
+	iam.AuthServiceWhoAmIProcedure:            Reads,
+	iam.AuthServiceChangePasswordProcedure:    Changes,
+	iam.AuthServiceExchangeAudienceProcedure:  Changes,
+	iam.AuthServiceListMyMembershipsProcedure: Reads,
+	iam.AuthServiceSwitchTenantProcedure:      Changes,
+
+	iam.HealthServiceGetVersionProcedure: Reads,
+	iam.HealthServiceGetHealthProcedure:  Reads,
+
+	iam.UserServiceCreateUserProcedure:    Changes,
+	iam.UserServiceGetUserProcedure:       Reads,
+	iam.UserServiceUpdateUserProcedure:    Changes,
+	iam.UserServiceDeleteUserProcedure:    Changes,
+	iam.UserServiceListUsersProcedure:     Reads,
+	iam.UserServiceGrantScopesProcedure:   Changes,
+	iam.UserServiceRevokeScopesProcedure:  Withdraws,
+	iam.UserServiceResetPasswordProcedure: Changes,
+
+	iam.UserSettingsServiceGetMineProcedure:       Reads,
+	iam.UserSettingsServiceUpdateMineProcedure:    Changes,
+	iam.UserSettingsServiceGetForUserProcedure:    Reads,
+	iam.UserSettingsServiceListByTenantProcedure:  Reads,
+	iam.UserSettingsServiceDeleteForUserProcedure: Changes,
 }

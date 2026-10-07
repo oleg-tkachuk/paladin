@@ -359,6 +359,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			// interceptor that establishes a principal, before validation and
 			// idempotency, so a refused call is never answered from memo.
 			tenantGate,
+			// Refuses a change to a tenant in the trash, whoever asks.
+			tenantFreeze,
 			middleware.NewLoginRateLimiter(
 				cfg.Auth.LoginRateLimitPerSubjectPerMinute,
 				cfg.Auth.LoginRateLimitPerIPPerMinute,
