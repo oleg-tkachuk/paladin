@@ -5,9 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -29,18 +30,18 @@ func (h *Handler) WithBiscuitCopies(copier BiscuitCopier, copies capability.Bisc
 // permission as Revoke, scoped the same way: a caller confined to its own
 // tenant cannot revoke a copy of another tenant's capability, and learns
 // nothing about it either.
-func (h *Handler) RevokeBiscuit(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceRevokeBiscuitRequest]) (*connect.Response[adminv1.CapabilityServiceRevokeBiscuitResponse], error) {
+func (h *Handler) RevokeBiscuit(ctx context.Context, req *adminv1.CapabilityServiceRevokeBiscuitRequest) (*adminv1.CapabilityServiceRevokeBiscuitResponse, error) {
 	caller, err := h.authorize(ctx, cedar.ActionRevokeCapability)
 	if err != nil {
 		return nil, err
 	}
 	if h.copier == nil || h.copies == nil {
 		return nil, connect.NewError(connect.CodeUnavailable,
-			errors.New("biscuit copy revocation not wired"))
+			"biscuit copy revocation not wired")
 	}
-	c, err := h.copier.BiscuitCopy(ctx, req.Msg.GetToken())
+	c, err := h.copier.BiscuitCopy(ctx, req.GetToken())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("token: %w", err))
 	}
 	ctx, err = h.actOnCapabilitysTenant(ctx, caller, c.CapabilityID)
 	if err != nil {
@@ -49,18 +50,18 @@ func (h *Handler) RevokeBiscuit(ctx context.Context, req *connect.Request[adminv
 	if err := h.copies.RevokeBiscuit(ctx, capability.RevokeBiscuitArgs{
 		CapabilityID: c.CapabilityID,
 		RevocationID: c.RevocationID,
-		Reason:       req.Msg.GetReason(),
+		Reason:       req.GetReason(),
 		Actor:        caller.Subject,
 	}); err != nil {
 		// As in Revoke: no such capability and another tenant's are one
 		// answer, so the endpoint is no oracle.
 		if errors.Is(err, capability.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
+			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	stashCapabilityInScope(ctx, c.CapabilityID)
-	return connect.NewResponse(&adminv1.CapabilityServiceRevokeBiscuitResponse{
+	return &adminv1.CapabilityServiceRevokeBiscuitResponse{
 		CapabilityId: c.CapabilityID.String(),
-	}), nil
+	}, nil
 }

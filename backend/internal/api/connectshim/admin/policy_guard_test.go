@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -36,41 +36,41 @@ func TestUncompilableCedarIsRefusedByEveryRPCThatTakesIt(t *testing.T) {
 	}{
 		{"CreateBucket", func() error {
 			s := &BucketServer{}
-			_, err := s.CreateBucket(ctx, connect.NewRequest(&pb.CreateBucketRequest{
+			_, err := s.CreateBucket(ctx, &pb.CreateBucketRequest{
 				Parent: "storageBackends/primary", BucketId: "b",
 				Bucket: &pb.Bucket{CedarPolicy: brokenPolicy},
-			}))
+			})
 			return err
 		}},
 		{"UpdateBucket", func() error {
 			s := &BucketServer{}
-			_, err := s.UpdateBucket(ctx, connect.NewRequest(&pb.UpdateBucketRequest{
+			_, err := s.UpdateBucket(ctx, &pb.UpdateBucketRequest{
 				Bucket: &pb.Bucket{
 					Name:        "storageBackends/primary/buckets/b",
 					CedarPolicy: brokenPolicy,
 				},
-			}))
+			})
 			return err
 		}},
 		{"SetBucketPolicy", func() error {
 			s := &BucketServer{}
-			_, err := s.SetBucketPolicy(ctx, connect.NewRequest(&pb.SetBucketPolicyRequest{
+			_, err := s.SetBucketPolicy(ctx, &pb.SetBucketPolicyRequest{
 				Name: "storageBackends/primary/buckets/b", CedarPolicy: brokenPolicy,
-			}))
+			})
 			return err
 		}},
 		{"CreateTenant", func() error {
 			s := &TenantServer{}
-			_, err := s.CreateTenant(ctx, connect.NewRequest(&pb.CreateTenantRequest{
+			_, err := s.CreateTenant(ctx, &pb.CreateTenantRequest{
 				TenantId: "t", Tenant: &pb.Tenant{InheritedCedarPolicy: brokenPolicy},
-			}))
+			})
 			return err
 		}},
 		{"UpdateTenant", func() error {
 			s := &TenantServer{}
-			_, err := s.UpdateTenant(ctx, connect.NewRequest(&pb.UpdateTenantRequest{
+			_, err := s.UpdateTenant(ctx, &pb.UpdateTenantRequest{
 				Tenant: &pb.Tenant{Name: "tenants/t", InheritedCedarPolicy: brokenPolicy},
-			}))
+			})
 			return err
 		}},
 	}

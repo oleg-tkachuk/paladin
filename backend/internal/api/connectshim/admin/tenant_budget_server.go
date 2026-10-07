@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 
@@ -46,16 +47,15 @@ func NewTenantBudgetServer(usage capability.TenantBudgets) *TenantBudgetServer {
 
 func (s *TenantBudgetServer) Get(
 	ctx context.Context,
-	req *connect.Request[pb.TenantBudgetServiceGetRequest],
-) (*connect.Response[pb.TenantBudgetServiceGetResponse], error) {
+	req *pb.TenantBudgetServiceGetRequest,
+) (*pb.TenantBudgetServiceGetResponse, error) {
 	if s.Usage == nil {
 		return nil, connect.NewError(connect.CodeUnavailable,
-			errors.New("capability subsystem disabled; tenant budget unavailable"))
+			"capability subsystem disabled; tenant budget unavailable")
 	}
-	tenantID, err := uuid.Parse(req.Msg.GetTenantId())
+	tenantID, err := uuid.Parse(req.GetTenantId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("tenant_id: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
 	}
 	// Same RLS constraint as Set, on the read side: the isolation policy's
 	// USING clause hides rows belonging to another tenant, so a platform admin
@@ -64,28 +64,27 @@ func (s *TenantBudgetServer) Get(
 	tb, err := s.Usage.GetTenantBudget(auth.WithActingTenant(ctx, tenantID), tenantID)
 	if err != nil {
 		if errors.Is(err, capability.ErrTenantBudgetNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
+			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&pb.TenantBudgetServiceGetResponse{
+	return &pb.TenantBudgetServiceGetResponse{
 		Budget: tenantBudgetToProto(tb),
-	}), nil
+	}, nil
 }
 
 func (s *TenantBudgetServer) Set(
 	ctx context.Context,
-	req *connect.Request[pb.TenantBudgetServiceSetRequest],
-) (*connect.Response[pb.TenantBudgetServiceSetResponse], error) {
+	req *pb.TenantBudgetServiceSetRequest,
+) (*pb.TenantBudgetServiceSetResponse, error) {
 	if s.Usage == nil {
 		return nil, connect.NewError(connect.CodeUnavailable,
-			errors.New("capability subsystem disabled; tenant budget unavailable"))
+			"capability subsystem disabled; tenant budget unavailable")
 	}
-	m := req.Msg
+	m := req
 	tenantID, err := uuid.Parse(m.GetTenantId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("tenant_id: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
 	}
 	// The request names the tenant by id, so the audit row would name nothing
 	// and the change would be in no tenant's trail.
@@ -97,13 +96,12 @@ func (s *TenantBudgetServer) Set(
 	// (or DEFAULT 'USD' on first insert).
 	unit := m.GetUnitCode()
 	if unit != "" && !capability.IsAllowedUnitCode(unit) {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("unit_code: %q not in %v", unit, capability.AllowedUnitCodes))
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"unit_code: %q not in %v", unit, capability.AllowedUnitCodes)
 	}
 	expected, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("resource_version: %w", err))
 	}
 	if err := apiutil.RefuseRemovedFields(m); err != nil {
 		return nil, err
@@ -135,13 +133,13 @@ func (s *TenantBudgetServer) Set(
 		// A version mismatch is the caller's to resolve — re-read and retry —
 		// not a server fault, so it must not read as Internal.
 		if errors.Is(err, capability.ErrTenantBudgetVersionMismatch) {
-			return nil, connect.NewError(connect.CodeAborted, err)
+			return nil, connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&pb.TenantBudgetServiceSetResponse{
+	return &pb.TenantBudgetServiceSetResponse{
 		Budget: tenantBudgetToProto(tb),
-	}), nil
+	}, nil
 }
 
 // Summarize returns one row per tenant joining the budget snapshot
@@ -151,16 +149,16 @@ func (s *TenantBudgetServer) Set(
 // are mutually exclusive (server-enforced).
 func (s *TenantBudgetServer) Summarize(
 	ctx context.Context,
-	req *connect.Request[pb.TenantBudgetServiceSummarizeRequest],
-) (*connect.Response[pb.TenantBudgetServiceSummarizeResponse], error) {
+	req *pb.TenantBudgetServiceSummarizeRequest,
+) (*pb.TenantBudgetServiceSummarizeResponse, error) {
 	if s.Usage == nil {
 		return nil, connect.NewError(connect.CodeUnavailable,
-			errors.New("capability subsystem disabled; tenant budget unavailable"))
+			"capability subsystem disabled; tenant budget unavailable")
 	}
-	m := req.Msg
+	m := req
 	if m.GetUnlimitedOnly() && m.GetThresholdPct() > 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("unlimited_only is mutually exclusive with a non-zero threshold_pct"))
+			"unlimited_only is mutually exclusive with a non-zero threshold_pct")
 	}
 	rows, err := s.Usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsArgs{
 		ThresholdPct:    m.GetThresholdPct(),
@@ -169,7 +167,7 @@ func (s *TenantBudgetServer) Summarize(
 		Limit:           m.GetLimit(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := &pb.TenantBudgetServiceSummarizeResponse{
 		Summaries: make([]*pb.TenantBudgetSummary, 0, len(rows)),
@@ -183,7 +181,7 @@ func (s *TenantBudgetServer) Summarize(
 			UtilisationPct: r.UtilisationPct,
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 var _ paladinadminv1connect.TenantBudgetServiceHandler = (*TenantBudgetServer)(nil)

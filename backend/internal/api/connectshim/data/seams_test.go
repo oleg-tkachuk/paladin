@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
@@ -120,110 +120,110 @@ func TestEveryShimPropagatesHandlerErrors(t *testing.T) {
 		call func() error
 	}{
 		{"BatchDeleteObjects", func() error {
-			_, err := batchSrv.BatchDeleteObjects(ctx, connect.NewRequest(&pb.BatchDeleteObjectsRequest{
+			_, err := batchSrv.BatchDeleteObjects(ctx, &pb.BatchDeleteObjectsRequest{
 				Parent:   parent,
 				Selector: &pb.ObjectSelector{Names: []string{objName}},
-			}))
+			})
 			return err
 		}},
 		{"InitiateMultipartUpload", func() error {
-			_, err := mpSrv.InitiateMultipartUpload(ctx, connect.NewRequest(&pb.InitiateMultipartUploadRequest{
+			_, err := mpSrv.InitiateMultipartUpload(ctx, &pb.InitiateMultipartUploadRequest{
 				Parent: parent, Key: "k", ContentType: "text/plain",
-			}))
+			})
 			return err
 		}},
 		{"GetObjectTags", func() error {
-			_, err := tagSrv.GetObjectTags(ctx, connect.NewRequest(&pb.GetObjectTagsRequest{Name: objName}))
+			_, err := tagSrv.GetObjectTags(ctx, &pb.GetObjectTagsRequest{Name: objName})
 			return err
 		}},
 		{"PresignDownload", func() error {
-			_, err := psSrv.PresignDownload(ctx, connect.NewRequest(&pb.PresignDownloadRequest{Name: objName}))
+			_, err := psSrv.PresignDownload(ctx, &pb.PresignDownloadRequest{Name: objName})
 			return err
 		}},
 		{"GetOperation", func() error {
-			_, err := opSrv.GetOperation(ctx, connect.NewRequest(&pb.GetOperationRequest{Name: opName}))
+			_, err := opSrv.GetOperation(ctx, &pb.GetOperationRequest{Name: opName})
 			return err
 		}},
 		{"BatchCopyObjects", func() error {
-			_, err := batchSrv.BatchCopyObjects(ctx, connect.NewRequest(&pb.BatchCopyObjectsRequest{
+			_, err := batchSrv.BatchCopyObjects(ctx, &pb.BatchCopyObjectsRequest{
 				SourceParent: parent, DestinationCollection: parent,
 				Selector: &pb.ObjectSelector{Names: []string{objName}},
-			}))
+			})
 			return err
 		}},
 		{"BatchRestoreObjects", func() error {
-			_, err := batchSrv.BatchRestoreObjects(ctx, connect.NewRequest(&pb.BatchRestoreObjectsRequest{
+			_, err := batchSrv.BatchRestoreObjects(ctx, &pb.BatchRestoreObjectsRequest{
 				Parent: parent, Selector: &pb.ObjectSelector{Names: []string{objName}},
-			}))
+			})
 			return err
 		}},
 		{"BatchUpdateTags", func() error {
-			_, err := batchSrv.BatchUpdateTags(ctx, connect.NewRequest(&pb.BatchUpdateTagsRequest{
+			_, err := batchSrv.BatchUpdateTags(ctx, &pb.BatchUpdateTagsRequest{
 				Parent: parent, Selector: &pb.ObjectSelector{Names: []string{objName}},
 				Tags: map[string]string{"k": "v"},
-			}))
+			})
 			return err
 		}},
 		{"PresignPart", func() error {
-			_, err := mpSrv.PresignPart(ctx, connect.NewRequest(&pb.PresignPartRequest{
+			_, err := mpSrv.PresignPart(ctx, &pb.PresignPartRequest{
 				ObjectName: objName, UploadId: "u1", PartNumber: 1,
-			}))
+			})
 			return err
 		}},
 		{"CompleteMultipartUpload", func() error {
-			_, err := mpSrv.CompleteMultipartUpload(ctx, connect.NewRequest(&pb.CompleteMultipartUploadRequest{
+			_, err := mpSrv.CompleteMultipartUpload(ctx, &pb.CompleteMultipartUploadRequest{
 				ObjectName: objName, UploadId: "u1",
-			}))
+			})
 			return err
 		}},
 		{"AbortMultipartUpload", func() error {
-			_, err := mpSrv.AbortMultipartUpload(ctx, connect.NewRequest(&pb.AbortMultipartUploadRequest{
+			_, err := mpSrv.AbortMultipartUpload(ctx, &pb.AbortMultipartUploadRequest{
 				ObjectName: objName, UploadId: "u1",
-			}))
+			})
 			return err
 		}},
 		{"ListParts", func() error {
-			_, err := mpSrv.ListParts(ctx, connect.NewRequest(&pb.ListPartsRequest{
+			_, err := mpSrv.ListParts(ctx, &pb.ListPartsRequest{
 				ObjectName: objName, UploadId: "u1",
-			}))
+			})
 			return err
 		}},
 		{"PutObjectTags", func() error {
-			_, err := tagSrv.PutObjectTags(ctx, connect.NewRequest(&pb.PutObjectTagsRequest{
+			_, err := tagSrv.PutObjectTags(ctx, &pb.PutObjectTagsRequest{
 				Name: objName, ResourceVersion: "1", Tags: map[string]string{"k": "v"},
-			}))
+			})
 			return err
 		}},
 		{"DeleteObjectTags", func() error {
-			_, err := tagSrv.DeleteObjectTags(ctx, connect.NewRequest(&pb.DeleteObjectTagsRequest{
+			_, err := tagSrv.DeleteObjectTags(ctx, &pb.DeleteObjectTagsRequest{
 				Name: objName, ResourceVersion: "1", Keys: []string{"k"},
-			}))
+			})
 			return err
 		}},
 		{"ListDistinctTags", func() error {
-			_, err := tagSrv.ListDistinctTags(ctx, connect.NewRequest(&pb.ListDistinctTagsRequest{
+			_, err := tagSrv.ListDistinctTags(ctx, &pb.ListDistinctTagsRequest{
 				Parent: parent,
-			}))
+			})
 			return err
 		}},
 		{"RegenerateUploadUrl", func() error {
-			_, err := psSrv.RegenerateUploadUrl(ctx, connect.NewRequest(&pb.RegenerateUploadUrlRequest{
+			_, err := psSrv.RegenerateUploadUrl(ctx, &pb.RegenerateUploadUrlRequest{
 				Name: objName,
-			}))
+			})
 			return err
 		}},
 		{"ListOperations", func() error {
-			_, err := opSrv.ListOperations(ctx, connect.NewRequest(&pb.ListOperationsRequest{}))
+			_, err := opSrv.ListOperations(ctx, &pb.ListOperationsRequest{})
 			return err
 		}},
 		{"CancelOperation", func() error {
-			_, err := opSrv.CancelOperation(ctx, connect.NewRequest(&pb.CancelOperationRequest{Name: opName}))
+			_, err := opSrv.CancelOperation(ctx, &pb.CancelOperationRequest{Name: opName})
 			return err
 		}},
 		{"EnsureTenantStorage", func() error {
-			_, err := sbSrv.EnsureTenantStorage(ctx, connect.NewRequest(&pb.EnsureTenantStorageRequest{
+			_, err := sbSrv.EnsureTenantStorage(ctx, &pb.EnsureTenantStorageRequest{
 				BackendId: "primary", Bucket: "b",
-			}))
+			})
 			return err
 		}},
 	}
@@ -274,9 +274,9 @@ func TestTheFAILINGStepIsTheOneReported(t *testing.T) {
 
 	t.Run("cancel fails even though the re-read would succeed", func(t *testing.T) {
 		srv := &OperationServer{H: cancelFailsGetSucceeds{}}
-		_, err := srv.CancelOperation(ctx, connect.NewRequest(&pb.CancelOperationRequest{
+		_, err := srv.CancelOperation(ctx, &pb.CancelOperationRequest{
 			Name: "operations/" + objUUID.String(),
-		}))
+		})
 		if err == nil {
 			t.Fatal("the cancel failed and the shim reported success because the " +
 				"following read worked — the caller believes the operation stopped")
@@ -288,9 +288,9 @@ func TestTheFAILINGStepIsTheOneReported(t *testing.T) {
 
 	t.Run("the re-read fails after the cancel succeeded", func(t *testing.T) {
 		srv := &OperationServer{H: cancelSucceedsGetFails{}}
-		resp, err := srv.CancelOperation(ctx, connect.NewRequest(&pb.CancelOperationRequest{
+		resp, err := srv.CancelOperation(ctx, &pb.CancelOperationRequest{
 			Name: "operations/" + objUUID.String(),
-		}))
+		})
 		if err == nil {
 			t.Fatalf("the re-read failed and the shim answered %v — a client "+
 				"reads an empty operation as the cancelled one", resp)
@@ -302,9 +302,9 @@ func TestTheFAILINGStepIsTheOneReported(t *testing.T) {
 
 	t.Run("the write fails even though the read succeeded", func(t *testing.T) {
 		srv := &ObjectTagServer{H: readOKWriteFails{}}
-		_, err := srv.DeleteObjectTags(ctx, connect.NewRequest(&pb.DeleteObjectTagsRequest{
+		_, err := srv.DeleteObjectTags(ctx, &pb.DeleteObjectTagsRequest{
 			Name: objName, ResourceVersion: "1", Keys: []string{"k"},
-		}))
+		})
 		if err == nil {
 			t.Fatal("the tag write failed and the shim reported success — the " +
 				"caller believes the tags are gone")
@@ -318,10 +318,10 @@ func TestTheFAILINGStepIsTheOneReported(t *testing.T) {
 	// refused rather than silently dropped from the batch.
 	t.Run("a malformed name in a batch selector", func(t *testing.T) {
 		srv := &BatchServer{H: failingBatch{}}
-		_, err := srv.BatchDeleteObjects(ctx, connect.NewRequest(&pb.BatchDeleteObjectsRequest{
+		_, err := srv.BatchDeleteObjects(ctx, &pb.BatchDeleteObjectsRequest{
 			Parent:   parent,
 			Selector: &pb.ObjectSelector{Names: []string{parent + "/objects/not-a-uuid"}},
-		}))
+		})
 		if err == nil {
 			t.Fatal("a batch accepted a name that does not parse")
 		}

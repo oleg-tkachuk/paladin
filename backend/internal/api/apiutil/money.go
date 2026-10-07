@@ -1,10 +1,9 @@
 package apiutil
 
 import (
-	"fmt"
 	"math"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
@@ -29,8 +28,8 @@ func Micros(amount float64) int64 {
 // optional field reads as 0, which every money field means as "unlimited".
 func AmountFromMicros(field string, micros int64) (float64, error) {
 	if micros < 0 || micros > capability.MaxMicros {
-		return 0, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("%s_micros: %d is outside 0..%d", field, micros, int64(capability.MaxMicros)))
+		return 0, connect.Errorf(connect.CodeInvalidArgument,
+			"%s_micros: %d is outside 0..%d", field, micros, int64(capability.MaxMicros))
 	}
 	return capability.MicrosToAmount(micros), nil
 }
@@ -52,9 +51,9 @@ func RefuseRemovedFields(msg proto.Message) error {
 			return nil
 		}
 		if reserved.Has(num) {
-			return connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("%s: field %d was removed from the API and is refused rather than ignored; upgrade the client",
-					m.Descriptor().FullName(), num))
+			return connect.Errorf(connect.CodeInvalidArgument,
+				"%s: field %d was removed from the API and is refused rather than ignored; upgrade the client",
+				m.Descriptor().FullName(), num)
 		}
 		v := protowire.ConsumeFieldValue(num, typ, b[n:])
 		if v < 0 {

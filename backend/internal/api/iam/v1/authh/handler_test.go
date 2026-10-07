@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -703,7 +703,7 @@ func TestWhoAmI_RouteListerErrorDegradesToEmpty(t *testing.T) {
 	// A route-source failure (incl. a Cedar denial) must not fail WhoAmI —
 	// identity still returns, just without routes.
 	u := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "u1"}
-	lister := &stubRouteLister{err: connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))}
+	lister := &stubRouteLister{err: connect.NewError(connect.CodePermissionDenied, "denied by policy")}
 	h := newHandler(&fakeUsers{user: u}, &fakeRefresh{}, &stubMinter{}).WithCollectionRoutes(lister)
 
 	out, err := h.WhoAmI(whoAmICtx(u), "")

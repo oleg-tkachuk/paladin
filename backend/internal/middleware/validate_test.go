@@ -3,16 +3,16 @@ package middleware
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/google/uuid"
 
 	validatepb "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
@@ -38,36 +38,32 @@ type countingSettings struct {
 }
 
 func (s *countingSettings) GetForUser(_ context.Context,
-	_ *connect.Request[iamv1.GetForUserRequest],
-) (*connect.Response[iamv1.UserSettings], error) {
+	_ *iamv1.GetForUserRequest,
+) (*iamv1.UserSettings, error) {
 	s.calls++
-	return connect.NewResponse(&iamv1.UserSettings{Name: "users/u-1/settings"}), nil
+	return &iamv1.UserSettings{Name: "users/u-1/settings"}, nil
 }
 
-func newValidatingServer(t *testing.T) (paladiniamv1connect.UserSettingsServiceClient, *countingSettings, func()) {
+func newValidatingServer(t *testing.T) (paladiniamv1connect.UserSettingsServiceClient, *countingSettings, context.Context) {
 	t.Helper()
 	validate, err := ProtoValidate()
 	if err != nil {
 		t.Fatalf("build interceptor: %v", err)
 	}
 	svc := &countingSettings{}
-	mux := http.NewServeMux()
-	path, handler := paladiniamv1connect.NewUserSettingsServiceHandler(svc,
-		connect.WithInterceptors(principalInjector(uuid.New()), validate),
-	)
-	mux.Handle(path, handler)
-	srv := httptest.NewServer(mux)
-	return paladiniamv1connect.NewUserSettingsServiceClient(srv.Client(), srv.URL), svc, srv.Close
+	client := paladiniamv1connect.NewUserSettingsServiceClient(unarytest.Client(func(s *connect.Server) {
+		paladiniamv1connect.RegisterUserSettingsServiceHandler(s, svc)
+	}, validate))
+	return client, svc, principalCtx(uuid.New())
 }
 
 // GetForUserRequest.name carries `min_len = 1`, so an empty name must not reach
 // the handler.
 func TestInvalidMessageIsRejectedBeforeTheHandler(t *testing.T) {
-	client, svc, cleanup := newValidatingServer(t)
-	defer cleanup()
+	client, svc, ctx := newValidatingServer(t)
 
-	_, err := client.GetForUser(context.Background(),
-		connect.NewRequest(&iamv1.GetForUserRequest{Name: ""}))
+	_, err := client.GetForUser(ctx,
+		&iamv1.GetForUserRequest{Name: ""})
 	if err == nil {
 		t.Fatal("an empty name passed validation")
 	}
@@ -96,18 +92,17 @@ func TestInvalidMessageIsRejectedBeforeTheHandler(t *testing.T) {
 // The other direction, and the one the surviving mutation needed: an
 // interceptor that rejects everything passes the test above.
 func TestValidMessageReachesTheHandler(t *testing.T) {
-	client, svc, cleanup := newValidatingServer(t)
-	defer cleanup()
+	client, svc, ctx := newValidatingServer(t)
 
-	res, err := client.GetForUser(context.Background(),
-		connect.NewRequest(&iamv1.GetForUserRequest{Name: "users/u-1"}))
+	res, err := client.GetForUser(ctx,
+		&iamv1.GetForUserRequest{Name: "users/u-1"})
 	if err != nil {
 		t.Fatalf("a valid message was rejected: %v", err)
 	}
 	if svc.calls != 1 {
 		t.Errorf("the handler ran %d times, want 1", svc.calls)
 	}
-	if res.Msg.Name == "" {
+	if res.Name == "" {
 		t.Error("the handler's response did not come back")
 	}
 }
@@ -117,9 +112,9 @@ func TestValidMessageReachesTheHandler(t *testing.T) {
 func hasViolation(t *testing.T, err *connect.Error, field string) bool {
 	t.Helper()
 	for _, d := range err.Details() {
-		msg, derr := d.Value()
+		msg, derr := connectproto.UnmarshalErrorDetail(d)
 		if derr != nil {
-			t.Fatalf("detail %s: %v", d.Type(), derr)
+			t.Fatalf("detail %s: %v", d.Type, derr)
 		}
 		v, ok := msg.(*validatepb.Violations)
 		if !ok {

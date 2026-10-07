@@ -7,7 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
@@ -34,15 +35,15 @@ func (s *failingInsertStore) Insert(context.Context, capability.Capability, capa
 // wrapping around text from the database that a caller must not act on.
 var errDriver = errors.New(`capability/postgres: insert: ERROR: insert or update on table "capability_records" violates foreign key constraint (SQLSTATE 23503)`)
 
-func issueRequest(tenant uuid.UUID) *connect.Request[adminv1.CapabilityServiceIssueRequest] {
-	return connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+func issueRequest(tenant uuid.UUID) *adminv1.CapabilityServiceIssueRequest {
+	return &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE, TenantId: tenant.String(), Subject: "svc",
 		},
 		Audience:   []string{capability.AudiencePlaneData},
 		TtlSeconds: 300,
 		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
-	})
+	}
 }
 
 // issuanceCases is every kind an issuance can fail by, with the answer the
@@ -77,9 +78,9 @@ func TestDelegateAnswersAFailureByItsKind(t *testing.T) {
 			parent := mkParent(uuid.New(), capability.OpGet, capability.OpShare)
 			store := &failingInsertStore{fakeStore: fakeStore{cap: &parent}, err: tc.err}
 			h := NewHandler(mkIssuer(t, store), store, nil, &denyAuthorizer{})
-			_, err := h.Delegate(auth.WithCapability(context.Background(), &parent), connect.NewRequest(&adminv1.CapabilityServiceDelegateRequest{
+			_, err := h.Delegate(auth.WithCapability(context.Background(), &parent), &adminv1.CapabilityServiceDelegateRequest{
 				ParentId: parent.ID.String(), TtlSeconds: 60,
-			}))
+			})
 			assertKind(t, err, tc.code, tc.reason)
 		})
 	}
@@ -91,7 +92,7 @@ func TestIssueStillRefusesAMalformedRequest(t *testing.T) {
 	store := &fakeStore{}
 	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
 	req := issueRequest(uuid.New())
-	req.Msg.Audience = []string{""}
+	req.Audience = []string{""}
 	_, err := h.Issue(adminCtx(), req)
 	assertKind(t, err, connect.CodeInvalidArgument, commonv1.ErrorReason_ERROR_REASON_INVALID_ARGUMENT)
 }
@@ -120,7 +121,7 @@ func reasonOf(t *testing.T, err error) commonv1.ErrorReason {
 		return commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED
 	}
 	for _, d := range cerr.Details() {
-		v, verr := d.Value()
+		v, verr := connectproto.UnmarshalErrorDetail(d)
 		if verr != nil {
 			t.Fatalf("detail does not decode: %v", verr)
 		}
@@ -150,9 +151,9 @@ func TestDelegateTellsAMissingParentFromAStoreFailure(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := NewHandler(mkIssuer(t, tc.store), tc.store, nil, &allowAuthorizer{})
-			_, err := h.Delegate(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceDelegateRequest{
+			_, err := h.Delegate(adminCtx(), &adminv1.CapabilityServiceDelegateRequest{
 				ParentId: uuid.NewString(), TtlSeconds: 60,
-			}))
+			})
 			if connect.CodeOf(err) != tc.code {
 				t.Errorf("err = %v, want %v", err, tc.code)
 			}

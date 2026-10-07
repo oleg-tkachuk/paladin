@@ -2,13 +2,13 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
@@ -22,19 +22,11 @@ type versionHealth struct {
 	fail bool
 }
 
-func (h versionHealth) GetVersion(context.Context, *connect.Request[iamv1.GetVersionRequest]) (*connect.Response[iamv1.VersionInfo], error) {
+func (h versionHealth) GetVersion(context.Context, *iamv1.GetVersionRequest) (*iamv1.VersionInfo, error) {
 	if h.fail {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("refused"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, "refused")
 	}
-	return connect.NewResponse(&iamv1.VersionInfo{}), nil
-}
-
-// headerOf is the response headers of a call, from its error when it failed.
-func headerOf(resp *connect.Response[iamv1.VersionInfo], err error) http.Header {
-	if cerr := new(connect.Error); errors.As(err, &cerr) {
-		return cerr.Meta()
-	}
-	return resp.Header()
+	return &iamv1.VersionInfo{}, nil
 }
 
 func TestServerVersionStampsEveryResponse(t *testing.T) {
@@ -58,16 +50,21 @@ func TestServerVersionStampsEveryResponse(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.Handle(UnknownProcedurePattern, UnknownProcedure())
 			if tc.mounted {
-				mux.Handle(paladiniamv1connect.NewHealthServiceHandler(versionHealth{fail: tc.fail}))
+				server := connect.NewServer()
+				paladiniamv1connect.RegisterHealthServiceHandler(server, versionHealth{fail: tc.fail})
+				connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(0))
 			}
 			srv := httptest.NewServer(ServerVersion(tc.version, mux))
 			defer srv.Close()
-			resp, err := paladiniamv1connect.NewHealthServiceClient(srv.Client(), srv.URL).
-				GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{}))
+			// The response headers are the call's, whether it succeeded or
+			// failed.
+			ctx, info := connect.NewClientContext(context.Background())
+			_, err := paladiniamv1connect.NewHealthServiceClient(connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL, connecthttp.WithReadMaxBytes(0)))).
+				GetVersion(ctx, &iamv1.GetVersionRequest{})
 			if tc.wantCode != 0 && connect.CodeOf(err) != tc.wantCode {
 				t.Fatalf("err = %v, want %v", err, tc.wantCode)
 			}
-			if got := headerOf(resp, err).Get(paladin.HeaderServerVersion); got != tc.want {
+			if got := info.ResponseHeader().Get(paladin.HeaderServerVersion); got != tc.want {
 				t.Errorf("%s = %q, want %q", paladin.HeaderServerVersion, got, tc.want)
 			}
 		})

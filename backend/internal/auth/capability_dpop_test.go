@@ -10,22 +10,29 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/capability/memstore"
+	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // A key-bound capability is useless to whoever copies it off the wire: every
 // request must carry a fresh DPoP proof signed by the key it is bound to. The
 // tests run the real issuer, verifier and DPoP verifier, and the unary path
-// through a real Connect server, so the method and procedure the interceptor
-// checks are the ones Connect reports.
+// through a real Connect server over HTTP, so the method and procedure the
+// interceptor checks are the ones Connect reports.
 
-const dpopProcedure = "/auth.dpop.v1.Svc/Call"
+// dpopProcedure is the contract RPC the unary tests call.
+const dpopProcedure = unarytest.ProbeProcedure
+
+// otherProcedure is a path the proofs below were not made for.
+const otherProcedure = "/auth.dpop.v1.Svc/Other"
 
 type dpopFixture struct {
 	issuer   *capability.Issuer
@@ -93,27 +100,27 @@ func (f *dpopFixture) proof(t *testing.T, url, token string) string {
 	return p
 }
 
-// serve mounts one unary procedure behind the interceptor and returns a
-// client for it.
-func serve(t *testing.T, i connect.Interceptor) (*connect.Client[emptypb.Empty, emptypb.Empty], string) {
+// serve mounts the Probe behind the interceptor on a real HTTP server and
+// returns a client for it and the server's base URL.
+func serve(t *testing.T, i connect.ServerInterceptor) (paladiniamv1connect.HealthServiceClient, string) {
 	t.Helper()
+	server := connect.NewServer(i)
+	paladiniamv1connect.RegisterHealthServiceHandler(server, &unarytest.Probe{})
 	mux := http.NewServeMux()
-	mux.Handle(dpopProcedure, connect.NewUnaryHandler(dpopProcedure,
-		func(context.Context, *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
-			return connect.NewResponse(&emptypb.Empty{}), nil
-		}, connect.WithInterceptors(i)))
+	connecthttp.Mount(mux, server)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return connect.NewClient[emptypb.Empty, emptypb.Empty](srv.Client(), srv.URL+dpopProcedure), srv.URL
+	return paladiniamv1connect.NewHealthServiceClient(
+		connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL))), srv.URL
 }
 
-func call(c *connect.Client[emptypb.Empty, emptypb.Empty], token, proof string) error {
-	req := connect.NewRequest(&emptypb.Empty{})
-	req.Header().Set("X-Paladin-Capability", token)
+func call(c paladiniamv1connect.HealthServiceClient, token, proof string) error {
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set(HeaderCapability, token)
 	if proof != "" {
-		req.Header().Set(capability.DPoPHeader, proof)
+		info.RequestHeader().Set(capability.DPoPHeader, proof)
 	}
-	_, err := c.CallUnary(context.Background(), req)
+	_, err := c.GetVersion(ctx, &iamv1.GetVersionRequest{})
 	return err
 }
 
@@ -134,7 +141,7 @@ func TestCapabilityDPoP_Unary(t *testing.T) {
 
 	refused := map[string]string{
 		"no proof":            "",
-		"proof for elsewhere": f.proof(t, base+"/auth.dpop.v1.Svc/Other", bound),
+		"proof for elsewhere": f.proof(t, base+otherProcedure, bound),
 		"proof for a token":   f.proof(t, base+dpopProcedure, "another-token"),
 	}
 	replayed := f.proof(t, base+dpopProcedure, bound)
@@ -171,28 +178,32 @@ func TestCapabilityDPoP_BoundRefusedWithoutAVerifier(t *testing.T) {
 	}
 }
 
-// The streaming handler is a separate copy of the gate.
+// The streaming hook is separate from the unary one — only the unary path
+// reads the request message — so the possession check is pinned on it too.
+// It runs through connect.Server.Call, which gives the call its server-side
+// headers; with no HTTP transport the method is the POST Connect uses.
 func TestCapabilityDPoP_Streaming(t *testing.T) {
 	f := newDPoPFixture(t)
 	dpop := &capability.DPoPVerifier{Replay: capability.NewMemoryReplayCache(0)}
 	i := CapabilityInterceptor(f.verifier, capability.AudiencePlaneData, nil, 0, "", WithDPoP(dpop))
 	bound := f.mint(t, f.jkt)
-	procedure := newStreamConn().Spec().Procedure
 
-	run := func(proof string) error {
-		conn := newStreamConn()
-		conn.header.Set("X-Paladin-Capability", bound)
+	run := func(proof string) (context.Context, error) {
+		h := &connect.Header{}
+		h.Set(HeaderCapability, bound)
 		if proof != "" {
-			conn.header.Set(capability.DPoPHeader, proof)
+			h.Set(capability.DPoPHeader, proof)
 		}
-		var called bool
-		var seen context.Context
-		return i.WrapStreamingHandler(streamNext(&called, &seen))(context.Background(), conn)
+		return callStream(context.Background(), []connect.ServerInterceptor{i}, h)
 	}
-	if err := run(f.proof(t, "https://data.example.com"+procedure, bound)); err != nil {
+	seen, err := run(f.proof(t, "https://data.example.com"+streamProcedure, bound))
+	if err != nil {
 		t.Fatalf("valid proof refused: %v", err)
 	}
-	err := run("")
+	if _, ok := CapabilityFromContext(seen); !ok {
+		t.Error("the verified capability did not reach the stream handler")
+	}
+	_, err = run("")
 	if connect.CodeOf(err) != connect.CodePermissionDenied || !errors.Is(err, capability.ErrDPoPRequired) {
 		t.Fatalf("missing proof: err = %v, want PermissionDenied wrapping ErrDPoPRequired", err)
 	}
@@ -214,9 +225,9 @@ func TestCapabilityDPoP_GoSDKInteroperates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := connect.NewClient[emptypb.Empty, emptypb.Empty](sdk.HTTPClient(), sdk.BaseURL()+dpopProcedure, sdk.ClientOptions()...)
+	client := paladiniamv1connect.NewHealthServiceClient(sdk.Connect())
 	for range 2 { // a fresh proof per call: the second is not a replay
-		if _, err := client.CallUnary(context.Background(), connect.NewRequest(&emptypb.Empty{})); err != nil {
+		if _, err := client.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
 			t.Fatalf("SDK call with WithDPoP refused: %v", err)
 		}
 	}
@@ -225,8 +236,8 @@ func TestCapabilityDPoP_GoSDKInteroperates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client = connect.NewClient[emptypb.Empty, emptypb.Empty](bare.HTTPClient(), bare.BaseURL()+dpopProcedure, bare.ClientOptions()...)
-	if _, err := client.CallUnary(context.Background(), connect.NewRequest(&emptypb.Empty{})); connect.CodeOf(err) != connect.CodePermissionDenied {
+	client = paladiniamv1connect.NewHealthServiceClient(bare.Connect())
+	if _, err := client.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("bound capability without WithDPoP: err = %v, want PermissionDenied", err)
 	}
 }

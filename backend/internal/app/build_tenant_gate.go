@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/tenantstate"
@@ -18,7 +18,7 @@ import (
 //
 // The same cache serves the freeze, which refuses a change to a trashed tenant
 // whoever asks for it.
-func buildTenantGate(deps *SharedDeps) (gate, freeze connect.Interceptor, err error) {
+func buildTenantGate(deps *SharedDeps) (gate, freeze connect.ServerInterceptor, err error) {
 	reader := tenantstate.NewReader(deps.Pool)
 	states := middleware.NewCachedTenantStates(reader, middleware.DefaultTenantStateTTL)
 	watchCtx, stopWatch := context.WithCancel(context.Background())

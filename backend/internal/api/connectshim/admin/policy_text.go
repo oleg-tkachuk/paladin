@@ -3,9 +3,10 @@ package admin
 import (
 	"fmt"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 // requireCompilablePolicy refuses Cedar text the engine cannot parse, at the
@@ -32,8 +33,7 @@ func requireCompilablePolicy(text string) error {
 		return nil
 	}
 	if err := cedar.Validate(text); err != nil {
-		return connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("cedar policy does not compile: %w", err))
+		return rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("cedar policy does not compile: %w", err))
 	}
 	return nil
 }

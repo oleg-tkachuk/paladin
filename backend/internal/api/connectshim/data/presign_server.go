@@ -3,8 +3,6 @@ package data
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/presignh"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
@@ -17,8 +15,8 @@ type PresignServer struct {
 
 func NewPresignServer(h *presignh.Handler) *PresignServer { return &PresignServer{H: h} }
 
-func (s *PresignServer) RegenerateUploadUrl(ctx context.Context, req *connect.Request[pb.RegenerateUploadUrlRequest]) (*connect.Response[pb.RegenerateUploadUrlResponse], error) {
-	m := req.Msg
+func (s *PresignServer) RegenerateUploadUrl(ctx context.Context, req *pb.RegenerateUploadUrlRequest) (*pb.RegenerateUploadUrlResponse, error) {
+	m := req
 	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
@@ -27,14 +25,14 @@ func (s *PresignServer) RegenerateUploadUrl(ctx context.Context, req *connect.Re
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.RegenerateUploadUrlResponse{
+	return &pb.RegenerateUploadUrlResponse{
 		UploadUrl:      presignedUrlProto(out.URL, "PUT", out.Headers, out.ExpiresAt, "", nil),
 		CompletionMode: completionModeProto(out.CompletionMode),
-	}), nil
+	}, nil
 }
 
-func (s *PresignServer) PresignDownload(ctx context.Context, req *connect.Request[pb.PresignDownloadRequest]) (*connect.Response[pb.PresignDownloadResponse], error) {
-	m := req.Msg
+func (s *PresignServer) PresignDownload(ctx context.Context, req *pb.PresignDownloadRequest) (*pb.PresignDownloadResponse, error) {
+	m := req
 	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
@@ -43,9 +41,9 @@ func (s *PresignServer) PresignDownload(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.PresignDownloadResponse{
+	return &pb.PresignDownloadResponse{
 		DownloadUrl: presignedUrlProto(url, "GET", headers, expires, "", nil),
-	}), nil
+	}, nil
 }
 
 var _ paladindatav1connect.PresignServiceHandler = (*PresignServer)(nil)

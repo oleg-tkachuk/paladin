@@ -17,7 +17,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -28,6 +28,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
@@ -107,14 +108,14 @@ func assertSessionMatches(sess Session, want SessionRef) error {
 		return nil // caller did not name an object (internal call sites)
 	}
 	if want.ObjectID != uuid.Nil && sess.ObjectID != want.ObjectID {
-		return connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("object_name names object %s but upload %s belongs to %s",
-				want.ObjectID, sess.UploadID, sess.ObjectID))
+		return connect.Errorf(connect.CodeInvalidArgument,
+			"object_name names object %s but upload %s belongs to %s",
+			want.ObjectID, sess.UploadID, sess.ObjectID)
 	}
 	if want.Collection != "" && sess.Collection != want.Collection {
-		return connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("object_name names collection %q but upload %s belongs to %q",
-				want.Collection, sess.UploadID, sess.Collection))
+		return connect.Errorf(connect.CodeInvalidArgument,
+			"object_name names collection %q but upload %s belongs to %q",
+			want.Collection, sess.UploadID, sess.Collection)
 	}
 	return nil
 }
@@ -308,12 +309,12 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	if meta.PublicRead {
 		args.PublicURL, err = h.storage.PublicURL(ctx, backendID, bucket, meta.PublicBaseURL, tenantID, args.Collection, args.Key)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("public url: %w", err))
+			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("public url: %w", err))
 		}
 	}
 	storageUploadID, err := h.storage.InitiateMultipart(ctx, backendID, bucket, tenantID, args.Collection, args.Key, args.ContentType, meta.CacheControl, args.ChecksumAlgo)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage initiate: %w", err))
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage initiate: %w", err))
 	}
 
 	objectID := uuid.Must(uuid.NewV7())
@@ -326,9 +327,9 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		// as UploadObject reports it: a conflict the caller can act on, not a
 		// failure of the server.
 		if pgerr.Is(err, pgerr.UniqueViolation) {
-			return nil, connect.NewError(connect.CodeAlreadyExists, err)
+			return nil, connect.NewError(connect.CodeAlreadyExists, err.Error()).WithCause(err)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &session, nil
 }
@@ -346,7 +347,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 
 	sess, err := h.repo.GetSession(ctx, args.UploadID)
 	if err != nil {
-		return objecth.Object{}, connect.NewError(connect.CodeNotFound, err)
+		return objecth.Object{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
 	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
@@ -365,7 +366,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 		}
 	}
 	if err := sess.checkParts(args.Parts); err != nil {
-		return objecth.Object{}, connect.NewError(connect.CodeInvalidArgument, err)
+		return objecth.Object{}, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	// The composite of the parts' checksums, which the store verified each
 	// part against: what a reader recomputes from the bytes. Recorded before
@@ -373,14 +374,14 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	// the row first — this call or the storage event.
 	composite, err := sess.compositeChecksum(args.Parts)
 	if err != nil {
-		return objecth.Object{}, connect.NewError(connect.CodeInvalidArgument, err)
+		return objecth.Object{}, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	if err := h.repo.RecordCompositeChecksum(ctx, sess.ObjectID, composite, sess.PartSizeBytes); err != nil {
-		return objecth.Object{}, connect.NewError(connect.CodeInternal, fmt.Errorf("record composite checksum: %w", err))
+		return objecth.Object{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("record composite checksum: %w", err))
 	}
 	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, sess.ChecksumAlgo, args.Parts)
 	if err != nil {
-		return objecth.Object{}, connect.NewError(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
+		return objecth.Object{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
 	}
 	// No sequencer from multipart completion — events will supply one later.
 	changed, err := h.sm.PromoteToAvailable(ctx, sess.ObjectID, etag, size, "", "", statemachine.SourceRPC)
@@ -388,7 +389,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 		return objecth.Object{}, h.discardMismatched(ctx, sess, backendID, bucket, args.UploadID, err)
 	}
 	if err != nil {
-		return objecth.Object{}, connect.NewError(connect.CodeInternal, err)
+		return objecth.Object{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if changed && h.versions != nil {
 		_ = h.versions.OnPromote(ctx, VersionedObject{
@@ -444,7 +445,7 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, wan
 	}
 	sess, err := h.repo.GetSession(ctx, uploadID)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err)
+		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	if err := assertSessionMatches(sess, want); err != nil {
 		return err
@@ -466,11 +467,11 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, wan
 		}
 	}
 	if err := h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key); err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// Mark the underlying object FAILED so reconciler won't promote it.
 	if err := h.sm.MarkFailed(ctx, sess.ObjectID, "multipart-aborted"); err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if err := h.repo.DeleteSession(ctx, uploadID); err != nil {
 		// Same as the complete path: the abort succeeded, so this must not
@@ -502,27 +503,27 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	}
 	sess, err := h.repo.GetSession(ctx, uploadID)
 	if err != nil {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err)
+		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	if sess.TenantID != tenantID {
-		return "", nil, time.Time{}, connect.NewError(connect.CodePermissionDenied, errors.New("tenant mismatch"))
+		return "", nil, time.Time{}, connect.NewError(connect.CodePermissionDenied, "tenant mismatch")
 	}
 	if err := assertSessionMatches(sess, want); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	if partNumber <= 0 || (sess.TotalParts > 0 && partNumber > sess.TotalParts) {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("part_number %d out of range (1..%d)", partNumber, sess.TotalParts))
+		return "", nil, time.Time{}, connect.Errorf(connect.CodeInvalidArgument,
+			"part_number %d out of range (1..%d)", partNumber, sess.TotalParts)
 	}
 	// A part URL is bound to the part's length, which needs the object's
 	// registered size, and to a checksum, which needs the session's
 	// algorithm. A session without them predates the binding.
 	if sess.SizeBytes <= 0 || sess.TotalParts <= 0 || !checksum.Known(sess.ChecksumAlgo) {
 		return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("upload was initiated without a size and checksum algorithm; start a new upload"))
+			"upload was initiated without a size and checksum algorithm; start a new upload")
 	}
 	if err := checksum.Validate(sess.ChecksumAlgo, checksumValue); err != nil {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("checksum_value: %w", err))
+		return "", nil, time.Time{}, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("checksum_value: %w", err))
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
 	// Presigned part URL grants Put on the underlying object; gate on
@@ -601,16 +602,16 @@ func (s Session) compositeChecksum(parts []PartETag) (string, error) {
 // will HEAD and fail, never a FAILED row over bytes nothing will remove.
 func (h *Handler) discardMismatched(ctx context.Context, sess Session, backendID, bucket, uploadID string, cause error) error {
 	if err := h.storage.DeleteObject(ctx, backendID, bucket, sess.TenantID, sess.Collection, sess.Key); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("%w; deleting the stored bytes failed: %w", cause, err))
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; deleting the stored bytes failed: %w", cause, err))
 	}
 	if err := h.sm.MarkFailed(ctx, sess.ObjectID, statemachine.FailedContentMismatch); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("%w; failing the object failed: %w", cause, err))
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; failing the object failed: %w", cause, err))
 	}
 	if err := h.repo.DeleteSession(ctx, uploadID); err != nil {
 		logger.FromContext(ctx).Warn("multipart session not deleted after a refused complete",
 			zap.String("upload_id", uploadID), zap.Error(err))
 	}
-	return connect.NewError(connect.CodeFailedPrecondition, cause)
+	return connect.NewError(connect.CodeFailedPrecondition, cause.Error()).WithCause(cause)
 }
 
 // ListParts reports which parts of an in-flight upload have actually landed
@@ -632,10 +633,10 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	}
 	sess, err := h.repo.GetSession(ctx, uploadID)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeNotFound, err)
+		return nil, "", connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	if sess.TenantID != tenantID {
-		return nil, "", connect.NewError(connect.CodePermissionDenied, errors.New("tenant mismatch"))
+		return nil, "", connect.NewError(connect.CodePermissionDenied, "tenant mismatch")
 	}
 	if err := assertSessionMatches(sess, want); err != nil {
 		return nil, "", err
@@ -658,8 +659,8 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	if pageToken != "" {
 		n, perr := strconv.ParseInt(pageToken, 10, 32)
 		if perr != nil || n < 0 {
-			return nil, "", connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("page_token must be a part number: %q", pageToken))
+			return nil, "", connect.Errorf(connect.CodeInvalidArgument,
+				"page_token must be a part number: %q", pageToken)
 		}
 		after = int32(n)
 	}
@@ -668,7 +669,7 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 		sess.BackendID, sess.Bucket, tenantID, sess.StorageUploadID,
 		sess.Collection, sess.Key, pageSize, after)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInternal, err)
+		return nil, "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	var nextToken string
 	if next > 0 {
@@ -694,7 +695,7 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }

@@ -2,13 +2,13 @@ package middleware
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
@@ -28,41 +28,35 @@ type stubSettings struct {
 	updateCalls int
 }
 
-func (s *stubSettings) GetMine(_ context.Context, _ *connect.Request[iamv1.GetMineRequest]) (*connect.Response[iamv1.UserSettings], error) {
+func (s *stubSettings) GetMine(_ context.Context, _ *iamv1.GetMineRequest) (*iamv1.UserSettings, error) {
 	s.getCalls++
-	return connect.NewResponse(&iamv1.UserSettings{Theme: "dark"}), nil
+	return &iamv1.UserSettings{Theme: "dark"}, nil
 }
 
-func (s *stubSettings) UpdateMine(_ context.Context, _ *connect.Request[iamv1.UpdateMineRequest]) (*connect.Response[iamv1.UserSettings], error) {
+func (s *stubSettings) UpdateMine(_ context.Context, _ *iamv1.UpdateMineRequest) (*iamv1.UserSettings, error) {
 	s.updateCalls++
-	return connect.NewResponse(&iamv1.UserSettings{Theme: "light"}), nil
+	return &iamv1.UserSettings{Theme: "light"}, nil
 }
 
-func (s *stubSettings) GetForUser(_ context.Context, _ *connect.Request[iamv1.GetForUserRequest]) (*connect.Response[iamv1.UserSettings], error) {
-	return connect.NewResponse(&iamv1.UserSettings{}), nil
+func (s *stubSettings) GetForUser(_ context.Context, _ *iamv1.GetForUserRequest) (*iamv1.UserSettings, error) {
+	return &iamv1.UserSettings{}, nil
 }
 
-func (s *stubSettings) ListByTenant(_ context.Context, _ *connect.Request[iamv1.ListByTenantRequest]) (*connect.Response[iamv1.ListByTenantResponse], error) {
-	return connect.NewResponse(&iamv1.ListByTenantResponse{}), nil
+func (s *stubSettings) ListByTenant(_ context.Context, _ *iamv1.ListByTenantRequest) (*iamv1.ListByTenantResponse, error) {
+	return &iamv1.ListByTenantResponse{}, nil
 }
 
-func (s *stubSettings) DeleteForUser(_ context.Context, _ *connect.Request[iamv1.DeleteForUserRequest]) (*connect.Response[iamv1.DeleteForUserResponse], error) {
-	return connect.NewResponse(&iamv1.DeleteForUserResponse{}), nil
+func (s *stubSettings) DeleteForUser(_ context.Context, _ *iamv1.DeleteForUserRequest) (*iamv1.DeleteForUserResponse, error) {
+	return &iamv1.DeleteForUserResponse{}, nil
 }
 
-func newSettingsServer(t *testing.T, store IdempotencyStore) (paladiniamv1connect.UserSettingsServiceClient, *stubSettings, func()) {
+func newSettingsServer(t *testing.T, store IdempotencyStore) (paladiniamv1connect.UserSettingsServiceClient, *stubSettings, context.Context) {
 	t.Helper()
 	svc := &stubSettings{}
-	mux := http.NewServeMux()
-	path, handler := paladiniamv1connect.NewUserSettingsServiceHandler(svc,
-		connect.WithInterceptors(
-			principalInjector(uuid.New()),
-			NewIdempotencyInterceptor(store, IdempotencyConfig{TTL: time.Minute}),
-		),
-	)
-	mux.Handle(path, handler)
-	srv := httptest.NewServer(mux)
-	return paladiniamv1connect.NewUserSettingsServiceClient(srv.Client(), srv.URL), svc, srv.Close
+	client := paladiniamv1connect.NewUserSettingsServiceClient(unarytest.Client(func(s *connect.Server) {
+		paladiniamv1connect.RegisterUserSettingsServiceHandler(s, svc)
+	}, NewIdempotencyInterceptor(store, IdempotencyConfig{TTL: time.Minute})))
+	return client, svc, principalCtx(uuid.New())
 }
 
 // A declared read runs every time, key or no key. Replaying it would hand the
@@ -70,14 +64,12 @@ func newSettingsServer(t *testing.T, store IdempotencyStore) (paladiniamv1connec
 // and before the descriptors carried the claim, a client that sent a key on a
 // read got exactly that.
 func TestDeclaredReadIsNeverMemoized(t *testing.T) {
-	client, svc, cleanup := newSettingsServer(t, newMemStore())
-	defer cleanup()
+	client, svc, ctx := newSettingsServer(t, newMemStore())
 
 	key := uuid.NewString()
 	for i := 0; i < 2; i++ {
-		req := connect.NewRequest(&iamv1.GetMineRequest{})
-		req.Header().Set("Idempotency-Key", key)
-		if _, err := client.GetMine(context.Background(), req); err != nil {
+		req := &iamv1.GetMineRequest{}
+		if _, err := client.GetMine(withIdempotencyKey(ctx, key), req); err != nil {
 			t.Fatalf("call %d: %v", i, err)
 		}
 	}
@@ -96,14 +88,12 @@ func TestDeclaredReadIsNeverMemoized(t *testing.T) {
 // replayed, since an idempotent write still writes and the key exists to
 // collapse the retry.
 func TestIdempotentSiblingStillMemoizes(t *testing.T) {
-	client, svc, cleanup := newSettingsServer(t, newMemStore())
-	defer cleanup()
+	client, svc, ctx := newSettingsServer(t, newMemStore())
 
 	key := uuid.NewString()
 	for i := 0; i < 2; i++ {
-		req := connect.NewRequest(&iamv1.UpdateMineRequest{})
-		req.Header().Set("Idempotency-Key", key)
-		if _, err := client.UpdateMine(context.Background(), req); err != nil {
+		req := &iamv1.UpdateMineRequest{}
+		if _, err := client.UpdateMine(withIdempotencyKey(ctx, key), req); err != nil {
 			t.Fatalf("call %d: %v", i, err)
 		}
 	}
@@ -120,11 +110,11 @@ type stubAuth struct {
 	calls int
 }
 
-func (s *stubAuth) RefreshToken(_ context.Context, _ *connect.Request[iamv1.RefreshTokenRequest]) (*connect.Response[iamv1.RefreshTokenResponse], error) {
+func (s *stubAuth) RefreshToken(_ context.Context, _ *iamv1.RefreshTokenRequest) (*iamv1.RefreshTokenResponse, error) {
 	s.calls++
-	return connect.NewResponse(&iamv1.RefreshTokenResponse{
+	return &iamv1.RefreshTokenResponse{
 		Tokens: &iamv1.TokenPair{AccessToken: "a"},
-	}), nil
+	}, nil
 }
 
 // An interceptor built with an EMPTY config still refuses to memoize a
@@ -142,24 +132,18 @@ func (s *stubAuth) RefreshToken(_ context.Context, _ *connect.Request[iamv1.Refr
 // previously none did, and the hazard sat behind a door nobody opened.
 func TestCredentialMinterIsSkippedWithoutBeingConfigured(t *testing.T) {
 	svc := &stubAuth{}
-	mux := http.NewServeMux()
-	path, handler := paladiniamv1connect.NewAuthServiceHandler(svc,
-		connect.WithInterceptors(
-			principalInjector(uuid.New()),
-			// No SkipMethods. The point of the test.
-			NewIdempotencyInterceptor(newMemStore(), IdempotencyConfig{TTL: time.Minute}),
-		),
-	)
-	mux.Handle(path, handler)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-	client := paladiniamv1connect.NewAuthServiceClient(srv.Client(), srv.URL)
+	client := paladiniamv1connect.NewAuthServiceClient(unarytest.Client(func(s *connect.Server) {
+		paladiniamv1connect.RegisterAuthServiceHandler(s, svc)
+	},
+		// No SkipMethods. The point of the test.
+		NewIdempotencyInterceptor(newMemStore(), IdempotencyConfig{TTL: time.Minute}),
+	))
+	ctx := principalCtx(uuid.New())
 
 	key := uuid.NewString()
 	for i := 0; i < 2; i++ {
-		req := connect.NewRequest(&iamv1.RefreshTokenRequest{RefreshToken: "r"})
-		req.Header().Set("Idempotency-Key", key)
-		if _, err := client.RefreshToken(context.Background(), req); err != nil {
+		req := &iamv1.RefreshTokenRequest{RefreshToken: "r"}
+		if _, err := client.RefreshToken(withIdempotencyKey(ctx, key), req); err != nil {
 			t.Fatalf("call %d: %v", i, err)
 		}
 	}

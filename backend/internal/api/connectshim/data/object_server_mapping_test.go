@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -53,7 +51,7 @@ func TestObjectRequestsMapOntoTheHandler(t *testing.T) {
 			commonpb.SortOrder_SORT_ORDER_UNSPECIFIED: false,
 		} {
 			h := newRecordingHandler()
-			_, _ = (&ObjectServer{H: h}).ListObjects(ctx, connect.NewRequest(&pb.ListObjectsRequest{Parent: parent, SortOrder: order}))
+			_, _ = (&ObjectServer{H: h}).ListObjects(ctx, &pb.ListObjectsRequest{Parent: parent, SortOrder: order})
 			if h.listed == nil || h.listed.SortDesc != desc {
 				t.Errorf("%v: SortDesc = %+v, want %v", order, h.listed, desc)
 			}
@@ -66,7 +64,7 @@ func TestObjectRequestsMapOntoTheHandler(t *testing.T) {
 			pb.PresignTransport_PRESIGN_TRANSPORT_UNSPECIFIED: false,
 		} {
 			h := newRecordingHandler()
-			_, _ = (&ObjectServer{H: h}).UploadObject(ctx, connect.NewRequest(&pb.UploadObjectRequest{Parent: parent, Transport: transport}))
+			_, _ = (&ObjectServer{H: h}).UploadObject(ctx, &pb.UploadObjectRequest{Parent: parent, Transport: transport})
 			if h.upload == nil || h.upload.TransportPOST != post {
 				t.Errorf("%v: TransportPOST = %+v, want %v", transport, h.upload, post)
 			}
@@ -75,19 +73,19 @@ func TestObjectRequestsMapOntoTheHandler(t *testing.T) {
 
 	t.Run("CopyObject overrides", func(t *testing.T) {
 		h := newRecordingHandler()
-		_, _ = (&ObjectServer{H: h}).CopyObject(ctx, connect.NewRequest(&pb.CopyObjectRequest{
+		_, _ = (&ObjectServer{H: h}).CopyObject(ctx, &pb.CopyObjectRequest{
 			SourceName: objName, DestinationCollection: parent, DestinationKey: "copy",
 			MetadataOverride: &pb.MetadataOverride{Metadata: map[string]string{"m": "1"}},
 			TagsOverride:     &pb.TagsOverride{Tags: map[string]string{"t": "1"}},
-		}))
+		})
 		if h.copied == nil || h.copied.Metadata["m"] != "1" || h.copied.Tags["t"] != "1" {
 			t.Errorf("overrides not passed: %+v", h.copied)
 		}
 
 		h = newRecordingHandler()
-		_, _ = (&ObjectServer{H: h}).CopyObject(ctx, connect.NewRequest(&pb.CopyObjectRequest{
+		_, _ = (&ObjectServer{H: h}).CopyObject(ctx, &pb.CopyObjectRequest{
 			SourceName: objName, DestinationCollection: parent, DestinationKey: "copy",
-		}))
+		})
 		if h.copied == nil || h.copied.Metadata != nil || h.copied.Tags != nil {
 			t.Errorf("no override set, yet the copy replaces metadata or tags: %+v", h.copied)
 		}

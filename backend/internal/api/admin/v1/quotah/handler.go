@@ -3,11 +3,10 @@ package quotah
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
@@ -99,7 +98,7 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, q admindomain.Quota) (context.Context, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return ctx, connect.NewError(connect.CodeUnauthenticated, err)
+		return ctx, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -115,7 +114,7 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, q admindom
 		return ctx, apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return ctx, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return ctx, connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return auth.WithActingTenant(ctx, q.TenantID), nil
 }
@@ -126,7 +125,7 @@ func (h *Handler) GetTenantQuota(ctx context.Context, tenantID uuid.UUID) (*admi
 		return nil, err
 	}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && tenantID != caller {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant denied"))
+		return nil, connect.NewError(connect.CodePermissionDenied, "cross-tenant denied")
 	}
 	if ctx, err = h.authorize(ctx, cedar.ActionReadQuota, admindomain.Quota{TenantID: tenantID}); err != nil {
 		return nil, err
@@ -182,7 +181,7 @@ func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []stri
 	bucketScope := q.BackendID != "" && q.BucketName != ""
 	if tenantScope == bucketScope {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("exactly one of tenant_id or (backend_id, bucket_name) must be set"))
+			"exactly one of tenant_id or (backend_id, bucket_name) must be set")
 	}
 	if tenantScope {
 		// Upsert + paladin.quota.set in one tx (ADR-0003). The event payload is
@@ -207,7 +206,7 @@ func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []stri
 		}
 		got, err := h.repo.GetTenant(ctx, q.TenantID)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		return &got, nil
 	}

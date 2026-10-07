@@ -8,7 +8,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
@@ -26,8 +25,8 @@ type OperationServer struct {
 
 func NewOperationServer(h *operationh.Handler) *OperationServer { return &OperationServer{H: h} }
 
-func (s *OperationServer) GetOperation(ctx context.Context, req *connect.Request[pb.GetOperationRequest]) (*connect.Response[pb.Operation], error) {
-	id, err := dataOperationID(req.Msg.GetName())
+func (s *OperationServer) GetOperation(ctx context.Context, req *pb.GetOperationRequest) (*pb.Operation, error) {
+	id, err := dataOperationID(req.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -35,11 +34,11 @@ func (s *OperationServer) GetOperation(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(dataOperationToProto(op)), nil
+	return dataOperationToProto(op), nil
 }
 
-func (s *OperationServer) ListOperations(ctx context.Context, req *connect.Request[pb.ListOperationsRequest]) (*connect.Response[pb.ListOperationsResponse], error) {
-	m := req.Msg
+func (s *OperationServer) ListOperations(ctx context.Context, req *pb.ListOperationsRequest) (*pb.ListOperationsResponse, error) {
+	m := req
 	list, next, err := s.H.ListOperations(ctx, nil,
 		m.GetPage().GetPageSize(), m.GetPage().GetPageToken(), m.GetFilter(),
 		m.GetSortOrder() == commonpb.SortOrder_SORT_ORDER_DESC)
@@ -50,11 +49,11 @@ func (s *OperationServer) ListOperations(ctx context.Context, req *connect.Reque
 	for i := range list {
 		out.Operations = append(out.Operations, dataOperationToProto(&list[i]))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *OperationServer) CancelOperation(ctx context.Context, req *connect.Request[pb.CancelOperationRequest]) (*connect.Response[pb.Operation], error) {
-	id, err := dataOperationID(req.Msg.GetName())
+func (s *OperationServer) CancelOperation(ctx context.Context, req *pb.CancelOperationRequest) (*pb.Operation, error) {
+	id, err := dataOperationID(req.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -65,7 +64,7 @@ func (s *OperationServer) CancelOperation(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(dataOperationToProto(op)), nil
+	return dataOperationToProto(op), nil
 }
 
 var _ paladindatav1connect.OperationServiceHandler = (*OperationServer)(nil)

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -100,9 +100,9 @@ func newHandler(iss tokenIssuer, store api_token.Store, authz cedar.Authorizer) 
 
 func TestCreate_CedarDenied(t *testing.T) {
 	h := newHandler(&stubIssuer{}, &fakeStore{}, denyAuthorizer{})
-	_, err := h.Create(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+	_, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
 		Parent: "tenants/" + uuid.NewString(), DisplayName: "ci",
-	}))
+	})
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", code(err))
 	}
@@ -110,9 +110,9 @@ func TestCreate_CedarDenied(t *testing.T) {
 
 func TestCreate_InvalidTenant(t *testing.T) {
 	h := newHandler(&stubIssuer{}, &fakeStore{}, allowAuthorizer{})
-	_, err := h.Create(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+	_, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
 		Parent: "not-a-tenant-name", DisplayName: "ci",
-	}))
+	})
 	if code(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", code(err))
 	}
@@ -125,21 +125,21 @@ func TestCreate_SuccessReturnsPlaintextOnce(t *testing.T) {
 	// Valid resource scopes (tenant:/backend:/bucket:/collection:/*). These must
 	// pass the mint-time auth.ParseScope validation and reach the issuer verbatim.
 	scopes := []string{"bucket:ci-bucket", "collection:ci-bucket/artifacts"}
-	resp, err := h.Create(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+	resp, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
 		Parent: "tenants/" + tid.String(), DisplayName: "ci-runner", Scopes: scopes,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resp.Msg.GetToken() != "paladin_pat_secret123" {
-		t.Errorf("Create should return the one-time plaintext, got %q", resp.Msg.GetToken())
+	if resp.GetToken() != "paladin_pat_secret123" {
+		t.Errorf("Create should return the one-time plaintext, got %q", resp.GetToken())
 	}
 	// The LABEL, which is display_name now — `name` on this message is the
 	// resource name, as it is everywhere else in the API.
-	if resp.Msg.GetApiToken().GetDisplayName() != "ci-runner" {
-		t.Errorf("display_name = %q, want ci-runner", resp.Msg.GetApiToken().GetDisplayName())
+	if resp.GetApiToken().GetDisplayName() != "ci-runner" {
+		t.Errorf("display_name = %q, want ci-runner", resp.GetApiToken().GetDisplayName())
 	}
-	if got := resp.Msg.GetApiToken().GetName(); !strings.HasPrefix(got, "tenants/") || !strings.Contains(got, "/apiTokens/") {
+	if got := resp.GetApiToken().GetName(); !strings.HasPrefix(got, "tenants/") || !strings.Contains(got, "/apiTokens/") {
 		t.Errorf("resource name = %q, want tenants/{t}/apiTokens/{id} — callers address Revoke and GetUsage with it", got)
 	}
 	// The issuer received the request faithfully, with the caller stamped and
@@ -164,9 +164,9 @@ func TestCreate_SuccessReturnsPlaintextOnce(t *testing.T) {
 func TestCreate_RejectsMalformedScope(t *testing.T) {
 	iss := &stubIssuer{}
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
-	_, err := h.Create(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+	_, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
 		Parent: "tenants/" + uuid.NewString(), DisplayName: "bad", Scopes: []string{"api:read"}, // legacy vocab — no longer valid
-	}))
+	})
 	if code(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", code(err))
 	}
@@ -185,13 +185,13 @@ func TestCreateThenList_ScopesRoundTrip(t *testing.T) {
 		{ID: uuid.New(), TenantID: tid, Name: "scoped", Scopes: scopes},
 	}}
 	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
-	resp, err := h.List(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceListRequest{
+	resp, err := h.List(ctxAs("platform.admin"), &adminv1.APITokenServiceListRequest{
 		Parent: "tenants/" + tid.String(),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	got := resp.Msg.GetApiTokens()
+	got := resp.GetApiTokens()
 	if len(got) != 1 {
 		t.Fatalf("got %d tokens, want 1", len(got))
 	}
@@ -204,7 +204,7 @@ func TestCreateThenList_ScopesRoundTrip(t *testing.T) {
 
 func TestRevoke_InvalidID(t *testing.T) {
 	h := newHandler(&stubIssuer{}, &fakeStore{}, allowAuthorizer{})
-	_, err := h.Revoke(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceRevokeRequest{Name: "x"}))
+	_, err := h.Revoke(ctxAs("platform.admin"), &adminv1.APITokenServiceRevokeRequest{Name: "x"})
 	if code(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", code(err))
 	}
@@ -213,9 +213,9 @@ func TestRevoke_InvalidID(t *testing.T) {
 func TestRevoke_Success(t *testing.T) {
 	store := &fakeStore{}
 	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
-	_, err := h.Revoke(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceRevokeRequest{
+	_, err := h.Revoke(ctxAs("platform.admin"), &adminv1.APITokenServiceRevokeRequest{
 		Name: "tenants/" + uuid.NewString() + "/apiTokens/" + uuid.NewString(),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestRevoke_Success(t *testing.T) {
 
 func TestList_InvalidTenant(t *testing.T) {
 	h := newHandler(&stubIssuer{}, &fakeStore{}, allowAuthorizer{})
-	_, err := h.List(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceListRequest{Parent: "x"}))
+	_, err := h.List(ctxAs("platform.admin"), &adminv1.APITokenServiceListRequest{Parent: "x"})
 	if code(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", code(err))
 	}
@@ -239,14 +239,14 @@ func TestList_MapsRows(t *testing.T) {
 		{ID: uuid.New(), Name: "a"}, {ID: uuid.New(), Name: "b"},
 	}}
 	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
-	resp, err := h.List(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceListRequest{
+	resp, err := h.List(ctxAs("platform.admin"), &adminv1.APITokenServiceListRequest{
 		Parent: "tenants/" + uuid.NewString(),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(resp.Msg.GetApiTokens()) != 2 {
-		t.Errorf("got %d tokens, want 2", len(resp.Msg.GetApiTokens()))
+	if len(resp.GetApiTokens()) != 2 {
+		t.Errorf("got %d tokens, want 2", len(resp.GetApiTokens()))
 	}
 }
 
@@ -254,7 +254,7 @@ func TestList_MapsRows(t *testing.T) {
 
 func TestGetSelf_NotTokenAuth(t *testing.T) {
 	h := newHandler(&stubIssuer{}, &fakeStore{}, allowAuthorizer{})
-	_, err := h.GetSelf(context.Background(), connect.NewRequest(&adminv1.APITokenServiceGetSelfRequest{}))
+	_, err := h.GetSelf(context.Background(), &adminv1.APITokenServiceGetSelfRequest{})
 	if code(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound (not token-authenticated)", code(err))
 	}
@@ -264,12 +264,12 @@ func TestGetSelf_ReturnsContextToken(t *testing.T) {
 	tok := &api_token.Token{ID: uuid.New(), Name: "self"}
 	ctx := auth.WithAPIToken(context.Background(), tok)
 	h := newHandler(&stubIssuer{}, &fakeStore{}, allowAuthorizer{})
-	resp, err := h.GetSelf(ctx, connect.NewRequest(&adminv1.APITokenServiceGetSelfRequest{}))
+	resp, err := h.GetSelf(ctx, &adminv1.APITokenServiceGetSelfRequest{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resp.Msg.GetApiToken().GetDisplayName() != "self" {
-		t.Errorf("display_name = %q, want the context token", resp.Msg.GetApiToken().GetDisplayName())
+	if resp.GetApiToken().GetDisplayName() != "self" {
+		t.Errorf("display_name = %q, want the context token", resp.GetApiToken().GetDisplayName())
 	}
 }
 
@@ -278,9 +278,9 @@ func TestGetSelf_ReturnsContextToken(t *testing.T) {
 func TestGetUsage_NotFound(t *testing.T) {
 	store := &fakeStore{getErr: api_token.ErrTokenNotFound}
 	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
-	_, err := h.GetUsage(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceGetUsageRequest{
+	_, err := h.GetUsage(ctxAs("platform.admin"), &adminv1.APITokenServiceGetUsageRequest{
 		Name: "tenants/" + uuid.NewString() + "/apiTokens/" + uuid.NewString(),
-	}))
+	})
 	if code(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", code(err))
 	}
@@ -292,15 +292,15 @@ func TestGetUsage_Success(t *testing.T) {
 	h := NewHandler(&stubIssuer{}, store,
 		fakeLimiter{snap: ratelimit.Snapshot{CurrentBucketCount: 5, WeightedCount: 7}},
 		allowAuthorizer{})
-	resp, err := h.GetUsage(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceGetUsageRequest{
+	resp, err := h.GetUsage(ctxAs("platform.admin"), &adminv1.APITokenServiceGetUsageRequest{
 		Name: "tenants/" + tenantID.String() + "/apiTokens/" + id.String(),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resp.Msg.GetLimitRpm() != 60 || resp.Msg.GetWeightedCount() != 7 {
+	if resp.GetLimitRpm() != 60 || resp.GetWeightedCount() != 7 {
 		t.Errorf("usage = limit %v weighted %v, want 60 / 7",
-			resp.Msg.GetLimitRpm(), resp.Msg.GetWeightedCount())
+			resp.GetLimitRpm(), resp.GetWeightedCount())
 	}
 }
 
@@ -330,9 +330,9 @@ func TestCreate_PlatformAdminMintsForAnotherTenant(t *testing.T) {
 	iss := &stubIssuer{}
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 
-	_, err := h.Create(ctxAsTenant(caller, "platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+	_, err := h.Create(ctxAsTenant(caller, "platform.admin"), &adminv1.APITokenServiceCreateRequest{
 		Parent: "tenants/" + target.String(), DisplayName: "acme-service", Audience: []string{"data"},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -348,9 +348,9 @@ func TestCreate_NonPlatformAdminCannotMintForAnotherTenant(t *testing.T) {
 	iss := &stubIssuer{}
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 
-	_, err := h.Create(ctxAsTenant(caller, "tenant.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+	_, err := h.Create(ctxAsTenant(caller, "tenant.admin"), &adminv1.APITokenServiceCreateRequest{
 		Parent: "tenants/" + target.String(), DisplayName: "sneaky", Audience: []string{"data"},
-	}))
+	})
 
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", code(err))
@@ -366,9 +366,9 @@ func TestCreate_NonPlatformAdminMintsForOwnTenant(t *testing.T) {
 	own := uuid.New()
 	h := newHandler(&stubIssuer{}, &fakeStore{}, allowAuthorizer{})
 
-	_, err := h.Create(ctxAsTenant(own, "tenant.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+	_, err := h.Create(ctxAsTenant(own, "tenant.admin"), &adminv1.APITokenServiceCreateRequest{
 		Parent: "tenants/" + own.String(), DisplayName: "own", Audience: []string{"data"},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -384,10 +384,10 @@ func TestCreate_GrantingRolesRequiresPlatformAdmin(t *testing.T) {
 	iss := &stubIssuer{}
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 
-	_, err := h.Create(ctxAsTenant(own, "tenant.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+	_, err := h.Create(ctxAsTenant(own, "tenant.admin"), &adminv1.APITokenServiceCreateRequest{
 		Parent: "tenants/" + own.String(), DisplayName: "self-promotion", Audience: []string{"data"},
 		Roles: []string{"platform.admin"},
-	}))
+	})
 
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", code(err))
@@ -402,10 +402,10 @@ func TestCreate_PlatformAdminMayGrantTheNarrowRole(t *testing.T) {
 	iss := &stubIssuer{}
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 
-	_, err := h.Create(ctxAs("platform.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+	_, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
 		Parent: "tenants/" + uuid.NewString(), DisplayName: "acme-issuer", Audience: []string{"admin"},
 		Roles: []string{"platform.capability-issuer"},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -419,9 +419,9 @@ func TestCreate_NoRolesNeedsNoPlatformAdmin(t *testing.T) {
 	own := uuid.New()
 	h := newHandler(&stubIssuer{}, &fakeStore{}, allowAuthorizer{})
 
-	_, err := h.Create(ctxAsTenant(own, "tenant.admin"), connect.NewRequest(&adminv1.APITokenServiceCreateRequest{
+	_, err := h.Create(ctxAsTenant(own, "tenant.admin"), &adminv1.APITokenServiceCreateRequest{
 		Parent: "tenants/" + own.String(), DisplayName: "ordinary", Audience: []string{"data"},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

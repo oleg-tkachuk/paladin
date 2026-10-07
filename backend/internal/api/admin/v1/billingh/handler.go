@@ -10,11 +10,10 @@ package billingh
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,6 +21,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
 
@@ -60,7 +60,7 @@ func NewHandler(pool *pgxpool.Pool, usage capability.UsageStore[pgx.Tx], policy 
 func (h *Handler) authorize(ctx context.Context, tenantID uuid.UUID) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -72,7 +72,7 @@ func (h *Handler) authorize(ctx context.Context, tenantID uuid.UUID) error {
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }
@@ -122,11 +122,11 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 	}
 	if h.pool == nil {
 		return nil, connect.NewError(connect.CodeUnavailable,
-			errors.New("billing: capability subsystem disabled"))
+			"billing: capability subsystem disabled")
 	}
 	start, end, err := resolvePeriod(periodStart, periodEnd)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 
 	out := &Summary{}
@@ -149,7 +149,7 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 		tenantID, start, end,
 	)
 	if err := row.Scan(&out.TotalAmount, &out.ChargeCount, &out.UnitCode); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: summary: %w", err))
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: summary: %w", err))
 	}
 
 	// Tenant budget cap join — best-effort. Missing row ⇒ no cap;
@@ -197,19 +197,19 @@ func (h *Handler) queryTopBy(ctx context.Context, tenantID uuid.UUID, start, end
 		 LIMIT %d`, col, col, topN)
 	rows, err := h.pool.Query(ctx, q, tenantID, start, end)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: top by %s: %w", col, err))
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: top by %s: %w", col, err))
 	}
 	defer rows.Close()
 	out := make([]TopEntry, 0, topN)
 	for rows.Next() {
 		var e TopEntry
 		if err := rows.Scan(&e.Label, &e.Amount, &e.ChargeCount); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: top scan: %w", err))
+			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: top scan: %w", err))
 		}
 		out = append(out, e)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return out, nil
 }
@@ -275,12 +275,12 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 		granularity = "day"
 	}
 	if !allowedGranularities[granularity] {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("granularity must be one of hour|day|week, got %q", granularity))
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"granularity must be one of hour|day|week, got %q", granularity)
 	}
 	start, end, err := resolvePeriod(periodStart, periodEnd)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	// Bound the result set: (period ÷ granularity) is the bucket count the
 	// GROUP BY produces, all buffered in memory. An hour-granularity request
@@ -289,14 +289,14 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 	// caller must narrow the period or coarsen the granularity instead.
 	if step := granularityStep(granularity); step > 0 {
 		if buckets := int64(end.Sub(start) / step); buckets > maxTimeSeriesBuckets {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("period too wide for %q granularity: %d buckets exceeds the %d cap; narrow the period or use a coarser granularity",
-					granularity, buckets, maxTimeSeriesBuckets))
+			return nil, connect.Errorf(connect.CodeInvalidArgument,
+				"period too wide for %q granularity: %d buckets exceeds the %d cap; narrow the period or use a coarser granularity",
+				granularity, buckets, maxTimeSeriesBuckets)
 		}
 	}
 	if h.pool == nil {
 		return nil, connect.NewError(connect.CodeUnavailable,
-			errors.New("billing: capability subsystem disabled"))
+			"billing: capability subsystem disabled")
 	}
 
 	q := fmt.Sprintf(
@@ -309,7 +309,7 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 		 ORDER BY bucket`, granularity)
 	rows, err := h.pool.Query(ctx, q, tenantID, start, end)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: timeseries: %w", err))
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries: %w", err))
 	}
 	defer rows.Close()
 
@@ -317,12 +317,12 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 	for rows.Next() {
 		var b TimeBucket
 		if err := rows.Scan(&b.Start, &b.Amount, &b.ChargeCount); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: timeseries scan: %w", err))
+			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries scan: %w", err))
 		}
 		out.Buckets = append(out.Buckets, b)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	// Unit_code derivation mirrors the summary path — take the
@@ -336,7 +336,7 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 		    '')`,
 		tenantID, start, end,
 	).Scan(&out.UnitCode); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: timeseries unit: %w", err))
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries unit: %w", err))
 	}
 	if out.UnitCode == "" && h.usage != nil {
 		if tb, err := h.usage.GetTenantBudget(ctx, tenantID); err == nil {

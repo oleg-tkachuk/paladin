@@ -3,7 +3,7 @@ package admin
 import (
 	"context"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/policyh"
@@ -19,8 +19,8 @@ type PolicyServer struct {
 
 func NewPolicyServer(h *policyh.Handler) *PolicyServer { return &PolicyServer{H: h} }
 
-func (s *PolicyServer) Validate(ctx context.Context, req *connect.Request[pb.ValidateRequest]) (*connect.Response[pb.ValidateResponse], error) {
-	res, err := s.H.ValidatePolicy(ctx, req.Msg.GetCedarPolicy())
+func (s *PolicyServer) Validate(ctx context.Context, req *pb.ValidateRequest) (*pb.ValidateResponse, error) {
+	res, err := s.H.ValidatePolicy(ctx, req.GetCedarPolicy())
 	if err != nil {
 		return nil, err
 	}
@@ -28,16 +28,16 @@ func (s *PolicyServer) Validate(ctx context.Context, req *connect.Request[pb.Val
 	for _, d := range res.Diagnostics {
 		out.Diagnostics = append(out.Diagnostics, &pb.PolicyDiagnostic{Severity: d.Severity, Message: d.Message})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *PolicyServer) SimulateAuthz(ctx context.Context, req *connect.Request[pb.SimulateAuthzRequest]) (*connect.Response[pb.SimulateAuthzResponse], error) {
-	m := req.Msg
+func (s *PolicyServer) SimulateAuthz(ctx context.Context, req *pb.SimulateAuthzRequest) (*pb.SimulateAuthzResponse, error) {
+	m := req
 	var tenantID uuid.UUID
 	if m.GetPrincipalTenantId() != "" {
 		id, err := uuid.Parse(m.GetPrincipalTenantId())
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 		}
 		tenantID = id
 	}
@@ -50,22 +50,22 @@ func (s *PolicyServer) SimulateAuthz(ctx context.Context, req *connect.Request[p
 		ResourceName:      m.GetResourceName(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&pb.SimulateAuthzResponse{
+	return &pb.SimulateAuthzResponse{
 		Allowed:     out.Allowed,
 		Explanation: out.Explanation,
-	}), nil
+	}, nil
 }
 
-func (s *PolicyServer) GetEffectivePolicy(ctx context.Context, req *connect.Request[pb.GetEffectivePolicyRequest]) (*connect.Response[pb.GetEffectivePolicyResponse], error) {
+func (s *PolicyServer) GetEffectivePolicy(ctx context.Context, req *pb.GetEffectivePolicyRequest) (*pb.GetEffectivePolicyResponse, error) {
 	// Caller-tenant fallback when the resource name does not embed one
 	// (e.g. backend-only resources): use the JWT principal's tenant.
 	var fallback uuid.UUID
 	if p, perr := auth.PrincipalFromContext(ctx); perr == nil {
 		fallback = p.TenantID
 	}
-	out, err := s.H.GetEffectivePolicy(ctx, req.Msg.GetResourceName(), fallback)
+	out, err := s.H.GetEffectivePolicy(ctx, req.GetResourceName(), fallback)
 	if err != nil {
 		// The handler answers with its own codes; wrapping them all as
 		// Internal turned a refused caller into a server fault.
@@ -82,7 +82,7 @@ func (s *PolicyServer) GetEffectivePolicy(ctx context.Context, req *connect.Requ
 			EvaluatedCedarPolicy: layer.EvaluatedCedarPolicy,
 		})
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 var _ paladinadminv1connect.PolicyServiceHandler = (*PolicyServer)(nil)

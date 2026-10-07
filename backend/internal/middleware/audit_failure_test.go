@@ -3,17 +3,16 @@ package middleware
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
@@ -43,27 +42,16 @@ func TestAuditWriteFailureIsLoggedAndDoesNotFailTheRPC(t *testing.T) {
 	core, logs := observer.New(zap.DebugLevel)
 	w := &failingAuditWriter{}
 
-	mux := http.NewServeMux()
-	path, handler := paladiniamv1connect.NewUserSettingsServiceHandler(&stubSettings{},
-		connect.WithInterceptors(
-			// The context logger is what the interceptor writes through.
-			connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-				return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-					return next(logger.WithContext(ctx, zap.New(core)), req)
-				}
-			}),
-			principalInjector(uuid.New()),
-			AuditWithMirror(w, "paladin-iam", false, nil),
-		),
-	)
-	mux.Handle(path, handler)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	client := paladiniamv1connect.NewUserSettingsServiceClient(unarytest.Client(func(s *connect.Server) {
+		paladiniamv1connect.RegisterUserSettingsServiceHandler(s, &stubSettings{})
+	}, AuditWithMirror(w, "paladin-iam", false, nil)))
+	// The context logger is what the interceptor writes through; the
+	// in-process transport serves the call on this context.
+	ctx := logger.WithContext(principalCtx(uuid.New()), zap.New(core))
 
-	client := paladiniamv1connect.NewUserSettingsServiceClient(srv.Client(), srv.URL)
 	// A mutation, so the interceptor actually tries to write a row.
-	if _, err := client.UpdateMine(context.Background(),
-		connect.NewRequest(&iamv1.UpdateMineRequest{})); err != nil {
+	if _, err := client.UpdateMine(ctx,
+		&iamv1.UpdateMineRequest{}); err != nil {
 		t.Fatalf("the RPC must succeed even when the audit write fails: %v", err)
 	}
 	if w.calls == 0 {

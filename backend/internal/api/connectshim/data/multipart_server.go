@@ -5,10 +5,11 @@ import (
 	"fmt"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
 	"github.com/google/uuid"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
@@ -24,8 +25,8 @@ type MultipartServer struct {
 
 func NewMultipartServer(h *multiparth.Handler) *MultipartServer { return &MultipartServer{H: h} }
 
-func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *connect.Request[pb.InitiateMultipartUploadRequest]) (*connect.Response[pb.InitiateMultipartUploadResponse], error) {
-	m := req.Msg
+func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *pb.InitiateMultipartUploadRequest) (*pb.InitiateMultipartUploadResponse, error) {
+	m := req
 	ctx, collection, err := collectionNameParts(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
@@ -43,7 +44,7 @@ func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *conn
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.InitiateMultipartUploadResponse{
+	return &pb.InitiateMultipartUploadResponse{
 		// Object's full state is fetched lazily via GetObject; we surface the
 		// minimal envelope here — plus `name`, without which the caller
 		// cannot continue: PresignPart and Complete both address the upload
@@ -59,11 +60,11 @@ func (s *MultipartServer) InitiateMultipartUpload(ctx context.Context, req *conn
 		UploadId:            sess.UploadID,
 		RecommendedPartSize: sess.PartSizeBytes,
 		TotalParts:          sess.TotalParts,
-	}), nil
+	}, nil
 }
 
-func (s *MultipartServer) PresignPart(ctx context.Context, req *connect.Request[pb.PresignPartRequest]) (*connect.Response[pb.PresignPartResponse], error) {
-	m := req.Msg
+func (s *MultipartServer) PresignPart(ctx context.Context, req *pb.PresignPartRequest) (*pb.PresignPartResponse, error) {
+	m := req
 	ctx, want, err := sessionRef(ctx, m.GetObjectName())
 	if err != nil {
 		return nil, err
@@ -72,13 +73,13 @@ func (s *MultipartServer) PresignPart(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.PresignPartResponse{
+	return &pb.PresignPartResponse{
 		UploadUrl: presignedUrlProto(url, "PUT", headers, expires, "", nil),
-	}), nil
+	}, nil
 }
 
-func (s *MultipartServer) CompleteMultipartUpload(ctx context.Context, req *connect.Request[pb.CompleteMultipartUploadRequest]) (*connect.Response[pb.Object], error) {
-	m := req.Msg
+func (s *MultipartServer) CompleteMultipartUpload(ctx context.Context, req *pb.CompleteMultipartUploadRequest) (*pb.Object, error) {
+	m := req
 	parts := make([]multiparth.PartETag, 0, len(m.GetParts()))
 	for _, p := range m.GetParts() {
 		parts = append(parts, multiparth.PartETag{
@@ -104,24 +105,24 @@ func (s *MultipartServer) CompleteMultipartUpload(ctx context.Context, req *conn
 	// alone, so every client read it back with GetObject. A read that failed
 	// after the completion leaves only the name, which is all that is sure.
 	if obj.Collection == "" {
-		return connect.NewResponse(&pb.Object{Name: m.GetObjectName()}), nil
+		return &pb.Object{Name: m.GetObjectName()}, nil
 	}
-	return connect.NewResponse(objectToProto(&obj)), nil
+	return objectToProto(&obj), nil
 }
 
-func (s *MultipartServer) AbortMultipartUpload(ctx context.Context, req *connect.Request[pb.AbortMultipartUploadRequest]) (*connect.Response[pb.AbortMultipartUploadResponse], error) {
-	ctx, want, err := sessionRef(ctx, req.Msg.GetObjectName())
+func (s *MultipartServer) AbortMultipartUpload(ctx context.Context, req *pb.AbortMultipartUploadRequest) (*pb.AbortMultipartUploadResponse, error) {
+	ctx, want, err := sessionRef(ctx, req.GetObjectName())
 	if err != nil {
 		return nil, err
 	}
-	if err := s.H.AbortMultipartUpload(ctx, req.Msg.GetUploadId(), want); err != nil {
+	if err := s.H.AbortMultipartUpload(ctx, req.GetUploadId(), want); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.AbortMultipartUploadResponse{}), nil
+	return &pb.AbortMultipartUploadResponse{}, nil
 }
 
-func (s *MultipartServer) ListParts(ctx context.Context, req *connect.Request[pb.ListPartsRequest]) (*connect.Response[pb.ListPartsResponse], error) {
-	m := req.Msg
+func (s *MultipartServer) ListParts(ctx context.Context, req *pb.ListPartsRequest) (*pb.ListPartsResponse, error) {
+	m := req
 	ctx, want, err := sessionRef(ctx, m.GetObjectName())
 	if err != nil {
 		return nil, err
@@ -139,7 +140,7 @@ func (s *MultipartServer) ListParts(ctx context.Context, req *connect.Request[pb
 			UploadedAt: convx.TsProto(parts[i].UploadedAt),
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 var _ paladindatav1connect.MultipartUploadServiceHandler = (*MultipartServer)(nil)
@@ -161,8 +162,7 @@ func sessionRef(ctx context.Context, objectName string) (context.Context, multip
 	}
 	id, err := uuid.Parse(objectID)
 	if err != nil {
-		return ctx, multiparth.SessionRef{}, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid object_id in object_name: %w", err))
+		return ctx, multiparth.SessionRef{}, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id in object_name: %w", err))
 	}
 	return ctx, multiparth.SessionRef{Collection: collection, ObjectID: id}, nil
 }

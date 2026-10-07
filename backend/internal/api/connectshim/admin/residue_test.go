@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -104,7 +104,7 @@ func TestTimeFromPB(t *testing.T) {
 func TestListBucketsNarrowsToTheParentBackend(t *testing.T) {
 	h := &recordingBuckets{}
 	if _, err := (&BucketServer{H: h}).ListBuckets(context.Background(),
-		connect.NewRequest(&pb.ListBucketsRequest{Parent: "storageBackends/b1"})); err != nil {
+		&pb.ListBucketsRequest{Parent: "storageBackends/b1"}); err != nil {
 		t.Fatal(err)
 	}
 	if h.listArgs.BackendID != "b1" {
@@ -128,7 +128,7 @@ func TestCreateBackendTakesTheIDFromEitherPlace(t *testing.T) {
 		"the body's own id":        {BackendId: "from-request", Backend: &pb.StorageBackend{BackendId: "from-body"}},
 	} {
 		h := &recordingBackendCreate{}
-		if _, err := (&BackendServer{H: h}).CreateBackend(context.Background(), connect.NewRequest(req)); err != nil {
+		if _, err := (&BackendServer{H: h}).CreateBackend(context.Background(), req); err != nil {
 			t.Fatal(err)
 		}
 		want := req.GetBackend().GetBackendId()
@@ -143,7 +143,7 @@ func TestCreateBackendTakesTheIDFromEitherPlace(t *testing.T) {
 
 func TestRotateCredentialsRefusesABadGracePeriod(t *testing.T) {
 	_, err := (&BackendServer{H: failingBackend{}}).RotateCredentials(context.Background(),
-		connect.NewRequest(&pb.RotateCredentialsRequest{Name: "storageBackends/b1", GracePeriod: "soon"}))
+		&pb.RotateCredentialsRequest{Name: "storageBackends/b1", GracePeriod: "soon"})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("err = %v, want InvalidArgument", err)
 	}
@@ -155,7 +155,7 @@ func TestResetUsageRoutesByScopeAndReportsTheReset(t *testing.T) {
 	tenant := uuid.New()
 	h := &recordingQuota{}
 	_, err := (&QuotaServer{H: h}).ResetUsage(context.Background(),
-		connect.NewRequest(&pb.ResetUsageRequest{Name: "tenants/" + tenant.String() + "/quota"}))
+		&pb.ResetUsageRequest{Name: "tenants/" + tenant.String() + "/quota"})
 	if h.tenantScope != tenant {
 		t.Errorf("tenant scope = %v, want %v", h.tenantScope, tenant)
 	}
@@ -166,7 +166,7 @@ func TestResetUsageRoutesByScopeAndReportsTheReset(t *testing.T) {
 
 	h = &recordingQuota{}
 	_, _ = (&QuotaServer{H: h}).ResetUsage(context.Background(),
-		connect.NewRequest(&pb.ResetUsageRequest{Name: "storageBackends/b1/buckets/n1/quota"}))
+		&pb.ResetUsageRequest{Name: "storageBackends/b1/buckets/n1/quota"})
 	if h.bucketScope != [2]string{"b1", "n1"} || h.tenantScope != uuid.Nil {
 		t.Errorf("bucket scope = %v, tenant = %v", h.bucketScope, h.tenantScope)
 	}
@@ -196,11 +196,11 @@ func TestResetUsageAnswersWithTheClearedCounters(t *testing.T) {
 		QuotaID: uuid.New(), UsageBytesToday: bytesToday, UsageObjectsToday: objectsToday,
 	}}
 	resp, err := (&QuotaServer{H: h}).ResetUsage(context.Background(),
-		connect.NewRequest(&pb.ResetUsageRequest{Name: "tenants/" + uuid.NewString() + "/quota"}))
+		&pb.ResetUsageRequest{Name: "tenants/" + uuid.NewString() + "/quota"})
 	if err != nil {
 		t.Fatalf("ResetUsage: %v", err)
 	}
-	if u := resp.Msg.GetUsage(); u.GetBytesToday() != 0 || u.GetObjectsToday() != 0 {
+	if u := resp.GetUsage(); u.GetBytesToday() != 0 || u.GetObjectsToday() != 0 {
 		t.Errorf("response usage today = %d bytes / %d objects, want 0 / 0",
 			u.GetBytesToday(), u.GetObjectsToday())
 	}
@@ -241,7 +241,7 @@ func TestListSubscriptionsCursor(t *testing.T) {
 	for tok, want := range map[string]uuid.UUID{after.String(): after, "not-a-uuid": uuid.Nil, "": uuid.Nil} {
 		h := &recordingSubs{}
 		if _, err := (&EventSubscriptionServer{H: h}).ListSubscriptions(context.Background(),
-			connect.NewRequest(&pb.ListSubscriptionsRequest{Page: &commonv1.PageRequest{PageToken: tok}})); err != nil {
+			&pb.ListSubscriptionsRequest{Page: &commonv1.PageRequest{PageToken: tok}}); err != nil {
 			t.Fatal(err)
 		}
 		if h.args.AfterID != want {
@@ -256,8 +256,8 @@ func (deliveringSubs) TestSubscription(context.Context, uuid.UUID, uuid.UUID) er
 
 func TestTestSubscriptionReportsDelivery(t *testing.T) {
 	resp, err := (&EventSubscriptionServer{H: deliveringSubs{}}).TestSubscription(context.Background(),
-		connect.NewRequest(&pb.TestSubscriptionRequest{Name: "tenants/" + uuid.NewString() + "/eventSubscriptions/" + uuid.NewString()}))
-	if err != nil || !resp.Msg.GetDelivered() {
+		&pb.TestSubscriptionRequest{Name: "tenants/" + uuid.NewString() + "/eventSubscriptions/" + uuid.NewString()})
+	if err != nil || !resp.GetDelivered() {
 		t.Fatalf("delivered = %v, %v", resp, err)
 	}
 }
@@ -287,28 +287,28 @@ func (r reportingSystem) PlatformStats(_ context.Context, page platformstats.Ten
 func TestSystemStatsCarryWhatTheHandlerReported(t *testing.T) {
 	var asked platformstats.TenantPage
 	srv := &SystemServer{H: reportingSystem{asked: &asked}}
-	ds, err := srv.GetDispatcherStats(context.Background(), connect.NewRequest(&pb.GetDispatcherStatsRequest{}))
-	if err != nil || ds.Msg.GetPending() != 3 || ds.Msg.GetFailed() != 1 {
+	ds, err := srv.GetDispatcherStats(context.Background(), &pb.GetDispatcherStatsRequest{})
+	if err != nil || ds.GetPending() != 3 || ds.GetFailed() != 1 {
 		t.Errorf("dispatcher stats = %v, %v", ds, err)
 	}
-	ps, err := srv.GetPlatformStats(context.Background(), connect.NewRequest(&pb.GetPlatformStatsRequest{
+	ps, err := srv.GetPlatformStats(context.Background(), &pb.GetPlatformStatsRequest{
 		TenantPage: &commonv1.PageRequest{PageSize: 3, PageToken: "cursor"},
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := (platformstats.TenantPage{Size: 3, After: "cursor"}); asked != want {
 		t.Errorf("handler was asked for %+v, want %+v", asked, want)
 	}
-	if o := ps.Msg.GetRls().GetObjects(); o.GetTenantsNextPageToken() != "next" || o.GetTenantsTruncated() != 2 {
+	if o := ps.GetRls().GetObjects(); o.GetTenantsNextPageToken() != "next" || o.GetTenantsTruncated() != 2 {
 		t.Errorf("tenant page = next %q, truncated %d; want next, 2",
 			o.GetTenantsNextPageToken(), o.GetTenantsTruncated())
 	}
-	if ps.Msg.GetTenants().GetTotal() != 4 {
-		t.Errorf("tenant total = %d, want 4", ps.Msg.GetTenants().GetTotal())
+	if ps.GetTenants().GetTotal() != 4 {
+		t.Errorf("tenant total = %d, want 4", ps.GetTenants().GetTotal())
 	}
-	if ps.Msg.GetRls().GetObjects().GetTotalCount() != 7 {
-		t.Errorf("object total = %d, want 7", ps.Msg.GetRls().GetObjects().GetTotalCount())
+	if ps.GetRls().GetObjects().GetTotalCount() != 7 {
+		t.Errorf("object total = %d, want 7", ps.GetRls().GetObjects().GetTotalCount())
 	}
 }
 
@@ -341,10 +341,10 @@ func TestListPlatformStatsTenants_MapsEverySignal(t *testing.T) {
 			var gotSig platformstats.Signal
 			var gotPage platformstats.TenantPage
 			srv := &SystemServer{H: signalRecorder{signal: &gotSig, page: &gotPage}}
-			res, err := srv.ListPlatformStatsTenants(context.Background(), connect.NewRequest(&pb.ListPlatformStatsTenantsRequest{
+			res, err := srv.ListPlatformStatsTenants(context.Background(), &pb.ListPlatformStatsTenantsRequest{
 				Signal: wire,
 				Page:   &commonv1.PageRequest{PageSize: 3, PageToken: "cursor"},
-			}))
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -354,7 +354,7 @@ func TestListPlatformStatsTenants_MapsEverySignal(t *testing.T) {
 			if wantPage := (platformstats.TenantPage{Size: 3, After: "cursor"}); gotPage != wantPage {
 				t.Errorf("handler asked for page %+v, want %+v", gotPage, wantPage)
 			}
-			m := res.Msg
+			m := res
 			if len(m.GetTenants()) != 1 {
 				t.Fatalf("tenants = %v, want one", m.GetTenants())
 			}
@@ -382,7 +382,7 @@ func TestListPlatformStatsTenants_RefusesAnUnnamedSignal(t *testing.T) {
 	for _, wire := range []pb.PlatformStatsSignal{
 		pb.PlatformStatsSignal_PLATFORM_STATS_SIGNAL_UNSPECIFIED, unknownSignal,
 	} {
-		_, err := srv.ListPlatformStatsTenants(context.Background(), connect.NewRequest(&pb.ListPlatformStatsTenantsRequest{Signal: wire}))
+		_, err := srv.ListPlatformStatsTenants(context.Background(), &pb.ListPlatformStatsTenantsRequest{Signal: wire})
 		if connect.CodeOf(err) != connect.CodeInvalidArgument {
 			t.Errorf("signal %v: err = %v, want InvalidArgument", wire, err)
 		}
@@ -397,9 +397,9 @@ func TestListPlatformStatsTenants_RefusesAnUnnamedSignal(t *testing.T) {
 func TestTenantBudgetSetForwardsThePeriodEnd(t *testing.T) {
 	store := &fakeUsageStore{}
 	end := time.Unix(1_767_225_600, 0).UTC()
-	if _, err := NewTenantBudgetServer(store).Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	if _, err := NewTenantBudgetServer(store).Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId: uuid.NewString(), PeriodEnd: timestamppb.New(end),
-	})); err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if store.lastSet.PeriodEnd == nil || !store.lastSet.PeriodEnd.Equal(end) {

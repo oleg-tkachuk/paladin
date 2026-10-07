@@ -1,13 +1,12 @@
 package mcp
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -22,26 +21,26 @@ func TestToolError(t *testing.T) {
 		{
 			name: "a token for another plane says which one is needed",
 			tool: "paladin_query_objects",
-			err:  connect.NewError(connect.CodeUnauthenticated, errors.New("jwt: audience mismatch")),
+			err:  connect.NewError(connect.CodeUnauthenticated, "jwt: audience mismatch"),
 			want: []string{"data plane", "paladin-data", "API token"},
 		},
 		{
 			name:    "an outage names no internal host",
 			tool:    "paladin_list_tenants",
-			err:     connect.NewError(connect.CodeUnavailable, errors.New("dial tcp 10.0.3.7:8090: connection refused")),
+			err:     connect.NewError(connect.CodeUnavailable, "dial tcp 10.0.3.7:8090: connection refused"),
 			want:    []string{"admin plane", "try again"},
 			notWant: []string{"10.0.3.7", "dial tcp"},
 		},
 		{
 			name: "a NotFound keeps its message",
 			tool: "paladin_get_tenant",
-			err:  connect.NewError(connect.CodeNotFound, errors.New("tenant not found")),
+			err:  connect.NewError(connect.CodeNotFound, "tenant not found"),
 			want: []string{"not_found", "tenant not found"},
 		},
 		{
 			name: "an expired token says so",
 			tool: "paladin_get_tenant",
-			err:  connect.NewError(connect.CodeUnauthenticated, errors.New("jwt: token expired")),
+			err:  connect.NewError(connect.CodeUnauthenticated, "jwt: token expired"),
 			want: []string{"refused", "expired"},
 		},
 	}

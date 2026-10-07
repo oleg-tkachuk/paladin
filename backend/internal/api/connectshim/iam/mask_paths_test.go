@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
@@ -26,11 +26,11 @@ func TestUpdateMaskPathsAreProtoFields(t *testing.T) {
 // handler, so reaching it would panic.
 func TestUpdateUserRefusesAnUnknownMaskPath(t *testing.T) {
 	s := &UserServer{}
-	_, err := s.UpdateUser(context.Background(), connect.NewRequest(&pb.UpdateUserRequest{
+	_, err := s.UpdateUser(context.Background(), &pb.UpdateUserRequest{
 		Name:            "tenants/" + uuid.NewString() + "/users/" + uuid.NewString(),
 		ResourceVersion: "1",
 		UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"display_nam"}},
-	}))
+	})
 	var ce *connect.Error
 	if !errors.As(err, &ce) || ce.Code() != connect.CodeInvalidArgument ||
 		!strings.Contains(ce.Message(), "update_mask") {

@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 // AdmitPublicUpload applies a public collection's rules to an object about
@@ -42,7 +43,7 @@ func (h *Handler) publicURL(ctx context.Context, meta BucketMeta, tenantID uuid.
 	}
 	u, err := h.storage.PublicURL(ctx, meta.BackendID, meta.BucketName, meta.PublicBaseURL, tenantID, collection, key)
 	if err != nil {
-		return "", connect.NewError(connect.CodeInternal, fmt.Errorf("public url: %w", err))
+		return "", rpcerr.New(connect.CodeInternal, fmt.Errorf("public url: %w", err))
 	}
 	return u, nil
 }

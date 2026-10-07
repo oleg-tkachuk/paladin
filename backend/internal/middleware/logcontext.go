@@ -4,9 +4,10 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/reqctx"
@@ -31,16 +32,19 @@ import (
 // and after auth, so the principal's tenant is known. Installed earlier it
 // still works and simply carries fewer fields, which is the right failure —
 // a log line with a trace id and no tenant is still findable.
-func LogContext(base *zap.Logger) connect.UnaryInterceptorFunc {
-	return func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			return next(withLogContext(ctx, base, req.Header().Get(HeaderRequestID), req.Spec().Procedure), req)
+//
+// One interceptor serves unary and streaming calls alike: a v2 interceptor
+// wraps the whole call whatever its shape.
+func LogContext(base *zap.Logger) connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			requestID := unary.Info(ctx).RequestHeader().Get(HeaderRequestID)
+			return next(withLogContext(ctx, base, requestID, spec.Procedure), spec, stream)
 		}
 	}
 }
 
-// withLogContext is the shared body, split out so the streaming and unary
-// paths cannot drift.
+// withLogContext stashes the request-scoped logger and ids.
 func withLogContext(ctx context.Context, base *zap.Logger, requestID, procedure string) context.Context {
 	if requestID != "" {
 		ctx = reqctx.WithRequestID(ctx, requestID)
@@ -55,30 +59,6 @@ func withLogContext(ctx context.Context, base *zap.Logger, requestID, procedure 
 		ctx = logger.WithContext(ctx, base.With(zap.String("rpc", procedure)))
 	}
 	return ctx
-}
-
-// LogContextStreaming mirrors LogContext for streaming handlers. Kept separate
-// because connect's streaming signature differs; the body is shared.
-func LogContextStreaming(base *zap.Logger) connect.Interceptor {
-	return &logContextInterceptor{base: base}
-}
-
-type logContextInterceptor struct{ base *zap.Logger }
-
-func (i *logContextInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		return next(withLogContext(ctx, i.base, req.Header().Get(HeaderRequestID), req.Spec().Procedure), req)
-	}
-}
-
-func (i *logContextInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (i *logContextInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		return next(withLogContext(ctx, i.base, conn.RequestHeader().Get(HeaderRequestID), conn.Spec().Procedure), conn)
-	}
 }
 
 // ─── outcomes ───────────────────────────────────────────────────────────────
@@ -107,11 +87,16 @@ func (i *logContextInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 // verified tenant is not on the context yet, so these lines carry the request
 // id and not the tenant. For a request rejected before authentication that is
 // not a loss but the truth: there is no verified tenant to name.
-func LogOutcome(base *zap.Logger) connect.Interceptor {
-	return &outcomeInterceptor{base: base}
+func LogOutcome(base *zap.Logger) connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			start := time.Now()
+			err := next(ctx, spec, stream)
+			logFailure(base, spec.Procedure, unary.Info(ctx).RequestHeader().Get(HeaderRequestID), time.Since(start), err)
+			return err
+		}
+	}
 }
-
-type outcomeInterceptor struct{ base *zap.Logger }
 
 // logFailure is the whole decision, split out from the interceptor plumbing so
 // it can be tested at every code rather than at the two the plumbing makes
@@ -151,27 +136,5 @@ func logFailure(base *zap.Logger, procedure, requestID string, took time.Duratio
 	// browser that probes an endpoint without a token.
 	default:
 		base.Info("rpc rejected", fields...)
-	}
-}
-
-func (i *outcomeInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		start := time.Now()
-		res, err := next(ctx, req)
-		logFailure(i.base, req.Spec().Procedure, req.Header().Get(HeaderRequestID), time.Since(start), err)
-		return res, err
-	}
-}
-
-func (i *outcomeInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (i *outcomeInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		start := time.Now()
-		err := next(ctx, conn)
-		logFailure(i.base, conn.Spec().Procedure, conn.RequestHeader().Get(HeaderRequestID), time.Since(start), err)
-		return err
 	}
 }

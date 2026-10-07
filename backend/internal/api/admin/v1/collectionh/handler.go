@@ -14,7 +14,7 @@ import (
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
@@ -24,6 +24,7 @@ import (
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -200,7 +201,7 @@ func (h *Handler) CreateCollection(ctx context.Context, args CreateCollectionArg
 		if !principal.HasRole(apiutil.RolePlatformAdmin) &&
 			!principal.HasRole(apiutil.RoleTenantProvisioner) {
 			return nil, connect.NewError(connect.CodePermissionDenied,
-				errors.New("cross-tenant CreateCollection requires platform.admin or platform.tenant-provisioner"))
+				"cross-tenant CreateCollection requires platform.admin or platform.tenant-provisioner")
 		}
 	}
 	// A backend must be named explicitly — there is no default. The connectshim
@@ -208,7 +209,7 @@ func (h *Handler) CreateCollection(ctx context.Context, args CreateCollectionArg
 	// we get here; an empty id at this point means neither was supplied.
 	if args.BackendID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("backend_id is required (name a bucket or set a tenant default binding; there is no default backend)"))
+			"backend_id is required (name a bucket or set a tenant default binding; there is no default backend)")
 	}
 	if err := h.authorizeFull(ctx, principal, args.TenantID, args.Collection, args.BackendID, args.BucketName, cedar.ActionManageCollection); err != nil {
 		return nil, err
@@ -277,11 +278,11 @@ func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArg
 	args.TenantID = callerTenantID
 	if args.Collection == "" {
 		return false, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("collection is required"))
+			"collection is required")
 	}
 	if args.BackendID == "" || args.BucketName == "" {
 		return false, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("backend_id and bucket_name are required"))
+			"backend_id and bucket_name are required")
 	}
 	// Self-service carries no ConfigurePublicRead check, so it never
 	// publishes (ADR-0027).
@@ -295,7 +296,7 @@ func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArg
 	case errors.Is(gerr, pgx.ErrNoRows):
 		// fall through to create
 	default:
-		return false, connect.NewError(connect.CodeInternal, gerr)
+		return false, connect.NewError(connect.CodeInternal, gerr.Error()).WithCause(gerr)
 	}
 	// Create + paladin.collection.created in one tx (ADR-0003), mirroring
 	// CreateCollection.
@@ -322,7 +323,7 @@ func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArg
 		if _, gerr := h.repo.Get(ctx, args.TenantID, args.Collection); gerr == nil {
 			return false, nil
 		}
-		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("ensure collection: %w", err))
+		return false, rpcerr.New(connect.CodeInternal, fmt.Errorf("ensure collection: %w", err))
 	}
 	return true, nil
 }
@@ -348,7 +349,7 @@ func (h *Handler) GetCollection(ctx context.Context, tenantID uuid.UUID, collect
 		!principal.HasRole(apiutil.RolePlatformAdmin) &&
 		!principal.HasRole(apiutil.RoleTenantProvisioner) {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("cross-tenant GetCollection requires platform.admin or platform.tenant-provisioner"))
+			"cross-tenant GetCollection requires platform.admin or platform.tenant-provisioner")
 	}
 	if err := h.authorize(ctx, principal, tenantID, collection, cedar.ActionManageCollection); err != nil {
 		return nil, err
@@ -356,7 +357,7 @@ func (h *Handler) GetCollection(ctx context.Context, tenantID uuid.UUID, collect
 	ctx = auth.WithActingTenant(ctx, tenantID)
 	b, err := h.repo.Get(ctx, tenantID, collection)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	return &b, nil
 }
@@ -380,8 +381,8 @@ func targetTenant(
 		return caller, nil
 	}
 	if !principal.HasRole(apiutil.RolePlatformAdmin) {
-		return uuid.Nil, connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("cross-tenant %s requires platform.admin", op))
+		return uuid.Nil, connect.Errorf(connect.CodePermissionDenied,
+			"cross-tenant %s requires platform.admin", op)
 	}
 	return target, nil
 }
@@ -486,12 +487,12 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 			args.TenantID = callerTenantID
 		} else if !principal.HasRole(apiutil.RolePlatformAdmin) {
 			return nil, "", connect.NewError(connect.CodePermissionDenied,
-				errors.New("cross-tenant ListCollections requires platform.admin"))
+				"cross-tenant ListCollections requires platform.admin")
 		}
 	} else if args.TenantID != callerTenantID {
 		if !principal.HasRole(apiutil.RolePlatformAdmin) {
 			return nil, "", connect.NewError(connect.CodePermissionDenied,
-				errors.New("cross-tenant ListCollections requires platform.admin"))
+				"cross-tenant ListCollections requires platform.admin")
 		}
 	}
 	// One tenant-scoped Cedar check up front; per-row filtering would
@@ -522,8 +523,7 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	}
 	page, err = celpkg.FilterPage(h.cel, celpkg.CollectionSchema, args.Filter, page, collectionRow)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("filter: %w", err))
+		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
 	return page, next, nil
 }
@@ -560,7 +560,7 @@ func (h *Handler) GetCollectionStats(ctx context.Context, collection string) (*C
 	ctx = auth.WithActingTenant(ctx, tenantID)
 	s, err := h.repo.Stats(ctx, tenantID, collection)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &s, nil
 }
@@ -580,24 +580,23 @@ func (h *Handler) BindCollectionToBucket(
 	}
 	backendID, bucketName, err := splitBucketResourceName(bucket)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	if err := h.authorizeFull(ctx, p, tenantID, collection, backendID, bucketName, cedar.ActionBindCollectionToBucket); err != nil {
 		return nil, err
 	}
 	if err := h.repo.Rebind(ctx, tenantID, collection, backendID, bucketName, expectedVersion); err != nil {
 		if errors.Is(err, ErrVersionMismatch) {
-			return nil, connect.NewError(connect.CodeAborted, err)
+			return nil, connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
 		}
 		if errors.Is(err, publicread.ErrRule) {
 			return nil, apiutil.MapError(err)
 		}
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("rebind: %w", err))
+		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("rebind: %w", err))
 	}
 	updated, err := h.repo.Get(ctx, tenantID, collection)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &updated, nil
 }
@@ -650,7 +649,7 @@ func (h *Handler) authorizeFull(
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }

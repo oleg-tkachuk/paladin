@@ -20,27 +20,9 @@
 //     retries (network flake, client double-click) onto a single
 //     resource.
 //
-// Replay reconstructs the cached *connect.Response[T] two ways:
-//
-//   - Preferred: a type-parameterized factory registered per method via
-//     RegisterResponseFactory[T]. It builds the response with
-//     connect.NewResponse[T] — pure generics, no Go reflection and no
-//     dependency on connect-go's internal struct layout.
-//
-//   - Fallback (any method without a registered factory): a runtime
-//     reflect.Type registry auto-populated from the first response. This
-//     keeps every method working without a registration sweep; methods
-//     migrate to the generic path incrementally by adding one
-//     RegisterResponseFactory[T] call at wiring time.
-//
-// Both produce a value that satisfies connect.AnyResponse because the
-// interface method set is defined on *Response[_] at the type level.
-//
-// Cold-start path: the FIRST request for any (method) tuple is
-// always a cache miss because the type registry is empty for that
-// method. That request runs normally and populates the registry as
-// a side effect of caching the response. Subsequent requests with
-// the same key hit the replay path.
+// Replay decodes the cached bytes into the method's response type, read from
+// the method's schema, so any memoised method replays from its first call on
+// any replica: there is no registry to warm and nothing per method to wire.
 //
 // Errors are NOT cached — a transient failure must be retryable.
 // Streaming RPCs are out of scope (Create* is always unary).
@@ -51,17 +33,15 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"errors"
-	"reflect"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcmeta"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
@@ -70,40 +50,6 @@ import (
 )
 
 const idempotencyHeader = paladin.HeaderIdempotencyKey
-
-// responseFactory builds a fresh AnyResponse from cached proto bytes.
-type responseFactory func(body []byte) (connect.AnyResponse, error)
-
-// protoPtr constrains PT to "*T that is a proto.Message" so the generic
-// factory can allocate new(T) and treat it as a proto message.
-type protoPtr[T any] interface {
-	*T
-	proto.Message
-}
-
-// responseFactories maps a Connect procedure → its generic reconstructor.
-// Process-wide (registration is a one-time wiring concern, not per
-// interceptor instance).
-var responseFactories sync.Map // method string → responseFactory
-
-// RegisterResponseFactory registers the generic, reflection-free replay
-// path for one memoizable method. Call once at wiring time, e.g.:
-//
-//	RegisterResponseFactory[adminv1.CreateTenantResponse](
-//	    adminv1connect.TenantServiceCreateTenantProcedure)
-//
-// On replay the interceptor allocates a fresh *T, unmarshals the cached
-// bytes into it, and wraps it with connect.NewResponse[T] — no Go
-// reflection, no reliance on the Response struct's field names.
-func RegisterResponseFactory[T any, PT protoPtr[T]](method string) {
-	responseFactories.Store(method, responseFactory(func(body []byte) (connect.AnyResponse, error) {
-		msg := PT(new(T))
-		if err := proto.Unmarshal(body, msg); err != nil {
-			return nil, err
-		}
-		return connect.NewResponse[T](msg), nil
-	}))
-}
 
 // IdempotencyRecord is one memoised call: the response it produced and the
 // fingerprint of the request that produced it.
@@ -124,18 +70,14 @@ type IdempotencyStore interface {
 // request to the same method. Replaying would hand back a response to a
 // question the caller did not ask — another object's download URL, another
 // part's presigned PUT — and nothing downstream could tell.
-var errKeyReused = connect.NewError(connect.CodeInvalidArgument, errors.New(
+var errKeyReused = connect.NewError(connect.CodeInvalidArgument,
 	"idempotency: this Idempotency-Key was already used for a different request to this method; "+
-		"use a new key for a new request"))
+		"use a new key for a new request")
 
 // requestFingerprint identifies a request's content: SHA-256 over its
 // deterministic protobuf encoding, so a JSON and a binary client sending the
 // same message produce the same fingerprint.
-func requestFingerprint(req connect.AnyRequest) ([]byte, error) {
-	msg, ok := req.Any().(proto.Message)
-	if !ok {
-		return nil, errors.New("idempotency: request message is not a proto.Message")
-	}
+func requestFingerprint(msg proto.Message) ([]byte, error) {
 	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(msg)
 	if err != nil {
 		return nil, err
@@ -190,7 +132,7 @@ type IdempotencyConfig struct {
 // stamps them, and a dropped wiring line would make a rotated refresh token
 // replayable. A safety property that depends on being remembered at each call
 // site is not a safety property, so it no longer does.
-func NewIdempotencyInterceptor(store IdempotencyStore, cfg IdempotencyConfig) connect.Interceptor {
+func NewIdempotencyInterceptor(store IdempotencyStore, cfg IdempotencyConfig) connect.ServerInterceptor {
 	if cfg.TTL == 0 {
 		cfg.TTL = 24 * time.Hour
 	}
@@ -202,17 +144,14 @@ func NewIdempotencyInterceptor(store IdempotencyStore, cfg IdempotencyConfig) co
 		skip[p] = true
 	}
 	cfg.SkipMethods = skip
-	return &idempotencyInterceptor{store: store, cfg: cfg}
+	i := &idempotencyInterceptor{store: store, cfg: cfg}
+	// Streaming RPCs don't participate in idempotency.
+	return unary.Interceptor(i.wrap, nil)
 }
 
 type idempotencyInterceptor struct {
 	store IdempotencyStore
 	cfg   IdempotencyConfig
-	// respTypes maps Connect procedure → reflect.Type of the
-	// *connect.Response[T] wrapper seen on the first successful call.
-	// Populated on cache miss, read on cache hit. sync.Map is the
-	// right shape: write-once-per-key, read-many.
-	respTypes sync.Map
 }
 
 // idempotencyKeyCarrier is satisfied by any request message declaring an
@@ -233,16 +172,16 @@ type idempotencyKeyCarrier interface {
 // When both are present they must agree. Silently preferring one would make
 // the effective key depend on a precedence rule nothing documents, and the
 // caller disagreeing with itself is a bug worth surfacing.
-func idempotencyKey(req connect.AnyRequest) (string, error) {
-	header := req.Header().Get(idempotencyHeader)
+func idempotencyKey(headers *connect.Header, req proto.Message) (string, error) {
+	header := headers.Get(idempotencyHeader)
 	var body string
-	if c, ok := req.Any().(idempotencyKeyCarrier); ok {
+	if c, ok := req.(idempotencyKeyCarrier); ok {
 		body = c.GetIdempotencyKey()
 	}
 	switch {
 	case header != "" && body != "" && header != body:
 		return "", connect.NewError(connect.CodeInvalidArgument,
-			errors.New("idempotency: Idempotency-Key header and idempotency_key field disagree"))
+			"idempotency: Idempotency-Key header and idempotency_key field disagree")
 	case header != "":
 		return header, nil
 	default:
@@ -250,11 +189,11 @@ func idempotencyKey(req connect.AnyRequest) (string, error) {
 	}
 }
 
-func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		method := req.Spec().Procedure
+func (i *idempotencyInterceptor) wrap(next unary.Func) unary.Func {
+	return func(ctx context.Context, spec connect.Spec, req proto.Message) (proto.Message, error) {
+		method := spec.Procedure
 		if i.cfg.SkipMethods[method] {
-			return next(ctx, req)
+			return next(ctx, spec, req)
 		}
 		// A declared read is never memoized, whatever header arrives.
 		//
@@ -268,18 +207,18 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 		// internal/api/idempotency_contract_test.go, which fails the build if
 		// one of them starts writing.
 		if rpcmeta.IsDeclaredRead(method) {
-			return next(ctx, req)
+			return next(ctx, spec, req)
 		}
-		key, err := idempotencyKey(req)
+		key, err := idempotencyKey(unary.Info(ctx).RequestHeader(), req)
 		if err != nil {
 			return nil, err
 		}
 		if key == "" {
 			if i.cfg.RequireOnCreate && isMutationMethod(method) {
 				return nil, connect.NewError(connect.CodeInvalidArgument,
-					errors.New("idempotency: missing Idempotency-Key header"))
+					"idempotency: missing Idempotency-Key header")
 			}
-			return next(ctx, req)
+			return next(ctx, spec, req)
 		}
 		// The tenant the request acts on: a platform admin's data-plane call
 		// names another one (ActOnNamedTenant), and keying it on the admin's
@@ -288,82 +227,53 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 		if err != nil {
 			// Pre-auth or auth-failed: skip memoize, defer to next()
 			// which will surface the auth error to the caller.
-			return next(ctx, req)
+			return next(ctx, spec, req)
 		}
 
-		// Replay path: cached response + known type → reconstruct
-		// without invoking the handler. If we have the bytes but
-		// NOT the type yet (e.g. another pod warmed the cache but
-		// this pod just started), we have to fall through to next()
-		// so this pod can learn the type. That's not a side-effect
-		// duplicate because next() will hit the SAME row via Put's
-		// ON CONFLICT DO NOTHING and the second-writer's response
-		// is just dropped — but the OBSERVABLE side effect (the
-		// resource row) is the one cached.
+		// Replay path: the cached response, decoded into the method's
+		// response type, answers without invoking the handler.
 		//
-		// Edge case: side-effecting handlers (CreateTenant) DO write
-		// to the resource table on the warm-up call. Acceptable: the
-		// resource handler is expected to use its own ON CONFLICT
-		// guard on the natural key. Without that guard we'd be at
-		// risk regardless of this cache.
+		// Side-effecting handlers (CreateTenant) are still expected to guard
+		// their natural key with ON CONFLICT: a cached row that cannot be
+		// decoded falls through to the handler, and so do two first calls
+		// racing past an empty cache.
 		fingerprint, ferr := requestFingerprint(req)
 		if ferr != nil {
 			// Cannot tell one request from another, so cannot memoise
 			// safely; run the handler unmemoised.
-			return next(ctx, req)
+			return next(ctx, spec, req)
 		}
 		rec, found, err := i.store.Get(ctx, tenantID, method, key)
 		if err == nil && found && !sameRequest(rec.RequestHash, fingerprint) {
 			metrics.RecordIdempotencyLookup(ctx, method, lookupKeyReused)
 			return nil, errKeyReused
 		}
-		cached := rec.Response
 		if err == nil && found {
-			// Preferred: generic factory (no reflection).
-			if f, ok := responseFactories.Load(method); ok {
-				if replay, rerr := f.(responseFactory)(cached); rerr == nil {
-					if err := refuseCredentialReplay(replay); err != nil {
-						metrics.RecordIdempotencyLookup(ctx, method, lookupRefused)
-						return nil, err
-					}
-					metrics.RecordIdempotencyLookup(ctx, method, "replayed")
-					return replay, nil
+			if replay, rerr := replayResponse(spec, rec.Response); rerr == nil {
+				if err := refuseCredentialReplay(replay); err != nil {
+					metrics.RecordIdempotencyLookup(ctx, method, lookupRefused)
+					return nil, err
 				}
-				// Reconstruction failure (proto drift / corrupt cache) →
-				// fall through to next() rather than fail the request.
-			} else if respType, ok := i.respTypes.Load(method); ok {
-				// Fallback: reflection registry auto-populated on a prior
-				// cache miss for an unregistered method.
-				if replay, rerr := reconstructResponse(respType.(reflect.Type), cached); rerr == nil {
-					if err := refuseCredentialReplay(replay); err != nil {
-						metrics.RecordIdempotencyLookup(ctx, method, lookupRefused)
-						return nil, err
-					}
-					metrics.RecordIdempotencyLookup(ctx, method, "replayed")
-					return replay, nil
-				}
+				metrics.RecordIdempotencyLookup(ctx, method, "replayed")
+				return replay, nil
 			}
-			// Cached, and not replayable: the handler is about to run for a
-			// key that already succeeded once. Every comment above explains why
-			// that is tolerable, and all of them assume it is RARE — this is
-			// the only outcome here that can produce a duplicate side effect,
-			// and until now nothing counted it.
+			// Cached, and not replayable — proto drift or a corrupt row: the
+			// handler is about to run for a key that already succeeded once.
+			// That is the only outcome here that can produce a duplicate side
+			// effect, so it is counted.
 			metrics.RecordIdempotencyLookup(ctx, method, "unreplayable")
 		} else {
 			metrics.RecordIdempotencyLookup(ctx, method, "miss")
 		}
 
-		resp, err := next(ctx, req)
+		resp, err := next(ctx, spec, req)
 		if err != nil {
 			// Don't memoize failures — the caller can retry and succeed.
 			return resp, err
 		}
 
-		// Cache the response. Type registry write is idempotent
-		// (same method always yields the same wrapper type); the
-		// store Put is ON CONFLICT DO NOTHING so concurrent
-		// first-time writers race harmlessly.
-		i.respTypes.Store(method, reflect.TypeOf(resp))
+		// Cache the response. The store Put is ON CONFLICT DO NOTHING
+		// so concurrent first-time writers race harmlessly.
 		body, merr := marshalResponse(resp)
 		if merr != nil {
 			// Marshal failure means we can't memoize this method.
@@ -380,28 +290,23 @@ func (i *idempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unary
 	}
 }
 
-func (i *idempotencyInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (i *idempotencyInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	// Streaming RPCs don't participate in idempotency.
-	return next
-}
-
-// marshalResponse extracts the proto message from an AnyResponse and
-// marshals it to bytes. Connect responses always wrap a proto.Message
-// (the generated Resp type), so the type assertion is safe in
-// production; the explicit error keeps test fixtures honest.
 // marshalResponse serialises the response for the cache with every
 // debug_redact field cleared: a minted API or capability token is returned
 // once, to the first caller, and never written to idempotency_keys.
-func marshalResponse(resp connect.AnyResponse) ([]byte, error) {
-	msg, ok := resp.Any().(proto.Message)
-	if !ok {
-		return nil, errors.New("idempotency: response message is not a proto.Message")
-	}
+func marshalResponse(msg proto.Message) ([]byte, error) {
 	return proto.Marshal(redacted(msg))
+}
+
+// replayResponse decodes a cached response into the method's response type.
+func replayResponse(spec connect.Spec, body []byte) (proto.Message, error) {
+	msg, err := unary.NewResponse(spec)
+	if err != nil {
+		return nil, err
+	}
+	if err := proto.Unmarshal(body, msg); err != nil {
+		return nil, err
+	}
+	return msg, nil
 }
 
 // lookupRefused is the idempotency lookup outcome for a repeated key whose
@@ -414,60 +319,17 @@ const lookupKeyReused = "key_reused"
 // errCredentialNotReplayed answers a repeated key whose response type carries
 // a credential. The cached copy has it cleared, and a success without it
 // would read as a token that is empty rather than one that was not kept.
-var errCredentialNotReplayed = connect.NewError(connect.CodeAlreadyExists, errors.New(
+var errCredentialNotReplayed = connect.NewError(connect.CodeAlreadyExists,
 	"this Idempotency-Key already completed; its response carried a credential, "+
-		"which is returned once and not stored — use a new key to issue another"))
+		"which is returned once and not stored — use a new key to issue another")
 
 // refuseCredentialReplay returns errCredentialNotReplayed when replay is of a
 // type that can carry a credential, and nil otherwise.
-func refuseCredentialReplay(replay connect.AnyResponse) error {
-	if msg, ok := replay.Any().(proto.Message); ok && carriesCredentials(msg.ProtoReflect().Descriptor()) {
+func refuseCredentialReplay(replay proto.Message) error {
+	if carriesCredentials(replay.ProtoReflect().Descriptor()) {
 		return errCredentialNotReplayed
 	}
 	return nil
-}
-
-// reconstructResponse builds a fresh *connect.Response[T] from the
-// cached bytes and the wrapper's reflect.Type. The returned value
-// satisfies connect.AnyResponse because the method set
-// (`internalOnly`, `Any`, `Header`, `Trailer`) is defined on
-// *Response[_] at the type level, not the instance level, so a
-// reflectively-allocated value of the same dynamic type carries the
-// same method set.
-//
-// Layout assumed: *connect.Response[T] has exported field `Msg *T`.
-// If connect-go ever renames or unexports that field we'll get a
-// hard error here at startup-time of the first replay — easier to
-// catch than a silent miss.
-func reconstructResponse(respType reflect.Type, body []byte) (connect.AnyResponse, error) {
-	if respType.Kind() != reflect.Pointer {
-		return nil, errors.New("idempotency: response type is not a pointer")
-	}
-	// Allocate a zero *Response[T].
-	respVal := reflect.New(respType.Elem())
-	msgField := respVal.Elem().FieldByName("Msg")
-	if !msgField.IsValid() || msgField.Kind() != reflect.Pointer {
-		return nil, errors.New("idempotency: Response.Msg field missing or not a pointer")
-	}
-	// Allocate a zero T, unmarshal cached bytes into it, set Msg.
-	newMsg := reflect.New(msgField.Type().Elem())
-	pm, ok := newMsg.Interface().(proto.Message)
-	if !ok {
-		return nil, errors.New("idempotency: Response.Msg's element type is not a proto.Message")
-	}
-	if err := proto.Unmarshal(body, pm); err != nil {
-		return nil, err
-	}
-	msgField.Set(newMsg)
-	// Type-assert back to AnyResponse. This succeeds iff respType
-	// is *connect.Response[T] for some T (true at every site we
-	// populate the registry — we capture reflect.TypeOf(resp) where
-	// resp comes straight out of a connect handler chain).
-	anyResp, ok := respVal.Interface().(connect.AnyResponse)
-	if !ok {
-		return nil, errors.New("idempotency: reconstructed value does not satisfy AnyResponse")
-	}
-	return anyResp, nil
 }
 
 // isMutationMethod reports whether the Connect procedure name

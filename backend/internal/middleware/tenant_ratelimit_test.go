@@ -6,10 +6,12 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // fakeRateStore is a shared sliding window in memory: one counter per tenant,
@@ -35,13 +37,21 @@ func (f *fakeRateStore) BumpTenantRate(_ context.Context, id uuid.UUID) (float64
 		return 0, 0, f.err
 	}
 	f.counts[id]++
-	return f.counts[id], 30, nil
+	return f.counts[id], fakeRetryAfterSeconds, nil
 }
 
-func nopNext(calls *int) connect.UnaryFunc {
-	return func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+// fakeRetryAfterSeconds is what fakeRateStore says is left in the bucket.
+const fakeRetryAfterSeconds = 30
+
+// limited is a call through one limiter to a probe handler that counts the
+// calls reaching it.
+func limited(i *TenantRateLimitInterceptor, calls *int) func(ctx context.Context) (*connect.Header, error) {
+	probe := &unarytest.Probe{OnCall: func(context.Context) error {
 		*calls++
-		return nil, nil
+		return nil
+	}}
+	return func(ctx context.Context) (*connect.Header, error) {
+		return unarytest.CallProbe(ctx, probe, []connect.ServerInterceptor{i.Intercept})
 	}
 }
 
@@ -50,33 +60,28 @@ func rlTenantCtx(t *testing.T, id uuid.UUID) context.Context {
 	return auth.WithPrincipal(context.Background(), &auth.Principal{TenantID: id})
 }
 
-func req() connect.AnyRequest {
-	return connect.NewRequest(&struct{}{})
-}
-
 // RPS becomes a per-minute ceiling, so 1 rps admits 60 requests in a window
 // and refuses the 61st.
 func TestTenantRateLimit_ThrottlesPastCapacity(t *testing.T) {
 	i := NewTenantRateLimitInterceptor(TenantRateLimitConfig{RPS: 1, Store: newFakeRateStore()})
 	calls := 0
-	h := i.WrapUnary(nopNext(&calls))
+	h := limited(i, &calls)
 	ctx := rlTenantCtx(t, uuid.New())
 
 	for n := range 60 {
-		if _, err := h(ctx, req()); err != nil {
+		if _, err := h(ctx); err != nil {
 			t.Fatalf("call %d: %v", n, err)
 		}
 	}
-	_, err := h(ctx, req())
+	header, err := h(ctx)
 	if connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("call 61 err = %v, want CodeResourceExhausted", err)
 	}
 	if calls != 60 {
 		t.Errorf("handler ran %d times, want 60 — the throttled call reached it", calls)
 	}
-	var cerr *connect.Error
-	if errors.As(err, &cerr) && cerr.Meta().Get("Retry-After") == "" {
-		t.Error("no Retry-After: an integrating client cannot tell how long to back off")
+	if got, want := header.Get(paladin.HeaderRetryAfter), retryAfterHeader(fakeRetryAfterSeconds); got != want {
+		t.Errorf("Retry-After = %q, want %q: an integrating client cannot tell how long to back off", got, want)
 	}
 }
 
@@ -89,23 +94,23 @@ func TestTenantRateLimit_ReplicasShareOneBudget(t *testing.T) {
 	podB := NewTenantRateLimitInterceptor(TenantRateLimitConfig{RPS: 1, Store: store})
 
 	callsA, callsB := 0, 0
-	hA := podA.WrapUnary(nopNext(&callsA))
-	hB := podB.WrapUnary(nopNext(&callsB))
+	hA := limited(podA, &callsA)
+	hB := limited(podB, &callsB)
 	ctx := rlTenantCtx(t, uuid.New())
 
 	// 30 through each replica exhausts the shared minute exactly.
 	for n := range 30 {
-		if _, err := hA(ctx, req()); err != nil {
+		if _, err := hA(ctx); err != nil {
 			t.Fatalf("A call %d: %v", n, err)
 		}
-		if _, err := hB(ctx, req()); err != nil {
+		if _, err := hB(ctx); err != nil {
 			t.Fatalf("B call %d: %v", n, err)
 		}
 	}
-	if _, err := hA(ctx, req()); connect.CodeOf(err) != connect.CodeResourceExhausted {
+	if _, err := hA(ctx); connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("replica A err = %v, want CodeResourceExhausted — the budget is shared", err)
 	}
-	if _, err := hB(ctx, req()); connect.CodeOf(err) != connect.CodeResourceExhausted {
+	if _, err := hB(ctx); connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("replica B err = %v, want CodeResourceExhausted — the budget is shared", err)
 	}
 }
@@ -114,18 +119,18 @@ func TestTenantRateLimit_ReplicasShareOneBudget(t *testing.T) {
 func TestTenantRateLimit_BucketsArePerTenant(t *testing.T) {
 	i := NewTenantRateLimitInterceptor(TenantRateLimitConfig{RPS: 1.0 / 60.0, Store: newFakeRateStore()})
 	calls := 0
-	h := i.WrapUnary(nopNext(&calls))
+	h := limited(i, &calls)
 
 	noisy := rlTenantCtx(t, uuid.New())
 	quiet := rlTenantCtx(t, uuid.New())
 
-	if _, err := h(noisy, req()); err != nil {
+	if _, err := h(noisy); err != nil {
 		t.Fatalf("noisy first: %v", err)
 	}
-	if _, err := h(noisy, req()); connect.CodeOf(err) != connect.CodeResourceExhausted {
+	if _, err := h(noisy); connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("noisy second err = %v, want CodeResourceExhausted", err)
 	}
-	if _, err := h(quiet, req()); err != nil {
+	if _, err := h(quiet); err != nil {
 		t.Fatalf("quiet tenant was charged for the noisy one: %v", err)
 	}
 }
@@ -137,10 +142,10 @@ func TestTenantRateLimit_TenantlessRequestsSkipTheStore(t *testing.T) {
 	store := newFakeRateStore()
 	i := NewTenantRateLimitInterceptor(TenantRateLimitConfig{RPS: 1.0 / 60.0, Store: store})
 	calls := 0
-	h := i.WrapUnary(nopNext(&calls))
+	h := limited(i, &calls)
 
 	for n := range 5 {
-		if _, err := h(context.Background(), req()); err != nil {
+		if _, err := h(context.Background()); err != nil {
 			t.Fatalf("call %d: %v", n, err)
 		}
 	}
@@ -160,11 +165,11 @@ func TestTenantRateLimit_FailsOpenOnStoreError(t *testing.T) {
 	store.err = errors.New("connection refused")
 	i := NewTenantRateLimitInterceptor(TenantRateLimitConfig{RPS: 1.0 / 60.0, Store: store})
 	calls := 0
-	h := i.WrapUnary(nopNext(&calls))
+	h := limited(i, &calls)
 	ctx := rlTenantCtx(t, uuid.New())
 
 	for n := range 10 {
-		if _, err := h(ctx, req()); err != nil {
+		if _, err := h(ctx); err != nil {
 			t.Fatalf("call %d was refused because the store errored: %v", n, err)
 		}
 	}
@@ -183,10 +188,10 @@ func TestTenantRateLimit_DisabledPassesEverything(t *testing.T) {
 	} {
 		i := NewTenantRateLimitInterceptor(cfg)
 		calls := 0
-		h := i.WrapUnary(nopNext(&calls))
+		h := limited(i, &calls)
 		ctx := rlTenantCtx(t, uuid.New())
 		for n := range 50 {
-			if _, err := h(ctx, req()); err != nil {
+			if _, err := h(ctx); err != nil {
 				t.Fatalf("call %d: %v", n, err)
 			}
 		}

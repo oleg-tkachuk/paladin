@@ -1,10 +1,10 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -35,13 +35,13 @@ const UnknownProcedurePattern = "/"
 // only a status. Mount it at UnknownProcedurePattern on a plane's mux; anything that is not an
 // RPC still gets a 404.
 func UnknownProcedure() http.Handler {
-	writer := connect.NewErrorWriter()
+	writer := connecthttp.NewErrorWriter()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !writer.IsSupported(r) {
 			http.NotFound(w, r)
 			return
 		}
-		_ = writer.Write(w, r, connect.NewError(connect.CodeUnimplemented,
-			fmt.Errorf("%s is not served by this release", r.URL.Path)))
+		_ = writer.Write(w, r, connect.Errorf(connect.CodeUnimplemented,
+			"%s is not served by this release", r.URL.Path))
 	})
 }

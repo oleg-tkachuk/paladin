@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -506,22 +506,22 @@ func TestBilling_MicrosAreExact(t *testing.T) {
 
 	srv := connectshim.NewBillingServer(f.handler)
 	end := time.Now().UTC().Add(time.Hour)
-	resp, err := srv.GetTenantSummary(ctxAdmin(t, tenant), connect.NewRequest(&pb.GetTenantSummaryRequest{
+	resp, err := srv.GetTenantSummary(ctxAdmin(t, tenant), &pb.GetTenantSummaryRequest{
 		TenantId:    tenant.String(),
 		PeriodStart: timestamppb.New(end.Add(-24 * time.Hour)),
 		PeriodEnd:   timestamppb.New(end),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("GetTenantSummary: %v", err)
 	}
-	if got := resp.Msg.GetTotalMicros(); got != 500_000 {
+	if got := resp.GetTotalMicros(); got != 500_000 {
 		t.Errorf("total_micros = %d, want 500000", got)
 	}
-	if got := resp.Msg.GetMaxBudgetMicros(); got != 19_990_000 {
+	if got := resp.GetMaxBudgetMicros(); got != 19_990_000 {
 		t.Errorf("max_budget_micros = %d, want 19990000", got)
 	}
 	var top int64
-	for _, e := range resp.Msg.GetTopOps() {
+	for _, e := range resp.GetTopOps() {
 		top += e.GetAmountMicros()
 	}
 	if top != 500_000 {

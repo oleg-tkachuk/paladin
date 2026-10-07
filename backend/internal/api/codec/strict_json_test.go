@@ -2,11 +2,12 @@ package codec
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
-	connect "connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"google.golang.org/protobuf/proto"
 )
@@ -19,7 +20,7 @@ func TestStrictJSONRejectsUnknownField(t *testing.T) {
 	t.Parallel()
 
 	var msg iamv1.LoginRequest
-	err := StrictJSON{}.Unmarshal([]byte(`{"subject":"admin","audience":"paladin-admin"}`), &msg)
+	err := unmarshal([]byte(`{"subject":"admin","audience":"paladin-admin"}`), &msg)
 	if err == nil {
 		t.Fatalf("Unmarshal accepted an unknown field; decoded %+v", &msg)
 	}
@@ -40,7 +41,7 @@ func TestStrictJSONAcceptsKnownFields(t *testing.T) {
 		`{"subject":"admin","requestedAudience":"paladin-admin"}`,
 	} {
 		var msg iamv1.LoginRequest
-		if err := (StrictJSON{}).Unmarshal([]byte(in), &msg); err != nil {
+		if err := unmarshal([]byte(in), &msg); err != nil {
 			t.Fatalf("Unmarshal(%s): %v", in, err)
 		}
 		if msg.GetSubject() != "admin" || msg.GetRequestedAudience() != "paladin-admin" {
@@ -58,7 +59,7 @@ func TestStrictJSONOmittedFieldIsStillFine(t *testing.T) {
 	t.Parallel()
 
 	var msg iamv1.LoginRequest
-	if err := (StrictJSON{}).Unmarshal([]byte(`{"subject":"admin"}`), &msg); err != nil {
+	if err := unmarshal([]byte(`{"subject":"admin"}`), &msg); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if msg.GetRequestedAudience() != "" {
@@ -70,7 +71,7 @@ func TestStrictJSONEmptyPayload(t *testing.T) {
 	t.Parallel()
 
 	var msg iamv1.LoginRequest
-	if err := (StrictJSON{}).Unmarshal(nil, &msg); err == nil {
+	if err := unmarshal(nil, &msg); err == nil {
 		t.Fatal("Unmarshal accepted a zero-length payload")
 	}
 }
@@ -79,19 +80,19 @@ func TestStrictJSONNonProtoMessage(t *testing.T) {
 	t.Parallel()
 
 	var notAMessage struct{ A int }
-	if err := (StrictJSON{}).Unmarshal([]byte(`{"a":1}`), &notAMessage); err == nil {
+	if err := unmarshal([]byte(`{"a":1}`), &notAMessage); err == nil {
 		t.Fatal("Unmarshal accepted a non-proto destination")
 	}
-	if _, err := (StrictJSON{}).Marshal(&notAMessage); err == nil {
-		t.Fatal("Marshal accepted a non-proto message")
+	if err := (StrictJSON{}).MarshalWrite(context.Background(), &bytes.Buffer{}, &notAMessage); err == nil {
+		t.Fatal("MarshalWrite accepted a non-proto message")
 	}
-	if _, err := (StrictJSON{}).MarshalAppend(nil, &notAMessage); err == nil {
-		t.Fatal("MarshalAppend accepted a non-proto message")
+	if err := (StrictJSON{}).MarshalWriteStable(context.Background(), &bytes.Buffer{}, &notAMessage); err == nil {
+		t.Fatal("MarshalWriteStable accepted a non-proto message")
 	}
 }
 
 // TestStrictJSONRoundTrip covers the marshal side, including the two optional
-// extensions Connect probes for. MarshalStable must be compact — the Connect
+// extensions Connect probes for. MarshalWriteStable must be compact — the Connect
 // protocol puts it in a GET query parameter.
 func TestStrictJSONRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -99,41 +100,43 @@ func TestStrictJSONRoundTrip(t *testing.T) {
 	in := &iamv1.LoginRequest{Subject: "admin", RequestedAudience: "paladin-admin"}
 	c := StrictJSON{}
 
-	b, err := c.Marshal(in)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
+	ctx := context.Background()
+	buf := bytes.NewBufferString("PREFIX")
+	if err := c.MarshalWrite(ctx, buf, in); err != nil {
+		t.Fatalf("MarshalWrite: %v", err)
 	}
+	if !strings.HasPrefix(buf.String(), "PREFIX") {
+		t.Errorf("MarshalWrite overwrote what dst held: %q", buf)
+	}
+	b := buf.Bytes()[len("PREFIX"):]
 	var out iamv1.LoginRequest
-	if err := c.Unmarshal(b, &out); err != nil {
+	if err := unmarshal(b, &out); err != nil {
 		t.Fatalf("Unmarshal of our own output: %v", err)
 	}
 	if !proto.Equal(in, &out) {
 		t.Errorf("round trip changed the message: %v -> %v", in, &out)
 	}
 
-	prefix := []byte("PREFIX")
-	appended, err := c.MarshalAppend(prefix, in)
-	if err != nil {
-		t.Fatalf("MarshalAppend: %v", err)
+	var stableBuf bytes.Buffer
+	if err := c.MarshalWriteStable(ctx, &stableBuf, in); err != nil {
+		t.Fatalf("MarshalWriteStable: %v", err)
 	}
-	if !strings.HasPrefix(string(appended), "PREFIX") {
-		t.Errorf("MarshalAppend discarded dst: %q", appended)
-	}
-
-	stable, err := c.MarshalStable(in)
-	if err != nil {
-		t.Fatalf("MarshalStable: %v", err)
-	}
+	stable := stableBuf.Bytes()
 	if !json.Valid(stable) {
-		t.Errorf("MarshalStable produced invalid JSON: %q", stable)
+		t.Errorf("MarshalWriteStable produced invalid JSON: %q", stable)
 	}
-	var compact []byte
-	if compact, err = compactJSON(stable); err != nil {
+	compact, err := compactJSON(stable)
+	if err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 	if string(compact) != string(stable) {
-		t.Errorf("MarshalStable output is not compact: %q", stable)
+		t.Errorf("MarshalWriteStable output is not compact: %q", stable)
 	}
+}
+
+// unmarshal decodes b into m with StrictJSON.
+func unmarshal(b []byte, m any) error {
+	return StrictJSON{}.UnmarshalRead(context.Background(), bytes.NewReader(b), m)
 }
 
 func compactJSON(b []byte) ([]byte, error) {
@@ -149,7 +152,7 @@ func compactJSON(b []byte) ([]byte, error) {
 func TestStrictJSONSatisfiesConnectCodec(t *testing.T) {
 	t.Parallel()
 
-	var c connect.Codec = StrictJSON{}
+	var c connect.StableCodec = StrictJSON{}
 	if c.Name() != "json" {
 		t.Fatalf("Name() = %q — must be \"json\" to displace the built-in codec "+
 			"for application/json requests", c.Name())

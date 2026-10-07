@@ -2,10 +2,8 @@ package apiutil
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
@@ -78,11 +76,11 @@ var AdminAudienceRoles = []string{
 func RequireRole(ctx context.Context, role string) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if !p.HasRole(role) {
-		return connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("role %q required", role))
+		return connect.Errorf(connect.CodePermissionDenied,
+			"role %q required", role)
 	}
 	return nil
 }
@@ -92,14 +90,14 @@ func RequireRole(ctx context.Context, role string) error {
 func RequireAnyRole(ctx context.Context, roles ...string) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	for _, r := range roles {
 		if p.HasRole(r) {
 			return nil
 		}
 	}
-	return connect.NewError(connect.CodePermissionDenied, errors.New("insufficient role"))
+	return connect.NewError(connect.CodePermissionDenied, "insufficient role")
 }
 
 // HasRole is a convenience predicate (no error wrapping) for handler-side

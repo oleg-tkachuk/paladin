@@ -7,7 +7,8 @@ import (
 	"slices"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -20,22 +21,24 @@ type quotaPlane struct {
 	set     *adminv1.SetQuotaRequest
 }
 
-func (p *quotaPlane) GetQuota(context.Context, *connect.Request[adminv1.GetQuotaRequest]) (*connect.Response[adminv1.Quota], error) {
+func (p *quotaPlane) GetQuota(context.Context, *adminv1.GetQuotaRequest) (*adminv1.Quota, error) {
 	if p.current == nil {
-		return nil, connect.NewError(connect.CodeNotFound, nil)
+		return nil, connect.NewError(connect.CodeNotFound, "")
 	}
-	return connect.NewResponse(p.current), nil
+	return p.current, nil
 }
 
-func (p *quotaPlane) SetQuota(_ context.Context, r *connect.Request[adminv1.SetQuotaRequest]) (*connect.Response[adminv1.Quota], error) {
-	p.set = r.Msg
-	return connect.NewResponse(r.Msg.GetQuota()), nil
+func (p *quotaPlane) SetQuota(_ context.Context, r *adminv1.SetQuotaRequest) (*adminv1.Quota, error) {
+	p.set = r
+	return r.GetQuota(), nil
 }
 
 func callSetQuota(t *testing.T, plane *quotaPlane, args map[string]any) *mcpsdk.CallToolResult {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle(adminv1connect.NewQuotaServiceHandler(plane))
+	server := connect.NewServer()
+	adminv1connect.RegisterQuotaServiceHandler(server, plane)
+	connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(0))
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
 	cs := dialInProcess(t, mustClients(t)(NewClients(ts.Client(), ts.URL, ts.URL, ts.URL, "tok")))

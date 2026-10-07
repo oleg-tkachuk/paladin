@@ -8,11 +8,10 @@ package batchh
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -20,6 +19,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
 
@@ -107,11 +107,11 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 	args.TenantID = tenantID
 	if len(args.ObjectIDs) == 0 {
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("object_ids must be non-empty"))
+			"object_ids must be non-empty")
 	}
 	if len(args.ObjectIDs) > maxBatchSize {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
+		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
+			"batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize)
 	}
 	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, capability.OpDelete); err != nil {
 		return uuid.Nil, err
@@ -128,7 +128,7 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 	}
 	md, err := json.Marshal(args)
 	if err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal BatchDelete args: %w", err))
+		return uuid.Nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal BatchDelete args: %w", err))
 	}
 	return h.chargeAndSubmit(ctx, "BatchDelete", md)
 }
@@ -141,11 +141,11 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 	args.TenantID = tenantID
 	if len(args.ObjectIDs) == 0 {
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("object_ids must be non-empty"))
+			"object_ids must be non-empty")
 	}
 	if len(args.ObjectIDs) > maxBatchSize {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
+		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
+			"batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize)
 	}
 	if err := h.assertCopy(ctx, tenantID, args); err != nil {
 		return uuid.Nil, err
@@ -159,7 +159,7 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 	}
 	md, err := json.Marshal(args)
 	if err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal BatchCopy args: %w", err))
+		return uuid.Nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal BatchCopy args: %w", err))
 	}
 	return h.chargeAndSubmit(ctx, "BatchCopy", md)
 }
@@ -172,11 +172,11 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 	args.TenantID = tenantID
 	if len(args.ObjectIDs) == 0 {
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("object_ids must be non-empty"))
+			"object_ids must be non-empty")
 	}
 	if len(args.ObjectIDs) > maxBatchSize {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
+		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
+			"batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize)
 	}
 	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, capability.OpTag); err != nil {
 		return uuid.Nil, err
@@ -186,7 +186,7 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 	}
 	md, err := json.Marshal(args)
 	if err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal BatchUpdateTags args: %w", err))
+		return uuid.Nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal BatchUpdateTags args: %w", err))
 	}
 	return h.chargeAndSubmit(ctx, "BatchUpdateTags", md)
 }
@@ -199,11 +199,11 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 	args.TenantID = tenantID
 	if len(args.ObjectIDs) == 0 {
 		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("object_ids must be non-empty"))
+			"object_ids must be non-empty")
 	}
 	if len(args.ObjectIDs) > maxBatchSize {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize))
+		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
+			"batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize)
 	}
 	// Restoring a soft-deleted object is a write to the lifecycle —
 	// the operator authority required mirrors the put path.
@@ -222,7 +222,7 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 // for the worker to report as not found.
 func (h *Handler) batchObjects(ctx context.Context, tenantID uuid.UUID, collection string, ids []uuid.UUID) ([]objecth.Object, error) {
 	if h.objects == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("batch: object lookup not wired"))
+		return nil, connect.NewError(connect.CodeUnavailable, "batch: object lookup not wired")
 	}
 	found, err := h.objects.FindByIDs(ctx, tenantID, ids)
 	if err != nil {
@@ -242,8 +242,7 @@ func (h *Handler) batchObjects(ctx context.Context, tenantID uuid.UUID, collecti
 // the capability is refused as it would be any unbound operation. Missing ids
 // are otherwise the worker's to report, per object.
 func errNothingInScope(collection string) error {
-	return connect.NewError(connect.CodePermissionDenied,
-		fmt.Errorf("%w: none of object_ids is an object of collection %q", capability.ErrResourceNotAllowed, collection))
+	return rpcerr.New(connect.CodePermissionDenied, fmt.Errorf("%w: none of object_ids is an object of collection %q", capability.ErrResourceNotAllowed, collection))
 }
 
 // assertOnObjects checks the capability on ctx, if any, for op over a batch.
@@ -336,7 +335,7 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }

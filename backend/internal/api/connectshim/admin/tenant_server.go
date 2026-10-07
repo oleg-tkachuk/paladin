@@ -7,8 +7,9 @@ import (
 	"slices"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -26,19 +27,19 @@ type TenantServer struct {
 
 func NewTenantServer(h *tenanth.Handler) *TenantServer { return &TenantServer{H: h} }
 
-func (s *TenantServer) CreateTenant(ctx context.Context, req *connect.Request[pb.CreateTenantRequest]) (*connect.Response[pb.Tenant], error) {
-	if err := requireCompilablePolicy(req.Msg.GetTenant().GetInheritedCedarPolicy()); err != nil {
+func (s *TenantServer) CreateTenant(ctx context.Context, req *pb.CreateTenantRequest) (*pb.Tenant, error) {
+	if err := requireCompilablePolicy(req.GetTenant().GetInheritedCedarPolicy()); err != nil {
 		return nil, err
 	}
-	args, err := parseCreateTenantArgs(req.Msg)
+	args, err := parseCreateTenantArgs(req)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	t, err := s.H.CreateTenant(ctx, args)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(tenantDomainToProto(t)), nil
+	return tenantDomainToProto(t), nil
 }
 
 // parseCreateTenantArgs is the pure proto→domain translator. Extracted
@@ -76,14 +77,14 @@ func parseCreateTenantArgs(m *pb.CreateTenantRequest) (tenanth.CreateTenantArgs,
 	return args, nil
 }
 
-func (s *TenantServer) GetTenant(ctx context.Context, req *connect.Request[pb.GetTenantRequest]) (*connect.Response[pb.Tenant], error) {
+func (s *TenantServer) GetTenant(ctx context.Context, req *pb.GetTenantRequest) (*pb.Tenant, error) {
 	// Resource name format is `tenants/{tenant_id_or_slug}` — accept
 	// either form. apiutil.ParseTenantNameRef returns a TenantRef
 	// carrying exactly one of {ID, Slug}; we route to the matching
 	// handler entry-point.
-	ref, err := apiutil.ParseTenantNameRef(req.Msg.GetName())
+	ref, err := apiutil.ParseTenantNameRef(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	var t *tenanth.Tenant
 	if ref.HasID() {
@@ -94,7 +95,7 @@ func (s *TenantServer) GetTenant(ctx context.Context, req *connect.Request[pb.Ge
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(tenantDomainToProto(t)), nil
+	return tenantDomainToProto(t), nil
 }
 
 func storageMigrationToProto(m *tenanth.StorageMigration) *pb.StorageMigrationStatus {
@@ -109,20 +110,20 @@ func storageMigrationToProto(m *tenanth.StorageMigration) *pb.StorageMigrationSt
 	}
 }
 
-func (s *TenantServer) MigrateTenantStorageLayout(ctx context.Context, req *connect.Request[pb.MigrateTenantStorageLayoutRequest]) (*connect.Response[pb.StorageMigrationStatus], error) {
-	id, err := s.resolveTenantID(ctx, req.Msg.GetName())
+func (s *TenantServer) MigrateTenantStorageLayout(ctx context.Context, req *pb.MigrateTenantStorageLayoutRequest) (*pb.StorageMigrationStatus, error) {
+	id, err := s.resolveTenantID(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	m, err := s.H.MigrateTenantStorageLayout(ctx, id, req.Msg.GetTargetBackendId(), req.Msg.GetCleanupRetentionSeconds())
+	m, err := s.H.MigrateTenantStorageLayout(ctx, id, req.GetTargetBackendId(), req.GetCleanupRetentionSeconds())
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(storageMigrationToProto(m)), nil
+	return storageMigrationToProto(m), nil
 }
 
-func (s *TenantServer) GetTenantStorageMigration(ctx context.Context, req *connect.Request[pb.GetTenantStorageMigrationRequest]) (*connect.Response[pb.StorageMigrationStatus], error) {
-	id, err := s.resolveTenantID(ctx, req.Msg.GetName())
+func (s *TenantServer) GetTenantStorageMigration(ctx context.Context, req *pb.GetTenantStorageMigrationRequest) (*pb.StorageMigrationStatus, error) {
+	id, err := s.resolveTenantID(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -130,26 +131,25 @@ func (s *TenantServer) GetTenantStorageMigration(ctx context.Context, req *conne
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(storageMigrationToProto(m)), nil
+	return storageMigrationToProto(m), nil
 }
 
 // updateTenantPaths are the Tenant fields UpdateTenant applies; tenant_id and
 // slug are refused above with their own messages.
 var updateTenantPaths = []string{"display_name", "labels", "inherited_cedar_policy"}
 
-func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb.UpdateTenantRequest]) (*connect.Response[pb.Tenant], error) {
-	if err := requireCompilablePolicy(req.Msg.GetTenant().GetInheritedCedarPolicy()); err != nil {
+func (s *TenantServer) UpdateTenant(ctx context.Context, req *pb.UpdateTenantRequest) (*pb.Tenant, error) {
+	if err := requireCompilablePolicy(req.GetTenant().GetInheritedCedarPolicy()); err != nil {
 		return nil, err
 	}
-	m := req.Msg
+	m := req
 	id, err := s.resolveTenantID(ctx, m.GetName())
 	if err != nil {
 		return nil, err
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	args := tenanth.UpdateTenantArgs{TenantID: id, ExpectedVersion: rv}
 	mask := m.GetUpdateMask().GetPaths()
@@ -159,11 +159,11 @@ func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb
 	for _, path := range mask {
 		switch path {
 		case "tenant_id":
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("tenant_id is immutable"))
+			return nil, connect.Errorf(connect.CodeInvalidArgument,
+				"tenant_id is immutable")
 		case "slug":
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("slug is immutable; use RenameTenantSlug"))
+			return nil, connect.Errorf(connect.CodeInvalidArgument,
+				"slug is immutable; use RenameTenantSlug")
 		}
 	}
 	if err := convx.CheckMask(mask, updateTenantPaths); err != nil {
@@ -186,40 +186,39 @@ func (s *TenantServer) UpdateTenant(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(tenantDomainToProto(t)), nil
+	return tenantDomainToProto(t), nil
 }
 
-func (s *TenantServer) DeleteTenant(ctx context.Context, req *connect.Request[pb.DeleteTenantRequest]) (*connect.Response[pb.DeleteTenantResponse], error) {
-	id, err := s.resolveTenantID(ctx, req.Msg.GetName())
+func (s *TenantServer) DeleteTenant(ctx context.Context, req *pb.DeleteTenantRequest) (*pb.DeleteTenantResponse, error) {
+	id, err := s.resolveTenantID(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	// The OCC guard is required. A race-delete is otherwise silent: caller A
 	// reads version 7, caller B deletes without a version, and A's next
 	// mutation returns 404 with no signal that the row was concurrently
 	// removed.
 	if rv == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("resource_version is required"))
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"resource_version is required")
 	}
 	// Always the trash. Hard deletion is PurgeTenant, which is a separate
 	// call because it is a separate decision.
 	if err := s.H.DeleteTenant(ctx, id, rv); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.DeleteTenantResponse{}), nil
+	return &pb.DeleteTenantResponse{}, nil
 }
 
 // RestoreTenant — soft-delete recovery. Operator-facing — see proto
 // commentary for the failure modes (ALREADY_EXISTS on slug collision,
 // FAILED_PRECONDITION on already-active rows).
-func (s *TenantServer) RestoreTenant(ctx context.Context, req *connect.Request[pb.RestoreTenantRequest]) (*connect.Response[pb.Tenant], error) {
-	tid, err := s.resolveTenantID(ctx, req.Msg.GetName())
+func (s *TenantServer) RestoreTenant(ctx context.Context, req *pb.RestoreTenantRequest) (*pb.Tenant, error) {
+	tid, err := s.resolveTenantID(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -227,24 +226,24 @@ func (s *TenantServer) RestoreTenant(ctx context.Context, req *connect.Request[p
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(tenantDomainToProto(t)), nil
+	return tenantDomainToProto(t), nil
 }
 
 // PurgeTenant — hard-delete on a trashed row. Refuses to operate on
 // an active tenant.
-func (s *TenantServer) PurgeTenant(ctx context.Context, req *connect.Request[pb.PurgeTenantRequest]) (*connect.Response[pb.PurgeTenantResponse], error) {
-	tid, err := s.resolveTenantID(ctx, req.Msg.GetName())
+func (s *TenantServer) PurgeTenant(ctx context.Context, req *pb.PurgeTenantRequest) (*pb.PurgeTenantResponse, error) {
+	tid, err := s.resolveTenantID(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
 	if err := s.H.PurgeTenant(ctx, tid); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.PurgeTenantResponse{}), nil
+	return &pb.PurgeTenantResponse{}, nil
 }
 
-func (s *TenantServer) ListTenants(ctx context.Context, req *connect.Request[pb.ListTenantsRequest]) (*connect.Response[pb.ListTenantsResponse], error) {
-	m := req.Msg
+func (s *TenantServer) ListTenants(ctx context.Context, req *pb.ListTenantsRequest) (*pb.ListTenantsResponse, error) {
+	m := req
 	args := tenanth.ListTenantsArgs{
 		PageSize:       m.GetPage().GetPageSize(),
 		IncludeTrashed: m.GetIncludeTrashed(),
@@ -259,19 +258,18 @@ func (s *TenantServer) ListTenants(ctx context.Context, req *connect.Request[pb.
 	for i := range list {
 		out.Tenants = append(out.Tenants, tenantDomainToProto(&list[i]))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *connect.Request[pb.SetInheritedPolicyRequest]) (*connect.Response[pb.Tenant], error) {
-	m := req.Msg
+func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *pb.SetInheritedPolicyRequest) (*pb.Tenant, error) {
+	m := req
 	id, err := s.resolveTenantID(ctx, m.GetName())
 	if err != nil {
 		return nil, err
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	policy := m.GetCedarPolicy()
 	if err := requireCompilablePolicy(policy); err != nil {
@@ -285,42 +283,41 @@ func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(tenantDomainToProto(t)), nil
+	return tenantDomainToProto(t), nil
 }
 
 // RenameTenantSlug rotates the tenant's slug and rewrites every
 // `Tenant::"<old_slug>"` reference in inherited + per-collection
 // policies. See proto comments and tenant.Handler.RenameTenantSlug.
-func (s *TenantServer) RenameTenantSlug(ctx context.Context, req *connect.Request[pb.RenameTenantSlugRequest]) (*connect.Response[pb.Tenant], error) {
-	id, err := s.resolveTenantID(ctx, req.Msg.GetName())
+func (s *TenantServer) RenameTenantSlug(ctx context.Context, req *pb.RenameTenantSlugRequest) (*pb.Tenant, error) {
+	id, err := s.resolveTenantID(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	t, err := s.H.RenameTenantSlug(ctx, tenanth.RenameTenantSlugArgs{
 		TenantID:        id,
-		NewSlug:         req.Msg.GetNewSlug(),
+		NewSlug:         req.GetNewSlug(),
 		ExpectedVersion: rv,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(tenantDomainToProto(t)), nil
+	return tenantDomainToProto(t), nil
 }
 
-func (s *TenantServer) ResolveRenamedSlug(ctx context.Context, req *connect.Request[pb.ResolveRenamedSlugRequest]) (*connect.Response[pb.ResolveRenamedSlugResponse], error) {
-	newSlug, renamedAt, err := s.H.ResolveRenamedSlug(ctx, req.Msg.GetOldSlug())
+func (s *TenantServer) ResolveRenamedSlug(ctx context.Context, req *pb.ResolveRenamedSlugRequest) (*pb.ResolveRenamedSlugResponse, error) {
+	newSlug, renamedAt, err := s.H.ResolveRenamedSlug(ctx, req.GetOldSlug())
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.ResolveRenamedSlugResponse{
+	return &pb.ResolveRenamedSlugResponse{
 		NewSlug:   newSlug,
 		RenamedAt: timestamppb.New(renamedAt),
-	}), nil
+	}, nil
 }
 
 var _ paladinadminv1connect.TenantServiceHandler = (*TenantServer)(nil)
@@ -369,8 +366,8 @@ func (s *TenantServer) resolveTenantID(ctx context.Context, name string) (uuid.U
 	return resolveTenantName(ctx, s.H, name)
 }
 
-func (s *TenantServer) GetTenantDefaultBinding(ctx context.Context, req *connect.Request[pb.GetTenantDefaultBindingRequest]) (*connect.Response[pb.TenantDefaultBinding], error) {
-	tid, err := s.resolveTenantID(ctx, req.Msg.GetName())
+func (s *TenantServer) GetTenantDefaultBinding(ctx context.Context, req *pb.GetTenantDefaultBindingRequest) (*pb.TenantDefaultBinding, error) {
+	tid, err := s.resolveTenantID(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -378,30 +375,30 @@ func (s *TenantServer) GetTenantDefaultBinding(ctx context.Context, req *connect
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(defaultBindingToProto(b)), nil
+	return defaultBindingToProto(b), nil
 }
 
-func (s *TenantServer) SetTenantDefaultBinding(ctx context.Context, req *connect.Request[pb.SetTenantDefaultBindingRequest]) (*connect.Response[pb.TenantDefaultBinding], error) {
-	tid, err := s.resolveTenantID(ctx, req.Msg.GetName())
+func (s *TenantServer) SetTenantDefaultBinding(ctx context.Context, req *pb.SetTenantDefaultBindingRequest) (*pb.TenantDefaultBinding, error) {
+	tid, err := s.resolveTenantID(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	b, err := s.H.SetDefaultBinding(ctx, tid, req.Msg.GetBucket())
+	b, err := s.H.SetDefaultBinding(ctx, tid, req.GetBucket())
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(defaultBindingToProto(b)), nil
+	return defaultBindingToProto(b), nil
 }
 
-func (s *TenantServer) ClearTenantDefaultBinding(ctx context.Context, req *connect.Request[pb.ClearTenantDefaultBindingRequest]) (*connect.Response[pb.ClearTenantDefaultBindingResponse], error) {
-	tid, err := s.resolveTenantID(ctx, req.Msg.GetName())
+func (s *TenantServer) ClearTenantDefaultBinding(ctx context.Context, req *pb.ClearTenantDefaultBindingRequest) (*pb.ClearTenantDefaultBindingResponse, error) {
+	tid, err := s.resolveTenantID(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
 	if err := s.H.ClearDefaultBinding(ctx, tid); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.ClearTenantDefaultBindingResponse{}), nil
+	return &pb.ClearTenantDefaultBindingResponse{}, nil
 }
 
 func defaultBindingToProto(b *tenanth.DefaultBinding) *pb.TenantDefaultBinding {

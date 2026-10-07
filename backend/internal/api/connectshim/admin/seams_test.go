@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -331,365 +330,365 @@ func TestEveryAdminShimPropagatesHandlerErrors(t *testing.T) {
 		call func() error
 	}{
 		{"Audit.ListAuditLog", func() error {
-			_, err := auditSrv.ListAuditLog(ctx, connect.NewRequest(&pb.ListAuditLogRequest{}))
+			_, err := auditSrv.ListAuditLog(ctx, &pb.ListAuditLogRequest{})
 			return err
 		}},
 		{"Audit.GetAuditLogEntry", func() error {
-			_, err := auditSrv.GetAuditLogEntry(ctx, connect.NewRequest(&pb.GetAuditLogEntryRequest{
+			_, err := auditSrv.GetAuditLogEntry(ctx, &pb.GetAuditLogEntryRequest{
 				EntryId: uuid.NewString(),
-			}))
+			})
 			return err
 		}},
 		{"Audit.ExportAuditLog", func() error {
-			_, err := auditSrv.ExportAuditLog(ctx, connect.NewRequest(&pb.ExportAuditLogRequest{
+			_, err := auditSrv.ExportAuditLog(ctx, &pb.ExportAuditLogRequest{
 				Destination: "s3://bucket/prefix",
-			}))
+			})
 			return err
 		}},
 
 		{"Backend.ListBackends", func() error {
-			_, err := backendSrv.ListBackends(ctx, connect.NewRequest(&pb.ListBackendsRequest{}))
+			_, err := backendSrv.ListBackends(ctx, &pb.ListBackendsRequest{})
 			return err
 		}},
 		{"Backend.GetBackend", func() error {
-			_, err := backendSrv.GetBackend(ctx, connect.NewRequest(&pb.GetBackendRequest{
+			_, err := backendSrv.GetBackend(ctx, &pb.GetBackendRequest{
 				Name: "storageBackends/primary",
-			}))
+			})
 			return err
 		}},
 		{"Backend.CreateBackend", func() error {
-			_, err := backendSrv.CreateBackend(ctx, connect.NewRequest(&pb.CreateBackendRequest{
+			_, err := backendSrv.CreateBackend(ctx, &pb.CreateBackendRequest{
 				BackendId: "primary",
 				Backend:   &pb.StorageBackend{Provider: "s3", Endpoint: "https://s3.example"},
-			}))
+			})
 			return err
 		}},
 		{"Backend.UpdateBackend", func() error {
-			_, err := backendSrv.UpdateBackend(ctx, connect.NewRequest(&pb.UpdateBackendRequest{
+			_, err := backendSrv.UpdateBackend(ctx, &pb.UpdateBackendRequest{
 				Name: "storageBackends/primary", ResourceVersion: "1",
 				Backend: &pb.StorageBackend{},
-			}))
+			})
 			return err
 		}},
 		{"Backend.DeleteBackend", func() error {
-			_, err := backendSrv.DeleteBackend(ctx, connect.NewRequest(&pb.DeleteBackendRequest{
+			_, err := backendSrv.DeleteBackend(ctx, &pb.DeleteBackendRequest{
 				Name: "storageBackends/primary", ResourceVersion: "1",
-			}))
+			})
 			return err
 		}},
 		{"Backend.TestBackend", func() error {
-			_, err := backendSrv.TestBackend(ctx, connect.NewRequest(&pb.TestBackendRequest{
+			_, err := backendSrv.TestBackend(ctx, &pb.TestBackendRequest{
 				Name: "storageBackends/primary",
-			}))
+			})
 			return err
 		}},
 		{"Backend.RotateCredentials", func() error {
-			_, err := backendSrv.RotateCredentials(ctx, connect.NewRequest(&pb.RotateCredentialsRequest{
+			_, err := backendSrv.RotateCredentials(ctx, &pb.RotateCredentialsRequest{
 				Name: "storageBackends/primary",
-			}))
+			})
 			return err
 		}},
 		{"Backend.SetBackendEnabled", func() error {
-			_, err := backendSrv.SetBackendEnabled(ctx, connect.NewRequest(&pb.SetBackendEnabledRequest{
+			_, err := backendSrv.SetBackendEnabled(ctx, &pb.SetBackendEnabledRequest{
 				Name: "storageBackends/primary", Enabled: true, ResourceVersion: "1",
-			}))
+			})
 			return err
 		}},
 		{"Backend.SetBackendReadOnly", func() error {
-			_, err := backendSrv.SetBackendReadOnly(ctx, connect.NewRequest(&pb.SetBackendReadOnlyRequest{
+			_, err := backendSrv.SetBackendReadOnly(ctx, &pb.SetBackendReadOnlyRequest{
 				Name: "storageBackends/primary", ReadOnly: true, ResourceVersion: "1",
-			}))
+			})
 			return err
 		}},
 		{"Backend.SetBackendMaintenance", func() error {
-			_, err := backendSrv.SetBackendMaintenance(ctx, connect.NewRequest(&pb.SetBackendMaintenanceRequest{
+			_, err := backendSrv.SetBackendMaintenance(ctx, &pb.SetBackendMaintenanceRequest{
 				Name: "storageBackends/primary", Maintenance: true, ResourceVersion: "1",
-			}))
+			})
 			return err
 		}},
 
 		{"Billing.GetTenantSummary", func() error {
-			_, err := billingSrv.GetTenantSummary(ctx, connect.NewRequest(&pb.GetTenantSummaryRequest{
+			_, err := billingSrv.GetTenantSummary(ctx, &pb.GetTenantSummaryRequest{
 				TenantId: tenantID.String(),
-			}))
+			})
 			return err
 		}},
 		{"Billing.GetTenantTimeSeries", func() error {
-			_, err := billingSrv.GetTenantTimeSeries(ctx, connect.NewRequest(&pb.GetTenantTimeSeriesRequest{
+			_, err := billingSrv.GetTenantTimeSeries(ctx, &pb.GetTenantTimeSeriesRequest{
 				TenantId: tenantID.String(),
-			}))
+			})
 			return err
 		}},
 
 		{"Bucket.ListBuckets", func() error {
-			_, err := bucketSrv.ListBuckets(ctx, connect.NewRequest(&pb.ListBucketsRequest{
+			_, err := bucketSrv.ListBuckets(ctx, &pb.ListBucketsRequest{
 				Parent: "storageBackends/primary",
-			}))
+			})
 			return err
 		}},
 		{"Bucket.ListAccessibleBuckets", func() error {
-			_, err := bucketSrv.ListAccessibleBuckets(ctx, connect.NewRequest(&pb.ListAccessibleBucketsRequest{
+			_, err := bucketSrv.ListAccessibleBuckets(ctx, &pb.ListAccessibleBucketsRequest{
 				Tenant: tenantName,
-			}))
+			})
 			return err
 		}},
 		{"Bucket.GetBucket", func() error {
-			_, err := bucketSrv.GetBucket(ctx, connect.NewRequest(&pb.GetBucketRequest{Name: bucketName}))
+			_, err := bucketSrv.GetBucket(ctx, &pb.GetBucketRequest{Name: bucketName})
 			return err
 		}},
 		{"Bucket.CreateBucket", func() error {
-			_, err := bucketSrv.CreateBucket(ctx, connect.NewRequest(&pb.CreateBucketRequest{
+			_, err := bucketSrv.CreateBucket(ctx, &pb.CreateBucketRequest{
 				Parent: "storageBackends/primary", BucketId: "b1", Bucket: &pb.Bucket{},
-			}))
+			})
 			return err
 		}},
 		{"Bucket.UpdateBucket", func() error {
-			_, err := bucketSrv.UpdateBucket(ctx, connect.NewRequest(&pb.UpdateBucketRequest{
+			_, err := bucketSrv.UpdateBucket(ctx, &pb.UpdateBucketRequest{
 				Name: bucketName, ResourceVersion: "1", Bucket: &pb.Bucket{},
-			}))
+			})
 			return err
 		}},
 		{"Bucket.DeleteBucket", func() error {
-			_, err := bucketSrv.DeleteBucket(ctx, connect.NewRequest(&pb.DeleteBucketRequest{Name: bucketName, ResourceVersion: "1"}))
+			_, err := bucketSrv.DeleteBucket(ctx, &pb.DeleteBucketRequest{Name: bucketName, ResourceVersion: "1"})
 			return err
 		}},
 		{"Bucket.SetVersioning", func() error {
-			_, err := bucketSrv.SetVersioning(ctx, connect.NewRequest(&pb.SetVersioningRequest{
+			_, err := bucketSrv.SetVersioning(ctx, &pb.SetVersioningRequest{
 				Name: bucketName, Versioning: &pb.BucketVersioning{Enabled: true},
-			}))
+			})
 			return err
 		}},
 		{"Bucket.SetObjectLock", func() error {
-			_, err := bucketSrv.SetObjectLock(ctx, connect.NewRequest(&pb.SetObjectLockRequest{Name: bucketName}))
+			_, err := bucketSrv.SetObjectLock(ctx, &pb.SetObjectLockRequest{Name: bucketName})
 			return err
 		}},
 		{"Bucket.SetLifecycleRules", func() error {
-			_, err := bucketSrv.SetLifecycleRules(ctx, connect.NewRequest(&pb.SetLifecycleRulesRequest{Name: bucketName}))
+			_, err := bucketSrv.SetLifecycleRules(ctx, &pb.SetLifecycleRulesRequest{Name: bucketName})
 			return err
 		}},
 		{"Bucket.SetReplication", func() error {
-			_, err := bucketSrv.SetReplication(ctx, connect.NewRequest(&pb.SetReplicationRequest{Name: bucketName}))
+			_, err := bucketSrv.SetReplication(ctx, &pb.SetReplicationRequest{Name: bucketName})
 			return err
 		}},
 		{"Bucket.SetBucketPolicy", func() error {
-			_, err := bucketSrv.SetBucketPolicy(ctx, connect.NewRequest(&pb.SetBucketPolicyRequest{
+			_, err := bucketSrv.SetBucketPolicy(ctx, &pb.SetBucketPolicyRequest{
 				Name: bucketName, CedarPolicy: okPolicy,
-			}))
+			})
 			return err
 		}},
 
 		{"Collection.ListCollections", func() error {
-			_, err := collSrv.ListCollections(ctx, connect.NewRequest(&pb.ListCollectionsRequest{Parent: tenantName}))
+			_, err := collSrv.ListCollections(ctx, &pb.ListCollectionsRequest{Parent: tenantName})
 			return err
 		}},
 		{"Collection.GetCollection", func() error {
-			_, err := collSrv.GetCollection(ctx, connect.NewRequest(&pb.GetCollectionRequest{Name: collName}))
+			_, err := collSrv.GetCollection(ctx, &pb.GetCollectionRequest{Name: collName})
 			return err
 		}},
 		{"Collection.CreateCollection", func() error {
-			_, err := collSrv.CreateCollection(ctx, connect.NewRequest(&pb.CreateCollectionRequest{
+			_, err := collSrv.CreateCollection(ctx, &pb.CreateCollectionRequest{
 				Parent: tenantName, Collection: "c1",
 				CollectionResource: &pb.Collection{CedarPolicy: okPolicy, Bucket: bucketName},
-			}))
+			})
 			return err
 		}},
 		{"Collection.UpdateCollection", func() error {
-			_, err := collSrv.UpdateCollection(ctx, connect.NewRequest(&pb.UpdateCollectionRequest{
+			_, err := collSrv.UpdateCollection(ctx, &pb.UpdateCollectionRequest{
 				Name: collName, ResourceVersion: "1",
 				CollectionResource: &pb.Collection{CedarPolicy: okPolicy},
-			}))
+			})
 			return err
 		}},
 		{"Collection.DeleteCollection", func() error {
-			_, err := collSrv.DeleteCollection(ctx, connect.NewRequest(&pb.DeleteCollectionRequest{Name: collName, ResourceVersion: "1"}))
+			_, err := collSrv.DeleteCollection(ctx, &pb.DeleteCollectionRequest{Name: collName, ResourceVersion: "1"})
 			return err
 		}},
 		{"Collection.SetCollectionPolicy", func() error {
-			_, err := collSrv.SetCollectionPolicy(ctx, connect.NewRequest(&pb.SetCollectionPolicyRequest{
+			_, err := collSrv.SetCollectionPolicy(ctx, &pb.SetCollectionPolicyRequest{
 				Name: collName, CedarPolicy: okPolicy,
-			}))
+			})
 			return err
 		}},
 		{"Collection.BindCollectionToBucket", func() error {
-			_, err := collSrv.BindCollectionToBucket(ctx, connect.NewRequest(&pb.BindCollectionToBucketRequest{
+			_, err := collSrv.BindCollectionToBucket(ctx, &pb.BindCollectionToBucketRequest{
 				Name: collName, Bucket: bucketName,
-			}))
+			})
 			return err
 		}},
 
 		{"EventSubscription.ListSubscriptions", func() error {
-			_, err := subSrv.ListSubscriptions(ctx, connect.NewRequest(&pb.ListSubscriptionsRequest{Parent: tenantName}))
+			_, err := subSrv.ListSubscriptions(ctx, &pb.ListSubscriptionsRequest{Parent: tenantName})
 			return err
 		}},
 		{"EventSubscription.GetSubscription", func() error {
-			_, err := subSrv.GetSubscription(ctx, connect.NewRequest(&pb.GetSubscriptionRequest{Name: subName}))
+			_, err := subSrv.GetSubscription(ctx, &pb.GetSubscriptionRequest{Name: subName})
 			return err
 		}},
 		{"EventSubscription.CreateSubscription", func() error {
-			_, err := subSrv.CreateSubscription(ctx, connect.NewRequest(&pb.CreateSubscriptionRequest{
+			_, err := subSrv.CreateSubscription(ctx, &pb.CreateSubscriptionRequest{
 				Parent: tenantName,
 				Subscription: &pb.EventSubscription{
 					Sink: &pb.EventSink{},
 				},
-			}))
+			})
 			return err
 		}},
 		{"EventSubscription.UpdateSubscription", func() error {
-			_, err := subSrv.UpdateSubscription(ctx, connect.NewRequest(&pb.UpdateSubscriptionRequest{
+			_, err := subSrv.UpdateSubscription(ctx, &pb.UpdateSubscriptionRequest{
 				Name: subName, ResourceVersion: "1",
 				Subscription: &pb.EventSubscription{Sink: &pb.EventSink{}},
-			}))
+			})
 			return err
 		}},
 		{"EventSubscription.DeleteSubscription", func() error {
-			_, err := subSrv.DeleteSubscription(ctx, connect.NewRequest(&pb.DeleteSubscriptionRequest{Name: subName}))
+			_, err := subSrv.DeleteSubscription(ctx, &pb.DeleteSubscriptionRequest{Name: subName})
 			return err
 		}},
 		{"EventSubscription.RedriveFailedDeliveries", func() error {
-			_, err := subSrv.RedriveFailedDeliveries(ctx, connect.NewRequest(&pb.RedriveFailedDeliveriesRequest{Name: subName}))
+			_, err := subSrv.RedriveFailedDeliveries(ctx, &pb.RedriveFailedDeliveriesRequest{Name: subName})
 			return err
 		}},
 		{"EventSubscription.TestSubscription", func() error {
-			_, err := subSrv.TestSubscription(ctx, connect.NewRequest(&pb.TestSubscriptionRequest{Name: subName}))
+			_, err := subSrv.TestSubscription(ctx, &pb.TestSubscriptionRequest{Name: subName})
 			return err
 		}},
 
 		{"Operation.ListOperations", func() error {
-			_, err := opSrv.ListOperations(ctx, connect.NewRequest(&pb.ListOperationsRequest{}))
+			_, err := opSrv.ListOperations(ctx, &pb.ListOperationsRequest{})
 			return err
 		}},
 		{"Operation.GetOperation", func() error {
-			_, err := opSrv.GetOperation(ctx, connect.NewRequest(&pb.GetOperationRequest{Name: opName}))
+			_, err := opSrv.GetOperation(ctx, &pb.GetOperationRequest{Name: opName})
 			return err
 		}},
 		{"Operation.CancelOperation", func() error {
-			_, err := opSrv.CancelOperation(ctx, connect.NewRequest(&pb.CancelOperationRequest{Name: opName}))
+			_, err := opSrv.CancelOperation(ctx, &pb.CancelOperationRequest{Name: opName})
 			return err
 		}},
 
 		{"Policy.Validate", func() error {
-			_, err := policySrv.Validate(ctx, connect.NewRequest(&pb.ValidateRequest{CedarPolicy: okPolicy}))
+			_, err := policySrv.Validate(ctx, &pb.ValidateRequest{CedarPolicy: okPolicy})
 			return err
 		}},
 		{"Policy.GetEffectivePolicy", func() error {
-			_, err := policySrv.GetEffectivePolicy(ctx, connect.NewRequest(&pb.GetEffectivePolicyRequest{
+			_, err := policySrv.GetEffectivePolicy(ctx, &pb.GetEffectivePolicyRequest{
 				ResourceName: collName,
-			}))
+			})
 			return err
 		}},
 		{"Policy.SimulateAuthz", func() error {
-			_, err := policySrv.SimulateAuthz(ctx, connect.NewRequest(&pb.SimulateAuthzRequest{
+			_, err := policySrv.SimulateAuthz(ctx, &pb.SimulateAuthzRequest{
 				ResourceName: collName, Action: "read",
 				PrincipalSubject: "tester", PrincipalTenantId: tenantID.String(),
-			}))
+			})
 			return err
 		}},
 
 		{"Quota.GetQuota", func() error {
-			_, err := quotaSrv.GetQuota(ctx, connect.NewRequest(&pb.GetQuotaRequest{Name: tenantName + "/quota"}))
+			_, err := quotaSrv.GetQuota(ctx, &pb.GetQuotaRequest{Name: tenantName + "/quota"})
 			return err
 		}},
 		{"Quota.SetQuota", func() error {
-			_, err := quotaSrv.SetQuota(ctx, connect.NewRequest(&pb.SetQuotaRequest{
+			_, err := quotaSrv.SetQuota(ctx, &pb.SetQuotaRequest{
 				Name: tenantName + "/quota", Quota: &pb.Quota{},
-			}))
+			})
 			return err
 		}},
 		{"Quota.ResetUsage", func() error {
-			_, err := quotaSrv.ResetUsage(ctx, connect.NewRequest(&pb.ResetUsageRequest{Name: tenantName + "/quota"}))
+			_, err := quotaSrv.ResetUsage(ctx, &pb.ResetUsageRequest{Name: tenantName + "/quota"})
 			return err
 		}},
 
 		{"System.GetConfig", func() error {
-			_, err := sysSrv.GetConfig(ctx, connect.NewRequest(&pb.GetConfigRequest{}))
+			_, err := sysSrv.GetConfig(ctx, &pb.GetConfigRequest{})
 			return err
 		}},
 		{"System.GetDispatcherStats", func() error {
-			_, err := sysSrv.GetDispatcherStats(ctx, connect.NewRequest(&pb.GetDispatcherStatsRequest{}))
+			_, err := sysSrv.GetDispatcherStats(ctx, &pb.GetDispatcherStatsRequest{})
 			return err
 		}},
 		{"System.GetPlatformStats", func() error {
-			_, err := sysSrv.GetPlatformStats(ctx, connect.NewRequest(&pb.GetPlatformStatsRequest{}))
+			_, err := sysSrv.GetPlatformStats(ctx, &pb.GetPlatformStatsRequest{})
 			return err
 		}},
 		{"System.ListPlatformStatsTenants", func() error {
-			_, err := sysSrv.ListPlatformStatsTenants(ctx, connect.NewRequest(&pb.ListPlatformStatsTenantsRequest{
+			_, err := sysSrv.ListPlatformStatsTenants(ctx, &pb.ListPlatformStatsTenantsRequest{
 				Signal: pb.PlatformStatsSignal_PLATFORM_STATS_SIGNAL_QUOTA_AT_LIMIT,
-			}))
+			})
 			return err
 		}},
 
 		{"Tenant.ListTenants", func() error {
-			_, err := tenantSrv.ListTenants(ctx, connect.NewRequest(&pb.ListTenantsRequest{}))
+			_, err := tenantSrv.ListTenants(ctx, &pb.ListTenantsRequest{})
 			return err
 		}},
 		{"Tenant.GetTenant", func() error {
-			_, err := tenantSrv.GetTenant(ctx, connect.NewRequest(&pb.GetTenantRequest{Name: tenantName}))
+			_, err := tenantSrv.GetTenant(ctx, &pb.GetTenantRequest{Name: tenantName})
 			return err
 		}},
 		{"Tenant.CreateTenant", func() error {
-			_, err := tenantSrv.CreateTenant(ctx, connect.NewRequest(&pb.CreateTenantRequest{
+			_, err := tenantSrv.CreateTenant(ctx, &pb.CreateTenantRequest{
 				TenantId: tenantID.String(), Tenant: &pb.Tenant{DisplayName: "Acme"},
-			}))
+			})
 			return err
 		}},
 		{"Tenant.UpdateTenant", func() error {
-			_, err := tenantSrv.UpdateTenant(ctx, connect.NewRequest(&pb.UpdateTenantRequest{
+			_, err := tenantSrv.UpdateTenant(ctx, &pb.UpdateTenantRequest{
 				Name: tenantName, ResourceVersion: "1",
 				Tenant: &pb.Tenant{DisplayName: "Acme"},
-			}))
+			})
 			return err
 		}},
 		{"Tenant.DeleteTenant", func() error {
-			_, err := tenantSrv.DeleteTenant(ctx, connect.NewRequest(&pb.DeleteTenantRequest{Name: tenantName, ResourceVersion: "1"}))
+			_, err := tenantSrv.DeleteTenant(ctx, &pb.DeleteTenantRequest{Name: tenantName, ResourceVersion: "1"})
 			return err
 		}},
 		{"Tenant.RestoreTenant", func() error {
-			_, err := tenantSrv.RestoreTenant(ctx, connect.NewRequest(&pb.RestoreTenantRequest{Name: tenantName}))
+			_, err := tenantSrv.RestoreTenant(ctx, &pb.RestoreTenantRequest{Name: tenantName})
 			return err
 		}},
 		{"Tenant.PurgeTenant", func() error {
-			_, err := tenantSrv.PurgeTenant(ctx, connect.NewRequest(&pb.PurgeTenantRequest{Name: tenantName}))
+			_, err := tenantSrv.PurgeTenant(ctx, &pb.PurgeTenantRequest{Name: tenantName})
 			return err
 		}},
 		{"Tenant.RenameTenantSlug", func() error {
-			_, err := tenantSrv.RenameTenantSlug(ctx, connect.NewRequest(&pb.RenameTenantSlugRequest{
+			_, err := tenantSrv.RenameTenantSlug(ctx, &pb.RenameTenantSlugRequest{
 				Name: tenantName, NewSlug: "acme2",
-			}))
+			})
 			return err
 		}},
 		{"Tenant.ResolveRenamedSlug", func() error {
-			_, err := tenantSrv.ResolveRenamedSlug(ctx, connect.NewRequest(&pb.ResolveRenamedSlugRequest{
+			_, err := tenantSrv.ResolveRenamedSlug(ctx, &pb.ResolveRenamedSlugRequest{
 				OldSlug: "acme",
-			}))
+			})
 			return err
 		}},
 		{"Tenant.SetInheritedPolicy", func() error {
-			_, err := tenantSrv.SetInheritedPolicy(ctx, connect.NewRequest(&pb.SetInheritedPolicyRequest{
+			_, err := tenantSrv.SetInheritedPolicy(ctx, &pb.SetInheritedPolicyRequest{
 				Name: tenantName, CedarPolicy: okPolicy,
-			}))
+			})
 			return err
 		}},
 		{"Tenant.GetTenantDefaultBinding", func() error {
-			_, err := tenantSrv.GetTenantDefaultBinding(ctx, connect.NewRequest(&pb.GetTenantDefaultBindingRequest{Name: tenantName}))
+			_, err := tenantSrv.GetTenantDefaultBinding(ctx, &pb.GetTenantDefaultBindingRequest{Name: tenantName})
 			return err
 		}},
 		{"Tenant.SetTenantDefaultBinding", func() error {
-			_, err := tenantSrv.SetTenantDefaultBinding(ctx, connect.NewRequest(&pb.SetTenantDefaultBindingRequest{Name: tenantName, Bucket: bucketName}))
+			_, err := tenantSrv.SetTenantDefaultBinding(ctx, &pb.SetTenantDefaultBindingRequest{Name: tenantName, Bucket: bucketName})
 			return err
 		}},
 		{"Tenant.ClearTenantDefaultBinding", func() error {
-			_, err := tenantSrv.ClearTenantDefaultBinding(ctx, connect.NewRequest(&pb.ClearTenantDefaultBindingRequest{Name: tenantName}))
+			_, err := tenantSrv.ClearTenantDefaultBinding(ctx, &pb.ClearTenantDefaultBindingRequest{Name: tenantName})
 			return err
 		}},
 		{"Tenant.MigrateTenantStorageLayout", func() error {
-			_, err := tenantSrv.MigrateTenantStorageLayout(ctx, connect.NewRequest(&pb.MigrateTenantStorageLayoutRequest{
+			_, err := tenantSrv.MigrateTenantStorageLayout(ctx, &pb.MigrateTenantStorageLayoutRequest{
 				Name: tenantName, TargetBackendId: "primary",
-			}))
+			})
 			return err
 		}},
 		{"Tenant.GetTenantStorageMigration", func() error {
-			_, err := tenantSrv.GetTenantStorageMigration(ctx, connect.NewRequest(&pb.GetTenantStorageMigrationRequest{Name: tenantName}))
+			_, err := tenantSrv.GetTenantStorageMigration(ctx, &pb.GetTenantStorageMigrationRequest{Name: tenantName})
 			return err
 		}},
 	}

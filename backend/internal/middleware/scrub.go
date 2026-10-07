@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 )
 
 // internalMessage is all a caller is told of a failure on the server's side.
@@ -32,26 +33,17 @@ var scrubbedCodes = map[connect.Code]bool{
 //
 // Install it outermost: LogOutcome and the tracing interceptor inside it see
 // the original error, which is where its detail belongs.
-func ScrubInternal() connect.Interceptor { return scrubInterceptor{} }
-
-type scrubInterceptor struct{}
-
-func (scrubInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		id := ensureRequestID(req.Header().Get(HeaderRequestID), req.Header().Set)
-		res, err := next(ctx, req)
-		return res, scrub(err, id)
-	}
-}
-
-func (scrubInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (scrubInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		id := ensureRequestID(conn.RequestHeader().Get(HeaderRequestID), conn.RequestHeader().Set)
-		return scrub(next(ctx, conn), id)
+func ScrubInternal() connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			info := unary.Info(ctx)
+			id := ensureRequestID(info.RequestHeader().Get(HeaderRequestID), info.RequestHeader().Set)
+			err := scrub(next(ctx, spec, stream), id)
+			if err != nil && scrubbedCodes[connect.CodeOf(err)] {
+				info.ResponseHeader().Set(HeaderRequestID, id)
+			}
+			return err
+		}
 	}
 }
 
@@ -74,17 +66,14 @@ func scrub(err error, requestID string) error {
 	if !scrubbedCodes[code] {
 		return err
 	}
-	out := connect.NewError(code, errors.New(internalMessage+requestIDSep+requestID))
+	out := connect.NewError(code, internalMessage+requestIDSep+requestID).WithCause(err)
 	if cerr := new(connect.Error); errors.As(err, &cerr) {
 		// Details are written for the caller — a reason, a retry delay — and
-		// carry no driver text; metadata is the response's headers.
+		// carry no driver text. Metadata is the response's headers, on the
+		// call's CallInfo, and is left as it is.
 		for _, d := range cerr.Details() {
-			out.AddDetail(d)
-		}
-		for k, v := range cerr.Meta() {
-			out.Meta()[k] = v
+			out = out.WithDetail(d)
 		}
 	}
-	out.Meta().Set(HeaderRequestID, requestID)
 	return out
 }

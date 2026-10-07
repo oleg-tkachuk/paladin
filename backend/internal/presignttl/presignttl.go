@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
@@ -107,7 +107,7 @@ func (p Policy) Resolve(op Op, requested time.Duration) (time.Duration, error) {
 func (p Policy) ResolveWithin(op Op, requested, ceiling time.Duration) (time.Duration, error) {
 	def := p.Default(op)
 	if def <= 0 || p.max <= 0 {
-		return 0, connect.NewError(connect.CodeInternal, ErrNotConfigured)
+		return 0, connect.NewError(connect.CodeInternal, ErrNotConfigured.Error()).WithCause(ErrNotConfigured)
 	}
 	limit, limitName := p.max, "limits.presign.max_ttl"
 	if ceiling > 0 && ceiling < limit {
@@ -117,11 +117,11 @@ func (p Policy) ResolveWithin(op Op, requested, ceiling time.Duration) (time.Dur
 	case requested == 0:
 		return min(def, limit), nil
 	case requested < 0:
-		return 0, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("ttl %s must be positive", requested))
+		return 0, connect.Errorf(connect.CodeInvalidArgument,
+			"ttl %s must be positive", requested)
 	case requested > limit:
-		return 0, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("ttl %s exceeds %s %s", requested, limitName, limit))
+		return 0, connect.Errorf(connect.CodeInvalidArgument,
+			"ttl %s exceeds %s %s", requested, limitName, limit)
 	}
 	return requested, nil
 }
