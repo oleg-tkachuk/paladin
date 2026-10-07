@@ -3,8 +3,9 @@
 - **Status:** Accepted — implemented 2026-10-07 (`048_storage_backend_features.sql`,
   `internal/storage/features`, `s3adapter.ProbeFeatures`, `TestBackend`).
 - **Related:** [ADR-0015](0015-per-tenant-bucket-layout.md) (backends and
-  buckets). Public collections are the first operation gated on a
-  feature.
+  buckets), [ADR-0027](0027-public-collections.md) (the first operation gated
+  on a feature), the S3 conformance suite
+  ([`backend/tests/conformance`](../../backend/tests/conformance/README.md)).
 
 - **Context.** Paladin talks to "S3" and means a specific subset of it: a PUT
   bound to `If-None-Match: *` so an upload cannot replace an object, a
@@ -76,6 +77,13 @@
     re-probing is in BACKLOG.
   - With S3 event notifications on, the probe's writes reach the ingest
     pipeline, which drops them: their key does not start with a tenant UUID.
+
+- **The probe and the conformance suite.** The suite is run by a developer,
+  against an endpoint of their choosing, and measures everything it can: it
+  is how a new store is evaluated. The probe runs in the deployment, against
+  the backend's own credentials, and checks the few features operations are
+  gated on or that Paladin's guarantees need. A feature the probe adds is
+  worth adding to the suite's profile too.
 
 - **Alternatives considered.**
   - *A static matrix per `provider`.* Wrong for any version or configuration

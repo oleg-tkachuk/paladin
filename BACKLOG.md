@@ -427,6 +427,55 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Features
 
+### Public collections: the console cannot create or show them
+
+- **Status:** Deferred
+- **Reason:** public buckets and collections ([ADR-0027](docs/adr/0027-public-collections.md))
+  are created through the admin API only; the console neither offers the
+  settings nor marks a bucket or collection as public.
+- **Definition of Done:** the bucket and collection create dialogs offer
+  public read (the bucket's only on a backend whose probe found
+  `ANONYMOUS_READ_POLICY` supported, saying why otherwise), and the lists and
+  detail pages mark what is public and show `public_base_url`; covered by
+  component tests.
+- **Blockers:** none.
+
+### Public collections on a store without bucket policies
+
+- **Status:** Aspirational
+- **Reason:** a public bucket is opened with an anonymous-read bucket policy,
+  so a store that has none — Garage among them — cannot host one, and the
+  probe says so. Garage serves a whole bucket unsigned through its website
+  endpoint instead.
+- **Definition of Done:** a second mechanism for such stores (Garage website
+  mode on its own host), chosen by a probed feature, with the public URL built
+  for it and an integration test against Garage.
+- **Blockers:** whether any deployment publishes from Garage.
+
+### The compose stack's SeaweedFS serves every request unsigned
+
+- **Status:** Deferred
+- **Reason:** `backend/deploy/seaweedfs-s3.json` gives Paladin's credentials to
+  SeaweedFS' `anonymous` identity, which grants its actions to unsigned
+  requests too. Nothing in the stack is private at the store, and the feature
+  probe reports `ANONYMOUS_READ_POLICY` unsupported there, so public
+  collections cannot be tried on it.
+- **Definition of Done:** the compose stack uses a named identity, as the
+  integration suites and the e2e stack do, and its e2e run still passes.
+- **Blockers:** none; check that nothing in the dev stack reads storage
+  unsigned.
+
+### Anonymous reads of public objects are not counted
+
+- **Status:** Deferred
+- **Reason:** a public object is read straight from the store or a CDN, so no
+  Paladin process sees the read: egress is attributed to no tenant and appears
+  in no Paladin metric ([ADR-0027](docs/adr/0027-public-collections.md)).
+- **Definition of Done:** if egress per tenant matters, ingest the store's or
+  the CDN's access logs and attribute them by the tenant segment of the path;
+  otherwise delete this entry with that decision recorded.
+- **Blockers:** whether per-tenant egress is ever billed.
+
 ### A storage backend's feature probe runs only on request
 
 - **Status:** Deferred
