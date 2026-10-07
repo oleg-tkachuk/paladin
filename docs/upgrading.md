@@ -43,6 +43,20 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a multipart download's checksum is verified
+
+- **A multipart object completed from now on records a composite checksum**:
+  the digest of its parts' digests, in S3's COMPOSITE form
+  (`<base64>-<parts>`), and `ChecksumDigest.part_size_bytes` beside it. Both
+  SDKs recompute it while a whole download streams and fail the read with
+  `IntegrityError` on a mismatch, as they already did for an object uploaded
+  in one piece.
+- A multipart object completed before this release has no checksum recorded
+  and is still checked for its size alone; there is nothing to backfill it
+  from, since the parts' checksums were never kept.
+- An older SDK ignores the new field; a new SDK against an older server sees
+  no part size and does not check a composite.
+
 ## Unreleased — the SDK fakes refuse what the server refuses
 
 - **`paladintest` (Go) validates every request** with the contract's

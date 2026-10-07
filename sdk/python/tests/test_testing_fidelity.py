@@ -11,10 +11,10 @@ from connectrpc.code import Code
 from connectrpc.errors import ConnectError
 
 import paladin
-from paladin import InvalidArgumentError, VersionConflictError
+from paladin import IntegrityError, InvalidArgumentError, VersionConflictError, download
 from paladin.common.v1 import error_reason_pb2, pagination_pb2, resource_pb2
 from paladin.data.v1 import object_service_pb2
-from paladin.testing import TESTING_EXTRA_HINT, FakePaladin
+from paladin.testing import PART_SIZE, TESTING_EXTRA_HINT, FakePaladin, StorageOp
 
 CONTENT_TYPE = "application/octet-stream"
 """A test upload's content type: the server refuses an upload that names none."""
@@ -157,3 +157,30 @@ def test_the_fake_without_the_extra_says_what_to_install(monkeypatch: pytest.Mon
     with pytest.raises(ImportError) as caught:
         FakePaladin()
     assert str(caught.value) == TESTING_EXTRA_HINT
+
+
+def test_a_multipart_download_is_verified(fake: FakePaladin) -> None:
+    data = fake.connect().data
+    body = b"p" * (2 * PART_SIZE + 1)  # three parts
+    obj = paladin.upload(
+        data,
+        parent=str(fake.collection()),
+        key="big",
+        content_type=CONTENT_TYPE,
+        body=body,
+        size=len(body),
+        multipart_threshold=PART_SIZE,
+    )
+    assert obj.checksum.part_size_bytes == PART_SIZE and obj.checksum.value.endswith("-3")
+    assert download(data, obj.name) == body
+    # Storage answers with other bytes of the same length: only the
+    # composite tells them apart.
+    corrupt = "q" * len(body)
+
+    def other_bytes(op: StorageOp) -> tuple[int, str] | None:
+        return (200, corrupt) if op.method == "GET" else None
+
+    fake.fail_storage(other_bytes)
+    with pytest.raises(IntegrityError) as caught:
+        download(data, obj.name)
+    assert caught.value.what == paladin.CHECKSUM_SHA256

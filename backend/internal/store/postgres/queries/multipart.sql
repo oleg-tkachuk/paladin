@@ -18,6 +18,16 @@ INSERT INTO multipart_uploads (
             WHERE sb.name = $7 AND b.name = $8),
           $9, $10, sqlc.arg('collection_name'), sqlc.arg('path'));
 
+-- name: RecordCompositeChecksum :execrows
+-- Records a multipart object's composite checksum and its part size before
+-- the object store assembles it. Written while the row is PENDING, so it is
+-- in place whichever promotes the object first: this upload's completion, or
+-- the storage event, which carries no checksum.
+UPDATE objects
+   SET checksum = sqlc.arg('checksum'),
+       checksum_part_size_bytes = sqlc.arg('part_size_bytes')
+ WHERE id = sqlc.arg('object_id') AND state = 'PENDING';
+
 -- name: DeleteMultipartUpload :exec
 DELETE FROM multipart_uploads
 WHERE id = $1;

@@ -2,7 +2,11 @@ package multiparth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
+	"fmt"
+	"slices"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -208,5 +212,49 @@ func TestCompleteSucceedsWhenTheReadBackFails(t *testing.T) {
 	}
 	if got.Collection != "" {
 		t.Errorf("returned %+v, want the zero object", got)
+	}
+}
+
+// A multipart object was promoted with no checksum, so no reader could verify
+// its bytes. Completion records the composite of the parts' checksums, in
+// part order whatever order they were listed in, with the part size.
+func TestCompleteRecordsTheCompositeChecksum(t *testing.T) {
+	tid := uuid.New()
+	parts := completeParts()
+	ordered := make([]string, len(parts))
+	for i := range parts {
+		sum := sha256.Sum256([]byte(fmt.Sprintf("part %d", i+1)))
+		parts[i].ChecksumValue = base64.StdEncoding.EncodeToString(sum[:])
+		ordered[i] = parts[i].ChecksumValue
+	}
+	slices.Reverse(parts)
+	sess := sessionForTenant(tid)
+	repo := &fakeRepo{getSessionFn: func(context.Context, string) (Session, error) { return sess, nil }}
+	h := NewHandler(repo, &fakeStorage{}, allow(), &fakeSM{}, testTTLPolicy(), testUploadLimits)
+	if _, err := h.CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: parts}); err != nil {
+		t.Fatal(err)
+	}
+	want, err := checksum.Composite(checksum.SHA256, ordered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.recorded.composite != want || repo.recorded.partSizeBytes != sess.PartSizeBytes || repo.recorded.objectID != sess.ObjectID {
+		t.Errorf("recorded %+v, want composite %q over %d-byte parts", repo.recorded, want, sess.PartSizeBytes)
+	}
+}
+
+// The composite is recorded before the store assembles the object: a store
+// that completed first could fire the event that promotes the row, after
+// which a PENDING-only write would find nothing to update.
+func TestCompleteStopsWhenTheCompositeIsNotRecorded(t *testing.T) {
+	tid := uuid.New()
+	repo := sessionRepo(tid)
+	repo.recordErr = errors.New("db down")
+	storage := &fakeStorage{}
+	h := NewHandler(repo, storage, allow(), &fakeSM{}, testTTLPolicy(), testUploadLimits)
+	_, err := h.CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: completeParts()})
+	wantCode(t, err, connect.CodeInternal)
+	if storage.lastComplete.storageUploadID != "" {
+		t.Error("the store assembled an object whose checksum was not recorded")
 	}
 }
