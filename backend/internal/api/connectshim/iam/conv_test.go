@@ -153,11 +153,11 @@ func contains(haystack, needle string) bool {
 
 // ─── resource-name parsers ─────────────────────────────────────────────────
 
-func TestUserIDFromName(t *testing.T) {
+func TestUserNameParts(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
-		got, err := userIDFromName("tenants/" + tenantID.String() + "/users/" + userID.String())
-		if err != nil || got != userID {
-			t.Errorf("got %v, %v", got, err)
+		parent, got, err := userNameParts("tenants/" + tenantID.String() + "/users/" + userID.String())
+		if err != nil || got != userID || parent != "tenants/"+tenantID.String() {
+			t.Errorf("got %q %v, %v", parent, got, err)
 		}
 	})
 	for label, n := range map[string]string{
@@ -167,7 +167,7 @@ func TestUserIDFromName(t *testing.T) {
 		"extra segments":   "tenants/a/users/b/c",
 	} {
 		t.Run(label, func(t *testing.T) {
-			if _, err := userIDFromName(n); err == nil {
+			if _, _, err := userNameParts(n); err == nil {
 				t.Errorf("want an error for %q", n)
 			}
 		})

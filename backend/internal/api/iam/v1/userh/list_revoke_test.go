@@ -128,7 +128,7 @@ func TestRevokeScopesRemovesOnlyWhatWasNamed(t *testing.T) {
 	}}
 	h := NewHandler(repo, allowAuthorizer{})
 
-	got, err := h.RevokeScopes(ctxAs(uuid.New(), "platform.admin"), id, []auth.Scope{{Type: auth.ScopeBucket, Value: "media"}})
+	got, err := h.RevokeScopes(ctxAs(uuid.New(), "platform.admin"), ref(repo.user), []auth.Scope{{Type: auth.ScopeBucket, Value: "media"}})
 	if err != nil {
 		t.Fatalf("RevokeScopes: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestRevokeScopesIsIndifferentToScopesNotHeld(t *testing.T) {
 	repo := &fakeUserRepo{user: authstore.User{UserID: id, Scopes: []auth.Scope{{Type: auth.ScopeBucket, Value: "docs"}}}}
 	h := NewHandler(repo, allowAuthorizer{})
 
-	got, err := h.RevokeScopes(ctxAs(uuid.New(), "platform.admin"), id, []auth.Scope{{Type: auth.ScopeBackend, Value: "primary"}})
+	got, err := h.RevokeScopes(ctxAs(uuid.New(), "platform.admin"), ref(repo.user), []auth.Scope{{Type: auth.ScopeBackend, Value: "primary"}})
 	if err != nil {
 		t.Fatalf("revoking a scope the user never had should be a no-op, got: %v", err)
 	}
@@ -162,17 +162,17 @@ func TestRevokeScopesIsIndifferentToScopesNotHeld(t *testing.T) {
 func TestRevokeScopesUnknownUserIsNotFound(t *testing.T) {
 	h := NewHandler(&fakeUserRepo{getErr: authstore.ErrNotFound}, allowAuthorizer{})
 
-	_, err := h.RevokeScopes(ctxAs(uuid.New(), "platform.admin"), uuid.New(), []auth.Scope{{Type: auth.ScopeBucket, Value: "docs"}})
+	_, err := h.RevokeScopes(ctxAs(uuid.New(), "platform.admin"), UserRef{UserID: uuid.New()}, []auth.Scope{{Type: auth.ScopeBucket, Value: "docs"}})
 	if code(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", code(err))
 	}
 }
 
 func TestRevokeScopesDeniedByCedar(t *testing.T) {
-	id := uuid.New()
-	h := NewHandler(&fakeUserRepo{user: authstore.User{UserID: id}}, denyAuthorizer{})
+	repo := &fakeUserRepo{user: authstore.User{UserID: uuid.New()}}
+	h := NewHandler(repo, denyAuthorizer{})
 
-	_, err := h.RevokeScopes(ctxAs(uuid.New(), "platform.admin"), id, []auth.Scope{{Type: auth.ScopeBucket, Value: "docs"}})
+	_, err := h.RevokeScopes(ctxAs(uuid.New(), "platform.admin"), ref(repo.user), []auth.Scope{{Type: auth.ScopeBucket, Value: "docs"}})
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", code(err))
 	}
