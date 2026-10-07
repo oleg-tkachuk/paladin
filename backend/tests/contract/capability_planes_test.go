@@ -74,8 +74,8 @@ const (
 	// capabilitySkippingJWTGate lets a capability-only request past the JWT gate.
 	capabilitySkippingJWTGate = "InterceptorSkipTokensAndCapabilities"
 	// iamOptsDecl opens the iam plane's interceptor chain.
-	iamOptsDecl = "iamOpts := connect.WithOptions("
-	// optsBlockEnd closes a top-level connect.WithOptions(...) block.
+	iamOptsDecl = "iamOpts := connect.WithHandlerOptions("
+	// optsBlockEnd closes a top-level connect.WithHandlerOptions(...) block.
 	optsBlockEnd = "\n\t)\n"
 	// capabilityWordStem and capDataVar, lower-cased, would appear in the iam
 	// chain if a capability interceptor were mounted there — by constructor

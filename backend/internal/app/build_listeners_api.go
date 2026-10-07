@@ -8,11 +8,12 @@ import (
 	"net/http"
 	"time"
 
+	"google.golang.org/protobuf/reflect/protoregistry"
+
 	"connectrpc.com/connect"
 	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/codec"
 	connectdata "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/data"
 	connectiam "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/iam"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
@@ -270,11 +271,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	}
 	tenantRL := middleware.NewTenantRateLimitInterceptor(tenantRLCfg)
 
-	// Every plane decodes JSON with the strict codec: an unknown request field
-	// is a 400, not a silent discard. See internal/api/codec for why the
-	// forward-compatibility the default buys is not worth its cost here.
-	dataOpts := connect.WithOptions(
-		connect.WithCodec(codec.StrictJSON{}),
+	// The codec, size limits, compression and panic recovery every plane
+	// shares: rpcHandlerOptions.
+	dataOpts := connect.WithHandlerOptions(
+		rpcHandlerOptions(l),
 		connect.WithInterceptors(
 			// Outermost of all: tracing and the failure log inside it see an
 			// internal error as it happened; the caller sees its code and a
@@ -325,18 +325,17 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			// nothing. Both scopes cost a point lookup on the upload path —
 			// collections by PK, then quotas by its unique index.
 			middleware.NewQuotaSoftCheck(repos.Quota).WithBucketScope(repos.Object),
-			connect.UnaryInterceptorFunc(validateInterceptor),
+			validateInterceptor,
 			idempotencyInterceptor,
 			// A platform admin's calls inside another tenant only: they are
 			// what that tenant's trail would miss (see AuditActingElsewhere).
 			middleware.AuditActingElsewhere(repos.Audit, auth.AudienceData),
 		),
 	)
-	// Every plane decodes JSON with the strict codec: an unknown request field
-	// is a 400, not a silent discard. See internal/api/codec for why the
-	// forward-compatibility the default buys is not worth its cost here.
-	iamOpts := connect.WithOptions(
-		connect.WithCodec(codec.StrictJSON{}),
+	// The codec, size limits, compression and panic recovery every plane
+	// shares: rpcHandlerOptions.
+	iamOpts := connect.WithHandlerOptions(
+		rpcHandlerOptions(l),
 		connect.WithInterceptors(
 			// Outermost of all: tracing and the failure log inside it see an
 			// internal error as it happened; the caller sees its code and a
@@ -382,7 +381,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			// carry trace and request id without a tenant — which is correct, not
 			// a gap. An anonymous failed login is exactly the line worth finding.
 			middleware.LogContextStreaming(l),
-			connect.UnaryInterceptorFunc(validateInterceptor),
+			validateInterceptor,
 			idempotencyInterceptor,
 		),
 	)
@@ -451,6 +450,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// carries the release header (see middleware.ServerVersion).
 	dataMux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(dataMux)
+	dataServices := servicesIn(protoregistry.GlobalFiles, dataPackage)
+	mountGRPCStandards(dataMux, healthH.GRPCChecker(dataServices...), dataServices)
 	dataMux.Handle(paladindatav1connect.NewObjectServiceHandler(
 		connectdata.NewObjectServer(objH, versionH).WithLocks(lockH).WithTaints(taintH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(connectdata.NewMultipartServer(mpH), dataOpts))
@@ -466,6 +467,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	iamMux = http.NewServeMux()
 	iamMux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(iamMux)
+	iamServices := servicesIn(protoregistry.GlobalFiles, iamPackage)
+	mountGRPCStandards(iamMux, healthH.GRPCChecker(iamServices...), iamServices)
 	iamMux.Handle(paladiniamv1connect.NewAuthServiceHandler(connectiam.NewAuthServer(authH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewUserServiceHandler(connectiam.NewUserServer(userH, repos.Tenant), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewHealthServiceHandler(

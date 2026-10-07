@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	validatepb "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -19,7 +20,7 @@ import (
 )
 
 // The server's answer to a request its contract's rules refuse begins so.
-const validationFailed = "validation failed"
+const validationFailed = "validation error"
 
 // oneByteSHA256 is the base64 SHA-256 of "x", what an upload of it is
 // registered with.
@@ -63,6 +64,9 @@ func TestTheFakeValidatesEveryRequest(t *testing.T) {
 			err := call()
 			if !errors.Is(err, paladin.ErrInvalidArgument) || !strings.Contains(err.Error(), validationFailed) {
 				t.Errorf("err = %v, want the server's validation failure", err)
+			}
+			if !hasViolations(err) {
+				t.Errorf("err = %v, want the buf.validate.Violations detail the server attaches", err)
 			}
 		})
 	}
@@ -196,4 +200,20 @@ func TestAMultipartDownloadIsVerified(t *testing.T) {
 	if err := read(); !errors.As(err, &ie) || ie.What != paladin.ChecksumSHA256 {
 		t.Fatalf("err = %v, want an IntegrityError on the composite", err)
 	}
+}
+
+// hasViolations reports whether err carries a buf.validate.Violations detail.
+func hasViolations(err error) bool {
+	var cerr *connect.Error
+	if !errors.As(err, &cerr) {
+		return false
+	}
+	for _, d := range cerr.Details() {
+		if msg, derr := d.Value(); derr == nil {
+			if _, ok := msg.(*validatepb.Violations); ok {
+				return true
+			}
+		}
+	}
+	return false
 }
