@@ -199,7 +199,10 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 		ConfirmationJKT: req.Msg.GetConfirmationJkt(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		// By kind: a malformed request, a tenant that is not (or no longer)
+		// there, or the store or signer failing — which is not the caller's
+		// fault and must not read as a request to stop retrying.
+		return nil, apiutil.MapError(err)
 	}
 
 	apiutil.StashResource(ctx, capabilityResourceName(cap.Subject.TenantID, cap.ID))
@@ -257,7 +260,11 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 			return nil, err
 		}
 		if parent, err = h.store.Get(ctx, parentID); err != nil {
-			return nil, connect.NewError(connect.CodeNotFound, err)
+			if errors.Is(err, capability.ErrNotFound) {
+				return nil, connect.NewError(connect.CodeNotFound, err)
+			}
+			// The store failing is not the parent being absent.
+			return nil, apiutil.MapError(err)
 		}
 	}
 
@@ -310,7 +317,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 			// must act on, not a malformed request.
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 		}
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, apiutil.MapError(err)
 	}
 	apiutil.StashResource(ctx, capabilityResourceName(cap.Subject.TenantID, cap.ID))
 	return h.issued(cap, token)

@@ -60,10 +60,19 @@ type CapabilityServiceClient interface {
 	// Issue mints a top-level capability for a principal. Caller is
 	// platform-admin or a delegating service. Returns the typed
 	// capability metadata plus the compact JWT in `token`.
+	//
+	// Errors: INVALID_ARGUMENT for a malformed request; NOT_FOUND with reason
+	// TENANT_NOT_FOUND when the subject's tenant does not exist (yet);
+	// FAILED_PRECONDITION with reason TENANT_ALREADY_DELETED when it is in the
+	// trash; INTERNAL when the store or the signer fails — a request worth
+	// retrying, not a bad one.
 	Issue(context.Context, *connect.Request[v1.CapabilityServiceIssueRequest]) (*connect.Response[v1.CapabilityServiceIssueResponse], error)
 	// Delegate issues a strictly-narrower child capability under a
 	// parent the caller already holds. Narrowing is enforced at issuance:
 	// widening attempts fail before any token is emitted.
+	//
+	// Errors as Issue's, plus PERMISSION_DENIED for a child wider than its
+	// parent and FAILED_PRECONDITION for a parent revoked or expired.
 	Delegate(context.Context, *connect.Request[v1.CapabilityServiceDelegateRequest]) (*connect.Response[v1.CapabilityServiceIssueResponse], error)
 	// Revoke adds the supplied capability ID to the revocation list.
 	// CascadeChildren=true revokes every descendant in the delegation
@@ -200,10 +209,19 @@ type CapabilityServiceHandler interface {
 	// Issue mints a top-level capability for a principal. Caller is
 	// platform-admin or a delegating service. Returns the typed
 	// capability metadata plus the compact JWT in `token`.
+	//
+	// Errors: INVALID_ARGUMENT for a malformed request; NOT_FOUND with reason
+	// TENANT_NOT_FOUND when the subject's tenant does not exist (yet);
+	// FAILED_PRECONDITION with reason TENANT_ALREADY_DELETED when it is in the
+	// trash; INTERNAL when the store or the signer fails — a request worth
+	// retrying, not a bad one.
 	Issue(context.Context, *connect.Request[v1.CapabilityServiceIssueRequest]) (*connect.Response[v1.CapabilityServiceIssueResponse], error)
 	// Delegate issues a strictly-narrower child capability under a
 	// parent the caller already holds. Narrowing is enforced at issuance:
 	// widening attempts fail before any token is emitted.
+	//
+	// Errors as Issue's, plus PERMISSION_DENIED for a child wider than its
+	// parent and FAILED_PRECONDITION for a parent revoked or expired.
 	Delegate(context.Context, *connect.Request[v1.CapabilityServiceDelegateRequest]) (*connect.Response[v1.CapabilityServiceIssueResponse], error)
 	// Revoke adds the supplied capability ID to the revocation list.
 	// CascadeChildren=true revokes every descendant in the delegation

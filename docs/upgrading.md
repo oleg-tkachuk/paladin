@@ -43,6 +43,21 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — capability issuance answers each failure by its kind
+
+- **`CapabilityService/Issue` and `Delegate` no longer answer every failure
+  `INVALID_ARGUMENT`.** A malformed request still does. A subject tenant that
+  does not exist answers `NOT_FOUND` with the new reason `TENANT_NOT_FOUND`
+  — a tenant being provisioned may exist shortly, so a caller can retry on
+  that reason — and one in the trash `FAILED_PRECONDITION` with
+  `TENANT_ALREADY_DELETED`; before, issuing for a trashed tenant succeeded.
+  A store or signer failure answers `INTERNAL`. Code that matched
+  `INVALID_ARGUMENT` to mean "tenant not ready" should match the reason.
+- `Delegate`'s admin path answers `NOT_FOUND` only for a parent that is not
+  there; a store failure reading it is `INTERNAL`.
+- The `capability` module's request errors match `ErrInvalidRequest`, and
+  their messages now read `capability: invalid request: …`.
+
 ## Unreleased — a multipart download's checksum is verified
 
 - **A multipart object completed from now on records a composite checksum**:
