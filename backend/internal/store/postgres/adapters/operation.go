@@ -52,6 +52,10 @@ SET    state = 'RUNNING', updated_at = NOW()
 WHERE  id = (
     SELECT id FROM operations
     WHERE  state = 'PENDING'
+    -- A tenant in the trash is frozen: its operations wait, PENDING, for a
+    -- restore.
+    AND    NOT EXISTS (SELECT 1 FROM tenants t
+                        WHERE t.id = operations.tenant_id AND t.deleted_at IS NOT NULL)
     ORDER  BY created_at ASC
     LIMIT  1
     FOR    UPDATE SKIP LOCKED

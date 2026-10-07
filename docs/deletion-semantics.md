@@ -52,6 +52,13 @@ uploads), and the tenant's own lifecycle (`GetTenant`, `ListTenants`,
 `RestoreTenant`, `PurgeTenant`). To remove a tenant that already holds data
 in the trash, restore it, empty it, and trash and purge it.
 
+The workers hold to the same rule: lifecycle expiry, replication, emptying the
+object trash, settling pending uploads (from the reconciler or a storage
+event), storage-layout migrations, queued batch operations and event delivery
+all pass a trashed tenant by, and pick up where they were on restore. What
+still runs is cleanup of work already done — the debt of committed deletes,
+aborting abandoned multipart uploads — and recomputing quota usage.
+
 There is no one-shot hard delete. There used to be — `DeleteTenant(force=true)`
 — and it is gone: landing the tenant in a different state is a different
 transition, not a modifier on this one.

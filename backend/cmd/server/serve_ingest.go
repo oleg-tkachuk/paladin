@@ -25,6 +25,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/tenantstate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -145,6 +146,7 @@ func runIngest(
 		Transitioner: ingestSM,
 		Events:       ingestDispatcher,
 		Logger:       l.Named("ingest.handler"),
+		Tenants:      tenantstate.NewReader(ingestPool),
 	}
 
 	// Build the configured driver.
