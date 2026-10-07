@@ -5,6 +5,7 @@
 // naming a bucket) lands. Backed by TenantService.{Get,Set,Clear}
 // TenantDefaultBinding.
 
+import { useTenantChangesBlocked } from "../tenant-context";
 import { useCallback, useEffect, useState } from "react";
 import {
   bucketResourceName,
@@ -40,6 +41,7 @@ function BucketBadges({ bucket }: { bucket: string }) {
 }
 
 export default function DefaultBindingPage() {
+  const changesBlocked = useTenantChangesBlocked();
   const { tenantId, slug } = useTenant();
   const name = `tenants/${slug}`;
   const { showNotification } = useNotification();
@@ -189,7 +191,11 @@ export default function DefaultBindingPage() {
               ))}
             </select>
           </label>
-          <Button onClick={handleSet} disabled={busy || selected < 0}>
+          <Button
+            onClick={handleSet}
+            disabled={Boolean(changesBlocked) || busy || selected < 0}
+            title={changesBlocked ?? undefined}
+          >
             {binding ? "Update" : "Set"}
           </Button>
           {binding && (

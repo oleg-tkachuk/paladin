@@ -48,7 +48,8 @@ interface ObjectTableRowProps {
     textOrPromise: string | Promise<string>,
     label: string,
   ) => void;
-  onSoftDelete: (obj: {
+  /** Absent in a public collection, which has no trash (ADR-0027). */
+  onSoftDelete?: (obj: {
     objectId: string;
     collection: string;
     key: string;
@@ -58,8 +59,9 @@ interface ObjectTableRowProps {
     collection: string;
     key: string;
   }) => void;
-  onCopy: (obj: { key: string; collection: string }) => void;
-  onMove: (obj: { key: string; collection: string }) => void;
+  /** Absent in a public collection, which names its objects itself. */
+  onCopy?: (obj: { key: string; collection: string }) => void;
+  onMove?: (obj: { key: string; collection: string }) => void;
   onGenerateDownloadUrl: (
     key: string,
     collection: string,
@@ -388,39 +390,45 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                     Copy Download Link
                   </div>
                 </Dropdown.Item>
+                {onCopy && onMove && (
+                  <>
+                    <div className="h-px bg-border my-0.5" />
+                    <Dropdown.Item
+                      className="p-0"
+                      onClick={() =>
+                        onCopy({ key: obj.key, collection: obj.collection })
+                      }
+                    >
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition-colors">
+                        <DocumentDuplicateIcon className="w-4 h-4 text-chart-4" />
+                        Copy Object
+                      </div>
+                    </Dropdown.Item>
+                    <Dropdown.Item
+                      className="p-0"
+                      onClick={() =>
+                        onMove({ key: obj.key, collection: obj.collection })
+                      }
+                    >
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition-colors">
+                        <ArrowRightCircleIcon className="w-4 h-4 text-chart-5" />
+                        Move Object
+                      </div>
+                    </Dropdown.Item>
+                  </>
+                )}
                 <div className="h-px bg-border my-0.5" />
-                <Dropdown.Item
-                  className="p-0"
-                  onClick={() =>
-                    onCopy({ key: obj.key, collection: obj.collection })
-                  }
-                >
-                  <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition-colors">
-                    <DocumentDuplicateIcon className="w-4 h-4 text-chart-4" />
-                    Copy Object
-                  </div>
-                </Dropdown.Item>
-                <Dropdown.Item
-                  className="p-0"
-                  onClick={() =>
-                    onMove({ key: obj.key, collection: obj.collection })
-                  }
-                >
-                  <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:bg-accent transition-colors">
-                    <ArrowRightCircleIcon className="w-4 h-4 text-chart-5" />
-                    Move Object
-                  </div>
-                </Dropdown.Item>
-                <div className="h-px bg-border my-0.5" />
-                <Dropdown.Item
-                  className="p-0"
-                  onClick={() => onSoftDelete(obj)}
-                >
-                  <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-                    <TrashIcon className="w-4 h-4 text-destructive/60" />
-                    Soft Delete
-                  </div>
-                </Dropdown.Item>
+                {onSoftDelete && (
+                  <Dropdown.Item
+                    className="p-0"
+                    onClick={() => onSoftDelete(obj)}
+                  >
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 text-xs font-bold text-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                      <TrashIcon className="w-4 h-4 text-destructive/60" />
+                      Soft Delete
+                    </div>
+                  </Dropdown.Item>
+                )}
                 <Dropdown.Item
                   className="p-0"
                   onClick={() => onHardDelete(obj)}

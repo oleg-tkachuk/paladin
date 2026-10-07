@@ -11,6 +11,8 @@
 // tab: on success, push the returned resource into context so
 // sibling tabs see fresh data without a refetch.
 
+import { useTenantChangesBlocked } from "../../tenant-context";
+import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import { useCallback, useEffect, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { LinkIcon } from "@heroicons/react/24/outline";
@@ -32,7 +34,10 @@ import {
 import { collectionClient } from "@/lib/connect/client";
 import { useBuckets } from "@/hooks/useBuckets";
 import { ListLoadError } from "@/components/ui/ListLoadError";
-import { CollectionSchema } from "@/gen/paladin/admin/v1/types_pb";
+import {
+  CollectionAccess,
+  CollectionSchema,
+} from "@/gen/paladin/admin/v1/types_pb";
 import { CompletionMode } from "@/gen/paladin/common/v1/resource_pb";
 import { T } from "@/lib/ui/typography";
 
@@ -53,6 +58,7 @@ function completionModeLabel(m: CompletionMode): string {
 }
 
 export default function CollectionOverviewPage() {
+  const changesBlocked = useTenantChangesBlocked();
   const { collection, setCollection } = useCollection();
   const { showNotification } = useNotification();
   const { buckets, error: bucketsError, fetchBuckets } = useBuckets();
@@ -110,6 +116,9 @@ export default function CollectionOverviewPage() {
     }
   }, [collection, displayName, setCollection, showNotification]);
 
+  // ADR-0027: fixed at creation; a public one never moves.
+  const isPublic = collection.access === CollectionAccess.PUBLIC_READ;
+
   const handleBind = useCallback(async () => {
     if (!bucketSelection || bucketSelection === collection.bucket) return;
     setBinding(true);
@@ -155,6 +164,22 @@ export default function CollectionOverviewPage() {
             </Badge>
           </dd>
 
+          <dt className="text-muted-foreground">Access</dt>
+          <dd>
+            {isPublic ? (
+              <PublicReadBadge />
+            ) : (
+              <span className="text-xs text-muted-foreground">private</span>
+            )}
+          </dd>
+
+          {isPublic && (
+            <>
+              <dt className="text-muted-foreground">Cache-Control</dt>
+              <dd className="font-mono text-xs">{collection.cacheControl}</dd>
+            </>
+          )}
+
           <dt className="text-muted-foreground">Resource version</dt>
           <dd className="font-mono text-xs">
             {collection.resourceVersion || "—"}
@@ -183,7 +208,12 @@ export default function CollectionOverviewPage() {
             <Button
               size="sm"
               onClick={handleSaveDisplayName}
-              disabled={savingMeta || displayName === collection.displayName}
+              disabled={
+                Boolean(changesBlocked) ||
+                savingMeta ||
+                displayName === collection.displayName
+              }
+              title={changesBlocked ?? undefined}
             >
               {savingMeta ? "Saving…" : "Save"}
             </Button>
@@ -198,8 +228,9 @@ export default function CollectionOverviewPage() {
           <h2 className="text-sm font-semibold">Bucket binding</h2>
         </div>
         <p className="text-xs text-muted-foreground">
-          Re-binding triggers an audit entry — pick a destination bucket and
-          confirm. Existing objects keep their physical location until migrated.
+          {isPublic
+            ? "A public Collection stays in its bucket: its objects' URLs name it."
+            : "Re-binding triggers an audit entry — pick a destination bucket and confirm. Existing objects keep their physical location until migrated."}
         </p>
         <div className="space-y-1">
           <Label className="text-xs">Current</Label>
@@ -224,6 +255,7 @@ export default function CollectionOverviewPage() {
           <SelectRoot
             value={bucketSelection}
             onValueChange={setBucketSelection}
+            disabled={isPublic}
           >
             <SelectTrigger id="collection-bucket-binding" className="w-full">
               <SelectValue placeholder="Pick a bucket…" />
@@ -253,10 +285,13 @@ export default function CollectionOverviewPage() {
             size="sm"
             onClick={handleBind}
             disabled={
+              Boolean(changesBlocked) ||
+              isPublic ||
               binding ||
               !bucketSelection ||
               bucketSelection === collection.bucket
             }
+            title={changesBlocked ?? undefined}
           >
             {binding ? "Binding…" : "Re-bind"}
           </Button>

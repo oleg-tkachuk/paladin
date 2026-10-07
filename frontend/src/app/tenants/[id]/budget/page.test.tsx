@@ -10,6 +10,7 @@ vi.mock("@/lib/connect/client", () => ({
   tenantBudgetClient: { get: h.get, set: h.set },
 }));
 vi.mock("../tenant-context", () => ({
+  useTenantChangesBlocked: () => null,
   useTenant: () => ({ tenantId: "t-1", displayName: "Acme" }),
 }));
 vi.mock("@/components/ui/Notification", () => ({

@@ -5,7 +5,10 @@ import { create } from "@bufbuild/protobuf";
 
 import { collectionClient } from "@/lib/connect/client";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
-import { CollectionSchema } from "@/gen/paladin/admin/v1/types_pb";
+import {
+  CollectionAccess,
+  CollectionSchema,
+} from "@/gen/paladin/admin/v1/types_pb";
 import { useActingTenantId } from "@/hooks/useActingTenant";
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
@@ -132,6 +135,7 @@ export function useCollections() {
       backendId: string = "",
       bucketId: string = "",
       cedarPolicy: string = "",
+      publicRead: { cacheControl: string } | null = null,
     ): Promise<Collection> => {
       try {
         setError(null);
@@ -147,6 +151,12 @@ export function useCollections() {
               : "",
           cedarPolicy,
           resourceVersion: "",
+          // ADR-0027: a collection's access equals its bucket's, fixed at
+          // creation. An empty cacheControl takes the server's default.
+          access: publicRead
+            ? CollectionAccess.PUBLIC_READ
+            : CollectionAccess.PRIVATE,
+          cacheControl: publicRead?.cacheControl ?? "",
         });
         const created = await collectionClient.createCollection({
           parent: tenantParent,

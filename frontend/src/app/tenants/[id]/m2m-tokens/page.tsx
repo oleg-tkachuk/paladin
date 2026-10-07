@@ -1,5 +1,6 @@
 "use client";
 
+import { useTenantChangesBlocked } from "../tenant-context";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -67,6 +68,7 @@ const EMPTY_USAGE: UsageMap = new Map();
 //              weighted / limit with "resets in Xs" subtitle.
 
 export default function M2MTokensPage() {
+  const changesBlocked = useTenantChangesBlocked();
   // tenantId comes from the URL (TenantLayout) so platform-admins
   // can issue tokens for any tenant by navigating in. Legacy /m2m-
   // tokens used useScope() (auth-bound), which limited the page
@@ -181,7 +183,12 @@ export default function M2MTokensPage() {
             />
             Refresh
           </Button>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <Button
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+            disabled={Boolean(changesBlocked)}
+            title={changesBlocked ?? undefined}
+          >
             <PlusIcon className="size-4" />
             New token
           </Button>
@@ -258,6 +265,8 @@ export default function M2MTokensPage() {
                       size="sm"
                       variant="outline"
                       onClick={() => setCreateOpen(true)}
+                      disabled={Boolean(changesBlocked)}
+                      title={changesBlocked ?? undefined}
                     >
                       <PlusIcon className="size-4" />
                       Create the first one
