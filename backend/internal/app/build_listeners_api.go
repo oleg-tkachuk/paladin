@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"google.golang.org/protobuf/reflect/protoregistry"
+
 	"connectrpc.com/connect"
 	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
@@ -448,6 +450,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// carries the release header (see middleware.ServerVersion).
 	dataMux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(dataMux)
+	dataServices := servicesIn(protoregistry.GlobalFiles, dataPackage)
+	mountGRPCStandards(dataMux, healthH.GRPCChecker(dataServices...), dataServices)
 	dataMux.Handle(paladindatav1connect.NewObjectServiceHandler(
 		connectdata.NewObjectServer(objH, versionH).WithLocks(lockH).WithTaints(taintH), dataOpts))
 	dataMux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(connectdata.NewMultipartServer(mpH), dataOpts))
@@ -463,6 +467,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	iamMux = http.NewServeMux()
 	iamMux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(iamMux)
+	iamServices := servicesIn(protoregistry.GlobalFiles, iamPackage)
+	mountGRPCStandards(iamMux, healthH.GRPCChecker(iamServices...), iamServices)
 	iamMux.Handle(paladiniamv1connect.NewAuthServiceHandler(connectiam.NewAuthServer(authH), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewUserServiceHandler(connectiam.NewUserServer(userH, repos.Tenant), iamOpts))
 	iamMux.Handle(paladiniamv1connect.NewHealthServiceHandler(
