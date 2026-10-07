@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/features"
 )
 
 // stateBackendRepo is a stateful fake that records the enabled flag and
@@ -29,6 +30,19 @@ type stateBackendRepo struct {
 	healthMessage string
 	setHealthHit  int
 	setHealthErr  error // when set, SetHealth returns it (best-effort path)
+	// Feature probe recording (ADR-0026).
+	features       []features.Result
+	setFeaturesHit int
+	setFeaturesErr error
+}
+
+func (r *stateBackendRepo) SetFeatures(_ context.Context, _ string, results []features.Result) error {
+	r.setFeaturesHit++
+	if r.setFeaturesErr != nil {
+		return r.setFeaturesErr
+	}
+	r.features = results
+	return nil
 }
 
 func (r *stateBackendRepo) SetHealth(_ context.Context, _ string, status, message string, _ time.Time) error {

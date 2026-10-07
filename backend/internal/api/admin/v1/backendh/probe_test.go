@@ -8,16 +8,26 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/features"
 )
 
 type fakeProber struct {
 	err    error
 	called bool
+	// featureErr, when set, is ProbeFeatures' error; features is its result.
+	featureErr     error
+	features       []features.Result
+	featuresCalled bool
 }
 
 func (p *fakeProber) Probe(_ context.Context, _ admindomain.StorageBackend) error {
 	p.called = true
 	return p.err
+}
+
+func (p *fakeProber) ProbeFeatures(_ context.Context, _ admindomain.StorageBackend) ([]features.Result, error) {
+	p.featuresCalled = true
+	return p.features, p.featureErr
 }
 
 func TestTestBackend_NoProber(t *testing.T) {

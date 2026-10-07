@@ -29,7 +29,14 @@ vi.mock("@/hooks/useBuckets", () => ({ useBuckets: () => h.buckets }));
 
 import StorageBackendDetailPage from "./page";
 
-const PRIMARY = { backendId: "primary", displayName: "Primary", kind: 0 };
+// features and compatibility as the server sends them for a backend never probed.
+const PRIMARY = {
+  backendId: "primary",
+  displayName: "Primary",
+  kind: 0,
+  features: [],
+  compatibility: 0,
+};
 
 beforeEach(() => {
   h.backends.backends = [PRIMARY];

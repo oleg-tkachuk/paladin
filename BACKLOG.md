@@ -427,6 +427,21 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Features
 
+### A storage backend's feature probe runs only on request
+
+- **Status:** Deferred
+- **Reason:** `TestBackend` is the only thing that probes a backend's S3
+  features ([ADR-0026](docs/adr/0026-storage-backend-features-are-probed.md)).
+  A backend nobody has tested shows every feature unknown, and a result goes
+  stale when the store is upgraded or reconfigured, with nothing re-checking
+  it.
+- **Definition of Done:** the worker probes every enabled backend at start and
+  on an interval, records the results the way `TestBackend` does, and the
+  console shows how old each result is; a test drives the worker against the
+  probe store.
+- **Blockers:** none; the interval and whether a probe's scratch bucket is
+  acceptable on a schedule for every store want a decision.
+
 ### Replication: real `StorageReplicator` implementation
 
 - **Status:** Aspirational

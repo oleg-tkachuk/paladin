@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/features"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
 
@@ -62,6 +63,9 @@ type StorageBackend struct {
 	HealthStatus    string
 	HealthMessage   string
 	HealthCheckedAt time.Time
+	// Features is what the last TestBackend probe found for each S3 feature
+	// (ADR-0026), as recorded: a feature never probed has no entry.
+	Features        []features.Result
 	ResourceVersion int64
 	CreatedAt       time.Time
 	UpdatedAt       time.Time

@@ -4,7 +4,7 @@
 // living on the backend detail page. Wraps four admin BackendService RPCs
 // that the list/create page deliberately left out (see that page's header):
 //
-//   • TestBackend        — probe connectivity on demand (read-only diagnostic)
+//   • TestBackend        — probe connectivity and S3 features on demand
 //   • UpdateBackend      — edit mutable metadata (OCC-guarded)
 //   • RotateCredentials  — point at a new secret ref with a grace window
 //   • DeleteBackend      — remove the backend (force past bucket refs)
@@ -52,7 +52,14 @@ import {
 } from "@/components/ui/dialog";
 import { errorMessage } from "@/hooks/errorContract";
 
-export function BackendActions({ backend }: { backend: StorageBackend }) {
+export function BackendActions({
+  backend,
+  onTested,
+}: {
+  backend: StorageBackend;
+  /** Called after a probe, which records the backend's S3 features. */
+  onTested?: () => void;
+}) {
   const router = useRouter();
   const { showNotification } = useNotification();
   // autoFetch=false: this component only needs the mutations, not the list —
@@ -77,6 +84,7 @@ export function BackendActions({ backend }: { backend: StorageBackend }) {
     try {
       const res = await testBackend(bid);
       setTestResult(res);
+      onTested?.();
       showNotification({
         type: res.reachable ? "success" : "error",
         title: res.reachable ? "Backend reachable" : "Backend unreachable",

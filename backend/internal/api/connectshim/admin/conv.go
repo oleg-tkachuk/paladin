@@ -53,6 +53,8 @@ func backendToProto(b *admindomain.StorageBackend) *pb.StorageBackend {
 		ResourceVersion:               convx.ResourceVersion(b.ResourceVersion),
 		CreatedAt:                     convx.TsProto(b.CreatedAt),
 		UpdatedAt:                     convx.TsProto(b.UpdatedAt),
+		Features:                      featuresToProto(b.Features),
+		Compatibility:                 compatibilityToProto(b.Features),
 	}
 }
 

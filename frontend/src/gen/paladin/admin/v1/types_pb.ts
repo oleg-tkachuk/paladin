@@ -27,7 +27,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_types: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "ChxwYWxhZGluL2FkbWluL3YxL3R5cGVzLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIqIGCg5TdG9yYWdlQmFja2VuZBIRCgRuYW1lGAEgASgJQgPgQQgSEgoKYmFja2VuZF9pZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSKwoEa2luZBgEIAEoDjIdLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZUtpbmQSEAoIZW5kcG9pbnQYBSABKAkSFwoPcHVibGljX2VuZHBvaW50GAYgASgJEg4KBnJlZ2lvbhgHIAEoCRIYChBmb3JjZV9wYXRoX3N0eWxlGAggASgIEh4KFmNyZWRlbnRpYWxzX3NlY3JldF9yZWYYCSABKAkSMwoDc3NlGAogASgLMiYucGFsYWRpbi5hZG1pbi52MS5TZXJ2ZXJTaWRlRW5jcnlwdGlvbhIzCgZldmVudHMYCyABKAsyIy5wYWxhZGluLmFkbWluLnYxLkV2ZW50U291cmNlQ29uZmlnEhQKDGNlZGFyX3BvbGljeRgMIAEoCRIdChByZXNvdXJjZV92ZXJzaW9uGA0gASgJQgPgQQMSMwoKY3JlYXRlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEg8KB2VuYWJsZWQYECABKAgSJwofcHJldmlvdXNfY3JlZGVudGlhbHNfc2VjcmV0X3JlZhgRIAEoCRJJCiBwcmV2aW91c19jcmVkZW50aWFsc192YWxpZF91bnRpbBgSIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIRCglyZWFkX29ubHkYEyABKAgSFQoNaGVhbHRoX3N0YXR1cxgUIAEoCRIWCg5oZWFsdGhfbWVzc2FnZRgVIAEoCRI6ChFoZWFsdGhfY2hlY2tlZF9hdBgWIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxITCgttYWludGVuYW5jZRgXIAEoCBIQCghwcm92aWRlchgYIAEoCSJPChRTZXJ2ZXJTaWRlRW5jcnlwdGlvbhInCgR0eXBlGAEgASgOMhkucGFsYWRpbi5hZG1pbi52MS5Tc2VUeXBlEg4KBmtleV9pZBgCIAEoCSKYAQoRRXZlbnRTb3VyY2VDb25maWcSDwoHZW5hYmxlZBgBIAEoCBItCgZ0YXJnZXQYAiABKA4yHS5wYWxhZGluLmFkbWluLnYxLkV2ZW50VGFyZ2V0EhEKCXF1ZXVlX3VybBgDIAEoCRIwCg1wb2xsX2ludGVydmFsGAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIscFCgZCdWNrZXQSEQoEbmFtZRgBIAEoCUID4EEIEhcKCmJhY2tlbmRfaWQYAiABKAlCA+BBBRIWCglidWNrZXRfaWQYAyABKAlCA+BBBRIUCgxkaXNwbGF5X25hbWUYBCABKAkSDgoGcmVnaW9uGAUgASgJEhcKD293bmVyX3RlbmFudF9pZBgGIAEoCRIUCgxjZWRhcl9wb2xpY3kYByABKAkSOAoLY29uc3RyYWludHMYCCABKAsyIy5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldENvbnN0cmFpbnRzEjgKD2xpZmVjeWNsZV9ydWxlcxgJIAMoCzIfLnBhbGFkaW4uYWRtaW4udjEuTGlmZWN5Y2xlUnVsZRI3CgtvYmplY3RfbG9jaxgKIAEoCzIiLnBhbGFkaW4uYWRtaW4udjEuT2JqZWN0TG9ja0NvbmZpZxI2Cgp2ZXJzaW9uaW5nGAsgASgLMiIucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRWZXJzaW9uaW5nEjgKC3JlcGxpY2F0aW9uGAwgASgLMiMucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRSZXBsaWNhdGlvbhI0CgZsYWJlbHMYDSADKAsyJC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldC5MYWJlbHNFbnRyeRIdChByZXNvdXJjZV92ZXJzaW9uGA4gASgJQgPgQQMSMwoKY3JlYXRlZF9hdBgPIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GBAgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEhcKD3Byb3Zpc2lvbl9zdGF0ZRgRIAEoCRotCgtMYWJlbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBItkCChFCdWNrZXRDb25zdHJhaW50cxIdChVtYXhfb2JqZWN0X3NpemVfYnl0ZXMYASABKAMSGwoTbWluX3BhcnRfc2l6ZV9ieXRlcxgCIAEoAxIbChNtYXhfcGFydF9zaXplX2J5dGVzGAMgASgDEhEKCW1heF9wYXJ0cxgEIAEoBRIdChVhbGxvd2VkX2NvbnRlbnRfdHlwZXMYBSADKAkSNgoTbWF4X3ByZXNpZ25fcHV0X3R0bBgGIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhI2ChNtYXhfcHJlc2lnbl9nZXRfdHRsGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEkkKG3JlcXVpcmVkX2NoZWNrc3VtX2FsZ29yaXRobRgIIAEoDjIkLnBhbGFkaW4uY29tbW9uLnYxLkNoZWNrc3VtQWxnb3JpdGhtIr8BCg1MaWZlY3ljbGVSdWxlEgoKAmlkGAEgASgJEg8KB2VuYWJsZWQYAiABKAgSDQoFbWF0Y2gYAyABKAkSOwoKdHJhbnNpdGlvbhgEIAEoCzIlLnBhbGFkaW4uYWRtaW4udjEuTGlmZWN5Y2xlVHJhbnNpdGlvbkgAEjsKCmV4cGlyYXRpb24YBSABKAsyJS5wYWxhZGluLmFkbWluLnYxLkxpZmVjeWNsZUV4cGlyYXRpb25IAEIICgZhY3Rpb24iVgoTTGlmZWN5Y2xlVHJhbnNpdGlvbhIoCgVhZnRlchgBIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIVCg1zdG9yYWdlX2NsYXNzGAIgASgJIj8KE0xpZmVjeWNsZUV4cGlyYXRpb24SKAoFYWZ0ZXIYASABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24ikQEKEE9iamVjdExvY2tDb25maWcSDwoHZW5hYmxlZBgBIAEoCBI2CgxkZWZhdWx0X21vZGUYAiABKA4yIC5wYWxhZGluLmFkbWluLnYxLk9iamVjdExvY2tNb2RlEjQKEWRlZmF1bHRfcmV0ZW50aW9uGAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIkEKEEJ1Y2tldFZlcnNpb25pbmcSDwoHZW5hYmxlZBgBIAEoCBIcChRrZWVwX2RlbGV0ZXNfZm9yZXZlchgCIAEoCCJQChFCdWNrZXRSZXBsaWNhdGlvbhIPCgdlbmFibGVkGAEgASgIEhoKEmRlc3RpbmF0aW9uX2J1Y2tldBgCIAEoCRIOCgZmaWx0ZXIYAyABKAki2QMKBlRlbmFudBIRCgRuYW1lGAEgASgJQgPgQQgSFgoJdGVuYW50X2lkGAIgASgJQgPgQQUSFAoMZGlzcGxheV9uYW1lGAMgASgJEjQKBmxhYmVscxgEIAMoCzIkLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50LkxhYmVsc0VudHJ5Eh4KFmluaGVyaXRlZF9jZWRhcl9wb2xpY3kYBSABKAkSHQoQcmVzb3VyY2VfdmVyc2lvbhgGIAEoCUID4EEDEjMKCmNyZWF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIRCgRzbHVnGAkgASgJQgPgQQUSMwoKZGVsZXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIbCg5kZWZhdWx0X2J1Y2tldBgLIAEoCUID4EEDEhsKDnN0b3JhZ2VfbGF5b3V0GAwgASgJQgPgQQUaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKLAwoKQ29sbGVjdGlvbhIRCgRuYW1lGAEgASgJQgPgQQgSFgoJdGVuYW50X2lkGAIgASgJQgPgQQUSFwoKY29sbGVjdGlvbhgDIAEoCUID4EEFEhQKDGRpc3BsYXlfbmFtZRgEIAEoCRIOCgZidWNrZXQYBSABKAkSOgoPY29tcGxldGlvbl9tb2RlGAYgASgOMiEucGFsYWRpbi5jb21tb24udjEuQ29tcGxldGlvbk1vZGUSFAoMY2VkYXJfcG9saWN5GAcgASgJEjgKC2NvbnN0cmFpbnRzGAggASgLMiMucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRDb25zdHJhaW50cxIdChByZXNvdXJjZV92ZXJzaW9uGAkgASgJQgPgQQMSMwoKY3JlYXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDIoYCCgVRdW90YRIRCgRuYW1lGAEgASgJQgPgQQgSFwoPbWF4X3RvdGFsX2J5dGVzGAIgASgDEhgKEG1heF9vYmplY3RfY291bnQYAyABKAMSGQoRbWF4X2J5dGVzX3Blcl9kYXkYBCABKAMSGwoTbWF4X29iamVjdHNfcGVyX2RheRgFIAEoAxIrCgV1c2FnZRgGIAEoCzIcLnBhbGFkaW4uYWRtaW4udjEuUXVvdGFVc2FnZRIdChByZXNvdXJjZV92ZXJzaW9uGAcgASgJQgPgQQMSMwoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAyKbAQoKUXVvdGFVc2FnZRITCgt0b3RhbF9ieXRlcxgBIAEoAxIUCgxvYmplY3RfY291bnQYAiABKAMSEwoLYnl0ZXNfdG9kYXkYAyABKAMSFQoNb2JqZWN0c190b2RheRgEIAEoAxI2Cg1sYXN0X3Jlc2V0X2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDIrsCCg1BdWRpdExvZ0VudHJ5EhAKCGVudHJ5X2lkGAEgASgJEisKAmF0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEhUKDWFjdG9yX3N1YmplY3QYAyABKAkSFwoPYWN0b3JfdGVuYW50X2lkGAQgASgJEhYKDmFjdG9yX2F1ZGllbmNlGAUgASgJEg4KBmFjdGlvbhgGIAEoCRIVCg1yZXNvdXJjZV9uYW1lGAcgASgJEhIKCnJlcXVlc3RfaWQYCCABKAkSEQoJc291cmNlX2lwGAkgASgJEhMKC2JlZm9yZV9qc29uGAogASgMEhIKCmFmdGVyX2pzb24YCyABKAwSFQoNZXJyb3JfbWVzc2FnZRgMIAEoCRIVCg1jYXBhYmlsaXR5X2lkGA0gASgJIo8CChFFdmVudFN1YnNjcmlwdGlvbhIRCgRuYW1lGAEgASgJQgPgQQgSEQoJdGVuYW50X2lkGAIgASgJEg4KBmZpbHRlchgDIAEoCRIpCgRzaW5rGAQgASgLMhsucGFsYWRpbi5hZG1pbi52MS5FdmVudFNpbmsSEAoIZGlzYWJsZWQYBSABKAgSHQoQcmVzb3VyY2VfdmVyc2lvbhgGIAEoCUID4EEDEjMKCmNyZWF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAyL5AQoJRXZlbnRTaW5rEioKBGh0dHAYASABKAsyGi5wYWxhZGluLmFkbWluLnYxLkh0dHBTaW5rSAASLAoFa2Fma2EYAiABKAsyGy5wYWxhZGluLmFkbWluLnYxLkthZmthU2lua0gAEigKA3NxcxgDIAEoCzIZLnBhbGFkaW4uYWRtaW4udjEuU3FzU2lua0gAEioKBG5hdHMYBCABKAsyGi5wYWxhZGluLmFkbWluLnYxLk5hdHNTaW5rSAASMgoIcmFiYml0bXEYBSABKAsyHi5wYWxhZGluLmFkbWluLnYxLlJhYmJpdE1xU2lua0gAQggKBnRhcmdldCJZCghIdHRwU2luaxILCgN1cmwYASABKAkSGgoSc2lnbmluZ19zZWNyZXRfcmVmGAIgASgJEhQKDG1heF9hdHRlbXB0cxgDIAEoBRIOCgZmb3JtYXQYBCABKAki1gEKCUthZmthU2luaxIPCgdicm9rZXJzGAEgASgJEg0KBXRvcGljGAIgASgJEhYKDnNhc2xfbWVjaGFuaXNtGAMgASgJEhUKDXNhc2xfdXNlcm5hbWUYBCABKAkSGgoNc2FzbF9wYXNzd29yZBgFIAEoCUIDgAEBEhMKC3Rsc19lbmFibGVkGAYgASgIEhcKD3Rsc19jbGllbnRfY2VydBgHIAEoCRIbCg50bHNfY2xpZW50X2tleRgIIAEoCUIDgAEBEhMKC3Rsc19jYV9jZXJ0GAkgASgJIj4KB1Nxc1NpbmsSEQoJcXVldWVfdXJsGAEgASgJEg4KBnJlZ2lvbhgCIAEoCRIQCghyb2xlX2FybhgDIAEoCSKSAQoMUmFiYml0TXFTaW5rEhAKA3VybBgBIAEoCUIDgAEBEhAKCGV4Y2hhbmdlGAIgASgJEhMKC3JvdXRpbmdfa2V5GAMgASgJEhcKD3Rsc19jbGllbnRfY2VydBgEIAEoCRIbCg50bHNfY2xpZW50X2tleRgFIAEoCUIDgAEBEhMKC3Rsc19jYV9jZXJ0GAYgASgJIlQKCE5hdHNTaW5rEgsKA3VybBgBIAEoCRIPCgdzdWJqZWN0GAIgASgJEhcKD2NyZWRlbnRpYWxzX3JlZhgDIAEoCRIRCglqZXRzdHJlYW0YBCABKAgqegoLU3RvcmFnZUtpbmQSHAoYU1RPUkFHRV9LSU5EX1VOU1BFQ0lGSUVEEAASFwoTU1RPUkFHRV9LSU5EX0FXU19TMxABEh4KGlNUT1JBR0VfS0lORF9TM19DT01QQVRJQkxFEAISFAoQU1RPUkFHRV9LSU5EX0dDUxADKl0KB1NzZVR5cGUSGAoUU1NFX1RZUEVfVU5TUEVDSUZJRUQQABIRCg1TU0VfVFlQRV9OT05FEAESEwoPU1NFX1RZUEVfQUVTMjU2EAISEAoMU1NFX1RZUEVfS01TEAMqcAoLRXZlbnRUYXJnZXQSHAoYRVZFTlRfVEFSR0VUX1VOU1BFQ0lGSUVEEAASFQoRRVZFTlRfVEFSR0VUX05PTkUQARIUChBFVkVOVF9UQVJHRVRfU1FTEAISFgoSRVZFTlRfVEFSR0VUX1JFRElTEAMqdAoOT2JqZWN0TG9ja01vZGUSIAocT0JKRUNUX0xPQ0tfTU9ERV9VTlNQRUNJRklFRBAAEh8KG09CSkVDVF9MT0NLX01PREVfR09WRVJOQU5DRRABEh8KG09CSkVDVF9MT0NLX01PREVfQ09NUExJQU5DRRACQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
+    "ChxwYWxhZGluL2FkbWluL3YxL3R5cGVzLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIqYHCg5TdG9yYWdlQmFja2VuZBIRCgRuYW1lGAEgASgJQgPgQQgSEgoKYmFja2VuZF9pZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSKwoEa2luZBgEIAEoDjIdLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZUtpbmQSEAoIZW5kcG9pbnQYBSABKAkSFwoPcHVibGljX2VuZHBvaW50GAYgASgJEg4KBnJlZ2lvbhgHIAEoCRIYChBmb3JjZV9wYXRoX3N0eWxlGAggASgIEh4KFmNyZWRlbnRpYWxzX3NlY3JldF9yZWYYCSABKAkSMwoDc3NlGAogASgLMiYucGFsYWRpbi5hZG1pbi52MS5TZXJ2ZXJTaWRlRW5jcnlwdGlvbhIzCgZldmVudHMYCyABKAsyIy5wYWxhZGluLmFkbWluLnYxLkV2ZW50U291cmNlQ29uZmlnEhQKDGNlZGFyX3BvbGljeRgMIAEoCRIdChByZXNvdXJjZV92ZXJzaW9uGA0gASgJQgPgQQMSMwoKY3JlYXRlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEg8KB2VuYWJsZWQYECABKAgSJwofcHJldmlvdXNfY3JlZGVudGlhbHNfc2VjcmV0X3JlZhgRIAEoCRJJCiBwcmV2aW91c19jcmVkZW50aWFsc192YWxpZF91bnRpbBgSIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIRCglyZWFkX29ubHkYEyABKAgSFQoNaGVhbHRoX3N0YXR1cxgUIAEoCRIWCg5oZWFsdGhfbWVzc2FnZRgVIAEoCRI6ChFoZWFsdGhfY2hlY2tlZF9hdBgWIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxITCgttYWludGVuYW5jZRgXIAEoCBIQCghwcm92aWRlchgYIAEoCRI+CghmZWF0dXJlcxgZIAMoCzInLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZUZlYXR1cmVTdXBwb3J0QgPgQQMSQgoNY29tcGF0aWJpbGl0eRgaIAEoDjImLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZUNvbXBhdGliaWxpdHlCA+BBAyLhAQoVU3RvcmFnZUZlYXR1cmVTdXBwb3J0EjEKB2ZlYXR1cmUYASABKA4yIC5wYWxhZGluLmFkbWluLnYxLlN0b3JhZ2VGZWF0dXJlEjEKB3N1cHBvcnQYAiABKA4yIC5wYWxhZGluLmFkbWluLnYxLkZlYXR1cmVTdXBwb3J0EhAKCHJlcXVpcmVkGAMgASgIEg8KB2VuYWJsZXMYBCABKAkSDwoHbWVzc2FnZRgFIAEoCRIuCgpjaGVja2VkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJPChRTZXJ2ZXJTaWRlRW5jcnlwdGlvbhInCgR0eXBlGAEgASgOMhkucGFsYWRpbi5hZG1pbi52MS5Tc2VUeXBlEg4KBmtleV9pZBgCIAEoCSKYAQoRRXZlbnRTb3VyY2VDb25maWcSDwoHZW5hYmxlZBgBIAEoCBItCgZ0YXJnZXQYAiABKA4yHS5wYWxhZGluLmFkbWluLnYxLkV2ZW50VGFyZ2V0EhEKCXF1ZXVlX3VybBgDIAEoCRIwCg1wb2xsX2ludGVydmFsGAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIscFCgZCdWNrZXQSEQoEbmFtZRgBIAEoCUID4EEIEhcKCmJhY2tlbmRfaWQYAiABKAlCA+BBBRIWCglidWNrZXRfaWQYAyABKAlCA+BBBRIUCgxkaXNwbGF5X25hbWUYBCABKAkSDgoGcmVnaW9uGAUgASgJEhcKD293bmVyX3RlbmFudF9pZBgGIAEoCRIUCgxjZWRhcl9wb2xpY3kYByABKAkSOAoLY29uc3RyYWludHMYCCABKAsyIy5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldENvbnN0cmFpbnRzEjgKD2xpZmVjeWNsZV9ydWxlcxgJIAMoCzIfLnBhbGFkaW4uYWRtaW4udjEuTGlmZWN5Y2xlUnVsZRI3CgtvYmplY3RfbG9jaxgKIAEoCzIiLnBhbGFkaW4uYWRtaW4udjEuT2JqZWN0TG9ja0NvbmZpZxI2Cgp2ZXJzaW9uaW5nGAsgASgLMiIucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRWZXJzaW9uaW5nEjgKC3JlcGxpY2F0aW9uGAwgASgLMiMucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRSZXBsaWNhdGlvbhI0CgZsYWJlbHMYDSADKAsyJC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldC5MYWJlbHNFbnRyeRIdChByZXNvdXJjZV92ZXJzaW9uGA4gASgJQgPgQQMSMwoKY3JlYXRlZF9hdBgPIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GBAgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEhcKD3Byb3Zpc2lvbl9zdGF0ZRgRIAEoCRotCgtMYWJlbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBItkCChFCdWNrZXRDb25zdHJhaW50cxIdChVtYXhfb2JqZWN0X3NpemVfYnl0ZXMYASABKAMSGwoTbWluX3BhcnRfc2l6ZV9ieXRlcxgCIAEoAxIbChNtYXhfcGFydF9zaXplX2J5dGVzGAMgASgDEhEKCW1heF9wYXJ0cxgEIAEoBRIdChVhbGxvd2VkX2NvbnRlbnRfdHlwZXMYBSADKAkSNgoTbWF4X3ByZXNpZ25fcHV0X3R0bBgGIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhI2ChNtYXhfcHJlc2lnbl9nZXRfdHRsGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEkkKG3JlcXVpcmVkX2NoZWNrc3VtX2FsZ29yaXRobRgIIAEoDjIkLnBhbGFkaW4uY29tbW9uLnYxLkNoZWNrc3VtQWxnb3JpdGhtIr8BCg1MaWZlY3ljbGVSdWxlEgoKAmlkGAEgASgJEg8KB2VuYWJsZWQYAiABKAgSDQoFbWF0Y2gYAyABKAkSOwoKdHJhbnNpdGlvbhgEIAEoCzIlLnBhbGFkaW4uYWRtaW4udjEuTGlmZWN5Y2xlVHJhbnNpdGlvbkgAEjsKCmV4cGlyYXRpb24YBSABKAsyJS5wYWxhZGluLmFkbWluLnYxLkxpZmVjeWNsZUV4cGlyYXRpb25IAEIICgZhY3Rpb24iVgoTTGlmZWN5Y2xlVHJhbnNpdGlvbhIoCgVhZnRlchgBIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIVCg1zdG9yYWdlX2NsYXNzGAIgASgJIj8KE0xpZmVjeWNsZUV4cGlyYXRpb24SKAoFYWZ0ZXIYASABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24ikQEKEE9iamVjdExvY2tDb25maWcSDwoHZW5hYmxlZBgBIAEoCBI2CgxkZWZhdWx0X21vZGUYAiABKA4yIC5wYWxhZGluLmFkbWluLnYxLk9iamVjdExvY2tNb2RlEjQKEWRlZmF1bHRfcmV0ZW50aW9uGAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIkEKEEJ1Y2tldFZlcnNpb25pbmcSDwoHZW5hYmxlZBgBIAEoCBIcChRrZWVwX2RlbGV0ZXNfZm9yZXZlchgCIAEoCCJQChFCdWNrZXRSZXBsaWNhdGlvbhIPCgdlbmFibGVkGAEgASgIEhoKEmRlc3RpbmF0aW9uX2J1Y2tldBgCIAEoCRIOCgZmaWx0ZXIYAyABKAki2QMKBlRlbmFudBIRCgRuYW1lGAEgASgJQgPgQQgSFgoJdGVuYW50X2lkGAIgASgJQgPgQQUSFAoMZGlzcGxheV9uYW1lGAMgASgJEjQKBmxhYmVscxgEIAMoCzIkLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50LkxhYmVsc0VudHJ5Eh4KFmluaGVyaXRlZF9jZWRhcl9wb2xpY3kYBSABKAkSHQoQcmVzb3VyY2VfdmVyc2lvbhgGIAEoCUID4EEDEjMKCmNyZWF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIRCgRzbHVnGAkgASgJQgPgQQUSMwoKZGVsZXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIbCg5kZWZhdWx0X2J1Y2tldBgLIAEoCUID4EEDEhsKDnN0b3JhZ2VfbGF5b3V0GAwgASgJQgPgQQUaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKLAwoKQ29sbGVjdGlvbhIRCgRuYW1lGAEgASgJQgPgQQgSFgoJdGVuYW50X2lkGAIgASgJQgPgQQUSFwoKY29sbGVjdGlvbhgDIAEoCUID4EEFEhQKDGRpc3BsYXlfbmFtZRgEIAEoCRIOCgZidWNrZXQYBSABKAkSOgoPY29tcGxldGlvbl9tb2RlGAYgASgOMiEucGFsYWRpbi5jb21tb24udjEuQ29tcGxldGlvbk1vZGUSFAoMY2VkYXJfcG9saWN5GAcgASgJEjgKC2NvbnN0cmFpbnRzGAggASgLMiMucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRDb25zdHJhaW50cxIdChByZXNvdXJjZV92ZXJzaW9uGAkgASgJQgPgQQMSMwoKY3JlYXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDIoYCCgVRdW90YRIRCgRuYW1lGAEgASgJQgPgQQgSFwoPbWF4X3RvdGFsX2J5dGVzGAIgASgDEhgKEG1heF9vYmplY3RfY291bnQYAyABKAMSGQoRbWF4X2J5dGVzX3Blcl9kYXkYBCABKAMSGwoTbWF4X29iamVjdHNfcGVyX2RheRgFIAEoAxIrCgV1c2FnZRgGIAEoCzIcLnBhbGFkaW4uYWRtaW4udjEuUXVvdGFVc2FnZRIdChByZXNvdXJjZV92ZXJzaW9uGAcgASgJQgPgQQMSMwoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAyKbAQoKUXVvdGFVc2FnZRITCgt0b3RhbF9ieXRlcxgBIAEoAxIUCgxvYmplY3RfY291bnQYAiABKAMSEwoLYnl0ZXNfdG9kYXkYAyABKAMSFQoNb2JqZWN0c190b2RheRgEIAEoAxI2Cg1sYXN0X3Jlc2V0X2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDIrsCCg1BdWRpdExvZ0VudHJ5EhAKCGVudHJ5X2lkGAEgASgJEisKAmF0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEhUKDWFjdG9yX3N1YmplY3QYAyABKAkSFwoPYWN0b3JfdGVuYW50X2lkGAQgASgJEhYKDmFjdG9yX2F1ZGllbmNlGAUgASgJEg4KBmFjdGlvbhgGIAEoCRIVCg1yZXNvdXJjZV9uYW1lGAcgASgJEhIKCnJlcXVlc3RfaWQYCCABKAkSEQoJc291cmNlX2lwGAkgASgJEhMKC2JlZm9yZV9qc29uGAogASgMEhIKCmFmdGVyX2pzb24YCyABKAwSFQoNZXJyb3JfbWVzc2FnZRgMIAEoCRIVCg1jYXBhYmlsaXR5X2lkGA0gASgJIo8CChFFdmVudFN1YnNjcmlwdGlvbhIRCgRuYW1lGAEgASgJQgPgQQgSEQoJdGVuYW50X2lkGAIgASgJEg4KBmZpbHRlchgDIAEoCRIpCgRzaW5rGAQgASgLMhsucGFsYWRpbi5hZG1pbi52MS5FdmVudFNpbmsSEAoIZGlzYWJsZWQYBSABKAgSHQoQcmVzb3VyY2VfdmVyc2lvbhgGIAEoCUID4EEDEjMKCmNyZWF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAyL5AQoJRXZlbnRTaW5rEioKBGh0dHAYASABKAsyGi5wYWxhZGluLmFkbWluLnYxLkh0dHBTaW5rSAASLAoFa2Fma2EYAiABKAsyGy5wYWxhZGluLmFkbWluLnYxLkthZmthU2lua0gAEigKA3NxcxgDIAEoCzIZLnBhbGFkaW4uYWRtaW4udjEuU3FzU2lua0gAEioKBG5hdHMYBCABKAsyGi5wYWxhZGluLmFkbWluLnYxLk5hdHNTaW5rSAASMgoIcmFiYml0bXEYBSABKAsyHi5wYWxhZGluLmFkbWluLnYxLlJhYmJpdE1xU2lua0gAQggKBnRhcmdldCJZCghIdHRwU2luaxILCgN1cmwYASABKAkSGgoSc2lnbmluZ19zZWNyZXRfcmVmGAIgASgJEhQKDG1heF9hdHRlbXB0cxgDIAEoBRIOCgZmb3JtYXQYBCABKAki1gEKCUthZmthU2luaxIPCgdicm9rZXJzGAEgASgJEg0KBXRvcGljGAIgASgJEhYKDnNhc2xfbWVjaGFuaXNtGAMgASgJEhUKDXNhc2xfdXNlcm5hbWUYBCABKAkSGgoNc2FzbF9wYXNzd29yZBgFIAEoCUIDgAEBEhMKC3Rsc19lbmFibGVkGAYgASgIEhcKD3Rsc19jbGllbnRfY2VydBgHIAEoCRIbCg50bHNfY2xpZW50X2tleRgIIAEoCUIDgAEBEhMKC3Rsc19jYV9jZXJ0GAkgASgJIj4KB1Nxc1NpbmsSEQoJcXVldWVfdXJsGAEgASgJEg4KBnJlZ2lvbhgCIAEoCRIQCghyb2xlX2FybhgDIAEoCSKSAQoMUmFiYml0TXFTaW5rEhAKA3VybBgBIAEoCUIDgAEBEhAKCGV4Y2hhbmdlGAIgASgJEhMKC3JvdXRpbmdfa2V5GAMgASgJEhcKD3Rsc19jbGllbnRfY2VydBgEIAEoCRIbCg50bHNfY2xpZW50X2tleRgFIAEoCUIDgAEBEhMKC3Rsc19jYV9jZXJ0GAYgASgJIlQKCE5hdHNTaW5rEgsKA3VybBgBIAEoCRIPCgdzdWJqZWN0GAIgASgJEhcKD2NyZWRlbnRpYWxzX3JlZhgDIAEoCRIRCglqZXRzdHJlYW0YBCABKAgquQIKDlN0b3JhZ2VGZWF0dXJlEh8KG1NUT1JBR0VfRkVBVFVSRV9VTlNQRUNJRklFRBAAEiMKH1NUT1JBR0VfRkVBVFVSRV9DT05ESVRJT05BTF9QVVQQARIjCh9TVE9SQUdFX0ZFQVRVUkVfQ0hFQ0tTVU1fU0hBMjU2EAISJAogU1RPUkFHRV9GRUFUVVJFX01VTFRJUEFSVF9VUExPQUQQAxIkCiBTVE9SQUdFX0ZFQVRVUkVfU0VSVkVSX1NJREVfQ09QWRAEEiIKHlNUT1JBR0VfRkVBVFVSRV9QUkVTSUdORURfUE9TVBAFEiEKHVNUT1JBR0VfRkVBVFVSRV9CVUNLRVRfQ1JFQVRFEAYSKQolU1RPUkFHRV9GRUFUVVJFX0FOT05ZTU9VU19SRUFEX1BPTElDWRAHKo4BCg5GZWF0dXJlU3VwcG9ydBIfChtGRUFUVVJFX1NVUFBPUlRfVU5TUEVDSUZJRUQQABIdChlGRUFUVVJFX1NVUFBPUlRfU1VQUE9SVEVEEAESHwobRkVBVFVSRV9TVVBQT1JUX1VOU1VQUE9SVEVEEAISGwoXRkVBVFVSRV9TVVBQT1JUX1VOS05PV04QAyqxAQoUU3RvcmFnZUNvbXBhdGliaWxpdHkSJQohU1RPUkFHRV9DT01QQVRJQklMSVRZX1VOU1BFQ0lGSUVEEAASJAogU1RPUkFHRV9DT01QQVRJQklMSVRZX1VOVkVSSUZJRUQQARIkCiBTVE9SQUdFX0NPTVBBVElCSUxJVFlfQ09NUEFUSUJMRRACEiYKIlNUT1JBR0VfQ09NUEFUSUJJTElUWV9JTkNPTVBBVElCTEUQAyp6CgtTdG9yYWdlS2luZBIcChhTVE9SQUdFX0tJTkRfVU5TUEVDSUZJRUQQABIXChNTVE9SQUdFX0tJTkRfQVdTX1MzEAESHgoaU1RPUkFHRV9LSU5EX1MzX0NPTVBBVElCTEUQAhIUChBTVE9SQUdFX0tJTkRfR0NTEAMqXQoHU3NlVHlwZRIYChRTU0VfVFlQRV9VTlNQRUNJRklFRBAAEhEKDVNTRV9UWVBFX05PTkUQARITCg9TU0VfVFlQRV9BRVMyNTYQAhIQCgxTU0VfVFlQRV9LTVMQAypwCgtFdmVudFRhcmdldBIcChhFVkVOVF9UQVJHRVRfVU5TUEVDSUZJRUQQABIVChFFVkVOVF9UQVJHRVRfTk9ORRABEhQKEEVWRU5UX1RBUkdFVF9TUVMQAhIWChJFVkVOVF9UQVJHRVRfUkVESVMQAyp0Cg5PYmplY3RMb2NrTW9kZRIgChxPQkpFQ1RfTE9DS19NT0RFX1VOU1BFQ0lGSUVEEAASHwobT0JKRUNUX0xPQ0tfTU9ERV9HT1ZFUk5BTkNFEAESHwobT0JKRUNUX0xPQ0tfTU9ERV9DT01QTElBTkNFEAJCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
     [
       file_google_protobuf_duration,
       file_google_protobuf_timestamp,
@@ -212,6 +212,21 @@ export type StorageBackend = Message<"paladin.admin.v1.StorageBackend"> & {
    * @generated from field: string provider = 24;
    */
   provider: string;
+
+  /**
+   * What the last TestBackend probe found for every S3 feature Paladin uses
+   * (ADR-0026), one entry per feature: UNKNOWN for one never probed.
+   *
+   * @generated from field: repeated paladin.admin.v1.StorageFeatureSupport features = 25;
+   */
+  features: StorageFeatureSupport[];
+
+  /**
+   * features summarised over the required ones.
+   *
+   * @generated from field: paladin.admin.v1.StorageCompatibility compatibility = 26;
+   */
+  compatibility: StorageCompatibility;
 };
 
 /**
@@ -221,6 +236,62 @@ export type StorageBackend = Message<"paladin.admin.v1.StorageBackend"> & {
 export const StorageBackendSchema: GenMessage<StorageBackend> =
   /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_types, 0);
+
+/**
+ * One feature's probe outcome.
+ *
+ * @generated from message paladin.admin.v1.StorageFeatureSupport
+ */
+export type StorageFeatureSupport =
+  Message<"paladin.admin.v1.StorageFeatureSupport"> & {
+    /**
+     * @generated from field: paladin.admin.v1.StorageFeature feature = 1;
+     */
+    feature: StorageFeature;
+
+    /**
+     * @generated from field: paladin.admin.v1.FeatureSupport support = 2;
+     */
+    support: FeatureSupport;
+
+    /**
+     * A guarantee Paladin makes depends on the feature; without it the backend
+     * is incompatible. Otherwise one operation needs it and is refused where it
+     * is not supported.
+     *
+     * @generated from field: bool required = 3;
+     */
+    required: boolean;
+
+    /**
+     * What the feature is for, for an operator reading a warning.
+     *
+     * @generated from field: string enables = 4;
+     */
+    enables: string;
+
+    /**
+     * Why, when support is not SUPPORTED.
+     *
+     * @generated from field: string message = 5;
+     */
+    message: string;
+
+    /**
+     * Unset for a feature never probed.
+     *
+     * @generated from field: google.protobuf.Timestamp checked_at = 6;
+     */
+    checkedAt?: Timestamp | undefined;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.StorageFeatureSupport.
+ * Use `create(StorageFeatureSupportSchema)` to create a new message.
+ */
+export const StorageFeatureSupportSchema: GenMessage<StorageFeatureSupport> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_types, 1);
 
 /**
  * @generated from message paladin.admin.v1.ServerSideEncryption
@@ -246,7 +317,7 @@ export type ServerSideEncryption =
  */
 export const ServerSideEncryptionSchema: GenMessage<ServerSideEncryption> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 1);
+  messageDesc(file_paladin_admin_v1_types, 2);
 
 /**
  * @generated from message paladin.admin.v1.EventSourceConfig
@@ -280,7 +351,7 @@ export type EventSourceConfig =
  */
 export const EventSourceConfigSchema: GenMessage<EventSourceConfig> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 2);
+  messageDesc(file_paladin_admin_v1_types, 3);
 
 /**
  * ─── Bucket ─────────────────────────────────────────────────────────────────
@@ -411,7 +482,7 @@ export type Bucket = Message<"paladin.admin.v1.Bucket"> & {
  */
 export const BucketSchema: GenMessage<Bucket> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 3);
+  messageDesc(file_paladin_admin_v1_types, 4);
 
 /**
  * @generated from message paladin.admin.v1.BucketConstraints
@@ -475,7 +546,7 @@ export type BucketConstraints =
  */
 export const BucketConstraintsSchema: GenMessage<BucketConstraints> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 4);
+  messageDesc(file_paladin_admin_v1_types, 5);
 
 /**
  * @generated from message paladin.admin.v1.LifecycleRule
@@ -525,7 +596,7 @@ export type LifecycleRule = Message<"paladin.admin.v1.LifecycleRule"> & {
  */
 export const LifecycleRuleSchema: GenMessage<LifecycleRule> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 5);
+  messageDesc(file_paladin_admin_v1_types, 6);
 
 /**
  * @generated from message paladin.admin.v1.LifecycleTransition
@@ -549,7 +620,7 @@ export type LifecycleTransition =
  */
 export const LifecycleTransitionSchema: GenMessage<LifecycleTransition> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 6);
+  messageDesc(file_paladin_admin_v1_types, 7);
 
 /**
  * @generated from message paladin.admin.v1.LifecycleExpiration
@@ -568,7 +639,7 @@ export type LifecycleExpiration =
  */
 export const LifecycleExpirationSchema: GenMessage<LifecycleExpiration> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 7);
+  messageDesc(file_paladin_admin_v1_types, 8);
 
 /**
  * @generated from message paladin.admin.v1.ObjectLockConfig
@@ -596,7 +667,7 @@ export type ObjectLockConfig = Message<"paladin.admin.v1.ObjectLockConfig"> & {
  */
 export const ObjectLockConfigSchema: GenMessage<ObjectLockConfig> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 8);
+  messageDesc(file_paladin_admin_v1_types, 9);
 
 /**
  * @generated from message paladin.admin.v1.BucketVersioning
@@ -621,7 +692,7 @@ export type BucketVersioning = Message<"paladin.admin.v1.BucketVersioning"> & {
  */
 export const BucketVersioningSchema: GenMessage<BucketVersioning> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 9);
+  messageDesc(file_paladin_admin_v1_types, 10);
 
 /**
  * @generated from message paladin.admin.v1.BucketReplication
@@ -654,7 +725,7 @@ export type BucketReplication =
  */
 export const BucketReplicationSchema: GenMessage<BucketReplication> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 10);
+  messageDesc(file_paladin_admin_v1_types, 11);
 
 /**
  * ─── Tenant ─────────────────────────────────────────────────────────────────
@@ -755,7 +826,7 @@ export type Tenant = Message<"paladin.admin.v1.Tenant"> & {
  */
 export const TenantSchema: GenMessage<Tenant> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 11);
+  messageDesc(file_paladin_admin_v1_types, 12);
 
 /**
  * ─── Collection ──────────────────────────────────────────────────────────────
@@ -839,7 +910,7 @@ export type Collection = Message<"paladin.admin.v1.Collection"> & {
  */
 export const CollectionSchema: GenMessage<Collection> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 12);
+  messageDesc(file_paladin_admin_v1_types, 13);
 
 /**
  * ─── Quota ──────────────────────────────────────────────────────────────────
@@ -902,7 +973,7 @@ export type Quota = Message<"paladin.admin.v1.Quota"> & {
  */
 export const QuotaSchema: GenMessage<Quota> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 13);
+  messageDesc(file_paladin_admin_v1_types, 14);
 
 /**
  * @generated from message paladin.admin.v1.QuotaUsage
@@ -940,7 +1011,7 @@ export type QuotaUsage = Message<"paladin.admin.v1.QuotaUsage"> & {
  */
 export const QuotaUsageSchema: GenMessage<QuotaUsage> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 14);
+  messageDesc(file_paladin_admin_v1_types, 15);
 
 /**
  * ─── Audit ──────────────────────────────────────────────────────────────────
@@ -1035,7 +1106,7 @@ export type AuditLogEntry = Message<"paladin.admin.v1.AuditLogEntry"> & {
  */
 export const AuditLogEntrySchema: GenMessage<AuditLogEntry> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 15);
+  messageDesc(file_paladin_admin_v1_types, 16);
 
 /**
  * ─── Event subscription ─────────────────────────────────────────────────────
@@ -1095,7 +1166,7 @@ export type EventSubscription =
  */
 export const EventSubscriptionSchema: GenMessage<EventSubscription> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 16);
+  messageDesc(file_paladin_admin_v1_types, 17);
 
 /**
  * EventSink is a tagged union of the supported delivery targets. Sink
@@ -1167,7 +1238,7 @@ export type EventSink = Message<"paladin.admin.v1.EventSink"> & {
  */
 export const EventSinkSchema: GenMessage<EventSink> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 17);
+  messageDesc(file_paladin_admin_v1_types, 18);
 
 /**
  * @generated from message paladin.admin.v1.HttpSink
@@ -1214,7 +1285,7 @@ export type HttpSink = Message<"paladin.admin.v1.HttpSink"> & {
  */
 export const HttpSinkSchema: GenMessage<HttpSink> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 18);
+  messageDesc(file_paladin_admin_v1_types, 19);
 
 /**
  * @generated from message paladin.admin.v1.KafkaSink
@@ -1291,7 +1362,7 @@ export type KafkaSink = Message<"paladin.admin.v1.KafkaSink"> & {
  */
 export const KafkaSinkSchema: GenMessage<KafkaSink> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 19);
+  messageDesc(file_paladin_admin_v1_types, 20);
 
 /**
  * @generated from message paladin.admin.v1.SqsSink
@@ -1324,7 +1395,7 @@ export type SqsSink = Message<"paladin.admin.v1.SqsSink"> & {
  */
 export const SqsSinkSchema: GenMessage<SqsSink> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 20);
+  messageDesc(file_paladin_admin_v1_types, 21);
 
 /**
  * RabbitMqSink dispatches CloudEvents-formatted JSON payloads to a RabbitMQ
@@ -1385,7 +1456,7 @@ export type RabbitMqSink = Message<"paladin.admin.v1.RabbitMqSink"> & {
  */
 export const RabbitMqSinkSchema: GenMessage<RabbitMqSink> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 21);
+  messageDesc(file_paladin_admin_v1_types, 22);
 
 /**
  * NatsSink dispatches CloudEvents-formatted JSON payloads to a NATS
@@ -1455,7 +1526,159 @@ export type NatsSink = Message<"paladin.admin.v1.NatsSink"> & {
  */
 export const NatsSinkSchema: GenMessage<NatsSink> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 22);
+  messageDesc(file_paladin_admin_v1_types, 23);
+
+/**
+ * An S3 feature Paladin uses (ADR-0026). Mirrors the catalog in the backend's
+ * internal/storage/features; a test holds the two equal.
+ *
+ * @generated from enum paladin.admin.v1.StorageFeature
+ */
+export enum StorageFeature {
+  /**
+   * @generated from enum value: STORAGE_FEATURE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * A PUT with If-None-Match: * is refused when the key exists. Required.
+   *
+   * @generated from enum value: STORAGE_FEATURE_CONDITIONAL_PUT = 1;
+   */
+  CONDITIONAL_PUT = 1,
+
+  /**
+   * The store refuses bytes that do not match x-amz-checksum-sha256. Required.
+   *
+   * @generated from enum value: STORAGE_FEATURE_CHECKSUM_SHA256 = 2;
+   */
+  CHECKSUM_SHA256 = 2,
+
+  /**
+   * Multipart create, upload part, complete. Required.
+   *
+   * @generated from enum value: STORAGE_FEATURE_MULTIPART_UPLOAD = 3;
+   */
+  MULTIPART_UPLOAD = 3,
+
+  /**
+   * CopyObject within the store.
+   *
+   * @generated from enum value: STORAGE_FEATURE_SERVER_SIDE_COPY = 4;
+   */
+  SERVER_SIDE_COPY = 4,
+
+  /**
+   * A browser form upload signed with a POST policy.
+   *
+   * @generated from enum value: STORAGE_FEATURE_PRESIGNED_POST = 5;
+   */
+  PRESIGNED_POST = 5,
+
+  /**
+   * The credentials may create and delete a bucket.
+   *
+   * @generated from enum value: STORAGE_FEATURE_BUCKET_CREATE = 6;
+   */
+  BUCKET_CREATE = 6,
+
+  /**
+   * A bucket policy granting anonymous reads on a prefix is enforced: an
+   * unsigned GET succeeds inside the prefix and is refused outside it.
+   *
+   * @generated from enum value: STORAGE_FEATURE_ANONYMOUS_READ_POLICY = 7;
+   */
+  ANONYMOUS_READ_POLICY = 7,
+}
+
+/**
+ * Describes the enum paladin.admin.v1.StorageFeature.
+ */
+export const StorageFeatureSchema: GenEnum<StorageFeature> =
+  /*@__PURE__*/
+  enumDesc(file_paladin_admin_v1_types, 0);
+
+/**
+ * What a probe of one feature found.
+ *
+ * @generated from enum paladin.admin.v1.FeatureSupport
+ */
+export enum FeatureSupport {
+  /**
+   * @generated from enum value: FEATURE_SUPPORT_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * The store behaved as the feature requires.
+   *
+   * @generated from enum value: FEATURE_SUPPORT_SUPPORTED = 1;
+   */
+  SUPPORTED = 1,
+
+  /**
+   * The store answered, and the answer was wrong.
+   *
+   * @generated from enum value: FEATURE_SUPPORT_UNSUPPORTED = 2;
+   */
+  UNSUPPORTED = 2,
+
+  /**
+   * The probe could not tell: never probed, no scratch bucket, a denied
+   * permission, a timeout.
+   *
+   * @generated from enum value: FEATURE_SUPPORT_UNKNOWN = 3;
+   */
+  UNKNOWN = 3,
+}
+
+/**
+ * Describes the enum paladin.admin.v1.FeatureSupport.
+ */
+export const FeatureSupportSchema: GenEnum<FeatureSupport> =
+  /*@__PURE__*/
+  enumDesc(file_paladin_admin_v1_types, 1);
+
+/**
+ * A backend's required features, summarised.
+ *
+ * @generated from enum paladin.admin.v1.StorageCompatibility
+ */
+export enum StorageCompatibility {
+  /**
+   * @generated from enum value: STORAGE_COMPATIBILITY_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * No required feature is unsupported, and not all are known supported.
+   *
+   * @generated from enum value: STORAGE_COMPATIBILITY_UNVERIFIED = 1;
+   */
+  UNVERIFIED = 1,
+
+  /**
+   * Every required feature is supported.
+   *
+   * @generated from enum value: STORAGE_COMPATIBILITY_COMPATIBLE = 2;
+   */
+  COMPATIBLE = 2,
+
+  /**
+   * A required feature is unsupported: Paladin's guarantees do not hold on
+   * this backend.
+   *
+   * @generated from enum value: STORAGE_COMPATIBILITY_INCOMPATIBLE = 3;
+   */
+  INCOMPATIBLE = 3,
+}
+
+/**
+ * Describes the enum paladin.admin.v1.StorageCompatibility.
+ */
+export const StorageCompatibilitySchema: GenEnum<StorageCompatibility> =
+  /*@__PURE__*/
+  enumDesc(file_paladin_admin_v1_types, 2);
 
 /**
  * @generated from enum paladin.admin.v1.StorageKind
@@ -1489,7 +1712,7 @@ export enum StorageKind {
  */
 export const StorageKindSchema: GenEnum<StorageKind> =
   /*@__PURE__*/
-  enumDesc(file_paladin_admin_v1_types, 0);
+  enumDesc(file_paladin_admin_v1_types, 3);
 
 /**
  * @generated from enum paladin.admin.v1.SseType
@@ -1521,7 +1744,7 @@ export enum SseType {
  */
 export const SseTypeSchema: GenEnum<SseType> =
   /*@__PURE__*/
-  enumDesc(file_paladin_admin_v1_types, 1);
+  enumDesc(file_paladin_admin_v1_types, 4);
 
 /**
  * @generated from enum paladin.admin.v1.EventTarget
@@ -1553,7 +1776,7 @@ export enum EventTarget {
  */
 export const EventTargetSchema: GenEnum<EventTarget> =
   /*@__PURE__*/
-  enumDesc(file_paladin_admin_v1_types, 2);
+  enumDesc(file_paladin_admin_v1_types, 5);
 
 /**
  * @generated from enum paladin.admin.v1.ObjectLockMode
@@ -1584,4 +1807,4 @@ export enum ObjectLockMode {
  */
 export const ObjectLockModeSchema: GenEnum<ObjectLockMode> =
   /*@__PURE__*/
-  enumDesc(file_paladin_admin_v1_types, 3);
+  enumDesc(file_paladin_admin_v1_types, 6);

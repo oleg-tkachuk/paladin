@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/features"
 )
 
 // ErrNotFound / ErrVersionMismatch are the canonical not-found / OCC errors
@@ -65,6 +66,9 @@ type BackendRepository interface {
 	// DERIVED/advisory: no OCC, writes a separate 1:1 table so it never
 	// bumps the backend's resource_version. status is "ok" | "error".
 	SetHealth(ctx context.Context, backendID, status, message string, checkedAt time.Time) error
+	// SetFeatures replaces the recorded feature probe results (ADR-0026).
+	// Advisory like SetHealth: no OCC, no resource_version change.
+	SetFeatures(ctx context.Context, backendID string, results []features.Result) error
 	// RotateCredentials swaps credentials_secret_ref to secretRef. When
 	// graceSeconds > 0 it preserves the prior ref in
 	// previous_credentials_secret_ref with a now()+grace validity horizon so

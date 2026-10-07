@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/features"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -67,6 +68,54 @@ func (r *BackendRepoV2) GetTx(ctx context.Context, tx pgx.Tx, backendID string) 
 		return admindomain.StorageBackend{}, fmt.Errorf("get backend: %w", err)
 	}
 	return backendFromGetRow(row), nil
+}
+
+// attachFeatures fills each backend's recorded feature probe results with one
+// query for the whole page.
+func (r *BackendRepoV2) attachFeatures(ctx context.Context, backends []admindomain.StorageBackend) error {
+	if len(backends) == 0 {
+		return nil
+	}
+	names := make([]string, len(backends))
+	for i, b := range backends {
+		names[i] = b.BackendID
+	}
+	rows, err := r.q.ListStorageBackendFeatures(ctx, names)
+	if err != nil {
+		return fmt.Errorf("list backend features: %w", err)
+	}
+	byBackend := make(map[string][]features.Result, len(backends))
+	for _, row := range rows {
+		byBackend[row.BackendName] = append(byBackend[row.BackendName], features.Result{
+			Feature:   features.Feature(row.Feature),
+			Support:   features.Support(row.Support),
+			Message:   row.Message,
+			CheckedAt: timeFrom(row.CheckedAt),
+		})
+	}
+	for i := range backends {
+		backends[i].Features = byBackend[backends[i].BackendID]
+	}
+	return nil
+}
+
+// SetFeatures replaces a backend's recorded feature probe results in one
+// transaction, so a reader sees one probe's results or the previous one's,
+// never a mix (ADR-0026).
+func (r *BackendRepoV2) SetFeatures(ctx context.Context, backendID string, results []features.Result) error {
+	return r.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		if err := q.DeleteStorageBackendFeatures(ctx, backendID); err != nil {
+			return fmt.Errorf("clear backend features: %w", err)
+		}
+		for _, res := range results {
+			if err := q.InsertStorageBackendFeature(ctx, string(res.Feature), string(res.Support),
+				res.Message, pgTS(res.CheckedAt), backendID); err != nil {
+				return fmt.Errorf("record backend feature %s: %w", res.Feature, err)
+			}
+		}
+		return nil
+	})
 }
 
 // Create inserts a new backend. A name already in use is a duplicate, not an
@@ -131,7 +180,11 @@ func (r *BackendRepoV2) Get(ctx context.Context, backendID string) (admindomain.
 		}
 		return admindomain.StorageBackend{}, fmt.Errorf("get backend: %w", err)
 	}
-	return backendFromGetRow(row), nil
+	out := []admindomain.StorageBackend{backendFromGetRow(row)}
+	if err := r.attachFeatures(ctx, out); err != nil {
+		return admindomain.StorageBackend{}, err
+	}
+	return out[0], nil
 }
 
 // backendFromGetRow maps a GetStorageBackendV2 row to the domain type. Shared
@@ -255,6 +308,9 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID, filte
 	out := make([]admindomain.StorageBackend, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, backendFromListRow(row))
+	}
+	if err := r.attachFeatures(ctx, out); err != nil {
+		return nil, "", err
 	}
 	var next string
 	if len(out) == int(pageSize) && len(out) > 0 {
