@@ -27,6 +27,9 @@ import (
 // benign defaults so happy-path tests only wire what they assert on; captured
 // fields verify the tenant-stamping / routing contract without a database.
 type fakeRepo struct {
+	// public makes the collection public, stored with cacheControl (ADR-0027).
+	public            bool
+	cacheControl      string
 	initiateSessionFn func(ctx context.Context, args InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (Session, error)
 	getSessionFn      func(ctx context.Context, uploadID string) (Session, error)
 	deleteSessionFn   func(ctx context.Context, uploadID string) error
@@ -107,7 +110,10 @@ func (f *fakeRepo) RecordCompositeChecksum(_ context.Context, objectID uuid.UUID
 
 func (f *fakeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error) {
 	backendID, bucket, err := f.LookupBucket(ctx, tenantID, collection, write)
-	return objecth.BucketMeta{BackendID: backendID, BucketName: bucket, Constraints: f.constraints}, err
+	return objecth.BucketMeta{
+		BackendID: backendID, BucketName: bucket, Constraints: f.constraints,
+		PublicRead: f.public, CacheControl: f.cacheControl,
+	}, err
 }
 
 func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
@@ -124,6 +130,10 @@ func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collect
 // handler routes calls to the (backend, bucket) it resolved and forwards
 // the storage upload id / parts / part-number / ttl unchanged.
 type fakeStorage struct {
+	// cacheControl is what the last InitiateMultipart was given.
+	cacheControl string
+	// publicURLs counts PublicURL calls.
+	publicURLs  int
 	initiateFn  func() (string, error)
 	completeFn  func(parts []PartETag) (string, int64, error)
 	abortFn     func() error
@@ -176,7 +186,8 @@ func (f *fakeStorage) ListMultipartParts(ctx context.Context, backendID, bucket 
 	return nil, 0, nil
 }
 
-func (f *fakeStorage) InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string) (string, error) {
+func (f *fakeStorage) InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, cacheControl, checksumAlgo string) (string, error) {
+	f.cacheControl = cacheControl
 	f.lastInitiate.checksumAlgo = checksumAlgo
 	f.lastInitiate.backendID = backendID
 	f.lastInitiate.bucket = bucket
@@ -923,4 +934,9 @@ func TestListParts(t *testing.T) {
 			t.Fatalf("page size clamp: got %d want 100", storage.lastListParts.maxParts)
 		}
 	})
+}
+
+func (f *fakeStorage) PublicURL(_ context.Context, _, bucket, base string, tenantID uuid.UUID, collection, key string) (string, error) {
+	f.publicURLs++
+	return "https://public.example/" + bucket + "/" + tenantID.String() + "/" + collection + "/" + key, nil
 }

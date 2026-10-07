@@ -505,7 +505,8 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		       bk.object_lock_default_mode,
 		       bk.object_lock_default_retention_seconds,
 		       c.constraints, sb.enabled, sb.read_only, sb.events_enabled,
-		       bk.provision_state, bk.constraints
+		       bk.provision_state, bk.constraints,
+		       c.public_read, c.cache_control, bk.public_base_url
 		FROM collections c
 		JOIN buckets bk          ON bk.id = c.bucket_id
 		JOIN storage_backends sb ON sb.id = bk.backend_id
@@ -525,6 +526,7 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		&meta.BackendID, &meta.BucketName, &meta.VersioningEnabled, &meta.ObjectLockEnabled,
 		&defaultMode, &retentionSeconds,
 		&constraintsJSON, &enabled, &readOnly, &meta.EventsEnabled, &provisionState, &bucketConstraint,
+		&meta.PublicRead, &meta.CacheControl, &meta.PublicBaseURL,
 	); err != nil {
 		if isNoRows(err) {
 			return objecth.BucketMeta{}, fmt.Errorf("collection %q not found", collection)

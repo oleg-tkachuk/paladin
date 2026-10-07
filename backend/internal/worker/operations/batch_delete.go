@@ -11,6 +11,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 )
 
 // BatchDeleteExecutor implements the BatchDelete operation type.
@@ -128,11 +129,16 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 			continue
 		}
 		var derr error
-		if args.Permanent {
+		switch {
+		case !args.Permanent && obj.PublicURL != "":
+			// A public collection has no trash: its bytes would stay served
+			// (ADR-0027).
+			derr = publicread.Rulef("a public object is deleted permanently or not at all")
+		case args.Permanent:
 			// bypassGovernance is always false here: the override needs a
 			// principal to check the role against, and this runs without one.
 			derr = e.Permanent.PermanentDelete(ctx, args.TenantID, obj, obj.ResourceVersion, false)
-		} else {
+		default:
 			derr = e.Transitions.SoftDelete(ctx, obj.ObjectID, obj.ResourceVersion)
 		}
 		if err := derr; err != nil {

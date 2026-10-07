@@ -167,7 +167,7 @@ func TestConformance(t *testing.T) {
 
 	t.Run("required/multipart round trip", func(t *testing.T) {
 		mkey := "conf/multi.bin"
-		uploadID, err := tg.client.InitiateMultipart(ctx, tg.bucket, tg.tenant, tg.collection, mkey, "application/octet-stream", checksum.SHA256)
+		uploadID, err := tg.client.InitiateMultipart(ctx, tg.bucket, tg.tenant, tg.collection, mkey, "application/octet-stream", "", checksum.SHA256)
 		if err != nil {
 			t.Fatalf("InitiateMultipart: %v", err)
 		}
