@@ -89,7 +89,8 @@ def connect(
     ``client_options`` are ``Client``'s — credentials, ``retry``, ``headers``;
     a ``token_source`` sends each plane the token for its own audience.
     ``transport`` is passed to every generated client: ``timeout_ms``,
-    ``http_client``, ``proto_json`` and the like. ``transfer`` sends the
+    ``http_client``, ``codec`` (``connectrpc.compat.google_protobuf_json_codec()``
+    for JSON), ``protocol``, ``read_max_bytes`` and the like. ``transfer`` sends the
     presigned requests of ``upload`` and ``download``; a shared default when
     left out. ``tls`` makes the connections to Paladin with a CA bundle and a
     client certificate that may rotate on disk; it builds the ``http_client``,

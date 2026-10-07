@@ -59,7 +59,10 @@ from paladin.errors import (
     ResourceExhaustedError,
     UnauthenticatedError,
     VersionConflictError,
+    error_detail,
+    error_details,
     reason,
+    unpack_detail,
 )
 from paladin.multipart import (
     NoPartSplitError,
@@ -275,6 +278,8 @@ __all__ = [
     "download_uri",
     "dpop_thumbprint",
     "ensure",
+    "error_detail",
+    "error_details",
     "expired",
     "idempotency_key",
     "lookup_object",
@@ -288,6 +293,7 @@ __all__ = [
     "reason",
     "sdk_version",
     "sign_webhook",
+    "unpack_detail",
     "upload",
     "upload_many",
     "user_agent",

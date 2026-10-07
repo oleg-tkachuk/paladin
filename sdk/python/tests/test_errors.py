@@ -38,7 +38,10 @@ from paladin import (
     VersionConflictError,
     connect,
     connect_async,
+    error_detail,
+    error_details,
     reason,
+    unpack_detail,
 )
 from paladin.common.v1 import error_reason_pb2
 from paladin.iam.v1 import health_service_pb2
@@ -78,9 +81,9 @@ class Failing(HealthServiceSync):
     retry_after: str | None = None
 
     def get_version(self, request, ctx: RequestContext):  # type: ignore[no-untyped-def]
-        ctx.response_headers()[HEADER_SERVER_VERSION] = SERVER_VERSION
+        ctx.response_headers[HEADER_SERVER_VERSION] = SERVER_VERSION
         if self.retry_after is not None:
-            ctx.response_headers()[HEADER_RETRY_AFTER] = self.retry_after
+            ctx.response_headers[HEADER_RETRY_AFTER] = self.retry_after
         if self.failures > 0:
             self.failures -= 1
             raise self.error
@@ -177,7 +180,7 @@ def _call(url: str, retry: Retry | None = None) -> None:
 def test_errors_are_typed_and_carry_the_reason(  # type: ignore[no-untyped-def]
     serve, code, details, kind, want_reason
 ) -> None:
-    url = serve(Failing(ConnectError(code, "refused", details)))
+    url = serve(Failing(ConnectError(code, "refused", error_details(details))))
     with pytest.raises(kind) as err:
         _call(url)
     e = err.value
@@ -228,13 +231,13 @@ def test_retries_see_the_connect_error_and_the_caller_the_typed_one(serve) -> No
 @pytest.mark.parametrize("retry", [None, FAST], ids=["without retries", "with retries"])
 def test_a_callers_response_metadata_still_sees_the_headers(serve, retry) -> None:  # type: ignore[no-untyped-def]
     # The SDK reads headers at the transport and opens no ResponseMetadata of
-    # its own, so the caller's is the one connect-python fills.
+    # its own, so the caller's is the one connectrpc fills.
     url = serve(Failing(ConnectError(Code.UNAVAILABLE, "down"), failures=0))
     client = Client(url, retry=retry)
     health = HealthServiceClientSync(client.base_url, interceptors=client.interceptors())
     with ResponseMetadata() as meta:
         health.get_version(health_service_pb2.GetVersionRequest())
-    assert meta.headers().get(HEADER_SERVER_VERSION.lower()) == SERVER_VERSION
+    assert meta.headers.get(HEADER_SERVER_VERSION.lower()) == SERVER_VERSION
 
 
 def test_async_errors_are_typed(serve) -> None:  # type: ignore[no-untyped-def]
@@ -300,3 +303,12 @@ def test_async_generated_client_on_the_relay_carries_the_server_version(serve) -
     with pytest.raises(NotFoundError) as err:
         asyncio.run(call())
     assert err.value.server_version == SERVER_VERSION
+
+
+def test_a_detail_round_trips_as_its_google_protobuf_message() -> None:
+    # connectrpc packs details with its own Protobuf runtime; the SDK's
+    # helpers carry a google.protobuf message across as its bytes and name.
+    sent = info(ERROR_DOMAIN, "ERROR_REASON_NOT_FOUND")
+    got = unpack_detail(error_detail(sent), error_details_pb2.ErrorInfo)
+    assert got == sent
+    assert unpack_detail(error_detail(sent), error_details_pb2.RetryInfo) is None

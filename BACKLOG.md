@@ -1506,14 +1506,14 @@ The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 ### Python reads response headers through a transport of its own
 
 - **Status:** Deferred.
-- **Reason:** connect-python gives a client interceptor no response headers,
+- **Reason:** connectrpc (0.12) gives a client interceptor no response headers,
   so typed errors and `Retry-After` depend on `paladin.RelaySyncTransport` in
   the HTTP client; a caller who builds a generated client without
   `Client.http_client()` gets a warning and errors without `server_version`.
-- **Definition of Done:** the interceptors read the headers from connect-python
+- **Definition of Done:** the interceptors read the headers from connectrpc
   directly and `http_client=` leaves the README's generated-client example.
 - **Blockers:** client-side response headers on `RequestContext`, or a public
-  way to chain `ResponseMetadata`, in connect-python.
+  way to chain `ResponseMetadata`, in connectrpc.
 
 ### An occasional abort at interpreter exit with the Python SDK loaded
 

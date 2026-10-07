@@ -49,9 +49,9 @@
   (ADR-0018's proposal): an annotation pattern cannot say that a collection
   may contain `/`, so the generated parsers would be wrong. Reasons as free
   strings: a client could not know the set, and a typo would pass. An
-  OpenTelemetry dependency in the SDKs: most consumers bring their own, and
-  connect-python's interceptor does not yet work with the version supported
-  (BACKLOG.md).
+  OpenTelemetry dependency in the SDKs: most consumers bring their own; since
+  the move to connectrpc, its `connectrpc-otel` interceptor works through a
+  client's `interceptors`.
 
 - **Consequences.** The SDK releases from 0.13.0 on change behaviour
   (docs/upgrading.md): the HTTP client for presigned requests moved to the

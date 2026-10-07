@@ -109,7 +109,7 @@ class FakeIAM(AuthServiceSync, HealthServiceSync):
         self, request: health_service_pb2.GetVersionRequest, ctx: RequestContext
     ) -> health_service_pb2.VersionInfo:
         with self.lock:
-            self.seen_tokens.append(ctx.request_headers().get(HEADER_AUTHORIZATION, ""))
+            self.seen_tokens.append(ctx.request_headers.get(HEADER_AUTHORIZATION, ""))
             if self.refuse_next_calls > 0:
                 self.refuse_next_calls -= 1
                 raise ConnectError(Code.UNAUTHENTICATED, "token revoked")
@@ -267,7 +267,7 @@ class _RecordingIAM(FakeIAM):
         self.login_headers: list[dict[str, str]] = []
 
     def login(self, request, ctx):  # type: ignore[no-untyped-def]
-        self.login_headers.append(dict(ctx.request_headers().items()))
+        self.login_headers.append(dict(ctx.request_headers.items()))
         return super().login(request, ctx)
 
 

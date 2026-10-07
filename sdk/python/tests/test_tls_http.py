@@ -66,7 +66,7 @@ def test_the_call_deadline_bounds_a_server_that_never_answers(servers: Any, tmp_
     with pytest.raises(ConnectError) as err:
         health.get_version(health_service_pb2.GetVersionRequest(), timeout_ms=CALL_TIMEOUT_MS)
     assert time.monotonic() - started < CALL_RETURNS_WITHIN
-    # connect-python reads a TimeoutError as the deadline, as from pyqwest.
+    # connectrpc reads a TimeoutError as the deadline, as from pyqwest.
     assert err.value.code == Code.DEADLINE_EXCEEDED
 
 

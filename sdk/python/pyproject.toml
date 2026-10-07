@@ -9,11 +9,13 @@ license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = [
     # Pre-1.0: a minor may change the API the generated clients call, so the
-    # range stops at the next one. CI tests the floor.
-    "connect-python>=0.9.0,<0.10",
+    # range stops at the next one. CI tests the floor. connect-python's
+    # successor (connect-py); its stubs target google.protobuf through the
+    # generator's protobuf=google option, so consumers keep those messages.
+    "connectrpc>=0.12.1,<0.13",
     # The HTTP client under the generated clients, and under Transfer and the
     # relay transports, which this package builds directly — not only through
-    # connect-python, whose own floor (0.4.1) predates what is used here.
+    # connectrpc, whose own floor (0.5.1) predates what is used here.
     # Pre-1.0: the range stops at the next minor.
     "pyqwest>=0.11.0,<0.12",
     # Both majors: workers that share an image with protobuf-6 libraries
@@ -50,6 +52,8 @@ biscuit = ["biscuit-python>=0.4.0,<0.5"]
 [dependency-groups]
 dev = [
     "opentelemetry-sdk==1.45.0",
+    # RPC spans through Client(interceptors=...), which the README documents.
+    "connectrpc-otel==0.2.0",
     "cryptography==50.0.2",
     # The testing extra, which FakePaladin needs.
     "protovalidate==2.0.0",
@@ -64,7 +68,7 @@ dev = [
     # newest release still generating for protobuf 6. A newer one would lock
     # out every protobuf-6 environment.
     "grpcio-tools==1.81.1",
-    "protoc-gen-connect-python==0.9.0",
+    "protoc-gen-connectrpc==0.12.1",
     "pytest==9.1.1",
     "ruff==0.16.9",
 ]
