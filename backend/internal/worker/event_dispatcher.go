@@ -874,6 +874,10 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 		          FROM event_deliveries
 		         WHERE status = 'pending'
 		           AND next_attempt_at <= now()
+		           -- A tenant in the trash is frozen: its events wait for a
+		           -- restore, and go with it on a purge.
+		           AND NOT EXISTS (SELECT 1 FROM tenants t
+		                            WHERE t.id = event_deliveries.tenant_id AND t.deleted_at IS NOT NULL)
 		         ORDER BY next_attempt_at
 		         FOR UPDATE SKIP LOCKED
 		         LIMIT $1)

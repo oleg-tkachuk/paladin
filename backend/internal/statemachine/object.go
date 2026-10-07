@@ -388,6 +388,9 @@ func (t *Transitioner) ScanPendingExpired(
          WHERE state = 'PENDING'
            AND presign_expires_at IS NOT NULL
            AND presign_expires_at < now() - $1::interval
+           -- A tenant in the trash is frozen: its uploads are settled on restore.
+           AND NOT EXISTS (SELECT 1 FROM tenants t
+                            WHERE t.id = objects.tenant_id AND t.deleted_at IS NOT NULL)
          ORDER BY presign_expires_at
          LIMIT $2
     `
