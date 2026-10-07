@@ -52,8 +52,11 @@ tree with itself and passes without checking anything.
   sessions work again. A change reaches every replica at once through the
   `tenant_state` notification (migration 047); a state that cannot be read
   refuses the call as `UNAVAILABLE`.
-- Calls with no principal (`Login`, `RefreshToken`) and platform principals
-  are not affected.
+- Calls with no principal (`Login`, `RefreshToken`), and principals holding
+  a platform role (`platform.admin`, `platform.capability-issuer`,
+  `platform.tenant-provisioner`), are not affected: their authority is not
+  their tenant's, and a trashed platform tenant must not lock out the admins
+  who could restore it.
 
 ## Unreleased — an internal error no longer carries its cause
 

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
@@ -74,7 +75,10 @@ func TestTenantGateRefusesATenantThatCannotActNow(t *testing.T) {
 	}{
 		{"a live tenant's principal", &auth.Principal{TenantID: live}, 0, ""},
 		{"no principal, as Login has", nil, 0, ""},
-		{"a principal spanning tenants", &auth.Principal{Roles: []string{"platform.admin"}}, 0, ""},
+		{"a principal with no tenant", &auth.Principal{Roles: []string{apiutil.RolePlatformAdmin}}, 0, ""},
+		{"a platform admin of a trashed tenant", &auth.Principal{TenantID: trashed, Roles: []string{apiutil.RolePlatformAdmin}}, 0, ""},
+		{"a tenant provisioner of a tenant still to be created", &auth.Principal{TenantID: gone, Roles: []string{apiutil.RoleTenantProvisioner}}, 0, ""},
+		{"a tenant admin of a trashed tenant", &auth.Principal{TenantID: trashed, Roles: []string{apiutil.RoleTenantAdmin}}, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_ALREADY_DELETED.String()},
 		{"a trashed tenant's principal", &auth.Principal{TenantID: trashed}, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_ALREADY_DELETED.String()},
 		{"a purged tenant's principal", &auth.Principal{TenantID: gone}, connect.CodeUnauthenticated, commonv1.ErrorReason_ERROR_REASON_UNAUTHENTICATED.String()},
 	} {
