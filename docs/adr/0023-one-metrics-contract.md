@@ -87,8 +87,8 @@
   - **Breaking values change.** `metrics.serviceMonitor.*`,
     `config.otel.metrics_exporter` and `config.otel.metrics_addr` leave the
     chart's values, and the strict schema refuses them. The dev, staging and
-    prod overlays here and the local-iac values for paladin-core change in
-    the same release. The overlays that run Prometheus Operator take
+    prod overlays here and every deployment's values for paladin-core change
+    in the same release. The overlays that run Prometheus Operator take
     `metrics.mode: scrape`; the PrometheusRule they already deploy assumes
     the series land in that Prometheus.
   - **Ordering.** worker, dispatcher and ingest open the metrics port only
@@ -124,8 +124,9 @@ Each step is one pull request with its tests, merged in this order.
    named values and runbook links; make the lifecycle rules per role; delete
    the copies under `deploy/grafana` with their promtool tests, which move
    to the chart's test.
-4. **local-iac.** Replace the removed keys in the paladin-core values with
-   `metrics.mode`, pinned to the chart release from step 2.
+4. **Deployments.** Replace the removed keys in each deployment's
+   paladin-core values with `metrics.mode`, pinned to the chart release from
+   step 2.
 5. **Docs.** `deploy/grafana/README.md`, `backend/docs/observability.md` and
    the runbooks point at the chart's rules and the one endpoint; ADR-0001
    links here.
