@@ -44,6 +44,26 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the Go SDK and the server run on connect-go v2
+
+- The Go SDK depends on `connectrpc.com/connect/v2` instead of
+  `connectrpc.com/connect`. Generated clients take and return plain messages:
+  `client.GetObject(ctx, &datav1.GetObjectRequest{…})`, no
+  `connect.NewRequest`, no `.Msg`.
+- A generated client is built from `(*paladin.Client).Connect()`:
+  `paladinadminv1connect.NewTenantServiceClient(c.Connect())`.
+  `HTTPClient()` and `ClientOptions()` are gone.
+- `WithClientOptions` is `WithTransportOptions`, taking `connecthttp` options
+  (`connecthttp.WithGRPC()`, `connecthttp.WithSendGzip()`). Interceptors of your
+  own — otelconnect's, say — go in `WithInterceptors`, as
+  `connect.ClientInterceptor`s: `otelconnect.NewClientInterceptor()`.
+- Request headers are set, and response headers read, through the call's
+  `connect.CallInfo`: `ctx, info := connect.NewClientContext(ctx)`.
+- A client reads responses up to `paladin.MaxResponseBytes` (16 MiB), the
+  largest the server sends; connect-go v2 alone would stop at 4 MiB.
+- On the wire nothing changes: a client on connect-go v1, or any other Connect
+  or gRPC client, keeps working against the server.
+
 ## Unreleased — the Python SDK runs on connectrpc
 
 - The Python SDK depends on `connectrpc` 0.12 (connect-python's successor)
