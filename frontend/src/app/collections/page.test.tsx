@@ -9,7 +9,7 @@ const h = vi.hoisted(() => ({
   fetchCollections: vi.fn(),
   createCollection: vi.fn(() => Promise.resolve()),
   deleteCollection: vi.fn(() => Promise.resolve()),
-  fetchBuckets: vi.fn(),
+  fetchBuckets: vi.fn(() => Promise.resolve()),
   fetchBackends: vi.fn(),
   showNotification: vi.fn(),
   // The page renders ListLoadError; without `error` here that branch never

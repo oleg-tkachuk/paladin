@@ -92,6 +92,45 @@ func NewHandler(r Repository, policyEngine cedar.Authorizer) *Handler {
 	return &Handler{cel: celpkg.NewEvaluator(), repo: r, policy: policyEngine, log: zap.NewNop()}
 }
 
+// SetDeclaredBackends records the backend ids declared in storage.backends.
+// Every backend the handler returns then says whether it is one of them, so a
+// client offers bucket creation only where the server allows it.
+func (h *Handler) SetDeclaredBackends(ids []string) {
+	declared := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		declared[id] = true
+	}
+	h.repo = declaringRepo{Repository: h.repo, declared: declared}
+}
+
+// declaringRepo marks each backend it reads with whether it is declared. Every
+// response of the handler reads through Get, GetTx or List, so none is left
+// unmarked.
+type declaringRepo struct {
+	Repository
+	declared map[string]bool
+}
+
+func (r declaringRepo) Get(ctx context.Context, backendID string) (admindomain.StorageBackend, error) {
+	b, err := r.Repository.Get(ctx, backendID)
+	b.Declared = r.declared[b.BackendID]
+	return b, err
+}
+
+func (r declaringRepo) GetTx(ctx context.Context, tx pgx.Tx, backendID string) (admindomain.StorageBackend, error) {
+	b, err := r.Repository.GetTx(ctx, tx, backendID)
+	b.Declared = r.declared[b.BackendID]
+	return b, err
+}
+
+func (r declaringRepo) List(ctx context.Context, pageSize int32, afterID, filter string) ([]admindomain.StorageBackend, string, error) {
+	out, next, err := r.Repository.List(ctx, pageSize, afterID, filter)
+	for i := range out {
+		out[i].Declared = r.declared[out[i].BackendID]
+	}
+	return out, next, err
+}
+
 // SetProber wires the TestBackend connectivity prober. Opt-in: an unset
 // prober makes TestBackend return reachable=false with a clear note rather
 // than panicking, so unit tests and probe-less deployments still work.
