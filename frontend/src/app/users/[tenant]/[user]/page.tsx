@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -24,7 +24,8 @@ import {
 } from "@/components/features/users/UserRowActions";
 import { UserRolesCard } from "@/components/features/users/UserRolesCard";
 import { UserScopesCard } from "@/components/features/users/UserScopesCard";
-import { userClient } from "@/lib/connect/client";
+import { tenantClient, userClient } from "@/lib/connect/client";
+import { useNameCrumbs } from "@/context/CrumbNamesContext";
 import { normalizeError } from "@/lib/connect/error";
 import { T } from "@/lib/ui/typography";
 import { USERS_INDEX_HREF, userResourceName } from "@/lib/userPath";
@@ -58,6 +59,30 @@ export default function UserDetailPage() {
   });
   const user = query.data;
   const refresh = () => void query.refetch();
+
+  // The path holds ids; the trail and the tab title name them: the tenant by
+  // its slug, leading to its page (/users/<tenant> is none), the user by login.
+  const tenantQuery = useQuery({
+    queryKey: ["tenant", user?.tenantId],
+    enabled: Boolean(user?.tenantId),
+    queryFn: ({ signal }) =>
+      tenantClient.getTenant({ name: `tenants/${user?.tenantId}` }, { signal }),
+  });
+  const slug = tenantQuery.data?.slug;
+  const crumbNames = useMemo(
+    () =>
+      user
+        ? {
+            [params?.tenant ?? ""]: {
+              label: slug || user.tenantId,
+              href: `/tenants/${encodeURIComponent(slug || user.tenantId)}`,
+            },
+            [params?.user ?? ""]: { label: user.subject },
+          }
+        : null,
+    [user, slug, params?.tenant, params?.user],
+  );
+  useNameCrumbs(crumbNames);
 
   return (
     <div className="space-y-6">
@@ -108,10 +133,10 @@ export default function UserDetailPage() {
               </Fact>
               <Fact label="Tenant">
                 <Link
-                  href={`/tenants/${encodeURIComponent(user.tenantId)}`}
+                  href={`/tenants/${encodeURIComponent(slug || user.tenantId)}`}
                   className="font-mono text-xs hover:text-primary hover:underline"
                 >
-                  {user.tenantId}
+                  {slug || user.tenantId}
                 </Link>
               </Fact>
               <Fact label="State">
