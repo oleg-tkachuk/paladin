@@ -34,10 +34,13 @@ interface UserLike {
 export function UserRowActions({
   user,
   onChanged,
+  onDeleted = onChanged,
   onResetPassword,
 }: {
   user: UserLike;
   onChanged: () => void;
+  /** After a delete; a page about this one user leaves rather than reloads. */
+  onDeleted?: () => void;
   onResetPassword: (t: ResetTarget) => void;
 }) {
   const { busy, updateUser, deleteUser, resetPassword } = useUserAdmin();
@@ -105,7 +108,7 @@ export function UserRowActions({
       title: "User deleted",
       message: label,
     });
-    onChanged();
+    onDeleted();
   }
 
   return (
