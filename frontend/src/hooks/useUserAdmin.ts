@@ -21,6 +21,7 @@ import { useBumpRefresh } from "@/context/RefreshContext";
 import { errorMessage } from "@/hooks/errorContract";
 import { fieldMask, type MaskField } from "@/lib/connect/fieldMask";
 import { UpdateUserRequestSchema } from "@/gen/paladin/iam/v1/user_service_pb";
+import type { Scope } from "@/gen/paladin/common/v1/scope_pb";
 
 /** Resource name for a user: "users/{subject}" or, when tenant-scoped,
  *  "tenants/{tenant}/users/{subject}". The server accepts the name the
@@ -140,5 +141,30 @@ export function useUserAdmin() {
     [bumpRefresh],
   );
 
-  return { busy, createUser, updateUser, deleteUser, resetPassword };
+  /**
+   * Scopes have RPCs of their own rather than a field on UpdateUser, so each
+   * grant and revoke is its own audit entry. Tokens already issued keep what
+   * they carry until they expire; this changes what the next one carries.
+   */
+  const grantScopes = useCallback(
+    (name: string, scopes: Pick<Scope, "type" | "value">[]) =>
+      run(() => userClient.grantScopes({ name, scopes })),
+    [run],
+  );
+
+  const revokeScopes = useCallback(
+    (name: string, scopes: Pick<Scope, "type" | "value">[]) =>
+      run(() => userClient.revokeScopes({ name, scopes })),
+    [run],
+  );
+
+  return {
+    busy,
+    createUser,
+    updateUser,
+    deleteUser,
+    resetPassword,
+    grantScopes,
+    revokeScopes,
+  };
 }

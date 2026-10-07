@@ -106,7 +106,7 @@ COLLECTION_ACCESS_PRIVATE: CollectionAccess
 COLLECTION_ACCESS_PUBLIC_READ: CollectionAccess
 
 class StorageBackend(_message.Message):
-    __slots__ = ("name", "backend_id", "display_name", "kind", "endpoint", "public_endpoint", "region", "force_path_style", "credentials_secret_ref", "sse", "events", "cedar_policy", "resource_version", "created_at", "updated_at", "enabled", "previous_credentials_secret_ref", "previous_credentials_valid_until", "read_only", "health_status", "health_message", "health_checked_at", "maintenance", "provider", "features", "compatibility")
+    __slots__ = ("name", "backend_id", "display_name", "kind", "endpoint", "public_endpoint", "region", "force_path_style", "credentials_secret_ref", "sse", "events", "cedar_policy", "resource_version", "created_at", "updated_at", "enabled", "previous_credentials_secret_ref", "previous_credentials_valid_until", "read_only", "health_status", "health_message", "health_checked_at", "maintenance", "provider", "features", "compatibility", "declared")
     NAME_FIELD_NUMBER: _ClassVar[int]
     BACKEND_ID_FIELD_NUMBER: _ClassVar[int]
     DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -133,6 +133,7 @@ class StorageBackend(_message.Message):
     PROVIDER_FIELD_NUMBER: _ClassVar[int]
     FEATURES_FIELD_NUMBER: _ClassVar[int]
     COMPATIBILITY_FIELD_NUMBER: _ClassVar[int]
+    DECLARED_FIELD_NUMBER: _ClassVar[int]
     name: str
     backend_id: str
     display_name: str
@@ -159,7 +160,8 @@ class StorageBackend(_message.Message):
     provider: str
     features: _containers.RepeatedCompositeFieldContainer[StorageFeatureSupport]
     compatibility: StorageCompatibility
-    def __init__(self, name: _Optional[str] = ..., backend_id: _Optional[str] = ..., display_name: _Optional[str] = ..., kind: _Optional[_Union[StorageKind, str]] = ..., endpoint: _Optional[str] = ..., public_endpoint: _Optional[str] = ..., region: _Optional[str] = ..., force_path_style: _Optional[bool] = ..., credentials_secret_ref: _Optional[str] = ..., sse: _Optional[_Union[ServerSideEncryption, _Mapping]] = ..., events: _Optional[_Union[EventSourceConfig, _Mapping]] = ..., cedar_policy: _Optional[str] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., enabled: _Optional[bool] = ..., previous_credentials_secret_ref: _Optional[str] = ..., previous_credentials_valid_until: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., read_only: _Optional[bool] = ..., health_status: _Optional[str] = ..., health_message: _Optional[str] = ..., health_checked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., maintenance: _Optional[bool] = ..., provider: _Optional[str] = ..., features: _Optional[_Iterable[_Union[StorageFeatureSupport, _Mapping]]] = ..., compatibility: _Optional[_Union[StorageCompatibility, str]] = ...) -> None: ...
+    declared: bool
+    def __init__(self, name: _Optional[str] = ..., backend_id: _Optional[str] = ..., display_name: _Optional[str] = ..., kind: _Optional[_Union[StorageKind, str]] = ..., endpoint: _Optional[str] = ..., public_endpoint: _Optional[str] = ..., region: _Optional[str] = ..., force_path_style: _Optional[bool] = ..., credentials_secret_ref: _Optional[str] = ..., sse: _Optional[_Union[ServerSideEncryption, _Mapping]] = ..., events: _Optional[_Union[EventSourceConfig, _Mapping]] = ..., cedar_policy: _Optional[str] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., enabled: _Optional[bool] = ..., previous_credentials_secret_ref: _Optional[str] = ..., previous_credentials_valid_until: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., read_only: _Optional[bool] = ..., health_status: _Optional[str] = ..., health_message: _Optional[str] = ..., health_checked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., maintenance: _Optional[bool] = ..., provider: _Optional[str] = ..., features: _Optional[_Iterable[_Union[StorageFeatureSupport, _Mapping]]] = ..., compatibility: _Optional[_Union[StorageCompatibility, str]] = ..., declared: _Optional[bool] = ...) -> None: ...
 
 class StorageFeatureSupport(_message.Message):
     __slots__ = ("feature", "support", "required", "enables", "message", "checked_at")

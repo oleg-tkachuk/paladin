@@ -34,8 +34,14 @@ import { supports } from "@/lib/storageFeatures";
 interface BucketCreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Backends to offer; the first is picked when the dialog opens. */
-  backends: Pick<StorageBackend, "backendId" | "features">[];
+  /**
+   * Backends to offer. The first that can hold a bucket is picked when the
+   * dialog opens; one that cannot is listed, held, with the reason.
+   */
+  backends: Pick<
+    StorageBackend,
+    "backendId" | "features" | "enabled" | "declared"
+  >[];
   /** Set when the backend list failed to load: `backends` is then unknown. */
   backendsFailed?: FailedRead | null;
   createBucket: (
@@ -46,6 +52,19 @@ interface BucketCreateDialogProps {
     provisionOnBackend: boolean,
     publicRead: PublicReadSettings | null,
   ) => Promise<unknown>;
+}
+
+/**
+ * Why the server refuses a bucket on this backend, or null when it takes one:
+ * a disabled backend, or one only registered through the API — the data plane
+ * builds storage clients from storage.backends alone.
+ */
+export function bucketBackendBlock(
+  backend: Pick<StorageBackend, "enabled" | "declared">,
+): string | null {
+  if (!backend.enabled) return "disabled";
+  if (!backend.declared) return "not in the server's storage.backends";
+  return null;
 }
 
 /** The backend page, where its features are probed and shown. */
@@ -79,11 +98,31 @@ export function BucketCreateDialog({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Render-phase adjust-on-condition: default the backend once they load.
+  // Render-phase adjust-on-condition: default the backend once they load, to
+  // one that can hold a bucket when any can.
   if (open && !backendId && backends.length > 0) {
-    setBackendId(backends[0].backendId);
+    setBackendId(
+      (backends.find((b) => !bucketBackendBlock(b)) ?? backends[0]).backendId,
+    );
   }
   const backend = backends.find((b) => b.backendId === backendId);
+  const backendBlock = backend ? bucketBackendBlock(backend) : null;
+
+  // An error answers the request that was sent; once the form changes it no
+  // longer describes what Create would send.
+  const draft = JSON.stringify([
+    backendId,
+    name,
+    displayName,
+    region,
+    publicRead,
+    allowedTypes,
+    baseUrl,
+  ]);
+  const [erroredDraft, setErroredDraft] = useState(draft);
+  if (submitError && draft !== erroredDraft) {
+    setSubmitError(null);
+  }
   const canPublish =
     backend !== undefined &&
     supports(backend, StorageFeature.ANONYMOUS_READ_POLICY);
@@ -100,13 +139,15 @@ export function BucketCreateDialog({
     ? "Backends could not be loaded."
     : backends.length === 0
       ? "Register a storage backend first."
-      : !name
-        ? "Enter a bucket name to continue."
-        : nameError
-          ? "Fix the bucket name to continue."
-          : publicRead && allowedTypes.length === 0
-            ? "List the content types a public bucket serves."
-            : null;
+      : backendBlock
+        ? `Backend ${backendId} is ${backendBlock}; pick another.`
+        : !name
+          ? "Enter a bucket name to continue."
+          : nameError
+            ? "Fix the bucket name to continue."
+            : publicRead && allowedTypes.length === 0
+              ? "List the content types a public bucket serves."
+              : null;
 
   const handleCreate = async () => {
     setSubmitError(null);
@@ -133,6 +174,7 @@ export function BucketCreateDialog({
       setBaseUrl("");
       onOpenChange(false);
     } catch (err) {
+      setErroredDraft(draft);
       const message = errorMessage(err, "Failed to create bucket.");
       setSubmitError(
         errorReason(err) === ErrorReason.BACKEND_FEATURE_UNSUPPORTED
@@ -185,11 +227,18 @@ export function BucketCreateDialog({
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    {backends.map((b) => (
-                      <SelectItem key={b.backendId} value={b.backendId}>
-                        {b.backendId}
-                      </SelectItem>
-                    ))}
+                    {backends.map((b) => {
+                      const block = bucketBackendBlock(b);
+                      return (
+                        <SelectItem
+                          key={b.backendId}
+                          value={b.backendId}
+                          disabled={block !== null}
+                        >
+                          {block ? `${b.backendId} — ${block}` : b.backendId}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </SelectRoot>
               )

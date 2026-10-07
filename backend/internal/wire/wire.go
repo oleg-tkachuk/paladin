@@ -206,11 +206,23 @@ func tenantSlugLookup(tr tenanth.Repository) func(ctx context.Context, tenantID 
 	}
 }
 
-func ProvideBackendV2Handler(repos Repos, pe *policy.Engine, _ config.Config) *backendh.Handler {
+func ProvideBackendV2Handler(repos Repos, pe *policy.Engine, cfg config.Config) *backendh.Handler {
 	// The concrete *BackendRepoV2 satisfies backendh.Repository (domain
 	// interface + ADR-0003 tx seam); Repos.BackendV2 is the pgx-free domain
 	// type, so assert to the wider local interface here (same as bucketh).
-	return backendh.NewHandler(repos.BackendV2.(backendh.Repository), pe)
+	h := backendh.NewHandler(repos.BackendV2.(backendh.Repository), pe)
+	h.SetDeclaredBackends(declaredBackendIDs(cfg))
+	return h
+}
+
+// declaredBackendIDs lists the backends in storage.backends, the only ones the
+// data plane and the worker build storage clients for.
+func declaredBackendIDs(cfg config.Config) []string {
+	ids := make([]string, 0, len(cfg.Storage.Backends))
+	for id := range cfg.Storage.Backends {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine, cfg config.Config) *bucketh.Handler {
@@ -221,11 +233,7 @@ func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine, cfg
 	// interface + ADR-0003 tx seam); Repos.BucketV2 is the pgx-free domain
 	// type, so assert to the wider local interface here.
 	h := bucketh.NewHandler(repos.BucketV2.(bucketh.Repository), storage.Provisioner, pe)
-	ids := make([]string, 0, len(cfg.Storage.Backends))
-	for id := range cfg.Storage.Backends {
-		ids = append(ids, id)
-	}
-	h.SetConfiguredBackends(ids)
+	h.SetConfiguredBackends(declaredBackendIDs(cfg))
 	// A public bucket needs its backend's probed features (ADR-0027).
 	h.SetBackends(repos.BackendV2)
 	return h
