@@ -6,53 +6,98 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// CapabilityServiceName is the fully-qualified name of the CapabilityService service.
 	CapabilityServiceName = "paladin.admin.v1.CapabilityService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// CapabilityServiceIssueProcedure is the fully-qualified name of the CapabilityService's Issue RPC.
+	// CapabilityServiceIssueProcedure is the procedure name of the CapabilityService's Issue RPC.
 	CapabilityServiceIssueProcedure = "/paladin.admin.v1.CapabilityService/Issue"
-	// CapabilityServiceDelegateProcedure is the fully-qualified name of the CapabilityService's
-	// Delegate RPC.
+	// CapabilityServiceDelegateProcedure is the procedure name of the CapabilityService's Delegate RPC.
 	CapabilityServiceDelegateProcedure = "/paladin.admin.v1.CapabilityService/Delegate"
-	// CapabilityServiceRevokeProcedure is the fully-qualified name of the CapabilityService's Revoke
-	// RPC.
+	// CapabilityServiceRevokeProcedure is the procedure name of the CapabilityService's Revoke RPC.
 	CapabilityServiceRevokeProcedure = "/paladin.admin.v1.CapabilityService/Revoke"
-	// CapabilityServiceRevokeBiscuitProcedure is the fully-qualified name of the CapabilityService's
+	// CapabilityServiceRevokeBiscuitProcedure is the procedure name of the CapabilityService's
 	// RevokeBiscuit RPC.
 	CapabilityServiceRevokeBiscuitProcedure = "/paladin.admin.v1.CapabilityService/RevokeBiscuit"
-	// CapabilityServiceGetBiscuitUsageProcedure is the fully-qualified name of the CapabilityService's
+	// CapabilityServiceGetBiscuitUsageProcedure is the procedure name of the CapabilityService's
 	// GetBiscuitUsage RPC.
 	CapabilityServiceGetBiscuitUsageProcedure = "/paladin.admin.v1.CapabilityService/GetBiscuitUsage"
-	// CapabilityServiceListProcedure is the fully-qualified name of the CapabilityService's List RPC.
+	// CapabilityServiceListProcedure is the procedure name of the CapabilityService's List RPC.
 	CapabilityServiceListProcedure = "/paladin.admin.v1.CapabilityService/List"
-	// CapabilityServiceGetUsageProcedure is the fully-qualified name of the CapabilityService's
-	// GetUsage RPC.
+	// CapabilityServiceGetUsageProcedure is the procedure name of the CapabilityService's GetUsage RPC.
 	CapabilityServiceGetUsageProcedure = "/paladin.admin.v1.CapabilityService/GetUsage"
+)
+
+var (
+	capabilityServiceIssueSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("Issue"),
+			Procedure:  CapabilityServiceIssueProcedure,
+		}
+	})
+	capabilityServiceDelegateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("Delegate"),
+			Procedure:  CapabilityServiceDelegateProcedure,
+		}
+	})
+	capabilityServiceRevokeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("Revoke"),
+			Procedure:        CapabilityServiceRevokeProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	capabilityServiceRevokeBiscuitSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("RevokeBiscuit"),
+			Procedure:        CapabilityServiceRevokeBiscuitProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	capabilityServiceGetBiscuitUsageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("GetBiscuitUsage"),
+			Procedure:        CapabilityServiceGetBiscuitUsageProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	capabilityServiceListSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("List"),
+			Procedure:        CapabilityServiceListProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	capabilityServiceGetUsageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("GetUsage"),
+			Procedure:        CapabilityServiceGetUsageProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // CapabilityServiceClient is a client for the paladin.admin.v1.CapabilityService service.
@@ -66,142 +111,41 @@ type CapabilityServiceClient interface {
 	// FAILED_PRECONDITION with reason TENANT_ALREADY_DELETED when it is in the
 	// trash; INTERNAL when the store or the signer fails — a request worth
 	// retrying, not a bad one.
-	Issue(context.Context, *connect.Request[v1.CapabilityServiceIssueRequest]) (*connect.Response[v1.CapabilityServiceIssueResponse], error)
+	Issue(context.Context, *v1.CapabilityServiceIssueRequest) (*v1.CapabilityServiceIssueResponse, error)
 	// Delegate issues a strictly-narrower child capability under a
 	// parent the caller already holds. Narrowing is enforced at issuance:
 	// widening attempts fail before any token is emitted.
 	//
 	// Errors as Issue's, plus PERMISSION_DENIED for a child wider than its
 	// parent and FAILED_PRECONDITION for a parent revoked or expired.
-	Delegate(context.Context, *connect.Request[v1.CapabilityServiceDelegateRequest]) (*connect.Response[v1.CapabilityServiceIssueResponse], error)
+	Delegate(context.Context, *v1.CapabilityServiceDelegateRequest) (*v1.CapabilityServiceIssueResponse, error)
 	// Revoke adds the supplied capability ID to the revocation list.
 	// CascadeChildren=true revokes every descendant in the delegation
 	// tree. Idempotent — re-revoking a revoked capability is a no-op.
-	Revoke(context.Context, *connect.Request[v1.CapabilityServiceRevokeRequest]) (*connect.Response[v1.CapabilityServiceRevokeResponse], error)
+	Revoke(context.Context, *v1.CapabilityServiceRevokeRequest) (*v1.CapabilityServiceRevokeResponse, error)
 	// RevokeBiscuit revokes one copy of a capability's Biscuit: the copy
 	// `token` is, and every copy attenuated from it. The capability, the copy
 	// it was attenuated from and its other copies keep working; revoke the
 	// capability to stop them all. Idempotent.
-	RevokeBiscuit(context.Context, *connect.Request[v1.CapabilityServiceRevokeBiscuitRequest]) (*connect.Response[v1.CapabilityServiceRevokeBiscuitResponse], error)
+	RevokeBiscuit(context.Context, *v1.CapabilityServiceRevokeBiscuitRequest) (*v1.CapabilityServiceRevokeBiscuitResponse, error)
 	// GetBiscuitUsage returns the limits in force on one copy of a
 	// capability's Biscuit — its own and those of the copies it was attenuated
 	// from — with what has been counted against each. A copy gets limits only
 	// by attenuation; one under none returns no copies.
-	GetBiscuitUsage(context.Context, *connect.Request[v1.CapabilityServiceGetBiscuitUsageRequest]) (*connect.Response[v1.CapabilityServiceGetBiscuitUsageResponse], error)
+	GetBiscuitUsage(context.Context, *v1.CapabilityServiceGetBiscuitUsageRequest) (*v1.CapabilityServiceGetBiscuitUsageResponse, error)
 	// List enumerates capabilities issued to a principal. Cursor-paginated.
-	List(context.Context, *connect.Request[v1.CapabilityServiceListRequest]) (*connect.Response[v1.CapabilityServiceListResponse], error)
+	List(context.Context, *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error)
 	// GetUsage returns the runtime counters for a capability:
 	// request_count (vs Caveats.max_requests) and spent_micros
 	// (vs Caveats.max_budget_micros). Returns NOT_FOUND when the
 	// capability has never been used (no requests, no charges).
-	GetUsage(context.Context, *connect.Request[v1.CapabilityServiceGetUsageRequest]) (*connect.Response[v1.CapabilityServiceGetUsageResponse], error)
+	GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error)
 }
 
 // NewCapabilityServiceClient constructs a client for the paladin.admin.v1.CapabilityService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewCapabilityServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) CapabilityServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	capabilityServiceMethods := v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods()
-	return &capabilityServiceClient{
-		issue: connect.NewClient[v1.CapabilityServiceIssueRequest, v1.CapabilityServiceIssueResponse](
-			httpClient,
-			baseURL+CapabilityServiceIssueProcedure,
-			connect.WithSchema(capabilityServiceMethods.ByName("Issue")),
-			connect.WithClientOptions(opts...),
-		),
-		delegate: connect.NewClient[v1.CapabilityServiceDelegateRequest, v1.CapabilityServiceIssueResponse](
-			httpClient,
-			baseURL+CapabilityServiceDelegateProcedure,
-			connect.WithSchema(capabilityServiceMethods.ByName("Delegate")),
-			connect.WithClientOptions(opts...),
-		),
-		revoke: connect.NewClient[v1.CapabilityServiceRevokeRequest, v1.CapabilityServiceRevokeResponse](
-			httpClient,
-			baseURL+CapabilityServiceRevokeProcedure,
-			connect.WithSchema(capabilityServiceMethods.ByName("Revoke")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		revokeBiscuit: connect.NewClient[v1.CapabilityServiceRevokeBiscuitRequest, v1.CapabilityServiceRevokeBiscuitResponse](
-			httpClient,
-			baseURL+CapabilityServiceRevokeBiscuitProcedure,
-			connect.WithSchema(capabilityServiceMethods.ByName("RevokeBiscuit")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		getBiscuitUsage: connect.NewClient[v1.CapabilityServiceGetBiscuitUsageRequest, v1.CapabilityServiceGetBiscuitUsageResponse](
-			httpClient,
-			baseURL+CapabilityServiceGetBiscuitUsageProcedure,
-			connect.WithSchema(capabilityServiceMethods.ByName("GetBiscuitUsage")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		list: connect.NewClient[v1.CapabilityServiceListRequest, v1.CapabilityServiceListResponse](
-			httpClient,
-			baseURL+CapabilityServiceListProcedure,
-			connect.WithSchema(capabilityServiceMethods.ByName("List")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		getUsage: connect.NewClient[v1.CapabilityServiceGetUsageRequest, v1.CapabilityServiceGetUsageResponse](
-			httpClient,
-			baseURL+CapabilityServiceGetUsageProcedure,
-			connect.WithSchema(capabilityServiceMethods.ByName("GetUsage")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// capabilityServiceClient implements CapabilityServiceClient.
-type capabilityServiceClient struct {
-	issue           *connect.Client[v1.CapabilityServiceIssueRequest, v1.CapabilityServiceIssueResponse]
-	delegate        *connect.Client[v1.CapabilityServiceDelegateRequest, v1.CapabilityServiceIssueResponse]
-	revoke          *connect.Client[v1.CapabilityServiceRevokeRequest, v1.CapabilityServiceRevokeResponse]
-	revokeBiscuit   *connect.Client[v1.CapabilityServiceRevokeBiscuitRequest, v1.CapabilityServiceRevokeBiscuitResponse]
-	getBiscuitUsage *connect.Client[v1.CapabilityServiceGetBiscuitUsageRequest, v1.CapabilityServiceGetBiscuitUsageResponse]
-	list            *connect.Client[v1.CapabilityServiceListRequest, v1.CapabilityServiceListResponse]
-	getUsage        *connect.Client[v1.CapabilityServiceGetUsageRequest, v1.CapabilityServiceGetUsageResponse]
-}
-
-// Issue calls paladin.admin.v1.CapabilityService.Issue.
-func (c *capabilityServiceClient) Issue(ctx context.Context, req *connect.Request[v1.CapabilityServiceIssueRequest]) (*connect.Response[v1.CapabilityServiceIssueResponse], error) {
-	return c.issue.CallUnary(ctx, req)
-}
-
-// Delegate calls paladin.admin.v1.CapabilityService.Delegate.
-func (c *capabilityServiceClient) Delegate(ctx context.Context, req *connect.Request[v1.CapabilityServiceDelegateRequest]) (*connect.Response[v1.CapabilityServiceIssueResponse], error) {
-	return c.delegate.CallUnary(ctx, req)
-}
-
-// Revoke calls paladin.admin.v1.CapabilityService.Revoke.
-func (c *capabilityServiceClient) Revoke(ctx context.Context, req *connect.Request[v1.CapabilityServiceRevokeRequest]) (*connect.Response[v1.CapabilityServiceRevokeResponse], error) {
-	return c.revoke.CallUnary(ctx, req)
-}
-
-// RevokeBiscuit calls paladin.admin.v1.CapabilityService.RevokeBiscuit.
-func (c *capabilityServiceClient) RevokeBiscuit(ctx context.Context, req *connect.Request[v1.CapabilityServiceRevokeBiscuitRequest]) (*connect.Response[v1.CapabilityServiceRevokeBiscuitResponse], error) {
-	return c.revokeBiscuit.CallUnary(ctx, req)
-}
-
-// GetBiscuitUsage calls paladin.admin.v1.CapabilityService.GetBiscuitUsage.
-func (c *capabilityServiceClient) GetBiscuitUsage(ctx context.Context, req *connect.Request[v1.CapabilityServiceGetBiscuitUsageRequest]) (*connect.Response[v1.CapabilityServiceGetBiscuitUsageResponse], error) {
-	return c.getBiscuitUsage.CallUnary(ctx, req)
-}
-
-// List calls paladin.admin.v1.CapabilityService.List.
-func (c *capabilityServiceClient) List(ctx context.Context, req *connect.Request[v1.CapabilityServiceListRequest]) (*connect.Response[v1.CapabilityServiceListResponse], error) {
-	return c.list.CallUnary(ctx, req)
-}
-
-// GetUsage calls paladin.admin.v1.CapabilityService.GetUsage.
-func (c *capabilityServiceClient) GetUsage(ctx context.Context, req *connect.Request[v1.CapabilityServiceGetUsageRequest]) (*connect.Response[v1.CapabilityServiceGetUsageResponse], error) {
-	return c.getUsage.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewCapabilityServiceClient(client *connect.Client) CapabilityServiceClient {
+	return &capabilityServiceClient{client: client}
 }
 
 // CapabilityServiceHandler is an implementation of the paladin.admin.v1.CapabilityService service.
@@ -215,140 +159,225 @@ type CapabilityServiceHandler interface {
 	// FAILED_PRECONDITION with reason TENANT_ALREADY_DELETED when it is in the
 	// trash; INTERNAL when the store or the signer fails — a request worth
 	// retrying, not a bad one.
-	Issue(context.Context, *connect.Request[v1.CapabilityServiceIssueRequest]) (*connect.Response[v1.CapabilityServiceIssueResponse], error)
+	Issue(context.Context, *v1.CapabilityServiceIssueRequest) (*v1.CapabilityServiceIssueResponse, error)
 	// Delegate issues a strictly-narrower child capability under a
 	// parent the caller already holds. Narrowing is enforced at issuance:
 	// widening attempts fail before any token is emitted.
 	//
 	// Errors as Issue's, plus PERMISSION_DENIED for a child wider than its
 	// parent and FAILED_PRECONDITION for a parent revoked or expired.
-	Delegate(context.Context, *connect.Request[v1.CapabilityServiceDelegateRequest]) (*connect.Response[v1.CapabilityServiceIssueResponse], error)
+	Delegate(context.Context, *v1.CapabilityServiceDelegateRequest) (*v1.CapabilityServiceIssueResponse, error)
 	// Revoke adds the supplied capability ID to the revocation list.
 	// CascadeChildren=true revokes every descendant in the delegation
 	// tree. Idempotent — re-revoking a revoked capability is a no-op.
-	Revoke(context.Context, *connect.Request[v1.CapabilityServiceRevokeRequest]) (*connect.Response[v1.CapabilityServiceRevokeResponse], error)
+	Revoke(context.Context, *v1.CapabilityServiceRevokeRequest) (*v1.CapabilityServiceRevokeResponse, error)
 	// RevokeBiscuit revokes one copy of a capability's Biscuit: the copy
 	// `token` is, and every copy attenuated from it. The capability, the copy
 	// it was attenuated from and its other copies keep working; revoke the
 	// capability to stop them all. Idempotent.
-	RevokeBiscuit(context.Context, *connect.Request[v1.CapabilityServiceRevokeBiscuitRequest]) (*connect.Response[v1.CapabilityServiceRevokeBiscuitResponse], error)
+	RevokeBiscuit(context.Context, *v1.CapabilityServiceRevokeBiscuitRequest) (*v1.CapabilityServiceRevokeBiscuitResponse, error)
 	// GetBiscuitUsage returns the limits in force on one copy of a
 	// capability's Biscuit — its own and those of the copies it was attenuated
 	// from — with what has been counted against each. A copy gets limits only
 	// by attenuation; one under none returns no copies.
-	GetBiscuitUsage(context.Context, *connect.Request[v1.CapabilityServiceGetBiscuitUsageRequest]) (*connect.Response[v1.CapabilityServiceGetBiscuitUsageResponse], error)
+	GetBiscuitUsage(context.Context, *v1.CapabilityServiceGetBiscuitUsageRequest) (*v1.CapabilityServiceGetBiscuitUsageResponse, error)
 	// List enumerates capabilities issued to a principal. Cursor-paginated.
-	List(context.Context, *connect.Request[v1.CapabilityServiceListRequest]) (*connect.Response[v1.CapabilityServiceListResponse], error)
+	List(context.Context, *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error)
 	// GetUsage returns the runtime counters for a capability:
 	// request_count (vs Caveats.max_requests) and spent_micros
 	// (vs Caveats.max_budget_micros). Returns NOT_FOUND when the
 	// capability has never been used (no requests, no charges).
-	GetUsage(context.Context, *connect.Request[v1.CapabilityServiceGetUsageRequest]) (*connect.Response[v1.CapabilityServiceGetUsageResponse], error)
+	GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error)
 }
 
-// NewCapabilityServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewCapabilityServiceHandler(svc CapabilityServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	capabilityServiceMethods := v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods()
-	capabilityServiceIssueHandler := connect.NewUnaryHandler(
-		CapabilityServiceIssueProcedure,
-		svc.Issue,
-		connect.WithSchema(capabilityServiceMethods.ByName("Issue")),
-		connect.WithHandlerOptions(opts...),
+// RegisterCapabilityServiceHandler registers svc as the paladin.admin.v1.CapabilityService
+// implementation on server.
+func RegisterCapabilityServiceHandler(server *connect.Server, svc CapabilityServiceHandler) {
+	adapter := capabilityServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: capabilityServiceIssueSpec(), Handler: adapter.issue},
+		connect.Method{Spec: capabilityServiceDelegateSpec(), Handler: adapter.delegate},
+		connect.Method{Spec: capabilityServiceRevokeSpec(), Handler: adapter.revoke},
+		connect.Method{Spec: capabilityServiceRevokeBiscuitSpec(), Handler: adapter.revokeBiscuit},
+		connect.Method{Spec: capabilityServiceGetBiscuitUsageSpec(), Handler: adapter.getBiscuitUsage},
+		connect.Method{Spec: capabilityServiceListSpec(), Handler: adapter.list},
+		connect.Method{Spec: capabilityServiceGetUsageSpec(), Handler: adapter.getUsage},
 	)
-	capabilityServiceDelegateHandler := connect.NewUnaryHandler(
-		CapabilityServiceDelegateProcedure,
-		svc.Delegate,
-		connect.WithSchema(capabilityServiceMethods.ByName("Delegate")),
-		connect.WithHandlerOptions(opts...),
-	)
-	capabilityServiceRevokeHandler := connect.NewUnaryHandler(
-		CapabilityServiceRevokeProcedure,
-		svc.Revoke,
-		connect.WithSchema(capabilityServiceMethods.ByName("Revoke")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	capabilityServiceRevokeBiscuitHandler := connect.NewUnaryHandler(
-		CapabilityServiceRevokeBiscuitProcedure,
-		svc.RevokeBiscuit,
-		connect.WithSchema(capabilityServiceMethods.ByName("RevokeBiscuit")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	capabilityServiceGetBiscuitUsageHandler := connect.NewUnaryHandler(
-		CapabilityServiceGetBiscuitUsageProcedure,
-		svc.GetBiscuitUsage,
-		connect.WithSchema(capabilityServiceMethods.ByName("GetBiscuitUsage")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	capabilityServiceListHandler := connect.NewUnaryHandler(
-		CapabilityServiceListProcedure,
-		svc.List,
-		connect.WithSchema(capabilityServiceMethods.ByName("List")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	capabilityServiceGetUsageHandler := connect.NewUnaryHandler(
-		CapabilityServiceGetUsageProcedure,
-		svc.GetUsage,
-		connect.WithSchema(capabilityServiceMethods.ByName("GetUsage")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.admin.v1.CapabilityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case CapabilityServiceIssueProcedure:
-			capabilityServiceIssueHandler.ServeHTTP(w, r)
-		case CapabilityServiceDelegateProcedure:
-			capabilityServiceDelegateHandler.ServeHTTP(w, r)
-		case CapabilityServiceRevokeProcedure:
-			capabilityServiceRevokeHandler.ServeHTTP(w, r)
-		case CapabilityServiceRevokeBiscuitProcedure:
-			capabilityServiceRevokeBiscuitHandler.ServeHTTP(w, r)
-		case CapabilityServiceGetBiscuitUsageProcedure:
-			capabilityServiceGetBiscuitUsageHandler.ServeHTTP(w, r)
-		case CapabilityServiceListProcedure:
-			capabilityServiceListHandler.ServeHTTP(w, r)
-		case CapabilityServiceGetUsageProcedure:
-			capabilityServiceGetUsageHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedCapabilityServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedCapabilityServiceHandler struct{}
 
-func (UnimplementedCapabilityServiceHandler) Issue(context.Context, *connect.Request[v1.CapabilityServiceIssueRequest]) (*connect.Response[v1.CapabilityServiceIssueResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CapabilityService.Issue is not implemented"))
+func (UnimplementedCapabilityServiceHandler) Issue(context.Context, *v1.CapabilityServiceIssueRequest) (*v1.CapabilityServiceIssueResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.Issue is not implemented")
 }
 
-func (UnimplementedCapabilityServiceHandler) Delegate(context.Context, *connect.Request[v1.CapabilityServiceDelegateRequest]) (*connect.Response[v1.CapabilityServiceIssueResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CapabilityService.Delegate is not implemented"))
+func (UnimplementedCapabilityServiceHandler) Delegate(context.Context, *v1.CapabilityServiceDelegateRequest) (*v1.CapabilityServiceIssueResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.Delegate is not implemented")
 }
 
-func (UnimplementedCapabilityServiceHandler) Revoke(context.Context, *connect.Request[v1.CapabilityServiceRevokeRequest]) (*connect.Response[v1.CapabilityServiceRevokeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CapabilityService.Revoke is not implemented"))
+func (UnimplementedCapabilityServiceHandler) Revoke(context.Context, *v1.CapabilityServiceRevokeRequest) (*v1.CapabilityServiceRevokeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.Revoke is not implemented")
 }
 
-func (UnimplementedCapabilityServiceHandler) RevokeBiscuit(context.Context, *connect.Request[v1.CapabilityServiceRevokeBiscuitRequest]) (*connect.Response[v1.CapabilityServiceRevokeBiscuitResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CapabilityService.RevokeBiscuit is not implemented"))
+func (UnimplementedCapabilityServiceHandler) RevokeBiscuit(context.Context, *v1.CapabilityServiceRevokeBiscuitRequest) (*v1.CapabilityServiceRevokeBiscuitResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.RevokeBiscuit is not implemented")
 }
 
-func (UnimplementedCapabilityServiceHandler) GetBiscuitUsage(context.Context, *connect.Request[v1.CapabilityServiceGetBiscuitUsageRequest]) (*connect.Response[v1.CapabilityServiceGetBiscuitUsageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CapabilityService.GetBiscuitUsage is not implemented"))
+func (UnimplementedCapabilityServiceHandler) GetBiscuitUsage(context.Context, *v1.CapabilityServiceGetBiscuitUsageRequest) (*v1.CapabilityServiceGetBiscuitUsageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.GetBiscuitUsage is not implemented")
 }
 
-func (UnimplementedCapabilityServiceHandler) List(context.Context, *connect.Request[v1.CapabilityServiceListRequest]) (*connect.Response[v1.CapabilityServiceListResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CapabilityService.List is not implemented"))
+func (UnimplementedCapabilityServiceHandler) List(context.Context, *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.List is not implemented")
 }
 
-func (UnimplementedCapabilityServiceHandler) GetUsage(context.Context, *connect.Request[v1.CapabilityServiceGetUsageRequest]) (*connect.Response[v1.CapabilityServiceGetUsageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CapabilityService.GetUsage is not implemented"))
+func (UnimplementedCapabilityServiceHandler) GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.GetUsage is not implemented")
+}
+
+type capabilityServiceClient struct {
+	client *connect.Client
+}
+
+func (c *capabilityServiceClient) Issue(ctx context.Context, req *v1.CapabilityServiceIssueRequest) (*v1.CapabilityServiceIssueResponse, error) {
+	var res v1.CapabilityServiceIssueResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceIssueSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) Delegate(ctx context.Context, req *v1.CapabilityServiceDelegateRequest) (*v1.CapabilityServiceIssueResponse, error) {
+	var res v1.CapabilityServiceIssueResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceDelegateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) Revoke(ctx context.Context, req *v1.CapabilityServiceRevokeRequest) (*v1.CapabilityServiceRevokeResponse, error) {
+	var res v1.CapabilityServiceRevokeResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceRevokeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) RevokeBiscuit(ctx context.Context, req *v1.CapabilityServiceRevokeBiscuitRequest) (*v1.CapabilityServiceRevokeBiscuitResponse, error) {
+	var res v1.CapabilityServiceRevokeBiscuitResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceRevokeBiscuitSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) GetBiscuitUsage(ctx context.Context, req *v1.CapabilityServiceGetBiscuitUsageRequest) (*v1.CapabilityServiceGetBiscuitUsageResponse, error) {
+	var res v1.CapabilityServiceGetBiscuitUsageResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceGetBiscuitUsageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) List(ctx context.Context, req *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error) {
+	var res v1.CapabilityServiceListResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceListSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) GetUsage(ctx context.Context, req *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error) {
+	var res v1.CapabilityServiceGetUsageResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceGetUsageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type capabilityServiceHandler struct{ svc CapabilityServiceHandler }
+
+func (h capabilityServiceHandler) issue(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceIssueRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Issue(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) delegate(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceDelegateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Delegate(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) revoke(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceRevokeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Revoke(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) revokeBiscuit(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceRevokeBiscuitRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeBiscuit(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) getBiscuitUsage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceGetBiscuitUsageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetBiscuitUsage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) list(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceListRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.List(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) getUsage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceGetUsageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetUsage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

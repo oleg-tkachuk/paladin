@@ -4,11 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
@@ -140,7 +139,7 @@ func newSession(iamURL string, opts ...SessionOption) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.auth = paladiniamv1connect.NewAuthServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...)
+	s.auth = paladiniamv1connect.NewAuthServiceClient(c.Connect())
 	return s, nil
 }
 
@@ -205,32 +204,32 @@ func (s *Session) Invalidate(audience string) {
 
 // signIn logs in and caches the IAM token. Called with mintMu held.
 func (s *Session) signIn(ctx context.Context) error {
-	resp, err := s.auth.Login(ctx, connect.NewRequest(s.login))
+	resp, err := s.auth.Login(ctx, s.login)
 	if err != nil {
 		return fmt.Errorf("paladin: sign in: %w", err)
 	}
-	return s.keepPair(resp.Msg.GetTokens())
+	return s.keepPair(resp.GetTokens())
 }
 
 // mint obtains an access token for audience. Called with mintMu held.
 func (s *Session) mint(ctx context.Context, audience string) error {
 	refresh := s.refreshToken()
 	if audience == AudienceIAM {
-		resp, err := s.auth.RefreshToken(ctx, connect.NewRequest(&iamv1.RefreshTokenRequest{
+		resp, err := s.auth.RefreshToken(ctx, &iamv1.RefreshTokenRequest{
 			RefreshToken: refresh, RequestedAudience: AudienceIAM,
-		}))
+		})
 		if err != nil {
 			return fmt.Errorf("paladin: refresh: %w", err)
 		}
-		return s.keepPair(resp.Msg.GetTokens())
+		return s.keepPair(resp.GetTokens())
 	}
-	resp, err := s.auth.ExchangeAudience(ctx, connect.NewRequest(&iamv1.ExchangeAudienceRequest{
+	resp, err := s.auth.ExchangeAudience(ctx, &iamv1.ExchangeAudienceRequest{
 		RefreshToken: refresh, TargetAudience: audience,
-	}))
+	})
 	if err != nil {
 		return fmt.Errorf("paladin: exchange for %s: %w", audience, err)
 	}
-	s.keep(audience, resp.Msg.GetAccessToken(), resp.Msg.GetAccessExpiresInSeconds())
+	s.keep(audience, resp.GetAccessToken(), resp.GetAccessExpiresInSeconds())
 	return nil
 }
 
@@ -264,13 +263,13 @@ type tokenAuth struct {
 	audience string
 }
 
-func (a *tokenAuth) set(ctx context.Context, h http.Header) error {
+func (a *tokenAuth) set(ctx context.Context, h *connect.Header) error {
 	token, err := a.source.Token(ctx, a.audience)
 	if err != nil {
 		return tokenError(err)
 	}
 	if token == "" {
-		h.Del(HeaderAuthorization)
+		h.Delete(HeaderAuthorization)
 		return nil
 	}
 	h.Set(HeaderAuthorization, bearerScheme+" "+token)
@@ -286,46 +285,47 @@ func (a *tokenAuth) set(ctx context.Context, h http.Header) error {
 func tokenError(err error) error {
 	switch code := connect.CodeOf(err); {
 	case errors.Is(err, ErrNoToken), code == connect.CodeUnauthenticated:
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	case errors.Is(err, context.Canceled):
-		return connect.NewError(connect.CodeCanceled, err)
+		return connect.NewError(connect.CodeCanceled, err.Error()).WithCause(err)
 	case errors.Is(err, context.DeadlineExceeded):
-		return connect.NewError(connect.CodeDeadlineExceeded, err)
+		return connect.NewError(connect.CodeDeadlineExceeded, err.Error()).WithCause(err)
 	case code == connect.CodeUnknown:
-		return connect.NewError(connect.CodeUnavailable, err)
+		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	default:
-		return connect.NewError(code, err)
+		return connect.NewError(code, err.Error()).WithCause(err)
 	}
 }
 
-func (a *tokenAuth) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if err := a.set(ctx, req.Header()); err != nil {
-			return nil, err
+func (a *tokenAuth) interceptor() connect.ClientInterceptor {
+	return interceptor(a.unary, a.stream)
+}
+
+func (a *tokenAuth) unary(next unaryFunc) unaryFunc {
+	return func(ctx context.Context, spec connect.Spec, req, res any) error {
+		header := callInfo(ctx).RequestHeader()
+		if err := a.set(ctx, header); err != nil {
+			return err
 		}
-		resp, err := next(ctx, req)
+		err := next(ctx, spec, req, res)
 		inv, ok := a.source.(tokenInvalidator)
 		if connect.CodeOf(err) != connect.CodeUnauthenticated || !ok {
-			return resp, err
+			return err
 		}
 		inv.Invalidate(a.audience)
-		if err := a.set(ctx, req.Header()); err != nil {
+		if err := a.set(ctx, header); err != nil {
+			return err
+		}
+		clearResponse(callInfo(ctx))
+		return next(ctx, spec, req, res)
+	}
+}
+
+func (a *tokenAuth) stream(next connect.ClientFunc) connect.ClientFunc {
+	return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+		if err := a.set(ctx, callInfo(ctx).RequestHeader()); err != nil {
 			return nil, err
 		}
-		return next(ctx, req)
+		return next(ctx, spec)
 	}
-}
-
-func (a *tokenAuth) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
-		conn := next(ctx, spec)
-		// A stream has nowhere to return the error before it is used; a
-		// missing token surfaces as the server's Unauthenticated.
-		_ = a.set(ctx, conn.RequestHeader())
-		return conn
-	}
-}
-
-func (a *tokenAuth) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
 }

@@ -6,78 +6,184 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// TenantServiceName is the fully-qualified name of the TenantService service.
 	TenantServiceName = "paladin.admin.v1.TenantService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// TenantServiceCreateTenantProcedure is the fully-qualified name of the TenantService's
-	// CreateTenant RPC.
+	// TenantServiceCreateTenantProcedure is the procedure name of the TenantService's CreateTenant RPC.
 	TenantServiceCreateTenantProcedure = "/paladin.admin.v1.TenantService/CreateTenant"
-	// TenantServiceGetTenantProcedure is the fully-qualified name of the TenantService's GetTenant RPC.
+	// TenantServiceGetTenantProcedure is the procedure name of the TenantService's GetTenant RPC.
 	TenantServiceGetTenantProcedure = "/paladin.admin.v1.TenantService/GetTenant"
-	// TenantServiceUpdateTenantProcedure is the fully-qualified name of the TenantService's
-	// UpdateTenant RPC.
+	// TenantServiceUpdateTenantProcedure is the procedure name of the TenantService's UpdateTenant RPC.
 	TenantServiceUpdateTenantProcedure = "/paladin.admin.v1.TenantService/UpdateTenant"
-	// TenantServiceDeleteTenantProcedure is the fully-qualified name of the TenantService's
-	// DeleteTenant RPC.
+	// TenantServiceDeleteTenantProcedure is the procedure name of the TenantService's DeleteTenant RPC.
 	TenantServiceDeleteTenantProcedure = "/paladin.admin.v1.TenantService/DeleteTenant"
-	// TenantServiceListTenantsProcedure is the fully-qualified name of the TenantService's ListTenants
-	// RPC.
+	// TenantServiceListTenantsProcedure is the procedure name of the TenantService's ListTenants RPC.
 	TenantServiceListTenantsProcedure = "/paladin.admin.v1.TenantService/ListTenants"
-	// TenantServiceSetInheritedPolicyProcedure is the fully-qualified name of the TenantService's
+	// TenantServiceSetInheritedPolicyProcedure is the procedure name of the TenantService's
 	// SetInheritedPolicy RPC.
 	TenantServiceSetInheritedPolicyProcedure = "/paladin.admin.v1.TenantService/SetInheritedPolicy"
-	// TenantServiceRestoreTenantProcedure is the fully-qualified name of the TenantService's
-	// RestoreTenant RPC.
-	TenantServiceRestoreTenantProcedure = "/paladin.admin.v1.TenantService/RestoreTenant"
-	// TenantServicePurgeTenantProcedure is the fully-qualified name of the TenantService's PurgeTenant
+	// TenantServiceRestoreTenantProcedure is the procedure name of the TenantService's RestoreTenant
 	// RPC.
+	TenantServiceRestoreTenantProcedure = "/paladin.admin.v1.TenantService/RestoreTenant"
+	// TenantServicePurgeTenantProcedure is the procedure name of the TenantService's PurgeTenant RPC.
 	TenantServicePurgeTenantProcedure = "/paladin.admin.v1.TenantService/PurgeTenant"
-	// TenantServiceRenameTenantSlugProcedure is the fully-qualified name of the TenantService's
+	// TenantServiceRenameTenantSlugProcedure is the procedure name of the TenantService's
 	// RenameTenantSlug RPC.
 	TenantServiceRenameTenantSlugProcedure = "/paladin.admin.v1.TenantService/RenameTenantSlug"
-	// TenantServiceMigrateTenantStorageLayoutProcedure is the fully-qualified name of the
-	// TenantService's MigrateTenantStorageLayout RPC.
+	// TenantServiceMigrateTenantStorageLayoutProcedure is the procedure name of the TenantService's
+	// MigrateTenantStorageLayout RPC.
 	TenantServiceMigrateTenantStorageLayoutProcedure = "/paladin.admin.v1.TenantService/MigrateTenantStorageLayout"
-	// TenantServiceGetTenantStorageMigrationProcedure is the fully-qualified name of the
-	// TenantService's GetTenantStorageMigration RPC.
+	// TenantServiceGetTenantStorageMigrationProcedure is the procedure name of the TenantService's
+	// GetTenantStorageMigration RPC.
 	TenantServiceGetTenantStorageMigrationProcedure = "/paladin.admin.v1.TenantService/GetTenantStorageMigration"
-	// TenantServiceResolveRenamedSlugProcedure is the fully-qualified name of the TenantService's
+	// TenantServiceResolveRenamedSlugProcedure is the procedure name of the TenantService's
 	// ResolveRenamedSlug RPC.
 	TenantServiceResolveRenamedSlugProcedure = "/paladin.admin.v1.TenantService/ResolveRenamedSlug"
-	// TenantServiceGetTenantDefaultBindingProcedure is the fully-qualified name of the TenantService's
+	// TenantServiceGetTenantDefaultBindingProcedure is the procedure name of the TenantService's
 	// GetTenantDefaultBinding RPC.
 	TenantServiceGetTenantDefaultBindingProcedure = "/paladin.admin.v1.TenantService/GetTenantDefaultBinding"
-	// TenantServiceSetTenantDefaultBindingProcedure is the fully-qualified name of the TenantService's
+	// TenantServiceSetTenantDefaultBindingProcedure is the procedure name of the TenantService's
 	// SetTenantDefaultBinding RPC.
 	TenantServiceSetTenantDefaultBindingProcedure = "/paladin.admin.v1.TenantService/SetTenantDefaultBinding"
-	// TenantServiceClearTenantDefaultBindingProcedure is the fully-qualified name of the
-	// TenantService's ClearTenantDefaultBinding RPC.
+	// TenantServiceClearTenantDefaultBindingProcedure is the procedure name of the TenantService's
+	// ClearTenantDefaultBinding RPC.
 	TenantServiceClearTenantDefaultBindingProcedure = "/paladin.admin.v1.TenantService/ClearTenantDefaultBinding"
+)
+
+var (
+	tenantServiceCreateTenantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("CreateTenant"),
+			Procedure:  TenantServiceCreateTenantProcedure,
+		}
+	})
+	tenantServiceGetTenantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("GetTenant"),
+			Procedure:        TenantServiceGetTenantProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	tenantServiceUpdateTenantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("UpdateTenant"),
+			Procedure:        TenantServiceUpdateTenantProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	tenantServiceDeleteTenantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("DeleteTenant"),
+			Procedure:        TenantServiceDeleteTenantProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	tenantServiceListTenantsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("ListTenants"),
+			Procedure:        TenantServiceListTenantsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	tenantServiceSetInheritedPolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("SetInheritedPolicy"),
+			Procedure:        TenantServiceSetInheritedPolicyProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	tenantServiceRestoreTenantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("RestoreTenant"),
+			Procedure:  TenantServiceRestoreTenantProcedure,
+		}
+	})
+	tenantServicePurgeTenantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("PurgeTenant"),
+			Procedure:        TenantServicePurgeTenantProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	tenantServiceRenameTenantSlugSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("RenameTenantSlug"),
+			Procedure:        TenantServiceRenameTenantSlugProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	tenantServiceMigrateTenantStorageLayoutSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("MigrateTenantStorageLayout"),
+			Procedure:  TenantServiceMigrateTenantStorageLayoutProcedure,
+		}
+	})
+	tenantServiceGetTenantStorageMigrationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("GetTenantStorageMigration"),
+			Procedure:        TenantServiceGetTenantStorageMigrationProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	tenantServiceResolveRenamedSlugSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("ResolveRenamedSlug"),
+			Procedure:        TenantServiceResolveRenamedSlugProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	tenantServiceGetTenantDefaultBindingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("GetTenantDefaultBinding"),
+			Procedure:        TenantServiceGetTenantDefaultBindingProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	tenantServiceSetTenantDefaultBindingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("SetTenantDefaultBinding"),
+			Procedure:        TenantServiceSetTenantDefaultBindingProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	tenantServiceClearTenantDefaultBindingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("ClearTenantDefaultBinding"),
+			Procedure:        TenantServiceClearTenantDefaultBindingProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 )
 
 // TenantServiceClient is a client for the paladin.admin.v1.TenantService service.
@@ -86,57 +192,57 @@ type TenantServiceClient interface {
 	// default storage binding. storage_layout="dedicated" also provisions a
 	// physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
 	// slug is taken.
-	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error)
+	CreateTenant(context.Context, *v1.CreateTenantRequest) (*v1.Tenant, error)
 	// GetTenant accepts either the UUID or the slug in the resource name.
 	// Soft-deleted tenants are returned — check deleted_at — so the trash view
 	// can show them.
-	GetTenant(context.Context, *connect.Request[v1.GetTenantRequest]) (*connect.Response[v1.Tenant], error)
+	GetTenant(context.Context, *v1.GetTenantRequest) (*v1.Tenant, error)
 	// UpdateTenant applies update_mask to display_name, labels and
 	// inherited_cedar_policy. tenant_id and slug are immutable (use
 	// RenameTenantSlug for the latter); resource_version is required and a stale
 	// one is Aborted.
-	UpdateTenant(context.Context, *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.Tenant], error)
+	UpdateTenant(context.Context, *v1.UpdateTenantRequest) (*v1.Tenant, error)
 	// DeleteTenant is a SOFT delete (sets `deleted_at`), always: the row
 	// remains recoverable via RestoreTenant within the retention window.
 	// There is no flag that skips the trash — removing the row physically
 	// is PurgeTenant, a second call that names what it does. Automated
 	// cleanups and emergency-purge flows therefore make both calls.
-	DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error)
+	DeleteTenant(context.Context, *v1.DeleteTenantRequest) (*v1.DeleteTenantResponse, error)
 	// ListTenants excludes soft-deleted tenants unless include_trashed or
 	// only_trashed is set.
-	ListTenants(context.Context, *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error)
+	ListTenants(context.Context, *v1.ListTenantsRequest) (*v1.ListTenantsResponse, error)
 	// SetInheritedPolicy replaces the Cedar policy every collection and bucket
 	// under the tenant inherits. Validated before it is stored — an unparseable
 	// policy is InvalidArgument, not a tenant that denies everything.
-	SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error)
+	SetInheritedPolicy(context.Context, *v1.SetInheritedPolicyRequest) (*v1.Tenant, error)
 	// RestoreTenant clears `deleted_at` on a soft-deleted row, returning
 	// it to the active set. Slug + display_name are unique among live
 	// tenants (`001_initial_schema.sql`), and a trashed row keeps both —
 	// if a new tenant claimed the slug while this one was
 	// trashed, restore fails with ALREADY_EXISTS and the operator must
 	// rename one side first.
-	RestoreTenant(context.Context, *connect.Request[v1.RestoreTenantRequest]) (*connect.Response[v1.Tenant], error)
+	RestoreTenant(context.Context, *v1.RestoreTenantRequest) (*v1.Tenant, error)
 	// PurgeTenant hard-deletes a soft-deleted row. Refuses to operate on
 	// an active tenant (operators have to soft-delete first) so the
 	// two-step recovery window is preserved by default. Idempotent on
 	// a missing row.
-	PurgeTenant(context.Context, *connect.Request[v1.PurgeTenantRequest]) (*connect.Response[v1.PurgeTenantResponse], error)
+	PurgeTenant(context.Context, *v1.PurgeTenantRequest) (*v1.PurgeTenantResponse, error)
 	// RenameTenantSlug rewrites the tenant's `slug` and rewrites every
 	// `Tenant::"<old_slug>"` reference in the tenant's
 	// inherited_cedar_policy AND in every collection's cedar_policy to
 	// `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
 	// the supplied resource_version. Returns the renamed Tenant.
-	RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error)
+	RenameTenantSlug(context.Context, *v1.RenameTenantSlugRequest) (*v1.Tenant, error)
 	// MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
 	// (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
 	// async copy job that server-side-copies every object into it, then rebinds
 	// the collections and flips the layout. Returns the initial migration status;
 	// poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
 	// tenant is not currently `shared` or a migration is already in flight.
-	MigrateTenantStorageLayout(context.Context, *connect.Request[v1.MigrateTenantStorageLayoutRequest]) (*connect.Response[v1.StorageMigrationStatus], error)
+	MigrateTenantStorageLayout(context.Context, *v1.MigrateTenantStorageLayoutRequest) (*v1.StorageMigrationStatus, error)
 	// GetTenantStorageMigration returns the current migration status for a
 	// tenant, or NOT_FOUND if none was ever started.
-	GetTenantStorageMigration(context.Context, *connect.Request[v1.GetTenantStorageMigrationRequest]) (*connect.Response[v1.StorageMigrationStatus], error)
+	GetTenantStorageMigration(context.Context, *v1.GetTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error)
 	// ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
 	// renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
 	// "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
@@ -145,227 +251,23 @@ type TenantServiceClient interface {
 	// link. Every failure (no rename history, outside the grace window, or
 	// read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
 	// enumerate slug→tenant mappings.
-	ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error)
+	ResolveRenamedSlug(context.Context, *v1.ResolveRenamedSlugRequest) (*v1.ResolveRenamedSlugResponse, error)
 	// GetTenantDefaultBinding returns the tenant's default (backend, bucket)
 	// route used to complete the bare collection name shape (ADR-0014 Phase 3).
 	// NOT_FOUND when the tenant has no binding set.
-	GetTenantDefaultBinding(context.Context, *connect.Request[v1.GetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
+	GetTenantDefaultBinding(context.Context, *v1.GetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error)
 	// SetTenantDefaultBinding upserts the tenant's default route. The
 	// (backend, bucket) MUST reference an existing bucket.
-	SetTenantDefaultBinding(context.Context, *connect.Request[v1.SetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
+	SetTenantDefaultBinding(context.Context, *v1.SetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error)
 	// ClearTenantDefaultBinding removes the tenant's default route; bare
 	// collection names for that tenant then fail with FAILED_PRECONDITION.
-	ClearTenantDefaultBinding(context.Context, *connect.Request[v1.ClearTenantDefaultBindingRequest]) (*connect.Response[v1.ClearTenantDefaultBindingResponse], error)
+	ClearTenantDefaultBinding(context.Context, *v1.ClearTenantDefaultBindingRequest) (*v1.ClearTenantDefaultBindingResponse, error)
 }
 
-// NewTenantServiceClient constructs a client for the paladin.admin.v1.TenantService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewTenantServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) TenantServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	tenantServiceMethods := v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods()
-	return &tenantServiceClient{
-		createTenant: connect.NewClient[v1.CreateTenantRequest, v1.Tenant](
-			httpClient,
-			baseURL+TenantServiceCreateTenantProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("CreateTenant")),
-			connect.WithClientOptions(opts...),
-		),
-		getTenant: connect.NewClient[v1.GetTenantRequest, v1.Tenant](
-			httpClient,
-			baseURL+TenantServiceGetTenantProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("GetTenant")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		updateTenant: connect.NewClient[v1.UpdateTenantRequest, v1.Tenant](
-			httpClient,
-			baseURL+TenantServiceUpdateTenantProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("UpdateTenant")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		deleteTenant: connect.NewClient[v1.DeleteTenantRequest, v1.DeleteTenantResponse](
-			httpClient,
-			baseURL+TenantServiceDeleteTenantProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("DeleteTenant")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		listTenants: connect.NewClient[v1.ListTenantsRequest, v1.ListTenantsResponse](
-			httpClient,
-			baseURL+TenantServiceListTenantsProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("ListTenants")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		setInheritedPolicy: connect.NewClient[v1.SetInheritedPolicyRequest, v1.Tenant](
-			httpClient,
-			baseURL+TenantServiceSetInheritedPolicyProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("SetInheritedPolicy")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		restoreTenant: connect.NewClient[v1.RestoreTenantRequest, v1.Tenant](
-			httpClient,
-			baseURL+TenantServiceRestoreTenantProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("RestoreTenant")),
-			connect.WithClientOptions(opts...),
-		),
-		purgeTenant: connect.NewClient[v1.PurgeTenantRequest, v1.PurgeTenantResponse](
-			httpClient,
-			baseURL+TenantServicePurgeTenantProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("PurgeTenant")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		renameTenantSlug: connect.NewClient[v1.RenameTenantSlugRequest, v1.Tenant](
-			httpClient,
-			baseURL+TenantServiceRenameTenantSlugProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("RenameTenantSlug")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		migrateTenantStorageLayout: connect.NewClient[v1.MigrateTenantStorageLayoutRequest, v1.StorageMigrationStatus](
-			httpClient,
-			baseURL+TenantServiceMigrateTenantStorageLayoutProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("MigrateTenantStorageLayout")),
-			connect.WithClientOptions(opts...),
-		),
-		getTenantStorageMigration: connect.NewClient[v1.GetTenantStorageMigrationRequest, v1.StorageMigrationStatus](
-			httpClient,
-			baseURL+TenantServiceGetTenantStorageMigrationProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("GetTenantStorageMigration")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		resolveRenamedSlug: connect.NewClient[v1.ResolveRenamedSlugRequest, v1.ResolveRenamedSlugResponse](
-			httpClient,
-			baseURL+TenantServiceResolveRenamedSlugProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("ResolveRenamedSlug")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		getTenantDefaultBinding: connect.NewClient[v1.GetTenantDefaultBindingRequest, v1.TenantDefaultBinding](
-			httpClient,
-			baseURL+TenantServiceGetTenantDefaultBindingProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("GetTenantDefaultBinding")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		setTenantDefaultBinding: connect.NewClient[v1.SetTenantDefaultBindingRequest, v1.TenantDefaultBinding](
-			httpClient,
-			baseURL+TenantServiceSetTenantDefaultBindingProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("SetTenantDefaultBinding")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		clearTenantDefaultBinding: connect.NewClient[v1.ClearTenantDefaultBindingRequest, v1.ClearTenantDefaultBindingResponse](
-			httpClient,
-			baseURL+TenantServiceClearTenantDefaultBindingProcedure,
-			connect.WithSchema(tenantServiceMethods.ByName("ClearTenantDefaultBinding")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// tenantServiceClient implements TenantServiceClient.
-type tenantServiceClient struct {
-	createTenant               *connect.Client[v1.CreateTenantRequest, v1.Tenant]
-	getTenant                  *connect.Client[v1.GetTenantRequest, v1.Tenant]
-	updateTenant               *connect.Client[v1.UpdateTenantRequest, v1.Tenant]
-	deleteTenant               *connect.Client[v1.DeleteTenantRequest, v1.DeleteTenantResponse]
-	listTenants                *connect.Client[v1.ListTenantsRequest, v1.ListTenantsResponse]
-	setInheritedPolicy         *connect.Client[v1.SetInheritedPolicyRequest, v1.Tenant]
-	restoreTenant              *connect.Client[v1.RestoreTenantRequest, v1.Tenant]
-	purgeTenant                *connect.Client[v1.PurgeTenantRequest, v1.PurgeTenantResponse]
-	renameTenantSlug           *connect.Client[v1.RenameTenantSlugRequest, v1.Tenant]
-	migrateTenantStorageLayout *connect.Client[v1.MigrateTenantStorageLayoutRequest, v1.StorageMigrationStatus]
-	getTenantStorageMigration  *connect.Client[v1.GetTenantStorageMigrationRequest, v1.StorageMigrationStatus]
-	resolveRenamedSlug         *connect.Client[v1.ResolveRenamedSlugRequest, v1.ResolveRenamedSlugResponse]
-	getTenantDefaultBinding    *connect.Client[v1.GetTenantDefaultBindingRequest, v1.TenantDefaultBinding]
-	setTenantDefaultBinding    *connect.Client[v1.SetTenantDefaultBindingRequest, v1.TenantDefaultBinding]
-	clearTenantDefaultBinding  *connect.Client[v1.ClearTenantDefaultBindingRequest, v1.ClearTenantDefaultBindingResponse]
-}
-
-// CreateTenant calls paladin.admin.v1.TenantService.CreateTenant.
-func (c *tenantServiceClient) CreateTenant(ctx context.Context, req *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error) {
-	return c.createTenant.CallUnary(ctx, req)
-}
-
-// GetTenant calls paladin.admin.v1.TenantService.GetTenant.
-func (c *tenantServiceClient) GetTenant(ctx context.Context, req *connect.Request[v1.GetTenantRequest]) (*connect.Response[v1.Tenant], error) {
-	return c.getTenant.CallUnary(ctx, req)
-}
-
-// UpdateTenant calls paladin.admin.v1.TenantService.UpdateTenant.
-func (c *tenantServiceClient) UpdateTenant(ctx context.Context, req *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.Tenant], error) {
-	return c.updateTenant.CallUnary(ctx, req)
-}
-
-// DeleteTenant calls paladin.admin.v1.TenantService.DeleteTenant.
-func (c *tenantServiceClient) DeleteTenant(ctx context.Context, req *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error) {
-	return c.deleteTenant.CallUnary(ctx, req)
-}
-
-// ListTenants calls paladin.admin.v1.TenantService.ListTenants.
-func (c *tenantServiceClient) ListTenants(ctx context.Context, req *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error) {
-	return c.listTenants.CallUnary(ctx, req)
-}
-
-// SetInheritedPolicy calls paladin.admin.v1.TenantService.SetInheritedPolicy.
-func (c *tenantServiceClient) SetInheritedPolicy(ctx context.Context, req *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error) {
-	return c.setInheritedPolicy.CallUnary(ctx, req)
-}
-
-// RestoreTenant calls paladin.admin.v1.TenantService.RestoreTenant.
-func (c *tenantServiceClient) RestoreTenant(ctx context.Context, req *connect.Request[v1.RestoreTenantRequest]) (*connect.Response[v1.Tenant], error) {
-	return c.restoreTenant.CallUnary(ctx, req)
-}
-
-// PurgeTenant calls paladin.admin.v1.TenantService.PurgeTenant.
-func (c *tenantServiceClient) PurgeTenant(ctx context.Context, req *connect.Request[v1.PurgeTenantRequest]) (*connect.Response[v1.PurgeTenantResponse], error) {
-	return c.purgeTenant.CallUnary(ctx, req)
-}
-
-// RenameTenantSlug calls paladin.admin.v1.TenantService.RenameTenantSlug.
-func (c *tenantServiceClient) RenameTenantSlug(ctx context.Context, req *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error) {
-	return c.renameTenantSlug.CallUnary(ctx, req)
-}
-
-// MigrateTenantStorageLayout calls paladin.admin.v1.TenantService.MigrateTenantStorageLayout.
-func (c *tenantServiceClient) MigrateTenantStorageLayout(ctx context.Context, req *connect.Request[v1.MigrateTenantStorageLayoutRequest]) (*connect.Response[v1.StorageMigrationStatus], error) {
-	return c.migrateTenantStorageLayout.CallUnary(ctx, req)
-}
-
-// GetTenantStorageMigration calls paladin.admin.v1.TenantService.GetTenantStorageMigration.
-func (c *tenantServiceClient) GetTenantStorageMigration(ctx context.Context, req *connect.Request[v1.GetTenantStorageMigrationRequest]) (*connect.Response[v1.StorageMigrationStatus], error) {
-	return c.getTenantStorageMigration.CallUnary(ctx, req)
-}
-
-// ResolveRenamedSlug calls paladin.admin.v1.TenantService.ResolveRenamedSlug.
-func (c *tenantServiceClient) ResolveRenamedSlug(ctx context.Context, req *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error) {
-	return c.resolveRenamedSlug.CallUnary(ctx, req)
-}
-
-// GetTenantDefaultBinding calls paladin.admin.v1.TenantService.GetTenantDefaultBinding.
-func (c *tenantServiceClient) GetTenantDefaultBinding(ctx context.Context, req *connect.Request[v1.GetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error) {
-	return c.getTenantDefaultBinding.CallUnary(ctx, req)
-}
-
-// SetTenantDefaultBinding calls paladin.admin.v1.TenantService.SetTenantDefaultBinding.
-func (c *tenantServiceClient) SetTenantDefaultBinding(ctx context.Context, req *connect.Request[v1.SetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error) {
-	return c.setTenantDefaultBinding.CallUnary(ctx, req)
-}
-
-// ClearTenantDefaultBinding calls paladin.admin.v1.TenantService.ClearTenantDefaultBinding.
-func (c *tenantServiceClient) ClearTenantDefaultBinding(ctx context.Context, req *connect.Request[v1.ClearTenantDefaultBindingRequest]) (*connect.Response[v1.ClearTenantDefaultBindingResponse], error) {
-	return c.clearTenantDefaultBinding.CallUnary(ctx, req)
+// NewTenantServiceClient constructs a client for the paladin.admin.v1.TenantService service.
+// Multiple service clients may share a single connect.Client.
+func NewTenantServiceClient(client *connect.Client) TenantServiceClient {
+	return &tenantServiceClient{client: client}
 }
 
 // TenantServiceHandler is an implementation of the paladin.admin.v1.TenantService service.
@@ -374,57 +276,57 @@ type TenantServiceHandler interface {
 	// default storage binding. storage_layout="dedicated" also provisions a
 	// physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
 	// slug is taken.
-	CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error)
+	CreateTenant(context.Context, *v1.CreateTenantRequest) (*v1.Tenant, error)
 	// GetTenant accepts either the UUID or the slug in the resource name.
 	// Soft-deleted tenants are returned — check deleted_at — so the trash view
 	// can show them.
-	GetTenant(context.Context, *connect.Request[v1.GetTenantRequest]) (*connect.Response[v1.Tenant], error)
+	GetTenant(context.Context, *v1.GetTenantRequest) (*v1.Tenant, error)
 	// UpdateTenant applies update_mask to display_name, labels and
 	// inherited_cedar_policy. tenant_id and slug are immutable (use
 	// RenameTenantSlug for the latter); resource_version is required and a stale
 	// one is Aborted.
-	UpdateTenant(context.Context, *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.Tenant], error)
+	UpdateTenant(context.Context, *v1.UpdateTenantRequest) (*v1.Tenant, error)
 	// DeleteTenant is a SOFT delete (sets `deleted_at`), always: the row
 	// remains recoverable via RestoreTenant within the retention window.
 	// There is no flag that skips the trash — removing the row physically
 	// is PurgeTenant, a second call that names what it does. Automated
 	// cleanups and emergency-purge flows therefore make both calls.
-	DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error)
+	DeleteTenant(context.Context, *v1.DeleteTenantRequest) (*v1.DeleteTenantResponse, error)
 	// ListTenants excludes soft-deleted tenants unless include_trashed or
 	// only_trashed is set.
-	ListTenants(context.Context, *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error)
+	ListTenants(context.Context, *v1.ListTenantsRequest) (*v1.ListTenantsResponse, error)
 	// SetInheritedPolicy replaces the Cedar policy every collection and bucket
 	// under the tenant inherits. Validated before it is stored — an unparseable
 	// policy is InvalidArgument, not a tenant that denies everything.
-	SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error)
+	SetInheritedPolicy(context.Context, *v1.SetInheritedPolicyRequest) (*v1.Tenant, error)
 	// RestoreTenant clears `deleted_at` on a soft-deleted row, returning
 	// it to the active set. Slug + display_name are unique among live
 	// tenants (`001_initial_schema.sql`), and a trashed row keeps both —
 	// if a new tenant claimed the slug while this one was
 	// trashed, restore fails with ALREADY_EXISTS and the operator must
 	// rename one side first.
-	RestoreTenant(context.Context, *connect.Request[v1.RestoreTenantRequest]) (*connect.Response[v1.Tenant], error)
+	RestoreTenant(context.Context, *v1.RestoreTenantRequest) (*v1.Tenant, error)
 	// PurgeTenant hard-deletes a soft-deleted row. Refuses to operate on
 	// an active tenant (operators have to soft-delete first) so the
 	// two-step recovery window is preserved by default. Idempotent on
 	// a missing row.
-	PurgeTenant(context.Context, *connect.Request[v1.PurgeTenantRequest]) (*connect.Response[v1.PurgeTenantResponse], error)
+	PurgeTenant(context.Context, *v1.PurgeTenantRequest) (*v1.PurgeTenantResponse, error)
 	// RenameTenantSlug rewrites the tenant's `slug` and rewrites every
 	// `Tenant::"<old_slug>"` reference in the tenant's
 	// inherited_cedar_policy AND in every collection's cedar_policy to
 	// `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
 	// the supplied resource_version. Returns the renamed Tenant.
-	RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error)
+	RenameTenantSlug(context.Context, *v1.RenameTenantSlugRequest) (*v1.Tenant, error)
 	// MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
 	// (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
 	// async copy job that server-side-copies every object into it, then rebinds
 	// the collections and flips the layout. Returns the initial migration status;
 	// poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
 	// tenant is not currently `shared` or a migration is already in flight.
-	MigrateTenantStorageLayout(context.Context, *connect.Request[v1.MigrateTenantStorageLayoutRequest]) (*connect.Response[v1.StorageMigrationStatus], error)
+	MigrateTenantStorageLayout(context.Context, *v1.MigrateTenantStorageLayoutRequest) (*v1.StorageMigrationStatus, error)
 	// GetTenantStorageMigration returns the current migration status for a
 	// tenant, or NOT_FOUND if none was ever started.
-	GetTenantStorageMigration(context.Context, *connect.Request[v1.GetTenantStorageMigrationRequest]) (*connect.Response[v1.StorageMigrationStatus], error)
+	GetTenantStorageMigration(context.Context, *v1.GetTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error)
 	// ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
 	// renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
 	// "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
@@ -433,225 +335,407 @@ type TenantServiceHandler interface {
 	// link. Every failure (no rename history, outside the grace window, or
 	// read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
 	// enumerate slug→tenant mappings.
-	ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error)
+	ResolveRenamedSlug(context.Context, *v1.ResolveRenamedSlugRequest) (*v1.ResolveRenamedSlugResponse, error)
 	// GetTenantDefaultBinding returns the tenant's default (backend, bucket)
 	// route used to complete the bare collection name shape (ADR-0014 Phase 3).
 	// NOT_FOUND when the tenant has no binding set.
-	GetTenantDefaultBinding(context.Context, *connect.Request[v1.GetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
+	GetTenantDefaultBinding(context.Context, *v1.GetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error)
 	// SetTenantDefaultBinding upserts the tenant's default route. The
 	// (backend, bucket) MUST reference an existing bucket.
-	SetTenantDefaultBinding(context.Context, *connect.Request[v1.SetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error)
+	SetTenantDefaultBinding(context.Context, *v1.SetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error)
 	// ClearTenantDefaultBinding removes the tenant's default route; bare
 	// collection names for that tenant then fail with FAILED_PRECONDITION.
-	ClearTenantDefaultBinding(context.Context, *connect.Request[v1.ClearTenantDefaultBindingRequest]) (*connect.Response[v1.ClearTenantDefaultBindingResponse], error)
+	ClearTenantDefaultBinding(context.Context, *v1.ClearTenantDefaultBindingRequest) (*v1.ClearTenantDefaultBindingResponse, error)
 }
 
-// NewTenantServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewTenantServiceHandler(svc TenantServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	tenantServiceMethods := v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods()
-	tenantServiceCreateTenantHandler := connect.NewUnaryHandler(
-		TenantServiceCreateTenantProcedure,
-		svc.CreateTenant,
-		connect.WithSchema(tenantServiceMethods.ByName("CreateTenant")),
-		connect.WithHandlerOptions(opts...),
+// RegisterTenantServiceHandler registers svc as the paladin.admin.v1.TenantService implementation
+// on server.
+func RegisterTenantServiceHandler(server *connect.Server, svc TenantServiceHandler) {
+	adapter := tenantServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: tenantServiceCreateTenantSpec(), Handler: adapter.createTenant},
+		connect.Method{Spec: tenantServiceGetTenantSpec(), Handler: adapter.getTenant},
+		connect.Method{Spec: tenantServiceUpdateTenantSpec(), Handler: adapter.updateTenant},
+		connect.Method{Spec: tenantServiceDeleteTenantSpec(), Handler: adapter.deleteTenant},
+		connect.Method{Spec: tenantServiceListTenantsSpec(), Handler: adapter.listTenants},
+		connect.Method{Spec: tenantServiceSetInheritedPolicySpec(), Handler: adapter.setInheritedPolicy},
+		connect.Method{Spec: tenantServiceRestoreTenantSpec(), Handler: adapter.restoreTenant},
+		connect.Method{Spec: tenantServicePurgeTenantSpec(), Handler: adapter.purgeTenant},
+		connect.Method{Spec: tenantServiceRenameTenantSlugSpec(), Handler: adapter.renameTenantSlug},
+		connect.Method{Spec: tenantServiceMigrateTenantStorageLayoutSpec(), Handler: adapter.migrateTenantStorageLayout},
+		connect.Method{Spec: tenantServiceGetTenantStorageMigrationSpec(), Handler: adapter.getTenantStorageMigration},
+		connect.Method{Spec: tenantServiceResolveRenamedSlugSpec(), Handler: adapter.resolveRenamedSlug},
+		connect.Method{Spec: tenantServiceGetTenantDefaultBindingSpec(), Handler: adapter.getTenantDefaultBinding},
+		connect.Method{Spec: tenantServiceSetTenantDefaultBindingSpec(), Handler: adapter.setTenantDefaultBinding},
+		connect.Method{Spec: tenantServiceClearTenantDefaultBindingSpec(), Handler: adapter.clearTenantDefaultBinding},
 	)
-	tenantServiceGetTenantHandler := connect.NewUnaryHandler(
-		TenantServiceGetTenantProcedure,
-		svc.GetTenant,
-		connect.WithSchema(tenantServiceMethods.ByName("GetTenant")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServiceUpdateTenantHandler := connect.NewUnaryHandler(
-		TenantServiceUpdateTenantProcedure,
-		svc.UpdateTenant,
-		connect.WithSchema(tenantServiceMethods.ByName("UpdateTenant")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServiceDeleteTenantHandler := connect.NewUnaryHandler(
-		TenantServiceDeleteTenantProcedure,
-		svc.DeleteTenant,
-		connect.WithSchema(tenantServiceMethods.ByName("DeleteTenant")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServiceListTenantsHandler := connect.NewUnaryHandler(
-		TenantServiceListTenantsProcedure,
-		svc.ListTenants,
-		connect.WithSchema(tenantServiceMethods.ByName("ListTenants")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServiceSetInheritedPolicyHandler := connect.NewUnaryHandler(
-		TenantServiceSetInheritedPolicyProcedure,
-		svc.SetInheritedPolicy,
-		connect.WithSchema(tenantServiceMethods.ByName("SetInheritedPolicy")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServiceRestoreTenantHandler := connect.NewUnaryHandler(
-		TenantServiceRestoreTenantProcedure,
-		svc.RestoreTenant,
-		connect.WithSchema(tenantServiceMethods.ByName("RestoreTenant")),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServicePurgeTenantHandler := connect.NewUnaryHandler(
-		TenantServicePurgeTenantProcedure,
-		svc.PurgeTenant,
-		connect.WithSchema(tenantServiceMethods.ByName("PurgeTenant")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServiceRenameTenantSlugHandler := connect.NewUnaryHandler(
-		TenantServiceRenameTenantSlugProcedure,
-		svc.RenameTenantSlug,
-		connect.WithSchema(tenantServiceMethods.ByName("RenameTenantSlug")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServiceMigrateTenantStorageLayoutHandler := connect.NewUnaryHandler(
-		TenantServiceMigrateTenantStorageLayoutProcedure,
-		svc.MigrateTenantStorageLayout,
-		connect.WithSchema(tenantServiceMethods.ByName("MigrateTenantStorageLayout")),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServiceGetTenantStorageMigrationHandler := connect.NewUnaryHandler(
-		TenantServiceGetTenantStorageMigrationProcedure,
-		svc.GetTenantStorageMigration,
-		connect.WithSchema(tenantServiceMethods.ByName("GetTenantStorageMigration")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServiceResolveRenamedSlugHandler := connect.NewUnaryHandler(
-		TenantServiceResolveRenamedSlugProcedure,
-		svc.ResolveRenamedSlug,
-		connect.WithSchema(tenantServiceMethods.ByName("ResolveRenamedSlug")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServiceGetTenantDefaultBindingHandler := connect.NewUnaryHandler(
-		TenantServiceGetTenantDefaultBindingProcedure,
-		svc.GetTenantDefaultBinding,
-		connect.WithSchema(tenantServiceMethods.ByName("GetTenantDefaultBinding")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServiceSetTenantDefaultBindingHandler := connect.NewUnaryHandler(
-		TenantServiceSetTenantDefaultBindingProcedure,
-		svc.SetTenantDefaultBinding,
-		connect.WithSchema(tenantServiceMethods.ByName("SetTenantDefaultBinding")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	tenantServiceClearTenantDefaultBindingHandler := connect.NewUnaryHandler(
-		TenantServiceClearTenantDefaultBindingProcedure,
-		svc.ClearTenantDefaultBinding,
-		connect.WithSchema(tenantServiceMethods.ByName("ClearTenantDefaultBinding")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.admin.v1.TenantService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case TenantServiceCreateTenantProcedure:
-			tenantServiceCreateTenantHandler.ServeHTTP(w, r)
-		case TenantServiceGetTenantProcedure:
-			tenantServiceGetTenantHandler.ServeHTTP(w, r)
-		case TenantServiceUpdateTenantProcedure:
-			tenantServiceUpdateTenantHandler.ServeHTTP(w, r)
-		case TenantServiceDeleteTenantProcedure:
-			tenantServiceDeleteTenantHandler.ServeHTTP(w, r)
-		case TenantServiceListTenantsProcedure:
-			tenantServiceListTenantsHandler.ServeHTTP(w, r)
-		case TenantServiceSetInheritedPolicyProcedure:
-			tenantServiceSetInheritedPolicyHandler.ServeHTTP(w, r)
-		case TenantServiceRestoreTenantProcedure:
-			tenantServiceRestoreTenantHandler.ServeHTTP(w, r)
-		case TenantServicePurgeTenantProcedure:
-			tenantServicePurgeTenantHandler.ServeHTTP(w, r)
-		case TenantServiceRenameTenantSlugProcedure:
-			tenantServiceRenameTenantSlugHandler.ServeHTTP(w, r)
-		case TenantServiceMigrateTenantStorageLayoutProcedure:
-			tenantServiceMigrateTenantStorageLayoutHandler.ServeHTTP(w, r)
-		case TenantServiceGetTenantStorageMigrationProcedure:
-			tenantServiceGetTenantStorageMigrationHandler.ServeHTTP(w, r)
-		case TenantServiceResolveRenamedSlugProcedure:
-			tenantServiceResolveRenamedSlugHandler.ServeHTTP(w, r)
-		case TenantServiceGetTenantDefaultBindingProcedure:
-			tenantServiceGetTenantDefaultBindingHandler.ServeHTTP(w, r)
-		case TenantServiceSetTenantDefaultBindingProcedure:
-			tenantServiceSetTenantDefaultBindingHandler.ServeHTTP(w, r)
-		case TenantServiceClearTenantDefaultBindingProcedure:
-			tenantServiceClearTenantDefaultBindingHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedTenantServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedTenantServiceHandler struct{}
 
-func (UnimplementedTenantServiceHandler) CreateTenant(context.Context, *connect.Request[v1.CreateTenantRequest]) (*connect.Response[v1.Tenant], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.CreateTenant is not implemented"))
+func (UnimplementedTenantServiceHandler) CreateTenant(context.Context, *v1.CreateTenantRequest) (*v1.Tenant, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.CreateTenant is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) GetTenant(context.Context, *connect.Request[v1.GetTenantRequest]) (*connect.Response[v1.Tenant], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.GetTenant is not implemented"))
+func (UnimplementedTenantServiceHandler) GetTenant(context.Context, *v1.GetTenantRequest) (*v1.Tenant, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.GetTenant is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) UpdateTenant(context.Context, *connect.Request[v1.UpdateTenantRequest]) (*connect.Response[v1.Tenant], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.UpdateTenant is not implemented"))
+func (UnimplementedTenantServiceHandler) UpdateTenant(context.Context, *v1.UpdateTenantRequest) (*v1.Tenant, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.UpdateTenant is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) DeleteTenant(context.Context, *connect.Request[v1.DeleteTenantRequest]) (*connect.Response[v1.DeleteTenantResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.DeleteTenant is not implemented"))
+func (UnimplementedTenantServiceHandler) DeleteTenant(context.Context, *v1.DeleteTenantRequest) (*v1.DeleteTenantResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.DeleteTenant is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) ListTenants(context.Context, *connect.Request[v1.ListTenantsRequest]) (*connect.Response[v1.ListTenantsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.ListTenants is not implemented"))
+func (UnimplementedTenantServiceHandler) ListTenants(context.Context, *v1.ListTenantsRequest) (*v1.ListTenantsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.ListTenants is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) SetInheritedPolicy(context.Context, *connect.Request[v1.SetInheritedPolicyRequest]) (*connect.Response[v1.Tenant], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.SetInheritedPolicy is not implemented"))
+func (UnimplementedTenantServiceHandler) SetInheritedPolicy(context.Context, *v1.SetInheritedPolicyRequest) (*v1.Tenant, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.SetInheritedPolicy is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) RestoreTenant(context.Context, *connect.Request[v1.RestoreTenantRequest]) (*connect.Response[v1.Tenant], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.RestoreTenant is not implemented"))
+func (UnimplementedTenantServiceHandler) RestoreTenant(context.Context, *v1.RestoreTenantRequest) (*v1.Tenant, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.RestoreTenant is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) PurgeTenant(context.Context, *connect.Request[v1.PurgeTenantRequest]) (*connect.Response[v1.PurgeTenantResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.PurgeTenant is not implemented"))
+func (UnimplementedTenantServiceHandler) PurgeTenant(context.Context, *v1.PurgeTenantRequest) (*v1.PurgeTenantResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.PurgeTenant is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) RenameTenantSlug(context.Context, *connect.Request[v1.RenameTenantSlugRequest]) (*connect.Response[v1.Tenant], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.RenameTenantSlug is not implemented"))
+func (UnimplementedTenantServiceHandler) RenameTenantSlug(context.Context, *v1.RenameTenantSlugRequest) (*v1.Tenant, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.RenameTenantSlug is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) MigrateTenantStorageLayout(context.Context, *connect.Request[v1.MigrateTenantStorageLayoutRequest]) (*connect.Response[v1.StorageMigrationStatus], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.MigrateTenantStorageLayout is not implemented"))
+func (UnimplementedTenantServiceHandler) MigrateTenantStorageLayout(context.Context, *v1.MigrateTenantStorageLayoutRequest) (*v1.StorageMigrationStatus, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.MigrateTenantStorageLayout is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) GetTenantStorageMigration(context.Context, *connect.Request[v1.GetTenantStorageMigrationRequest]) (*connect.Response[v1.StorageMigrationStatus], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.GetTenantStorageMigration is not implemented"))
+func (UnimplementedTenantServiceHandler) GetTenantStorageMigration(context.Context, *v1.GetTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.GetTenantStorageMigration is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) ResolveRenamedSlug(context.Context, *connect.Request[v1.ResolveRenamedSlugRequest]) (*connect.Response[v1.ResolveRenamedSlugResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.ResolveRenamedSlug is not implemented"))
+func (UnimplementedTenantServiceHandler) ResolveRenamedSlug(context.Context, *v1.ResolveRenamedSlugRequest) (*v1.ResolveRenamedSlugResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.ResolveRenamedSlug is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) GetTenantDefaultBinding(context.Context, *connect.Request[v1.GetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.GetTenantDefaultBinding is not implemented"))
+func (UnimplementedTenantServiceHandler) GetTenantDefaultBinding(context.Context, *v1.GetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.GetTenantDefaultBinding is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) SetTenantDefaultBinding(context.Context, *connect.Request[v1.SetTenantDefaultBindingRequest]) (*connect.Response[v1.TenantDefaultBinding], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.SetTenantDefaultBinding is not implemented"))
+func (UnimplementedTenantServiceHandler) SetTenantDefaultBinding(context.Context, *v1.SetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.SetTenantDefaultBinding is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) ClearTenantDefaultBinding(context.Context, *connect.Request[v1.ClearTenantDefaultBindingRequest]) (*connect.Response[v1.ClearTenantDefaultBindingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.TenantService.ClearTenantDefaultBinding is not implemented"))
+func (UnimplementedTenantServiceHandler) ClearTenantDefaultBinding(context.Context, *v1.ClearTenantDefaultBindingRequest) (*v1.ClearTenantDefaultBindingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.ClearTenantDefaultBinding is not implemented")
+}
+
+type tenantServiceClient struct {
+	client *connect.Client
+}
+
+func (c *tenantServiceClient) CreateTenant(ctx context.Context, req *v1.CreateTenantRequest) (*v1.Tenant, error) {
+	var res v1.Tenant
+	if err := c.client.CallUnary(ctx, tenantServiceCreateTenantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) GetTenant(ctx context.Context, req *v1.GetTenantRequest) (*v1.Tenant, error) {
+	var res v1.Tenant
+	if err := c.client.CallUnary(ctx, tenantServiceGetTenantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) UpdateTenant(ctx context.Context, req *v1.UpdateTenantRequest) (*v1.Tenant, error) {
+	var res v1.Tenant
+	if err := c.client.CallUnary(ctx, tenantServiceUpdateTenantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) DeleteTenant(ctx context.Context, req *v1.DeleteTenantRequest) (*v1.DeleteTenantResponse, error) {
+	var res v1.DeleteTenantResponse
+	if err := c.client.CallUnary(ctx, tenantServiceDeleteTenantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) ListTenants(ctx context.Context, req *v1.ListTenantsRequest) (*v1.ListTenantsResponse, error) {
+	var res v1.ListTenantsResponse
+	if err := c.client.CallUnary(ctx, tenantServiceListTenantsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) SetInheritedPolicy(ctx context.Context, req *v1.SetInheritedPolicyRequest) (*v1.Tenant, error) {
+	var res v1.Tenant
+	if err := c.client.CallUnary(ctx, tenantServiceSetInheritedPolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) RestoreTenant(ctx context.Context, req *v1.RestoreTenantRequest) (*v1.Tenant, error) {
+	var res v1.Tenant
+	if err := c.client.CallUnary(ctx, tenantServiceRestoreTenantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) PurgeTenant(ctx context.Context, req *v1.PurgeTenantRequest) (*v1.PurgeTenantResponse, error) {
+	var res v1.PurgeTenantResponse
+	if err := c.client.CallUnary(ctx, tenantServicePurgeTenantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) RenameTenantSlug(ctx context.Context, req *v1.RenameTenantSlugRequest) (*v1.Tenant, error) {
+	var res v1.Tenant
+	if err := c.client.CallUnary(ctx, tenantServiceRenameTenantSlugSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) MigrateTenantStorageLayout(ctx context.Context, req *v1.MigrateTenantStorageLayoutRequest) (*v1.StorageMigrationStatus, error) {
+	var res v1.StorageMigrationStatus
+	if err := c.client.CallUnary(ctx, tenantServiceMigrateTenantStorageLayoutSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) GetTenantStorageMigration(ctx context.Context, req *v1.GetTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error) {
+	var res v1.StorageMigrationStatus
+	if err := c.client.CallUnary(ctx, tenantServiceGetTenantStorageMigrationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) ResolveRenamedSlug(ctx context.Context, req *v1.ResolveRenamedSlugRequest) (*v1.ResolveRenamedSlugResponse, error) {
+	var res v1.ResolveRenamedSlugResponse
+	if err := c.client.CallUnary(ctx, tenantServiceResolveRenamedSlugSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) GetTenantDefaultBinding(ctx context.Context, req *v1.GetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error) {
+	var res v1.TenantDefaultBinding
+	if err := c.client.CallUnary(ctx, tenantServiceGetTenantDefaultBindingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) SetTenantDefaultBinding(ctx context.Context, req *v1.SetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error) {
+	var res v1.TenantDefaultBinding
+	if err := c.client.CallUnary(ctx, tenantServiceSetTenantDefaultBindingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) ClearTenantDefaultBinding(ctx context.Context, req *v1.ClearTenantDefaultBindingRequest) (*v1.ClearTenantDefaultBindingResponse, error) {
+	var res v1.ClearTenantDefaultBindingResponse
+	if err := c.client.CallUnary(ctx, tenantServiceClearTenantDefaultBindingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type tenantServiceHandler struct{ svc TenantServiceHandler }
+
+func (h tenantServiceHandler) createTenant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateTenantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateTenant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) getTenant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetTenantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetTenant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) updateTenant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateTenantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateTenant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) deleteTenant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteTenantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteTenant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) listTenants(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListTenantsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTenants(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) setInheritedPolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetInheritedPolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetInheritedPolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) restoreTenant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RestoreTenantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RestoreTenant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) purgeTenant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PurgeTenantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PurgeTenant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) renameTenantSlug(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RenameTenantSlugRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RenameTenantSlug(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) migrateTenantStorageLayout(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MigrateTenantStorageLayoutRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.MigrateTenantStorageLayout(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) getTenantStorageMigration(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetTenantStorageMigrationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetTenantStorageMigration(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) resolveRenamedSlug(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResolveRenamedSlugRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResolveRenamedSlug(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) getTenantDefaultBinding(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetTenantDefaultBindingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetTenantDefaultBinding(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) setTenantDefaultBinding(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetTenantDefaultBindingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetTenantDefaultBinding(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) clearTenantDefaultBinding(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ClearTenantDefaultBindingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ClearTenantDefaultBinding(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

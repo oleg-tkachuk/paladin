@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"connectrpc.com/otelconnect"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/propagation"
@@ -52,7 +52,7 @@ func (r *records) levels() []slog.Level {
 func TestUserAgentSuffix(t *testing.T) {
 	rec := &recorder{}
 	health, _ := clients(t, serve(t, rec), paladin.WithUserAgentSuffix("gateway/1.4"))
-	if _, err := health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+	if _, err := health.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	ua := rec.last().Get(paladin.HeaderUserAgent)
@@ -68,7 +68,7 @@ func TestRetriesAreReportedToHooksAndTheLogger(t *testing.T) {
 	health, _ := clients(t, serve(t, rec), paladin.WithRetries(3, testRetryDelay),
 		paladin.WithHooks(paladin.Hooks{OnRetry: func(e paladin.RetryEvent) { events = append(events, e) }}),
 		paladin.WithLogger(slog.New(logs)))
-	if _, err := health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+	if _, err := health.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	if len(events) != 2 || events[0].Attempt != 1 || events[1].Attempt != 2 ||
@@ -141,7 +141,7 @@ func TestOpenTelemetryThroughTheExtensionPoints(t *testing.T) {
 	spans := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans))
 	propagator := propagation.TraceContext{}
-	otelInterceptor, err := otelconnect.NewInterceptor(
+	otelInterceptor, err := otelconnect.NewClientInterceptor(
 		otelconnect.WithTracerProvider(provider), otelconnect.WithPropagator(propagator))
 	if err != nil {
 		t.Fatal(err)
@@ -153,8 +153,8 @@ func TestOpenTelemetryThroughTheExtensionPoints(t *testing.T) {
 
 	// The RPC leg.
 	rec := &recorder{}
-	health, _ := clients(t, serve(t, rec), paladin.WithClientOptions(connect.WithInterceptors(otelInterceptor)))
-	if _, err := health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+	health, _ := clients(t, serve(t, rec), paladin.WithInterceptors(otelInterceptor))
+	if _, err := health.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	if rec.last().Get("Traceparent") == "" {

@@ -7,8 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
-
+	"connectrpc.com/connect/v2"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
 
@@ -17,16 +16,16 @@ func TestIdempotencyKeyFor(t *testing.T) {
 		ctxKey  = "from-context"
 		bodyKey = "from-body"
 	)
-	sideEffects := connect.NewRequest(&datav1.UploadObjectRequest{})
-	withBody := connect.NewRequest(&datav1.UploadObjectRequest{IdempotencyKey: bodyKey})
+	sideEffects := &datav1.UploadObjectRequest{}
+	withBody := &datav1.UploadObjectRequest{IdempotencyKey: bodyKey}
 
-	if key, ok := idempotencyKeyFor(WithIdempotencyKey(context.Background(), ctxKey), withBody); !ok || key != ctxKey {
+	if key, ok := idempotencyKeyFor(WithIdempotencyKey(context.Background(), ctxKey), connect.Spec{}, withBody); !ok || key != ctxKey {
 		t.Errorf("context key: got %q, %v; the caller's key wins", key, ok)
 	}
-	if key, ok := idempotencyKeyFor(context.Background(), withBody); !ok || key != bodyKey {
+	if key, ok := idempotencyKeyFor(context.Background(), connect.Spec{}, withBody); !ok || key != bodyKey {
 		t.Errorf("body key: got %q, %v; the server refuses a header that disagrees with the field", key, ok)
 	}
-	if key, ok := idempotencyKeyFor(context.Background(), sideEffects); !ok || key == "" {
+	if key, ok := idempotencyKeyFor(context.Background(), connect.Spec{}, sideEffects); !ok || key == "" {
 		t.Errorf("no key: got %q, %v; a call with side effects needs one", key, ok)
 	}
 }

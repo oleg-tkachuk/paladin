@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/genproto/googleapis/rpc/status"
 
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -58,7 +58,7 @@ func TestWaitStopsWithTheContext(t *testing.T) {
 }
 
 func TestWaitPassesThePollError(t *testing.T) {
-	boom := connect.NewError(connect.CodeNotFound, errors.New("no such operation"))
+	boom := connect.NewError(connect.CodeNotFound, "no such operation")
 	get := func(context.Context) (*datav1.Operation, error) { return nil, boom }
 	if _, err := waitWith(context.Background(), get, testPoll, testPoll); !errors.Is(err, boom) {
 		t.Fatalf("err = %v, want the poll's error", err)

@@ -10,7 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 
 	validatepb "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -45,18 +46,18 @@ func TestTheFakeValidatesEveryRequest(t *testing.T) {
 	ctx := context.Background()
 	for name, call := range map[string]func() error{
 		"GetObject with no name": func() error {
-			_, err := p.Data.Object.GetObject(ctx, connect.NewRequest(&datav1.GetObjectRequest{}))
+			_, err := p.Data.Object.GetObject(ctx, &datav1.GetObjectRequest{})
 			return err
 		},
 		"UploadObject with no content type": func() error {
-			_, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+			_, err := p.Data.Object.UploadObject(ctx, &datav1.UploadObjectRequest{
 				Parent: srv.Collection().String(), Key: "k", SizeHintBytes: 1,
-			}))
+			})
 			return err
 		},
 		"DeleteObject with no resource_version": func() error {
 			obj := srv.Put(srv.Collection(), "k", testContentType, []byte("x"))
-			_, err := p.Data.Object.DeleteObject(ctx, connect.NewRequest(&datav1.DeleteObjectRequest{Name: obj.GetName()}))
+			_, err := p.Data.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{Name: obj.GetName()})
 			return err
 		},
 	} {
@@ -84,13 +85,13 @@ func TestListObjectsRefusesWhatItDoesNotApply(t *testing.T) {
 		"sort_order": {Parent: parent, SortOrder: commonv1.SortOrder_SORT_ORDER_DESC},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := p.Data.Object.ListObjects(context.Background(), connect.NewRequest(req))
+			_, err := p.Data.Object.ListObjects(context.Background(), req)
 			if connect.CodeOf(err) != connect.CodeUnimplemented || !strings.Contains(err.Error(), name) {
 				t.Errorf("err = %v, want Unimplemented naming %s", err, name)
 			}
 		})
 	}
-	if _, err := p.Data.Object.ListObjects(context.Background(), connect.NewRequest(&datav1.ListObjectsRequest{Parent: parent})); err != nil {
+	if _, err := p.Data.Object.ListObjects(context.Background(), &datav1.ListObjectsRequest{Parent: parent}); err != nil {
 		t.Errorf("a plain listing: %v", err)
 	}
 }
@@ -112,9 +113,9 @@ func TestDeleteObjectChecksTheVersion(t *testing.T) {
 			t.Run(tc.name+" permanent="+strconv.FormatBool(permanent), func(t *testing.T) {
 				srv := paladintest.New(t)
 				obj := srv.Put(srv.Collection(), "k", testContentType, []byte("x"))
-				_, err := srv.Connect().Data.Object.DeleteObject(context.Background(), connect.NewRequest(&datav1.DeleteObjectRequest{
+				_, err := srv.Connect().Data.Object.DeleteObject(context.Background(), &datav1.DeleteObjectRequest{
 					Name: obj.GetName(), ResourceVersion: tc.version(obj.GetResourceVersion()), Permanent: permanent,
-				}))
+				})
 				if tc.want == nil {
 					if err != nil {
 						t.Fatalf("delete at the current version: %v", err)
@@ -138,21 +139,21 @@ func TestAChangeAdvancesTheVersion(t *testing.T) {
 	srv := paladintest.New(t)
 	p := srv.Connect()
 	ctx := context.Background()
-	registered, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+	registered, err := p.Data.Object.UploadObject(ctx, &datav1.UploadObjectRequest{
 		Parent: srv.Collection().String(), Key: "k", ContentType: testContentType, SizeHintBytes: 1,
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256, ChecksumValue: oneByteSHA256,
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := registered.Msg.GetObject().GetName()
+	name := registered.GetObject().GetName()
 	srv.MarkFailed(name)
-	got, err := p.Data.Object.GetObject(ctx, connect.NewRequest(&datav1.GetObjectRequest{Name: name}))
+	got, err := p.Data.Object.GetObject(ctx, &datav1.GetObjectRequest{Name: name})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := nextVersion(t, registered.Msg.GetObject().GetResourceVersion()); got.Msg.GetResourceVersion() != want {
-		t.Errorf("version after a change = %q, want %q", got.Msg.GetResourceVersion(), want)
+	if want := nextVersion(t, registered.GetObject().GetResourceVersion()); got.GetResourceVersion() != want {
+		t.Errorf("version after a change = %q, want %q", got.GetResourceVersion(), want)
 	}
 }
 
@@ -209,7 +210,7 @@ func hasViolations(err error) bool {
 		return false
 	}
 	for _, d := range cerr.Details() {
-		if msg, derr := d.Value(); derr == nil {
+		if msg, derr := connectproto.UnmarshalErrorDetail(d); derr == nil {
 			if _, ok := msg.(*validatepb.Violations); ok {
 				return true
 			}

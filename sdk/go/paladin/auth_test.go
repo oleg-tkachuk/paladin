@@ -10,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
@@ -57,53 +58,54 @@ func (f *fakeIAM) pair() *iamv1.TokenPair {
 
 func (f *fakeIAM) checkRefresh(token string) error {
 	if f.refuseRefresh || token != f.validRefresh {
-		return connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token expired"))
+		return connect.NewError(connect.CodeUnauthenticated, "refresh token expired")
 	}
 	return nil
 }
 
-func (f *fakeIAM) Login(context.Context, *connect.Request[iamv1.LoginRequest]) (*connect.Response[iamv1.LoginResponse], error) {
+func (f *fakeIAM) Login(context.Context, *iamv1.LoginRequest) (*iamv1.LoginResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.logins++
 	f.refuseRefresh = false
-	return connect.NewResponse(&iamv1.LoginResponse{Tokens: f.pair()}), nil
+	return &iamv1.LoginResponse{Tokens: f.pair()}, nil
 }
 
-func (f *fakeIAM) RefreshToken(_ context.Context, req *connect.Request[iamv1.RefreshTokenRequest]) (*connect.Response[iamv1.RefreshTokenResponse], error) {
+func (f *fakeIAM) RefreshToken(_ context.Context, req *iamv1.RefreshTokenRequest) (*iamv1.RefreshTokenResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.refreshes++
-	if err := f.checkRefresh(req.Msg.GetRefreshToken()); err != nil {
+	if err := f.checkRefresh(req.GetRefreshToken()); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&iamv1.RefreshTokenResponse{Tokens: f.pair()}), nil
+	return &iamv1.RefreshTokenResponse{Tokens: f.pair()}, nil
 }
 
-func (f *fakeIAM) ExchangeAudience(_ context.Context, req *connect.Request[iamv1.ExchangeAudienceRequest]) (*connect.Response[iamv1.ExchangeAudienceResponse], error) {
+func (f *fakeIAM) ExchangeAudience(_ context.Context, req *iamv1.ExchangeAudienceRequest) (*iamv1.ExchangeAudienceResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.exchanges++
-	if err := f.checkRefresh(req.Msg.GetRefreshToken()); err != nil {
+	if err := f.checkRefresh(req.GetRefreshToken()); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&iamv1.ExchangeAudienceResponse{
-		AccessToken:            f.next(req.Msg.GetTargetAudience()),
+	return &iamv1.ExchangeAudienceResponse{
+		AccessToken:            f.next(req.GetTargetAudience()),
 		AccessExpiresInSeconds: int32(tokenLifetime / time.Second),
-	}), nil
+	}, nil
 }
 
 // GetVersion stands in for any authenticated call: it records the token and
 // refuses it while refuseNextCalls lasts.
-func (f *fakeIAM) GetVersion(_ context.Context, req *connect.Request[iamv1.GetVersionRequest]) (*connect.Response[iamv1.VersionInfo], error) {
+func (f *fakeIAM) GetVersion(ctx context.Context, _ *iamv1.GetVersionRequest) (*iamv1.VersionInfo, error) {
+	info, _ := connect.CallInfoForServerContext(ctx)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.seenTokens = append(f.seenTokens, req.Header().Get(paladin.HeaderAuthorization))
+	f.seenTokens = append(f.seenTokens, info.RequestHeader().Get(paladin.HeaderAuthorization))
 	if f.refuseNextCalls > 0 {
 		f.refuseNextCalls--
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("token revoked"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "token revoked")
 	}
-	return connect.NewResponse(&iamv1.VersionInfo{}), nil
+	return &iamv1.VersionInfo{}, nil
 }
 
 func (f *fakeIAM) counts() (logins, refreshes, exchanges int) {
@@ -115,8 +117,11 @@ func (f *fakeIAM) counts() (logins, refreshes, exchanges int) {
 func serveIAM(t *testing.T, f *fakeIAM) string {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle(paladiniamv1connect.NewAuthServiceHandler(f))
-	mux.Handle(paladiniamv1connect.NewHealthServiceHandler(f))
+	server := connect.NewServer()
+	paladiniamv1connect.RegisterAuthServiceHandler(server, f)
+	paladiniamv1connect.RegisterHealthServiceHandler(server, f)
+	connecthttp.Mount(mux, server)
+
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.URL
@@ -252,7 +257,7 @@ func healthWith(t *testing.T, url string, opts ...paladin.Option) paladiniamv1co
 	if err != nil {
 		t.Fatal(err)
 	}
-	return paladiniamv1connect.NewHealthServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...)
+	return paladiniamv1connect.NewHealthServiceClient(c.Connect())
 }
 
 func TestTokenSourceAuthenticatesAndRetriesARefusedTokenOnce(t *testing.T) {
@@ -263,7 +268,7 @@ func TestTokenSourceAuthenticatesAndRetriesARefusedTokenOnce(t *testing.T) {
 	f.mu.Lock()
 	f.refuseNextCalls = 1
 	f.mu.Unlock()
-	if _, err := health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+	if _, err := health.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
 		t.Fatalf("a call whose token was refused once: %v", err)
 	}
 	f.mu.Lock()
@@ -274,7 +279,7 @@ func TestTokenSourceAuthenticatesAndRetriesARefusedTokenOnce(t *testing.T) {
 		t.Fatalf("tokens sent = %q, want two different bearer tokens", seen)
 	}
 
-	if _, err := health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+	if _, err := health.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("err = %v, want Unauthenticated after the retry was refused too", err)
 	}
 	f.mu.Lock()
@@ -288,7 +293,7 @@ func TestStaticToken(t *testing.T) {
 	f := &fakeIAM{}
 	url := serveIAM(t, f)
 	health := healthWith(t, url, paladin.WithTokenSource(paladin.StaticToken("paladin_pat_abc"), paladin.AudienceIAM))
-	if _, err := health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+	if _, err := health.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.seenTokens[0]; got != "Bearer paladin_pat_abc" {
@@ -296,7 +301,7 @@ func TestStaticToken(t *testing.T) {
 	}
 
 	empty := healthWith(t, url, paladin.WithTokenSource(paladin.StaticToken(""), paladin.AudienceIAM))
-	if _, err := empty.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+	if _, err := empty.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Errorf("err = %v, want Unauthenticated without a token", err)
 	}
 	if len(f.seenTokens) != 1 {
@@ -313,9 +318,9 @@ type blockingIAM struct {
 	failing connect.Code
 }
 
-func (b *blockingIAM) ExchangeAudience(ctx context.Context, req *connect.Request[iamv1.ExchangeAudienceRequest]) (*connect.Response[iamv1.ExchangeAudienceResponse], error) {
+func (b *blockingIAM) ExchangeAudience(ctx context.Context, req *iamv1.ExchangeAudienceRequest) (*iamv1.ExchangeAudienceResponse, error) {
 	if b.failing != 0 {
-		return nil, connect.NewError(b.failing, errors.New("iam is down"))
+		return nil, connect.NewError(b.failing, "iam is down")
 	}
 	if b.entered != nil {
 		b.entered <- struct{}{}
@@ -331,7 +336,9 @@ func (b *blockingIAM) ExchangeAudience(ctx context.Context, req *connect.Request
 func TestSessionServesACachedTokenWhileAnotherIsMinted(t *testing.T) {
 	b := &blockingIAM{hold: make(chan struct{}), entered: make(chan struct{}, 1)}
 	mux := http.NewServeMux()
-	mux.Handle(paladiniamv1connect.NewAuthServiceHandler(b))
+	server := connect.NewServer()
+	paladiniamv1connect.RegisterAuthServiceHandler(server, b)
+	connecthttp.Mount(mux, server)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
@@ -371,8 +378,11 @@ func TestSessionServesACachedTokenWhileAnotherIsMinted(t *testing.T) {
 func TestSessionReportsAnIAMOutageAsUnavailable(t *testing.T) {
 	b := &blockingIAM{failing: connect.CodeUnavailable}
 	mux := http.NewServeMux()
-	mux.Handle(paladiniamv1connect.NewAuthServiceHandler(b))
-	mux.Handle(paladiniamv1connect.NewHealthServiceHandler(b))
+	server := connect.NewServer()
+	paladiniamv1connect.RegisterAuthServiceHandler(server, b)
+	paladiniamv1connect.RegisterHealthServiceHandler(server, b)
+	connecthttp.Mount(mux, server)
+
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
@@ -384,8 +394,8 @@ func TestSessionReportsAnIAMOutageAsUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	health := paladiniamv1connect.NewHealthServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...)
-	_, err = health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{}))
+	health := paladiniamv1connect.NewHealthServiceClient(c.Connect())
+	_, err = health.GetVersion(context.Background(), &iamv1.GetVersionRequest{})
 	if connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("code = %v, want Unavailable for an IAM outage", connect.CodeOf(err))
 	}
@@ -401,8 +411,8 @@ func TestSessionClientOptionsReachIAM(t *testing.T) {
 	var seen string
 	f := &fakeIAM{}
 	mux := http.NewServeMux()
-	path, h := paladiniamv1connect.NewAuthServiceHandler(f)
-	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := connectHandler(func(s *connect.Server) { paladiniamv1connect.RegisterAuthServiceHandler(s, f) })
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = r.Header.Get(header)
 		h.ServeHTTP(w, r)
 	}))

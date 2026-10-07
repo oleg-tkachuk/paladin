@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -29,9 +29,9 @@ func (e *ensureCalls) create(context.Context) (string, error) {
 }
 
 func TestEnsure(t *testing.T) {
-	notFound := connect.NewError(connect.CodeNotFound, errors.New("no such collection"))
-	exists := connect.NewError(connect.CodeAlreadyExists, errors.New("taken"))
-	denied := connect.NewError(connect.CodePermissionDenied, errors.New("no"))
+	notFound := connect.NewError(connect.CodeNotFound, "no such collection")
+	exists := connect.NewError(connect.CodeAlreadyExists, "taken")
+	denied := connect.NewError(connect.CodePermissionDenied, "no")
 	cases := []struct {
 		name        string
 		calls       ensureCalls

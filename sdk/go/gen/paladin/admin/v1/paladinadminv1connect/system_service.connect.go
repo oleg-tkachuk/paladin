@@ -6,45 +6,71 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SystemServiceName is the fully-qualified name of the SystemService service.
 	SystemServiceName = "paladin.admin.v1.SystemService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// SystemServiceGetConfigProcedure is the fully-qualified name of the SystemService's GetConfig RPC.
+	// SystemServiceGetConfigProcedure is the procedure name of the SystemService's GetConfig RPC.
 	SystemServiceGetConfigProcedure = "/paladin.admin.v1.SystemService/GetConfig"
-	// SystemServiceGetDispatcherStatsProcedure is the fully-qualified name of the SystemService's
+	// SystemServiceGetDispatcherStatsProcedure is the procedure name of the SystemService's
 	// GetDispatcherStats RPC.
 	SystemServiceGetDispatcherStatsProcedure = "/paladin.admin.v1.SystemService/GetDispatcherStats"
-	// SystemServiceGetPlatformStatsProcedure is the fully-qualified name of the SystemService's
+	// SystemServiceGetPlatformStatsProcedure is the procedure name of the SystemService's
 	// GetPlatformStats RPC.
 	SystemServiceGetPlatformStatsProcedure = "/paladin.admin.v1.SystemService/GetPlatformStats"
-	// SystemServiceListPlatformStatsTenantsProcedure is the fully-qualified name of the SystemService's
+	// SystemServiceListPlatformStatsTenantsProcedure is the procedure name of the SystemService's
 	// ListPlatformStatsTenants RPC.
 	SystemServiceListPlatformStatsTenantsProcedure = "/paladin.admin.v1.SystemService/ListPlatformStatsTenants"
+)
+
+var (
+	systemServiceGetConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_system_service_proto.Services().ByName("SystemService").Methods().ByName("GetConfig"),
+			Procedure:        SystemServiceGetConfigProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	systemServiceGetDispatcherStatsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_system_service_proto.Services().ByName("SystemService").Methods().ByName("GetDispatcherStats"),
+			Procedure:        SystemServiceGetDispatcherStatsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	systemServiceGetPlatformStatsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_system_service_proto.Services().ByName("SystemService").Methods().ByName("GetPlatformStats"),
+			Procedure:        SystemServiceGetPlatformStatsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	systemServiceListPlatformStatsTenantsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_system_service_proto.Services().ByName("SystemService").Methods().ByName("ListPlatformStatsTenants"),
+			Procedure:        SystemServiceListPlatformStatsTenantsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // SystemServiceClient is a client for the paladin.admin.v1.SystemService service.
@@ -53,7 +79,7 @@ type SystemServiceClient interface {
 	// single YAML blob with all secrets replaced by "***". The shape
 	// matches the on-disk config.yaml exactly so an operator can diff
 	// what's loaded against what's checked in. Cheap; no DB touch.
-	GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error)
+	GetConfig(context.Context, *v1.GetConfigRequest) (*v1.GetConfigResponse, error)
 	// GetDispatcherStats returns the event dispatcher's operator view:
 	// global delivery-queue depth plus a per-subscription breakdown of
 	// stuck work (pending/failed counts + the latest error). The admin
@@ -63,7 +89,7 @@ type SystemServiceClient interface {
 	// Empty/zeroed response with `available=false` when the dispatcher
 	// ops endpoint is unconfigured or unreachable — the console renders
 	// "stats unavailable" rather than erroring.
-	GetDispatcherStats(context.Context, *connect.Request[v1.GetDispatcherStatsRequest]) (*connect.Response[v1.GetDispatcherStatsResponse], error)
+	GetDispatcherStats(context.Context, *v1.GetDispatcherStatsRequest) (*v1.GetDispatcherStatsResponse, error)
 	// GetPlatformStats returns a cross-tenant census of the control plane:
 	// how many tenants / storage backends / buckets / object keys / users
 	// exist and how they break down, plus per-tenant object counts by
@@ -74,7 +100,7 @@ type SystemServiceClient interface {
 	// is proxied from the worker pod's BYPASSRLS ops endpoint and
 	// degrades to `objects.available=false` when that is unconfigured or
 	// unreachable. Read-only, no audit row — it is a dashboard poll.
-	GetPlatformStats(context.Context, *connect.Request[v1.GetPlatformStatsRequest]) (*connect.Response[v1.GetPlatformStatsResponse], error)
+	GetPlatformStats(context.Context, *v1.GetPlatformStatsRequest) (*v1.GetPlatformStatsResponse, error)
 	// ListPlatformStatsTenants answers "whose" for one of the census counts
 	// GetPlatformStats flags for attention: the tenants behind it, biggest
 	// share first, paged like the object table. The counts are computed from
@@ -84,77 +110,13 @@ type SystemServiceClient interface {
 	// Proxied from the worker like the census, but with no degraded answer:
 	// UNAVAILABLE when the worker leg is unconfigured or unreachable, because
 	// an empty list would read as "nobody". Read-only, no audit row.
-	ListPlatformStatsTenants(context.Context, *connect.Request[v1.ListPlatformStatsTenantsRequest]) (*connect.Response[v1.ListPlatformStatsTenantsResponse], error)
+	ListPlatformStatsTenants(context.Context, *v1.ListPlatformStatsTenantsRequest) (*v1.ListPlatformStatsTenantsResponse, error)
 }
 
-// NewSystemServiceClient constructs a client for the paladin.admin.v1.SystemService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SystemServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	systemServiceMethods := v1.File_paladin_admin_v1_system_service_proto.Services().ByName("SystemService").Methods()
-	return &systemServiceClient{
-		getConfig: connect.NewClient[v1.GetConfigRequest, v1.GetConfigResponse](
-			httpClient,
-			baseURL+SystemServiceGetConfigProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("GetConfig")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		getDispatcherStats: connect.NewClient[v1.GetDispatcherStatsRequest, v1.GetDispatcherStatsResponse](
-			httpClient,
-			baseURL+SystemServiceGetDispatcherStatsProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("GetDispatcherStats")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		getPlatformStats: connect.NewClient[v1.GetPlatformStatsRequest, v1.GetPlatformStatsResponse](
-			httpClient,
-			baseURL+SystemServiceGetPlatformStatsProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("GetPlatformStats")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		listPlatformStatsTenants: connect.NewClient[v1.ListPlatformStatsTenantsRequest, v1.ListPlatformStatsTenantsResponse](
-			httpClient,
-			baseURL+SystemServiceListPlatformStatsTenantsProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("ListPlatformStatsTenants")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// systemServiceClient implements SystemServiceClient.
-type systemServiceClient struct {
-	getConfig                *connect.Client[v1.GetConfigRequest, v1.GetConfigResponse]
-	getDispatcherStats       *connect.Client[v1.GetDispatcherStatsRequest, v1.GetDispatcherStatsResponse]
-	getPlatformStats         *connect.Client[v1.GetPlatformStatsRequest, v1.GetPlatformStatsResponse]
-	listPlatformStatsTenants *connect.Client[v1.ListPlatformStatsTenantsRequest, v1.ListPlatformStatsTenantsResponse]
-}
-
-// GetConfig calls paladin.admin.v1.SystemService.GetConfig.
-func (c *systemServiceClient) GetConfig(ctx context.Context, req *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error) {
-	return c.getConfig.CallUnary(ctx, req)
-}
-
-// GetDispatcherStats calls paladin.admin.v1.SystemService.GetDispatcherStats.
-func (c *systemServiceClient) GetDispatcherStats(ctx context.Context, req *connect.Request[v1.GetDispatcherStatsRequest]) (*connect.Response[v1.GetDispatcherStatsResponse], error) {
-	return c.getDispatcherStats.CallUnary(ctx, req)
-}
-
-// GetPlatformStats calls paladin.admin.v1.SystemService.GetPlatformStats.
-func (c *systemServiceClient) GetPlatformStats(ctx context.Context, req *connect.Request[v1.GetPlatformStatsRequest]) (*connect.Response[v1.GetPlatformStatsResponse], error) {
-	return c.getPlatformStats.CallUnary(ctx, req)
-}
-
-// ListPlatformStatsTenants calls paladin.admin.v1.SystemService.ListPlatformStatsTenants.
-func (c *systemServiceClient) ListPlatformStatsTenants(ctx context.Context, req *connect.Request[v1.ListPlatformStatsTenantsRequest]) (*connect.Response[v1.ListPlatformStatsTenantsResponse], error) {
-	return c.listPlatformStatsTenants.CallUnary(ctx, req)
+// NewSystemServiceClient constructs a client for the paladin.admin.v1.SystemService service.
+// Multiple service clients may share a single connect.Client.
+func NewSystemServiceClient(client *connect.Client) SystemServiceClient {
+	return &systemServiceClient{client: client}
 }
 
 // SystemServiceHandler is an implementation of the paladin.admin.v1.SystemService service.
@@ -163,7 +125,7 @@ type SystemServiceHandler interface {
 	// single YAML blob with all secrets replaced by "***". The shape
 	// matches the on-disk config.yaml exactly so an operator can diff
 	// what's loaded against what's checked in. Cheap; no DB touch.
-	GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error)
+	GetConfig(context.Context, *v1.GetConfigRequest) (*v1.GetConfigResponse, error)
 	// GetDispatcherStats returns the event dispatcher's operator view:
 	// global delivery-queue depth plus a per-subscription breakdown of
 	// stuck work (pending/failed counts + the latest error). The admin
@@ -173,7 +135,7 @@ type SystemServiceHandler interface {
 	// Empty/zeroed response with `available=false` when the dispatcher
 	// ops endpoint is unconfigured or unreachable — the console renders
 	// "stats unavailable" rather than erroring.
-	GetDispatcherStats(context.Context, *connect.Request[v1.GetDispatcherStatsRequest]) (*connect.Response[v1.GetDispatcherStatsResponse], error)
+	GetDispatcherStats(context.Context, *v1.GetDispatcherStatsRequest) (*v1.GetDispatcherStatsResponse, error)
 	// GetPlatformStats returns a cross-tenant census of the control plane:
 	// how many tenants / storage backends / buckets / object keys / users
 	// exist and how they break down, plus per-tenant object counts by
@@ -184,7 +146,7 @@ type SystemServiceHandler interface {
 	// is proxied from the worker pod's BYPASSRLS ops endpoint and
 	// degrades to `objects.available=false` when that is unconfigured or
 	// unreachable. Read-only, no audit row — it is a dashboard poll.
-	GetPlatformStats(context.Context, *connect.Request[v1.GetPlatformStatsRequest]) (*connect.Response[v1.GetPlatformStatsResponse], error)
+	GetPlatformStats(context.Context, *v1.GetPlatformStatsRequest) (*v1.GetPlatformStatsResponse, error)
 	// ListPlatformStatsTenants answers "whose" for one of the census counts
 	// GetPlatformStats flags for attention: the tenants behind it, biggest
 	// share first, paged like the object table. The counts are computed from
@@ -194,75 +156,122 @@ type SystemServiceHandler interface {
 	// Proxied from the worker like the census, but with no degraded answer:
 	// UNAVAILABLE when the worker leg is unconfigured or unreachable, because
 	// an empty list would read as "nobody". Read-only, no audit row.
-	ListPlatformStatsTenants(context.Context, *connect.Request[v1.ListPlatformStatsTenantsRequest]) (*connect.Response[v1.ListPlatformStatsTenantsResponse], error)
+	ListPlatformStatsTenants(context.Context, *v1.ListPlatformStatsTenantsRequest) (*v1.ListPlatformStatsTenantsResponse, error)
 }
 
-// NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	systemServiceMethods := v1.File_paladin_admin_v1_system_service_proto.Services().ByName("SystemService").Methods()
-	systemServiceGetConfigHandler := connect.NewUnaryHandler(
-		SystemServiceGetConfigProcedure,
-		svc.GetConfig,
-		connect.WithSchema(systemServiceMethods.ByName("GetConfig")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterSystemServiceHandler registers svc as the paladin.admin.v1.SystemService implementation
+// on server.
+func RegisterSystemServiceHandler(server *connect.Server, svc SystemServiceHandler) {
+	adapter := systemServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: systemServiceGetConfigSpec(), Handler: adapter.getConfig},
+		connect.Method{Spec: systemServiceGetDispatcherStatsSpec(), Handler: adapter.getDispatcherStats},
+		connect.Method{Spec: systemServiceGetPlatformStatsSpec(), Handler: adapter.getPlatformStats},
+		connect.Method{Spec: systemServiceListPlatformStatsTenantsSpec(), Handler: adapter.listPlatformStatsTenants},
 	)
-	systemServiceGetDispatcherStatsHandler := connect.NewUnaryHandler(
-		SystemServiceGetDispatcherStatsProcedure,
-		svc.GetDispatcherStats,
-		connect.WithSchema(systemServiceMethods.ByName("GetDispatcherStats")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	systemServiceGetPlatformStatsHandler := connect.NewUnaryHandler(
-		SystemServiceGetPlatformStatsProcedure,
-		svc.GetPlatformStats,
-		connect.WithSchema(systemServiceMethods.ByName("GetPlatformStats")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	systemServiceListPlatformStatsTenantsHandler := connect.NewUnaryHandler(
-		SystemServiceListPlatformStatsTenantsProcedure,
-		svc.ListPlatformStatsTenants,
-		connect.WithSchema(systemServiceMethods.ByName("ListPlatformStatsTenants")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.admin.v1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case SystemServiceGetConfigProcedure:
-			systemServiceGetConfigHandler.ServeHTTP(w, r)
-		case SystemServiceGetDispatcherStatsProcedure:
-			systemServiceGetDispatcherStatsHandler.ServeHTTP(w, r)
-		case SystemServiceGetPlatformStatsProcedure:
-			systemServiceGetPlatformStatsHandler.ServeHTTP(w, r)
-		case SystemServiceListPlatformStatsTenantsProcedure:
-			systemServiceListPlatformStatsTenantsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedSystemServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSystemServiceHandler struct{}
 
-func (UnimplementedSystemServiceHandler) GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.SystemService.GetConfig is not implemented"))
+func (UnimplementedSystemServiceHandler) GetConfig(context.Context, *v1.GetConfigRequest) (*v1.GetConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.SystemService.GetConfig is not implemented")
 }
 
-func (UnimplementedSystemServiceHandler) GetDispatcherStats(context.Context, *connect.Request[v1.GetDispatcherStatsRequest]) (*connect.Response[v1.GetDispatcherStatsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.SystemService.GetDispatcherStats is not implemented"))
+func (UnimplementedSystemServiceHandler) GetDispatcherStats(context.Context, *v1.GetDispatcherStatsRequest) (*v1.GetDispatcherStatsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.SystemService.GetDispatcherStats is not implemented")
 }
 
-func (UnimplementedSystemServiceHandler) GetPlatformStats(context.Context, *connect.Request[v1.GetPlatformStatsRequest]) (*connect.Response[v1.GetPlatformStatsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.SystemService.GetPlatformStats is not implemented"))
+func (UnimplementedSystemServiceHandler) GetPlatformStats(context.Context, *v1.GetPlatformStatsRequest) (*v1.GetPlatformStatsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.SystemService.GetPlatformStats is not implemented")
 }
 
-func (UnimplementedSystemServiceHandler) ListPlatformStatsTenants(context.Context, *connect.Request[v1.ListPlatformStatsTenantsRequest]) (*connect.Response[v1.ListPlatformStatsTenantsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.SystemService.ListPlatformStatsTenants is not implemented"))
+func (UnimplementedSystemServiceHandler) ListPlatformStatsTenants(context.Context, *v1.ListPlatformStatsTenantsRequest) (*v1.ListPlatformStatsTenantsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.SystemService.ListPlatformStatsTenants is not implemented")
+}
+
+type systemServiceClient struct {
+	client *connect.Client
+}
+
+func (c *systemServiceClient) GetConfig(ctx context.Context, req *v1.GetConfigRequest) (*v1.GetConfigResponse, error) {
+	var res v1.GetConfigResponse
+	if err := c.client.CallUnary(ctx, systemServiceGetConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) GetDispatcherStats(ctx context.Context, req *v1.GetDispatcherStatsRequest) (*v1.GetDispatcherStatsResponse, error) {
+	var res v1.GetDispatcherStatsResponse
+	if err := c.client.CallUnary(ctx, systemServiceGetDispatcherStatsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) GetPlatformStats(ctx context.Context, req *v1.GetPlatformStatsRequest) (*v1.GetPlatformStatsResponse, error) {
+	var res v1.GetPlatformStatsResponse
+	if err := c.client.CallUnary(ctx, systemServiceGetPlatformStatsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) ListPlatformStatsTenants(ctx context.Context, req *v1.ListPlatformStatsTenantsRequest) (*v1.ListPlatformStatsTenantsResponse, error) {
+	var res v1.ListPlatformStatsTenantsResponse
+	if err := c.client.CallUnary(ctx, systemServiceListPlatformStatsTenantsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type systemServiceHandler struct{ svc SystemServiceHandler }
+
+func (h systemServiceHandler) getConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) getDispatcherStats(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetDispatcherStatsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetDispatcherStats(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) getPlatformStats(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPlatformStatsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetPlatformStats(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) listPlatformStatsTenants(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPlatformStatsTenantsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPlatformStatsTenants(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

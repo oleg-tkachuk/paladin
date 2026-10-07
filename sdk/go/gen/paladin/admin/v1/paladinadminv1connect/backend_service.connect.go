@@ -6,432 +6,483 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// BackendServiceName is the fully-qualified name of the BackendService service.
 	BackendServiceName = "paladin.admin.v1.BackendService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// BackendServiceCreateBackendProcedure is the fully-qualified name of the BackendService's
-	// CreateBackend RPC.
-	BackendServiceCreateBackendProcedure = "/paladin.admin.v1.BackendService/CreateBackend"
-	// BackendServiceGetBackendProcedure is the fully-qualified name of the BackendService's GetBackend
+	// BackendServiceCreateBackendProcedure is the procedure name of the BackendService's CreateBackend
 	// RPC.
+	BackendServiceCreateBackendProcedure = "/paladin.admin.v1.BackendService/CreateBackend"
+	// BackendServiceGetBackendProcedure is the procedure name of the BackendService's GetBackend RPC.
 	BackendServiceGetBackendProcedure = "/paladin.admin.v1.BackendService/GetBackend"
-	// BackendServiceUpdateBackendProcedure is the fully-qualified name of the BackendService's
-	// UpdateBackend RPC.
+	// BackendServiceUpdateBackendProcedure is the procedure name of the BackendService's UpdateBackend
+	// RPC.
 	BackendServiceUpdateBackendProcedure = "/paladin.admin.v1.BackendService/UpdateBackend"
-	// BackendServiceDeleteBackendProcedure is the fully-qualified name of the BackendService's
-	// DeleteBackend RPC.
+	// BackendServiceDeleteBackendProcedure is the procedure name of the BackendService's DeleteBackend
+	// RPC.
 	BackendServiceDeleteBackendProcedure = "/paladin.admin.v1.BackendService/DeleteBackend"
-	// BackendServiceListBackendsProcedure is the fully-qualified name of the BackendService's
-	// ListBackends RPC.
+	// BackendServiceListBackendsProcedure is the procedure name of the BackendService's ListBackends
+	// RPC.
 	BackendServiceListBackendsProcedure = "/paladin.admin.v1.BackendService/ListBackends"
-	// BackendServiceRotateCredentialsProcedure is the fully-qualified name of the BackendService's
+	// BackendServiceRotateCredentialsProcedure is the procedure name of the BackendService's
 	// RotateCredentials RPC.
 	BackendServiceRotateCredentialsProcedure = "/paladin.admin.v1.BackendService/RotateCredentials"
-	// BackendServiceTestBackendProcedure is the fully-qualified name of the BackendService's
-	// TestBackend RPC.
+	// BackendServiceTestBackendProcedure is the procedure name of the BackendService's TestBackend RPC.
 	BackendServiceTestBackendProcedure = "/paladin.admin.v1.BackendService/TestBackend"
-	// BackendServiceSetBackendEnabledProcedure is the fully-qualified name of the BackendService's
+	// BackendServiceSetBackendEnabledProcedure is the procedure name of the BackendService's
 	// SetBackendEnabled RPC.
 	BackendServiceSetBackendEnabledProcedure = "/paladin.admin.v1.BackendService/SetBackendEnabled"
-	// BackendServiceSetBackendReadOnlyProcedure is the fully-qualified name of the BackendService's
+	// BackendServiceSetBackendReadOnlyProcedure is the procedure name of the BackendService's
 	// SetBackendReadOnly RPC.
 	BackendServiceSetBackendReadOnlyProcedure = "/paladin.admin.v1.BackendService/SetBackendReadOnly"
-	// BackendServiceSetBackendMaintenanceProcedure is the fully-qualified name of the BackendService's
+	// BackendServiceSetBackendMaintenanceProcedure is the procedure name of the BackendService's
 	// SetBackendMaintenance RPC.
 	BackendServiceSetBackendMaintenanceProcedure = "/paladin.admin.v1.BackendService/SetBackendMaintenance"
+)
+
+var (
+	backendServiceCreateBackendSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_backend_service_proto.Services().ByName("BackendService").Methods().ByName("CreateBackend"),
+			Procedure:  BackendServiceCreateBackendProcedure,
+		}
+	})
+	backendServiceGetBackendSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_backend_service_proto.Services().ByName("BackendService").Methods().ByName("GetBackend"),
+			Procedure:        BackendServiceGetBackendProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	backendServiceUpdateBackendSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_backend_service_proto.Services().ByName("BackendService").Methods().ByName("UpdateBackend"),
+			Procedure:        BackendServiceUpdateBackendProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	backendServiceDeleteBackendSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_backend_service_proto.Services().ByName("BackendService").Methods().ByName("DeleteBackend"),
+			Procedure:        BackendServiceDeleteBackendProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	backendServiceListBackendsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_backend_service_proto.Services().ByName("BackendService").Methods().ByName("ListBackends"),
+			Procedure:        BackendServiceListBackendsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	backendServiceRotateCredentialsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_backend_service_proto.Services().ByName("BackendService").Methods().ByName("RotateCredentials"),
+			Procedure:  BackendServiceRotateCredentialsProcedure,
+		}
+	})
+	backendServiceTestBackendSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_backend_service_proto.Services().ByName("BackendService").Methods().ByName("TestBackend"),
+			Procedure:        BackendServiceTestBackendProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	backendServiceSetBackendEnabledSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_backend_service_proto.Services().ByName("BackendService").Methods().ByName("SetBackendEnabled"),
+			Procedure:        BackendServiceSetBackendEnabledProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	backendServiceSetBackendReadOnlySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_backend_service_proto.Services().ByName("BackendService").Methods().ByName("SetBackendReadOnly"),
+			Procedure:        BackendServiceSetBackendReadOnlyProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	backendServiceSetBackendMaintenanceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_backend_service_proto.Services().ByName("BackendService").Methods().ByName("SetBackendMaintenance"),
+			Procedure:        BackendServiceSetBackendMaintenanceProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 )
 
 // BackendServiceClient is a client for the paladin.admin.v1.BackendService service.
 type BackendServiceClient interface {
 	// CreateBackend registers an S3-compatible endpoint. Credentials are stored
 	// via SecretRef, never inline in the resource.
-	CreateBackend(context.Context, *connect.Request[v1.CreateBackendRequest]) (*connect.Response[v1.StorageBackend], error)
+	CreateBackend(context.Context, *v1.CreateBackendRequest) (*v1.StorageBackend, error)
 	// GetBackend returns the backend by id. Credentials are never echoed back.
-	GetBackend(context.Context, *connect.Request[v1.GetBackendRequest]) (*connect.Response[v1.StorageBackend], error)
+	GetBackend(context.Context, *v1.GetBackendRequest) (*v1.StorageBackend, error)
 	// UpdateBackend applies update_mask; resource_version is required. Changing
 	// the endpoint of a backend with live buckets does not migrate anything —
 	// the objects stay where they are.
-	UpdateBackend(context.Context, *connect.Request[v1.UpdateBackendRequest]) (*connect.Response[v1.StorageBackend], error)
+	UpdateBackend(context.Context, *v1.UpdateBackendRequest) (*v1.StorageBackend, error)
 	// DeleteBackend refuses while buckets still reference it. No flag overrides
 	// that — buckets.backend_id is ON DELETE RESTRICT, so the refusal comes from
 	// the database. resource_version is required.
-	DeleteBackend(context.Context, *connect.Request[v1.DeleteBackendRequest]) (*connect.Response[v1.DeleteBackendResponse], error)
+	DeleteBackend(context.Context, *v1.DeleteBackendRequest) (*v1.DeleteBackendResponse, error)
 	// ListBackends returns every registered backend for the platform; backends
 	// are not tenant-scoped.
-	ListBackends(context.Context, *connect.Request[v1.ListBackendsRequest]) (*connect.Response[v1.ListBackendsResponse], error)
+	ListBackends(context.Context, *v1.ListBackendsRequest) (*v1.ListBackendsResponse, error)
 	// RotateCredentials swaps the credentials_secret_ref. The previous secret
 	// remains valid for `grace_period` so in-flight presigns don't break.
-	RotateCredentials(context.Context, *connect.Request[v1.RotateCredentialsRequest]) (*connect.Response[v1.StorageBackend], error)
+	RotateCredentials(context.Context, *v1.RotateCredentialsRequest) (*v1.StorageBackend, error)
 	// TestBackend performs a connectivity probe (HEAD / list-buckets). Read-only.
-	TestBackend(context.Context, *connect.Request[v1.TestBackendRequest]) (*connect.Response[v1.TestBackendResponse], error)
+	TestBackend(context.Context, *v1.TestBackendRequest) (*v1.TestBackendResponse, error)
 	// SetBackendEnabled flips the backend's enabled state. Idempotent
 	// (setting the current state is a no-op success). OCC-guarded via
 	// resource_version. Disabling the configured default backend is
 	// refused (FailedPrecondition).
-	SetBackendEnabled(context.Context, *connect.Request[v1.SetBackendEnabledRequest]) (*connect.Response[v1.StorageBackend], error)
+	SetBackendEnabled(context.Context, *v1.SetBackendEnabledRequest) (*v1.StorageBackend, error)
 	// SetBackendReadOnly flips the backend's read-only "drain" state
 	// (`001_initial_schema.sql`). Idempotent, OCC-guarded via resource_version. Only
 	// meaningful on an enabled backend: reads keep working, mutations are
 	// refused so an operator can migrate data off before disabling.
-	SetBackendReadOnly(context.Context, *connect.Request[v1.SetBackendReadOnlyRequest]) (*connect.Response[v1.StorageBackend], error)
+	SetBackendReadOnly(context.Context, *v1.SetBackendReadOnlyRequest) (*v1.StorageBackend, error)
 	// SetBackendMaintenance raises/clears the operator-set, advisory
 	// maintenance flag (`001_initial_schema.sql`). Idempotent, OCC-guarded via
 	// resource_version. Advisory — it does not gate operations.
-	SetBackendMaintenance(context.Context, *connect.Request[v1.SetBackendMaintenanceRequest]) (*connect.Response[v1.StorageBackend], error)
+	SetBackendMaintenance(context.Context, *v1.SetBackendMaintenanceRequest) (*v1.StorageBackend, error)
 }
 
-// NewBackendServiceClient constructs a client for the paladin.admin.v1.BackendService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewBackendServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BackendServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	backendServiceMethods := v1.File_paladin_admin_v1_backend_service_proto.Services().ByName("BackendService").Methods()
-	return &backendServiceClient{
-		createBackend: connect.NewClient[v1.CreateBackendRequest, v1.StorageBackend](
-			httpClient,
-			baseURL+BackendServiceCreateBackendProcedure,
-			connect.WithSchema(backendServiceMethods.ByName("CreateBackend")),
-			connect.WithClientOptions(opts...),
-		),
-		getBackend: connect.NewClient[v1.GetBackendRequest, v1.StorageBackend](
-			httpClient,
-			baseURL+BackendServiceGetBackendProcedure,
-			connect.WithSchema(backendServiceMethods.ByName("GetBackend")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		updateBackend: connect.NewClient[v1.UpdateBackendRequest, v1.StorageBackend](
-			httpClient,
-			baseURL+BackendServiceUpdateBackendProcedure,
-			connect.WithSchema(backendServiceMethods.ByName("UpdateBackend")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		deleteBackend: connect.NewClient[v1.DeleteBackendRequest, v1.DeleteBackendResponse](
-			httpClient,
-			baseURL+BackendServiceDeleteBackendProcedure,
-			connect.WithSchema(backendServiceMethods.ByName("DeleteBackend")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		listBackends: connect.NewClient[v1.ListBackendsRequest, v1.ListBackendsResponse](
-			httpClient,
-			baseURL+BackendServiceListBackendsProcedure,
-			connect.WithSchema(backendServiceMethods.ByName("ListBackends")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		rotateCredentials: connect.NewClient[v1.RotateCredentialsRequest, v1.StorageBackend](
-			httpClient,
-			baseURL+BackendServiceRotateCredentialsProcedure,
-			connect.WithSchema(backendServiceMethods.ByName("RotateCredentials")),
-			connect.WithClientOptions(opts...),
-		),
-		testBackend: connect.NewClient[v1.TestBackendRequest, v1.TestBackendResponse](
-			httpClient,
-			baseURL+BackendServiceTestBackendProcedure,
-			connect.WithSchema(backendServiceMethods.ByName("TestBackend")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		setBackendEnabled: connect.NewClient[v1.SetBackendEnabledRequest, v1.StorageBackend](
-			httpClient,
-			baseURL+BackendServiceSetBackendEnabledProcedure,
-			connect.WithSchema(backendServiceMethods.ByName("SetBackendEnabled")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		setBackendReadOnly: connect.NewClient[v1.SetBackendReadOnlyRequest, v1.StorageBackend](
-			httpClient,
-			baseURL+BackendServiceSetBackendReadOnlyProcedure,
-			connect.WithSchema(backendServiceMethods.ByName("SetBackendReadOnly")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		setBackendMaintenance: connect.NewClient[v1.SetBackendMaintenanceRequest, v1.StorageBackend](
-			httpClient,
-			baseURL+BackendServiceSetBackendMaintenanceProcedure,
-			connect.WithSchema(backendServiceMethods.ByName("SetBackendMaintenance")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// backendServiceClient implements BackendServiceClient.
-type backendServiceClient struct {
-	createBackend         *connect.Client[v1.CreateBackendRequest, v1.StorageBackend]
-	getBackend            *connect.Client[v1.GetBackendRequest, v1.StorageBackend]
-	updateBackend         *connect.Client[v1.UpdateBackendRequest, v1.StorageBackend]
-	deleteBackend         *connect.Client[v1.DeleteBackendRequest, v1.DeleteBackendResponse]
-	listBackends          *connect.Client[v1.ListBackendsRequest, v1.ListBackendsResponse]
-	rotateCredentials     *connect.Client[v1.RotateCredentialsRequest, v1.StorageBackend]
-	testBackend           *connect.Client[v1.TestBackendRequest, v1.TestBackendResponse]
-	setBackendEnabled     *connect.Client[v1.SetBackendEnabledRequest, v1.StorageBackend]
-	setBackendReadOnly    *connect.Client[v1.SetBackendReadOnlyRequest, v1.StorageBackend]
-	setBackendMaintenance *connect.Client[v1.SetBackendMaintenanceRequest, v1.StorageBackend]
-}
-
-// CreateBackend calls paladin.admin.v1.BackendService.CreateBackend.
-func (c *backendServiceClient) CreateBackend(ctx context.Context, req *connect.Request[v1.CreateBackendRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return c.createBackend.CallUnary(ctx, req)
-}
-
-// GetBackend calls paladin.admin.v1.BackendService.GetBackend.
-func (c *backendServiceClient) GetBackend(ctx context.Context, req *connect.Request[v1.GetBackendRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return c.getBackend.CallUnary(ctx, req)
-}
-
-// UpdateBackend calls paladin.admin.v1.BackendService.UpdateBackend.
-func (c *backendServiceClient) UpdateBackend(ctx context.Context, req *connect.Request[v1.UpdateBackendRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return c.updateBackend.CallUnary(ctx, req)
-}
-
-// DeleteBackend calls paladin.admin.v1.BackendService.DeleteBackend.
-func (c *backendServiceClient) DeleteBackend(ctx context.Context, req *connect.Request[v1.DeleteBackendRequest]) (*connect.Response[v1.DeleteBackendResponse], error) {
-	return c.deleteBackend.CallUnary(ctx, req)
-}
-
-// ListBackends calls paladin.admin.v1.BackendService.ListBackends.
-func (c *backendServiceClient) ListBackends(ctx context.Context, req *connect.Request[v1.ListBackendsRequest]) (*connect.Response[v1.ListBackendsResponse], error) {
-	return c.listBackends.CallUnary(ctx, req)
-}
-
-// RotateCredentials calls paladin.admin.v1.BackendService.RotateCredentials.
-func (c *backendServiceClient) RotateCredentials(ctx context.Context, req *connect.Request[v1.RotateCredentialsRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return c.rotateCredentials.CallUnary(ctx, req)
-}
-
-// TestBackend calls paladin.admin.v1.BackendService.TestBackend.
-func (c *backendServiceClient) TestBackend(ctx context.Context, req *connect.Request[v1.TestBackendRequest]) (*connect.Response[v1.TestBackendResponse], error) {
-	return c.testBackend.CallUnary(ctx, req)
-}
-
-// SetBackendEnabled calls paladin.admin.v1.BackendService.SetBackendEnabled.
-func (c *backendServiceClient) SetBackendEnabled(ctx context.Context, req *connect.Request[v1.SetBackendEnabledRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return c.setBackendEnabled.CallUnary(ctx, req)
-}
-
-// SetBackendReadOnly calls paladin.admin.v1.BackendService.SetBackendReadOnly.
-func (c *backendServiceClient) SetBackendReadOnly(ctx context.Context, req *connect.Request[v1.SetBackendReadOnlyRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return c.setBackendReadOnly.CallUnary(ctx, req)
-}
-
-// SetBackendMaintenance calls paladin.admin.v1.BackendService.SetBackendMaintenance.
-func (c *backendServiceClient) SetBackendMaintenance(ctx context.Context, req *connect.Request[v1.SetBackendMaintenanceRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return c.setBackendMaintenance.CallUnary(ctx, req)
+// NewBackendServiceClient constructs a client for the paladin.admin.v1.BackendService service.
+// Multiple service clients may share a single connect.Client.
+func NewBackendServiceClient(client *connect.Client) BackendServiceClient {
+	return &backendServiceClient{client: client}
 }
 
 // BackendServiceHandler is an implementation of the paladin.admin.v1.BackendService service.
 type BackendServiceHandler interface {
 	// CreateBackend registers an S3-compatible endpoint. Credentials are stored
 	// via SecretRef, never inline in the resource.
-	CreateBackend(context.Context, *connect.Request[v1.CreateBackendRequest]) (*connect.Response[v1.StorageBackend], error)
+	CreateBackend(context.Context, *v1.CreateBackendRequest) (*v1.StorageBackend, error)
 	// GetBackend returns the backend by id. Credentials are never echoed back.
-	GetBackend(context.Context, *connect.Request[v1.GetBackendRequest]) (*connect.Response[v1.StorageBackend], error)
+	GetBackend(context.Context, *v1.GetBackendRequest) (*v1.StorageBackend, error)
 	// UpdateBackend applies update_mask; resource_version is required. Changing
 	// the endpoint of a backend with live buckets does not migrate anything —
 	// the objects stay where they are.
-	UpdateBackend(context.Context, *connect.Request[v1.UpdateBackendRequest]) (*connect.Response[v1.StorageBackend], error)
+	UpdateBackend(context.Context, *v1.UpdateBackendRequest) (*v1.StorageBackend, error)
 	// DeleteBackend refuses while buckets still reference it. No flag overrides
 	// that — buckets.backend_id is ON DELETE RESTRICT, so the refusal comes from
 	// the database. resource_version is required.
-	DeleteBackend(context.Context, *connect.Request[v1.DeleteBackendRequest]) (*connect.Response[v1.DeleteBackendResponse], error)
+	DeleteBackend(context.Context, *v1.DeleteBackendRequest) (*v1.DeleteBackendResponse, error)
 	// ListBackends returns every registered backend for the platform; backends
 	// are not tenant-scoped.
-	ListBackends(context.Context, *connect.Request[v1.ListBackendsRequest]) (*connect.Response[v1.ListBackendsResponse], error)
+	ListBackends(context.Context, *v1.ListBackendsRequest) (*v1.ListBackendsResponse, error)
 	// RotateCredentials swaps the credentials_secret_ref. The previous secret
 	// remains valid for `grace_period` so in-flight presigns don't break.
-	RotateCredentials(context.Context, *connect.Request[v1.RotateCredentialsRequest]) (*connect.Response[v1.StorageBackend], error)
+	RotateCredentials(context.Context, *v1.RotateCredentialsRequest) (*v1.StorageBackend, error)
 	// TestBackend performs a connectivity probe (HEAD / list-buckets). Read-only.
-	TestBackend(context.Context, *connect.Request[v1.TestBackendRequest]) (*connect.Response[v1.TestBackendResponse], error)
+	TestBackend(context.Context, *v1.TestBackendRequest) (*v1.TestBackendResponse, error)
 	// SetBackendEnabled flips the backend's enabled state. Idempotent
 	// (setting the current state is a no-op success). OCC-guarded via
 	// resource_version. Disabling the configured default backend is
 	// refused (FailedPrecondition).
-	SetBackendEnabled(context.Context, *connect.Request[v1.SetBackendEnabledRequest]) (*connect.Response[v1.StorageBackend], error)
+	SetBackendEnabled(context.Context, *v1.SetBackendEnabledRequest) (*v1.StorageBackend, error)
 	// SetBackendReadOnly flips the backend's read-only "drain" state
 	// (`001_initial_schema.sql`). Idempotent, OCC-guarded via resource_version. Only
 	// meaningful on an enabled backend: reads keep working, mutations are
 	// refused so an operator can migrate data off before disabling.
-	SetBackendReadOnly(context.Context, *connect.Request[v1.SetBackendReadOnlyRequest]) (*connect.Response[v1.StorageBackend], error)
+	SetBackendReadOnly(context.Context, *v1.SetBackendReadOnlyRequest) (*v1.StorageBackend, error)
 	// SetBackendMaintenance raises/clears the operator-set, advisory
 	// maintenance flag (`001_initial_schema.sql`). Idempotent, OCC-guarded via
 	// resource_version. Advisory — it does not gate operations.
-	SetBackendMaintenance(context.Context, *connect.Request[v1.SetBackendMaintenanceRequest]) (*connect.Response[v1.StorageBackend], error)
+	SetBackendMaintenance(context.Context, *v1.SetBackendMaintenanceRequest) (*v1.StorageBackend, error)
 }
 
-// NewBackendServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewBackendServiceHandler(svc BackendServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	backendServiceMethods := v1.File_paladin_admin_v1_backend_service_proto.Services().ByName("BackendService").Methods()
-	backendServiceCreateBackendHandler := connect.NewUnaryHandler(
-		BackendServiceCreateBackendProcedure,
-		svc.CreateBackend,
-		connect.WithSchema(backendServiceMethods.ByName("CreateBackend")),
-		connect.WithHandlerOptions(opts...),
+// RegisterBackendServiceHandler registers svc as the paladin.admin.v1.BackendService implementation
+// on server.
+func RegisterBackendServiceHandler(server *connect.Server, svc BackendServiceHandler) {
+	adapter := backendServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: backendServiceCreateBackendSpec(), Handler: adapter.createBackend},
+		connect.Method{Spec: backendServiceGetBackendSpec(), Handler: adapter.getBackend},
+		connect.Method{Spec: backendServiceUpdateBackendSpec(), Handler: adapter.updateBackend},
+		connect.Method{Spec: backendServiceDeleteBackendSpec(), Handler: adapter.deleteBackend},
+		connect.Method{Spec: backendServiceListBackendsSpec(), Handler: adapter.listBackends},
+		connect.Method{Spec: backendServiceRotateCredentialsSpec(), Handler: adapter.rotateCredentials},
+		connect.Method{Spec: backendServiceTestBackendSpec(), Handler: adapter.testBackend},
+		connect.Method{Spec: backendServiceSetBackendEnabledSpec(), Handler: adapter.setBackendEnabled},
+		connect.Method{Spec: backendServiceSetBackendReadOnlySpec(), Handler: adapter.setBackendReadOnly},
+		connect.Method{Spec: backendServiceSetBackendMaintenanceSpec(), Handler: adapter.setBackendMaintenance},
 	)
-	backendServiceGetBackendHandler := connect.NewUnaryHandler(
-		BackendServiceGetBackendProcedure,
-		svc.GetBackend,
-		connect.WithSchema(backendServiceMethods.ByName("GetBackend")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	backendServiceUpdateBackendHandler := connect.NewUnaryHandler(
-		BackendServiceUpdateBackendProcedure,
-		svc.UpdateBackend,
-		connect.WithSchema(backendServiceMethods.ByName("UpdateBackend")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	backendServiceDeleteBackendHandler := connect.NewUnaryHandler(
-		BackendServiceDeleteBackendProcedure,
-		svc.DeleteBackend,
-		connect.WithSchema(backendServiceMethods.ByName("DeleteBackend")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	backendServiceListBackendsHandler := connect.NewUnaryHandler(
-		BackendServiceListBackendsProcedure,
-		svc.ListBackends,
-		connect.WithSchema(backendServiceMethods.ByName("ListBackends")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	backendServiceRotateCredentialsHandler := connect.NewUnaryHandler(
-		BackendServiceRotateCredentialsProcedure,
-		svc.RotateCredentials,
-		connect.WithSchema(backendServiceMethods.ByName("RotateCredentials")),
-		connect.WithHandlerOptions(opts...),
-	)
-	backendServiceTestBackendHandler := connect.NewUnaryHandler(
-		BackendServiceTestBackendProcedure,
-		svc.TestBackend,
-		connect.WithSchema(backendServiceMethods.ByName("TestBackend")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	backendServiceSetBackendEnabledHandler := connect.NewUnaryHandler(
-		BackendServiceSetBackendEnabledProcedure,
-		svc.SetBackendEnabled,
-		connect.WithSchema(backendServiceMethods.ByName("SetBackendEnabled")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	backendServiceSetBackendReadOnlyHandler := connect.NewUnaryHandler(
-		BackendServiceSetBackendReadOnlyProcedure,
-		svc.SetBackendReadOnly,
-		connect.WithSchema(backendServiceMethods.ByName("SetBackendReadOnly")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	backendServiceSetBackendMaintenanceHandler := connect.NewUnaryHandler(
-		BackendServiceSetBackendMaintenanceProcedure,
-		svc.SetBackendMaintenance,
-		connect.WithSchema(backendServiceMethods.ByName("SetBackendMaintenance")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.admin.v1.BackendService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case BackendServiceCreateBackendProcedure:
-			backendServiceCreateBackendHandler.ServeHTTP(w, r)
-		case BackendServiceGetBackendProcedure:
-			backendServiceGetBackendHandler.ServeHTTP(w, r)
-		case BackendServiceUpdateBackendProcedure:
-			backendServiceUpdateBackendHandler.ServeHTTP(w, r)
-		case BackendServiceDeleteBackendProcedure:
-			backendServiceDeleteBackendHandler.ServeHTTP(w, r)
-		case BackendServiceListBackendsProcedure:
-			backendServiceListBackendsHandler.ServeHTTP(w, r)
-		case BackendServiceRotateCredentialsProcedure:
-			backendServiceRotateCredentialsHandler.ServeHTTP(w, r)
-		case BackendServiceTestBackendProcedure:
-			backendServiceTestBackendHandler.ServeHTTP(w, r)
-		case BackendServiceSetBackendEnabledProcedure:
-			backendServiceSetBackendEnabledHandler.ServeHTTP(w, r)
-		case BackendServiceSetBackendReadOnlyProcedure:
-			backendServiceSetBackendReadOnlyHandler.ServeHTTP(w, r)
-		case BackendServiceSetBackendMaintenanceProcedure:
-			backendServiceSetBackendMaintenanceHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedBackendServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedBackendServiceHandler struct{}
 
-func (UnimplementedBackendServiceHandler) CreateBackend(context.Context, *connect.Request[v1.CreateBackendRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.CreateBackend is not implemented"))
+func (UnimplementedBackendServiceHandler) CreateBackend(context.Context, *v1.CreateBackendRequest) (*v1.StorageBackend, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BackendService.CreateBackend is not implemented")
 }
 
-func (UnimplementedBackendServiceHandler) GetBackend(context.Context, *connect.Request[v1.GetBackendRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.GetBackend is not implemented"))
+func (UnimplementedBackendServiceHandler) GetBackend(context.Context, *v1.GetBackendRequest) (*v1.StorageBackend, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BackendService.GetBackend is not implemented")
 }
 
-func (UnimplementedBackendServiceHandler) UpdateBackend(context.Context, *connect.Request[v1.UpdateBackendRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.UpdateBackend is not implemented"))
+func (UnimplementedBackendServiceHandler) UpdateBackend(context.Context, *v1.UpdateBackendRequest) (*v1.StorageBackend, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BackendService.UpdateBackend is not implemented")
 }
 
-func (UnimplementedBackendServiceHandler) DeleteBackend(context.Context, *connect.Request[v1.DeleteBackendRequest]) (*connect.Response[v1.DeleteBackendResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.DeleteBackend is not implemented"))
+func (UnimplementedBackendServiceHandler) DeleteBackend(context.Context, *v1.DeleteBackendRequest) (*v1.DeleteBackendResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BackendService.DeleteBackend is not implemented")
 }
 
-func (UnimplementedBackendServiceHandler) ListBackends(context.Context, *connect.Request[v1.ListBackendsRequest]) (*connect.Response[v1.ListBackendsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.ListBackends is not implemented"))
+func (UnimplementedBackendServiceHandler) ListBackends(context.Context, *v1.ListBackendsRequest) (*v1.ListBackendsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BackendService.ListBackends is not implemented")
 }
 
-func (UnimplementedBackendServiceHandler) RotateCredentials(context.Context, *connect.Request[v1.RotateCredentialsRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.RotateCredentials is not implemented"))
+func (UnimplementedBackendServiceHandler) RotateCredentials(context.Context, *v1.RotateCredentialsRequest) (*v1.StorageBackend, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BackendService.RotateCredentials is not implemented")
 }
 
-func (UnimplementedBackendServiceHandler) TestBackend(context.Context, *connect.Request[v1.TestBackendRequest]) (*connect.Response[v1.TestBackendResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.TestBackend is not implemented"))
+func (UnimplementedBackendServiceHandler) TestBackend(context.Context, *v1.TestBackendRequest) (*v1.TestBackendResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BackendService.TestBackend is not implemented")
 }
 
-func (UnimplementedBackendServiceHandler) SetBackendEnabled(context.Context, *connect.Request[v1.SetBackendEnabledRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.SetBackendEnabled is not implemented"))
+func (UnimplementedBackendServiceHandler) SetBackendEnabled(context.Context, *v1.SetBackendEnabledRequest) (*v1.StorageBackend, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BackendService.SetBackendEnabled is not implemented")
 }
 
-func (UnimplementedBackendServiceHandler) SetBackendReadOnly(context.Context, *connect.Request[v1.SetBackendReadOnlyRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.SetBackendReadOnly is not implemented"))
+func (UnimplementedBackendServiceHandler) SetBackendReadOnly(context.Context, *v1.SetBackendReadOnlyRequest) (*v1.StorageBackend, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BackendService.SetBackendReadOnly is not implemented")
 }
 
-func (UnimplementedBackendServiceHandler) SetBackendMaintenance(context.Context, *connect.Request[v1.SetBackendMaintenanceRequest]) (*connect.Response[v1.StorageBackend], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BackendService.SetBackendMaintenance is not implemented"))
+func (UnimplementedBackendServiceHandler) SetBackendMaintenance(context.Context, *v1.SetBackendMaintenanceRequest) (*v1.StorageBackend, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BackendService.SetBackendMaintenance is not implemented")
+}
+
+type backendServiceClient struct {
+	client *connect.Client
+}
+
+func (c *backendServiceClient) CreateBackend(ctx context.Context, req *v1.CreateBackendRequest) (*v1.StorageBackend, error) {
+	var res v1.StorageBackend
+	if err := c.client.CallUnary(ctx, backendServiceCreateBackendSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backendServiceClient) GetBackend(ctx context.Context, req *v1.GetBackendRequest) (*v1.StorageBackend, error) {
+	var res v1.StorageBackend
+	if err := c.client.CallUnary(ctx, backendServiceGetBackendSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backendServiceClient) UpdateBackend(ctx context.Context, req *v1.UpdateBackendRequest) (*v1.StorageBackend, error) {
+	var res v1.StorageBackend
+	if err := c.client.CallUnary(ctx, backendServiceUpdateBackendSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backendServiceClient) DeleteBackend(ctx context.Context, req *v1.DeleteBackendRequest) (*v1.DeleteBackendResponse, error) {
+	var res v1.DeleteBackendResponse
+	if err := c.client.CallUnary(ctx, backendServiceDeleteBackendSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backendServiceClient) ListBackends(ctx context.Context, req *v1.ListBackendsRequest) (*v1.ListBackendsResponse, error) {
+	var res v1.ListBackendsResponse
+	if err := c.client.CallUnary(ctx, backendServiceListBackendsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backendServiceClient) RotateCredentials(ctx context.Context, req *v1.RotateCredentialsRequest) (*v1.StorageBackend, error) {
+	var res v1.StorageBackend
+	if err := c.client.CallUnary(ctx, backendServiceRotateCredentialsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backendServiceClient) TestBackend(ctx context.Context, req *v1.TestBackendRequest) (*v1.TestBackendResponse, error) {
+	var res v1.TestBackendResponse
+	if err := c.client.CallUnary(ctx, backendServiceTestBackendSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backendServiceClient) SetBackendEnabled(ctx context.Context, req *v1.SetBackendEnabledRequest) (*v1.StorageBackend, error) {
+	var res v1.StorageBackend
+	if err := c.client.CallUnary(ctx, backendServiceSetBackendEnabledSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backendServiceClient) SetBackendReadOnly(ctx context.Context, req *v1.SetBackendReadOnlyRequest) (*v1.StorageBackend, error) {
+	var res v1.StorageBackend
+	if err := c.client.CallUnary(ctx, backendServiceSetBackendReadOnlySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backendServiceClient) SetBackendMaintenance(ctx context.Context, req *v1.SetBackendMaintenanceRequest) (*v1.StorageBackend, error) {
+	var res v1.StorageBackend
+	if err := c.client.CallUnary(ctx, backendServiceSetBackendMaintenanceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type backendServiceHandler struct{ svc BackendServiceHandler }
+
+func (h backendServiceHandler) createBackend(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateBackendRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateBackend(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backendServiceHandler) getBackend(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetBackendRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetBackend(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backendServiceHandler) updateBackend(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateBackendRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateBackend(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backendServiceHandler) deleteBackend(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteBackendRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteBackend(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backendServiceHandler) listBackends(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListBackendsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListBackends(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backendServiceHandler) rotateCredentials(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RotateCredentialsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RotateCredentials(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backendServiceHandler) testBackend(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TestBackendRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TestBackend(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backendServiceHandler) setBackendEnabled(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetBackendEnabledRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetBackendEnabled(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backendServiceHandler) setBackendReadOnly(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetBackendReadOnlyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetBackendReadOnly(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backendServiceHandler) setBackendMaintenance(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetBackendMaintenanceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetBackendMaintenance(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

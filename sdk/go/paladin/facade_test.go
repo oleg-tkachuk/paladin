@@ -11,8 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/internal/facadegen"
@@ -117,8 +115,8 @@ func TestConnectSendsEachPlaneItsOwnAudience(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	_, _ = p.IAM.Health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{}))
-	_, _ = p.Data.Object.GetObject(ctx, connect.NewRequest(&datav1.GetObjectRequest{}))
+	_, _ = p.IAM.Health.GetVersion(ctx, &iamv1.GetVersionRequest{})
+	_, _ = p.Data.Object.GetObject(ctx, &datav1.GetObjectRequest{})
 
 	rec.mu.Lock()
 	defer rec.mu.Unlock()

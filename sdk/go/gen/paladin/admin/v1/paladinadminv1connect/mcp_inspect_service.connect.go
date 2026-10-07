@@ -6,57 +6,74 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// MCPInspectServiceName is the fully-qualified name of the MCPInspectService service.
 	MCPInspectServiceName = "paladin.admin.v1.MCPInspectService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// MCPInspectServiceInspectProcedure is the fully-qualified name of the MCPInspectService's Inspect
-	// RPC.
+	// MCPInspectServiceInspectProcedure is the procedure name of the MCPInspectService's Inspect RPC.
 	MCPInspectServiceInspectProcedure = "/paladin.admin.v1.MCPInspectService/Inspect"
-	// MCPInspectServiceListSessionsProcedure is the fully-qualified name of the MCPInspectService's
+	// MCPInspectServiceListSessionsProcedure is the procedure name of the MCPInspectService's
 	// ListSessions RPC.
 	MCPInspectServiceListSessionsProcedure = "/paladin.admin.v1.MCPInspectService/ListSessions"
-	// MCPInspectServiceGetBridgeStatusProcedure is the fully-qualified name of the MCPInspectService's
+	// MCPInspectServiceGetBridgeStatusProcedure is the procedure name of the MCPInspectService's
 	// GetBridgeStatus RPC.
 	MCPInspectServiceGetBridgeStatusProcedure = "/paladin.admin.v1.MCPInspectService/GetBridgeStatus"
+)
+
+var (
+	mCPInspectServiceInspectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_mcp_inspect_service_proto.Services().ByName("MCPInspectService").Methods().ByName("Inspect"),
+			Procedure:        MCPInspectServiceInspectProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	mCPInspectServiceListSessionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_mcp_inspect_service_proto.Services().ByName("MCPInspectService").Methods().ByName("ListSessions"),
+			Procedure:        MCPInspectServiceListSessionsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	mCPInspectServiceGetBridgeStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_mcp_inspect_service_proto.Services().ByName("MCPInspectService").Methods().ByName("GetBridgeStatus"),
+			Procedure:        MCPInspectServiceGetBridgeStatusProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // MCPInspectServiceClient is a client for the paladin.admin.v1.MCPInspectService service.
 type MCPInspectServiceClient interface {
 	// Inspect reports the MCP server's effective configuration: the active
 	// profile, the tool catalog it exposes, and the upstream planes it dials.
-	Inspect(context.Context, *connect.Request[v1.MCPInspectRequest]) (*connect.Response[v1.MCPInspectResponse], error)
+	Inspect(context.Context, *v1.MCPInspectRequest) (*v1.MCPInspectResponse, error)
 	// ListSessions returns the live MCP streamable-HTTP sessions tracked by the
 	// bridge (id, agent, activity counts). Unlike Inspect (config-derived,
 	// stateless) this reflects live process state that lives in the MCP server,
 	// so the admin plane proxies the call to the MCP server's own /sessions
 	// endpoint. Returns an empty list when the MCP server is unconfigured or
 	// unreachable. Platform-admin only.
-	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	ListSessions(context.Context, *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error)
 	// GetBridgeStatus reports what only the MCP server can answer: whether it
 	// can currently reach the planes it proxies to, and how many sessions it
 	// holds.
@@ -68,78 +85,27 @@ type MCPInspectServiceClient interface {
 	// an operator opens when something is wrong. This call distinguishes them:
 	// `reachable` is the bridge's own answer, and `error` says why when it is
 	// not. Platform-admin only.
-	GetBridgeStatus(context.Context, *connect.Request[v1.GetBridgeStatusRequest]) (*connect.Response[v1.GetBridgeStatusResponse], error)
+	GetBridgeStatus(context.Context, *v1.GetBridgeStatusRequest) (*v1.GetBridgeStatusResponse, error)
 }
 
 // NewMCPInspectServiceClient constructs a client for the paladin.admin.v1.MCPInspectService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewMCPInspectServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) MCPInspectServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	mCPInspectServiceMethods := v1.File_paladin_admin_v1_mcp_inspect_service_proto.Services().ByName("MCPInspectService").Methods()
-	return &mCPInspectServiceClient{
-		inspect: connect.NewClient[v1.MCPInspectRequest, v1.MCPInspectResponse](
-			httpClient,
-			baseURL+MCPInspectServiceInspectProcedure,
-			connect.WithSchema(mCPInspectServiceMethods.ByName("Inspect")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		listSessions: connect.NewClient[v1.ListSessionsRequest, v1.ListSessionsResponse](
-			httpClient,
-			baseURL+MCPInspectServiceListSessionsProcedure,
-			connect.WithSchema(mCPInspectServiceMethods.ByName("ListSessions")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		getBridgeStatus: connect.NewClient[v1.GetBridgeStatusRequest, v1.GetBridgeStatusResponse](
-			httpClient,
-			baseURL+MCPInspectServiceGetBridgeStatusProcedure,
-			connect.WithSchema(mCPInspectServiceMethods.ByName("GetBridgeStatus")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// mCPInspectServiceClient implements MCPInspectServiceClient.
-type mCPInspectServiceClient struct {
-	inspect         *connect.Client[v1.MCPInspectRequest, v1.MCPInspectResponse]
-	listSessions    *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
-	getBridgeStatus *connect.Client[v1.GetBridgeStatusRequest, v1.GetBridgeStatusResponse]
-}
-
-// Inspect calls paladin.admin.v1.MCPInspectService.Inspect.
-func (c *mCPInspectServiceClient) Inspect(ctx context.Context, req *connect.Request[v1.MCPInspectRequest]) (*connect.Response[v1.MCPInspectResponse], error) {
-	return c.inspect.CallUnary(ctx, req)
-}
-
-// ListSessions calls paladin.admin.v1.MCPInspectService.ListSessions.
-func (c *mCPInspectServiceClient) ListSessions(ctx context.Context, req *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
-	return c.listSessions.CallUnary(ctx, req)
-}
-
-// GetBridgeStatus calls paladin.admin.v1.MCPInspectService.GetBridgeStatus.
-func (c *mCPInspectServiceClient) GetBridgeStatus(ctx context.Context, req *connect.Request[v1.GetBridgeStatusRequest]) (*connect.Response[v1.GetBridgeStatusResponse], error) {
-	return c.getBridgeStatus.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewMCPInspectServiceClient(client *connect.Client) MCPInspectServiceClient {
+	return &mCPInspectServiceClient{client: client}
 }
 
 // MCPInspectServiceHandler is an implementation of the paladin.admin.v1.MCPInspectService service.
 type MCPInspectServiceHandler interface {
 	// Inspect reports the MCP server's effective configuration: the active
 	// profile, the tool catalog it exposes, and the upstream planes it dials.
-	Inspect(context.Context, *connect.Request[v1.MCPInspectRequest]) (*connect.Response[v1.MCPInspectResponse], error)
+	Inspect(context.Context, *v1.MCPInspectRequest) (*v1.MCPInspectResponse, error)
 	// ListSessions returns the live MCP streamable-HTTP sessions tracked by the
 	// bridge (id, agent, activity counts). Unlike Inspect (config-derived,
 	// stateless) this reflects live process state that lives in the MCP server,
 	// so the admin plane proxies the call to the MCP server's own /sessions
 	// endpoint. Returns an empty list when the MCP server is unconfigured or
 	// unreachable. Platform-admin only.
-	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	ListSessions(context.Context, *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error)
 	// GetBridgeStatus reports what only the MCP server can answer: whether it
 	// can currently reach the planes it proxies to, and how many sessions it
 	// holds.
@@ -151,62 +117,97 @@ type MCPInspectServiceHandler interface {
 	// an operator opens when something is wrong. This call distinguishes them:
 	// `reachable` is the bridge's own answer, and `error` says why when it is
 	// not. Platform-admin only.
-	GetBridgeStatus(context.Context, *connect.Request[v1.GetBridgeStatusRequest]) (*connect.Response[v1.GetBridgeStatusResponse], error)
+	GetBridgeStatus(context.Context, *v1.GetBridgeStatusRequest) (*v1.GetBridgeStatusResponse, error)
 }
 
-// NewMCPInspectServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewMCPInspectServiceHandler(svc MCPInspectServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	mCPInspectServiceMethods := v1.File_paladin_admin_v1_mcp_inspect_service_proto.Services().ByName("MCPInspectService").Methods()
-	mCPInspectServiceInspectHandler := connect.NewUnaryHandler(
-		MCPInspectServiceInspectProcedure,
-		svc.Inspect,
-		connect.WithSchema(mCPInspectServiceMethods.ByName("Inspect")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterMCPInspectServiceHandler registers svc as the paladin.admin.v1.MCPInspectService
+// implementation on server.
+func RegisterMCPInspectServiceHandler(server *connect.Server, svc MCPInspectServiceHandler) {
+	adapter := mCPInspectServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: mCPInspectServiceInspectSpec(), Handler: adapter.inspect},
+		connect.Method{Spec: mCPInspectServiceListSessionsSpec(), Handler: adapter.listSessions},
+		connect.Method{Spec: mCPInspectServiceGetBridgeStatusSpec(), Handler: adapter.getBridgeStatus},
 	)
-	mCPInspectServiceListSessionsHandler := connect.NewUnaryHandler(
-		MCPInspectServiceListSessionsProcedure,
-		svc.ListSessions,
-		connect.WithSchema(mCPInspectServiceMethods.ByName("ListSessions")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	mCPInspectServiceGetBridgeStatusHandler := connect.NewUnaryHandler(
-		MCPInspectServiceGetBridgeStatusProcedure,
-		svc.GetBridgeStatus,
-		connect.WithSchema(mCPInspectServiceMethods.ByName("GetBridgeStatus")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.admin.v1.MCPInspectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case MCPInspectServiceInspectProcedure:
-			mCPInspectServiceInspectHandler.ServeHTTP(w, r)
-		case MCPInspectServiceListSessionsProcedure:
-			mCPInspectServiceListSessionsHandler.ServeHTTP(w, r)
-		case MCPInspectServiceGetBridgeStatusProcedure:
-			mCPInspectServiceGetBridgeStatusHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedMCPInspectServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedMCPInspectServiceHandler struct{}
 
-func (UnimplementedMCPInspectServiceHandler) Inspect(context.Context, *connect.Request[v1.MCPInspectRequest]) (*connect.Response[v1.MCPInspectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.MCPInspectService.Inspect is not implemented"))
+func (UnimplementedMCPInspectServiceHandler) Inspect(context.Context, *v1.MCPInspectRequest) (*v1.MCPInspectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.MCPInspectService.Inspect is not implemented")
 }
 
-func (UnimplementedMCPInspectServiceHandler) ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.MCPInspectService.ListSessions is not implemented"))
+func (UnimplementedMCPInspectServiceHandler) ListSessions(context.Context, *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.MCPInspectService.ListSessions is not implemented")
 }
 
-func (UnimplementedMCPInspectServiceHandler) GetBridgeStatus(context.Context, *connect.Request[v1.GetBridgeStatusRequest]) (*connect.Response[v1.GetBridgeStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.MCPInspectService.GetBridgeStatus is not implemented"))
+func (UnimplementedMCPInspectServiceHandler) GetBridgeStatus(context.Context, *v1.GetBridgeStatusRequest) (*v1.GetBridgeStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.MCPInspectService.GetBridgeStatus is not implemented")
+}
+
+type mCPInspectServiceClient struct {
+	client *connect.Client
+}
+
+func (c *mCPInspectServiceClient) Inspect(ctx context.Context, req *v1.MCPInspectRequest) (*v1.MCPInspectResponse, error) {
+	var res v1.MCPInspectResponse
+	if err := c.client.CallUnary(ctx, mCPInspectServiceInspectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *mCPInspectServiceClient) ListSessions(ctx context.Context, req *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error) {
+	var res v1.ListSessionsResponse
+	if err := c.client.CallUnary(ctx, mCPInspectServiceListSessionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *mCPInspectServiceClient) GetBridgeStatus(ctx context.Context, req *v1.GetBridgeStatusRequest) (*v1.GetBridgeStatusResponse, error) {
+	var res v1.GetBridgeStatusResponse
+	if err := c.client.CallUnary(ctx, mCPInspectServiceGetBridgeStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type mCPInspectServiceHandler struct{ svc MCPInspectServiceHandler }
+
+func (h mCPInspectServiceHandler) inspect(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MCPInspectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Inspect(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h mCPInspectServiceHandler) listSessions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSessionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSessions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h mCPInspectServiceHandler) getBridgeStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetBridgeStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetBridgeStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

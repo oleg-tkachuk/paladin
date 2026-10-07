@@ -6,181 +6,183 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AuditLogServiceName is the fully-qualified name of the AuditLogService service.
 	AuditLogServiceName = "paladin.admin.v1.AuditLogService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AuditLogServiceListAuditLogProcedure is the fully-qualified name of the AuditLogService's
-	// ListAuditLog RPC.
+	// AuditLogServiceListAuditLogProcedure is the procedure name of the AuditLogService's ListAuditLog
+	// RPC.
 	AuditLogServiceListAuditLogProcedure = "/paladin.admin.v1.AuditLogService/ListAuditLog"
-	// AuditLogServiceGetAuditLogEntryProcedure is the fully-qualified name of the AuditLogService's
+	// AuditLogServiceGetAuditLogEntryProcedure is the procedure name of the AuditLogService's
 	// GetAuditLogEntry RPC.
 	AuditLogServiceGetAuditLogEntryProcedure = "/paladin.admin.v1.AuditLogService/GetAuditLogEntry"
-	// AuditLogServiceExportAuditLogProcedure is the fully-qualified name of the AuditLogService's
+	// AuditLogServiceExportAuditLogProcedure is the procedure name of the AuditLogService's
 	// ExportAuditLog RPC.
 	AuditLogServiceExportAuditLogProcedure = "/paladin.admin.v1.AuditLogService/ExportAuditLog"
+)
+
+var (
+	auditLogServiceListAuditLogSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_audit_service_proto.Services().ByName("AuditLogService").Methods().ByName("ListAuditLog"),
+			Procedure:        AuditLogServiceListAuditLogProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	auditLogServiceGetAuditLogEntrySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_audit_service_proto.Services().ByName("AuditLogService").Methods().ByName("GetAuditLogEntry"),
+			Procedure:        AuditLogServiceGetAuditLogEntryProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	auditLogServiceExportAuditLogSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_audit_service_proto.Services().ByName("AuditLogService").Methods().ByName("ExportAuditLog"),
+			Procedure:        AuditLogServiceExportAuditLogProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // AuditLogServiceClient is a client for the paladin.admin.v1.AuditLogService service.
 type AuditLogServiceClient interface {
 	// ListAuditLog returns audit entries newest-first. The log is append-only:
 	// there is no RPC that mutates or deletes an entry.
-	ListAuditLog(context.Context, *connect.Request[v1.ListAuditLogRequest]) (*connect.Response[v1.ListAuditLogResponse], error)
+	ListAuditLog(context.Context, *v1.ListAuditLogRequest) (*v1.ListAuditLogResponse, error)
 	// GetAuditLogEntry returns a single entry by id, including the full request
 	// context recorded at the time.
-	GetAuditLogEntry(context.Context, *connect.Request[v1.GetAuditLogEntryRequest]) (*connect.Response[v1.AuditLogEntry], error)
+	GetAuditLogEntry(context.Context, *v1.GetAuditLogEntryRequest) (*v1.AuditLogEntry, error)
 	// ExportAuditLog emits entries to a sink (S3 object, webhook batch).
 	// Returns an Operation whose response contains the export location.
-	ExportAuditLog(context.Context, *connect.Request[v1.ExportAuditLogRequest]) (*connect.Response[v1.Operation], error)
+	ExportAuditLog(context.Context, *v1.ExportAuditLogRequest) (*v1.Operation, error)
 }
 
-// NewAuditLogServiceClient constructs a client for the paladin.admin.v1.AuditLogService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewAuditLogServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AuditLogServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	auditLogServiceMethods := v1.File_paladin_admin_v1_audit_service_proto.Services().ByName("AuditLogService").Methods()
-	return &auditLogServiceClient{
-		listAuditLog: connect.NewClient[v1.ListAuditLogRequest, v1.ListAuditLogResponse](
-			httpClient,
-			baseURL+AuditLogServiceListAuditLogProcedure,
-			connect.WithSchema(auditLogServiceMethods.ByName("ListAuditLog")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		getAuditLogEntry: connect.NewClient[v1.GetAuditLogEntryRequest, v1.AuditLogEntry](
-			httpClient,
-			baseURL+AuditLogServiceGetAuditLogEntryProcedure,
-			connect.WithSchema(auditLogServiceMethods.ByName("GetAuditLogEntry")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		exportAuditLog: connect.NewClient[v1.ExportAuditLogRequest, v1.Operation](
-			httpClient,
-			baseURL+AuditLogServiceExportAuditLogProcedure,
-			connect.WithSchema(auditLogServiceMethods.ByName("ExportAuditLog")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// auditLogServiceClient implements AuditLogServiceClient.
-type auditLogServiceClient struct {
-	listAuditLog     *connect.Client[v1.ListAuditLogRequest, v1.ListAuditLogResponse]
-	getAuditLogEntry *connect.Client[v1.GetAuditLogEntryRequest, v1.AuditLogEntry]
-	exportAuditLog   *connect.Client[v1.ExportAuditLogRequest, v1.Operation]
-}
-
-// ListAuditLog calls paladin.admin.v1.AuditLogService.ListAuditLog.
-func (c *auditLogServiceClient) ListAuditLog(ctx context.Context, req *connect.Request[v1.ListAuditLogRequest]) (*connect.Response[v1.ListAuditLogResponse], error) {
-	return c.listAuditLog.CallUnary(ctx, req)
-}
-
-// GetAuditLogEntry calls paladin.admin.v1.AuditLogService.GetAuditLogEntry.
-func (c *auditLogServiceClient) GetAuditLogEntry(ctx context.Context, req *connect.Request[v1.GetAuditLogEntryRequest]) (*connect.Response[v1.AuditLogEntry], error) {
-	return c.getAuditLogEntry.CallUnary(ctx, req)
-}
-
-// ExportAuditLog calls paladin.admin.v1.AuditLogService.ExportAuditLog.
-func (c *auditLogServiceClient) ExportAuditLog(ctx context.Context, req *connect.Request[v1.ExportAuditLogRequest]) (*connect.Response[v1.Operation], error) {
-	return c.exportAuditLog.CallUnary(ctx, req)
+// NewAuditLogServiceClient constructs a client for the paladin.admin.v1.AuditLogService service.
+// Multiple service clients may share a single connect.Client.
+func NewAuditLogServiceClient(client *connect.Client) AuditLogServiceClient {
+	return &auditLogServiceClient{client: client}
 }
 
 // AuditLogServiceHandler is an implementation of the paladin.admin.v1.AuditLogService service.
 type AuditLogServiceHandler interface {
 	// ListAuditLog returns audit entries newest-first. The log is append-only:
 	// there is no RPC that mutates or deletes an entry.
-	ListAuditLog(context.Context, *connect.Request[v1.ListAuditLogRequest]) (*connect.Response[v1.ListAuditLogResponse], error)
+	ListAuditLog(context.Context, *v1.ListAuditLogRequest) (*v1.ListAuditLogResponse, error)
 	// GetAuditLogEntry returns a single entry by id, including the full request
 	// context recorded at the time.
-	GetAuditLogEntry(context.Context, *connect.Request[v1.GetAuditLogEntryRequest]) (*connect.Response[v1.AuditLogEntry], error)
+	GetAuditLogEntry(context.Context, *v1.GetAuditLogEntryRequest) (*v1.AuditLogEntry, error)
 	// ExportAuditLog emits entries to a sink (S3 object, webhook batch).
 	// Returns an Operation whose response contains the export location.
-	ExportAuditLog(context.Context, *connect.Request[v1.ExportAuditLogRequest]) (*connect.Response[v1.Operation], error)
+	ExportAuditLog(context.Context, *v1.ExportAuditLogRequest) (*v1.Operation, error)
 }
 
-// NewAuditLogServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewAuditLogServiceHandler(svc AuditLogServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	auditLogServiceMethods := v1.File_paladin_admin_v1_audit_service_proto.Services().ByName("AuditLogService").Methods()
-	auditLogServiceListAuditLogHandler := connect.NewUnaryHandler(
-		AuditLogServiceListAuditLogProcedure,
-		svc.ListAuditLog,
-		connect.WithSchema(auditLogServiceMethods.ByName("ListAuditLog")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterAuditLogServiceHandler registers svc as the paladin.admin.v1.AuditLogService
+// implementation on server.
+func RegisterAuditLogServiceHandler(server *connect.Server, svc AuditLogServiceHandler) {
+	adapter := auditLogServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: auditLogServiceListAuditLogSpec(), Handler: adapter.listAuditLog},
+		connect.Method{Spec: auditLogServiceGetAuditLogEntrySpec(), Handler: adapter.getAuditLogEntry},
+		connect.Method{Spec: auditLogServiceExportAuditLogSpec(), Handler: adapter.exportAuditLog},
 	)
-	auditLogServiceGetAuditLogEntryHandler := connect.NewUnaryHandler(
-		AuditLogServiceGetAuditLogEntryProcedure,
-		svc.GetAuditLogEntry,
-		connect.WithSchema(auditLogServiceMethods.ByName("GetAuditLogEntry")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	auditLogServiceExportAuditLogHandler := connect.NewUnaryHandler(
-		AuditLogServiceExportAuditLogProcedure,
-		svc.ExportAuditLog,
-		connect.WithSchema(auditLogServiceMethods.ByName("ExportAuditLog")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.admin.v1.AuditLogService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case AuditLogServiceListAuditLogProcedure:
-			auditLogServiceListAuditLogHandler.ServeHTTP(w, r)
-		case AuditLogServiceGetAuditLogEntryProcedure:
-			auditLogServiceGetAuditLogEntryHandler.ServeHTTP(w, r)
-		case AuditLogServiceExportAuditLogProcedure:
-			auditLogServiceExportAuditLogHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedAuditLogServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAuditLogServiceHandler struct{}
 
-func (UnimplementedAuditLogServiceHandler) ListAuditLog(context.Context, *connect.Request[v1.ListAuditLogRequest]) (*connect.Response[v1.ListAuditLogResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.AuditLogService.ListAuditLog is not implemented"))
+func (UnimplementedAuditLogServiceHandler) ListAuditLog(context.Context, *v1.ListAuditLogRequest) (*v1.ListAuditLogResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.AuditLogService.ListAuditLog is not implemented")
 }
 
-func (UnimplementedAuditLogServiceHandler) GetAuditLogEntry(context.Context, *connect.Request[v1.GetAuditLogEntryRequest]) (*connect.Response[v1.AuditLogEntry], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.AuditLogService.GetAuditLogEntry is not implemented"))
+func (UnimplementedAuditLogServiceHandler) GetAuditLogEntry(context.Context, *v1.GetAuditLogEntryRequest) (*v1.AuditLogEntry, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.AuditLogService.GetAuditLogEntry is not implemented")
 }
 
-func (UnimplementedAuditLogServiceHandler) ExportAuditLog(context.Context, *connect.Request[v1.ExportAuditLogRequest]) (*connect.Response[v1.Operation], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.AuditLogService.ExportAuditLog is not implemented"))
+func (UnimplementedAuditLogServiceHandler) ExportAuditLog(context.Context, *v1.ExportAuditLogRequest) (*v1.Operation, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.AuditLogService.ExportAuditLog is not implemented")
+}
+
+type auditLogServiceClient struct {
+	client *connect.Client
+}
+
+func (c *auditLogServiceClient) ListAuditLog(ctx context.Context, req *v1.ListAuditLogRequest) (*v1.ListAuditLogResponse, error) {
+	var res v1.ListAuditLogResponse
+	if err := c.client.CallUnary(ctx, auditLogServiceListAuditLogSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *auditLogServiceClient) GetAuditLogEntry(ctx context.Context, req *v1.GetAuditLogEntryRequest) (*v1.AuditLogEntry, error) {
+	var res v1.AuditLogEntry
+	if err := c.client.CallUnary(ctx, auditLogServiceGetAuditLogEntrySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *auditLogServiceClient) ExportAuditLog(ctx context.Context, req *v1.ExportAuditLogRequest) (*v1.Operation, error) {
+	var res v1.Operation
+	if err := c.client.CallUnary(ctx, auditLogServiceExportAuditLogSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type auditLogServiceHandler struct{ svc AuditLogServiceHandler }
+
+func (h auditLogServiceHandler) listAuditLog(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListAuditLogRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListAuditLog(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h auditLogServiceHandler) getAuditLogEntry(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetAuditLogEntryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetAuditLogEntry(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h auditLogServiceHandler) exportAuditLog(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ExportAuditLogRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ExportAuditLog(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

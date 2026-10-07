@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -117,7 +117,7 @@ func TestTheFakeRefusesAKeyReusedForAnotherRequest(t *testing.T) {
 	// the key the way the SDK's helpers now do.
 	ctx := paladin.WithIdempotencyKey(context.Background(), operationKey)
 	call := func(name string) error {
-		_, err := p.Data.Object.DownloadObject(ctx, connect.NewRequest(&datav1.DownloadObjectRequest{Name: name}))
+		_, err := p.Data.Object.DownloadObject(ctx, &datav1.DownloadObjectRequest{Name: name})
 		return err
 	}
 	if err := call(a.GetName()); err != nil {

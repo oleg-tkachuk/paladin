@@ -6,344 +6,380 @@ package paladiniamv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// UserServiceName is the fully-qualified name of the UserService service.
 	UserServiceName = "paladin.iam.v1.UserService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// UserServiceCreateUserProcedure is the fully-qualified name of the UserService's CreateUser RPC.
+	// UserServiceCreateUserProcedure is the procedure name of the UserService's CreateUser RPC.
 	UserServiceCreateUserProcedure = "/paladin.iam.v1.UserService/CreateUser"
-	// UserServiceGetUserProcedure is the fully-qualified name of the UserService's GetUser RPC.
+	// UserServiceGetUserProcedure is the procedure name of the UserService's GetUser RPC.
 	UserServiceGetUserProcedure = "/paladin.iam.v1.UserService/GetUser"
-	// UserServiceUpdateUserProcedure is the fully-qualified name of the UserService's UpdateUser RPC.
+	// UserServiceUpdateUserProcedure is the procedure name of the UserService's UpdateUser RPC.
 	UserServiceUpdateUserProcedure = "/paladin.iam.v1.UserService/UpdateUser"
-	// UserServiceDeleteUserProcedure is the fully-qualified name of the UserService's DeleteUser RPC.
+	// UserServiceDeleteUserProcedure is the procedure name of the UserService's DeleteUser RPC.
 	UserServiceDeleteUserProcedure = "/paladin.iam.v1.UserService/DeleteUser"
-	// UserServiceListUsersProcedure is the fully-qualified name of the UserService's ListUsers RPC.
+	// UserServiceListUsersProcedure is the procedure name of the UserService's ListUsers RPC.
 	UserServiceListUsersProcedure = "/paladin.iam.v1.UserService/ListUsers"
-	// UserServiceGrantScopesProcedure is the fully-qualified name of the UserService's GrantScopes RPC.
+	// UserServiceGrantScopesProcedure is the procedure name of the UserService's GrantScopes RPC.
 	UserServiceGrantScopesProcedure = "/paladin.iam.v1.UserService/GrantScopes"
-	// UserServiceRevokeScopesProcedure is the fully-qualified name of the UserService's RevokeScopes
-	// RPC.
+	// UserServiceRevokeScopesProcedure is the procedure name of the UserService's RevokeScopes RPC.
 	UserServiceRevokeScopesProcedure = "/paladin.iam.v1.UserService/RevokeScopes"
-	// UserServiceResetPasswordProcedure is the fully-qualified name of the UserService's ResetPassword
-	// RPC.
+	// UserServiceResetPasswordProcedure is the procedure name of the UserService's ResetPassword RPC.
 	UserServiceResetPasswordProcedure = "/paladin.iam.v1.UserService/ResetPassword"
+)
+
+var (
+	userServiceCreateUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods().ByName("CreateUser"),
+			Procedure:  UserServiceCreateUserProcedure,
+		}
+	})
+	userServiceGetUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods().ByName("GetUser"),
+			Procedure:        UserServiceGetUserProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	userServiceUpdateUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods().ByName("UpdateUser"),
+			Procedure:        UserServiceUpdateUserProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	userServiceDeleteUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods().ByName("DeleteUser"),
+			Procedure:        UserServiceDeleteUserProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	userServiceListUsersSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods().ByName("ListUsers"),
+			Procedure:        UserServiceListUsersProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	userServiceGrantScopesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods().ByName("GrantScopes"),
+			Procedure:        UserServiceGrantScopesProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	userServiceRevokeScopesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods().ByName("RevokeScopes"),
+			Procedure:        UserServiceRevokeScopesProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	userServiceResetPasswordSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods().ByName("ResetPassword"),
+			Procedure:        UserServiceResetPasswordProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 )
 
 // UserServiceClient is a client for the paladin.iam.v1.UserService service.
 type UserServiceClient interface {
 	// CreateUser adds a user to a tenant. The initial password is returned once
 	// and never again — it is not recoverable from any later read.
-	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.User], error)
+	CreateUser(context.Context, *v1.CreateUserRequest) (*v1.User, error)
 	// GetUser returns the user. The password hash is never included.
-	GetUser(context.Context, *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.User], error)
+	GetUser(context.Context, *v1.GetUserRequest) (*v1.User, error)
 	// UpdateUser applies update_mask to display_name, roles, scopes and disabled.
 	// tenant_id is immutable; the password has its own RPC.
-	UpdateUser(context.Context, *connect.Request[v1.UpdateUserRequest]) (*connect.Response[v1.User], error)
+	UpdateUser(context.Context, *v1.UpdateUserRequest) (*v1.User, error)
 	// DeleteUser removes the user's membership in one tenant. A subject that
 	// belongs to several tenants keeps the others.
-	DeleteUser(context.Context, *connect.Request[v1.DeleteUserRequest]) (*connect.Response[v1.DeleteUserResponse], error)
+	DeleteUser(context.Context, *v1.DeleteUserRequest) (*v1.DeleteUserResponse, error)
 	// ListUsers pages the users in a tenant.
-	ListUsers(context.Context, *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error)
+	ListUsers(context.Context, *v1.ListUsersRequest) (*v1.ListUsersResponse, error)
 	// GrantScopes / RevokeScopes are single-purpose RPCs (cleaner audit trail
 	// than UpdateUser with a scopes field).
-	GrantScopes(context.Context, *connect.Request[v1.GrantScopesRequest]) (*connect.Response[v1.User], error)
+	GrantScopes(context.Context, *v1.GrantScopesRequest) (*v1.User, error)
 	// RevokeScopes removes the named scopes from the user. Tokens already issued
 	// keep their scopes until they expire — this changes what the next token
 	// will carry.
-	RevokeScopes(context.Context, *connect.Request[v1.RevokeScopesRequest]) (*connect.Response[v1.User], error)
+	RevokeScopes(context.Context, *v1.RevokeScopesRequest) (*v1.User, error)
 	// ResetPassword forces a password change on next login. Local IdP only.
-	ResetPassword(context.Context, *connect.Request[v1.ResetPasswordRequest]) (*connect.Response[v1.ResetPasswordResponse], error)
+	ResetPassword(context.Context, *v1.ResetPasswordRequest) (*v1.ResetPasswordResponse, error)
 }
 
-// NewUserServiceClient constructs a client for the paladin.iam.v1.UserService service. By default,
-// it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and
-// sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC()
-// or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewUserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) UserServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	userServiceMethods := v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods()
-	return &userServiceClient{
-		createUser: connect.NewClient[v1.CreateUserRequest, v1.User](
-			httpClient,
-			baseURL+UserServiceCreateUserProcedure,
-			connect.WithSchema(userServiceMethods.ByName("CreateUser")),
-			connect.WithClientOptions(opts...),
-		),
-		getUser: connect.NewClient[v1.GetUserRequest, v1.User](
-			httpClient,
-			baseURL+UserServiceGetUserProcedure,
-			connect.WithSchema(userServiceMethods.ByName("GetUser")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		updateUser: connect.NewClient[v1.UpdateUserRequest, v1.User](
-			httpClient,
-			baseURL+UserServiceUpdateUserProcedure,
-			connect.WithSchema(userServiceMethods.ByName("UpdateUser")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		deleteUser: connect.NewClient[v1.DeleteUserRequest, v1.DeleteUserResponse](
-			httpClient,
-			baseURL+UserServiceDeleteUserProcedure,
-			connect.WithSchema(userServiceMethods.ByName("DeleteUser")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		listUsers: connect.NewClient[v1.ListUsersRequest, v1.ListUsersResponse](
-			httpClient,
-			baseURL+UserServiceListUsersProcedure,
-			connect.WithSchema(userServiceMethods.ByName("ListUsers")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		grantScopes: connect.NewClient[v1.GrantScopesRequest, v1.User](
-			httpClient,
-			baseURL+UserServiceGrantScopesProcedure,
-			connect.WithSchema(userServiceMethods.ByName("GrantScopes")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		revokeScopes: connect.NewClient[v1.RevokeScopesRequest, v1.User](
-			httpClient,
-			baseURL+UserServiceRevokeScopesProcedure,
-			connect.WithSchema(userServiceMethods.ByName("RevokeScopes")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		resetPassword: connect.NewClient[v1.ResetPasswordRequest, v1.ResetPasswordResponse](
-			httpClient,
-			baseURL+UserServiceResetPasswordProcedure,
-			connect.WithSchema(userServiceMethods.ByName("ResetPassword")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// userServiceClient implements UserServiceClient.
-type userServiceClient struct {
-	createUser    *connect.Client[v1.CreateUserRequest, v1.User]
-	getUser       *connect.Client[v1.GetUserRequest, v1.User]
-	updateUser    *connect.Client[v1.UpdateUserRequest, v1.User]
-	deleteUser    *connect.Client[v1.DeleteUserRequest, v1.DeleteUserResponse]
-	listUsers     *connect.Client[v1.ListUsersRequest, v1.ListUsersResponse]
-	grantScopes   *connect.Client[v1.GrantScopesRequest, v1.User]
-	revokeScopes  *connect.Client[v1.RevokeScopesRequest, v1.User]
-	resetPassword *connect.Client[v1.ResetPasswordRequest, v1.ResetPasswordResponse]
-}
-
-// CreateUser calls paladin.iam.v1.UserService.CreateUser.
-func (c *userServiceClient) CreateUser(ctx context.Context, req *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.User], error) {
-	return c.createUser.CallUnary(ctx, req)
-}
-
-// GetUser calls paladin.iam.v1.UserService.GetUser.
-func (c *userServiceClient) GetUser(ctx context.Context, req *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.User], error) {
-	return c.getUser.CallUnary(ctx, req)
-}
-
-// UpdateUser calls paladin.iam.v1.UserService.UpdateUser.
-func (c *userServiceClient) UpdateUser(ctx context.Context, req *connect.Request[v1.UpdateUserRequest]) (*connect.Response[v1.User], error) {
-	return c.updateUser.CallUnary(ctx, req)
-}
-
-// DeleteUser calls paladin.iam.v1.UserService.DeleteUser.
-func (c *userServiceClient) DeleteUser(ctx context.Context, req *connect.Request[v1.DeleteUserRequest]) (*connect.Response[v1.DeleteUserResponse], error) {
-	return c.deleteUser.CallUnary(ctx, req)
-}
-
-// ListUsers calls paladin.iam.v1.UserService.ListUsers.
-func (c *userServiceClient) ListUsers(ctx context.Context, req *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error) {
-	return c.listUsers.CallUnary(ctx, req)
-}
-
-// GrantScopes calls paladin.iam.v1.UserService.GrantScopes.
-func (c *userServiceClient) GrantScopes(ctx context.Context, req *connect.Request[v1.GrantScopesRequest]) (*connect.Response[v1.User], error) {
-	return c.grantScopes.CallUnary(ctx, req)
-}
-
-// RevokeScopes calls paladin.iam.v1.UserService.RevokeScopes.
-func (c *userServiceClient) RevokeScopes(ctx context.Context, req *connect.Request[v1.RevokeScopesRequest]) (*connect.Response[v1.User], error) {
-	return c.revokeScopes.CallUnary(ctx, req)
-}
-
-// ResetPassword calls paladin.iam.v1.UserService.ResetPassword.
-func (c *userServiceClient) ResetPassword(ctx context.Context, req *connect.Request[v1.ResetPasswordRequest]) (*connect.Response[v1.ResetPasswordResponse], error) {
-	return c.resetPassword.CallUnary(ctx, req)
+// NewUserServiceClient constructs a client for the paladin.iam.v1.UserService service. Multiple
+// service clients may share a single connect.Client.
+func NewUserServiceClient(client *connect.Client) UserServiceClient {
+	return &userServiceClient{client: client}
 }
 
 // UserServiceHandler is an implementation of the paladin.iam.v1.UserService service.
 type UserServiceHandler interface {
 	// CreateUser adds a user to a tenant. The initial password is returned once
 	// and never again — it is not recoverable from any later read.
-	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.User], error)
+	CreateUser(context.Context, *v1.CreateUserRequest) (*v1.User, error)
 	// GetUser returns the user. The password hash is never included.
-	GetUser(context.Context, *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.User], error)
+	GetUser(context.Context, *v1.GetUserRequest) (*v1.User, error)
 	// UpdateUser applies update_mask to display_name, roles, scopes and disabled.
 	// tenant_id is immutable; the password has its own RPC.
-	UpdateUser(context.Context, *connect.Request[v1.UpdateUserRequest]) (*connect.Response[v1.User], error)
+	UpdateUser(context.Context, *v1.UpdateUserRequest) (*v1.User, error)
 	// DeleteUser removes the user's membership in one tenant. A subject that
 	// belongs to several tenants keeps the others.
-	DeleteUser(context.Context, *connect.Request[v1.DeleteUserRequest]) (*connect.Response[v1.DeleteUserResponse], error)
+	DeleteUser(context.Context, *v1.DeleteUserRequest) (*v1.DeleteUserResponse, error)
 	// ListUsers pages the users in a tenant.
-	ListUsers(context.Context, *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error)
+	ListUsers(context.Context, *v1.ListUsersRequest) (*v1.ListUsersResponse, error)
 	// GrantScopes / RevokeScopes are single-purpose RPCs (cleaner audit trail
 	// than UpdateUser with a scopes field).
-	GrantScopes(context.Context, *connect.Request[v1.GrantScopesRequest]) (*connect.Response[v1.User], error)
+	GrantScopes(context.Context, *v1.GrantScopesRequest) (*v1.User, error)
 	// RevokeScopes removes the named scopes from the user. Tokens already issued
 	// keep their scopes until they expire — this changes what the next token
 	// will carry.
-	RevokeScopes(context.Context, *connect.Request[v1.RevokeScopesRequest]) (*connect.Response[v1.User], error)
+	RevokeScopes(context.Context, *v1.RevokeScopesRequest) (*v1.User, error)
 	// ResetPassword forces a password change on next login. Local IdP only.
-	ResetPassword(context.Context, *connect.Request[v1.ResetPasswordRequest]) (*connect.Response[v1.ResetPasswordResponse], error)
+	ResetPassword(context.Context, *v1.ResetPasswordRequest) (*v1.ResetPasswordResponse, error)
 }
 
-// NewUserServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	userServiceMethods := v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods()
-	userServiceCreateUserHandler := connect.NewUnaryHandler(
-		UserServiceCreateUserProcedure,
-		svc.CreateUser,
-		connect.WithSchema(userServiceMethods.ByName("CreateUser")),
-		connect.WithHandlerOptions(opts...),
+// RegisterUserServiceHandler registers svc as the paladin.iam.v1.UserService implementation on
+// server.
+func RegisterUserServiceHandler(server *connect.Server, svc UserServiceHandler) {
+	adapter := userServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: userServiceCreateUserSpec(), Handler: adapter.createUser},
+		connect.Method{Spec: userServiceGetUserSpec(), Handler: adapter.getUser},
+		connect.Method{Spec: userServiceUpdateUserSpec(), Handler: adapter.updateUser},
+		connect.Method{Spec: userServiceDeleteUserSpec(), Handler: adapter.deleteUser},
+		connect.Method{Spec: userServiceListUsersSpec(), Handler: adapter.listUsers},
+		connect.Method{Spec: userServiceGrantScopesSpec(), Handler: adapter.grantScopes},
+		connect.Method{Spec: userServiceRevokeScopesSpec(), Handler: adapter.revokeScopes},
+		connect.Method{Spec: userServiceResetPasswordSpec(), Handler: adapter.resetPassword},
 	)
-	userServiceGetUserHandler := connect.NewUnaryHandler(
-		UserServiceGetUserProcedure,
-		svc.GetUser,
-		connect.WithSchema(userServiceMethods.ByName("GetUser")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceUpdateUserHandler := connect.NewUnaryHandler(
-		UserServiceUpdateUserProcedure,
-		svc.UpdateUser,
-		connect.WithSchema(userServiceMethods.ByName("UpdateUser")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceDeleteUserHandler := connect.NewUnaryHandler(
-		UserServiceDeleteUserProcedure,
-		svc.DeleteUser,
-		connect.WithSchema(userServiceMethods.ByName("DeleteUser")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceListUsersHandler := connect.NewUnaryHandler(
-		UserServiceListUsersProcedure,
-		svc.ListUsers,
-		connect.WithSchema(userServiceMethods.ByName("ListUsers")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceGrantScopesHandler := connect.NewUnaryHandler(
-		UserServiceGrantScopesProcedure,
-		svc.GrantScopes,
-		connect.WithSchema(userServiceMethods.ByName("GrantScopes")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceRevokeScopesHandler := connect.NewUnaryHandler(
-		UserServiceRevokeScopesProcedure,
-		svc.RevokeScopes,
-		connect.WithSchema(userServiceMethods.ByName("RevokeScopes")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceResetPasswordHandler := connect.NewUnaryHandler(
-		UserServiceResetPasswordProcedure,
-		svc.ResetPassword,
-		connect.WithSchema(userServiceMethods.ByName("ResetPassword")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.iam.v1.UserService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case UserServiceCreateUserProcedure:
-			userServiceCreateUserHandler.ServeHTTP(w, r)
-		case UserServiceGetUserProcedure:
-			userServiceGetUserHandler.ServeHTTP(w, r)
-		case UserServiceUpdateUserProcedure:
-			userServiceUpdateUserHandler.ServeHTTP(w, r)
-		case UserServiceDeleteUserProcedure:
-			userServiceDeleteUserHandler.ServeHTTP(w, r)
-		case UserServiceListUsersProcedure:
-			userServiceListUsersHandler.ServeHTTP(w, r)
-		case UserServiceGrantScopesProcedure:
-			userServiceGrantScopesHandler.ServeHTTP(w, r)
-		case UserServiceRevokeScopesProcedure:
-			userServiceRevokeScopesHandler.ServeHTTP(w, r)
-		case UserServiceResetPasswordProcedure:
-			userServiceResetPasswordHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedUserServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedUserServiceHandler struct{}
 
-func (UnimplementedUserServiceHandler) CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.User], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserService.CreateUser is not implemented"))
+func (UnimplementedUserServiceHandler) CreateUser(context.Context, *v1.CreateUserRequest) (*v1.User, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.CreateUser is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) GetUser(context.Context, *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.User], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserService.GetUser is not implemented"))
+func (UnimplementedUserServiceHandler) GetUser(context.Context, *v1.GetUserRequest) (*v1.User, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.GetUser is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) UpdateUser(context.Context, *connect.Request[v1.UpdateUserRequest]) (*connect.Response[v1.User], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserService.UpdateUser is not implemented"))
+func (UnimplementedUserServiceHandler) UpdateUser(context.Context, *v1.UpdateUserRequest) (*v1.User, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.UpdateUser is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) DeleteUser(context.Context, *connect.Request[v1.DeleteUserRequest]) (*connect.Response[v1.DeleteUserResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserService.DeleteUser is not implemented"))
+func (UnimplementedUserServiceHandler) DeleteUser(context.Context, *v1.DeleteUserRequest) (*v1.DeleteUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.DeleteUser is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) ListUsers(context.Context, *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserService.ListUsers is not implemented"))
+func (UnimplementedUserServiceHandler) ListUsers(context.Context, *v1.ListUsersRequest) (*v1.ListUsersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.ListUsers is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) GrantScopes(context.Context, *connect.Request[v1.GrantScopesRequest]) (*connect.Response[v1.User], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserService.GrantScopes is not implemented"))
+func (UnimplementedUserServiceHandler) GrantScopes(context.Context, *v1.GrantScopesRequest) (*v1.User, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.GrantScopes is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) RevokeScopes(context.Context, *connect.Request[v1.RevokeScopesRequest]) (*connect.Response[v1.User], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserService.RevokeScopes is not implemented"))
+func (UnimplementedUserServiceHandler) RevokeScopes(context.Context, *v1.RevokeScopesRequest) (*v1.User, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.RevokeScopes is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) ResetPassword(context.Context, *connect.Request[v1.ResetPasswordRequest]) (*connect.Response[v1.ResetPasswordResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserService.ResetPassword is not implemented"))
+func (UnimplementedUserServiceHandler) ResetPassword(context.Context, *v1.ResetPasswordRequest) (*v1.ResetPasswordResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.ResetPassword is not implemented")
+}
+
+type userServiceClient struct {
+	client *connect.Client
+}
+
+func (c *userServiceClient) CreateUser(ctx context.Context, req *v1.CreateUserRequest) (*v1.User, error) {
+	var res v1.User
+	if err := c.client.CallUnary(ctx, userServiceCreateUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) GetUser(ctx context.Context, req *v1.GetUserRequest) (*v1.User, error) {
+	var res v1.User
+	if err := c.client.CallUnary(ctx, userServiceGetUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) UpdateUser(ctx context.Context, req *v1.UpdateUserRequest) (*v1.User, error) {
+	var res v1.User
+	if err := c.client.CallUnary(ctx, userServiceUpdateUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) DeleteUser(ctx context.Context, req *v1.DeleteUserRequest) (*v1.DeleteUserResponse, error) {
+	var res v1.DeleteUserResponse
+	if err := c.client.CallUnary(ctx, userServiceDeleteUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) ListUsers(ctx context.Context, req *v1.ListUsersRequest) (*v1.ListUsersResponse, error) {
+	var res v1.ListUsersResponse
+	if err := c.client.CallUnary(ctx, userServiceListUsersSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) GrantScopes(ctx context.Context, req *v1.GrantScopesRequest) (*v1.User, error) {
+	var res v1.User
+	if err := c.client.CallUnary(ctx, userServiceGrantScopesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) RevokeScopes(ctx context.Context, req *v1.RevokeScopesRequest) (*v1.User, error) {
+	var res v1.User
+	if err := c.client.CallUnary(ctx, userServiceRevokeScopesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) ResetPassword(ctx context.Context, req *v1.ResetPasswordRequest) (*v1.ResetPasswordResponse, error) {
+	var res v1.ResetPasswordResponse
+	if err := c.client.CallUnary(ctx, userServiceResetPasswordSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type userServiceHandler struct{ svc UserServiceHandler }
+
+func (h userServiceHandler) createUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) getUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) updateUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) deleteUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) listUsers(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListUsersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListUsers(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) grantScopes(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GrantScopesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GrantScopes(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) revokeScopes(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeScopesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeScopes(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) resetPassword(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResetPasswordRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResetPassword(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

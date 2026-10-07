@@ -89,7 +89,7 @@ func Render() ([]byte, error) {
 		}
 		fmt.Fprintf(&b, "}\n\nfunc new%sPlane(c *Client) *%sPlane {\n\treturn &%sPlane{\n", p.Name, p.Name, p.Name)
 		for _, s := range services {
-			fmt.Fprintf(&b, "\t\t%s: %s.New%sClient(c.httpClient, c.baseURL, c.ClientOptions()...),\n", Field(s), alias, s)
+			fmt.Fprintf(&b, "\t\t%s: %s.New%sClient(c.rpc),\n", Field(s), alias, s)
 		}
 		if p.Transfers {
 			b.WriteString("\t\ttransfer: c.transfer,\n")

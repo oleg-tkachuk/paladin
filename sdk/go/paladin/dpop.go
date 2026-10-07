@@ -17,7 +17,7 @@ import (
 	"net/http"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 // WithDPoP proves possession of key on every call that presents a
@@ -149,7 +149,7 @@ type dpopAuth struct {
 	now     func() time.Time
 }
 
-func (a *dpopAuth) set(h http.Header, procedure string) error {
+func (a *dpopAuth) set(h *connect.Header, procedure string) error {
 	token := h.Get(HeaderCapability)
 	if token == "" {
 		return nil
@@ -162,25 +162,26 @@ func (a *dpopAuth) set(h http.Header, procedure string) error {
 	return nil
 }
 
-func (a *dpopAuth) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if err := a.set(req.Header(), req.Spec().Procedure); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+func (a *dpopAuth) interceptor() connect.ClientInterceptor {
+	return interceptor(a.unary, a.stream)
+}
+
+// unary signs each attempt afresh: innermost, inside the retry interceptor,
+// so a retried call never repeats a proof the server has seen.
+func (a *dpopAuth) unary(next unaryFunc) unaryFunc {
+	return func(ctx context.Context, spec connect.Spec, req, res any) error {
+		if err := a.set(callInfo(ctx).RequestHeader(), spec.Procedure); err != nil {
+			return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
-		return next(ctx, req)
+		return next(ctx, spec, req, res)
 	}
 }
 
-func (a *dpopAuth) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
-		conn := next(ctx, spec)
-		// A stream has nowhere to return the error before it is used; a
-		// missing proof surfaces as the server's PermissionDenied.
-		_ = a.set(conn.RequestHeader(), spec.Procedure)
-		return conn
+func (a *dpopAuth) stream(next connect.ClientFunc) connect.ClientFunc {
+	return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+		if err := a.set(callInfo(ctx).RequestHeader(), spec.Procedure); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		}
+		return next(ctx, spec)
 	}
-}
-
-func (a *dpopAuth) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
 }
