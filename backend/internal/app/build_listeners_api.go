@@ -325,7 +325,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			// nothing. Both scopes cost a point lookup on the upload path —
 			// collections by PK, then quotas by its unique index.
 			middleware.NewQuotaSoftCheck(repos.Quota).WithBucketScope(repos.Object),
-			connect.UnaryInterceptorFunc(validateInterceptor),
+			validateInterceptor,
 			idempotencyInterceptor,
 			// A platform admin's calls inside another tenant only: they are
 			// what that tenant's trail would miss (see AuditActingElsewhere).
@@ -382,7 +382,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			// carry trace and request id without a tenant — which is correct, not
 			// a gap. An anonymous failed login is exactly the line worth finding.
 			middleware.LogContextStreaming(l),
-			connect.UnaryInterceptorFunc(validateInterceptor),
+			validateInterceptor,
 			idempotencyInterceptor,
 		),
 	)

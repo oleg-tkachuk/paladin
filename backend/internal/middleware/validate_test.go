@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+
+	validatepb "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
@@ -73,8 +76,16 @@ func TestInvalidMessageIsRejectedBeforeTheHandler(t *testing.T) {
 	}
 	// The message names the constraint, which is what turns a 400 into
 	// something a caller can act on without reading our proto.
-	if !strings.Contains(err.Error(), "validation failed") {
-		t.Errorf("error %q does not say what failed", err)
+	if !strings.Contains(err.Error(), "name") {
+		t.Errorf("error %q does not name the field", err)
+	}
+	// And the violation travels as data, for a client that acts on it.
+	var cerr *connect.Error
+	if !errors.As(err, &cerr) {
+		t.Fatalf("not a connect error: %v", err)
+	}
+	if !hasViolation(t, cerr, "name") {
+		t.Errorf("no buf.validate.Violations detail naming the field: %v", cerr.Details())
 	}
 	if svc.calls != 0 {
 		t.Errorf("the handler ran %d times for an invalid message — the "+
@@ -99,4 +110,28 @@ func TestValidMessageReachesTheHandler(t *testing.T) {
 	if res.Msg.Name == "" {
 		t.Error("the handler's response did not come back")
 	}
+}
+
+// hasViolation reports whether err carries a buf.validate.Violations detail
+// with a violation on field.
+func hasViolation(t *testing.T, err *connect.Error, field string) bool {
+	t.Helper()
+	for _, d := range err.Details() {
+		msg, derr := d.Value()
+		if derr != nil {
+			t.Fatalf("detail %s: %v", d.Type(), derr)
+		}
+		v, ok := msg.(*validatepb.Violations)
+		if !ok {
+			continue
+		}
+		for _, one := range v.GetViolations() {
+			for _, el := range one.GetField().GetElements() {
+				if el.GetFieldName() == field {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
