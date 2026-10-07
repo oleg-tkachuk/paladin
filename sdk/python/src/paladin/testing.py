@@ -34,6 +34,7 @@ import base64
 import hashlib
 import io
 import json
+import secrets
 import threading
 import uuid
 from collections.abc import Callable, Mapping
@@ -90,6 +91,11 @@ if TYPE_CHECKING:  # annotations only: typing.Self is 3.11+
     from typing_extensions import Self
 
 DEFAULT_COLLECTION = "default"
+DEFAULT_PUBLIC_COLLECTION = "public"
+"""The collection ``public_collection`` names when given none."""
+PUBLIC_CACHE_CONTROL = "public, max-age=31536000, immutable"
+"""What the fake stores every public object with: the server's default for a
+public collection."""
 """The collection ``collection()`` names."""
 PART_SIZE = 5 << 20
 """The part size multipart uploads are told to use."""
@@ -111,6 +117,12 @@ A longer one is refused, not shortened."""
 _LOOPBACK = "127.0.0.1"
 _EPHEMERAL_PORT = 0
 _STORAGE = "/storage/"
+_PUBLIC = "/public/"
+"""Where the fake serves public objects, as a store under a public bucket
+policy does."""
+_PUBLIC_KEY_BYTES = 16
+"""The randomness in a public object's key, as the server draws it."""
+_CACHE_CONTROL = "Cache-Control"
 _PART = "part"
 # Carries a download's Content-Disposition, as S3's presigned GET does.
 _DISPOSITION_QUERY = "response-content-disposition"
@@ -153,6 +165,7 @@ class _Binding:
     checksum: str
     content_type: str = ""
     no_overwrite: bool = False
+    cache_control: str = ""
 
     def headers(self) -> dict[str, str]:
         h = {_CONTENT_LENGTH: str(self.size), _CHECKSUM_SHA256_HEADER: self.checksum}
@@ -160,6 +173,8 @@ class _Binding:
             h[_CONTENT_TYPE] = self.content_type
         if self.no_overwrite:
             h[_IF_NONE_MATCH] = _IF_NONE_MATCH_ANY
+        if self.cache_control:
+            h[_CACHE_CONTROL] = self.cache_control
         return h
 
     def refuses(self, environ: dict[str, Any], body: bytes) -> str:
@@ -196,6 +211,8 @@ class _Object:
     body: bytes | None = None
     put: bytes | None = None
     bound: _Binding | None = None
+    cache_control: str = ""
+    """What a public object is stored with; "" elsewhere."""
 
 
 @dataclass(frozen=True)
@@ -431,6 +448,7 @@ class FakePaladin(
         self._uploads: dict[str, _Multipart] = {}
         self._buckets: set[tuple[str, str]] = set()
         self._bound: set[str] = set()
+        self._public: set[str] = set()
         self._requests: list[Request] = []
         self._fault: StorageFault | None = None
         self._after_store: StorageFault | None = None
@@ -456,6 +474,8 @@ class FakePaladin(
         def route(environ, start_response):  # type: ignore[no-untyped-def]
             if environ["PATH_INFO"].startswith(_STORAGE):
                 return self._storage(environ, start_response)
+            if environ["PATH_INFO"].startswith(_PUBLIC):
+                return self._serve_public(environ, start_response)
             # wsgiref hands over the raw socket, which blocks past the body.
             length = int(environ.get("CONTENT_LENGTH") or 0)
             environ["wsgi.input"] = io.BytesIO(environ["wsgi.input"].read(length))
@@ -489,6 +509,14 @@ class FakePaladin(
         """A collection in the fake's tenant; every collection exists."""
         return CollectionName(self.tenant, name)
 
+    def public_collection(self, name: str = DEFAULT_PUBLIC_COLLECTION) -> CollectionName:
+        """A public collection in the fake's tenant: the fake names the objects
+        uploaded into it and serves each, unsigned, at its ``public_url``."""
+        c = self.collection(name)
+        with self._lock:
+            self._public.add(str(c))
+        return c
+
     # ─── Inspection ─────────────────────────────────────────────────────────
 
     def put(
@@ -496,6 +524,7 @@ class FakePaladin(
     ) -> types_pb2.Object:
         """Store an object directly, as if uploaded and completed."""
         with self._lock:
+            key = self._public_key(str(collection), key)
             o = self._new(str(collection), key, content_type)
             self._commit(o, body, "")
             return o.msg
@@ -807,21 +836,32 @@ class FakePaladin(
             resource_version="1",
         )
         o = _Object(msg)
+        if parent in self._public:
+            msg.public_url = f"{self.url}{_PUBLIC}{self.tenant}/{msg.collection}/{msg.key}"
+            o.cache_control = PUBLIC_CACHE_CONTROL
         self._objects[msg.name] = o
         return o
+
+    def _public_key(self, parent: str, key: str) -> str:
+        """The key a public collection names an object with, refusing one the
+        client chose, as the server does; ``key`` elsewhere."""
+        if parent not in self._public:
+            return key
+        if key:
+            raise _public_rule("a public collection names its objects itself; leave the key empty")
+        return base64.b32encode(secrets.token_bytes(_PUBLIC_KEY_BYTES)).decode().rstrip("=").lower()
 
     def _claim(self, request: Any) -> _Object:
         """The object an upload registers, refusing a key another object
         holds — in any state, the trash included — as the server's unique path
         does."""
-        if request.key:
+        key = self._public_key(request.parent, request.key)
+        if key:
             prefix = request.parent + _OBJECTS_SEP
             for o in self._objects.values():
-                if o.msg.name.startswith(prefix) and o.msg.key == request.key:
-                    raise ConnectError(
-                        Code.ALREADY_EXISTS, f"an object is already at {request.key!r}"
-                    )
-        o = self._new(request.parent, request.key, request.content_type)
+                if o.msg.name.startswith(prefix) and o.msg.key == key:
+                    raise ConnectError(Code.ALREADY_EXISTS, f"an object is already at {key!r}")
+        o = self._new(request.parent, key, request.content_type)
         o.msg.metadata.update(request.metadata)
         o.msg.tags.update(request.tags)
         return o
@@ -877,7 +917,11 @@ class FakePaladin(
         with self._lock:
             o = self._claim(request)
             o.bound = _Binding(
-                request.size_hint_bytes, request.checksum_value, request.content_type, True
+                request.size_hint_bytes,
+                request.checksum_value,
+                request.content_type,
+                True,
+                o.cache_control,
             )
             url = self._signed(o.msg.object_id, _PUT)
             url.required_headers.update(o.bound.headers())
@@ -975,6 +1019,10 @@ class FakePaladin(
                 return object_service_pb2.DeleteObjectResponse()
             o = self._get(request.name)
             _check_version(o, request.resource_version)
+            if o.msg.public_url:
+                raise _public_rule(
+                    "a public object is deleted with permanent=true; it has no trash"
+                )
             o.msg.state = _DELETED  # in the trash, still holding its key
             _bump(o)
             o.body = None
@@ -1135,6 +1183,35 @@ class FakePaladin(
 
     # ─── Storage ────────────────────────────────────────────────────────────
 
+    def _serve_public(self, environ, start_response):  # type: ignore[no-untyped-def]
+        """An unsigned GET of a public object, as the store answers it: the
+        bytes with the collection's Cache-Control, 404 once it is gone."""
+        if environ["REQUEST_METHOD"] != _GET:
+            return _status(start_response, HTTPStatus.FORBIDDEN, "anonymous access is read-only")
+        url = self.url + environ["PATH_INFO"]
+        with self._lock:
+            found = next(
+                (
+                    o
+                    for o in self._objects.values()
+                    if o.msg.public_url == url and o.msg.state == _AVAILABLE
+                ),
+                None,
+            )
+            body = found.body if found is not None else None
+            content_type = found.msg.content_type if found is not None else ""
+        if body is None:
+            return _status(start_response, HTTPStatus.NOT_FOUND, "no such key")
+        start_response(
+            "200 OK",
+            [
+                (_CONTENT_TYPE, content_type),
+                (_CACHE_CONTROL, PUBLIC_CACHE_CONTROL),
+                (_CONTENT_LENGTH, str(len(body))),
+            ],
+        )
+        return [body]
+
     def _storage(self, environ, start_response):  # type: ignore[no-untyped-def]
         object_id = environ["PATH_INFO"][len(_STORAGE) :]
         raw_query = environ.get("QUERY_STRING", "")
@@ -1202,6 +1279,22 @@ class FakePaladin(
             return [part]
         start_response("200 OK", [*headers, ("Content-Length", str(len(content)))])
         return [content]
+
+
+def _public_rule(what: str) -> ConnectError:
+    """The server's answer to a request a public collection refuses."""
+    return ConnectError(
+        Code.FAILED_PRECONDITION,
+        f"public collection: {what}",
+        [
+            error_details_pb2.ErrorInfo(
+                reason=error_reason_pb2.ErrorReason.Name(
+                    error_reason_pb2.ERROR_REASON_PUBLIC_COLLECTION_RULE
+                ),
+                domain=ERROR_DOMAIN,
+            )
+        ],
+    )
 
 
 def _failure(procedure: str, code: Code) -> ConnectError:
