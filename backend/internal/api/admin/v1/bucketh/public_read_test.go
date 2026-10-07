@@ -76,7 +76,9 @@ func TestCreatePublicBucket(t *testing.T) {
 		return fakeBackends{backend: b}
 	}
 	kms := servesPublicly()
-	kms.SSE.Type = "aws:kms"
+	// As the domain stores it, from either "aws:kms" in the configuration or
+	// SSE_TYPE_KMS on the API.
+	kms.SSE.Type = admindomain.SSETypeKMS
 
 	for name, tc := range map[string]struct {
 		bucket    func() admindomain.Bucket
