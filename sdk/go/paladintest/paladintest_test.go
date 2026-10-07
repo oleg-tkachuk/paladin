@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -115,10 +115,10 @@ func TestPutListAndDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.Data.Object.DeleteObject(context.Background(), connect.NewRequest(&datav1.DeleteObjectRequest{Name: obj.GetName(), ResourceVersion: obj.GetResourceVersion()})); err != nil {
+	if _, err := p.Data.Object.DeleteObject(context.Background(), &datav1.DeleteObjectRequest{Name: obj.GetName(), ResourceVersion: obj.GetResourceVersion()}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = p.Data.Object.GetObject(context.Background(), connect.NewRequest(&datav1.GetObjectRequest{Name: obj.GetName()}))
+	_, err = p.Data.Object.GetObject(context.Background(), &datav1.GetObjectRequest{Name: obj.GetName()})
 	if !errors.Is(err, paladin.ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound after the delete", err)
 	}
@@ -126,7 +126,7 @@ func TestPutListAndDelete(t *testing.T) {
 
 func TestEverythingElseIsUnimplemented(t *testing.T) {
 	p := paladintest.New(t).Connect()
-	_, err := p.Admin.Tenant.ListTenants(context.Background(), connect.NewRequest(&adminv1.ListTenantsRequest{}))
+	_, err := p.Admin.Tenant.ListTenants(context.Background(), &adminv1.ListTenantsRequest{})
 	if !errors.Is(err, paladin.ErrContractSkew) {
 		t.Errorf("err = %v, want Unimplemented, which the SDK reads as a contract skew", err)
 	}
@@ -136,27 +136,27 @@ func TestTheFakeRefusesWhatTheServerRefuses(t *testing.T) {
 	srv := paladintest.New(t)
 	p := srv.Connect()
 	// A collection under the tenant's slug, not its id.
-	_, err := p.Data.Object.UploadObject(context.Background(), connect.NewRequest(&datav1.UploadObjectRequest{ContentType: testContentType,
+	_, err := p.Data.Object.UploadObject(context.Background(), &datav1.UploadObjectRequest{ContentType: testContentType,
 		Parent: "tenants/acme/collections/c", Key: "k",
-	}))
+	})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("err = %v, want InvalidArgument", err)
 	}
 	// An upload with no checksum to bind its URL to.
-	_, err = p.Data.Object.UploadObject(context.Background(), connect.NewRequest(&datav1.UploadObjectRequest{ContentType: testContentType,
+	_, err = p.Data.Object.UploadObject(context.Background(), &datav1.UploadObjectRequest{ContentType: testContentType,
 		Parent: srv.Collection().String(), Key: "k",
-	}))
+	})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("no checksum: err = %v, want InvalidArgument", err)
 	}
 	// A completion whose ETag is not the content's.
-	up, err := p.Data.Object.UploadObject(context.Background(), connect.NewRequest(&datav1.UploadObjectRequest{ContentType: testContentType,
+	up, err := p.Data.Object.UploadObject(context.Background(), &datav1.UploadObjectRequest{ContentType: testContentType,
 		Parent: srv.Collection().String(), Key: "k", ChecksumValue: emptySHA256,
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = p.Data.Object.CompleteObject(context.Background(), connect.NewRequest(&datav1.CompleteObjectRequest{Name: up.Msg.GetObject().GetName(), Etag: "x"}))
+	_, err = p.Data.Object.CompleteObject(context.Background(), &datav1.CompleteObjectRequest{Name: up.GetObject().GetName(), Etag: "x"})
 	if !errors.Is(err, paladin.ErrFailedPrecondition) {
 		t.Errorf("err = %v, want FailedPrecondition", err)
 	}
@@ -168,17 +168,17 @@ func TestCompleteMatchesTheServer(t *testing.T) {
 	ctx := context.Background()
 	body := []byte("no etag")
 	sum, _ := paladin.Checksum(paladin.ChecksumSHA256, bytes.NewReader(body))
-	up, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{ContentType: testContentType,
+	up, err := p.Data.Object.UploadObject(ctx, &datav1.UploadObjectRequest{ContentType: testContentType,
 		Parent: srv.Collection().String(), Key: "k", SizeHintBytes: int64(len(body)), ChecksumValue: sum,
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, up.Msg.GetUploadUrl().GetUrl(), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, up.GetUploadUrl().GetUrl(), bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for k, v := range up.Msg.GetUploadUrl().GetRequiredHeaders() {
+	for k, v := range up.GetUploadUrl().GetRequiredHeaders() {
 		req.Header.Set(k, v)
 	}
 	resp, err := http.DefaultClient.Do(req)
@@ -186,20 +186,20 @@ func TestCompleteMatchesTheServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = resp.Body.Close()
-	name := up.Msg.GetObject().GetName()
+	name := up.GetObject().GetName()
 
 	// The ETag is optional, as on the server.
-	obj, err := p.Data.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{Name: name}))
+	obj, err := p.Data.Object.CompleteObject(ctx, &datav1.CompleteObjectRequest{Name: name})
 	if err != nil {
 		t.Fatalf("complete without an ETag: %v", err)
 	}
-	if obj.Msg.GetState() != datav1.ObjectState_OBJECT_STATE_AVAILABLE {
-		t.Errorf("state = %v, want AVAILABLE", obj.Msg.GetState())
+	if obj.GetState() != datav1.ObjectState_OBJECT_STATE_AVAILABLE {
+		t.Errorf("state = %v, want AVAILABLE", obj.GetState())
 	}
 	// Completing it again returns it, whatever the ETag.
-	again, err := p.Data.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{Name: name, Etag: "stale"}))
-	if err != nil || again.Msg.GetEtag() != obj.Msg.GetEtag() {
-		t.Errorf("second complete: %v, etag %q; want the object as completed", err, again.Msg.GetEtag())
+	again, err := p.Data.Object.CompleteObject(ctx, &datav1.CompleteObjectRequest{Name: name, Etag: "stale"})
+	if err != nil || again.GetEtag() != obj.GetEtag() {
+		t.Errorf("second complete: %v, etag %q; want the object as completed", err, again.GetEtag())
 	}
 	if got, _ := srv.Content(name); !bytes.Equal(got, body) {
 		t.Errorf("content = %q, want %q", got, body)
@@ -213,12 +213,12 @@ func TestEnsureTenantStorage(t *testing.T) {
 	)
 	p := paladintest.New(t).Connect()
 	ensure := func(collections ...string) (*datav1.EnsureTenantStorageResponse, error) {
-		resp, err := p.Data.StorageBootstrap.EnsureTenantStorage(context.Background(), connect.NewRequest(
-			&datav1.EnsureTenantStorageRequest{BackendId: backend, Bucket: bucket, Collections: collections}))
+		resp, err := p.Data.StorageBootstrap.EnsureTenantStorage(context.Background(),
+			&datav1.EnsureTenantStorageRequest{BackendId: backend, Bucket: bucket, Collections: collections})
 		if err != nil {
 			return nil, err
 		}
-		return resp.Msg, nil
+		return resp, nil
 	}
 	first, err := ensure("a", "b")
 	if err != nil {
@@ -234,8 +234,8 @@ func TestEnsureTenantStorage(t *testing.T) {
 	if second.GetBucketCreated() || !slices.Equal(second.GetCollectionsCreated(), []string{"c"}) || !slices.Equal(second.GetCollectionsExisting(), []string{"b"}) {
 		t.Errorf("second ensure = %v, want only c created", second)
 	}
-	_, err = p.Data.StorageBootstrap.EnsureTenantStorage(context.Background(), connect.NewRequest(
-		&datav1.EnsureTenantStorageRequest{BackendId: backend, Bucket: "ab"}))
+	_, err = p.Data.StorageBootstrap.EnsureTenantStorage(context.Background(),
+		&datav1.EnsureTenantStorageRequest{BackendId: backend, Bucket: "ab"})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("a two-character bucket: err = %v, want InvalidArgument", err)
 	}
@@ -245,9 +245,9 @@ func TestRequestsShowWhatTheClientSent(t *testing.T) {
 	const token = "test-token"
 	srv := paladintest.New(t)
 	p := srv.Connect(paladin.WithBearerToken(token))
-	if _, err := p.Data.Object.UploadObject(context.Background(), connect.NewRequest(&datav1.UploadObjectRequest{ContentType: testContentType,
+	if _, err := p.Data.Object.UploadObject(context.Background(), &datav1.UploadObjectRequest{ContentType: testContentType,
 		Parent: srv.Collection().String(), Key: "k", ChecksumValue: emptySHA256,
-	})); err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 	reqs := srv.Requests()
@@ -281,13 +281,13 @@ func TestTheFakeStorageEnforcesTheBinding(t *testing.T) {
 	ctx := context.Background()
 	body := []byte("bound body")
 	sum, _ := paladin.Checksum(paladin.ChecksumSHA256, bytes.NewReader(body))
-	up, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+	up, err := p.Data.Object.UploadObject(ctx, &datav1.UploadObjectRequest{
 		Parent: srv.Collection().String(), Key: "k", ContentType: "text/plain", SizeHintBytes: int64(len(body)), ChecksumValue: sum,
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	url := up.Msg.GetUploadUrl()
+	url := up.GetUploadUrl()
 	put := func(b []byte, drop string) int {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodPut, url.GetUrl(), bytes.NewReader(b))
 		for k, v := range url.GetRequiredHeaders() {
@@ -323,11 +323,11 @@ func TestTheFakeHonoursIfMatch(t *testing.T) {
 	p := srv.Connect()
 	ctx := context.Background()
 	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
-	resp, err := p.Data.Object.DownloadObject(ctx, connect.NewRequest(&datav1.DownloadObjectRequest{Name: obj.GetName(), RequireEtagMatch: true}))
+	resp, err := p.Data.Object.DownloadObject(ctx, &datav1.DownloadObjectRequest{Name: obj.GetName(), RequireEtagMatch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	url := resp.Msg.GetDownloadUrl()
+	url := resp.GetDownloadUrl()
 	if url.GetRequiredHeaders()["If-Match"] == "" {
 		t.Fatal("no If-Match among the required headers")
 	}
@@ -371,17 +371,17 @@ func TestTheFakeHoldsOneObjectPerKey(t *testing.T) {
 	if _, err := upload(); !errors.Is(err, paladin.ErrAlreadyExists) {
 		t.Fatalf("second upload: %v, want ErrAlreadyExists", err)
 	}
-	_, err = p.Data.MultipartUpload.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
+	_, err = p.Data.MultipartUpload.InitiateMultipartUpload(ctx, &datav1.InitiateMultipartUploadRequest{
 		Parent: srv.Collection().String(), Key: "k", SizeBytes: 1, ContentType: testContentType,
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
-	}))
+	})
 	if !errors.Is(err, paladin.ErrAlreadyExists) {
 		t.Fatalf("multipart at the key: %v, want ErrAlreadyExists", err)
 	}
 	del := func(version string, permanent bool) {
-		if _, err := p.Data.Object.DeleteObject(ctx, connect.NewRequest(&datav1.DeleteObjectRequest{
+		if _, err := p.Data.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{
 			Name: obj.GetName(), ResourceVersion: version, Permanent: permanent,
-		})); err != nil {
+		}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -401,10 +401,10 @@ func TestTheFakeLooksUpAndFailsPendingObjects(t *testing.T) {
 	srv := paladintest.New(t)
 	p := srv.Connect()
 	ctx := context.Background()
-	resp, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+	resp, err := p.Data.Object.UploadObject(ctx, &datav1.UploadObjectRequest{
 		Parent: srv.Collection().String(), Key: "k", ContentType: "text/plain", SizeHintBytes: 1,
 		ChecksumValue: "LGW4m3CYc5cGdyqLzSa4tqkq2Hj1/jmn6wGAWuR+hEk=",
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +418,7 @@ func TestTheFakeLooksUpAndFailsPendingObjects(t *testing.T) {
 	if got := lookup(); got != datav1.ObjectState_OBJECT_STATE_PENDING {
 		t.Errorf("lookup = %s, want PENDING: the server finds an object in any state but DELETED", got)
 	}
-	srv.MarkFailed(resp.Msg.GetObject().GetName())
+	srv.MarkFailed(resp.GetObject().GetName())
 	if got := lookup(); got != datav1.ObjectState_OBJECT_STATE_FAILED {
 		t.Errorf("after MarkFailed = %s, want FAILED", got)
 	}
@@ -426,7 +426,7 @@ func TestTheFakeLooksUpAndFailsPendingObjects(t *testing.T) {
 
 // getObject reads obj through GetObject, the RPC the FailRPC tests fail.
 func getObject(p *paladin.Paladin, obj *datav1.Object) error {
-	_, err := p.Data.Object.GetObject(context.Background(), connect.NewRequest(&datav1.GetObjectRequest{Name: obj.GetName()}))
+	_, err := p.Data.Object.GetObject(context.Background(), &datav1.GetObjectRequest{Name: obj.GetName()})
 	return err
 }
 
@@ -551,7 +551,7 @@ func TestFailRPCOnAnUnimplementedProcedure(t *testing.T) {
 	p := srv.Connect()
 	srv.FailRPC(paladindatav1connect.ObjectServiceCountObjectsProcedure, 1, connect.CodeUnavailable)
 	count := func() error {
-		_, err := p.Data.Object.CountObjects(context.Background(), connect.NewRequest(&datav1.CountObjectsRequest{Parent: srv.Collection().String()}))
+		_, err := p.Data.Object.CountObjects(context.Background(), &datav1.CountObjectsRequest{Parent: srv.Collection().String()})
 		return err
 	}
 	if err := count(); connect.CodeOf(err) != connect.CodeUnavailable {
@@ -590,11 +590,11 @@ func TestFailRPCRefusesAMistake(t *testing.T) {
 
 // presignDownload asks the fake for a download URL.
 func presignDownload(p *paladin.Paladin, req *datav1.PresignDownloadRequest) (*datav1.PresignDownloadResponse, error) {
-	resp, err := p.Data.Presign.PresignDownload(context.Background(), connect.NewRequest(req))
+	resp, err := p.Data.Presign.PresignDownload(context.Background(), req)
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 // fetch GETs a presigned URL with its required headers, and overrides.
@@ -693,13 +693,13 @@ func TestPresignDownloadRefusesWhatTheServerRefuses(t *testing.T) {
 	ctx := context.Background()
 	available := srv.Put(srv.Collection(), "available", "text/plain", []byte("x"))
 	register := func(key string) string {
-		resp, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{ContentType: testContentType,
+		resp, err := p.Data.Object.UploadObject(ctx, &datav1.UploadObjectRequest{ContentType: testContentType,
 			Parent: srv.Collection().String(), Key: key, ChecksumValue: emptySHA256,
-		}))
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return resp.Msg.GetObject().GetName()
+		return resp.GetObject().GetName()
 	}
 	pending := register("pending")
 	failed := register("failed")

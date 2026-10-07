@@ -15,8 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
-
+	"connectrpc.com/connect/v2"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -72,8 +71,8 @@ func newRotatingServer(t *testing.T, h2 bool, server leaf, cas ...*authority) *r
 		pool.AddCert(ca.cert)
 	}
 	mux := http.NewServeMux()
-	path, handler := paladiniamv1connect.NewHealthServiceHandler(&mtlsHealth{})
-	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := connectHandler(func(s *connect.Server) { paladiniamv1connect.RegisterHealthServiceHandler(s, &mtlsHealth{}) })
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.serials = append(s.serials, r.TLS.PeerCertificates[0].SerialNumber.String())
 		s.conns = append(s.conns, r.RemoteAddr)
@@ -167,7 +166,7 @@ func rotate(t *testing.T, f files, ca []byte, client leaf) {
 }
 
 func getVersionWith(p *paladin.Paladin) error {
-	_, err := p.IAM.Health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{}))
+	_, err := p.IAM.Health.GetVersion(context.Background(), &iamv1.GetVersionRequest{})
 	return err
 }
 

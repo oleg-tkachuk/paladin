@@ -6,466 +6,521 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// BucketServiceName is the fully-qualified name of the BucketService service.
 	BucketServiceName = "paladin.admin.v1.BucketService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// BucketServiceCreateBucketProcedure is the fully-qualified name of the BucketService's
-	// CreateBucket RPC.
+	// BucketServiceCreateBucketProcedure is the procedure name of the BucketService's CreateBucket RPC.
 	BucketServiceCreateBucketProcedure = "/paladin.admin.v1.BucketService/CreateBucket"
-	// BucketServiceGetBucketProcedure is the fully-qualified name of the BucketService's GetBucket RPC.
+	// BucketServiceGetBucketProcedure is the procedure name of the BucketService's GetBucket RPC.
 	BucketServiceGetBucketProcedure = "/paladin.admin.v1.BucketService/GetBucket"
-	// BucketServiceUpdateBucketProcedure is the fully-qualified name of the BucketService's
-	// UpdateBucket RPC.
+	// BucketServiceUpdateBucketProcedure is the procedure name of the BucketService's UpdateBucket RPC.
 	BucketServiceUpdateBucketProcedure = "/paladin.admin.v1.BucketService/UpdateBucket"
-	// BucketServiceDeleteBucketProcedure is the fully-qualified name of the BucketService's
-	// DeleteBucket RPC.
+	// BucketServiceDeleteBucketProcedure is the procedure name of the BucketService's DeleteBucket RPC.
 	BucketServiceDeleteBucketProcedure = "/paladin.admin.v1.BucketService/DeleteBucket"
-	// BucketServiceListBucketsProcedure is the fully-qualified name of the BucketService's ListBuckets
-	// RPC.
+	// BucketServiceListBucketsProcedure is the procedure name of the BucketService's ListBuckets RPC.
 	BucketServiceListBucketsProcedure = "/paladin.admin.v1.BucketService/ListBuckets"
-	// BucketServiceSetBucketPolicyProcedure is the fully-qualified name of the BucketService's
+	// BucketServiceSetBucketPolicyProcedure is the procedure name of the BucketService's
 	// SetBucketPolicy RPC.
 	BucketServiceSetBucketPolicyProcedure = "/paladin.admin.v1.BucketService/SetBucketPolicy"
-	// BucketServiceSetLifecycleRulesProcedure is the fully-qualified name of the BucketService's
+	// BucketServiceSetLifecycleRulesProcedure is the procedure name of the BucketService's
 	// SetLifecycleRules RPC.
 	BucketServiceSetLifecycleRulesProcedure = "/paladin.admin.v1.BucketService/SetLifecycleRules"
-	// BucketServiceSetObjectLockProcedure is the fully-qualified name of the BucketService's
-	// SetObjectLock RPC.
+	// BucketServiceSetObjectLockProcedure is the procedure name of the BucketService's SetObjectLock
+	// RPC.
 	BucketServiceSetObjectLockProcedure = "/paladin.admin.v1.BucketService/SetObjectLock"
-	// BucketServiceSetVersioningProcedure is the fully-qualified name of the BucketService's
-	// SetVersioning RPC.
+	// BucketServiceSetVersioningProcedure is the procedure name of the BucketService's SetVersioning
+	// RPC.
 	BucketServiceSetVersioningProcedure = "/paladin.admin.v1.BucketService/SetVersioning"
-	// BucketServiceSetReplicationProcedure is the fully-qualified name of the BucketService's
-	// SetReplication RPC.
+	// BucketServiceSetReplicationProcedure is the procedure name of the BucketService's SetReplication
+	// RPC.
 	BucketServiceSetReplicationProcedure = "/paladin.admin.v1.BucketService/SetReplication"
-	// BucketServiceListAccessibleBucketsProcedure is the fully-qualified name of the BucketService's
+	// BucketServiceListAccessibleBucketsProcedure is the procedure name of the BucketService's
 	// ListAccessibleBuckets RPC.
 	BucketServiceListAccessibleBucketsProcedure = "/paladin.admin.v1.BucketService/ListAccessibleBuckets"
+)
+
+var (
+	bucketServiceCreateBucketSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("CreateBucket"),
+			Procedure:  BucketServiceCreateBucketProcedure,
+		}
+	})
+	bucketServiceGetBucketSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("GetBucket"),
+			Procedure:        BucketServiceGetBucketProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	bucketServiceUpdateBucketSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("UpdateBucket"),
+			Procedure:        BucketServiceUpdateBucketProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	bucketServiceDeleteBucketSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("DeleteBucket"),
+			Procedure:        BucketServiceDeleteBucketProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	bucketServiceListBucketsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("ListBuckets"),
+			Procedure:        BucketServiceListBucketsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	bucketServiceSetBucketPolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("SetBucketPolicy"),
+			Procedure:        BucketServiceSetBucketPolicyProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	bucketServiceSetLifecycleRulesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("SetLifecycleRules"),
+			Procedure:        BucketServiceSetLifecycleRulesProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	bucketServiceSetObjectLockSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("SetObjectLock"),
+			Procedure:        BucketServiceSetObjectLockProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	bucketServiceSetVersioningSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("SetVersioning"),
+			Procedure:        BucketServiceSetVersioningProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	bucketServiceSetReplicationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("SetReplication"),
+			Procedure:        BucketServiceSetReplicationProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	bucketServiceListAccessibleBucketsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("ListAccessibleBuckets"),
+			Procedure:        BucketServiceListAccessibleBucketsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // BucketServiceClient is a client for the paladin.admin.v1.BucketService service.
 type BucketServiceClient interface {
 	// CreateBucket registers a bucket on a backend. It does not create the
 	// physical bucket — see StorageBootstrapService for that.
-	CreateBucket(context.Context, *connect.Request[v1.CreateBucketRequest]) (*connect.Response[v1.Bucket], error)
+	CreateBucket(context.Context, *v1.CreateBucketRequest) (*v1.Bucket, error)
 	// GetBucket returns the bucket, including its versioning, replication and
 	// object-lock configuration.
-	GetBucket(context.Context, *connect.Request[v1.GetBucketRequest]) (*connect.Response[v1.Bucket], error)
+	GetBucket(context.Context, *v1.GetBucketRequest) (*v1.Bucket, error)
 	// UpdateBucket applies update_mask; resource_version is required. Versioning,
 	// replication and object lock have their own RPCs — they are not settable
 	// through this one.
-	UpdateBucket(context.Context, *connect.Request[v1.UpdateBucketRequest]) (*connect.Response[v1.Bucket], error)
+	UpdateBucket(context.Context, *v1.UpdateBucketRequest) (*v1.Bucket, error)
 	// DeleteBucket removes the registration. delete_on_backend=true also erases
 	// the physical bucket and its contents, which is irreversible.
 	// skip_version_check waives the OCC guard and nothing else — the two flags
 	// are independent, and only one of them destroys anything.
-	DeleteBucket(context.Context, *connect.Request[v1.DeleteBucketRequest]) (*connect.Response[v1.DeleteBucketResponse], error)
+	DeleteBucket(context.Context, *v1.DeleteBucketRequest) (*v1.DeleteBucketResponse, error)
 	// ListBuckets returns buckets across every backend, optionally filtered to
 	// one.
-	ListBuckets(context.Context, *connect.Request[v1.ListBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error)
+	ListBuckets(context.Context, *v1.ListBucketsRequest) (*v1.ListBucketsResponse, error)
 	// SetBucketPolicy sets/replaces the Cedar policy text. Validated synchronously.
-	SetBucketPolicy(context.Context, *connect.Request[v1.SetBucketPolicyRequest]) (*connect.Response[v1.Bucket], error)
+	SetBucketPolicy(context.Context, *v1.SetBucketPolicyRequest) (*v1.Bucket, error)
 	// SetLifecycleRules / SetObjectLock / SetVersioning / SetReplication are
 	// single-purpose RPCs to keep audit log entries focused.
-	SetLifecycleRules(context.Context, *connect.Request[v1.SetLifecycleRulesRequest]) (*connect.Response[v1.Bucket], error)
+	SetLifecycleRules(context.Context, *v1.SetLifecycleRulesRequest) (*v1.Bucket, error)
 	// SetObjectLock configures WORM retention for the bucket (ADR-0013). Enabling
 	// it is one-way: a bucket with object lock on cannot have it turned off,
 	// because objects already written under it rely on the guarantee.
-	SetObjectLock(context.Context, *connect.Request[v1.SetObjectLockRequest]) (*connect.Response[v1.Bucket], error)
+	SetObjectLock(context.Context, *v1.SetObjectLockRequest) (*v1.Bucket, error)
 	// SetVersioning turns object versioning on or off. Turning it off keeps the
 	// versions already recorded — it stops new ones being written.
-	SetVersioning(context.Context, *connect.Request[v1.SetVersioningRequest]) (*connect.Response[v1.Bucket], error)
+	SetVersioning(context.Context, *v1.SetVersioningRequest) (*v1.Bucket, error)
 	// SetReplication configures asynchronous copy to a second backend. Existing
 	// objects are not backfilled; replication applies from the moment it is
 	// enabled.
-	SetReplication(context.Context, *connect.Request[v1.SetReplicationRequest]) (*connect.Response[v1.Bucket], error)
+	SetReplication(context.Context, *v1.SetReplicationRequest) (*v1.Bucket, error)
 	// ListAccessibleBuckets is callable by tenant admins. Returns only buckets
 	// the caller's principal/scopes are allowed to bind Collections to.
-	ListAccessibleBuckets(context.Context, *connect.Request[v1.ListAccessibleBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error)
+	ListAccessibleBuckets(context.Context, *v1.ListAccessibleBucketsRequest) (*v1.ListBucketsResponse, error)
 }
 
-// NewBucketServiceClient constructs a client for the paladin.admin.v1.BucketService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewBucketServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BucketServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	bucketServiceMethods := v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods()
-	return &bucketServiceClient{
-		createBucket: connect.NewClient[v1.CreateBucketRequest, v1.Bucket](
-			httpClient,
-			baseURL+BucketServiceCreateBucketProcedure,
-			connect.WithSchema(bucketServiceMethods.ByName("CreateBucket")),
-			connect.WithClientOptions(opts...),
-		),
-		getBucket: connect.NewClient[v1.GetBucketRequest, v1.Bucket](
-			httpClient,
-			baseURL+BucketServiceGetBucketProcedure,
-			connect.WithSchema(bucketServiceMethods.ByName("GetBucket")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		updateBucket: connect.NewClient[v1.UpdateBucketRequest, v1.Bucket](
-			httpClient,
-			baseURL+BucketServiceUpdateBucketProcedure,
-			connect.WithSchema(bucketServiceMethods.ByName("UpdateBucket")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		deleteBucket: connect.NewClient[v1.DeleteBucketRequest, v1.DeleteBucketResponse](
-			httpClient,
-			baseURL+BucketServiceDeleteBucketProcedure,
-			connect.WithSchema(bucketServiceMethods.ByName("DeleteBucket")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		listBuckets: connect.NewClient[v1.ListBucketsRequest, v1.ListBucketsResponse](
-			httpClient,
-			baseURL+BucketServiceListBucketsProcedure,
-			connect.WithSchema(bucketServiceMethods.ByName("ListBuckets")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		setBucketPolicy: connect.NewClient[v1.SetBucketPolicyRequest, v1.Bucket](
-			httpClient,
-			baseURL+BucketServiceSetBucketPolicyProcedure,
-			connect.WithSchema(bucketServiceMethods.ByName("SetBucketPolicy")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		setLifecycleRules: connect.NewClient[v1.SetLifecycleRulesRequest, v1.Bucket](
-			httpClient,
-			baseURL+BucketServiceSetLifecycleRulesProcedure,
-			connect.WithSchema(bucketServiceMethods.ByName("SetLifecycleRules")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		setObjectLock: connect.NewClient[v1.SetObjectLockRequest, v1.Bucket](
-			httpClient,
-			baseURL+BucketServiceSetObjectLockProcedure,
-			connect.WithSchema(bucketServiceMethods.ByName("SetObjectLock")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		setVersioning: connect.NewClient[v1.SetVersioningRequest, v1.Bucket](
-			httpClient,
-			baseURL+BucketServiceSetVersioningProcedure,
-			connect.WithSchema(bucketServiceMethods.ByName("SetVersioning")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		setReplication: connect.NewClient[v1.SetReplicationRequest, v1.Bucket](
-			httpClient,
-			baseURL+BucketServiceSetReplicationProcedure,
-			connect.WithSchema(bucketServiceMethods.ByName("SetReplication")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		listAccessibleBuckets: connect.NewClient[v1.ListAccessibleBucketsRequest, v1.ListBucketsResponse](
-			httpClient,
-			baseURL+BucketServiceListAccessibleBucketsProcedure,
-			connect.WithSchema(bucketServiceMethods.ByName("ListAccessibleBuckets")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// bucketServiceClient implements BucketServiceClient.
-type bucketServiceClient struct {
-	createBucket          *connect.Client[v1.CreateBucketRequest, v1.Bucket]
-	getBucket             *connect.Client[v1.GetBucketRequest, v1.Bucket]
-	updateBucket          *connect.Client[v1.UpdateBucketRequest, v1.Bucket]
-	deleteBucket          *connect.Client[v1.DeleteBucketRequest, v1.DeleteBucketResponse]
-	listBuckets           *connect.Client[v1.ListBucketsRequest, v1.ListBucketsResponse]
-	setBucketPolicy       *connect.Client[v1.SetBucketPolicyRequest, v1.Bucket]
-	setLifecycleRules     *connect.Client[v1.SetLifecycleRulesRequest, v1.Bucket]
-	setObjectLock         *connect.Client[v1.SetObjectLockRequest, v1.Bucket]
-	setVersioning         *connect.Client[v1.SetVersioningRequest, v1.Bucket]
-	setReplication        *connect.Client[v1.SetReplicationRequest, v1.Bucket]
-	listAccessibleBuckets *connect.Client[v1.ListAccessibleBucketsRequest, v1.ListBucketsResponse]
-}
-
-// CreateBucket calls paladin.admin.v1.BucketService.CreateBucket.
-func (c *bucketServiceClient) CreateBucket(ctx context.Context, req *connect.Request[v1.CreateBucketRequest]) (*connect.Response[v1.Bucket], error) {
-	return c.createBucket.CallUnary(ctx, req)
-}
-
-// GetBucket calls paladin.admin.v1.BucketService.GetBucket.
-func (c *bucketServiceClient) GetBucket(ctx context.Context, req *connect.Request[v1.GetBucketRequest]) (*connect.Response[v1.Bucket], error) {
-	return c.getBucket.CallUnary(ctx, req)
-}
-
-// UpdateBucket calls paladin.admin.v1.BucketService.UpdateBucket.
-func (c *bucketServiceClient) UpdateBucket(ctx context.Context, req *connect.Request[v1.UpdateBucketRequest]) (*connect.Response[v1.Bucket], error) {
-	return c.updateBucket.CallUnary(ctx, req)
-}
-
-// DeleteBucket calls paladin.admin.v1.BucketService.DeleteBucket.
-func (c *bucketServiceClient) DeleteBucket(ctx context.Context, req *connect.Request[v1.DeleteBucketRequest]) (*connect.Response[v1.DeleteBucketResponse], error) {
-	return c.deleteBucket.CallUnary(ctx, req)
-}
-
-// ListBuckets calls paladin.admin.v1.BucketService.ListBuckets.
-func (c *bucketServiceClient) ListBuckets(ctx context.Context, req *connect.Request[v1.ListBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error) {
-	return c.listBuckets.CallUnary(ctx, req)
-}
-
-// SetBucketPolicy calls paladin.admin.v1.BucketService.SetBucketPolicy.
-func (c *bucketServiceClient) SetBucketPolicy(ctx context.Context, req *connect.Request[v1.SetBucketPolicyRequest]) (*connect.Response[v1.Bucket], error) {
-	return c.setBucketPolicy.CallUnary(ctx, req)
-}
-
-// SetLifecycleRules calls paladin.admin.v1.BucketService.SetLifecycleRules.
-func (c *bucketServiceClient) SetLifecycleRules(ctx context.Context, req *connect.Request[v1.SetLifecycleRulesRequest]) (*connect.Response[v1.Bucket], error) {
-	return c.setLifecycleRules.CallUnary(ctx, req)
-}
-
-// SetObjectLock calls paladin.admin.v1.BucketService.SetObjectLock.
-func (c *bucketServiceClient) SetObjectLock(ctx context.Context, req *connect.Request[v1.SetObjectLockRequest]) (*connect.Response[v1.Bucket], error) {
-	return c.setObjectLock.CallUnary(ctx, req)
-}
-
-// SetVersioning calls paladin.admin.v1.BucketService.SetVersioning.
-func (c *bucketServiceClient) SetVersioning(ctx context.Context, req *connect.Request[v1.SetVersioningRequest]) (*connect.Response[v1.Bucket], error) {
-	return c.setVersioning.CallUnary(ctx, req)
-}
-
-// SetReplication calls paladin.admin.v1.BucketService.SetReplication.
-func (c *bucketServiceClient) SetReplication(ctx context.Context, req *connect.Request[v1.SetReplicationRequest]) (*connect.Response[v1.Bucket], error) {
-	return c.setReplication.CallUnary(ctx, req)
-}
-
-// ListAccessibleBuckets calls paladin.admin.v1.BucketService.ListAccessibleBuckets.
-func (c *bucketServiceClient) ListAccessibleBuckets(ctx context.Context, req *connect.Request[v1.ListAccessibleBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error) {
-	return c.listAccessibleBuckets.CallUnary(ctx, req)
+// NewBucketServiceClient constructs a client for the paladin.admin.v1.BucketService service.
+// Multiple service clients may share a single connect.Client.
+func NewBucketServiceClient(client *connect.Client) BucketServiceClient {
+	return &bucketServiceClient{client: client}
 }
 
 // BucketServiceHandler is an implementation of the paladin.admin.v1.BucketService service.
 type BucketServiceHandler interface {
 	// CreateBucket registers a bucket on a backend. It does not create the
 	// physical bucket — see StorageBootstrapService for that.
-	CreateBucket(context.Context, *connect.Request[v1.CreateBucketRequest]) (*connect.Response[v1.Bucket], error)
+	CreateBucket(context.Context, *v1.CreateBucketRequest) (*v1.Bucket, error)
 	// GetBucket returns the bucket, including its versioning, replication and
 	// object-lock configuration.
-	GetBucket(context.Context, *connect.Request[v1.GetBucketRequest]) (*connect.Response[v1.Bucket], error)
+	GetBucket(context.Context, *v1.GetBucketRequest) (*v1.Bucket, error)
 	// UpdateBucket applies update_mask; resource_version is required. Versioning,
 	// replication and object lock have their own RPCs — they are not settable
 	// through this one.
-	UpdateBucket(context.Context, *connect.Request[v1.UpdateBucketRequest]) (*connect.Response[v1.Bucket], error)
+	UpdateBucket(context.Context, *v1.UpdateBucketRequest) (*v1.Bucket, error)
 	// DeleteBucket removes the registration. delete_on_backend=true also erases
 	// the physical bucket and its contents, which is irreversible.
 	// skip_version_check waives the OCC guard and nothing else — the two flags
 	// are independent, and only one of them destroys anything.
-	DeleteBucket(context.Context, *connect.Request[v1.DeleteBucketRequest]) (*connect.Response[v1.DeleteBucketResponse], error)
+	DeleteBucket(context.Context, *v1.DeleteBucketRequest) (*v1.DeleteBucketResponse, error)
 	// ListBuckets returns buckets across every backend, optionally filtered to
 	// one.
-	ListBuckets(context.Context, *connect.Request[v1.ListBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error)
+	ListBuckets(context.Context, *v1.ListBucketsRequest) (*v1.ListBucketsResponse, error)
 	// SetBucketPolicy sets/replaces the Cedar policy text. Validated synchronously.
-	SetBucketPolicy(context.Context, *connect.Request[v1.SetBucketPolicyRequest]) (*connect.Response[v1.Bucket], error)
+	SetBucketPolicy(context.Context, *v1.SetBucketPolicyRequest) (*v1.Bucket, error)
 	// SetLifecycleRules / SetObjectLock / SetVersioning / SetReplication are
 	// single-purpose RPCs to keep audit log entries focused.
-	SetLifecycleRules(context.Context, *connect.Request[v1.SetLifecycleRulesRequest]) (*connect.Response[v1.Bucket], error)
+	SetLifecycleRules(context.Context, *v1.SetLifecycleRulesRequest) (*v1.Bucket, error)
 	// SetObjectLock configures WORM retention for the bucket (ADR-0013). Enabling
 	// it is one-way: a bucket with object lock on cannot have it turned off,
 	// because objects already written under it rely on the guarantee.
-	SetObjectLock(context.Context, *connect.Request[v1.SetObjectLockRequest]) (*connect.Response[v1.Bucket], error)
+	SetObjectLock(context.Context, *v1.SetObjectLockRequest) (*v1.Bucket, error)
 	// SetVersioning turns object versioning on or off. Turning it off keeps the
 	// versions already recorded — it stops new ones being written.
-	SetVersioning(context.Context, *connect.Request[v1.SetVersioningRequest]) (*connect.Response[v1.Bucket], error)
+	SetVersioning(context.Context, *v1.SetVersioningRequest) (*v1.Bucket, error)
 	// SetReplication configures asynchronous copy to a second backend. Existing
 	// objects are not backfilled; replication applies from the moment it is
 	// enabled.
-	SetReplication(context.Context, *connect.Request[v1.SetReplicationRequest]) (*connect.Response[v1.Bucket], error)
+	SetReplication(context.Context, *v1.SetReplicationRequest) (*v1.Bucket, error)
 	// ListAccessibleBuckets is callable by tenant admins. Returns only buckets
 	// the caller's principal/scopes are allowed to bind Collections to.
-	ListAccessibleBuckets(context.Context, *connect.Request[v1.ListAccessibleBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error)
+	ListAccessibleBuckets(context.Context, *v1.ListAccessibleBucketsRequest) (*v1.ListBucketsResponse, error)
 }
 
-// NewBucketServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewBucketServiceHandler(svc BucketServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	bucketServiceMethods := v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods()
-	bucketServiceCreateBucketHandler := connect.NewUnaryHandler(
-		BucketServiceCreateBucketProcedure,
-		svc.CreateBucket,
-		connect.WithSchema(bucketServiceMethods.ByName("CreateBucket")),
-		connect.WithHandlerOptions(opts...),
+// RegisterBucketServiceHandler registers svc as the paladin.admin.v1.BucketService implementation
+// on server.
+func RegisterBucketServiceHandler(server *connect.Server, svc BucketServiceHandler) {
+	adapter := bucketServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: bucketServiceCreateBucketSpec(), Handler: adapter.createBucket},
+		connect.Method{Spec: bucketServiceGetBucketSpec(), Handler: adapter.getBucket},
+		connect.Method{Spec: bucketServiceUpdateBucketSpec(), Handler: adapter.updateBucket},
+		connect.Method{Spec: bucketServiceDeleteBucketSpec(), Handler: adapter.deleteBucket},
+		connect.Method{Spec: bucketServiceListBucketsSpec(), Handler: adapter.listBuckets},
+		connect.Method{Spec: bucketServiceSetBucketPolicySpec(), Handler: adapter.setBucketPolicy},
+		connect.Method{Spec: bucketServiceSetLifecycleRulesSpec(), Handler: adapter.setLifecycleRules},
+		connect.Method{Spec: bucketServiceSetObjectLockSpec(), Handler: adapter.setObjectLock},
+		connect.Method{Spec: bucketServiceSetVersioningSpec(), Handler: adapter.setVersioning},
+		connect.Method{Spec: bucketServiceSetReplicationSpec(), Handler: adapter.setReplication},
+		connect.Method{Spec: bucketServiceListAccessibleBucketsSpec(), Handler: adapter.listAccessibleBuckets},
 	)
-	bucketServiceGetBucketHandler := connect.NewUnaryHandler(
-		BucketServiceGetBucketProcedure,
-		svc.GetBucket,
-		connect.WithSchema(bucketServiceMethods.ByName("GetBucket")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	bucketServiceUpdateBucketHandler := connect.NewUnaryHandler(
-		BucketServiceUpdateBucketProcedure,
-		svc.UpdateBucket,
-		connect.WithSchema(bucketServiceMethods.ByName("UpdateBucket")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	bucketServiceDeleteBucketHandler := connect.NewUnaryHandler(
-		BucketServiceDeleteBucketProcedure,
-		svc.DeleteBucket,
-		connect.WithSchema(bucketServiceMethods.ByName("DeleteBucket")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	bucketServiceListBucketsHandler := connect.NewUnaryHandler(
-		BucketServiceListBucketsProcedure,
-		svc.ListBuckets,
-		connect.WithSchema(bucketServiceMethods.ByName("ListBuckets")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	bucketServiceSetBucketPolicyHandler := connect.NewUnaryHandler(
-		BucketServiceSetBucketPolicyProcedure,
-		svc.SetBucketPolicy,
-		connect.WithSchema(bucketServiceMethods.ByName("SetBucketPolicy")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	bucketServiceSetLifecycleRulesHandler := connect.NewUnaryHandler(
-		BucketServiceSetLifecycleRulesProcedure,
-		svc.SetLifecycleRules,
-		connect.WithSchema(bucketServiceMethods.ByName("SetLifecycleRules")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	bucketServiceSetObjectLockHandler := connect.NewUnaryHandler(
-		BucketServiceSetObjectLockProcedure,
-		svc.SetObjectLock,
-		connect.WithSchema(bucketServiceMethods.ByName("SetObjectLock")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	bucketServiceSetVersioningHandler := connect.NewUnaryHandler(
-		BucketServiceSetVersioningProcedure,
-		svc.SetVersioning,
-		connect.WithSchema(bucketServiceMethods.ByName("SetVersioning")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	bucketServiceSetReplicationHandler := connect.NewUnaryHandler(
-		BucketServiceSetReplicationProcedure,
-		svc.SetReplication,
-		connect.WithSchema(bucketServiceMethods.ByName("SetReplication")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	bucketServiceListAccessibleBucketsHandler := connect.NewUnaryHandler(
-		BucketServiceListAccessibleBucketsProcedure,
-		svc.ListAccessibleBuckets,
-		connect.WithSchema(bucketServiceMethods.ByName("ListAccessibleBuckets")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.admin.v1.BucketService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case BucketServiceCreateBucketProcedure:
-			bucketServiceCreateBucketHandler.ServeHTTP(w, r)
-		case BucketServiceGetBucketProcedure:
-			bucketServiceGetBucketHandler.ServeHTTP(w, r)
-		case BucketServiceUpdateBucketProcedure:
-			bucketServiceUpdateBucketHandler.ServeHTTP(w, r)
-		case BucketServiceDeleteBucketProcedure:
-			bucketServiceDeleteBucketHandler.ServeHTTP(w, r)
-		case BucketServiceListBucketsProcedure:
-			bucketServiceListBucketsHandler.ServeHTTP(w, r)
-		case BucketServiceSetBucketPolicyProcedure:
-			bucketServiceSetBucketPolicyHandler.ServeHTTP(w, r)
-		case BucketServiceSetLifecycleRulesProcedure:
-			bucketServiceSetLifecycleRulesHandler.ServeHTTP(w, r)
-		case BucketServiceSetObjectLockProcedure:
-			bucketServiceSetObjectLockHandler.ServeHTTP(w, r)
-		case BucketServiceSetVersioningProcedure:
-			bucketServiceSetVersioningHandler.ServeHTTP(w, r)
-		case BucketServiceSetReplicationProcedure:
-			bucketServiceSetReplicationHandler.ServeHTTP(w, r)
-		case BucketServiceListAccessibleBucketsProcedure:
-			bucketServiceListAccessibleBucketsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedBucketServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedBucketServiceHandler struct{}
 
-func (UnimplementedBucketServiceHandler) CreateBucket(context.Context, *connect.Request[v1.CreateBucketRequest]) (*connect.Response[v1.Bucket], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BucketService.CreateBucket is not implemented"))
+func (UnimplementedBucketServiceHandler) CreateBucket(context.Context, *v1.CreateBucketRequest) (*v1.Bucket, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.CreateBucket is not implemented")
 }
 
-func (UnimplementedBucketServiceHandler) GetBucket(context.Context, *connect.Request[v1.GetBucketRequest]) (*connect.Response[v1.Bucket], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BucketService.GetBucket is not implemented"))
+func (UnimplementedBucketServiceHandler) GetBucket(context.Context, *v1.GetBucketRequest) (*v1.Bucket, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.GetBucket is not implemented")
 }
 
-func (UnimplementedBucketServiceHandler) UpdateBucket(context.Context, *connect.Request[v1.UpdateBucketRequest]) (*connect.Response[v1.Bucket], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BucketService.UpdateBucket is not implemented"))
+func (UnimplementedBucketServiceHandler) UpdateBucket(context.Context, *v1.UpdateBucketRequest) (*v1.Bucket, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.UpdateBucket is not implemented")
 }
 
-func (UnimplementedBucketServiceHandler) DeleteBucket(context.Context, *connect.Request[v1.DeleteBucketRequest]) (*connect.Response[v1.DeleteBucketResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BucketService.DeleteBucket is not implemented"))
+func (UnimplementedBucketServiceHandler) DeleteBucket(context.Context, *v1.DeleteBucketRequest) (*v1.DeleteBucketResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.DeleteBucket is not implemented")
 }
 
-func (UnimplementedBucketServiceHandler) ListBuckets(context.Context, *connect.Request[v1.ListBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BucketService.ListBuckets is not implemented"))
+func (UnimplementedBucketServiceHandler) ListBuckets(context.Context, *v1.ListBucketsRequest) (*v1.ListBucketsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.ListBuckets is not implemented")
 }
 
-func (UnimplementedBucketServiceHandler) SetBucketPolicy(context.Context, *connect.Request[v1.SetBucketPolicyRequest]) (*connect.Response[v1.Bucket], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BucketService.SetBucketPolicy is not implemented"))
+func (UnimplementedBucketServiceHandler) SetBucketPolicy(context.Context, *v1.SetBucketPolicyRequest) (*v1.Bucket, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.SetBucketPolicy is not implemented")
 }
 
-func (UnimplementedBucketServiceHandler) SetLifecycleRules(context.Context, *connect.Request[v1.SetLifecycleRulesRequest]) (*connect.Response[v1.Bucket], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BucketService.SetLifecycleRules is not implemented"))
+func (UnimplementedBucketServiceHandler) SetLifecycleRules(context.Context, *v1.SetLifecycleRulesRequest) (*v1.Bucket, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.SetLifecycleRules is not implemented")
 }
 
-func (UnimplementedBucketServiceHandler) SetObjectLock(context.Context, *connect.Request[v1.SetObjectLockRequest]) (*connect.Response[v1.Bucket], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BucketService.SetObjectLock is not implemented"))
+func (UnimplementedBucketServiceHandler) SetObjectLock(context.Context, *v1.SetObjectLockRequest) (*v1.Bucket, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.SetObjectLock is not implemented")
 }
 
-func (UnimplementedBucketServiceHandler) SetVersioning(context.Context, *connect.Request[v1.SetVersioningRequest]) (*connect.Response[v1.Bucket], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BucketService.SetVersioning is not implemented"))
+func (UnimplementedBucketServiceHandler) SetVersioning(context.Context, *v1.SetVersioningRequest) (*v1.Bucket, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.SetVersioning is not implemented")
 }
 
-func (UnimplementedBucketServiceHandler) SetReplication(context.Context, *connect.Request[v1.SetReplicationRequest]) (*connect.Response[v1.Bucket], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BucketService.SetReplication is not implemented"))
+func (UnimplementedBucketServiceHandler) SetReplication(context.Context, *v1.SetReplicationRequest) (*v1.Bucket, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.SetReplication is not implemented")
 }
 
-func (UnimplementedBucketServiceHandler) ListAccessibleBuckets(context.Context, *connect.Request[v1.ListAccessibleBucketsRequest]) (*connect.Response[v1.ListBucketsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BucketService.ListAccessibleBuckets is not implemented"))
+func (UnimplementedBucketServiceHandler) ListAccessibleBuckets(context.Context, *v1.ListAccessibleBucketsRequest) (*v1.ListBucketsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.ListAccessibleBuckets is not implemented")
+}
+
+type bucketServiceClient struct {
+	client *connect.Client
+}
+
+func (c *bucketServiceClient) CreateBucket(ctx context.Context, req *v1.CreateBucketRequest) (*v1.Bucket, error) {
+	var res v1.Bucket
+	if err := c.client.CallUnary(ctx, bucketServiceCreateBucketSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) GetBucket(ctx context.Context, req *v1.GetBucketRequest) (*v1.Bucket, error) {
+	var res v1.Bucket
+	if err := c.client.CallUnary(ctx, bucketServiceGetBucketSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) UpdateBucket(ctx context.Context, req *v1.UpdateBucketRequest) (*v1.Bucket, error) {
+	var res v1.Bucket
+	if err := c.client.CallUnary(ctx, bucketServiceUpdateBucketSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) DeleteBucket(ctx context.Context, req *v1.DeleteBucketRequest) (*v1.DeleteBucketResponse, error) {
+	var res v1.DeleteBucketResponse
+	if err := c.client.CallUnary(ctx, bucketServiceDeleteBucketSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) ListBuckets(ctx context.Context, req *v1.ListBucketsRequest) (*v1.ListBucketsResponse, error) {
+	var res v1.ListBucketsResponse
+	if err := c.client.CallUnary(ctx, bucketServiceListBucketsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) SetBucketPolicy(ctx context.Context, req *v1.SetBucketPolicyRequest) (*v1.Bucket, error) {
+	var res v1.Bucket
+	if err := c.client.CallUnary(ctx, bucketServiceSetBucketPolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) SetLifecycleRules(ctx context.Context, req *v1.SetLifecycleRulesRequest) (*v1.Bucket, error) {
+	var res v1.Bucket
+	if err := c.client.CallUnary(ctx, bucketServiceSetLifecycleRulesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) SetObjectLock(ctx context.Context, req *v1.SetObjectLockRequest) (*v1.Bucket, error) {
+	var res v1.Bucket
+	if err := c.client.CallUnary(ctx, bucketServiceSetObjectLockSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) SetVersioning(ctx context.Context, req *v1.SetVersioningRequest) (*v1.Bucket, error) {
+	var res v1.Bucket
+	if err := c.client.CallUnary(ctx, bucketServiceSetVersioningSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) SetReplication(ctx context.Context, req *v1.SetReplicationRequest) (*v1.Bucket, error) {
+	var res v1.Bucket
+	if err := c.client.CallUnary(ctx, bucketServiceSetReplicationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) ListAccessibleBuckets(ctx context.Context, req *v1.ListAccessibleBucketsRequest) (*v1.ListBucketsResponse, error) {
+	var res v1.ListBucketsResponse
+	if err := c.client.CallUnary(ctx, bucketServiceListAccessibleBucketsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type bucketServiceHandler struct{ svc BucketServiceHandler }
+
+func (h bucketServiceHandler) createBucket(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateBucketRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateBucket(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) getBucket(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetBucketRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetBucket(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) updateBucket(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateBucketRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateBucket(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) deleteBucket(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteBucketRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteBucket(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) listBuckets(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListBucketsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListBuckets(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) setBucketPolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetBucketPolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetBucketPolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) setLifecycleRules(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetLifecycleRulesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetLifecycleRules(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) setObjectLock(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetObjectLockRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetObjectLock(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) setVersioning(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetVersioningRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetVersioning(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) setReplication(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetReplicationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetReplication(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) listAccessibleBuckets(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListAccessibleBucketsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListAccessibleBuckets(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

@@ -6,40 +6,50 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// BillingServiceName is the fully-qualified name of the BillingService service.
 	BillingServiceName = "paladin.admin.v1.BillingService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// BillingServiceGetTenantSummaryProcedure is the fully-qualified name of the BillingService's
+	// BillingServiceGetTenantSummaryProcedure is the procedure name of the BillingService's
 	// GetTenantSummary RPC.
 	BillingServiceGetTenantSummaryProcedure = "/paladin.admin.v1.BillingService/GetTenantSummary"
-	// BillingServiceGetTenantTimeSeriesProcedure is the fully-qualified name of the BillingService's
+	// BillingServiceGetTenantTimeSeriesProcedure is the procedure name of the BillingService's
 	// GetTenantTimeSeries RPC.
 	BillingServiceGetTenantTimeSeriesProcedure = "/paladin.admin.v1.BillingService/GetTenantTimeSeries"
+)
+
+var (
+	billingServiceGetTenantSummarySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_billing_service_proto.Services().ByName("BillingService").Methods().ByName("GetTenantSummary"),
+			Procedure:        BillingServiceGetTenantSummaryProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	billingServiceGetTenantTimeSeriesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_billing_service_proto.Services().ByName("BillingService").Methods().ByName("GetTenantTimeSeries"),
+			Procedure:        BillingServiceGetTenantTimeSeriesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // BillingServiceClient is a client for the paladin.admin.v1.BillingService service.
@@ -47,54 +57,16 @@ type BillingServiceClient interface {
 	// GetTenantSummary returns aggregate spend + top-N breakdowns for
 	// the supplied period. Defaults to last 30 days when period_start
 	// / period_end are unset.
-	GetTenantSummary(context.Context, *connect.Request[v1.GetTenantSummaryRequest]) (*connect.Response[v1.GetTenantSummaryResponse], error)
+	GetTenantSummary(context.Context, *v1.GetTenantSummaryRequest) (*v1.GetTenantSummaryResponse, error)
 	// GetTenantTimeSeries returns time-bucketed spend for a chart.
 	// granularity ∈ {hour, day, week} — server validates.
-	GetTenantTimeSeries(context.Context, *connect.Request[v1.GetTenantTimeSeriesRequest]) (*connect.Response[v1.GetTenantTimeSeriesResponse], error)
+	GetTenantTimeSeries(context.Context, *v1.GetTenantTimeSeriesRequest) (*v1.GetTenantTimeSeriesResponse, error)
 }
 
-// NewBillingServiceClient constructs a client for the paladin.admin.v1.BillingService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BillingServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	billingServiceMethods := v1.File_paladin_admin_v1_billing_service_proto.Services().ByName("BillingService").Methods()
-	return &billingServiceClient{
-		getTenantSummary: connect.NewClient[v1.GetTenantSummaryRequest, v1.GetTenantSummaryResponse](
-			httpClient,
-			baseURL+BillingServiceGetTenantSummaryProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetTenantSummary")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		getTenantTimeSeries: connect.NewClient[v1.GetTenantTimeSeriesRequest, v1.GetTenantTimeSeriesResponse](
-			httpClient,
-			baseURL+BillingServiceGetTenantTimeSeriesProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetTenantTimeSeries")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// billingServiceClient implements BillingServiceClient.
-type billingServiceClient struct {
-	getTenantSummary    *connect.Client[v1.GetTenantSummaryRequest, v1.GetTenantSummaryResponse]
-	getTenantTimeSeries *connect.Client[v1.GetTenantTimeSeriesRequest, v1.GetTenantTimeSeriesResponse]
-}
-
-// GetTenantSummary calls paladin.admin.v1.BillingService.GetTenantSummary.
-func (c *billingServiceClient) GetTenantSummary(ctx context.Context, req *connect.Request[v1.GetTenantSummaryRequest]) (*connect.Response[v1.GetTenantSummaryResponse], error) {
-	return c.getTenantSummary.CallUnary(ctx, req)
-}
-
-// GetTenantTimeSeries calls paladin.admin.v1.BillingService.GetTenantTimeSeries.
-func (c *billingServiceClient) GetTenantTimeSeries(ctx context.Context, req *connect.Request[v1.GetTenantTimeSeriesRequest]) (*connect.Response[v1.GetTenantTimeSeriesResponse], error) {
-	return c.getTenantTimeSeries.CallUnary(ctx, req)
+// NewBillingServiceClient constructs a client for the paladin.admin.v1.BillingService service.
+// Multiple service clients may share a single connect.Client.
+func NewBillingServiceClient(client *connect.Client) BillingServiceClient {
+	return &billingServiceClient{client: client}
 }
 
 // BillingServiceHandler is an implementation of the paladin.admin.v1.BillingService service.
@@ -102,52 +74,75 @@ type BillingServiceHandler interface {
 	// GetTenantSummary returns aggregate spend + top-N breakdowns for
 	// the supplied period. Defaults to last 30 days when period_start
 	// / period_end are unset.
-	GetTenantSummary(context.Context, *connect.Request[v1.GetTenantSummaryRequest]) (*connect.Response[v1.GetTenantSummaryResponse], error)
+	GetTenantSummary(context.Context, *v1.GetTenantSummaryRequest) (*v1.GetTenantSummaryResponse, error)
 	// GetTenantTimeSeries returns time-bucketed spend for a chart.
 	// granularity ∈ {hour, day, week} — server validates.
-	GetTenantTimeSeries(context.Context, *connect.Request[v1.GetTenantTimeSeriesRequest]) (*connect.Response[v1.GetTenantTimeSeriesResponse], error)
+	GetTenantTimeSeries(context.Context, *v1.GetTenantTimeSeriesRequest) (*v1.GetTenantTimeSeriesResponse, error)
 }
 
-// NewBillingServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	billingServiceMethods := v1.File_paladin_admin_v1_billing_service_proto.Services().ByName("BillingService").Methods()
-	billingServiceGetTenantSummaryHandler := connect.NewUnaryHandler(
-		BillingServiceGetTenantSummaryProcedure,
-		svc.GetTenantSummary,
-		connect.WithSchema(billingServiceMethods.ByName("GetTenantSummary")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterBillingServiceHandler registers svc as the paladin.admin.v1.BillingService implementation
+// on server.
+func RegisterBillingServiceHandler(server *connect.Server, svc BillingServiceHandler) {
+	adapter := billingServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: billingServiceGetTenantSummarySpec(), Handler: adapter.getTenantSummary},
+		connect.Method{Spec: billingServiceGetTenantTimeSeriesSpec(), Handler: adapter.getTenantTimeSeries},
 	)
-	billingServiceGetTenantTimeSeriesHandler := connect.NewUnaryHandler(
-		BillingServiceGetTenantTimeSeriesProcedure,
-		svc.GetTenantTimeSeries,
-		connect.WithSchema(billingServiceMethods.ByName("GetTenantTimeSeries")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.admin.v1.BillingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case BillingServiceGetTenantSummaryProcedure:
-			billingServiceGetTenantSummaryHandler.ServeHTTP(w, r)
-		case BillingServiceGetTenantTimeSeriesProcedure:
-			billingServiceGetTenantTimeSeriesHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedBillingServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedBillingServiceHandler struct{}
 
-func (UnimplementedBillingServiceHandler) GetTenantSummary(context.Context, *connect.Request[v1.GetTenantSummaryRequest]) (*connect.Response[v1.GetTenantSummaryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BillingService.GetTenantSummary is not implemented"))
+func (UnimplementedBillingServiceHandler) GetTenantSummary(context.Context, *v1.GetTenantSummaryRequest) (*v1.GetTenantSummaryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BillingService.GetTenantSummary is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetTenantTimeSeries(context.Context, *connect.Request[v1.GetTenantTimeSeriesRequest]) (*connect.Response[v1.GetTenantTimeSeriesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.BillingService.GetTenantTimeSeries is not implemented"))
+func (UnimplementedBillingServiceHandler) GetTenantTimeSeries(context.Context, *v1.GetTenantTimeSeriesRequest) (*v1.GetTenantTimeSeriesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BillingService.GetTenantTimeSeries is not implemented")
+}
+
+type billingServiceClient struct {
+	client *connect.Client
+}
+
+func (c *billingServiceClient) GetTenantSummary(ctx context.Context, req *v1.GetTenantSummaryRequest) (*v1.GetTenantSummaryResponse, error) {
+	var res v1.GetTenantSummaryResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetTenantSummarySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetTenantTimeSeries(ctx context.Context, req *v1.GetTenantTimeSeriesRequest) (*v1.GetTenantTimeSeriesResponse, error) {
+	var res v1.GetTenantTimeSeriesResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetTenantTimeSeriesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type billingServiceHandler struct{ svc BillingServiceHandler }
+
+func (h billingServiceHandler) getTenantSummary(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetTenantSummaryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetTenantSummary(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getTenantTimeSeries(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetTenantTimeSeriesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetTenantTimeSeries(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

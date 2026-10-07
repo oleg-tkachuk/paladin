@@ -6,8 +6,6 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -31,20 +29,20 @@ func durableInput(srv *paladintest.Server, body []byte) paladin.UploadInput {
 func registered(t *testing.T, srv *paladintest.Server, p *paladin.Paladin, body []byte, put bool) *datav1.Object {
 	t.Helper()
 	sum := sha256Of(body)
-	resp, err := p.Data.Object.UploadObject(context.Background(), connect.NewRequest(&datav1.UploadObjectRequest{
+	resp, err := p.Data.Object.UploadObject(context.Background(), &datav1.UploadObjectRequest{
 		Parent: srv.Collection().String(), Key: durableKey, ContentType: "application/pdf",
 		SizeHintBytes: int64(len(body)), ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
 		ChecksumValue: sum, Metadata: map[string]string{contentSHA256: sum},
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if put {
-		if _, err := p.Data.Transfer().Put(context.Background(), resp.Msg.GetUploadUrl(), bytes.NewReader(body), int64(len(body))); err != nil {
+		if _, err := p.Data.Transfer().Put(context.Background(), resp.GetUploadUrl(), bytes.NewReader(body), int64(len(body))); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return resp.Msg.GetObject()
+	return resp.GetObject()
 }
 
 func durably(t *testing.T, srv *paladintest.Server, p *paladin.Paladin, body []byte) (*datav1.Object, int, error) {
@@ -125,9 +123,9 @@ func TestDurableUploadLeavesTheTrashAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.Data.Object.DeleteObject(context.Background(), connect.NewRequest(&datav1.DeleteObjectRequest{
+	if _, err := p.Data.Object.DeleteObject(context.Background(), &datav1.DeleteObjectRequest{
 		Name: obj.GetName(), ResourceVersion: obj.GetResourceVersion(),
-	})); err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := durably(t, srv, p, body); !errors.Is(err, errKeyTaken) {

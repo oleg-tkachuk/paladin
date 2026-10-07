@@ -6,49 +6,80 @@ package paladindatav1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// MultipartUploadServiceName is the fully-qualified name of the MultipartUploadService service.
 	MultipartUploadServiceName = "paladin.data.v1.MultipartUploadService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// MultipartUploadServiceInitiateMultipartUploadProcedure is the fully-qualified name of the
+	// MultipartUploadServiceInitiateMultipartUploadProcedure is the procedure name of the
 	// MultipartUploadService's InitiateMultipartUpload RPC.
 	MultipartUploadServiceInitiateMultipartUploadProcedure = "/paladin.data.v1.MultipartUploadService/InitiateMultipartUpload"
-	// MultipartUploadServicePresignPartProcedure is the fully-qualified name of the
-	// MultipartUploadService's PresignPart RPC.
+	// MultipartUploadServicePresignPartProcedure is the procedure name of the MultipartUploadService's
+	// PresignPart RPC.
 	MultipartUploadServicePresignPartProcedure = "/paladin.data.v1.MultipartUploadService/PresignPart"
-	// MultipartUploadServiceCompleteMultipartUploadProcedure is the fully-qualified name of the
+	// MultipartUploadServiceCompleteMultipartUploadProcedure is the procedure name of the
 	// MultipartUploadService's CompleteMultipartUpload RPC.
 	MultipartUploadServiceCompleteMultipartUploadProcedure = "/paladin.data.v1.MultipartUploadService/CompleteMultipartUpload"
-	// MultipartUploadServiceAbortMultipartUploadProcedure is the fully-qualified name of the
+	// MultipartUploadServiceAbortMultipartUploadProcedure is the procedure name of the
 	// MultipartUploadService's AbortMultipartUpload RPC.
 	MultipartUploadServiceAbortMultipartUploadProcedure = "/paladin.data.v1.MultipartUploadService/AbortMultipartUpload"
-	// MultipartUploadServiceListPartsProcedure is the fully-qualified name of the
-	// MultipartUploadService's ListParts RPC.
+	// MultipartUploadServiceListPartsProcedure is the procedure name of the MultipartUploadService's
+	// ListParts RPC.
 	MultipartUploadServiceListPartsProcedure = "/paladin.data.v1.MultipartUploadService/ListParts"
+)
+
+var (
+	multipartUploadServiceInitiateMultipartUploadSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_data_v1_multipart_service_proto.Services().ByName("MultipartUploadService").Methods().ByName("InitiateMultipartUpload"),
+			Procedure:  MultipartUploadServiceInitiateMultipartUploadProcedure,
+		}
+	})
+	multipartUploadServicePresignPartSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_data_v1_multipart_service_proto.Services().ByName("MultipartUploadService").Methods().ByName("PresignPart"),
+			Procedure:  MultipartUploadServicePresignPartProcedure,
+		}
+	})
+	multipartUploadServiceCompleteMultipartUploadSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_data_v1_multipart_service_proto.Services().ByName("MultipartUploadService").Methods().ByName("CompleteMultipartUpload"),
+			Procedure:  MultipartUploadServiceCompleteMultipartUploadProcedure,
+		}
+	})
+	multipartUploadServiceAbortMultipartUploadSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_multipart_service_proto.Services().ByName("MultipartUploadService").Methods().ByName("AbortMultipartUpload"),
+			Procedure:        MultipartUploadServiceAbortMultipartUploadProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	multipartUploadServiceListPartsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_multipart_service_proto.Services().ByName("MultipartUploadService").Methods().ByName("ListParts"),
+			Procedure:        MultipartUploadServiceListPartsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // MultipartUploadServiceClient is a client for the paladin.data.v1.MultipartUploadService service.
@@ -56,100 +87,27 @@ type MultipartUploadServiceClient interface {
 	// InitiateMultipartUpload opens an upload session and returns its id. Sessions
 	// left incomplete are reaped by the housekeeping job after
 	// worker.jobs.housekeeping.multipart_ttl.
-	InitiateMultipartUpload(context.Context, *connect.Request[v1.InitiateMultipartUploadRequest]) (*connect.Response[v1.InitiateMultipartUploadResponse], error)
+	InitiateMultipartUpload(context.Context, *v1.InitiateMultipartUploadRequest) (*v1.InitiateMultipartUploadResponse, error)
 	// PresignPart issues a PUT URL for one part. Parts may be uploaded in any
 	// order and in parallel.
-	PresignPart(context.Context, *connect.Request[v1.PresignPartRequest]) (*connect.Response[v1.PresignPartResponse], error)
+	PresignPart(context.Context, *v1.PresignPartRequest) (*v1.PresignPartResponse, error)
 	// CompleteMultipartUpload assembles the parts into one object. The part list
 	// must carry every etag the client received; a mismatch is
 	// FailedPrecondition and the object is not created.
-	CompleteMultipartUpload(context.Context, *connect.Request[v1.CompleteMultipartUploadRequest]) (*connect.Response[v1.Object], error)
+	CompleteMultipartUpload(context.Context, *v1.CompleteMultipartUploadRequest) (*v1.Object, error)
 	// AbortMultipartUpload discards the session and the parts already uploaded.
 	// Safe to call on an already-aborted session.
-	AbortMultipartUpload(context.Context, *connect.Request[v1.AbortMultipartUploadRequest]) (*connect.Response[v1.AbortMultipartUploadResponse], error)
+	AbortMultipartUpload(context.Context, *v1.AbortMultipartUploadRequest) (*v1.AbortMultipartUploadResponse, error)
 	// ListParts returns the parts recorded for an open session, for a client
 	// reconciling after a crash.
-	ListParts(context.Context, *connect.Request[v1.ListPartsRequest]) (*connect.Response[v1.ListPartsResponse], error)
+	ListParts(context.Context, *v1.ListPartsRequest) (*v1.ListPartsResponse, error)
 }
 
 // NewMultipartUploadServiceClient constructs a client for the
-// paladin.data.v1.MultipartUploadService service. By default, it uses the Connect protocol with the
-// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
-// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewMultipartUploadServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) MultipartUploadServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	multipartUploadServiceMethods := v1.File_paladin_data_v1_multipart_service_proto.Services().ByName("MultipartUploadService").Methods()
-	return &multipartUploadServiceClient{
-		initiateMultipartUpload: connect.NewClient[v1.InitiateMultipartUploadRequest, v1.InitiateMultipartUploadResponse](
-			httpClient,
-			baseURL+MultipartUploadServiceInitiateMultipartUploadProcedure,
-			connect.WithSchema(multipartUploadServiceMethods.ByName("InitiateMultipartUpload")),
-			connect.WithClientOptions(opts...),
-		),
-		presignPart: connect.NewClient[v1.PresignPartRequest, v1.PresignPartResponse](
-			httpClient,
-			baseURL+MultipartUploadServicePresignPartProcedure,
-			connect.WithSchema(multipartUploadServiceMethods.ByName("PresignPart")),
-			connect.WithClientOptions(opts...),
-		),
-		completeMultipartUpload: connect.NewClient[v1.CompleteMultipartUploadRequest, v1.Object](
-			httpClient,
-			baseURL+MultipartUploadServiceCompleteMultipartUploadProcedure,
-			connect.WithSchema(multipartUploadServiceMethods.ByName("CompleteMultipartUpload")),
-			connect.WithClientOptions(opts...),
-		),
-		abortMultipartUpload: connect.NewClient[v1.AbortMultipartUploadRequest, v1.AbortMultipartUploadResponse](
-			httpClient,
-			baseURL+MultipartUploadServiceAbortMultipartUploadProcedure,
-			connect.WithSchema(multipartUploadServiceMethods.ByName("AbortMultipartUpload")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		listParts: connect.NewClient[v1.ListPartsRequest, v1.ListPartsResponse](
-			httpClient,
-			baseURL+MultipartUploadServiceListPartsProcedure,
-			connect.WithSchema(multipartUploadServiceMethods.ByName("ListParts")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// multipartUploadServiceClient implements MultipartUploadServiceClient.
-type multipartUploadServiceClient struct {
-	initiateMultipartUpload *connect.Client[v1.InitiateMultipartUploadRequest, v1.InitiateMultipartUploadResponse]
-	presignPart             *connect.Client[v1.PresignPartRequest, v1.PresignPartResponse]
-	completeMultipartUpload *connect.Client[v1.CompleteMultipartUploadRequest, v1.Object]
-	abortMultipartUpload    *connect.Client[v1.AbortMultipartUploadRequest, v1.AbortMultipartUploadResponse]
-	listParts               *connect.Client[v1.ListPartsRequest, v1.ListPartsResponse]
-}
-
-// InitiateMultipartUpload calls paladin.data.v1.MultipartUploadService.InitiateMultipartUpload.
-func (c *multipartUploadServiceClient) InitiateMultipartUpload(ctx context.Context, req *connect.Request[v1.InitiateMultipartUploadRequest]) (*connect.Response[v1.InitiateMultipartUploadResponse], error) {
-	return c.initiateMultipartUpload.CallUnary(ctx, req)
-}
-
-// PresignPart calls paladin.data.v1.MultipartUploadService.PresignPart.
-func (c *multipartUploadServiceClient) PresignPart(ctx context.Context, req *connect.Request[v1.PresignPartRequest]) (*connect.Response[v1.PresignPartResponse], error) {
-	return c.presignPart.CallUnary(ctx, req)
-}
-
-// CompleteMultipartUpload calls paladin.data.v1.MultipartUploadService.CompleteMultipartUpload.
-func (c *multipartUploadServiceClient) CompleteMultipartUpload(ctx context.Context, req *connect.Request[v1.CompleteMultipartUploadRequest]) (*connect.Response[v1.Object], error) {
-	return c.completeMultipartUpload.CallUnary(ctx, req)
-}
-
-// AbortMultipartUpload calls paladin.data.v1.MultipartUploadService.AbortMultipartUpload.
-func (c *multipartUploadServiceClient) AbortMultipartUpload(ctx context.Context, req *connect.Request[v1.AbortMultipartUploadRequest]) (*connect.Response[v1.AbortMultipartUploadResponse], error) {
-	return c.abortMultipartUpload.CallUnary(ctx, req)
-}
-
-// ListParts calls paladin.data.v1.MultipartUploadService.ListParts.
-func (c *multipartUploadServiceClient) ListParts(ctx context.Context, req *connect.Request[v1.ListPartsRequest]) (*connect.Response[v1.ListPartsResponse], error) {
-	return c.listParts.CallUnary(ctx, req)
+// paladin.data.v1.MultipartUploadService service. Multiple service clients may share a single
+// connect.Client.
+func NewMultipartUploadServiceClient(client *connect.Client) MultipartUploadServiceClient {
+	return &multipartUploadServiceClient{client: client}
 }
 
 // MultipartUploadServiceHandler is an implementation of the paladin.data.v1.MultipartUploadService
@@ -158,98 +116,160 @@ type MultipartUploadServiceHandler interface {
 	// InitiateMultipartUpload opens an upload session and returns its id. Sessions
 	// left incomplete are reaped by the housekeeping job after
 	// worker.jobs.housekeeping.multipart_ttl.
-	InitiateMultipartUpload(context.Context, *connect.Request[v1.InitiateMultipartUploadRequest]) (*connect.Response[v1.InitiateMultipartUploadResponse], error)
+	InitiateMultipartUpload(context.Context, *v1.InitiateMultipartUploadRequest) (*v1.InitiateMultipartUploadResponse, error)
 	// PresignPart issues a PUT URL for one part. Parts may be uploaded in any
 	// order and in parallel.
-	PresignPart(context.Context, *connect.Request[v1.PresignPartRequest]) (*connect.Response[v1.PresignPartResponse], error)
+	PresignPart(context.Context, *v1.PresignPartRequest) (*v1.PresignPartResponse, error)
 	// CompleteMultipartUpload assembles the parts into one object. The part list
 	// must carry every etag the client received; a mismatch is
 	// FailedPrecondition and the object is not created.
-	CompleteMultipartUpload(context.Context, *connect.Request[v1.CompleteMultipartUploadRequest]) (*connect.Response[v1.Object], error)
+	CompleteMultipartUpload(context.Context, *v1.CompleteMultipartUploadRequest) (*v1.Object, error)
 	// AbortMultipartUpload discards the session and the parts already uploaded.
 	// Safe to call on an already-aborted session.
-	AbortMultipartUpload(context.Context, *connect.Request[v1.AbortMultipartUploadRequest]) (*connect.Response[v1.AbortMultipartUploadResponse], error)
+	AbortMultipartUpload(context.Context, *v1.AbortMultipartUploadRequest) (*v1.AbortMultipartUploadResponse, error)
 	// ListParts returns the parts recorded for an open session, for a client
 	// reconciling after a crash.
-	ListParts(context.Context, *connect.Request[v1.ListPartsRequest]) (*connect.Response[v1.ListPartsResponse], error)
+	ListParts(context.Context, *v1.ListPartsRequest) (*v1.ListPartsResponse, error)
 }
 
-// NewMultipartUploadServiceHandler builds an HTTP handler from the service implementation. It
-// returns the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewMultipartUploadServiceHandler(svc MultipartUploadServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	multipartUploadServiceMethods := v1.File_paladin_data_v1_multipart_service_proto.Services().ByName("MultipartUploadService").Methods()
-	multipartUploadServiceInitiateMultipartUploadHandler := connect.NewUnaryHandler(
-		MultipartUploadServiceInitiateMultipartUploadProcedure,
-		svc.InitiateMultipartUpload,
-		connect.WithSchema(multipartUploadServiceMethods.ByName("InitiateMultipartUpload")),
-		connect.WithHandlerOptions(opts...),
+// RegisterMultipartUploadServiceHandler registers svc as the paladin.data.v1.MultipartUploadService
+// implementation on server.
+func RegisterMultipartUploadServiceHandler(server *connect.Server, svc MultipartUploadServiceHandler) {
+	adapter := multipartUploadServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: multipartUploadServiceInitiateMultipartUploadSpec(), Handler: adapter.initiateMultipartUpload},
+		connect.Method{Spec: multipartUploadServicePresignPartSpec(), Handler: adapter.presignPart},
+		connect.Method{Spec: multipartUploadServiceCompleteMultipartUploadSpec(), Handler: adapter.completeMultipartUpload},
+		connect.Method{Spec: multipartUploadServiceAbortMultipartUploadSpec(), Handler: adapter.abortMultipartUpload},
+		connect.Method{Spec: multipartUploadServiceListPartsSpec(), Handler: adapter.listParts},
 	)
-	multipartUploadServicePresignPartHandler := connect.NewUnaryHandler(
-		MultipartUploadServicePresignPartProcedure,
-		svc.PresignPart,
-		connect.WithSchema(multipartUploadServiceMethods.ByName("PresignPart")),
-		connect.WithHandlerOptions(opts...),
-	)
-	multipartUploadServiceCompleteMultipartUploadHandler := connect.NewUnaryHandler(
-		MultipartUploadServiceCompleteMultipartUploadProcedure,
-		svc.CompleteMultipartUpload,
-		connect.WithSchema(multipartUploadServiceMethods.ByName("CompleteMultipartUpload")),
-		connect.WithHandlerOptions(opts...),
-	)
-	multipartUploadServiceAbortMultipartUploadHandler := connect.NewUnaryHandler(
-		MultipartUploadServiceAbortMultipartUploadProcedure,
-		svc.AbortMultipartUpload,
-		connect.WithSchema(multipartUploadServiceMethods.ByName("AbortMultipartUpload")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	multipartUploadServiceListPartsHandler := connect.NewUnaryHandler(
-		MultipartUploadServiceListPartsProcedure,
-		svc.ListParts,
-		connect.WithSchema(multipartUploadServiceMethods.ByName("ListParts")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.data.v1.MultipartUploadService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case MultipartUploadServiceInitiateMultipartUploadProcedure:
-			multipartUploadServiceInitiateMultipartUploadHandler.ServeHTTP(w, r)
-		case MultipartUploadServicePresignPartProcedure:
-			multipartUploadServicePresignPartHandler.ServeHTTP(w, r)
-		case MultipartUploadServiceCompleteMultipartUploadProcedure:
-			multipartUploadServiceCompleteMultipartUploadHandler.ServeHTTP(w, r)
-		case MultipartUploadServiceAbortMultipartUploadProcedure:
-			multipartUploadServiceAbortMultipartUploadHandler.ServeHTTP(w, r)
-		case MultipartUploadServiceListPartsProcedure:
-			multipartUploadServiceListPartsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedMultipartUploadServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedMultipartUploadServiceHandler struct{}
 
-func (UnimplementedMultipartUploadServiceHandler) InitiateMultipartUpload(context.Context, *connect.Request[v1.InitiateMultipartUploadRequest]) (*connect.Response[v1.InitiateMultipartUploadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.MultipartUploadService.InitiateMultipartUpload is not implemented"))
+func (UnimplementedMultipartUploadServiceHandler) InitiateMultipartUpload(context.Context, *v1.InitiateMultipartUploadRequest) (*v1.InitiateMultipartUploadResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.MultipartUploadService.InitiateMultipartUpload is not implemented")
 }
 
-func (UnimplementedMultipartUploadServiceHandler) PresignPart(context.Context, *connect.Request[v1.PresignPartRequest]) (*connect.Response[v1.PresignPartResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.MultipartUploadService.PresignPart is not implemented"))
+func (UnimplementedMultipartUploadServiceHandler) PresignPart(context.Context, *v1.PresignPartRequest) (*v1.PresignPartResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.MultipartUploadService.PresignPart is not implemented")
 }
 
-func (UnimplementedMultipartUploadServiceHandler) CompleteMultipartUpload(context.Context, *connect.Request[v1.CompleteMultipartUploadRequest]) (*connect.Response[v1.Object], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.MultipartUploadService.CompleteMultipartUpload is not implemented"))
+func (UnimplementedMultipartUploadServiceHandler) CompleteMultipartUpload(context.Context, *v1.CompleteMultipartUploadRequest) (*v1.Object, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.MultipartUploadService.CompleteMultipartUpload is not implemented")
 }
 
-func (UnimplementedMultipartUploadServiceHandler) AbortMultipartUpload(context.Context, *connect.Request[v1.AbortMultipartUploadRequest]) (*connect.Response[v1.AbortMultipartUploadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.MultipartUploadService.AbortMultipartUpload is not implemented"))
+func (UnimplementedMultipartUploadServiceHandler) AbortMultipartUpload(context.Context, *v1.AbortMultipartUploadRequest) (*v1.AbortMultipartUploadResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.MultipartUploadService.AbortMultipartUpload is not implemented")
 }
 
-func (UnimplementedMultipartUploadServiceHandler) ListParts(context.Context, *connect.Request[v1.ListPartsRequest]) (*connect.Response[v1.ListPartsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.MultipartUploadService.ListParts is not implemented"))
+func (UnimplementedMultipartUploadServiceHandler) ListParts(context.Context, *v1.ListPartsRequest) (*v1.ListPartsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.MultipartUploadService.ListParts is not implemented")
+}
+
+type multipartUploadServiceClient struct {
+	client *connect.Client
+}
+
+func (c *multipartUploadServiceClient) InitiateMultipartUpload(ctx context.Context, req *v1.InitiateMultipartUploadRequest) (*v1.InitiateMultipartUploadResponse, error) {
+	var res v1.InitiateMultipartUploadResponse
+	if err := c.client.CallUnary(ctx, multipartUploadServiceInitiateMultipartUploadSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *multipartUploadServiceClient) PresignPart(ctx context.Context, req *v1.PresignPartRequest) (*v1.PresignPartResponse, error) {
+	var res v1.PresignPartResponse
+	if err := c.client.CallUnary(ctx, multipartUploadServicePresignPartSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *multipartUploadServiceClient) CompleteMultipartUpload(ctx context.Context, req *v1.CompleteMultipartUploadRequest) (*v1.Object, error) {
+	var res v1.Object
+	if err := c.client.CallUnary(ctx, multipartUploadServiceCompleteMultipartUploadSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *multipartUploadServiceClient) AbortMultipartUpload(ctx context.Context, req *v1.AbortMultipartUploadRequest) (*v1.AbortMultipartUploadResponse, error) {
+	var res v1.AbortMultipartUploadResponse
+	if err := c.client.CallUnary(ctx, multipartUploadServiceAbortMultipartUploadSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *multipartUploadServiceClient) ListParts(ctx context.Context, req *v1.ListPartsRequest) (*v1.ListPartsResponse, error) {
+	var res v1.ListPartsResponse
+	if err := c.client.CallUnary(ctx, multipartUploadServiceListPartsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type multipartUploadServiceHandler struct{ svc MultipartUploadServiceHandler }
+
+func (h multipartUploadServiceHandler) initiateMultipartUpload(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InitiateMultipartUploadRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.InitiateMultipartUpload(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h multipartUploadServiceHandler) presignPart(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PresignPartRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PresignPart(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h multipartUploadServiceHandler) completeMultipartUpload(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CompleteMultipartUploadRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CompleteMultipartUpload(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h multipartUploadServiceHandler) abortMultipartUpload(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AbortMultipartUploadRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AbortMultipartUpload(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h multipartUploadServiceHandler) listParts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPartsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListParts(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

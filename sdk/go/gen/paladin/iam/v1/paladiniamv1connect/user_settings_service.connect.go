@@ -6,49 +6,83 @@ package paladiniamv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// UserSettingsServiceName is the fully-qualified name of the UserSettingsService service.
 	UserSettingsServiceName = "paladin.iam.v1.UserSettingsService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// UserSettingsServiceGetMineProcedure is the fully-qualified name of the UserSettingsService's
-	// GetMine RPC.
+	// UserSettingsServiceGetMineProcedure is the procedure name of the UserSettingsService's GetMine
+	// RPC.
 	UserSettingsServiceGetMineProcedure = "/paladin.iam.v1.UserSettingsService/GetMine"
-	// UserSettingsServiceUpdateMineProcedure is the fully-qualified name of the UserSettingsService's
+	// UserSettingsServiceUpdateMineProcedure is the procedure name of the UserSettingsService's
 	// UpdateMine RPC.
 	UserSettingsServiceUpdateMineProcedure = "/paladin.iam.v1.UserSettingsService/UpdateMine"
-	// UserSettingsServiceGetForUserProcedure is the fully-qualified name of the UserSettingsService's
+	// UserSettingsServiceGetForUserProcedure is the procedure name of the UserSettingsService's
 	// GetForUser RPC.
 	UserSettingsServiceGetForUserProcedure = "/paladin.iam.v1.UserSettingsService/GetForUser"
-	// UserSettingsServiceListByTenantProcedure is the fully-qualified name of the UserSettingsService's
+	// UserSettingsServiceListByTenantProcedure is the procedure name of the UserSettingsService's
 	// ListByTenant RPC.
 	UserSettingsServiceListByTenantProcedure = "/paladin.iam.v1.UserSettingsService/ListByTenant"
-	// UserSettingsServiceDeleteForUserProcedure is the fully-qualified name of the
-	// UserSettingsService's DeleteForUser RPC.
+	// UserSettingsServiceDeleteForUserProcedure is the procedure name of the UserSettingsService's
+	// DeleteForUser RPC.
 	UserSettingsServiceDeleteForUserProcedure = "/paladin.iam.v1.UserSettingsService/DeleteForUser"
+)
+
+var (
+	userSettingsServiceGetMineSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_settings_service_proto.Services().ByName("UserSettingsService").Methods().ByName("GetMine"),
+			Procedure:        UserSettingsServiceGetMineProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	userSettingsServiceUpdateMineSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_settings_service_proto.Services().ByName("UserSettingsService").Methods().ByName("UpdateMine"),
+			Procedure:        UserSettingsServiceUpdateMineProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	userSettingsServiceGetForUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_settings_service_proto.Services().ByName("UserSettingsService").Methods().ByName("GetForUser"),
+			Procedure:        UserSettingsServiceGetForUserProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	userSettingsServiceListByTenantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_settings_service_proto.Services().ByName("UserSettingsService").Methods().ByName("ListByTenant"),
+			Procedure:        UserSettingsServiceListByTenantProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	userSettingsServiceDeleteForUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_settings_service_proto.Services().ByName("UserSettingsService").Methods().ByName("DeleteForUser"),
+			Procedure:        UserSettingsServiceDeleteForUserProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 )
 
 // UserSettingsServiceClient is a client for the paladin.iam.v1.UserSettingsService service.
@@ -56,102 +90,25 @@ type UserSettingsServiceClient interface {
 	// GetMine returns the calling user's settings, creating nothing: a user who
 	// has never saved settings gets the zero value with an empty
 	// resource_version.
-	GetMine(context.Context, *connect.Request[v1.GetMineRequest]) (*connect.Response[v1.UserSettings], error)
+	GetMine(context.Context, *v1.GetMineRequest) (*v1.UserSettings, error)
 	// UpdateMine writes the calling user's settings. An empty resource_version
 	// means "create"; a non-empty one must match, or the write is Aborted.
-	UpdateMine(context.Context, *connect.Request[v1.UpdateMineRequest]) (*connect.Response[v1.UserSettings], error)
+	UpdateMine(context.Context, *v1.UpdateMineRequest) (*v1.UserSettings, error)
 	// GetForUser reads another user's settings. Tenant-admin only — the
 	// self-service path is GetMine.
-	GetForUser(context.Context, *connect.Request[v1.GetForUserRequest]) (*connect.Response[v1.UserSettings], error)
+	GetForUser(context.Context, *v1.GetForUserRequest) (*v1.UserSettings, error)
 	// ListByTenant returns every settings row in the tenant, for an operator
 	// auditing what users have configured.
-	ListByTenant(context.Context, *connect.Request[v1.ListByTenantRequest]) (*connect.Response[v1.ListByTenantResponse], error)
+	ListByTenant(context.Context, *v1.ListByTenantRequest) (*v1.ListByTenantResponse, error)
 	// DeleteForUser removes another user's settings row, resetting them to
 	// defaults on next read.
-	DeleteForUser(context.Context, *connect.Request[v1.DeleteForUserRequest]) (*connect.Response[v1.DeleteForUserResponse], error)
+	DeleteForUser(context.Context, *v1.DeleteForUserRequest) (*v1.DeleteForUserResponse, error)
 }
 
 // NewUserSettingsServiceClient constructs a client for the paladin.iam.v1.UserSettingsService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewUserSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) UserSettingsServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	userSettingsServiceMethods := v1.File_paladin_iam_v1_user_settings_service_proto.Services().ByName("UserSettingsService").Methods()
-	return &userSettingsServiceClient{
-		getMine: connect.NewClient[v1.GetMineRequest, v1.UserSettings](
-			httpClient,
-			baseURL+UserSettingsServiceGetMineProcedure,
-			connect.WithSchema(userSettingsServiceMethods.ByName("GetMine")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		updateMine: connect.NewClient[v1.UpdateMineRequest, v1.UserSettings](
-			httpClient,
-			baseURL+UserSettingsServiceUpdateMineProcedure,
-			connect.WithSchema(userSettingsServiceMethods.ByName("UpdateMine")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		getForUser: connect.NewClient[v1.GetForUserRequest, v1.UserSettings](
-			httpClient,
-			baseURL+UserSettingsServiceGetForUserProcedure,
-			connect.WithSchema(userSettingsServiceMethods.ByName("GetForUser")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		listByTenant: connect.NewClient[v1.ListByTenantRequest, v1.ListByTenantResponse](
-			httpClient,
-			baseURL+UserSettingsServiceListByTenantProcedure,
-			connect.WithSchema(userSettingsServiceMethods.ByName("ListByTenant")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		deleteForUser: connect.NewClient[v1.DeleteForUserRequest, v1.DeleteForUserResponse](
-			httpClient,
-			baseURL+UserSettingsServiceDeleteForUserProcedure,
-			connect.WithSchema(userSettingsServiceMethods.ByName("DeleteForUser")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// userSettingsServiceClient implements UserSettingsServiceClient.
-type userSettingsServiceClient struct {
-	getMine       *connect.Client[v1.GetMineRequest, v1.UserSettings]
-	updateMine    *connect.Client[v1.UpdateMineRequest, v1.UserSettings]
-	getForUser    *connect.Client[v1.GetForUserRequest, v1.UserSettings]
-	listByTenant  *connect.Client[v1.ListByTenantRequest, v1.ListByTenantResponse]
-	deleteForUser *connect.Client[v1.DeleteForUserRequest, v1.DeleteForUserResponse]
-}
-
-// GetMine calls paladin.iam.v1.UserSettingsService.GetMine.
-func (c *userSettingsServiceClient) GetMine(ctx context.Context, req *connect.Request[v1.GetMineRequest]) (*connect.Response[v1.UserSettings], error) {
-	return c.getMine.CallUnary(ctx, req)
-}
-
-// UpdateMine calls paladin.iam.v1.UserSettingsService.UpdateMine.
-func (c *userSettingsServiceClient) UpdateMine(ctx context.Context, req *connect.Request[v1.UpdateMineRequest]) (*connect.Response[v1.UserSettings], error) {
-	return c.updateMine.CallUnary(ctx, req)
-}
-
-// GetForUser calls paladin.iam.v1.UserSettingsService.GetForUser.
-func (c *userSettingsServiceClient) GetForUser(ctx context.Context, req *connect.Request[v1.GetForUserRequest]) (*connect.Response[v1.UserSettings], error) {
-	return c.getForUser.CallUnary(ctx, req)
-}
-
-// ListByTenant calls paladin.iam.v1.UserSettingsService.ListByTenant.
-func (c *userSettingsServiceClient) ListByTenant(ctx context.Context, req *connect.Request[v1.ListByTenantRequest]) (*connect.Response[v1.ListByTenantResponse], error) {
-	return c.listByTenant.CallUnary(ctx, req)
-}
-
-// DeleteForUser calls paladin.iam.v1.UserSettingsService.DeleteForUser.
-func (c *userSettingsServiceClient) DeleteForUser(ctx context.Context, req *connect.Request[v1.DeleteForUserRequest]) (*connect.Response[v1.DeleteForUserResponse], error) {
-	return c.deleteForUser.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewUserSettingsServiceClient(client *connect.Client) UserSettingsServiceClient {
+	return &userSettingsServiceClient{client: client}
 }
 
 // UserSettingsServiceHandler is an implementation of the paladin.iam.v1.UserSettingsService
@@ -160,100 +117,159 @@ type UserSettingsServiceHandler interface {
 	// GetMine returns the calling user's settings, creating nothing: a user who
 	// has never saved settings gets the zero value with an empty
 	// resource_version.
-	GetMine(context.Context, *connect.Request[v1.GetMineRequest]) (*connect.Response[v1.UserSettings], error)
+	GetMine(context.Context, *v1.GetMineRequest) (*v1.UserSettings, error)
 	// UpdateMine writes the calling user's settings. An empty resource_version
 	// means "create"; a non-empty one must match, or the write is Aborted.
-	UpdateMine(context.Context, *connect.Request[v1.UpdateMineRequest]) (*connect.Response[v1.UserSettings], error)
+	UpdateMine(context.Context, *v1.UpdateMineRequest) (*v1.UserSettings, error)
 	// GetForUser reads another user's settings. Tenant-admin only — the
 	// self-service path is GetMine.
-	GetForUser(context.Context, *connect.Request[v1.GetForUserRequest]) (*connect.Response[v1.UserSettings], error)
+	GetForUser(context.Context, *v1.GetForUserRequest) (*v1.UserSettings, error)
 	// ListByTenant returns every settings row in the tenant, for an operator
 	// auditing what users have configured.
-	ListByTenant(context.Context, *connect.Request[v1.ListByTenantRequest]) (*connect.Response[v1.ListByTenantResponse], error)
+	ListByTenant(context.Context, *v1.ListByTenantRequest) (*v1.ListByTenantResponse, error)
 	// DeleteForUser removes another user's settings row, resetting them to
 	// defaults on next read.
-	DeleteForUser(context.Context, *connect.Request[v1.DeleteForUserRequest]) (*connect.Response[v1.DeleteForUserResponse], error)
+	DeleteForUser(context.Context, *v1.DeleteForUserRequest) (*v1.DeleteForUserResponse, error)
 }
 
-// NewUserSettingsServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewUserSettingsServiceHandler(svc UserSettingsServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	userSettingsServiceMethods := v1.File_paladin_iam_v1_user_settings_service_proto.Services().ByName("UserSettingsService").Methods()
-	userSettingsServiceGetMineHandler := connect.NewUnaryHandler(
-		UserSettingsServiceGetMineProcedure,
-		svc.GetMine,
-		connect.WithSchema(userSettingsServiceMethods.ByName("GetMine")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterUserSettingsServiceHandler registers svc as the paladin.iam.v1.UserSettingsService
+// implementation on server.
+func RegisterUserSettingsServiceHandler(server *connect.Server, svc UserSettingsServiceHandler) {
+	adapter := userSettingsServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: userSettingsServiceGetMineSpec(), Handler: adapter.getMine},
+		connect.Method{Spec: userSettingsServiceUpdateMineSpec(), Handler: adapter.updateMine},
+		connect.Method{Spec: userSettingsServiceGetForUserSpec(), Handler: adapter.getForUser},
+		connect.Method{Spec: userSettingsServiceListByTenantSpec(), Handler: adapter.listByTenant},
+		connect.Method{Spec: userSettingsServiceDeleteForUserSpec(), Handler: adapter.deleteForUser},
 	)
-	userSettingsServiceUpdateMineHandler := connect.NewUnaryHandler(
-		UserSettingsServiceUpdateMineProcedure,
-		svc.UpdateMine,
-		connect.WithSchema(userSettingsServiceMethods.ByName("UpdateMine")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	userSettingsServiceGetForUserHandler := connect.NewUnaryHandler(
-		UserSettingsServiceGetForUserProcedure,
-		svc.GetForUser,
-		connect.WithSchema(userSettingsServiceMethods.ByName("GetForUser")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	userSettingsServiceListByTenantHandler := connect.NewUnaryHandler(
-		UserSettingsServiceListByTenantProcedure,
-		svc.ListByTenant,
-		connect.WithSchema(userSettingsServiceMethods.ByName("ListByTenant")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	userSettingsServiceDeleteForUserHandler := connect.NewUnaryHandler(
-		UserSettingsServiceDeleteForUserProcedure,
-		svc.DeleteForUser,
-		connect.WithSchema(userSettingsServiceMethods.ByName("DeleteForUser")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.iam.v1.UserSettingsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case UserSettingsServiceGetMineProcedure:
-			userSettingsServiceGetMineHandler.ServeHTTP(w, r)
-		case UserSettingsServiceUpdateMineProcedure:
-			userSettingsServiceUpdateMineHandler.ServeHTTP(w, r)
-		case UserSettingsServiceGetForUserProcedure:
-			userSettingsServiceGetForUserHandler.ServeHTTP(w, r)
-		case UserSettingsServiceListByTenantProcedure:
-			userSettingsServiceListByTenantHandler.ServeHTTP(w, r)
-		case UserSettingsServiceDeleteForUserProcedure:
-			userSettingsServiceDeleteForUserHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedUserSettingsServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedUserSettingsServiceHandler struct{}
 
-func (UnimplementedUserSettingsServiceHandler) GetMine(context.Context, *connect.Request[v1.GetMineRequest]) (*connect.Response[v1.UserSettings], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserSettingsService.GetMine is not implemented"))
+func (UnimplementedUserSettingsServiceHandler) GetMine(context.Context, *v1.GetMineRequest) (*v1.UserSettings, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserSettingsService.GetMine is not implemented")
 }
 
-func (UnimplementedUserSettingsServiceHandler) UpdateMine(context.Context, *connect.Request[v1.UpdateMineRequest]) (*connect.Response[v1.UserSettings], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserSettingsService.UpdateMine is not implemented"))
+func (UnimplementedUserSettingsServiceHandler) UpdateMine(context.Context, *v1.UpdateMineRequest) (*v1.UserSettings, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserSettingsService.UpdateMine is not implemented")
 }
 
-func (UnimplementedUserSettingsServiceHandler) GetForUser(context.Context, *connect.Request[v1.GetForUserRequest]) (*connect.Response[v1.UserSettings], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserSettingsService.GetForUser is not implemented"))
+func (UnimplementedUserSettingsServiceHandler) GetForUser(context.Context, *v1.GetForUserRequest) (*v1.UserSettings, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserSettingsService.GetForUser is not implemented")
 }
 
-func (UnimplementedUserSettingsServiceHandler) ListByTenant(context.Context, *connect.Request[v1.ListByTenantRequest]) (*connect.Response[v1.ListByTenantResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserSettingsService.ListByTenant is not implemented"))
+func (UnimplementedUserSettingsServiceHandler) ListByTenant(context.Context, *v1.ListByTenantRequest) (*v1.ListByTenantResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserSettingsService.ListByTenant is not implemented")
 }
 
-func (UnimplementedUserSettingsServiceHandler) DeleteForUser(context.Context, *connect.Request[v1.DeleteForUserRequest]) (*connect.Response[v1.DeleteForUserResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.UserSettingsService.DeleteForUser is not implemented"))
+func (UnimplementedUserSettingsServiceHandler) DeleteForUser(context.Context, *v1.DeleteForUserRequest) (*v1.DeleteForUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserSettingsService.DeleteForUser is not implemented")
+}
+
+type userSettingsServiceClient struct {
+	client *connect.Client
+}
+
+func (c *userSettingsServiceClient) GetMine(ctx context.Context, req *v1.GetMineRequest) (*v1.UserSettings, error) {
+	var res v1.UserSettings
+	if err := c.client.CallUnary(ctx, userSettingsServiceGetMineSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userSettingsServiceClient) UpdateMine(ctx context.Context, req *v1.UpdateMineRequest) (*v1.UserSettings, error) {
+	var res v1.UserSettings
+	if err := c.client.CallUnary(ctx, userSettingsServiceUpdateMineSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userSettingsServiceClient) GetForUser(ctx context.Context, req *v1.GetForUserRequest) (*v1.UserSettings, error) {
+	var res v1.UserSettings
+	if err := c.client.CallUnary(ctx, userSettingsServiceGetForUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userSettingsServiceClient) ListByTenant(ctx context.Context, req *v1.ListByTenantRequest) (*v1.ListByTenantResponse, error) {
+	var res v1.ListByTenantResponse
+	if err := c.client.CallUnary(ctx, userSettingsServiceListByTenantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userSettingsServiceClient) DeleteForUser(ctx context.Context, req *v1.DeleteForUserRequest) (*v1.DeleteForUserResponse, error) {
+	var res v1.DeleteForUserResponse
+	if err := c.client.CallUnary(ctx, userSettingsServiceDeleteForUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type userSettingsServiceHandler struct{ svc UserSettingsServiceHandler }
+
+func (h userSettingsServiceHandler) getMine(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetMineRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetMine(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userSettingsServiceHandler) updateMine(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateMineRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateMine(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userSettingsServiceHandler) getForUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetForUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetForUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userSettingsServiceHandler) listByTenant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListByTenantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListByTenant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userSettingsServiceHandler) deleteForUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteForUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteForUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

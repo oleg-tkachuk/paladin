@@ -6,7 +6,8 @@ require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
 	buf.build/go/protovalidate v1.4.0
 	connectrpc.com/connect v1.21.0
-	connectrpc.com/otelconnect v0.10.0
+	connectrpc.com/connect/v2 v2.0.0
+	connectrpc.com/otelconnect v0.11.0
 	github.com/google/uuid v1.6.0
 	github.com/spiffe/go-spiffe/v2 v2.8.2
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
@@ -34,8 +35,3 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )
-
-// otelconnect v0.11 requires connect-go v2; v0.10 is the last release for
-// connect-go v1. Excluded so `go get -u` stops at v0.10 until the module
-// moves to connect-go v2 (BACKLOG: "Migrate to connect-go v2").
-exclude connectrpc.com/otelconnect v0.11.0

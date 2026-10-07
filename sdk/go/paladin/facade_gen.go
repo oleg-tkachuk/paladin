@@ -23,13 +23,13 @@ type DataPlane struct {
 
 func newDataPlane(c *Client) *DataPlane {
 	return &DataPlane{
-		Batch:            paladindatav1connect.NewBatchServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		MultipartUpload:  paladindatav1connect.NewMultipartUploadServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		Object:           paladindatav1connect.NewObjectServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		ObjectTag:        paladindatav1connect.NewObjectTagServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		Operation:        paladindatav1connect.NewOperationServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		Presign:          paladindatav1connect.NewPresignServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		StorageBootstrap: paladindatav1connect.NewStorageBootstrapServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
+		Batch:            paladindatav1connect.NewBatchServiceClient(c.rpc),
+		MultipartUpload:  paladindatav1connect.NewMultipartUploadServiceClient(c.rpc),
+		Object:           paladindatav1connect.NewObjectServiceClient(c.rpc),
+		ObjectTag:        paladindatav1connect.NewObjectTagServiceClient(c.rpc),
+		Operation:        paladindatav1connect.NewOperationServiceClient(c.rpc),
+		Presign:          paladindatav1connect.NewPresignServiceClient(c.rpc),
+		StorageBootstrap: paladindatav1connect.NewStorageBootstrapServiceClient(c.rpc),
 		transfer:         c.transfer,
 	}
 }
@@ -56,22 +56,22 @@ type AdminPlane struct {
 
 func newAdminPlane(c *Client) *AdminPlane {
 	return &AdminPlane{
-		APIToken:          paladinadminv1connect.NewAPITokenServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		AuditLog:          paladinadminv1connect.NewAuditLogServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		Backend:           paladinadminv1connect.NewBackendServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		Billing:           paladinadminv1connect.NewBillingServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		Bucket:            paladinadminv1connect.NewBucketServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		CEL:               paladinadminv1connect.NewCELServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		Capability:        paladinadminv1connect.NewCapabilityServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		Collection:        paladinadminv1connect.NewCollectionServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		EventSubscription: paladinadminv1connect.NewEventSubscriptionServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		MCPInspect:        paladinadminv1connect.NewMCPInspectServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		PlatformOperation: paladinadminv1connect.NewPlatformOperationServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		Policy:            paladinadminv1connect.NewPolicyServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		Quota:             paladinadminv1connect.NewQuotaServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		System:            paladinadminv1connect.NewSystemServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		TenantBudget:      paladinadminv1connect.NewTenantBudgetServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		Tenant:            paladinadminv1connect.NewTenantServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
+		APIToken:          paladinadminv1connect.NewAPITokenServiceClient(c.rpc),
+		AuditLog:          paladinadminv1connect.NewAuditLogServiceClient(c.rpc),
+		Backend:           paladinadminv1connect.NewBackendServiceClient(c.rpc),
+		Billing:           paladinadminv1connect.NewBillingServiceClient(c.rpc),
+		Bucket:            paladinadminv1connect.NewBucketServiceClient(c.rpc),
+		CEL:               paladinadminv1connect.NewCELServiceClient(c.rpc),
+		Capability:        paladinadminv1connect.NewCapabilityServiceClient(c.rpc),
+		Collection:        paladinadminv1connect.NewCollectionServiceClient(c.rpc),
+		EventSubscription: paladinadminv1connect.NewEventSubscriptionServiceClient(c.rpc),
+		MCPInspect:        paladinadminv1connect.NewMCPInspectServiceClient(c.rpc),
+		PlatformOperation: paladinadminv1connect.NewPlatformOperationServiceClient(c.rpc),
+		Policy:            paladinadminv1connect.NewPolicyServiceClient(c.rpc),
+		Quota:             paladinadminv1connect.NewQuotaServiceClient(c.rpc),
+		System:            paladinadminv1connect.NewSystemServiceClient(c.rpc),
+		TenantBudget:      paladinadminv1connect.NewTenantBudgetServiceClient(c.rpc),
+		Tenant:            paladinadminv1connect.NewTenantServiceClient(c.rpc),
 	}
 }
 
@@ -85,9 +85,9 @@ type IAMPlane struct {
 
 func newIAMPlane(c *Client) *IAMPlane {
 	return &IAMPlane{
-		Auth:         paladiniamv1connect.NewAuthServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		Health:       paladiniamv1connect.NewHealthServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		User:         paladiniamv1connect.NewUserServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
-		UserSettings: paladiniamv1connect.NewUserSettingsServiceClient(c.httpClient, c.baseURL, c.ClientOptions()...),
+		Auth:         paladiniamv1connect.NewAuthServiceClient(c.rpc),
+		Health:       paladiniamv1connect.NewHealthServiceClient(c.rpc),
+		User:         paladiniamv1connect.NewUserServiceClient(c.rpc),
+		UserSettings: paladiniamv1connect.NewUserSettingsServiceClient(c.rpc),
 	}
 }

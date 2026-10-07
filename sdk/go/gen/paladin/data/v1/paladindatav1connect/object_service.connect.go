@@ -6,87 +6,214 @@ package paladindatav1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ObjectServiceName is the fully-qualified name of the ObjectService service.
 	ObjectServiceName = "paladin.data.v1.ObjectService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ObjectServiceUploadObjectProcedure is the fully-qualified name of the ObjectService's
-	// UploadObject RPC.
+	// ObjectServiceUploadObjectProcedure is the procedure name of the ObjectService's UploadObject RPC.
 	ObjectServiceUploadObjectProcedure = "/paladin.data.v1.ObjectService/UploadObject"
-	// ObjectServiceDownloadObjectProcedure is the fully-qualified name of the ObjectService's
-	// DownloadObject RPC.
+	// ObjectServiceDownloadObjectProcedure is the procedure name of the ObjectService's DownloadObject
+	// RPC.
 	ObjectServiceDownloadObjectProcedure = "/paladin.data.v1.ObjectService/DownloadObject"
-	// ObjectServiceGetObjectProcedure is the fully-qualified name of the ObjectService's GetObject RPC.
+	// ObjectServiceGetObjectProcedure is the procedure name of the ObjectService's GetObject RPC.
 	ObjectServiceGetObjectProcedure = "/paladin.data.v1.ObjectService/GetObject"
-	// ObjectServiceLookupObjectProcedure is the fully-qualified name of the ObjectService's
-	// LookupObject RPC.
+	// ObjectServiceLookupObjectProcedure is the procedure name of the ObjectService's LookupObject RPC.
 	ObjectServiceLookupObjectProcedure = "/paladin.data.v1.ObjectService/LookupObject"
-	// ObjectServiceUpdateObjectProcedure is the fully-qualified name of the ObjectService's
-	// UpdateObject RPC.
+	// ObjectServiceUpdateObjectProcedure is the procedure name of the ObjectService's UpdateObject RPC.
 	ObjectServiceUpdateObjectProcedure = "/paladin.data.v1.ObjectService/UpdateObject"
-	// ObjectServiceCompleteObjectProcedure is the fully-qualified name of the ObjectService's
-	// CompleteObject RPC.
+	// ObjectServiceCompleteObjectProcedure is the procedure name of the ObjectService's CompleteObject
+	// RPC.
 	ObjectServiceCompleteObjectProcedure = "/paladin.data.v1.ObjectService/CompleteObject"
-	// ObjectServiceDeleteObjectProcedure is the fully-qualified name of the ObjectService's
-	// DeleteObject RPC.
+	// ObjectServiceDeleteObjectProcedure is the procedure name of the ObjectService's DeleteObject RPC.
 	ObjectServiceDeleteObjectProcedure = "/paladin.data.v1.ObjectService/DeleteObject"
-	// ObjectServiceRestoreObjectProcedure is the fully-qualified name of the ObjectService's
-	// RestoreObject RPC.
+	// ObjectServiceRestoreObjectProcedure is the procedure name of the ObjectService's RestoreObject
+	// RPC.
 	ObjectServiceRestoreObjectProcedure = "/paladin.data.v1.ObjectService/RestoreObject"
-	// ObjectServiceCopyObjectProcedure is the fully-qualified name of the ObjectService's CopyObject
-	// RPC.
+	// ObjectServiceCopyObjectProcedure is the procedure name of the ObjectService's CopyObject RPC.
 	ObjectServiceCopyObjectProcedure = "/paladin.data.v1.ObjectService/CopyObject"
-	// ObjectServiceListObjectsProcedure is the fully-qualified name of the ObjectService's ListObjects
-	// RPC.
+	// ObjectServiceListObjectsProcedure is the procedure name of the ObjectService's ListObjects RPC.
 	ObjectServiceListObjectsProcedure = "/paladin.data.v1.ObjectService/ListObjects"
-	// ObjectServiceCountObjectsProcedure is the fully-qualified name of the ObjectService's
-	// CountObjects RPC.
+	// ObjectServiceCountObjectsProcedure is the procedure name of the ObjectService's CountObjects RPC.
 	ObjectServiceCountObjectsProcedure = "/paladin.data.v1.ObjectService/CountObjects"
-	// ObjectServiceListObjectVersionsProcedure is the fully-qualified name of the ObjectService's
+	// ObjectServiceListObjectVersionsProcedure is the procedure name of the ObjectService's
 	// ListObjectVersions RPC.
 	ObjectServiceListObjectVersionsProcedure = "/paladin.data.v1.ObjectService/ListObjectVersions"
-	// ObjectServiceGetObjectVersionProcedure is the fully-qualified name of the ObjectService's
+	// ObjectServiceGetObjectVersionProcedure is the procedure name of the ObjectService's
 	// GetObjectVersion RPC.
 	ObjectServiceGetObjectVersionProcedure = "/paladin.data.v1.ObjectService/GetObjectVersion"
-	// ObjectServiceRestoreObjectVersionProcedure is the fully-qualified name of the ObjectService's
+	// ObjectServiceRestoreObjectVersionProcedure is the procedure name of the ObjectService's
 	// RestoreObjectVersion RPC.
 	ObjectServiceRestoreObjectVersionProcedure = "/paladin.data.v1.ObjectService/RestoreObjectVersion"
-	// ObjectServiceSetObjectRetentionProcedure is the fully-qualified name of the ObjectService's
+	// ObjectServiceSetObjectRetentionProcedure is the procedure name of the ObjectService's
 	// SetObjectRetention RPC.
 	ObjectServiceSetObjectRetentionProcedure = "/paladin.data.v1.ObjectService/SetObjectRetention"
-	// ObjectServiceSetObjectLegalHoldProcedure is the fully-qualified name of the ObjectService's
+	// ObjectServiceSetObjectLegalHoldProcedure is the procedure name of the ObjectService's
 	// SetObjectLegalHold RPC.
 	ObjectServiceSetObjectLegalHoldProcedure = "/paladin.data.v1.ObjectService/SetObjectLegalHold"
-	// ObjectServiceGetObjectLockProcedure is the fully-qualified name of the ObjectService's
-	// GetObjectLock RPC.
+	// ObjectServiceGetObjectLockProcedure is the procedure name of the ObjectService's GetObjectLock
+	// RPC.
 	ObjectServiceGetObjectLockProcedure = "/paladin.data.v1.ObjectService/GetObjectLock"
-	// ObjectServiceSetObjectTaintProcedure is the fully-qualified name of the ObjectService's
-	// SetObjectTaint RPC.
+	// ObjectServiceSetObjectTaintProcedure is the procedure name of the ObjectService's SetObjectTaint
+	// RPC.
 	ObjectServiceSetObjectTaintProcedure = "/paladin.data.v1.ObjectService/SetObjectTaint"
+)
+
+var (
+	objectServiceUploadObjectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("UploadObject"),
+			Procedure:  ObjectServiceUploadObjectProcedure,
+		}
+	})
+	objectServiceDownloadObjectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("DownloadObject"),
+			Procedure:  ObjectServiceDownloadObjectProcedure,
+		}
+	})
+	objectServiceGetObjectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("GetObject"),
+			Procedure:        ObjectServiceGetObjectProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	objectServiceLookupObjectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("LookupObject"),
+			Procedure:        ObjectServiceLookupObjectProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	objectServiceUpdateObjectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("UpdateObject"),
+			Procedure:        ObjectServiceUpdateObjectProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	objectServiceCompleteObjectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("CompleteObject"),
+			Procedure:  ObjectServiceCompleteObjectProcedure,
+		}
+	})
+	objectServiceDeleteObjectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("DeleteObject"),
+			Procedure:        ObjectServiceDeleteObjectProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	objectServiceRestoreObjectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("RestoreObject"),
+			Procedure:        ObjectServiceRestoreObjectProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	objectServiceCopyObjectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("CopyObject"),
+			Procedure:  ObjectServiceCopyObjectProcedure,
+		}
+	})
+	objectServiceListObjectsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("ListObjects"),
+			Procedure:        ObjectServiceListObjectsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	objectServiceCountObjectsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("CountObjects"),
+			Procedure:        ObjectServiceCountObjectsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	objectServiceListObjectVersionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("ListObjectVersions"),
+			Procedure:        ObjectServiceListObjectVersionsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	objectServiceGetObjectVersionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("GetObjectVersion"),
+			Procedure:        ObjectServiceGetObjectVersionProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	objectServiceRestoreObjectVersionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("RestoreObjectVersion"),
+			Procedure:        ObjectServiceRestoreObjectVersionProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	objectServiceSetObjectRetentionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("SetObjectRetention"),
+			Procedure:        ObjectServiceSetObjectRetentionProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	objectServiceSetObjectLegalHoldSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("SetObjectLegalHold"),
+			Procedure:        ObjectServiceSetObjectLegalHoldProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	objectServiceGetObjectLockSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("GetObjectLock"),
+			Procedure:        ObjectServiceGetObjectLockProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	objectServiceSetObjectTaintSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods().ByName("SetObjectTaint"),
+			Procedure:        ObjectServiceSetObjectTaintProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 )
 
 // ObjectServiceClient is a client for the paladin.data.v1.ObjectService service.
@@ -94,50 +221,50 @@ type ObjectServiceClient interface {
 	// UploadObject is the presigned-URL handshake, not a byte pipe: it records
 	// the intent and returns a URL the client PUTs to directly. The control
 	// plane never sees object bytes. Finish with CompleteObject.
-	UploadObject(context.Context, *connect.Request[v1.UploadObjectRequest]) (*connect.Response[v1.UploadObjectResponse], error)
+	UploadObject(context.Context, *v1.UploadObjectRequest) (*v1.UploadObjectResponse, error)
 	// DownloadObject returns a presigned GET URL. As with upload, the bytes move
 	// between the client and the storage backend, not through here.
-	DownloadObject(context.Context, *connect.Request[v1.DownloadObjectRequest]) (*connect.Response[v1.DownloadObjectResponse], error)
+	DownloadObject(context.Context, *v1.DownloadObjectRequest) (*v1.DownloadObjectResponse, error)
 	// GetObject returns metadata for one object. lock is populated here but left
 	// empty by ListObjects — reading it per row would add a join to the
 	// pagination hot path.
-	GetObject(context.Context, *connect.Request[v1.GetObjectRequest]) (*connect.Response[v1.Object], error)
+	GetObject(context.Context, *v1.GetObjectRequest) (*v1.Object, error)
 	// LookupObject resolves an Object by (collection, key) instead of object_id.
-	LookupObject(context.Context, *connect.Request[v1.LookupObjectRequest]) (*connect.Response[v1.Object], error)
+	LookupObject(context.Context, *v1.LookupObjectRequest) (*v1.Object, error)
 	// UpdateObject applies update_mask to metadata, tags and content_type; every
 	// other field is server-owned. resource_version is required.
-	UpdateObject(context.Context, *connect.Request[v1.UpdateObjectRequest]) (*connect.Response[v1.Object], error)
+	UpdateObject(context.Context, *v1.UpdateObjectRequest) (*v1.Object, error)
 	// CompleteObject is no-op for IMPLICIT completion mode and the event has
 	// already arrived; otherwise promotes PENDING → AVAILABLE after HEAD verify.
-	CompleteObject(context.Context, *connect.Request[v1.CompleteObjectRequest]) (*connect.Response[v1.Object], error)
+	CompleteObject(context.Context, *v1.CompleteObjectRequest) (*v1.Object, error)
 	// DeleteObject soft-deletes by default — the object moves to the trash and
 	// RestoreObject brings it back. permanent=true purges it irrecoverably. A
 	// locked object refuses deletion unless the caller holds GOVERNANCE bypass
 	// and the window is GOVERNANCE, never COMPLIANCE or a legal hold.
-	DeleteObject(context.Context, *connect.Request[v1.DeleteObjectRequest]) (*connect.Response[v1.DeleteObjectResponse], error)
+	DeleteObject(context.Context, *v1.DeleteObjectRequest) (*v1.DeleteObjectResponse, error)
 	// RestoreObject brings a soft-deleted object back to AVAILABLE. Requires the
 	// current resource_version: a stale one is Aborted rather than overwriting
 	// whatever happened to the row meanwhile.
-	RestoreObject(context.Context, *connect.Request[v1.RestoreObjectRequest]) (*connect.Response[v1.Object], error)
+	RestoreObject(context.Context, *v1.RestoreObjectRequest) (*v1.Object, error)
 	// CopyObject creates a new object from an existing one, within or across
 	// collections. Server-side where the backend supports it; the bytes do not
 	// travel through the control plane either way.
-	CopyObject(context.Context, *connect.Request[v1.CopyObjectRequest]) (*connect.Response[v1.Object], error)
+	CopyObject(context.Context, *v1.CopyObjectRequest) (*v1.Object, error)
 	// ListObjects pages a collection newest-first. Soft-deleted objects are
 	// excluded unless the request asks for them.
-	ListObjects(context.Context, *connect.Request[v1.ListObjectsRequest]) (*connect.Response[v1.ListObjectsResponse], error)
+	ListObjects(context.Context, *v1.ListObjectsRequest) (*v1.ListObjectsResponse, error)
 	// CountObjects returns a count matching the same filters ListObjects
 	// accepts, without paging the rows.
-	CountObjects(context.Context, *connect.Request[v1.CountObjectsRequest]) (*connect.Response[v1.CountObjectsResponse], error)
+	CountObjects(context.Context, *v1.CountObjectsRequest) (*v1.CountObjectsResponse, error)
 	// ─── Versioning (opt-in per bucket) ──────────────────────────────────────
 	// ListObjectVersions returns the immutable history of an object. Empty
 	// when the parent bucket has versioning disabled.
-	ListObjectVersions(context.Context, *connect.Request[v1.ListObjectVersionsRequest]) (*connect.Response[v1.ListObjectVersionsResponse], error)
+	ListObjectVersions(context.Context, *v1.ListObjectVersionsRequest) (*v1.ListObjectVersionsResponse, error)
 	// GetObjectVersion fetches metadata for a specific version.
-	GetObjectVersion(context.Context, *connect.Request[v1.GetObjectVersionRequest]) (*connect.Response[v1.ObjectVersion], error)
+	GetObjectVersion(context.Context, *v1.GetObjectVersionRequest) (*v1.ObjectVersion, error)
 	// RestoreObjectVersion makes the named version `current` again. The
 	// current version becomes a non-current entry preserving lock state.
-	RestoreObjectVersion(context.Context, *connect.Request[v1.RestoreObjectVersionRequest]) (*connect.Response[v1.Object], error)
+	RestoreObjectVersion(context.Context, *v1.RestoreObjectVersionRequest) (*v1.Object, error)
 	// ─── Object Lock (ADR-0013) ──────────────────────────────────────────────
 	//
 	// Retention and legal hold are separate operations because their rules
@@ -151,269 +278,27 @@ type ObjectServiceClient interface {
 	// protecting today's copy of it.
 	// SetObjectRetention applies or extends a retention window on an object's
 	// current version. Requires the parent bucket to have object lock enabled.
-	SetObjectRetention(context.Context, *connect.Request[v1.SetObjectRetentionRequest]) (*connect.Response[v1.ObjectLockState], error)
+	SetObjectRetention(context.Context, *v1.SetObjectRetentionRequest) (*v1.ObjectLockState, error)
 	// SetObjectLegalHold turns a legal hold on or off. A hold blocks deletion
 	// for as long as it is on, independently of any retention window, and is
 	// not subject to the GOVERNANCE bypass.
-	SetObjectLegalHold(context.Context, *connect.Request[v1.SetObjectLegalHoldRequest]) (*connect.Response[v1.ObjectLockState], error)
+	SetObjectLegalHold(context.Context, *v1.SetObjectLegalHoldRequest) (*v1.ObjectLockState, error)
 	// GetObjectLock reads the current lock state. Returns an empty state — not
 	// NOT_FOUND — for an object with no lock, so callers can render "unlocked"
 	// without special-casing an error.
-	GetObjectLock(context.Context, *connect.Request[v1.GetObjectLockRequest]) (*connect.Response[v1.ObjectLockState], error)
+	GetObjectLock(context.Context, *v1.GetObjectLockRequest) (*v1.ObjectLockState, error)
 	// SetObjectTaint replaces the taint signals on an object; an empty list
 	// clears them. A capability without allow_tainted_read is refused any read
 	// of a tainted object. Gated by its own Cedar action, SetObjectTaint:
 	// clearing a flag re-opens content to agents, which write access to a
 	// collection should not imply.
-	SetObjectTaint(context.Context, *connect.Request[v1.SetObjectTaintRequest]) (*connect.Response[v1.Object], error)
+	SetObjectTaint(context.Context, *v1.SetObjectTaintRequest) (*v1.Object, error)
 }
 
-// NewObjectServiceClient constructs a client for the paladin.data.v1.ObjectService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewObjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ObjectServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	objectServiceMethods := v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods()
-	return &objectServiceClient{
-		uploadObject: connect.NewClient[v1.UploadObjectRequest, v1.UploadObjectResponse](
-			httpClient,
-			baseURL+ObjectServiceUploadObjectProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("UploadObject")),
-			connect.WithClientOptions(opts...),
-		),
-		downloadObject: connect.NewClient[v1.DownloadObjectRequest, v1.DownloadObjectResponse](
-			httpClient,
-			baseURL+ObjectServiceDownloadObjectProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("DownloadObject")),
-			connect.WithClientOptions(opts...),
-		),
-		getObject: connect.NewClient[v1.GetObjectRequest, v1.Object](
-			httpClient,
-			baseURL+ObjectServiceGetObjectProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("GetObject")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		lookupObject: connect.NewClient[v1.LookupObjectRequest, v1.Object](
-			httpClient,
-			baseURL+ObjectServiceLookupObjectProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("LookupObject")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		updateObject: connect.NewClient[v1.UpdateObjectRequest, v1.Object](
-			httpClient,
-			baseURL+ObjectServiceUpdateObjectProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("UpdateObject")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		completeObject: connect.NewClient[v1.CompleteObjectRequest, v1.Object](
-			httpClient,
-			baseURL+ObjectServiceCompleteObjectProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("CompleteObject")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteObject: connect.NewClient[v1.DeleteObjectRequest, v1.DeleteObjectResponse](
-			httpClient,
-			baseURL+ObjectServiceDeleteObjectProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("DeleteObject")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		restoreObject: connect.NewClient[v1.RestoreObjectRequest, v1.Object](
-			httpClient,
-			baseURL+ObjectServiceRestoreObjectProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("RestoreObject")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		copyObject: connect.NewClient[v1.CopyObjectRequest, v1.Object](
-			httpClient,
-			baseURL+ObjectServiceCopyObjectProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("CopyObject")),
-			connect.WithClientOptions(opts...),
-		),
-		listObjects: connect.NewClient[v1.ListObjectsRequest, v1.ListObjectsResponse](
-			httpClient,
-			baseURL+ObjectServiceListObjectsProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("ListObjects")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		countObjects: connect.NewClient[v1.CountObjectsRequest, v1.CountObjectsResponse](
-			httpClient,
-			baseURL+ObjectServiceCountObjectsProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("CountObjects")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		listObjectVersions: connect.NewClient[v1.ListObjectVersionsRequest, v1.ListObjectVersionsResponse](
-			httpClient,
-			baseURL+ObjectServiceListObjectVersionsProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("ListObjectVersions")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		getObjectVersion: connect.NewClient[v1.GetObjectVersionRequest, v1.ObjectVersion](
-			httpClient,
-			baseURL+ObjectServiceGetObjectVersionProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("GetObjectVersion")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		restoreObjectVersion: connect.NewClient[v1.RestoreObjectVersionRequest, v1.Object](
-			httpClient,
-			baseURL+ObjectServiceRestoreObjectVersionProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("RestoreObjectVersion")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		setObjectRetention: connect.NewClient[v1.SetObjectRetentionRequest, v1.ObjectLockState](
-			httpClient,
-			baseURL+ObjectServiceSetObjectRetentionProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("SetObjectRetention")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		setObjectLegalHold: connect.NewClient[v1.SetObjectLegalHoldRequest, v1.ObjectLockState](
-			httpClient,
-			baseURL+ObjectServiceSetObjectLegalHoldProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("SetObjectLegalHold")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		getObjectLock: connect.NewClient[v1.GetObjectLockRequest, v1.ObjectLockState](
-			httpClient,
-			baseURL+ObjectServiceGetObjectLockProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("GetObjectLock")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		setObjectTaint: connect.NewClient[v1.SetObjectTaintRequest, v1.Object](
-			httpClient,
-			baseURL+ObjectServiceSetObjectTaintProcedure,
-			connect.WithSchema(objectServiceMethods.ByName("SetObjectTaint")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// objectServiceClient implements ObjectServiceClient.
-type objectServiceClient struct {
-	uploadObject         *connect.Client[v1.UploadObjectRequest, v1.UploadObjectResponse]
-	downloadObject       *connect.Client[v1.DownloadObjectRequest, v1.DownloadObjectResponse]
-	getObject            *connect.Client[v1.GetObjectRequest, v1.Object]
-	lookupObject         *connect.Client[v1.LookupObjectRequest, v1.Object]
-	updateObject         *connect.Client[v1.UpdateObjectRequest, v1.Object]
-	completeObject       *connect.Client[v1.CompleteObjectRequest, v1.Object]
-	deleteObject         *connect.Client[v1.DeleteObjectRequest, v1.DeleteObjectResponse]
-	restoreObject        *connect.Client[v1.RestoreObjectRequest, v1.Object]
-	copyObject           *connect.Client[v1.CopyObjectRequest, v1.Object]
-	listObjects          *connect.Client[v1.ListObjectsRequest, v1.ListObjectsResponse]
-	countObjects         *connect.Client[v1.CountObjectsRequest, v1.CountObjectsResponse]
-	listObjectVersions   *connect.Client[v1.ListObjectVersionsRequest, v1.ListObjectVersionsResponse]
-	getObjectVersion     *connect.Client[v1.GetObjectVersionRequest, v1.ObjectVersion]
-	restoreObjectVersion *connect.Client[v1.RestoreObjectVersionRequest, v1.Object]
-	setObjectRetention   *connect.Client[v1.SetObjectRetentionRequest, v1.ObjectLockState]
-	setObjectLegalHold   *connect.Client[v1.SetObjectLegalHoldRequest, v1.ObjectLockState]
-	getObjectLock        *connect.Client[v1.GetObjectLockRequest, v1.ObjectLockState]
-	setObjectTaint       *connect.Client[v1.SetObjectTaintRequest, v1.Object]
-}
-
-// UploadObject calls paladin.data.v1.ObjectService.UploadObject.
-func (c *objectServiceClient) UploadObject(ctx context.Context, req *connect.Request[v1.UploadObjectRequest]) (*connect.Response[v1.UploadObjectResponse], error) {
-	return c.uploadObject.CallUnary(ctx, req)
-}
-
-// DownloadObject calls paladin.data.v1.ObjectService.DownloadObject.
-func (c *objectServiceClient) DownloadObject(ctx context.Context, req *connect.Request[v1.DownloadObjectRequest]) (*connect.Response[v1.DownloadObjectResponse], error) {
-	return c.downloadObject.CallUnary(ctx, req)
-}
-
-// GetObject calls paladin.data.v1.ObjectService.GetObject.
-func (c *objectServiceClient) GetObject(ctx context.Context, req *connect.Request[v1.GetObjectRequest]) (*connect.Response[v1.Object], error) {
-	return c.getObject.CallUnary(ctx, req)
-}
-
-// LookupObject calls paladin.data.v1.ObjectService.LookupObject.
-func (c *objectServiceClient) LookupObject(ctx context.Context, req *connect.Request[v1.LookupObjectRequest]) (*connect.Response[v1.Object], error) {
-	return c.lookupObject.CallUnary(ctx, req)
-}
-
-// UpdateObject calls paladin.data.v1.ObjectService.UpdateObject.
-func (c *objectServiceClient) UpdateObject(ctx context.Context, req *connect.Request[v1.UpdateObjectRequest]) (*connect.Response[v1.Object], error) {
-	return c.updateObject.CallUnary(ctx, req)
-}
-
-// CompleteObject calls paladin.data.v1.ObjectService.CompleteObject.
-func (c *objectServiceClient) CompleteObject(ctx context.Context, req *connect.Request[v1.CompleteObjectRequest]) (*connect.Response[v1.Object], error) {
-	return c.completeObject.CallUnary(ctx, req)
-}
-
-// DeleteObject calls paladin.data.v1.ObjectService.DeleteObject.
-func (c *objectServiceClient) DeleteObject(ctx context.Context, req *connect.Request[v1.DeleteObjectRequest]) (*connect.Response[v1.DeleteObjectResponse], error) {
-	return c.deleteObject.CallUnary(ctx, req)
-}
-
-// RestoreObject calls paladin.data.v1.ObjectService.RestoreObject.
-func (c *objectServiceClient) RestoreObject(ctx context.Context, req *connect.Request[v1.RestoreObjectRequest]) (*connect.Response[v1.Object], error) {
-	return c.restoreObject.CallUnary(ctx, req)
-}
-
-// CopyObject calls paladin.data.v1.ObjectService.CopyObject.
-func (c *objectServiceClient) CopyObject(ctx context.Context, req *connect.Request[v1.CopyObjectRequest]) (*connect.Response[v1.Object], error) {
-	return c.copyObject.CallUnary(ctx, req)
-}
-
-// ListObjects calls paladin.data.v1.ObjectService.ListObjects.
-func (c *objectServiceClient) ListObjects(ctx context.Context, req *connect.Request[v1.ListObjectsRequest]) (*connect.Response[v1.ListObjectsResponse], error) {
-	return c.listObjects.CallUnary(ctx, req)
-}
-
-// CountObjects calls paladin.data.v1.ObjectService.CountObjects.
-func (c *objectServiceClient) CountObjects(ctx context.Context, req *connect.Request[v1.CountObjectsRequest]) (*connect.Response[v1.CountObjectsResponse], error) {
-	return c.countObjects.CallUnary(ctx, req)
-}
-
-// ListObjectVersions calls paladin.data.v1.ObjectService.ListObjectVersions.
-func (c *objectServiceClient) ListObjectVersions(ctx context.Context, req *connect.Request[v1.ListObjectVersionsRequest]) (*connect.Response[v1.ListObjectVersionsResponse], error) {
-	return c.listObjectVersions.CallUnary(ctx, req)
-}
-
-// GetObjectVersion calls paladin.data.v1.ObjectService.GetObjectVersion.
-func (c *objectServiceClient) GetObjectVersion(ctx context.Context, req *connect.Request[v1.GetObjectVersionRequest]) (*connect.Response[v1.ObjectVersion], error) {
-	return c.getObjectVersion.CallUnary(ctx, req)
-}
-
-// RestoreObjectVersion calls paladin.data.v1.ObjectService.RestoreObjectVersion.
-func (c *objectServiceClient) RestoreObjectVersion(ctx context.Context, req *connect.Request[v1.RestoreObjectVersionRequest]) (*connect.Response[v1.Object], error) {
-	return c.restoreObjectVersion.CallUnary(ctx, req)
-}
-
-// SetObjectRetention calls paladin.data.v1.ObjectService.SetObjectRetention.
-func (c *objectServiceClient) SetObjectRetention(ctx context.Context, req *connect.Request[v1.SetObjectRetentionRequest]) (*connect.Response[v1.ObjectLockState], error) {
-	return c.setObjectRetention.CallUnary(ctx, req)
-}
-
-// SetObjectLegalHold calls paladin.data.v1.ObjectService.SetObjectLegalHold.
-func (c *objectServiceClient) SetObjectLegalHold(ctx context.Context, req *connect.Request[v1.SetObjectLegalHoldRequest]) (*connect.Response[v1.ObjectLockState], error) {
-	return c.setObjectLegalHold.CallUnary(ctx, req)
-}
-
-// GetObjectLock calls paladin.data.v1.ObjectService.GetObjectLock.
-func (c *objectServiceClient) GetObjectLock(ctx context.Context, req *connect.Request[v1.GetObjectLockRequest]) (*connect.Response[v1.ObjectLockState], error) {
-	return c.getObjectLock.CallUnary(ctx, req)
-}
-
-// SetObjectTaint calls paladin.data.v1.ObjectService.SetObjectTaint.
-func (c *objectServiceClient) SetObjectTaint(ctx context.Context, req *connect.Request[v1.SetObjectTaintRequest]) (*connect.Response[v1.Object], error) {
-	return c.setObjectTaint.CallUnary(ctx, req)
+// NewObjectServiceClient constructs a client for the paladin.data.v1.ObjectService service.
+// Multiple service clients may share a single connect.Client.
+func NewObjectServiceClient(client *connect.Client) ObjectServiceClient {
+	return &objectServiceClient{client: client}
 }
 
 // ObjectServiceHandler is an implementation of the paladin.data.v1.ObjectService service.
@@ -421,50 +306,50 @@ type ObjectServiceHandler interface {
 	// UploadObject is the presigned-URL handshake, not a byte pipe: it records
 	// the intent and returns a URL the client PUTs to directly. The control
 	// plane never sees object bytes. Finish with CompleteObject.
-	UploadObject(context.Context, *connect.Request[v1.UploadObjectRequest]) (*connect.Response[v1.UploadObjectResponse], error)
+	UploadObject(context.Context, *v1.UploadObjectRequest) (*v1.UploadObjectResponse, error)
 	// DownloadObject returns a presigned GET URL. As with upload, the bytes move
 	// between the client and the storage backend, not through here.
-	DownloadObject(context.Context, *connect.Request[v1.DownloadObjectRequest]) (*connect.Response[v1.DownloadObjectResponse], error)
+	DownloadObject(context.Context, *v1.DownloadObjectRequest) (*v1.DownloadObjectResponse, error)
 	// GetObject returns metadata for one object. lock is populated here but left
 	// empty by ListObjects — reading it per row would add a join to the
 	// pagination hot path.
-	GetObject(context.Context, *connect.Request[v1.GetObjectRequest]) (*connect.Response[v1.Object], error)
+	GetObject(context.Context, *v1.GetObjectRequest) (*v1.Object, error)
 	// LookupObject resolves an Object by (collection, key) instead of object_id.
-	LookupObject(context.Context, *connect.Request[v1.LookupObjectRequest]) (*connect.Response[v1.Object], error)
+	LookupObject(context.Context, *v1.LookupObjectRequest) (*v1.Object, error)
 	// UpdateObject applies update_mask to metadata, tags and content_type; every
 	// other field is server-owned. resource_version is required.
-	UpdateObject(context.Context, *connect.Request[v1.UpdateObjectRequest]) (*connect.Response[v1.Object], error)
+	UpdateObject(context.Context, *v1.UpdateObjectRequest) (*v1.Object, error)
 	// CompleteObject is no-op for IMPLICIT completion mode and the event has
 	// already arrived; otherwise promotes PENDING → AVAILABLE after HEAD verify.
-	CompleteObject(context.Context, *connect.Request[v1.CompleteObjectRequest]) (*connect.Response[v1.Object], error)
+	CompleteObject(context.Context, *v1.CompleteObjectRequest) (*v1.Object, error)
 	// DeleteObject soft-deletes by default — the object moves to the trash and
 	// RestoreObject brings it back. permanent=true purges it irrecoverably. A
 	// locked object refuses deletion unless the caller holds GOVERNANCE bypass
 	// and the window is GOVERNANCE, never COMPLIANCE or a legal hold.
-	DeleteObject(context.Context, *connect.Request[v1.DeleteObjectRequest]) (*connect.Response[v1.DeleteObjectResponse], error)
+	DeleteObject(context.Context, *v1.DeleteObjectRequest) (*v1.DeleteObjectResponse, error)
 	// RestoreObject brings a soft-deleted object back to AVAILABLE. Requires the
 	// current resource_version: a stale one is Aborted rather than overwriting
 	// whatever happened to the row meanwhile.
-	RestoreObject(context.Context, *connect.Request[v1.RestoreObjectRequest]) (*connect.Response[v1.Object], error)
+	RestoreObject(context.Context, *v1.RestoreObjectRequest) (*v1.Object, error)
 	// CopyObject creates a new object from an existing one, within or across
 	// collections. Server-side where the backend supports it; the bytes do not
 	// travel through the control plane either way.
-	CopyObject(context.Context, *connect.Request[v1.CopyObjectRequest]) (*connect.Response[v1.Object], error)
+	CopyObject(context.Context, *v1.CopyObjectRequest) (*v1.Object, error)
 	// ListObjects pages a collection newest-first. Soft-deleted objects are
 	// excluded unless the request asks for them.
-	ListObjects(context.Context, *connect.Request[v1.ListObjectsRequest]) (*connect.Response[v1.ListObjectsResponse], error)
+	ListObjects(context.Context, *v1.ListObjectsRequest) (*v1.ListObjectsResponse, error)
 	// CountObjects returns a count matching the same filters ListObjects
 	// accepts, without paging the rows.
-	CountObjects(context.Context, *connect.Request[v1.CountObjectsRequest]) (*connect.Response[v1.CountObjectsResponse], error)
+	CountObjects(context.Context, *v1.CountObjectsRequest) (*v1.CountObjectsResponse, error)
 	// ─── Versioning (opt-in per bucket) ──────────────────────────────────────
 	// ListObjectVersions returns the immutable history of an object. Empty
 	// when the parent bucket has versioning disabled.
-	ListObjectVersions(context.Context, *connect.Request[v1.ListObjectVersionsRequest]) (*connect.Response[v1.ListObjectVersionsResponse], error)
+	ListObjectVersions(context.Context, *v1.ListObjectVersionsRequest) (*v1.ListObjectVersionsResponse, error)
 	// GetObjectVersion fetches metadata for a specific version.
-	GetObjectVersion(context.Context, *connect.Request[v1.GetObjectVersionRequest]) (*connect.Response[v1.ObjectVersion], error)
+	GetObjectVersion(context.Context, *v1.GetObjectVersionRequest) (*v1.ObjectVersion, error)
 	// RestoreObjectVersion makes the named version `current` again. The
 	// current version becomes a non-current entry preserving lock state.
-	RestoreObjectVersion(context.Context, *connect.Request[v1.RestoreObjectVersionRequest]) (*connect.Response[v1.Object], error)
+	RestoreObjectVersion(context.Context, *v1.RestoreObjectVersionRequest) (*v1.Object, error)
 	// ─── Object Lock (ADR-0013) ──────────────────────────────────────────────
 	//
 	// Retention and legal hold are separate operations because their rules
@@ -478,267 +363,486 @@ type ObjectServiceHandler interface {
 	// protecting today's copy of it.
 	// SetObjectRetention applies or extends a retention window on an object's
 	// current version. Requires the parent bucket to have object lock enabled.
-	SetObjectRetention(context.Context, *connect.Request[v1.SetObjectRetentionRequest]) (*connect.Response[v1.ObjectLockState], error)
+	SetObjectRetention(context.Context, *v1.SetObjectRetentionRequest) (*v1.ObjectLockState, error)
 	// SetObjectLegalHold turns a legal hold on or off. A hold blocks deletion
 	// for as long as it is on, independently of any retention window, and is
 	// not subject to the GOVERNANCE bypass.
-	SetObjectLegalHold(context.Context, *connect.Request[v1.SetObjectLegalHoldRequest]) (*connect.Response[v1.ObjectLockState], error)
+	SetObjectLegalHold(context.Context, *v1.SetObjectLegalHoldRequest) (*v1.ObjectLockState, error)
 	// GetObjectLock reads the current lock state. Returns an empty state — not
 	// NOT_FOUND — for an object with no lock, so callers can render "unlocked"
 	// without special-casing an error.
-	GetObjectLock(context.Context, *connect.Request[v1.GetObjectLockRequest]) (*connect.Response[v1.ObjectLockState], error)
+	GetObjectLock(context.Context, *v1.GetObjectLockRequest) (*v1.ObjectLockState, error)
 	// SetObjectTaint replaces the taint signals on an object; an empty list
 	// clears them. A capability without allow_tainted_read is refused any read
 	// of a tainted object. Gated by its own Cedar action, SetObjectTaint:
 	// clearing a flag re-opens content to agents, which write access to a
 	// collection should not imply.
-	SetObjectTaint(context.Context, *connect.Request[v1.SetObjectTaintRequest]) (*connect.Response[v1.Object], error)
+	SetObjectTaint(context.Context, *v1.SetObjectTaintRequest) (*v1.Object, error)
 }
 
-// NewObjectServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewObjectServiceHandler(svc ObjectServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	objectServiceMethods := v1.File_paladin_data_v1_object_service_proto.Services().ByName("ObjectService").Methods()
-	objectServiceUploadObjectHandler := connect.NewUnaryHandler(
-		ObjectServiceUploadObjectProcedure,
-		svc.UploadObject,
-		connect.WithSchema(objectServiceMethods.ByName("UploadObject")),
-		connect.WithHandlerOptions(opts...),
+// RegisterObjectServiceHandler registers svc as the paladin.data.v1.ObjectService implementation on
+// server.
+func RegisterObjectServiceHandler(server *connect.Server, svc ObjectServiceHandler) {
+	adapter := objectServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: objectServiceUploadObjectSpec(), Handler: adapter.uploadObject},
+		connect.Method{Spec: objectServiceDownloadObjectSpec(), Handler: adapter.downloadObject},
+		connect.Method{Spec: objectServiceGetObjectSpec(), Handler: adapter.getObject},
+		connect.Method{Spec: objectServiceLookupObjectSpec(), Handler: adapter.lookupObject},
+		connect.Method{Spec: objectServiceUpdateObjectSpec(), Handler: adapter.updateObject},
+		connect.Method{Spec: objectServiceCompleteObjectSpec(), Handler: adapter.completeObject},
+		connect.Method{Spec: objectServiceDeleteObjectSpec(), Handler: adapter.deleteObject},
+		connect.Method{Spec: objectServiceRestoreObjectSpec(), Handler: adapter.restoreObject},
+		connect.Method{Spec: objectServiceCopyObjectSpec(), Handler: adapter.copyObject},
+		connect.Method{Spec: objectServiceListObjectsSpec(), Handler: adapter.listObjects},
+		connect.Method{Spec: objectServiceCountObjectsSpec(), Handler: adapter.countObjects},
+		connect.Method{Spec: objectServiceListObjectVersionsSpec(), Handler: adapter.listObjectVersions},
+		connect.Method{Spec: objectServiceGetObjectVersionSpec(), Handler: adapter.getObjectVersion},
+		connect.Method{Spec: objectServiceRestoreObjectVersionSpec(), Handler: adapter.restoreObjectVersion},
+		connect.Method{Spec: objectServiceSetObjectRetentionSpec(), Handler: adapter.setObjectRetention},
+		connect.Method{Spec: objectServiceSetObjectLegalHoldSpec(), Handler: adapter.setObjectLegalHold},
+		connect.Method{Spec: objectServiceGetObjectLockSpec(), Handler: adapter.getObjectLock},
+		connect.Method{Spec: objectServiceSetObjectTaintSpec(), Handler: adapter.setObjectTaint},
 	)
-	objectServiceDownloadObjectHandler := connect.NewUnaryHandler(
-		ObjectServiceDownloadObjectProcedure,
-		svc.DownloadObject,
-		connect.WithSchema(objectServiceMethods.ByName("DownloadObject")),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceGetObjectHandler := connect.NewUnaryHandler(
-		ObjectServiceGetObjectProcedure,
-		svc.GetObject,
-		connect.WithSchema(objectServiceMethods.ByName("GetObject")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceLookupObjectHandler := connect.NewUnaryHandler(
-		ObjectServiceLookupObjectProcedure,
-		svc.LookupObject,
-		connect.WithSchema(objectServiceMethods.ByName("LookupObject")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceUpdateObjectHandler := connect.NewUnaryHandler(
-		ObjectServiceUpdateObjectProcedure,
-		svc.UpdateObject,
-		connect.WithSchema(objectServiceMethods.ByName("UpdateObject")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceCompleteObjectHandler := connect.NewUnaryHandler(
-		ObjectServiceCompleteObjectProcedure,
-		svc.CompleteObject,
-		connect.WithSchema(objectServiceMethods.ByName("CompleteObject")),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceDeleteObjectHandler := connect.NewUnaryHandler(
-		ObjectServiceDeleteObjectProcedure,
-		svc.DeleteObject,
-		connect.WithSchema(objectServiceMethods.ByName("DeleteObject")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceRestoreObjectHandler := connect.NewUnaryHandler(
-		ObjectServiceRestoreObjectProcedure,
-		svc.RestoreObject,
-		connect.WithSchema(objectServiceMethods.ByName("RestoreObject")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceCopyObjectHandler := connect.NewUnaryHandler(
-		ObjectServiceCopyObjectProcedure,
-		svc.CopyObject,
-		connect.WithSchema(objectServiceMethods.ByName("CopyObject")),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceListObjectsHandler := connect.NewUnaryHandler(
-		ObjectServiceListObjectsProcedure,
-		svc.ListObjects,
-		connect.WithSchema(objectServiceMethods.ByName("ListObjects")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceCountObjectsHandler := connect.NewUnaryHandler(
-		ObjectServiceCountObjectsProcedure,
-		svc.CountObjects,
-		connect.WithSchema(objectServiceMethods.ByName("CountObjects")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceListObjectVersionsHandler := connect.NewUnaryHandler(
-		ObjectServiceListObjectVersionsProcedure,
-		svc.ListObjectVersions,
-		connect.WithSchema(objectServiceMethods.ByName("ListObjectVersions")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceGetObjectVersionHandler := connect.NewUnaryHandler(
-		ObjectServiceGetObjectVersionProcedure,
-		svc.GetObjectVersion,
-		connect.WithSchema(objectServiceMethods.ByName("GetObjectVersion")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceRestoreObjectVersionHandler := connect.NewUnaryHandler(
-		ObjectServiceRestoreObjectVersionProcedure,
-		svc.RestoreObjectVersion,
-		connect.WithSchema(objectServiceMethods.ByName("RestoreObjectVersion")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceSetObjectRetentionHandler := connect.NewUnaryHandler(
-		ObjectServiceSetObjectRetentionProcedure,
-		svc.SetObjectRetention,
-		connect.WithSchema(objectServiceMethods.ByName("SetObjectRetention")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceSetObjectLegalHoldHandler := connect.NewUnaryHandler(
-		ObjectServiceSetObjectLegalHoldProcedure,
-		svc.SetObjectLegalHold,
-		connect.WithSchema(objectServiceMethods.ByName("SetObjectLegalHold")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceGetObjectLockHandler := connect.NewUnaryHandler(
-		ObjectServiceGetObjectLockProcedure,
-		svc.GetObjectLock,
-		connect.WithSchema(objectServiceMethods.ByName("GetObjectLock")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectServiceSetObjectTaintHandler := connect.NewUnaryHandler(
-		ObjectServiceSetObjectTaintProcedure,
-		svc.SetObjectTaint,
-		connect.WithSchema(objectServiceMethods.ByName("SetObjectTaint")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.data.v1.ObjectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ObjectServiceUploadObjectProcedure:
-			objectServiceUploadObjectHandler.ServeHTTP(w, r)
-		case ObjectServiceDownloadObjectProcedure:
-			objectServiceDownloadObjectHandler.ServeHTTP(w, r)
-		case ObjectServiceGetObjectProcedure:
-			objectServiceGetObjectHandler.ServeHTTP(w, r)
-		case ObjectServiceLookupObjectProcedure:
-			objectServiceLookupObjectHandler.ServeHTTP(w, r)
-		case ObjectServiceUpdateObjectProcedure:
-			objectServiceUpdateObjectHandler.ServeHTTP(w, r)
-		case ObjectServiceCompleteObjectProcedure:
-			objectServiceCompleteObjectHandler.ServeHTTP(w, r)
-		case ObjectServiceDeleteObjectProcedure:
-			objectServiceDeleteObjectHandler.ServeHTTP(w, r)
-		case ObjectServiceRestoreObjectProcedure:
-			objectServiceRestoreObjectHandler.ServeHTTP(w, r)
-		case ObjectServiceCopyObjectProcedure:
-			objectServiceCopyObjectHandler.ServeHTTP(w, r)
-		case ObjectServiceListObjectsProcedure:
-			objectServiceListObjectsHandler.ServeHTTP(w, r)
-		case ObjectServiceCountObjectsProcedure:
-			objectServiceCountObjectsHandler.ServeHTTP(w, r)
-		case ObjectServiceListObjectVersionsProcedure:
-			objectServiceListObjectVersionsHandler.ServeHTTP(w, r)
-		case ObjectServiceGetObjectVersionProcedure:
-			objectServiceGetObjectVersionHandler.ServeHTTP(w, r)
-		case ObjectServiceRestoreObjectVersionProcedure:
-			objectServiceRestoreObjectVersionHandler.ServeHTTP(w, r)
-		case ObjectServiceSetObjectRetentionProcedure:
-			objectServiceSetObjectRetentionHandler.ServeHTTP(w, r)
-		case ObjectServiceSetObjectLegalHoldProcedure:
-			objectServiceSetObjectLegalHoldHandler.ServeHTTP(w, r)
-		case ObjectServiceGetObjectLockProcedure:
-			objectServiceGetObjectLockHandler.ServeHTTP(w, r)
-		case ObjectServiceSetObjectTaintProcedure:
-			objectServiceSetObjectTaintHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedObjectServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedObjectServiceHandler struct{}
 
-func (UnimplementedObjectServiceHandler) UploadObject(context.Context, *connect.Request[v1.UploadObjectRequest]) (*connect.Response[v1.UploadObjectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.UploadObject is not implemented"))
+func (UnimplementedObjectServiceHandler) UploadObject(context.Context, *v1.UploadObjectRequest) (*v1.UploadObjectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.UploadObject is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) DownloadObject(context.Context, *connect.Request[v1.DownloadObjectRequest]) (*connect.Response[v1.DownloadObjectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.DownloadObject is not implemented"))
+func (UnimplementedObjectServiceHandler) DownloadObject(context.Context, *v1.DownloadObjectRequest) (*v1.DownloadObjectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.DownloadObject is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) GetObject(context.Context, *connect.Request[v1.GetObjectRequest]) (*connect.Response[v1.Object], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.GetObject is not implemented"))
+func (UnimplementedObjectServiceHandler) GetObject(context.Context, *v1.GetObjectRequest) (*v1.Object, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.GetObject is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) LookupObject(context.Context, *connect.Request[v1.LookupObjectRequest]) (*connect.Response[v1.Object], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.LookupObject is not implemented"))
+func (UnimplementedObjectServiceHandler) LookupObject(context.Context, *v1.LookupObjectRequest) (*v1.Object, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.LookupObject is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) UpdateObject(context.Context, *connect.Request[v1.UpdateObjectRequest]) (*connect.Response[v1.Object], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.UpdateObject is not implemented"))
+func (UnimplementedObjectServiceHandler) UpdateObject(context.Context, *v1.UpdateObjectRequest) (*v1.Object, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.UpdateObject is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) CompleteObject(context.Context, *connect.Request[v1.CompleteObjectRequest]) (*connect.Response[v1.Object], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.CompleteObject is not implemented"))
+func (UnimplementedObjectServiceHandler) CompleteObject(context.Context, *v1.CompleteObjectRequest) (*v1.Object, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.CompleteObject is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) DeleteObject(context.Context, *connect.Request[v1.DeleteObjectRequest]) (*connect.Response[v1.DeleteObjectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.DeleteObject is not implemented"))
+func (UnimplementedObjectServiceHandler) DeleteObject(context.Context, *v1.DeleteObjectRequest) (*v1.DeleteObjectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.DeleteObject is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) RestoreObject(context.Context, *connect.Request[v1.RestoreObjectRequest]) (*connect.Response[v1.Object], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.RestoreObject is not implemented"))
+func (UnimplementedObjectServiceHandler) RestoreObject(context.Context, *v1.RestoreObjectRequest) (*v1.Object, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.RestoreObject is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) CopyObject(context.Context, *connect.Request[v1.CopyObjectRequest]) (*connect.Response[v1.Object], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.CopyObject is not implemented"))
+func (UnimplementedObjectServiceHandler) CopyObject(context.Context, *v1.CopyObjectRequest) (*v1.Object, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.CopyObject is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) ListObjects(context.Context, *connect.Request[v1.ListObjectsRequest]) (*connect.Response[v1.ListObjectsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.ListObjects is not implemented"))
+func (UnimplementedObjectServiceHandler) ListObjects(context.Context, *v1.ListObjectsRequest) (*v1.ListObjectsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.ListObjects is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) CountObjects(context.Context, *connect.Request[v1.CountObjectsRequest]) (*connect.Response[v1.CountObjectsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.CountObjects is not implemented"))
+func (UnimplementedObjectServiceHandler) CountObjects(context.Context, *v1.CountObjectsRequest) (*v1.CountObjectsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.CountObjects is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) ListObjectVersions(context.Context, *connect.Request[v1.ListObjectVersionsRequest]) (*connect.Response[v1.ListObjectVersionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.ListObjectVersions is not implemented"))
+func (UnimplementedObjectServiceHandler) ListObjectVersions(context.Context, *v1.ListObjectVersionsRequest) (*v1.ListObjectVersionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.ListObjectVersions is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) GetObjectVersion(context.Context, *connect.Request[v1.GetObjectVersionRequest]) (*connect.Response[v1.ObjectVersion], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.GetObjectVersion is not implemented"))
+func (UnimplementedObjectServiceHandler) GetObjectVersion(context.Context, *v1.GetObjectVersionRequest) (*v1.ObjectVersion, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.GetObjectVersion is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) RestoreObjectVersion(context.Context, *connect.Request[v1.RestoreObjectVersionRequest]) (*connect.Response[v1.Object], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.RestoreObjectVersion is not implemented"))
+func (UnimplementedObjectServiceHandler) RestoreObjectVersion(context.Context, *v1.RestoreObjectVersionRequest) (*v1.Object, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.RestoreObjectVersion is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) SetObjectRetention(context.Context, *connect.Request[v1.SetObjectRetentionRequest]) (*connect.Response[v1.ObjectLockState], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.SetObjectRetention is not implemented"))
+func (UnimplementedObjectServiceHandler) SetObjectRetention(context.Context, *v1.SetObjectRetentionRequest) (*v1.ObjectLockState, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.SetObjectRetention is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) SetObjectLegalHold(context.Context, *connect.Request[v1.SetObjectLegalHoldRequest]) (*connect.Response[v1.ObjectLockState], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.SetObjectLegalHold is not implemented"))
+func (UnimplementedObjectServiceHandler) SetObjectLegalHold(context.Context, *v1.SetObjectLegalHoldRequest) (*v1.ObjectLockState, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.SetObjectLegalHold is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) GetObjectLock(context.Context, *connect.Request[v1.GetObjectLockRequest]) (*connect.Response[v1.ObjectLockState], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.GetObjectLock is not implemented"))
+func (UnimplementedObjectServiceHandler) GetObjectLock(context.Context, *v1.GetObjectLockRequest) (*v1.ObjectLockState, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.GetObjectLock is not implemented")
 }
 
-func (UnimplementedObjectServiceHandler) SetObjectTaint(context.Context, *connect.Request[v1.SetObjectTaintRequest]) (*connect.Response[v1.Object], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectService.SetObjectTaint is not implemented"))
+func (UnimplementedObjectServiceHandler) SetObjectTaint(context.Context, *v1.SetObjectTaintRequest) (*v1.Object, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectService.SetObjectTaint is not implemented")
+}
+
+type objectServiceClient struct {
+	client *connect.Client
+}
+
+func (c *objectServiceClient) UploadObject(ctx context.Context, req *v1.UploadObjectRequest) (*v1.UploadObjectResponse, error) {
+	var res v1.UploadObjectResponse
+	if err := c.client.CallUnary(ctx, objectServiceUploadObjectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) DownloadObject(ctx context.Context, req *v1.DownloadObjectRequest) (*v1.DownloadObjectResponse, error) {
+	var res v1.DownloadObjectResponse
+	if err := c.client.CallUnary(ctx, objectServiceDownloadObjectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) GetObject(ctx context.Context, req *v1.GetObjectRequest) (*v1.Object, error) {
+	var res v1.Object
+	if err := c.client.CallUnary(ctx, objectServiceGetObjectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) LookupObject(ctx context.Context, req *v1.LookupObjectRequest) (*v1.Object, error) {
+	var res v1.Object
+	if err := c.client.CallUnary(ctx, objectServiceLookupObjectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) UpdateObject(ctx context.Context, req *v1.UpdateObjectRequest) (*v1.Object, error) {
+	var res v1.Object
+	if err := c.client.CallUnary(ctx, objectServiceUpdateObjectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) CompleteObject(ctx context.Context, req *v1.CompleteObjectRequest) (*v1.Object, error) {
+	var res v1.Object
+	if err := c.client.CallUnary(ctx, objectServiceCompleteObjectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) DeleteObject(ctx context.Context, req *v1.DeleteObjectRequest) (*v1.DeleteObjectResponse, error) {
+	var res v1.DeleteObjectResponse
+	if err := c.client.CallUnary(ctx, objectServiceDeleteObjectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) RestoreObject(ctx context.Context, req *v1.RestoreObjectRequest) (*v1.Object, error) {
+	var res v1.Object
+	if err := c.client.CallUnary(ctx, objectServiceRestoreObjectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) CopyObject(ctx context.Context, req *v1.CopyObjectRequest) (*v1.Object, error) {
+	var res v1.Object
+	if err := c.client.CallUnary(ctx, objectServiceCopyObjectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) ListObjects(ctx context.Context, req *v1.ListObjectsRequest) (*v1.ListObjectsResponse, error) {
+	var res v1.ListObjectsResponse
+	if err := c.client.CallUnary(ctx, objectServiceListObjectsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) CountObjects(ctx context.Context, req *v1.CountObjectsRequest) (*v1.CountObjectsResponse, error) {
+	var res v1.CountObjectsResponse
+	if err := c.client.CallUnary(ctx, objectServiceCountObjectsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) ListObjectVersions(ctx context.Context, req *v1.ListObjectVersionsRequest) (*v1.ListObjectVersionsResponse, error) {
+	var res v1.ListObjectVersionsResponse
+	if err := c.client.CallUnary(ctx, objectServiceListObjectVersionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) GetObjectVersion(ctx context.Context, req *v1.GetObjectVersionRequest) (*v1.ObjectVersion, error) {
+	var res v1.ObjectVersion
+	if err := c.client.CallUnary(ctx, objectServiceGetObjectVersionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) RestoreObjectVersion(ctx context.Context, req *v1.RestoreObjectVersionRequest) (*v1.Object, error) {
+	var res v1.Object
+	if err := c.client.CallUnary(ctx, objectServiceRestoreObjectVersionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) SetObjectRetention(ctx context.Context, req *v1.SetObjectRetentionRequest) (*v1.ObjectLockState, error) {
+	var res v1.ObjectLockState
+	if err := c.client.CallUnary(ctx, objectServiceSetObjectRetentionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) SetObjectLegalHold(ctx context.Context, req *v1.SetObjectLegalHoldRequest) (*v1.ObjectLockState, error) {
+	var res v1.ObjectLockState
+	if err := c.client.CallUnary(ctx, objectServiceSetObjectLegalHoldSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) GetObjectLock(ctx context.Context, req *v1.GetObjectLockRequest) (*v1.ObjectLockState, error) {
+	var res v1.ObjectLockState
+	if err := c.client.CallUnary(ctx, objectServiceGetObjectLockSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectServiceClient) SetObjectTaint(ctx context.Context, req *v1.SetObjectTaintRequest) (*v1.Object, error) {
+	var res v1.Object
+	if err := c.client.CallUnary(ctx, objectServiceSetObjectTaintSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type objectServiceHandler struct{ svc ObjectServiceHandler }
+
+func (h objectServiceHandler) uploadObject(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UploadObjectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UploadObject(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) downloadObject(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DownloadObjectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DownloadObject(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) getObject(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetObjectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetObject(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) lookupObject(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.LookupObjectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.LookupObject(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) updateObject(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateObjectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateObject(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) completeObject(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CompleteObjectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CompleteObject(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) deleteObject(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteObjectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteObject(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) restoreObject(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RestoreObjectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RestoreObject(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) copyObject(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CopyObjectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CopyObject(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) listObjects(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListObjectsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListObjects(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) countObjects(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CountObjectsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CountObjects(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) listObjectVersions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListObjectVersionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListObjectVersions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) getObjectVersion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetObjectVersionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetObjectVersion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) restoreObjectVersion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RestoreObjectVersionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RestoreObjectVersion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) setObjectRetention(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetObjectRetentionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetObjectRetention(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) setObjectLegalHold(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetObjectLegalHoldRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetObjectLegalHold(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) getObjectLock(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetObjectLockRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetObjectLock(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectServiceHandler) setObjectTaint(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetObjectTaintRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetObjectTaint(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

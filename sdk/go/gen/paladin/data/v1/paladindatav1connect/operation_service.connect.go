@@ -6,43 +6,61 @@ package paladindatav1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// OperationServiceName is the fully-qualified name of the OperationService service.
 	OperationServiceName = "paladin.data.v1.OperationService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// OperationServiceGetOperationProcedure is the fully-qualified name of the OperationService's
+	// OperationServiceGetOperationProcedure is the procedure name of the OperationService's
 	// GetOperation RPC.
 	OperationServiceGetOperationProcedure = "/paladin.data.v1.OperationService/GetOperation"
-	// OperationServiceListOperationsProcedure is the fully-qualified name of the OperationService's
+	// OperationServiceListOperationsProcedure is the procedure name of the OperationService's
 	// ListOperations RPC.
 	OperationServiceListOperationsProcedure = "/paladin.data.v1.OperationService/ListOperations"
-	// OperationServiceCancelOperationProcedure is the fully-qualified name of the OperationService's
+	// OperationServiceCancelOperationProcedure is the procedure name of the OperationService's
 	// CancelOperation RPC.
 	OperationServiceCancelOperationProcedure = "/paladin.data.v1.OperationService/CancelOperation"
+)
+
+var (
+	operationServiceGetOperationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_operation_service_proto.Services().ByName("OperationService").Methods().ByName("GetOperation"),
+			Procedure:        OperationServiceGetOperationProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	operationServiceListOperationsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_operation_service_proto.Services().ByName("OperationService").Methods().ByName("ListOperations"),
+			Procedure:        OperationServiceListOperationsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	operationServiceCancelOperationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_operation_service_proto.Services().ByName("OperationService").Methods().ByName("CancelOperation"),
+			Procedure:        OperationServiceCancelOperationProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 )
 
 // OperationServiceClient is a client for the paladin.data.v1.OperationService service.
@@ -50,70 +68,19 @@ type OperationServiceClient interface {
 	// GetOperation returns the current state of a long-running operation. done
 	// distinguishes finished from in-flight; result carries either the response
 	// or the error.
-	GetOperation(context.Context, *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error)
+	GetOperation(context.Context, *v1.GetOperationRequest) (*v1.Operation, error)
 	// ListOperations pages the caller's operations, most recent first.
-	ListOperations(context.Context, *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error)
+	ListOperations(context.Context, *v1.ListOperationsRequest) (*v1.ListOperationsResponse, error)
 	// CancelOperation requests cancellation. It is best-effort: work already
 	// committed is not rolled back, and an operation that finished first stays
 	// finished.
-	CancelOperation(context.Context, *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error)
+	CancelOperation(context.Context, *v1.CancelOperationRequest) (*v1.Operation, error)
 }
 
 // NewOperationServiceClient constructs a client for the paladin.data.v1.OperationService service.
-// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
-// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewOperationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OperationServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	operationServiceMethods := v1.File_paladin_data_v1_operation_service_proto.Services().ByName("OperationService").Methods()
-	return &operationServiceClient{
-		getOperation: connect.NewClient[v1.GetOperationRequest, v1.Operation](
-			httpClient,
-			baseURL+OperationServiceGetOperationProcedure,
-			connect.WithSchema(operationServiceMethods.ByName("GetOperation")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		listOperations: connect.NewClient[v1.ListOperationsRequest, v1.ListOperationsResponse](
-			httpClient,
-			baseURL+OperationServiceListOperationsProcedure,
-			connect.WithSchema(operationServiceMethods.ByName("ListOperations")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		cancelOperation: connect.NewClient[v1.CancelOperationRequest, v1.Operation](
-			httpClient,
-			baseURL+OperationServiceCancelOperationProcedure,
-			connect.WithSchema(operationServiceMethods.ByName("CancelOperation")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// operationServiceClient implements OperationServiceClient.
-type operationServiceClient struct {
-	getOperation    *connect.Client[v1.GetOperationRequest, v1.Operation]
-	listOperations  *connect.Client[v1.ListOperationsRequest, v1.ListOperationsResponse]
-	cancelOperation *connect.Client[v1.CancelOperationRequest, v1.Operation]
-}
-
-// GetOperation calls paladin.data.v1.OperationService.GetOperation.
-func (c *operationServiceClient) GetOperation(ctx context.Context, req *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error) {
-	return c.getOperation.CallUnary(ctx, req)
-}
-
-// ListOperations calls paladin.data.v1.OperationService.ListOperations.
-func (c *operationServiceClient) ListOperations(ctx context.Context, req *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error) {
-	return c.listOperations.CallUnary(ctx, req)
-}
-
-// CancelOperation calls paladin.data.v1.OperationService.CancelOperation.
-func (c *operationServiceClient) CancelOperation(ctx context.Context, req *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error) {
-	return c.cancelOperation.CallUnary(ctx, req)
+// Multiple service clients may share a single connect.Client.
+func NewOperationServiceClient(client *connect.Client) OperationServiceClient {
+	return &operationServiceClient{client: client}
 }
 
 // OperationServiceHandler is an implementation of the paladin.data.v1.OperationService service.
@@ -121,68 +88,103 @@ type OperationServiceHandler interface {
 	// GetOperation returns the current state of a long-running operation. done
 	// distinguishes finished from in-flight; result carries either the response
 	// or the error.
-	GetOperation(context.Context, *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error)
+	GetOperation(context.Context, *v1.GetOperationRequest) (*v1.Operation, error)
 	// ListOperations pages the caller's operations, most recent first.
-	ListOperations(context.Context, *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error)
+	ListOperations(context.Context, *v1.ListOperationsRequest) (*v1.ListOperationsResponse, error)
 	// CancelOperation requests cancellation. It is best-effort: work already
 	// committed is not rolled back, and an operation that finished first stays
 	// finished.
-	CancelOperation(context.Context, *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error)
+	CancelOperation(context.Context, *v1.CancelOperationRequest) (*v1.Operation, error)
 }
 
-// NewOperationServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewOperationServiceHandler(svc OperationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	operationServiceMethods := v1.File_paladin_data_v1_operation_service_proto.Services().ByName("OperationService").Methods()
-	operationServiceGetOperationHandler := connect.NewUnaryHandler(
-		OperationServiceGetOperationProcedure,
-		svc.GetOperation,
-		connect.WithSchema(operationServiceMethods.ByName("GetOperation")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterOperationServiceHandler registers svc as the paladin.data.v1.OperationService
+// implementation on server.
+func RegisterOperationServiceHandler(server *connect.Server, svc OperationServiceHandler) {
+	adapter := operationServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: operationServiceGetOperationSpec(), Handler: adapter.getOperation},
+		connect.Method{Spec: operationServiceListOperationsSpec(), Handler: adapter.listOperations},
+		connect.Method{Spec: operationServiceCancelOperationSpec(), Handler: adapter.cancelOperation},
 	)
-	operationServiceListOperationsHandler := connect.NewUnaryHandler(
-		OperationServiceListOperationsProcedure,
-		svc.ListOperations,
-		connect.WithSchema(operationServiceMethods.ByName("ListOperations")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	operationServiceCancelOperationHandler := connect.NewUnaryHandler(
-		OperationServiceCancelOperationProcedure,
-		svc.CancelOperation,
-		connect.WithSchema(operationServiceMethods.ByName("CancelOperation")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.data.v1.OperationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case OperationServiceGetOperationProcedure:
-			operationServiceGetOperationHandler.ServeHTTP(w, r)
-		case OperationServiceListOperationsProcedure:
-			operationServiceListOperationsHandler.ServeHTTP(w, r)
-		case OperationServiceCancelOperationProcedure:
-			operationServiceCancelOperationHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedOperationServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedOperationServiceHandler struct{}
 
-func (UnimplementedOperationServiceHandler) GetOperation(context.Context, *connect.Request[v1.GetOperationRequest]) (*connect.Response[v1.Operation], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.OperationService.GetOperation is not implemented"))
+func (UnimplementedOperationServiceHandler) GetOperation(context.Context, *v1.GetOperationRequest) (*v1.Operation, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.OperationService.GetOperation is not implemented")
 }
 
-func (UnimplementedOperationServiceHandler) ListOperations(context.Context, *connect.Request[v1.ListOperationsRequest]) (*connect.Response[v1.ListOperationsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.OperationService.ListOperations is not implemented"))
+func (UnimplementedOperationServiceHandler) ListOperations(context.Context, *v1.ListOperationsRequest) (*v1.ListOperationsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.OperationService.ListOperations is not implemented")
 }
 
-func (UnimplementedOperationServiceHandler) CancelOperation(context.Context, *connect.Request[v1.CancelOperationRequest]) (*connect.Response[v1.Operation], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.OperationService.CancelOperation is not implemented"))
+func (UnimplementedOperationServiceHandler) CancelOperation(context.Context, *v1.CancelOperationRequest) (*v1.Operation, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.OperationService.CancelOperation is not implemented")
+}
+
+type operationServiceClient struct {
+	client *connect.Client
+}
+
+func (c *operationServiceClient) GetOperation(ctx context.Context, req *v1.GetOperationRequest) (*v1.Operation, error) {
+	var res v1.Operation
+	if err := c.client.CallUnary(ctx, operationServiceGetOperationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *operationServiceClient) ListOperations(ctx context.Context, req *v1.ListOperationsRequest) (*v1.ListOperationsResponse, error) {
+	var res v1.ListOperationsResponse
+	if err := c.client.CallUnary(ctx, operationServiceListOperationsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *operationServiceClient) CancelOperation(ctx context.Context, req *v1.CancelOperationRequest) (*v1.Operation, error) {
+	var res v1.Operation
+	if err := c.client.CallUnary(ctx, operationServiceCancelOperationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type operationServiceHandler struct{ svc OperationServiceHandler }
+
+func (h operationServiceHandler) getOperation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetOperationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetOperation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h operationServiceHandler) listOperations(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListOperationsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListOperations(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h operationServiceHandler) cancelOperation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CancelOperationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CancelOperation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

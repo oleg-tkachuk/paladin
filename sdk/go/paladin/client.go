@@ -5,7 +5,7 @@
 // repeat. The service clients themselves are the generated ones:
 //
 //	c, err := paladin.New("https://admin.example.com", paladin.WithBearerToken(token))
-//	tenants := paladinadminv1connect.NewTenantServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...)
+//	tenants := paladinadminv1connect.NewTenantServiceClient(c.Connect())
 package paladin
 
 import (
@@ -19,7 +19,18 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+)
+
+// Message size limits, in bytes, that the server and this client share. The
+// server reads requests up to MaxRequestBytes and sends responses up to
+// MaxResponseBytes, the larger because a page of a list holds many records;
+// a client reads responses up to MaxResponseBytes, so no answer the server
+// may send is refused here as too large.
+const (
+	MaxRequestBytes  = 4 << 20
+	MaxResponseBytes = 16 << 20
 )
 
 // Header names the server reads. The backend imports these, so a client and
@@ -66,24 +77,25 @@ var (
 
 // Client holds what the generated service clients of one plane need.
 type Client struct {
-	httpClient connect.HTTPClient
-	baseURL    string
-	options    []connect.ClientOption
-	transfer   *Transfer
+	rpc      *connect.Client
+	baseURL  string
+	transfer *Transfer
 }
 
 // Option configures a Client.
 type Option func(*config)
 
 type config struct {
-	httpClient connect.HTTPClient
+	httpClient connecthttp.HTTPClient
 	headers    http.Header
 	retry      *retryPolicy
 	retryable  func(error) bool
 	tokens     *tokenAuth
-	extra      []connect.ClientOption
-	transfer   *Transfer
-	tls        *TLS
+	extra      []connecthttp.Option
+	// interceptors: WithInterceptors.
+	interceptors []connect.ClientInterceptor
+	transfer     *Transfer
+	tls          *TLS
 	// hooks, logger and userAgentSuffix: WithHooks, WithLogger,
 	// WithUserAgentSuffix.
 	hooks           Hooks
@@ -108,7 +120,7 @@ func WithTransfer(t *Transfer) Option {
 }
 
 // WithHTTPClient replaces http.DefaultClient.
-func WithHTTPClient(c connect.HTTPClient) Option {
+func WithHTTPClient(c connecthttp.HTTPClient) Option {
 	return func(cfg *config) { cfg.httpClient, cfg.httpClientSet = c, true }
 }
 
@@ -168,9 +180,17 @@ func WithRetryable(transient func(error) bool) Option {
 	return func(cfg *config) { cfg.retryable = transient }
 }
 
-// WithClientOptions passes Connect options through, e.g. connect.WithGRPC().
-func WithClientOptions(opts ...connect.ClientOption) Option {
+// WithTransportOptions passes options to the Connect HTTP transport, e.g.
+// connecthttp.WithGRPC().
+func WithTransportOptions(opts ...connecthttp.Option) Option {
 	return func(cfg *config) { cfg.extra = append(cfg.extra, opts...) }
+}
+
+// WithInterceptors adds Connect client interceptors — otelconnect's, say —
+// inside the SDK's own, so they see every attempt of a retried call with its
+// credentials set.
+func WithInterceptors(interceptors ...connect.ClientInterceptor) Option {
+	return func(cfg *config) { cfg.interceptors = append(cfg.interceptors, interceptors...) }
 }
 
 // New returns a Client for the plane served at baseURL.
@@ -216,41 +236,45 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 	}
 	// Outermost: every failure reaches the caller as an *Error, while the
 	// interceptors inside see the Connect error they act on.
-	interceptors := []connect.Interceptor{errorInterceptor{}, &headerInterceptor{headers: cfg.headers, capability: cfg.capabilitySource}}
+	interceptors := []connect.ClientInterceptor{
+		errorInterceptor(),
+		(&headerInterceptor{headers: cfg.headers, capability: cfg.capabilitySource}).interceptor(),
+	}
 	if cfg.tokens != nil {
-		interceptors = append(interceptors, cfg.tokens)
+		interceptors = append(interceptors, cfg.tokens.interceptor())
 	}
 	if cfg.retry != nil {
 		cfg.retry.transient = cfg.retryable
 		cfg.retry.observe = observer{hooks: cfg.hooks, logger: cfg.logger}
-		interceptors = append(interceptors, cfg.retry)
+		interceptors = append(interceptors, cfg.retry.interceptor())
 	}
 	if cfg.dpopKey != nil {
 		if _, err := DPoPThumbprint(cfg.dpopKey.Public()); err != nil {
 			return nil, err
 		}
-		interceptors = append(interceptors, &dpopAuth{
+		interceptors = append(interceptors, (&dpopAuth{
 			key: cfg.dpopKey, baseURL: strings.TrimRight(baseURL, "/"), now: time.Now,
-		})
+		}).interceptor())
 	}
-	options := append([]connect.ClientOption{connect.WithInterceptors(interceptors...)}, cfg.extra...)
+	interceptors = append(interceptors, cfg.interceptors...)
+	base := strings.TrimRight(baseURL, "/")
+	// The limits first, so a WithTransportOptions given later still wins.
+	transport := append([]connecthttp.Option{
+		connecthttp.WithReadMaxBytes(MaxResponseBytes),
+		connecthttp.WithSendMaxBytes(MaxRequestBytes),
+	}, cfg.extra...)
 
 	return &Client{
-		httpClient: cfg.httpClient,
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		options:    options,
-		transfer:   cfg.transfer,
+		rpc:      connect.NewClient(connecthttp.NewTransport(cfg.httpClient, base, transport...), interceptors...),
+		baseURL:  base,
+		transfer: cfg.transfer,
 	}, nil
 }
 
-// HTTPClient is the first argument of every generated New…ServiceClient.
-func (c *Client) HTTPClient() connect.HTTPClient { return c.httpClient }
+// Connect is the argument of every generated New…ServiceClient: the
+// transport to the plane, with the client's credentials, retries and error
+// handling around every call.
+func (c *Client) Connect() *connect.Client { return c.rpc }
 
-// BaseURL is the second argument of every generated New…ServiceClient.
+// BaseURL is the URL of the plane the client calls.
 func (c *Client) BaseURL() string { return c.baseURL }
-
-// ClientOptions are the remaining arguments of every generated
-// New…ServiceClient. The slice is a copy.
-func (c *Client) ClientOptions() []connect.ClientOption {
-	return append([]connect.ClientOption(nil), c.options...)
-}
