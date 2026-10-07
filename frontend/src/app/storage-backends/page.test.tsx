@@ -55,6 +55,11 @@ vi.mock("@/components/layout/PageHeader", () => ({
 }));
 
 import StorageBackendsPage from "./page";
+import {
+  FeatureSupport,
+  StorageCompatibility,
+  StorageFeature,
+} from "@/gen/paladin/admin/v1/types_pb";
 
 beforeEach(() => {
   h.fetchBackends.mockClear();
@@ -79,7 +84,24 @@ const makeBackend = (over: Record<string, unknown> = {}) => ({
   healthStatus: "unknown",
   healthMessage: "",
   maintenance: false,
+  features: [],
+  compatibility: StorageCompatibility.UNVERIFIED,
   ...over,
+});
+
+// One probed feature entry, as the server sends it.
+const feature = (
+  f: StorageFeature,
+  support: FeatureSupport,
+  required: boolean,
+  enables: string,
+) => ({
+  feature: f,
+  support,
+  required,
+  enables,
+  message: "",
+  checkedAt: { seconds: BigInt(1), nanos: 0 },
 });
 
 describe("StorageBackendsPage", () => {
@@ -146,6 +168,54 @@ describe("StorageBackendsPage", () => {
     h.backends = [makeBackend({ healthStatus: "unknown" })];
     render(<StorageBackendsPage />);
     expect(screen.getByText("Untested")).toBeInTheDocument();
+  });
+
+  // Compatibility (ADR-0026) — what the last feature probe found.
+  it("marks a backend lacking a required feature incompatible, saying which", () => {
+    h.backends = [
+      makeBackend({
+        compatibility: StorageCompatibility.INCOMPATIBLE,
+        features: [
+          feature(
+            StorageFeature.CONDITIONAL_PUT,
+            FeatureSupport.UNSUPPORTED,
+            true,
+            "refusing an upload that would replace an existing object",
+          ),
+        ],
+      }),
+    ];
+    render(<StorageBackendsPage />);
+    const badge = screen.getByText("Incompatible");
+    expect(badge.getAttribute("title")).toContain(
+      "Conditional PUT is unsupported",
+    );
+  });
+
+  it("marks a compatible backend lacking an optional feature limited", () => {
+    h.backends = [
+      makeBackend({
+        compatibility: StorageCompatibility.COMPATIBLE,
+        features: [
+          feature(
+            StorageFeature.ANONYMOUS_READ_POLICY,
+            FeatureSupport.UNSUPPORTED,
+            false,
+            "public collections",
+          ),
+        ],
+      }),
+    ];
+    render(<StorageBackendsPage />);
+    expect(screen.getByText("Limited").getAttribute("title")).toContain(
+      "public collections",
+    );
+  });
+
+  it("marks a backend never probed unverified", () => {
+    h.backends = [makeBackend()];
+    render(<StorageBackendsPage />);
+    expect(screen.getByText("Unverified")).toBeInTheDocument();
   });
 
   // Bulk actions — multi-select + client-side fan-out over the per-backend RPCs.
