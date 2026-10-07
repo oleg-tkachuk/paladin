@@ -1325,6 +1325,10 @@ finding moving from "packages you import" to "your code is affected".
   - Live cross-backend run on the dev cluster (infra-dependent — needs the
     `secondary`/SeaweedFS backend back online; the integration test above is the
     code-side proof).
+  - Public collections stay where they are: the schema refuses to rebind
+    one (`collections_public_bucket_fixed`, ADR-0027), since its objects'
+    URLs name the bucket. The job skips them, or refuses a tenant that has
+    any before it starts, rather than failing halfway through the rebind.
 - **Deferred (smaller follow-ups):** per-tenant backend selection at
   CreateTenant (currently the config default backend); org-prefix in the
   derived bucket name for cross-account global uniqueness; bucket tagging
