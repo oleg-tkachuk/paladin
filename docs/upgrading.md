@@ -43,6 +43,18 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a trashed tenant's credentials stop working
+
+- **Every plane refuses a credential whose tenant is in the trash** —
+  `FAILED_PRECONDITION` with reason `TENANT_ALREADY_DELETED` — and one whose
+  tenant no longer exists, `UNAUTHENTICATED`. Moving a tenant to the trash
+  revokes nothing: restoring it makes its API tokens, capabilities and
+  sessions work again. A change reaches every replica at once through the
+  `tenant_state` notification (migration 047); a state that cannot be read
+  refuses the call as `UNAVAILABLE`.
+- Calls with no principal (`Login`, `RefreshToken`) and platform principals
+  are not affected.
+
 ## Unreleased — an internal error no longer carries its cause
 
 - **An RPC that fails on the server's side answers `internal error; request
