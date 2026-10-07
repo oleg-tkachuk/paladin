@@ -12,7 +12,6 @@ import (
 	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/codec"
 	connectdata "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/data"
 	connectiam "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/iam"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
@@ -270,11 +269,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	}
 	tenantRL := middleware.NewTenantRateLimitInterceptor(tenantRLCfg)
 
-	// Every plane decodes JSON with the strict codec: an unknown request field
-	// is a 400, not a silent discard. See internal/api/codec for why the
-	// forward-compatibility the default buys is not worth its cost here.
-	dataOpts := connect.WithOptions(
-		connect.WithCodec(codec.StrictJSON{}),
+	// The codec, size limits, compression and panic recovery every plane
+	// shares: rpcHandlerOptions.
+	dataOpts := connect.WithHandlerOptions(
+		rpcHandlerOptions(l),
 		connect.WithInterceptors(
 			// Outermost of all: tracing and the failure log inside it see an
 			// internal error as it happened; the caller sees its code and a
@@ -332,11 +330,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			middleware.AuditActingElsewhere(repos.Audit, auth.AudienceData),
 		),
 	)
-	// Every plane decodes JSON with the strict codec: an unknown request field
-	// is a 400, not a silent discard. See internal/api/codec for why the
-	// forward-compatibility the default buys is not worth its cost here.
-	iamOpts := connect.WithOptions(
-		connect.WithCodec(codec.StrictJSON{}),
+	// The codec, size limits, compression and panic recovery every plane
+	// shares: rpcHandlerOptions.
+	iamOpts := connect.WithHandlerOptions(
+		rpcHandlerOptions(l),
 		connect.WithInterceptors(
 			// Outermost of all: tracing and the failure log inside it see an
 			// internal error as it happened; the caller sees its code and a
