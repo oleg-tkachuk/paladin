@@ -55,6 +55,7 @@ func backendToProto(b *admindomain.StorageBackend) *pb.StorageBackend {
 		UpdatedAt:                     convx.TsProto(b.UpdatedAt),
 		Features:                      featuresToProto(b.Features),
 		Compatibility:                 compatibilityToProto(b.Features),
+		Declared:                      b.Declared,
 	}
 }
 

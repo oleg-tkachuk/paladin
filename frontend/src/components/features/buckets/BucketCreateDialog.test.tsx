@@ -17,9 +17,16 @@ import {
 } from "@/gen/paladin/admin/v1/types_pb";
 
 /** A backend as the dialog reads it, with the anonymous-read probe's result. */
-function backend(id: string, anonymousRead = FeatureSupport.UNKNOWN) {
+function backend(
+  id: string,
+  anonymousRead = FeatureSupport.UNKNOWN,
+  state: { enabled?: boolean; declared?: boolean } = {},
+) {
   return {
     backendId: id,
+    enabled: true,
+    declared: true,
+    ...state,
     features: [
       {
         feature: StorageFeature.ANONYMOUS_READ_POLICY,
@@ -192,5 +199,46 @@ describe("BucketCreateDialog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /Run Test connectivity on the backend's page/,
     );
+  });
+
+  // A backend registered only through the API cannot hold a bucket, and it
+  // was the default because it sorted first.
+  it("defaults to a backend that can hold a bucket", async () => {
+    const apiOnly = backend("api-only", undefined, { declared: false });
+    const { createBucket } = open(undefined, [apiOnly, backend("primary")]);
+    fireEvent.change(name(), { target: { value: "logs" } });
+    fireEvent.submit(submit().closest("form")!);
+    await waitFor(() =>
+      expect(createBucket).toHaveBeenCalledWith(
+        "primary",
+        "logs",
+        "",
+        "",
+        true,
+        null,
+      ),
+    );
+  });
+
+  it("holds Create and says why when no backend can hold a bucket", () => {
+    const disabled = backend("old", undefined, { enabled: false });
+    open(undefined, [disabled]);
+    fireEvent.change(name(), { target: { value: "logs" } });
+    expect(
+      screen.getByText("Backend old is disabled; pick another."),
+    ).toBeInTheDocument();
+    expect(submit()).toBeDisabled();
+  });
+
+  // The refusal stayed on screen after the field it was about was fixed.
+  it("drops a refusal once the form changes", async () => {
+    open(vi.fn().mockRejectedValue(new Error("BucketAlreadyExists")));
+    fireEvent.change(name(), { target: { value: "taken" } });
+    fireEvent.submit(submit().closest("form")!);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "BucketAlreadyExists",
+    );
+    fireEvent.change(name(), { target: { value: "taken-2" } });
+    expect(screen.queryByText("BucketAlreadyExists")).not.toBeInTheDocument();
   });
 });
