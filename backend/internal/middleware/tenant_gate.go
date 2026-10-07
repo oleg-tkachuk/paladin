@@ -89,8 +89,10 @@ func (c *CachedTenantStates) Clear() {
 // restored tenant's credentials work again — so this is what stops them
 // working meanwhile.
 //
-// A call with no principal (Login, RefreshToken) and a principal spanning
-// tenants (no tenant id) pass. A state that cannot be read refuses the call
+// A call with no principal (Login, RefreshToken), a principal with no tenant
+// and one holding a platform role pass: a platform role's authority is not
+// its tenant's, and gating it would let a trashed platform tenant lock out
+// every admin who could restore it. A state that cannot be read refuses the call
 // as Unavailable: the gate fails closed, and the caller retries.
 //
 // Install it after every interceptor that establishes a principal, and before
@@ -104,7 +106,7 @@ type tenantGate struct{ states auth.TenantStateReader }
 
 func (g tenantGate) check(ctx context.Context) error {
 	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil || p == nil || p.TenantID == uuid.Nil {
+	if err != nil || p == nil || p.TenantID == uuid.Nil || apiutil.HoldsPlatformRole(p) {
 		return nil
 	}
 	state, err := g.states.TenantState(ctx, p.TenantID)
