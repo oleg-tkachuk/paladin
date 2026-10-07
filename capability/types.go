@@ -25,7 +25,31 @@ var (
 	// declared unit and cross-currency delegation is rejected at
 	// issuance.
 	ErrUnitCodeMismatch = errors.New("capability: unit_code mismatch between parent and child")
+	// ErrInvalidRequest is an Issue or Delegate request that is malformed in
+	// itself: a missing tenant, an empty audience entry, a negative TTL, a
+	// thumbprint that is not one, a not-before past the expiry, caveats that
+	// do not validate. Nothing was minted. Every such error matches it, so a
+	// caller maps the whole family to its "bad request" without listing it.
+	ErrInvalidRequest = errors.New("capability: invalid request")
+	// ErrUnknownTenant is an issuance for a tenant that does not exist —
+	// typically one whose provisioning has not finished. The Store returns it.
+	ErrUnknownTenant = errors.New("capability: unknown tenant")
+	// ErrTenantDeleted is an issuance for a tenant in the trash: it exists,
+	// so its rows may be restored, but nothing new is minted for it. The
+	// Store returns it.
+	ErrTenantDeleted = errors.New("capability: tenant deleted")
 )
+
+// requestError is one of the ErrInvalidRequest family with a name of its own.
+type requestError struct{ msg string }
+
+func (e *requestError) Error() string        { return e.msg }
+func (e *requestError) Is(target error) bool { return target == ErrInvalidRequest }
+
+// invalidRequest is an ErrInvalidRequest saying what was wrong.
+func invalidRequest(format string, args ...any) error {
+	return fmt.Errorf("%w: "+format, append([]any{ErrInvalidRequest}, args...)...)
+}
 
 // DefaultUnitCode is the fallback when a request / row omits the
 // unit. Keeps existing payloads / DB rows working without an explicit
