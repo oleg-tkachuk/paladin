@@ -77,6 +77,11 @@ message StorageBackend {
   repeated StorageFeatureSupport features = 25 [(google.api.field_behavior) = OUTPUT_ONLY];
   // features summarised over the required ones.
   StorageCompatibility compatibility = 26 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // The backend is declared in the server's storage.backends. The data plane
+  // and the worker build storage clients from that list only, so a bucket can
+  // be created only on a declared backend; one registered through the API
+  // alone is listed but cannot hold one.
+  bool declared = 27 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 // An S3 feature Paladin uses (ADR-0026). Mirrors the catalog in the backend's
