@@ -117,7 +117,7 @@ describe("TenantBucketsPage", () => {
     render(<TenantBucketsPage />);
     await userEvent.click(screen.getByRole("button", { name: /New bucket/i }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("paladin-primary")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Bucket name/)).toBeInTheDocument();
   });
 
   it("does not create when the bucket name is empty", async () => {
@@ -130,10 +130,7 @@ describe("TenantBucketsPage", () => {
   it("creates a bucket when a name is provided", async () => {
     render(<TenantBucketsPage />);
     await userEvent.click(screen.getByRole("button", { name: /New bucket/i }));
-    await userEvent.type(
-      screen.getByPlaceholderText("paladin-primary"),
-      "my-bucket",
-    );
+    await userEvent.type(screen.getByLabelText(/Bucket name/), "my-bucket");
     fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
     await waitFor(() =>
       expect(h.createBucket).toHaveBeenCalledWith(
