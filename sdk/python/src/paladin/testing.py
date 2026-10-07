@@ -1078,6 +1078,11 @@ class FakePaladin(
                 body += data
             o = self._objects[up.name]
             self._commit(o, bytes(body), "")
+            # As the server: the composite of the parts' checksums, over the
+            # part size the upload was told to use.
+            o.msg.checksum.algorithm = CHECKSUM_SHA256
+            o.msg.checksum.value = _composite_sha256([p.checksum_value for p in request.parts])
+            o.msg.checksum.part_size_bytes = PART_SIZE
             del self._uploads[request.upload_id]
             return o.msg
 
@@ -1218,6 +1223,13 @@ def _with_reason(code: Code, message: str) -> ConnectError:
         else []
     )
     return ConnectError(code, message, details)
+
+
+def _composite_sha256(parts: list[str]) -> str:
+    """The server's composite of SHA-256 part checksums: the base64 SHA-256 of
+    their raw digests, in part order, then "-" and the count."""
+    whole = hashlib.sha256(b"".join(base64.b64decode(p) for p in parts)).digest()
+    return f"{base64.b64encode(whole).decode()}-{len(parts)}"
 
 
 def _bump(o: _Object) -> None:
