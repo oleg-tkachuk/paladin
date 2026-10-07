@@ -44,6 +44,8 @@ interface CollectionCreateDialogProps {
     displayName: string,
     backendId: string,
     bucketId: string,
+    cedarPolicy: string,
+    publicRead: { cacheControl: string } | null,
   ) => Promise<unknown>;
   onCreated?: () => void;
 }
@@ -52,6 +54,10 @@ interface CollectionCreateDialogProps {
  * New Collection — one dialog for the cross-tenant list and a tenant's own,
  * which each carried a copy. The Collection is created in the signed-in
  * tenant (useCollections), which is why the tenant page offers it only there.
+ *
+ * A Collection's access is its bucket's (ADR-0027): bound to a public bucket
+ * it is public, and the dialog says so before it is created. A private
+ * bucket is picked by default, so publishing is always a choice.
  */
 export function CollectionCreateDialog({
   open,
@@ -69,6 +75,7 @@ export function CollectionCreateDialog({
   const [bucketId, setBucketId] = useState("");
   const [path, setPath] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [cacheControl, setCacheControl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -99,8 +106,13 @@ export function CollectionCreateDialog({
     setBucketId("");
   }
   if (!bucketId && bucketsForBackend.length > 0) {
-    setBucketId(bucketsForBackend[0].bucketId);
+    setBucketId(
+      (bucketsForBackend.find((b) => !b.publicRead) ?? bucketsForBackend[0])
+        .bucketId,
+    );
   }
+  const publicBucket =
+    bucketsForBackend.find((b) => b.bucketId === bucketId)?.publicRead ?? false;
 
   // Failed reads are checked before empty ones: both leave the list empty, and
   // only one of them means there is nothing to choose.
@@ -120,7 +132,14 @@ export function CollectionCreateDialog({
     setSubmitError(null);
     try {
       setSubmitting(true);
-      await createCollection(path, displayName, backendId, bucketId);
+      await createCollection(
+        path,
+        displayName,
+        backendId,
+        bucketId,
+        "",
+        publicBucket ? { cacheControl } : null,
+      );
       showNotification({
         type: "success",
         title: "Collection created",
@@ -128,6 +147,7 @@ export function CollectionCreateDialog({
       });
       setPath("");
       setDisplayName("");
+      setCacheControl("");
       onOpenChange(false);
       onCreated?.();
     } catch (err) {
@@ -256,6 +276,9 @@ export function CollectionCreateDialog({
                     {bucketsForBackend.map((b) => (
                       <SelectItem key={b.bucketId} value={b.bucketId}>
                         <span className="font-mono">{b.bucketId}</span>
+                        {b.publicRead ? (
+                          <span className="text-warning"> · public</span>
+                        ) : null}
                         {b.displayName ? (
                           <span className="text-muted-foreground">
                             {" "}
@@ -270,6 +293,32 @@ export function CollectionCreateDialog({
             }
           </FormField>
         </FormRow>
+        {publicBucket && (
+          <>
+            <p
+              role="note"
+              className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning"
+            >
+              <span className={T.code}>{bucketId}</span> is public: anyone with
+              an object&apos;s URL will read it, unsigned. Paladin names every
+              object, and a delete is permanent.
+            </p>
+            <FormField
+              label="Cache-Control"
+              hint="Stored with every object. Empty uses public, max-age=31536000, immutable. Cannot change later."
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  placeholder="public, max-age=31536000, immutable"
+                  className="font-mono text-xs"
+                  value={cacheControl}
+                  onChange={(e) => setCacheControl(e.target.value)}
+                />
+              )}
+            </FormField>
+          </>
+        )}
         {backendId && !bucketsFailed && bucketsForBackend.length === 0 ? (
           <div className="space-y-1 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
             <p className="text-warning">

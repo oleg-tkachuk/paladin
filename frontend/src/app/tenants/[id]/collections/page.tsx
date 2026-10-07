@@ -7,6 +7,8 @@
 // tenant (useActingTenantId), so a platform admin manages another tenant's
 // collections from its page.
 
+import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
+import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import React, { useEffect, useMemo, useState } from "react";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
 import { useQuery } from "@tanstack/react-query";
@@ -353,6 +355,9 @@ export default function TenantCollectionsPage() {
                       >
                         {ok.collection}
                       </Link>
+                      {ok.access === CollectionAccess.PUBLIC_READ && (
+                        <PublicReadBadge />
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">
