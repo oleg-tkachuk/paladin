@@ -217,8 +217,9 @@ func objectToProto(o *objecth.Object) *pb.Object {
 	}
 	if o.ChecksumAlgo != "" || o.Checksum != "" {
 		out.Checksum = &pb.ChecksumDigest{
-			Algorithm: o.ChecksumAlgo,
-			Value:     o.Checksum,
+			Algorithm:     o.ChecksumAlgo,
+			Value:         o.Checksum,
+			PartSizeBytes: o.ChecksumPartSizeBytes,
 		}
 	}
 	// Lock is set only where the handler populated it (GetObject /

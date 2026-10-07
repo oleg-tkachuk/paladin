@@ -317,7 +317,7 @@ type Querier interface {
 	InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID, resourceTenantID pgtype.UUID) error
 	// ObjectVersion queries — immutable history rows. Populated by the
 	// promotion path when the parent bucket has versioning_enabled = true.
-	InsertObjectVersion(ctx context.Context, iD pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, storagePath string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, contentType *string, metadata []byte, tags []byte) error
+	InsertObjectVersion(ctx context.Context, iD pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, storagePath string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, checksumPartSizeBytes *int64, contentType *string, metadata []byte, tags []byte) error
 	// Purge debt: the retry handle for bytes whose DB row is already gone.
 	// See ADR-0017 and migrations/001_initial_schema.sql: storage_path is
 	// denormalised here because the object row is gone before the purge runs.
@@ -632,6 +632,11 @@ type Querier interface {
 	// report still holds the executor's arguments — hence the validity check
 	// rather than a bare cast, which would fail the whole statement on one row.
 	ReclaimStaleOperations(ctx context.Context, staleAfterMicros int64) (int64, error)
+	// Records a multipart object's composite checksum and its part size before
+	// the object store assembles it. Written while the row is PENDING, so it is
+	// in place whichever promotes the object first: this upload's completion, or
+	// the storage event, which carries no checksum.
+	RecordCompositeChecksum(ctx context.Context, checksum *string, partSizeBytes *int64, objectID pgtype.UUID) (int64, error)
 	// Symmetric refund on the per-capability counter. Same floor rule.
 	RefundCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric) error
 	// Subtracts amount; floors at 0 so a refund larger than current

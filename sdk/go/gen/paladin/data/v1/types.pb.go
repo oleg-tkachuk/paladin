@@ -373,9 +373,17 @@ func (x *Object) GetTaint() []TaintSignal {
 }
 
 type ChecksumDigest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Algorithm     string                 `protobuf:"bytes,1,opt,name=algorithm,proto3" json:"algorithm,omitempty"` // CRC32C | SHA256 | MD5
-	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`         // base64-encoded
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Algorithm string                 `protobuf:"bytes,1,opt,name=algorithm,proto3" json:"algorithm,omitempty"` // CRC32C | SHA256 | MD5
+	// base64-encoded. For an object assembled from a multipart upload it is a
+	// composite, in S3's COMPOSITE form: the base64 of the algorithm's digest
+	// of the parts' raw digests concatenated in part order, then "-" and the
+	// part count.
+	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	// Set when value is a composite: every part is this many bytes, the last
+	// the remainder. A reader recomputes the composite by restarting the
+	// digest at each boundary. Zero when value is a digest of the whole.
+	PartSizeBytes int64 `protobuf:"varint,3,opt,name=part_size_bytes,json=partSizeBytes,proto3" json:"part_size_bytes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -422,6 +430,13 @@ func (x *ChecksumDigest) GetValue() string {
 		return x.Value
 	}
 	return ""
+}
+
+func (x *ChecksumDigest) GetPartSizeBytes() int64 {
+	if x != nil {
+		return x.PartSizeBytes
+	}
+	return 0
 }
 
 type ObjectLockState struct {
@@ -715,10 +730,11 @@ const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"D\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"q\n" +
 	"\x0eChecksumDigest\x12\x1c\n" +
 	"\talgorithm\x18\x01 \x01(\tR\talgorithm\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"\x88\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\x12+\n" +
+	"\x0fpart_size_bytes\x18\x03 \x01(\x03B\x03\xe0A\x03R\rpartSizeBytes\"\x88\x01\n" +
 	"\x0fObjectLockState\x12\x12\n" +
 	"\x04mode\x18\x01 \x01(\tR\x04mode\x12B\n" +
 	"\fretain_until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vretainUntil\x12\x1d\n" +

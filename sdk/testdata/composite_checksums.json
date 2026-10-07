@@ -1,0 +1,50 @@
+{
+  "_comment": "Composite checksums of multipart objects, in S3's COMPOSITE form: base64(algorithm(concat(raw part digests))) + \"-\" + part count. The server computes it from the parts' checksums; both SDKs recompute it from the bytes, restarting the digest every part_size_bytes.",
+  "cases": [
+    {
+      "name": "three parts, the last shorter",
+      "algorithm": "SHA256",
+      "part_size_bytes": 5,
+      "body_base64": "aGVsbG8gd29ybGQh",
+      "parts": [
+        "LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ=",
+        "Q8+JdyDMWmk7JQjJ6V6HEZQqlu2Y13L+NxI9MWA84g8=",
+        "JhVznUHbMRqXjDIy9RictRcvE93IYnEtTXUP9GO5y4o="
+      ],
+      "composite": "D3qZqhMCO0j+h+RS7RQR8UFdX4mTed1iexltHESNUwA=-3"
+    },
+    {
+      "name": "two parts of exactly the part size",
+      "algorithm": "SHA256",
+      "part_size_bytes": 4,
+      "body_base64": "YWJjZGVmZ2g=",
+      "parts": [
+        "iNQmb9TmM40TuEX88olXnSCciXgjuSF9o+Fhk28DFYk=",
+        "5eCIoLZhY6Cial4FPSpEltwWq24OPdGt8tFqqEoHjJ0="
+      ],
+      "composite": "fVRzcSFy+ewUlLqgPaPYc00S04XRymNAhWdxw9kzguY=-2"
+    },
+    {
+      "name": "one part, shorter than the part size",
+      "algorithm": "SHA256",
+      "part_size_bytes": 8,
+      "body_base64": "YWJj",
+      "parts": [
+        "ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0="
+      ],
+      "composite": "T4tCwi3TcptRm6b2jS2nzFstYG0F2u1a1RKMwD5sY1g=-1"
+    },
+    {
+      "name": "CRC32C, the last part shorter",
+      "algorithm": "CRC32C",
+      "part_size_bytes": 5,
+      "body_base64": "aGVsbG8gd29ybGQh",
+      "parts": [
+        "mnG7TA==",
+        "DCQYQw==",
+        "7aE+1Q=="
+      ],
+      "composite": "khc96Q==-3"
+    }
+  ]
+}

@@ -47,7 +47,7 @@ func versionToProto(parent paladin.ObjectName, v *objecth.ObjectVersion) *pb.Obj
 		IsCurrent:      v.IsCurrent,
 	}
 	if v.ChecksumAlgo != "" || v.Checksum != "" {
-		out.Checksum = &pb.ChecksumDigest{Algorithm: v.ChecksumAlgo, Value: v.Checksum}
+		out.Checksum = &pb.ChecksumDigest{Algorithm: v.ChecksumAlgo, Value: v.Checksum, PartSizeBytes: v.ChecksumPartSizeBytes}
 	}
 	if v.LockMode != "" || v.LockRetainUntil != nil || v.LegalHold {
 		out.Lock = &pb.ObjectLockState{

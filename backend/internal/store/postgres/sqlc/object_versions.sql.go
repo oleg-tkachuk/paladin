@@ -66,7 +66,7 @@ func (q *Queries) GetObjectLockByVersion(ctx context.Context, versionID pgtype.U
 }
 
 const getObjectVersion = `-- name: GetObjectVersion :one
-SELECT v.id, v.tenant_id, v.object_id, v.is_delete_marker, v.storage_path, v.size_bytes, v.etag, v.checksum_algorithm, v.checksum, v.content_type, v.metadata, v.tags, v.created_at,
+SELECT v.id, v.tenant_id, v.object_id, v.is_delete_marker, v.storage_path, v.size_bytes, v.etag, v.checksum_algorithm, v.checksum, v.content_type, v.metadata, v.tags, v.created_at, v.checksum_part_size_bytes,
        l.mode AS lock_mode, l.retain_until AS lock_retain_until,
        COALESCE(l.legal_hold, false) AS legal_hold,
        v.created_at
@@ -100,6 +100,7 @@ func (q *Queries) GetObjectVersion(ctx context.Context, id pgtype.UUID) (GetObje
 		&i.ObjectVersion.Metadata,
 		&i.ObjectVersion.Tags,
 		&i.ObjectVersion.CreatedAt,
+		&i.ObjectVersion.ChecksumPartSizeBytes,
 		&i.LockMode,
 		&i.LockRetainUntil,
 		&i.LegalHold,
@@ -112,14 +113,14 @@ const insertObjectVersion = `-- name: InsertObjectVersion :exec
 
 INSERT INTO object_versions (
     id, object_id, is_delete_marker, storage_path,
-    size_bytes, etag, checksum_algorithm, checksum,
+    size_bytes, etag, checksum_algorithm, checksum, checksum_part_size_bytes,
     content_type, metadata, tags
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 `
 
 // ObjectVersion queries — immutable history rows. Populated by the
 // promotion path when the parent bucket has versioning_enabled = true.
-func (q *Queries) InsertObjectVersion(ctx context.Context, iD pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, storagePath string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, contentType *string, metadata []byte, tags []byte) error {
+func (q *Queries) InsertObjectVersion(ctx context.Context, iD pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, storagePath string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, checksumPartSizeBytes *int64, contentType *string, metadata []byte, tags []byte) error {
 	_, err := q.db.Exec(ctx, insertObjectVersion,
 		iD,
 		objectID,
@@ -129,6 +130,7 @@ func (q *Queries) InsertObjectVersion(ctx context.Context, iD pgtype.UUID, objec
 		etag,
 		checksumAlgorithm,
 		checksum,
+		checksumPartSizeBytes,
 		contentType,
 		metadata,
 		tags,
@@ -137,7 +139,7 @@ func (q *Queries) InsertObjectVersion(ctx context.Context, iD pgtype.UUID, objec
 }
 
 const listObjectVersions = `-- name: ListObjectVersions :many
-SELECT v.id, v.tenant_id, v.object_id, v.is_delete_marker, v.storage_path, v.size_bytes, v.etag, v.checksum_algorithm, v.checksum, v.content_type, v.metadata, v.tags, v.created_at,
+SELECT v.id, v.tenant_id, v.object_id, v.is_delete_marker, v.storage_path, v.size_bytes, v.etag, v.checksum_algorithm, v.checksum, v.content_type, v.metadata, v.tags, v.created_at, v.checksum_part_size_bytes,
        l.mode AS lock_mode, l.retain_until AS lock_retain_until,
        COALESCE(l.legal_hold, false) AS legal_hold,
        v.created_at
@@ -194,6 +196,7 @@ func (q *Queries) ListObjectVersions(ctx context.Context, objectID pgtype.UUID, 
 			&i.ObjectVersion.Metadata,
 			&i.ObjectVersion.Tags,
 			&i.ObjectVersion.CreatedAt,
+			&i.ObjectVersion.ChecksumPartSizeBytes,
 			&i.LockMode,
 			&i.LockRetainUntil,
 			&i.LegalHold,

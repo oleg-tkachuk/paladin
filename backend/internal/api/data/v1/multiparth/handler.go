@@ -7,9 +7,11 @@
 package multiparth
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -186,6 +188,9 @@ type Repository interface {
 	// Object reads the object a completed upload produced, to answer
 	// CompleteMultipartUpload with it as CompleteObject answers with its own.
 	Object(ctx context.Context, tenantID, objectID uuid.UUID) (objecth.Object, error)
+	// RecordCompositeChecksum records a PENDING object's composite checksum
+	// and its part size, before the store assembles it.
+	RecordCompositeChecksum(ctx context.Context, objectID uuid.UUID, composite string, partSizeBytes int64) error
 }
 
 // VersionRecorder is the optional hook that records a versions-row when the
@@ -208,8 +213,10 @@ type VersionedObject struct {
 	ETag         string
 	ChecksumAlgo string
 	Checksum     string
-	Metadata     map[string]string
-	Tags         map[string]string
+	// ChecksumPartSizeBytes is the part size Checksum is a composite over.
+	ChecksumPartSizeBytes int64
+	Metadata              map[string]string
+	Tags                  map[string]string
 }
 
 // QuotaUpdater is the post-promote accounting hook — same shape as the
@@ -343,6 +350,17 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	if err := sess.checkParts(args.Parts); err != nil {
 		return objecth.Object{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	// The composite of the parts' checksums, which the store verified each
+	// part against: what a reader recomputes from the bytes. Recorded before
+	// the store assembles the object, so it is in place whichever promotes
+	// the row first — this call or the storage event.
+	composite, err := sess.compositeChecksum(args.Parts)
+	if err != nil {
+		return objecth.Object{}, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if err := h.repo.RecordCompositeChecksum(ctx, sess.ObjectID, composite, sess.PartSizeBytes); err != nil {
+		return objecth.Object{}, connect.NewError(connect.CodeInternal, fmt.Errorf("record composite checksum: %w", err))
+	}
 	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, sess.ChecksumAlgo, args.Parts)
 	if err != nil {
 		return objecth.Object{}, connect.NewError(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
@@ -357,13 +375,16 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	}
 	if changed && h.versions != nil {
 		_ = h.versions.OnPromote(ctx, VersionedObject{
-			ObjectID:    sess.ObjectID,
-			TenantID:    sess.TenantID,
-			Collection:  sess.Collection,
-			Key:         sess.Key,
-			SizeBytes:   size,
-			ETag:        etag,
-			ContentType: "", // multipart doesn't carry CT through Storage; lookup later
+			ObjectID:              sess.ObjectID,
+			TenantID:              sess.TenantID,
+			Collection:            sess.Collection,
+			Key:                   sess.Key,
+			SizeBytes:             size,
+			ETag:                  etag,
+			ContentType:           "", // multipart doesn't carry CT through Storage; lookup later
+			ChecksumAlgo:          sess.ChecksumAlgo,
+			Checksum:              composite,
+			ChecksumPartSizeBytes: sess.PartSizeBytes,
 		})
 	}
 	// Quota accounting — symmetric with single-PUT path on object.Handler.
@@ -543,6 +564,18 @@ func (s Session) checkParts(parts []PartETag) error {
 		}
 	}
 	return nil
+}
+
+// compositeChecksum is the composite of the parts' checksums, in part order.
+// The parts are those checkParts accepted: each number once, each checksum
+// valid under the session's algorithm.
+func (s Session) compositeChecksum(parts []PartETag) (string, error) {
+	ordered := slices.SortedFunc(slices.Values(parts), func(a, b PartETag) int { return cmp.Compare(a.PartNumber, b.PartNumber) })
+	values := make([]string, len(ordered))
+	for i, p := range ordered {
+		values[i] = p.ChecksumValue
+	}
+	return checksum.Composite(s.ChecksumAlgo, values)
 }
 
 // discardMismatched settles an assembled object whose size is not the one it

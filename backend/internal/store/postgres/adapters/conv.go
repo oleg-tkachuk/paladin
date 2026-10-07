@@ -71,6 +71,23 @@ func derefStr(p *string) string {
 	return *p
 }
 
+// ─── *int64 helpers ─────────────────────────────────────────────────────────
+
+// positivePtr is n, or nil — SQL NULL — when it is not positive.
+func positivePtr(n int64) *int64 {
+	if n <= 0 {
+		return nil
+	}
+	return &n
+}
+
+func derefInt64(p *int64) int64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
 // ─── []byte JSONB ↔ map[string]string ──────────────────────────────────────
 
 func encodeMap(m map[string]string) []byte {

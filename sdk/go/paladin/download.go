@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -113,6 +114,10 @@ type ObjectReader struct {
 	digest   hash.Hash
 	want     []byte
 	algo     string
+	// composite, when set instead of digest, recomputes a multipart object's
+	// composite checksum; wantParts is the part count it must reach.
+	composite *compositeHash
+	wantParts int
 }
 
 // Read reads the content, and verifies it at the end of a whole object.
@@ -121,6 +126,9 @@ func (r *ObjectReader) Read(p []byte) (int, error) {
 	r.read += int64(n)
 	if r.digest != nil {
 		r.digest.Write(p[:n])
+	}
+	if r.composite != nil {
+		r.composite.write(p[:n])
 	}
 	if errors.Is(err, io.EOF) {
 		verr := r.verify()
@@ -150,7 +158,81 @@ func (r *ObjectReader) verify() error {
 			return &IntegrityError{What: r.algo, Want: base64.StdEncoding.EncodeToString(r.want), Got: base64.StdEncoding.EncodeToString(got)}
 		}
 	}
+	if r.composite != nil {
+		if got, parts := r.composite.sum(); !bytes.Equal(got, r.want) || parts != r.wantParts {
+			return &IntegrityError{What: r.algo, Want: compositeValue(r.want, r.wantParts), Got: compositeValue(got, parts)}
+		}
+	}
 	return nil
+}
+
+// compositeSep separates a composite checksum's digest from its part count.
+const compositeSep = "-"
+
+// compositeHash recomputes a multipart object's composite checksum from its
+// bytes: the digest restarts every partSize bytes, and the composite is the
+// digest of the parts' digests, in order.
+type compositeHash struct {
+	newDigest func() hash.Hash
+	partSize  int64
+	part      hash.Hash
+	inPart    int64
+	parts     hash.Hash
+	count     int
+}
+
+func newCompositeHash(newDigest func() hash.Hash, partSize int64) *compositeHash {
+	return &compositeHash{newDigest: newDigest, partSize: partSize, part: newDigest(), parts: newDigest()}
+}
+
+func (c *compositeHash) write(p []byte) {
+	for len(p) > 0 {
+		n := min(int64(len(p)), c.partSize-c.inPart)
+		c.part.Write(p[:n])
+		c.inPart += n
+		p = p[n:]
+		if c.inPart == c.partSize {
+			c.endPart()
+		}
+	}
+}
+
+func (c *compositeHash) endPart() {
+	c.parts.Write(c.part.Sum(nil))
+	c.part, c.inPart = c.newDigest(), 0
+	c.count++
+}
+
+// sum ends a last part shorter than the rest and returns the composite and
+// the part count.
+func (c *compositeHash) sum() ([]byte, int) {
+	if c.inPart > 0 {
+		c.endPart()
+	}
+	return c.parts.Sum(nil), c.count
+}
+
+// compositeValue is a composite checksum as the server writes it.
+func compositeValue(digest []byte, parts int) string {
+	return base64.StdEncoding.EncodeToString(digest) + compositeSep + strconv.Itoa(parts)
+}
+
+// parseComposite splits a composite checksum into its digest and part count;
+// false when value is not one.
+func parseComposite(value string, digestSize int) ([]byte, int, bool) {
+	encoded, count, ok := strings.Cut(value, compositeSep)
+	if !ok {
+		return nil, 0, false
+	}
+	parts, err := strconv.Atoi(count)
+	if err != nil || parts < 1 {
+		return nil, 0, false
+	}
+	digest, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(digest) != digestSize {
+		return nil, 0, false
+	}
+	return digest, parts, true
 }
 
 // Close closes the response body.
@@ -230,9 +312,10 @@ func Download(ctx context.Context, data *DataPlane, name string, opts DownloadOp
 }
 
 // expect sets what a whole read must match: the object's recorded size and,
-// when the server recorded one this SDK can compute, its checksum. A
-// multipart object's checksum is a composite of its parts' and is not
-// checked: it does not decode to a digest of the algorithm's length.
+// when the server recorded one this SDK can compute, its checksum — a digest
+// of the whole, or a multipart object's composite, recomputed part by part
+// over the part size the server recorded beside it. A composite with no part
+// size, as a server that predates it reports, is not checked.
 func (r *ObjectReader) expect(object *datav1.Object) {
 	if size := object.GetSizeBytes(); size > 0 {
 		r.wantSize = size
@@ -242,12 +325,18 @@ func (r *ObjectReader) expect(object *datav1.Object) {
 	if !ok {
 		return
 	}
-	want, err := base64.StdEncoding.DecodeString(sum.GetValue())
-	digest := newDigest()
-	if err != nil || len(want) != digest.Size() {
+	size := newDigest().Size()
+	if partSize := sum.GetPartSizeBytes(); partSize > 0 {
+		if want, parts, ok := parseComposite(sum.GetValue(), size); ok {
+			r.composite, r.want, r.wantParts, r.algo = newCompositeHash(newDigest, partSize), want, parts, sum.GetAlgorithm()
+		}
 		return
 	}
-	r.digest, r.want, r.algo = digest, want, sum.GetAlgorithm()
+	want, err := base64.StdEncoding.DecodeString(sum.GetValue())
+	if err != nil || len(want) != size {
+		return
+	}
+	r.digest, r.want, r.algo = newDigest(), want, sum.GetAlgorithm()
 }
 
 // LookupObject returns the object a paladin:// URI names, found by its key.

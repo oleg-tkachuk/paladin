@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -285,24 +286,34 @@ func TestDownloadVerifiesTheWholeObject(t *testing.T) {
 	crc := crc32.Checksum(body, crc32.MakeTable(crc32.Castagnoli))
 	crcBytes := []byte{byte(crc >> 24), byte(crc >> 16), byte(crc >> 8), byte(crc)}
 	wrong := sha256Of([]byte("something else"))
+	// body is 16 bytes: 3 parts of 6, the last 4.
+	const partSize = 6
+	composite := sha256Composite(body, partSize)
 	cases := []struct {
 		name     string
 		size     int64
 		algo     string
 		value    string
+		partSize int64
 		opts     paladin.DownloadOptions
 		mismatch string // IntegrityError.What, or "" for a clean read
 	}{
-		{"sha256", int64(len(body)), paladin.ChecksumSHA256, sha256Of(body), paladin.DownloadOptions{}, ""},
-		{"crc32c", int64(len(body)), paladin.ChecksumCRC32C, b64(crcBytes), paladin.DownloadOptions{}, ""},
-		{"md5", int64(len(body)), paladin.ChecksumMD5, b64(md5Sum[:]), paladin.DownloadOptions{}, ""},
-		{"no checksum recorded", int64(len(body)), "", "", paladin.DownloadOptions{}, ""},
-		{"multipart composite is skipped", int64(len(body)), paladin.ChecksumSHA256, "abc-3", paladin.DownloadOptions{}, ""},
-		{"a digest of the wrong length is skipped", int64(len(body)), paladin.ChecksumSHA256, "AAAA", paladin.DownloadOptions{}, ""},
-		{"unknown algorithm is skipped", int64(len(body)), "XXH3", "AAAA", paladin.DownloadOptions{}, ""},
-		{"wrong checksum", int64(len(body)), paladin.ChecksumSHA256, wrong, paladin.DownloadOptions{}, paladin.ChecksumSHA256},
-		{"wrong size", int64(len(body)) + 1, paladin.ChecksumSHA256, sha256Of(body), paladin.DownloadOptions{}, "size"},
-		{"a range is not verified", int64(len(body)), paladin.ChecksumSHA256, wrong, paladin.DownloadOptions{Offset: 1}, ""},
+		{"sha256", int64(len(body)), paladin.ChecksumSHA256, sha256Of(body), 0, paladin.DownloadOptions{}, ""},
+		{"crc32c", int64(len(body)), paladin.ChecksumCRC32C, b64(crcBytes), 0, paladin.DownloadOptions{}, ""},
+		{"md5", int64(len(body)), paladin.ChecksumMD5, b64(md5Sum[:]), 0, paladin.DownloadOptions{}, ""},
+		{"no checksum recorded", int64(len(body)), "", "", 0, paladin.DownloadOptions{}, ""},
+		{"a multipart composite", int64(len(body)), paladin.ChecksumSHA256, composite, partSize, paladin.DownloadOptions{}, ""},
+		{"a composite of other bytes", int64(len(body)), paladin.ChecksumSHA256, sha256Composite([]byte("something else!"), partSize), partSize, paladin.DownloadOptions{}, paladin.ChecksumSHA256},
+		{"a composite over another part size", int64(len(body)), paladin.ChecksumSHA256, composite, partSize + 1, paladin.DownloadOptions{}, paladin.ChecksumSHA256},
+		{"a composite of another part count", int64(len(body)), paladin.ChecksumSHA256, strings.TrimSuffix(composite, "-3") + "-4", partSize, paladin.DownloadOptions{}, paladin.ChecksumSHA256},
+		{"a composite with no part size is skipped", int64(len(body)), paladin.ChecksumSHA256, composite, 0, paladin.DownloadOptions{}, ""},
+		{"a malformed composite is skipped", int64(len(body)), paladin.ChecksumSHA256, "abc-3", partSize, paladin.DownloadOptions{}, ""},
+		{"a composite is not verified on a range", int64(len(body)), paladin.ChecksumSHA256, sha256Composite([]byte("something else!"), partSize), partSize, paladin.DownloadOptions{Offset: 1}, ""},
+		{"a digest of the wrong length is skipped", int64(len(body)), paladin.ChecksumSHA256, "AAAA", 0, paladin.DownloadOptions{}, ""},
+		{"unknown algorithm is skipped", int64(len(body)), "XXH3", "AAAA", 0, paladin.DownloadOptions{}, ""},
+		{"wrong checksum", int64(len(body)), paladin.ChecksumSHA256, wrong, 0, paladin.DownloadOptions{}, paladin.ChecksumSHA256},
+		{"wrong size", int64(len(body)) + 1, paladin.ChecksumSHA256, sha256Of(body), 0, paladin.DownloadOptions{}, "size"},
+		{"a range is not verified", int64(len(body)), paladin.ChecksumSHA256, wrong, 0, paladin.DownloadOptions{Offset: 1}, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -310,7 +321,7 @@ func TestDownloadVerifiesTheWholeObject(t *testing.T) {
 			obj := upload(t, data, "k", body)
 			dp.described = &datav1.Object{Name: obj.GetName(), SizeBytes: tc.size, ContentType: "text/plain"}
 			if tc.algo != "" {
-				dp.described.Checksum = &datav1.ChecksumDigest{Algorithm: tc.algo, Value: tc.value}
+				dp.described.Checksum = &datav1.ChecksumDigest{Algorithm: tc.algo, Value: tc.value, PartSizeBytes: tc.partSize}
 			}
 			got, err := readAll(t, data, obj.GetName(), tc.opts)
 			var ie *paladin.IntegrityError
@@ -379,4 +390,19 @@ func TestPresignExpiry(t *testing.T) {
 			}
 		})
 	}
+}
+
+// sha256Composite is the server's composite SHA-256 of body uploaded in parts
+// of partSize: written out here rather than taken from the SDK, so the test
+// does not check the SDK against itself.
+func sha256Composite(body []byte, partSize int) string {
+	var digests []byte
+	parts := 0
+	for start := 0; start < len(body); start += partSize {
+		sum := sha256.Sum256(body[start:min(start+partSize, len(body))])
+		digests = append(digests, sum[:]...)
+		parts++
+	}
+	whole := sha256.Sum256(digests)
+	return base64.StdEncoding.EncodeToString(whole[:]) + "-" + strconv.Itoa(parts)
 }

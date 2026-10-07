@@ -218,7 +218,7 @@ _WRONG = _b64(hashlib.sha256(b"something else").digest())
         "sha256",
         "md5",
         "none recorded",
-        "multipart composite skipped",
+        "a composite with no part size skipped",
         "wrong length skipped",
         "unknown algorithm skipped",
         "wrong checksum",
@@ -242,6 +242,61 @@ def test_download_verifies_the_whole_object(  # type: ignore[no-untyped-def]
     else:
         got = download(data, obj.name, offset=offset)
         assert got == BODY[offset:]
+
+
+# BODY is 16 bytes: 3 parts of 6, the last 4.
+_PART_SIZE = 6
+
+
+def _sha256_composite(body: bytes, part_size: int) -> str:
+    """The server's composite SHA-256 of ``body`` uploaded in parts of
+    ``part_size``: written out here rather than taken from the SDK, so the
+    test does not check the SDK against itself."""
+    parts = [body[i : i + part_size] for i in range(0, len(body), part_size)]
+    whole = hashlib.sha256(b"".join(hashlib.sha256(p).digest() for p in parts)).digest()
+    return f"{_b64(whole)}-{len(parts)}"
+
+
+_COMPOSITE = _sha256_composite(BODY, _PART_SIZE)
+_OTHER_COMPOSITE = _sha256_composite(b"something else!", _PART_SIZE)
+
+
+@pytest.mark.parametrize(
+    ("value", "part_size", "offset", "mismatch"),
+    [
+        (_COMPOSITE, _PART_SIZE, 0, None),
+        (_OTHER_COMPOSITE, _PART_SIZE, 0, CHECKSUM_SHA256),
+        (_COMPOSITE, _PART_SIZE + 1, 0, CHECKSUM_SHA256),
+        (_COMPOSITE.removesuffix("-3") + "-4", _PART_SIZE, 0, CHECKSUM_SHA256),
+        ("abc-3", _PART_SIZE, 0, None),
+        (_OTHER_COMPOSITE, _PART_SIZE, 1, None),
+    ],
+    ids=[
+        "a multipart composite",
+        "a composite of other bytes",
+        "a composite over another part size",
+        "a composite of another part count",
+        "a malformed composite skipped",
+        "a composite is not verified on a range",
+    ],
+)
+def test_download_verifies_a_multipart_composite(  # type: ignore[no-untyped-def]
+    fake: Fake, value, part_size, offset, mismatch
+) -> None:
+    data = _data(fake)
+    obj = _upload(data)
+    fake.described = types_pb2.Object(
+        name=obj.name, size_bytes=len(BODY), content_type="text/plain"
+    )
+    fake.described.checksum.algorithm = CHECKSUM_SHA256
+    fake.described.checksum.value = value
+    fake.described.checksum.part_size_bytes = part_size
+    if mismatch:
+        with pytest.raises(IntegrityError) as err:
+            download(data, obj.name, offset=offset)
+        assert err.value.what == mismatch
+    else:
+        assert download(data, obj.name, offset=offset) == BODY[offset:]
 
 
 def test_download_stream_is_a_file_with_type_and_length(fake: Fake) -> None:

@@ -12,22 +12,25 @@ import (
 // `IsDeleteMarker == true` represents a tombstone; the object is hidden
 // from default reads but ListObjectVersions still surfaces the entry.
 type ObjectVersion struct {
-	VersionID       uuid.UUID
-	ObjectID        uuid.UUID
-	IsDeleteMarker  bool
-	StoragePath     string
-	SizeBytes       int64
-	ETag            string
-	ChecksumAlgo    string
-	Checksum        string
-	ContentType     string
-	Metadata        map[string]string
-	Tags            map[string]string
-	LockMode        string // "" | "GOVERNANCE" | "COMPLIANCE"
-	LockRetainUntil *time.Time
-	LegalHold       bool
-	CreatedAt       time.Time
-	IsCurrent       bool
+	VersionID      uuid.UUID
+	ObjectID       uuid.UUID
+	IsDeleteMarker bool
+	StoragePath    string
+	SizeBytes      int64
+	ETag           string
+	ChecksumAlgo   string
+	Checksum       string
+	// ChecksumPartSizeBytes is Object.ChecksumPartSizeBytes, as the version
+	// was written.
+	ChecksumPartSizeBytes int64
+	ContentType           string
+	Metadata              map[string]string
+	Tags                  map[string]string
+	LockMode              string // "" | "GOVERNANCE" | "COMPLIANCE"
+	LockRetainUntil       *time.Time
+	LegalHold             bool
+	CreatedAt             time.Time
+	IsCurrent             bool
 }
 
 // VersionRepository persists object_versions rows. Implementations live in

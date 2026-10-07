@@ -303,16 +303,17 @@ func (h *VersionHandler) OnPromote(ctx context.Context, obj Object) error {
 	}
 	versionID := uuid.Must(uuid.NewV7())
 	if err := h.RecordPromotion(ctx, ObjectVersion{
-		VersionID:    versionID,
-		ObjectID:     obj.ObjectID,
-		StoragePath:  obj.Key,
-		SizeBytes:    obj.SizeBytes,
-		ETag:         obj.ETag,
-		ChecksumAlgo: obj.ChecksumAlgo,
-		Checksum:     obj.Checksum,
-		ContentType:  obj.ContentType,
-		Metadata:     obj.Metadata,
-		Tags:         obj.Tags,
+		VersionID:             versionID,
+		ObjectID:              obj.ObjectID,
+		StoragePath:           obj.Key,
+		SizeBytes:             obj.SizeBytes,
+		ETag:                  obj.ETag,
+		ChecksumAlgo:          obj.ChecksumAlgo,
+		Checksum:              obj.Checksum,
+		ChecksumPartSizeBytes: obj.ChecksumPartSizeBytes,
+		ContentType:           obj.ContentType,
+		Metadata:              obj.Metadata,
+		Tags:                  obj.Tags,
 	}); err != nil {
 		return err
 	}

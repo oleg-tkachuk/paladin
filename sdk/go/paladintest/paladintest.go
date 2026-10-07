@@ -34,9 +34,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5" //nolint:gosec // S3's ETag, which the fake reproduces
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
+	"hash/crc32"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -671,6 +675,28 @@ func (s *Server) commitAs(o *object, body []byte, algo, checksum string) {
 	}
 }
 
+// partDigests is each algorithm's digest, as the server computes a composite.
+var partDigests = map[string]func() hash.Hash{
+	paladin.ChecksumSHA256: sha256.New,
+	paladin.ChecksumCRC32C: func() hash.Hash { return crc32.New(crc32.MakeTable(crc32.Castagnoli)) },
+	paladin.ChecksumMD5:    md5.New,
+}
+
+// compositeChecksum is the server's composite of part checksums: the base64
+// of algo's digest of their raw digests, in part order, then "-" and the
+// count. The parts were checked when they were presigned.
+func compositeChecksum(algo string, parts []string) string {
+	h := partDigests[algo]()
+	for _, part := range parts {
+		raw, err := base64.StdEncoding.DecodeString(part)
+		if err != nil {
+			panic(fmt.Sprintf("paladintest: part checksum %q: %v", part, err)) // validChecksum admitted it
+		}
+		h.Write(raw)
+	}
+	return base64.StdEncoding.EncodeToString(h.Sum(nil)) + "-" + strconv.Itoa(len(parts))
+}
+
 func etagOf(body []byte) string {
 	sum := md5.Sum(body) //nolint:gosec // S3's ETag
 	return hex.EncodeToString(sum[:])
@@ -987,7 +1013,14 @@ func (s *Server) CompleteMultipartUpload(_ context.Context, req *connect.Request
 		body = append(body, data...)
 	}
 	o := s.objects[up.name]
-	s.commit(o, body, "")
+	// As the server: the composite of the parts' checksums, over the part
+	// size the upload was told to use.
+	checksums := make([]string, 0, len(req.Msg.GetParts()))
+	for _, p := range req.Msg.GetParts() {
+		checksums = append(checksums, p.GetChecksumValue())
+	}
+	s.commitAs(o, body, up.algo, compositeChecksum(up.algo, checksums))
+	o.msg.Checksum.PartSizeBytes = PartSize
 	delete(s.uploads, req.Msg.GetUploadId())
 	return connect.NewResponse(o.msg), nil
 }
