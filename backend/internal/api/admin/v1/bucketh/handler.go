@@ -19,6 +19,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -55,7 +56,9 @@ type Provisioner interface {
 type Handler struct {
 	repo        Repository
 	provisioner Provisioner
-	policy      cedar.Authorizer
+	// backends reads a backend's probed features (ADR-0026); see SetBackends.
+	backends BackendReader
+	policy   cedar.Authorizer
 	// cel compiles and caches List filters (program cache only).
 	cel *celpkg.Evaluator
 
@@ -184,6 +187,9 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 	if err := h.authorize(ctx, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
 		return nil, err
 	}
+	if err := h.checkPublicBucket(ctx, in); err != nil {
+		return nil, err
+	}
 	// Refuse binding a bucket to a disabled backend (feature 002). The
 	// object-path resolver gate covers reads/writes; this is the one
 	// admin-plane op that does not go through that resolver, so it gets
@@ -274,6 +280,11 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 	}
 	if err := in.Bucket.Constraints.Validate(); err != nil {
 		return nil, false, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("constraints: %w", err))
+	}
+	// Self-service carries no ConfigurePublicRead check, so it never publishes
+	// (ADR-0027).
+	if in.Bucket.PublicRead || in.Bucket.PublicBaseURL != "" {
+		return nil, false, apiutil.MapError(publicread.Rulef("a public bucket is created through CreateBucket only"))
 	}
 	// Fast idempotent path: an existing row is a success no-op. This also keeps
 	// the common "already provisioned" startup call off the write path.
@@ -508,6 +519,9 @@ func (h *Handler) SetLifecycleRules(ctx context.Context, backendID, bucketName s
 			return nil, connect.NewError(connect.CodeInvalidArgument,
 				fmt.Errorf("rule[%d] (id=%q): %w", i, r.ID, err))
 		}
+	}
+	if err := h.refuseLifecycleOnPublic(ctx, backendID, bucketName, rules); err != nil {
+		return nil, err
 	}
 	if err := h.repo.SetLifecycle(ctx, backendID, bucketName, rules, expectedVersion); err != nil {
 		return nil, mapVersion(err)
