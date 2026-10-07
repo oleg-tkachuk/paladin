@@ -43,11 +43,11 @@ class Recorder:
 
     def record(self, ctx: RequestContext) -> None:
         with self.lock:
-            self.headers.append({k.lower(): v for k, v in ctx.request_headers().items()})
+            self.headers.append({k.lower(): v for k, v in ctx.request_headers.items()})
             if self.failures > 0:
                 self.failures -= 1
                 if self.retry_after is not None:
-                    ctx.response_headers()["Retry-After"] = self.retry_after
+                    ctx.response_headers["Retry-After"] = self.retry_after
                 raise ConnectError(self.fail_code, "injected")
 
     @property

@@ -35,9 +35,10 @@ Two parts, both imported as `paladin`:
   And what takes more than one call (`paladin.workflows`): paging, waiting on
   an operation, update masks, uploads and downloads.
 
-Built on [connect-python](https://github.com/connectrpc/connect-python).
-See [Compatibility](#compatibility) for the Python, protobuf and
-connect-python versions it supports.
+Built on [connectrpc](https://github.com/connectrpc/connect-py), with stubs
+generated against `google.protobuf` messages. See
+[Compatibility](#compatibility) for the Python, protobuf and connectrpc
+versions it supports.
 
 ## Quick start
 
@@ -90,7 +91,7 @@ with TenantServiceClientSync(
 ```
 
 The `http_client` relays each response's headers to the SDK, which reads the
-server's release and `Retry-After` from them: connect-python shows an
+server's release and `Retry-After` from them: connectrpc shows a client
 interceptor no response headers. An HTTP client of your own does the same with
 its transport wrapped, `pyqwest.SyncClient(paladin.RelaySyncTransport(t))`;
 without that, typed errors carry no `server_version` or `retry_after`, retries
@@ -182,7 +183,7 @@ capability's JWT keep working; `revoke` stops them all.
 
 | Name | Does |
 | --- | --- |
-| `connect(Endpoints(data=…, admin=…, iam=…), *, transport=None, **client_options)` | A `Paladin` with a synchronous client for every service of each plane given. `client_options` are `Client`'s; `transport` goes to every generated client — `timeout_ms`, `http_client`, `proto_json`. `Endpoints()` with no URL raises `ValueError`. |
+| `connect(Endpoints(data=…, admin=…, iam=…), *, transport=None, **client_options)` | A `Paladin` with a synchronous client for every service of each plane given. `client_options` are `Client`'s; `transport` goes to every generated client — `timeout_ms`, `http_client`, `codec` (`connectrpc.compat.google_protobuf_json_codec()` for JSON; the stubs carry `google.protobuf` messages, so not `connectrpc.codec`'s), `protocol` (`ProtocolType.GRPC` or `GRPC_WEB` as well as Connect), `read_max_bytes`, `send_compression`, `accept_compression`. `Endpoints()` with no URL raises `ValueError`. |
 | `connect_async(...)` | The same with the async clients, as an `AsyncPaladin`. |
 
 ### Workflows
@@ -269,7 +270,7 @@ new files, over HTTP/2 as well as HTTP/1.1; a request in flight finishes on
 its own, and the old connections close once nothing uses them.
 
 The connections under `TLS` are made by the standard library's `ssl`, under
-httpcore: pyqwest, the HTTP stack connect-python runs on, has no hook to
+httpcore: pyqwest, the HTTP stack connectrpc runs on, has no hook to
 check a peer or set a protocol floor. The SPIFFE ID and `verify_peer` are
 checked after the handshake and before anything is written, so a refused
 server never receives a request, a token or a body. Responses are decoded and
@@ -305,6 +306,11 @@ Each carries `procedure`, the server's `reason` (a
 `ERROR_REASON_UNSPECIFIED` when there is none — or one newer than this SDK,
 which a caller treats as the kind alone. A code with no kind (`INTERNAL`,
 `UNAVAILABLE`, …) stays a plain `ConnectError`.
+
+`err.details` are connectrpc's `ErrorDetail`s, a type name and the message's
+bytes. `unpack_detail(detail, error_details_pb2.ErrorInfo)` reads one as a
+`google.protobuf` message, or returns None for another type; a server or fake
+of your own attaches them with `error_detail(message)` / `error_details([…])`.
 
 ```python
 from paladin.common.v1 import error_reason_pb2
@@ -359,9 +365,19 @@ package.
 | the `paladin` logger (`LOGGER_NAME`) | Retries and transfers at debug, failed transfers at warning, with their fields in the record's `extra` for a structured formatter. |
 | `Client(…, interceptors=[…])`, `connect(…, interceptors=[…])` | Interceptors of your own, run outside the SDK's, so one that times or traces a call covers its retries. |
 
-**OpenTelemetry** comes from the HTTP stack connect-python runs on,
-`pyqwest`, which makes a span for every request and sends W3C trace
-context:
+**OpenTelemetry** has two layers, each optional. `connectrpc-otel` gives
+every RPC a span named for its procedure, with the RPC metrics, through
+the interceptors a client takes:
+
+```python
+from connectrpc_otel import OpenTelemetryInterceptor
+
+p = paladin.connect(endpoints, interceptors=[
+    OpenTelemetryInterceptor(tracer_provider=provider, client=True)])
+```
+
+Under it, the HTTP stack connectrpc runs on, `pyqwest`, makes a span for
+every request and sends W3C trace context:
 
 ```python
 http = pyqwest.SyncClient(
@@ -371,9 +387,6 @@ p = paladin.connect(endpoints, transport={"http_client": http},
                     transfer=paladin.Transfer(otel=True, tracer_provider=provider))
 ```
 
-connect-python's own `connectrpc-otel` 0.2.0 does not work with
-connect-python 0.9.0 — it reads `RequestContext.method` as an attribute,
-which 0.9.0 has as a method — so it is not used here.
 
 ### Verifying webhook deliveries
 
@@ -540,7 +553,7 @@ tests hold its parsers to as well. Where they differ, it is on purpose:
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
 | Webhook signatures | `VerifyWebhook`, options for the window and clock | `verify_webhook`, keyword arguments | Each language's idiom; both run the vectors in `sdk/testdata/webhook_signatures.json`. |
 | Biscuit attenuation | `capability.Attenuate`, from the capability module | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
-| OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0. |
+| OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `connectrpc-otel` through `interceptors`, and `pyqwest`'s own spans through `http_client` and `Transfer(otel=True)` | |
 | Bulk transfers | `DownloadMany`, a callback per reader; `UploadMany`, objects in input order and failures by index | `download_many` / `adownload_many` and `upload_many` / `aupload_many`, iterators of results as each finishes | Each language's idiom. |
 | asyncio | — | An `a…` form of every workflow | Go has goroutines. |
 
@@ -639,7 +652,7 @@ they no longer match the contract.
 | --- | --- | --- |
 | Python | 3.10–3.14 | `requires-python`; each is tested |
 | `protobuf` | `>=6.33.5,<8` | the stubs' gencode version is the floor; 6.x and 7.x are tested |
-| `connect-python` | `>=0.9.0,<0.10` | pre-1.0: a minor may change the API the generated clients call |
+| `connectrpc` | `>=0.12.1,<0.13` | pre-1.0: a minor may change the API the generated clients call |
 | `googleapis-common-protos` | `>=1.75.5,<2` | the first release that accepts protobuf 7 |
 
 Both protobuf majors are supported so the SDK can share an environment with
