@@ -44,4 +44,7 @@ enum ErrorReason {
   ERROR_REASON_OBJECT_VERSION_NOT_FOUND = 23;
   // A change another one conflicts with, short of a version mismatch.
   ERROR_REASON_CONFLICT = 24;
+  // The tenant a request names does not exist — one being provisioned may
+  // exist shortly, so a caller that expects it can retry.
+  ERROR_REASON_TENANT_NOT_FOUND = 25;
 }

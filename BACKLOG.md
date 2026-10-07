@@ -1308,6 +1308,19 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Capability module
 
+### A trashed tenant's credentials may keep working
+
+- **Status:** Deferred
+- **Reason:** issuance now refuses a tenant in the trash, but moving a tenant
+  there revokes nothing, and nothing found in the request path reads
+  `tenants.deleted_at`: its capabilities, API tokens and sessions may go on
+  authenticating until they expire. Not yet confirmed against a live call.
+- **Definition of Done:** a test that calls the data plane with each kind of
+  credential of a trashed tenant, and either a refusal at authentication
+  (`TENANT_ALREADY_DELETED`) or a recorded decision that restore depends on
+  them surviving.
+- **Blockers:** none.
+
 ### Capability module CI: deny network egress in the standalone job
 
 - **Status:** Deferred — considered, not urgent.
