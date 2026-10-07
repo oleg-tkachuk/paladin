@@ -46,3 +46,16 @@ export function useTenant(): ResolvedTenant {
 export function useTenantOptional(): ResolvedTenant | null {
   return useContext(TenantCtx);
 }
+
+/**
+ * Why the tenant takes no changes, for a control that would change it — or
+ * null when it does. A tenant in the trash is frozen: the server refuses every
+ * change to it until it is restored, so the console holds the controls rather
+ * than offering a refusal.
+ */
+export const TRASHED_TENANT_BLOCK =
+  "This tenant is in the trash and takes no changes. Restore it first.";
+
+export function useTenantChangesBlocked(): string | null {
+  return useContext(TenantCtx)?.trashed ? TRASHED_TENANT_BLOCK : null;
+}

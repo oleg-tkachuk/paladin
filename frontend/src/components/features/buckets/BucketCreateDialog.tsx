@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 import { Input } from "@/components/ui/input";
 import {
@@ -19,13 +20,22 @@ import {
 import { useNotification } from "@/components/ui/Notification";
 import { bucketNameError } from "@/lib/bucketName";
 import { type FailedRead, ListLoadError } from "@/components/ui/ListLoadError";
-import { errorMessage } from "@/hooks/errorContract";
+import { errorMessage, errorReason } from "@/hooks/errorContract";
+import type { PublicReadSettings } from "@/hooks/useBuckets";
+import { ChipInput } from "@/components/ui/ChipInput";
+import { Switch } from "@/components/ui/switch";
+import { ErrorReason } from "@/gen/paladin/common/v1/error_reason_pb";
+import {
+  StorageFeature,
+  type StorageBackend,
+} from "@/gen/paladin/admin/v1/types_pb";
+import { supports } from "@/lib/storageFeatures";
 
 interface BucketCreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Backend ids to offer; the first is picked when the dialog opens. */
-  backends: string[];
+  /** Backends to offer; the first is picked when the dialog opens. */
+  backends: Pick<StorageBackend, "backendId" | "features">[];
   /** Set when the backend list failed to load: `backends` is then unknown. */
   backendsFailed?: FailedRead | null;
   createBucket: (
@@ -33,13 +43,23 @@ interface BucketCreateDialogProps {
     bucketId: string,
     displayName: string,
     region: string,
+    provisionOnBackend: boolean,
+    publicRead: PublicReadSettings | null,
   ) => Promise<unknown>;
 }
+
+/** The backend page, where its features are probed and shown. */
+const backendHref = (backendId: string) =>
+  `/storage-backends/${encodeURIComponent(backendId)}`;
 
 /**
  * New S3 bucket — one dialog for the cross-tenant list and a tenant's own,
  * which each carried a copy. The bucket is created shared (no owner tenant)
  * from either page; the description says so rather than implying otherwise.
+ *
+ * It may be created public (ADR-0027): anyone reads its objects by URL. That
+ * is offered only on a backend whose probe found anonymous reads enforced,
+ * and asks for the content types the bucket will serve.
  */
 export function BucketCreateDialog({
   open,
@@ -53,12 +73,23 @@ export function BucketCreateDialog({
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [region, setRegion] = useState("");
+  const [publicRead, setPublicRead] = useState(false);
+  const [allowedTypes, setAllowedTypes] = useState<string[]>([]);
+  const [baseUrl, setBaseUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Render-phase adjust-on-condition: default the backend once they load.
   if (open && !backendId && backends.length > 0) {
-    setBackendId(backends[0]);
+    setBackendId(backends[0].backendId);
+  }
+  const backend = backends.find((b) => b.backendId === backendId);
+  const canPublish =
+    backend !== undefined &&
+    supports(backend, StorageFeature.ANONYMOUS_READ_POLICY);
+  // A backend switched to one that cannot publish takes the setting with it.
+  if (publicRead && !canPublish) {
+    setPublicRead(false);
   }
 
   // Shown only once something is typed: an empty field is not yet wrong.
@@ -73,13 +104,22 @@ export function BucketCreateDialog({
         ? "Enter a bucket name to continue."
         : nameError
           ? "Fix the bucket name to continue."
-          : null;
+          : publicRead && allowedTypes.length === 0
+            ? "List the content types a public bucket serves."
+            : null;
 
   const handleCreate = async () => {
     setSubmitError(null);
     try {
       setSubmitting(true);
-      await createBucket(backendId, name, displayName, region);
+      await createBucket(
+        backendId,
+        name,
+        displayName,
+        region,
+        true,
+        publicRead ? { allowedContentTypes: allowedTypes, baseUrl } : null,
+      );
       showNotification({
         type: "success",
         title: "Bucket created",
@@ -88,9 +128,17 @@ export function BucketCreateDialog({
       setName("");
       setDisplayName("");
       setRegion("");
+      setPublicRead(false);
+      setAllowedTypes([]);
+      setBaseUrl("");
       onOpenChange(false);
     } catch (err) {
-      setSubmitError(errorMessage(err, "Failed to create bucket."));
+      const message = errorMessage(err, "Failed to create bucket.");
+      setSubmitError(
+        errorReason(err) === ErrorReason.BACKEND_FEATURE_UNSUPPORTED
+          ? `${message} Run Test connectivity on the backend's page to probe it.`
+          : message,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -138,8 +186,8 @@ export function BucketCreateDialog({
                   </SelectTrigger>
                   <SelectContent>
                     {backends.map((b) => (
-                      <SelectItem key={b} value={b}>
-                        {b}
+                      <SelectItem key={b.backendId} value={b.backendId}>
+                        {b.backendId}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -188,6 +236,65 @@ export function BucketCreateDialog({
             )}
           </FormField>
         </FormRow>
+        <FormField
+          label="Public read"
+          hint={
+            canPublish ? (
+              "Anyone with an object's URL reads it, unsigned. Fixed at creation."
+            ) : (
+              <>
+                This backend has not shown it enforces anonymous reads.{" "}
+                {backendId && (
+                  <Link className="underline" href={backendHref(backendId)}>
+                    Probe its features
+                  </Link>
+                )}
+              </>
+            )
+          }
+        >
+          {(control) => (
+            <Switch
+              id={control.id}
+              aria-describedby={control["aria-describedby"]}
+              checked={publicRead}
+              disabled={!canPublish}
+              onCheckedChange={setPublicRead}
+            />
+          )}
+        </FormField>
+        {publicRead && (
+          <FormRow>
+            <FormField
+              label="Allowed content types"
+              required
+              hint="What the bucket serves, e.g. image/jpeg. Nothing a browser runs: no HTML, SVG, XML or script."
+            >
+              {(control) => (
+                <ChipInput
+                  id={control.id}
+                  values={allowedTypes}
+                  onChange={setAllowedTypes}
+                  placeholder="image/webp"
+                />
+              )}
+            </FormField>
+            <FormField
+              label="CDN base URL"
+              hint="Where a CDN serves the bucket. Empty uses the backend's public endpoint. Consumers store URLs built on it, so it cannot change."
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  placeholder="https://cdn.example.com"
+                  className="font-mono text-xs"
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value.trim())}
+                />
+              )}
+            </FormField>
+          </FormRow>
+        )}
       </FormSection>
     </FormDialog>
   );

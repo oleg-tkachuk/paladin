@@ -17,6 +17,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("./StorageMigrationCard", () => ({ StorageMigrationCard: () => null }));
 vi.mock("./tenant-context", () => ({
+  useTenantChangesBlocked: () => null,
   useTenant: () => ({ tenantId: "t-1", slug: "acme", displayName: "Acme" }),
 }));
 

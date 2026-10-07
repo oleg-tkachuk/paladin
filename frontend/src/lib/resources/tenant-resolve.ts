@@ -31,6 +31,8 @@ export type ResolvedTenant = {
   displayName: string;
   // "shared" (default) | "dedicated" — ADR-0015 physical bucket layout.
   storageLayout: string;
+  /** In the trash: the tenant is frozen and takes no changes. */
+  trashed: boolean;
 };
 
 const UUID_RE =
@@ -123,6 +125,7 @@ export function useTenantResolve(id: string): {
           slug,
           displayName: res.displayName || slug,
           storageLayout: res.storageLayout || "shared",
+          trashed: res.deletedAt !== undefined,
         };
 
         // Auto-canonicalise: caller landed via UUID but slug differs.

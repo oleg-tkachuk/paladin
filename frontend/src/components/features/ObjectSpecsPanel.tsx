@@ -96,6 +96,24 @@ export function ObjectSpecsPanel({
             </Button>
           </SpecRow>
 
+          {/* ADR-0027: where anyone reads it, unsigned — the address a
+              consumer stores. Only an object in a public collection has one. */}
+          {object.publicUrl && (
+            <SpecRow label="Public URL">
+              <span
+                className="break-all font-mono text-xs"
+                title={object.publicUrl}
+              >
+                {object.publicUrl}
+              </span>
+              <IdentifierCopy
+                value={object.publicUrl}
+                label="Public URL"
+                iconOnly
+              />
+            </SpecRow>
+          )}
+
           <SpecRow label="Collection">
             {/* A Collection lives under its tenant; /collections/<name> is no
                 page, and the link led to a 404. */}

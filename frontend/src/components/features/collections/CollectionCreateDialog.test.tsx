@@ -55,7 +55,14 @@ describe("CollectionCreateDialog", () => {
     });
     fireEvent.submit(submit().closest("form")!);
     await waitFor(() =>
-      expect(create).toHaveBeenCalledWith("invoices/2026", "", "full", "b1"),
+      expect(create).toHaveBeenCalledWith(
+        "invoices/2026",
+        "",
+        "full",
+        "b1",
+        "",
+        null,
+      ),
     );
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
   });
@@ -116,5 +123,44 @@ describe("CollectionCreateDialog", () => {
     expect(
       screen.queryByText("No backend can take a Collection."),
     ).not.toBeInTheDocument();
+  });
+
+  // ADR-0027: the bucket decides; a private one is the default, and choosing
+  // a public one is said out loud and carries its Cache-Control.
+  it("defaults to a private bucket when the backend has both", () => {
+    h.buckets = [
+      { backendId: "full", bucketId: "pub", displayName: "", publicRead: true },
+      {
+        backendId: "full",
+        bucketId: "priv",
+        displayName: "",
+        publicRead: false,
+      },
+    ];
+    open(["full"]);
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Bucket/)).toHaveTextContent("priv");
+  });
+
+  it("creates a public Collection on a public bucket, with its Cache-Control", async () => {
+    h.buckets = [
+      { backendId: "full", bucketId: "pub", displayName: "", publicRead: true },
+    ];
+    const { create } = open(["full"]);
+    expect(screen.getByRole("note")).toHaveTextContent(
+      /anyone with an object.s URL will read it/,
+    );
+    fireEvent.change(screen.getByLabelText(/Path/), {
+      target: { value: "photos" },
+    });
+    fireEvent.change(screen.getByLabelText("Cache-Control"), {
+      target: { value: "public, max-age=600" },
+    });
+    fireEvent.submit(submit().closest("form")!);
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith("photos", "", "full", "pub", "", {
+        cacheControl: "public, max-age=600",
+      }),
+    );
   });
 });

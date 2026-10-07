@@ -144,4 +144,22 @@ describe("ObjectDetailView", () => {
     );
     await waitFor(() => expect(h.softDeleteObject).toHaveBeenCalled());
   });
+
+  // ADR-0027: a public object shows where anyone reads it, and has no trash.
+  it("shows a public object's URL and offers no trash", async () => {
+    h.object = {
+      ...makeObject(),
+      publicUrl: "https://s3.example/pub/t/c/abc",
+    };
+    render(<ObjectDetailView collection="o1" />);
+    expect(screen.getByText("Public URL")).toBeInTheDocument();
+    expect(
+      screen.getByText("https://s3.example/pub/t/c/abc"),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Object actions" }),
+    );
+    expect(screen.queryByText("Move to Trash")).not.toBeInTheDocument();
+    expect(screen.getByText("Permanently Delete")).toBeInTheDocument();
+  });
 });
