@@ -102,3 +102,24 @@ def test_the_upload_url_is_bound_to_the_cache_control(fake: FakePaladin) -> None
 def test_a_private_object_has_no_public_url(fake: FakePaladin) -> None:
     obj = fake.put(fake.collection(), "mine", CONTENT_TYPE, BODY)
     assert obj.key == "mine" and not obj.public_url
+
+
+def test_a_public_object_is_served_as_soon_as_its_bytes_land(fake: FakePaladin) -> None:
+    """The store serves what a PUT stored before CompleteObject: it knows
+    nothing of Paladin's states."""
+    resp = fake.connect().data.object.upload_object(  # type: ignore[union-attr]
+        object_service_pb2.UploadObjectRequest(
+            parent=str(fake.public_collection()),
+            content_type=CONTENT_TYPE,
+            size_hint_bytes=1,
+            checksum_algorithm=resource_pb2.CHECKSUM_ALGORITHM_SHA256,
+            checksum_value=paladin.checksum(paladin.CHECKSUM_SHA256, b"x"),
+        )
+    )
+    assert _get(resp.object.public_url)[0] == NOT_FOUND
+    req = urllib.request.Request(resp.upload_url.url, data=b"x", method="PUT")
+    for name, value in resp.upload_url.required_headers.items():
+        req.add_header(name, value)
+    with urllib.request.urlopen(req):
+        pass
+    assert _get(resp.object.public_url)[:2] == (OK, b"x")

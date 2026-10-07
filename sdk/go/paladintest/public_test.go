@@ -129,3 +129,34 @@ func TestAPrivateObjectHasNoPublicURL(t *testing.T) {
 		t.Errorf("object %v, want the private one untouched", obj)
 	}
 }
+
+// The store serves what a PUT stored before CompleteObject: it knows nothing
+// of Paladin's states.
+func TestAPublicObjectIsServedAsSoonAsItsBytesLand(t *testing.T) {
+	srv := paladintest.New(t)
+	resp, err := srv.Connect().Data.Object.UploadObject(context.Background(), connect.NewRequest(&datav1.UploadObjectRequest{
+		Parent: srv.PublicCollection().String(), ContentType: "image/jpeg", SizeHintBytes: 1,
+		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256, ChecksumValue: oneByteSHA256,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status, _, _ := get(t, resp.Msg.GetObject().GetPublicUrl()); status != http.StatusNotFound {
+		t.Fatalf("before the PUT GET = %d, want 404", status)
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPut, resp.Msg.GetUploadUrl().GetUrl(), bytes.NewReader([]byte("x")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range resp.Msg.GetUploadUrl().GetRequiredHeaders() {
+		req.Header.Set(k, v)
+	}
+	put, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = put.Body.Close()
+	if status, got, _ := get(t, resp.Msg.GetObject().GetPublicUrl()); status != http.StatusOK || string(got) != "x" {
+		t.Errorf("after the PUT, before Complete, GET = %d %q, want the bytes", status, got)
+	}
+}
