@@ -53,6 +53,8 @@ func backendToProto(b *admindomain.StorageBackend) *pb.StorageBackend {
 		ResourceVersion:               convx.ResourceVersion(b.ResourceVersion),
 		CreatedAt:                     convx.TsProto(b.CreatedAt),
 		UpdatedAt:                     convx.TsProto(b.UpdatedAt),
+		Features:                      featuresToProto(b.Features),
+		Compatibility:                 compatibilityToProto(b.Features),
 	}
 }
 
@@ -105,7 +107,7 @@ func sseToProto(s admindomain.ServerSideEncryption) *pb.ServerSideEncryption {
 	switch s.Type {
 	case "AES256":
 		out.Type = pb.SseType_SSE_TYPE_AES256
-	case "KMS":
+	case admindomain.SSETypeKMS:
 		out.Type = pb.SseType_SSE_TYPE_KMS
 	case "":
 		out.Type = pb.SseType_SSE_TYPE_NONE
@@ -122,7 +124,7 @@ func sseFromProto(p *pb.ServerSideEncryption) admindomain.ServerSideEncryption {
 	case pb.SseType_SSE_TYPE_AES256:
 		out.Type = "AES256"
 	case pb.SseType_SSE_TYPE_KMS:
-		out.Type = "KMS"
+		out.Type = admindomain.SSETypeKMS
 	}
 	return out
 }
@@ -186,6 +188,8 @@ func bucketToProto(b *admindomain.Bucket) *pb.Bucket {
 		CreatedAt:       convx.TsProto(b.CreatedAt),
 		UpdatedAt:       convx.TsProto(b.UpdatedAt),
 		ProvisionState:  b.ProvisionState,
+		PublicRead:      b.PublicRead,
+		PublicBaseUrl:   b.PublicBaseURL,
 	}
 }
 

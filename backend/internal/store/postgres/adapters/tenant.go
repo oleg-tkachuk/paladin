@@ -124,6 +124,7 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenanth.Creat
 			pgUUID(args.TenantID), // owner_tenant_id
 			"", []byte("{}"),      // cedar_policy, constraints
 			"pending", // provision_state
+			false, "", // public_read, public_base_url: a tenant's dedicated bucket is private
 		); err != nil {
 			return fmt.Errorf("create tenant: provision dedicated bucket: %w", err)
 		}
@@ -338,6 +339,11 @@ func (r *TenantRepo) updateWith(ctx context.Context, q *sqlc.Queries, args tenan
 		return tenanth.Tenant{}, fmt.Errorf("update tenant: %w", err)
 	}
 	if rows == 0 {
+		// Nothing matched: a stale version, or a tenant in the trash. Read
+		// the row to say which.
+		if t, gerr := r.getWith(ctx, q, args.TenantID); gerr == nil && !t.DeletedAt.IsZero() {
+			return tenanth.Tenant{}, tenanth.ErrAlreadyDeleted
+		}
 		return tenanth.Tenant{}, tenanth.ErrVersionMismatch
 	}
 	return r.getWith(ctx, q, args.TenantID)

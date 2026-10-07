@@ -1433,12 +1433,14 @@ type CopyObjectRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	SourceName string                 `protobuf:"bytes,1,opt,name=source_name,json=sourceName,proto3" json:"source_name,omitempty"`
 	// Destination Collection resource name.
-	DestinationCollection string            `protobuf:"bytes,2,opt,name=destination_collection,json=destinationCollection,proto3" json:"destination_collection,omitempty"`
-	DestinationKey        string            `protobuf:"bytes,3,opt,name=destination_key,json=destinationKey,proto3" json:"destination_key,omitempty"`
-	MetadataOverride      *MetadataOverride `protobuf:"bytes,4,opt,name=metadata_override,json=metadataOverride,proto3,oneof" json:"metadata_override,omitempty"`
-	TagsOverride          *TagsOverride     `protobuf:"bytes,5,opt,name=tags_override,json=tagsOverride,proto3,oneof" json:"tags_override,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	DestinationCollection string `protobuf:"bytes,2,opt,name=destination_collection,json=destinationCollection,proto3" json:"destination_collection,omitempty"`
+	// Empty keeps the source's key. A PUBLIC_READ destination names the copy
+	// itself and refuses one (ADR-0027).
+	DestinationKey   string            `protobuf:"bytes,3,opt,name=destination_key,json=destinationKey,proto3" json:"destination_key,omitempty"`
+	MetadataOverride *MetadataOverride `protobuf:"bytes,4,opt,name=metadata_override,json=metadataOverride,proto3,oneof" json:"metadata_override,omitempty"`
+	TagsOverride     *TagsOverride     `protobuf:"bytes,5,opt,name=tags_override,json=tagsOverride,proto3,oneof" json:"tags_override,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CopyObjectRequest) Reset() {
@@ -1951,12 +1953,12 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"g\n" +
 	"\x14RestoreObjectRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
-	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\xf5\x02\n" +
+	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\"\xec\x02\n" +
 	"\x11CopyObjectRequest\x12(\n" +
 	"\vsource_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"sourceName\x12>\n" +
-	"\x16destination_collection\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x15destinationCollection\x120\n" +
-	"\x0fdestination_key\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0edestinationKey\x12S\n" +
+	"\x16destination_collection\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x15destinationCollection\x12'\n" +
+	"\x0fdestination_key\x18\x03 \x01(\tR\x0edestinationKey\x12S\n" +
 	"\x11metadata_override\x18\x04 \x01(\v2!.paladin.data.v1.MetadataOverrideH\x00R\x10metadataOverride\x88\x01\x01\x12G\n" +
 	"\rtags_override\x18\x05 \x01(\v2\x1d.paladin.data.v1.TagsOverrideH\x01R\ftagsOverride\x88\x01\x01B\x14\n" +
 	"\x12_metadata_overrideB\x10\n" +

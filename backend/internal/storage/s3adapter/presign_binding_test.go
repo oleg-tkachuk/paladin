@@ -223,7 +223,7 @@ func TestPresignGetIfMatch(t *testing.T) {
 func TestMultipartCarriesChecksums(t *testing.T) {
 	f := newFakeS3(t)
 	c := newTestClient(t, f.srv.URL)
-	if _, err := c.InitiateMultipart(testCtx, "b", testTenant, "ok", "k", "image/png", checksum.SHA256); err != nil {
+	if _, err := c.InitiateMultipart(testCtx, "b", testTenant, "ok", "k", "image/png", "", checksum.SHA256); err != nil {
 		t.Fatal(err)
 	}
 	creates := f.requestsFor(http.MethodPost, "")

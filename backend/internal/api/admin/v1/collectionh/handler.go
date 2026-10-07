@@ -23,6 +23,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -37,13 +38,19 @@ type EventProducer interface {
 }
 
 type Collection struct {
-	TenantID        uuid.UUID
-	Collection      string
-	DisplayName     string
-	BackendID       string
-	BucketName      string
-	CedarPolicy     string
-	LifecycleRules  []byte // JSONB bytes; parsed by caller if needed
+	TenantID       uuid.UUID
+	Collection     string
+	DisplayName    string
+	BackendID      string
+	BucketName     string
+	CedarPolicy    string
+	LifecycleRules []byte // JSONB bytes; parsed by caller if needed
+	// PublicRead: anyone may read the objects by URL (ADR-0027). Fixed at
+	// creation, and equal to the bucket's.
+	PublicRead bool
+	// CacheControl is what a public collection stores objects with; "" for
+	// a private one.
+	CacheControl    string
 	ResourceVersion int64
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -64,6 +71,10 @@ type CreateCollectionArgs struct {
 	BucketName     string
 	CedarPolicy    string
 	LifecycleRules []byte
+	// PublicRead declares a public collection; CacheControl is its requested
+	// Cache-Control, "" for the default (ADR-0027).
+	PublicRead   bool
+	CacheControl string
 }
 
 type UpdateCollectionArgs struct {
@@ -202,6 +213,9 @@ func (h *Handler) CreateCollection(ctx context.Context, args CreateCollectionArg
 	if err := h.authorizeFull(ctx, principal, args.TenantID, args.Collection, args.BackendID, args.BucketName, cedar.ActionManageCollection); err != nil {
 		return nil, err
 	}
+	if err := h.admitVisibility(ctx, principal, &args); err != nil {
+		return nil, err
+	}
 	// Scope the connection's RLS tenant to the row's owner, now that Cedar
 	// has allowed this caller to act on it. Without this a platform admin
 	// creating for another tenant writes a row WITH CHECK rejects.
@@ -268,6 +282,11 @@ func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArg
 	if args.BackendID == "" || args.BucketName == "" {
 		return false, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("backend_id and bucket_name are required"))
+	}
+	// Self-service carries no ConfigurePublicRead check, so it never
+	// publishes (ADR-0027).
+	if args.PublicRead || args.CacheControl != "" {
+		return false, apiutil.MapError(publicread.Rulef("a public collection is created through CreateCollection only"))
 	}
 	// Fast idempotent path: an existing key is a success no-op.
 	switch _, gerr := h.repo.Get(ctx, args.TenantID, args.Collection); {
@@ -570,6 +589,9 @@ func (h *Handler) BindCollectionToBucket(
 		if errors.Is(err, ErrVersionMismatch) {
 			return nil, connect.NewError(connect.CodeAborted, err)
 		}
+		if errors.Is(err, publicread.ErrRule) {
+			return nil, apiutil.MapError(err)
+		}
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("rebind: %w", err))
 	}
@@ -675,4 +697,26 @@ func init() {
 	// a fault of the server. Registered here rather than in the cedar package
 	// because apiutil's registry is the API layer's, and cedar sits below it.
 	apiutil.RegisterError(cedar.ErrPolicyUnparseable, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_POLICY_UNPARSEABLE)
+}
+
+// admitVisibility settles a new collection's public settings (ADR-0027): a
+// private one carries no cache_control, and a public one needs the
+// ConfigurePublicRead action and gets a valid cache_control, the default when
+// none was asked for. That the bucket matches is the schema's rule.
+func (h *Handler) admitVisibility(ctx context.Context, principal *auth.Principal, args *CreateCollectionArgs) error {
+	if !args.PublicRead {
+		if args.CacheControl != "" {
+			return apiutil.MapError(publicread.Rulef("cache_control is for a public collection"))
+		}
+		return nil
+	}
+	if err := h.authorizeFull(ctx, principal, args.TenantID, args.Collection, args.BackendID, args.BucketName, cedar.ActionConfigurePublicRead); err != nil {
+		return err
+	}
+	cc, err := publicread.CacheControl(args.CacheControl)
+	if err != nil {
+		return apiutil.MapError(err)
+	}
+	args.CacheControl = cc
+	return nil
 }

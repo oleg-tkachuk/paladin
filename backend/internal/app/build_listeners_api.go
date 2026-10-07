@@ -251,6 +251,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	if err != nil {
 		l.Fatal("otelconnect interceptor", zap.Error(err))
 	}
+	tenantGate, tenantFreeze, err := buildTenantGate(deps)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	// Per-tenant request rate limit (middleware.rate_limit). The config block
 	// has existed since the initial schema with enabled=true; nothing ever read
@@ -297,6 +301,12 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			// one has to run first.
 			capData,
 			auth.RequireAudience(auth.AudienceData),
+			// Refuses a trashed or purged tenant's credentials; after every
+			// interceptor that establishes a principal, before validation and
+			// idempotency, so a refused call is never answered from memo.
+			tenantGate,
+			// Refuses a change to a tenant in the trash, whoever asks.
+			tenantFreeze,
 			// A platform admin's request acts on the tenant it names; everything
 			// below keys on that tenant, so it is set before any of them.
 			middleware.ActOnNamedTenant(),
@@ -345,6 +355,12 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 				"ExchangeAudience",
 			),
 			apiTokIAM,
+			// Refuses a trashed or purged tenant's credentials; after every
+			// interceptor that establishes a principal, before validation and
+			// idempotency, so a refused call is never answered from memo.
+			tenantGate,
+			// Refuses a change to a tenant in the trash, whoever asks.
+			tenantFreeze,
 			middleware.NewLoginRateLimiter(
 				cfg.Auth.LoginRateLimitPerSubjectPerMinute,
 				cfg.Auth.LoginRateLimitPerIPPerMinute,

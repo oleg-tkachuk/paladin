@@ -45,6 +45,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { providerLabel } from "@/lib/storageProvider";
+import { compatibilityBadge, featureWarnings } from "@/lib/storageFeatures";
 import { T } from "@/lib/ui/typography";
 import { errorMessage } from "@/hooks/errorContract";
 
@@ -595,6 +596,24 @@ export default function StorageBackendsPage() {
                             Untested
                           </Badge>
                         )}
+                        {/* What the last probe found for the S3 features
+                            Paladin uses (ADR-0026); the detail page lists
+                            them. */}
+                        {(() => {
+                          const c = compatibilityBadge(b);
+                          const why = featureWarnings(b)
+                            .map((w) => w.text)
+                            .join("\n");
+                          return (
+                            <Badge
+                              variant={c.variant}
+                              className={T.labelTight}
+                              title={why || undefined}
+                            >
+                              {c.label}
+                            </Badge>
+                          );
+                        })()}
                         {/* Drain toggle — only meaningful on an enabled
                             backend (a disabled one already rejects all ops). */}
                         {b.enabled && (

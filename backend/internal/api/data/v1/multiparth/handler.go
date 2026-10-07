@@ -38,7 +38,10 @@ import (
 type Storage interface {
 	// InitiateMultipart opens the storage upload with the checksum algorithm
 	// its parts are bound by.
-	InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, checksumAlgo string) (storageUploadID string, err error)
+	// cacheControl is bound into the object in a public collection, "" elsewhere.
+	InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, cacheControl, checksumAlgo string) (storageUploadID string, err error)
+	// PublicURL is objecth.Storage's: where a public object is read unsigned.
+	PublicURL(ctx context.Context, backendID, bucket, publicBaseURL string, tenantID uuid.UUID, collection, key string) (string, error)
 	// CompleteMultipart assembles the parts; each carries the checksum it was
 	// presigned with, which the store checks against the part it recorded.
 	CompleteMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key, checksumAlgo string, parts []PartETag) (etag string, sizeBytes int64, err error)
@@ -165,6 +168,9 @@ type InitiateArgs struct {
 	// single-shot sibling, and as a column — just not on the path between
 	// them.
 	ExternalRef string
+	// PublicURL is the object's address in a public collection (ADR-0027);
+	// "" elsewhere. Set by Initiate, never by the caller.
+	PublicURL string
 }
 
 type CompleteArgs struct {
@@ -267,18 +273,23 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	// `total_parts`. Computing them here is what makes those promises true:
 	// they were left zero, so a caller had nothing to slice the file by and
 	// PresignPart rejected every part number as out of range.
-	objectURI := paladin.ObjectResource(tenantID.String(), args.Collection, args.Key)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
-		return nil, err
-	}
 	// Resolve the (backend, bucket) BEFORE authz so a bucket:/collection:-
 	// scoped write PAT enforces on multipart init; the same resolution routes
-	// InitiateMultipart and anchors the session below.
+	// InitiateMultipart and anchors the session below. Before the capability
+	// check too: a public collection names the object itself, and the check
+	// is of the object it will create.
 	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, args.Collection, true) // multipart init (mutation)
 	if err != nil {
 		return nil, objecth.MapResolveErr(err)
 	}
 	backendID, bucket := meta.BackendID, meta.BucketName
+	if err := objecth.AdmitPublicUpload(meta, &args.Key, args.ContentType); err != nil {
+		return nil, err
+	}
+	objectURI := paladin.ObjectResource(tenantID.String(), args.Collection, args.Key)
+	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+		return nil, err
+	}
 	// The plan honours limits.* narrowed by the bucket: max_multipart_size,
 	// the part-size bounds and max_parts, plus the type and checksum rules
 	// every upload obeys. A size it cannot plan is refused here, not at the
@@ -294,7 +305,13 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		return nil, err
 	}
 
-	storageUploadID, err := h.storage.InitiateMultipart(ctx, backendID, bucket, tenantID, args.Collection, args.Key, args.ContentType, args.ChecksumAlgo)
+	if meta.PublicRead {
+		args.PublicURL, err = h.storage.PublicURL(ctx, backendID, bucket, meta.PublicBaseURL, tenantID, args.Collection, args.Key)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("public url: %w", err))
+		}
+	}
+	storageUploadID, err := h.storage.InitiateMultipart(ctx, backendID, bucket, tenantID, args.Collection, args.Key, args.ContentType, meta.CacheControl, args.ChecksumAlgo)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage initiate: %w", err))
 	}

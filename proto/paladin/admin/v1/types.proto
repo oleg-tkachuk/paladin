@@ -72,6 +72,72 @@ message StorageBackend {
   // which one, for UI display. Mirrored from static config (`001_initial_schema.sql`);
   // empty when unset (the UI falls back to an endpoint heuristic).
   string provider = 24;
+  // What the last TestBackend probe found for every S3 feature Paladin uses
+  // (ADR-0026), one entry per feature: UNKNOWN for one never probed.
+  repeated StorageFeatureSupport features = 25 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // features summarised over the required ones.
+  StorageCompatibility compatibility = 26 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// An S3 feature Paladin uses (ADR-0026). Mirrors the catalog in the backend's
+// internal/storage/features; a test holds the two equal.
+enum StorageFeature {
+  STORAGE_FEATURE_UNSPECIFIED = 0;
+  // A PUT with If-None-Match: * is refused when the key exists. Required.
+  STORAGE_FEATURE_CONDITIONAL_PUT = 1;
+  // The store refuses bytes that do not match x-amz-checksum-sha256. Required.
+  STORAGE_FEATURE_CHECKSUM_SHA256 = 2;
+  // Multipart create, upload part, complete. Required.
+  STORAGE_FEATURE_MULTIPART_UPLOAD = 3;
+  // CopyObject within the store.
+  STORAGE_FEATURE_SERVER_SIDE_COPY = 4;
+  // A browser form upload signed with a POST policy.
+  STORAGE_FEATURE_PRESIGNED_POST = 5;
+  // The credentials may create and delete a bucket.
+  STORAGE_FEATURE_BUCKET_CREATE = 6;
+  // A bucket policy granting anonymous reads on a prefix is enforced: an
+  // unsigned GET succeeds inside the prefix and is refused outside it.
+  STORAGE_FEATURE_ANONYMOUS_READ_POLICY = 7;
+}
+
+// What a probe of one feature found.
+enum FeatureSupport {
+  FEATURE_SUPPORT_UNSPECIFIED = 0;
+  // The store behaved as the feature requires.
+  FEATURE_SUPPORT_SUPPORTED = 1;
+  // The store answered, and the answer was wrong.
+  FEATURE_SUPPORT_UNSUPPORTED = 2;
+  // The probe could not tell: never probed, no scratch bucket, a denied
+  // permission, a timeout.
+  FEATURE_SUPPORT_UNKNOWN = 3;
+}
+
+// A backend's required features, summarised.
+enum StorageCompatibility {
+  STORAGE_COMPATIBILITY_UNSPECIFIED = 0;
+  // No required feature is unsupported, and not all are known supported.
+  STORAGE_COMPATIBILITY_UNVERIFIED = 1;
+  // Every required feature is supported.
+  STORAGE_COMPATIBILITY_COMPATIBLE = 2;
+  // A required feature is unsupported: Paladin's guarantees do not hold on
+  // this backend.
+  STORAGE_COMPATIBILITY_INCOMPATIBLE = 3;
+}
+
+// One feature's probe outcome.
+message StorageFeatureSupport {
+  StorageFeature feature = 1;
+  FeatureSupport support = 2;
+  // A guarantee Paladin makes depends on the feature; without it the backend
+  // is incompatible. Otherwise one operation needs it and is refused where it
+  // is not supported.
+  bool required = 3;
+  // What the feature is for, for an operator reading a warning.
+  string enables = 4;
+  // Why, when support is not SUPPORTED.
+  string message = 5;
+  // Unset for a feature never probed.
+  google.protobuf.Timestamp checked_at = 6;
 }
 
 enum StorageKind {
@@ -148,6 +214,17 @@ message Bucket {
   // upload to this bucket yet"; the row stays visible so admin tooling
   // can render progress or surface a stuck operation.
   string provision_state = 17;
+  // Every object in the bucket is readable by anyone with its URL, unsigned
+  // (ADR-0027). Set at creation, never changed. Needs provision_on_backend,
+  // a backend whose probe found ANONYMOUS_READ_POLICY supported, and
+  // constraints.allowed_content_types naming only passive types. Only
+  // collections declared PUBLIC_READ bind to a public bucket.
+  bool public_read = 18 [(google.api.field_behavior) = IMMUTABLE];
+  // Where a CDN serves this public bucket, e.g. "https://cdn.example.com".
+  // Object.public_url starts with it; empty means the backend's
+  // public_endpoint. Set at creation, never changed: consumers store the
+  // URLs built from it.
+  string public_base_url = 19 [(google.api.field_behavior) = IMMUTABLE];
 }
 
 message BucketConstraints {
@@ -268,6 +345,24 @@ message Collection {
   string resource_version = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
   google.protobuf.Timestamp created_at = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
   google.protobuf.Timestamp updated_at = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // Who may read the collection's objects (ADR-0027). Set at creation, never
+  // changed; UNSPECIFIED creates a PRIVATE collection. A PUBLIC_READ
+  // collection binds only to a public bucket, never rebinds, names its
+  // objects itself and has no trash.
+  CollectionAccess access = 12 [(google.api.field_behavior) = IMMUTABLE];
+  // The Cache-Control every object of a PUBLIC_READ collection is stored
+  // with. Empty at creation means "public, max-age=31536000, immutable";
+  // a private collection has none.
+  string cache_control = 13 [(google.api.field_behavior) = IMMUTABLE];
+}
+
+// Who may read a collection's objects.
+enum CollectionAccess {
+  COLLECTION_ACCESS_UNSPECIFIED = 0;
+  // Reads are presigned downloads, authorised per call.
+  COLLECTION_ACCESS_PRIVATE = 1;
+  // Anyone with an object's public_url may read it, unsigned.
+  COLLECTION_ACCESS_PUBLIC_READ = 2;
 }
 
 // ─── Quota ──────────────────────────────────────────────────────────────────

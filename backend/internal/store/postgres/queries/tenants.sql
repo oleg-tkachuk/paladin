@@ -17,6 +17,10 @@ LEFT JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE tenants.id = $1;
 
 -- name: GetTenantBySlug :one
+-- A slug is unique among live tenants only (tenants_slug_live_key), so a
+-- trashed tenant's slug can be taken by a live one. The slug names the live
+-- tenant when there is one, else the most recently trashed: deterministic,
+-- and what middleware.TenantFreeze resolves too (tenantstate.TenantIDBySlug).
 SELECT sqlc.embed(tenants),
        COALESCE(sb.name, '') AS backend_name,
        COALESCE(b.name, '')  AS bucket_name
@@ -24,9 +28,14 @@ FROM tenants
 LEFT JOIN tenant_default_bindings tdb ON tdb.tenant_id = tenants.id
 LEFT JOIN buckets b           ON b.id = tdb.bucket_id
 LEFT JOIN storage_backends sb ON sb.id = b.backend_id
-WHERE tenants.slug = $1;
+WHERE tenants.slug = $1
+ORDER BY tenants.deleted_at IS NOT NULL, tenants.deleted_at DESC
+LIMIT 1;
 
 -- name: UpdateTenant :execrows
+-- A tenant in the trash takes no changes (middleware.TenantFreeze); this is
+-- the same rule where the row is written, for a caller the freeze could not
+-- resolve.
 UPDATE tenants
 SET display_name           = COALESCE(sqlc.narg('display_name'), display_name),
     labels                 = COALESCE(sqlc.narg('labels'),       labels),
@@ -35,7 +44,8 @@ SET display_name           = COALESCE(sqlc.narg('display_name'), display_name),
                                   THEN inherited_policy_hash
                                   ELSE sqlc.narg('policy_hash') END
 WHERE id = $1
-  AND resource_version = sqlc.arg('expected_version');
+  AND resource_version = sqlc.arg('expected_version')
+  AND deleted_at IS NULL;
 
 -- name: ListTenants :many
 -- include_trashed = false → active rows only; true → both;

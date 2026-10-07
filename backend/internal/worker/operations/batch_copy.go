@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
@@ -115,6 +116,11 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 	dstMeta, err := e.Objects.LookupBucketMeta(ctx, args.TenantID, args.DstCollection, true) // copy dest (mutation)
 	if err != nil {
 		return nil, fmt.Errorf("lookup dst bucket: %w", err)
+	}
+	if dstMeta.PublicRead {
+		// A batch copy names its copies after their sources (KeyPrefix + key);
+		// a public collection names its objects itself (ADR-0027).
+		return nil, publicread.Rulef("a batch copy cannot write into a public collection; copy objects one at a time")
 	}
 	dstBackendID, dstBucket := dstMeta.BackendID, dstMeta.BucketName
 	dstPolicy := uploadpolicy.For(e.Limits, dstMeta.Constraints)

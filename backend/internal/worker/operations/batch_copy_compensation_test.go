@@ -177,3 +177,7 @@ func TestExecuteRefusesWithoutPendingTTL(t *testing.T) {
 		t.Fatalf("want PendingTTL error, got %v", err)
 	}
 }
+
+func (*copyFakeStorage) PublicURL(context.Context, string, string, string, uuid.UUID, string, string) (string, error) {
+	return "", nil
+}

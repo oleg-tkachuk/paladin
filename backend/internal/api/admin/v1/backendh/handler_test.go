@@ -14,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/features"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -49,6 +50,8 @@ func (fakeBackendRepo) SetReadOnly(context.Context, string, bool, int64) error {
 func (fakeBackendRepo) SetMaintenance(context.Context, string, bool, int64) error {
 	return nil
 }
+func (fakeBackendRepo) SetFeatures(context.Context, string, []features.Result) error { return nil }
+
 func (fakeBackendRepo) SetHealth(context.Context, string, string, string, time.Time) error {
 	return nil
 }

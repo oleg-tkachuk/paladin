@@ -115,9 +115,9 @@ type Querier interface {
 	// CreateBucket is also idempotent (s3adapter swallows BucketAlreadyOwnedByYou),
 	// so the API surface stays consistently retry-safe.
 	CreateBucket(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte) error
-	CreateBucketV2(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string) error
+	CreateBucketV2(ctx context.Context, name string, name_2 string, displayName string, region string, labels []byte, ownerTenantID pgtype.UUID, cedarPolicy string, constraints []byte, provisionState string, publicRead bool, publicBaseUrl string) error
 	// Collection queries.
-	CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName string, name_2 string, name_3 string, cedarPolicy string, lifecycleRules []byte) error
+	CreateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName string, name_2 string, name_3 string, cedarPolicy string, lifecycleRules []byte, publicRead bool, cacheControl string) error
 	CreateEventSubscription(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, celFilter string, sinkKind EventSinkKind, sinkConfig []byte, disabled bool) error
 	// Multipart upload queries.
 	// bucket_id anchors the upload to the physical location resolved at initiate
@@ -131,7 +131,7 @@ type Querier interface {
 	CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string, initiatedBySubject string, initiatedByKind string, collectionName string, path string) error
 	// Object queries.
 	// collection_id is resolved by the caller via ResolveCollectionID.
-	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz) error
+	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz, publicUrl string) error
 	// Object tag queries. Tenant-scoped; addressed by (tenant_id, slug).
 	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error
 	// Long-running operation queries.
@@ -175,6 +175,9 @@ type Querier interface {
 	DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
 	DeletePendingPurge(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteStorageBackend(ctx context.Context, name string, expectedVersion int64) (int64, error)
+	// First half of recording a probe (ADR-0026): the probe's rows replace every
+	// earlier one, in the caller's transaction.
+	DeleteStorageBackendFeatures(ctx context.Context, backendName string) error
 	DeleteUser(ctx context.Context, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
 	// RegenerateUploadUrl hands a PENDING object a new PUT URL; the reaper's
@@ -268,6 +271,10 @@ type Querier interface {
 	// so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
 	GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, error)
 	GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (GetTenantBudgetRow, error)
+	// A slug is unique among live tenants only (tenants_slug_live_key), so a
+	// trashed tenant's slug can be taken by a live one. The slug names the live
+	// tenant when there is one, else the most recently trashed: deterministic,
+	// and what middleware.TenantFreeze resolves too (tenantstate.TenantIDBySlug).
 	GetTenantBySlug(ctx context.Context, slug string) (GetTenantBySlugRow, error)
 	GetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (GetTenantDefaultBindingRow, error)
 	GetTenantQuota(ctx context.Context, tenantID pgtype.UUID) (Quota, error)
@@ -324,6 +331,7 @@ type Querier interface {
 	InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, name string, name_2 string, collectionName string, path string) error
 	// parent_id is the token this one was rotated from, NULL for a login.
 	InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz, parentID pgtype.UUID) error
+	InsertStorageBackendFeature(ctx context.Context, feature string, support string, message string, checkedAt pgtype.Timestamptz, backendName string) error
 	// Streams a window of AVAILABLE-only objects under (tenant, collection)
 	// newest-first. Pagination cursor: id (UUIDv7 → time-ordered).
 	// Lifecycle worker walks via repeated calls until empty page.
@@ -466,6 +474,8 @@ type Querier interface {
 	// which addresses buckets by name, and the collection name is a segment of the
 	// object's storage path.
 	ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error)
+	// Keyed by backend NAME, for a page of backends at once.
+	ListStorageBackendFeatures(ctx context.Context, backendNames []string) ([]ListStorageBackendFeaturesRow, error)
 	// Cursor pagination on the backend NAME, which is what the domain calls
 	// BackendID and what the caller round-trips as the page token. The surrogate
 	// `id` uuid is not usable here: its ordering is meaningless to a reader, and
@@ -866,6 +876,9 @@ type Querier interface {
 	// FAILED, is not overwritten by the runner's late progress or result.
 	UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error)
 	UpdateStorageBackend(ctx context.Context, displayName *string, endpoint *string, publicEndpoint *string, region *string, forcePathStyle *bool, credentialsSecretRef *string, sseType *string, sseKeyID *string, eventsEnabled *bool, eventsTarget *string, eventsQueueUrl *string, eventsPollIntervalMs *int64, cedarPolicy *string, name string, expectedVersion int64) (int64, error)
+	// A tenant in the trash takes no changes (middleware.TenantFreeze); this is
+	// the same rule where the row is written, for a caller the freeze could not
+	// resolve.
 	UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)
 	UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) error

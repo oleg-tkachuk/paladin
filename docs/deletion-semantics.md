@@ -43,6 +43,15 @@ with explicitly.
 | `DeleteTenant` | Moves to trash (`deleted_at` set). Nothing is destroyed. | `RestoreTenant` |
 | `PurgeTenant` | Hard delete of a **trashed** tenant. Refuses while the tenant owns anything (`RESTRICT`). | No |
 
+**A tenant in the trash is frozen.** Every change to it is refused with
+`FAILED_PRECONDITION` and reason `TENANT_ALREADY_DELETED`, whoever asks —
+platform admins included — so that restoring returns exactly what was
+trashed. What stays open: reading and downloading its data, taking access
+away (revoking tokens and capabilities, cancelling operations, aborting
+uploads), and the tenant's own lifecycle (`GetTenant`, `ListTenants`,
+`RestoreTenant`, `PurgeTenant`). To remove a tenant that already holds data
+in the trash, restore it, empty it, and trash and purge it.
+
 There is no one-shot hard delete. There used to be — `DeleteTenant(force=true)`
 — and it is gone: landing the tenant in a different state is a different
 transition, not a modifier on this one.
@@ -101,6 +110,20 @@ Object lock outranks all of it:
   from a caller holding `lock.governance.bypass` or `platform.admin`. The
   server sets `paladin.bypass_governance_retention` for that transaction and a
   trigger on `object_locks` reads it before allowing the row to go.
+
+### In a public collection
+
+A public collection ([ADR-0027](adr/0027-public-collections.md)) has no trash.
+Its objects are served to anyone at their URL, and a soft delete leaves the
+bytes in storage, so the URL would keep answering: `DeleteObject` without
+`permanent=true` is refused (`FAILED_PRECONDITION`, reason
+`PUBLIC_COLLECTION_RULE`), and a batch delete reports each such object as
+failed. A permanent delete removes the bytes, and the store answers 404 at the
+URL from then on. A CDN in front of the bucket may keep serving its copy until
+its own TTL expires; that is between the CDN and whoever configured it.
+
+Moving the tenant to the trash does not touch any bytes, so its public objects
+stay readable until they are deleted.
 
 ## Multipart sessions
 

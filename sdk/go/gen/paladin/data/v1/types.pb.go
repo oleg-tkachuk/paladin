@@ -176,7 +176,11 @@ type Object struct {
 	// Signals the content has been flagged with. Empty for a clean object. A
 	// capability without allow_tainted_read cannot read a tainted object.
 	// Populated by GetObject and LookupObject; set with SetObjectTaint.
-	Taint         []TaintSignal `protobuf:"varint,23,rep,packed,name=taint,proto3,enum=paladin.data.v1.TaintSignal" json:"taint,omitempty"`
+	Taint []TaintSignal `protobuf:"varint,23,rep,packed,name=taint,proto3,enum=paladin.data.v1.TaintSignal" json:"taint,omitempty"`
+	// For an object in a PUBLIC_READ collection, the URL anyone can read it
+	// at, unsigned (ADR-0027) — stable for the object's life, so store it
+	// rather than build it. Empty for every other object.
+	PublicUrl     string `protobuf:"bytes,24,opt,name=public_url,json=publicUrl,proto3" json:"public_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -370,6 +374,13 @@ func (x *Object) GetTaint() []TaintSignal {
 		return x.Taint
 	}
 	return nil
+}
+
+func (x *Object) GetPublicUrl() string {
+	if x != nil {
+		return x.PublicUrl
+	}
+	return ""
 }
 
 type ChecksumDigest struct {
@@ -694,7 +705,8 @@ var File_paladin_data_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpaladin/data/v1/types.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xf1\t\n" +
+	"\x1bpaladin/data/v1/types.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x95\n" +
+	"\n" +
 	"\x06Object\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12 \n" +
 	"\tobject_id\x18\x02 \x01(\tB\x03\xe0A\x03R\bobjectId\x12 \n" +
@@ -724,7 +736,9 @@ const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\x12presign_expires_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x10presignExpiresAt\x129\n" +
 	"\x04lock\x18\x15 \x01(\v2 .paladin.data.v1.ObjectLockStateB\x03\xe0A\x03R\x04lock\x12@\n" +
 	"\tplacement\x18\x16 \x01(\v2\".paladin.data.v1.PhysicalPlacementR\tplacement\x127\n" +
-	"\x05taint\x18\x17 \x03(\x0e2\x1c.paladin.data.v1.TaintSignalB\x03\xe0A\x03R\x05taint\x1a;\n" +
+	"\x05taint\x18\x17 \x03(\x0e2\x1c.paladin.data.v1.TaintSignalB\x03\xe0A\x03R\x05taint\x12\"\n" +
+	"\n" +
+	"public_url\x18\x18 \x01(\tB\x03\xe0A\x03R\tpublicUrl\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a7\n" +
