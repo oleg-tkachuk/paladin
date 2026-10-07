@@ -62,7 +62,7 @@ def test_the_code_reads_tags_as_the_build_does() -> None:
 
 
 def _direct_url(revision: str | None) -> str:
-    """What Poetry recorded for the agentic-rag workers' install."""
+    """What Poetry records for an install from a git tag."""
     vcs: dict[str, Any] = {"vcs": "git", "commit_id": COMMIT}
     if revision is not None:
         vcs["requested_revision"] = revision
