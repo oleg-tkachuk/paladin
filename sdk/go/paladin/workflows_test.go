@@ -25,6 +25,10 @@ import (
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladintest"
 )
 
+// testContentType is a test upload's content type: the server refuses an
+// upload that names none.
+const testContentType = "application/octet-stream"
+
 // ─── Pages ──────────────────────────────────────────────────────────────────
 
 // pagedObjects serves ListObjects over items, pageSize at a time.
@@ -427,7 +431,7 @@ func TestUploadAbortsWhenAPartIsRefused(t *testing.T) {
 
 func TestUploadRefusesANegativeSize(t *testing.T) {
 	data, _, _ := newTransfer(t, 0)
-	if _, err := paladin.Upload(context.Background(), data, paladin.UploadInput{Parent: testParent, Size: -1, Body: bytes.NewReader(nil)}, paladin.UploadOptions{}); !errors.Is(err, paladin.ErrUploadSize) {
+	if _, err := paladin.Upload(context.Background(), data, paladin.UploadInput{ContentType: testContentType, Parent: testParent, Size: -1, Body: bytes.NewReader(nil)}, paladin.UploadOptions{}); !errors.Is(err, paladin.ErrUploadSize) {
 		t.Fatalf("err = %v, want ErrUploadSize", err)
 	}
 }

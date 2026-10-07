@@ -12,6 +12,9 @@ from paladin.common.v1 import resource_pb2
 from paladin.data.v1 import multipart_service_pb2, types_pb2
 from paladin.testing import PART_SIZE, FakePaladin
 
+# What the object is uploaded as; the server refuses an upload that names none.
+CONTENT_TYPE = "application/octet-stream"
+
 
 def send_part(
     p: paladin.Paladin, transfer: paladin.Transfer, name: str, upload_id: str, n: int, data: bytes
@@ -35,6 +38,7 @@ def main(fake: FakePaladin) -> tuple[int, int, bool]:
     body = b"x" * (2 * PART_SIZE + 10)
     init = p.data.multipart_upload.initiate_multipart_upload(  # type: ignore[union-attr]
         multipart_service_pb2.InitiateMultipartUploadRequest(
+            content_type=CONTENT_TYPE,
             parent=str(fake.collection()),
             key="big.bin",
             size_bytes=len(body),

@@ -14,9 +14,12 @@ from google.protobuf.message import Message
 
 import paladin
 from paladin import NotFoundError, ObjectURI, upload
-from paladin.common.v1 import error_reason_pb2
+from paladin.common.v1 import error_reason_pb2, resource_pb2
 from paladin.data.v1 import multipart_service_pb2, object_service_pb2, types_pb2
 from paladin.testing import PART_SIZE, FakePaladin
+
+# The content type of a test upload: the server refuses an upload that names none.
+CONTENT_TYPE = "application/octet-stream"
 
 GET_OBJECT = "/paladin.data.v1.ObjectService/GetObject"
 LOOKUP_OBJECT = "/paladin.data.v1.ObjectService/LookupObject"
@@ -283,7 +286,11 @@ def test_strict_auth_refuses_another_tenants_upload(strict: FakePaladin) -> None
     mine = strict.connect(bearer_token=strict.issue_bearer_token(strict.tenant))
     up = mine.data.multipart_upload.initiate_multipart_upload(
         multipart_service_pb2.InitiateMultipartUploadRequest(
-            parent=str(strict.collection()), key="k", size_bytes=1
+            checksum_algorithm=resource_pb2.CHECKSUM_ALGORITHM_SHA256,
+            content_type=CONTENT_TYPE,
+            parent=str(strict.collection()),
+            key="k",
+            size_bytes=1,
         )
     )
     theirs = strict.connect(bearer_token=strict.issue_bearer_token(str(uuid.uuid4())))

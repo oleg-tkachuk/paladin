@@ -39,6 +39,10 @@ tls = ["httpcore[http2,asyncio]>=1.0.9,<2", "cryptography>=41"]
 # Signs DPoP proofs for key-bound capabilities (paladin.dpop). Its own extra:
 # a caller binding capabilities to a key need not install the TLS stack.
 dpop = ["cryptography>=41"]
+# Validates every request paladin.testing.FakePaladin serves with the
+# contract's own rules, as the server does. Its own extra: it is a native
+# library that only tests need.
+testing = ["protovalidate>=2.0.0,<3"]
 # Narrows a capability's Biscuit form offline (paladin.attenuate). Pre-1.0: a
 # minor may change the API, so the range stops at the next one.
 biscuit = ["biscuit-python>=0.4.0,<0.5"]
@@ -47,6 +51,8 @@ biscuit = ["biscuit-python>=0.4.0,<0.5"]
 dev = [
     "opentelemetry-sdk==1.45.0",
     "cryptography==50.0.2",
+    # The testing extra, which FakePaladin needs.
+    "protovalidate==2.0.0",
     # The tls extra, which the TLS tests exercise.
     "httpcore[http2,asyncio]==1.0.9",
     "google-crc32c==1.9.0",

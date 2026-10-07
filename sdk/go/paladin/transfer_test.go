@@ -187,7 +187,7 @@ func TestUploadFromAStream(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			data, dp, st := newTransfer(t, tc.partSize)
-			obj, err := paladin.Upload(context.Background(), data, paladin.UploadInput{
+			obj, err := paladin.Upload(context.Background(), data, paladin.UploadInput{ContentType: testContentType,
 				Parent: testParent, Key: "s", Size: int64(len(tc.body)), Stream: streamOnly{strings.NewReader(tc.body)},
 			}, paladin.UploadOptions{MultipartThreshold: tc.threshold})
 			if err != nil {
@@ -213,7 +213,7 @@ func TestUploadFromAStream(t *testing.T) {
 
 func TestUploadFailsOnAShortStream(t *testing.T) {
 	data, dp, _ := newTransfer(t, 4)
-	_, err := paladin.Upload(context.Background(), data, paladin.UploadInput{
+	_, err := paladin.Upload(context.Background(), data, paladin.UploadInput{ContentType: testContentType,
 		Parent: testParent, Key: "s", Size: 10, Stream: streamOnly{strings.NewReader("012345")},
 	}, paladin.UploadOptions{MultipartThreshold: 8})
 	if !errors.Is(err, io.ErrUnexpectedEOF) {
@@ -227,8 +227,8 @@ func TestUploadFailsOnAShortStream(t *testing.T) {
 func TestUploadNeedsExactlyOneBody(t *testing.T) {
 	data, _, _ := newTransfer(t, 0)
 	for name, in := range map[string]paladin.UploadInput{
-		"neither": {Parent: testParent, Size: 1},
-		"both":    {Parent: testParent, Size: 1, Body: bytes.NewReader([]byte("x")), Stream: strings.NewReader("x")},
+		"neither": {ContentType: testContentType, Parent: testParent, Size: 1},
+		"both":    {ContentType: testContentType, Parent: testParent, Size: 1, Body: bytes.NewReader([]byte("x")), Stream: strings.NewReader("x")},
 	} {
 		if _, err := paladin.Upload(context.Background(), data, in, paladin.UploadOptions{}); !errors.Is(err, paladin.ErrUploadBody) {
 			t.Errorf("%s: err = %v, want ErrUploadBody", name, err)

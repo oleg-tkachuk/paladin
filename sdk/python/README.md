@@ -14,7 +14,7 @@ line. Pin the tag: a branch moves under a lock file.
 Extras, named as `paladin-sdk[tls,dpop] @ git+…`: `tls` for `TLS` — mutual
 TLS, a server's SPIFFE ID, a protocol floor — `dpop` for key-bound
 capabilities, `biscuit` for offline attenuation, `crc32c` to verify CRC32C
-checksums. Plaintext connections and pyqwest's own TLS need none of them.
+checksums, `testing` for `paladin.testing.FakePaladin`. Plaintext connections and pyqwest's own TLS need none of them.
 
 Where the build has no git — a slim image, a vendored copy — install the
 tag's source archive instead; `git archive` records the version in it:
@@ -400,7 +400,8 @@ which is stable across retries.
 
 `FakePaladin` is an in-memory data plane for the tests of a program built on
 the SDK. Uploads and downloads go through presigned URLs on its own storage,
-as against the real server.
+as against the real server. It needs the `testing` extra, for protovalidate;
+without it `FakePaladin()` raises `ImportError` naming the extra.
 
 ```python
 from paladin.testing import FakePaladin
@@ -415,7 +416,13 @@ with FakePaladin() as fake:
 It serves `ObjectService` (upload, complete, get, lookup, list, download,
 delete), `MultipartUploadService`, `PresignService` (`regenerate_upload_url`,
 `presign_download`) and `StorageBootstrapService`; every other RPC answers
-`UNIMPLEMENTED`. Like the server it refuses a collection
+`UNIMPLEMENTED`. Like the server it runs protovalidate on every request,
+after authentication, so a request the contract's rules refuse is
+`InvalidArgumentError`; it checks `delete_object`'s `resource_version` —
+`VersionConflictError` for one that is not the object's — and advances it on
+every change to the object. `list_objects` refuses `filter`, `order_by` and
+`sort_order` as `UNIMPLEMENTED` rather than list as if they were not set.
+Like the server it refuses a collection
 named by the tenant's slug and a completion whose ETag, when given, is not
 the content's; completing a completed object returns it. Like the server it
 holds one object per key: an upload to a key another object holds, in any
