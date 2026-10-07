@@ -34,3 +34,8 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )
+
+// otelconnect v0.11 requires connect-go v2; v0.10 is the last release for
+// connect-go v1. Excluded so `go get -u` stops at v0.10 until the module
+// moves to connect-go v2 (BACKLOG: "Migrate to connect-go v2").
+exclude connectrpc.com/otelconnect v0.11.0
