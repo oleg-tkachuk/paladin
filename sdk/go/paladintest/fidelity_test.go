@@ -1,8 +1,11 @@
 package paladintest_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"testing"
@@ -146,5 +149,51 @@ func TestAChangeAdvancesTheVersion(t *testing.T) {
 	}
 	if want := nextVersion(t, registered.Msg.GetObject().GetResourceVersion()); got.Msg.GetResourceVersion() != want {
 		t.Errorf("version after a change = %q, want %q", got.Msg.GetResourceVersion(), want)
+	}
+}
+
+// A multipart object was completed with no checksum, so a download of it was
+// checked for its size alone. The fake records the composite the server
+// does, over the part size, and Download recomputes it from the bytes.
+func TestAMultipartDownloadIsVerified(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	ctx := context.Background()
+	body := bytes.Repeat([]byte("p"), 2*paladintest.PartSize+1) // three parts
+	obj, err := paladin.Upload(ctx, p.Data, paladin.UploadInput{
+		Parent: srv.Collection().String(), Key: "big", ContentType: testContentType,
+		Size: int64(len(body)), Body: bytes.NewReader(body),
+	}, paladin.UploadOptions{MultipartThreshold: paladintest.PartSize})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := obj.GetChecksum()
+	if sum.GetPartSizeBytes() != paladintest.PartSize || !strings.HasSuffix(sum.GetValue(), "-3") {
+		t.Fatalf("checksum = %v, want a composite over three %d-byte parts", sum, paladintest.PartSize)
+	}
+	read := func() error {
+		r, err := paladin.Download(ctx, p.Data, obj.GetName(), paladin.DownloadOptions{})
+		if err != nil {
+			return err
+		}
+		defer func() { _ = r.Close() }()
+		_, err = io.Copy(io.Discard, r)
+		return err
+	}
+	if err := read(); err != nil {
+		t.Fatalf("a whole read of the stored bytes: %v", err)
+	}
+	// Storage answers with other bytes of the same length: only the
+	// composite tells them apart. http.Error appends a newline.
+	corrupt := strings.Repeat("q", len(body)-1)
+	srv.FailStorage(func(r *http.Request) (int, string) {
+		if r.Method == http.MethodGet {
+			return http.StatusOK, corrupt
+		}
+		return 0, ""
+	})
+	var ie *paladin.IntegrityError
+	if err := read(); !errors.As(err, &ie) || ie.What != paladin.ChecksumSHA256 {
+		t.Fatalf("err = %v, want an IntegrityError on the composite", err)
 	}
 }
