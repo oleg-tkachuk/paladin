@@ -43,6 +43,16 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — an internal error no longer carries its cause
+
+- **An RPC that fails on the server's side answers `internal error; request
+  id <id>`** with its code (`internal`, `unknown`, `data_loss`), its details
+  and its metadata, instead of the error's own text — which carried driver
+  messages, table and constraint names. The log line and the trace keep the
+  original under the same request id, returned in `X-Request-Id`; a request
+  sent without one is given one. Code that parsed an internal error's message
+  has nothing to parse.
+
 ## Unreleased — a multipart download's checksum is verified
 
 - **A multipart object completed from now on records a composite checksum**:
