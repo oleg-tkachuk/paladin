@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/Select";
 import { T } from "@/lib/ui/typography";
 import { useObjectLock } from "@/hooks/useObjectLock";
+import { useTenantChangesBlocked } from "@/app/tenants/[id]/tenant-context";
 import { formatDateTime } from "@/lib/format/locale";
 
 /**
@@ -49,6 +50,8 @@ export function ObjectLockCard({ objectName }: { objectName: string }) {
   const [bypass, setBypass] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const changesBlocked = useTenantChangesBlocked();
+  const frozen = Boolean(changesBlocked);
 
   const activeUntil = lock?.retainUntil
     ? new Date(Number(lock.retainUntil.seconds) * 1000)
@@ -181,14 +184,19 @@ export function ObjectLockCard({ objectName }: { objectName: string }) {
             {mode === "COMPLIANCE" && !confirming ? (
               <Button
                 variant="outline"
-                disabled={!until || saving}
+                disabled={!until || saving || frozen}
+                title={changesBlocked ?? undefined}
                 onClick={() => setConfirming(true)}
               >
                 Apply COMPLIANCE retention…
               </Button>
             ) : (
               <div className="flex items-center gap-2">
-                <Button disabled={!until || saving} onClick={apply}>
+                <Button
+                  disabled={!until || saving || frozen}
+                  title={changesBlocked ?? undefined}
+                  onClick={apply}
+                >
                   {mode === "COMPLIANCE"
                     ? "Yes — pin permanently until that date"
                     : "Apply retention"}
@@ -219,7 +227,8 @@ export function ObjectLockCard({ objectName }: { objectName: string }) {
               <Switch
                 id="legal-hold"
                 checked={held}
-                disabled={saving}
+                disabled={saving || frozen}
+                title={changesBlocked ?? undefined}
                 onCheckedChange={toggleHold}
               />
             </div>
