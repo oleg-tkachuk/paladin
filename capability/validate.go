@@ -1,7 +1,6 @@
 package capability
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"net/netip"
@@ -12,8 +11,9 @@ import (
 // ErrInvalidCaveats is returned when a caveat bag is malformed: a negative or
 // non-finite budget, an unknown unit, an empty resource entry, an unparsable
 // CIDR, an operation name that is not well formed. It is a request error, not
-// an authorisation decision — the capability was never minted.
-var ErrInvalidCaveats = errors.New("capability: invalid caveats")
+// an authorisation decision — the capability was never minted — so it also
+// matches ErrInvalidRequest.
+var ErrInvalidCaveats error = &requestError{"capability: invalid caveats"}
 
 // builtinOps is the closed set this package defines. Consumers add their own
 // operations as namespaced names ("tool:search", "mcp:github/create_issue");
