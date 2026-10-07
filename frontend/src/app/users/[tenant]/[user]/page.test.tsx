@@ -6,12 +6,14 @@ import { ScopeType } from "@/gen/paladin/common/v1/scope_pb";
 
 const h = vi.hoisted(() => ({
   getUser: vi.fn(),
+  getTenant: vi.fn(),
   deleteUser: vi.fn(),
   push: vi.fn(),
 }));
 
 vi.mock("@/lib/connect/client", () => ({
   userClient: { getUser: h.getUser },
+  tenantClient: { getTenant: h.getTenant },
 }));
 vi.mock("next/navigation", () => ({
   useParams: () => ({ tenant: "t-1", user: "u-1" }),
@@ -47,6 +49,16 @@ vi.mock("@/components/layout/PageHeader", () => ({
 }));
 
 import UserDetailPage from "./page";
+import { CrumbNamesProvider, useCrumbNames } from "@/context/CrumbNamesContext";
+
+function Trail() {
+  const names = useCrumbNames();
+  return (
+    <p data-testid="trail">
+      {["t-1", "u-1"].map((s) => names[s]?.label ?? s).join(" / ")}
+    </p>
+  );
+}
 
 const USER = {
   name: "tenants/t-1/users/u-1",
@@ -62,6 +74,7 @@ const USER = {
 
 beforeEach(() => {
   h.getUser.mockReset().mockResolvedValue(USER);
+  h.getTenant.mockReset().mockResolvedValue({ slug: "acme" });
   h.deleteUser.mockReset().mockResolvedValue({ ok: true });
   h.push.mockReset();
 });
@@ -96,5 +109,22 @@ describe("UserDetailPage", () => {
     await userEvent.click(screen.getByText("Delete"));
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(h.push).toHaveBeenCalledWith("/users"));
+  });
+
+  // The trail and the tab title showed the path's ids.
+  it("names the tenant by slug and the user by login in the trail", async () => {
+    render(
+      <CrumbNamesProvider>
+        <UserDetailPage />
+        <Trail />
+      </CrumbNamesProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("trail")).toHaveTextContent("acme / alice"),
+    );
+    expect(h.getTenant).toHaveBeenCalledWith(
+      { name: "tenants/t-1" },
+      expect.anything(),
+    );
   });
 });
