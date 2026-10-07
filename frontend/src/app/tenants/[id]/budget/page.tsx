@@ -50,7 +50,7 @@ import {
 import { Select } from "@/components/ui/Select";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
-import { useTenant } from "../tenant-context";
+import { useTenant, useTenantChangesBlocked } from "../tenant-context";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 function formatAmount(n: number, unit: string): string {
@@ -66,6 +66,7 @@ function progressColour(spent: number, max: number): string {
 }
 
 export default function TenantBudgetPage() {
+  const changesBlocked = useTenantChangesBlocked();
   const tenant = useTenant();
   const tenantId = tenant.tenantId;
   const { showNotification } = useNotification();
@@ -446,7 +447,9 @@ export default function TenantBudgetPage() {
             <div className="flex justify-end">
               <Button
                 type="submit"
+                title={changesBlocked ?? undefined}
                 disabled={
+                  Boolean(changesBlocked) ||
                   submitting ||
                   initialising ||
                   budgetQuery.isError ||

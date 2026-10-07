@@ -1,5 +1,7 @@
 "use client";
 
+import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
+import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import React, { useEffect, useMemo, useState } from "react";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
 import { errorMessage } from "@/hooks/errorContract";
@@ -290,6 +292,9 @@ export default function CollectionsPage() {
                       >
                         {ok.collection}
                       </Link>
+                      {ok.access === CollectionAccess.PUBLIC_READ && (
+                        <PublicReadBadge />
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">

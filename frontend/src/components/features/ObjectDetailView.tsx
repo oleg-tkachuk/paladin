@@ -192,6 +192,7 @@ export function ObjectDetailView({
             onShare={handleShare}
             onDownload={handleDownload}
             onAction={setConfirmAction}
+            publicObject={Boolean(object.publicUrl)}
           />
         }
       />

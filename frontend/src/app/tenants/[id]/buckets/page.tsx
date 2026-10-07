@@ -13,6 +13,7 @@
 // current tenant — operators can still un-set it via the cross-tenant
 // page if they want a shared bucket.
 
+import { useTenantChangesBlocked } from "../tenant-context";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTableSort } from "@/hooks/useTableSort";
 import Link from "next/link";
@@ -69,6 +70,7 @@ import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
 import { useRefetchWhile } from "@/hooks/useRefetchWhile";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { BucketDeleteDialog } from "@/components/features/buckets/BucketDeleteDialog";
+import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import { ProvisionStateBadge } from "@/components/features/buckets/ProvisionStateBadge";
 
 type SortColumn = "backend" | "name" | "region";
@@ -76,6 +78,7 @@ type SortColumn = "backend" | "name" | "region";
 const ALL_BACKENDS = "__all__";
 
 export default function TenantBucketsPage() {
+  const changesBlocked = useTenantChangesBlocked();
   const tenant = useTenant();
   const {
     buckets,
@@ -185,7 +188,12 @@ export default function TenantBucketsPage() {
             .
           </p>
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Button
+          size="sm"
+          onClick={() => setCreateOpen(true)}
+          disabled={Boolean(changesBlocked)}
+          title={changesBlocked ?? undefined}
+        >
           <PlusIcon className="size-4" />
           New bucket
         </Button>
@@ -293,6 +301,8 @@ export default function TenantBucketsPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => setCreateOpen(true)}
+                        disabled={Boolean(changesBlocked)}
+                        title={changesBlocked ?? undefined}
                       >
                         <PlusIcon className="size-4" />
                         Create the first bucket
@@ -336,6 +346,7 @@ export default function TenantBucketsPage() {
                   </TableCell>
                   <TableCell>
                     <ProvisionStateBadge state={b.provisionState} />
+                    {b.publicRead && <PublicReadBadge />}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
@@ -376,7 +387,7 @@ export default function TenantBucketsPage() {
       <BucketCreateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        backends={backends}
+        backends={backendRows}
         backendsFailed={failedRead(backendsError, fetchBackends)}
         createBucket={createBucket}
       />

@@ -7,6 +7,7 @@
 // backend persists ObjectLockConfig on the bucket row and the data plane
 // enforces it on delete/overwrite; this page is the operator switch.
 
+import { useTenantChangesBlocked } from "../../../../tenant-context";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ function strToMode(s: string): ObjectLockMode {
 }
 
 export default function BucketObjectLockPage() {
+  const changesBlocked = useTenantChangesBlocked();
   const { bucket, setBucket } = useBucket();
   const { showNotification } = useNotification();
 
@@ -171,7 +173,11 @@ export default function BucketObjectLockPage() {
       </div>
 
       <div className="flex justify-end">
-        <Button onClick={save} disabled={!dirty || !daysValid || saving}>
+        <Button
+          onClick={save}
+          disabled={Boolean(changesBlocked) || !dirty || !daysValid || saving}
+          title={changesBlocked ?? undefined}
+        >
           {saving ? "Saving…" : "Save"}
         </Button>
       </div>
