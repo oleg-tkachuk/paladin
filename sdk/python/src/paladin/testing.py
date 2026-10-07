@@ -8,6 +8,10 @@ It serves ObjectService (upload, complete, get, lookup, list, download,
 delete), MultipartUploadService, ListParts included, PresignService
 (RegenerateUploadUrl, PresignDownload) and StorageBootstrapService, with presigned URLs on its own storage; every other
 RPC answers Unimplemented, as a server that lacks it does. Like the server it
+runs protovalidate on every request, after authentication, and checks
+DeleteObject's ``resource_version``; ListObjects refuses a filter or an
+ordering as Unimplemented rather than ignore it. It needs the ``testing``
+extra, for protovalidate. Like the server it
 binds every upload URL to the size and checksum the upload was registered
 with — its storage refuses a PUT without exactly the signed headers, a body of
 another length or SHA-256, or an overwrite — records that checksum on the
@@ -91,6 +95,10 @@ PART_SIZE = 5 << 20
 """The part size multipart uploads are told to use."""
 DEFAULT_PAGE_SIZE = 100
 """The page ``list_objects`` answers when asked for none."""
+TESTING_EXTRA_HINT = "paladin.testing needs the 'testing' extra: pip install 'paladin-sdk[testing]'"
+"""What ``FakePaladin`` raises, as an ``ImportError``, without the extra."""
+_VALIDATION_FAILED = "validation failed"
+"""How the server's answer to a request its contract's rules refuse begins."""
 EXPIRED_BODY = "<Error><Code>AccessDenied</Code><Message>Request has expired</Message></Error>"
 """What S3 answers, with 403, for a presigned URL past its expiry."""
 DEFAULT_DOWNLOAD_TTL = timedelta(minutes=15)
@@ -301,6 +309,8 @@ class _Calls:
         self._fake._record(Request(procedure, headers, _copy_message(request)))
         if self._fake.strict_auth:
             self._fake._authenticate(headers, request)
+        # After authentication, as the server's interceptor chain runs it.
+        self._fake._validate(request)
         err = self._fake._take_rpc_fault(procedure, request)
         if err is not None:
             raise err
@@ -407,6 +417,9 @@ class FakePaladin(
     def __init__(self, *, strict_auth: bool = False) -> None:
         """``strict_auth`` checks credentials as the server's data plane does,
         instead of serving every call; see ``issue_bearer_token``."""
+        protovalidate = _protovalidate()
+        self._validator = protovalidate.Validator()
+        self._validation_error: type[Exception] = protovalidate.ValidationError
         self.strict_auth = strict_auth
         """Whether the fake checks credentials."""
         self.tenant = str(uuid.uuid4())
@@ -738,6 +751,7 @@ class FakePaladin(
             o = self._objects.get(name)
             if o is not None and o.msg.state == _PENDING:
                 o.msg.state = _FAILED
+                _bump(o)
 
     def storage_ops(self) -> list[StorageOp]:
         """The storage requests received, oldest first."""
@@ -818,12 +832,26 @@ class FakePaladin(
         o.msg.etag = _etag(body)
         o.msg.size_bytes = len(body)
         o.msg.state = _AVAILABLE
+        _bump(o)
         if checksum:
             o.msg.checksum.algorithm = CHECKSUM_SHA256
             o.msg.checksum.value = checksum
 
     def _signed(self, path: str, method: str) -> resource_pb2.PresignedUrl:
         return resource_pb2.PresignedUrl(url=f"{self.url}{_STORAGE}{path}", method=method)
+
+    def _validate(self, request: Message) -> None:
+        """Refuse a request the contract's rules refuse, as the server's
+        protovalidate interceptor does."""
+        try:
+            self._validator.validate(request)
+        except self._validation_error as err:
+            # Each violation named by its field, as the server's message does.
+            named = "; ".join(
+                ".".join(e.field_name for e in v.proto.field.elements) + f": {v.proto.message}"
+                for v in err.violations  # type: ignore[attr-defined]
+            )
+            raise ConnectError(Code.INVALID_ARGUMENT, f"{_VALIDATION_FAILED}: {named}") from err
 
     def _get(self, name: str) -> _Object:
         o = self._objects.get(name)
@@ -895,6 +923,13 @@ class FakePaladin(
         raise ConnectError(Code.NOT_FOUND, f"{request.parent} has no key {request.key!r}")
 
     def list_objects(self, request, ctx):  # type: ignore[no-untyped-def]
+        unhonoured = _unhonoured_list_field(request)
+        if unhonoured:
+            raise ConnectError(
+                Code.UNIMPLEMENTED,
+                f"paladin.testing: ListObjects does not apply {unhonoured}; the server does, "
+                "so a test would pass on what it would not",
+            )
         prefix = request.parent + _OBJECTS_SEP
         with self._lock:
             found = sorted(
@@ -932,11 +967,16 @@ class FakePaladin(
             if request.permanent:
                 # As the server: one in the trash is purged too, and the path
                 # is free again.
-                if self._objects.pop(request.name, None) is None:
+                o = self._objects.get(request.name)
+                if o is None:
                     raise ConnectError(Code.NOT_FOUND, f"{request.name} not found")
+                _check_version(o, request.resource_version)
+                del self._objects[request.name]
                 return object_service_pb2.DeleteObjectResponse()
             o = self._get(request.name)
+            _check_version(o, request.resource_version)
             o.msg.state = _DELETED  # in the trash, still holding its key
+            _bump(o)
             o.body = None
             return object_service_pb2.DeleteObjectResponse()
 
@@ -1162,6 +1202,11 @@ class FakePaladin(
 def _failure(procedure: str, code: Code) -> ConnectError:
     """What an injected failure answers with: ``code``, and the reason the
     server attaches to it."""
+    return _with_reason(code, f"{procedure} failed by fail_rpc")
+
+
+def _with_reason(code: Code, message: str) -> ConnectError:
+    """``code`` with the ``ErrorInfo`` reason the server attaches to it."""
     reason = _SERVER_REASON.get(code)
     details = (
         [
@@ -1172,7 +1217,44 @@ def _failure(procedure: str, code: Code) -> ConnectError:
         if reason is not None
         else []
     )
-    return ConnectError(code, f"{procedure} failed by fail_rpc", details)
+    return ConnectError(code, message, details)
+
+
+def _bump(o: _Object) -> None:
+    """Advance the object's resource_version, as the server's trigger does on
+    every change to its row."""
+    o.msg.resource_version = str(int(o.msg.resource_version) + 1)
+
+
+def _check_version(o: _Object, version: str) -> None:
+    """Refuse a resource_version that is not the object's, as the server
+    does: not a number is INVALID_ARGUMENT, another one ABORTED."""
+    try:
+        int(version)
+    except ValueError as err:
+        raise _with_reason(Code.INVALID_ARGUMENT, f"invalid resource_version: {err}") from err
+    if version != o.msg.resource_version:
+        raise _with_reason(Code.ABORTED, "resource_version mismatch")
+
+
+def _unhonoured_list_field(request: object_service_pb2.ListObjectsRequest) -> str:
+    """The ListObjects parameter the fake does not apply, or "" for none."""
+    if request.filter:
+        return "filter"
+    if request.order_by:
+        return "order_by"
+    if request.sort_order != pagination_pb2.SORT_ORDER_UNSPECIFIED:
+        return "sort_order"
+    return ""
+
+
+def _protovalidate() -> Any:
+    """The protovalidate module, from the ``testing`` extra."""
+    try:
+        import protovalidate
+    except ImportError as err:
+        raise ImportError(TESTING_EXTRA_HINT) from err
+    return protovalidate
 
 
 def _status(start_response, status: str | int, body: str = "") -> list[bytes]:  # type: ignore[no-untyped-def]
