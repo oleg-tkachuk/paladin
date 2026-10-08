@@ -13,12 +13,15 @@ package components
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit"
 	ratelimitstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit/postgres"
 )
 
@@ -75,9 +78,8 @@ func TestLimiterUnlimitedFastPath(t *testing.T) {
 	}
 }
 
-// TestLimiterDeniesPastCapacity pins the core decision. The bump is
-// unconditional and happens before the check, so the Nth call at capacity N is
-// the last allowed one.
+// TestLimiterDeniesPastCapacity pins the core decision: the Nth call at
+// capacity N is the last allowed one.
 func TestLimiterDeniesPastCapacity(t *testing.T) {
 	t.Parallel()
 	ctx, _, lim, tokenID := newLimiterFixture(t)
@@ -100,12 +102,81 @@ func TestLimiterDeniesPastCapacity(t *testing.T) {
 	if d.Allowed {
 		t.Fatalf("request %d allowed at capacity %d (weighted %v)", capacity+1, capacity, d.WeightedCount)
 	}
-	// A denial without a usable RetryAfter makes clients busy-loop.
-	if d.RetryAfter < time.Second || d.RetryAfter > time.Minute {
-		t.Errorf("retry_after %v is outside the one-minute window", d.RetryAfter)
+	// A denial without a usable RetryAfter makes clients busy-loop. With the
+	// current bucket full, the wait runs to its end and into the next, where
+	// it still weighs: never past two windows.
+	if d.RetryAfter < time.Second || d.RetryAfter > 2*ratelimit.Window {
+		t.Errorf("retry_after %v is outside two windows", d.RetryAfter)
 	}
 	if d.WeightedCount <= float64(capacity) {
 		t.Errorf("denied with weighted count %v, which is not over capacity %d", d.WeightedCount, capacity)
+	}
+}
+
+// A denied request used to be counted, so a client that retried while waiting
+// pushed its own window further out, and one that honoured Retry-After was
+// refused again. Denials now leave the bucket as it was, and the RetryAfter
+// they carry does not grow with them.
+func TestLimiterDoesNotCountDenials(t *testing.T) {
+	t.Parallel()
+	ctx, _, lim, tokenID := newLimiterFixture(t)
+	const capacity = 2
+
+	for i := 0; i < capacity; i++ {
+		if d, err := lim.Allow(ctx, tokenID, capacity); err != nil || !d.Allowed {
+			t.Fatalf("request %d: allowed=%v err=%v", i+1, d.Allowed, err)
+		}
+	}
+	first, err := lim.Allow(ctx, tokenID, capacity)
+	if err != nil || first.Allowed {
+		t.Fatalf("over capacity: allowed=%v err=%v", first.Allowed, err)
+	}
+	var last ratelimit.Decision
+	for i := 0; i < 5; i++ {
+		if last, err = lim.Allow(ctx, tokenID, capacity); err != nil || last.Allowed {
+			t.Fatalf("retry %d: allowed=%v err=%v", i+1, last.Allowed, err)
+		}
+	}
+	usage, err := lim.Usage(ctx, tokenID)
+	if err != nil {
+		t.Fatalf("usage: %v", err)
+	}
+	if usage.CurrentBucketCount != capacity {
+		t.Errorf("bucket counts %d after %d denials, want the %d admitted", usage.CurrentBucketCount, 6, capacity)
+	}
+	if last.RetryAfter > first.RetryAfter {
+		t.Errorf("retry_after grew with denials: %v → %v", first.RetryAfter, last.RetryAfter)
+	}
+}
+
+// Requests racing for the last slots must not all take them: the bump checks
+// capacity against the row it locks.
+func TestLimiterHoldsCapacityUnderConcurrency(t *testing.T) {
+	t.Parallel()
+	ctx, _, lim, tokenID := newLimiterFixture(t)
+	const capacity, callers = 5, 40
+
+	var admitted atomic.Int64
+	var wg sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			d, err := lim.Allow(ctx, tokenID, capacity)
+			if err != nil {
+				t.Errorf("allow: %v", err)
+				return
+			}
+			if d.Allowed {
+				admitted.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	// The previous bucket is empty, so the whole capacity is open — unless
+	// the minute rolled mid-test, which can only admit fewer.
+	if n := admitted.Load(); n > capacity || n == 0 {
+		t.Errorf("%d of %d concurrent requests admitted at capacity %d", n, callers, capacity)
 	}
 }
 

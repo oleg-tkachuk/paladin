@@ -29,14 +29,13 @@ type Decision struct {
 	Allowed bool
 
 	// WeightedCount is the effective request count over the trailing
-	// 60s after this request was attempted (always reflects the new
-	// state — Allow always increments). Surfaced for observability /
-	// dashboards; not load-bearing.
+	// window with this request in it: what was counted when it is
+	// admitted, what it would have made when it is denied (a denial is
+	// not counted). Surfaced for observability; not load-bearing.
 	WeightedCount float64
 
-	// RetryAfter is roughly when the caller should try again. For a
-	// 1-minute bucket: bucket_end - now. Implementations may return
-	// 0 when not applicable (e.g. unlimited tokens).
+	// RetryAfter, on a denial, is how long until one more request fits,
+	// whole seconds rounded up (see RetryAfter). Zero when admitted.
 	RetryAfter time.Duration
 }
 
@@ -46,7 +45,7 @@ type Decision struct {
 // shortcut of always bumping the bucket.
 type Snapshot struct {
 	// CurrentBucketCount is the raw counter for the in-progress
-	// minute. Bumped by every Allow call (allowed or denied).
+	// minute. Bumped by every admitted Allow call; a denial is not counted.
 	CurrentBucketCount int64
 
 	// PreviousBucketCount is the raw counter for the previous full
@@ -68,14 +67,14 @@ type Snapshot struct {
 // after a successful Verify; on Allowed=false the interceptor returns
 // connect.CodeResourceExhausted with a Retry-After header.
 type Limiter interface {
-	// Allow checks the token's bucket, increments the counter, and
+	// Allow checks the token's bucket, counts the request if it fits, and
 	// returns the Decision. capacity is the per-minute ceiling
 	// (api_tokens.rate_limit_rpm); 0 means unlimited and the
 	// implementation must short-circuit without touching the store.
 	Allow(ctx context.Context, tokenID uuid.UUID, capacity int) (Decision, error)
 
 	// Usage returns the readonly Snapshot for a token. Does NOT bump
-	// the bucket — distinct from Allow which always bumps. Cheap
+	// the bucket — distinct from Allow, which counts an admitted request. Cheap
 	// query, suitable for UI dashboards refreshing every few seconds.
 	Usage(ctx context.Context, tokenID uuid.UUID) (Snapshot, error)
 
