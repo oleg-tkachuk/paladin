@@ -227,10 +227,18 @@ type DelegateRequest struct {
 // through Verifier.Verify first; the Issuer trusts its in-memory shape.
 // It does not trust it to be current, though: a parent that has expired,
 // or that the store reports revoked (itself or any ancestor), delegates
-// nothing.
+// nothing; nor does a Biscuit copy with limits of its own (Parent.Copies),
+// which returns ErrDelegationTooWide.
 func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (Capability, string, error) {
 	if req.Parent.ID == uuid.Nil {
 		return Capability{}, "", invalidRequest("Delegate requires Parent.ID")
+	}
+	// A child counts against the capability and its ancestors, never against
+	// a Biscuit copy's own counters, so a copy with limits of its own would
+	// shed them by delegating. Its holder attenuates it instead.
+	if len(req.Parent.Copies) > 0 {
+		return Capability{}, "", fmt.Errorf("%w: parent is a Biscuit copy with limits of its own; attenuate it instead",
+			ErrDelegationTooWide)
 	}
 	if req.Subject.TenantID == uuid.Nil {
 		req.Subject.TenantID = req.Parent.Subject.TenantID
