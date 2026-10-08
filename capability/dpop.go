@@ -1,6 +1,7 @@
 package capability
 
 import (
+	"container/heap"
 	"context"
 	"crypto"
 	"crypto/ecdsa"
@@ -404,6 +405,7 @@ func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 type MemoryReplayCache struct {
 	mu         sync.Mutex
 	seen       map[string]time.Time
+	expiries   expiryHeap // the ids in seen, soonest to expire first
 	maxEntries int
 	now        func() time.Time
 }
@@ -416,28 +418,46 @@ func NewMemoryReplayCache(maxEntries int) *MemoryReplayCache {
 	return &MemoryReplayCache{seen: map[string]time.Time{}, maxEntries: maxEntries, now: time.Now}
 }
 
-// Seen implements ReplayCache. When full, expired ids are dropped first; if
-// none have expired, the new id is still refused as a replay rather than
-// accepted unrecorded — a full cache errs towards refusing.
+// Seen implements ReplayCache. Expired ids are dropped as they lapse, soonest
+// first, so a full cache costs a lookup rather than a scan. When it is full
+// of live ids, the new id is refused as a replay rather than accepted
+// unrecorded — a full cache errs towards refusing.
 func (c *MemoryReplayCache) Seen(_ context.Context, jti string, expires time.Time) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := c.now()
-	if until, ok := c.seen[jti]; ok && until.After(now) {
+	for len(c.expiries) > 0 && !c.expiries[0].expires.After(now) {
+		delete(c.seen, heap.Pop(&c.expiries).(replayEntry).jti)
+	}
+	if _, ok := c.seen[jti]; ok {
 		return true
 	}
 	if len(c.seen) >= c.maxEntries {
-		for id, until := range c.seen {
-			if !until.After(now) {
-				delete(c.seen, id)
-			}
-		}
-		if len(c.seen) >= c.maxEntries {
-			return true
-		}
+		return true
 	}
 	c.seen[jti] = expires
+	heap.Push(&c.expiries, replayEntry{jti: jti, expires: expires})
 	return false
+}
+
+// replayEntry is one id a MemoryReplayCache holds, and when it lapses.
+type replayEntry struct {
+	jti     string
+	expires time.Time
+}
+
+// expiryHeap is a min-heap of replayEntry by expiry (container/heap).
+type expiryHeap []replayEntry
+
+func (h expiryHeap) Len() int           { return len(h) }
+func (h expiryHeap) Less(i, j int) bool { return h[i].expires.Before(h[j].expires) }
+func (h expiryHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *expiryHeap) Push(x any)        { *h = append(*h, x.(replayEntry)) }
+func (h *expiryHeap) Pop() any {
+	old := *h
+	e := old[len(old)-1]
+	*h = old[:len(old)-1]
+	return e
 }
 
 // validateThumbprint accepts "" (unbound) or a base64url SHA-256 thumbprint.
