@@ -9,9 +9,9 @@ follow the format releases nothing.
 change can reach — `verify-backend`, `verify-capability`, `verify-sdk`,
 `verify-frontend` and `verify-repo`, one job each — and audits the workflows
 with actionlint and zizmor. A change the `sdk` group reaches also installs the
-Python SDK's wheel beside each protobuf major and Python it supports, one job
-per cell of [`sdk/python/compat.json`](../sdk/python/compat.json)
-(`verify-py-sdk-compat` locally), and runs the client lifecycle stress in
+Python SDK's wheel beside each protobuf major and Python it supports, every
+cell of [`sdk/python/compat.json`](../sdk/python/compat.json) side by side in
+one job (`verify-py-sdk-compat` locally), and runs the client lifecycle stress in
 `sdk/python/tests/test_lifecycle.py` at a count high enough to catch an
 intermittent abort at exit. [`scripts/ci-groups.sh`](../scripts/ci-groups.sh)
 decides which groups a set of paths reaches; a console-only change does not
