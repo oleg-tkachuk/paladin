@@ -268,3 +268,40 @@ describe("CapabilitiesPage failed list", () => {
     window.localStorage.clear();
   });
 });
+
+// jsdom has no layout, so these pin the structure that keeps the table inside
+// its card: column visibility keyed to the card's width, and full-width rows
+// that really span every column.
+describe("CapabilitiesPage table layout", () => {
+  const VIEWPORT_BREAKPOINT = /(^|\s)(sm|md|lg|xl|2xl):/;
+  const headers = () => Array.from(document.querySelectorAll("thead th"));
+
+  it("spans every column with the placeholder row", () => {
+    render(<CapabilitiesPage />);
+    const cell = screen.getByText(/Pick a principal/).closest("td")!;
+    expect(cell.colSpan).toBe(headers().length);
+  });
+
+  // The sidebar takes a fixed share of the window, so a viewport breakpoint
+  // showed every column on a card too narrow for them and pushed Status and
+  // the actions menu off its right edge.
+  it("shows optional columns by the card's width, not the viewport's", () => {
+    render(<CapabilitiesPage />);
+    const card = document
+      .querySelector('[data-slot="table-container"]')!
+      .closest(".\\@container");
+    expect(card).not.toBeNull();
+    for (const th of headers()) {
+      expect(th.className).not.toMatch(VIEWPORT_BREAKPOINT);
+    }
+  });
+
+  it("never hides the status column or the actions menu", () => {
+    render(<CapabilitiesPage />);
+    const always = headers().filter((th) =>
+      /^(Status|Actions)$/.test(th.textContent!.trim()),
+    );
+    expect(always).toHaveLength(2);
+    for (const th of always) expect(th.className).not.toMatch(/\bhidden\b/);
+  });
+});
