@@ -8,6 +8,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -234,5 +235,46 @@ func TestDPoPProofFromAnOpaqueSigner(t *testing.T) {
 				t.Fatalf("proof from an opaque signer refused: %v", err)
 			}
 		})
+	}
+}
+
+// Expired ids leave in expiry order as time passes, whatever order they
+// came in, and only they do.
+func TestMemoryReplayCacheForgetsInExpiryOrder(t *testing.T) {
+	ctx := context.Background()
+	now := time.Unix(1_800_000_000, 0)
+	c := NewMemoryReplayCache(0)
+	c.now = func() time.Time { return now }
+	for i, d := range []time.Duration{5, 1, 4, 2, 3} {
+		if c.Seen(ctx, fmt.Sprint(i), now.Add(d*time.Second)) {
+			t.Fatalf("fresh id %d reported seen", i)
+		}
+	}
+	now = now.Add(3 * time.Second) // the ids expiring at 1s, 2s and 3s lapse
+	_ = c.Seen(ctx, "probe", now.Add(time.Hour))
+	if got := len(c.seen); got != 3 {
+		t.Errorf("after the clock passed three expiries, %d ids are held, want 3", got)
+	}
+	for _, live := range []string{"0", "2"} {
+		if !c.Seen(ctx, live, now.Add(time.Hour)) {
+			t.Errorf("live id %s was forgotten", live)
+		}
+	}
+}
+
+// BenchmarkMemoryReplayCacheFull measures a new id offered to a full cache
+// in which nothing has expired — the case a flood of proofs produces.
+func BenchmarkMemoryReplayCacheFull(b *testing.B) {
+	const entries = 100_000
+	ctx := context.Background()
+	now := time.Unix(1_800_000_000, 0)
+	c := NewMemoryReplayCache(entries)
+	c.now = func() time.Time { return now }
+	for i := range entries {
+		c.Seen(ctx, fmt.Sprint(i), now.Add(time.Hour))
+	}
+	b.ResetTimer()
+	for i := 0; b.Loop(); i++ {
+		c.Seen(ctx, fmt.Sprint("new", i), now.Add(time.Hour))
 	}
 }
