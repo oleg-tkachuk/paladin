@@ -260,32 +260,72 @@ function ComponentRow({ c }: { c: Component }) {
 
 // DetailList shows a component's details on their own line, apart from the
 // message: they are not an error, and folding them into the preview would
-// offer to expand them. Details about different roles — each role's pool —
-// get a line per role.
+// offer to expand them. Details about several roles — each role's pool — are
+// a table, a role to a column, so the same fact lines up across roles.
 function DetailList({ details }: { details: Detail[] }) {
-  const groups = new Map<string, Detail[]>();
-  for (const d of details) {
-    const key = d.role ?? "";
-    groups.set(key, [...(groups.get(key) ?? []), d]);
-  }
+  if (details.some((d) => d.role)) return <DetailTable details={details} />;
   return (
-    <div className="mt-1 space-y-0.5">
-      {Array.from(groups, ([role, ds]) => (
-        <dl
-          key={role}
-          className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground"
-        >
-          {role && <dt className="font-mono text-foreground">{role}</dt>}
-          {ds.map((d) => (
-            <div key={d.name} className="flex gap-1">
-              <dt>{d.name}:</dt>
-              <dd className="font-mono tabular-nums">{d.value}</dd>
-            </div>
-          ))}
-        </dl>
+    <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+      {details.map((d) => (
+        <div key={d.name} className="flex gap-1.5">
+          <dt>{d.name}</dt>
+          <dd className="font-mono tabular-nums text-foreground">{d.value}</dd>
+        </div>
       ))}
+    </dl>
+  );
+}
+
+function DetailTable({ details }: { details: Detail[] }) {
+  const roles = unique(details.map((d) => d.role ?? ""));
+  const names = unique(details.map((d) => d.name));
+  const value = (name: string, role: string) =>
+    details.find((d) => d.name === name && (d.role ?? "") === role)?.value ??
+    "—";
+  return (
+    <div className="mt-2 overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-muted-foreground">
+            <th className="pb-1 text-left font-normal" />
+            {roles.map((r) => (
+              <th
+                key={r}
+                scope="col"
+                className="pb-1 pl-3 text-right font-mono font-normal"
+              >
+                {r}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {names.map((n) => (
+            <tr key={n} className="border-t border-border/40">
+              <th
+                scope="row"
+                className="py-1 text-left font-normal text-muted-foreground"
+              >
+                {n}
+              </th>
+              {roles.map((r) => (
+                <td
+                  key={r}
+                  className="py-1 pl-3 text-right font-mono tabular-nums"
+                >
+                  {value(n, r)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
+}
+
+function unique(xs: string[]): string[] {
+  return Array.from(new Set(xs));
 }
 
 // useCutOff is whether the one-line preview hides part of message: it runs
