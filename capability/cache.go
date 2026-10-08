@@ -116,6 +116,9 @@ type ttlCache[K comparable] struct {
 	mu       sync.Mutex
 	entries  map[K]cacheEntry
 	inflight map[K]*lookupCall
+	// epoch counts invalidations. A lookup that started before one may
+	// have read the state it invalidated, so its answer is not cached.
+	epoch uint64
 }
 
 type cacheEntry struct {
@@ -128,6 +131,10 @@ type lookupCall struct {
 	revoked bool
 	err     error
 }
+
+// errLookupAbandoned is what callers sharing a lookup receive when it ended
+// without an answer — it panicked — rather than a "not revoked" nobody gave.
+var errLookupAbandoned = errors.New("capability: revocation lookup ended without an answer")
 
 func newTTLCache[K comparable](cfg cacheConfig) *ttlCache[K] {
 	return &ttlCache[K]{cfg: cfg, entries: make(map[K]cacheEntry), inflight: make(map[K]*lookupCall)}
@@ -160,21 +167,31 @@ func (c *ttlCache[K]) get(ctx context.Context, key K, lookup func(context.Contex
 			return false, ctx.Err()
 		}
 	}
-	call := &lookupCall{done: make(chan struct{})}
+	call := &lookupCall{done: make(chan struct{}), err: errLookupAbandoned}
 	c.inflight[key] = call
+	epoch := c.epoch
 	c.mu.Unlock()
 
+	// Deferred so that a lookup that panics still releases its waiters and
+	// the key.
+	defer c.finish(key, call, epoch)
 	call.revoked, call.err = lookup(ctx)
+	return call.revoked, call.err
+}
 
+// finish publishes call's answer to its waiters and caches it, unless it
+// failed or an invalidation happened while it ran.
+func (c *ttlCache[K]) finish(key K, call *lookupCall, epoch uint64) {
 	c.mu.Lock()
-	delete(c.inflight, key)
-	if call.err == nil {
+	if c.inflight[key] == call {
+		delete(c.inflight, key)
+	}
+	if call.err == nil && c.epoch == epoch {
 		c.makeRoomLocked()
 		c.entries[key] = cacheEntry{revoked: call.revoked, expires: c.cfg.now().Add(c.cfg.ttl)}
 	}
 	c.mu.Unlock()
 	close(call.done)
-	return call.revoked, call.err
 }
 
 // makeRoomLocked keeps the cache under maxEntries: expired entries go
@@ -189,15 +206,24 @@ func (c *ttlCache[K]) makeRoomLocked() {
 	}
 }
 
+// invalidate drops key's entry and detaches a lookup of it in flight, so the
+// next check asks upstream rather than taking an answer read before now.
+// The epoch is shared: lookups of other keys in flight go uncached too,
+// which costs them one extra lookup and keeps the bookkeeping to a counter.
 func (c *ttlCache[K]) invalidate(key K) {
 	c.mu.Lock()
+	c.epoch++
 	delete(c.entries, key)
+	delete(c.inflight, key)
 	c.mu.Unlock()
 }
 
+// clear drops every entry and detaches every lookup in flight.
 func (c *ttlCache[K]) clear() {
 	c.mu.Lock()
+	c.epoch++
 	clear(c.entries)
+	clear(c.inflight)
 	c.mu.Unlock()
 }
 
