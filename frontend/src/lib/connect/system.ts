@@ -27,6 +27,8 @@ export function componentStatusLabel(s: ComponentStatus): string {
       return "DEGRADED";
     case ComponentStatus.UNHEALTHY:
       return "UNHEALTHY";
+    case ComponentStatus.DISABLED:
+      return "DISABLED";
     default:
       return "UNKNOWN";
   }
