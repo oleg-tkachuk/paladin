@@ -18,12 +18,14 @@ vi.mock("@/components/ui/Notification", () => ({
 }));
 
 import BudgetPage from "./page";
+import { moneyFromDecimal } from "@/lib/format/money";
+
+const usd = (amount: string) => moneyFromDecimal(amount, "USD");
 
 const budget = {
   $typeName: "paladin.admin.v1.TenantBudget",
-  maxBudgetMicros: 100_000_000n,
-  spentMicros: 0n,
-  unitCode: "USD",
+  maxBudget: usd("100"),
+  spent: usd("0"),
   periodStart: undefined,
   periodEnd: undefined,
   resourceVersion: "7",
@@ -107,7 +109,7 @@ describe("TenantBudgetPage OCC", () => {
     h.get.mockResolvedValue({
       budget: {
         ...budget,
-        maxBudgetMicros: 300_000_000n,
+        maxBudget: usd("300"),
         resourceVersion: "8",
       },
     });
@@ -119,7 +121,7 @@ describe("TenantBudgetPage OCC", () => {
     );
     await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
     expect(h.set.mock.calls[0][0].resourceVersion).toBe("7");
-    expect(h.set.mock.calls[0][0].maxBudgetMicros).toBe(999_000_000n);
+    expect(h.set.mock.calls[0][0].maxBudget).toEqual(usd("999"));
   });
 
   it('sends "0" when no budget exists yet — the create case', async () => {
@@ -134,6 +136,24 @@ describe("TenantBudgetPage OCC", () => {
 
     await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
     expect(h.set.mock.calls[0][0].resourceVersion).toBe("0");
+  });
+
+  it("sends a new cap exactly to the nano, in XXX by default", async () => {
+    h.get.mockRejectedValue(new ConnectError("nope", Code.NotFound));
+    render(<BudgetPage />);
+
+    const submit = await screen.findByRole("button", {
+      name: /create budget/i,
+    });
+    await userEvent.type(screen.getByLabelText(/max budget/i), "0.300000001");
+    await userEvent.click(submit);
+
+    await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
+    expect(h.set.mock.calls[0][0].maxBudget).toMatchObject({
+      currencyCode: "XXX",
+      units: 0n,
+      nanos: 300_000_001,
+    });
   });
 
   it("holds submit until the first read resolves, so it cannot send a version it never read", async () => {
@@ -201,9 +221,7 @@ describe("TenantBudgetPage OCC", () => {
 
     await userEvent.click(submit);
     await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
-    expect(h.set.mock.calls[0][0].maxBudgetMicros).toBe(
-      BigInt(typed) * 1_000_000n,
-    );
+    expect(h.set.mock.calls[0][0].maxBudget).toEqual(usd(typed));
   });
 
   it("refetches and explains the conflict when the server aborts", async () => {

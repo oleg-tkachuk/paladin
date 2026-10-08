@@ -31,9 +31,9 @@ func (u *tenantRecordingUsage) record(ctx context.Context, call string) {
 	u.seen[call] = tid
 }
 
-func (u *tenantRecordingUsage) BumpRequest(ctx context.Context, req capability.RequestBump) (int64, error) {
-	u.record(ctx, "BumpRequest")
-	return u.fakeUsage.BumpRequest(ctx, req)
+func (u *tenantRecordingUsage) Bump(ctx context.Context, req capability.BumpRequest) (int64, error) {
+	u.record(ctx, "Bump")
+	return u.fakeUsage.Bump(ctx, req)
 }
 
 func (u *tenantRecordingUsage) Charge(ctx context.Context, req capability.ChargeRequest, onCharged func(context.Context, pgx.Tx) error) (capability.ChargeReceipt, error) {
@@ -41,7 +41,7 @@ func (u *tenantRecordingUsage) Charge(ctx context.Context, req capability.Charge
 	return u.fakeUsage.Charge(ctx, req, onCharged)
 }
 
-func (u *tenantRecordingUsage) Refund(ctx context.Context, req capability.RefundRequest) (float64, error) {
+func (u *tenantRecordingUsage) Refund(ctx context.Context, req capability.RefundRequest) (capability.Nanos, error) {
 	u.record(ctx, "Refund")
 	return u.fakeUsage.Refund(ctx, req)
 }
@@ -53,9 +53,9 @@ func (u *tenantRecordingUsage) Refund(ctx context.Context, req capability.Refund
 // the wrong tenant, with the same result.
 func TestCapabilityLedgerWritesRunOnTheCapabilitysTenant(t *testing.T) {
 	const (
-		chargeAmount = 0.5
-		maxRequests  = 5
-		maxBudget    = 10
+		chargeAmount capability.Nanos = capability.NanosPerUnit / 2
+		maxRequests                   = 5
+		maxBudget    capability.Nanos = 10 * capability.NanosPerUnit
 	)
 	capTenant := uuid.New()
 	cases := map[string]context.Context{
@@ -81,7 +81,7 @@ func TestCapabilityLedgerWritesRunOnTheCapabilitysTenant(t *testing.T) {
 				t.Fatalf("RefundLastCharge: %v", err)
 			}
 
-			for _, call := range []string{"BumpRequest", "Charge", "Refund"} {
+			for _, call := range []string{"Bump", "Charge", "Refund"} {
 				got, ok := usage.seen[call]
 				if !ok {
 					t.Errorf("%s was not called", call)

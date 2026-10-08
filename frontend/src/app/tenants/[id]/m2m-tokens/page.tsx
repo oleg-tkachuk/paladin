@@ -26,6 +26,7 @@ import {
 import { useNotification } from "@/components/ui/Notification";
 import { useTenant } from "../tenant-context";
 import { apiTokenClient } from "@/lib/connect/client";
+import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
@@ -35,6 +36,15 @@ import { CreateTokenDialog } from "./CreateTokenDialog";
 import { RevokeTokenDialog } from "./RevokeTokenDialog";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
 import { ListLoadError } from "@/components/ui/ListLoadError";
+
+// Optional columns appear by the width of the table's card (see Table):
+// least useful goes first, so Status and the actions menu always fit.
+const COL_PREFIX = "hidden @md:table-cell";
+const COL_AUDIENCE = "hidden @2xl:table-cell";
+const COL_EXPIRES = "hidden @3xl:table-cell";
+const COL_RATE = "hidden @4xl:table-cell";
+const COL_LAST_USED = "hidden @5xl:table-cell";
+const COL_USAGE = "hidden @6xl:table-cell";
 
 // Per-token sliding-window usage snapshot keyed by token.id; "never" ⇒
 // the token was never verified (GetUsage NotFound).
@@ -105,7 +115,7 @@ export default function M2MTokensPage() {
             try {
               const u = await apiTokenClient.getUsage(
                 { name: t.name },
-                { signal },
+                notFoundIsAnswer({ signal }),
               );
               return [
                 t.id,
@@ -220,15 +230,15 @@ export default function M2MTokensPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-35">Prefix</TableHead>
+              <TableHead className={cn(COL_PREFIX, "w-35")}>Prefix</TableHead>
               <TableHead>Name</TableHead>
-              <TableHead className="hidden md:table-cell">Audience</TableHead>
-              <TableHead className="hidden lg:table-cell">Rate (rpm)</TableHead>
-              <TableHead className="hidden xl:table-cell w-35">
+              <TableHead className={COL_AUDIENCE}>Audience</TableHead>
+              <TableHead className={COL_RATE}>Rate (rpm)</TableHead>
+              <TableHead className={cn(COL_USAGE, "w-35")}>
                 Usage (1m)
               </TableHead>
-              <TableHead className="hidden lg:table-cell">Last used</TableHead>
-              <TableHead className="hidden lg:table-cell">Expires</TableHead>
+              <TableHead className={COL_LAST_USED}>Last used</TableHead>
+              <TableHead className={COL_EXPIRES}>Expires</TableHead>
               <TableHead className="w-25">Status</TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
@@ -280,12 +290,12 @@ export default function M2MTokensPage() {
                 const expired = isExpired(t);
                 return (
                   <TableRow key={t.id} className="group">
-                    <TableCell>
+                    <TableCell className={COL_PREFIX}>
                       <span className="font-mono text-xs">
                         paladin_pat_{t.prefix}…
                       </span>
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium whitespace-normal break-words">
                       {t.displayName || (
                         <span className="italic text-muted-foreground">
                           (unnamed)
@@ -307,7 +317,7 @@ export default function M2MTokensPage() {
                         <div className={cn("mt-1", T.hint)}>tenant-wide</div>
                       )}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className={COL_AUDIENCE}>
                       <div className="flex flex-wrap gap-1">
                         {t.audience.map((a) => (
                           <Badge
@@ -321,15 +331,11 @@ export default function M2MTokensPage() {
                       </div>
                     </TableCell>
                     <TableCell
-                      className={cn(
-                        "hidden lg:table-cell",
-                        T.code,
-                        "text-muted-foreground",
-                      )}
+                      className={cn(COL_RATE, T.code, "text-muted-foreground")}
                     >
                       {t.rateLimitRpm > 0 ? t.rateLimitRpm : "∞"}
                     </TableCell>
-                    <TableCell className={cn("hidden xl:table-cell", T.code)}>
+                    <TableCell className={cn(COL_USAGE, T.code)}>
                       {(() => {
                         if (revoked) {
                           return (
@@ -378,7 +384,7 @@ export default function M2MTokensPage() {
                     </TableCell>
                     <TableCell
                       className={cn(
-                        "hidden lg:table-cell",
+                        COL_LAST_USED,
                         T.code,
                         "text-muted-foreground",
                       )}
@@ -389,7 +395,7 @@ export default function M2MTokensPage() {
                     </TableCell>
                     <TableCell
                       className={cn(
-                        "hidden lg:table-cell",
+                        COL_EXPIRES,
                         T.code,
                         "text-muted-foreground",
                       )}

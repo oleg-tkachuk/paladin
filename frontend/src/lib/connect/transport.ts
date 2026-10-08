@@ -7,6 +7,7 @@ import {
   type Transport,
 } from "@connectrpc/connect";
 
+import { kNotFoundIsAnswer } from "./expected";
 import {
   RPC_API_PREFIX,
   RPC_PLANE_PREFIXES,
@@ -129,6 +130,13 @@ const loggingInterceptor: Interceptor = (next) => async (req) => {
       throw err;
     }
     if (isCanceled(err)) {
+      throw err;
+    }
+    if (
+      err instanceof ConnectError &&
+      err.code === Code.NotFound &&
+      req.contextValues.get(kNotFoundIsAnswer)
+    ) {
       throw err;
     }
     // No token-cache work here — the auth interceptor (inner) owns

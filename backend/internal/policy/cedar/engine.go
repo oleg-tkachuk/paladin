@@ -195,7 +195,7 @@ var (
 	// Capability actions (admin plane, CapabilityService). Resource is the
 	// CALLER's own Tenant entity: which tenant a call may reach beyond its own
 	// is decided in the handler (capabilityh.spansTenants), not here. Read
-	// covers List, GetUsage and GetBiscuitUsage; Revoke covers RevokeBiscuit.
+	// covers Get, List, GetUsage and GetBiscuitUsage; Revoke covers RevokeBiscuit.
 	ActionIssueCapability    = declare("IssueCapability")
 	ActionDelegateCapability = declare("DelegateCapability")
 	ActionRevokeCapability   = declare("RevokeCapability")

@@ -16,7 +16,7 @@ func TestFirstChargeRespectsTheCeiling(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
 	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{
-		CapabilityID: f.capID, TenantID: f.tenant, Amount: 50, MaxBudget: 10, UnitCode: "USD",
+		CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("50"), MaxBudget: capability.MustParseAmount("10"), UnitCode: "USD",
 	}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("first charge above the cap: err = %v, want ErrBudgetExceeded", err)
 	}
@@ -34,7 +34,7 @@ func TestFirstChargeOfAnAncestorRespectsItsCeiling(t *testing.T) {
 	// The child's own ceiling is 20; the parent's 25. The parent has never
 	// been charged, so its usage row does not exist yet. 30 fits neither.
 	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{
-		CapabilityID: f.child, TenantID: f.tenant, Amount: 30, MaxBudget: 0, UnitCode: "USD",
+		CapabilityID: f.child, TenantID: f.tenant, Amount: capability.MustParseAmount("30"), MaxBudget: 0, UnitCode: "USD",
 	}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("first charge above the parent's ceiling: err = %v, want ErrBudgetExceeded", err)
 	}

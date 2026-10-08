@@ -68,6 +68,149 @@ tree with itself and passes without checking anything.
   unauthenticated caller gets `Unauthenticated` first. An unknown service is
   answered `Unimplemented` as before.
 
+## Unreleased — money is exact: nanos in the core, `google.type.Money` on the wire
+
+Amounts were `float64` in the capability module, so spend drifted — 0.1 then
+0.2 was refused under a ceiling of 0.3 — and the API carried micros, so a
+cost below a millionth rounded away. Every amount is now counted exactly, to
+the nano (a billionth of the unit), and nothing on the client's side needs
+summing apart or correcting.
+
+- **Breaking, capability module.** Every amount is `capability.Nanos`
+  (`int64` billionths) instead of `float64`: request, receipt, usage, budget
+  and caveat fields alike, and `Meter.Refund` returns `Nanos`. Write one with
+  `ParseAmount`/`MustParseAmount("0.35")`, or `AmountFromFloat` for a price
+  that arrives as a float; `MicrosPerUnit`, `MaxMicros`, `AmountToMicros` and
+  `MicrosToAmount` are gone. `CopyCeiling.MaxBudgetMicros` and
+  `Attenuation.MaxBudgetMicros` are `MaxBudget Nanos`. An untyped integer
+  constant still compiles but now means nanos: `Amount: 5` is five
+  billionths, so convert literals with `MustParseAmount`. A token's budget is
+  still a JSON number of units, so issued tokens verify unchanged.
+- **Breaking, unit codes.** Unit codes are ISO 4217: USD, EUR, UAH, GBP, and
+  XXX — ISO 4217's code for "no currency" — for a budget that is not money.
+  `UNIT`, the name XXX replaces, is refused everywhere: in tokens, records,
+  requests and `capability.charge_per_request_unit`. Reissue a capability
+  that carries it.
+- **Breaking, Biscuit.** A copy's budget is the attenuation fact
+  `paladin_max_budget_nanos`; `paladin_max_budget_micros` is no longer part
+  of the vocabulary, and a copy carrying it is refused. The Python SDK's
+  `attenuate` takes `max_budget_nanos`. Attenuate such a copy again.
+- **Breaking, API.** Every `*_micros` field and the `unit_code` beside it are
+  replaced by a `google.type.Money` that carries both, exact to the nano:
+  `CapabilityCaveats.max_budget`, `CapabilityServiceGetUsageResponse.spent`,
+  `CapabilityBiscuitCopyUsage.max_budget`/`spent`/`reserved`,
+  `TenantBudget.max_budget`/`spent`, `TenantBudgetServiceSetRequest.max_budget`,
+  `GetTenantSummaryResponse.total`/`max_budget`, and `spent` on `TopEntry`
+  and `TimeBucket`. The old numbers and names are reserved, and a binary
+  request that still sends one is refused rather than read as unlimited. A
+  zero `max_budget` is no budget in its currency; an absent one is no budget
+  in USD, and on `TenantBudgetService.Set` lifts the cap and keeps the unit.
+- **Breaking, events.** `paladin.capability.charged` carries `amount`, in the
+  CloudEvents envelope's `data`, as a Money object —
+  `{"currency_code": "USD", "units": "1", "nanos": 500000000}`,
+  `units` a string as in the proto JSON mapping — in place of the float
+  `amount`, `amount_micros` and `unit_code`. A subscription filter on the
+  old keys matches nothing.
+- **Database.** Migrations 055 and 056 widen every money column to nine
+  decimals — a catalog change, not a rewrite — bounded at
+  `capability.MaxNanos` by a CHECK, and rename
+  `capability_reservations.copy_max_budget_micros` to `copy_max_budget_nanos`
+  with its values in nanos.
+- **Configuration.** `capability.charge_per_request_amount` is read exactly,
+  to nine decimals, and refuses a negative value.
+
+## Unreleased — a Biscuit copy with limits cannot delegate
+
+**Behaviour, capability module.** `Issuer.Delegate` refuses a `Parent` that
+carries `Copies` — a Biscuit copy with limits of its own — with
+`ErrDelegationTooWide`. A child counts against the capability, never the copy,
+so delegating let a copy shed its limits; a consumer that did not refuse it
+itself was open to that. Paladin's delegation endpoint already refused it.
+
+**Behaviour, capability module.** `NewRemoteJWKSResolver` refuses intervals
+that do not nest, `MinRefreshInterval ≤ RefreshInterval ≤ MaxStale`, after
+applying the defaults. A `MaxStale` below `RefreshInterval` made the resolver
+fail closed with no fetch having failed.
+
+## Unreleased — the capability module's API, made uniform
+
+**Breaking, capability module.** Every input is a `…Request` and every read
+names what it reads. Renamed, with no change in behaviour:
+
+| Before | After |
+|---|---|
+| `RevokeArgs`, `RevokeBiscuitArgs` | `RevokeRequest`, `RevokeBiscuitRequest` |
+| `ListByPrincipalArgs` (field `PrincipalT`) | `ListByPrincipalRequest` (field `PrincipalType`) |
+| `SetTenantBudgetArgs`, `ListTenantBudgetsArgs` | `SetTenantBudgetRequest`, `ListTenantBudgetsRequest` |
+| `Meter.BumpRequest(RequestBump)` | `Meter.Bump(BumpRequest)` |
+| `Meter.Get` | `Meter.GetUsage` |
+| `ValidateOverrun(p)` | `p.Validate()` |
+
+The metric names are unchanged.
+
+A `Capability` now crosses the API by value: `Store.Get`, `Verifier.Verify`,
+`Issuer.Issue`, `Issuer.Delegate` and `Decode` return one, and
+`Issuer.Biscuit` and `DPoPVerifier.Check` take one, where each used a pointer.
+
+`CacheOption` now configures both revocation caches, so it is built only by
+`WithCacheClock` and `WithMaxEntries`; an option written against
+`*CachedRevocationChecker` no longer compiles. `CachedBiscuitRevocationChecker`
+gains `Sweep`. `WithMetering` returns a store that implements
+`CopyUsageReader` exactly when the store it wraps does — assert the interface
+on its result rather than reaching past it.
+
+What the stores write can now be read back. `Store.GetRecord` returns a
+capability with the principal that issued it and its own revocation entry;
+`BiscuitRevocationStore.GetBiscuitRevocation` returns a revoked copy's entry;
+`Meter.GetCharge` reads a charge by the id `Refund` takes. All three are new
+interface methods, so a store of your own must add them. So are
+`Meter.GetReservation` and `Meter.ListReservations`, and `Reserve` now returns
+the whole hold, which both read back the same way. Migration `054` adds
+`capability_records.issued_by`; a capability recorded before it reads back
+with the issuer's subject alone. `memstore.Store.IssuedBy` is gone — use
+`GetRecord`.
+
+`ListTenantBudgets` pages like `ListByPrincipal`: it takes a `Cursor` and
+returns the next one, and `TenantBudgetService.Summarize` carries them as
+`page_token` / `next_page_token`. Its order is now utilisation, unclamped,
+then tenant id — the tenant furthest past its ceiling leads, and ties no
+longer fall to the slug.
+
+`CapabilityService.Get` returns one capability as it is on record — who asked
+for it and its own revocation, if any — and the console's capability details
+show both. `CapabilityServiceRevokeResponse` no longer promises a count of the
+descendants a cascade revoked.
+
+`capability/storetest` checks a `Store` against the contract, which now says
+what it left open: an id already on record is `ErrAlreadyExists`, revoking an
+unknown id is `ErrNotFound`, `PurgeExpired` drops revocation entries and never
+records, and `ListByPrincipal` takes the whole principal and pages in id order
+(`PageLimit`). `memstore` follows it: it used to accept a duplicate, revoke an
+unknown id, delete expired records, list without paging, and cascade a
+revocation down from capabilities revoked earlier as well as the one named.
+
+## Unreleased — capability refusals carry a reason; costs reported later
+
+- A refused capability now carries a `google.rpc.ErrorInfo` in the `paladin`
+  domain, with a reason from the new `ERROR_REASON_CAPABILITY_*` values:
+  expired, revoked, op not allowed, budget exceeded and the rest. The Connect
+  codes are unchanged. The comments on `ErrorReason` say which refusals are
+  permanent — the same request with the same capability will never pass — so
+  a client can stop instead of retrying.
+- The capability module: `CheckRequest.Effect` declares what a consumer-defined
+  operation does to state; `ReasonOf` and `Reason.Permanent` name a refusal;
+  `ChargeRequest.ExternalRef` makes a charge idempotent, and `Overrun:
+  OverrunRecord` records a cost already incurred past a ceiling.
+- **Breaking, capability module:** settling a reservation that is already
+  settled returns that charge with `Replayed` set, where it returned
+  `ErrReservationNotFound`. A released or expired reservation still returns it.
+- **Breaking, capability module:** `Meter` gains `ChargeByRef`. A `Meter` of
+  your own must also honour `ChargeRequest.ExternalRef` and `Overrun`, and
+  `SettleRequest.Overrun`; run `capability/metertest` from its tests to check
+  that it does.
+- Migrations `051`–`053` add `external_ref`, `reservation_id` and `overrun` to
+  `charges`, with two unique partial indexes built concurrently.
+
 ## Unreleased — the Python SDK runs on connectrpc
 
 - The Python SDK depends on `connectrpc` 0.12 (connect-python's successor)

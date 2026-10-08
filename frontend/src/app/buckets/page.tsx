@@ -216,7 +216,7 @@ export default function BucketsPage() {
           <TableHeader>
             <TableRow>
               <SortableHead
-                className="w-45"
+                className="hidden @md:table-cell w-45"
                 label="Backend"
                 column="backend"
                 current={sort}
@@ -228,17 +228,17 @@ export default function BucketsPage() {
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead className="hidden sm:table-cell">
+              <TableHead className="hidden @lg:table-cell">
                 Display name
               </TableHead>
               <SortableHead
-                className="hidden md:table-cell"
+                className="hidden @md:table-cell"
                 label="Region"
                 column="region"
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead className="w-35">Status</TableHead>
+              <TableHead className="@md:w-35">Status</TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -314,7 +314,7 @@ export default function BucketsPage() {
                     key={`${b.backendId}/${b.bucketId}`}
                     className="group"
                   >
-                    <TableCell>
+                    <TableCell className="hidden @md:table-cell">
                       <Link
                         href={`/storage-backends/${encodeURIComponent(b.backendId)}`}
                         className="flex items-center gap-2 hover:text-primary"
@@ -338,7 +338,7 @@ export default function BucketsPage() {
                         </span>
                       </Link>
                     </TableCell>
-                    <TableCell className="hidden sm:table-cell font-medium">
+                    <TableCell className="hidden @lg:table-cell font-medium">
                       <Link href={detailHref} className="hover:text-primary">
                         {b.displayName || (
                           <span className="text-muted-foreground italic">
@@ -347,7 +347,7 @@ export default function BucketsPage() {
                         )}
                       </Link>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground text-xs font-mono">
+                    <TableCell className="hidden @md:table-cell text-muted-foreground text-xs font-mono">
                       {b.region || "—"}
                     </TableCell>
                     <TableCell>

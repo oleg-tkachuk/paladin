@@ -29,13 +29,16 @@ func (c *fakeCopier) BiscuitCopy(_ context.Context, token string) (capability.Bi
 
 // copyStore records what RevokeBiscuit was asked to list, and on which context.
 type copyStore struct {
-	args *capability.RevokeBiscuitArgs
+	args *capability.RevokeBiscuitRequest
 	ctx  context.Context
 	err  error
 }
 
 func (s *copyStore) IsBiscuitRevoked(context.Context, [][]byte) (bool, error) { return false, nil }
-func (s *copyStore) RevokeBiscuit(ctx context.Context, args capability.RevokeBiscuitArgs) error {
+func (s *copyStore) GetBiscuitRevocation(context.Context, []byte) (capability.BiscuitRevocation, error) {
+	return capability.BiscuitRevocation{}, capability.ErrNotFound
+}
+func (s *copyStore) RevokeBiscuit(ctx context.Context, args capability.RevokeBiscuitRequest) error {
 	s.args, s.ctx = &args, ctx
 	return s.err
 }

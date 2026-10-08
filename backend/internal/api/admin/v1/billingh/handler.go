@@ -10,18 +10,24 @@ package billingh
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
 
@@ -57,10 +63,15 @@ func NewHandler(pool *pgxpool.Pool, usage capability.UsageStore[pgx.Tx], policy 
 // entity carrying the queried tenant_id, so policies can pin
 // "tenant.admin reads own tenant only" via resource.tenant_id ==
 // principal.tenant_id.
-func (h *Handler) authorize(ctx context.Context, tenantID uuid.UUID) error {
+//
+// On allow it returns ctx acting on tenantID: the ledger and the budget are
+// read under row-level security, and a platform admin reading another
+// tenant would otherwise see that tenant's rows filtered to nothing — a
+// summary of zeros, with nothing to say why.
+func (h *Handler) authorize(ctx context.Context, tenantID uuid.UUID) (context.Context, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -69,12 +80,32 @@ func (h *Handler) authorize(ctx context.Context, tenantID uuid.UUID) error {
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
+		return nil, apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
+		return nil, connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
-	return nil
+	return auth.WithActingTenant(ctx, tenantID), nil
+}
+
+// tenantBudget reads tenantID's budget for a summary that only decorates
+// with it. A tenant with no budget row has none to show; any other failure
+// is logged rather than returned, since the ledger figures stand without
+// it, but a summary that shows no cap for a tenant that has one must leave
+// a trace of why.
+func (h *Handler) tenantBudget(ctx context.Context, tenantID uuid.UUID) (capability.TenantBudget, bool) {
+	if h.usage == nil {
+		return capability.TenantBudget{}, false
+	}
+	tb, err := h.usage.GetTenantBudget(ctx, tenantID)
+	if err != nil {
+		if !errors.Is(err, capability.ErrTenantBudgetNotFound) {
+			logger.FromContext(ctx).Warn("billing: tenant budget unreadable; summary shows no cap",
+				zap.String("tenant_id", tenantID.String()), zap.Error(err))
+		}
+		return capability.TenantBudget{}, false
+	}
+	return tb, true
 }
 
 // resolvePeriod computes the start/end window. Both args are optional;
@@ -96,9 +127,9 @@ func resolvePeriod(start, end time.Time) (time.Time, time.Time, error) {
 
 // Summary is the in-memory shape returned by GetTenantSummary.
 type Summary struct {
-	TotalAmount     float64
+	TotalAmount     capability.Nanos
 	UnitCode        string
-	MaxBudgetAmount float64
+	MaxBudgetAmount capability.Nanos
 	ChargeCount     int64
 	TopCapabilities []TopEntry
 	TopActors       []TopEntry
@@ -108,7 +139,7 @@ type Summary struct {
 // TopEntry mirrors the proto shape one-to-one.
 type TopEntry struct {
 	Label       string
-	Amount      float64
+	Amount      capability.Nanos
 	ChargeCount int64
 }
 
@@ -117,12 +148,12 @@ type TopEntry struct {
 // pool == nil then short-circuits to Unavailable (capability
 // subsystem disabled in this deployment).
 func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, periodStart, periodEnd time.Time) (*Summary, error) {
-	if err := h.authorize(ctx, tenantID); err != nil {
+	ctx, err := h.authorize(ctx, tenantID)
+	if err != nil {
 		return nil, err
 	}
 	if h.pool == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			"billing: capability subsystem disabled")
+		return nil, connect.NewError(connect.CodeUnavailable, "billing: capability subsystem disabled")
 	}
 	start, end, err := resolvePeriod(periodStart, periodEnd)
 	if err != nil {
@@ -137,7 +168,7 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 	// total in. tenant_budgets.unit_code (when present) is preferred.
 	row := h.pool.QueryRow(ctx,
 		`SELECT
-		   COALESCE(SUM(amount), 0)::float8,
+		   COALESCE(SUM(amount), 0),
 		   COUNT(*),
 		   COALESCE(
 		     (SELECT unit_code FROM charges
@@ -148,19 +179,21 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 		 WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at < $3`,
 		tenantID, start, end,
 	)
-	if err := row.Scan(&out.TotalAmount, &out.ChargeCount, &out.UnitCode); err != nil {
+	var total pgtype.Numeric
+	if err := row.Scan(&total, &out.ChargeCount, &out.UnitCode); err != nil {
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: summary: %w", err))
+	}
+	if out.TotalAmount, err = pgmoney.NanosFromNumeric(total); err != nil {
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: summary: %w", err))
 	}
 
 	// Tenant budget cap join — best-effort. Missing row ⇒ no cap;
 	// out.MaxBudgetAmount stays 0 which the frontend renders as
 	// "no cap configured".
-	if h.usage != nil {
-		if tb, err := h.usage.GetTenantBudget(ctx, tenantID); err == nil {
-			out.MaxBudgetAmount = tb.MaxBudgetAmount
-			if out.UnitCode == "" {
-				out.UnitCode = tb.UnitCode
-			}
+	if tb, ok := h.tenantBudget(ctx, tenantID); ok {
+		out.MaxBudgetAmount = tb.MaxBudgetAmount
+		if out.UnitCode == "" {
+			out.UnitCode = tb.UnitCode
 		}
 	}
 	if out.UnitCode == "" {
@@ -189,7 +222,7 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 // don't dominate the top-N.
 func (h *Handler) queryTopBy(ctx context.Context, tenantID uuid.UUID, start, end time.Time, col string) ([]TopEntry, error) {
 	q := fmt.Sprintf(
-		`SELECT %s AS label, COALESCE(SUM(amount), 0)::float8 AS amount, COUNT(*) AS n
+		`SELECT %s AS label, COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS n
 		 FROM charges
 		 WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at < $3
 		 GROUP BY %s
@@ -202,8 +235,14 @@ func (h *Handler) queryTopBy(ctx context.Context, tenantID uuid.UUID, start, end
 	defer rows.Close()
 	out := make([]TopEntry, 0, topN)
 	for rows.Next() {
-		var e TopEntry
-		if err := rows.Scan(&e.Label, &e.Amount, &e.ChargeCount); err != nil {
+		var (
+			e      TopEntry
+			amount pgtype.Numeric
+		)
+		if err := rows.Scan(&e.Label, &amount, &e.ChargeCount); err != nil {
+			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: top scan: %w", err))
+		}
+		if e.Amount, err = pgmoney.NanosFromNumeric(amount); err != nil {
 			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: top scan: %w", err))
 		}
 		out = append(out, e)
@@ -223,7 +262,7 @@ type TimeSeries struct {
 // TimeBucket mirrors the proto shape.
 type TimeBucket struct {
 	Start       time.Time
-	Amount      float64
+	Amount      capability.Nanos
 	ChargeCount int64
 }
 
@@ -265,7 +304,8 @@ func granularityStep(granularity string) time.Duration {
 // "year" and we don't want to expose those without a deliberate
 // product call.
 func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, periodStart, periodEnd time.Time, granularity string) (*TimeSeries, error) {
-	if err := h.authorize(ctx, tenantID); err != nil {
+	ctx, err := h.authorize(ctx, tenantID)
+	if err != nil {
 		return nil, err
 	}
 	// Input validation (granularity + period + bucket bound) runs before the
@@ -275,8 +315,7 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 		granularity = "day"
 	}
 	if !allowedGranularities[granularity] {
-		return nil, connect.Errorf(connect.CodeInvalidArgument,
-			"granularity must be one of hour|day|week, got %q", granularity)
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "granularity must be one of hour|day|week, got %q", granularity)
 	}
 	start, end, err := resolvePeriod(periodStart, periodEnd)
 	if err != nil {
@@ -289,19 +328,17 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 	// caller must narrow the period or coarsen the granularity instead.
 	if step := granularityStep(granularity); step > 0 {
 		if buckets := int64(end.Sub(start) / step); buckets > maxTimeSeriesBuckets {
-			return nil, connect.Errorf(connect.CodeInvalidArgument,
-				"period too wide for %q granularity: %d buckets exceeds the %d cap; narrow the period or use a coarser granularity",
+			return nil, connect.Errorf(connect.CodeInvalidArgument, "period too wide for %q granularity: %d buckets exceeds the %d cap; narrow the period or use a coarser granularity",
 				granularity, buckets, maxTimeSeriesBuckets)
 		}
 	}
 	if h.pool == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			"billing: capability subsystem disabled")
+		return nil, connect.NewError(connect.CodeUnavailable, "billing: capability subsystem disabled")
 	}
 
 	q := fmt.Sprintf(
 		`SELECT date_trunc('%s', occurred_at) AS bucket,
-		        COALESCE(SUM(amount), 0)::float8 AS amount,
+		        COALESCE(SUM(amount), 0) AS amount,
 		        COUNT(*) AS n
 		 FROM charges
 		 WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at < $3
@@ -315,8 +352,14 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 
 	out := &TimeSeries{Buckets: make([]TimeBucket, 0, 32)}
 	for rows.Next() {
-		var b TimeBucket
-		if err := rows.Scan(&b.Start, &b.Amount, &b.ChargeCount); err != nil {
+		var (
+			b      TimeBucket
+			amount pgtype.Numeric
+		)
+		if err := rows.Scan(&b.Start, &amount, &b.ChargeCount); err != nil {
+			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries scan: %w", err))
+		}
+		if b.Amount, err = pgmoney.NanosFromNumeric(amount); err != nil {
 			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries scan: %w", err))
 		}
 		out.Buckets = append(out.Buckets, b)
@@ -338,8 +381,8 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 	).Scan(&out.UnitCode); err != nil {
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries unit: %w", err))
 	}
-	if out.UnitCode == "" && h.usage != nil {
-		if tb, err := h.usage.GetTenantBudget(ctx, tenantID); err == nil {
+	if out.UnitCode == "" {
+		if tb, ok := h.tenantBudget(ctx, tenantID); ok {
 			out.UnitCode = tb.UnitCode
 		}
 	}

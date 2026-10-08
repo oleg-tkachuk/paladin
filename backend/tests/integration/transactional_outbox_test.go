@@ -95,21 +95,21 @@ func TestCharge_FanoutCommitsOnSameTx(t *testing.T) {
 	capID := uuid.New()
 	seedCapRecord(t, h, capID, tenantID)
 
-	spent, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: 2.5, MaxBudget: 10.0, UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID)))
+	spent, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: capability.MustParseAmount("2.5"), MaxBudget: capability.MustParseAmount("10.0"), UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID)))
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
-	if spent.Spent < 2.49 || spent.Spent > 2.51 {
-		t.Errorf("spent = %v, want ~2.50", spent.Spent)
+	if spent.Spent != capability.MustParseAmount("2.5") {
+		t.Errorf("spent = %v, want 2.50", spent.Spent)
 	}
 
 	// Counter committed.
-	usage, err := store.Get(ctx, capID)
+	usage, err := store.GetUsage(ctx, capID)
 	if err != nil {
 		t.Fatalf("get usage: %v", err)
 	}
-	if usage.SpentAmount < 2.49 || usage.SpentAmount > 2.51 {
-		t.Errorf("cap spent = %v, want ~2.50", usage.SpentAmount)
+	if usage.SpentAmount != capability.MustParseAmount("2.5") {
+		t.Errorf("cap spent = %v, want 2.50", usage.SpentAmount)
 	}
 	// Ledger row committed.
 	if got := countCharges(t, h, tenantID); got != 1 {
@@ -135,13 +135,13 @@ func TestCharge_FanoutErrorRollsBackEverything(t *testing.T) {
 	seedCapRecord(t, h, capID, tenantID)
 
 	boom := errors.New("fan-out down")
-	_, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: 2.5, MaxBudget: 10.0, UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, func(context.Context, pgx.Tx) error { return boom })
+	_, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: capability.MustParseAmount("2.5"), MaxBudget: capability.MustParseAmount("10.0"), UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, func(context.Context, pgx.Tx) error { return boom })
 	if !errors.Is(err, boom) {
 		t.Fatalf("charge err = %v, want it to wrap the fan-out error", err)
 	}
 
 	// Counter never committed → no usage row at all.
-	if _, err := store.Get(ctx, capID); !errors.Is(err, capability.ErrUsageNotFound) {
+	if _, err := store.GetUsage(ctx, capID); !errors.Is(err, capability.ErrUsageNotFound) {
 		t.Errorf("usage after rollback: err = %v, want ErrUsageNotFound (counter must not have committed)", err)
 	}
 	// Ledger row rolled back.

@@ -47,6 +47,7 @@ import {
   auditClient,
   tenantBudgetClient,
 } from "@/lib/connect/client";
+import { notFoundIsAnswer } from "@/lib/connect/expected";
 import type {
   TenantBudget,
   TenantBudgetServiceGetResponse,
@@ -85,10 +86,16 @@ const QUICK_LINKS: Array<{
 // Re-export the shared money formatter so the Budget tile renders
 // consistently with /billing and the Tenant Budget tab. The local
 // duplicate that used to live here printed bare numbers for the
-// UNIT case (no suffix), so a metering-only tenant looked like
+// XXX case (no suffix), so a metering-only tenant looked like
 // "0 / 1,000" — same digits the cap had. The shared formatter
 // emits "0 units / 1,000 units" for that case.
-import { formatMoney, fromMicros } from "@/lib/format/money";
+import {
+  formatMoney,
+  moneyIsPositive,
+  moneyPercent,
+  moneyToNanos,
+  unitOf,
+} from "@/lib/format/money";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { formatCount } from "@/lib/format/locale";
 import { errorMessage } from "@/hooks/errorContract";
@@ -221,7 +228,10 @@ export default function TenantOverviewPage() {
     (async () => {
       try {
         const res: TenantBudgetServiceGetResponse =
-          await tenantBudgetClient.get({ tenantId: tenant.tenantId });
+          await tenantBudgetClient.get(
+            { tenantId: tenant.tenantId },
+            notFoundIsAnswer(),
+          );
         if (cancelled) return;
         setBudget(res.budget ?? null);
         setBudgetMissing(!res.budget);
@@ -440,17 +450,19 @@ function BudgetTile({
   budget: TenantBudget | null;
   missing: boolean;
 }) {
-  const cap = fromMicros(budget?.maxBudgetMicros);
-  const spent = fromMicros(budget?.spentMicros);
-  // Default to "UNIT" (abstract metering sentinel) when the
-  // budget row has no unit_code — covers freshly-created budgets
-  // and tenants doing non-currency metering. Avoids a misleading
-  // "$0.00" label on a tenant that doesn't actually pay in USD.
-  const unit = budget?.unitCode || "UNIT";
-  // Cap of 0 means unlimited per the proto comment; pct only
-  // makes sense when there's a finite cap.
-  const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : null;
-  const overCap = cap > 0 && spent > cap;
+  const cap = budget?.maxBudget;
+  const spent = budget?.spent;
+  // Default to XXX (no currency) when neither amount carries a unit —
+  // covers freshly-created budgets and tenants doing non-currency
+  // metering. Avoids a misleading "$0.00" label on a tenant that
+  // doesn't actually pay in USD.
+  const unit = unitOf(cap?.currencyCode ? cap : spent);
+  // A zero or absent cap means unlimited per the proto comment; pct
+  // only makes sense when there's a finite cap.
+  const capped = moneyIsPositive(cap);
+  const ratio = moneyPercent(spent, cap);
+  const pct = ratio === null ? null : Math.min(100, ratio);
+  const overCap = capped && moneyToNanos(spent) > moneyToNanos(cap);
 
   return (
     <Link
@@ -470,7 +482,7 @@ function BudgetTile({
                   over cap
                 </Badge>
               )}
-              {!overCap && cap === 0 && budget && (
+              {!overCap && !capped && budget && (
                 <Badge variant="outline" className={T.labelTight}>
                   unlimited
                 </Badge>
@@ -484,11 +496,11 @@ function BudgetTile({
             ) : (
               <>
                 <div className="text-sm font-mono tabular-nums">
-                  {formatMoney(spent, unit)}
-                  {cap > 0 && (
+                  {formatMoney(spent, { fallbackUnit: unit })}
+                  {capped && (
                     <span className="text-muted-foreground">
                       {" "}
-                      / {formatMoney(cap, unit)}
+                      / {formatMoney(cap, { fallbackUnit: unit })}
                     </span>
                   )}
                 </div>

@@ -86,6 +86,9 @@ func (r *StaticKeyResolver) Keys() map[string]ed25519.PublicKey {
 // larger is refused before any decoding is spent on it.
 const DefaultMaxTokenBytes = 16 << 10
 
+// defaultLeeway is VerifierConfig.Leeway when unset.
+const defaultLeeway = 30 * time.Second
+
 // VerifierConfig wires the verifier. Keys, Revocations and TrustedIssuers
 // are required.
 type VerifierConfig struct {
@@ -128,7 +131,7 @@ type VerifierConfig struct {
 	// MeterCopies admits Biscuits whose attenuation blocks set a copy's own
 	// request or budget limits (Attenuation.MaxRequests, MaxBudgetMicros).
 	// Set it only when the Meter that enforces caveats counts
-	// RequestBump.Copies and the like; off, such a token is refused with
+	// BumpRequest.Copies and the like; off, such a token is refused with
 	// ErrCopyCountersNotMetered rather than accepted with its limits unkept.
 	MeterCopies bool
 
@@ -166,7 +169,7 @@ func NewStandardVerifier(cfg VerifierConfig) (*StandardVerifier, error) {
 		cfg.Now = time.Now
 	}
 	if cfg.Leeway == 0 {
-		cfg.Leeway = 30 * time.Second
+		cfg.Leeway = defaultLeeway
 	}
 	if cfg.MaxTokenBytes == 0 {
 		cfg.MaxTokenBytes = DefaultMaxTokenBytes
@@ -183,9 +186,9 @@ func NewStandardVerifier(cfg VerifierConfig) (*StandardVerifier, error) {
 // Order matters: nothing in the claims is read until the signature over
 // them has verified, so a forged token costs a header decode and one
 // signature check, and no claim-parsing path is reachable by an attacker.
-func (v *StandardVerifier) Verify(ctx context.Context, token string, audience string) (*Capability, error) {
+func (v *StandardVerifier) Verify(ctx context.Context, token string, audience string) (Capability, error) {
 	if len(token) > v.cfg.MaxTokenBytes {
-		return nil, fmt.Errorf("%w: token is %d bytes (limit %d)",
+		return Capability{}, fmt.Errorf("%w: token is %d bytes (limit %d)",
 			ErrInvalidSignature, len(token), v.cfg.MaxTokenBytes)
 	}
 
@@ -193,36 +196,36 @@ func (v *StandardVerifier) Verify(ctx context.Context, token string, audience st
 	var biscuitIDs [][]byte // set for a Biscuit, from its verified chain
 	if IsBiscuit(token) {
 		if !v.cfg.AcceptBiscuit {
-			return nil, fmt.Errorf("%w: Biscuit tokens are not accepted here", ErrInvalidSignature)
+			return Capability{}, fmt.Errorf("%w: Biscuit tokens are not accepted here", ErrInvalidSignature)
 		}
 		var err error
 		if cap, biscuitIDs, err = v.verifyBiscuit(ctx, token, v.cfg.MeterCopies); err != nil {
-			return nil, err
+			return Capability{}, err
 		}
 	} else {
 		var err error
 		if cap, err = v.verifySigned(ctx, token); err != nil {
-			return nil, err
+			return Capability{}, err
 		}
 		// The token sealed inside a Biscuit, lifted out to shed the
 		// Biscuit's attenuation.
 		if cap.BiscuitRoot != "" {
-			return nil, fmt.Errorf("%w: token is sealed in a Biscuit; present the Biscuit", ErrInvalidSignature)
+			return Capability{}, fmt.Errorf("%w: token is sealed in a Biscuit; present the Biscuit", ErrInvalidSignature)
 		}
 	}
 
 	// 4) Time window. Leeway absorbs clock skew on both ends.
 	now := v.cfg.Now()
 	if !cap.NotBefore.IsZero() && now.Add(v.cfg.Leeway).Before(cap.NotBefore) {
-		return nil, ErrNotYetValid
+		return Capability{}, ErrNotYetValid
 	}
 	if cap.ExpiresAt.IsZero() || now.Add(-v.cfg.Leeway).After(cap.ExpiresAt) {
-		return nil, ErrExpired
+		return Capability{}, ErrExpired
 	}
 
 	// 5) Audience match.
 	if !slices.Contains(cap.Audience, audience) {
-		return nil, fmt.Errorf("%w: token audience %v lacks %q",
+		return Capability{}, fmt.Errorf("%w: token audience %v lacks %q",
 			ErrAudienceMismatch, cap.Audience, audience)
 	}
 
@@ -230,24 +233,24 @@ func (v *StandardVerifier) Verify(ctx context.Context, token string, audience st
 	// rejections short-circuit before hitting the cache / store.
 	revoked, err := v.cfg.Revocations.IsRevoked(ctx, cap.ID)
 	if err != nil {
-		return nil, fmt.Errorf("capability: revocation lookup: %w", err)
+		return Capability{}, fmt.Errorf("capability: revocation lookup: %w", err)
 	}
 	if revoked {
-		return nil, ErrRevoked
+		return Capability{}, ErrRevoked
 	}
 	// 7) Revocation of this copy of a Biscuit, or a copy it was attenuated
 	// from.
 	if biscuitIDs != nil {
 		revoked, err := v.cfg.BiscuitRevocations.IsBiscuitRevoked(ctx, biscuitIDs)
 		if err != nil {
-			return nil, fmt.Errorf("capability: biscuit revocation lookup: %w", err)
+			return Capability{}, fmt.Errorf("capability: biscuit revocation lookup: %w", err)
 		}
 		if revoked {
-			return nil, ErrRevoked
+			return Capability{}, ErrRevoked
 		}
 	}
 
-	return cap, nil
+	return *cap, nil
 }
 
 // verifyBiscuit checks a Biscuit's sealed token as verifySigned does, then its

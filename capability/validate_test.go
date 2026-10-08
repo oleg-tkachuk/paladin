@@ -3,7 +3,6 @@ package capability
 import (
 	"context"
 	"errors"
-	"math"
 	"testing"
 	"time"
 
@@ -18,18 +17,17 @@ func TestCaveatsValidate(t *testing.T) {
 		t.Fatalf("valid caveats rejected: %v", err)
 	}
 	bad := map[string]Caveats{
-		"no ops":         {},
-		"unknown op":     {Ops: []Op{"teleport"}},
-		"op with space":  {Ops: []Op{"tool:do it"}},
-		"empty prefix":   {Ops: []Op{OpGet}, ResourcePrefixes: []string{""}},
-		"empty uri":      {Ops: []Op{OpGet}, ResourceURIs: []string{""}},
-		"neg requests":   {Ops: []Op{OpGet}, MaxRequests: -1},
-		"neg budget":     {Ops: []Op{OpGet}, MaxBudgetAmount: -5},
-		"nan budget":     {Ops: []Op{OpGet}, MaxBudgetAmount: math.NaN()},
-		"inf budget":     {Ops: []Op{OpGet}, MaxBudgetAmount: math.Inf(1)},
-		"bad unit":       {Ops: []Op{OpGet}, UnitCode: "XYZ"},
-		"bad cidr":       {Ops: []Op{OpGet}, SourceIPCIDR: []string{"10.0.0.0/33"}},
-		"control in uri": {Ops: []Op{OpGet}, ResourceURIs: []string{"a\x00b"}},
+		"no ops":               {},
+		"unknown op":           {Ops: []Op{"teleport"}},
+		"op with space":        {Ops: []Op{"tool:do it"}},
+		"empty prefix":         {Ops: []Op{OpGet}, ResourcePrefixes: []string{""}},
+		"empty uri":            {Ops: []Op{OpGet}, ResourceURIs: []string{""}},
+		"neg requests":         {Ops: []Op{OpGet}, MaxRequests: -1},
+		"neg budget":           {Ops: []Op{OpGet}, MaxBudgetAmount: -5},
+		"budget past MaxNanos": {Ops: []Op{OpGet}, MaxBudgetAmount: MaxNanos + 1},
+		"bad unit":             {Ops: []Op{OpGet}, UnitCode: "XYZ"},
+		"bad cidr":             {Ops: []Op{OpGet}, SourceIPCIDR: []string{"10.0.0.0/33"}},
+		"control in uri":       {Ops: []Op{OpGet}, ResourceURIs: []string{"a\x00b"}},
 	}
 	for name, c := range bad {
 		if err := c.Validate(); !errors.Is(err, ErrInvalidCaveats) {
@@ -68,7 +66,7 @@ func TestIssueRejectsMalformedRequests(t *testing.T) {
 	}
 }
 
-func issueRoot(t *testing.T, issuer *Issuer, caveats Caveats) *Capability {
+func issueRoot(t *testing.T, issuer *Issuer, caveats Caveats) Capability {
 	t.Helper()
 	c, _, err := issuer.Issue(context.Background(), IssueRequest{
 		IssuedBy: Principal{Subject: "op"},
@@ -88,19 +86,19 @@ func issueRoot(t *testing.T, issuer *Issuer, caveats Caveats) *Capability {
 func TestDelegateInheritanceIsExplicit(t *testing.T) {
 	issuer, _, _, _ := buildIssuerVerifier(t)
 	ctx := context.Background()
-	parent := issueRoot(t, issuer, Caveats{Ops: []Op{OpGet}, MaxBudgetAmount: 25, UnitCode: "USD"})
+	parent := issueRoot(t, issuer, Caveats{Ops: []Op{OpGet}, MaxBudgetAmount: MustParseAmount("25"), UnitCode: "USD"})
 
 	if _, _, err := issuer.Delegate(ctx, DelegateRequest{
-		Parent: *parent, Caveats: Caveats{MaxBudgetAmount: 2},
+		Parent: parent, Caveats: Caveats{MaxBudgetAmount: MustParseAmount("2")},
 	}); !errors.Is(err, ErrInvalidCaveats) {
 		t.Fatalf("delegate with ops omitted = %v, want ErrInvalidCaveats", err)
 	}
 
-	child, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: *parent, InheritCaveats: true})
+	child, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: parent, InheritCaveats: true})
 	if err != nil {
 		t.Fatalf("delegate with InheritCaveats: %v", err)
 	}
-	if child.Caveats.MaxBudgetAmount != 25 {
+	if child.Caveats.MaxBudgetAmount != 25*NanosPerUnit {
 		t.Errorf("inherited budget = %v, want 25", child.Caveats.MaxBudgetAmount)
 	}
 }
@@ -110,14 +108,14 @@ func TestDelegateRefusesRevokedOrExpiredParent(t *testing.T) {
 	ctx := context.Background()
 	parent := issueRoot(t, issuer, Caveats{Ops: []Op{OpGet}})
 
-	expired := *parent
+	expired := parent
 	expired.ExpiresAt = time.Now().Add(-time.Minute)
 	if _, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: expired, InheritCaveats: true}); !errors.Is(err, ErrExpired) {
 		t.Errorf("delegate from expired parent = %v, want ErrExpired", err)
 	}
 
-	_ = store.Revoke(ctx, RevokeArgs{ID: parent.ID})
-	if _, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: *parent, InheritCaveats: true}); !errors.Is(err, ErrRevoked) {
+	_ = store.Revoke(ctx, RevokeRequest{ID: parent.ID})
+	if _, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: parent, InheritCaveats: true}); !errors.Is(err, ErrRevoked) {
 		t.Errorf("delegate from revoked parent = %v, want ErrRevoked", err)
 	}
 }

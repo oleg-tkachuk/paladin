@@ -14,8 +14,8 @@ It is a separate Go module with its own version stream — see
 [Versioning](#versioning) before you depend on it.
 
 [docs/diagrams.md](docs/diagrams.md) draws the module: the contract boundary,
-a capability's lifecycle, the verification gates, delegation, the charge and
-reservation path, and how a revocation reaches the verifiers.
+a capability's lifecycle, the verification gates, delegation, Biscuit copies,
+the charge and reservation path, and how a revocation reaches the verifiers.
 
 ## The problem
 
@@ -64,7 +64,7 @@ cap, token, _ := issuer.Issue(ctx, capability.IssueRequest{
         Ops:              []capability.Op{capability.OpGet, capability.OpShare},
         ResourcePrefixes: []string{"corpus/public/"},
         MaxRequests:      500,
-        MaxBudgetAmount:  25.00,
+        MaxBudgetAmount:  capability.MustParseAmount("25.00"),
         UnitCode:         "USD",
     },
 })
@@ -98,7 +98,28 @@ The token must carry `typ: paladin-cap+jwt` and a tenant, and may be at most
 `KeyIssuers` (kid → issuer) so one issuer's key cannot sign for another.
 Verifiers running apart from the issuer resolve keys with
 `RemoteJWKSResolver`, which caches the issuer's JWKS, picks up a rotated-in
-kid on first sight (rate-limited), and fails closed after `MaxStale`.
+kid on first sight (rate-limited), and fails closed after `MaxStale`:
+
+```go
+keys, err := capability.NewRemoteJWKSResolver(capability.RemoteJWKSConfig{
+    URL: "https://issuer.example.com/.well-known/jwks.json",
+})
+verifier, err := capability.NewStandardVerifier(capability.VerifierConfig{
+    Keys: keys, Revocations: revocations, TrustedIssuers: []string{"paladin"},
+})
+```
+
+The issuer serves that document with `MarshalJWKS`; `ParseJWKS` reads one
+back, for a resolver of your own. It skips an entry it cannot use — a foreign
+`kty`, no kid, a malformed key — rather than refusing the set, so one bad
+entry does not take every other key out of service mid-rotation.
+
+### Inspect a token without trusting it
+
+`Decode` reads a token's claims and checks nothing; `VerifySignature` checks
+only its signature against one key. Both are for tooling — showing what a
+token grants, or which key signed it. Neither applies expiry, audience or
+revocation, so never authorise a request on either: that is `Verify`.
 
 ## Enforce the caveats on every operation
 
@@ -130,6 +151,25 @@ for an operation over a set, pass the prefix that bounds the set.
 `AllowTaintedRead` can only act on a taint signal you supply; if you track
 none, it protects nothing, and you should say so.
 
+Your own operations are namespaced (`tool:retrieve`, `mcp:github/create_issue`)
+and are treated as writes unless you declare otherwise, so an undeclared one
+needs an idempotency key under `IdempotencyKeyRequired` and is never refused as
+a tainted read. Declare the effect where you define the operation — a method
+option, a tool registry — and pass it on every check:
+
+```go
+err := cap.Caveats.Check(capability.CheckRequest{
+    Op:       "tool:retrieve",
+    Effect:   capability.EffectRead, // from your operation's definition
+    Resource: "corpus/public/",
+})
+```
+
+A built-in operation keeps its own effect: declaring `put` a read returns
+`ErrEffectConflict`, a programming error rather than a caveat violation. Gate
+anything else on the effect through `CheckRequest.Mutating`, so it and `Check`
+cannot disagree.
+
 ## Delegate — attenuate, never escalate
 
 An orchestrator narrows its own authority and hands the result to a worker it
@@ -137,13 +177,13 @@ spawned, without calling back to any admin API:
 
 ```go
 child, childToken, err := issuer.Delegate(ctx, capability.DelegateRequest{
-    Parent:  *cap,                      // the verified parent
+    Parent:  cap,                       // the verified parent
     Subject: capability.Principal{ /* the sub-agent */ },
     TTL:     2 * time.Minute,
     Caveats: capability.Caveats{
         Ops:              []capability.Op{capability.OpGet},  // dropped OpShare
         ResourcePrefixes: []string{"corpus/public/2026/"},     // narrowed
-        MaxBudgetAmount:  2.00,                                // 25.00 → 2.00
+        MaxBudgetAmount:  capability.MustParseAmount("2.00"),  // 25.00 → 2.00
         UnitCode:         "USD",                               // MUST match parent
     },
 })
@@ -226,18 +266,20 @@ anything else (Datalog rules and checks included), makes the whole token
 invalid. An attenuated copy spends its capability's budget and request
 count, and revoking the capability revokes every copy.
 
-A copy can also get limits of its own: `MaxRequests` and `MaxBudgetMicros` on
+A copy can also get limits of its own: `MaxRequests` and `MaxBudget` on
 the `Attenuation`. Each is counted under the revocation id of the block that
 set it, so siblings narrowed apart count apart, while the capability's own
 limits still bound them all; a limit must fit every limit already in force.
 The verifier hands them to the caller as `Capability.Copies`, and the `Meter`
-counts them when they are passed on as `Copies` in `RequestBump`,
+counts them when they are passed on as `Copies` in `BumpRequest`,
 `ChargeRequest` and `ReserveRequest`. A verifier admits such a copy only with
 `MeterCopies` set, which says the `Meter` behind it counts copies; without it
 the token is refused rather than accepted with its limits unkept.
 `verifier.BiscuitCopy` names the limits in force on a copy, on any verifier,
 and a `CopyUsageReader` (`memstore` implements one) reads what each has
-counted.
+counted. A copy with limits of its own cannot delegate — a server-side child
+would count against the capability, never the copy — so `Delegate` refuses
+it with `ErrDelegationTooWide`; its holder attenuates it instead.
 
 One copy can also be revoked on its own. `verifier.BiscuitCopy(ctx, token)`
 checks the token and names its capability and the revocation id of its last
@@ -258,22 +300,22 @@ cannot be re-wrapped in a fresh Biscuit.
 ```go
 receipt, err := usage.Charge(ctx, capability.ChargeRequest{
     CapabilityID: cap.ID, TenantID: tenantID,
-    Amount: 0.35, MaxBudget: cap.Caveats.MaxBudgetAmount, UnitCode: "USD",
-    Op: "search", Actor: "orchestrator",
+    Amount: capability.MustParseAmount("0.35"), MaxBudget: cap.Caveats.MaxBudgetAmount,
+    UnitCode: "USD", Op: "search", Actor: "orchestrator",
 }, nil)
 if errors.Is(err, capability.ErrBudgetExceeded) {
     // rejected at the auth boundary — before your business logic ran
 }
 ```
 
-Three ceilings are checked: the capability's own, each ancestor's, then the
-tenant aggregate. If **any** rejects, no counter moves, so a retry after
-rejection is safe.
+Every ceiling is checked: each Biscuit copy's own (the `Copies` you pass),
+the capability's, each ancestor's, then the tenant aggregate. If **any**
+rejects, no counter moves, so a retry after rejection is safe.
 
 `receipt.ChargeID` names the ledger row. Refund against it:
 
 ```go
-usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: 0.10}) // partial
+usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: capability.MustParseAmount("0.10")}) // partial
 usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID})               // the rest
 ```
 
@@ -281,10 +323,27 @@ A refund returns spend to every counter the charge took it from, and never
 more than the charge: `Amount: 0` refunds what is left, so a retried full
 refund is a no-op.
 
-Amounts are float64 in this API and exact in practice: `AmountToMicros`
-rounds an amount to whole millionths and `MicrosToAmount` reverses it
-without loss for anything below `MaxMicros` (fifteen significant digits,
-just under a billion units). Store and sum micros, not floats.
+## Amounts are exact
+
+Every amount is `capability.Nanos`: an `int64` count of billionths of the
+unit, so 0.35 USD is `350_000_000`. Sums, ceilings, holds and refunds are
+integer arithmetic, exact however many charges they take: a tenth and two
+tenths fit under a ceiling of three tenths, and ten tenths make one. Nothing
+on your side needs rounding, summing apart or correcting.
+
+- **Writing one.** `ParseAmount("0.35")` reads a decimal exactly and refuses
+  anything finer than a nano rather than round it; `MustParseAmount` is the
+  same for a literal in your code. A price that reaches you as a `float64`
+  goes through `AmountFromFloat`, which rounds once, to the nearest nano.
+- **Reading one.** `String()` writes the exact decimal (`"0.35"`);
+  `Float64()` is for display and metrics only.
+- **Range.** Up to `MaxNanos`, just under a billion units. A charge that
+  would take a counter past it is refused with `ErrInvalidAmount`.
+- **Units.** `UnitCode` is an ISO 4217 code: USD, EUR, UAH or GBP, or XXX,
+  ISO 4217's code for "no currency", for a budget that is not money.
+
+In a token the budget is still a plain JSON number of units
+(`"MaxBudgetAmount": 1.5`), read and written without a float in between.
 
 
 ## Reserve before a cost is known
@@ -320,13 +379,69 @@ usage.Charge(ctx, req, func(ctx context.Context, tx MyTx) error {
 })
 ```
 
-The module never inspects `MyTx` — it only hands it back. That is why this
+`Settle` takes the same callback. It must not call back into the `Meter`: a
+store may hold its counters while the callback runs. The module never
+inspects `MyTx` — it only hands it back. That is why this
 library has no database dependency.
+
+## Charge a cost reported after the fact
+
+Some costs never pass through your verifier: a call made straight to a
+provider whose price arrives later, in a usage record or on an event stream
+delivered at least once. Two things change for such a cost.
+
+**It may arrive twice.** Name it with the id your records already give it, and
+the capability is charged once per name; a repeat returns the first receipt
+with `Replayed` set and runs no callback:
+
+```go
+receipt, err := usage.Charge(ctx, capability.ChargeRequest{
+    CapabilityID: capID, TenantID: tenantID, Amount: cost,
+    MaxBudget:   rec.Caveats.MaxBudgetAmount, // the stored record, from Store.Get
+    ExternalRef: event.CallID,
+    Overrun:     capability.OverrunRecord,
+}, nil)
+```
+
+A settle is idempotent on its reservation in the same way: settling one twice
+returns the first charge. `ChargeByRef` reads a named charge back, so a
+reporter can reconcile its own records with the ledger.
+
+**It has already been spent.** Refusing it would only leave the ledger short.
+`OverrunRecord` charges it past every ceiling it crosses and sets
+`receipt.Overrun`; the crossed ceiling then refuses every later charge and
+reservation made with the default `OverrunReject`, which is what stops the
+next cost before it is incurred. Keep `OverrunReject` for anything you can
+still decline.
+
+A reporter with no token in hand reads the ceiling from the capability's
+stored record (`Store.Get`), as the meter already does for every ancestor. A
+price that is not known yet is not a price of zero: hold the estimate and
+settle when it is known, or let the hold lapse and count against the ceilings
+until `ReleaseExpired` runs.
+
+## Check your own store
+
+Much of each contract lives in request fields and in which sentinel comes
+back, so a store that gets one wrong still compiles. Run the module's checks
+from your store's tests — `storetest` for a `Store` (and a
+`BiscuitRevocationStore`), `metertest` for a `Meter`:
+
+```go
+func TestMeterContract(t *testing.T) {
+    metertest.Run(t, func(t *testing.T) metertest.Env[MyTx] {
+        return metertest.Env[MyTx]{Ctx: ctx, Usage: newStore(t), Tenant: tenant,
+            NewCapability: recordCapability}
+    })
+}
+```
+
+`memstore` and Paladin's relational stores run the same checks.
 
 ## Revoke
 
 ```go
-records.Revoke(ctx, capability.RevokeArgs{
+records.Revoke(ctx, capability.RevokeRequest{
     ID: cap.ID, Reason: "agent looping", Actor: "operator@example.com",
     CascadeChildren: true,   // takes every sub-agent with it
 })
@@ -351,6 +466,7 @@ Implement these and you are done:
 | `CopyUsageReader` | Reads Biscuit copies' own counters (only to show them) | No |
 | `UsageStore[TX]` = `Meter[TX]` + `TenantBudgets` + `UsageHousekeeping` | Request and spend counters, the charges ledger, tenant ceilings | Only for atomic side effects |
 | `KeyResolver` | Public verification keys | No |
+| `ReplayCache` | DPoP proof ids seen (only for key-bound tokens; `MemoryReplayCache` ships, share one across replicas) | No |
 
 Two obligations are easy to miss. `Store.IsRevoked` answers for the
 capability's whole delegation chain, and `Meter` applies every charge and
@@ -366,9 +482,9 @@ missing tenant id, an empty audience entry, a negative TTL, a malformed
 thumbprint, invalid caveats. Anything else they return is the store's or the
 signer's failure, not the caller's.
 
-`Store` and `UsageStore` are **separate types**: both declare a method named
-`Get` with different signatures, so one type cannot satisfy both. `memstore`
-shows the split.
+Every input is a `…Request` and every read names what it reads (`Get`,
+`GetUsage`, `GetTenantBudget`), so one type may implement `Store` and
+`UsageStore` together, or each apart as `memstore` does.
 
 `UsageStore` is generic in `TX` — *your* transaction type. Have none?
 Instantiate `UsageStore[struct{}]` and always pass `nil` for the callback.

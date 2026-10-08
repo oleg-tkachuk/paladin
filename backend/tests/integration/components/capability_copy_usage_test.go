@@ -8,26 +8,30 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // copyRow reads one copy's counters as they are stored, past RLS.
-func copyRow(t *testing.T, ctx context.Context, f lineageFixture, id string) (requests int64, spent, reserved float64) {
+func copyRow(t *testing.T, ctx context.Context, f lineageFixture, id string) (requests int64, spent, reserved capability.Nanos) {
 	t.Helper()
+	var s, r pgtype.Numeric
 	err := f.pool.QueryRow(ctx,
-		`SELECT request_count, spent::float8, reserved::float8 FROM capability_copy_usage WHERE revocation_id = $1`,
-		[]byte(id)).Scan(&requests, &spent, &reserved)
+		`SELECT request_count, spent, reserved FROM capability_copy_usage WHERE revocation_id = $1`,
+		[]byte(id)).Scan(&requests, &s, &r)
 	if err != nil {
 		t.Fatalf("copy %s: %v", id, err)
 	}
-	return requests, spent, reserved
+	return requests, nanosFrom(t, s), nanosFrom(t, r)
 }
 
-func ceiling(id string, requests int64, budget float64) capability.CopyCeiling {
+// ceiling is a copy's limits; budget is a decimal amount, "0" for none.
+func ceiling(id string, requests int64, budget string) capability.CopyCeiling {
 	return capability.CopyCeiling{
 		RevocationID: []byte(id), MaxRequests: requests,
-		MaxBudgetMicros: int64(budget * capability.MicrosPerUnit),
+		MaxBudget: capability.MustParseAmount(budget),
 	}
 }
 
@@ -40,12 +44,12 @@ func TestCopyRequestLimitsUnderRowLevelSecurity(t *testing.T) {
 	f.usage = rlsUsage(t, ctx, f)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 	bump := func(copies ...capability.CopyCeiling) error {
-		_, err := f.usage.BumpRequest(ledgerCtx, capability.RequestBump{
+		_, err := f.usage.Bump(ledgerCtx, capability.BumpRequest{
 			CapabilityID: f.root, TenantID: f.tenant, MaxRequests: 3, Copies: copies,
 		})
 		return err
 	}
-	one := ceiling("one", 1, 0)
+	one := ceiling("one", 1, "0")
 	if err := bump(one); err != nil {
 		t.Fatalf("first: %v", err)
 	}
@@ -55,10 +59,10 @@ func TestCopyRequestLimitsUnderRowLevelSecurity(t *testing.T) {
 	if n, _, _ := copyRow(t, ctx, f, "one"); n != 1 {
 		t.Fatalf("a refused request left the copy at %d", n)
 	}
-	if u, err := f.usage.Get(ledgerCtx, f.root); err != nil || u.RequestCount != 1 {
+	if u, err := f.usage.GetUsage(ledgerCtx, f.root); err != nil || u.RequestCount != 1 {
 		t.Fatalf("a refused request moved the capability: %+v, %v", u, err)
 	}
-	sibling := ceiling("sibling", 5, 0)
+	sibling := ceiling("sibling", 5, "0")
 	for range 2 {
 		if err := bump(sibling); err != nil {
 			t.Fatalf("sibling: %v", err)
@@ -76,21 +80,21 @@ func TestCopyBudgetChargeAndRefund(t *testing.T) {
 	ctx, f := newLineageFixture(t)
 	f.usage = rlsUsage(t, ctx, f)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
-	c := ceiling("budgeted", 0, 2)
-	charge := func(amount float64) (capability.ChargeReceipt, error) {
+	c := ceiling("budgeted", 0, "2")
+	charge := func(amount string) (capability.ChargeReceipt, error) {
 		return f.usage.Charge(ledgerCtx, capability.ChargeRequest{
-			CapabilityID: f.root, TenantID: f.tenant, Amount: amount, MaxBudget: 25, UnitCode: "USD",
+			CapabilityID: f.root, TenantID: f.tenant, Amount: capability.MustParseAmount(amount), MaxBudget: capability.MustParseAmount("25"), UnitCode: "USD",
 			Copies: []capability.CopyCeiling{c},
 		}, nil)
 	}
-	r, err := charge(1.5)
+	r, err := charge("1.5")
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
-	if _, err := charge(1); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := charge("1"); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("past the copy's budget: err = %v", err)
 	}
-	if !closeEnough(f.spent(t, ledgerCtx, f.root), 1.5) {
+	if f.spent(t, ledgerCtx, f.root) != capability.MustParseAmount("1.5") {
 		t.Fatalf("a refused charge moved the capability")
 	}
 	var recorded [][]byte
@@ -106,7 +110,7 @@ func TestCopyBudgetChargeAndRefund(t *testing.T) {
 	if _, spent, _ := copyRow(t, ctx, f, "budgeted"); spent != 0 {
 		t.Fatalf("copy spend after refund = %v", spent)
 	}
-	if _, err := charge(2); err != nil {
+	if _, err := charge("2"); err != nil {
 		t.Fatalf("after refund: %v", err)
 	}
 }
@@ -118,31 +122,31 @@ func TestCopyBudgetReservations(t *testing.T) {
 	ctx, f := newLineageFixture(t)
 	f.usage = rlsUsage(t, ctx, f)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
-	c := ceiling("held", 0, 2)
-	reserve := func(amount float64, ttl time.Duration) (capability.Reservation, error) {
+	c := ceiling("held", 0, "2")
+	reserve := func(amount string, ttl time.Duration) (capability.Reservation, error) {
 		return f.usage.Reserve(ledgerCtx, capability.ReserveRequest{
-			CapabilityID: f.root, TenantID: f.tenant, Amount: amount, MaxBudget: 25, UnitCode: "USD",
+			CapabilityID: f.root, TenantID: f.tenant, Amount: capability.MustParseAmount(amount), MaxBudget: capability.MustParseAmount("25"), UnitCode: "USD",
 			TTL: ttl, Copies: []capability.CopyCeiling{c},
 		})
 	}
-	r, err := reserve(1.5, time.Hour)
+	r, err := reserve("1.5", time.Hour)
 	if err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
-	if _, err := reserve(1, time.Hour); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := reserve("1", time.Hour); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("a hold past the copy's budget: err = %v", err)
 	}
-	if _, err := f.usage.Settle(ledgerCtx, capability.SettleRequest{ReservationID: r.ID, Amount: 2.5, MaxBudget: 25}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := f.usage.Settle(ledgerCtx, capability.SettleRequest{ReservationID: r.ID, Amount: capability.MustParseAmount("2.5"), MaxBudget: capability.MustParseAmount("25")}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("settle past the copy's budget: err = %v", err)
 	}
-	if _, err := f.usage.Settle(ledgerCtx, capability.SettleRequest{ReservationID: r.ID, Amount: 1.75, MaxBudget: 25}, nil); err != nil {
+	if _, err := f.usage.Settle(ledgerCtx, capability.SettleRequest{ReservationID: r.ID, Amount: capability.MustParseAmount("1.75"), MaxBudget: capability.MustParseAmount("25")}, nil); err != nil {
 		t.Fatalf("settle: %v", err)
 	}
-	if _, spent, reserved := copyRow(t, ctx, f, "held"); !closeEnough(spent, 1.75) || reserved != 0 {
+	if _, spent, reserved := copyRow(t, ctx, f, "held"); spent != capability.MustParseAmount("1.75") || reserved != 0 {
 		t.Fatalf("copy after settle: spent %v, reserved %v", spent, reserved)
 	}
 
-	if _, err := reserve(0.25, time.Millisecond); err != nil {
+	if _, err := reserve("0.25", time.Millisecond); err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
 	time.Sleep(20 * time.Millisecond)
@@ -191,14 +195,14 @@ func TestCopyUsageIsReadBackPerTenant(t *testing.T) {
 	ctx, f := newLineageFixture(t)
 	f.usage = rlsUsage(t, ctx, f)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
-	c := ceiling("read", 5, 2)
-	if _, err := f.usage.BumpRequest(ledgerCtx, capability.RequestBump{
+	c := ceiling("read", 5, "2")
+	if _, err := f.usage.Bump(ledgerCtx, capability.BumpRequest{
 		CapabilityID: f.root, TenantID: f.tenant, Copies: []capability.CopyCeiling{c},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.usage.Charge(ledgerCtx, capability.ChargeRequest{
-		CapabilityID: f.root, TenantID: f.tenant, Amount: 0.5, MaxBudget: 25, UnitCode: "USD",
+		CapabilityID: f.root, TenantID: f.tenant, Amount: capability.MustParseAmount("0.5"), MaxBudget: capability.MustParseAmount("25"), UnitCode: "USD",
 		Copies: []capability.CopyCeiling{c},
 	}, nil); err != nil {
 		t.Fatal(err)
@@ -209,7 +213,7 @@ func TestCopyUsageIsReadBackPerTenant(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || string(got[0].RevocationID) != "read" || got[0].CapabilityID != f.root ||
-		got[0].RequestCount != 1 || !closeEnough(got[0].SpentAmount, 0.5) || got[0].ReservedAmount != 0 {
+		got[0].RequestCount != 1 || got[0].SpentAmount != capability.MustParseAmount("0.5") || got[0].ReservedAmount != 0 {
 		t.Fatalf("CopyUsage = %+v", got)
 	}
 	other, _ := mkTenant(t, ctx, f.pool, "shared")

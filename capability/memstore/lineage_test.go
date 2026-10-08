@@ -45,32 +45,32 @@ func TestChildrenCannotSpendPastTheirParentsBudget(t *testing.T) {
 	s := New[struct{}]()
 	u := NewUsage(s)
 	rootID, kids, tenant := tree(t, s,
-		capability.Caveats{Ops: []capability.Op{capability.OpGet}, MaxBudgetAmount: 25, UnitCode: "USD"},
+		capability.Caveats{Ops: []capability.Op{capability.OpGet}, MaxBudgetAmount: capability.MustParseAmount("25"), UnitCode: "USD"},
 		2,
-		capability.Caveats{Ops: []capability.Op{capability.OpGet}, MaxBudgetAmount: 20, UnitCode: "USD"},
+		capability.Caveats{Ops: []capability.Op{capability.OpGet}, MaxBudgetAmount: capability.MustParseAmount("20"), UnitCode: "USD"},
 	)
 
-	charge := func(id uuid.UUID, amount float64) (capability.ChargeReceipt, error) {
+	charge := func(id uuid.UUID, amount capability.Nanos) (capability.ChargeReceipt, error) {
 		return u.Charge(ctx, capability.ChargeRequest{
-			CapabilityID: id, TenantID: tenant, Amount: amount, MaxBudget: 20, UnitCode: "USD",
+			CapabilityID: id, TenantID: tenant, Amount: amount, MaxBudget: capability.MustParseAmount("20"), UnitCode: "USD",
 		}, nil)
 	}
-	first, err := charge(kids[0], 20)
+	first, err := charge(kids[0], 20*unit)
 	if err != nil {
 		t.Fatalf("first child within budget: %v", err)
 	}
-	if _, err := charge(kids[1], 20); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := charge(kids[1], 20*unit); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("second child past the parent's ceiling: err = %v, want ErrBudgetExceeded", err)
 	}
 	// The rejection mutated nothing: the second child is still at zero.
-	if got, err := u.Get(ctx, kids[1]); err == nil && got.SpentAmount != 0 {
+	if got, err := u.GetUsage(ctx, kids[1]); err == nil && got.SpentAmount != 0 {
 		t.Errorf("rejected child's spend = %v, want 0", got.SpentAmount)
 	}
-	if _, err := charge(kids[1], 5); err != nil {
+	if _, err := charge(kids[1], 5*unit); err != nil {
 		t.Fatalf("second child within what the parent has left: %v", err)
 	}
-	root, _ := u.Get(ctx, rootID)
-	if root.SpentAmount != 25 {
+	root, _ := u.GetUsage(ctx, rootID)
+	if root.SpentAmount != 25*unit {
 		t.Errorf("parent subtree spend = %v, want 25", root.SpentAmount)
 	}
 
@@ -78,11 +78,11 @@ func TestChildrenCannotSpendPastTheirParentsBudget(t *testing.T) {
 	if _, err := u.Refund(ctx, capability.RefundRequest{ChargeID: first.ChargeID}); err != nil {
 		t.Fatalf("Refund: %v", err)
 	}
-	root, _ = u.Get(ctx, rootID)
-	if root.SpentAmount != 5 {
+	root, _ = u.GetUsage(ctx, rootID)
+	if root.SpentAmount != 5*unit {
 		t.Errorf("parent subtree spend after refund = %v, want 5", root.SpentAmount)
 	}
-	if _, err := charge(kids[1], 15); err != nil {
+	if _, err := charge(kids[1], 15*unit); err != nil {
 		t.Fatalf("sibling after refund: %v", err)
 	}
 }
@@ -97,7 +97,7 @@ func TestChildrenCannotExceedTheirParentsRequestCount(t *testing.T) {
 		capability.Caveats{Ops: []capability.Op{capability.OpGet}, MaxRequests: 3},
 	)
 	bump := func(id uuid.UUID) error {
-		_, err := u.BumpRequest(ctx, capability.RequestBump{CapabilityID: id, TenantID: tenant, MaxRequests: 3})
+		_, err := u.Bump(ctx, capability.BumpRequest{CapabilityID: id, TenantID: tenant, MaxRequests: 3})
 		return err
 	}
 	for i, id := range []uuid.UUID{kids[0], kids[0], kids[1]} {
@@ -108,7 +108,7 @@ func TestChildrenCannotExceedTheirParentsRequestCount(t *testing.T) {
 	if err := bump(kids[1]); !errors.Is(err, capability.ErrRequestLimitExceeded) {
 		t.Fatalf("fourth request across the subtree: err = %v, want ErrRequestLimitExceeded", err)
 	}
-	root, _ := u.Get(ctx, rootID)
+	root, _ := u.GetUsage(ctx, rootID)
 	if root.RequestCount != 3 {
 		t.Errorf("parent subtree requests = %d, want 3", root.RequestCount)
 	}
@@ -141,14 +141,14 @@ func TestVerifierRejectsChildOfRevokedParent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, childToken, err := issuer.Delegate(ctx, capability.DelegateRequest{Parent: *parent, InheritCaveats: true})
+	_, childToken, err := issuer.Delegate(ctx, capability.DelegateRequest{Parent: parent, InheritCaveats: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := verifier.Verify(ctx, childToken, "data"); err != nil {
 		t.Fatalf("child before revoke: %v", err)
 	}
-	if err := records.Revoke(ctx, capability.RevokeArgs{ID: parent.ID}); err != nil {
+	if err := records.Revoke(ctx, capability.RevokeRequest{ID: parent.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := verifier.Verify(ctx, childToken, "data"); !errors.Is(err, capability.ErrRevoked) {

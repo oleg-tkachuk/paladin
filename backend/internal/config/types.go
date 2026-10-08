@@ -5,6 +5,7 @@ import (
 	"time"
 
 	yaml "github.com/oasdiff/yaml3"
+	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 type Config struct {
@@ -589,9 +590,11 @@ type Dispatcher struct {
 	// per successful capability.UsageStore[pgx.Tx].Charge. Default OFF —
 	// every chargeable RPC fires, so the cardinality multiplies the
 	// outbox volume by the per-tenant request rate. Subscribers MUST
-	// set a CEL filter pinning `event.kind == 'paladin.capability.charged'`
-	// (or just dropping events on the floor at the broker) before
-	// flipping this on for a noisy tenant.
+	// set a CEL filter pinning `type == "paladin.capability.charged"`
+	// (filter variables are bare; `kind` is only "capability") or drop
+	// the events at the broker before flipping this on for a noisy
+	// tenant. Each delivery is a CloudEvents 1.0 envelope whose data
+	// carries the amount as a google.type.Money object.
 	ChargeEventsEnabled bool `yaml:"charge_events_enabled" json:"charge_events_enabled"`
 
 	// AuditMirrorEnabled mirrors every audit_log row to
@@ -1126,7 +1129,7 @@ type Capability struct {
 	//
 	// Renamed from ChargePerRequest — same semantic, just no longer
 	// USD-pinned in name.
-	ChargePerRequestAmount float64 `yaml:"charge_per_request_amount" json:"charge_per_request_amount"`
+	ChargePerRequestAmount capability.Nanos `yaml:"charge_per_request_amount" json:"charge_per_request_amount"`
 
 	// ChargePerRequestUnit pins the currency / unit for the auto-
 	// charge amount. Empty falls back to the capability's own

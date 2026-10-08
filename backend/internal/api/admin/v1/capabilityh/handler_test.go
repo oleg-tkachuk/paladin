@@ -46,20 +46,27 @@ type fakeStore struct {
 func (s *fakeStore) Insert(_ context.Context, _ capability.Capability, _ capability.Principal) error {
 	return nil
 }
-func (s *fakeStore) Get(_ context.Context, id uuid.UUID) (*capability.Capability, error) {
+func (s *fakeStore) Get(_ context.Context, id uuid.UUID) (capability.Capability, error) {
 	if s.cap != nil && s.cap.ID == id {
-		return s.cap, nil
+		return *s.cap, nil
 	}
-	return nil, capability.ErrNotFound // the Store contract's sentinel
+	return capability.Capability{}, capability.ErrNotFound // the Store contract's sentinel
+}
+func (s *fakeStore) GetRecord(ctx context.Context, id uuid.UUID) (capability.Record, error) {
+	c, err := s.Get(ctx, id)
+	if err != nil {
+		return capability.Record{}, err
+	}
+	return capability.Record{Capability: c}, nil
 }
 func (s *fakeStore) IsRevoked(context.Context, uuid.UUID) (bool, error) { return false, nil }
-func (s *fakeStore) Revoke(context.Context, capability.RevokeArgs) error {
+func (s *fakeStore) Revoke(context.Context, capability.RevokeRequest) error {
 	return errors.New("not used")
 }
 func (s *fakeStore) PurgeExpired(context.Context, time.Duration) (int64, error) {
 	return 0, errors.New("not used")
 }
-func (s *fakeStore) ListByPrincipal(context.Context, capability.ListByPrincipalArgs) ([]capability.Capability, string, error) {
+func (s *fakeStore) ListByPrincipal(context.Context, capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
 	return nil, "", errors.New("not used")
 }
 

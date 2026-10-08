@@ -96,7 +96,7 @@ func CapabilityInterceptor(
 	verifier *capability.StandardVerifier,
 	audience string,
 	usage capability.UsageStore[pgx.Tx],
-	chargePerRequestAmount float64,
+	chargePerRequestAmount capability.Nanos,
 	chargePerRequestUnit string,
 	opts ...CapabilityOption,
 ) connect.ServerInterceptor {
@@ -124,7 +124,7 @@ func CapabilityInterceptorWithEvents(
 	verifier *capability.StandardVerifier,
 	audience string,
 	usage capability.UsageStore[pgx.Tx],
-	chargePerRequestAmount float64,
+	chargePerRequestAmount capability.Nanos,
 	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
@@ -142,7 +142,7 @@ func newCapabilityInterceptor(
 	verifier *capability.StandardVerifier,
 	audience string,
 	usage capability.UsageStore[pgx.Tx],
-	chargePerRequestAmount float64,
+	chargePerRequestAmount capability.Nanos,
 	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
@@ -178,7 +178,7 @@ func CapabilityEstablishingInterceptor(
 	verifier *capability.StandardVerifier,
 	audience string,
 	usage capability.UsageStore[pgx.Tx],
-	chargePerRequestAmount float64,
+	chargePerRequestAmount capability.Nanos,
 	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
@@ -221,7 +221,7 @@ type capabilityInterceptor struct {
 	// JWT or API token stays additive, exactly as before.
 	establishPrincipal     bool
 	usage                  capability.UsageStore[pgx.Tx]
-	chargePerRequestAmount float64
+	chargePerRequestAmount capability.Nanos
 	chargePerRequestUnit   string
 	emitter                ChargeEventEmitter
 	dpop                   *capability.DPoPVerifier
@@ -263,17 +263,18 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 	if token == "" {
 		return ctx, nil
 	}
-	cap, err := i.verifier.Verify(ctx, token, i.audience)
+	verified, err := i.verifier.Verify(ctx, token, i.audience)
 	if err != nil {
 		// Token was supplied AND failed verification. We surface
 		// this as PermissionDenied — the caller chose to present
 		// a capability and it didn't pass; falling through to JWT
 		// silently would mask the misconfiguration.
-		return ctx, connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
+		return ctx, capabilityError(connect.CodePermissionDenied, err)
 	}
+	cap := &verified // the request's context holds it by reference
 	if err := i.checkPossession(ctx, cap, token, header.Get(paladin.HeaderDPoP),
 		httpMethod(ctx), spec.Procedure); err != nil {
-		return ctx, connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
+		return ctx, capabilityError(connect.CodePermissionDenied, err)
 	}
 	if err := i.enforceCaveats(ctx, cap); err != nil {
 		return ctx, err
@@ -281,7 +282,7 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 	ctx = WithCapability(ctx, cap)
 	ctx, err = i.withCapabilityPrincipal(ctx, cap)
 	if err != nil {
-		return ctx, connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
+		return ctx, capabilityError(connect.CodePermissionDenied, err)
 	}
 	ctx = WithChargeStore(ctx, i.usage)
 	ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
@@ -315,7 +316,7 @@ func (i *capabilityInterceptor) checkPossession(ctx context.Context, cap *capabi
 	if method == "" {
 		method = http.MethodPost
 	}
-	return i.dpop.Check(ctx, cap, capability.DPoPRequest{
+	return i.dpop.Check(ctx, *cap, capability.DPoPRequest{
 		Proof:         proof,
 		Method:        method,
 		URL:           procedure,
@@ -394,7 +395,7 @@ func (i *capabilityInterceptor) enforceCaveats(
 		// which CheckSource refuses: "unknown" is not "inside the range".
 		addr, _ := clientip.FromContext(ctx)
 		if err := cap.Caveats.CheckSource(addr); err != nil {
-			return connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
+			return capabilityError(connect.CodePermissionDenied, err)
 		}
 	}
 
@@ -403,19 +404,19 @@ func (i *capabilityInterceptor) enforceCaveats(
 	// subtree, and the store reads it from the ancestor's record. A Biscuit
 	// copy with limits of its own is counted the same way.
 	if i.usage != nil && (cap.Caveats.MaxRequests > 0 || cap.ParentID != uuid.Nil || len(cap.Copies) > 0) {
-		if _, err := i.usage.BumpRequest(ledgerContext(ctx, cap), capability.RequestBump{
+		if _, err := i.usage.Bump(ledgerContext(ctx, cap), capability.BumpRequest{
 			CapabilityID: cap.ID,
 			TenantID:     cap.Subject.TenantID,
 			MaxRequests:  int64(cap.Caveats.MaxRequests),
 			Copies:       cap.Copies,
 		}); err != nil {
 			if errors.Is(err, capability.ErrRequestLimitExceeded) {
-				return connect.NewError(connect.CodeResourceExhausted, err.Error()).WithCause(err)
+				return capabilityError(connect.CodeResourceExhausted, err)
 			}
 			// DB-side error: fail closed. A capability with a
 			// MaxRequests cap that can't be incremented atomically
 			// is safer to reject than to allow unbounded use.
-			return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
+			return capabilityError(connect.CodeUnavailable, err)
 		}
 	}
 	return nil
@@ -534,7 +535,7 @@ type chargeEventsKey struct{}
 // the fan-out commits atomically with the charge (or rolls back with
 // it). An error propagates up and rolls the charge back.
 type ChargeEventEmitter interface {
-	EmitChargedTx(ctx context.Context, tx pgx.Tx, tenantID, capabilityID, op, actor string, amount float64, unitCode string) error
+	EmitChargedTx(ctx context.Context, tx pgx.Tx, tenantID, capabilityID, op, actor string, amount capability.Nanos, unitCode string) error
 }
 
 // WithChargeEventEmitter stamps the optional emitter on ctx. Wiring
@@ -559,7 +560,7 @@ func chargeEventEmitterFromContext(ctx context.Context) ChargeEventEmitter {
 // amount + unit avoids two context lookups per charge (the unit is
 // always read alongside the amount).
 type chargeAmount struct {
-	Amount float64
+	Amount capability.Nanos
 	Unit   string
 }
 
@@ -580,7 +581,7 @@ func WithChargeStore(ctx context.Context, s capability.UsageStore[pgx.Tx]) conte
 // An empty unit string means "use the capability's own UnitCode at
 // charge time"; the resolution happens in ChargeCapability so
 // callers don't have to reach across config + capability state.
-func WithChargeAmount(ctx context.Context, amount float64, unit string) context.Context {
+func WithChargeAmount(ctx context.Context, amount capability.Nanos, unit string) context.Context {
 	if amount <= 0 {
 		return ctx
 	}
@@ -591,7 +592,7 @@ func WithChargeAmount(ctx context.Context, amount float64, unit string) context.
 // cost (e.g. presign issuance, batch op kickoff, future LLM calls)
 // call this once the work is committed:
 //
-//	if err := auth.ChargeCapability(ctx, 0.0001); err != nil {
+//	if err := auth.ChargeCapability(ctx, capability.MustParseAmount("0.0001"), "USD"); err != nil {
 //	    return nil, err
 //	}
 //
@@ -616,7 +617,7 @@ func WithChargeAmount(ctx context.Context, amount float64, unit string) context.
 // cost (e.g. presign issuance, batch op kickoff, future LLM calls)
 // call this once the work is committed:
 //
-//	if err := auth.ChargeCapability(ctx, 0.0001, "USD"); err != nil {
+//	if err := auth.ChargeCapability(ctx, capability.MustParseAmount("0.0001"), "USD"); err != nil {
 //	    return nil, err
 //	}
 //
@@ -643,7 +644,7 @@ func WithChargeAmount(ctx context.Context, amount float64, unit string) context.
 //
 // Refunds are exposed via auth.RefundLastCharge for handlers that
 // detect a partial failure after the charge.
-func ChargeCapability(ctx context.Context, amount float64, unit string) error {
+func ChargeCapability(ctx context.Context, amount capability.Nanos, unit string) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
 		return nil
@@ -703,15 +704,15 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 		switch {
 		case errors.Is(err, capability.ErrBudgetExceeded):
 			metrics.RecordCapabilityCharge(ctx, tenantID.String(), "capability_exhausted", 0)
-			return connect.NewError(connect.CodeResourceExhausted, err.Error()).WithCause(err)
+			return capabilityError(connect.CodeResourceExhausted, err)
 		case errors.Is(err, capability.ErrTenantBudgetExceeded):
 			metrics.RecordCapabilityCharge(ctx, tenantID.String(), "tenant_exhausted", 0)
-			return connect.NewError(connect.CodeResourceExhausted, err.Error()).WithCause(err)
+			return capabilityError(connect.CodeResourceExhausted, err)
 		}
 		metrics.RecordCapabilityCharge(ctx, tenantID.String(), "error", 0)
-		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
+		return capabilityError(connect.CodeUnavailable, err)
 	}
-	metrics.RecordCapabilityCharge(ctx, tenantID.String(), "charged", amount)
+	metrics.RecordCapabilityCharge(ctx, tenantID.String(), "charged", amount.Float64())
 	stampLastCharge(ctx, receipt.ChargeID)
 	return nil
 }
@@ -752,7 +753,7 @@ func ChargeRequest(ctx context.Context) error {
 // full refund a no-op rather than a second credit. A partial refund larger
 // than what is left is refused. No-op when no capability is on context, no
 // store is wired, or this request has made no charge.
-func RefundLastCharge(ctx context.Context, amount float64) error {
+func RefundLastCharge(ctx context.Context, amount capability.Nanos) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
 		return nil
@@ -767,9 +768,9 @@ func RefundLastCharge(ctx context.Context, amount float64) error {
 	}
 	if _, err := store.Refund(ledgerContext(ctx, cap), capability.RefundRequest{ChargeID: chargeID, Amount: amount}); err != nil {
 		if errors.Is(err, capability.ErrRefundExceedsCharge) || errors.Is(err, capability.ErrInvalidAmount) {
-			return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+			return capabilityError(connect.CodeInvalidArgument, err)
 		}
-		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
+		return capabilityError(connect.CodeUnavailable, err)
 	}
 	return nil
 }
@@ -782,7 +783,7 @@ func RefundLastCharge(ctx context.Context, amount float64) error {
 //
 // Returns uuid.Nil and no error when there is nothing to hold against: no
 // capability on the context, or no store wired.
-func ReserveCapability(ctx context.Context, amount float64, ttl time.Duration) (uuid.UUID, error) {
+func ReserveCapability(ctx context.Context, amount capability.Nanos, ttl time.Duration) (uuid.UUID, error) {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
 		return uuid.Nil, nil
@@ -815,7 +816,7 @@ func ReserveCapability(ctx context.Context, amount float64, ttl time.Duration) (
 // SettleReservation charges the actual cost in place of a hold made by
 // ReserveCapability. A cost above the hold must fit the ceilings; if it
 // does not, the hold stays and the call returns ResourceExhausted.
-func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount float64) error {
+func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount capability.Nanos) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok || reservationID == uuid.Nil {
 		return nil
@@ -831,7 +832,7 @@ func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount floa
 	}, nil)
 	if err != nil {
 		if errors.Is(err, capability.ErrReservationNotFound) {
-			return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
+			return capabilityError(connect.CodeFailedPrecondition, err)
 		}
 		return chargeError(err)
 	}
@@ -851,7 +852,7 @@ func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 		return nil
 	}
 	if err := store.Release(ledgerContext(ctx, cap), reservationID); err != nil {
-		return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
+		return capabilityError(connect.CodeUnavailable, err)
 	}
 	return nil
 }
@@ -862,11 +863,11 @@ func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 func chargeError(err error) error {
 	switch {
 	case errors.Is(err, capability.ErrBudgetExceeded), errors.Is(err, capability.ErrTenantBudgetExceeded):
-		return connect.NewError(connect.CodeResourceExhausted, err.Error()).WithCause(err)
+		return capabilityError(connect.CodeResourceExhausted, err)
 	case errors.Is(err, capability.ErrInvalidAmount):
-		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		return capabilityError(connect.CodeInvalidArgument, err)
 	}
-	return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
+	return capabilityError(connect.CodeUnavailable, err)
 }
 
 // AssertCapabilityOp is the handler-side gate. Call early in any
@@ -931,21 +932,23 @@ func assertCapabilityOp(ctx context.Context, op capability.Op, resourceURI strin
 		HasIdempotencyKey: idempotencyKeyPresent(ctx),
 	}
 	if err := cap.Caveats.Check(req); err != nil {
-		return connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
+		return capabilityError(connect.CodePermissionDenied, err)
 	}
 	// The taint check can cost a lookup, so it runs only once everything else
 	// has passed, and only where it can refuse: a read of a named object by
-	// a capability that was not allowed tainted reads.
-	if resourceURI != "" && !op.Mutating() && !cap.Caveats.AllowTaintedRead {
+	// a capability that was not allowed tainted reads. Check has resolved the
+	// operation's effect already, so asking again cannot fail.
+	mutating, _ := req.Mutating()
+	if resourceURI != "" && !mutating && !cap.Caveats.AllowTaintedRead {
 		isTainted, err := tainted(ctx)
 		if err != nil {
 			// Fail closed: "could not tell" is not "clean".
-			return connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
+			return capabilityError(connect.CodeUnavailable, err)
 		}
 		if isTainted {
 			req.ResourceTainted = true
 			if err := cap.Caveats.Check(req); err != nil {
-				return connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
+				return capabilityError(connect.CodePermissionDenied, err)
 			}
 		}
 	}

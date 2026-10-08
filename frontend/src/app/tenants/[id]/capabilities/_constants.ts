@@ -42,6 +42,10 @@ export const PRINCIPAL_KIND_OPTIONS = [
   { value: String(PrincipalKind.SERVICE), label: "service" },
 ];
 
+// SPEND_DIGITS is how many decimals spend is shown to, so a sub-cent charge
+// does not read as nothing.
+export const SPEND_DIGITS = 4;
+
 export function isExpired(c: Capability): boolean {
   if (!c.expiresAt) return false;
   const ms = Number(c.expiresAt.seconds) * 1000;

@@ -32,11 +32,11 @@ type erroringUsage struct {
 	err error
 }
 
-func (e erroringUsage) BumpRequest(ctx context.Context, req capability.RequestBump) (int64, error) {
+func (e erroringUsage) Bump(ctx context.Context, req capability.BumpRequest) (int64, error) {
 	if e.err != nil {
 		return 0, e.err
 	}
-	return e.fakeUsage.BumpRequest(ctx, req)
+	return e.fakeUsage.Bump(ctx, req)
 }
 
 func capWithCaveats(c capability.Caveats) *capability.Capability {

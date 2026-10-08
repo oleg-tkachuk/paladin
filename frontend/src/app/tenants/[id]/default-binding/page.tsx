@@ -19,6 +19,7 @@ import { useBuckets } from "@/hooks/useBuckets";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { tenantClient } from "@/lib/connect/client";
+import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +64,10 @@ export default function DefaultBindingPage() {
     retry: false,
     queryFn: async ({ signal }) => {
       try {
-        return await tenantClient.getTenantDefaultBinding({ name }, { signal });
+        return await tenantClient.getTenantDefaultBinding(
+          { name },
+          notFoundIsAnswer({ signal }),
+        );
       } catch (err) {
         // An aborted query is not a failure the operator needs to see:
         // TanStack cancels in-flight reads on unmount and on supersede.

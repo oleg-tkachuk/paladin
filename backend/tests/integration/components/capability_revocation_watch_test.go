@@ -35,7 +35,7 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 
 	// Revoked through the first pool — a different connection, as another
 	// replica would.
-	if err := f.records.Revoke(ctx, capability.RevokeArgs{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
+	if err := f.records.Revoke(ctx, capability.RevokeRequest{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 

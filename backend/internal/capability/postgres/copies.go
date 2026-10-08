@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -69,20 +71,32 @@ func bumpCopies(ctx context.Context, tx pgx.Tx, capID uuid.UUID, copies []capabi
 
 // addCopySpend adds amount to counter of every copy, against its budget.
 func addCopySpend(ctx context.Context, tx pgx.Tx, capID uuid.UUID, copies []capability.CopyCeiling, amount pgtype.Numeric, counter string) error {
+	_, err := addCopySpendPast(ctx, tx, capID, copies, amount, counter, capability.OverrunReject)
+	return err
+}
+
+// addCopySpendPast is addCopySpend under an overrun policy: with
+// OverrunRecord a copy whose budget the amount would cross takes it anyway,
+// and crossed reports that one did.
+func addCopySpendPast(ctx context.Context, tx pgx.Tx, capID uuid.UUID, copies []capability.CopyCeiling,
+	amount pgtype.Numeric, counter string, overrun capability.OverrunPolicy,
+) (crossed bool, err error) {
 	for _, c := range copies {
-		limit, err := numericFromFloat(c.MaxBudget())
-		if err != nil {
-			return err
-		}
+		limit := pgmoney.NumericFromNanos(c.MaxBudget)
 		var spent pgtype.Numeric
-		if err := tx.QueryRow(ctx, addCopySpendQuery, c.RevocationID, capID, amount, counter, limit).Scan(&spent); err != nil {
+		err = tx.QueryRow(ctx, addCopySpendQuery, c.RevocationID, capID, amount, counter, limit).Scan(&spent)
+		if errors.Is(err, pgx.ErrNoRows) && overrun == capability.OverrunRecord {
+			crossed = true
+			err = tx.QueryRow(ctx, addCopySpendQuery, c.RevocationID, capID, amount, counter, noCeiling).Scan(&spent)
+		}
+		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("%w: copy %x", capability.ErrBudgetExceeded, c.RevocationID)
+				return false, fmt.Errorf("%w: copy %x", capability.ErrBudgetExceeded, c.RevocationID)
 			}
-			return fmt.Errorf("capability/postgres: %s copy: %w", counter, err)
+			return false, fmt.Errorf("capability/postgres: %s copy: %w", counter, err)
 		}
 	}
-	return nil
+	return crossed, nil
 }
 
 // subtractCopySpend takes amount off counter of the copies named, never below
@@ -122,7 +136,7 @@ func copyBudgets(copies []capability.CopyCeiling) []int64 {
 	}
 	out := make([]int64, 0, len(copies))
 	for _, c := range copies {
-		out = append(out, c.MaxBudgetMicros)
+		out = append(out, int64(c.MaxBudget))
 	}
 	return out
 }
@@ -135,7 +149,7 @@ func ceilingsOf(ids [][]byte, budgets []int64) ([]capability.CopyCeiling, error)
 	}
 	out := make([]capability.CopyCeiling, 0, len(ids))
 	for i, id := range ids {
-		out = append(out, capability.CopyCeiling{RevocationID: id, MaxBudgetMicros: budgets[i]})
+		out = append(out, capability.CopyCeiling{RevocationID: id, MaxBudget: capability.Nanos(budgets[i])})
 	}
 	return out, nil
 }
@@ -166,7 +180,12 @@ WHERE  revocation_id = ANY($1::bytea[])`, revocationIDs)
 		if err := rows.Scan(&u.RevocationID, &u.CapabilityID, &u.RequestCount, &spent, &reserved); err != nil {
 			return nil, fmt.Errorf("capability/postgres: copy usage scan: %w", err)
 		}
-		u.SpentAmount, u.ReservedAmount = floatFromNumeric(spent), floatFromNumeric(reserved)
+		if u.SpentAmount, err = pgmoney.NanosFromNumeric(spent); err != nil {
+			return nil, err
+		}
+		if u.ReservedAmount, err = pgmoney.NanosFromNumeric(reserved); err != nil {
+			return nil, err
+		}
 		out = append(out, u)
 	}
 	if err := rows.Err(); err != nil {

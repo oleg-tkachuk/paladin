@@ -20,17 +20,35 @@ type MeteringStore[TX any] struct {
 
 // WithMetering wraps an inner UsageStore with the metering decorator.
 // nil inner → nil out (a UsageStore was never wired, so no-op).
+//
+// The result implements CopyUsageReader exactly when inner does, so wrapping
+// a store never hides what it can read.
 func WithMetering[TX any](inner UsageStore[TX]) UsageStore[TX] {
 	if inner == nil {
 		return nil
 	}
-	return &MeteringStore[TX]{Inner: inner}
+	m := &MeteringStore[TX]{Inner: inner}
+	if reader, ok := inner.(CopyUsageReader); ok {
+		return &meteringCopyStore[TX]{MeteringStore: m, copies: reader}
+	}
+	return m
 }
 
-// BumpRequest emits paladin.capability.request.bumps with outcome=
+// meteringCopyStore is MeteringStore over a store that also reads Biscuit
+// copies' counters. Reading moves nothing, so it emits no metric.
+type meteringCopyStore[TX any] struct {
+	*MeteringStore[TX]
+	copies CopyUsageReader
+}
+
+func (s *meteringCopyStore[TX]) CopyUsage(ctx context.Context, revocationIDs [][]byte) ([]CopyUsage, error) {
+	return s.copies.CopyUsage(ctx, revocationIDs)
+}
+
+// Bump emits paladin.capability.request.bumps with outcome=
 // allowed | limit_exceeded.
-func (s *MeteringStore[TX]) BumpRequest(ctx context.Context, req RequestBump) (int64, error) {
-	count, err := s.Inner.BumpRequest(ctx, req)
+func (s *MeteringStore[TX]) Bump(ctx context.Context, req BumpRequest) (int64, error) {
+	count, err := s.Inner.Bump(ctx, req)
 	switch {
 	case errors.Is(err, ErrRequestLimitExceeded):
 		recordRequestBump(ctx, req.TenantID, "limit_exceeded")
@@ -53,6 +71,9 @@ func (s *MeteringStore[TX]) Charge(
 	onCharged func(ctx context.Context, tx TX) error,
 ) (ChargeReceipt, error) {
 	receipt, err := s.Inner.Charge(ctx, req, onCharged)
+	if err == nil && receipt.Replayed {
+		return receipt, nil // nothing moved, so nothing to count
+	}
 	unit := req.UnitCode
 	if unit == "" {
 		unit = DefaultUnitCode
@@ -69,7 +90,7 @@ func (s *MeteringStore[TX]) Charge(
 }
 
 // Refund emits paladin.capability.refund.amount.
-func (s *MeteringStore[TX]) Refund(ctx context.Context, req RefundRequest) (float64, error) {
+func (s *MeteringStore[TX]) Refund(ctx context.Context, req RefundRequest) (Nanos, error) {
 	refunded, err := s.Inner.Refund(ctx, req)
 	if err == nil && refunded > 0 {
 		recordRefund(ctx, refunded)
@@ -96,6 +117,9 @@ func (s *MeteringStore[TX]) Reserve(ctx context.Context, req ReserveRequest) (Re
 // here; the charge is recorded without them.
 func (s *MeteringStore[TX]) Settle(ctx context.Context, req SettleRequest, onCharged func(ctx context.Context, tx TX) error) (ChargeReceipt, error) {
 	receipt, err := s.Inner.Settle(ctx, req, onCharged)
+	if err == nil && receipt.Replayed {
+		return receipt, nil // nothing moved, so nothing to count
+	}
 	switch {
 	case err == nil:
 		recordChargeAttempt(ctx, uuid.Nil, "", req.Amount, receipt.Spent, "allowed")
@@ -109,19 +133,35 @@ func (s *MeteringStore[TX]) Settle(ctx context.Context, req SettleRequest, onCha
 
 // Pure pass-throughs — reads and admin writes don't move counters, no metric.
 
-func (s *MeteringStore[TX]) Get(ctx context.Context, capID uuid.UUID) (Usage, error) {
-	return s.Inner.Get(ctx, capID)
+func (s *MeteringStore[TX]) GetReservation(ctx context.Context, reservationID uuid.UUID) (Reservation, error) {
+	return s.Inner.GetReservation(ctx, reservationID)
+}
+
+func (s *MeteringStore[TX]) ListReservations(ctx context.Context, capID uuid.UUID) ([]Reservation, error) {
+	return s.Inner.ListReservations(ctx, capID)
+}
+
+func (s *MeteringStore[TX]) GetCharge(ctx context.Context, chargeID uuid.UUID) (ChargeRecord, error) {
+	return s.Inner.GetCharge(ctx, chargeID)
+}
+
+func (s *MeteringStore[TX]) ChargeByRef(ctx context.Context, capID uuid.UUID, externalRef string) (ChargeRecord, error) {
+	return s.Inner.ChargeByRef(ctx, capID, externalRef)
+}
+
+func (s *MeteringStore[TX]) GetUsage(ctx context.Context, capID uuid.UUID) (Usage, error) {
+	return s.Inner.GetUsage(ctx, capID)
 }
 
 func (s *MeteringStore[TX]) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (TenantBudget, error) {
 	return s.Inner.GetTenantBudget(ctx, tenantID)
 }
 
-func (s *MeteringStore[TX]) SetTenantBudget(ctx context.Context, args SetTenantBudgetArgs) (TenantBudget, error) {
+func (s *MeteringStore[TX]) SetTenantBudget(ctx context.Context, args SetTenantBudgetRequest) (TenantBudget, error) {
 	return s.Inner.SetTenantBudget(ctx, args)
 }
 
-func (s *MeteringStore[TX]) ListTenantBudgets(ctx context.Context, args ListTenantBudgetsArgs) ([]TenantBudgetSummary, error) {
+func (s *MeteringStore[TX]) ListTenantBudgets(ctx context.Context, args ListTenantBudgetsRequest) ([]TenantBudgetSummary, string, error) {
 	return s.Inner.ListTenantBudgets(ctx, args)
 }
 

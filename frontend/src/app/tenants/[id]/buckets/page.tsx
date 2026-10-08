@@ -239,7 +239,7 @@ export default function TenantBucketsPage() {
           <TableHeader>
             <TableRow>
               <SortableHead
-                className="w-45"
+                className="@md:w-45"
                 label="Backend"
                 column="backend"
                 current={sort}
@@ -251,17 +251,17 @@ export default function TenantBucketsPage() {
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead className="hidden sm:table-cell">
+              <TableHead className="hidden @xs:table-cell">
                 Display name
               </TableHead>
               <SortableHead
-                className="hidden md:table-cell"
+                className="hidden @md:table-cell"
                 label="Region"
                 column="region"
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead className="w-35">Status</TableHead>
+              <TableHead className="@md:w-35">Status</TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -336,12 +336,12 @@ export default function TenantBucketsPage() {
                       <span className="font-mono text-xs">{b.bucketId}</span>
                     </Link>
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell font-medium">
+                  <TableCell className="hidden @xs:table-cell font-medium">
                     {b.displayName || (
                       <span className="text-muted-foreground italic">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground text-xs font-mono">
+                  <TableCell className="hidden @md:table-cell text-muted-foreground text-xs font-mono">
                     {b.region || "—"}
                   </TableCell>
                   <TableCell>

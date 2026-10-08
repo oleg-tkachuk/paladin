@@ -338,7 +338,7 @@ func TestCopyObjectReportsBothFailuresWhenCompensationAlsoFails(t *testing.T) {
 // meaning "how much this principal may store" the moment one way of storing
 // is exempt.
 
-func budgetedCtx(t *testing.T, tenantID uuid.UUID, maxBudget float64) (context.Context, *capability.Capability, *memstore.UsageStore[pgx.Tx]) {
+func budgetedCtx(t *testing.T, tenantID uuid.UUID, maxBudget capability.Nanos) (context.Context, *capability.Capability, *memstore.UsageStore[pgx.Tx]) {
 	t.Helper()
 	cap := &capability.Capability{
 		ID:      uuid.New(),
@@ -352,7 +352,7 @@ func budgetedCtx(t *testing.T, tenantID uuid.UUID, maxBudget float64) (context.C
 	}
 	usage := memstore.NewUsage[pgx.Tx](nil)
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
-	ctx = auth.WithChargeAmount(auth.WithChargeStore(auth.WithCapability(ctx, cap), usage), 1, "")
+	ctx = auth.WithChargeAmount(auth.WithChargeStore(auth.WithCapability(ctx, cap), usage), capability.NanosPerUnit, "")
 	return ctx, cap, usage
 }
 
@@ -361,18 +361,18 @@ func TestCopyObjectChargesTheCapabilityBudget(t *testing.T) {
 	repo := &completeRepo{}
 	h, _, _, _, _, tenantID := tailHandler(t, repo, noopStorage{}, sm)
 	repo.obj = copySource(tenantID)
-	ctx, cap, usage := budgetedCtx(t, tenantID, 10)
+	ctx, cap, usage := budgetedCtx(t, tenantID, 10*capability.NanosPerUnit)
 
 	if _, err := h.CopyObject(ctx, CopyObjectInput{
 		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
 	}); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
-	u, err := usage.Get(ctx, cap.ID)
+	u, err := usage.GetUsage(ctx, cap.ID)
 	if err != nil {
 		t.Fatalf("no usage recorded — the copy was free: %v", err)
 	}
-	if u.SpentAmount != 1 {
+	if u.SpentAmount != capability.NanosPerUnit {
 		t.Errorf("spent = %v, want 1", u.SpentAmount)
 	}
 }
@@ -382,7 +382,7 @@ func TestCopyObjectRefusesWhenTheBudgetIsSpent(t *testing.T) {
 	repo := &completeRepo{}
 	h, _, _, _, _, tenantID := tailHandler(t, repo, noopStorage{}, sm)
 	repo.obj = copySource(tenantID)
-	ctx, _, _ := budgetedCtx(t, tenantID, 1)
+	ctx, _, _ := budgetedCtx(t, tenantID, capability.NanosPerUnit)
 
 	in := CopyObjectInput{SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst"}
 	if _, err := h.CopyObject(ctx, in); err != nil {
@@ -398,14 +398,14 @@ func TestCopyObjectDoesNotChargeARetryThatChangedNothing(t *testing.T) {
 	repo := &completeRepo{}
 	h, _, _, _, _, tenantID := tailHandler(t, repo, noopStorage{}, sm)
 	repo.obj = copySource(tenantID)
-	ctx, cap, usage := budgetedCtx(t, tenantID, 10)
+	ctx, cap, usage := budgetedCtx(t, tenantID, 10*capability.NanosPerUnit)
 
 	if _, err := h.CopyObject(ctx, CopyObjectInput{
 		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
 	}); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
-	if _, err := usage.Get(ctx, cap.ID); err == nil {
+	if _, err := usage.GetUsage(ctx, cap.ID); err == nil {
 		t.Error("charged a promote that changed nothing — an at-least-once retry would bill twice")
 	}
 }

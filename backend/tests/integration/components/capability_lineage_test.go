@@ -41,31 +41,31 @@ func newLineageFixture(t *testing.T) (context.Context, lineageFixture) {
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
 	records := newCapStore(t, pool)
 
-	insert := func(parent uuid.UUID, budget float64, requests int) uuid.UUID {
+	insert := func(parent uuid.UUID, budget string, requests int) uuid.UUID {
 		c := mkCap(tenant, "agent:"+uuid.NewString()[:8], time.Now().Add(time.Hour))
 		c.ParentID = parent
-		c.Caveats.MaxBudgetAmount = budget
+		c.Caveats.MaxBudgetAmount = capability.MustParseAmount(budget)
 		c.Caveats.MaxRequests = requests
 		if err := records.Insert(ctx, c, seedIssuer); err != nil {
 			t.Fatalf("seed capability: %v", err)
 		}
 		return c.ID
 	}
-	root := insert(uuid.Nil, 25, 3)
+	root := insert(uuid.Nil, "25", 3)
 	return ctx, lineageFixture{
 		pool:    pool,
 		records: records,
 		usage:   capstore.NewUsageStore(sqlc.New(pool), pool, zap.NewNop()),
 		tenant:  tenant,
 		root:    root,
-		child:   insert(root, 20, 3),
-		sibling: insert(root, 20, 3),
+		child:   insert(root, "20", 3),
+		sibling: insert(root, "20", 3),
 	}
 }
 
-func (f lineageFixture) spent(t *testing.T, ctx context.Context, id uuid.UUID) float64 {
+func (f lineageFixture) spent(t *testing.T, ctx context.Context, id uuid.UUID) capability.Nanos {
 	t.Helper()
-	u, err := f.usage.Get(ctx, id)
+	u, err := f.usage.GetUsage(ctx, id)
 	if errors.Is(err, capability.ErrUsageNotFound) {
 		return 0
 	}
@@ -78,26 +78,26 @@ func (f lineageFixture) spent(t *testing.T, ctx context.Context, id uuid.UUID) f
 func TestChildrenCannotSpendPastTheirParentsBudget(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
-	charge := func(id uuid.UUID, amount float64) (capability.ChargeReceipt, error) {
+	charge := func(id uuid.UUID, amount string) (capability.ChargeReceipt, error) {
 		return f.usage.Charge(ctx, capability.ChargeRequest{
-			CapabilityID: id, TenantID: f.tenant, Amount: amount, MaxBudget: 20, UnitCode: "USD",
+			CapabilityID: id, TenantID: f.tenant, Amount: capability.MustParseAmount(amount), MaxBudget: capability.MustParseAmount("20"), UnitCode: "USD",
 		}, nil)
 	}
 
-	first, err := charge(f.child, 20)
+	first, err := charge(f.child, "20")
 	if err != nil {
 		t.Fatalf("child within its own and its parent's budget: %v", err)
 	}
-	if _, err := charge(f.sibling, 20); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := charge(f.sibling, "20"); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("sibling past the parent's ceiling: err = %v, want ErrBudgetExceeded", err)
 	}
 	if got := f.spent(t, ctx, f.sibling); got != 0 {
 		t.Errorf("rejected sibling's counter = %v, want 0 (the rollback must cover it)", got)
 	}
-	if _, err := charge(f.sibling, 5); err != nil {
+	if _, err := charge(f.sibling, "5"); err != nil {
 		t.Fatalf("sibling within what the parent has left: %v", err)
 	}
-	if got := f.spent(t, ctx, f.root); !closeEnough(got, 25) {
+	if got := f.spent(t, ctx, f.root); got != capability.MustParseAmount("25") {
 		t.Errorf("parent's subtree spend = %v, want 25", got)
 	}
 
@@ -105,10 +105,10 @@ func TestChildrenCannotSpendPastTheirParentsBudget(t *testing.T) {
 	if _, err := f.usage.Refund(ctx, capability.RefundRequest{ChargeID: first.ChargeID}); err != nil {
 		t.Fatalf("refund: %v", err)
 	}
-	if got := f.spent(t, ctx, f.root); !closeEnough(got, 5) {
+	if got := f.spent(t, ctx, f.root); got != capability.MustParseAmount("5") {
 		t.Errorf("parent's subtree spend after refund = %v, want 5", got)
 	}
-	if _, err := charge(f.sibling, 15); err != nil {
+	if _, err := charge(f.sibling, "15"); err != nil {
 		t.Fatalf("sibling after the refund: %v", err)
 	}
 }
@@ -117,7 +117,7 @@ func TestChildrenCannotExceedTheirParentsRequestCount(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
 	bump := func(id uuid.UUID) error {
-		_, err := f.usage.BumpRequest(ctx, capability.RequestBump{CapabilityID: id, TenantID: f.tenant, MaxRequests: 3})
+		_, err := f.usage.Bump(ctx, capability.BumpRequest{CapabilityID: id, TenantID: f.tenant, MaxRequests: 3})
 		return err
 	}
 	for i, id := range []uuid.UUID{f.child, f.child, f.sibling} {
@@ -128,7 +128,7 @@ func TestChildrenCannotExceedTheirParentsRequestCount(t *testing.T) {
 	if err := bump(f.sibling); !errors.Is(err, capability.ErrRequestLimitExceeded) {
 		t.Fatalf("fourth request across the subtree: err = %v, want ErrRequestLimitExceeded", err)
 	}
-	u, err := f.usage.Get(ctx, f.sibling)
+	u, err := f.usage.GetUsage(ctx, f.sibling)
 	if err != nil {
 		t.Fatalf("get sibling usage: %v", err)
 	}
@@ -143,14 +143,14 @@ func TestRevokingAParentRevokesItsChildrenWithoutCascade(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
 
-	if err := f.records.Revoke(ctx, capability.RevokeArgs{ID: f.child, Reason: "test", Actor: "user:ops"}); err != nil {
+	if err := f.records.Revoke(ctx, capability.RevokeRequest{ID: f.child, Reason: "test", Actor: "user:ops"}); err != nil {
 		t.Fatalf("revoke child: %v", err)
 	}
 	if r, err := f.records.IsRevoked(ctx, f.root); err != nil || r {
 		t.Fatalf("root after revoking a child: revoked=%v err=%v, want live", r, err)
 	}
 
-	if err := f.records.Revoke(ctx, capability.RevokeArgs{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
+	if err := f.records.Revoke(ctx, capability.RevokeRequest{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
 		t.Fatalf("revoke root: %v", err)
 	}
 	if r, err := f.records.IsRevoked(ctx, f.sibling); err != nil || !r {
@@ -173,25 +173,25 @@ func TestLineageHoldsUnderRowLevelSecurity(t *testing.T) {
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 
 	receipt, err := usage.Charge(ledgerCtx, capability.ChargeRequest{
-		CapabilityID: f.child, TenantID: f.tenant, Amount: 20, MaxBudget: 20, UnitCode: "USD",
+		CapabilityID: f.child, TenantID: f.tenant, Amount: capability.MustParseAmount("20"), MaxBudget: capability.MustParseAmount("20"), UnitCode: "USD",
 	}, nil)
 	if err != nil {
 		t.Fatalf("child charge under RLS: %v", err)
 	}
 	if _, err := usage.Charge(ledgerCtx, capability.ChargeRequest{
-		CapabilityID: f.sibling, TenantID: f.tenant, Amount: 20, MaxBudget: 20, UnitCode: "USD",
+		CapabilityID: f.sibling, TenantID: f.tenant, Amount: capability.MustParseAmount("20"), MaxBudget: capability.MustParseAmount("20"), UnitCode: "USD",
 	}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("sibling past the parent's ceiling under RLS: err = %v, want ErrBudgetExceeded", err)
 	}
 
-	if got, err := usage.Refund(ledgerCtx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: 5}); err != nil || !closeEnough(got, 5) {
+	if got, err := usage.Refund(ledgerCtx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: capability.MustParseAmount("5")}); err != nil || got != capability.MustParseAmount("5") {
 		t.Fatalf("refund under RLS = %v, %v; want 5", got, err)
 	}
-	if got := f.spent(t, ctx, f.root); !closeEnough(got, 15) {
+	if got := f.spent(t, ctx, f.root); got != capability.MustParseAmount("15") {
 		t.Errorf("parent's subtree spend after an RLS refund = %v, want 15", got)
 	}
 
-	if err := f.records.Revoke(ctx, capability.RevokeArgs{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
+	if err := f.records.Revoke(ctx, capability.RevokeRequest{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
 		t.Fatalf("revoke root: %v", err)
 	}
 	if r, err := records.IsRevoked(ctx, f.child); err != nil || !r {

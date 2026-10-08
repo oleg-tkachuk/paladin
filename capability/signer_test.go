@@ -47,7 +47,7 @@ func TestSign_RoundTrip(t *testing.T) {
 		Caveats: Caveats{
 			Ops:              []Op{OpGet, OpList, OpSearch},
 			ResourcePrefixes: []string{"object://acme/run-42/"},
-			MaxBudgetAmount:  0.50,
+			MaxBudgetAmount:  NanosPerUnit / 2,
 			MaxRequests:      100,
 		},
 	}
@@ -76,7 +76,7 @@ func TestSign_RoundTrip(t *testing.T) {
 	if got.Subject.Agent == nil || got.Subject.Agent.AgentType != "research-orchestrator" {
 		t.Errorf("AgentPrincipal round-trip lost")
 	}
-	if got.Caveats.MaxBudgetAmount != 0.50 {
+	if got.Caveats.MaxBudgetAmount != NanosPerUnit/2 {
 		t.Errorf("MaxBudgetAmount: got %v, want 0.50", got.Caveats.MaxBudgetAmount)
 	}
 	if got.Generation != 1 {
@@ -179,7 +179,7 @@ func TestNarrows_RejectsWidening(t *testing.T) {
 		Caveats: Caveats{
 			Ops:              []Op{OpGet, OpList},
 			ResourcePrefixes: []string{"object://acme/"},
-			MaxBudgetAmount:  1.00,
+			MaxBudgetAmount:  MustParseAmount("1.00"),
 			MaxRequests:      50,
 		},
 		IssuedAt:  now,
@@ -197,7 +197,7 @@ func TestNarrows_RejectsWidening(t *testing.T) {
 			c.ExpiresAt = now.Add(time.Hour)
 		},
 		"wider budget": func(c *Capability) {
-			c.Caveats.MaxBudgetAmount = 10.00
+			c.Caveats.MaxBudgetAmount = 10 * NanosPerUnit
 		},
 		"unrestricted prefix": func(c *Capability) {
 			c.Caveats.ResourcePrefixes = nil
@@ -248,7 +248,7 @@ func TestNarrows_RejectsCrossCurrency(t *testing.T) {
 		Audience: []string{AudiencePlaneData},
 		Caveats: Caveats{
 			Ops:             []Op{OpGet},
-			MaxBudgetAmount: 10.0,
+			MaxBudgetAmount: MustParseAmount("10.0"),
 			UnitCode:        "USD",
 		},
 		IssuedAt:  now,
@@ -259,7 +259,7 @@ func TestNarrows_RejectsCrossCurrency(t *testing.T) {
 	child.ParentID = parent.ID
 	child.Caveats = Caveats{
 		Ops:             []Op{OpGet},
-		MaxBudgetAmount: 5.0,
+		MaxBudgetAmount: MustParseAmount("5.0"),
 		UnitCode:        "EUR", // ← mismatch
 	}
 	err := Narrows(parent, child)
@@ -283,7 +283,7 @@ func TestNarrows_AcceptsValidNarrowing(t *testing.T) {
 		Caveats: Caveats{
 			Ops:              []Op{OpGet, OpList, OpSearch},
 			ResourcePrefixes: []string{"object://acme/"},
-			MaxBudgetAmount:  1.00,
+			MaxBudgetAmount:  MustParseAmount("1.00"),
 			MaxRequests:      100,
 		},
 		IssuedAt:  now,
@@ -297,7 +297,7 @@ func TestNarrows_AcceptsValidNarrowing(t *testing.T) {
 		Caveats: Caveats{
 			Ops:              []Op{OpGet},
 			ResourcePrefixes: []string{"object://acme/run-42/"},
-			MaxBudgetAmount:  0.10,
+			MaxBudgetAmount:  NanosPerUnit / 10,
 			MaxRequests:      10,
 		},
 		IssuedAt:  now,

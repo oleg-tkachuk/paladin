@@ -74,8 +74,10 @@ func tenantAttrs(tenantID uuid.UUID, attrs ...attribute.KeyValue) []attribute.Ke
 	return attrs
 }
 
-// recordChargeAttempt is called once per Charge regardless of outcome.
-func recordChargeAttempt(ctx context.Context, tenantID uuid.UUID, unit string, amount, postSpend float64, outcome string) {
+// recordChargeAttempt is called once per Charge regardless of outcome. The
+// instruments count units as float64, the metrics contract; the amounts are
+// exact up to that boundary.
+func recordChargeAttempt(ctx context.Context, tenantID uuid.UUID, unit string, amount, postSpend Nanos, outcome string) {
 	initMetrics()
 	if capChargeDecisions == nil {
 		return
@@ -91,14 +93,14 @@ func recordChargeAttempt(ctx context.Context, tenantID uuid.UUID, unit string, a
 	}
 	amountAttrs := metric.WithAttributes(tenantAttrs(tenantID, amountOpts...)...)
 	if capChargeAmount != nil {
-		capChargeAmount.Add(ctx, amount, amountAttrs)
+		capChargeAmount.Add(ctx, amount.Float64(), amountAttrs)
 	}
 	if capCurrentSpend != nil {
-		capCurrentSpend.Record(ctx, postSpend, amountAttrs)
+		capCurrentSpend.Record(ctx, postSpend.Float64(), amountAttrs)
 	}
 }
 
-// recordRequestBump is called once per BumpRequest regardless of outcome.
+// recordRequestBump is called once per Bump regardless of outcome.
 func recordRequestBump(ctx context.Context, tenantID uuid.UUID, outcome string) {
 	initMetrics()
 	if capRequestBumps == nil {
@@ -111,12 +113,12 @@ func recordRequestBump(ctx context.Context, tenantID uuid.UUID, outcome string) 
 // recordRefund is called once per committed refund. The refund request names
 // only the charge, so neither tenant nor unit is known here without a lookup
 // this decorator deliberately does not make.
-func recordRefund(ctx context.Context, amount float64) {
+func recordRefund(ctx context.Context, amount Nanos) {
 	initMetrics()
 	if capRefundAmount == nil {
 		return
 	}
-	capRefundAmount.Add(ctx, amount)
+	capRefundAmount.Add(ctx, amount.Float64())
 }
 
 // recordReservation is called once per Reserve regardless of outcome.
