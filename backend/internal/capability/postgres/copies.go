@@ -69,20 +69,35 @@ func bumpCopies(ctx context.Context, tx pgx.Tx, capID uuid.UUID, copies []capabi
 
 // addCopySpend adds amount to counter of every copy, against its budget.
 func addCopySpend(ctx context.Context, tx pgx.Tx, capID uuid.UUID, copies []capability.CopyCeiling, amount pgtype.Numeric, counter string) error {
+	_, err := addCopySpendPast(ctx, tx, capID, copies, amount, counter, capability.OverrunReject)
+	return err
+}
+
+// addCopySpendPast is addCopySpend under an overrun policy: with
+// OverrunRecord a copy whose budget the amount would cross takes it anyway,
+// and crossed reports that one did.
+func addCopySpendPast(ctx context.Context, tx pgx.Tx, capID uuid.UUID, copies []capability.CopyCeiling,
+	amount pgtype.Numeric, counter string, overrun capability.OverrunPolicy,
+) (crossed bool, err error) {
 	for _, c := range copies {
 		limit, err := numericFromFloat(c.MaxBudget())
 		if err != nil {
-			return err
+			return false, err
 		}
 		var spent pgtype.Numeric
-		if err := tx.QueryRow(ctx, addCopySpendQuery, c.RevocationID, capID, amount, counter, limit).Scan(&spent); err != nil {
+		err = tx.QueryRow(ctx, addCopySpendQuery, c.RevocationID, capID, amount, counter, limit).Scan(&spent)
+		if errors.Is(err, pgx.ErrNoRows) && overrun == capability.OverrunRecord {
+			crossed = true
+			err = tx.QueryRow(ctx, addCopySpendQuery, c.RevocationID, capID, amount, counter, noCeiling).Scan(&spent)
+		}
+		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("%w: copy %x", capability.ErrBudgetExceeded, c.RevocationID)
+				return false, fmt.Errorf("%w: copy %x", capability.ErrBudgetExceeded, c.RevocationID)
 			}
-			return fmt.Errorf("capability/postgres: %s copy: %w", counter, err)
+			return false, fmt.Errorf("capability/postgres: %s copy: %w", counter, err)
 		}
 	}
-	return nil
+	return crossed, nil
 }
 
 // subtractCopySpend takes amount off counter of the copies named, never below

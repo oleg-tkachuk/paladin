@@ -78,8 +78,9 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 	if op != "llm" || actor != "agent" {
 		t.Errorf("ledger row op=%q actor=%q, want the reservation's", op, actor)
 	}
-	if _, err := f.usage.Settle(ledgerCtx, capability.SettleRequest{ReservationID: r.ID, Amount: 1, MaxBudget: 20}, nil); !errors.Is(err, capability.ErrReservationNotFound) {
-		t.Errorf("second settle: err = %v, want ErrReservationNotFound", err)
+	again, err := f.usage.Settle(ledgerCtx, capability.SettleRequest{ReservationID: r.ID, Amount: 1, MaxBudget: 20}, nil)
+	if err != nil || !again.Replayed || again.ChargeID != receipt.ChargeID || !closeEnough(again.Spent, 4) {
+		t.Errorf("second settle = %+v, %v; want a replay of %s at spend 4", again, err, receipt.ChargeID)
 	}
 
 	// Release is idempotent and frees the room.

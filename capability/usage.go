@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 )
@@ -72,6 +73,13 @@ type Meter[TX any] interface {
 	// Pass nil to skip it.
 	//
 	// The returned receipt carries the ledger row's ID; Refund takes it.
+	//
+	// With req.ExternalRef set, Charge is idempotent on (CapabilityID,
+	// ExternalRef): a charge whose pair is already in the ledger moves
+	// nothing, does not run onCharged, and returns that charge's receipt
+	// with Replayed set. With req.Overrun = OverrunRecord, a charge that
+	// would cross a ceiling is committed anyway and the receipt reports it
+	// (ChargeReceipt.Overrun); see OverrunPolicy.
 	Charge(ctx context.Context, req ChargeRequest, onCharged func(ctx context.Context, tx TX) error) (ChargeReceipt, error)
 
 	// Refund returns spend from one recorded charge to every counter that
@@ -101,8 +109,13 @@ type Meter[TX any] interface {
 	// below, equal to or above the hold; above it, the excess must fit
 	// every ceiling, or Settle returns the Charge sentinel and the
 	// reservation stays in place for the caller to settle lower or
-	// release. An unknown, settled, released or expired reservation
-	// returns ErrReservationNotFound.
+	// release — unless req.Overrun is OverrunRecord, when the cost is
+	// charged anyway and the receipt reports it.
+	//
+	// Settle is idempotent on the reservation: settling one already
+	// settled moves nothing, does not run onCharged, and returns the
+	// receipt of the charge that settled it, with Replayed set. An unknown,
+	// released or expired reservation returns ErrReservationNotFound.
 	Settle(ctx context.Context, req SettleRequest, onCharged func(ctx context.Context, tx TX) error) (ChargeReceipt, error)
 
 	// Release ends a reservation without charging. Idempotent: releasing
@@ -194,15 +207,50 @@ type ChargeRequest struct {
 	Actor string
 	// Copies are the presented Biscuit copy's own limits (Capability.Copies).
 	Copies []CopyCeiling
+	// ExternalRef names the cost in the consumer's own records — the id of
+	// the call or the event that reported it — and makes the charge
+	// idempotent on (CapabilityID, ExternalRef). Empty: every call charges.
+	// At most MaxExternalRefBytes long.
+	ExternalRef string
+	// Overrun is what happens when Amount would cross a ceiling.
+	Overrun OverrunPolicy
 }
+
+// MaxExternalRefBytes bounds ChargeRequest.ExternalRef: long enough for any
+// UUID, ULID or provider call id, short enough to index.
+const MaxExternalRefBytes = 200
+
+// OverrunPolicy is what a charge does when its amount would cross a ceiling —
+// a Biscuit copy's, the capability's, an ancestor's or the tenant's.
+type OverrunPolicy uint8
+
+const (
+	// OverrunReject refuses the charge with the ceiling's sentinel and
+	// changes nothing. Use it for a cost not yet incurred: the refusal is
+	// what stops it.
+	OverrunReject OverrunPolicy = iota
+	// OverrunRecord commits the charge past the ceiling and reports it in
+	// ChargeReceipt.Overrun. Use it for a cost already incurred — reported
+	// after the fact, out of the request path — where refusing would only
+	// leave the ledger short of what was spent. The crossed ceiling then
+	// refuses every later charge and reservation under OverrunReject.
+	OverrunRecord
+)
 
 // ChargeReceipt is the result of a committed charge.
 type ChargeReceipt struct {
 	// ChargeID identifies the ledger row; pass it to Meter.Refund.
 	ChargeID uuid.UUID
-	// Spent is the capability's spend after the charge (its subtree's,
+	// Spent is the capability's spend as this call returns (its subtree's,
 	// when it has delegated children).
 	Spent float64
+	// Replayed reports that the charge was already in the ledger — the same
+	// ExternalRef, or a reservation already settled — so this call moved
+	// nothing and ChargeID names the earlier charge.
+	Replayed bool
+	// Overrun reports that the charge crossed at least one ceiling, which
+	// only OverrunRecord allows.
+	Overrun bool
 }
 
 // DefaultReservationTTL is how long a reservation lasts when the request
@@ -243,6 +291,8 @@ type SettleRequest struct {
 	Amount float64
 	// MaxBudget is the capability's own ceiling, from the verified token.
 	MaxBudget float64
+	// Overrun is what happens when Amount would cross a ceiling.
+	Overrun OverrunPolicy
 }
 
 // RefundRequest is the input to Meter.Refund.
@@ -391,6 +441,31 @@ var (
 	// rather than silently overwriting a change it never saw.
 	ErrTenantBudgetVersionMismatch = errors.New("capability: tenant budget resource_version mismatch")
 )
+
+// ValidateOverrun reports whether p is an OverrunPolicy this package defines.
+// Implementations call it before touching state, so an unknown policy is never
+// read as either one.
+func ValidateOverrun(p OverrunPolicy) error {
+	if p > OverrunRecord {
+		return fmt.Errorf("%w: unknown overrun policy %d", ErrInvalidRequest, p)
+	}
+	return nil
+}
+
+// ValidateExternalRef reports whether ref is usable as
+// ChargeRequest.ExternalRef: empty, or printable text within
+// MaxExternalRefBytes.
+func ValidateExternalRef(ref string) error {
+	if len(ref) > MaxExternalRefBytes {
+		return fmt.Errorf("%w: external ref is %d bytes, at most %d", ErrInvalidRequest, len(ref), MaxExternalRefBytes)
+	}
+	for _, r := range ref {
+		if !unicode.IsPrint(r) {
+			return fmt.Errorf("%w: external ref %q contains a non-printable character", ErrInvalidRequest, ref)
+		}
+	}
+	return nil
+}
 
 // ValidateAmount reports whether a charge or refund amount is usable:
 // finite and not negative. Implementations call it before touching state.
