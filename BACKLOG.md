@@ -1565,23 +1565,6 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** the deterministic option makes its seed a secret; that needs
   the threat model first.
 
-### The admin API cannot read a capability's record
-
-- **Status:** Deferred.
-- **Reason:** the module now reads back who issued a capability, its
-  revocation entry, a revoked Biscuit copy and a charge by id
-  (`Store.GetRecord`, `GetBiscuitRevocation`, `Meter.GetCharge`), but
-  `CapabilityService` has no RPC for any of them: an operator sees a
-  capability only in a list, and never why or by whom it was revoked.
-  `CapabilityServiceRevokeResponse` also keeps an unused slot for how many
-  descendants a cascade revoked, which `Store.Revoke` does not report.
-- **Definition of Done:** `CapabilityService.Get` returning the record with
-  its issuer and revocation — with `storetest` also run under the app role,
-  since the revocation join relies on the policy of `004` — the console
-  showing it, and either a revoke
-  count from `Store.Revoke` in the response or the slot's comment removed.
-- **Blockers:** none.
-
 ### Capability spans and a decision hook
 
 - **Status:** Deferred.

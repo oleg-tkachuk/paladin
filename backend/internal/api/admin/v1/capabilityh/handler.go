@@ -414,6 +414,40 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 // Authorization: same Cedar action as List (read-side admin), so
 // the operator who can List a tenant's caps can also see their
 // usage.
+// Get returns one capability as it is on record. Gated as List and GetUsage
+// are, and scoped to the capability's tenant the way GetUsage is.
+func (h *Handler) Get(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceGetRequest]) (*connect.Response[adminv1.CapabilityServiceGetResponse], error) {
+	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
+	if err != nil {
+		return nil, err
+	}
+	id, err := uuid.Parse(req.Msg.GetId())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
+	}
+	ctx, err = h.actOnCapabilitysTenant(ctx, caller, id)
+	if err != nil {
+		return nil, err
+	}
+	rec, err := h.store.GetRecord(ctx, id)
+	if err != nil {
+		if errors.Is(err, capability.ErrNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, apiutil.MapError(err)
+	}
+	out := &adminv1.CapabilityServiceGetResponse{
+		Capability: capabilityToProto(&rec.Capability),
+		IssuedBy:   principalToProto(rec.IssuedBy),
+	}
+	if r := rec.Revocation; r != nil {
+		out.Revocation = &adminv1.CapabilityRevocation{
+			RevokedAt: timestamppb.New(r.RevokedAt), Reason: r.Reason, Actor: r.Actor, Cascade: r.Cascade,
+		}
+	}
+	return connect.NewResponse(out), nil
+}
+
 func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceGetUsageRequest]) (*connect.Response[adminv1.CapabilityServiceGetUsageResponse], error) {
 	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
 	if err != nil {

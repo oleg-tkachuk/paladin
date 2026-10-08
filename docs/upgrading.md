@@ -88,6 +88,11 @@ returns the next one, and `TenantBudgetService.Summarize` carries them as
 then tenant id — the tenant furthest past its ceiling leads, and ties no
 longer fall to the slug.
 
+`CapabilityService.Get` returns one capability as it is on record — who asked
+for it and its own revocation, if any — and the console's capability details
+show both. `CapabilityServiceRevokeResponse` no longer promises a count of the
+descendants a cascade revoked.
+
 `capability/storetest` checks a `Store` against the contract, which now says
 what it left open: an id already on record is `ErrAlreadyExists`, revoking an
 unknown id is `ErrNotFound`, `PurgeExpired` drops revocation entries and never
