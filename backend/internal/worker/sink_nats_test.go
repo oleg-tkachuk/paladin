@@ -231,7 +231,7 @@ func TestNatsConnPool_ConnsNameTheServerNotTheCredentials(t *testing.T) {
 			t.Errorf("Conns() = %v, want %s connected", got, url)
 		}
 	}
-	if err := BrokerHealth(SinkKindNATS, 1, got); err != nil {
+	if err := BrokerHealth(got); err != nil {
 		t.Errorf("BrokerHealth = %v, want healthy", err)
 	}
 }
@@ -248,7 +248,7 @@ func TestNatsConnPool_ReportsAFailedDialRedacted(t *testing.T) {
 	if len(got) != 1 || got[0].Err == nil {
 		t.Fatalf("Conns() = %v, want the failed dial", got)
 	}
-	err := BrokerHealth(SinkKindNATS, 1, got)
+	err := BrokerHealth(got)
 	if err == nil || strings.Contains(err.Error(), "s3cret") || !strings.Contains(err.Error(), "127.0.0.1:1") {
 		t.Errorf("BrokerHealth = %v, want the server named, its password not", err)
 	}

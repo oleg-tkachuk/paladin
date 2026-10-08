@@ -258,23 +258,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// the same capability + api_token components — operators viewing the
 	// admin pod alone (e.g. via /system/health.json) shouldn't have to
 	// cross-reference the api pod to learn that capability is disabled.
-	if deps.Capability != nil && deps.Capability.Issuer != nil {
-		AddSubsystemCheck(healthH, "capability", true, func(ctx context.Context) error {
-			if deps.Capability.Issuer == nil {
-				return fmt.Errorf("capability issuer not initialised")
-			}
-			return nil
-		})
-	} else {
-		AddDisabledSubsystem(healthH, "capability")
-	}
-	if deps.APIToken != nil {
-		AddSubsystemCheck(healthH, "api_token", false, func(ctx context.Context) error {
-			return nil
-		})
-	} else {
-		AddDisabledSubsystem(healthH, "api_token")
-	}
+	AddComponent(healthH, capabilityComponent(deps))
+	AddComponent(healthH, apiTokenComponent(deps))
 
 	mux := http.NewServeMux()
 	// See AssembleAPIMuxes.

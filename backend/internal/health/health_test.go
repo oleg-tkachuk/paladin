@@ -69,8 +69,8 @@ func TestReadyz_NoChecks_OK(t *testing.T) {
 func TestReadyz_FailingCheck(t *testing.T) {
 	t.Parallel()
 	h := &Handler{
-		Ready: []Check{
-			{Name: "db", Critical: true, Func: func(context.Context) error { return errors.New("connection refused") }},
+		Ready: []Probe{
+			Check{Name: "db", Critical: true, Func: func(context.Context) error { return errors.New("connection refused") }},
 		},
 	}
 	code, body := probe(t, h, "/readyz")
@@ -94,9 +94,9 @@ func TestReadyz_ManyChecks_AllFailuresReported(t *testing.T) {
 	// slice exactly matches the registration order, so log scrapers can
 	// pick the "first failure" off the top reliably.
 	h := &Handler{
-		Ready: []Check{
-			{Name: "db", Critical: true, Func: func(context.Context) error { return errors.New("db down") }},
-			{Name: "s3", Critical: true, Func: func(context.Context) error { return errors.New("s3 down") }},
+		Ready: []Probe{
+			Check{Name: "db", Critical: true, Func: func(context.Context) error { return errors.New("db down") }},
+			Check{Name: "s3", Critical: true, Func: func(context.Context) error { return errors.New("s3 down") }},
 		},
 	}
 	_, body := probe(t, h, "/readyz")
@@ -116,8 +116,8 @@ func TestReadyz_DrainingShortCircuits(t *testing.T) {
 	// pod that's about to disappear.
 	checkRan := false
 	h := &Handler{
-		Ready: []Check{
-			{Name: "expensive", Critical: true, Func: func(context.Context) error {
+		Ready: []Probe{
+			Check{Name: "expensive", Critical: true, Func: func(context.Context) error {
 				checkRan = true
 				return nil
 			}},
@@ -139,8 +139,8 @@ func TestReadyz_DrainingShortCircuits(t *testing.T) {
 func TestStartupz_FailureSetsStarting(t *testing.T) {
 	t.Parallel()
 	h := &Handler{
-		Startup: []Check{
-			{Name: "migrations", Critical: true, Func: func(context.Context) error { return errors.New("not yet applied") }},
+		Startup: []Probe{
+			Check{Name: "migrations", Critical: true, Func: func(context.Context) error { return errors.New("not yet applied") }},
 		},
 	}
 	code, body := probe(t, h, "/startupz")
@@ -161,8 +161,8 @@ func TestStartupz_IgnoresShuttingDown(t *testing.T) {
 	// has already passed startup. So shuttingDown is a no-op for this
 	// endpoint; the probe still exercises its checks.
 	h := &Handler{
-		Startup: []Check{
-			{Name: "always-ok", Critical: true, Func: func(context.Context) error { return nil }},
+		Startup: []Probe{
+			Check{Name: "always-ok", Critical: true, Func: func(context.Context) error { return nil }},
 		},
 	}
 	h.MarkShuttingDown()
@@ -182,8 +182,8 @@ func TestCheck_RespectsTimeout(t *testing.T) {
 	// budget so the test runs fast.
 	h := &Handler{
 		Timeout: 30 * time.Millisecond,
-		Ready: []Check{
-			{Name: "slow", Critical: true, Func: func(ctx context.Context) error {
+		Ready: []Probe{
+			Check{Name: "slow", Critical: true, Func: func(ctx context.Context) error {
 				select {
 				case <-time.After(500 * time.Millisecond):
 					return nil

@@ -2,22 +2,27 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"errors"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // BuildHTTPServer wraps a mux into an h2c-enabled http.Server with
@@ -133,7 +138,7 @@ func ParseBuildTime(s string) time.Time {
 //
 // Today only Postgres is registered as a Critical check (Category=
 // database). Storage / capability / MCP-upstream checks are added by
-// callers that own those subsystems via the `Add` helper below — keeps
+// callers that own those subsystems via AddComponent below — keeps
 // this factory free of subsystem-specific deps and lets a role-only
 // component (e.g. mcp upstreams on the mcp role) be conditionally
 // registered.
@@ -148,46 +153,67 @@ func NewHealthHandler(db *postgres.DB, cfg config.Runtime, l *zap.Logger) *healt
 		Logger:        l.Named("health"),
 		LogSuccesses:  cfg.LogProbes,
 		SnapshotToken: cfg.HealthSnapshotToken,
-		Ready:         []health.Check{dbPing, replicaCheck(db)},
-		Startup:       []health.Check{dbPing},
+		Ready:         []health.Probe{dbPing, replicaCheck(db)},
+		Startup:       []health.Probe{dbPing},
 	}
 }
 
 // replicaCheck shows the read replica on the health page. Never critical: a
 // replica that is down or behind slows nothing, because the reads it would
 // serve go to the primary — failing readiness for it would turn an
-// optimisation into an outage. With no replica it is an informational
-// "disabled" row.
+// optimisation into an outage.
 func replicaCheck(db *postgres.DB) health.Check {
-	c := health.Check{Name: "postgres-replica", Category: health.CategoryDatabase}
-	if db == nil || !db.Reads.HasReplica() {
-		c.Disabled = true
-		return c
+	return health.Check{
+		Name:     "postgres-replica",
+		Category: health.CategoryDatabase,
+		Switch:   health.Fixed(health.ByConfig(db != nil && db.Reads.HasReplica(), config.KeyReplicaEnabled)),
+		Func:     func(context.Context) error { return db.Reads.HealthErr() },
 	}
-	c.Func = func(context.Context) error { return db.Reads.HealthErr() }
-	return c
 }
 
-// AddSubsystemCheck appends a Category=subsystem check (capability,
-// cedar, ingest). Critical default true — these gate request-path
-// authorisation and should fail readiness when broken.
-func AddSubsystemCheck(h *health.Handler, name string, critical bool, fn func(ctx context.Context) error) {
-	h.Ready = append(h.Ready, health.Check{
-		Name:     name,
-		Category: health.CategorySubsystem,
-		Critical: critical,
-		Func:     fn,
-	})
+// AddComponent registers p on the role's health page and readiness.
+func AddComponent(h *health.Handler, p health.Probe) {
+	h.Ready = append(h.Ready, p)
 }
 
-// AddDisabledSubsystem lists a subsystem that is off by configuration, so
-// the /health page shows it as disabled rather than leaving operators to
-// grep config to confirm it is absent on purpose. It is never run and
-// never fails /readyz.
-func AddDisabledSubsystem(h *health.Handler, name string) {
-	h.Ready = append(h.Ready, health.Check{
-		Name:     name,
+// capabilityComponent reports the capability subsystem. On, it checks the
+// capability store answers a lookup as the verifier makes one; critical,
+// as a request bearing a capability cannot be authorised without it.
+func capabilityComponent(deps *SharedDeps) health.Check {
+	on := deps.Capability != nil
+	return health.Check{
+		Name:     "capability",
 		Category: health.CategorySubsystem,
-		Disabled: true,
-	})
+		Critical: true,
+		Switch:   health.Fixed(health.ByConfig(on, config.KeyCapabilityEnabled)),
+		Func: func(ctx context.Context) error {
+			_, err := deps.Capability.Store.Get(ctx, uuid.New())
+			return storeAnswers(err, capability.ErrNotFound)
+		},
+	}
+}
+
+// apiTokenComponent reports the api_token subsystem. On, it checks the
+// token store answers the lookup authentication makes, before any tenant
+// is known. Not critical: users and capabilities still authenticate.
+func apiTokenComponent(deps *SharedDeps) health.Check {
+	on := deps.APIToken != nil
+	return health.Check{
+		Name:     "api_token",
+		Category: health.CategorySubsystem,
+		Switch:   health.Fixed(health.ByConfig(on, config.KeyAPITokenEnabled)),
+		Func: func(ctx context.Context) error {
+			_, err := deps.APIToken.Store.FindByDigest(ctx, make([]byte, sha256.Size))
+			return storeAnswers(err, api_token.ErrTokenNotFound)
+		},
+	}
+}
+
+// storeAnswers reads a store the way the request path does, for a row that
+// cannot exist: notFound is the store answering, anything else is not.
+func storeAnswers(err, notFound error) error {
+	if err == nil || errors.Is(err, notFound) {
+		return nil
+	}
+	return err
 }
