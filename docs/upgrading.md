@@ -52,6 +52,11 @@ carries `Copies` — a Biscuit copy with limits of its own — with
 so delegating let a copy shed its limits; a consumer that did not refuse it
 itself was open to that. Paladin's delegation endpoint already refused it.
 
+**Behaviour, capability module.** `NewRemoteJWKSResolver` refuses intervals
+that do not nest, `MinRefreshInterval ≤ RefreshInterval ≤ MaxStale`, after
+applying the defaults. A `MaxStale` below `RefreshInterval` made the resolver
+fail closed with no fetch having failed.
+
 ## Unreleased — the capability module's API, made uniform
 
 **Breaking, capability module.** Every input is a `…Request` and every read
