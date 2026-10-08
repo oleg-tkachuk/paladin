@@ -71,7 +71,9 @@ What the stores write can now be read back. `Store.GetRecord` returns a
 capability with the principal that issued it and its own revocation entry;
 `BiscuitRevocationStore.GetBiscuitRevocation` returns a revoked copy's entry;
 `Meter.GetCharge` reads a charge by the id `Refund` takes. All three are new
-interface methods, so a store of your own must add them. Migration `054` adds
+interface methods, so a store of your own must add them. So are
+`Meter.GetReservation` and `Meter.ListReservations`, and `Reserve` now returns
+the whole hold, which both read back the same way. Migration `054` adds
 `capability_records.issued_by`; a capability recorded before it reads back
 with the issuer's subject alone. `memstore.Store.IssuedBy` is gone — use
 `GetRecord`.

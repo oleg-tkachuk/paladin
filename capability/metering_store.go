@@ -133,6 +133,14 @@ func (s *MeteringStore[TX]) Settle(ctx context.Context, req SettleRequest, onCha
 
 // Pure pass-throughs — reads and admin writes don't move counters, no metric.
 
+func (s *MeteringStore[TX]) GetReservation(ctx context.Context, reservationID uuid.UUID) (Reservation, error) {
+	return s.Inner.GetReservation(ctx, reservationID)
+}
+
+func (s *MeteringStore[TX]) ListReservations(ctx context.Context, capID uuid.UUID) ([]Reservation, error) {
+	return s.Inner.ListReservations(ctx, capID)
+}
+
 func (s *MeteringStore[TX]) GetCharge(ctx context.Context, chargeID uuid.UUID) (ChargeRecord, error) {
 	return s.Inner.GetCharge(ctx, chargeID)
 }

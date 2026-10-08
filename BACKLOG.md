@@ -1592,16 +1592,6 @@ finding moving from "packages you import" to "your code is affected".
   its utilisation order, through the admin RPC and the console.
 - **Blockers:** a stable cursor over an order that changes as tenants spend.
 
-### No read of an open reservation
-
-- **Status:** Deferred.
-- **Reason:** `Reserve` returns an id and an expiry, and the held amount shows
-  only in the totals (`Usage.ReservedAmount`); nothing reads one hold back, or
-  lists a capability's holds, so a stuck hold is found by subtraction.
-- **Definition of Done:** `Meter.GetReservation` and a per-capability list,
-  in `metertest` and both stores.
-- **Blockers:** none.
-
 ### `Capability` crosses the API by pointer and by value
 
 - **Status:** Deferred — churn with no behaviour behind it.
