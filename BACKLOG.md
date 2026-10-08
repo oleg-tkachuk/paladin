@@ -1582,16 +1582,6 @@ finding moving from "packages you import" to "your code is affected".
   count from `Store.Revoke` in the response or the slot's comment removed.
 - **Blockers:** none.
 
-### Two lists page two ways
-
-- **Status:** Deferred — an API change for the console.
-- **Reason:** `ListByPrincipal` pages with a cursor; `ListTenantBudgets`
-  returns at most a page and no cursor, so tenants past `MaxListLimit` cannot
-  be listed at all.
-- **Definition of Done:** `ListTenantBudgets` takes and returns a cursor over
-  its utilisation order, through the admin RPC and the console.
-- **Blockers:** a stable cursor over an order that changes as tenants spend.
-
 ### Capability spans and a decision hook
 
 - **Status:** Deferred.

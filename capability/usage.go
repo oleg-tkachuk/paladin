@@ -2,9 +2,12 @@ package capability
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 	"time"
 	"unicode"
 
@@ -169,11 +172,15 @@ type TenantBudgets interface {
 	//   - thresholdPct > 0: include only rows where
 	//     spent / max * 100 >= thresholdPct (and max > 0).
 	//   - unlimitedOnly: include only rows where max == 0.
-	//   - limit: the most rows returned, as PageLimit reads it.
+	//   - limit: the page size, as PageLimit reads it.
 	//
-	// Rows are returned in descending utilisation order so the most
-	// at-risk tenants surface first.
-	ListTenantBudgets(ctx context.Context, req ListTenantBudgetsRequest) ([]TenantBudgetSummary, error)
+	// Rows come most at risk first: by spent / max × 100 descending —
+	// unclamped, so of two tenants past their ceilings the further one
+	// leads — then by tenant id. A page ends with a cursor that fetches
+	// the next one, empty on the last page. Spend moves between pages, so
+	// a tenant may show on two of them, or on none; a cursor is a place in
+	// the order, not a snapshot.
+	ListTenantBudgets(ctx context.Context, req ListTenantBudgetsRequest) ([]TenantBudgetSummary, string, error)
 }
 
 // UsageHousekeeping reclaims usage rows of capabilities that are gone.
@@ -413,6 +420,45 @@ type ListTenantBudgetsRequest struct {
 	UnlimitedOnly   bool
 	ExcludeInactive bool
 	Limit           int32
+	// Cursor is the one the previous page returned; empty for the first.
+	Cursor string
+}
+
+// TenantBudgetCursor is a place in ListTenantBudgets' order: the last row's
+// utilisation, in the decimal text its store computed it in, and tenant id.
+type TenantBudgetCursor struct {
+	Utilisation string
+	TenantID    uuid.UUID
+}
+
+// tenantBudgetCursorSep separates the cursor's two fields; neither a decimal
+// nor a uuid contains it.
+const tenantBudgetCursorSep = "|"
+
+// Encode is the cursor as ListTenantBudgets hands it out: opaque, URL-safe.
+func (c TenantBudgetCursor) Encode() string {
+	return base64.RawURLEncoding.EncodeToString([]byte(c.Utilisation + tenantBudgetCursorSep + c.TenantID.String()))
+}
+
+// DecodeTenantBudgetCursor reads a cursor Encode wrote. Anything else is an
+// ErrInvalidRequest.
+func DecodeTenantBudgetCursor(s string) (TenantBudgetCursor, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return TenantBudgetCursor{}, invalidRequest("tenant budget cursor %q", s)
+	}
+	pct, id, ok := strings.Cut(string(raw), tenantBudgetCursorSep)
+	if !ok || pct == "" {
+		return TenantBudgetCursor{}, invalidRequest("tenant budget cursor %q", s)
+	}
+	if _, err := strconv.ParseFloat(pct, 64); err != nil {
+		return TenantBudgetCursor{}, invalidRequest("tenant budget cursor %q", s)
+	}
+	tenant, err := uuid.Parse(id)
+	if err != nil {
+		return TenantBudgetCursor{}, invalidRequest("tenant budget cursor %q", s)
+	}
+	return TenantBudgetCursor{Utilisation: pct, TenantID: tenant}, nil
 }
 
 // Usage is the snapshot view of a capability's runtime counters.

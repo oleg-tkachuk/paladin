@@ -500,8 +500,11 @@ type Querier interface {
 	//                          everything).
 	//   exclude_inactive=true → join filters tenants.deleted_at IS NULL.
 	//
-	// Ordered by utilisation DESC so at-risk tenants surface first.
-	ListTenantBudgetSummaries(ctx context.Context, excludeInactive bool, unlimitedOnly bool, thresholdPct pgtype.Numeric, rowLimit int32) ([]ListTenantBudgetSummariesRow, error)
+	// Ordered most at risk first: by raw utilisation (unclamped, so the
+	// tenant furthest past its ceiling leads), then tenant_id. after_pct and
+	// after_tenant, both set or both NULL, resume after a row of that order
+	// (capability.ListTenantBudgets' cursor); raw_pct is returned to build it.
+	ListTenantBudgetSummaries(ctx context.Context, excludeInactive bool, unlimitedOnly bool, thresholdPct pgtype.Numeric, afterPct pgtype.Numeric, afterTenant pgtype.UUID, rowLimit int32) ([]ListTenantBudgetSummariesRow, error)
 	// include_trashed = false → active rows only; true → both;
 	// only_trashed = true → trashed only (overrides include_trashed).
 	// The boolean gating is inline-CASE so sqlc emits a single prepared

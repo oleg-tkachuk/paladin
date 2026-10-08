@@ -161,7 +161,7 @@ func (s *MeteringStore[TX]) SetTenantBudget(ctx context.Context, args SetTenantB
 	return s.Inner.SetTenantBudget(ctx, args)
 }
 
-func (s *MeteringStore[TX]) ListTenantBudgets(ctx context.Context, args ListTenantBudgetsRequest) ([]TenantBudgetSummary, error) {
+func (s *MeteringStore[TX]) ListTenantBudgets(ctx context.Context, args ListTenantBudgetsRequest) ([]TenantBudgetSummary, string, error) {
 	return s.Inner.ListTenantBudgets(ctx, args)
 }
 

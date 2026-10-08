@@ -197,7 +197,7 @@ func TestMeteringStorePassesEveryCallThrough(t *testing.T) {
 	if b, err := usage.GetTenantBudget(ctx, tenant); err != nil || b.SpentAmount != 1 {
 		t.Errorf("GetTenantBudget = %+v, %v", b, err)
 	}
-	if l, err := usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{}); err != nil || len(l) != 1 {
+	if l, _, err := usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{}); err != nil || len(l) != 1 {
 		t.Errorf("ListTenantBudgets = %+v, %v", l, err)
 	}
 	if c, err := usage.GetCharge(ctx, receipt.ChargeID); err != nil || c.Refunded != 1 {

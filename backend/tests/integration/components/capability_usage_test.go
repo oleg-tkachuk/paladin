@@ -12,9 +12,11 @@
 package components
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -502,7 +504,7 @@ func TestListTenantBudgets(t *testing.T) {
 	}
 
 	t.Run("threshold selects tenants at or above it", func(t *testing.T) {
-		rows, err := f.usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{ThresholdPct: 80})
+		rows, _, err := f.usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{ThresholdPct: 80})
 		if err != nil {
 			t.Fatalf("list: %v", err)
 		}
@@ -523,7 +525,7 @@ func TestListTenantBudgets(t *testing.T) {
 	})
 
 	t.Run("unlimited_only selects uncapped tenants", func(t *testing.T) {
-		rows, err := f.usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{UnlimitedOnly: true})
+		rows, _, err := f.usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{UnlimitedOnly: true})
 		if err != nil {
 			t.Fatalf("list: %v", err)
 		}
@@ -537,7 +539,7 @@ func TestListTenantBudgets(t *testing.T) {
 
 	t.Run("exclude_inactive drops soft-deleted tenants", func(t *testing.T) {
 		mustExec(t, ctx, f.pool, `UPDATE tenants SET deleted_at = now() WHERE id = $1`, lowUse)
-		rows, err := f.usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{ExcludeInactive: true})
+		rows, _, err := f.usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{ExcludeInactive: true})
 		if err != nil {
 			t.Fatalf("list: %v", err)
 		}
@@ -545,6 +547,62 @@ func TestListTenantBudgets(t *testing.T) {
 			t.Error("soft-deleted tenant survived exclude_inactive")
 		}
 	})
+}
+
+// Pages of the tenant budget list cover every tenant once, in the order, and
+// of two tenants past their ceilings the further one leads although both read
+// 100%.
+func TestListTenantBudgetsPages(t *testing.T) {
+	t.Parallel()
+	ctx, f := newUsageFixture(t)
+	const ceiling = 10.0
+	// Spend per tenant, in the order the list must return them; the last two
+	// tie, so tenant id decides between them.
+	spends := []float64{20, 12, 5, 1, 1}
+	var want []uuid.UUID
+	for i, spent := range spends {
+		tenant := f.tenant
+		if i > 0 {
+			tenant, _ = mkTenant(t, ctx, f.pool, "shared")
+		}
+		if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{TenantID: tenant, MaxBudgetAmount: ceiling}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.usage.Charge(ctx, capability.ChargeRequest{
+			CapabilityID: f.capID, TenantID: tenant, Amount: spent, UnitCode: "USD", Overrun: capability.OverrunRecord,
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, tenant)
+	}
+	tail := want[len(want)-2:]
+	slices.SortFunc(tail, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+
+	const pageSize = 2
+	var got []uuid.UUID
+	req := capability.ListTenantBudgetsRequest{Limit: pageSize}
+	for pages := 0; ; pages++ {
+		page, next, err := f.usage.ListTenantBudgets(ctx, req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range page {
+			got = append(got, r.TenantID)
+		}
+		if next == "" {
+			break
+		}
+		if pages > len(want) {
+			t.Fatal("the cursor never reached the last page")
+		}
+		req.Cursor = next
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("paged %v, want %v", got, want)
+	}
+	if _, _, err := f.usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{Cursor: "garbage"}); !errors.Is(err, capability.ErrInvalidRequest) {
+		t.Errorf("a bad cursor: err = %v, want ErrInvalidRequest", err)
+	}
 }
 
 // TestUsageGetDeleteAndPurgeOrphans pins the maintenance surface. PurgeOrphans
