@@ -104,9 +104,24 @@ func snapshotToProto(s health.Snapshot) *pb.HealthInfo {
 			LatencyMs: c.LatencyMs,
 			Category:  c.Category,
 			Critical:  c.Critical,
+			Control:   controlToProto(c.Control),
 		})
 	}
 	return out
+}
+
+// controlToProto maps where a component's switch lives.
+func controlToProto(c health.Control) pb.ComponentControl {
+	switch c {
+	case health.ControlAlwaysOn:
+		return pb.ComponentControl_COMPONENT_CONTROL_ALWAYS_ON
+	case health.ControlConfig:
+		return pb.ComponentControl_COMPONENT_CONTROL_CONFIG
+	case health.ControlDatabase:
+		return pb.ComponentControl_COMPONENT_CONTROL_DATABASE
+	default:
+		return pb.ComponentControl_COMPONENT_CONTROL_UNSPECIFIED
+	}
 }
 
 func statusToProto(s health.ComponentStatus) pb.ComponentStatus {

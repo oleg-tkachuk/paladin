@@ -22,9 +22,15 @@ const redactedQueryValue = "REDACTED"
 // names stay, so a log line still says what kind of URL it was. The fragment
 // is dropped.
 func URL(key, raw string) zap.Field {
+	return zap.String(key, RedactURL(raw))
+}
+
+// RedactURL is raw as URL logs it, for a URL shown anywhere but a log line —
+// a health message, say.
+func RedactURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return zap.String(key, unparseableURL)
+		return unparseableURL
 	}
 	if u.RawQuery != "" {
 		q := u.Query()
@@ -34,5 +40,5 @@ func URL(key, raw string) zap.Field {
 		u.RawQuery = q.Encode()
 	}
 	u.Fragment, u.RawFragment = "", ""
-	return zap.String(key, u.Redacted())
+	return u.Redacted()
 }

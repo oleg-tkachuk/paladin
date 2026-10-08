@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -85,7 +86,10 @@ func rabbitConnKey(cfg rabbitSinkConfig) string {
 type RabbitMQConnPool struct {
 	mu   sync.Mutex
 	pubs map[string]pooledRabbitPub
-	log  *zap.Logger
+	// failed holds the last failed dial per connection key, until a dial
+	// to it succeeds, so the health probe names a broker it cannot reach.
+	failed map[string]BrokerConn
+	log    *zap.Logger
 	// newPub dials url (with the optional TLS config for AMQPS client
 	// certs / private CAs) → publisher. Overridable in tests.
 	newPub func(url string, tlsCfg *tls.Config) (rabbitPublisher, error)
@@ -102,8 +106,9 @@ type pooledRabbitPub struct {
 // use per URL.
 func NewRabbitMQConnPool(log *zap.Logger) *RabbitMQConnPool {
 	return &RabbitMQConnPool{
-		pubs: map[string]pooledRabbitPub{},
-		log:  log,
+		pubs:   map[string]pooledRabbitPub{},
+		failed: map[string]BrokerConn{},
+		log:    log,
 		newPub: func(url string, tlsCfg *tls.Config) (rabbitPublisher, error) {
 			var (
 				conn *amqp.Connection
@@ -138,8 +143,10 @@ func (p *RabbitMQConnPool) get(key, url string, tlsCfg *tls.Config) (rabbitPubli
 	}
 	pub, err := p.newPub(url, tlsCfg)
 	if err != nil {
+		p.failed[key] = BrokerConn{URL: logfield.RedactURL(url), Err: err}
 		return nil, err
 	}
+	delete(p.failed, key)
 	p.pubs[key] = pooledRabbitPub{pub: pub, url: url}
 	if p.log != nil {
 		p.log.Info("rabbitmq connection dialed",
@@ -148,19 +155,39 @@ func (p *RabbitMQConnPool) get(key, url string, tlsCfg *tls.Config) (rabbitPubli
 	return pub, nil
 }
 
-// Statuses returns a snapshot of (url → healthy) for every pooled connection.
-// The dispatcher's health probe walks this to surface per-broker connectivity
-// in /system/health.json. An empty map means no RabbitMQ sink has dialed yet
-// (nothing to report), which the probe treats as healthy-but-empty.
-func (p *RabbitMQConnPool) Statuses() map[string]bool {
+// RabbitWarmupURL reads the URL Warmup may dial out of a rabbitmq
+// subscription's stored sink_config. ok is false where a dial of it as it
+// stands would not be the connection delivery makes — a Secret-ref URL,
+// resolved only at delivery, or a sink with TLS material — so a failure there
+// would report a broker as unreachable that delivery reaches.
+func RabbitWarmupURL(raw []byte) (url string, ok bool) {
+	var cfg rabbitSinkConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil || cfg.URL == "" {
+		return "", false
+	}
+	if strings.HasPrefix(cfg.URL, sinkSecretPrefix) ||
+		cfg.TLSClientCert != "" || cfg.TLSClientKey != "" || cfg.TLSCACert != "" {
+		return "", false
+	}
+	return cfg.URL, true
+}
+
+// Conns reports every broker the pool has dialed, for the dispatcher's
+// "rabbitmq" health check: held connections, up or dropped, and dials that
+// failed.
+func (p *RabbitMQConnPool) Conns() []BrokerConn {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make(map[string]bool, len(p.pubs))
+	out := make([]BrokerConn, 0, len(p.pubs)+len(p.failed))
 	for _, e := range p.pubs {
-		// Keyed by URL for operator readability; two same-URL sinks with
-		// different client certs collapse to one row (AND of health would
-		// need a richer shape — fine for a coarse probe).
-		out[e.url] = e.pub.healthy()
+		c := BrokerConn{URL: logfield.RedactURL(e.url)}
+		if !e.pub.healthy() {
+			c.Err = errConnectionLost
+		}
+		out = append(out, c)
+	}
+	for _, c := range p.failed {
+		out = append(out, c)
 	}
 	return out
 }
@@ -170,9 +197,9 @@ func (p *RabbitMQConnPool) Statuses() map[string]bool {
 // are logged, not returned; the per-row deliver path retries under the row's
 // normal budget.
 func (p *RabbitMQConnPool) Warmup(urls []string) {
-	// Warmup only covers URL-auth sinks: client-cert sinks need their PEM
-	// material (possibly a k8s: Secret ref), so they dial lazily on first
-	// delivery instead.
+	// Warmup only covers URL-auth sinks — RabbitWarmupURL picks them out:
+	// client-cert sinks need their PEM material (possibly a k8s: Secret
+	// ref), so they dial lazily on first delivery instead.
 	for _, url := range urls {
 		if _, err := p.get(rabbitConnKey(rabbitSinkConfig{URL: url}), url, nil); err != nil && p.log != nil {
 			p.log.Warn("rabbitmq: pre-warm dial failed",
@@ -190,6 +217,7 @@ func (p *RabbitMQConnPool) Close() {
 		_ = e.pub.close()
 		delete(p.pubs, key)
 	}
+	clear(p.failed)
 }
 
 // amqpPublisher is the production rabbitPublisher: one cached connection,

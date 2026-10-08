@@ -34,6 +34,8 @@ import { formatTime } from "@/lib/format/locale";
 // off by configuration, which is never probed and never counts toward a role.
 type RoleStatus = "healthy" | "degraded" | "unhealthy";
 type ComponentStatus = RoleStatus | "disabled";
+// Where a component's on/off switch lives — backend/internal/health.Control.
+type Control = "always_on" | "config" | "database";
 
 type Component = {
   name: string;
@@ -42,6 +44,7 @@ type Component = {
   latency_ms: number;
   category: string;
   critical: boolean;
+  control?: Control;
 };
 
 type Snapshot = {
@@ -153,6 +156,18 @@ function StatusPill({ status }: { status: StateKey }) {
 // fits gets none. A disabled component is muted and shows no latency, since
 // it is never probed.
 
+// The badge of a component that can be switched off, and what switches it.
+// A component with no switch (always_on) carries none.
+const CONTROL_BADGE: Partial<
+  Record<Control, { label: string; title: string }>
+> = {
+  config: { label: "config", title: "Switched by a configuration key" },
+  database: {
+    label: "db",
+    title: "In use while something stored in the database uses it",
+  },
+};
+
 function ComponentRow({ c }: { c: Component }) {
   const [open, setOpen] = useState(false);
   const m = META[c.status];
@@ -162,6 +177,7 @@ function ComponentRow({ c }: { c: Component }) {
   // Expanding is only offered when the preview does not already show the
   // whole message: a toggle that reveals the same text again is noise.
   const expandable = !!c.message && (cutOff || open);
+  const control = c.control && CONTROL_BADGE[c.control];
 
   return (
     <div className="border-b border-border/40 py-2 last:border-b-0">
@@ -190,6 +206,15 @@ function ComponentRow({ c }: { c: Component }) {
               className="shrink-0 px-1.5 py-0 text-sm font-normal"
             >
               required
+            </Badge>
+          )}
+          {control && (
+            <Badge
+              variant="secondary"
+              title={control.title}
+              className="shrink-0 px-1.5 py-0 text-sm font-normal"
+            >
+              {control.label}
             </Badge>
           )}
         </div>

@@ -19,6 +19,8 @@ and where its boundaries are. This directory holds the detail.
 - [configuration.md](configuration.md) — every configuration surface:
   files, overlays, environment overrides, secrets, and the validation
   that runs at load.
+- [health.md](health.md) — what each role reports on its health page,
+  what switches each component on, and what is checked.
 - [`../backend/README.md`](../backend/README.md) — roles, ports, package
   layout, wire contracts, database.
 - [`../frontend/README.md`](../frontend/README.md) — console and BFF.
