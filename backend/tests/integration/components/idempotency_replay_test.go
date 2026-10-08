@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/pgtest"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -44,7 +46,7 @@ func TestIdempotencyReplayAgainstPartitionedTable(t *testing.T) {
 	ctx := context.Background()
 
 	pgC, err := tcpostgres.Run(ctx,
-		"postgres:16-alpine",
+		pgtest.Image,
 		tcpostgres.WithDatabase("paladin"),
 		tcpostgres.WithUsername("paladin_migrate"),
 		tcpostgres.WithPassword("paladin"),
