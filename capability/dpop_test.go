@@ -29,13 +29,13 @@ func dpopKeys(t *testing.T) map[string]crypto.Signer {
 	return map[string]crypto.Signer{"Ed25519": ed, "P-256": ec}
 }
 
-func boundCap(t *testing.T, key crypto.Signer) *Capability {
+func boundCap(t *testing.T, key crypto.Signer) Capability {
 	t.Helper()
 	jkt, err := KeyThumbprint(key.Public())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &Capability{ID: uuid.New(), ConfirmationJKT: jkt}
+	return Capability{ID: uuid.New(), ConfirmationJKT: jkt}
 }
 
 func TestDPoPAcceptsAProofFromTheBoundKey(t *testing.T) {
@@ -131,7 +131,7 @@ func TestDPoPPathOnlyIgnoresHostButNotPath(t *testing.T) {
 
 func TestDPoPUnboundCapabilityNeedsNoProof(t *testing.T) {
 	v := &DPoPVerifier{Replay: NewMemoryReplayCache(0)}
-	if err := v.Check(context.Background(), &Capability{}, DPoPRequest{}); err != nil {
+	if err := v.Check(context.Background(), Capability{}, DPoPRequest{}); err != nil {
 		t.Fatalf("unbound capability: %v", err)
 	}
 }
@@ -168,20 +168,20 @@ func TestKeyBindingSurvivesTheTokenAndDelegation(t *testing.T) {
 		t.Fatalf("verified binding = %q, %v; want %q", got.ConfirmationJKT, err, jkt)
 	}
 
-	child, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: *parent, InheritCaveats: true})
+	child, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: parent, InheritCaveats: true})
 	if err != nil || child.ConfirmationJKT != jkt {
 		t.Fatalf("child without its own key: binding %q, %v; want the parent's", child.ConfirmationJKT, err)
 	}
 	subKey := dpopKeys(t)["P-256"]
 	subJKT, _ := KeyThumbprint(subKey.Public())
-	child, _, err = issuer.Delegate(ctx, DelegateRequest{Parent: *parent, InheritCaveats: true, ConfirmationJKT: subJKT})
+	child, _, err = issuer.Delegate(ctx, DelegateRequest{Parent: parent, InheritCaveats: true, ConfirmationJKT: subJKT})
 	if err != nil || child.ConfirmationJKT != subJKT {
 		t.Fatalf("child bound to the sub-agent's key: %q, %v", child.ConfirmationJKT, err)
 	}
 
-	unbound := *child
+	unbound := child
 	unbound.ConfirmationJKT = ""
-	if err := Narrows(*parent, unbound); !errors.Is(err, ErrDelegationTooWide) {
+	if err := Narrows(parent, unbound); !errors.Is(err, ErrDelegationTooWide) {
 		t.Fatalf("unbound child of a bound parent: err = %v, want ErrDelegationTooWide", err)
 	}
 }

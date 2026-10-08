@@ -38,6 +38,9 @@
 //     [RemoteJWKSResolver] fetches an issuer's JWKS for verifiers that run
 //     apart from it.
 //
+// A Capability crosses the API by value, in and out: no caller can alter one
+// another holds, and one that is not there is an error, never nil.
+//
 // Every read names what it reads — Store.Get a record, Meter.GetUsage the
 // counters, TenantBudgets.GetTenantBudget a ceiling — so one type may
 // implement Store and UsageStore together, or each apart as memstore does.

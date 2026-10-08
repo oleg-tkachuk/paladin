@@ -93,7 +93,7 @@ func main() {
 	// 5. Delegate to a sub-agent — strictly narrower, without calling back to
 	//    any admin API. An orchestrator can attenuate, never escalate.
 	child, _, err := issuer.Delegate(ctx, capability.DelegateRequest{
-		Parent: *parent,
+		Parent: parent,
 		Subject: capability.Principal{
 			Type: capability.PrincipalAgent, TenantID: tenantID, Subject: "sub-worker",
 			Agent: &capability.AgentPrincipal{
@@ -116,7 +116,7 @@ func main() {
 	// Widening is refused — this is the property that makes the model safe to
 	// hand to an agent.
 	_, _, err = issuer.Delegate(ctx, capability.DelegateRequest{
-		Parent: *parent,
+		Parent: parent,
 		Subject: capability.Principal{
 			Type: capability.PrincipalAgent, TenantID: tenantID, Subject: "greedy-worker",
 		},

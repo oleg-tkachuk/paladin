@@ -553,7 +553,7 @@ type lookupStore struct {
 	getCtx context.Context
 }
 
-func (s *lookupStore) Get(ctx context.Context, id uuid.UUID) (*capability.Capability, error) {
+func (s *lookupStore) Get(ctx context.Context, id uuid.UUID) (capability.Capability, error) {
 	s.getCtx = ctx
 	return s.recordingStore.Get(ctx, id)
 }

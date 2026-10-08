@@ -106,30 +106,30 @@ type IssueRequest struct {
 // Returns the typed Capability and the compact-form token in one call —
 // callers usually need both: the token to ship to the agent, the struct
 // to log / display.
-func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Capability, string, error) {
+func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (Capability, string, error) {
 	if req.Subject.TenantID == uuid.Nil {
-		return nil, "", invalidRequest("Issue requires Subject.TenantID")
+		return Capability{}, "", invalidRequest("Issue requires Subject.TenantID")
 	}
 	if req.IssuedBy.Subject == "" {
-		return nil, "", invalidRequest("IssuedBy is required")
+		return Capability{}, "", invalidRequest("IssuedBy is required")
 	}
 	if req.Generation < 0 {
-		return nil, "", invalidRequest("Generation %d is negative", req.Generation)
+		return Capability{}, "", invalidRequest("Generation %d is negative", req.Generation)
 	}
 	if err := validateAudience(req.Audience); err != nil {
-		return nil, "", err
+		return Capability{}, "", err
 	}
 	if err := req.Caveats.Validate(); err != nil {
-		return nil, "", err
+		return Capability{}, "", err
 	}
 	if err := validateThumbprint(req.ConfirmationJKT); err != nil {
-		return nil, "", err
+		return Capability{}, "", err
 	}
 
 	now := i.clock().UTC()
 	expires, err := i.expiry(now, req.TTL)
 	if err != nil {
-		return nil, "", err
+		return Capability{}, "", err
 	}
 	cap := Capability{
 		ID:              uuid.New(),
@@ -146,17 +146,17 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Capability, stri
 		cap.Generation = 1
 	}
 	if err := setNotBefore(&cap, req.NotBefore); err != nil {
-		return nil, "", err
+		return Capability{}, "", err
 	}
 
 	if err := i.store.Insert(ctx, cap, req.IssuedBy); err != nil {
-		return nil, "", fmt.Errorf("capability: persist issuance: %w", err)
+		return Capability{}, "", fmt.Errorf("capability: persist issuance: %w", err)
 	}
 	token, err := i.signer.Sign(cap)
 	if err != nil {
-		return nil, "", fmt.Errorf("capability: sign: %w", err)
+		return Capability{}, "", fmt.Errorf("capability: sign: %w", err)
 	}
-	return &cap, token, nil
+	return cap, token, nil
 }
 
 // expiry resolves a requested TTL against the default. A negative TTL is a
@@ -225,9 +225,9 @@ type DelegateRequest struct {
 // It does not trust it to be current, though: a parent that has expired,
 // or that the store reports revoked (itself or any ancestor), delegates
 // nothing.
-func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (*Capability, string, error) {
+func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (Capability, string, error) {
 	if req.Parent.ID == uuid.Nil {
-		return nil, "", invalidRequest("Delegate requires Parent.ID")
+		return Capability{}, "", invalidRequest("Delegate requires Parent.ID")
 	}
 	if req.Subject.TenantID == uuid.Nil {
 		req.Subject.TenantID = req.Parent.Subject.TenantID
@@ -239,30 +239,30 @@ func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (*Capability
 		req.Caveats = req.Parent.Caveats
 	}
 	if err := validateAudience(req.Audience); err != nil {
-		return nil, "", err
+		return Capability{}, "", err
 	}
 	if err := req.Caveats.Validate(); err != nil {
-		return nil, "", err
+		return Capability{}, "", err
 	}
 	if err := validateThumbprint(req.ConfirmationJKT); err != nil {
-		return nil, "", err
+		return Capability{}, "", err
 	}
 
 	now := i.clock().UTC()
 	if !now.Before(req.Parent.ExpiresAt) {
-		return nil, "", fmt.Errorf("capability: delegate from parent %s: %w", req.Parent.ID, ErrExpired)
+		return Capability{}, "", fmt.Errorf("capability: delegate from parent %s: %w", req.Parent.ID, ErrExpired)
 	}
 	revoked, err := i.store.IsRevoked(ctx, req.Parent.ID)
 	if err != nil {
-		return nil, "", fmt.Errorf("capability: delegate revocation lookup: %w", err)
+		return Capability{}, "", fmt.Errorf("capability: delegate revocation lookup: %w", err)
 	}
 	if revoked {
-		return nil, "", fmt.Errorf("capability: delegate from parent %s: %w", req.Parent.ID, ErrRevoked)
+		return Capability{}, "", fmt.Errorf("capability: delegate from parent %s: %w", req.Parent.ID, ErrRevoked)
 	}
 
 	expires, err := i.expiry(now, req.TTL)
 	if err != nil {
-		return nil, "", err
+		return Capability{}, "", err
 	}
 	if expires.After(req.Parent.ExpiresAt) {
 		expires = req.Parent.ExpiresAt
@@ -284,24 +284,24 @@ func (i *Issuer) Delegate(ctx context.Context, req DelegateRequest) (*Capability
 		child.ConfirmationJKT = req.Parent.ConfirmationJKT
 	}
 	if err := setNotBefore(&child, req.NotBefore); err != nil {
-		return nil, "", err
+		return Capability{}, "", err
 	}
 
 	if err := Narrows(req.Parent, child); err != nil {
-		return nil, "", fmt.Errorf("capability: delegate %w", err)
+		return Capability{}, "", fmt.Errorf("capability: delegate %w", err)
 	}
 
 	// A delegation is requested by whoever holds the parent — that is not a
 	// caller-supplied fact, it is what delegation means, so it is derived
 	// rather than accepted as an argument.
 	if err := i.store.Insert(ctx, child, req.Parent.Subject); err != nil {
-		return nil, "", fmt.Errorf("capability: persist delegation: %w", err)
+		return Capability{}, "", fmt.Errorf("capability: persist delegation: %w", err)
 	}
 	token, err := i.signer.Sign(child)
 	if err != nil {
-		return nil, "", fmt.Errorf("capability: sign delegation: %w", err)
+		return Capability{}, "", fmt.Errorf("capability: sign delegation: %w", err)
 	}
-	return &child, token, nil
+	return child, token, nil
 }
 
 // GenerateEd25519Keypair is a convenience for boot wiring: returns a new

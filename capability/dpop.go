@@ -279,7 +279,7 @@ type DPoPVerifier struct {
 // proof that: is a dpop+jwt signed by the key its header carries; whose key's
 // thumbprint is the capability's; that names this method and URL and this
 // token's hash; that was issued within the window; and whose jti is new.
-func (v *DPoPVerifier) Check(ctx context.Context, c *Capability, req DPoPRequest) error {
+func (v *DPoPVerifier) Check(ctx context.Context, c Capability, req DPoPRequest) error {
 	if c.ConfirmationJKT == "" {
 		return nil
 	}

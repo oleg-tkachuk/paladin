@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func biscuitFixture(t *testing.T) (*Issuer, *StandardVerifier, *memStore, *Capability, string) {
+func biscuitFixture(t *testing.T) (*Issuer, *StandardVerifier, *memStore, Capability, string) {
 	t.Helper()
 	issuer, _, store, pub := buildIssuerVerifier(t)
 	verifier, err := NewStandardVerifier(VerifierConfig{
@@ -317,7 +317,7 @@ func TestBiscuitAttenuationChainsNeverWiden(t *testing.T) {
 				continue
 			}
 			verified++
-			if err := Narrows(*cap, *got); err != nil {
+			if err := Narrows(cap, got); err != nil {
 				t.Fatalf("a verified chain widened its capability: %v\n%+v", err, got.Caveats)
 			}
 		}

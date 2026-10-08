@@ -46,18 +46,18 @@ type fakeStore struct {
 func (s *fakeStore) Insert(_ context.Context, _ capability.Capability, _ capability.Principal) error {
 	return nil
 }
-func (s *fakeStore) Get(_ context.Context, id uuid.UUID) (*capability.Capability, error) {
+func (s *fakeStore) Get(_ context.Context, id uuid.UUID) (capability.Capability, error) {
 	if s.cap != nil && s.cap.ID == id {
-		return s.cap, nil
+		return *s.cap, nil
 	}
-	return nil, capability.ErrNotFound // the Store contract's sentinel
+	return capability.Capability{}, capability.ErrNotFound // the Store contract's sentinel
 }
 func (s *fakeStore) GetRecord(ctx context.Context, id uuid.UUID) (capability.Record, error) {
 	c, err := s.Get(ctx, id)
 	if err != nil {
 		return capability.Record{}, err
 	}
-	return capability.Record{Capability: *c}, nil
+	return capability.Record{Capability: c}, nil
 }
 func (s *fakeStore) IsRevoked(context.Context, uuid.UUID) (bool, error) { return false, nil }
 func (s *fakeStore) Revoke(context.Context, capability.RevokeRequest) error {

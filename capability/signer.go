@@ -47,7 +47,7 @@ type Verifier interface {
 	// The audience parameter is the plane the call is hitting — the
 	// verifier rejects tokens whose Capability.Audience does not
 	// include it. Use one of the AudiencePlane* constants.
-	Verify(ctx context.Context, token string, audience string) (*Capability, error)
+	Verify(ctx context.Context, token string, audience string) (Capability, error)
 }
 
 // AudiencePlane* constants are the audiences Paladin, the reference
@@ -271,15 +271,19 @@ func parseClaims(seg string) (*Capability, error) {
 // or applying time / audience / revocation gates. Use only for tooling
 // (`paladin cap show`); production code goes through Verifier.Verify,
 // which never reads a claim before the signature has checked out.
-func Decode(token string) (*Capability, error) {
+func Decode(token string) (Capability, error) {
 	parts, err := splitToken(token)
 	if err != nil {
-		return nil, err
+		return Capability{}, err
 	}
 	if _, err := parseHeader(parts.header); err != nil {
-		return nil, err
+		return Capability{}, err
 	}
-	return parseClaims(parts.claims)
+	c, err := parseClaims(parts.claims)
+	if err != nil {
+		return Capability{}, err
+	}
+	return *c, nil
 }
 
 // VerifySignature checks the Ed25519 signature on a compact token

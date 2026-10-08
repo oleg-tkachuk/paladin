@@ -35,20 +35,20 @@ func (m *memStore) Insert(_ context.Context, c Capability, _ Principal) error {
 	m.caps[c.ID] = c
 	return nil
 }
-func (m *memStore) Get(_ context.Context, id uuid.UUID) (*Capability, error) {
+func (m *memStore) Get(_ context.Context, id uuid.UUID) (Capability, error) {
 	atomic.AddInt64(&m.getCalls, 1)
 	c, ok := m.caps[id]
 	if !ok {
-		return nil, errors.New("not found")
+		return Capability{}, errors.New("not found")
 	}
-	return &c, nil
+	return c, nil
 }
 func (m *memStore) GetRecord(ctx context.Context, id uuid.UUID) (Record, error) {
 	c, err := m.Get(ctx, id)
 	if err != nil {
 		return Record{}, err
 	}
-	return Record{Capability: *c}, nil
+	return Record{Capability: c}, nil
 }
 func (m *memStore) IsRevoked(_ context.Context, id uuid.UUID) (bool, error) {
 	atomic.AddInt64(&m.revCalls, 1)
@@ -282,7 +282,7 @@ func TestDelegate_NarrowsAndPersists(t *testing.T) {
 	}
 
 	child, childToken, err := issuer.Delegate(ctx, DelegateRequest{
-		Parent:   *parent,
+		Parent:   parent,
 		Subject:  Principal{Type: PrincipalAgent, TenantID: tenantID, Subject: "child"},
 		Audience: []string{AudiencePlaneData},
 		Caveats: Caveats{
@@ -322,7 +322,7 @@ func TestDelegate_RejectsWidening(t *testing.T) {
 	})
 
 	_, _, err := issuer.Delegate(ctx, DelegateRequest{
-		Parent:   *parent,
+		Parent:   parent,
 		Subject:  Principal{Type: PrincipalAgent, TenantID: tenantID},
 		Audience: []string{AudiencePlaneData, AudiencePlaneAdmin}, // wider!
 		Caveats:  Caveats{Ops: []Op{OpGet}},

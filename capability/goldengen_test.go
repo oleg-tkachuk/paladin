@@ -51,8 +51,8 @@ func goldenClock() time.Time {
 type genStore struct{}
 
 func (genStore) Insert(context.Context, Capability, Principal) error { return nil }
-func (genStore) Get(context.Context, uuid.UUID) (*Capability, error) {
-	return nil, errors.New("not found")
+func (genStore) Get(context.Context, uuid.UUID) (Capability, error) {
+	return Capability{}, errors.New("not found")
 }
 func (genStore) GetRecord(context.Context, uuid.UUID) (Record, error) {
 	return Record{}, errors.New("not found")
