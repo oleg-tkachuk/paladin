@@ -245,7 +245,9 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 		}
 		// A child's requests and spend reach its ancestors' counters, not a
 		// Biscuit copy's own, so a copy with limits of its own would shed them
-		// by delegating. Its holder narrows offline instead.
+		// by delegating. Its holder narrows offline instead. Issuer.Delegate
+		// refuses it too, as ErrDelegationTooWide; asking first answers with
+		// a precondition the caller can act on, not a permission denial.
 		if len(callerCap.Copies) > 0 {
 			return nil, connect.NewError(connect.CodeFailedPrecondition,
 				errors.New("capability: a Biscuit copy with limits of its own cannot delegate; attenuate it instead"))
