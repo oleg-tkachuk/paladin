@@ -93,7 +93,7 @@ export function DispatcherStatsCard() {
               </p>
             ) : (
               <div className="space-y-1">
-                <p className="text-tiny uppercase tracking-wider text-muted-foreground">
+                <p className="text-sm uppercase tracking-wider text-muted-foreground">
                   Subscriptions behind ({behind.length})
                 </p>
                 <div className="divide-y divide-border/60 overflow-hidden rounded-md border border-border">
@@ -107,7 +107,7 @@ export function DispatcherStatsCard() {
                           {s.subscriptionId}
                         </p>
                         {s.lastError && (
-                          <p className="truncate text-caption text-destructive">
+                          <p className="truncate text-sm text-destructive">
                             {s.lastError}
                           </p>
                         )}
@@ -152,7 +152,7 @@ function Stat({
       <p className={cn("text-xl font-semibold tabular-nums", accent)}>
         {text ?? value}
       </p>
-      <p className="text-tiny uppercase tracking-wider text-muted-foreground">
+      <p className="text-sm uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
     </div>

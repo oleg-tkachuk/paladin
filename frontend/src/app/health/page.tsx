@@ -168,7 +168,7 @@ function ComponentRow({ c }: { c: Component }) {
           {c.critical && (
             <Badge
               variant="outline"
-              className="shrink-0 px-1.5 py-0 text-tiny font-normal"
+              className="shrink-0 px-1.5 py-0 text-sm font-normal"
             >
               required
             </Badge>

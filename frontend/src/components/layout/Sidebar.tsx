@@ -320,7 +320,7 @@ function SidebarBody({
               </Link>
               <BuildVersion
                 fallback={
-                  <div className="text-tiny font-medium uppercase tracking-wider text-muted-foreground">
+                  <div className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
                     Control Plane
                   </div>
                 }
@@ -448,7 +448,7 @@ function SidebarBody({
           {!collapsed && (
             <div className="min-w-0">
               <div className="truncate text-xs font-medium">{displayName}</div>
-              <div className="truncate text-tiny text-muted-foreground">
+              <div className="truncate text-sm text-muted-foreground">
                 {user?.roles?.[0] || (user ? "no role" : "not signed in")}
               </div>
             </div>
