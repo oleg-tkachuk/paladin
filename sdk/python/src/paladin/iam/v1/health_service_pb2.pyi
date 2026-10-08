@@ -17,10 +17,12 @@ class ComponentStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     COMPONENT_STATUS_HEALTHY: _ClassVar[ComponentStatus]
     COMPONENT_STATUS_DEGRADED: _ClassVar[ComponentStatus]
     COMPONENT_STATUS_UNHEALTHY: _ClassVar[ComponentStatus]
+    COMPONENT_STATUS_DISABLED: _ClassVar[ComponentStatus]
 COMPONENT_STATUS_UNSPECIFIED: ComponentStatus
 COMPONENT_STATUS_HEALTHY: ComponentStatus
 COMPONENT_STATUS_DEGRADED: ComponentStatus
 COMPONENT_STATUS_UNHEALTHY: ComponentStatus
+COMPONENT_STATUS_DISABLED: ComponentStatus
 
 class GetVersionRequest(_message.Message):
     __slots__ = ()

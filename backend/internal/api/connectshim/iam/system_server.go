@@ -117,6 +117,8 @@ func statusToProto(s health.ComponentStatus) pb.ComponentStatus {
 		return pb.ComponentStatus_COMPONENT_STATUS_DEGRADED
 	case health.StatusUnhealthy:
 		return pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY
+	case health.StatusDisabled:
+		return pb.ComponentStatus_COMPONENT_STATUS_DISABLED
 	default:
 		return pb.ComponentStatus_COMPONENT_STATUS_UNSPECIFIED
 	}
