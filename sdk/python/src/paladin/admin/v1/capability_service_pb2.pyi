@@ -223,6 +223,34 @@ class CapabilityServiceListResponse(_message.Message):
     next_page_token: str
     def __init__(self, capabilities: _Optional[_Iterable[_Union[Capability, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
 
+class CapabilityServiceGetRequest(_message.Message):
+    __slots__ = ("id",)
+    ID_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    def __init__(self, id: _Optional[str] = ...) -> None: ...
+
+class CapabilityRevocation(_message.Message):
+    __slots__ = ("revoked_at", "reason", "actor", "cascade")
+    REVOKED_AT_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    ACTOR_FIELD_NUMBER: _ClassVar[int]
+    CASCADE_FIELD_NUMBER: _ClassVar[int]
+    revoked_at: _timestamp_pb2.Timestamp
+    reason: str
+    actor: str
+    cascade: bool
+    def __init__(self, revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., reason: _Optional[str] = ..., actor: _Optional[str] = ..., cascade: _Optional[bool] = ...) -> None: ...
+
+class CapabilityServiceGetResponse(_message.Message):
+    __slots__ = ("capability", "issued_by", "revocation")
+    CAPABILITY_FIELD_NUMBER: _ClassVar[int]
+    ISSUED_BY_FIELD_NUMBER: _ClassVar[int]
+    REVOCATION_FIELD_NUMBER: _ClassVar[int]
+    capability: Capability
+    issued_by: CapabilityPrincipal
+    revocation: CapabilityRevocation
+    def __init__(self, capability: _Optional[_Union[Capability, _Mapping]] = ..., issued_by: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., revocation: _Optional[_Union[CapabilityRevocation, _Mapping]] = ...) -> None: ...
+
 class CapabilityServiceGetUsageRequest(_message.Message):
     __slots__ = ("id",)
     ID_FIELD_NUMBER: _ClassVar[int]
