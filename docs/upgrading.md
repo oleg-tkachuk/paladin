@@ -44,6 +44,63 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the capability module's API, made uniform
+
+**Breaking, capability module.** Every input is a `…Request` and every read
+names what it reads. Renamed, with no change in behaviour:
+
+| Before | After |
+|---|---|
+| `RevokeArgs`, `RevokeBiscuitArgs` | `RevokeRequest`, `RevokeBiscuitRequest` |
+| `ListByPrincipalArgs` (field `PrincipalT`) | `ListByPrincipalRequest` (field `PrincipalType`) |
+| `SetTenantBudgetArgs`, `ListTenantBudgetsArgs` | `SetTenantBudgetRequest`, `ListTenantBudgetsRequest` |
+| `Meter.BumpRequest(RequestBump)` | `Meter.Bump(BumpRequest)` |
+| `Meter.Get` | `Meter.GetUsage` |
+| `ValidateOverrun(p)` | `p.Validate()` |
+
+The metric names are unchanged.
+
+A `Capability` now crosses the API by value: `Store.Get`, `Verifier.Verify`,
+`Issuer.Issue`, `Issuer.Delegate` and `Decode` return one, and
+`Issuer.Biscuit` and `DPoPVerifier.Check` take one, where each used a pointer.
+
+`CacheOption` now configures both revocation caches, so it is built only by
+`WithCacheClock` and `WithMaxEntries`; an option written against
+`*CachedRevocationChecker` no longer compiles. `CachedBiscuitRevocationChecker`
+gains `Sweep`. `WithMetering` returns a store that implements
+`CopyUsageReader` exactly when the store it wraps does — assert the interface
+on its result rather than reaching past it.
+
+What the stores write can now be read back. `Store.GetRecord` returns a
+capability with the principal that issued it and its own revocation entry;
+`BiscuitRevocationStore.GetBiscuitRevocation` returns a revoked copy's entry;
+`Meter.GetCharge` reads a charge by the id `Refund` takes. All three are new
+interface methods, so a store of your own must add them. So are
+`Meter.GetReservation` and `Meter.ListReservations`, and `Reserve` now returns
+the whole hold, which both read back the same way. Migration `054` adds
+`capability_records.issued_by`; a capability recorded before it reads back
+with the issuer's subject alone. `memstore.Store.IssuedBy` is gone — use
+`GetRecord`.
+
+`ListTenantBudgets` pages like `ListByPrincipal`: it takes a `Cursor` and
+returns the next one, and `TenantBudgetService.Summarize` carries them as
+`page_token` / `next_page_token`. Its order is now utilisation, unclamped,
+then tenant id — the tenant furthest past its ceiling leads, and ties no
+longer fall to the slug.
+
+`CapabilityService.Get` returns one capability as it is on record — who asked
+for it and its own revocation, if any — and the console's capability details
+show both. `CapabilityServiceRevokeResponse` no longer promises a count of the
+descendants a cascade revoked.
+
+`capability/storetest` checks a `Store` against the contract, which now says
+what it left open: an id already on record is `ErrAlreadyExists`, revoking an
+unknown id is `ErrNotFound`, `PurgeExpired` drops revocation entries and never
+records, and `ListByPrincipal` takes the whole principal and pages in id order
+(`PageLimit`). `memstore` follows it: it used to accept a duplicate, revoke an
+unknown id, delete expired records, list without paging, and cascade a
+revocation down from capabilities revoked earlier as well as the one named.
+
 ## Unreleased — capability refusals carry a reason; costs reported later
 
 - A refused capability now carries a `google.rpc.ErrorInfo` in the `paladin`

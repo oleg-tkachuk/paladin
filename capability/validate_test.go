@@ -68,7 +68,7 @@ func TestIssueRejectsMalformedRequests(t *testing.T) {
 	}
 }
 
-func issueRoot(t *testing.T, issuer *Issuer, caveats Caveats) *Capability {
+func issueRoot(t *testing.T, issuer *Issuer, caveats Caveats) Capability {
 	t.Helper()
 	c, _, err := issuer.Issue(context.Background(), IssueRequest{
 		IssuedBy: Principal{Subject: "op"},
@@ -91,12 +91,12 @@ func TestDelegateInheritanceIsExplicit(t *testing.T) {
 	parent := issueRoot(t, issuer, Caveats{Ops: []Op{OpGet}, MaxBudgetAmount: 25, UnitCode: "USD"})
 
 	if _, _, err := issuer.Delegate(ctx, DelegateRequest{
-		Parent: *parent, Caveats: Caveats{MaxBudgetAmount: 2},
+		Parent: parent, Caveats: Caveats{MaxBudgetAmount: 2},
 	}); !errors.Is(err, ErrInvalidCaveats) {
 		t.Fatalf("delegate with ops omitted = %v, want ErrInvalidCaveats", err)
 	}
 
-	child, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: *parent, InheritCaveats: true})
+	child, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: parent, InheritCaveats: true})
 	if err != nil {
 		t.Fatalf("delegate with InheritCaveats: %v", err)
 	}
@@ -110,14 +110,14 @@ func TestDelegateRefusesRevokedOrExpiredParent(t *testing.T) {
 	ctx := context.Background()
 	parent := issueRoot(t, issuer, Caveats{Ops: []Op{OpGet}})
 
-	expired := *parent
+	expired := parent
 	expired.ExpiresAt = time.Now().Add(-time.Minute)
 	if _, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: expired, InheritCaveats: true}); !errors.Is(err, ErrExpired) {
 		t.Errorf("delegate from expired parent = %v, want ErrExpired", err)
 	}
 
-	_ = store.Revoke(ctx, RevokeArgs{ID: parent.ID})
-	if _, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: *parent, InheritCaveats: true}); !errors.Is(err, ErrRevoked) {
+	_ = store.Revoke(ctx, RevokeRequest{ID: parent.ID})
+	if _, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: parent, InheritCaveats: true}); !errors.Is(err, ErrRevoked) {
 		t.Errorf("delegate from revoked parent = %v, want ErrRevoked", err)
 	}
 }

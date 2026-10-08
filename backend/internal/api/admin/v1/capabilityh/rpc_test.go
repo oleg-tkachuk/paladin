@@ -3,6 +3,7 @@ package capabilityh
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -32,22 +33,22 @@ func codeOf(err error) connect.Code { return connect.CodeOf(err) }
 // configurable failures for the paths the existing tests do not drive.
 type recordingStore struct {
 	fakeStore
-	revokeArgs *capability.RevokeArgs
+	revokeArgs *capability.RevokeRequest
 	revokeErr  error
 	revokeCtx  context.Context
-	listArgs   *capability.ListByPrincipalArgs
+	listArgs   *capability.ListByPrincipalRequest
 	listOut    []capability.Capability
 	listNext   string
 	listErr    error
 }
 
-func (s *recordingStore) Revoke(ctx context.Context, args capability.RevokeArgs) error {
+func (s *recordingStore) Revoke(ctx context.Context, args capability.RevokeRequest) error {
 	s.revokeArgs = &args
 	s.revokeCtx = ctx
 	return s.revokeErr
 }
 
-func (s *recordingStore) ListByPrincipal(_ context.Context, args capability.ListByPrincipalArgs) ([]capability.Capability, string, error) {
+func (s *recordingStore) ListByPrincipal(_ context.Context, args capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
 	s.listArgs = &args
 	return s.listOut, s.listNext, s.listErr
 }
@@ -63,7 +64,7 @@ type fakeUsage struct {
 	ctx context.Context
 }
 
-func (u *fakeUsage) Get(ctx context.Context, id uuid.UUID) (capability.Usage, error) {
+func (u *fakeUsage) GetUsage(ctx context.Context, id uuid.UUID) (capability.Usage, error) {
 	u.got = id
 	u.ctx = ctx
 	return u.out, u.err
@@ -255,7 +256,7 @@ func TestListForwardsFiltersAndPaging(t *testing.T) {
 		t.Fatal("store.ListByPrincipal was not called")
 	}
 	a := store.listArgs
-	if a.TenantID != tenant || a.Subject != "agent-1" || a.PrincipalT != capability.PrincipalAgent {
+	if a.TenantID != tenant || a.Subject != "agent-1" || a.PrincipalType != capability.PrincipalAgent {
 		t.Errorf("filters = %+v", a)
 	}
 	// Include flags widen the result set; dropping one silently hides revoked
@@ -317,6 +318,19 @@ func TestListStoreErrorIsInternal(t *testing.T) {
 	}))
 	if codeOf(err) != connect.CodeInternal {
 		t.Fatalf("code = %v, want Internal", codeOf(err))
+	}
+}
+
+// A page token the store cannot read is a bad request, not a server fault.
+func TestListBadPageTokenIsInvalidArgument(t *testing.T) {
+	store := &recordingStore{listErr: fmt.Errorf("%w: cursor", capability.ErrInvalidRequest)}
+	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
+
+	_, err := h.List(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceListRequest{
+		TenantId: uuid.New().String(), PageToken: "garbage",
+	}))
+	if codeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument", codeOf(err))
 	}
 }
 
@@ -539,7 +553,7 @@ type lookupStore struct {
 	getCtx context.Context
 }
 
-func (s *lookupStore) Get(ctx context.Context, id uuid.UUID) (*capability.Capability, error) {
+func (s *lookupStore) Get(ctx context.Context, id uuid.UUID) (capability.Capability, error) {
 	s.getCtx = ctx
 	return s.recordingStore.Get(ctx, id)
 }

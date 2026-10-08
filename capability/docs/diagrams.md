@@ -119,11 +119,11 @@ sequenceDiagram
     S->>S: Verify(token, audience)
     S->>St: IsRevoked(child) — via CachedRevocationChecker
     S->>S: Caveats.CheckSource(addr) · Caveats.Check(op, resource)
-    S->>St: BumpRequest · Charge, or Reserve then Settle
+    S->>St: Bump · Charge, or Reserve then Settle
     St-->>S: ChargeReceipt{ChargeID, Spent}
     S-->>W: response
 
-    Op->>St: Store.Revoke(RevokeArgs{ID: parent, CascadeChildren})
+    Op->>St: Store.Revoke(RevokeRequest{ID: parent, CascadeChildren})
     Note over S,St: the next IsRevoked for the child answers true<br/>once the cache entry expires, or at once after Clear / Invalidate
     W->>S: request + child token
     S-->>W: ErrRevoked
@@ -150,7 +150,7 @@ flowchart TB
     exp{"now − Leeway ≤ ExpiresAt"}
     aud{"audience ∈ Audience"}
     rev{"RevocationLookup.IsRevoked<br/>this capability or an ancestor"}
-    ok(["*Capability"])
+    ok(["Capability"])
 
     bad["ErrInvalidSignature"]
     early["ErrNotYetValid"]
@@ -212,7 +212,7 @@ flowchart TB
     end
     rev{"IsRevoked(capability)"}
     brev{"IsBiscuitRevoked(revocation ids)<br/>any block of this token"}
-    ok(["*Capability with Copies"])
+    ok(["Capability with Copies"])
 
     bad["ErrInvalidSignature"]
     att["ErrBiscuitAttenuation"]
@@ -425,7 +425,7 @@ flowchart TB
     req(["ChargeRequest<br/>CapabilityID · TenantID · Amount · MaxBudget · UnitCode · Copies<br/>ExternalRef · Overrun"])
     sreq(["SettleRequest<br/>ReservationID · Amount · MaxBudget · Overrun"])
     hold{"reservation open"}
-    val{"ValidateAmount · ValidateOverrun<br/>ValidateExternalRef · NormaliseUnitCode"}
+    val{"ValidateAmount · Overrun.Validate<br/>ValidateExternalRef · NormaliseUnitCode"}
     seen{"ExternalRef already charged<br/>to this capability"}
 
     subgraph stage ["stage — compute, publish nothing"]
@@ -485,7 +485,7 @@ flowchart TB
     class e0,e1,e2,e3,e4,e5 external
 ```
 
-`BumpRequest` takes the same order for requests: each copy's limit, then the
+`Bump` takes the same order for requests: each copy's limit, then the
 capability's, then each ancestor's. A reservation keeps its copies' budgets,
 so `Settle` checks them without being handed the token again.
 
@@ -510,13 +510,13 @@ Revocation is a write to the `Store`; verifiers see it through
 
 ```mermaid
 flowchart LR
-    op(["Revoke(RevokeArgs{ID, Reason, Actor, CascadeChildren})"])
+    op(["Revoke(RevokeRequest{ID, Reason, Actor, CascadeChildren})"])
     store[("<b>Store</b><br/>revoked set<br/>ParentID links")]
     cascade["CascadeChildren:<br/>a revocation entry per descendant,<br/>for the audit trail"]
     chain["IsRevoked(id):<br/>id or any ancestor revoked"]
     cache["<b>CachedRevocationChecker</b><br/>answer cached for TTL<br/>one upstream call per id at a time<br/>errors never cached"]
     notify{{"consumer's revocation signal<br/>e.g. a Postgres channel"}}
-    bop(["RevokeBiscuit(RevokeBiscuitArgs{CapabilityID, RevocationID})"])
+    bop(["RevokeBiscuit(RevokeBiscuitRequest{CapabilityID, RevocationID})"])
     blist[("<b>BiscuitRevocationStore</b><br/>revoked block ids")]
     bcache["<b>CachedBiscuitRevocationChecker</b><br/>answer per token, cached for TTL"]
     v1["StandardVerifier"]

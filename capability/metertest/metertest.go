@@ -15,12 +15,15 @@
 package metertest
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -73,7 +76,7 @@ func newFixture[TX any](t *testing.T, setup func(t *testing.T) Env[TX]) fixture[
 	if f.child, err = env.NewCapability(f.root, childBudget); err != nil {
 		t.Fatalf("child capability: %v", err)
 	}
-	if _, err := env.Usage.SetTenantBudget(env.Ctx, capability.SetTenantBudgetArgs{
+	if _, err := env.Usage.SetTenantBudget(env.Ctx, capability.SetTenantBudgetRequest{
 		TenantID: env.Tenant, MaxBudgetAmount: tenantBudget, UnitCode: unit,
 	}); err != nil {
 		t.Fatalf("tenant budget: %v", err)
@@ -94,7 +97,7 @@ func (f fixture[TX]) charge(req capability.ChargeRequest, onCharged func(context
 
 func (f fixture[TX]) spent(t *testing.T, id uuid.UUID) float64 {
 	t.Helper()
-	u, err := f.Usage.Get(f.Ctx, id)
+	u, err := f.Usage.GetUsage(f.Ctx, id)
 	if errors.Is(err, capability.ErrUsageNotFound) {
 		return 0
 	}
@@ -130,6 +133,8 @@ func Run[TX any](t *testing.T, setup func(t *testing.T) Env[TX]) {
 		{"OverrunRecordCrossesEveryCeiling", checkOverrunRecord[TX]},
 		{"SettleReplaysAndRecordsAnOverrun", checkSettle[TX]},
 		{"OverrunRecordCrossesACopyBudget", checkCopyOverrun[TX]},
+		{"TenantBudgetReadsAgree", checkTenantBudgetReads[TX]},
+		{"ReservationsReadBack", checkReservations[TX]},
 	}
 	for _, c := range checks {
 		t.Run(c.name, func(t *testing.T) { c.run(t, newFixture(t, setup)) })
@@ -222,6 +227,12 @@ func checkChargeByRef[TX any](t *testing.T, f fixture[TX]) {
 		!near(got.Refunded, 1) || got.ExternalRef != "call-1" || got.UnitCode != unit || got.Overrun {
 		t.Fatalf("ChargeByRef = %+v, %v; want charge %s of 3 with 1 refunded", got, err, r.ChargeID)
 	}
+	if byID, err := f.Usage.GetCharge(f.Ctx, r.ChargeID); err != nil || byID != got {
+		t.Errorf("GetCharge = %+v, %v; want what ChargeByRef read, %+v", byID, err, got)
+	}
+	if _, err := f.Usage.GetCharge(f.Ctx, uuid.New()); !errors.Is(err, capability.ErrChargeNotFound) {
+		t.Errorf("GetCharge of an unknown id: err = %v, want ErrChargeNotFound", err)
+	}
 	if _, err := f.Usage.ChargeByRef(f.Ctx, f.root, "call-1"); !errors.Is(err, capability.ErrChargeNotFound) {
 		t.Errorf("the ref on another capability: err = %v, want ErrChargeNotFound", err)
 	}
@@ -296,7 +307,7 @@ func checkSettle[TX any](t *testing.T, f fixture[TX]) {
 	if err != nil || !r.Overrun || !near(r.Spent, 24) {
 		t.Fatalf("recording settle = %+v, %v; want 24 spent, overrun", r, err)
 	}
-	if u, err := f.Usage.Get(f.Ctx, f.root); err != nil || u.ReservedAmount != 0 {
+	if u, err := f.Usage.GetUsage(f.Ctx, f.root); err != nil || u.ReservedAmount != 0 {
 		t.Errorf("root after settling = %+v, %v; want nothing held", u, err)
 	}
 	again, err := settle(1, capability.OverrunReject)
@@ -317,6 +328,132 @@ func checkSettle[TX any](t *testing.T, f fixture[TX]) {
 	}
 	if _, err := f.Usage.Settle(f.Ctx, capability.SettleRequest{ReservationID: other.ID, Amount: 0}, nil); !errors.Is(err, capability.ErrReservationNotFound) {
 		t.Errorf("settling a released reservation: err = %v, want ErrReservationNotFound", err)
+	}
+}
+
+// GetTenantBudget, SetTenantBudget and ListTenantBudgets read one row; each
+// returns all of it.
+func checkTenantBudgetReads[TX any](t *testing.T, f fixture[TX]) {
+	const held = 3.0
+	if _, err := f.Usage.Reserve(f.Ctx, capability.ReserveRequest{
+		CapabilityID: f.child, TenantID: f.Tenant, Amount: held, MaxBudget: childBudget, UnitCode: unit,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.Usage.GetTenantBudget(f.Ctx, f.Tenant)
+	if err != nil || !near(got.ReservedAmount, held) || got.ResourceVersion == 0 {
+		t.Fatalf("GetTenantBudget = %+v, %v; want %v held and a version", got, err, held)
+	}
+	set, err := f.Usage.SetTenantBudget(f.Ctx, capability.SetTenantBudgetRequest{
+		TenantID: f.Tenant, MaxBudgetAmount: tenantBudget, UnitCode: unit, ExpectedVersion: got.ResourceVersion,
+	})
+	if err != nil || !near(set.ReservedAmount, held) || set.ResourceVersion != got.ResourceVersion+1 {
+		t.Errorf("SetTenantBudget = %+v, %v; want %v held and the next version", set, err, held)
+	}
+	listed, _, err := f.Usage.ListTenantBudgets(f.Ctx, capability.ListTenantBudgetsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(listed, func(s capability.TenantBudgetSummary) bool { return s.TenantID == f.Tenant })
+	if i < 0 {
+		t.Fatalf("ListTenantBudgets left out the tenant: %+v", listed)
+	}
+	if b := listed[i].Budget; !near(b.ReservedAmount, held) || b.ResourceVersion != set.ResourceVersion {
+		t.Errorf("listed budget = %+v; want %v held at version %d", b, held, set.ResourceVersion)
+	}
+}
+
+// sameReservation names how got differs from want, or returns "".
+func sameReservation(got, want capability.Reservation) string {
+	switch {
+	case got.ID != want.ID, got.CapabilityID != want.CapabilityID, got.TenantID != want.TenantID:
+		return "ids differ"
+	case !near(got.Amount, want.Amount), got.UnitCode != want.UnitCode:
+		return "amount differs"
+	case got.Op != want.Op, got.Actor != want.Actor:
+		return "op or actor differs"
+	case !got.ExpiresAt.Equal(want.ExpiresAt):
+		return "expiry differs"
+	case len(got.Copies) != len(want.Copies):
+		return "copies differ"
+	}
+	for i := range got.Copies {
+		if !bytes.Equal(got.Copies[i].RevocationID, want.Copies[i].RevocationID) || got.Copies[i].MaxBudgetMicros != want.Copies[i].MaxBudgetMicros || got.Copies[i].MaxRequests != 0 {
+			return "copies differ"
+		}
+	}
+	return ""
+}
+
+// Reserve, GetReservation and ListReservations read one hold the same way,
+// and a settled or released hold is gone from both.
+func checkReservations[TX any](t *testing.T, f fixture[TX]) {
+	const (
+		held   = 2.0
+		sooner = time.Minute
+		later  = 2 * time.Minute
+		// copyLimit holds every reservation below, through the one copy.
+		copyLimit = 10
+	)
+	copies := []capability.CopyCeiling{{RevocationID: []byte("copy-1"), MaxRequests: copyLimit, MaxBudgetMicros: capability.MicrosPerUnit * copyLimit}}
+	reserve := func(capID uuid.UUID, ceiling float64, ttl time.Duration) capability.Reservation {
+		t.Helper()
+		r, err := f.Usage.Reserve(f.Ctx, capability.ReserveRequest{
+			CapabilityID: capID, TenantID: f.Tenant, Amount: held, MaxBudget: ceiling, UnitCode: unit,
+			TTL: ttl, Op: "llm", Actor: "agent", Copies: copies,
+		})
+		if err != nil {
+			t.Fatalf("reserve: %v", err)
+		}
+		return r
+	}
+	first := reserve(f.child, childBudget, sooner)
+	second := reserve(f.child, childBudget, later)
+	onRoot := reserve(f.root, rootBudget, sooner)
+	if first.CapabilityID != f.child || first.TenantID != f.Tenant || !near(first.Amount, held) ||
+		first.Op != "llm" || first.Actor != "agent" || len(first.Copies) != 1 || first.Copies[0].MaxRequests != 0 {
+		t.Errorf("Reserve returned %+v; want the whole hold, copies with their budgets alone", first)
+	}
+
+	got, err := f.Usage.GetReservation(f.Ctx, first.ID)
+	if err != nil {
+		t.Fatalf("GetReservation: %v", err)
+	}
+	if diff := sameReservation(got, first); diff != "" {
+		t.Errorf("GetReservation = %+v, Reserve returned %+v: %s", got, first, diff)
+	}
+	list := func(capID uuid.UUID) []uuid.UUID {
+		t.Helper()
+		rs, err := f.Usage.ListReservations(f.Ctx, capID)
+		if err != nil {
+			t.Fatalf("ListReservations: %v", err)
+		}
+		ids := []uuid.UUID{}
+		for _, r := range rs {
+			ids = append(ids, r.ID)
+		}
+		return ids
+	}
+	if got := list(f.child); !slices.Equal(got, []uuid.UUID{first.ID, second.ID}) {
+		t.Errorf("the child's holds = %v, want %v soonest first", got, []uuid.UUID{first.ID, second.ID})
+	}
+	if got := list(f.root); !slices.Equal(got, []uuid.UUID{onRoot.ID}) {
+		t.Errorf("the root's holds = %v, want only its own %v", got, onRoot.ID)
+	}
+
+	if _, err := f.Usage.Settle(f.Ctx, capability.SettleRequest{ReservationID: first.ID, Amount: held, MaxBudget: childBudget}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Usage.Release(f.Ctx, second.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []uuid.UUID{first.ID, second.ID, uuid.New()} {
+		if _, err := f.Usage.GetReservation(f.Ctx, id); !errors.Is(err, capability.ErrReservationNotFound) {
+			t.Errorf("GetReservation %s: err = %v, want ErrReservationNotFound", id, err)
+		}
+	}
+	if got := list(f.child); len(got) != 0 {
+		t.Errorf("holds left after settling and releasing: %v", got)
 	}
 }
 

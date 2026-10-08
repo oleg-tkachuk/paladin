@@ -65,7 +65,7 @@ func newLineageFixture(t *testing.T) (context.Context, lineageFixture) {
 
 func (f lineageFixture) spent(t *testing.T, ctx context.Context, id uuid.UUID) float64 {
 	t.Helper()
-	u, err := f.usage.Get(ctx, id)
+	u, err := f.usage.GetUsage(ctx, id)
 	if errors.Is(err, capability.ErrUsageNotFound) {
 		return 0
 	}
@@ -117,7 +117,7 @@ func TestChildrenCannotExceedTheirParentsRequestCount(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
 	bump := func(id uuid.UUID) error {
-		_, err := f.usage.BumpRequest(ctx, capability.RequestBump{CapabilityID: id, TenantID: f.tenant, MaxRequests: 3})
+		_, err := f.usage.Bump(ctx, capability.BumpRequest{CapabilityID: id, TenantID: f.tenant, MaxRequests: 3})
 		return err
 	}
 	for i, id := range []uuid.UUID{f.child, f.child, f.sibling} {
@@ -128,7 +128,7 @@ func TestChildrenCannotExceedTheirParentsRequestCount(t *testing.T) {
 	if err := bump(f.sibling); !errors.Is(err, capability.ErrRequestLimitExceeded) {
 		t.Fatalf("fourth request across the subtree: err = %v, want ErrRequestLimitExceeded", err)
 	}
-	u, err := f.usage.Get(ctx, f.sibling)
+	u, err := f.usage.GetUsage(ctx, f.sibling)
 	if err != nil {
 		t.Fatalf("get sibling usage: %v", err)
 	}
@@ -143,14 +143,14 @@ func TestRevokingAParentRevokesItsChildrenWithoutCascade(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
 
-	if err := f.records.Revoke(ctx, capability.RevokeArgs{ID: f.child, Reason: "test", Actor: "user:ops"}); err != nil {
+	if err := f.records.Revoke(ctx, capability.RevokeRequest{ID: f.child, Reason: "test", Actor: "user:ops"}); err != nil {
 		t.Fatalf("revoke child: %v", err)
 	}
 	if r, err := f.records.IsRevoked(ctx, f.root); err != nil || r {
 		t.Fatalf("root after revoking a child: revoked=%v err=%v, want live", r, err)
 	}
 
-	if err := f.records.Revoke(ctx, capability.RevokeArgs{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
+	if err := f.records.Revoke(ctx, capability.RevokeRequest{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
 		t.Fatalf("revoke root: %v", err)
 	}
 	if r, err := f.records.IsRevoked(ctx, f.sibling); err != nil || !r {
@@ -191,7 +191,7 @@ func TestLineageHoldsUnderRowLevelSecurity(t *testing.T) {
 		t.Errorf("parent's subtree spend after an RLS refund = %v, want 15", got)
 	}
 
-	if err := f.records.Revoke(ctx, capability.RevokeArgs{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
+	if err := f.records.Revoke(ctx, capability.RevokeRequest{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
 		t.Fatalf("revoke root: %v", err)
 	}
 	if r, err := records.IsRevoked(ctx, f.child); err != nil || !r {

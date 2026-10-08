@@ -134,8 +134,8 @@ func reasonOf(t *testing.T, err error) commonv1.ErrorReason {
 // failingGetStore fails the parent lookup as a store outage does.
 type failingGetStore struct{ fakeStore }
 
-func (*failingGetStore) Get(context.Context, uuid.UUID) (*capability.Capability, error) {
-	return nil, errDriver
+func (*failingGetStore) Get(context.Context, uuid.UUID) (capability.Capability, error) {
+	return capability.Capability{}, errDriver
 }
 
 // The admin path answered NotFound for any failure to read the parent, an

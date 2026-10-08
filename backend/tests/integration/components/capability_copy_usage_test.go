@@ -40,7 +40,7 @@ func TestCopyRequestLimitsUnderRowLevelSecurity(t *testing.T) {
 	f.usage = rlsUsage(t, ctx, f)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 	bump := func(copies ...capability.CopyCeiling) error {
-		_, err := f.usage.BumpRequest(ledgerCtx, capability.RequestBump{
+		_, err := f.usage.Bump(ledgerCtx, capability.BumpRequest{
 			CapabilityID: f.root, TenantID: f.tenant, MaxRequests: 3, Copies: copies,
 		})
 		return err
@@ -55,7 +55,7 @@ func TestCopyRequestLimitsUnderRowLevelSecurity(t *testing.T) {
 	if n, _, _ := copyRow(t, ctx, f, "one"); n != 1 {
 		t.Fatalf("a refused request left the copy at %d", n)
 	}
-	if u, err := f.usage.Get(ledgerCtx, f.root); err != nil || u.RequestCount != 1 {
+	if u, err := f.usage.GetUsage(ledgerCtx, f.root); err != nil || u.RequestCount != 1 {
 		t.Fatalf("a refused request moved the capability: %+v, %v", u, err)
 	}
 	sibling := ceiling("sibling", 5, 0)
@@ -192,7 +192,7 @@ func TestCopyUsageIsReadBackPerTenant(t *testing.T) {
 	f.usage = rlsUsage(t, ctx, f)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 	c := ceiling("read", 5, 2)
-	if _, err := f.usage.BumpRequest(ledgerCtx, capability.RequestBump{
+	if _, err := f.usage.Bump(ledgerCtx, capability.BumpRequest{
 		CapabilityID: f.root, TenantID: f.tenant, Copies: []capability.CopyCeiling{c},
 	}); err != nil {
 		t.Fatal(err)

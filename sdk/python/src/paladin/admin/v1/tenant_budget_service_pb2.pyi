@@ -80,19 +80,23 @@ class TenantBudgetSummary(_message.Message):
     def __init__(self, tenant_id: _Optional[str] = ..., slug: _Optional[str] = ..., display_name: _Optional[str] = ..., budget: _Optional[_Union[TenantBudget, _Mapping]] = ..., utilisation_pct: _Optional[float] = ...) -> None: ...
 
 class TenantBudgetServiceSummarizeRequest(_message.Message):
-    __slots__ = ("threshold_pct", "unlimited_only", "exclude_inactive", "limit")
+    __slots__ = ("threshold_pct", "unlimited_only", "exclude_inactive", "limit", "page_token")
     THRESHOLD_PCT_FIELD_NUMBER: _ClassVar[int]
     UNLIMITED_ONLY_FIELD_NUMBER: _ClassVar[int]
     EXCLUDE_INACTIVE_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
+    PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     threshold_pct: float
     unlimited_only: bool
     exclude_inactive: bool
     limit: int
-    def __init__(self, threshold_pct: _Optional[float] = ..., unlimited_only: _Optional[bool] = ..., exclude_inactive: _Optional[bool] = ..., limit: _Optional[int] = ...) -> None: ...
+    page_token: str
+    def __init__(self, threshold_pct: _Optional[float] = ..., unlimited_only: _Optional[bool] = ..., exclude_inactive: _Optional[bool] = ..., limit: _Optional[int] = ..., page_token: _Optional[str] = ...) -> None: ...
 
 class TenantBudgetServiceSummarizeResponse(_message.Message):
-    __slots__ = ("summaries",)
+    __slots__ = ("summaries", "next_page_token")
     SUMMARIES_FIELD_NUMBER: _ClassVar[int]
+    NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     summaries: _containers.RepeatedCompositeFieldContainer[TenantBudgetSummary]
-    def __init__(self, summaries: _Optional[_Iterable[_Union[TenantBudgetSummary, _Mapping]]] = ...) -> None: ...
+    next_page_token: str
+    def __init__(self, summaries: _Optional[_Iterable[_Union[TenantBudgetSummary, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...

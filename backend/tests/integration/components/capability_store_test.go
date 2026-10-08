@@ -176,7 +176,7 @@ func TestCapabilityRevokeCascade(t *testing.T) {
 		}
 	}
 
-	if err := store.Revoke(ctx, capability.RevokeArgs{
+	if err := store.Revoke(ctx, capability.RevokeRequest{
 		ID: root.ID, Reason: "compromise", Actor: "user:ops", CascadeChildren: true,
 	}); err != nil {
 		t.Fatalf("cascade revoke: %v", err)
@@ -193,11 +193,11 @@ func TestCapabilityRevokeCascade(t *testing.T) {
 
 	// Re-revoking is a no-op, not a primary-key violation: the purger and
 	// the admin RPC can both call it.
-	if err := store.Revoke(ctx, capability.RevokeArgs{ID: root.ID, Reason: "again", Actor: "user:ops"}); err != nil {
+	if err := store.Revoke(ctx, capability.RevokeRequest{ID: root.ID, Reason: "again", Actor: "user:ops"}); err != nil {
 		t.Errorf("re-revoke should be idempotent: %v", err)
 	}
 
-	if err := store.Revoke(ctx, capability.RevokeArgs{}); err == nil {
+	if err := store.Revoke(ctx, capability.RevokeRequest{}); err == nil {
 		t.Error("want error for nil revoke ID")
 	}
 }
@@ -230,7 +230,7 @@ func TestCapabilityRevokeIsTenantScoped(t *testing.T) {
 
 	// And must not be able to revoke it. Either an error or a silent no-op is
 	// an acceptable outcome; a recorded revocation is not.
-	revokeErr := scoped.Revoke(ctxA, capability.RevokeArgs{
+	revokeErr := scoped.Revoke(ctxA, capability.RevokeRequest{
 		ID: victim.ID, Reason: "hostile", Actor: "user:attacker",
 	})
 
@@ -268,7 +268,7 @@ func TestCapabilityIsRevokedBeforeTheTenantIsKnown(t *testing.T) {
 			t.Fatalf("seed %s: %v", c.Subject.Subject, err)
 		}
 	}
-	if err := seed.Revoke(ctx, capability.RevokeArgs{
+	if err := seed.Revoke(ctx, capability.RevokeRequest{
 		ID: revokedCap.ID, Reason: "compromise", Actor: "user:ops",
 	}); err != nil {
 		t.Fatalf("revoke: %v", err)
@@ -323,14 +323,14 @@ func TestCapabilityListByPrincipal(t *testing.T) {
 			t.Fatalf("insert %s: %v", c.ID, err)
 		}
 	}
-	if err := store.Revoke(ctx, capability.RevokeArgs{ID: revoked.ID, Reason: "r", Actor: "a"}); err != nil {
+	if err := store.Revoke(ctx, capability.RevokeRequest{ID: revoked.ID, Reason: "r", Actor: "a"}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 
-	list := func(args capability.ListByPrincipalArgs) ([]capability.Capability, string) {
+	list := func(args capability.ListByPrincipalRequest) ([]capability.Capability, string) {
 		t.Helper()
 		args.TenantID = tenant
-		args.PrincipalT = capability.PrincipalUser
+		args.PrincipalType = capability.PrincipalUser
 		args.Subject = subject
 		got, next, err := store.ListByPrincipal(ctx, args)
 		if err != nil {
@@ -340,7 +340,7 @@ func TestCapabilityListByPrincipal(t *testing.T) {
 	}
 
 	t.Run("defaults hide expired, revoked, other subjects and other tenants", func(t *testing.T) {
-		got, next := list(capability.ListByPrincipalArgs{})
+		got, next := list(capability.ListByPrincipalRequest{})
 		if next != "" {
 			t.Errorf("unexpected cursor %q", next)
 		}
@@ -350,14 +350,14 @@ func TestCapabilityListByPrincipal(t *testing.T) {
 	})
 
 	t.Run("include_expired widens by exactly one", func(t *testing.T) {
-		got, _ := list(capability.ListByPrincipalArgs{IncludeExpired: true})
+		got, _ := list(capability.ListByPrincipalRequest{IncludeExpired: true})
 		if len(got) != len(active)+1 {
 			t.Errorf("got %d, want %d", len(got), len(active)+1)
 		}
 	})
 
 	t.Run("include_revoked widens by exactly one", func(t *testing.T) {
-		got, _ := list(capability.ListByPrincipalArgs{IncludeRevoked: true})
+		got, _ := list(capability.ListByPrincipalRequest{IncludeRevoked: true})
 		if len(got) != len(active)+1 {
 			t.Errorf("got %d, want %d", len(got), len(active)+1)
 		}
@@ -370,7 +370,7 @@ func TestCapabilityListByPrincipal(t *testing.T) {
 			if page > 10 {
 				t.Fatal("pagination did not terminate")
 			}
-			got, next := list(capability.ListByPrincipalArgs{Limit: 2, Cursor: cursor})
+			got, next := list(capability.ListByPrincipalRequest{Limit: 2, Cursor: cursor})
 			for _, c := range got {
 				seen[c.ID]++
 			}
@@ -390,7 +390,7 @@ func TestCapabilityListByPrincipal(t *testing.T) {
 	})
 
 	t.Run("tenant_id is required", func(t *testing.T) {
-		if _, _, err := store.ListByPrincipal(ctx, capability.ListByPrincipalArgs{}); err == nil {
+		if _, _, err := store.ListByPrincipal(ctx, capability.ListByPrincipalRequest{}); err == nil {
 			t.Error("want error for nil tenant_id")
 		}
 	})
@@ -413,7 +413,7 @@ func TestCapabilityPurgeExpired(t *testing.T) {
 		if err := store.Insert(ctx, c, seedIssuer); err != nil {
 			t.Fatalf("insert: %v", err)
 		}
-		if err := store.Revoke(ctx, capability.RevokeArgs{ID: c.ID, Reason: "r", Actor: "a"}); err != nil {
+		if err := store.Revoke(ctx, capability.RevokeRequest{ID: c.ID, Reason: "r", Actor: "a"}); err != nil {
 			t.Fatalf("revoke: %v", err)
 		}
 	}
@@ -501,7 +501,7 @@ func TestPurgeRunsWithoutARequestPrincipal(t *testing.T) {
 	if err := seed.Insert(ctx, expired, seedIssuer); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
-	if err := seed.Revoke(ctx, capability.RevokeArgs{ID: expired.ID, Reason: "r", Actor: "a"}); err != nil {
+	if err := seed.Revoke(ctx, capability.RevokeRequest{ID: expired.ID, Reason: "r", Actor: "a"}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 

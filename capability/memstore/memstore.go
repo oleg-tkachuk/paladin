@@ -18,12 +18,14 @@
 package memstore
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -34,20 +36,17 @@ import (
 
 // Store implements capability.Store — capability records and revocations.
 //
-// It is a SEPARATE type from UsageStore because the two contracts both declare
-// a method named Get with different signatures, so no single type can satisfy
-// both. Paladin's relational implementation splits them for exactly this reason;
-// a third-party implementer will hit the same constraint and should expect to
-// write two types too.
+// It is a separate type from UsageStore so that each reads as the contract it
+// implements: records and revocations here, counters and the ledger there.
 type Store[TX any] struct {
 	mu sync.Mutex
 
 	caps     map[uuid.UUID]capability.Capability
 	issuedBy map[uuid.UUID]capability.Principal
-	revoked  map[uuid.UUID]bool
+	revoked  map[uuid.UUID]capability.Revocation
 	// revokedCopies maps a revoked Biscuit copy's revocation id to the
 	// capability it belongs to.
-	revokedCopies map[string]uuid.UUID
+	revokedCopies map[string]capability.BiscuitRevocation
 	nowFn         func() time.Time
 }
 
@@ -116,10 +115,10 @@ func New[TX any]() *Store[TX] {
 	return &Store[TX]{
 		caps:     map[uuid.UUID]capability.Capability{},
 		issuedBy: map[uuid.UUID]capability.Principal{},
-		revoked:  map[uuid.UUID]bool{},
+		revoked:  map[uuid.UUID]capability.Revocation{},
 		nowFn:    time.Now,
 
-		revokedCopies: map[string]uuid.UUID{},
+		revokedCopies: map[string]capability.BiscuitRevocation{},
 	}
 }
 
@@ -171,31 +170,55 @@ func (s *UsageStore[TX]) Ledger() []LedgerEntry {
 func (s *Store[TX]) Insert(_ context.Context, c capability.Capability, issuedBy capability.Principal) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, ok := s.caps[c.ID]; ok {
+		return fmt.Errorf("%w: %s", capability.ErrAlreadyExists, c.ID)
+	}
 	s.caps[c.ID] = c
 	s.issuedBy[c.ID] = issuedBy
 	return nil
 }
 
-// IssuedBy returns the principal that requested the capability, if known.
-func (s *Store[TX]) IssuedBy(id uuid.UUID) (capability.Principal, bool) {
+// GetRecord returns the capability, who issued it and its own revocation.
+func (s *Store[TX]) GetRecord(_ context.Context, id uuid.UUID) (capability.Record, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.issuedBy[id]
-	return p, ok
+	c, ok := s.caps[id]
+	if !ok {
+		return capability.Record{}, capability.ErrNotFound
+	}
+	rec := capability.Record{Capability: c, IssuedBy: s.issuedBy[id]}
+	if r, ok := s.revoked[id]; ok {
+		rec.Revocation = &r
+	}
+	return rec, nil
+}
+
+// revokeLocked writes id's revocation entry unless it has one: the first
+// entry stands, as a repeated revoke is a no-op. s.mu must be held.
+func (s *Store[TX]) revokeLocked(id uuid.UUID, r capability.Revocation) {
+	if _, ok := s.revoked[id]; !ok {
+		s.revoked[id] = r
+	}
+}
+
+// isRevokedItselfLocked reports whether id has a revocation entry of its own.
+// s.mu must be held.
+func (s *Store[TX]) isRevokedItselfLocked(id uuid.UUID) bool {
+	_, ok := s.revoked[id]
+	return ok
 }
 
 // Get returns capability.ErrNotFound when absent. Callers treat that as
 // forgery, not as a missing entity — a syntactically valid token with no
 // record was minted by someone else.
-func (s *Store[TX]) Get(_ context.Context, id uuid.UUID) (*capability.Capability, error) {
+func (s *Store[TX]) Get(_ context.Context, id uuid.UUID) (capability.Capability, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c, ok := s.caps[id]
 	if !ok {
-		return nil, capability.ErrNotFound
+		return capability.Capability{}, capability.ErrNotFound
 	}
-	out := c
-	return &out, nil
+	return c, nil
 }
 
 // IsRevoked answers for the whole delegation chain: a capability is revoked
@@ -203,11 +226,11 @@ func (s *Store[TX]) Get(_ context.Context, id uuid.UUID) (*capability.Capability
 func (s *Store[TX]) IsRevoked(_ context.Context, id uuid.UUID) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.revoked[id] {
+	if _, ok := s.revoked[id]; ok {
 		return true, nil
 	}
 	for _, a := range s.ancestorsLocked(id) {
-		if s.revoked[a.ID] {
+		if _, ok := s.revoked[a.ID]; ok {
 			return true, nil
 		}
 	}
@@ -247,30 +270,34 @@ const maxLineageDepth = 64
 
 // Revoke is idempotent. CascadeChildren walks the delegation tree by ParentID
 // so revoking an orchestrator takes the sub-agents it spawned with it.
-func (s *Store[TX]) Revoke(_ context.Context, args capability.RevokeArgs) error {
+func (s *Store[TX]) Revoke(_ context.Context, args capability.RevokeRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.revoked[args.ID] = true
+	if _, ok := s.caps[args.ID]; !ok {
+		return capability.ErrNotFound
+	}
+	entry := capability.Revocation{
+		RevokedAt: s.nowFn(), Reason: args.Reason, Actor: args.Actor, Cascade: args.CascadeChildren,
+	}
+	s.revokeLocked(args.ID, entry)
 	if !args.CascadeChildren {
 		return nil
 	}
-	// Repeat to depth: each pass revokes children of anything already revoked,
-	// until a pass changes nothing. Obvious beats clever here.
-	for {
-		changed := false
+	// Breadth-first down the delegation tree from args.ID alone, to the
+	// depth the relational store walks: a capability revoked earlier without
+	// cascade elsewhere in the store is not a root of this walk.
+	level := []uuid.UUID{args.ID}
+	for depth := 0; len(level) > 0 && depth < maxLineageDepth; depth++ {
+		var next []uuid.UUID
 		for id, c := range s.caps {
-			if s.revoked[id] || c.ParentID == uuid.Nil {
-				continue
-			}
-			if s.revoked[c.ParentID] {
-				s.revoked[id] = true
-				changed = true
+			if slices.Contains(level, c.ParentID) {
+				s.revokeLocked(id, entry)
+				next = append(next, id)
 			}
 		}
-		if !changed {
-			return nil
-		}
+		level = next
 	}
+	return nil
 }
 
 // IsBiscuitRevoked implements capability.BiscuitRevocationLookup.
@@ -286,17 +313,34 @@ func (s *Store[TX]) IsBiscuitRevoked(_ context.Context, revocationIDs [][]byte) 
 }
 
 // RevokeBiscuit implements capability.BiscuitRevocationStore.
-func (s *Store[TX]) RevokeBiscuit(_ context.Context, args capability.RevokeBiscuitArgs) error {
+func (s *Store[TX]) RevokeBiscuit(_ context.Context, args capability.RevokeBiscuitRequest) error {
 	if len(args.RevocationID) == 0 {
-		return errors.New("memstore: revocation id required")
+		return fmt.Errorf("%w: memstore: revocation id required", capability.ErrInvalidRequest)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.caps[args.CapabilityID]; !ok {
 		return capability.ErrNotFound
 	}
-	s.revokedCopies[string(args.RevocationID)] = args.CapabilityID
+	if _, ok := s.revokedCopies[string(args.RevocationID)]; !ok { // the first entry stands
+		s.revokedCopies[string(args.RevocationID)] = capability.BiscuitRevocation{
+			CapabilityID: args.CapabilityID, RevocationID: slices.Clone(args.RevocationID),
+			RevokedAt: s.nowFn(), Reason: args.Reason, Actor: args.Actor,
+		}
+	}
 	return nil
+}
+
+// GetBiscuitRevocation returns what RevokeBiscuit wrote for revocationID.
+func (s *Store[TX]) GetBiscuitRevocation(_ context.Context, revocationID []byte) (capability.BiscuitRevocation, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.revokedCopies[string(revocationID)]
+	if !ok {
+		return capability.BiscuitRevocation{}, capability.ErrNotFound
+	}
+	r.RevocationID = slices.Clone(r.RevocationID)
+	return r, nil
 }
 
 func (s *Store[TX]) PurgeExpired(_ context.Context, expiredFor time.Duration) (int64, error) {
@@ -305,47 +349,65 @@ func (s *Store[TX]) PurgeExpired(_ context.Context, expiredFor time.Duration) (i
 	cutoff := s.nowFn().Add(-expiredFor)
 	var n int64
 	for id, c := range s.caps {
-		if !c.ExpiresAt.IsZero() && c.ExpiresAt.Before(cutoff) {
-			delete(s.caps, id)
+		if c.ExpiresAt.IsZero() || !c.ExpiresAt.Before(cutoff) {
+			continue
+		}
+		if _, ok := s.revoked[id]; ok {
 			delete(s.revoked, id)
-			maps.DeleteFunc(s.revokedCopies, func(_ string, c uuid.UUID) bool { return c == id })
 			n++
 		}
+		before := len(s.revokedCopies)
+		maps.DeleteFunc(s.revokedCopies, func(_ string, r capability.BiscuitRevocation) bool { return r.CapabilityID == id })
+		n += int64(before - len(s.revokedCopies))
 	}
 	return n, nil
 }
 
-func (s *Store[TX]) ListByPrincipal(_ context.Context, args capability.ListByPrincipalArgs) ([]capability.Capability, string, error) {
+func (s *Store[TX]) ListByPrincipal(_ context.Context, req capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
+	if err := req.Validate(); err != nil {
+		return nil, "", err
+	}
+	var after uuid.UUID
+	if req.Cursor != "" {
+		var err error
+		if after, err = uuid.Parse(req.Cursor); err != nil {
+			return nil, "", fmt.Errorf("%w: memstore: cursor %q", capability.ErrInvalidRequest, req.Cursor)
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	now := s.nowFn()
 	out := make([]capability.Capability, 0, len(s.caps))
 	for id, c := range s.caps {
-		if args.TenantID != uuid.Nil && c.Subject.TenantID != args.TenantID {
+		switch {
+		case c.Subject.TenantID != req.TenantID, c.Subject.Type != req.PrincipalType, c.Subject.Subject != req.Subject:
 			continue
-		}
-		if args.PrincipalT != "" && c.Subject.Type != args.PrincipalT {
+		case !req.IncludeExpired && !c.ExpiresAt.After(now):
 			continue
-		}
-		if args.Subject != "" && c.Subject.Subject != args.Subject {
+		case !req.IncludeRevoked && s.isRevokedItselfLocked(id):
 			continue
-		}
-		if !args.IncludeExpired && !c.ExpiresAt.IsZero() && c.ExpiresAt.Before(now) {
-			continue
-		}
-		if !args.IncludeRevoked && s.revoked[id] {
+		case req.Cursor != "" && !uuidLess(after, id):
 			continue
 		}
 		out = append(out, c)
 	}
-	// Stable order so tests and readers see the same sequence every run.
-	sort.Slice(out, func(i, j int) bool { return out[i].ID.String() < out[j].ID.String() })
-	if args.Limit > 0 && int(args.Limit) < len(out) {
-		out = out[:args.Limit]
+	// Ascending id, the order the cursor seeks in.
+	sort.Slice(out, func(i, j int) bool { return uuidLess(out[i].ID, out[j].ID) })
+	limit := int(capability.PageLimit(req.Limit))
+	if len(out) <= limit {
+		return out, "", nil
 	}
-	return out, "", nil
+	out = out[:limit]
+	return out, out[len(out)-1].ID.String(), nil
 }
+
+// maxUtilisationPct is where TenantBudgetSummary.UtilisationPct is clamped:
+// a tenant past its ceiling is at 100%, not beyond.
+const maxUtilisationPct = 100
+
+// uuidLess orders ids as Postgres orders the uuid type: bytewise.
+func uuidLess(a, b uuid.UUID) bool { return bytes.Compare(a[:], b[:]) < 0 }
 
 // ─── capability.UsageStore[TX] ─────────────────────────────────────────────
 
@@ -357,10 +419,10 @@ func (s *UsageStore[TX]) lineage(capID uuid.UUID) []capability.Capability {
 	return s.records.ancestors(capID)
 }
 
-// BumpRequest returns ErrRequestLimitExceeded WITHOUT mutating when the
+// Bump returns ErrRequestLimitExceeded WITHOUT mutating when the
 // increment would cross the capability's ceiling or any ancestor's. A
 // rejected call must be safe to retry.
-func (s *UsageStore[TX]) BumpRequest(_ context.Context, req capability.RequestBump) (int64, error) {
+func (s *UsageStore[TX]) Bump(_ context.Context, req capability.BumpRequest) (int64, error) {
 	ancestors := s.lineage(req.CapabilityID)
 
 	s.mu.Lock()
@@ -427,7 +489,7 @@ func (s *UsageStore[TX]) Charge(
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
-	if err := capability.ValidateOverrun(req.Overrun); err != nil {
+	if err := req.Overrun.Validate(); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
 	if err := capability.ValidateExternalRef(req.ExternalRef); err != nil {
@@ -467,10 +529,26 @@ func (s *UsageStore[TX]) ChargeByRef(_ context.Context, capID uuid.UUID, externa
 	if !ok {
 		return capability.ChargeRecord{}, capability.ErrChargeNotFound
 	}
+	return e.record(), nil
+}
+
+// GetCharge returns one charge of the ledger by its id.
+func (s *UsageStore[TX]) GetCharge(_ context.Context, chargeID uuid.UUID) (capability.ChargeRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.findLocked(func(e LedgerEntry) bool { return e.ID == chargeID })
+	if !ok {
+		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+	}
+	return e.record(), nil
+}
+
+// record is the entry as the Meter contract reads a charge back.
+func (e LedgerEntry) record() capability.ChargeRecord {
 	return capability.ChargeRecord{
 		ChargeID: e.ID, CapabilityID: e.CapabilityID, Amount: e.Amount, Refunded: e.Refunded,
 		UnitCode: e.UnitCode, ExternalRef: e.ExternalRef, Overrun: e.Overrun,
-	}, nil
+	}
 }
 
 // findLocked returns the first ledger entry match accepts. s.mu must be held.
@@ -673,7 +751,7 @@ func (s *UsageStore[TX]) Reserve(_ context.Context, req capability.ReserveReques
 	h.id = uuid.New()
 	s.applyHoldLocked(h, +1)
 	s.holds[h.id] = h
-	return capability.Reservation{ID: h.id, ExpiresAt: h.expires}, nil
+	return h.reservation(), nil
 }
 
 // applyHoldLocked adds (sign +1) or removes (sign -1) a hold on every counter.
@@ -708,7 +786,7 @@ func (s *UsageStore[TX]) Settle(
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
-	if err := capability.ValidateOverrun(req.Overrun); err != nil {
+	if err := req.Overrun.Validate(); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
 	s.mu.Lock()
@@ -737,6 +815,56 @@ func (s *UsageStore[TX]) Settle(
 	}
 	delete(s.holds, req.ReservationID)
 	return receipt, nil
+}
+
+// reservation is the hold as the Meter contract reads it back.
+func (h hold) reservation() capability.Reservation {
+	return capability.Reservation{
+		ID: h.id, CapabilityID: h.capID, TenantID: h.tenantID, Amount: h.amount, UnitCode: h.unit,
+		Op: h.op, Actor: h.actor, Copies: budgetsOnly(h.copies), ExpiresAt: h.expires,
+	}
+}
+
+// budgetsOnly is copies with their budgets alone, as a hold keeps them.
+func budgetsOnly(copies []capability.CopyCeiling) []capability.CopyCeiling {
+	if len(copies) == 0 {
+		return nil
+	}
+	out := make([]capability.CopyCeiling, len(copies))
+	for i, c := range copies {
+		out[i] = capability.CopyCeiling{RevocationID: slices.Clone(c.RevocationID), MaxBudgetMicros: c.MaxBudgetMicros}
+	}
+	return out
+}
+
+// GetReservation returns a hold that still counts, expired or not.
+func (s *UsageStore[TX]) GetReservation(_ context.Context, reservationID uuid.UUID) (capability.Reservation, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h, ok := s.holds[reservationID]
+	if !ok {
+		return capability.Reservation{}, capability.ErrReservationNotFound
+	}
+	return h.reservation(), nil
+}
+
+// ListReservations returns the capability's own holds, soonest to expire first.
+func (s *UsageStore[TX]) ListReservations(_ context.Context, capID uuid.UUID) ([]capability.Reservation, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []capability.Reservation{}
+	for _, h := range s.holds {
+		if h.capID == capID {
+			out = append(out, h.reservation())
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].ExpiresAt.Equal(out[j].ExpiresAt) {
+			return out[i].ExpiresAt.Before(out[j].ExpiresAt)
+		}
+		return uuidLess(out[i].ID, out[j].ID)
+	})
+	return out, nil
 }
 
 // Release ends a reservation without charging. Idempotent.
@@ -812,7 +940,7 @@ func (s *UsageStore[TX]) Refund(_ context.Context, req capability.RefundRequest)
 	return amount, nil
 }
 
-func (s *UsageStore[TX]) Get(_ context.Context, capID uuid.UUID) (capability.Usage, error) {
+func (s *UsageStore[TX]) GetUsage(_ context.Context, capID uuid.UUID) (capability.Usage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	u, ok := s.usage[capID]
@@ -848,7 +976,7 @@ func (s *UsageStore[TX]) GetTenantBudget(_ context.Context, tenantID uuid.UUID) 
 	return b, nil
 }
 
-func (s *UsageStore[TX]) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetArgs) (capability.TenantBudget, error) {
+func (s *UsageStore[TX]) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetRequest) (capability.TenantBudget, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -878,6 +1006,10 @@ func (s *UsageStore[TX]) SetTenantBudget(_ context.Context, args capability.SetT
 	b.MaxBudgetAmount = args.MaxBudgetAmount
 	b.UnitCode = normalised
 	b.PeriodEnd = args.PeriodEnd
+	if args.ResetSpend {
+		b.SpentAmount = 0
+		b.PeriodStart = s.nowFn()
+	}
 	if b.PeriodStart.IsZero() {
 		b.PeriodStart = s.nowFn()
 	}
@@ -887,11 +1019,20 @@ func (s *UsageStore[TX]) SetTenantBudget(_ context.Context, args capability.SetT
 	return b, nil
 }
 
-func (s *UsageStore[TX]) ListTenantBudgets(_ context.Context, args capability.ListTenantBudgetsArgs) ([]capability.TenantBudgetSummary, error) {
+func (s *UsageStore[TX]) ListTenantBudgets(_ context.Context, args capability.ListTenantBudgetsRequest) ([]capability.TenantBudgetSummary, string, error) {
+	var after *budgetRow
+	if args.Cursor != "" {
+		c, err := capability.DecodeTenantBudgetCursor(args.Cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		pct, _ := strconv.ParseFloat(c.Utilisation, 64) // DecodeTenantBudgetCursor checked it
+		after = &budgetRow{pct: pct, tenant: c.TenantID}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	out := make([]capability.TenantBudgetSummary, 0, len(s.budgets))
+	rows := make([]budgetRow, 0, len(s.budgets))
 	for _, b := range s.budgets {
 		unlimited := b.MaxBudgetAmount <= 0
 		if args.UnlimitedOnly && !unlimited {
@@ -904,17 +1045,46 @@ func (s *UsageStore[TX]) ListTenantBudgets(_ context.Context, args capability.Li
 		if args.ThresholdPct > 0 && pct < args.ThresholdPct {
 			continue
 		}
+		row := budgetRow{pct: pct, tenant: b.TenantID, budget: b}
+		if after != nil && !after.before(row) {
+			continue
+		}
+		rows = append(rows, row)
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].before(rows[j]) })
+
+	limit := int(capability.PageLimit(args.Limit))
+	next := ""
+	if len(rows) > limit {
+		rows = rows[:limit]
+		last := rows[limit-1]
+		next = capability.TenantBudgetCursor{
+			Utilisation: strconv.FormatFloat(last.pct, 'g', -1, 64), TenantID: last.tenant,
+		}.Encode()
+	}
+	out := make([]capability.TenantBudgetSummary, 0, len(rows))
+	for _, r := range rows {
 		out = append(out, capability.TenantBudgetSummary{
-			TenantID: b.TenantID, Budget: b, UtilisationPct: pct,
+			TenantID: r.tenant, Budget: r.budget, UtilisationPct: min(r.pct, maxUtilisationPct),
 		})
 	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].TenantID.String() < out[j].TenantID.String()
-	})
-	if args.Limit > 0 && int(args.Limit) < len(out) {
-		out = out[:args.Limit]
+	return out, next, nil
+}
+
+// budgetRow is a tenant budget in ListTenantBudgets' order.
+type budgetRow struct {
+	pct    float64 // unclamped utilisation
+	tenant uuid.UUID
+	budget capability.TenantBudget
+}
+
+// before reports whether r comes before o: higher utilisation first, then the
+// lower tenant id.
+func (r budgetRow) before(o budgetRow) bool {
+	if r.pct != o.pct {
+		return r.pct > o.pct
 	}
-	return out, nil
+	return uuidLess(r.tenant, o.tenant)
 }
 
 func (s *UsageStore[TX]) Delete(_ context.Context, capID uuid.UUID) error {

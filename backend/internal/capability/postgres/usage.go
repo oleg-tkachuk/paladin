@@ -164,7 +164,7 @@ func ancestorsOf(ctx context.Context, tx pgx.Tx, capID uuid.UUID) ([]ancestor, e
 // ancestor are bumped in one transaction, leaf first and then nearest
 // ancestor first — the same order every charge takes, so two requests
 // sharing part of a chain lock it in the same order and cannot deadlock.
-func (s *UsageStore) BumpRequest(ctx context.Context, req capability.RequestBump) (int64, error) {
+func (s *UsageStore) Bump(ctx context.Context, req capability.BumpRequest) (int64, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("capability/postgres: bump begin: %w", err)
@@ -227,7 +227,7 @@ func (s *UsageStore) Charge(
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
-	if err := capability.ValidateOverrun(req.Overrun); err != nil {
+	if err := req.Overrun.Validate(); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
 	if err := capability.ValidateExternalRef(req.ExternalRef); err != nil {
@@ -416,33 +416,44 @@ func nullableUUID(id uuid.UUID) pgtype.UUID {
 	return pgtype.UUID{Bytes: id, Valid: id != uuid.Nil}
 }
 
-// chargeRecordQuery reads a charge a capability took under an external ref,
-// with what has been refunded from it.
-const chargeRecordQuery = `
-SELECT ch.id, ch.amount,
+// chargeRecordSelect reads charges as the Meter contract reads one back,
+// with what has been refunded from each; a WHERE clause picks which.
+const chargeRecordSelect = `
+SELECT ch.id, ch.capability_id, ch.amount,
        COALESCE((SELECT sum(cr.amount) FROM charge_refunds cr WHERE cr.charge_id = ch.id), 0),
-       ch.unit_code, ch.overrun
+       ch.unit_code, COALESCE(ch.external_ref, ''), ch.overrun
 FROM   charges ch
-WHERE  ch.capability_id = $1 AND ch.external_ref = $2
 `
+
+// readCharge runs chargeRecordSelect with where and its args.
+func (s *UsageStore) readCharge(ctx context.Context, where string, args ...any) (capability.ChargeRecord, error) {
+	var (
+		rec              capability.ChargeRecord
+		amount, refunded pgtype.Numeric
+	)
+	err := s.pool.QueryRow(ctx, chargeRecordSelect+where, args...).
+		Scan(&rec.ChargeID, &rec.CapabilityID, &amount, &refunded, &rec.UnitCode, &rec.ExternalRef, &rec.Overrun)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+	}
+	if err != nil {
+		return capability.ChargeRecord{}, fmt.Errorf("capability/postgres: read charge: %w", err)
+	}
+	rec.Amount, rec.Refunded = floatFromNumeric(amount), floatFromNumeric(refunded)
+	return rec, nil
+}
+
+// GetCharge implements capability.Meter.
+func (s *UsageStore) GetCharge(ctx context.Context, chargeID uuid.UUID) (capability.ChargeRecord, error) {
+	return s.readCharge(ctx, `WHERE ch.id = $1`, chargeID)
+}
 
 // ChargeByRef implements capability.Meter.
 func (s *UsageStore) ChargeByRef(ctx context.Context, capID uuid.UUID, externalRef string) (capability.ChargeRecord, error) {
 	if externalRef == "" {
 		return capability.ChargeRecord{}, capability.ErrChargeNotFound
 	}
-	rec := capability.ChargeRecord{CapabilityID: capID, ExternalRef: externalRef}
-	var amount, refunded pgtype.Numeric
-	err := s.pool.QueryRow(ctx, chargeRecordQuery, capID, externalRef).
-		Scan(&rec.ChargeID, &amount, &refunded, &rec.UnitCode, &rec.Overrun)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return capability.ChargeRecord{}, capability.ErrChargeNotFound
-	}
-	if err != nil {
-		return capability.ChargeRecord{}, fmt.Errorf("capability/postgres: charge by ref: %w", err)
-	}
-	rec.Amount, rec.Refunded = floatFromNumeric(amount), floatFromNumeric(refunded)
-	return rec, nil
+	return s.readCharge(ctx, `WHERE ch.capability_id = $1 AND ch.external_ref = $2`, capID, externalRef)
 }
 
 // refundableQuery reads what is left of a charge and resolves the amount to
@@ -556,14 +567,12 @@ func (s *UsageStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (c
 		}
 		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: get tenant budget: %w", err)
 	}
-	got := tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt)
-	got.ReservedAmount = floatFromNumeric(row.ReservedUsd)
-	got.ResourceVersion = row.ResourceVersion
-	return got, nil
+	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.ReservedUsd, row.UnitCode,
+		row.PeriodStart, row.PeriodEnd, row.UpdatedAt, row.ResourceVersion), nil
 }
 
 // SetTenantBudget implements capability.UsageStore[pgx.Tx].
-func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTenantBudgetArgs) (capability.TenantBudget, error) {
+func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTenantBudgetRequest) (capability.TenantBudget, error) {
 	maxBudget, err := numericFromFloat(args.MaxBudgetAmount)
 	if err != nil {
 		return capability.TenantBudget{}, err
@@ -599,9 +608,8 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTen
 		}
 		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: set tenant budget: %w", err)
 	}
-	out := tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt)
-	out.ResourceVersion = row.ResourceVersion
-	return out, nil
+	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.ReservedUsd, row.UnitCode,
+		row.PeriodStart, row.PeriodEnd, row.UpdatedAt, row.ResourceVersion), nil
 }
 
 // ListTenantBudgets joins tenant_budgets with tenants and applies the
@@ -612,27 +620,41 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTen
 // numeric-precision path inside Postgres where it belongs).
 func (s *UsageStore) ListTenantBudgets(
 	ctx context.Context,
-	args capability.ListTenantBudgetsArgs,
-) ([]capability.TenantBudgetSummary, error) {
-	limit := args.Limit
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 500 {
-		limit = 500
-	}
+	args capability.ListTenantBudgetsRequest,
+) ([]capability.TenantBudgetSummary, string, error) {
+	limit := capability.PageLimit(args.Limit)
 	threshold, err := numericFromFloat(args.ThresholdPct)
 	if err != nil {
-		return nil, fmt.Errorf("capability/postgres: threshold_pct: %w", err)
+		return nil, "", fmt.Errorf("capability/postgres: threshold_pct: %w", err)
+	}
+	var afterPct pgtype.Numeric
+	var afterTenant pgtype.UUID
+	if args.Cursor != "" {
+		c, err := capability.DecodeTenantBudgetCursor(args.Cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		if err := afterPct.Scan(c.Utilisation); err != nil {
+			return nil, "", fmt.Errorf("%w: tenant budget cursor", capability.ErrInvalidRequest)
+		}
+		afterTenant = pgtype.UUID{Bytes: c.TenantID, Valid: true}
 	}
 	rows, err := s.q.ListTenantBudgetSummaries(ctx,
 		args.ExcludeInactive,
 		args.UnlimitedOnly,
 		threshold,
-		limit,
+		afterPct,
+		afterTenant,
+		limit+1, // one past the page says whether another follows
 	)
 	if err != nil {
-		return nil, fmt.Errorf("capability/postgres: list tenant budgets: %w", err)
+		return nil, "", fmt.Errorf("capability/postgres: list tenant budgets: %w", err)
+	}
+	next := ""
+	if len(rows) > int(limit) {
+		rows = rows[:limit]
+		last := rows[len(rows)-1]
+		next = capability.TenantBudgetCursor{Utilisation: last.RawPct, TenantID: uuid.UUID(last.TenantID.Bytes)}.Encode()
 	}
 	out := make([]capability.TenantBudgetSummary, 0, len(rows))
 	for _, r := range rows {
@@ -641,27 +663,30 @@ func (s *UsageStore) ListTenantBudgets(
 			Slug:        r.Slug,
 			DisplayName: r.DisplayName,
 			Budget: tenantBudgetFromRow(
-				r.TenantID, r.MaxBudgetUsd, r.SpentUsd, r.UnitCode,
-				r.PeriodStart, r.PeriodEnd, r.UpdatedAt,
+				r.TenantID, r.MaxBudgetUsd, r.SpentUsd, r.ReservedUsd, r.UnitCode,
+				r.PeriodStart, r.PeriodEnd, r.UpdatedAt, r.ResourceVersion,
 			),
 			UtilisationPct: floatFromNumeric(r.UtilisationPct),
 		})
 	}
-	return out, nil
+	return out, next, nil
 }
 
 // tenantBudgetFromRow normalises sqlc row types into the public shape.
 func tenantBudgetFromRow(
 	tenantID pgtype.UUID,
-	maxBudget, spent pgtype.Numeric,
+	maxBudget, spent, reserved pgtype.Numeric,
 	unitCode string,
 	periodStart, periodEnd, updatedAt pgtype.Timestamptz,
+	resourceVersion int64,
 ) capability.TenantBudget {
 	out := capability.TenantBudget{
 		TenantID:        uuid.UUID(tenantID.Bytes),
 		MaxBudgetAmount: floatFromNumeric(maxBudget),
 		SpentAmount:     floatFromNumeric(spent),
+		ReservedAmount:  floatFromNumeric(reserved),
 		UnitCode:        unitCode,
+		ResourceVersion: resourceVersion,
 	}
 	if periodStart.Valid {
 		out.PeriodStart = periodStart.Time
@@ -677,7 +702,7 @@ func tenantBudgetFromRow(
 }
 
 // Get implements capability.UsageStore[pgx.Tx].
-func (s *UsageStore) Get(ctx context.Context, capID uuid.UUID) (capability.Usage, error) {
+func (s *UsageStore) GetUsage(ctx context.Context, capID uuid.UUID) (capability.Usage, error) {
 	row, err := s.q.GetCapabilityUsage(ctx, pgtype.UUID{Bytes: capID, Valid: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

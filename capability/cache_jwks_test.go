@@ -111,7 +111,7 @@ func TestRevocationCacheIsBoundedAndHonoursClock(t *testing.T) {
 	for range 100 {
 		_, _ = c.IsRevoked(ctx, uuid.New())
 	}
-	if n := len(c.entries); n > 10 {
+	if n := len(c.cache.entries); n > 10 {
 		t.Errorf("cache holds %d entries, want ≤ 10", n)
 	}
 

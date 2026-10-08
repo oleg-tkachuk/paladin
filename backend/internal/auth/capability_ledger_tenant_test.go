@@ -31,9 +31,9 @@ func (u *tenantRecordingUsage) record(ctx context.Context, call string) {
 	u.seen[call] = tid
 }
 
-func (u *tenantRecordingUsage) BumpRequest(ctx context.Context, req capability.RequestBump) (int64, error) {
-	u.record(ctx, "BumpRequest")
-	return u.fakeUsage.BumpRequest(ctx, req)
+func (u *tenantRecordingUsage) Bump(ctx context.Context, req capability.BumpRequest) (int64, error) {
+	u.record(ctx, "Bump")
+	return u.fakeUsage.Bump(ctx, req)
 }
 
 func (u *tenantRecordingUsage) Charge(ctx context.Context, req capability.ChargeRequest, onCharged func(context.Context, pgx.Tx) error) (capability.ChargeReceipt, error) {
@@ -81,7 +81,7 @@ func TestCapabilityLedgerWritesRunOnTheCapabilitysTenant(t *testing.T) {
 				t.Fatalf("RefundLastCharge: %v", err)
 			}
 
-			for _, call := range []string{"BumpRequest", "Charge", "Refund"} {
+			for _, call := range []string{"Bump", "Charge", "Refund"} {
 				got, ok := usage.seen[call]
 				if !ok {
 					t.Errorf("%s was not called", call)

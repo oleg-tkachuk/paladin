@@ -35,19 +35,26 @@ func (m *memStore) Insert(_ context.Context, c Capability, _ Principal) error {
 	m.caps[c.ID] = c
 	return nil
 }
-func (m *memStore) Get(_ context.Context, id uuid.UUID) (*Capability, error) {
+func (m *memStore) Get(_ context.Context, id uuid.UUID) (Capability, error) {
 	atomic.AddInt64(&m.getCalls, 1)
 	c, ok := m.caps[id]
 	if !ok {
-		return nil, errors.New("not found")
+		return Capability{}, errors.New("not found")
 	}
-	return &c, nil
+	return c, nil
+}
+func (m *memStore) GetRecord(ctx context.Context, id uuid.UUID) (Record, error) {
+	c, err := m.Get(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	return Record{Capability: c}, nil
 }
 func (m *memStore) IsRevoked(_ context.Context, id uuid.UUID) (bool, error) {
 	atomic.AddInt64(&m.revCalls, 1)
 	return m.revoked[id], nil
 }
-func (m *memStore) Revoke(_ context.Context, args RevokeArgs) error {
+func (m *memStore) Revoke(_ context.Context, args RevokeRequest) error {
 	m.revoked[args.ID] = true
 	return nil
 }
@@ -59,14 +66,14 @@ func (m *memStore) IsBiscuitRevoked(_ context.Context, ids [][]byte) (bool, erro
 	}
 	return false, nil
 }
-func (m *memStore) RevokeBiscuit(_ context.Context, args RevokeBiscuitArgs) error {
+func (m *memStore) RevokeBiscuit(_ context.Context, args RevokeBiscuitRequest) error {
 	m.copies[string(args.RevocationID)] = true
 	return nil
 }
 func (m *memStore) PurgeExpired(context.Context, time.Duration) (int64, error) {
 	return 0, nil
 }
-func (m *memStore) ListByPrincipal(context.Context, ListByPrincipalArgs) ([]Capability, string, error) {
+func (m *memStore) ListByPrincipal(context.Context, ListByPrincipalRequest) ([]Capability, string, error) {
 	return nil, "", nil
 }
 
@@ -209,7 +216,7 @@ func TestVerify_Revoked(t *testing.T) {
 		Audience: []string{AudiencePlaneData},
 		Caveats:  Caveats{Ops: []Op{OpGet}},
 	})
-	if err := store.Revoke(ctx, RevokeArgs{ID: cap.ID, Reason: "test"}); err != nil {
+	if err := store.Revoke(ctx, RevokeRequest{ID: cap.ID, Reason: "test"}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 	_, err := verifier.Verify(ctx, token, AudiencePlaneData)
@@ -275,7 +282,7 @@ func TestDelegate_NarrowsAndPersists(t *testing.T) {
 	}
 
 	child, childToken, err := issuer.Delegate(ctx, DelegateRequest{
-		Parent:   *parent,
+		Parent:   parent,
 		Subject:  Principal{Type: PrincipalAgent, TenantID: tenantID, Subject: "child"},
 		Audience: []string{AudiencePlaneData},
 		Caveats: Caveats{
@@ -315,7 +322,7 @@ func TestDelegate_RejectsWidening(t *testing.T) {
 	})
 
 	_, _, err := issuer.Delegate(ctx, DelegateRequest{
-		Parent:   *parent,
+		Parent:   parent,
 		Subject:  Principal{Type: PrincipalAgent, TenantID: tenantID},
 		Audience: []string{AudiencePlaneData, AudiencePlaneAdmin}, // wider!
 		Caveats:  Caveats{Ops: []Op{OpGet}},

@@ -66,6 +66,13 @@ service CapabilityService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
+  // Get returns one capability as it is on record: the capability, who
+  // asked for it, and its own revocation if it has one. NOT_FOUND when no
+  // capability has the id, or the caller cannot see it.
+  rpc Get(CapabilityServiceGetRequest) returns (CapabilityServiceGetResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   // List enumerates capabilities issued to a principal. Cursor-paginated.
   rpc List(CapabilityServiceListRequest) returns (CapabilityServiceListResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -209,10 +216,7 @@ message CapabilityServiceRevokeRequest {
   bool cascade_children = 3;
 }
 
-message CapabilityServiceRevokeResponse {
-  // Empty on success; protobuf forward-compat slot for fields like
-  // descendants_revoked when cascade is on.
-}
+message CapabilityServiceRevokeResponse {}
 
 message CapabilityServiceRevokeBiscuitRequest {
   // token is the Biscuit copy to revoke, exactly as its holder presents it.
@@ -272,6 +276,30 @@ message CapabilityServiceListRequest {
 message CapabilityServiceListResponse {
   repeated Capability capabilities = 1;
   string next_page_token = 2;
+}
+
+message CapabilityServiceGetRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// CapabilityRevocation is a capability's own entry on the revocation list.
+message CapabilityRevocation {
+  google.protobuf.Timestamp revoked_at = 1;
+  string reason = 2;
+  string actor = 3;
+  // cascade reports that the entry was written by a cascading revoke, of
+  // this capability or of an ancestor.
+  bool cascade = 4;
+}
+
+message CapabilityServiceGetResponse {
+  Capability capability = 1;
+  // issued_by is the principal that asked for the capability. A capability
+  // recorded before it was kept carries the subject alone.
+  CapabilityPrincipal issued_by = 2;
+  // revocation is the capability's own entry; absent when it has none. A
+  // capability stopped only through an ancestor has none.
+  CapabilityRevocation revocation = 3;
 }
 
 message CapabilityServiceGetUsageRequest {

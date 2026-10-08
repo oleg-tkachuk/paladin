@@ -21,7 +21,7 @@ const (
 
 // limitedBiscuit is a Biscuit of a capability with request and budget
 // limits, and a verifier that admits copy limits.
-func limitedBiscuit(t *testing.T) (*StandardVerifier, *Capability, string) {
+func limitedBiscuit(t *testing.T) (*StandardVerifier, Capability, string) {
 	t.Helper()
 	issuer, v, _, _, _ := biscuitFixture(t)
 	v.cfg.MeterCopies = true
@@ -197,7 +197,7 @@ func TestCopyLimitsMalformed(t *testing.T) {
 // carries them does not, and a JWT verifies with none.
 func TestCopiesAreNeverSigned(t *testing.T) {
 	issuer, v, _, cap, _ := biscuitFixture(t)
-	withCopies := *cap
+	withCopies := cap
 	withCopies.Copies = []CopyCeiling{{RevocationID: []byte("x"), MaxRequests: 1}}
 	jwt, err := issuer.signer.Sign(withCopies)
 	if err != nil {

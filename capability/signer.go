@@ -21,8 +21,8 @@ import (
 //
 // Signer is intentionally narrow: callers populate a Capability struct
 // and ask Sign to encode + sign. The compact JWT format is the wire
-// representation; we expose Encode / Decode helpers so debugging
-// tooling can inspect tokens without the full verifier path.
+// representation; Decode reads one back without the verifier path, for
+// debugging tools, and VerifySignature checks its signature alone.
 type Signer interface {
 	// KeyID is the JWKS key ID embedded in tokens this signer mints.
 	// Verifiers index their key set by it, and rotation works by
@@ -47,7 +47,7 @@ type Verifier interface {
 	// The audience parameter is the plane the call is hitting — the
 	// verifier rejects tokens whose Capability.Audience does not
 	// include it. Use one of the AudiencePlane* constants.
-	Verify(ctx context.Context, token string, audience string) (*Capability, error)
+	Verify(ctx context.Context, token string, audience string) (Capability, error)
 }
 
 // AudiencePlane* constants are the audiences Paladin, the reference
@@ -271,15 +271,19 @@ func parseClaims(seg string) (*Capability, error) {
 // or applying time / audience / revocation gates. Use only for tooling
 // (`paladin cap show`); production code goes through Verifier.Verify,
 // which never reads a claim before the signature has checked out.
-func Decode(token string) (*Capability, error) {
+func Decode(token string) (Capability, error) {
 	parts, err := splitToken(token)
 	if err != nil {
-		return nil, err
+		return Capability{}, err
 	}
 	if _, err := parseHeader(parts.header); err != nil {
-		return nil, err
+		return Capability{}, err
 	}
-	return parseClaims(parts.claims)
+	c, err := parseClaims(parts.claims)
+	if err != nil {
+		return Capability{}, err
+	}
+	return *c, nil
 }
 
 // VerifySignature checks the Ed25519 signature on a compact token
