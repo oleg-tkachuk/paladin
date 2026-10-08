@@ -284,18 +284,18 @@ type Caveats struct {
 	// be used. 0 = unlimited within the TTL.
 	MaxRequests int
 
-	// MaxBudgetAmount is the cost budget the capability authorises,
-	// expressed in the currency identified by UnitCode. The budget
-	// tracker decrements as LLM / storage operations bill; once
-	// exhausted, the verifier returns ErrBudgetExceeded.
+	// MaxBudgetAmount is the cost budget the capability authorises, in
+	// the currency identified by UnitCode, exact to the nano. The Meter
+	// counts spend against it; once exhausted, a charge returns
+	// ErrBudgetExceeded.
 	//
 	// Renamed from MaxBudgetUSD — same field, no longer USD-pinned.
 	MaxBudgetAmount Nanos
 
-	// UnitCode pins the currency or unit (USD/EUR/UAH/GBP or the
-	// abstract sentinel UNIT). Empty value is interpreted as the
-	// default ("USD") at the application boundary; the in-memory
-	// shape is happy to carry either form.
+	// UnitCode pins the currency or unit: an ISO 4217 code, USD/EUR/UAH/GBP,
+	// or XXX ("no currency") for a budget that is not money. Empty value is
+	// interpreted as the default ("USD") at the application boundary; the
+	// in-memory shape is happy to carry either form.
 	UnitCode string
 
 	// AllowTaintedRead permits non-mutating operations on resources the

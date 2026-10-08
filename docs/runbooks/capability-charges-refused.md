@@ -61,7 +61,7 @@ refused before any charge and does not appear here.
   job — find the client spending it.
 - **Capability budget.** A capability's budget is signed into it and cannot
   be raised in place: issue a new capability with a larger
-  `max_budget_micros` and have the client switch to it.
+  `max_budget` and have the client switch to it.
 
 ## Escalation / notes
 

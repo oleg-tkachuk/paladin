@@ -153,8 +153,8 @@ A field left empty leaves that dimension as it is; a set one replaces it and
 must be within what the token allows, or the server refuses the whole token.
 Setting `ResourcePrefixes` or `ResourceURIs` replaces both. `ConfirmationJKT`
 (`DPoPThumbprint(key.Public())`) binds the token to a key, and only an unbound
-token can be bound. `MaxRequests` and `MaxBudgetMicros` give the copy limits of
-its own, counted apart from other copies and within every limit already in
+token can be bound. `MaxRequests` and `MaxBudget` (`capability.Nanos`, billionths of the
+capability's unit) give the copy limits of its own, counted apart from other copies and within every limit already in
 force; spending past them answers `ResourceExhausted`.
 `CapabilityService.GetBiscuitUsage` takes a copy and reports each limit in
 force on it with what has been counted against it. The facts it writes are listed in
