@@ -130,6 +130,25 @@ for an operation over a set, pass the prefix that bounds the set.
 `AllowTaintedRead` can only act on a taint signal you supply; if you track
 none, it protects nothing, and you should say so.
 
+Your own operations are namespaced (`tool:retrieve`, `mcp:github/create_issue`)
+and are treated as writes unless you declare otherwise, so an undeclared one
+needs an idempotency key under `IdempotencyKeyRequired` and is never refused as
+a tainted read. Declare the effect where you define the operation — a method
+option, a tool registry — and pass it on every check:
+
+```go
+err := cap.Caveats.Check(capability.CheckRequest{
+    Op:       "tool:retrieve",
+    Effect:   capability.EffectRead, // from your operation's definition
+    Resource: "corpus/public/",
+})
+```
+
+A built-in operation keeps its own effect: declaring `put` a read returns
+`ErrEffectConflict`, a programming error rather than a caveat violation. Gate
+anything else on the effect through `CheckRequest.Mutating`, so it and `Check`
+cannot disagree.
+
 ## Delegate — attenuate, never escalate
 
 An orchestrator narrows its own authority and hands the result to a worker it
@@ -322,6 +341,59 @@ usage.Charge(ctx, req, func(ctx context.Context, tx MyTx) error {
 
 The module never inspects `MyTx` — it only hands it back. That is why this
 library has no database dependency.
+
+## Charge a cost reported after the fact
+
+Some costs never pass through your verifier: a call made straight to a
+provider whose price arrives later, in a usage record or on an event stream
+delivered at least once. Two things change for such a cost.
+
+**It may arrive twice.** Name it with the id your records already give it, and
+the capability is charged once per name; a repeat returns the first receipt
+with `Replayed` set and runs no callback:
+
+```go
+receipt, err := usage.Charge(ctx, capability.ChargeRequest{
+    CapabilityID: capID, TenantID: tenantID, Amount: cost,
+    MaxBudget:   rec.Caveats.MaxBudgetAmount, // the stored record, from Store.Get
+    ExternalRef: event.CallID,
+    Overrun:     capability.OverrunRecord,
+}, nil)
+```
+
+A settle is idempotent on its reservation in the same way: settling one twice
+returns the first charge. `ChargeByRef` reads a named charge back, so a
+reporter can reconcile its own records with the ledger.
+
+**It has already been spent.** Refusing it would only leave the ledger short.
+`OverrunRecord` charges it past every ceiling it crosses and sets
+`receipt.Overrun`; the crossed ceiling then refuses every later charge and
+reservation made with the default `OverrunReject`, which is what stops the
+next cost before it is incurred. Keep `OverrunReject` for anything you can
+still decline.
+
+A reporter with no token in hand reads the ceiling from the capability's
+stored record (`Store.Get`), as the meter already does for every ancestor. A
+price that is not known yet is not a price of zero: hold the estimate and
+settle when it is known, or let the hold lapse and count against the ceilings
+until `ReleaseExpired` runs. Costs below a micro round to zero one at a time;
+sum them on your side and charge the total.
+
+## Check your own store
+
+Most of the `Meter` contract lives in request fields, so a store that ignores
+one still compiles. Run the module's checks from your store's tests:
+
+```go
+func TestMeterContract(t *testing.T) {
+    metertest.Run(t, func(t *testing.T) metertest.Env[MyTx] {
+        return metertest.Env[MyTx]{Ctx: ctx, Usage: newStore(t), Tenant: tenant,
+            NewCapability: recordCapability}
+    })
+}
+```
+
+`memstore` runs the same checks.
 
 ## Revoke
 

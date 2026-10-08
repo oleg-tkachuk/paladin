@@ -191,13 +191,16 @@ WHERE tenant_id = $1`, r.tenantID, r.amount); err != nil {
 // rejection rolls all three back, so the reservation is still there to be
 // settled lower or released. Deleting the row is what serialises two
 // settles of one reservation: the second waits on the row lock, then finds
-// nothing.
+// nothing, and returns the first's charge as a replay.
 func (s *UsageStore) Settle(
 	ctx context.Context,
 	req capability.SettleRequest,
 	onCharged func(ctx context.Context, tx pgx.Tx) error,
 ) (capability.ChargeReceipt, error) {
 	if err := capability.ValidateAmount(req.Amount); err != nil {
+		return capability.ChargeReceipt{}, err
+	}
+	if err := capability.ValidateOverrun(req.Overrun); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
 	amount, err := numericFromFloat(req.Amount)
@@ -216,10 +219,23 @@ func (s *UsageStore) Settle(
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	r, err := takeReservation(ctx, tx, req.ReservationID, true)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Settled already, or never settleable. A second settle waited on
+		// the first's row lock, so a charge the first made is visible now.
+		var (
+			chargeID, capID uuid.UUID
+			overrun         bool
+		)
+		lErr := tx.QueryRow(ctx, chargeByReservationQuery, req.ReservationID).Scan(&chargeID, &capID, &overrun)
+		if lErr == nil {
+			return replay(ctx, tx, chargeID, capID, overrun)
+		}
+		if errors.Is(lErr, pgx.ErrNoRows) {
 			return capability.ChargeReceipt{}, capability.ErrReservationNotFound
 		}
+		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: settle read charge: %w", lErr)
+	}
+	if err != nil {
 		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: settle read: %w", err)
 	}
 	if err := s.releaseHold(ctx, tx, r); err != nil {
@@ -238,7 +254,8 @@ func (s *UsageStore) Settle(
 		Op:           r.op,
 		Actor:        r.actor,
 		Copies:       copies,
-	}, r.unit, amount, maxBudget, onCharged)
+		Overrun:      req.Overrun,
+	}, req.ReservationID, r.unit, amount, maxBudget, onCharged)
 	if err != nil {
 		return capability.ChargeReceipt{}, err
 	}
