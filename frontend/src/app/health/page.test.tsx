@@ -179,6 +179,44 @@ describe("HealthPage component switch", () => {
   });
 });
 
+// The pool's use and the schema version are details: their own line under
+// the row, not a message to expand.
+describe("HealthPage component details", () => {
+  beforeEach(() => {
+    payload = {
+      roles: [
+        {
+          role: "api",
+          status: "healthy",
+          components: [
+            {
+              ...component("postgres", true),
+              details: [
+                { name: "connections", value: "3 of 20 in use" },
+                { name: "idle", value: "2" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+  });
+
+  it("lists each detail as name and value, in order", async () => {
+    render(<HealthPage />);
+    const row = (await screen.findByText("postgres")).closest("button")!;
+    const list = row.parentElement!.querySelector("dl")!;
+    expect(list).toHaveTextContent("connections:3 of 20 in useidle:2");
+  });
+
+  it("offers nothing to expand for details alone", async () => {
+    render(<HealthPage />);
+    const row = (await screen.findByText("postgres")).closest("button")!;
+    expect(row).not.toHaveAttribute("aria-expanded");
+    expect(row.querySelector("svg")).toBeNull();
+  });
+});
+
 describe("HealthPage component message", () => {
   const withMessage = (message: string) => ({
     roles: [

@@ -94,6 +94,7 @@ type Component = {
   category: string;
   critical: boolean;
   control?: "always_on" | "config" | "database";
+  details?: { name: string; value: string }[];
 };
 
 // Shared secret gating /system/health.json on the backends. When set
