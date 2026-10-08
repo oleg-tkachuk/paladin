@@ -21,15 +21,17 @@ import (
 const (
 	detailConnections   = "connections"
 	detailIdle          = "idle"
-	detailWaited        = "waited for a connection"
+	detailNoIdle        = "acquired with no idle connection"
 	detailSchemaApplied = "schema applied"
 	detailSchemaWanted  = "schema this build needs"
 )
 
 // postgresComponent pings the primary, and describes the role's pool: how
-// many of its connections are in use, and how often a query has had to wait
-// for one — the first sign the pool is too small for the role's load. The
-// pool is read in memory; describing it touches no database.
+// many of its connections are in use, and how many acquires found no idle
+// connection (pgx's EmptyAcquireCount). That count includes the connections
+// opened as the pool warms up after start, so it is not a measure of load on
+// its own — its growth on a warm pool is. The pool is read in memory;
+// describing it touches no database.
 func postgresComponent(db *postgres.DB) health.Check {
 	return health.Check{
 		Name:     "postgres",
@@ -57,7 +59,7 @@ func poolDetails(st poolStat) []health.Detail {
 	return []health.Detail{
 		{Name: detailConnections, Value: fmt.Sprintf("%d of %d in use", st.AcquiredConns(), st.MaxConns())},
 		{Name: detailIdle, Value: strconv.Itoa(int(st.IdleConns()))},
-		{Name: detailWaited, Value: fmt.Sprintf("%d times since start", st.EmptyAcquireCount())},
+		{Name: detailNoIdle, Value: fmt.Sprintf("%d times since start", st.EmptyAcquireCount())},
 	}
 }
 

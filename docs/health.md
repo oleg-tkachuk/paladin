@@ -30,7 +30,7 @@ The switch lives in one of three places, reported as the row's `control`:
 
 | role | component | control | critical | check |
 |---|---|---|---|---|
-| all but mcp | `postgres` | always_on | yes | ping the primary; details: the role's pool — connections in use of its maximum, idle, and how often a query waited for one |
+| all but mcp | `postgres` | always_on | yes | ping the primary; details: the role's pool — connections in use of its maximum, idle, and how many acquires found no idle connection (it counts the warm-up after start too) |
 | all but mcp | `postgres-schema` | always_on | yes | the applied schema is not behind the newest migration this build carries; details: both versions. Ahead is normal mid-rollout |
 | all but mcp | `postgres-replica` | config: `datastores.postgres.replica.enabled` | no | the replica is reachable and within `max_lag` |
 | api, admin | `capability` | config: `capability.enabled` | yes | the capability store answers a lookup |
