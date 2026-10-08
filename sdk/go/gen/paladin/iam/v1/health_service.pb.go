@@ -34,8 +34,9 @@ const (
 	ComponentStatus_COMPONENT_STATUS_HEALTHY     ComponentStatus = 1
 	ComponentStatus_COMPONENT_STATUS_DEGRADED    ComponentStatus = 2
 	ComponentStatus_COMPONENT_STATUS_UNHEALTHY   ComponentStatus = 3
-	// Off by configuration: listed so its absence reads as intended, never
-	// probed, and never part of the overall status.
+	// Switched off — by configuration, or because nothing stored uses it (see
+	// ComponentControl): listed so its absence reads as intended, never
+	// probed, and never part of the overall status. The message says why.
 	ComponentStatus_COMPONENT_STATUS_DISABLED ComponentStatus = 4
 )
 
@@ -82,6 +83,63 @@ func (x ComponentStatus) Number() protoreflect.EnumNumber {
 // Deprecated: Use ComponentStatus.Descriptor instead.
 func (ComponentStatus) EnumDescriptor() ([]byte, []int) {
 	return file_paladin_iam_v1_health_service_proto_rawDescGZIP(), []int{0}
+}
+
+// Where a component's on/off switch lives.
+type ComponentControl int32
+
+const (
+	ComponentControl_COMPONENT_CONTROL_UNSPECIFIED ComponentControl = 0
+	// No switch: the role cannot run without it.
+	ComponentControl_COMPONENT_CONTROL_ALWAYS_ON ComponentControl = 1
+	// A configuration key, read at startup; a disabled component names it.
+	ComponentControl_COMPONENT_CONTROL_CONFIG ComponentControl = 2
+	// Stored rows: in use while something in the database uses it — a broker
+	// while an enabled event subscription delivers to it.
+	ComponentControl_COMPONENT_CONTROL_DATABASE ComponentControl = 3
+)
+
+// Enum value maps for ComponentControl.
+var (
+	ComponentControl_name = map[int32]string{
+		0: "COMPONENT_CONTROL_UNSPECIFIED",
+		1: "COMPONENT_CONTROL_ALWAYS_ON",
+		2: "COMPONENT_CONTROL_CONFIG",
+		3: "COMPONENT_CONTROL_DATABASE",
+	}
+	ComponentControl_value = map[string]int32{
+		"COMPONENT_CONTROL_UNSPECIFIED": 0,
+		"COMPONENT_CONTROL_ALWAYS_ON":   1,
+		"COMPONENT_CONTROL_CONFIG":      2,
+		"COMPONENT_CONTROL_DATABASE":    3,
+	}
+)
+
+func (x ComponentControl) Enum() *ComponentControl {
+	p := new(ComponentControl)
+	*p = x
+	return p
+}
+
+func (x ComponentControl) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ComponentControl) Descriptor() protoreflect.EnumDescriptor {
+	return file_paladin_iam_v1_health_service_proto_enumTypes[1].Descriptor()
+}
+
+func (ComponentControl) Type() protoreflect.EnumType {
+	return &file_paladin_iam_v1_health_service_proto_enumTypes[1]
+}
+
+func (x ComponentControl) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ComponentControl.Descriptor instead.
+func (ComponentControl) EnumDescriptor() ([]byte, []int) {
+	return file_paladin_iam_v1_health_service_proto_rawDescGZIP(), []int{1}
 }
 
 type GetVersionRequest struct {
@@ -237,7 +295,7 @@ type ComponentHealth struct {
 	Name   string          `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Status ComponentStatus `protobuf:"varint,2,opt,name=status,proto3,enum=paladin.iam.v1.ComponentStatus" json:"status,omitempty"`
 	// Free-form context shown next to the status pill. Error message on
-	// failure; empty on healthy.
+	// failure, why it is off when disabled; empty on healthy.
 	Message string `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
 	// How long the check took. Useful for spotting a degrading dep before
 	// it tips over into unhealthy.
@@ -252,7 +310,9 @@ type ComponentHealth struct {
 	// kubelet endpoint set. Frontend uses this to badge components
 	// ("required" vs "informational") so an operator sees the runtime
 	// impact without reading runbooks.
-	Critical      bool `protobuf:"varint,6,opt,name=critical,proto3" json:"critical,omitempty"`
+	Critical bool `protobuf:"varint,6,opt,name=critical,proto3" json:"critical,omitempty"`
+	// Where the component's switch lives.
+	Control       ComponentControl `protobuf:"varint,7,opt,name=control,proto3,enum=paladin.iam.v1.ComponentControl" json:"control,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -327,6 +387,13 @@ func (x *ComponentHealth) GetCritical() bool {
 		return x.Critical
 	}
 	return false
+}
+
+func (x *ComponentHealth) GetControl() ComponentControl {
+	if x != nil {
+		return x.Control
+	}
+	return ComponentControl_COMPONENT_CONTROL_UNSPECIFIED
 }
 
 type HealthInfo struct {
@@ -408,7 +475,7 @@ const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"build_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tbuildTime\x12\x1d\n" +
 	"\n" +
 	"go_version\x18\x04 \x01(\tR\tgoVersion\"\x12\n" +
-	"\x10GetHealthRequest\"\xd4\x01\n" +
+	"\x10GetHealthRequest\"\x90\x02\n" +
 	"\x0fComponentHealth\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x127\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x1f.paladin.iam.v1.ComponentStatusR\x06status\x12\x18\n" +
@@ -416,7 +483,8 @@ const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"\n" +
 	"latency_ms\x18\x04 \x01(\x03R\tlatencyMs\x12\x1a\n" +
 	"\bcategory\x18\x05 \x01(\tR\bcategory\x12\x1a\n" +
-	"\bcritical\x18\x06 \x01(\bR\bcritical\"\x9a\x01\n" +
+	"\bcritical\x18\x06 \x01(\bR\bcritical\x12:\n" +
+	"\acontrol\x18\a \x01(\x0e2 .paladin.iam.v1.ComponentControlR\acontrol\"\x9a\x01\n" +
 	"\n" +
 	"HealthInfo\x127\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x1f.paladin.iam.v1.ComponentStatusR\x06status\x12?\n" +
@@ -429,7 +497,12 @@ const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"\x18COMPONENT_STATUS_HEALTHY\x10\x01\x12\x1d\n" +
 	"\x19COMPONENT_STATUS_DEGRADED\x10\x02\x12\x1e\n" +
 	"\x1aCOMPONENT_STATUS_UNHEALTHY\x10\x03\x12\x1d\n" +
-	"\x19COMPONENT_STATUS_DISABLED\x10\x042\xb2\x01\n" +
+	"\x19COMPONENT_STATUS_DISABLED\x10\x04*\x94\x01\n" +
+	"\x10ComponentControl\x12!\n" +
+	"\x1dCOMPONENT_CONTROL_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bCOMPONENT_CONTROL_ALWAYS_ON\x10\x01\x12\x1c\n" +
+	"\x18COMPONENT_CONTROL_CONFIG\x10\x02\x12\x1e\n" +
+	"\x1aCOMPONENT_CONTROL_DATABASE\x10\x032\xb2\x01\n" +
 	"\rHealthService\x12Q\n" +
 	"\n" +
 	"GetVersion\x12!.paladin.iam.v1.GetVersionRequest\x1a\x1b.paladin.iam.v1.VersionInfo\"\x03\x90\x02\x01\x12N\n" +
@@ -447,31 +520,33 @@ func file_paladin_iam_v1_health_service_proto_rawDescGZIP() []byte {
 	return file_paladin_iam_v1_health_service_proto_rawDescData
 }
 
-var file_paladin_iam_v1_health_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_paladin_iam_v1_health_service_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_paladin_iam_v1_health_service_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_paladin_iam_v1_health_service_proto_goTypes = []any{
 	(ComponentStatus)(0),          // 0: paladin.iam.v1.ComponentStatus
-	(*GetVersionRequest)(nil),     // 1: paladin.iam.v1.GetVersionRequest
-	(*VersionInfo)(nil),           // 2: paladin.iam.v1.VersionInfo
-	(*GetHealthRequest)(nil),      // 3: paladin.iam.v1.GetHealthRequest
-	(*ComponentHealth)(nil),       // 4: paladin.iam.v1.ComponentHealth
-	(*HealthInfo)(nil),            // 5: paladin.iam.v1.HealthInfo
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(ComponentControl)(0),         // 1: paladin.iam.v1.ComponentControl
+	(*GetVersionRequest)(nil),     // 2: paladin.iam.v1.GetVersionRequest
+	(*VersionInfo)(nil),           // 3: paladin.iam.v1.VersionInfo
+	(*GetHealthRequest)(nil),      // 4: paladin.iam.v1.GetHealthRequest
+	(*ComponentHealth)(nil),       // 5: paladin.iam.v1.ComponentHealth
+	(*HealthInfo)(nil),            // 6: paladin.iam.v1.HealthInfo
+	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
 }
 var file_paladin_iam_v1_health_service_proto_depIdxs = []int32{
-	6, // 0: paladin.iam.v1.VersionInfo.build_time:type_name -> google.protobuf.Timestamp
+	7, // 0: paladin.iam.v1.VersionInfo.build_time:type_name -> google.protobuf.Timestamp
 	0, // 1: paladin.iam.v1.ComponentHealth.status:type_name -> paladin.iam.v1.ComponentStatus
-	0, // 2: paladin.iam.v1.HealthInfo.status:type_name -> paladin.iam.v1.ComponentStatus
-	4, // 3: paladin.iam.v1.HealthInfo.components:type_name -> paladin.iam.v1.ComponentHealth
-	1, // 4: paladin.iam.v1.HealthService.GetVersion:input_type -> paladin.iam.v1.GetVersionRequest
-	3, // 5: paladin.iam.v1.HealthService.GetHealth:input_type -> paladin.iam.v1.GetHealthRequest
-	2, // 6: paladin.iam.v1.HealthService.GetVersion:output_type -> paladin.iam.v1.VersionInfo
-	5, // 7: paladin.iam.v1.HealthService.GetHealth:output_type -> paladin.iam.v1.HealthInfo
-	6, // [6:8] is the sub-list for method output_type
-	4, // [4:6] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	1, // 2: paladin.iam.v1.ComponentHealth.control:type_name -> paladin.iam.v1.ComponentControl
+	0, // 3: paladin.iam.v1.HealthInfo.status:type_name -> paladin.iam.v1.ComponentStatus
+	5, // 4: paladin.iam.v1.HealthInfo.components:type_name -> paladin.iam.v1.ComponentHealth
+	2, // 5: paladin.iam.v1.HealthService.GetVersion:input_type -> paladin.iam.v1.GetVersionRequest
+	4, // 6: paladin.iam.v1.HealthService.GetHealth:input_type -> paladin.iam.v1.GetHealthRequest
+	3, // 7: paladin.iam.v1.HealthService.GetVersion:output_type -> paladin.iam.v1.VersionInfo
+	6, // 8: paladin.iam.v1.HealthService.GetHealth:output_type -> paladin.iam.v1.HealthInfo
+	7, // [7:9] is the sub-list for method output_type
+	5, // [5:7] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_paladin_iam_v1_health_service_proto_init() }
@@ -484,7 +559,7 @@ func file_paladin_iam_v1_health_service_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_iam_v1_health_service_proto_rawDesc), len(file_paladin_iam_v1_health_service_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,

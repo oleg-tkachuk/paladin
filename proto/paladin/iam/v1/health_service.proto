@@ -57,9 +57,22 @@ enum ComponentStatus {
   COMPONENT_STATUS_HEALTHY = 1;
   COMPONENT_STATUS_DEGRADED = 2;
   COMPONENT_STATUS_UNHEALTHY = 3;
-  // Off by configuration: listed so its absence reads as intended, never
-  // probed, and never part of the overall status.
+  // Switched off — by configuration, or because nothing stored uses it (see
+  // ComponentControl): listed so its absence reads as intended, never
+  // probed, and never part of the overall status. The message says why.
   COMPONENT_STATUS_DISABLED = 4;
+}
+
+// Where a component's on/off switch lives.
+enum ComponentControl {
+  COMPONENT_CONTROL_UNSPECIFIED = 0;
+  // No switch: the role cannot run without it.
+  COMPONENT_CONTROL_ALWAYS_ON = 1;
+  // A configuration key, read at startup; a disabled component names it.
+  COMPONENT_CONTROL_CONFIG = 2;
+  // Stored rows: in use while something in the database uses it — a broker
+  // while an enabled event subscription delivers to it.
+  COMPONENT_CONTROL_DATABASE = 3;
 }
 
 message ComponentHealth {
@@ -69,7 +82,7 @@ message ComponentHealth {
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   ComponentStatus status = 2;
   // Free-form context shown next to the status pill. Error message on
-  // failure; empty on healthy.
+  // failure, why it is off when disabled; empty on healthy.
   string message = 3;
   // How long the check took. Useful for spotting a degrading dep before
   // it tips over into unhealthy.
@@ -85,6 +98,8 @@ message ComponentHealth {
   // ("required" vs "informational") so an operator sees the runtime
   // impact without reading runbooks.
   bool critical = 6;
+  // Where the component's switch lives.
+  ComponentControl control = 7;
 }
 
 message HealthInfo {

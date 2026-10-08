@@ -25,7 +25,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_iam_v1_health_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiNwYWxhZGluL2lhbS92MS9oZWFsdGhfc2VydmljZS5wcm90bxIOcGFsYWRpbi5pYW0udjEiEwoRR2V0VmVyc2lvblJlcXVlc3QidwoLVmVyc2lvbkluZm8SDwoHdmVyc2lvbhgBIAEoCRIOCgZjb21taXQYAiABKAkSMwoKYnVpbGRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxISCgpnb192ZXJzaW9uGAQgASgJIhIKEEdldEhlYWx0aFJlcXVlc3QingEKD0NvbXBvbmVudEhlYWx0aBIRCgRuYW1lGAEgASgJQgPgQQgSLwoGc3RhdHVzGAIgASgOMh8ucGFsYWRpbi5pYW0udjEuQ29tcG9uZW50U3RhdHVzEg8KB21lc3NhZ2UYAyABKAkSEgoKbGF0ZW5jeV9tcxgEIAEoAxIQCghjYXRlZ29yeRgFIAEoCRIQCghjcml0aWNhbBgGIAEoCCKAAQoKSGVhbHRoSW5mbxIvCgZzdGF0dXMYASABKA4yHy5wYWxhZGluLmlhbS52MS5Db21wb25lbnRTdGF0dXMSMwoKY29tcG9uZW50cxgCIAMoCzIfLnBhbGFkaW4uaWFtLnYxLkNvbXBvbmVudEhlYWx0aBIMCgRyb2xlGAMgASgJKq8BCg9Db21wb25lbnRTdGF0dXMSIAocQ09NUE9ORU5UX1NUQVRVU19VTlNQRUNJRklFRBAAEhwKGENPTVBPTkVOVF9TVEFUVVNfSEVBTFRIWRABEh0KGUNPTVBPTkVOVF9TVEFUVVNfREVHUkFERUQQAhIeChpDT01QT05FTlRfU1RBVFVTX1VOSEVBTFRIWRADEh0KGUNPTVBPTkVOVF9TVEFUVVNfRElTQUJMRUQQBDKyAQoNSGVhbHRoU2VydmljZRJRCgpHZXRWZXJzaW9uEiEucGFsYWRpbi5pYW0udjEuR2V0VmVyc2lvblJlcXVlc3QaGy5wYWxhZGluLmlhbS52MS5WZXJzaW9uSW5mbyIDkAIBEk4KCUdldEhlYWx0aBIgLnBhbGFkaW4uaWFtLnYxLkdldEhlYWx0aFJlcXVlc3QaGi5wYWxhZGluLmlhbS52MS5IZWFsdGhJbmZvIgOQAgFCSFpGZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vaWFtL3YxO3BhbGFkaW5pYW12MWIGcHJvdG8z",
+    "CiNwYWxhZGluL2lhbS92MS9oZWFsdGhfc2VydmljZS5wcm90bxIOcGFsYWRpbi5pYW0udjEiEwoRR2V0VmVyc2lvblJlcXVlc3QidwoLVmVyc2lvbkluZm8SDwoHdmVyc2lvbhgBIAEoCRIOCgZjb21taXQYAiABKAkSMwoKYnVpbGRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxISCgpnb192ZXJzaW9uGAQgASgJIhIKEEdldEhlYWx0aFJlcXVlc3Qi0QEKD0NvbXBvbmVudEhlYWx0aBIRCgRuYW1lGAEgASgJQgPgQQgSLwoGc3RhdHVzGAIgASgOMh8ucGFsYWRpbi5pYW0udjEuQ29tcG9uZW50U3RhdHVzEg8KB21lc3NhZ2UYAyABKAkSEgoKbGF0ZW5jeV9tcxgEIAEoAxIQCghjYXRlZ29yeRgFIAEoCRIQCghjcml0aWNhbBgGIAEoCBIxCgdjb250cm9sGAcgASgOMiAucGFsYWRpbi5pYW0udjEuQ29tcG9uZW50Q29udHJvbCKAAQoKSGVhbHRoSW5mbxIvCgZzdGF0dXMYASABKA4yHy5wYWxhZGluLmlhbS52MS5Db21wb25lbnRTdGF0dXMSMwoKY29tcG9uZW50cxgCIAMoCzIfLnBhbGFkaW4uaWFtLnYxLkNvbXBvbmVudEhlYWx0aBIMCgRyb2xlGAMgASgJKq8BCg9Db21wb25lbnRTdGF0dXMSIAocQ09NUE9ORU5UX1NUQVRVU19VTlNQRUNJRklFRBAAEhwKGENPTVBPTkVOVF9TVEFUVVNfSEVBTFRIWRABEh0KGUNPTVBPTkVOVF9TVEFUVVNfREVHUkFERUQQAhIeChpDT01QT05FTlRfU1RBVFVTX1VOSEVBTFRIWRADEh0KGUNPTVBPTkVOVF9TVEFUVVNfRElTQUJMRUQQBCqUAQoQQ29tcG9uZW50Q29udHJvbBIhCh1DT01QT05FTlRfQ09OVFJPTF9VTlNQRUNJRklFRBAAEh8KG0NPTVBPTkVOVF9DT05UUk9MX0FMV0FZU19PThABEhwKGENPTVBPTkVOVF9DT05UUk9MX0NPTkZJRxACEh4KGkNPTVBPTkVOVF9DT05UUk9MX0RBVEFCQVNFEAMysgEKDUhlYWx0aFNlcnZpY2USUQoKR2V0VmVyc2lvbhIhLnBhbGFkaW4uaWFtLnYxLkdldFZlcnNpb25SZXF1ZXN0GhsucGFsYWRpbi5pYW0udjEuVmVyc2lvbkluZm8iA5ACARJOCglHZXRIZWFsdGgSIC5wYWxhZGluLmlhbS52MS5HZXRIZWFsdGhSZXF1ZXN0GhoucGFsYWRpbi5pYW0udjEuSGVhbHRoSW5mbyIDkAIBQkhaRmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2lhbS92MTtwYWxhZGluaWFtdjFiBnByb3RvMw",
     [file_google_protobuf_timestamp, file_google_api_field_behavior],
   );
 
@@ -118,7 +118,7 @@ export type ComponentHealth = Message<"paladin.iam.v1.ComponentHealth"> & {
 
   /**
    * Free-form context shown next to the status pill. Error message on
-   * failure; empty on healthy.
+   * failure, why it is off when disabled; empty on healthy.
    *
    * @generated from field: string message = 3;
    */
@@ -152,6 +152,13 @@ export type ComponentHealth = Message<"paladin.iam.v1.ComponentHealth"> & {
    * @generated from field: bool critical = 6;
    */
   critical: boolean;
+
+  /**
+   * Where the component's switch lives.
+   *
+   * @generated from field: paladin.iam.v1.ComponentControl control = 7;
+   */
+  control: ComponentControl;
 };
 
 /**
@@ -227,8 +234,9 @@ export enum ComponentStatus {
   UNHEALTHY = 3,
 
   /**
-   * Off by configuration: listed so its absence reads as intended, never
-   * probed, and never part of the overall status.
+   * Switched off — by configuration, or because nothing stored uses it (see
+   * ComponentControl): listed so its absence reads as intended, never
+   * probed, and never part of the overall status. The message says why.
    *
    * @generated from enum value: COMPONENT_STATUS_DISABLED = 4;
    */
@@ -241,6 +249,47 @@ export enum ComponentStatus {
 export const ComponentStatusSchema: GenEnum<ComponentStatus> =
   /*@__PURE__*/
   enumDesc(file_paladin_iam_v1_health_service, 0);
+
+/**
+ * Where a component's on/off switch lives.
+ *
+ * @generated from enum paladin.iam.v1.ComponentControl
+ */
+export enum ComponentControl {
+  /**
+   * @generated from enum value: COMPONENT_CONTROL_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * No switch: the role cannot run without it.
+   *
+   * @generated from enum value: COMPONENT_CONTROL_ALWAYS_ON = 1;
+   */
+  ALWAYS_ON = 1,
+
+  /**
+   * A configuration key, read at startup; a disabled component names it.
+   *
+   * @generated from enum value: COMPONENT_CONTROL_CONFIG = 2;
+   */
+  CONFIG = 2,
+
+  /**
+   * Stored rows: in use while something in the database uses it — a broker
+   * while an enabled event subscription delivers to it.
+   *
+   * @generated from enum value: COMPONENT_CONTROL_DATABASE = 3;
+   */
+  DATABASE = 3,
+}
+
+/**
+ * Describes the enum paladin.iam.v1.ComponentControl.
+ */
+export const ComponentControlSchema: GenEnum<ComponentControl> =
+  /*@__PURE__*/
+  enumDesc(file_paladin_iam_v1_health_service, 1);
 
 /**
  * SystemService exposes process-level metadata (version, build info) and
