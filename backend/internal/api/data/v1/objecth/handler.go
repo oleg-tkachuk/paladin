@@ -54,7 +54,7 @@ import (
 // catches every event class; subscribers that only care about
 // `paladin.object.uploaded` should set
 //
-//	`event.kind == 'paladin.object.uploaded'`
+//	`type == "paladin.object.uploaded"`
 //
 // (see frontend/src/app/events/page.tsx hint copy) so the
 // dispatcher's per-row List doesn't queue rows the consumer would

@@ -656,6 +656,20 @@ finding moving from "packages you import" to "your code is affected".
   with the delivery and pool-key tests that cover it.
 - **Blockers:** a customer whose consumers need one topic per tenant.
 
+### Event dispatcher: configurable CloudEvents `source`
+
+- **Status:** Deferred (owner decision, 2026-10-08).
+- **Reason:** `source` is the fixed `cloudEventSource` (`paladin`) on every
+  sink. Dedup does not need more: `id` is the delivery-row UUIDv7, so
+  `source` + `id` stays unique across deployments, and `tenantid` already
+  tells tenants apart.
+- **Definition of Done:** an optional dispatcher config key (for example
+  `config.dispatcher.event_source`) that defaults to `paladin`, validated as
+  a URI-reference, stamped by `newCloudEventEnvelope`, with tests and the
+  envelope table in `docs/event-delivery-dedup.md` updated.
+- **Blockers:** a second Paladin deployment publishing into the same broker
+  or webhook, where consumers need to know which one an event came from.
+
 ### The Python SDK is not published
 
 - **Status:** Deferred (owner decision, 2026-09-30).
