@@ -17,13 +17,15 @@ import (
 )
 
 // Detail names the postgres components report. The console shows them as
-// they are; they are a contract with nothing but a reader.
+// they are — the pool's as a table, a role to a column — so values are bare
+// numbers and names say no more than their row needs; they are a contract
+// with nothing but a reader.
 const (
-	detailConnections   = "connections"
+	detailConnections   = "in use"
 	detailIdle          = "idle"
 	detailNoIdle        = "acquired with no idle connection"
-	detailSchemaApplied = "schema applied"
-	detailSchemaWanted  = "schema this build needs"
+	detailSchemaApplied = "applied"
+	detailSchemaWanted  = "this build needs"
 )
 
 // postgresComponent pings the primary, and describes the role's pool: how
@@ -57,9 +59,10 @@ type poolStat interface {
 
 func poolDetails(st poolStat) []health.Detail {
 	return []health.Detail{
-		{Name: detailConnections, Value: fmt.Sprintf("%d of %d in use", st.AcquiredConns(), st.MaxConns())},
+		{Name: detailConnections, Value: fmt.Sprintf("%d/%d", st.AcquiredConns(), st.MaxConns())},
 		{Name: detailIdle, Value: strconv.Itoa(int(st.IdleConns()))},
-		{Name: detailNoIdle, Value: fmt.Sprintf("%d times since start", st.EmptyAcquireCount())},
+		// Since the pod started.
+		{Name: detailNoIdle, Value: strconv.FormatInt(st.EmptyAcquireCount(), 10)},
 	}
 }
 
