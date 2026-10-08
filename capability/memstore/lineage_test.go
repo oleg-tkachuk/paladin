@@ -45,32 +45,32 @@ func TestChildrenCannotSpendPastTheirParentsBudget(t *testing.T) {
 	s := New[struct{}]()
 	u := NewUsage(s)
 	rootID, kids, tenant := tree(t, s,
-		capability.Caveats{Ops: []capability.Op{capability.OpGet}, MaxBudgetAmount: 25, UnitCode: "USD"},
+		capability.Caveats{Ops: []capability.Op{capability.OpGet}, MaxBudgetAmount: capability.MustParseAmount("25"), UnitCode: "USD"},
 		2,
-		capability.Caveats{Ops: []capability.Op{capability.OpGet}, MaxBudgetAmount: 20, UnitCode: "USD"},
+		capability.Caveats{Ops: []capability.Op{capability.OpGet}, MaxBudgetAmount: capability.MustParseAmount("20"), UnitCode: "USD"},
 	)
 
-	charge := func(id uuid.UUID, amount float64) (capability.ChargeReceipt, error) {
+	charge := func(id uuid.UUID, amount capability.Nanos) (capability.ChargeReceipt, error) {
 		return u.Charge(ctx, capability.ChargeRequest{
-			CapabilityID: id, TenantID: tenant, Amount: amount, MaxBudget: 20, UnitCode: "USD",
+			CapabilityID: id, TenantID: tenant, Amount: amount, MaxBudget: capability.MustParseAmount("20"), UnitCode: "USD",
 		}, nil)
 	}
-	first, err := charge(kids[0], 20)
+	first, err := charge(kids[0], 20*unit)
 	if err != nil {
 		t.Fatalf("first child within budget: %v", err)
 	}
-	if _, err := charge(kids[1], 20); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := charge(kids[1], 20*unit); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("second child past the parent's ceiling: err = %v, want ErrBudgetExceeded", err)
 	}
 	// The rejection mutated nothing: the second child is still at zero.
 	if got, err := u.GetUsage(ctx, kids[1]); err == nil && got.SpentAmount != 0 {
 		t.Errorf("rejected child's spend = %v, want 0", got.SpentAmount)
 	}
-	if _, err := charge(kids[1], 5); err != nil {
+	if _, err := charge(kids[1], 5*unit); err != nil {
 		t.Fatalf("second child within what the parent has left: %v", err)
 	}
 	root, _ := u.GetUsage(ctx, rootID)
-	if root.SpentAmount != 25 {
+	if root.SpentAmount != 25*unit {
 		t.Errorf("parent subtree spend = %v, want 25", root.SpentAmount)
 	}
 
@@ -79,10 +79,10 @@ func TestChildrenCannotSpendPastTheirParentsBudget(t *testing.T) {
 		t.Fatalf("Refund: %v", err)
 	}
 	root, _ = u.GetUsage(ctx, rootID)
-	if root.SpentAmount != 5 {
+	if root.SpentAmount != 5*unit {
 		t.Errorf("parent subtree spend after refund = %v, want 5", root.SpentAmount)
 	}
-	if _, err := charge(kids[1], 15); err != nil {
+	if _, err := charge(kids[1], 15*unit); err != nil {
 		t.Fatalf("sibling after refund: %v", err)
 	}
 }

@@ -71,7 +71,7 @@ func (f fixture) newCapability(subject string, parent uuid.UUID, expires time.Ti
 			Ops:              []capability.Op{capability.OpGet, "tool:search"},
 			ResourcePrefixes: []string{"corpus/"},
 			MaxRequests:      7,
-			MaxBudgetAmount:  1.5,
+			MaxBudgetAmount:  3 * capability.NanosPerUnit / 2, // 1.5
 			UnitCode:         "EUR",
 			SourceIPCIDR:     []string{"10.0.0.0/8"},
 		},

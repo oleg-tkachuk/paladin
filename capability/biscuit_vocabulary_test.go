@@ -30,6 +30,7 @@ type biscuitVocabulary struct {
 		RootClaim string `json:"root_claim"`
 	} `json:"authority"`
 	Facts               map[string]string `json:"facts"`
+	LegacyFacts         map[string]string `json:"legacy_facts"`
 	ReplaceTogether     [][]string        `json:"replace_together"`
 	BindThumbprintBytes int               `json:"bind_thumbprint_bytes"`
 }
@@ -64,6 +65,9 @@ func TestBiscuitVocabularyMatchesSharedSpec(t *testing.T) {
 	}
 	if !reflect.DeepEqual(v.Facts, want) {
 		t.Errorf("facts = %v, want %v", v.Facts, want)
+	}
+	if wantLegacy := map[string]string{biscuitFactMaxBudgetMicros: termInteger}; !reflect.DeepEqual(v.LegacyFacts, wantLegacy) {
+		t.Errorf("legacy facts = %v, want %v", v.LegacyFacts, wantLegacy)
 	}
 	if v.Authority.Fact != biscuitFactCapability {
 		t.Errorf("authority fact = %q, want %q", v.Authority.Fact, biscuitFactCapability)

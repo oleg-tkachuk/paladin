@@ -48,3 +48,26 @@ func TestReadBlockFacts(t *testing.T) {
 		t.Errorf("facts = %+v; want the earliest expiry, both ops, the last limit and the restated binding", f)
 	}
 }
+
+// A copy's budget reads in nanos, and from the micros fact Biscuits carried
+// before, scaled — so a copy attenuated then keeps its limit.
+func TestReadBlockFactsBudgetUnits(t *testing.T) {
+	cases := map[string]struct {
+		fact string
+		n    int64
+		want Nanos
+	}{
+		"nanos":         {biscuitFactMaxBudget, 1_500, 1_500},
+		"legacy micros": {biscuitFactMaxBudgetMicros, 1_500, 1_500 * nanosPerMicro},
+	}
+	for name, c := range cases {
+		f, err := readBlockFacts(decodedBlock{facts: []decodedFact{{name: c.fact, term: c.n}}}, "")
+		if err != nil || f.ceiling.MaxBudget != c.want {
+			t.Errorf("%s: budget = %s, %v; want %s", name, f.ceiling.MaxBudget, err, c.want)
+		}
+	}
+	tooMany := int64(MaxNanos)/nanosPerMicro + 1
+	if _, err := readBlockFacts(decodedBlock{facts: []decodedFact{{name: biscuitFactMaxBudgetMicros, term: tooMany}}}, ""); err == nil {
+		t.Error("a micros budget past MaxNanos was read")
+	}
+}

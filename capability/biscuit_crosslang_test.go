@@ -150,7 +150,7 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 		t.Errorf("ConfirmationJKT = %q, want %q", got.ConfirmationJKT, want.ConfirmationJKT)
 	}
 	if len(got.Copies) != 1 || got.Copies[0].MaxRequests != want.CopyMaxRequests ||
-		got.Copies[0].MaxBudgetMicros != want.CopyMaxBudget {
+		got.Copies[0].MaxBudget != Nanos(want.CopyMaxBudget*nanosPerMicro) {
 		t.Errorf("Copies = %+v, want one with %d requests and %d micros",
 			got.Copies, want.CopyMaxRequests, want.CopyMaxBudget)
 	}

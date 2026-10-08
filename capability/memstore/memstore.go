@@ -75,8 +75,8 @@ type UsageStore[TX any] struct {
 type copyCounter struct {
 	capID    uuid.UUID // the capability the copy belongs to
 	requests int64
-	spent    float64
-	reserved float64
+	spent    capability.Nanos
+	reserved capability.Nanos
 }
 
 // LedgerEntry records one committed charge. Exposed so tests (and readers)
@@ -88,13 +88,13 @@ type LedgerEntry struct {
 	// first, so a refund returns spend to exactly the same counters.
 	Ancestors []uuid.UUID
 	TenantID  uuid.UUID
-	Amount    float64
+	Amount    capability.Nanos
 	UnitCode  string
 	Op        string
 	Actor     string
 	At        time.Time
 	// Refunded is the total refunded from this charge so far.
-	Refunded float64
+	Refunded capability.Nanos
 	// Copies are the revocation ids of the Biscuit copies the charge also
 	// debited, innermost first.
 	Copies [][]byte
@@ -470,7 +470,7 @@ type hold struct {
 	capID     uuid.UUID
 	ancestors []uuid.UUID
 	tenantID  uuid.UUID
-	amount    float64
+	amount    capability.Nanos
 	unit      string
 	op, actor string
 	expires   time.Time
@@ -592,7 +592,7 @@ func (s *UsageStore[TX]) chargeLocked(
 	settling *hold,
 	onCharged func(ctx context.Context, tx TX) error,
 ) (capability.ChargeReceipt, error) {
-	released := 0.0
+	var released capability.Nanos
 	reservationID := uuid.Nil
 	if settling != nil {
 		released = settling.amount
@@ -676,8 +676,8 @@ func (s *UsageStore[TX]) chargeLocked(
 // ceilingCheck is an amount measured against every ceiling. released is
 // the amount of a hold being settled by it, which no longer counts.
 type ceilingCheck struct {
-	amount, released float64
-	maxBudget        float64 // the capability's own, from its token
+	amount, released capability.Nanos
+	maxBudget        capability.Nanos // the capability's own, from its token
 	capID, tenantID  uuid.UUID
 	ancestors        []capability.Capability
 	copies           []capability.CopyCeiling
@@ -689,9 +689,12 @@ type ceilingCheck struct {
 // to crossed, which returns the error to stop on or nil to carry on.
 // s.mu must be held.
 func (s *UsageStore[TX]) checkCeilingsLocked(c ceilingCheck, crossed func(error) error) error {
+	if err := s.checkRangeLocked(c); err != nil {
+		return err
+	}
 	for _, cp := range c.copies {
 		cc := s.copies[string(cp.RevocationID)]
-		if cp.MaxBudgetMicros > 0 && cc.spent+cc.reserved-c.released+c.amount > cp.MaxBudget() {
+		if cp.MaxBudget > 0 && cc.spent+cc.reserved-c.released+c.amount > cp.MaxBudget {
 			if err := crossed(fmt.Errorf("%w: copy %x", capability.ErrBudgetExceeded, cp.RevocationID)); err != nil {
 				return err
 			}
@@ -716,6 +719,33 @@ func (s *UsageStore[TX]) checkCeilingsLocked(c ceilingCheck, crossed func(error)
 		if err := crossed(capability.ErrTenantBudgetExceeded); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// checkRangeLocked keeps every counter c would move within MaxNanos, the
+// range a store holds. Unlike a ceiling it is not an overrun to record: past
+// it the amount could not be counted at all. s.mu must be held.
+func (s *UsageStore[TX]) checkRangeLocked(c ceilingCheck) error {
+	fits := func(spent, reserved capability.Nanos) bool {
+		return spent+max0(reserved-c.released) <= capability.MaxNanos-c.amount
+	}
+	ok := true
+	for _, cp := range c.copies {
+		cc := s.copies[string(cp.RevocationID)]
+		ok = ok && fits(cc.spent, cc.reserved)
+	}
+	u := s.usage[c.capID]
+	ok = ok && fits(u.SpentAmount, u.ReservedAmount)
+	for _, a := range c.ancestors {
+		au := s.usage[a.ID]
+		ok = ok && fits(au.SpentAmount, au.ReservedAmount)
+	}
+	if b, found := s.budgets[c.tenantID]; found {
+		ok = ok && fits(b.SpentAmount, b.ReservedAmount)
+	}
+	if !ok {
+		return fmt.Errorf("%w: %s would take a counter past %s", capability.ErrInvalidAmount, c.amount, capability.MaxNanos)
 	}
 	return nil
 }
@@ -761,7 +791,7 @@ func (s *UsageStore[TX]) Reserve(_ context.Context, req capability.ReserveReques
 }
 
 // applyHoldLocked adds (sign +1) or removes (sign -1) a hold on every counter.
-func (s *UsageStore[TX]) applyHoldLocked(h hold, sign float64) {
+func (s *UsageStore[TX]) applyHoldLocked(h hold, sign capability.Nanos) {
 	for _, id := range append([]uuid.UUID{h.capID}, h.ancestors...) {
 		u := s.usage[id]
 		u.CapabilityID = id
@@ -838,7 +868,7 @@ func budgetsOnly(copies []capability.CopyCeiling) []capability.CopyCeiling {
 	}
 	out := make([]capability.CopyCeiling, len(copies))
 	for i, c := range copies {
-		out[i] = capability.CopyCeiling{RevocationID: slices.Clone(c.RevocationID), MaxBudgetMicros: c.MaxBudgetMicros}
+		out[i] = capability.CopyCeiling{RevocationID: slices.Clone(c.RevocationID), MaxBudget: c.MaxBudget}
 	}
 	return out
 }
@@ -901,7 +931,7 @@ func (s *UsageStore[TX]) ReleaseExpired(_ context.Context) (int64, error) {
 }
 
 // Refund returns spend from one ledger entry to the counters it debited.
-func (s *UsageStore[TX]) Refund(_ context.Context, req capability.RefundRequest) (float64, error) {
+func (s *UsageStore[TX]) Refund(_ context.Context, req capability.RefundRequest) (capability.Nanos, error) {
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return 0, err
 	}
@@ -1046,7 +1076,7 @@ func (s *UsageStore[TX]) ListTenantBudgets(_ context.Context, args capability.Li
 		}
 		var pct float64
 		if !unlimited {
-			pct = b.SpentAmount / b.MaxBudgetAmount * percent
+			pct = float64(b.SpentAmount) / float64(b.MaxBudgetAmount) * percent
 		}
 		if args.ThresholdPct > 0 && pct < args.ThresholdPct {
 			continue
@@ -1117,11 +1147,11 @@ func (s *UsageStore[TX]) PurgeOrphans(_ context.Context) (int64, error) {
 	return n, nil
 }
 
-func max0(f float64) float64 {
-	if f < 0 {
+func max0(n capability.Nanos) capability.Nanos {
+	if n < 0 {
 		return 0
 	}
-	return f
+	return n
 }
 
 // Compile-time proof that both contracts are satisfied by a consumer holding

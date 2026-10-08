@@ -1,5 +1,5 @@
 {
-  "_comment": "The Biscuit attenuation vocabulary (capability/biscuit.go). capability/ and the Python SDK test their names against this file, so a fact renamed on one side fails the other's tests. An attenuation block holds only the facts below, one term each; any other fact, and any rule or check, makes the verifier refuse the whole token.",
+  "_comment": "The Biscuit attenuation vocabulary (capability/biscuit.go). capability/ and the Python SDK test their names against this file, so a fact renamed on one side fails the other's tests. An attenuation block holds only the facts below, one term each; any other fact, and any rule or check, makes the verifier refuse the whole token. Amounts are nanos, billionths of the capability's unit. legacy_facts are read but never written: paladin_max_budget_micros, a copy's budget in millionths, reads as nanos x 1000, so a copy attenuated before nanos keeps its limit.",
   "encoding": "base64url, no padding",
   "authority": {
     "_comment": "The authority block holds one fact: the capability JWT, whose claim root_claim is the base64url Ed25519 public key that roots the Biscuit's signature chain.",
@@ -14,6 +14,9 @@
     "paladin_expires": "date",
     "paladin_bind": "string",
     "paladin_max_requests": "integer",
+    "paladin_max_budget_nanos": "integer"
+  },
+  "legacy_facts": {
     "paladin_max_budget_micros": "integer"
   },
   "replace_together": [["paladin_resource_prefix", "paladin_resource_uri"]],
