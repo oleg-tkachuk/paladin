@@ -24,7 +24,7 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 
 	t.Run("first write creates at version 0", func(t *testing.T) {
 		got, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-			TenantID: f.tenant, MaxBudgetAmount: 100,
+			TenantID: f.tenant, MaxBudgetAmount: capability.MustParseAmount("100"),
 		})
 		if err != nil {
 			t.Fatalf("create: %v", err)
@@ -36,13 +36,13 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 
 	t.Run("creating twice at version 0 is a conflict", func(t *testing.T) {
 		_, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-			TenantID: f.tenant, MaxBudgetAmount: 999,
+			TenantID: f.tenant, MaxBudgetAmount: capability.MustParseAmount("999"),
 		})
 		if !errors.Is(err, capability.ErrTenantBudgetVersionMismatch) {
 			t.Fatalf("err = %v, want ErrTenantBudgetVersionMismatch — 0 asserts the row does not exist", err)
 		}
 		after, _ := f.usage.GetTenantBudget(ctx, f.tenant)
-		if closeEnough(after.MaxBudgetAmount, 999) {
+		if after.MaxBudgetAmount == capability.MustParseAmount("999") {
 			t.Error("the rejected write landed anyway")
 		}
 	})
@@ -53,12 +53,12 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 			t.Fatalf("get: %v", err)
 		}
 		got, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-			TenantID: f.tenant, MaxBudgetAmount: 200, ExpectedVersion: cur.ResourceVersion,
+			TenantID: f.tenant, MaxBudgetAmount: capability.MustParseAmount("200"), ExpectedVersion: cur.ResourceVersion,
 		})
 		if err != nil {
 			t.Fatalf("update: %v", err)
 		}
-		if !closeEnough(got.MaxBudgetAmount, 200) {
+		if got.MaxBudgetAmount != capability.MustParseAmount("200") {
 			t.Errorf("max_budget = %v, want 200", got.MaxBudgetAmount)
 		}
 		if got.ResourceVersion <= cur.ResourceVersion {
@@ -74,14 +74,14 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 		}
 		_, err = f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 			TenantID:        f.tenant,
-			MaxBudgetAmount: 400,
+			MaxBudgetAmount: capability.MustParseAmount("400"),
 			ExpectedVersion: cur.ResourceVersion - 1, // what a concurrent writer held
 		})
 		if !errors.Is(err, capability.ErrTenantBudgetVersionMismatch) {
 			t.Fatalf("err = %v, want ErrTenantBudgetVersionMismatch", err)
 		}
 		after, _ := f.usage.GetTenantBudget(ctx, f.tenant)
-		if closeEnough(after.MaxBudgetAmount, 400) {
+		if after.MaxBudgetAmount == capability.MustParseAmount("400") {
 			t.Error("stale write overwrote the current cap")
 		}
 		if after.ResourceVersion != cur.ResourceVersion {

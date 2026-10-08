@@ -14,6 +14,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -96,9 +99,9 @@ func resolvePeriod(start, end time.Time) (time.Time, time.Time, error) {
 
 // Summary is the in-memory shape returned by GetTenantSummary.
 type Summary struct {
-	TotalAmount     float64
+	TotalAmount     capability.Nanos
 	UnitCode        string
-	MaxBudgetAmount float64
+	MaxBudgetAmount capability.Nanos
 	ChargeCount     int64
 	TopCapabilities []TopEntry
 	TopActors       []TopEntry
@@ -108,7 +111,7 @@ type Summary struct {
 // TopEntry mirrors the proto shape one-to-one.
 type TopEntry struct {
 	Label       string
-	Amount      float64
+	Amount      capability.Nanos
 	ChargeCount int64
 }
 
@@ -137,7 +140,7 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 	// total in. tenant_budgets.unit_code (when present) is preferred.
 	row := h.pool.QueryRow(ctx,
 		`SELECT
-		   COALESCE(SUM(amount), 0)::float8,
+		   COALESCE(SUM(amount), 0),
 		   COUNT(*),
 		   COALESCE(
 		     (SELECT unit_code FROM charges
@@ -148,7 +151,11 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 		 WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at < $3`,
 		tenantID, start, end,
 	)
-	if err := row.Scan(&out.TotalAmount, &out.ChargeCount, &out.UnitCode); err != nil {
+	var total pgtype.Numeric
+	if err := row.Scan(&total, &out.ChargeCount, &out.UnitCode); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: summary: %w", err))
+	}
+	if out.TotalAmount, err = pgmoney.NanosFromNumeric(total); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: summary: %w", err))
 	}
 
@@ -189,7 +196,7 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 // don't dominate the top-N.
 func (h *Handler) queryTopBy(ctx context.Context, tenantID uuid.UUID, start, end time.Time, col string) ([]TopEntry, error) {
 	q := fmt.Sprintf(
-		`SELECT %s AS label, COALESCE(SUM(amount), 0)::float8 AS amount, COUNT(*) AS n
+		`SELECT %s AS label, COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS n
 		 FROM charges
 		 WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at < $3
 		 GROUP BY %s
@@ -202,8 +209,14 @@ func (h *Handler) queryTopBy(ctx context.Context, tenantID uuid.UUID, start, end
 	defer rows.Close()
 	out := make([]TopEntry, 0, topN)
 	for rows.Next() {
-		var e TopEntry
-		if err := rows.Scan(&e.Label, &e.Amount, &e.ChargeCount); err != nil {
+		var (
+			e      TopEntry
+			amount pgtype.Numeric
+		)
+		if err := rows.Scan(&e.Label, &amount, &e.ChargeCount); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: top scan: %w", err))
+		}
+		if e.Amount, err = pgmoney.NanosFromNumeric(amount); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: top scan: %w", err))
 		}
 		out = append(out, e)
@@ -223,7 +236,7 @@ type TimeSeries struct {
 // TimeBucket mirrors the proto shape.
 type TimeBucket struct {
 	Start       time.Time
-	Amount      float64
+	Amount      capability.Nanos
 	ChargeCount int64
 }
 
@@ -301,7 +314,7 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 
 	q := fmt.Sprintf(
 		`SELECT date_trunc('%s', occurred_at) AS bucket,
-		        COALESCE(SUM(amount), 0)::float8 AS amount,
+		        COALESCE(SUM(amount), 0) AS amount,
 		        COUNT(*) AS n
 		 FROM charges
 		 WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at < $3
@@ -315,8 +328,14 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 
 	out := &TimeSeries{Buckets: make([]TimeBucket, 0, 32)}
 	for rows.Next() {
-		var b TimeBucket
-		if err := rows.Scan(&b.Start, &b.Amount, &b.ChargeCount); err != nil {
+		var (
+			b      TimeBucket
+			amount pgtype.Numeric
+		)
+		if err := rows.Scan(&b.Start, &amount, &b.ChargeCount); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: timeseries scan: %w", err))
+		}
+		if b.Amount, err = pgmoney.NanosFromNumeric(amount); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: timeseries scan: %w", err))
 		}
 		out.Buckets = append(out.Buckets, b)

@@ -64,25 +64,22 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *connect.Request[admi
 		byID[string(u.RevocationID)] = u
 	}
 
+	// A copy's amounts are in its capability's unit.
+	unit := record.Caveats.UnitCode
 	out := make([]*adminv1.CapabilityBiscuitCopyUsage, 0, len(c.Limits))
 	for _, l := range c.Limits {
 		u := byID[string(l.RevocationID)] // a copy never used counts zero
 		out = append(out, &adminv1.CapabilityBiscuitCopyUsage{
-			RevocationId:    l.RevocationID,
-			MaxRequests:     l.MaxRequests,
-			MaxBudgetMicros: l.MaxBudgetMicros,
-			RequestCount:    u.RequestCount,
-			SpentMicros:     apiutil.Micros(u.SpentAmount),
-			ReservedMicros:  apiutil.Micros(u.ReservedAmount),
+			RevocationId: l.RevocationID,
+			MaxRequests:  l.MaxRequests,
+			MaxBudget:    apiutil.MoneyOf(unit, l.MaxBudget),
+			RequestCount: u.RequestCount,
+			Spent:        apiutil.MoneyOf(unit, u.SpentAmount),
+			Reserved:     apiutil.MoneyOf(unit, u.ReservedAmount),
 		})
-	}
-	unit := record.Caveats.UnitCode
-	if unit == "" {
-		unit = capability.DefaultUnitCode
 	}
 	return connect.NewResponse(&adminv1.CapabilityServiceGetBiscuitUsageResponse{
 		CapabilityId: c.CapabilityID.String(),
-		UnitCode:     unit,
 		Copies:       out,
 	}), nil
 }

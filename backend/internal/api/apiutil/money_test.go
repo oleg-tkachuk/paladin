@@ -5,37 +5,43 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
-func TestAmountFromMicros(t *testing.T) {
-	cases := map[string]struct {
-		micros int64
-		want   float64
-		code   connect.Code
-	}{
-		"micros":                        {micros: 12_500_000, want: 12.5},
-		"0 means unlimited":             {micros: 0, want: 0},
-		"one micro":                     {micros: 1, want: 0.000001},
-		"negative micros":               {micros: -1, code: connect.CodeInvalidArgument},
-		"micros beyond the exact range": {micros: 1_000_000_000_000_000, code: connect.CodeInvalidArgument},
+func TestMoneyRoundTripIsExact(t *testing.T) {
+	for _, n := range []capability.Nanos{0, 1, 350_000_000, capability.NanosPerUnit, 25*capability.NanosPerUnit + 1, capability.MaxNanos} {
+		m := MoneyOf("EUR", n)
+		got, unit, err := NanosOf("max_budget", m)
+		if err != nil || got != n || unit != "EUR" {
+			t.Errorf("%s → %v → %s %s, %v", n, m, got, unit, err)
+		}
 	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			got, err := AmountFromMicros("max_budget", tc.micros)
-			if tc.code != 0 {
-				if connect.CodeOf(err) != tc.code {
-					t.Fatalf("err = %v, want %v", err, tc.code)
-				}
-				return
-			}
-			if err != nil || got != tc.want {
-				t.Fatalf("got %v, %v; want %v", got, err, tc.want)
-			}
-		})
+	if m := MoneyOf("", capability.NanosPerUnit); m.GetCurrencyCode() != capability.DefaultUnitCode {
+		t.Errorf("MoneyOf with no unit = %v, want %s", m, capability.DefaultUnitCode)
+	}
+	if n, unit, err := NanosOf("max_budget", nil); err != nil || n != 0 || unit != "" {
+		t.Errorf("an absent field = %s %q, %v; want zero and no unit", n, unit, err)
+	}
+}
+
+func TestNanosOfRefusesWhatIsNotAnAmount(t *testing.T) {
+	maxUnits := int64(capability.MaxNanos / capability.NanosPerUnit)
+	for name, m := range map[string]*money.Money{
+		"negative units":    {CurrencyCode: "USD", Units: -1},
+		"negative nanos":    {CurrencyCode: "USD", Nanos: -1},
+		"nanos past a unit": {CurrencyCode: "USD", Nanos: capability.NanosPerUnit},
+		"past MaxNanos":     {CurrencyCode: "USD", Units: maxUnits + 1},
+		"unknown currency":  {CurrencyCode: "BTC", Units: 1},
+		"the old UNIT":      {CurrencyCode: "UNIT", Units: 1},
+	} {
+		if _, _, err := NanosOf("max_budget", m); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%s: err = %v, want InvalidArgument", name, err)
+		}
 	}
 }
 
@@ -54,16 +60,6 @@ func withUnknownDouble(t *testing.T, msg proto.Message, num protowire.Number) {
 	}
 }
 
-// firstReserved is a field number msg's contract has removed.
-func firstReserved(t *testing.T, msg proto.Message) protowire.Number {
-	t.Helper()
-	r := msg.ProtoReflect().Descriptor().ReservedRanges()
-	if r.Len() == 0 {
-		t.Fatalf("%T reserves no field", msg)
-	}
-	return r.Get(0)[0]
-}
-
 func TestRefuseRemovedFields(t *testing.T) {
 	removedBudgets := []proto.Message{
 		&adminv1.CapabilityCaveats{Ops: []string{"get"}},
@@ -74,9 +70,16 @@ func TestRefuseRemovedFields(t *testing.T) {
 			if err := RefuseRemovedFields(msg); err != nil {
 				t.Fatalf("a current request is refused: %v", err)
 			}
-			withUnknownDouble(t, msg, firstReserved(t, msg))
-			if err := RefuseRemovedFields(msg); connect.CodeOf(err) != connect.CodeInvalidArgument {
-				t.Fatalf("a removed field passed: err = %v", err)
+			// Every removed number: the doubles and, after them, the micros.
+			reserved := msg.ProtoReflect().Descriptor().ReservedRanges()
+			for i := range reserved.Len() {
+				for num := reserved.Get(i)[0]; num < reserved.Get(i)[1]; num++ {
+					old := proto.Clone(msg)
+					withUnknownDouble(t, old, num)
+					if err := RefuseRemovedFields(old); connect.CodeOf(err) != connect.CodeInvalidArgument {
+						t.Fatalf("removed field %d passed: err = %v", num, err)
+					}
+				}
 			}
 		})
 	}
@@ -87,14 +90,5 @@ func TestRefuseRemovedFields(t *testing.T) {
 	withUnknownDouble(t, newer, protowire.MaxValidNumber)
 	if err := RefuseRemovedFields(newer); err != nil {
 		t.Fatalf("an unreserved unknown field is refused: %v", err)
-	}
-}
-
-func TestMicros(t *testing.T) {
-	tenth, fifth := 0.1, 0.2
-	for amount, want := range map[float64]int64{0: 0, -1: 0, 25: 25_000_000, 19.99: 19_990_000, tenth + fifth: 300_000} {
-		if got := Micros(amount); got != want {
-			t.Errorf("Micros(%v) = %d, want %d", amount, got, want)
-		}
 	}
 }

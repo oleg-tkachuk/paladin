@@ -68,7 +68,7 @@ func TestCapabilityErrorCarriesTheReason(t *testing.T) {
 // The reason reaches the wire from the paths a handler takes.
 func TestCapabilityRefusalsCarryTheirReason(t *testing.T) {
 	cap := &capability.Capability{ID: uuid.New(), Caveats: capability.Caveats{
-		Ops: []capability.Op{capability.OpGet}, MaxBudgetAmount: 1,
+		Ops: []capability.Op{capability.OpGet}, MaxBudgetAmount: capability.MustParseAmount("1"),
 	}}
 	ctx := WithChargeStore(WithCapability(context.Background(), cap), newFakeUsage())
 
@@ -76,7 +76,7 @@ func TestCapabilityRefusalsCarryTheirReason(t *testing.T) {
 	if got := wireReason(t, err); got != "ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED" {
 		t.Errorf("op refusal reason = %q", got)
 	}
-	err = ChargeCapability(ctx, 2, "")
+	err = ChargeCapability(ctx, 2*capability.NanosPerUnit, "")
 	if got := wireReason(t, err); got != "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED" {
 		t.Errorf("budget refusal reason = %q", got)
 	}
