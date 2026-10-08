@@ -27,7 +27,7 @@ func TestBiscuitCopyRevokedBeforeTheTenantIsKnown(t *testing.T) {
 	}
 	revoked, other := []byte("revoked-copy"), []byte("other-copy")
 	for range 2 { // idempotent
-		if err := seed.RevokeBiscuit(ctx, capability.RevokeBiscuitArgs{
+		if err := seed.RevokeBiscuit(ctx, capability.RevokeBiscuitRequest{
 			CapabilityID: c.ID, RevocationID: revoked, Reason: "leak", Actor: "user:ops",
 		}); err != nil {
 			t.Fatalf("revoke copy: %v", err)
@@ -72,7 +72,7 @@ func TestBiscuitCopyRevokeIsTenantScoped(t *testing.T) {
 
 	scoped := newCapStore(t, rlsPool(t, ctx, admin))
 	ctxA := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenantA})
-	err := scoped.RevokeBiscuit(ctxA, capability.RevokeBiscuitArgs{
+	err := scoped.RevokeBiscuit(ctxA, capability.RevokeBiscuitRequest{
 		CapabilityID: victim.ID, RevocationID: []byte("hostile"), Reason: "hostile", Actor: "user:attacker",
 	})
 	if !errors.Is(err, capability.ErrNotFound) {
@@ -90,7 +90,7 @@ func TestBiscuitCopyRevokeIsTenantScoped(t *testing.T) {
 
 	// The owning tenant can.
 	ctxB := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenantB})
-	if err := scoped.RevokeBiscuit(ctxB, capability.RevokeBiscuitArgs{
+	if err := scoped.RevokeBiscuit(ctxB, capability.RevokeBiscuitRequest{
 		CapabilityID: victim.ID, RevocationID: []byte("own"),
 	}); err != nil {
 		t.Errorf("owning tenant: %v", err)
@@ -111,7 +111,7 @@ func TestBiscuitCopiesPurgedWithTheirCapability(t *testing.T) {
 		if err := store.Insert(ctx, c, seedIssuer); err != nil {
 			t.Fatalf("insert: %v", err)
 		}
-		if err := store.RevokeBiscuit(ctx, capability.RevokeBiscuitArgs{
+		if err := store.RevokeBiscuit(ctx, capability.RevokeBiscuitRequest{
 			CapabilityID: c.ID, RevocationID: []byte(c.Subject.Subject),
 		}); err != nil {
 			t.Fatalf("revoke copy: %v", err)
@@ -160,7 +160,7 @@ func TestBiscuitCopyRevocationNotifies(t *testing.T) {
 		t.Fatalf("before revoke: revoked=%v err=%v", r, err)
 	}
 
-	if err := f.records.RevokeBiscuit(ctx, capability.RevokeBiscuitArgs{
+	if err := f.records.RevokeBiscuit(ctx, capability.RevokeBiscuitRequest{
 		CapabilityID: f.root, RevocationID: ids[0], Reason: "test", Actor: "user:ops",
 	}); err != nil {
 		t.Fatalf("revoke copy: %v", err)

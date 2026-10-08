@@ -34,11 +34,8 @@ import (
 
 // Store implements capability.Store — capability records and revocations.
 //
-// It is a SEPARATE type from UsageStore because the two contracts both declare
-// a method named Get with different signatures, so no single type can satisfy
-// both. Paladin's relational implementation splits them for exactly this reason;
-// a third-party implementer will hit the same constraint and should expect to
-// write two types too.
+// It is a separate type from UsageStore so that each reads as the contract it
+// implements: records and revocations here, counters and the ledger there.
 type Store[TX any] struct {
 	mu sync.Mutex
 
@@ -247,7 +244,7 @@ const maxLineageDepth = 64
 
 // Revoke is idempotent. CascadeChildren walks the delegation tree by ParentID
 // so revoking an orchestrator takes the sub-agents it spawned with it.
-func (s *Store[TX]) Revoke(_ context.Context, args capability.RevokeArgs) error {
+func (s *Store[TX]) Revoke(_ context.Context, args capability.RevokeRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.revoked[args.ID] = true
@@ -286,7 +283,7 @@ func (s *Store[TX]) IsBiscuitRevoked(_ context.Context, revocationIDs [][]byte) 
 }
 
 // RevokeBiscuit implements capability.BiscuitRevocationStore.
-func (s *Store[TX]) RevokeBiscuit(_ context.Context, args capability.RevokeBiscuitArgs) error {
+func (s *Store[TX]) RevokeBiscuit(_ context.Context, args capability.RevokeBiscuitRequest) error {
 	if len(args.RevocationID) == 0 {
 		return errors.New("memstore: revocation id required")
 	}
@@ -315,7 +312,7 @@ func (s *Store[TX]) PurgeExpired(_ context.Context, expiredFor time.Duration) (i
 	return n, nil
 }
 
-func (s *Store[TX]) ListByPrincipal(_ context.Context, args capability.ListByPrincipalArgs) ([]capability.Capability, string, error) {
+func (s *Store[TX]) ListByPrincipal(_ context.Context, args capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -325,7 +322,7 @@ func (s *Store[TX]) ListByPrincipal(_ context.Context, args capability.ListByPri
 		if args.TenantID != uuid.Nil && c.Subject.TenantID != args.TenantID {
 			continue
 		}
-		if args.PrincipalT != "" && c.Subject.Type != args.PrincipalT {
+		if args.PrincipalType != "" && c.Subject.Type != args.PrincipalType {
 			continue
 		}
 		if args.Subject != "" && c.Subject.Subject != args.Subject {
@@ -357,10 +354,10 @@ func (s *UsageStore[TX]) lineage(capID uuid.UUID) []capability.Capability {
 	return s.records.ancestors(capID)
 }
 
-// BumpRequest returns ErrRequestLimitExceeded WITHOUT mutating when the
+// Bump returns ErrRequestLimitExceeded WITHOUT mutating when the
 // increment would cross the capability's ceiling or any ancestor's. A
 // rejected call must be safe to retry.
-func (s *UsageStore[TX]) BumpRequest(_ context.Context, req capability.RequestBump) (int64, error) {
+func (s *UsageStore[TX]) Bump(_ context.Context, req capability.BumpRequest) (int64, error) {
 	ancestors := s.lineage(req.CapabilityID)
 
 	s.mu.Lock()
@@ -427,7 +424,7 @@ func (s *UsageStore[TX]) Charge(
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
-	if err := capability.ValidateOverrun(req.Overrun); err != nil {
+	if err := req.Overrun.Validate(); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
 	if err := capability.ValidateExternalRef(req.ExternalRef); err != nil {
@@ -708,7 +705,7 @@ func (s *UsageStore[TX]) Settle(
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
-	if err := capability.ValidateOverrun(req.Overrun); err != nil {
+	if err := req.Overrun.Validate(); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
 	s.mu.Lock()
@@ -812,7 +809,7 @@ func (s *UsageStore[TX]) Refund(_ context.Context, req capability.RefundRequest)
 	return amount, nil
 }
 
-func (s *UsageStore[TX]) Get(_ context.Context, capID uuid.UUID) (capability.Usage, error) {
+func (s *UsageStore[TX]) GetUsage(_ context.Context, capID uuid.UUID) (capability.Usage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	u, ok := s.usage[capID]
@@ -848,7 +845,7 @@ func (s *UsageStore[TX]) GetTenantBudget(_ context.Context, tenantID uuid.UUID) 
 	return b, nil
 }
 
-func (s *UsageStore[TX]) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetArgs) (capability.TenantBudget, error) {
+func (s *UsageStore[TX]) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetRequest) (capability.TenantBudget, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -887,7 +884,7 @@ func (s *UsageStore[TX]) SetTenantBudget(_ context.Context, args capability.SetT
 	return b, nil
 }
 
-func (s *UsageStore[TX]) ListTenantBudgets(_ context.Context, args capability.ListTenantBudgetsArgs) ([]capability.TenantBudgetSummary, error) {
+func (s *UsageStore[TX]) ListTenantBudgets(_ context.Context, args capability.ListTenantBudgetsRequest) ([]capability.TenantBudgetSummary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

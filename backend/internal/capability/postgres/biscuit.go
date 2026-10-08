@@ -42,7 +42,7 @@ SELECT EXISTS (
 // RevokeBiscuit implements capability.BiscuitRevocationStore. As in Revoke,
 // the capability id is read from capability_records in the same statement, so
 // a caller that cannot see the capability gets ErrNotFound and writes nothing.
-func (s *Store) RevokeBiscuit(ctx context.Context, args capability.RevokeBiscuitArgs) error {
+func (s *Store) RevokeBiscuit(ctx context.Context, args capability.RevokeBiscuitRequest) error {
 	if len(args.RevocationID) == 0 {
 		return errors.New("capability/postgres: revoke biscuit: revocation id required")
 	}

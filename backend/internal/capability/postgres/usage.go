@@ -164,7 +164,7 @@ func ancestorsOf(ctx context.Context, tx pgx.Tx, capID uuid.UUID) ([]ancestor, e
 // ancestor are bumped in one transaction, leaf first and then nearest
 // ancestor first — the same order every charge takes, so two requests
 // sharing part of a chain lock it in the same order and cannot deadlock.
-func (s *UsageStore) BumpRequest(ctx context.Context, req capability.RequestBump) (int64, error) {
+func (s *UsageStore) Bump(ctx context.Context, req capability.BumpRequest) (int64, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("capability/postgres: bump begin: %w", err)
@@ -227,7 +227,7 @@ func (s *UsageStore) Charge(
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
-	if err := capability.ValidateOverrun(req.Overrun); err != nil {
+	if err := req.Overrun.Validate(); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
 	if err := capability.ValidateExternalRef(req.ExternalRef); err != nil {
@@ -563,7 +563,7 @@ func (s *UsageStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (c
 }
 
 // SetTenantBudget implements capability.UsageStore[pgx.Tx].
-func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTenantBudgetArgs) (capability.TenantBudget, error) {
+func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTenantBudgetRequest) (capability.TenantBudget, error) {
 	maxBudget, err := numericFromFloat(args.MaxBudgetAmount)
 	if err != nil {
 		return capability.TenantBudget{}, err
@@ -612,7 +612,7 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTen
 // numeric-precision path inside Postgres where it belongs).
 func (s *UsageStore) ListTenantBudgets(
 	ctx context.Context,
-	args capability.ListTenantBudgetsArgs,
+	args capability.ListTenantBudgetsRequest,
 ) ([]capability.TenantBudgetSummary, error) {
 	limit := args.Limit
 	if limit <= 0 {
@@ -677,7 +677,7 @@ func tenantBudgetFromRow(
 }
 
 // Get implements capability.UsageStore[pgx.Tx].
-func (s *UsageStore) Get(ctx context.Context, capID uuid.UUID) (capability.Usage, error) {
+func (s *UsageStore) GetUsage(ctx context.Context, capID uuid.UUID) (capability.Usage, error) {
 	row, err := s.q.GetCapabilityUsage(ctx, pgtype.UUID{Bytes: capID, Valid: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

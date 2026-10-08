@@ -200,7 +200,7 @@ func (s *UsageStore) Settle(
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
-	if err := capability.ValidateOverrun(req.Overrun); err != nil {
+	if err := req.Overrun.Validate(); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
 	amount, err := numericFromFloat(req.Amount)

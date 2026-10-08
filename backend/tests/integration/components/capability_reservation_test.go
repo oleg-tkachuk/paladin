@@ -59,7 +59,7 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 	if _, err := f.usage.Settle(ledgerCtx, capability.SettleRequest{ReservationID: r.ID, Amount: 21, MaxBudget: 20}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("settle past the ceiling: err = %v, want ErrBudgetExceeded", err)
 	}
-	if u, _ := f.usage.Get(ledgerCtx, f.root); !closeEnough(u.ReservedAmount, 15) {
+	if u, _ := f.usage.GetUsage(ledgerCtx, f.root); !closeEnough(u.ReservedAmount, 15) {
 		t.Fatalf("parent hold after a refused settle = %v, want 15", u.ReservedAmount)
 	}
 
@@ -67,7 +67,7 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
-	root, _ := f.usage.Get(ledgerCtx, f.root)
+	root, _ := f.usage.GetUsage(ledgerCtx, f.root)
 	if !closeEnough(root.SpentAmount, 4) || root.ReservedAmount != 0 {
 		t.Errorf("parent after settle = %+v, want 4 spent, 0 held", root)
 	}
@@ -93,7 +93,7 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 			t.Fatalf("release: %v", err)
 		}
 	}
-	if u, _ := f.usage.Get(ledgerCtx, f.root); u.ReservedAmount != 0 {
+	if u, _ := f.usage.GetUsage(ledgerCtx, f.root); u.ReservedAmount != 0 {
 		t.Errorf("parent held after release = %v, want 0", u.ReservedAmount)
 	}
 }
@@ -122,7 +122,7 @@ func TestExpiredReservationsAreReleased(t *testing.T) {
 		t.Fatalf("ReleaseExpired = %d, %v; want 1", n, err)
 	}
 	for _, id := range []uuid.UUID{f.child, f.root} {
-		if u, _ := f.usage.Get(ledgerCtx, id); u.ReservedAmount != 0 {
+		if u, _ := f.usage.GetUsage(ledgerCtx, id); u.ReservedAmount != 0 {
 			t.Errorf("%s still holds %v after the sweep", id, u.ReservedAmount)
 		}
 	}

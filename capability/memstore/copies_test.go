@@ -35,7 +35,7 @@ func TestCopyRequestLimits(t *testing.T) {
 	inner := copyCeiling("inner", 1, 0)
 	sibling := copyCeiling("sibling", 3, 0)
 	bump := func(copies ...capability.CopyCeiling) error {
-		_, err := u.BumpRequest(ctx, capability.RequestBump{
+		_, err := u.Bump(ctx, capability.BumpRequest{
 			CapabilityID: capID, TenantID: tenant, MaxRequests: capLimit, Copies: copies,
 		})
 		return err
@@ -90,7 +90,7 @@ func TestCopyBudgetChargeAndRefund(t *testing.T) {
 	if _, err := charge(1); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("copy past its budget: %v", err)
 	}
-	if got, _ := u.Get(ctx, capID); got.SpentAmount != 1.5 {
+	if got, _ := u.GetUsage(ctx, capID); got.SpentAmount != 1.5 {
 		t.Fatalf("a refused charge moved the capability to %v", got.SpentAmount)
 	}
 	// Refund returns to the copy without being told about it.
@@ -146,7 +146,7 @@ func TestCopyBudgetReservations(t *testing.T) {
 // A copy's counters go with its capability.
 func TestCopyCountersPurgedWithTheirCapability(t *testing.T) {
 	ctx, u, capID, tenant := newCopyFixture(t)
-	if _, err := u.BumpRequest(ctx, capability.RequestBump{
+	if _, err := u.Bump(ctx, capability.BumpRequest{
 		CapabilityID: capID, TenantID: tenant, Copies: []capability.CopyCeiling{copyCeiling("copy", 1, 0)},
 	}); err != nil {
 		t.Fatal(err)
@@ -159,7 +159,7 @@ func TestCopyCountersPurgedWithTheirCapability(t *testing.T) {
 	}
 
 	gone := uuid.New() // never on record
-	if _, err := u.BumpRequest(ctx, capability.RequestBump{
+	if _, err := u.Bump(ctx, capability.BumpRequest{
 		CapabilityID: gone, TenantID: tenant, Copies: []capability.CopyCeiling{copyCeiling("orphan", 1, 0)},
 	}); err != nil {
 		t.Fatal(err)
@@ -176,7 +176,7 @@ func TestCopyCountersPurgedWithTheirCapability(t *testing.T) {
 func TestCopyUsageReadsTheCounters(t *testing.T) {
 	ctx, u, capID, tenant := newCopyFixture(t)
 	c := copyCeiling("read", 5, 2*capability.MicrosPerUnit)
-	if _, err := u.BumpRequest(ctx, capability.RequestBump{CapabilityID: capID, TenantID: tenant, Copies: []capability.CopyCeiling{c}}); err != nil {
+	if _, err := u.Bump(ctx, capability.BumpRequest{CapabilityID: capID, TenantID: tenant, Copies: []capability.CopyCeiling{c}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := u.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenant, Amount: 0.5, Copies: []capability.CopyCeiling{c}}, nil); err != nil {

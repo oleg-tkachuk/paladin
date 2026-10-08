@@ -98,7 +98,7 @@ func recordChargeAttempt(ctx context.Context, tenantID uuid.UUID, unit string, a
 	}
 }
 
-// recordRequestBump is called once per BumpRequest regardless of outcome.
+// recordRequestBump is called once per Bump regardless of outcome.
 func recordRequestBump(ctx context.Context, tenantID uuid.UUID, outcome string) {
 	initMetrics()
 	if capRequestBumps == nil {

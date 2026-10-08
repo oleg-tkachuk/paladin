@@ -112,7 +112,7 @@ func (s *TenantBudgetServer) Set(
 	if err != nil {
 		return nil, err
 	}
-	args := capability.SetTenantBudgetArgs{
+	args := capability.SetTenantBudgetRequest{
 		TenantID:        tenantID,
 		MaxBudgetAmount: budget,
 		UnitCode:        unit,
@@ -162,7 +162,7 @@ func (s *TenantBudgetServer) Summarize(
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("unlimited_only is mutually exclusive with a non-zero threshold_pct"))
 	}
-	rows, err := s.Usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsArgs{
+	rows, err := s.Usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{
 		ThresholdPct:    m.GetThresholdPct(),
 		UnlimitedOnly:   m.GetUnlimitedOnly(),
 		ExcludeInactive: m.GetExcludeInactive(),

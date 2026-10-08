@@ -44,6 +44,22 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the capability module's API, made uniform
+
+**Breaking, capability module.** Every input is a `…Request` and every read
+names what it reads. Renamed, with no change in behaviour:
+
+| Before | After |
+|---|---|
+| `RevokeArgs`, `RevokeBiscuitArgs` | `RevokeRequest`, `RevokeBiscuitRequest` |
+| `ListByPrincipalArgs` (field `PrincipalT`) | `ListByPrincipalRequest` (field `PrincipalType`) |
+| `SetTenantBudgetArgs`, `ListTenantBudgetsArgs` | `SetTenantBudgetRequest`, `ListTenantBudgetsRequest` |
+| `Meter.BumpRequest(RequestBump)` | `Meter.Bump(BumpRequest)` |
+| `Meter.Get` | `Meter.GetUsage` |
+| `ValidateOverrun(p)` | `p.Validate()` |
+
+The metric names are unchanged.
+
 ## Unreleased — capability refusals carry a reason; costs reported later
 
 - A refused capability now carries a `google.rpc.ErrorInfo` in the `paladin`

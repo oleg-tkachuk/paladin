@@ -24,7 +24,7 @@ func TestChargeRollsBackWhenSideEffectFails(t *testing.T) {
 	capID, tenantID := uuid.New(), uuid.New()
 
 	usage := NewUsage[struct{}](nil)
-	if _, err := usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+	if _, err := usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 		TenantID: tenantID, MaxBudgetAmount: 100, UnitCode: "USD",
 	}); err != nil {
 		t.Fatalf("SetTenantBudget: %v", err)
@@ -35,7 +35,7 @@ func TestChargeRollsBackWhenSideEffectFails(t *testing.T) {
 		t.Fatalf("first charge: %v", err)
 	}
 
-	before, err := usage.Get(ctx, capID)
+	before, err := usage.GetUsage(ctx, capID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestChargeRollsBackWhenSideEffectFails(t *testing.T) {
 	}
 
 	// The whole point: nothing moved.
-	after, err := usage.Get(ctx, capID)
+	after, err := usage.GetUsage(ctx, capID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestChargeCapabilityCeilingLeavesBothCountersUnmutated(t *testing.T) {
 	ctx := context.Background()
 	capID, tenantID := uuid.New(), uuid.New()
 	usage := NewUsage[struct{}](nil)
-	if _, err := usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+	if _, err := usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 		TenantID: tenantID, MaxBudgetAmount: 1000, UnitCode: "USD",
 	}); err != nil {
 		t.Fatalf("SetTenantBudget: %v", err)
@@ -122,7 +122,7 @@ func TestChargeCapabilityCeilingLeavesBothCountersUnmutated(t *testing.T) {
 		t.Fatalf("want ErrBudgetExceeded, got %v", err)
 	}
 
-	if _, err := usage.Get(ctx, capID); !errors.Is(err, capability.ErrUsageNotFound) {
+	if _, err := usage.GetUsage(ctx, capID); !errors.Is(err, capability.ErrUsageNotFound) {
 		t.Errorf("a rejected first charge must create no usage row, got %v", err)
 	}
 	b, err := usage.GetTenantBudget(ctx, tenantID)
@@ -141,7 +141,7 @@ func TestChargeTenantCeilingLeavesBothCountersUnmutated(t *testing.T) {
 	ctx := context.Background()
 	capID, tenantID := uuid.New(), uuid.New()
 	usage := NewUsage[struct{}](nil)
-	if _, err := usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+	if _, err := usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 		TenantID: tenantID, MaxBudgetAmount: 20, UnitCode: "USD",
 	}); err != nil {
 		t.Fatalf("SetTenantBudget: %v", err)
@@ -153,7 +153,7 @@ func TestChargeTenantCeilingLeavesBothCountersUnmutated(t *testing.T) {
 		t.Fatalf("want ErrTenantBudgetExceeded, got %v", err)
 	}
 
-	if _, err := usage.Get(ctx, capID); !errors.Is(err, capability.ErrUsageNotFound) {
+	if _, err := usage.GetUsage(ctx, capID); !errors.Is(err, capability.ErrUsageNotFound) {
 		t.Errorf("capability counter was mutated before the tenant check rejected: %v", err)
 	}
 	b, _ := usage.GetTenantBudget(ctx, tenantID)
@@ -173,8 +173,8 @@ func TestNoTransactionModeWorksEndToEnd(t *testing.T) {
 	capID := uuid.New()
 	usage := NewUsage[struct{}](nil)
 
-	if _, err := usage.BumpRequest(ctx, capability.RequestBump{CapabilityID: capID, MaxRequests: 5}); err != nil {
-		t.Fatalf("BumpRequest: %v", err)
+	if _, err := usage.Bump(ctx, capability.BumpRequest{CapabilityID: capID, MaxRequests: 5}); err != nil {
+		t.Fatalf("Bump: %v", err)
 	}
 	spent, err := usage.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: uuid.New(), Amount: 3, MaxBudget: 10, UnitCode: "", Op: "op", Actor: "actor"}, nil)
 	if err != nil {
@@ -183,7 +183,7 @@ func TestNoTransactionModeWorksEndToEnd(t *testing.T) {
 	if spent.Spent != 3 {
 		t.Errorf("spent = %v, want 3", spent.Spent)
 	}
-	u, err := usage.Get(ctx, capID)
+	u, err := usage.GetUsage(ctx, capID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}

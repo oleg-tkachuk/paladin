@@ -73,7 +73,7 @@ func newFixture[TX any](t *testing.T, setup func(t *testing.T) Env[TX]) fixture[
 	if f.child, err = env.NewCapability(f.root, childBudget); err != nil {
 		t.Fatalf("child capability: %v", err)
 	}
-	if _, err := env.Usage.SetTenantBudget(env.Ctx, capability.SetTenantBudgetArgs{
+	if _, err := env.Usage.SetTenantBudget(env.Ctx, capability.SetTenantBudgetRequest{
 		TenantID: env.Tenant, MaxBudgetAmount: tenantBudget, UnitCode: unit,
 	}); err != nil {
 		t.Fatalf("tenant budget: %v", err)
@@ -94,7 +94,7 @@ func (f fixture[TX]) charge(req capability.ChargeRequest, onCharged func(context
 
 func (f fixture[TX]) spent(t *testing.T, id uuid.UUID) float64 {
 	t.Helper()
-	u, err := f.Usage.Get(f.Ctx, id)
+	u, err := f.Usage.GetUsage(f.Ctx, id)
 	if errors.Is(err, capability.ErrUsageNotFound) {
 		return 0
 	}
@@ -296,7 +296,7 @@ func checkSettle[TX any](t *testing.T, f fixture[TX]) {
 	if err != nil || !r.Overrun || !near(r.Spent, 24) {
 		t.Fatalf("recording settle = %+v, %v; want 24 spent, overrun", r, err)
 	}
-	if u, err := f.Usage.Get(f.Ctx, f.root); err != nil || u.ReservedAmount != 0 {
+	if u, err := f.Usage.GetUsage(f.Ctx, f.root); err != nil || u.ReservedAmount != 0 {
 		t.Errorf("root after settling = %+v, %v; want nothing held", u, err)
 	}
 	again, err := settle(1, capability.OverrunReject)

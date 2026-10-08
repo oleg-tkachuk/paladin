@@ -382,7 +382,7 @@ func (i *capabilityInterceptor) enforceCaveats(
 	// subtree, and the store reads it from the ancestor's record. A Biscuit
 	// copy with limits of its own is counted the same way.
 	if i.usage != nil && (cap.Caveats.MaxRequests > 0 || cap.ParentID != uuid.Nil || len(cap.Copies) > 0) {
-		if _, err := i.usage.BumpRequest(ledgerContext(ctx, cap), capability.RequestBump{
+		if _, err := i.usage.Bump(ledgerContext(ctx, cap), capability.BumpRequest{
 			CapabilityID: cap.ID,
 			TenantID:     cap.Subject.TenantID,
 			MaxRequests:  int64(cap.Caveats.MaxRequests),

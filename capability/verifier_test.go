@@ -47,7 +47,7 @@ func (m *memStore) IsRevoked(_ context.Context, id uuid.UUID) (bool, error) {
 	atomic.AddInt64(&m.revCalls, 1)
 	return m.revoked[id], nil
 }
-func (m *memStore) Revoke(_ context.Context, args RevokeArgs) error {
+func (m *memStore) Revoke(_ context.Context, args RevokeRequest) error {
 	m.revoked[args.ID] = true
 	return nil
 }
@@ -59,14 +59,14 @@ func (m *memStore) IsBiscuitRevoked(_ context.Context, ids [][]byte) (bool, erro
 	}
 	return false, nil
 }
-func (m *memStore) RevokeBiscuit(_ context.Context, args RevokeBiscuitArgs) error {
+func (m *memStore) RevokeBiscuit(_ context.Context, args RevokeBiscuitRequest) error {
 	m.copies[string(args.RevocationID)] = true
 	return nil
 }
 func (m *memStore) PurgeExpired(context.Context, time.Duration) (int64, error) {
 	return 0, nil
 }
-func (m *memStore) ListByPrincipal(context.Context, ListByPrincipalArgs) ([]Capability, string, error) {
+func (m *memStore) ListByPrincipal(context.Context, ListByPrincipalRequest) ([]Capability, string, error) {
 	return nil, "", nil
 }
 
@@ -209,7 +209,7 @@ func TestVerify_Revoked(t *testing.T) {
 		Audience: []string{AudiencePlaneData},
 		Caveats:  Caveats{Ops: []Op{OpGet}},
 	})
-	if err := store.Revoke(ctx, RevokeArgs{ID: cap.ID, Reason: "test"}); err != nil {
+	if err := store.Revoke(ctx, RevokeRequest{ID: cap.ID, Reason: "test"}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 	_, err := verifier.Verify(ctx, token, AudiencePlaneData)

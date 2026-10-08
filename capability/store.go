@@ -55,7 +55,7 @@ type Store interface {
 	// revocation entry for each descendant, so the audit trail names
 	// every capability that was stopped, not only the one an operator
 	// picked.
-	Revoke(ctx context.Context, args RevokeArgs) error
+	Revoke(ctx context.Context, args RevokeRequest) error
 
 	// PurgeExpired drops revocation rows whose underlying capability
 	// has been expired for at least the supplied grace period. Run by
@@ -65,7 +65,7 @@ type Store interface {
 	// ListByPrincipal is admin-tooling support: list every active
 	// capability issued to a principal (for display in the UI).
 	// Pagination: cursor-based opaque to caller.
-	ListByPrincipal(ctx context.Context, args ListByPrincipalArgs) ([]Capability, string, error)
+	ListByPrincipal(ctx context.Context, args ListByPrincipalRequest) ([]Capability, string, error)
 }
 
 // ErrNotFound is the typed not-found return from Store.Get. It lives in the
@@ -78,8 +78,8 @@ type Store interface {
 // failure, not a missing entity.
 var ErrNotFound = errors.New("capability: not found")
 
-// RevokeArgs is the input shape for Store.Revoke.
-type RevokeArgs struct {
+// RevokeRequest is the input shape for Store.Revoke.
+type RevokeRequest struct {
 	ID uuid.UUID
 	// Reason is an operator-supplied label ("compromise", "rotation",
 	// "policy-change"). Stored on the revocation row for audit.
@@ -92,10 +92,10 @@ type RevokeArgs struct {
 	CascadeChildren bool
 }
 
-// ListByPrincipalArgs is the input shape for Store.ListByPrincipal.
-type ListByPrincipalArgs struct {
+// ListByPrincipalRequest is the input shape for Store.ListByPrincipal.
+type ListByPrincipalRequest struct {
 	TenantID       uuid.UUID
-	PrincipalT     PrincipalType
+	PrincipalType  PrincipalType
 	Subject        string
 	IncludeExpired bool
 	IncludeRevoked bool

@@ -249,7 +249,7 @@ SELECT EXISTS (
 // records are a forest (parent_id is nullable, no cycles by construction
 // because the FK is set NULL on parent delete), but a depth limit is
 // kept as a defensive guard against pathological dataset corruption.
-func (s *Store) Revoke(ctx context.Context, args capability.RevokeArgs) error {
+func (s *Store) Revoke(ctx context.Context, args capability.RevokeRequest) error {
 	if args.ID == uuid.Nil {
 		return errors.New("capability/postgres: revoke ID required")
 	}
@@ -350,7 +350,7 @@ WHERE capability_id IN (
 // ListByPrincipal implements capability.Store. Cursor is the last seen
 // id encoded as a hex string; a follow-up page seeks past it. Page size
 // is bounded by Limit (default 50, max 500).
-func (s *Store) ListByPrincipal(ctx context.Context, args capability.ListByPrincipalArgs) ([]capability.Capability, string, error) {
+func (s *Store) ListByPrincipal(ctx context.Context, args capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
 	if args.TenantID == uuid.Nil {
 		return nil, "", errors.New("capability/postgres: tenant_id required")
 	}
@@ -364,7 +364,7 @@ func (s *Store) ListByPrincipal(ctx context.Context, args capability.ListByPrinc
 
 	// Build clauses incrementally so the query plan stays readable.
 	whereExtra := ""
-	bindArgs := []any{args.TenantID, string(args.PrincipalT), args.Subject}
+	bindArgs := []any{args.TenantID, string(args.PrincipalType), args.Subject}
 	if !args.IncludeExpired {
 		whereExtra += " AND cr.expires_at > NOW()"
 	}

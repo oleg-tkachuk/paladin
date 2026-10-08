@@ -53,13 +53,13 @@ func (s *fakeStore) Get(_ context.Context, id uuid.UUID) (*capability.Capability
 	return nil, capability.ErrNotFound // the Store contract's sentinel
 }
 func (s *fakeStore) IsRevoked(context.Context, uuid.UUID) (bool, error) { return false, nil }
-func (s *fakeStore) Revoke(context.Context, capability.RevokeArgs) error {
+func (s *fakeStore) Revoke(context.Context, capability.RevokeRequest) error {
 	return errors.New("not used")
 }
 func (s *fakeStore) PurgeExpired(context.Context, time.Duration) (int64, error) {
 	return 0, errors.New("not used")
 }
-func (s *fakeStore) ListByPrincipal(context.Context, capability.ListByPrincipalArgs) ([]capability.Capability, string, error) {
+func (s *fakeStore) ListByPrincipal(context.Context, capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
 	return nil, "", errors.New("not used")
 }
 
