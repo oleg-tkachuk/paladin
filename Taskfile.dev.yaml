@@ -262,6 +262,7 @@ tasks:
       - task: verify:stream-release-notes
       - task: verify:badge-versions
       - task: verify:postgres-version
+      - task: verify:release-age
       - task: verify:warm-go-proxy
       - task: verify:release-head
       - task: verify:release-rules
@@ -578,6 +579,11 @@ tasks:
     desc: "Fail when the compose stacks and the Go test suites run different Postgres versions"
     cmds:
       - ./scripts/postgres-version.test.sh
+
+  verify:release-age:
+    desc: "Fail when Renovate would propose an npm release pnpm refuses to install"
+    cmds:
+      - ./scripts/release-age.test.sh
 
   verify:stream-release-notes:
     desc: "Fail when an SDK or capability release lists commits that are not its own"
