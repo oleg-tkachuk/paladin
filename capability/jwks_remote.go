@@ -60,7 +60,10 @@ type RemoteJWKSConfig struct {
 type RemoteJWKSResolver struct {
 	cfg RemoteJWKSConfig
 
-	fetchMu sync.Mutex // serialises fetches; at most one in flight
+	// fetching holds one token while a fetch is in flight. It is a channel
+	// rather than a mutex so that a caller waiting behind another's fetch
+	// can give up when its own context does.
+	fetching chan struct{}
 
 	mu          sync.RWMutex
 	keys        map[string]ed25519.PublicKey
@@ -94,14 +97,16 @@ func NewRemoteJWKSResolver(cfg RemoteJWKSConfig) (*RemoteJWKSResolver, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &RemoteJWKSResolver{cfg: cfg}, nil
+	return &RemoteJWKSResolver{cfg: cfg, fetching: make(chan struct{}, 1)}, nil
 }
 
 // PublicKey implements KeyResolver.
 func (r *RemoteJWKSResolver) PublicKey(ctx context.Context, kid string) (ed25519.PublicKey, error) {
 	key, ok, fetchedAt := r.lookup(kid)
 	if !ok || r.cfg.Now().Sub(fetchedAt) >= r.cfg.RefreshInterval {
-		r.refresh(ctx)
+		if err := r.refresh(ctx); err != nil {
+			return nil, err
+		}
 		key, ok, fetchedAt = r.lookup(kid)
 	}
 
@@ -126,10 +131,15 @@ func (r *RemoteJWKSResolver) lookup(kid string) (ed25519.PublicKey, bool, time.T
 
 // refresh fetches the document unless a fetch was attempted within
 // MinRefreshInterval. Failures are recorded, not returned: the caller decides
-// from the age of the set it still holds.
-func (r *RemoteJWKSResolver) refresh(ctx context.Context) {
-	r.fetchMu.Lock()
-	defer r.fetchMu.Unlock()
+// from the age of the set it still holds. It returns only ctx's error, when
+// the caller gave up waiting behind another fetch.
+func (r *RemoteJWKSResolver) refresh(ctx context.Context) error {
+	select {
+	case r.fetching <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-r.fetching }()
 
 	now := r.cfg.Now()
 	r.mu.RLock()
@@ -137,7 +147,7 @@ func (r *RemoteJWKSResolver) refresh(ctx context.Context) {
 	etag := r.etag
 	r.mu.RUnlock()
 	if recent {
-		return
+		return nil
 	}
 
 	keys, newETag, notModified, err := r.fetch(ctx, etag)
@@ -147,13 +157,14 @@ func (r *RemoteJWKSResolver) refresh(ctx context.Context) {
 	r.lastAttempt = now
 	r.lastErr = err
 	if err != nil {
-		return
+		return nil
 	}
 	r.fetchedAt = now
 	if !notModified {
 		r.keys = keys
 		r.etag = newETag
 	}
+	return nil
 }
 
 func (r *RemoteJWKSResolver) fetch(ctx context.Context, etag string) (keys map[string]ed25519.PublicKey, newETag string, notModified bool, err error) {
