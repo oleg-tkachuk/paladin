@@ -26,7 +26,7 @@ from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__
 from google.api import field_behavior_pb2 as google_dot_api_dot_field__behavior__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n#paladin/iam/v1/health_service.proto\x12\x0epaladin.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x13\n\x11GetVersionRequest\"w\n\x0bVersionInfo\x12\x0f\n\x07version\x18\x01 \x01(\t\x12\x0e\n\x06\x63ommit\x18\x02 \x01(\t\x12\x33\n\nbuild_time\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x12\n\ngo_version\x18\x04 \x01(\t\"\x12\n\x10GetHealthRequest\"\xd1\x01\n\x0f\x43omponentHealth\x12\x11\n\x04name\x18\x01 \x01(\tB\x03\xe0\x41\x08\x12/\n\x06status\x18\x02 \x01(\x0e\x32\x1f.paladin.iam.v1.ComponentStatus\x12\x0f\n\x07message\x18\x03 \x01(\t\x12\x12\n\nlatency_ms\x18\x04 \x01(\x03\x12\x10\n\x08\x63\x61tegory\x18\x05 \x01(\t\x12\x10\n\x08\x63ritical\x18\x06 \x01(\x08\x12\x31\n\x07\x63ontrol\x18\x07 \x01(\x0e\x32 .paladin.iam.v1.ComponentControl\"\x80\x01\n\nHealthInfo\x12/\n\x06status\x18\x01 \x01(\x0e\x32\x1f.paladin.iam.v1.ComponentStatus\x12\x33\n\ncomponents\x18\x02 \x03(\x0b\x32\x1f.paladin.iam.v1.ComponentHealth\x12\x0c\n\x04role\x18\x03 \x01(\t*\xaf\x01\n\x0f\x43omponentStatus\x12 \n\x1c\x43OMPONENT_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n\x18\x43OMPONENT_STATUS_HEALTHY\x10\x01\x12\x1d\n\x19\x43OMPONENT_STATUS_DEGRADED\x10\x02\x12\x1e\n\x1a\x43OMPONENT_STATUS_UNHEALTHY\x10\x03\x12\x1d\n\x19\x43OMPONENT_STATUS_DISABLED\x10\x04*\x94\x01\n\x10\x43omponentControl\x12!\n\x1d\x43OMPONENT_CONTROL_UNSPECIFIED\x10\x00\x12\x1f\n\x1b\x43OMPONENT_CONTROL_ALWAYS_ON\x10\x01\x12\x1c\n\x18\x43OMPONENT_CONTROL_CONFIG\x10\x02\x12\x1e\n\x1a\x43OMPONENT_CONTROL_DATABASE\x10\x03\x32\xb2\x01\n\rHealthService\x12Q\n\nGetVersion\x12!.paladin.iam.v1.GetVersionRequest\x1a\x1b.paladin.iam.v1.VersionInfo\"\x03\x90\x02\x01\x12N\n\tGetHealth\x12 .paladin.iam.v1.GetHealthRequest\x1a\x1a.paladin.iam.v1.HealthInfo\"\x03\x90\x02\x01\x42HZFgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1;paladiniamv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n#paladin/iam/v1/health_service.proto\x12\x0epaladin.iam.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x13\n\x11GetVersionRequest\"w\n\x0bVersionInfo\x12\x0f\n\x07version\x18\x01 \x01(\t\x12\x0e\n\x06\x63ommit\x18\x02 \x01(\t\x12\x33\n\nbuild_time\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x12\n\ngo_version\x18\x04 \x01(\t\"\x12\n\x10GetHealthRequest\"\x83\x02\n\x0f\x43omponentHealth\x12\x11\n\x04name\x18\x01 \x01(\tB\x03\xe0\x41\x08\x12/\n\x06status\x18\x02 \x01(\x0e\x32\x1f.paladin.iam.v1.ComponentStatus\x12\x0f\n\x07message\x18\x03 \x01(\t\x12\x12\n\nlatency_ms\x18\x04 \x01(\x03\x12\x10\n\x08\x63\x61tegory\x18\x05 \x01(\t\x12\x10\n\x08\x63ritical\x18\x06 \x01(\x08\x12\x31\n\x07\x63ontrol\x18\x07 \x01(\x0e\x32 .paladin.iam.v1.ComponentControl\x12\x30\n\x07\x64\x65tails\x18\x08 \x03(\x0b\x32\x1f.paladin.iam.v1.ComponentDetail\".\n\x0f\x43omponentDetail\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"\x80\x01\n\nHealthInfo\x12/\n\x06status\x18\x01 \x01(\x0e\x32\x1f.paladin.iam.v1.ComponentStatus\x12\x33\n\ncomponents\x18\x02 \x03(\x0b\x32\x1f.paladin.iam.v1.ComponentHealth\x12\x0c\n\x04role\x18\x03 \x01(\t*\xaf\x01\n\x0f\x43omponentStatus\x12 \n\x1c\x43OMPONENT_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n\x18\x43OMPONENT_STATUS_HEALTHY\x10\x01\x12\x1d\n\x19\x43OMPONENT_STATUS_DEGRADED\x10\x02\x12\x1e\n\x1a\x43OMPONENT_STATUS_UNHEALTHY\x10\x03\x12\x1d\n\x19\x43OMPONENT_STATUS_DISABLED\x10\x04*\x94\x01\n\x10\x43omponentControl\x12!\n\x1d\x43OMPONENT_CONTROL_UNSPECIFIED\x10\x00\x12\x1f\n\x1b\x43OMPONENT_CONTROL_ALWAYS_ON\x10\x01\x12\x1c\n\x18\x43OMPONENT_CONTROL_CONFIG\x10\x02\x12\x1e\n\x1a\x43OMPONENT_CONTROL_DATABASE\x10\x03\x32\xb2\x01\n\rHealthService\x12Q\n\nGetVersion\x12!.paladin.iam.v1.GetVersionRequest\x1a\x1b.paladin.iam.v1.VersionInfo\"\x03\x90\x02\x01\x12N\n\tGetHealth\x12 .paladin.iam.v1.GetHealthRequest\x1a\x1a.paladin.iam.v1.HealthInfo\"\x03\x90\x02\x01\x42HZFgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1;paladiniamv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -42,10 +42,10 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_HEALTHSERVICE'].methods_by_name['GetVersion']._serialized_options = b'\220\002\001'
   _globals['_HEALTHSERVICE'].methods_by_name['GetHealth']._loaded_options = None
   _globals['_HEALTHSERVICE'].methods_by_name['GetHealth']._serialized_options = b'\220\002\001'
-  _globals['_COMPONENTSTATUS']._serialized_start=627
-  _globals['_COMPONENTSTATUS']._serialized_end=802
-  _globals['_COMPONENTCONTROL']._serialized_start=805
-  _globals['_COMPONENTCONTROL']._serialized_end=953
+  _globals['_COMPONENTSTATUS']._serialized_start=725
+  _globals['_COMPONENTSTATUS']._serialized_end=900
+  _globals['_COMPONENTCONTROL']._serialized_start=903
+  _globals['_COMPONENTCONTROL']._serialized_end=1051
   _globals['_GETVERSIONREQUEST']._serialized_start=121
   _globals['_GETVERSIONREQUEST']._serialized_end=140
   _globals['_VERSIONINFO']._serialized_start=142
@@ -53,9 +53,11 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETHEALTHREQUEST']._serialized_start=263
   _globals['_GETHEALTHREQUEST']._serialized_end=281
   _globals['_COMPONENTHEALTH']._serialized_start=284
-  _globals['_COMPONENTHEALTH']._serialized_end=493
-  _globals['_HEALTHINFO']._serialized_start=496
-  _globals['_HEALTHINFO']._serialized_end=624
-  _globals['_HEALTHSERVICE']._serialized_start=956
-  _globals['_HEALTHSERVICE']._serialized_end=1134
+  _globals['_COMPONENTHEALTH']._serialized_end=543
+  _globals['_COMPONENTDETAIL']._serialized_start=545
+  _globals['_COMPONENTDETAIL']._serialized_end=591
+  _globals['_HEALTHINFO']._serialized_start=594
+  _globals['_HEALTHINFO']._serialized_end=722
+  _globals['_HEALTHSERVICE']._serialized_start=1054
+  _globals['_HEALTHSERVICE']._serialized_end=1232
 # @@protoc_insertion_point(module_scope)

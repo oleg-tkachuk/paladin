@@ -56,7 +56,7 @@ class GetHealthRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class ComponentHealth(_message.Message):
-    __slots__ = ("name", "status", "message", "latency_ms", "category", "critical", "control")
+    __slots__ = ("name", "status", "message", "latency_ms", "category", "critical", "control", "details")
     NAME_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
@@ -64,6 +64,7 @@ class ComponentHealth(_message.Message):
     CATEGORY_FIELD_NUMBER: _ClassVar[int]
     CRITICAL_FIELD_NUMBER: _ClassVar[int]
     CONTROL_FIELD_NUMBER: _ClassVar[int]
+    DETAILS_FIELD_NUMBER: _ClassVar[int]
     name: str
     status: ComponentStatus
     message: str
@@ -71,7 +72,16 @@ class ComponentHealth(_message.Message):
     category: str
     critical: bool
     control: ComponentControl
-    def __init__(self, name: _Optional[str] = ..., status: _Optional[_Union[ComponentStatus, str]] = ..., message: _Optional[str] = ..., latency_ms: _Optional[int] = ..., category: _Optional[str] = ..., critical: _Optional[bool] = ..., control: _Optional[_Union[ComponentControl, str]] = ...) -> None: ...
+    details: _containers.RepeatedCompositeFieldContainer[ComponentDetail]
+    def __init__(self, name: _Optional[str] = ..., status: _Optional[_Union[ComponentStatus, str]] = ..., message: _Optional[str] = ..., latency_ms: _Optional[int] = ..., category: _Optional[str] = ..., critical: _Optional[bool] = ..., control: _Optional[_Union[ComponentControl, str]] = ..., details: _Optional[_Iterable[_Union[ComponentDetail, _Mapping]]] = ...) -> None: ...
+
+class ComponentDetail(_message.Message):
+    __slots__ = ("name", "value")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    value: str
+    def __init__(self, name: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
 
 class HealthInfo(_message.Message):
     __slots__ = ("status", "components", "role")

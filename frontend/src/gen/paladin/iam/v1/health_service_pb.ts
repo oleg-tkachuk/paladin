@@ -25,7 +25,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_iam_v1_health_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiNwYWxhZGluL2lhbS92MS9oZWFsdGhfc2VydmljZS5wcm90bxIOcGFsYWRpbi5pYW0udjEiEwoRR2V0VmVyc2lvblJlcXVlc3QidwoLVmVyc2lvbkluZm8SDwoHdmVyc2lvbhgBIAEoCRIOCgZjb21taXQYAiABKAkSMwoKYnVpbGRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxISCgpnb192ZXJzaW9uGAQgASgJIhIKEEdldEhlYWx0aFJlcXVlc3Qi0QEKD0NvbXBvbmVudEhlYWx0aBIRCgRuYW1lGAEgASgJQgPgQQgSLwoGc3RhdHVzGAIgASgOMh8ucGFsYWRpbi5pYW0udjEuQ29tcG9uZW50U3RhdHVzEg8KB21lc3NhZ2UYAyABKAkSEgoKbGF0ZW5jeV9tcxgEIAEoAxIQCghjYXRlZ29yeRgFIAEoCRIQCghjcml0aWNhbBgGIAEoCBIxCgdjb250cm9sGAcgASgOMiAucGFsYWRpbi5pYW0udjEuQ29tcG9uZW50Q29udHJvbCKAAQoKSGVhbHRoSW5mbxIvCgZzdGF0dXMYASABKA4yHy5wYWxhZGluLmlhbS52MS5Db21wb25lbnRTdGF0dXMSMwoKY29tcG9uZW50cxgCIAMoCzIfLnBhbGFkaW4uaWFtLnYxLkNvbXBvbmVudEhlYWx0aBIMCgRyb2xlGAMgASgJKq8BCg9Db21wb25lbnRTdGF0dXMSIAocQ09NUE9ORU5UX1NUQVRVU19VTlNQRUNJRklFRBAAEhwKGENPTVBPTkVOVF9TVEFUVVNfSEVBTFRIWRABEh0KGUNPTVBPTkVOVF9TVEFUVVNfREVHUkFERUQQAhIeChpDT01QT05FTlRfU1RBVFVTX1VOSEVBTFRIWRADEh0KGUNPTVBPTkVOVF9TVEFUVVNfRElTQUJMRUQQBCqUAQoQQ29tcG9uZW50Q29udHJvbBIhCh1DT01QT05FTlRfQ09OVFJPTF9VTlNQRUNJRklFRBAAEh8KG0NPTVBPTkVOVF9DT05UUk9MX0FMV0FZU19PThABEhwKGENPTVBPTkVOVF9DT05UUk9MX0NPTkZJRxACEh4KGkNPTVBPTkVOVF9DT05UUk9MX0RBVEFCQVNFEAMysgEKDUhlYWx0aFNlcnZpY2USUQoKR2V0VmVyc2lvbhIhLnBhbGFkaW4uaWFtLnYxLkdldFZlcnNpb25SZXF1ZXN0GhsucGFsYWRpbi5pYW0udjEuVmVyc2lvbkluZm8iA5ACARJOCglHZXRIZWFsdGgSIC5wYWxhZGluLmlhbS52MS5HZXRIZWFsdGhSZXF1ZXN0GhoucGFsYWRpbi5pYW0udjEuSGVhbHRoSW5mbyIDkAIBQkhaRmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2lhbS92MTtwYWxhZGluaWFtdjFiBnByb3RvMw",
+    "CiNwYWxhZGluL2lhbS92MS9oZWFsdGhfc2VydmljZS5wcm90bxIOcGFsYWRpbi5pYW0udjEiEwoRR2V0VmVyc2lvblJlcXVlc3QidwoLVmVyc2lvbkluZm8SDwoHdmVyc2lvbhgBIAEoCRIOCgZjb21taXQYAiABKAkSMwoKYnVpbGRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxISCgpnb192ZXJzaW9uGAQgASgJIhIKEEdldEhlYWx0aFJlcXVlc3QigwIKD0NvbXBvbmVudEhlYWx0aBIRCgRuYW1lGAEgASgJQgPgQQgSLwoGc3RhdHVzGAIgASgOMh8ucGFsYWRpbi5pYW0udjEuQ29tcG9uZW50U3RhdHVzEg8KB21lc3NhZ2UYAyABKAkSEgoKbGF0ZW5jeV9tcxgEIAEoAxIQCghjYXRlZ29yeRgFIAEoCRIQCghjcml0aWNhbBgGIAEoCBIxCgdjb250cm9sGAcgASgOMiAucGFsYWRpbi5pYW0udjEuQ29tcG9uZW50Q29udHJvbBIwCgdkZXRhaWxzGAggAygLMh8ucGFsYWRpbi5pYW0udjEuQ29tcG9uZW50RGV0YWlsIi4KD0NvbXBvbmVudERldGFpbBIMCgRuYW1lGAEgASgJEg0KBXZhbHVlGAIgASgJIoABCgpIZWFsdGhJbmZvEi8KBnN0YXR1cxgBIAEoDjIfLnBhbGFkaW4uaWFtLnYxLkNvbXBvbmVudFN0YXR1cxIzCgpjb21wb25lbnRzGAIgAygLMh8ucGFsYWRpbi5pYW0udjEuQ29tcG9uZW50SGVhbHRoEgwKBHJvbGUYAyABKAkqrwEKD0NvbXBvbmVudFN0YXR1cxIgChxDT01QT05FTlRfU1RBVFVTX1VOU1BFQ0lGSUVEEAASHAoYQ09NUE9ORU5UX1NUQVRVU19IRUFMVEhZEAESHQoZQ09NUE9ORU5UX1NUQVRVU19ERUdSQURFRBACEh4KGkNPTVBPTkVOVF9TVEFUVVNfVU5IRUFMVEhZEAMSHQoZQ09NUE9ORU5UX1NUQVRVU19ESVNBQkxFRBAEKpQBChBDb21wb25lbnRDb250cm9sEiEKHUNPTVBPTkVOVF9DT05UUk9MX1VOU1BFQ0lGSUVEEAASHwobQ09NUE9ORU5UX0NPTlRST0xfQUxXQVlTX09OEAESHAoYQ09NUE9ORU5UX0NPTlRST0xfQ09ORklHEAISHgoaQ09NUE9ORU5UX0NPTlRST0xfREFUQUJBU0UQAzKyAQoNSGVhbHRoU2VydmljZRJRCgpHZXRWZXJzaW9uEiEucGFsYWRpbi5pYW0udjEuR2V0VmVyc2lvblJlcXVlc3QaGy5wYWxhZGluLmlhbS52MS5WZXJzaW9uSW5mbyIDkAIBEk4KCUdldEhlYWx0aBIgLnBhbGFkaW4uaWFtLnYxLkdldEhlYWx0aFJlcXVlc3QaGi5wYWxhZGluLmlhbS52MS5IZWFsdGhJbmZvIgOQAgFCSFpGZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vaWFtL3YxO3BhbGFkaW5pYW12MWIGcHJvdG8z",
     [file_google_protobuf_timestamp, file_google_api_field_behavior],
   );
 
@@ -159,6 +159,14 @@ export type ComponentHealth = Message<"paladin.iam.v1.ComponentHealth"> & {
    * @generated from field: paladin.iam.v1.ComponentControl control = 7;
    */
   control: ComponentControl;
+
+  /**
+   * Facts the component reports beside its status, in its order — a pool's
+   * connections in use, the schema version applied. Empty while disabled.
+   *
+   * @generated from field: repeated paladin.iam.v1.ComponentDetail details = 8;
+   */
+  details: ComponentDetail[];
 };
 
 /**
@@ -168,6 +176,31 @@ export type ComponentHealth = Message<"paladin.iam.v1.ComponentHealth"> & {
 export const ComponentHealthSchema: GenMessage<ComponentHealth> =
   /*@__PURE__*/
   messageDesc(file_paladin_iam_v1_health_service, 3);
+
+/**
+ * One fact a component reports, shown as "name: value".
+ *
+ * @generated from message paladin.iam.v1.ComponentDetail
+ */
+export type ComponentDetail = Message<"paladin.iam.v1.ComponentDetail"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string value = 2;
+   */
+  value: string;
+};
+
+/**
+ * Describes the message paladin.iam.v1.ComponentDetail.
+ * Use `create(ComponentDetailSchema)` to create a new message.
+ */
+export const ComponentDetailSchema: GenMessage<ComponentDetail> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_health_service, 4);
 
 /**
  * @generated from message paladin.iam.v1.HealthInfo
@@ -203,7 +236,7 @@ export type HealthInfo = Message<"paladin.iam.v1.HealthInfo"> & {
  */
 export const HealthInfoSchema: GenMessage<HealthInfo> =
   /*@__PURE__*/
-  messageDesc(file_paladin_iam_v1_health_service, 4);
+  messageDesc(file_paladin_iam_v1_health_service, 5);
 
 /**
  * ComponentStatus is a small enum so the UI can colour-code rows without
