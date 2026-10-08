@@ -21,8 +21,8 @@ import (
 //
 // Signer is intentionally narrow: callers populate a Capability struct
 // and ask Sign to encode + sign. The compact JWT format is the wire
-// representation; we expose Encode / Decode helpers so debugging
-// tooling can inspect tokens without the full verifier path.
+// representation; Decode reads one back without the verifier path, for
+// debugging tools, and VerifySignature checks its signature alone.
 type Signer interface {
 	// KeyID is the JWKS key ID embedded in tokens this signer mints.
 	// Verifiers index their key set by it, and rotation works by
