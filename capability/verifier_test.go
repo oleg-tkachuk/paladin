@@ -43,6 +43,13 @@ func (m *memStore) Get(_ context.Context, id uuid.UUID) (*Capability, error) {
 	}
 	return &c, nil
 }
+func (m *memStore) GetRecord(ctx context.Context, id uuid.UUID) (Record, error) {
+	c, err := m.Get(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	return Record{Capability: *c}, nil
+}
 func (m *memStore) IsRevoked(_ context.Context, id uuid.UUID) (bool, error) {
 	atomic.AddInt64(&m.revCalls, 1)
 	return m.revoked[id], nil

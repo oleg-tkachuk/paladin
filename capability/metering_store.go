@@ -115,6 +115,10 @@ func (s *MeteringStore[TX]) Settle(ctx context.Context, req SettleRequest, onCha
 
 // Pure pass-throughs — reads and admin writes don't move counters, no metric.
 
+func (s *MeteringStore[TX]) GetCharge(ctx context.Context, chargeID uuid.UUID) (ChargeRecord, error) {
+	return s.Inner.GetCharge(ctx, chargeID)
+}
+
 func (s *MeteringStore[TX]) ChargeByRef(ctx context.Context, capID uuid.UUID, externalRef string) (ChargeRecord, error) {
 	return s.Inner.ChargeByRef(ctx, capID, externalRef)
 }

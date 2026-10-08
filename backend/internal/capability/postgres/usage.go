@@ -416,33 +416,44 @@ func nullableUUID(id uuid.UUID) pgtype.UUID {
 	return pgtype.UUID{Bytes: id, Valid: id != uuid.Nil}
 }
 
-// chargeRecordQuery reads a charge a capability took under an external ref,
-// with what has been refunded from it.
-const chargeRecordQuery = `
-SELECT ch.id, ch.amount,
+// chargeRecordSelect reads charges as the Meter contract reads one back,
+// with what has been refunded from each; a WHERE clause picks which.
+const chargeRecordSelect = `
+SELECT ch.id, ch.capability_id, ch.amount,
        COALESCE((SELECT sum(cr.amount) FROM charge_refunds cr WHERE cr.charge_id = ch.id), 0),
-       ch.unit_code, ch.overrun
+       ch.unit_code, COALESCE(ch.external_ref, ''), ch.overrun
 FROM   charges ch
-WHERE  ch.capability_id = $1 AND ch.external_ref = $2
 `
+
+// readCharge runs chargeRecordSelect with where and its args.
+func (s *UsageStore) readCharge(ctx context.Context, where string, args ...any) (capability.ChargeRecord, error) {
+	var (
+		rec              capability.ChargeRecord
+		amount, refunded pgtype.Numeric
+	)
+	err := s.pool.QueryRow(ctx, chargeRecordSelect+where, args...).
+		Scan(&rec.ChargeID, &rec.CapabilityID, &amount, &refunded, &rec.UnitCode, &rec.ExternalRef, &rec.Overrun)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+	}
+	if err != nil {
+		return capability.ChargeRecord{}, fmt.Errorf("capability/postgres: read charge: %w", err)
+	}
+	rec.Amount, rec.Refunded = floatFromNumeric(amount), floatFromNumeric(refunded)
+	return rec, nil
+}
+
+// GetCharge implements capability.Meter.
+func (s *UsageStore) GetCharge(ctx context.Context, chargeID uuid.UUID) (capability.ChargeRecord, error) {
+	return s.readCharge(ctx, `WHERE ch.id = $1`, chargeID)
+}
 
 // ChargeByRef implements capability.Meter.
 func (s *UsageStore) ChargeByRef(ctx context.Context, capID uuid.UUID, externalRef string) (capability.ChargeRecord, error) {
 	if externalRef == "" {
 		return capability.ChargeRecord{}, capability.ErrChargeNotFound
 	}
-	rec := capability.ChargeRecord{CapabilityID: capID, ExternalRef: externalRef}
-	var amount, refunded pgtype.Numeric
-	err := s.pool.QueryRow(ctx, chargeRecordQuery, capID, externalRef).
-		Scan(&rec.ChargeID, &amount, &refunded, &rec.UnitCode, &rec.Overrun)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return capability.ChargeRecord{}, capability.ErrChargeNotFound
-	}
-	if err != nil {
-		return capability.ChargeRecord{}, fmt.Errorf("capability/postgres: charge by ref: %w", err)
-	}
-	rec.Amount, rec.Refunded = floatFromNumeric(amount), floatFromNumeric(refunded)
-	return rec, nil
+	return s.readCharge(ctx, `WHERE ch.capability_id = $1 AND ch.external_ref = $2`, capID, externalRef)
 }
 
 // refundableQuery reads what is left of a charge and resolves the amount to

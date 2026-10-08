@@ -118,6 +118,11 @@ type Meter[TX any] interface {
 	// released or expired reservation returns ErrReservationNotFound.
 	Settle(ctx context.Context, req SettleRequest, onCharged func(ctx context.Context, tx TX) error) (ChargeReceipt, error)
 
+	// GetCharge returns one charge of the ledger, by the ChargeID its
+	// receipt carried — the id Refund takes. ErrChargeNotFound when there
+	// is none.
+	GetCharge(ctx context.Context, chargeID uuid.UUID) (ChargeRecord, error)
+
 	// ChargeByRef returns the charge a capability took under externalRef
 	// (ChargeRequest.ExternalRef), so a reporter can reconcile its own
 	// records with the ledger. ErrChargeNotFound when there is none.

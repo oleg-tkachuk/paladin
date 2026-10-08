@@ -13,6 +13,7 @@
 package storetest
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"slices"
@@ -121,6 +122,7 @@ func Run(t *testing.T, setup func(t *testing.T) Env) {
 	}{
 		{"InsertReadsBack", checkRoundTrip},
 		{"InsertRefusesADuplicate", checkDuplicate},
+		{"GetRecordReadsBackIssuanceAndRevocation", checkRecord},
 		{"UnknownIDs", checkUnknown},
 		{"RevokeIsIdempotentAndReachesDescendants", checkRevoke},
 		{"CascadeRecordsEveryDescendant", checkCascade},
@@ -147,6 +149,52 @@ func checkRoundTrip(t *testing.T, f fixture) {
 	}
 	if diff := diffCapabilities(*got, want); diff != "" {
 		t.Fatalf("Get read back a different capability: %s", diff)
+	}
+}
+
+func checkRecord(t *testing.T, f fixture) {
+	parent := f.live(t, "agent:parent", uuid.Nil)
+	child := f.live(t, "agent:child", parent.ID)
+	cascadeRoot := f.live(t, "agent:cascade", uuid.Nil)
+	cascadeChild := f.live(t, "agent:cascade-child", cascadeRoot.ID)
+	record := func(id uuid.UUID) capability.Record {
+		t.Helper()
+		r, err := f.Store.GetRecord(f.Ctx, id)
+		if err != nil {
+			t.Fatalf("GetRecord %s: %v", id, err)
+		}
+		return r
+	}
+
+	r := record(parent.ID)
+	if diff := diffCapabilities(r.Capability, parent); diff != "" {
+		t.Errorf("GetRecord read back a different capability: %s", diff)
+	}
+	if r.IssuedBy != issuedBy || r.Revocation != nil {
+		t.Errorf("before any revoke: issued by %+v, revocation %+v; want %+v and none", r.IssuedBy, r.Revocation, issuedBy)
+	}
+
+	f.revoke(t, parent.ID, false)
+	if err := f.Store.Revoke(f.Ctx, capability.RevokeRequest{ID: parent.ID, Reason: "again", Actor: "someone-else"}); err != nil {
+		t.Fatal(err)
+	}
+	rev := record(parent.ID).Revocation
+	if rev == nil || rev.Reason != "test" || rev.Actor != "storetest" || rev.Cascade || rev.RevokedAt.IsZero() {
+		t.Errorf("revocation = %+v; want the first revoke's reason and actor, not cascading, with a time", rev)
+	}
+	if rev := record(child.ID).Revocation; rev != nil {
+		t.Errorf("a child stopped through its parent has an entry of its own: %+v", rev)
+	}
+	f.revoke(t, cascadeRoot.ID, true)
+	for _, id := range []uuid.UUID{cascadeRoot.ID, cascadeChild.ID} {
+		if rev := record(id).Revocation; rev == nil || !rev.Cascade {
+			t.Errorf("%s after a cascading revoke: revocation %+v, want a cascading entry", id, rev)
+		}
+	}
+	for _, id := range []uuid.UUID{uuid.New(), uuid.Nil} {
+		if _, err := f.Store.GetRecord(f.Ctx, id); !errors.Is(err, capability.ErrNotFound) {
+			t.Errorf("GetRecord %s: err = %v, want ErrNotFound", id, err)
+		}
 	}
 }
 
@@ -358,6 +406,19 @@ func checkBiscuit(t *testing.T, f fixture) {
 	}
 	if !isRevoked(otherID, copyID) || isRevoked(otherID) {
 		t.Error("IsBiscuitRevoked must hold for a token carrying a revoked id, and only then")
+	}
+	if err := store.RevokeBiscuit(f.Ctx, capability.RevokeBiscuitRequest{
+		CapabilityID: live.ID, RevocationID: copyID, Reason: "again", Actor: "someone-else",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.GetBiscuitRevocation(f.Ctx, copyID)
+	if err != nil || got.CapabilityID != live.ID || !bytes.Equal(got.RevocationID, copyID) ||
+		got.Reason != "test" || got.Actor != "storetest" || got.RevokedAt.IsZero() {
+		t.Errorf("GetBiscuitRevocation = %+v, %v; want the first revoke of %s", got, err, live.ID)
+	}
+	if _, err := store.GetBiscuitRevocation(f.Ctx, otherID); !errors.Is(err, capability.ErrNotFound) {
+		t.Errorf("GetBiscuitRevocation of an id never revoked: err = %v, want ErrNotFound", err)
 	}
 	if err := revoke(expired.ID, oldCopyID); err != nil {
 		t.Fatal(err)

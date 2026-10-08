@@ -364,6 +364,14 @@ func (f *fakeUsage) ReleaseExpired(context.Context) (int64, error) { return 0, n
 
 // ChargeByRef finds nothing: the interceptor never charges under an external
 // ref, so this fake keeps none.
+func (f *fakeUsage) GetCharge(_ context.Context, id uuid.UUID) (capability.ChargeRecord, error) {
+	c, ok := f.charges[id]
+	if !ok {
+		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+	}
+	return capability.ChargeRecord{ChargeID: id, CapabilityID: c.capID, Amount: c.amount, Refunded: c.refunded}, nil
+}
+
 func (f *fakeUsage) ChargeByRef(context.Context, uuid.UUID, string) (capability.ChargeRecord, error) {
 	return capability.ChargeRecord{}, capability.ErrChargeNotFound
 }

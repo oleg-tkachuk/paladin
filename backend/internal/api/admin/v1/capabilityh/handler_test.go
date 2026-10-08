@@ -52,6 +52,13 @@ func (s *fakeStore) Get(_ context.Context, id uuid.UUID) (*capability.Capability
 	}
 	return nil, capability.ErrNotFound // the Store contract's sentinel
 }
+func (s *fakeStore) GetRecord(ctx context.Context, id uuid.UUID) (capability.Record, error) {
+	c, err := s.Get(ctx, id)
+	if err != nil {
+		return capability.Record{}, err
+	}
+	return capability.Record{Capability: *c}, nil
+}
 func (s *fakeStore) IsRevoked(context.Context, uuid.UUID) (bool, error) { return false, nil }
 func (s *fakeStore) Revoke(context.Context, capability.RevokeRequest) error {
 	return errors.New("not used")

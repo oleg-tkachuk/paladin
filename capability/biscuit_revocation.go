@@ -43,6 +43,20 @@ type BiscuitRevocationStore interface {
 	// capability it cannot see, and an ErrInvalidRequest for an empty
 	// revocation id.
 	RevokeBiscuit(ctx context.Context, req RevokeBiscuitRequest) error
+
+	// GetBiscuitRevocation reads back what RevokeBiscuit wrote for one
+	// revocation id. ErrNotFound when the id is not revoked, or belongs to a
+	// capability the caller cannot see.
+	GetBiscuitRevocation(ctx context.Context, revocationID []byte) (BiscuitRevocation, error)
+}
+
+// BiscuitRevocation is one revoked Biscuit copy, as RevokeBiscuit wrote it.
+type BiscuitRevocation struct {
+	CapabilityID uuid.UUID
+	RevocationID []byte
+	RevokedAt    time.Time
+	Reason       string
+	Actor        string
 }
 
 // RevokeBiscuitRequest is the input shape for BiscuitRevocationStore.RevokeBiscuit.

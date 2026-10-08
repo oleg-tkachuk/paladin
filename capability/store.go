@@ -43,6 +43,12 @@ type Store interface {
 	// sentinel to return without importing someone else's persistence.
 	Get(ctx context.Context, id uuid.UUID) (*Capability, error)
 
+	// GetRecord reads back everything Insert and Revoke wrote about a
+	// capability: the capability, who issued it, and its own revocation
+	// entry if it has one. ErrNotFound as Get. Get stays the read on the
+	// verification path; this one is for audit and admin tooling.
+	GetRecord(ctx context.Context, id uuid.UUID) (Record, error)
+
 	// IsRevoked reports whether the capability, or any ancestor of it
 	// that is still on record, is in the revocation list. Answering for
 	// the chain is what makes revoking an orchestrator stop the workers it
@@ -87,6 +93,27 @@ type Store interface {
 // whose record is absent was forged or purged, which is an authentication
 // failure, not a missing entity.
 var ErrNotFound = errors.New("capability: not found")
+
+// Record is a capability as the Store holds it.
+type Record struct {
+	Capability Capability
+	// IssuedBy is the principal Insert was given.
+	IssuedBy Principal
+	// Revocation is the capability's own revocation entry; nil when it has
+	// none. A capability stopped only through an ancestor has none — ask
+	// IsRevoked whether it verifies.
+	Revocation *Revocation
+}
+
+// Revocation is one entry of the revocation list, as Revoke wrote it.
+type Revocation struct {
+	RevokedAt time.Time
+	Reason    string
+	Actor     string
+	// Cascade reports that the entry was written by a cascading revoke —
+	// of this capability or of an ancestor.
+	Cascade bool
+}
 
 // ErrAlreadyExists is Store.Insert given an id already on record.
 var ErrAlreadyExists = errors.New("capability: already exists")

@@ -96,6 +96,10 @@ func (s *Store) Insert(ctx context.Context, c capability.Capability, issuedBy ca
 	if err != nil {
 		return fmt.Errorf("capability/postgres: marshal principal: %w", err)
 	}
+	issuedByPayload, err := json.Marshal(issuedBy)
+	if err != nil {
+		return fmt.Errorf("capability/postgres: marshal issuing principal: %w", err)
+	}
 	caveats, err := json.Marshal(c.Caveats)
 	if err != nil {
 		return fmt.Errorf("capability/postgres: marshal caveats: %w", err)
@@ -105,11 +109,13 @@ func (s *Store) Insert(ctx context.Context, c capability.Capability, issuedBy ca
 INSERT INTO capability_records (
     id, tenant_id, issuer, principal_kind, principal_subject,
     principal_payload, audience, caveats, parent_id, generation,
-    issued_at, not_before, expires_at, created_by, confirmation_jkt
+    issued_at, not_before, expires_at, created_by, confirmation_jkt,
+    issued_by
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6::jsonb, $7, $8::jsonb, $9, $10,
-    $11, $12, $13, $14, NULLIF($15, '')
+    $11, $12, $13, $14, NULLIF($15, ''),
+    $16::jsonb
 );
 `
 	var parent *uuid.UUID
@@ -160,6 +166,7 @@ INSERT INTO capability_records (
 		// module still depends on no auth pipeline.
 		issuedBy.Subject,
 		c.ConfirmationJKT,
+		issuedByPayload,
 	); err != nil {
 		// The lock above makes this unreachable short of a tenant removed by
 		// something that ignores it; the constraint is the last word either
@@ -189,6 +196,57 @@ WHERE  id = $1;
 `
 	row := s.pool.QueryRow(ctx, stmt, id)
 	return scanRow(row)
+}
+
+// getRecordQuery is Get's columns, then who issued the capability and its
+// own revocation entry, if any. capability_revocations is visible through
+// the capability it names (004), so the join sees what Get sees.
+const getRecordQuery = `
+SELECT cr.id, cr.tenant_id, cr.issuer, cr.principal_kind, cr.principal_subject,
+       cr.principal_payload, cr.audience, cr.caveats, cr.parent_id, cr.generation,
+       cr.issued_at, cr.not_before, cr.expires_at, COALESCE(cr.confirmation_jkt, ''),
+       cr.created_by, cr.issued_by,
+       rv.revoked_at, COALESCE(rv.reason, ''), COALESCE(rv.actor, ''), COALESCE(rv.cascade, false)
+FROM   capability_records cr
+LEFT   JOIN capability_revocations rv ON rv.id = cr.id
+WHERE  cr.id = $1;
+`
+
+// trailingScanner scans a row into scanRow's destinations, then into extra:
+// a query that selects Get's columns first and more after them.
+type trailingScanner struct {
+	row   scanner
+	extra []any
+}
+
+func (t trailingScanner) Scan(dest ...any) error { return t.row.Scan(append(dest, t.extra...)...) }
+
+// GetRecord implements capability.Store.
+func (s *Store) GetRecord(ctx context.Context, id uuid.UUID) (capability.Record, error) {
+	var (
+		createdBy     string
+		issuedByRaw   []byte
+		revokedAt     *time.Time
+		reason, actor string
+		cascade       bool
+	)
+	c, err := scanRow(trailingScanner{
+		row:   s.pool.QueryRow(ctx, getRecordQuery, id),
+		extra: []any{&createdBy, &issuedByRaw, &revokedAt, &reason, &actor, &cascade},
+	})
+	if err != nil {
+		return capability.Record{}, err
+	}
+	rec := capability.Record{Capability: *c, IssuedBy: capability.Principal{Subject: createdBy}}
+	if issuedByRaw != nil {
+		if err := json.Unmarshal(issuedByRaw, &rec.IssuedBy); err != nil {
+			return capability.Record{}, fmt.Errorf("capability/postgres: parse issuing principal: %w", err)
+		}
+	}
+	if revokedAt != nil {
+		rec.Revocation = &capability.Revocation{RevokedAt: revokedAt.UTC(), Reason: reason, Actor: actor, Cascade: cascade}
+	}
+	return rec, nil
 }
 
 // IsRevoked implements capability.Store: true when the capability or any

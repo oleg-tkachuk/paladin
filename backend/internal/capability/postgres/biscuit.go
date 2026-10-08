@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -36,6 +38,26 @@ SELECT EXISTS (
 		return false, fmt.Errorf("capability/postgres: is_biscuit_revoked: %w", err)
 	}
 	return revoked, nil
+}
+
+// GetBiscuitRevocation implements capability.BiscuitRevocationStore. The row
+// is visible through its capability (038), as RevokeBiscuit's target is.
+func (s *Store) GetBiscuitRevocation(ctx context.Context, revocationID []byte) (capability.BiscuitRevocation, error) {
+	const stmt = `
+SELECT capability_id, revoked_at, reason, actor
+FROM   capability_biscuit_revocations
+WHERE  revocation_id = $1;
+`
+	r := capability.BiscuitRevocation{RevocationID: slices.Clone(revocationID)}
+	err := s.pool.QueryRow(ctx, stmt, revocationID).Scan(&r.CapabilityID, &r.RevokedAt, &r.Reason, &r.Actor)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return capability.BiscuitRevocation{}, ErrNotFound
+	}
+	if err != nil {
+		return capability.BiscuitRevocation{}, fmt.Errorf("capability/postgres: get biscuit revocation: %w", err)
+	}
+	r.RevokedAt = r.RevokedAt.UTC()
+	return r, nil
 }
 
 // RevokeBiscuit implements capability.BiscuitRevocationStore. As in Revoke,
