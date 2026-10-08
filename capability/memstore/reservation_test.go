@@ -131,3 +131,18 @@ func TestReservationsCountAgainstAncestors(t *testing.T) {
 		t.Errorf("parent held = %v, want 20", got.ReservedAmount)
 	}
 }
+
+// A hold that would cross the tenant aggregate is refused, and holds nothing.
+func TestReservationsCountAgainstTheTenantBudget(t *testing.T) {
+	ctx := context.Background()
+	u, capID, tenant, _ := reservationFixture(t)
+	if _, err := u.Charge(ctx, capability.ChargeRequest{CapabilityID: uuid.New(), TenantID: tenant, Amount: 90}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := u.Reserve(ctx, capability.ReserveRequest{CapabilityID: capID, TenantID: tenant, Amount: 11}); !errors.Is(err, capability.ErrTenantBudgetExceeded) {
+		t.Fatalf("hold past the tenant budget: err = %v, want ErrTenantBudgetExceeded", err)
+	}
+	if b, _ := u.GetTenantBudget(ctx, tenant); b.ReservedAmount != 0 {
+		t.Errorf("tenant held after a refused hold = %v, want 0", b.ReservedAmount)
+	}
+}

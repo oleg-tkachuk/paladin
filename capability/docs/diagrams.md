@@ -15,7 +15,9 @@ process.
 The module ships the primitive and its contracts; the consumer supplies the
 storage behind them. `memstore` is the in-memory reference implementation, and
 Paladin's PostgreSQL adapters are another. The two Biscuit contracts are needed
-only by a consumer that accepts the Biscuit form.
+only by a consumer that accepts the Biscuit form, and `ReplayCache` only by
+one that binds capabilities to keys. `storetest` and `metertest` check a
+store against its contract from the store's own tests.
 
 ```mermaid
 flowchart LR
@@ -23,10 +25,10 @@ flowchart LR
 
     subgraph mod ["capability (this module)"]
         direction TB
-        issuer["<b>Issuer</b><br/>Issue · Delegate"]
+        issuer["<b>Issuer</b><br/>Issue · Delegate · Biscuit"]
         signer["<b>Signer</b><br/>NewEd25519Signer · JWT EdDSA"]
         narrows["<b>Narrows</b><br/>child ⊆ parent"]
-        verifier["<b>StandardVerifier</b><br/>Verify(token, audience)"]
+        verifier["<b>StandardVerifier</b><br/>Verify(token, audience) · BiscuitCopy"]
         caveats["<b>Caveats</b><br/>Check · CheckSource · MatchResource"]
         cache["CachedRevocationChecker<br/>TTL · single-flight"]
         bcache["CachedBiscuitRevocationChecker<br/>TTL · per token"]
@@ -34,15 +36,18 @@ flowchart LR
         metering["MeteringStore[TX]<br/>WithMetering · OTel counters"]
         static["StaticKeyResolver<br/>SetKey · RemoveKey"]
         remote["RemoteJWKSResolver<br/>ETag · MaxStale"]
+        dpop["DPoPVerifier<br/>Check(proof) · NewDPoPProof"]
+        suites["storetest · metertest<br/>conformance suites"]
     end
 
     subgraph contracts ["contracts the consumer implements"]
         direction TB
-        store["<b>Store</b><br/>Insert · Get · IsRevoked · Revoke<br/>PurgeExpired · ListByPrincipal"]
-        usage["<b>UsageStore[TX]</b><br/>Meter[TX]: Charge · Reserve · Settle · Refund<br/>TenantBudgets · UsageHousekeeping"]
+        store["<b>Store</b><br/>Insert · Get · GetRecord · IsRevoked · Revoke<br/>PurgeExpired · ListByPrincipal"]
+        usage["<b>UsageStore[TX]</b><br/>Meter[TX]: Bump · Charge · Reserve · Settle · Refund · Release<br/>GetUsage · GetCharge · ChargeByRef · GetReservation · ListReservations<br/>TenantBudgets · UsageHousekeeping"]
         keys["<b>KeyResolver</b><br/>PublicKey(kid)"]
-        brev["<b>BiscuitRevocationStore</b><br/>IsBiscuitRevoked · RevokeBiscuit"]
+        brev["<b>BiscuitRevocationStore</b><br/>IsBiscuitRevoked · RevokeBiscuit<br/>GetBiscuitRevocation"]
         cusage["<b>CopyUsageReader</b><br/>CopyUsage(revocation ids)"]
+        replay["<b>ReplayCache</b><br/>Seen(jti) · MemoryReplayCache ships"]
     end
 
     impl[("memstore · PostgreSQL · …")]
@@ -66,6 +71,9 @@ flowchart LR
     static -. "implements" .-> keys
     remote -. "implements" .-> keys
     remote -- "HTTP GET" --> jwks
+    caller -. "key-bound tokens" .-> dpop --> replay
+    suites -. "check" .-> store
+    suites -. "check" .-> usage
     store --> impl
     usage --> impl
     brev --> impl
@@ -78,15 +86,16 @@ flowchart LR
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     class caller client
     class issuer,signer,narrows,verifier,caveats role
-    class cache,metering,static,remote,bcache,attenuate optional
-    class store,usage,keys,impl,brev,cusage store
+    class cache,metering,static,remote,bcache,attenuate,dpop,suites optional
+    class store,usage,keys,impl,brev,cusage,replay store
     class jwks,otel external
 ```
 
-`Store` and `UsageStore` are separate types on purpose: both declare a `Get`
-with different signatures, so one type cannot satisfy both. `TX` is the
+Every read names what it reads — `Store.Get`, `Meter.GetUsage`,
+`TenantBudgets.GetTenantBudget` — so one type may implement `Store` and
+`UsageStore` together, or each apart as `memstore` does. `TX` is the
 consumer's transaction handle; the module only threads it back through
-`Meter.Charge`, which is why it has no database dependency.
+`Meter.Charge` and `Meter.Settle`, which is why it has no database dependency.
 
 ## Lifecycle of a capability
 
@@ -246,15 +255,21 @@ The sealed token presented on its own is refused, so it cannot be lifted out
 to shed an attenuation. `ErrBiscuitAttenuation` and
 `ErrCopyCountersNotMetered` both match `ErrInvalidSignature`.
 
+A key-bound capability (`ConfirmationJKT` set) passes one more gate after
+`Verify`: `DPoPVerifier.Check` wants a proof signed by that key over the
+request's method, URL and token, issued within `DefaultDPoPWindow` and not
+seen before by the `ReplayCache`. Every refusal matches `ErrInvalidSignature`.
+
 Verification proves the token is genuine. What the bearer may do with it is a
 second, separate step, `Caveats.Check`, evaluated per operation:
 
 ```mermaid
 flowchart LR
-    req(["CheckRequest<br/>Op · Resource · HasIdempotencyKey · ResourceTainted"])
+    req(["CheckRequest<br/>Op · Effect · Resource · HasIdempotencyKey · ResourceTainted"])
+    eff{"Op.ResolveEffect(Effect)<br/>read or write"}
     op{"Op ∈ Ops"}
     res{"AllowsResource(Resource)<br/>prefix at a / boundary"}
-    idem{"mutating Op and<br/>IdempotencyKeyRequired<br/>→ key present"}
+    idem{"write and<br/>IdempotencyKeyRequired<br/>→ key present"}
     taint{"read of a tainted resource<br/>→ AllowTaintedRead"}
     ok(["nil"])
 
@@ -262,41 +277,51 @@ flowchart LR
     e2["ErrResourceNotAllowed"]
     e3["ErrIdempotencyKeyRequired"]
     e4["ErrTaintedReadNotAllowed"]
+    e0["ErrEffectConflict"]
 
-    req --> op -- yes --> res -- yes --> idem -- yes --> taint -- yes --> ok
+    req --> eff -- resolved --> op -- yes --> res -- yes --> idem -- yes --> taint -- yes --> ok
     op -- no --> e1
     res -- no --> e2
     idem -- no --> e3
     taint -- no --> e4
+    eff -- "built-in Op declared otherwise" --> e0
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     class req,ok client
-    class op,res,idem,taint role
-    class e1,e2,e3,e4 external
+    class eff,op,res,idem,taint role
+    class e0,e1,e2,e3,e4 external
 ```
 
-Each of the four also matches `ErrCaveatViolation`. The source-address caveat
+A built-in operation keeps its own effect; a consumer's operation is a write
+unless its `Effect` says otherwise. `ErrEffectConflict` is a programming error,
+not a caveat violation; each of the other four matches `ErrCaveatViolation`.
+The source-address caveat
 is per connection and checked by `Caveats.CheckSource`, which fails closed on
 an unknown address with `ErrSourceIPNotAllowed`. Budget and request ceilings
 are stateful and belong to the `UsageStore`.
 
 ## Delegation: attenuate, never escalate
 
-`Issuer.Delegate` refuses a parent that is expired or revoked, clamps the
-child's expiry to the parent's, and then requires `Narrows(parent, child)` to
-pass before anything is persisted or signed.
+`Issuer.Delegate` fills what the request leaves out from the parent — tenant,
+audience, key binding, and the caveats under `InheritCaveats` — refuses a
+parent that is expired or revoked, clamps the child's expiry to the parent's,
+and then requires `Narrows(parent, child)` to pass before anything is
+persisted or signed.
 
 ```mermaid
 flowchart TB
-    req(["DelegateRequest<br/>Parent · Subject · Caveats or InheritCaveats · TTL"])
-    valid{"Caveats.Validate<br/>audience non-empty"}
+    req(["DelegateRequest<br/>Parent · Subject · Audience · Caveats or InheritCaveats<br/>TTL · NotBefore · ConfirmationJKT"])
+    fill["unset tenant, audience, binding<br/>taken from the parent"]
+    valid{"Parent.ID set · audience valid<br/>Caveats.Validate · thumbprint valid"}
+    copyp{"Parent.Copies empty<br/>(not a copy with limits of its own)"}
     alive{"parent not expired<br/>Store.IsRevoked(parent) = false"}
     clamp["ExpiresAt = min(now + TTL, parent.ExpiresAt)"]
 
     subgraph nar ["Narrows(parent, child)"]
         direction TB
+        n0["Audience ⊆ parent's · ExpiresAt ≤ parent's<br/>same tenant · a bound parent's child stays bound"]
         n1["Ops ⊆ parent.Ops"]
         n2["every resource reachable by the parent<br/>exact-URI parent admits no child prefix"]
         n3["MaxRequests ≤ parent's, never unlimited under a bounded parent"]
@@ -304,7 +329,7 @@ flowchart TB
         n5["MaxBudgetAmount ≤ parent's, never unlimited under a bounded parent"]
         n6["AllowTaintedRead only if the parent has it<br/>IdempotencyKeyRequired never relaxed"]
         n7["SourceIPCIDR inside a parent network"]
-        n1 --> n2 --> n3 --> n4 --> n5 --> n6 --> n7
+        n0 --> n1 --> n2 --> n3 --> n4 --> n5 --> n6 --> n7
     end
 
     persist["Store.Insert(child, issuedBy = parent.Subject)<br/>Signer.Sign(child)"]
@@ -313,21 +338,22 @@ flowchart TB
     wide["ErrDelegationTooWide"]
     unit["ErrUnitCodeMismatch"]
     dead["ErrExpired · ErrRevoked"]
-    inval["ErrInvalidCaveats · audience error"]
+    inval["ErrInvalidRequest · ErrInvalidCaveats"]
 
-    req --> valid -- yes --> alive -- yes --> clamp --> n1
+    req --> fill --> valid -- yes --> copyp -- yes --> alive -- yes --> clamp --> n0
     n7 --> persist --> ok
     valid -- no --> inval
     alive -- no --> dead
     n4 -- differs --> unit
     nar -- widens --> wide
+    copyp -- no --> wide
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
     classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     class req,ok client
-    class valid,clamp,n1,n2,n3,n4,n5,n6,n7 role
+    class fill,valid,copyp,clamp,n0,n1,n2,n3,n4,n5,n6,n7 role
     class alive,persist store
     class wide,unit,dead,inval external
 ```
@@ -404,18 +430,21 @@ flowchart TB
   it debited so a refund, settle or release returns to them.
   `CopyUsageReader` reads the counters back.
 - **Delegation from a copy** narrows from the copy as presented, not from the
-  capability's record; a copy with limits of its own cannot delegate, because
-  a server-side child would count against the capability and never the copy.
+  capability's record. A copy with limits of its own cannot delegate:
+  `Issuer.Delegate` refuses a `Parent` with `Copies` (`ErrDelegationTooWide`),
+  because a server-side child counts against the capability and never the
+  copy, and would shed its limits.
 
 ## Charge: stage, then commit
 
-`Meter.Charge` checks three ceilings and runs the consumer's side effect before
+`Meter.Charge` checks every ceiling — each Biscuit copy's, the capability's,
+each ancestor's and the tenant's — and runs the consumer's side effect before
 any counter moves. A rejection at any stage, or a failing `onCharged`, leaves
 the capability's counter, every ancestor's, the tenant aggregate and the
 ledger exactly as they were, so a retry after a rejection is safe.
 
 A cost known only afterwards goes through a reservation instead. `Reserve`
-holds an estimate against the same three ceilings, and `Settle` charges the
+holds an estimate against the same ceilings, and `Settle` charges the
 actual cost along the same path, releasing the hold in the same commit. Every
 ceiling counts open holds as well as spend, so two callers cannot both hold
 the last of a budget.
@@ -514,7 +543,7 @@ flowchart LR
     store[("<b>Store</b><br/>revoked set<br/>ParentID links")]
     cascade["CascadeChildren:<br/>a revocation entry per descendant,<br/>for the audit trail"]
     chain["IsRevoked(id):<br/>id or any ancestor revoked"]
-    cache["<b>CachedRevocationChecker</b><br/>answer cached for TTL<br/>one upstream call per id at a time<br/>errors never cached"]
+    cache["<b>CachedRevocationChecker</b><br/>answer cached for TTL<br/>one upstream call per id at a time<br/>errors never cached · a Clear mid-lookup<br/>discards that lookup's answer"]
     notify{{"consumer's revocation signal<br/>e.g. a Postgres channel"}}
     bop(["RevokeBiscuit(RevokeBiscuitRequest{CapabilityID, RevocationID})"])
     blist[("<b>BiscuitRevocationStore</b><br/>revoked block ids")]
@@ -549,6 +578,8 @@ Revoking a capability stops everything delegated from it whether or not
 `CascadeChildren` is set, because `IsRevoked` walks the ancestors; the flag
 only adds the per-descendant entries that name each stopped capability. Without
 a revocation signal, a verifier learns of a revocation within the cache TTL.
+A `Clear` or `Invalidate` also detaches any lookup in flight, whose answer may
+predate the revocation, so it is neither cached nor shared with later checks.
 Revoked Biscuit copies travel the same way, on their own list and cache; one
 signal clears both.
 

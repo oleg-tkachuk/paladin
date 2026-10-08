@@ -86,6 +86,9 @@ func (r *StaticKeyResolver) Keys() map[string]ed25519.PublicKey {
 // larger is refused before any decoding is spent on it.
 const DefaultMaxTokenBytes = 16 << 10
 
+// defaultLeeway is VerifierConfig.Leeway when unset.
+const defaultLeeway = 30 * time.Second
+
 // VerifierConfig wires the verifier. Keys, Revocations and TrustedIssuers
 // are required.
 type VerifierConfig struct {
@@ -166,7 +169,7 @@ func NewStandardVerifier(cfg VerifierConfig) (*StandardVerifier, error) {
 		cfg.Now = time.Now
 	}
 	if cfg.Leeway == 0 {
-		cfg.Leeway = 30 * time.Second
+		cfg.Leeway = defaultLeeway
 	}
 	if cfg.MaxTokenBytes == 0 {
 		cfg.MaxTokenBytes = DefaultMaxTokenBytes

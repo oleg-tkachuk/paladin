@@ -14,8 +14,8 @@ It is a separate Go module with its own version stream — see
 [Versioning](#versioning) before you depend on it.
 
 [docs/diagrams.md](docs/diagrams.md) draws the module: the contract boundary,
-a capability's lifecycle, the verification gates, delegation, the charge and
-reservation path, and how a revocation reaches the verifiers.
+a capability's lifecycle, the verification gates, delegation, Biscuit copies,
+the charge and reservation path, and how a revocation reaches the verifiers.
 
 ## The problem
 
@@ -98,7 +98,28 @@ The token must carry `typ: paladin-cap+jwt` and a tenant, and may be at most
 `KeyIssuers` (kid → issuer) so one issuer's key cannot sign for another.
 Verifiers running apart from the issuer resolve keys with
 `RemoteJWKSResolver`, which caches the issuer's JWKS, picks up a rotated-in
-kid on first sight (rate-limited), and fails closed after `MaxStale`.
+kid on first sight (rate-limited), and fails closed after `MaxStale`:
+
+```go
+keys, err := capability.NewRemoteJWKSResolver(capability.RemoteJWKSConfig{
+    URL: "https://issuer.example.com/.well-known/jwks.json",
+})
+verifier, err := capability.NewStandardVerifier(capability.VerifierConfig{
+    Keys: keys, Revocations: revocations, TrustedIssuers: []string{"paladin"},
+})
+```
+
+The issuer serves that document with `MarshalJWKS`; `ParseJWKS` reads one
+back, for a resolver of your own. It skips an entry it cannot use — a foreign
+`kty`, no kid, a malformed key — rather than refusing the set, so one bad
+entry does not take every other key out of service mid-rotation.
+
+### Inspect a token without trusting it
+
+`Decode` reads a token's claims and checks nothing; `VerifySignature` checks
+only its signature against one key. Both are for tooling — showing what a
+token grants, or which key signed it. Neither applies expiry, audience or
+revocation, so never authorise a request on either: that is `Verify`.
 
 ## Enforce the caveats on every operation
 
@@ -156,7 +177,7 @@ spawned, without calling back to any admin API:
 
 ```go
 child, childToken, err := issuer.Delegate(ctx, capability.DelegateRequest{
-    Parent:  *cap,                      // the verified parent
+    Parent:  cap,                       // the verified parent
     Subject: capability.Principal{ /* the sub-agent */ },
     TTL:     2 * time.Minute,
     Caveats: capability.Caveats{
@@ -256,7 +277,9 @@ counts them when they are passed on as `Copies` in `BumpRequest`,
 the token is refused rather than accepted with its limits unkept.
 `verifier.BiscuitCopy` names the limits in force on a copy, on any verifier,
 and a `CopyUsageReader` (`memstore` implements one) reads what each has
-counted.
+counted. A copy with limits of its own cannot delegate — a server-side child
+would count against the capability, never the copy — so `Delegate` refuses
+it with `ErrDelegationTooWide`; its holder attenuates it instead.
 
 One copy can also be revoked on its own. `verifier.BiscuitCopy(ctx, token)`
 checks the token and names its capability and the revocation id of its last
@@ -285,9 +308,9 @@ if errors.Is(err, capability.ErrBudgetExceeded) {
 }
 ```
 
-Three ceilings are checked: the capability's own, each ancestor's, then the
-tenant aggregate. If **any** rejects, no counter moves, so a retry after
-rejection is safe.
+Every ceiling is checked: each Biscuit copy's own (the `Copies` you pass),
+the capability's, each ancestor's, then the tenant aggregate. If **any**
+rejects, no counter moves, so a retry after rejection is safe.
 
 `receipt.ChargeID` names the ledger row. Refund against it:
 
@@ -339,7 +362,9 @@ usage.Charge(ctx, req, func(ctx context.Context, tx MyTx) error {
 })
 ```
 
-The module never inspects `MyTx` — it only hands it back. That is why this
+`Settle` takes the same callback. It must not call back into the `Meter`: a
+store may hold its counters while the callback runs. The module never
+inspects `MyTx` — it only hands it back. That is why this
 library has no database dependency.
 
 ## Charge a cost reported after the fact
@@ -425,6 +450,7 @@ Implement these and you are done:
 | `CopyUsageReader` | Reads Biscuit copies' own counters (only to show them) | No |
 | `UsageStore[TX]` = `Meter[TX]` + `TenantBudgets` + `UsageHousekeeping` | Request and spend counters, the charges ledger, tenant ceilings | Only for atomic side effects |
 | `KeyResolver` | Public verification keys | No |
+| `ReplayCache` | DPoP proof ids seen (only for key-bound tokens; `MemoryReplayCache` ships, share one across replicas) | No |
 
 Two obligations are easy to miss. `Store.IsRevoked` answers for the
 capability's whole delegation chain, and `Meter` applies every charge and

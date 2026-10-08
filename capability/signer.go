@@ -139,7 +139,7 @@ func (s *ed25519Signer) Sign(c Capability) (string, error) {
 		return "", errors.New("capability: ExpiresAt must be after IssuedAt")
 	}
 
-	header := jwtHeader{Alg: "EdDSA", Kid: s.keyID, Typ: TokenType}
+	header := jwtHeader{Alg: algEdDSA, Kid: s.keyID, Typ: TokenType}
 	claims := jwtClaims{
 		Issuer:           c.Issuer,
 		Subject:          c.Subject.Subject,
@@ -216,7 +216,7 @@ func parseHeader(seg string) (jwtHeader, error) {
 	if err := json.Unmarshal(raw, &h); err != nil {
 		return jwtHeader{}, fmt.Errorf("capability: parse header: %w", err)
 	}
-	if h.Alg != "EdDSA" {
+	if h.Alg != algEdDSA {
 		return jwtHeader{}, fmt.Errorf("capability: unexpected alg %q (want EdDSA)", h.Alg)
 	}
 	return h, nil
@@ -269,7 +269,7 @@ func parseClaims(seg string) (*Capability, error) {
 
 // Decode parses a compact-form token without verifying the signature
 // or applying time / audience / revocation gates. Use only for tooling
-// (`paladin cap show`); production code goes through Verifier.Verify,
+// that displays a token; production code goes through Verifier.Verify,
 // which never reads a claim before the signature has checked out.
 func Decode(token string) (Capability, error) {
 	parts, err := splitToken(token)

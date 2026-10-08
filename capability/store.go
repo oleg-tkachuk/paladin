@@ -18,8 +18,8 @@ import (
 // cost flat.
 type Store interface {
 	// Insert records a capability at issuance. The persisted row holds
-	// the full claim set so admin tooling can render `paladin cap show`
-	// without parsing the JWT, and so audit can correlate without
+	// the full claim set so admin tooling can show a capability without
+	// parsing the JWT, and so audit can correlate without
 	// keeping every issued token.
 	//
 	// issuedBy is the principal that ASKED for the capability, which is not
