@@ -157,8 +157,11 @@ func TestCloudEventEnvelope_TimeIsNormalisedToUTC(t *testing.T) {
 		t.Errorf("specversion/datacontenttype = %q/%q, want 1.0/application/json",
 			env.SpecVersion, env.DataContentType)
 	}
-	if env.Source != natsDefaultSource {
-		t.Errorf("source = %q, want %q", env.Source, natsDefaultSource)
+	// Pinned as a literal rather than the constant: docs/event-delivery-dedup.md
+	// promises consumers this exact value, so renaming it must fail here.
+	const documentedSource = "paladin"
+	if env.Source != documentedSource {
+		t.Errorf("source = %q, want %q", env.Source, documentedSource)
 	}
 }
 
