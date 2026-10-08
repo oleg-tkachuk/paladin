@@ -569,6 +569,10 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    # A Python uv installs, not the runner's: only a uv-managed one is what
+    # cache-python saves, and the runner's moves with the image.
+    env:
+      UV_PYTHON_PREFERENCE: only-managed
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -583,6 +587,9 @@ jobs:
           cache-python: true
           prune-cache: true
           cache-dependency-glob: sdk/python/uv.lock
+
+      - name: Pin the Python SDK's interpreter
+        run: echo "UV_PYTHON=${PY_SDK_PYTHON}" >> "$GITHUB_ENV"
 
       - name: Run the lifecycle stress
         working-directory: sdk/python
