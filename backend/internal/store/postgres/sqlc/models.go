@@ -450,16 +450,19 @@ type CapabilityUsage struct {
 }
 
 type Charge struct {
-	ID           pgtype.UUID        `json:"id"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	TenantSlug   string             `json:"tenant_slug"`
-	CapabilityID pgtype.UUID        `json:"capability_id"`
-	OccurredAt   pgtype.Timestamptz `json:"occurred_at"`
-	Amount       pgtype.Numeric     `json:"amount"`
-	UnitCode     string             `json:"unit_code"`
-	Op           string             `json:"op"`
-	ActorSubject string             `json:"actor_subject"`
-	CopyIds      [][]byte           `json:"copy_ids"`
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	TenantSlug    string             `json:"tenant_slug"`
+	CapabilityID  pgtype.UUID        `json:"capability_id"`
+	OccurredAt    pgtype.Timestamptz `json:"occurred_at"`
+	Amount        pgtype.Numeric     `json:"amount"`
+	UnitCode      string             `json:"unit_code"`
+	Op            string             `json:"op"`
+	ActorSubject  string             `json:"actor_subject"`
+	CopyIds       [][]byte           `json:"copy_ids"`
+	ExternalRef   *string            `json:"external_ref"`
+	ReservationID pgtype.UUID        `json:"reservation_id"`
+	Overrun       bool               `json:"overrun"`
 }
 
 type ChargeRefund struct {

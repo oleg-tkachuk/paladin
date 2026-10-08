@@ -342,6 +342,42 @@ usage.Charge(ctx, req, func(ctx context.Context, tx MyTx) error {
 The module never inspects `MyTx` — it only hands it back. That is why this
 library has no database dependency.
 
+## Charge a cost reported after the fact
+
+Some costs never pass through your verifier: a call made straight to a
+provider whose price arrives later, in a usage record or on an event stream
+delivered at least once. Two things change for such a cost.
+
+**It may arrive twice.** Name it with the id your records already give it, and
+the capability is charged once per name; a repeat returns the first receipt
+with `Replayed` set and runs no callback:
+
+```go
+receipt, err := usage.Charge(ctx, capability.ChargeRequest{
+    CapabilityID: capID, TenantID: tenantID, Amount: cost,
+    MaxBudget:   rec.Caveats.MaxBudgetAmount, // the stored record, from Store.Get
+    ExternalRef: event.CallID,
+    Overrun:     capability.OverrunRecord,
+}, nil)
+```
+
+A settle is idempotent on its reservation in the same way: settling one twice
+returns the first charge.
+
+**It has already been spent.** Refusing it would only leave the ledger short.
+`OverrunRecord` charges it past every ceiling it crosses and sets
+`receipt.Overrun`; the crossed ceiling then refuses every later charge and
+reservation made with the default `OverrunReject`, which is what stops the
+next cost before it is incurred. Keep `OverrunReject` for anything you can
+still decline.
+
+A reporter with no token in hand reads the ceiling from the capability's
+stored record (`Store.Get`), as the meter already does for every ancestor. A
+price that is not known yet is not a price of zero: hold the estimate and
+settle when it is known, or let the hold lapse and count against the ceilings
+until `ReleaseExpired` runs. Costs below a micro round to zero one at a time;
+sum them on your side and charge the total.
+
 ## Revoke
 
 ```go

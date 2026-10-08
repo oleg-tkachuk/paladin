@@ -99,6 +99,13 @@ type LedgerEntry struct {
 	// Copies are the revocation ids of the Biscuit copies the charge also
 	// debited, innermost first.
 	Copies [][]byte
+	// ExternalRef is the charge's ChargeRequest.ExternalRef; empty for none.
+	ExternalRef string
+	// ReservationID is the reservation the charge settled; uuid.Nil for a
+	// charge made directly.
+	ReservationID uuid.UUID
+	// Overrun reports that the charge crossed a ceiling (OverrunRecord).
+	Overrun bool
 }
 
 // New returns an empty store. TX is inferred from the call site:
@@ -394,6 +401,7 @@ func (s *UsageStore[TX]) BumpRequest(_ context.Context, req capability.RequestBu
 
 // hold is one open reservation and every counter it holds against.
 type hold struct {
+	id        uuid.UUID
 	capID     uuid.UUID
 	ancestors []uuid.UUID
 	tenantID  uuid.UUID
@@ -419,6 +427,12 @@ func (s *UsageStore[TX]) Charge(
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
+	if err := capability.ValidateOverrun(req.Overrun); err != nil {
+		return capability.ChargeReceipt{}, err
+	}
+	if err := capability.ValidateExternalRef(req.ExternalRef); err != nil {
+		return capability.ChargeReceipt{}, err
+	}
 	if req.TenantID == uuid.Nil {
 		return capability.ChargeReceipt{}, errors.New("memstore: charge requires TenantID")
 	}
@@ -430,7 +444,32 @@ func (s *UsageStore[TX]) Charge(
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if req.ExternalRef != "" {
+		if e, ok := s.findLocked(func(e LedgerEntry) bool {
+			return e.CapabilityID == req.CapabilityID && e.ExternalRef == req.ExternalRef
+		}); ok {
+			return s.replayLocked(e), nil
+		}
+	}
 	return s.chargeLocked(ctx, req, unit, ancestorIDs(ancestors), ancestors, nil, onCharged)
+}
+
+// findLocked returns the first ledger entry match accepts. s.mu must be held.
+func (s *UsageStore[TX]) findLocked(match func(LedgerEntry) bool) (LedgerEntry, bool) {
+	i := slices.IndexFunc(s.ledger, match)
+	if i < 0 {
+		return LedgerEntry{}, false
+	}
+	return s.ledger[i], true
+}
+
+// replayLocked is the receipt for a charge already in the ledger, returned
+// when the same charge arrives again. s.mu must be held.
+func (s *UsageStore[TX]) replayLocked(e LedgerEntry) capability.ChargeReceipt {
+	return capability.ChargeReceipt{
+		ChargeID: e.ID, Spent: s.usage[e.CapabilityID].SpentAmount,
+		Replayed: true, Overrun: e.Overrun,
+	}
 }
 
 func ancestorIDs(ancestors []capability.Capability) []uuid.UUID {
@@ -454,8 +493,21 @@ func (s *UsageStore[TX]) chargeLocked(
 	onCharged func(ctx context.Context, tx TX) error,
 ) (capability.ChargeReceipt, error) {
 	released := 0.0
+	reservationID := uuid.Nil
 	if settling != nil {
 		released = settling.amount
+		reservationID = settling.id
+	}
+	// crossed decides a ceiling the charge would cross: under OverrunRecord
+	// the charge goes on and the receipt says so; otherwise it is refused
+	// with err, and nothing has been published.
+	overrun := false
+	crossed := func(err error) error {
+		if req.Overrun == capability.OverrunRecord {
+			overrun = true
+			return nil
+		}
+		return err
 	}
 
 	// ── stage: compute, do not publish ──
@@ -466,22 +518,26 @@ func (s *UsageStore[TX]) chargeLocked(
 	for _, c := range req.Copies {
 		cc := s.copies[string(c.RevocationID)]
 		if c.MaxBudgetMicros > 0 && cc.spent+cc.reserved-released+req.Amount > c.MaxBudget() {
-			return capability.ChargeReceipt{Spent: u.SpentAmount},
-				fmt.Errorf("%w: copy %x", capability.ErrBudgetExceeded, c.RevocationID)
+			if err := crossed(fmt.Errorf("%w: copy %x", capability.ErrBudgetExceeded, c.RevocationID)); err != nil {
+				return capability.ChargeReceipt{Spent: u.SpentAmount}, err
+			}
 		}
 	}
 
 	// 1. capability ceiling
 	if req.MaxBudget > 0 && stagedSpent+u.ReservedAmount-released > req.MaxBudget {
-		return capability.ChargeReceipt{Spent: u.SpentAmount}, capability.ErrBudgetExceeded
+		if err := crossed(capability.ErrBudgetExceeded); err != nil {
+			return capability.ChargeReceipt{Spent: u.SpentAmount}, err
+		}
 	}
 
 	// 2. ancestor ceilings
 	for _, a := range ancestors {
 		au := s.usage[a.ID]
 		if limit := a.Caveats.MaxBudgetAmount; limit > 0 && au.SpentAmount+au.ReservedAmount-released+req.Amount > limit {
-			return capability.ChargeReceipt{Spent: u.SpentAmount},
-				fmt.Errorf("%w: ancestor %s", capability.ErrBudgetExceeded, a.ID)
+			if err := crossed(fmt.Errorf("%w: ancestor %s", capability.ErrBudgetExceeded, a.ID)); err != nil {
+				return capability.ChargeReceipt{Spent: u.SpentAmount}, err
+			}
 		}
 	}
 
@@ -491,7 +547,9 @@ func (s *UsageStore[TX]) chargeLocked(
 		stagedBudget.SpentAmount += req.Amount
 		stagedBudget.ReservedAmount = max0(stagedBudget.ReservedAmount - released)
 		if stagedBudget.MaxBudgetAmount > 0 && stagedBudget.SpentAmount+stagedBudget.ReservedAmount > stagedBudget.MaxBudgetAmount {
-			return capability.ChargeReceipt{Spent: u.SpentAmount}, capability.ErrTenantBudgetExceeded
+			if err := crossed(capability.ErrTenantBudgetExceeded); err != nil {
+				return capability.ChargeReceipt{Spent: u.SpentAmount}, err
+			}
 		}
 	}
 
@@ -540,9 +598,10 @@ func (s *UsageStore[TX]) chargeLocked(
 		ID: uuid.New(), CapabilityID: req.CapabilityID, Ancestors: ids,
 		TenantID: req.TenantID, Amount: req.Amount, UnitCode: unit,
 		Op: req.Op, Actor: req.Actor, At: s.nowFn(), Copies: copyIDs,
+		ExternalRef: req.ExternalRef, ReservationID: reservationID, Overrun: overrun,
 	}
 	s.ledger = append(s.ledger, entry)
-	return capability.ChargeReceipt{ChargeID: entry.ID, Spent: stagedSpent}, nil
+	return capability.ChargeReceipt{ChargeID: entry.ID, Spent: stagedSpent, Overrun: overrun}, nil
 }
 
 // Reserve holds an amount against every ceiling Charge checks.
@@ -592,10 +651,10 @@ func (s *UsageStore[TX]) Reserve(_ context.Context, req capability.ReserveReques
 		amount: req.Amount, unit: unit, op: req.Op, actor: req.Actor,
 		expires: s.nowFn().Add(ttl), copies: slices.Clone(req.Copies),
 	}
+	h.id = uuid.New()
 	s.applyHoldLocked(h, +1)
-	id := uuid.New()
-	s.holds[id] = h
-	return capability.Reservation{ID: id, ExpiresAt: h.expires}, nil
+	s.holds[h.id] = h
+	return capability.Reservation{ID: h.id, ExpiresAt: h.expires}, nil
 }
 
 // applyHoldLocked adds (sign +1) or removes (sign -1) a hold on every counter.
@@ -630,10 +689,18 @@ func (s *UsageStore[TX]) Settle(
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
+	if err := capability.ValidateOverrun(req.Overrun); err != nil {
+		return capability.ChargeReceipt{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	h, ok := s.holds[req.ReservationID]
+	if !ok {
+		if e, settled := s.findLocked(func(e LedgerEntry) bool { return e.ReservationID == req.ReservationID }); settled {
+			return s.replayLocked(e), nil
+		}
+	}
 	if !ok || !h.expires.After(s.nowFn()) {
 		return capability.ChargeReceipt{}, capability.ErrReservationNotFound
 	}
@@ -644,7 +711,7 @@ func (s *UsageStore[TX]) Settle(
 	receipt, err := s.chargeLocked(ctx, capability.ChargeRequest{
 		CapabilityID: h.capID, TenantID: h.tenantID, Amount: req.Amount,
 		MaxBudget: req.MaxBudget, UnitCode: h.unit, Op: h.op, Actor: h.actor,
-		Copies: h.copies,
+		Copies: h.copies, Overrun: req.Overrun,
 	}, h.unit, h.ancestors, ancestors, &h, onCharged)
 	if err != nil {
 		return receipt, err
