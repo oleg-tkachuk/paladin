@@ -41,7 +41,7 @@ type Store interface {
 	// ErrNotFound is defined in THIS package (below), not in any store
 	// implementation — a third party writing its own Store must have a
 	// sentinel to return without importing someone else's persistence.
-	Get(ctx context.Context, id uuid.UUID) (*Capability, error)
+	Get(ctx context.Context, id uuid.UUID) (Capability, error)
 
 	// GetRecord reads back everything Insert and Revoke wrote about a
 	// capability: the capability, who issued it, and its own revocation

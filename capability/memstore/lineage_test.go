@@ -141,7 +141,7 @@ func TestVerifierRejectsChildOfRevokedParent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, childToken, err := issuer.Delegate(ctx, capability.DelegateRequest{Parent: *parent, InheritCaveats: true})
+	_, childToken, err := issuer.Delegate(ctx, capability.DelegateRequest{Parent: parent, InheritCaveats: true})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -231,7 +231,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("parent_id: %w", err))
 	}
 
-	var parent *capability.Capability
+	var parent capability.Capability
 	// Path 2: capability-authenticated caller. Gated entirely by the
 	// caller's own caveats — no Cedar admin check.
 	if callerCap, ok := auth.CapabilityFromContext(ctx); ok {
@@ -253,7 +253,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 		// Narrow from the capability as presented: a Biscuit copy's
 		// attenuation is not in the stored record, and narrowing from the
 		// record would hand the child what the copy gave up.
-		parent = callerCap
+		parent = *callerCap
 	} else {
 		// Path 1: admin. Re-use the existing Cedar gate.
 		if _, err := h.authorize(ctx, cedar.ActionDelegateCapability); err != nil {
@@ -298,7 +298,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 	}
 
 	cap, token, err := h.issuer.Delegate(ctx, capability.DelegateRequest{
-		Parent:          *parent,
+		Parent:          parent,
 		Subject:         delegSubj,
 		Audience:        audience,
 		Caveats:         caveats,
@@ -528,13 +528,13 @@ func stashCapabilityInScope(ctx context.Context, id uuid.UUID) {
 	}
 }
 
-func (h *Handler) issued(cap *capability.Capability, token string) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
+func (h *Handler) issued(cap capability.Capability, token string) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
 	bisc, err := h.issuer.Biscuit(cap)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&adminv1.CapabilityServiceIssueResponse{
-		Capability: capabilityToProto(cap),
+		Capability: capabilityToProto(&cap),
 		Token:      token,
 		Biscuit:    bisc,
 	}), nil

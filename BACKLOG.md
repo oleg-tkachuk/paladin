@@ -1592,15 +1592,6 @@ finding moving from "packages you import" to "your code is affected".
   its utilisation order, through the admin RPC and the console.
 - **Blockers:** a stable cursor over an order that changes as tenants spend.
 
-### `Capability` crosses the API by pointer and by value
-
-- **Status:** Deferred — churn with no behaviour behind it.
-- **Reason:** `Verify`, `Get` and `Delegate` return `*Capability`, while
-  `Insert`, `ListByPrincipal`, `Narrows` and `Record` use values.
-- **Definition of Done:** one convention, applied in the module's next
-  breaking release.
-- **Blockers:** none.
-
 ### Capability spans and a decision hook
 
 - **Status:** Deferred.

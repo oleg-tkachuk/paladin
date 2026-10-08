@@ -389,9 +389,9 @@ func sameReservation(got, want capability.Reservation) string {
 // and a settled or released hold is gone from both.
 func checkReservations[TX any](t *testing.T, f fixture[TX]) {
 	const (
-		held      = 2.0
-		sooner    = time.Minute
-		later     = 2 * time.Minute
+		held   = 2.0
+		sooner = time.Minute
+		later  = 2 * time.Minute
 		// copyLimit holds every reservation below, through the one copy.
 		copyLimit = 10
 	)

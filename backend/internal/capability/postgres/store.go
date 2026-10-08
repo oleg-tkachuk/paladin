@@ -186,7 +186,7 @@ INSERT INTO capability_records (
 }
 
 // Get implements capability.Store.
-func (s *Store) Get(ctx context.Context, id uuid.UUID) (*capability.Capability, error) {
+func (s *Store) Get(ctx context.Context, id uuid.UUID) (capability.Capability, error) {
 	const stmt = `
 SELECT id, tenant_id, issuer, principal_kind, principal_subject,
        principal_payload, audience, caveats, parent_id, generation,
@@ -194,8 +194,11 @@ SELECT id, tenant_id, issuer, principal_kind, principal_subject,
 FROM   capability_records
 WHERE  id = $1;
 `
-	row := s.pool.QueryRow(ctx, stmt, id)
-	return scanRow(row)
+	c, err := scanRow(s.pool.QueryRow(ctx, stmt, id))
+	if err != nil {
+		return capability.Capability{}, err
+	}
+	return *c, nil
 }
 
 // getRecordQuery is Get's columns, then who issued the capability and its

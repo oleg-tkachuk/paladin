@@ -57,13 +57,13 @@ func TestDPoPProofSeenOnOneReplicaIsRefusedOnAnother(t *testing.T) {
 	first := &capability.DPoPVerifier{Replay: newReplayCache(t, rlsPool(t, ctx, admin))}
 	second := &capability.DPoPVerifier{Replay: newReplayCache(t, rlsPool(t, ctx, admin))}
 
-	if err := first.Check(ctx, c, req); err != nil {
+	if err := first.Check(ctx, *c, req); err != nil {
 		t.Fatalf("first use of the proof: %v", err)
 	}
-	if err := second.Check(ctx, c, req); !errors.Is(err, capability.ErrDPoPReplayed) {
+	if err := second.Check(ctx, *c, req); !errors.Is(err, capability.ErrDPoPReplayed) {
 		t.Fatalf("the proof replayed on another replica: err = %v, want ErrDPoPReplayed", err)
 	}
-	if err := first.Check(ctx, c, req); !errors.Is(err, capability.ErrDPoPReplayed) {
+	if err := first.Check(ctx, *c, req); !errors.Is(err, capability.ErrDPoPReplayed) {
 		t.Fatalf("the proof replayed on the same replica: err = %v, want ErrDPoPReplayed", err)
 	}
 }

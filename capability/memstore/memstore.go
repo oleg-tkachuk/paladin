@@ -210,15 +210,14 @@ func (s *Store[TX]) isRevokedItselfLocked(id uuid.UUID) bool {
 // Get returns capability.ErrNotFound when absent. Callers treat that as
 // forgery, not as a missing entity — a syntactically valid token with no
 // record was minted by someone else.
-func (s *Store[TX]) Get(_ context.Context, id uuid.UUID) (*capability.Capability, error) {
+func (s *Store[TX]) Get(_ context.Context, id uuid.UUID) (capability.Capability, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c, ok := s.caps[id]
 	if !ok {
-		return nil, capability.ErrNotFound
+		return capability.Capability{}, capability.ErrNotFound
 	}
-	out := c
-	return &out, nil
+	return c, nil
 }
 
 // IsRevoked answers for the whole delegation chain: a capability is revoked

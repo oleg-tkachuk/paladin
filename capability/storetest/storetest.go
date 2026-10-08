@@ -147,7 +147,7 @@ func checkRoundTrip(t *testing.T, f fixture) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if diff := diffCapabilities(*got, want); diff != "" {
+	if diff := diffCapabilities(got, want); diff != "" {
 		t.Fatalf("Get read back a different capability: %s", diff)
 	}
 }

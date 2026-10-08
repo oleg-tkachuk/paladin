@@ -60,6 +60,10 @@ names what it reads. Renamed, with no change in behaviour:
 
 The metric names are unchanged.
 
+A `Capability` now crosses the API by value: `Store.Get`, `Verifier.Verify`,
+`Issuer.Issue`, `Issuer.Delegate` and `Decode` return one, and
+`Issuer.Biscuit` and `DPoPVerifier.Check` take one, where each used a pointer.
+
 `CacheOption` now configures both revocation caches, so it is built only by
 `WithCacheClock` and `WithMaxEntries`; an option written against
 `*CachedRevocationChecker` no longer compiles. `CachedBiscuitRevocationChecker`

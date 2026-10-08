@@ -150,7 +150,7 @@ flowchart TB
     exp{"now − Leeway ≤ ExpiresAt"}
     aud{"audience ∈ Audience"}
     rev{"RevocationLookup.IsRevoked<br/>this capability or an ancestor"}
-    ok(["*Capability"])
+    ok(["Capability"])
 
     bad["ErrInvalidSignature"]
     early["ErrNotYetValid"]
@@ -212,7 +212,7 @@ flowchart TB
     end
     rev{"IsRevoked(capability)"}
     brev{"IsBiscuitRevoked(revocation ids)<br/>any block of this token"}
-    ok(["*Capability with Copies"])
+    ok(["Capability with Copies"])
 
     bad["ErrInvalidSignature"]
     att["ErrBiscuitAttenuation"]
