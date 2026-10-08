@@ -100,6 +100,15 @@ message ComponentHealth {
   bool critical = 6;
   // Where the component's switch lives.
   ComponentControl control = 7;
+  // Facts the component reports beside its status, in its order — a pool's
+  // connections in use, the schema version applied. Empty while disabled.
+  repeated ComponentDetail details = 8;
+}
+
+// One fact a component reports, shown as "name: value".
+message ComponentDetail {
+  string name = 1;
+  string value = 2;
 }
 
 message HealthInfo {
