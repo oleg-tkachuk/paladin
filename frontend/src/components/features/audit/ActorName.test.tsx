@@ -7,6 +7,8 @@ vi.mock("@/lib/connect/client", () => ({
   userClient: { getUser: h.getUser },
 }));
 
+import { kNotFoundIsAnswer } from "@/lib/connect/expected";
+
 import { ActorName } from "./ActorName";
 
 const USER = "01a0f2e5-67d5-7825-a9d9-7c7c87abff09";
@@ -45,6 +47,17 @@ describe("ActorName", () => {
     // this checks what is shown after it rather than before.
     await waitFor(() => expect(h.getUser).toHaveBeenCalledTimes(1));
     await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByText(USER)).toBeInTheDocument();
+  });
+
+  // A user deleted since the entry was written is a state the row shows,
+  // not an RPC error to log on every audit page view.
+  it("shows the recorded id for a user deleted since, without logging it", async () => {
+    h.getUser.mockRejectedValue(new ConnectError("gone", Code.NotFound));
+    render(<ActorName subject={USER} tenantId={TENANT} />);
+    await waitFor(() => expect(h.getUser).toHaveBeenCalledTimes(1));
+    const opts = h.getUser.mock.calls[0][1];
+    expect(opts.contextValues.get(kNotFoundIsAnswer)).toBe(true);
     expect(screen.getByText(USER)).toBeInTheDocument();
   });
 

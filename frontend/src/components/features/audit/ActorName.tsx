@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { userClient } from "@/lib/connect/client";
+import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { isUuid } from "@/lib/resources/tenant-resolve";
 
 /** How long a resolved name is reused; users are renamed rarely. */
@@ -32,7 +33,8 @@ export function ActorName({
     queryFn: ({ signal }) =>
       userClient.getUser(
         { name: `tenants/${tenantId}/users/${subject}` },
-        { signal },
+        // A user deleted since is shown as recorded, not reported.
+        notFoundIsAnswer({ signal }),
       ),
     enabled: resolvable,
     staleTime: ACTOR_NAME_STALE_MS,
