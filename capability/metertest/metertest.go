@@ -222,6 +222,12 @@ func checkChargeByRef[TX any](t *testing.T, f fixture[TX]) {
 		!near(got.Refunded, 1) || got.ExternalRef != "call-1" || got.UnitCode != unit || got.Overrun {
 		t.Fatalf("ChargeByRef = %+v, %v; want charge %s of 3 with 1 refunded", got, err, r.ChargeID)
 	}
+	if byID, err := f.Usage.GetCharge(f.Ctx, r.ChargeID); err != nil || byID != got {
+		t.Errorf("GetCharge = %+v, %v; want what ChargeByRef read, %+v", byID, err, got)
+	}
+	if _, err := f.Usage.GetCharge(f.Ctx, uuid.New()); !errors.Is(err, capability.ErrChargeNotFound) {
+		t.Errorf("GetCharge of an unknown id: err = %v, want ErrChargeNotFound", err)
+	}
 	if _, err := f.Usage.ChargeByRef(f.Ctx, f.root, "call-1"); !errors.Is(err, capability.ErrChargeNotFound) {
 		t.Errorf("the ref on another capability: err = %v, want ErrChargeNotFound", err)
 	}

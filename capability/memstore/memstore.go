@@ -42,10 +42,10 @@ type Store[TX any] struct {
 
 	caps     map[uuid.UUID]capability.Capability
 	issuedBy map[uuid.UUID]capability.Principal
-	revoked  map[uuid.UUID]bool
+	revoked  map[uuid.UUID]capability.Revocation
 	// revokedCopies maps a revoked Biscuit copy's revocation id to the
 	// capability it belongs to.
-	revokedCopies map[string]uuid.UUID
+	revokedCopies map[string]capability.BiscuitRevocation
 	nowFn         func() time.Time
 }
 
@@ -114,10 +114,10 @@ func New[TX any]() *Store[TX] {
 	return &Store[TX]{
 		caps:     map[uuid.UUID]capability.Capability{},
 		issuedBy: map[uuid.UUID]capability.Principal{},
-		revoked:  map[uuid.UUID]bool{},
+		revoked:  map[uuid.UUID]capability.Revocation{},
 		nowFn:    time.Now,
 
-		revokedCopies: map[string]uuid.UUID{},
+		revokedCopies: map[string]capability.BiscuitRevocation{},
 	}
 }
 
@@ -177,12 +177,34 @@ func (s *Store[TX]) Insert(_ context.Context, c capability.Capability, issuedBy 
 	return nil
 }
 
-// IssuedBy returns the principal that requested the capability, if known.
-func (s *Store[TX]) IssuedBy(id uuid.UUID) (capability.Principal, bool) {
+// GetRecord returns the capability, who issued it and its own revocation.
+func (s *Store[TX]) GetRecord(_ context.Context, id uuid.UUID) (capability.Record, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.issuedBy[id]
-	return p, ok
+	c, ok := s.caps[id]
+	if !ok {
+		return capability.Record{}, capability.ErrNotFound
+	}
+	rec := capability.Record{Capability: c, IssuedBy: s.issuedBy[id]}
+	if r, ok := s.revoked[id]; ok {
+		rec.Revocation = &r
+	}
+	return rec, nil
+}
+
+// revokeLocked writes id's revocation entry unless it has one: the first
+// entry stands, as a repeated revoke is a no-op. s.mu must be held.
+func (s *Store[TX]) revokeLocked(id uuid.UUID, r capability.Revocation) {
+	if _, ok := s.revoked[id]; !ok {
+		s.revoked[id] = r
+	}
+}
+
+// isRevokedItselfLocked reports whether id has a revocation entry of its own.
+// s.mu must be held.
+func (s *Store[TX]) isRevokedItselfLocked(id uuid.UUID) bool {
+	_, ok := s.revoked[id]
+	return ok
 }
 
 // Get returns capability.ErrNotFound when absent. Callers treat that as
@@ -204,11 +226,11 @@ func (s *Store[TX]) Get(_ context.Context, id uuid.UUID) (*capability.Capability
 func (s *Store[TX]) IsRevoked(_ context.Context, id uuid.UUID) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.revoked[id] {
+	if _, ok := s.revoked[id]; ok {
 		return true, nil
 	}
 	for _, a := range s.ancestorsLocked(id) {
-		if s.revoked[a.ID] {
+		if _, ok := s.revoked[a.ID]; ok {
 			return true, nil
 		}
 	}
@@ -254,7 +276,10 @@ func (s *Store[TX]) Revoke(_ context.Context, args capability.RevokeRequest) err
 	if _, ok := s.caps[args.ID]; !ok {
 		return capability.ErrNotFound
 	}
-	s.revoked[args.ID] = true
+	entry := capability.Revocation{
+		RevokedAt: s.nowFn(), Reason: args.Reason, Actor: args.Actor, Cascade: args.CascadeChildren,
+	}
+	s.revokeLocked(args.ID, entry)
 	if !args.CascadeChildren {
 		return nil
 	}
@@ -266,7 +291,7 @@ func (s *Store[TX]) Revoke(_ context.Context, args capability.RevokeRequest) err
 		var next []uuid.UUID
 		for id, c := range s.caps {
 			if slices.Contains(level, c.ParentID) {
-				s.revoked[id] = true
+				s.revokeLocked(id, entry)
 				next = append(next, id)
 			}
 		}
@@ -297,8 +322,25 @@ func (s *Store[TX]) RevokeBiscuit(_ context.Context, args capability.RevokeBiscu
 	if _, ok := s.caps[args.CapabilityID]; !ok {
 		return capability.ErrNotFound
 	}
-	s.revokedCopies[string(args.RevocationID)] = args.CapabilityID
+	if _, ok := s.revokedCopies[string(args.RevocationID)]; !ok { // the first entry stands
+		s.revokedCopies[string(args.RevocationID)] = capability.BiscuitRevocation{
+			CapabilityID: args.CapabilityID, RevocationID: slices.Clone(args.RevocationID),
+			RevokedAt: s.nowFn(), Reason: args.Reason, Actor: args.Actor,
+		}
+	}
 	return nil
+}
+
+// GetBiscuitRevocation returns what RevokeBiscuit wrote for revocationID.
+func (s *Store[TX]) GetBiscuitRevocation(_ context.Context, revocationID []byte) (capability.BiscuitRevocation, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.revokedCopies[string(revocationID)]
+	if !ok {
+		return capability.BiscuitRevocation{}, capability.ErrNotFound
+	}
+	r.RevocationID = slices.Clone(r.RevocationID)
+	return r, nil
 }
 
 func (s *Store[TX]) PurgeExpired(_ context.Context, expiredFor time.Duration) (int64, error) {
@@ -310,12 +352,12 @@ func (s *Store[TX]) PurgeExpired(_ context.Context, expiredFor time.Duration) (i
 		if c.ExpiresAt.IsZero() || !c.ExpiresAt.Before(cutoff) {
 			continue
 		}
-		if s.revoked[id] {
+		if _, ok := s.revoked[id]; ok {
 			delete(s.revoked, id)
 			n++
 		}
 		before := len(s.revokedCopies)
-		maps.DeleteFunc(s.revokedCopies, func(_ string, c uuid.UUID) bool { return c == id })
+		maps.DeleteFunc(s.revokedCopies, func(_ string, r capability.BiscuitRevocation) bool { return r.CapabilityID == id })
 		n += int64(before - len(s.revokedCopies))
 	}
 	return n, nil
@@ -343,7 +385,7 @@ func (s *Store[TX]) ListByPrincipal(_ context.Context, req capability.ListByPrin
 			continue
 		case !req.IncludeExpired && !c.ExpiresAt.After(now):
 			continue
-		case !req.IncludeRevoked && s.revoked[id]:
+		case !req.IncludeRevoked && s.isRevokedItselfLocked(id):
 			continue
 		case req.Cursor != "" && !uuidLess(after, id):
 			continue
@@ -483,10 +525,26 @@ func (s *UsageStore[TX]) ChargeByRef(_ context.Context, capID uuid.UUID, externa
 	if !ok {
 		return capability.ChargeRecord{}, capability.ErrChargeNotFound
 	}
+	return e.record(), nil
+}
+
+// GetCharge returns one charge of the ledger by its id.
+func (s *UsageStore[TX]) GetCharge(_ context.Context, chargeID uuid.UUID) (capability.ChargeRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.findLocked(func(e LedgerEntry) bool { return e.ID == chargeID })
+	if !ok {
+		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+	}
+	return e.record(), nil
+}
+
+// record is the entry as the Meter contract reads a charge back.
+func (e LedgerEntry) record() capability.ChargeRecord {
 	return capability.ChargeRecord{
 		ChargeID: e.ID, CapabilityID: e.CapabilityID, Amount: e.Amount, Refunded: e.Refunded,
 		UnitCode: e.UnitCode, ExternalRef: e.ExternalRef, Overrun: e.Overrun,
-	}, nil
+	}
 }
 
 // findLocked returns the first ledger entry match accepts. s.mu must be held.

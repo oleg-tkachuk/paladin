@@ -54,6 +54,9 @@ func (genStore) Insert(context.Context, Capability, Principal) error { return ni
 func (genStore) Get(context.Context, uuid.UUID) (*Capability, error) {
 	return nil, errors.New("not found")
 }
+func (genStore) GetRecord(context.Context, uuid.UUID) (Record, error) {
+	return Record{}, errors.New("not found")
+}
 func (genStore) IsRevoked(context.Context, uuid.UUID) (bool, error) { return false, nil }
 func (genStore) Revoke(context.Context, RevokeRequest) error        { return nil }
 func (genStore) PurgeExpired(context.Context, time.Duration) (int64, error) {

@@ -60,6 +60,15 @@ names what it reads. Renamed, with no change in behaviour:
 
 The metric names are unchanged.
 
+What the stores write can now be read back. `Store.GetRecord` returns a
+capability with the principal that issued it and its own revocation entry;
+`BiscuitRevocationStore.GetBiscuitRevocation` returns a revoked copy's entry;
+`Meter.GetCharge` reads a charge by the id `Refund` takes. All three are new
+interface methods, so a store of your own must add them. Migration `054` adds
+`capability_records.issued_by`; a capability recorded before it reads back
+with the issuer's subject alone. `memstore.Store.IssuedBy` is gone — use
+`GetRecord`.
+
 `capability/storetest` checks a `Store` against the contract, which now says
 what it left open: an id already on record is `ErrAlreadyExists`, revoking an
 unknown id is `ErrNotFound`, `PurgeExpired` drops revocation entries and never
