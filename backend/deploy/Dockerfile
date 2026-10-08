@@ -24,7 +24,7 @@ ARG TARGETPLATFORM
 # Go base — the toolchain and workspace layout the builder extends.
 # Everything below extends this stage so we don't duplicate ENV blocks.
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS gobase
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine@sha256:738d1cf061836894ff6bb8c33881080ac66de8cf0586615012a0c8f592649cfa AS gobase
 
 ENV GOPATH=/go_workspace \
     GOMODCACHE=/go_workspace/pkg/mod \
@@ -135,7 +135,7 @@ COPY --from=cache-collect /export /
 # -----------------------------------------------------------------------------
 # Digest-pinned (Renovate-managed, see renovate.json). `:nonroot` is a
 # floating tag that moves often, so the digest is the real reproducibility pin.
-FROM gcr.io/distroless/static:nonroot@sha256:1c2c046bc09ed40fad370b599a0b1ae7987f55b01e247cf27a7c27cd97e5bbc7 AS runtime
+FROM gcr.io/distroless/static:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3 AS runtime
 
 ARG APP_VERSION
 ARG GIT_COMMIT_HASH
