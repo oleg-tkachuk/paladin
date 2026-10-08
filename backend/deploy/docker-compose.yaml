@@ -43,7 +43,7 @@ x-paladin-base: &paladin-base
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:18@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
     container_name: paladin-postgres
     environment:
       POSTGRES_DB: paladin
@@ -109,7 +109,7 @@ services:
   # connects as it (configs/compose.yaml), so on a fresh volume nothing could
   # start without this. Same step as the e2e stack's promote-app-role.
   paladin-promote-app-role:
-    image: postgres:16
+    image: postgres:18@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
     container_name: paladin-promote-app-role
     restart: "no"
     environment:
