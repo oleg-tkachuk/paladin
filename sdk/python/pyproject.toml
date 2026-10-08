@@ -51,7 +51,7 @@ biscuit = ["biscuit-python>=0.4.0,<0.5"]
 
 [dependency-groups]
 dev = [
-    "opentelemetry-sdk==1.45.0",
+    "opentelemetry-sdk==1.45.1",
     # RPC spans through Client(interceptors=...), which the README documents.
     "connectrpc-otel==0.2.0",
     "cryptography==50.0.2",
@@ -67,10 +67,10 @@ dev = [
     # runtime the stubs accept (ValidateProtobufRuntimeVersion), so it is the
     # newest release still generating for protobuf 6. A newer one would lock
     # out every protobuf-6 environment.
-    "grpcio-tools==1.81.1",
+    "grpcio-tools==1.84.0",
     "protoc-gen-connectrpc==0.12.1",
     "pytest==9.1.1",
-    "ruff==0.16.9",
+    "ruff==0.16.10",
 ]
 
 [build-system]
