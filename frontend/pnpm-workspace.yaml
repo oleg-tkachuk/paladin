@@ -24,8 +24,12 @@ overrides:
   postcss: ^8.5.23
   sharp: ^0.35.0
   brace-expansion@5: ^5.0.8
-# pnpm 11 holds back any release younger than `minimumReleaseAge`
-# (24h by default) as a supply-chain cooling window. `pnpm update` warns
+# pnpm 11 holds back any release younger than `minimumReleaseAge` as a
+# supply-chain cooling window, and `pnpm install --frozen-lockfile` refuses a
+# lockfile naming one. Set here rather than left to pnpm's default so
+# renovate.json can wait at least as long before proposing an npm update
+# (scripts/release-age.test.sh holds the two together); a Renovate PR inside
+# the window fails every install in CI. `pnpm update` warns
 # ("was updated to X, not Y…") for every dep still inside that window and
 # suggests an `overrides` entry — do NOT take that suggestion: an override
 # is a permanent hard pin and belongs to the CVE block above. List the
@@ -36,6 +40,8 @@ overrides:
 #
 #   - prettier 3.9.8: formatting only, and `pnpm install` during the bump
 #     would otherwise resolve back to 3.9.6 and undo it.
+# Minutes: 24h.
+minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - prettier@3.9.8
   - lucide-react@1.49.0
