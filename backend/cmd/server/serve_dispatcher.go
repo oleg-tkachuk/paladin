@@ -298,18 +298,21 @@ func newDispatcherPool(ctx context.Context, dsn, password, appName string, l *za
 // shape as the worker / api / admin planes. Subsystem checks:
 //   - outbox: table reachable (a backlog is not a probe failure —
 //     operators route on the count metric instead).
-//   - nats, rabbitmq: the brokers the enabled subscriptions of that kind
-//     deliver to (worker.BrokerHealth). Disabled when no subscription uses
-//     the kind. Non-required: a broker outage stops only its own sinks, so
-//     it flips the JSON to degraded without taking /readyz to 503.
+//   - nats, rabbitmq: worker.BrokerComponent — switched by the database,
+//     in use while an enabled subscription delivers to the kind.
 func dispatcherOpsMux(deps *app.SharedDeps, runner *worker.OutboxRunner, subs sinkSubscriptions, natsPool *worker.NatsConnPool, rabbitPool *worker.RabbitMQConnPool, l *zap.Logger) (http.Handler, *health.Handler) {
 	healthH := app.NewHealthHandler(deps.DB, deps.Cfg.Runtime, l).WithRole("dispatcher")
-	app.AddSubsystemCheck(healthH, "outbox", true, func(ctx context.Context) error {
-		_, err := runner.PendingCount(ctx)
-		return err
+	app.AddComponent(healthH, health.Check{
+		Name:     "outbox",
+		Category: health.CategorySubsystem,
+		Critical: true,
+		Func: func(ctx context.Context) error {
+			_, err := runner.PendingCount(ctx)
+			return err
+		},
 	})
-	app.AddSubsystemCheck(healthH, worker.SinkKindNATS, false, brokerCheck(worker.SinkKindNATS, subs, natsPool.Conns))
-	app.AddSubsystemCheck(healthH, worker.SinkKindRabbitMQ, false, brokerCheck(worker.SinkKindRabbitMQ, subs, rabbitPool.Conns))
+	app.AddComponent(healthH, worker.BrokerComponent(worker.SinkKindNATS, subs.count(worker.SinkKindNATS), natsPool.Conns))
+	app.AddComponent(healthH, worker.BrokerComponent(worker.SinkKindRabbitMQ, subs.count(worker.SinkKindRabbitMQ), rabbitPool.Conns))
 	mux := http.NewServeMux()
 	healthH.Register(mux)
 
@@ -361,15 +364,12 @@ func enabledSinkConfigs(pool *pgxpool.Pool) sinkSubscriptions {
 	}
 }
 
-// brokerCheck is the health check of one sink kind: the brokers its enabled
-// subscriptions deliver to, as the pool's conns report them.
-func brokerCheck(kind string, subs sinkSubscriptions, conns func() []worker.BrokerConn) func(context.Context) error {
-	return func(ctx context.Context) error {
+// count is how many enabled subscriptions deliver to kind: the switch of
+// that kind's health component.
+func (subs sinkSubscriptions) count(kind string) func(context.Context) (int, error) {
+	return func(ctx context.Context) (int, error) {
 		cfgs, err := subs(ctx, kind)
-		if err != nil {
-			return fmt.Errorf("list %s subscriptions: %w", kind, err)
-		}
-		return worker.BrokerHealth(kind, len(cfgs), conns())
+		return len(cfgs), err
 	}
 }
 

@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -26,17 +27,31 @@ type BrokerConn struct {
 // errConnectionLost is a pooled connection that is no longer up.
 var errConnectionLost = errors.New("connection lost")
 
-// BrokerHealth is the health of one sink kind on the dispatcher: subscriptions
-// is how many enabled subscriptions deliver to it, conns what its pool knows.
-//
-// No subscription means the broker is not in use, whatever the pool holds.
-// Subscriptions but no connection is not healthy either: nothing has reached
-// a broker — a sink whose credentials are a Secret ref dials on its first
-// delivery, and says so here until then.
-func BrokerHealth(kind string, subscriptions int, conns []BrokerConn) error {
-	if subscriptions == 0 {
-		return health.NotInUse(fmt.Sprintf("no enabled subscription delivers to %s", kind))
+// BrokerComponent is the dispatcher's health component for one sink kind.
+// Its switch is the database: the kind is in use while an enabled
+// subscription delivers to it — subscriptions counts them — and off
+// otherwise, its broker never dialed for health. Never critical: a broker
+// outage stops only its own sinks.
+func BrokerComponent(kind string, subscriptions func(context.Context) (int, error), conns func() []BrokerConn) health.Check {
+	return health.Check{
+		Name:     kind,
+		Category: health.CategoryUpstream,
+		Switch: func(ctx context.Context) (health.Enablement, error) {
+			n, err := subscriptions(ctx)
+			if err != nil {
+				return health.Enablement{Control: health.ControlDatabase}, fmt.Errorf("list %s subscriptions: %w", kind, err)
+			}
+			return health.ByDatabase(n > 0, fmt.Sprintf("no enabled subscription delivers to %s", kind)), nil
+		},
+		Func: func(context.Context) error { return BrokerHealth(conns()) },
 	}
+}
+
+// BrokerHealth is the health of a sink kind in use, from what its pool knows:
+// every broker connected. No connection at all is not healthy either —
+// nothing has reached a broker; a sink whose credentials are a Secret ref
+// dials on its first delivery, and says so here until then.
+func BrokerHealth(conns []BrokerConn) error {
 	var errs []error
 	for _, c := range byURL(conns) {
 		if c.Err != nil {
@@ -47,11 +62,13 @@ func BrokerHealth(kind string, subscriptions int, conns []BrokerConn) error {
 		return errors.Join(errs...)
 	}
 	if len(conns) == 0 {
-		return fmt.Errorf("%d enabled subscription(s) deliver to %s, none connected yet: a broker is dialed on its first delivery",
-			subscriptions, kind)
+		return errNotConnectedYet
 	}
 	return nil
 }
+
+// errNotConnectedYet is a kind in use with no broker dialed.
+var errNotConnectedYet = errors.New("no broker connected yet: one is dialed on its first delivery")
 
 // byURL folds the connections to one broker — one per principal or client
 // certificate — into one entry, failing if any of them does, sorted by URL so

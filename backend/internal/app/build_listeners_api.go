@@ -389,35 +389,9 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 
 	healthH = NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("api")
 
-	// Capability subsystem — when enabled, verify the issuer signer
-	// has a key loaded. Cheap: no I/O, just nil-check on the
-	// in-memory signer. Critical=true because the request path
-	// short-circuits to "no capability" if the issuer fails, which
-	// is a real privilege gap operators need to see.
-	if deps.Capability != nil && deps.Capability.Issuer != nil {
-		AddSubsystemCheck(healthH, "capability", true, func(ctx context.Context) error {
-			if deps.Capability.Issuer == nil {
-				return fmt.Errorf("capability issuer not initialised")
-			}
-			return nil
-		})
-	} else {
-		// Subsystem is off-by-config — register an informational row so
-		// the /health page surfaces "capability: disabled" instead of
-		// omitting the component entirely. Operators consistently
-		// misread an absent row as "missing/broken" rather than "off".
-		AddDisabledSubsystem(healthH, "capability")
-	}
-
-	// APIToken subsystem mirrors capability: probe when on, surface
-	// "disabled" when off so the /health page shows the row.
-	if deps.APIToken != nil {
-		AddSubsystemCheck(healthH, "api_token", false, func(ctx context.Context) error {
-			return nil
-		})
-	} else {
-		AddDisabledSubsystem(healthH, "api_token")
-	}
+	// Each subsystem is listed whether on or off: the page says which.
+	AddComponent(healthH, capabilityComponent(deps))
+	AddComponent(healthH, apiTokenComponent(deps))
 
 	// The api role serves two listeners — data and iam — and Kubernetes
 	// allows one readiness probe per container, which points at data. So iam
@@ -435,8 +409,11 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// the Service's endpoint list.
 	if addr := cfg.API.Server.IAM.Addr; addr != "" {
 		iamTLS := cfg.API.Server.IAM.TLS.Enabled
-		AddSubsystemCheck(healthH, "iam_listener", true, func(ctx context.Context) error {
-			return dialLocalListener(ctx, addr, iamTLS)
+		AddComponent(healthH, health.Check{
+			Name:     "iam_listener",
+			Category: health.CategorySubsystem,
+			Critical: true,
+			Func:     func(ctx context.Context) error { return dialLocalListener(ctx, addr, iamTLS) },
 		})
 	}
 
