@@ -9,9 +9,9 @@
 //
 //   - Per-call attribution: every call carries the capability ID, so audit and
 //     cost roll up by it, down to which run of which agent spent what.
-//   - Budget enforcement at the authorisation boundary: the verifier rejects
-//     once the ceiling is exhausted, rather than business logic discovering it
-//     three calls deep.
+//   - Budget enforcement at the authorisation boundary: the Meter refuses a
+//     charge once a ceiling is exhausted, rather than business logic
+//     discovering it three calls deep.
 //   - Mid-flight revocation: a compromised agent's capability is revoked
 //     atomically, optionally cascading to everything it delegated.
 //   - Sub-capabilities without a round trip: an orchestrator narrows its own
@@ -23,8 +23,8 @@
 //
 // # What you implement
 //
-// The module publishes three contracts and nothing more. A consumer that
-// implements them needs nothing else:
+// Three contracts are required; a consumer that implements them needs nothing
+// else:
 //
 //   - [Store] — capability records and revocations. IsRevoked answers for the
 //     capability's whole delegation chain. No transactions required; an
@@ -38,6 +38,11 @@
 //     [RemoteJWKSResolver] fetches an issuer's JWKS for verifiers that run
 //     apart from it.
 //
+// Three more are needed only with the feature they serve:
+// [BiscuitRevocationStore] to accept Biscuit tokens, [CopyUsageReader] to
+// show a Biscuit copy's own counters, and [ReplayCache] to share DPoP replay
+// state across replicas ([MemoryReplayCache] ships for one process).
+//
 // A Capability crosses the API by value, in and out: no caller can alter one
 // another holds, and one that is not there is an error, never nil.
 //
@@ -47,11 +52,11 @@
 //
 // # No-transaction mode
 //
-// Meter.Charge takes an onCharged callback that runs inside the charge,
-// receiving the consumer's transaction handle, so a side effect such as an
-// outbox write commits atomically with the spend. The module never constructs,
-// inspects or constrains that handle — it only threads it back. That is what
-// keeps this package free of any database dependency.
+// Meter.Charge and Meter.Settle take an onCharged callback that runs inside
+// the charge, receiving the consumer's transaction handle, so a side effect
+// such as an outbox write commits atomically with the spend. The module never
+// constructs, inspects or constrains that handle — it only threads it back.
+// That is what keeps this package free of any database dependency.
 //
 // A consumer with no transactional storage instantiates UsageStore[struct{}]
 // and always passes nil for onCharged. Everything else behaves identically;
