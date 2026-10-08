@@ -115,7 +115,7 @@ Every service and RPC in `proto/`, by plane.
 | `CELService` | 1 | `Validate` |
 | `CapabilityService` | 8 | `Issue`, `Delegate`, `Revoke`, `RevokeBiscuit`, `GetBiscuitUsage`, `Get`, `List`, `GetUsage` |
 | `CollectionService` | 7 | `CreateCollection`, `GetCollection`, `UpdateCollection`, `DeleteCollection`, `ListCollections`, `SetCollectionPolicy`, `BindCollectionToBucket` |
-| `EventSubscriptionService` | 7 | `CreateSubscription`, `GetSubscription`, `UpdateSubscription`, `DeleteSubscription`, `ListSubscriptions`, `TestSubscription`, `RedriveFailedDeliveries` |
+| `EventSubscriptionService` | 7 | `CreateSubscription`, `GetSubscription`, `UpdateSubscription`, `DeleteSubscription`, `ListSubscriptions`, `TestSubscription`, `RedriveFailedDeliveries` — deliveries are CloudEvents 1.0 envelopes ([event-delivery-dedup.md](../../docs/event-delivery-dedup.md)) |
 | `MCPInspectService` | 3 | `Inspect`, `ListSessions`, `GetBridgeStatus` |
 | `PlatformOperationService` | 3 | `GetOperation`, `ListOperations`, `CancelOperation` |
 | `PolicyService` | 3 | `Validate`, `SimulateAuthz`, `GetEffectivePolicy` |

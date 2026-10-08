@@ -128,7 +128,7 @@ comment. What each top-level block owns:
 | `bootstrap` | the platform admin provisioned by `paladin bootstrap` |
 | `middleware` | interceptor defaults shared by every plane |
 | `worker` | job intervals, leases, reaper batch sizes ([ops-housekeeping.md](../backend/docs/ops-housekeeping.md)) |
-| `dispatcher` | outbox drain loop and sink behaviour |
+| `dispatcher` | outbox drain loop and sink behaviour; every delivery is a CloudEvents 1.0 envelope ([event-delivery-dedup.md](event-delivery-dedup.md)) |
 | `storage` | backends, routing, SSE, per-backend auth mode ([backend-registry.md](../backend/docs/backend-registry.md)) |
 | `ingest` | the storage-notification receiver: driver, webhook, dedup ([storage-ingest.md](storage-ingest.md)) |
 | `cedar` | policy cache TTL, canonical collection entity UIDs ([cedar-authoring.md](../backend/docs/cedar-authoring.md)) |

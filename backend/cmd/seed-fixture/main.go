@@ -77,6 +77,12 @@ const (
 	// display_name starts with this string". Don't change without bumping
 	// any in-cluster fixture data first — the regex is dumb.
 	fixturePrefix = "Fixture: "
+
+	// demoFilter is the filtered demo subscription's CEL expression. The
+	// server validates it against the event envelope, whose variables are
+	// bare (`type`, not `event.type`): an `event.` prefix is refused and
+	// takes the whole demo flavour down with it.
+	demoFilter = `type == "paladin.object.uploaded"`
 )
 
 // ─── Top-level command tree ────────────────────────────────────────────────
@@ -439,7 +445,7 @@ func seedDemo(ctx context.Context, c *mcp.Clients) error {
 			sink: &adminv1.EventSink{Target: &adminv1.EventSink_Http{Http: &adminv1.HttpSink{
 				Url: "https://example.test/webhook/filtered",
 			}}},
-			filter: "event.kind == 'paladin.object.uploaded'",
+			filter: demoFilter,
 		},
 	}
 	for _, s := range subscriptions {

@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
+)
 
 func TestFlavourObjectCount(t *testing.T) {
 	cases := []struct {
@@ -66,5 +70,12 @@ func TestIsFixtureCollection(t *testing.T) {
 func TestSHA256Base64(t *testing.T) {
 	if got := sha256Base64(nil); got != "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=" {
 		t.Fatalf("sha256Base64(empty) = %q", got)
+	}
+}
+
+// The demo subscription's filter is one the server accepts.
+func TestDemoFilterValidates(t *testing.T) {
+	if err := cel.Validate(cel.EventEnvelopeSchema, demoFilter); err != nil {
+		t.Fatalf("demo filter %q: %v", demoFilter, err)
 	}
 }

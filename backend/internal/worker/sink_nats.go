@@ -287,11 +287,9 @@ type cloudEventEnvelope struct {
 	Data            map[string]any `json:"data,omitempty"`
 }
 
-// natsSource is the CloudEvents `source` value stamped on every
-// outbound envelope. Operators override it via cfg.Runtime.SiteURL
-// when building the dispatcher; the literal "paladin" is a sane fallback
-// for in-cluster lab deployments where there is no canonical URL.
-const natsDefaultSource = "paladin"
+// cloudEventSource is the CloudEvents `source` stamped on every envelope,
+// whatever the sink. It is a fixed value with no configuration override.
+const cloudEventSource = "paladin"
 
 // newCloudEventEnvelope builds the CloudEvents 1.0 envelope shared by every
 // JSON-publishing sink (NATS, SQS, RabbitMQ). The `id` MUST be unique per
@@ -319,7 +317,7 @@ func (d *Dispatcher) newCloudEventEnvelope(sub admindomain.EventSubscription, ev
 	return cloudEventEnvelope{
 		SpecVersion:     "1.0",
 		Type:            evt.Type,
-		Source:          natsDefaultSource,
+		Source:          cloudEventSource,
 		ID:              eventID,
 		Time:            evt.At.UTC().Format(time.RFC3339Nano),
 		Subject:         evt.ResourceName,

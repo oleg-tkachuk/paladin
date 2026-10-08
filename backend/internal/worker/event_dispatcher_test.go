@@ -407,6 +407,10 @@ func TestDispatchFilterMatch(t *testing.T) {
 		{"kind derived from type matches", `kind == "object"`, Event{Type: "paladin.object.uploaded"}, 1},
 		{"kind derived (collection) matches", `kind == "collection"`, Event{Type: "paladin.collection.created"}, 1},
 		{"kind mismatch drops", `kind == "bucket"`, Event{Type: "paladin.object.uploaded"}, 0},
+		// The filters the docs and the console hint give for capability charges.
+		{"charged by type queues", `type == "paladin.capability.charged"`, Event{Type: "paladin.capability.charged"}, 1},
+		{"charged by kind queues", `kind == "capability"`, Event{Type: "paladin.capability.charged"}, 1},
+		{"kind is not the full type", `kind == "capability.charged"`, Event{Type: "paladin.capability.charged"}, 0},
 		{
 			"predicate over envelope field",
 			`type == "paladin.object.uploaded" && actor_subject == "svc"`,
