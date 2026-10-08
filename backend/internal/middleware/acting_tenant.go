@@ -3,12 +3,13 @@ package middleware
 import (
 	"context"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
@@ -40,12 +41,12 @@ var nameFields = map[protoreflect.Name]bool{
 // than its own. Anyone else naming another tenant is refused by the shim;
 // names that span tenants are refused there too, so neither is decided here.
 // Unary only: the data plane has no streaming RPC.
-func ActOnNamedTenant() connect.UnaryInterceptorFunc {
-	return func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			return next(actingOnNamedTenant(ctx, req.Any()), req)
+func ActOnNamedTenant() connect.ServerInterceptor {
+	return unary.Interceptor(func(next unary.Func) unary.Func {
+		return func(ctx context.Context, spec connect.Spec, req proto.Message) (proto.Message, error) {
+			return next(actingOnNamedTenant(ctx, req), spec, req)
 		}
-	}
+	}, nil)
 }
 
 func actingOnNamedTenant(ctx context.Context, msg any) context.Context {

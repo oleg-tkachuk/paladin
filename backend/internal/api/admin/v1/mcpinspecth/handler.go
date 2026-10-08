@@ -15,7 +15,6 @@ package mcpinspecth
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -26,10 +25,11 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	mcppkg "github.com/oleg-tkachuk/paladin/backend/internal/mcp"
@@ -78,7 +78,7 @@ func NewHandler(cfg config.MCP, policy cedar.Authorizer) *Handler {
 func (h *Handler) authorize(ctx context.Context) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -90,7 +90,7 @@ func (h *Handler) authorize(ctx context.Context) error {
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("mcp inspect denied"))
+		return connect.NewError(connect.CodePermissionDenied, "mcp inspect denied")
 	}
 	return nil
 }
@@ -106,15 +106,16 @@ const defaultSessionPageSize = 50
 // unreachable the result is an empty list — the truthful answer (a restarted
 // MCP server has no sessions; an unconfigured proxy shows none) and a graceful
 // degrade rather than a hard error.
-func (h *Handler) ListSessions(ctx context.Context, req *connect.Request[adminv1.ListSessionsRequest]) (*connect.Response[adminv1.ListSessionsResponse], error) {
+func (h *Handler) ListSessions(ctx context.Context, req *adminv1.ListSessionsRequest) (*adminv1.ListSessionsResponse, error) {
+	info := unary.Info(ctx)
 	if err := h.authorize(ctx); err != nil {
 		return nil, err
 	}
 	out := &adminv1.ListSessionsResponse{}
 	if h.sessionsURL == "" {
-		return connect.NewResponse(out), nil
+		return out, nil
 	}
-	authz := req.Header().Get("Authorization")
+	authz := info.RequestHeader().Get("Authorization")
 
 	// Fan out across every MCP replica: the registry is process-local, so a
 	// single LB'd query only sees one pod's sessions. Resolve the configured
@@ -164,7 +165,7 @@ func (h *Handler) ListSessions(ctx context.Context, req *connect.Request[adminv1
 	// stays unpaged on purpose: it is an internal, plane-to-plane call whose
 	// only consumer is this merge.
 	start := 0
-	if tok := req.Msg.GetPage().GetPageToken(); tok != "" {
+	if tok := req.GetPage().GetPageToken(); tok != "" {
 		for i := range infos {
 			if infos[i].ID == tok {
 				start = i + 1
@@ -174,7 +175,7 @@ func (h *Handler) ListSessions(ctx context.Context, req *connect.Request[adminv1
 		// An unknown cursor (the session was reaped between pages) restarts
 		// the listing rather than failing it.
 	}
-	limit := int(req.Msg.GetPage().GetPageSize())
+	limit := int(req.GetPage().GetPageSize())
 	if limit <= 0 {
 		limit = defaultSessionPageSize
 	}
@@ -194,7 +195,7 @@ func (h *Handler) ListSessions(ctx context.Context, req *connect.Request[adminv1
 			RequestCount:  s.RequestCount,
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // sessionTargets expands SessionsURL into one URL per resolved host address
@@ -261,7 +262,7 @@ func (h *Handler) fetchSessions(ctx context.Context, target, authz string) ([]mc
 // Inspect returns the merged effective MCP configuration: profiles
 // (built-ins overlaid by operator overrides), the always-deny list,
 // the tool catalog, upstreams, and transport settings.
-func (h *Handler) Inspect(ctx context.Context, _ *connect.Request[adminv1.MCPInspectRequest]) (*connect.Response[adminv1.MCPInspectResponse], error) {
+func (h *Handler) Inspect(ctx context.Context, _ *adminv1.MCPInspectRequest) (*adminv1.MCPInspectResponse, error) {
 	if err := h.authorize(ctx); err != nil {
 		return nil, err
 	}
@@ -288,7 +289,7 @@ func (h *Handler) Inspect(ctx context.Context, _ *connect.Request[adminv1.MCPIns
 			},
 		},
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // profiles merges built-in DefaultProfiles with operator overrides
@@ -425,17 +426,18 @@ func matchAny(name string, patterns []string) bool {
 // into a slow page.
 func (h *Handler) GetBridgeStatus(
 	ctx context.Context,
-	req *connect.Request[adminv1.GetBridgeStatusRequest],
-) (*connect.Response[adminv1.GetBridgeStatusResponse], error) {
+	req *adminv1.GetBridgeStatusRequest,
+) (*adminv1.GetBridgeStatusResponse, error) {
+	info := unary.Info(ctx)
 	if err := h.authorize(ctx); err != nil {
 		return nil, err
 	}
 	out := &adminv1.GetBridgeStatusResponse{}
 	if h.sessionsURL == "" {
 		out.Error = "no MCP server configured (mcp.http.sessions_url is empty)"
-		return connect.NewResponse(out), nil
+		return out, nil
 	}
-	authz := req.Header().Get("Authorization")
+	authz := info.RequestHeader().Get("Authorization")
 
 	var lastErr error
 	for _, target := range h.sessionTargets(ctx) {
@@ -456,14 +458,14 @@ func (h *Handler) GetBridgeStatus(
 				LatencyMs: u.LatencyMs,
 			})
 		}
-		return connect.NewResponse(out), nil
+		return out, nil
 	}
 	if lastErr != nil {
 		out.Error = lastErr.Error()
 	} else {
 		out.Error = "no MCP replica answered"
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // statusURL rewrites a /sessions target into its /status sibling. The two

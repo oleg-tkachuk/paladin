@@ -1,9 +1,7 @@
 package apiutil
 
 import (
-	"fmt"
-
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
@@ -38,7 +36,7 @@ func NanosOf(field string, m *money.Money) (capability.Nanos, string, error) {
 		return 0, "", nil
 	}
 	invalid := func(format string, args ...any) (capability.Nanos, string, error) {
-		return 0, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s: "+format, append([]any{field}, args...)...))
+		return 0, "", connect.Errorf(connect.CodeInvalidArgument, "%s: "+format, append([]any{field}, args...)...)
 	}
 	unit, err := capability.NormaliseUnitCode(m.GetCurrencyCode())
 	if err != nil {
@@ -75,9 +73,8 @@ func RefuseRemovedFields(msg proto.Message) error {
 			return nil
 		}
 		if reserved.Has(num) {
-			return connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("%s: field %d was removed from the API and is refused rather than ignored; upgrade the client",
-					m.Descriptor().FullName(), num))
+			return connect.Errorf(connect.CodeInvalidArgument, "%s: field %d was removed from the API and is refused rather than ignored; upgrade the client",
+				m.Descriptor().FullName(), num)
 		}
 		v := protowire.ConsumeFieldValue(num, typ, b[n:])
 		if v < 0 {

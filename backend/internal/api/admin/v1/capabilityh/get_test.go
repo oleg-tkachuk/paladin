@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -35,8 +35,8 @@ func (s *recordStore) GetRecord(ctx context.Context, id uuid.UUID) (capability.R
 	return s.rec, nil
 }
 
-func getReq(id string) *connect.Request[adminv1.CapabilityServiceGetRequest] {
-	return connect.NewRequest(&adminv1.CapabilityServiceGetRequest{Id: id})
+func getReq(id string) *adminv1.CapabilityServiceGetRequest {
+	return &adminv1.CapabilityServiceGetRequest{Id: id}
 }
 
 func TestGetReturnsTheRecord(t *testing.T) {
@@ -54,7 +54,7 @@ func TestGetReturnsTheRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	m := resp.Msg
+	m := resp
 	if m.GetCapability().GetId() != c.ID.String() || m.GetIssuedBy().GetSubject() != "operator" ||
 		m.GetIssuedBy().GetKind() != adminv1.PrincipalKind_PRINCIPAL_KIND_USER {
 		t.Errorf("capability %v issued by %v; want %s issued by the operator", m.GetCapability().GetId(), m.GetIssuedBy(), c.ID)
@@ -66,8 +66,8 @@ func TestGetReturnsTheRecord(t *testing.T) {
 
 	store.rec.Revocation = nil
 	resp, err = h.Get(adminCtx(), getReq(c.ID.String()))
-	if err != nil || resp.Msg.GetRevocation() != nil {
-		t.Errorf("a capability with no entry of its own = %v, %v; want no revocation", resp.Msg.GetRevocation(), err)
+	if err != nil || resp.GetRevocation() != nil {
+		t.Errorf("a capability with no entry of its own = %v, %v; want no revocation", resp.GetRevocation(), err)
 	}
 }
 

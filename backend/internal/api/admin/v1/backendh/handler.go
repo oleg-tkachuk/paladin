@@ -6,13 +6,13 @@ package backendh
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
@@ -181,7 +181,7 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, eventType, res
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, backendID string) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -194,7 +194,7 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, backendID 
 	}
 	if decision != cedar.DecisionAllow {
 		return connect.NewError(connect.CodePermissionDenied,
-			errors.New("denied by policy"))
+			"denied by policy")
 	}
 	return nil
 }
@@ -209,10 +209,10 @@ func (h *Handler) CreateBackend(ctx context.Context, b admindomain.StorageBacken
 		return nil, err
 	}
 	if b.BackendID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("backend_id required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "backend_id required")
 	}
 	if b.Kind == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("kind required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "kind required")
 	}
 	// Create, not Upsert — and MapError, not a hardcoded Internal.
 	//
@@ -235,7 +235,7 @@ func (h *Handler) CreateBackend(ctx context.Context, b admindomain.StorageBacken
 	apiutil.StashResource(ctx, backendResourceName(b.BackendID))
 	got, err := h.repo.Get(ctx, b.BackendID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &got, nil
 }
@@ -277,7 +277,7 @@ func (h *Handler) ListBackends(ctx context.Context, pageSize int32, afterID, fil
 	}
 	out, next, err := h.repo.List(ctx, pageSize, afterID, filter)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInternal, err)
+		return nil, "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !p.HasRole(rolePlatformAdmin) {
@@ -290,8 +290,7 @@ func (h *Handler) ListBackends(ctx context.Context, pageSize int32, afterID, fil
 	}
 	out, err = celpkg.FilterPage(h.cel, celpkg.StorageBackendSchema, filter, out, backendRow)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("filter: %w", err))
+		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
 	return out, next, nil
 }
@@ -337,7 +336,7 @@ func (h *Handler) UpdateBackend(ctx context.Context, b admindomain.StorageBacken
 	}
 	got, err := h.repo.Get(ctx, b.BackendID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &got, nil
 }
@@ -368,7 +367,7 @@ func (h *Handler) SetBackendEnabled(ctx context.Context, backendID string, enabl
 	}
 	got, err := h.repo.Get(ctx, backendID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &got, nil
 }
@@ -392,7 +391,7 @@ func (h *Handler) SetBackendReadOnly(ctx context.Context, backendID string, read
 	}
 	got, err := h.repo.Get(ctx, backendID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &got, nil
 }
@@ -415,7 +414,7 @@ func (h *Handler) SetBackendMaintenance(ctx context.Context, backendID string, m
 	}
 	got, err := h.repo.Get(ctx, backendID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &got, nil
 }
@@ -499,7 +498,7 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 	// an "unreachable" result. The row also feeds the dynamic probe path.
 	got, err := h.repo.Get(ctx, backendID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	// Read-only — no audit row (per the BackendService contract).
 	if h.prober == nil {
@@ -564,11 +563,11 @@ func (h *Handler) probeFeatures(ctx context.Context, b admindomain.StorageBacken
 func requireRole(ctx context.Context, role string) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if !p.HasRole(role) {
-		return connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("role %q required", role))
+		return connect.Errorf(connect.CodePermissionDenied,
+			"role %q required", role)
 	}
 	return nil
 }
@@ -576,12 +575,12 @@ func requireRole(ctx context.Context, role string) error {
 func requireAnyRole(ctx context.Context, roles ...string) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	for _, r := range roles {
 		if p.HasRole(r) {
 			return nil
 		}
 	}
-	return connect.NewError(connect.CodePermissionDenied, errors.New("insufficient role"))
+	return connect.NewError(connect.CodePermissionDenied, "insufficient role")
 }

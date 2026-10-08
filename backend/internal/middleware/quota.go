@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/resolve"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 // QuotaReader is the read-only slice of the QuotaRepository the interceptor
@@ -105,21 +108,17 @@ func (q *QuotaSoftCheck) WithBucketScope(bindings BucketBindingLookup) *QuotaSof
 	return q
 }
 
-func (q *QuotaSoftCheck) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if err := q.CheckUpload(ctx, req.Spec().Procedure, req.Any()); err != nil {
-			return nil, err
+// Interceptor is the check as a Connect server interceptor. It reads the
+// upload's size from the request message, so it acts on unary calls.
+func (q *QuotaSoftCheck) Interceptor() connect.ServerInterceptor {
+	return unary.Interceptor(func(next unary.Func) unary.Func {
+		return func(ctx context.Context, spec connect.Spec, req proto.Message) (proto.Message, error) {
+			if err := q.CheckUpload(ctx, spec.Procedure, req); err != nil {
+				return nil, err
+			}
+			return next(ctx, spec, req)
 		}
-		return next(ctx, req)
-	}
-}
-
-func (q *QuotaSoftCheck) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (q *QuotaSoftCheck) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
+	}, nil)
 }
 
 // regenerateUploadURLProc re-binds a presigned PUT to a Collection's
@@ -130,7 +129,7 @@ func (q *QuotaSoftCheck) WrapStreamingHandler(next connect.StreamingHandlerFunc)
 const regenerateUploadURLProc = "/paladin.data.v1.PresignService/RegenerateUploadUrl"
 
 // CheckUpload gates on procedure, then runs every configured cap for every
-// scope in play. WrapUnary is a thin shell over it.
+// scope in play. Interceptor is a thin shell over it.
 //
 // Exported because it takes the procedure + message rather than a
 // connect.AnyRequest, whose unexported marker method makes it
@@ -275,7 +274,7 @@ func checkCaps(quota admindomain.Quota, scope string, sizeHint int64, newObject 
 }
 
 func exhausted(format string, args ...any) error {
-	return connect.NewError(connect.CodeResourceExhausted, fmt.Errorf(format, args...))
+	return rpcerr.New(connect.CodeResourceExhausted, fmt.Errorf(format, args...))
 }
 
 // extractSizeHint reads a `size_hint_bytes` (UploadObject) or `size_bytes`

@@ -3,7 +3,7 @@ package middleware
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 // The audit log is the trail of mutations. A read is skipped when the contract

@@ -4,7 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 // PermissiveInterceptor verifies a bearer token *if* present and skips auth
@@ -29,27 +31,15 @@ func NewPermissiveInterceptor(v TokenVerifier, allowMissingFor ...string) *Permi
 	return &PermissiveInterceptor{Verifier: v, AllowMissingFor: allowMissingFor}
 }
 
-func (p *PermissiveInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		ctx, err := p.attach(ctx, req.Header().Get("Authorization"), req.Spec().Procedure)
-		if err != nil {
-			return nil, err
-		}
-		return next(ctx, req)
-	}
-}
-
-func (p *PermissiveInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (p *PermissiveInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		ctx, err := p.attach(ctx, conn.RequestHeader().Get("Authorization"), conn.Spec().Procedure)
+// Intercept authenticates every call, unary or streaming, from its
+// Authorization header.
+func (p *PermissiveInterceptor) Intercept(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		ctx, err := p.attach(ctx, unary.Info(ctx).RequestHeader().Get("Authorization"), spec.Procedure)
 		if err != nil {
 			return err
 		}
-		return next(ctx, conn)
+		return next(ctx, spec, stream)
 	}
 }
 
@@ -58,20 +48,19 @@ func (p *PermissiveInterceptor) attach(ctx context.Context, authz, procedure str
 		if p.allowsMissing(procedure) {
 			return ctx, nil
 		}
-		return ctx, connect.NewError(connect.CodeUnauthenticated,
-			missingAuthErr())
+		return ctx, rpcerr.New(connect.CodeUnauthenticated, missingAuthErr())
 	}
 	const bearer = "Bearer "
 	if !strings.HasPrefix(authz, bearer) {
-		return ctx, connect.NewError(connect.CodeUnauthenticated, expectedBearerErr())
+		return ctx, rpcerr.New(connect.CodeUnauthenticated, expectedBearerErr())
 	}
 	token := strings.TrimSpace(authz[len(bearer):])
 	if token == "" {
-		return ctx, connect.NewError(connect.CodeUnauthenticated, emptyTokenErr())
+		return ctx, rpcerr.New(connect.CodeUnauthenticated, emptyTokenErr())
 	}
 	principal, err := p.Verifier.Verify(ctx, token)
 	if err != nil {
-		return ctx, connect.NewError(connect.CodeUnauthenticated, err)
+		return ctx, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	return WithPrincipal(ctx, principal), nil
 }

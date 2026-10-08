@@ -3,7 +3,7 @@ package paladin
 import (
 	"context"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 // Ensure makes a resource exist and returns it, for provisioning that runs at

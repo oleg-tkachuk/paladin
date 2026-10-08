@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -118,98 +118,98 @@ func TestHandlerErrorsReachTheCaller(t *testing.T) {
 		call func() error
 	}{
 		{"GetObject", func() error {
-			_, err := s.GetObject(ctx, connect.NewRequest(&pb.GetObjectRequest{Name: objName}))
+			_, err := s.GetObject(ctx, &pb.GetObjectRequest{Name: objName})
 			return err
 		}},
 		{"SetObjectTaint", func() error {
-			_, err := s.SetObjectTaint(ctx, connect.NewRequest(&pb.SetObjectTaintRequest{Name: objName}))
+			_, err := s.SetObjectTaint(ctx, &pb.SetObjectTaintRequest{Name: objName})
 			return err
 		}},
 		{"DownloadObject", func() error {
-			_, err := s.DownloadObject(ctx, connect.NewRequest(&pb.DownloadObjectRequest{Name: objName}))
+			_, err := s.DownloadObject(ctx, &pb.DownloadObjectRequest{Name: objName})
 			return err
 		}},
 		{"ListObjects", func() error {
-			_, err := s.ListObjects(ctx, connect.NewRequest(&pb.ListObjectsRequest{Parent: parent}))
+			_, err := s.ListObjects(ctx, &pb.ListObjectsRequest{Parent: parent})
 			return err
 		}},
 		{"CountObjects", func() error {
-			_, err := s.CountObjects(ctx, connect.NewRequest(&pb.CountObjectsRequest{Parent: parent}))
+			_, err := s.CountObjects(ctx, &pb.CountObjectsRequest{Parent: parent})
 			return err
 		}},
 		{"UpdateObject", func() error {
-			_, err := s.UpdateObject(ctx, connect.NewRequest(&pb.UpdateObjectRequest{
+			_, err := s.UpdateObject(ctx, &pb.UpdateObjectRequest{
 				Name: objName, ResourceVersion: "1",
-			}))
+			})
 			return err
 		}},
 		{"CopyObject", func() error {
-			_, err := s.CopyObject(ctx, connect.NewRequest(&pb.CopyObjectRequest{
+			_, err := s.CopyObject(ctx, &pb.CopyObjectRequest{
 				SourceName: objName, DestinationCollection: parent, DestinationKey: "copy",
-			}))
+			})
 			return err
 		}},
 		{"ListObjectVersions", func() error {
-			_, err := s.ListObjectVersions(ctx, connect.NewRequest(&pb.ListObjectVersionsRequest{Parent: objName}))
+			_, err := s.ListObjectVersions(ctx, &pb.ListObjectVersionsRequest{Parent: objName})
 			return err
 		}},
 		{"GetObjectVersion", func() error {
 			// A version name carries its own /versions/{id} segment; without it
 			// the shim refuses before the handler and the test measures the
 			// wrong layer.
-			_, err := s.GetObjectVersion(ctx, connect.NewRequest(&pb.GetObjectVersionRequest{
+			_, err := s.GetObjectVersion(ctx, &pb.GetObjectVersionRequest{
 				Name: objName + "/versions/44444444-4444-4444-4444-444444444444",
-			}))
+			})
 			return err
 		}},
 		{"GetObjectLock", func() error {
-			_, err := s.GetObjectLock(ctx, connect.NewRequest(&pb.GetObjectLockRequest{Name: objName}))
+			_, err := s.GetObjectLock(ctx, &pb.GetObjectLockRequest{Name: objName})
 			return err
 		}},
 		{"SetObjectLegalHold", func() error {
-			_, err := s.SetObjectLegalHold(ctx, connect.NewRequest(&pb.SetObjectLegalHoldRequest{Name: objName, LegalHold: true}))
+			_, err := s.SetObjectLegalHold(ctx, &pb.SetObjectLegalHoldRequest{Name: objName, LegalHold: true})
 			return err
 		}},
 		{"UploadObject", func() error {
-			_, err := s.UploadObject(ctx, connect.NewRequest(&pb.UploadObjectRequest{
+			_, err := s.UploadObject(ctx, &pb.UploadObjectRequest{
 				Parent: parent, Key: "k", ContentType: "text/plain",
-			}))
+			})
 			return err
 		}},
 		{"LookupObject", func() error {
-			_, err := s.LookupObject(ctx, connect.NewRequest(&pb.LookupObjectRequest{
+			_, err := s.LookupObject(ctx, &pb.LookupObjectRequest{
 				Parent: parent, Key: "k",
-			}))
+			})
 			return err
 		}},
 		{"CompleteObject", func() error {
-			_, err := s.CompleteObject(ctx, connect.NewRequest(&pb.CompleteObjectRequest{
+			_, err := s.CompleteObject(ctx, &pb.CompleteObjectRequest{
 				Name: objName, Etag: "e",
-			}))
+			})
 			return err
 		}},
 		{"RestoreObject", func() error {
-			_, err := s.RestoreObject(ctx, connect.NewRequest(&pb.RestoreObjectRequest{
+			_, err := s.RestoreObject(ctx, &pb.RestoreObjectRequest{
 				Name: objName, ResourceVersion: "1",
-			}))
+			})
 			return err
 		}},
 		{"RestoreObjectVersion", func() error {
-			_, err := s.RestoreObjectVersion(ctx, connect.NewRequest(&pb.RestoreObjectVersionRequest{
+			_, err := s.RestoreObjectVersion(ctx, &pb.RestoreObjectVersionRequest{
 				Name:            objName + "/versions/44444444-4444-4444-4444-444444444444",
 				ResourceVersion: "1",
-			}))
+			})
 			return err
 		}},
 		{"SetObjectRetention", func() error {
-			_, err := s.SetObjectRetention(ctx, connect.NewRequest(&pb.SetObjectRetentionRequest{
+			_, err := s.SetObjectRetention(ctx, &pb.SetObjectRetentionRequest{
 				Name: objName, Mode: "GOVERNANCE",
 				RetainUntil: timestamppb.New(time.Now().Add(time.Hour)),
-			}))
+			})
 			return err
 		}},
 		{"DeleteObject", func() error {
-			_, err := s.DeleteObject(ctx, connect.NewRequest(&pb.DeleteObjectRequest{Name: objName}))
+			_, err := s.DeleteObject(ctx, &pb.DeleteObjectRequest{Name: objName})
 			return err
 		}},
 	}
@@ -249,7 +249,7 @@ func TestDisabledFeaturesAnswerUnimplementedRatherThanPanicking(t *testing.T) {
 	objName := "tenants/" + tenantA.String() + "/collections/c1/objects/" + objUUID.String()
 
 	t.Run("object lock", func(t *testing.T) {
-		_, err := s.GetObjectLock(ctx, connect.NewRequest(&pb.GetObjectLockRequest{Name: objName}))
+		_, err := s.GetObjectLock(ctx, &pb.GetObjectLockRequest{Name: objName})
 		if err == nil {
 			t.Fatal("a disabled feature answered success")
 		}
@@ -259,7 +259,7 @@ func TestDisabledFeaturesAnswerUnimplementedRatherThanPanicking(t *testing.T) {
 	})
 
 	t.Run("versioning", func(t *testing.T) {
-		_, err := s.GetObjectVersion(ctx, connect.NewRequest(&pb.GetObjectVersionRequest{Name: objName}))
+		_, err := s.GetObjectVersion(ctx, &pb.GetObjectVersionRequest{Name: objName})
 		if err == nil {
 			t.Fatal("a disabled feature answered success")
 		}
@@ -286,33 +286,33 @@ func TestMalformedNamesAreRefusedBeforeTheHandler(t *testing.T) {
 		call func() error
 	}{
 		{"object name missing the objects segment", func() error {
-			_, err := s.GetObject(ctx, connect.NewRequest(&pb.GetObjectRequest{
+			_, err := s.GetObject(ctx, &pb.GetObjectRequest{
 				Name: "tenants/" + tenantA.String() + "/collections/c1",
-			}))
+			})
 			return err
 		}},
 		{"object id is not a uuid", func() error {
-			_, err := s.GetObject(ctx, connect.NewRequest(&pb.GetObjectRequest{
+			_, err := s.GetObject(ctx, &pb.GetObjectRequest{
 				Name: "tenants/" + tenantA.String() + "/collections/c1/objects/not-a-uuid",
-			}))
+			})
 			return err
 		}},
 		{"tenant segment is not a uuid", func() error {
-			_, err := s.GetObject(ctx, connect.NewRequest(&pb.GetObjectRequest{
+			_, err := s.GetObject(ctx, &pb.GetObjectRequest{
 				Name: "tenants/nope/collections/c1/objects/" + objUUID.String(),
-			}))
+			})
 			return err
 		}},
 		{"parent is not a collection", func() error {
-			_, err := s.ListObjects(ctx, connect.NewRequest(&pb.ListObjectsRequest{
+			_, err := s.ListObjects(ctx, &pb.ListObjectsRequest{
 				Parent: "tenants/" + tenantA.String(),
-			}))
+			})
 			return err
 		}},
 		{"version name without a version id", func() error {
-			_, err := s.GetObjectVersion(ctx, connect.NewRequest(&pb.GetObjectVersionRequest{
+			_, err := s.GetObjectVersion(ctx, &pb.GetObjectVersionRequest{
 				Name: "tenants/" + tenantA.String() + "/collections/c1/objects/" + objUUID.String(),
-			}))
+			})
 			return err
 		}},
 	}

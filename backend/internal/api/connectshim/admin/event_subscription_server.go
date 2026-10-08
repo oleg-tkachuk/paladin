@@ -5,8 +5,9 @@ import (
 	"fmt"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -34,11 +35,11 @@ func NewEventSubscriptionServer(h *eventsubh.Handler, tenants TenantResolver) *E
 func (s *EventSubscriptionServer) resolveSubscriptionName(ctx context.Context, name string) (uuid.UUID, uuid.UUID, error) {
 	ref, subID, err := subscriptionFromName(name)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return uuid.Nil, uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	id, err := uuid.Parse(subID)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return uuid.Nil, uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	tenantID, err := resolveTenantRef(ctx, s.Tenants, ref)
 	if err != nil {
@@ -47,8 +48,8 @@ func (s *EventSubscriptionServer) resolveSubscriptionName(ctx context.Context, n
 	return tenantID, id, nil
 }
 
-func (s *EventSubscriptionServer) CreateSubscription(ctx context.Context, req *connect.Request[pb.CreateSubscriptionRequest]) (*connect.Response[pb.EventSubscription], error) {
-	m := req.Msg
+func (s *EventSubscriptionServer) CreateSubscription(ctx context.Context, req *pb.CreateSubscriptionRequest) (*pb.EventSubscription, error) {
+	m := req
 	tenantID, err := resolveTenantName(ctx, s.Tenants, m.GetParent())
 	if err != nil {
 		return nil, err
@@ -65,11 +66,11 @@ func (s *EventSubscriptionServer) CreateSubscription(ctx context.Context, req *c
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(eventSubToProto(out)), nil
+	return eventSubToProto(out), nil
 }
 
-func (s *EventSubscriptionServer) GetSubscription(ctx context.Context, req *connect.Request[pb.GetSubscriptionRequest]) (*connect.Response[pb.EventSubscription], error) {
-	tenantID, id, err := s.resolveSubscriptionName(ctx, req.Msg.GetName())
+func (s *EventSubscriptionServer) GetSubscription(ctx context.Context, req *pb.GetSubscriptionRequest) (*pb.EventSubscription, error) {
+	tenantID, id, err := s.resolveSubscriptionName(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +78,7 @@ func (s *EventSubscriptionServer) GetSubscription(ctx context.Context, req *conn
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(eventSubToProto(out)), nil
+	return eventSubToProto(out), nil
 }
 
 // updateEventSubscriptionPaths are the EventSubscription fields
@@ -88,16 +89,15 @@ var updateEventSubscriptionPaths = []string{
 	admindomain.EventSubscriptionPathDisabled,
 }
 
-func (s *EventSubscriptionServer) UpdateSubscription(ctx context.Context, req *connect.Request[pb.UpdateSubscriptionRequest]) (*connect.Response[pb.EventSubscription], error) {
-	m := req.Msg
+func (s *EventSubscriptionServer) UpdateSubscription(ctx context.Context, req *pb.UpdateSubscriptionRequest) (*pb.EventSubscription, error) {
+	m := req
 	tenantID, id, err := s.resolveSubscriptionName(ctx, m.GetName())
 	if err != nil {
 		return nil, err
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	if err := convx.CheckMask(m.GetUpdateMask().GetPaths(), updateEventSubscriptionPaths); err != nil {
 		return nil, err
@@ -114,27 +114,26 @@ func (s *EventSubscriptionServer) UpdateSubscription(ctx context.Context, req *c
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(eventSubToProto(out)), nil
+	return eventSubToProto(out), nil
 }
 
-func (s *EventSubscriptionServer) DeleteSubscription(ctx context.Context, req *connect.Request[pb.DeleteSubscriptionRequest]) (*connect.Response[pb.DeleteSubscriptionResponse], error) {
-	tenantID, id, err := s.resolveSubscriptionName(ctx, req.Msg.GetName())
+func (s *EventSubscriptionServer) DeleteSubscription(ctx context.Context, req *pb.DeleteSubscriptionRequest) (*pb.DeleteSubscriptionResponse, error) {
+	tenantID, id, err := s.resolveSubscriptionName(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	if err := s.H.Delete(ctx, tenantID, id, rv); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.DeleteSubscriptionResponse{}), nil
+	return &pb.DeleteSubscriptionResponse{}, nil
 }
 
-func (s *EventSubscriptionServer) ListSubscriptions(ctx context.Context, req *connect.Request[pb.ListSubscriptionsRequest]) (*connect.Response[pb.ListSubscriptionsResponse], error) {
-	m := req.Msg
+func (s *EventSubscriptionServer) ListSubscriptions(ctx context.Context, req *pb.ListSubscriptionsRequest) (*pb.ListSubscriptionsResponse, error) {
+	m := req
 	args := admindomain.ListEventSubscriptionsArgs{PageSize: m.GetPage().GetPageSize()}
 	// An unresolvable parent is an error, never an unscoped listing.
 	if m.GetParent() != "" {
@@ -157,22 +156,22 @@ func (s *EventSubscriptionServer) ListSubscriptions(ctx context.Context, req *co
 	for i := range list {
 		out.Subscriptions = append(out.Subscriptions, eventSubToProto(&list[i]))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *EventSubscriptionServer) TestSubscription(ctx context.Context, req *connect.Request[pb.TestSubscriptionRequest]) (*connect.Response[pb.TestSubscriptionResponse], error) {
-	tenantID, id, err := s.resolveSubscriptionName(ctx, req.Msg.GetName())
+func (s *EventSubscriptionServer) TestSubscription(ctx context.Context, req *pb.TestSubscriptionRequest) (*pb.TestSubscriptionResponse, error) {
+	tenantID, id, err := s.resolveSubscriptionName(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
 	if err := s.H.TestSubscription(ctx, tenantID, id); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.TestSubscriptionResponse{Delivered: true}), nil
+	return &pb.TestSubscriptionResponse{Delivered: true}, nil
 }
 
-func (s *EventSubscriptionServer) RedriveFailedDeliveries(ctx context.Context, req *connect.Request[pb.RedriveFailedDeliveriesRequest]) (*connect.Response[pb.RedriveFailedDeliveriesResponse], error) {
-	tenantID, id, err := s.resolveSubscriptionName(ctx, req.Msg.GetName())
+func (s *EventSubscriptionServer) RedriveFailedDeliveries(ctx context.Context, req *pb.RedriveFailedDeliveriesRequest) (*pb.RedriveFailedDeliveriesResponse, error) {
+	tenantID, id, err := s.resolveSubscriptionName(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +179,7 @@ func (s *EventSubscriptionServer) RedriveFailedDeliveries(ctx context.Context, r
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.RedriveFailedDeliveriesResponse{Requeued: n}), nil
+	return &pb.RedriveFailedDeliveriesResponse{Requeued: n}, nil
 }
 
 var _ paladinadminv1connect.EventSubscriptionServiceHandler = (*EventSubscriptionServer)(nil)

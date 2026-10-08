@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -46,15 +47,15 @@ type TenantSlugs interface {
 //
 // Install it after TenantGate. Unary only: no change is a streaming RPC
 // (TestNoChangeIsStreaming).
-func TenantFreeze(states auth.TenantStateReader, slugs TenantSlugs) connect.UnaryInterceptorFunc {
-	return func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if err := checkFrozen(ctx, states, slugs, req.Spec().Procedure, req.Any()); err != nil {
+func TenantFreeze(states auth.TenantStateReader, slugs TenantSlugs) connect.ServerInterceptor {
+	return unary.Interceptor(func(next unary.Func) unary.Func {
+		return func(ctx context.Context, spec connect.Spec, req proto.Message) (proto.Message, error) {
+			if err := checkFrozen(ctx, states, slugs, spec.Procedure, req); err != nil {
 				return nil, err
 			}
-			return next(ctx, req)
+			return next(ctx, spec, req)
 		}
-	}
+	}, nil)
 }
 
 func checkFrozen(ctx context.Context, states auth.TenantStateReader, slugs TenantSlugs, procedure string, msg any) error {
@@ -98,5 +99,5 @@ func checkFrozen(ctx context.Context, states auth.TenantStateReader, slugs Tenan
 
 func unreadable(ctx context.Context, err error) error {
 	logger.FromContext(ctx).Warn("tenant state unreadable; refusing the change", zap.Error(err))
-	return connect.NewError(connect.CodeUnavailable, errTenantStateUnreadable)
+	return connect.NewError(connect.CodeUnavailable, errTenantStateUnreadable.Error()).WithCause(errTenantStateUnreadable)
 }

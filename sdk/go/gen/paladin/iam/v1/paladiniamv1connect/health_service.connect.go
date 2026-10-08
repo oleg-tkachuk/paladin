@@ -6,149 +6,143 @@ package paladiniamv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// HealthServiceName is the fully-qualified name of the HealthService service.
 	HealthServiceName = "paladin.iam.v1.HealthService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// HealthServiceGetVersionProcedure is the fully-qualified name of the HealthService's GetVersion
-	// RPC.
+	// HealthServiceGetVersionProcedure is the procedure name of the HealthService's GetVersion RPC.
 	HealthServiceGetVersionProcedure = "/paladin.iam.v1.HealthService/GetVersion"
-	// HealthServiceGetHealthProcedure is the fully-qualified name of the HealthService's GetHealth RPC.
+	// HealthServiceGetHealthProcedure is the procedure name of the HealthService's GetHealth RPC.
 	HealthServiceGetHealthProcedure = "/paladin.iam.v1.HealthService/GetHealth"
+)
+
+var (
+	healthServiceGetVersionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_health_service_proto.Services().ByName("HealthService").Methods().ByName("GetVersion"),
+			Procedure:        HealthServiceGetVersionProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	healthServiceGetHealthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_health_service_proto.Services().ByName("HealthService").Methods().ByName("GetHealth"),
+			Procedure:        HealthServiceGetHealthProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // HealthServiceClient is a client for the paladin.iam.v1.HealthService service.
 type HealthServiceClient interface {
 	// GetVersion returns build metadata embedded in the binary at link time
 	// (-ldflags). Cheap, no dependencies touched. Safe to poll.
-	GetVersion(context.Context, *connect.Request[v1.GetVersionRequest]) (*connect.Response[v1.VersionInfo], error)
+	GetVersion(context.Context, *v1.GetVersionRequest) (*v1.VersionInfo, error)
 	// GetHealth runs the same per-component checks as /readyz but returns
 	// them itemised so the UI can render a per-dependency table. Each
 	// component carries its own status + latency so a single slow
 	// dependency is identifiable without log scraping.
-	GetHealth(context.Context, *connect.Request[v1.GetHealthRequest]) (*connect.Response[v1.HealthInfo], error)
+	GetHealth(context.Context, *v1.GetHealthRequest) (*v1.HealthInfo, error)
 }
 
-// NewHealthServiceClient constructs a client for the paladin.iam.v1.HealthService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewHealthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) HealthServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	healthServiceMethods := v1.File_paladin_iam_v1_health_service_proto.Services().ByName("HealthService").Methods()
-	return &healthServiceClient{
-		getVersion: connect.NewClient[v1.GetVersionRequest, v1.VersionInfo](
-			httpClient,
-			baseURL+HealthServiceGetVersionProcedure,
-			connect.WithSchema(healthServiceMethods.ByName("GetVersion")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		getHealth: connect.NewClient[v1.GetHealthRequest, v1.HealthInfo](
-			httpClient,
-			baseURL+HealthServiceGetHealthProcedure,
-			connect.WithSchema(healthServiceMethods.ByName("GetHealth")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// healthServiceClient implements HealthServiceClient.
-type healthServiceClient struct {
-	getVersion *connect.Client[v1.GetVersionRequest, v1.VersionInfo]
-	getHealth  *connect.Client[v1.GetHealthRequest, v1.HealthInfo]
-}
-
-// GetVersion calls paladin.iam.v1.HealthService.GetVersion.
-func (c *healthServiceClient) GetVersion(ctx context.Context, req *connect.Request[v1.GetVersionRequest]) (*connect.Response[v1.VersionInfo], error) {
-	return c.getVersion.CallUnary(ctx, req)
-}
-
-// GetHealth calls paladin.iam.v1.HealthService.GetHealth.
-func (c *healthServiceClient) GetHealth(ctx context.Context, req *connect.Request[v1.GetHealthRequest]) (*connect.Response[v1.HealthInfo], error) {
-	return c.getHealth.CallUnary(ctx, req)
+// NewHealthServiceClient constructs a client for the paladin.iam.v1.HealthService service. Multiple
+// service clients may share a single connect.Client.
+func NewHealthServiceClient(client *connect.Client) HealthServiceClient {
+	return &healthServiceClient{client: client}
 }
 
 // HealthServiceHandler is an implementation of the paladin.iam.v1.HealthService service.
 type HealthServiceHandler interface {
 	// GetVersion returns build metadata embedded in the binary at link time
 	// (-ldflags). Cheap, no dependencies touched. Safe to poll.
-	GetVersion(context.Context, *connect.Request[v1.GetVersionRequest]) (*connect.Response[v1.VersionInfo], error)
+	GetVersion(context.Context, *v1.GetVersionRequest) (*v1.VersionInfo, error)
 	// GetHealth runs the same per-component checks as /readyz but returns
 	// them itemised so the UI can render a per-dependency table. Each
 	// component carries its own status + latency so a single slow
 	// dependency is identifiable without log scraping.
-	GetHealth(context.Context, *connect.Request[v1.GetHealthRequest]) (*connect.Response[v1.HealthInfo], error)
+	GetHealth(context.Context, *v1.GetHealthRequest) (*v1.HealthInfo, error)
 }
 
-// NewHealthServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewHealthServiceHandler(svc HealthServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	healthServiceMethods := v1.File_paladin_iam_v1_health_service_proto.Services().ByName("HealthService").Methods()
-	healthServiceGetVersionHandler := connect.NewUnaryHandler(
-		HealthServiceGetVersionProcedure,
-		svc.GetVersion,
-		connect.WithSchema(healthServiceMethods.ByName("GetVersion")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterHealthServiceHandler registers svc as the paladin.iam.v1.HealthService implementation on
+// server.
+func RegisterHealthServiceHandler(server *connect.Server, svc HealthServiceHandler) {
+	adapter := healthServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: healthServiceGetVersionSpec(), Handler: adapter.getVersion},
+		connect.Method{Spec: healthServiceGetHealthSpec(), Handler: adapter.getHealth},
 	)
-	healthServiceGetHealthHandler := connect.NewUnaryHandler(
-		HealthServiceGetHealthProcedure,
-		svc.GetHealth,
-		connect.WithSchema(healthServiceMethods.ByName("GetHealth")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.iam.v1.HealthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case HealthServiceGetVersionProcedure:
-			healthServiceGetVersionHandler.ServeHTTP(w, r)
-		case HealthServiceGetHealthProcedure:
-			healthServiceGetHealthHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedHealthServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedHealthServiceHandler struct{}
 
-func (UnimplementedHealthServiceHandler) GetVersion(context.Context, *connect.Request[v1.GetVersionRequest]) (*connect.Response[v1.VersionInfo], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.HealthService.GetVersion is not implemented"))
+func (UnimplementedHealthServiceHandler) GetVersion(context.Context, *v1.GetVersionRequest) (*v1.VersionInfo, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.HealthService.GetVersion is not implemented")
 }
 
-func (UnimplementedHealthServiceHandler) GetHealth(context.Context, *connect.Request[v1.GetHealthRequest]) (*connect.Response[v1.HealthInfo], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.iam.v1.HealthService.GetHealth is not implemented"))
+func (UnimplementedHealthServiceHandler) GetHealth(context.Context, *v1.GetHealthRequest) (*v1.HealthInfo, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.HealthService.GetHealth is not implemented")
+}
+
+type healthServiceClient struct {
+	client *connect.Client
+}
+
+func (c *healthServiceClient) GetVersion(ctx context.Context, req *v1.GetVersionRequest) (*v1.VersionInfo, error) {
+	var res v1.VersionInfo
+	if err := c.client.CallUnary(ctx, healthServiceGetVersionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *healthServiceClient) GetHealth(ctx context.Context, req *v1.GetHealthRequest) (*v1.HealthInfo, error) {
+	var res v1.HealthInfo
+	if err := c.client.CallUnary(ctx, healthServiceGetHealthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type healthServiceHandler struct{ svc HealthServiceHandler }
+
+func (h healthServiceHandler) getVersion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetVersionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetVersion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h healthServiceHandler) getHealth(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetHealthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetHealth(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

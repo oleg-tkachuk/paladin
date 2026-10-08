@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 // audienceMismatch is how the planes' JWT verifier words a token issued for

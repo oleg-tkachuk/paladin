@@ -5,7 +5,6 @@ import (
 	"runtime"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
@@ -54,8 +53,8 @@ func NewSystemServer(version, commit string, buildTime time.Time, role string, h
 
 func (s *SystemServer) GetVersion(
 	_ context.Context,
-	_ *connect.Request[pb.GetVersionRequest],
-) (*connect.Response[pb.VersionInfo], error) {
+	_ *pb.GetVersionRequest,
+) (*pb.VersionInfo, error) {
 	out := &pb.VersionInfo{
 		Version:   s.Version,
 		Commit:    s.Commit,
@@ -67,23 +66,23 @@ func (s *SystemServer) GetVersion(
 	if out.GoVersion == "" {
 		out.GoVersion = runtime.Version()
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 func (s *SystemServer) GetHealth(
 	ctx context.Context,
-	_ *connect.Request[pb.GetHealthRequest],
-) (*connect.Response[pb.HealthInfo], error) {
+	_ *pb.GetHealthRequest,
+) (*pb.HealthInfo, error) {
 	if s.Health == nil {
 		// No checks registered → trivially healthy. Useful in tests; the
 		// production wiring always passes a real *health.Handler.
-		return connect.NewResponse(&pb.HealthInfo{
+		return &pb.HealthInfo{
 			Status: pb.ComponentStatus_COMPONENT_STATUS_HEALTHY,
 			Role:   s.Role,
-		}), nil
+		}, nil
 	}
 	snap := s.Health.Snapshot(ctx, s.Role)
-	return connect.NewResponse(snapshotToProto(snap)), nil
+	return snapshotToProto(snap), nil
 }
 
 // snapshotToProto converts the canonical health.Snapshot into the proto

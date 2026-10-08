@@ -41,7 +41,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
@@ -136,11 +137,11 @@ func newFixture(t *testing.T) *fixture {
 		nonce:     nonce,
 		jwtSecret: secret,
 		jwtIssuer: issuer,
-		tenants:   paladinadminv1connect.NewTenantServiceClient(httpClient, adminURL),
-		backends:  paladinadminv1connect.NewBackendServiceClient(httpClient, adminURL),
-		buckets:   paladinadminv1connect.NewBucketServiceClient(httpClient, adminURL),
-		collections: paladinadminv1connect.NewCollectionServiceClient(
-			httpClient, adminURL),
+		tenants:   paladinadminv1connect.NewTenantServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, adminURL))),
+		backends:  paladinadminv1connect.NewBackendServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, adminURL))),
+		buckets:   paladinadminv1connect.NewBucketServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, adminURL))),
+		collections: paladinadminv1connect.NewCollectionServiceClient(connect.NewClient(connecthttp.NewTransport(
+			httpClient, adminURL))),
 	}
 }
 
@@ -162,12 +163,12 @@ func platformTenantID(ctx context.Context, t *testing.T, secret, issuer, adminUR
 	spanning := mintJWT(t, secret, issuer, "paladin-admin", "",
 		"e2e-runner", []string{"platform.admin"}, time.Minute)
 	hc := &http.Client{Timeout: 30 * time.Second, Transport: &authedTransport{jwt: spanning, base: http.DefaultTransport}}
-	got, err := paladinadminv1connect.NewTenantServiceClient(hc, adminURL).GetTenant(ctx,
-		connect.NewRequest(&pb.GetTenantRequest{Name: "tenants/" + slug}))
+	got, err := paladinadminv1connect.NewTenantServiceClient(connect.NewClient(connecthttp.NewTransport(hc, adminURL))).GetTenant(ctx,
+		&pb.GetTenantRequest{Name: "tenants/" + slug})
 	if err != nil {
 		t.Fatalf("read the platform tenant %q: %v", slug, err)
 	}
-	return got.Msg.GetTenantId()
+	return got.GetTenantId()
 }
 
 // clientForTenant returns a fresh Collection client whose JWT is
@@ -183,7 +184,7 @@ func (f *fixture) collectionsAsTenant(t *testing.T, tenantID string) paladinadmi
 		Timeout:   30 * time.Second,
 		Transport: &authedTransport{jwt: jwt, base: http.DefaultTransport},
 	}
-	return paladinadminv1connect.NewCollectionServiceClient(hc, f.adminURL)
+	return paladinadminv1connect.NewCollectionServiceClient(connect.NewClient(connecthttp.NewTransport(hc, f.adminURL)))
 }
 
 // tenantVersion reads the tenant's current resource_version for a
@@ -191,23 +192,23 @@ func (f *fixture) collectionsAsTenant(t *testing.T, tenantID string) paladinadmi
 // row is already gone — the caller reads that as "nothing to delete"
 // rather than as a failure, because teardown runs after partial runs too.
 func (f *fixture) tenantVersion(tenantID string) string {
-	got, err := f.tenants.GetTenant(f.ctx, connect.NewRequest(
-		&pb.GetTenantRequest{Name: "tenants/" + tenantID}))
+	got, err := f.tenants.GetTenant(f.ctx,
+		&pb.GetTenantRequest{Name: "tenants/" + tenantID})
 	if err != nil {
 		return ""
 	}
-	return got.Msg.GetResourceVersion()
+	return got.GetResourceVersion()
 }
 
 // backendVersion is tenantVersion for storage backends — same reason,
 // same contract on the empty return.
 func (f *fixture) backendVersion(backendID string) string {
-	got, err := f.backends.GetBackend(f.ctx, connect.NewRequest(
-		&pb.GetBackendRequest{Name: "storageBackends/" + backendID}))
+	got, err := f.backends.GetBackend(f.ctx,
+		&pb.GetBackendRequest{Name: "storageBackends/" + backendID})
 	if err != nil {
 		return ""
 	}
-	return got.Msg.GetResourceVersion()
+	return got.GetResourceVersion()
 }
 
 // authedTransport injects the bearer JWT on every request, and an
@@ -339,43 +340,43 @@ func TestAdminAPI_E2E(t *testing.T) {
 		if createdTenantID != "" {
 			oks := f.collectionsAsTenant(t, createdTenantID)
 			_, _ = oks.DeleteCollection(f.ctx,
-				connect.NewRequest(&pb.DeleteCollectionRequest{
+				&pb.DeleteCollectionRequest{
 					Name:             "tenants/" + createdTenantID + "/collections/" + collectionName,
 					SkipVersionCheck: true,
-				}))
+				})
 			// DeleteTenant moves the row to the trash; PurgeTenant is
 			// what takes it out. `force` used to collapse the two into
 			// one call and no longer exists, so draining this run's
 			// state takes both.
 			if rv := f.tenantVersion(createdTenantID); rv != "" {
 				_, _ = f.tenants.DeleteTenant(f.ctx,
-					connect.NewRequest(&pb.DeleteTenantRequest{
+					&pb.DeleteTenantRequest{
 						Name:            "tenants/" + createdTenantID,
 						ResourceVersion: rv,
-					}))
+					})
 			}
 			_, _ = f.tenants.PurgeTenant(f.ctx,
-				connect.NewRequest(&pb.PurgeTenantRequest{
+				&pb.PurgeTenantRequest{
 					Name: "tenants/" + createdTenantID,
-				}))
+				})
 		}
 		_, _ = f.buckets.DeleteBucket(f.ctx,
-			connect.NewRequest(&pb.DeleteBucketRequest{
+			&pb.DeleteBucketRequest{
 				Name:             bucketResourceName(bucketBackendID, bucketID),
 				SkipVersionCheck: true,
-			}))
+			})
 		if rv := f.backendVersion(backendID); rv != "" {
 			_, _ = f.backends.DeleteBackend(f.ctx,
-				connect.NewRequest(&pb.DeleteBackendRequest{
+				&pb.DeleteBackendRequest{
 					Name:            "storageBackends/" + backendID,
 					ResourceVersion: rv,
-				}))
+				})
 		}
 	})
 
 	// ─── Backend ─────────────────────────────────────────────────
 	t.Run("BackendService_CreateAndGet", func(t *testing.T) {
-		got, err := f.backends.CreateBackend(f.ctx, connect.NewRequest(
+		got, err := f.backends.CreateBackend(f.ctx,
 			&pb.CreateBackendRequest{
 				BackendId: backendID,
 				Backend: &pb.StorageBackend{
@@ -387,39 +388,39 @@ func TestAdminAPI_E2E(t *testing.T) {
 					ForcePathStyle:       true,
 					CredentialsSecretRef: "vault://kv/paladin/e2e",
 				},
-			}))
+			})
 		if err != nil {
 			t.Fatalf("CreateBackend: %v", err)
 		}
-		if got.Msg.GetBackendId() != backendID {
+		if got.GetBackendId() != backendID {
 			t.Errorf("BackendId: got %q want %q",
-				got.Msg.GetBackendId(), backendID)
+				got.GetBackendId(), backendID)
 		}
 
-		read, err := f.backends.GetBackend(f.ctx, connect.NewRequest(
-			&pb.GetBackendRequest{Name: "storageBackends/" + backendID}))
+		read, err := f.backends.GetBackend(f.ctx,
+			&pb.GetBackendRequest{Name: "storageBackends/" + backendID})
 		if err != nil {
 			t.Fatalf("GetBackend: %v", err)
 		}
-		if read.Msg.GetEndpoint() == "" {
+		if read.GetEndpoint() == "" {
 			t.Errorf("Endpoint is empty on read")
 		}
 	})
 
 	t.Run("BackendService_List", func(t *testing.T) {
-		res, err := f.backends.ListBackends(f.ctx, connect.NewRequest(
-			&pb.ListBackendsRequest{}))
+		res, err := f.backends.ListBackends(f.ctx,
+			&pb.ListBackendsRequest{})
 		if err != nil {
 			t.Fatalf("ListBackends: %v", err)
 		}
-		if !containsBackend(res.Msg.GetBackends(), backendID) {
+		if !containsBackend(res.GetBackends(), backendID) {
 			t.Errorf("ListBackends missing %q", backendID)
 		}
 	})
 
 	// ─── Bucket ──────────────────────────────────────────────────
 	t.Run("BucketService_CreateAndGet", func(t *testing.T) {
-		got, err := f.buckets.CreateBucket(f.ctx, connect.NewRequest(
+		got, err := f.buckets.CreateBucket(f.ctx,
 			&pb.CreateBucketRequest{
 				Parent:   "storageBackends/" + bucketBackendID,
 				BucketId: bucketID,
@@ -431,78 +432,78 @@ func TestAdminAPI_E2E(t *testing.T) {
 				// A new name: Paladin registers without provisioning only a
 				// bucket the backend already holds (ADR-0028).
 				ProvisionOnBackend: true,
-			}))
+			})
 		if err != nil {
 			t.Fatalf("CreateBucket: %v", err)
 		}
-		if got.Msg.GetBucketId() != bucketID {
+		if got.GetBucketId() != bucketID {
 			t.Errorf("BucketId: got %q want %q",
-				got.Msg.GetBucketId(), bucketID)
+				got.GetBucketId(), bucketID)
 		}
 
-		read, err := f.buckets.GetBucket(f.ctx, connect.NewRequest(
+		read, err := f.buckets.GetBucket(f.ctx,
 			&pb.GetBucketRequest{
 				Name: bucketResourceName(bucketBackendID, bucketID),
-			}))
+			})
 		if err != nil {
 			t.Fatalf("GetBucket: %v", err)
 		}
-		if read.Msg.GetBackendId() != bucketBackendID {
+		if read.GetBackendId() != bucketBackendID {
 			t.Errorf("BackendId: got %q want %q",
-				read.Msg.GetBackendId(), bucketBackendID)
+				read.GetBackendId(), bucketBackendID)
 		}
 	})
 
 	// ─── Tenant ──────────────────────────────────────────────────
 	t.Run("TenantService_CreateWithDefaultBinding", func(t *testing.T) {
-		got, err := f.tenants.CreateTenant(f.ctx, connect.NewRequest(
+		got, err := f.tenants.CreateTenant(f.ctx,
 			&pb.CreateTenantRequest{
 				Tenant: &pb.Tenant{
 					Slug:        tenantSlug,
 					DisplayName: "E2E Tenant " + f.nonce,
 				},
 				DefaultBucket: bucketResourceName(bucketBackendID, bucketID),
-			}))
+			})
 		if err != nil {
 			t.Fatalf("CreateTenant: %v", err)
 		}
-		if got.Msg.GetSlug() != tenantSlug {
+		if got.GetSlug() != tenantSlug {
 			t.Errorf("Slug: got %q want %q",
-				got.Msg.GetSlug(), tenantSlug)
+				got.GetSlug(), tenantSlug)
 		}
-		if got.Msg.GetTenantId() == "" {
+		if got.GetTenantId() == "" {
 			t.Fatal("TenantId is empty — server should have minted UUIDv7")
 		}
-		if _, err := uuid.Parse(got.Msg.GetTenantId()); err != nil {
+		if _, err := uuid.Parse(got.GetTenantId()); err != nil {
 			t.Errorf("TenantId is not a valid UUID: %v", err)
 		}
-		createdTenantID = got.Msg.GetTenantId()
-		tenantRV = got.Msg.GetResourceVersion()
+		createdTenantID = got.GetTenantId()
+		tenantRV = got.GetResourceVersion()
 	})
 
 	t.Run("TenantService_RejectEmptySlug", func(t *testing.T) {
-		_, err := f.tenants.CreateTenant(f.ctx, connect.NewRequest(
+		_, err := f.tenants.CreateTenant(f.ctx,
 			&pb.CreateTenantRequest{
 				Tenant:        &pb.Tenant{Slug: "" /* missing */},
 				DefaultBucket: bucketResourceName(bucketBackendID, bucketID),
-			}))
+			})
 		assertCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("TenantService_RejectDuplicateSlug", func(t *testing.T) {
-		_, err := f.tenants.CreateTenant(f.ctx, connect.NewRequest(
+		_, err := f.tenants.CreateTenant(f.ctx,
 			&pb.CreateTenantRequest{
 				Tenant: &pb.Tenant{
 					Slug:        tenantSlug, // already taken
 					DisplayName: "Different " + f.nonce,
 				},
 				DefaultBucket: bucketResourceName(bucketBackendID, bucketID),
-			}))
+			})
 		assertCode(t, err, connect.CodeAlreadyExists)
 	})
 
 	t.Run("TenantService_RejectMismatchedBinding", func(t *testing.T) {
-		_, err := f.tenants.CreateTenant(f.ctx, connect.NewRequest(
+		_, err := f.tenants.CreateTenant(f.ctx,
 			&pb.CreateTenantRequest{
 				Tenant: &pb.Tenant{
 					Slug:        "e2e-mismatch-" + f.nonce,
@@ -510,58 +511,58 @@ func TestAdminAPI_E2E(t *testing.T) {
 				},
 				// Bucket name doesn't exist on this backend → FK fails.
 				DefaultBucket: bucketResourceName(bucketBackendID, "does-not-exist-"+f.nonce),
-			}))
+			})
 		assertCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("TenantService_GetByUUIDAndSlug", func(t *testing.T) {
 		// Both forms should resolve to the same row.
-		byUUID, err := f.tenants.GetTenant(f.ctx, connect.NewRequest(
-			&pb.GetTenantRequest{Name: "tenants/" + createdTenantID}))
+		byUUID, err := f.tenants.GetTenant(f.ctx,
+			&pb.GetTenantRequest{Name: "tenants/" + createdTenantID})
 		if err != nil {
 			t.Fatalf("GetTenant by UUID: %v", err)
 		}
-		bySlug, err := f.tenants.GetTenant(f.ctx, connect.NewRequest(
-			&pb.GetTenantRequest{Name: "tenants/" + tenantSlug}))
+		bySlug, err := f.tenants.GetTenant(f.ctx,
+			&pb.GetTenantRequest{Name: "tenants/" + tenantSlug})
 		if err != nil {
 			t.Fatalf("GetTenant by slug: %v", err)
 		}
-		if byUUID.Msg.GetTenantId() != bySlug.Msg.GetTenantId() {
+		if byUUID.GetTenantId() != bySlug.GetTenantId() {
 			t.Errorf("UUID-form and slug-form returned different tenants: %s vs %s",
-				byUUID.Msg.GetTenantId(), bySlug.Msg.GetTenantId())
+				byUUID.GetTenantId(), bySlug.GetTenantId())
 		}
 	})
 
 	t.Run("TenantService_UpdateDisplayName", func(t *testing.T) {
 		newName := "E2E Updated " + f.nonce
-		got, err := f.tenants.UpdateTenant(f.ctx, connect.NewRequest(
+		got, err := f.tenants.UpdateTenant(f.ctx,
 			&pb.UpdateTenantRequest{
 				Name:            "tenants/" + createdTenantID,
 				ResourceVersion: tenantRV,
 				UpdateMask:      maskOf("display_name"),
 				Tenant:          &pb.Tenant{DisplayName: newName},
-			}))
+			})
 		if err != nil {
 			t.Fatalf("UpdateTenant: %v", err)
 		}
-		if got.Msg.GetDisplayName() != newName {
+		if got.GetDisplayName() != newName {
 			t.Errorf("DisplayName: got %q want %q",
-				got.Msg.GetDisplayName(), newName)
+				got.GetDisplayName(), newName)
 		}
-		tenantRV = got.Msg.GetResourceVersion()
+		tenantRV = got.GetResourceVersion()
 	})
 
 	t.Run("TenantService_RejectSlugMutation", func(t *testing.T) {
 		// Slug in the field mask must be rejected — immutable per
 		// Phase 0. The DB trigger is the last line of defence; the
 		// connectshim should refuse before any DB write.
-		_, err := f.tenants.UpdateTenant(f.ctx, connect.NewRequest(
+		_, err := f.tenants.UpdateTenant(f.ctx,
 			&pb.UpdateTenantRequest{
 				Name:            "tenants/" + createdTenantID,
 				ResourceVersion: tenantRV,
 				UpdateMask:      maskOf("slug"),
 				Tenant:          &pb.Tenant{Slug: "evil-" + f.nonce},
-			}))
+			})
 		assertCode(t, err, connect.CodeInvalidArgument)
 	})
 
@@ -571,7 +572,7 @@ func TestAdminAPI_E2E(t *testing.T) {
 	// tenant so the FK on collections.tenant_id resolves to a real row.
 	t.Run("CollectionService_CreateMultiSegment", func(t *testing.T) {
 		oks := f.collectionsAsTenant(t, createdTenantID)
-		got, err := oks.CreateCollection(f.ctx, connect.NewRequest(
+		got, err := oks.CreateCollection(f.ctx,
 			&pb.CreateCollectionRequest{
 				Parent:     "tenants/" + createdTenantID,
 				Collection: collectionName,
@@ -580,60 +581,60 @@ func TestAdminAPI_E2E(t *testing.T) {
 					DisplayName: "E2E OK " + f.nonce,
 					Bucket:      bucketResourceName(bucketBackendID, bucketID),
 				},
-			}))
+			})
 		if err != nil {
 			t.Fatalf("CreateCollection: %v", err)
 		}
-		if got.Msg.GetCollection() != collectionName {
+		if got.GetCollection() != collectionName {
 			t.Errorf("Collection: got %q want %q",
-				got.Msg.GetCollection(), collectionName)
+				got.GetCollection(), collectionName)
 		}
 		// Multi-segment path round-trip — the schema baseline (001_initial_schema.sql) guarantees the
 		// constraint accepts `a/b/c` shapes; the connectshim parser
 		// (admin/collection_server.go) anchors on `/collections/` so
 		// slashes inside the body don't get mistaken for resource-name
 		// separators.
-		if !strings.Contains(got.Msg.GetCollection(), "/") {
+		if !strings.Contains(got.GetCollection(), "/") {
 			t.Errorf("expected multi-segment collection, got %q",
-				got.Msg.GetCollection())
+				got.GetCollection())
 		}
 	})
 
 	t.Run("CollectionService_GetAndList", func(t *testing.T) {
 		oks := f.collectionsAsTenant(t, createdTenantID)
-		read, err := oks.GetCollection(f.ctx, connect.NewRequest(
+		read, err := oks.GetCollection(f.ctx,
 			&pb.GetCollectionRequest{
 				Name: "tenants/" + createdTenantID + "/collections/" + collectionName,
-			}))
+			})
 		if err != nil {
 			t.Fatalf("GetCollection: %v", err)
 		}
-		if read.Msg.GetBucket() != bucketResourceName(bucketBackendID, bucketID) {
+		if read.GetBucket() != bucketResourceName(bucketBackendID, bucketID) {
 			t.Errorf("Bucket: got %q want %q",
-				read.Msg.GetBucket(),
+				read.GetBucket(),
 				bucketResourceName(bucketBackendID, bucketID))
 		}
 
-		list, err := oks.ListCollections(f.ctx, connect.NewRequest(
+		list, err := oks.ListCollections(f.ctx,
 			&pb.ListCollectionsRequest{
 				Parent: "tenants/" + createdTenantID,
-			}))
+			})
 		if err != nil {
 			t.Fatalf("ListCollections: %v", err)
 		}
-		if !containsCollection(list.Msg.GetCollections(), collectionName) {
+		if !containsCollection(list.GetCollections(), collectionName) {
 			t.Errorf("ListCollections missing %q", collectionName)
 		}
 	})
 
 	t.Run("ListTenants_IncludesCreated", func(t *testing.T) {
-		list, err := f.tenants.ListTenants(f.ctx, connect.NewRequest(
-			&pb.ListTenantsRequest{}))
+		list, err := f.tenants.ListTenants(f.ctx,
+			&pb.ListTenantsRequest{})
 		if err != nil {
 			t.Fatalf("ListTenants: %v", err)
 		}
 		found := false
-		for _, tt := range list.Msg.GetTenants() {
+		for _, tt := range list.GetTenants() {
 			if tt.GetTenantId() == createdTenantID {
 				found = true
 				if tt.GetSlug() != tenantSlug {

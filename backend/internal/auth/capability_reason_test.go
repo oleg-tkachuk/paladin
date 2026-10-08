@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
@@ -24,7 +25,7 @@ func wireReason(t *testing.T, err error) string {
 		t.Fatalf("%v is not a connect error", err)
 	}
 	for _, d := range ce.Details() {
-		v, dErr := d.Value()
+		v, dErr := connectproto.UnmarshalErrorDetail(d)
 		if dErr != nil {
 			t.Fatalf("detail: %v", dErr)
 		}

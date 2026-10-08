@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
@@ -36,9 +35,9 @@ func (cancelFailsGetSucceeds) GetOperation(context.Context, uuid.UUID) (*operati
 
 func TestCancelOperation_ReportsTheCancelNotTheReread(t *testing.T) {
 	srv := &OperationServer{H: cancelFailsGetSucceeds{}}
-	_, err := srv.CancelOperation(context.Background(), connect.NewRequest(&pb.CancelOperationRequest{
+	_, err := srv.CancelOperation(context.Background(), &pb.CancelOperationRequest{
 		Name: "operations/" + uuid.NewString(),
-	}))
+	})
 	if err == nil {
 		t.Fatal("the cancel failed and the shim reported success because the " +
 			"following read worked — the caller believes the operation stopped")
@@ -58,9 +57,9 @@ func (slugFailsPurgeSucceeds) PurgeTenant(context.Context, uuid.UUID) error { re
 
 func TestPurgeTenant_ReportsTheSlugLookupNotThePurge(t *testing.T) {
 	srv := &TenantServer{H: slugFailsPurgeSucceeds{}}
-	_, err := srv.PurgeTenant(context.Background(), connect.NewRequest(&pb.PurgeTenantRequest{
+	_, err := srv.PurgeTenant(context.Background(), &pb.PurgeTenantRequest{
 		Name: "tenants/acme-corp", // a slug, so the lookup runs
-	}))
+	})
 	if err == nil {
 		t.Fatal("the tenant could not be resolved and the shim answered success — " +
 			"a purge was reported against a tenant that was never identified")
@@ -89,14 +88,14 @@ func (okCollection) CreateCollection(context.Context, objectkey.CreateCollection
 
 func TestCreateCollection_RoutesThroughTheDefaultBinding(t *testing.T) {
 	srv := &CollectionServer{H: okCollection{}, bindings: okBindings{}}
-	resp, err := srv.CreateCollection(context.Background(), connect.NewRequest(&pb.CreateCollectionRequest{
+	resp, err := srv.CreateCollection(context.Background(), &pb.CreateCollectionRequest{
 		Parent: "tenants/" + uuid.NewString(), Collection: "c1",
 		CollectionResource: &pb.Collection{}, // no bucket: the binding supplies it
-	}))
+	})
 	if err != nil {
 		t.Fatalf("the binding resolved and the create succeeded, yet the shim failed: %v", err)
 	}
-	if resp == nil || resp.Msg == nil {
+	if resp == nil {
 		t.Fatal("the shim answered with no error and no response — a client reads " +
 			"that as a created collection it can never address")
 	}
@@ -112,9 +111,9 @@ func (cancelSucceedsGetFails) CancelOperation(context.Context, uuid.UUID) error 
 
 func TestCancelOperation_ReportsAFailedReread(t *testing.T) {
 	srv := &OperationServer{H: cancelSucceedsGetFails{}}
-	_, err := srv.CancelOperation(context.Background(), connect.NewRequest(&pb.CancelOperationRequest{
+	_, err := srv.CancelOperation(context.Background(), &pb.CancelOperationRequest{
 		Name: "operations/" + uuid.NewString(),
-	}))
+	})
 	if err == nil {
 		t.Fatal("the re-read failed and the shim answered with an empty operation")
 	}

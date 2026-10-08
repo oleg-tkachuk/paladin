@@ -10,7 +10,7 @@ import (
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -63,7 +63,7 @@ func NewHandler(repo Repository) *Handler { return &Handler{repo: repo} }
 func (h *Handler) CreateObjectTag(ctx context.Context, args CreateArgs) (*ObjectTag, error) {
 	t, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpTag, ""); err != nil {
 		return nil, err
@@ -83,14 +83,14 @@ func (h *Handler) CreateObjectTag(ctx context.Context, args CreateArgs) (*Object
 func (h *Handler) GetObjectTag(ctx context.Context, slug string) (*ObjectTag, error) {
 	t, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, ""); err != nil {
 		return nil, err
 	}
 	ot, err := h.repo.Get(ctx, t, slug)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	return &ot, nil
 }
@@ -98,7 +98,7 @@ func (h *Handler) GetObjectTag(ctx context.Context, slug string) (*ObjectTag, er
 func (h *Handler) UpdateObjectTag(ctx context.Context, args UpdateArgs) (*ObjectTag, error) {
 	t, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpTag, ""); err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func (h *Handler) UpdateObjectTag(ctx context.Context, args UpdateArgs) (*Object
 func (h *Handler) DeleteObjectTag(ctx context.Context, slug string, expectedVersion int64) error {
 	t, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpTag, ""); err != nil {
 		return err
@@ -128,7 +128,7 @@ func (h *Handler) DeleteObjectTag(ctx context.Context, slug string, expectedVers
 func (h *Handler) ListObjectTags(ctx context.Context, pageSize int32, pageToken string) ([]ObjectTag, string, error) {
 	t, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, "", connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
 		return nil, "", err

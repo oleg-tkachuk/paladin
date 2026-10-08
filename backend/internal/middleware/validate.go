@@ -14,7 +14,7 @@ import (
 	"fmt"
 
 	"buf.build/go/protovalidate"
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"connectrpc.com/validate"
 )
 
@@ -27,10 +27,10 @@ import (
 // The validator is built here rather than taken from protovalidate's global
 // one so that a contract whose rules do not compile fails the server at
 // start, not on the first request.
-func ProtoValidate() (connect.Interceptor, error) {
+func ProtoValidate() (connect.ServerInterceptor, error) {
 	v, err := protovalidate.New()
 	if err != nil {
 		return nil, fmt.Errorf("protovalidate: init: %w", err)
 	}
-	return validate.NewInterceptor(validate.WithValidator(v)), nil
+	return validate.NewServerInterceptor(validate.WithValidator(v)), nil
 }

@@ -19,8 +19,9 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -110,18 +111,18 @@ func scopeToTenant(ctx context.Context, urlTenantID string) (context.Context, er
 	}
 	tenantID, err := uuid.Parse(urlTenantID)
 	if err != nil {
-		return ctx, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant %q: %w", urlTenantID, err))
+		return ctx, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant %q: %w", urlTenantID, err))
 	}
 	if named, ok := ctx.Value(namedTenantKey{}).(uuid.UUID); ok {
 		if named != tenantID {
-			return ctx, connect.NewError(connect.CodePermissionDenied, errNamesSpanTenants)
+			return ctx, connect.NewError(connect.CodePermissionDenied, errNamesSpanTenants.Error()).WithCause(errNamesSpanTenants)
 		}
 		return ctx, nil
 	}
 	ctx = context.WithValue(ctx, namedTenantKey{}, tenantID)
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return ctx, connect.NewError(connect.CodeUnauthenticated, err)
+		return ctx, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if p.TenantID == tenantID {
 		return ctx, nil
@@ -156,7 +157,7 @@ func badName(err error) error {
 		return err
 	}
 
-	return connect.NewError(connect.CodeInvalidArgument, err)
+	return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 }
 
 // assertJWTTenant returns an error when the URL tenant does not match the
@@ -165,17 +166,17 @@ func badName(err error) error {
 func assertJWTTenant(ctx context.Context, urlTenantID string) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if p.HasRole("platform.admin") {
 		return nil
 	}
 	if p.TenantID == uuid.Nil {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("token has no tenant"))
+		return connect.NewError(connect.CodePermissionDenied, "token has no tenant")
 	}
 	if p.TenantID.String() != urlTenantID {
 		return connect.NewError(connect.CodePermissionDenied,
-			errors.New("URL tenant does not match token tenant"))
+			"URL tenant does not match token tenant")
 	}
 	return nil
 }

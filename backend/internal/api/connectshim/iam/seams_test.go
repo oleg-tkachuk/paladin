@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
@@ -127,111 +126,111 @@ func TestEveryIAMShimPropagatesHandlerErrors(t *testing.T) {
 		call func() error
 	}{
 		{"Auth.Login", func() error {
-			_, err := authSrv.Login(ctx, connect.NewRequest(&pb.LoginRequest{
+			_, err := authSrv.Login(ctx, &pb.LoginRequest{
 				Subject: "tester", Password: "hunter2",
-			}))
+			})
 			return err
 		}},
 		{"Auth.RefreshToken", func() error {
-			_, err := authSrv.RefreshToken(ctx, connect.NewRequest(&pb.RefreshTokenRequest{
+			_, err := authSrv.RefreshToken(ctx, &pb.RefreshTokenRequest{
 				RefreshToken: "rt",
-			}))
+			})
 			return err
 		}},
 		{"Auth.Revoke", func() error {
-			_, err := authSrv.Revoke(ctx, connect.NewRequest(&pb.RevokeRequest{Token: "rt"}))
+			_, err := authSrv.Revoke(ctx, &pb.RevokeRequest{Token: "rt"})
 			return err
 		}},
 		{"Auth.WhoAmI", func() error {
-			_, err := authSrv.WhoAmI(ctx, connect.NewRequest(&pb.WhoAmIRequest{}))
+			_, err := authSrv.WhoAmI(ctx, &pb.WhoAmIRequest{})
 			return err
 		}},
 		{"Auth.ChangePassword", func() error {
-			_, err := authSrv.ChangePassword(ctx, connect.NewRequest(&pb.ChangePasswordRequest{
+			_, err := authSrv.ChangePassword(ctx, &pb.ChangePasswordRequest{
 				OldPassword: "old", NewPassword: "new",
-			}))
+			})
 			return err
 		}},
 		{"Auth.ExchangeAudience", func() error {
-			_, err := authSrv.ExchangeAudience(ctx, connect.NewRequest(&pb.ExchangeAudienceRequest{
+			_, err := authSrv.ExchangeAudience(ctx, &pb.ExchangeAudienceRequest{
 				RefreshToken: "rt", TargetAudience: "paladin-data",
-			}))
+			})
 			return err
 		}},
 		{"Auth.ListMyMemberships", func() error {
-			_, err := authSrv.ListMyMemberships(ctx, connect.NewRequest(&pb.ListMyMembershipsRequest{}))
+			_, err := authSrv.ListMyMemberships(ctx, &pb.ListMyMembershipsRequest{})
 			return err
 		}},
 		{"Auth.SwitchTenant", func() error {
-			_, err := authSrv.SwitchTenant(ctx, connect.NewRequest(&pb.SwitchTenantRequest{
+			_, err := authSrv.SwitchTenant(ctx, &pb.SwitchTenantRequest{
 				TargetTenantId: tenantID.String(),
-			}))
+			})
 			return err
 		}},
 
 		{"User.CreateUser", func() error {
-			_, err := userSrv.CreateUser(ctx, connect.NewRequest(&pb.CreateUserRequest{
+			_, err := userSrv.CreateUser(ctx, &pb.CreateUserRequest{
 				Parent: "tenants/" + tenantID.String(), Subject: "tester",
-			}))
+			})
 			return err
 		}},
 		{"User.GetUser", func() error {
-			_, err := userSrv.GetUser(ctx, connect.NewRequest(&pb.GetUserRequest{Name: userName}))
+			_, err := userSrv.GetUser(ctx, &pb.GetUserRequest{Name: userName})
 			return err
 		}},
 		{"User.UpdateUser", func() error {
-			_, err := userSrv.UpdateUser(ctx, connect.NewRequest(&pb.UpdateUserRequest{
+			_, err := userSrv.UpdateUser(ctx, &pb.UpdateUserRequest{
 				Name: userName, ResourceVersion: "1",
-			}))
+			})
 			return err
 		}},
 		{"User.DeleteUser", func() error {
-			_, err := userSrv.DeleteUser(ctx, connect.NewRequest(&pb.DeleteUserRequest{
+			_, err := userSrv.DeleteUser(ctx, &pb.DeleteUserRequest{
 				Name: userName, ResourceVersion: "1",
-			}))
+			})
 			return err
 		}},
 		{"User.ListUsers", func() error {
-			_, err := userSrv.ListUsers(ctx, connect.NewRequest(&pb.ListUsersRequest{
+			_, err := userSrv.ListUsers(ctx, &pb.ListUsersRequest{
 				Parent: "tenants/" + tenantID.String(),
-			}))
+			})
 			return err
 		}},
 		{"User.GrantScopes", func() error {
-			_, err := userSrv.GrantScopes(ctx, connect.NewRequest(&pb.GrantScopesRequest{Name: userName}))
+			_, err := userSrv.GrantScopes(ctx, &pb.GrantScopesRequest{Name: userName})
 			return err
 		}},
 		{"User.RevokeScopes", func() error {
-			_, err := userSrv.RevokeScopes(ctx, connect.NewRequest(&pb.RevokeScopesRequest{Name: userName}))
+			_, err := userSrv.RevokeScopes(ctx, &pb.RevokeScopesRequest{Name: userName})
 			return err
 		}},
 		{"User.ResetPassword", func() error {
-			_, err := userSrv.ResetPassword(ctx, connect.NewRequest(&pb.ResetPasswordRequest{Name: userName}))
+			_, err := userSrv.ResetPassword(ctx, &pb.ResetPasswordRequest{Name: userName})
 			return err
 		}},
 
 		{"UserSettings.GetMine", func() error {
-			_, err := setSrv.GetMine(ctx, connect.NewRequest(&pb.GetMineRequest{}))
+			_, err := setSrv.GetMine(ctx, &pb.GetMineRequest{})
 			return err
 		}},
 		{"UserSettings.UpdateMine", func() error {
-			_, err := setSrv.UpdateMine(ctx, connect.NewRequest(&pb.UpdateMineRequest{Theme: "dark"}))
+			_, err := setSrv.UpdateMine(ctx, &pb.UpdateMineRequest{Theme: "dark"})
 			return err
 		}},
 		{"UserSettings.GetForUser", func() error {
-			_, err := setSrv.GetForUser(ctx, connect.NewRequest(&pb.GetForUserRequest{Name: settingsName}))
+			_, err := setSrv.GetForUser(ctx, &pb.GetForUserRequest{Name: settingsName})
 			return err
 		}},
 		{"UserSettings.ListByTenant", func() error {
-			_, err := setSrv.ListByTenant(ctx, connect.NewRequest(&pb.ListByTenantRequest{
+			_, err := setSrv.ListByTenant(ctx, &pb.ListByTenantRequest{
 				Parent: "tenants/" + tenantID.String(),
-			}))
+			})
 			return err
 		}},
 		{"UserSettings.DeleteForUser", func() error {
-			_, err := setSrv.DeleteForUser(ctx, connect.NewRequest(&pb.DeleteForUserRequest{
+			_, err := setSrv.DeleteForUser(ctx, &pb.DeleteForUserRequest{
 				Name: settingsName,
-			}))
+			})
 			return err
 		}},
 	}

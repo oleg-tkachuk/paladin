@@ -24,13 +24,14 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 // Settings is the domain projection of a user_settings row.
@@ -103,7 +104,7 @@ func NewHandler(repo Repository, users authstore.UserRepository, policy cedar.Au
 func (h *Handler) GetMine(ctx context.Context) (*Settings, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	uid, err := h.subjectToUserID(ctx, p)
 	if err != nil {
@@ -115,7 +116,7 @@ func (h *Handler) GetMine(ctx context.Context) (*Settings, error) {
 			d := DefaultsFor(uid, p.TenantID)
 			return &d, nil
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &s, nil
 }
@@ -136,7 +137,7 @@ type UpdateMineInput struct {
 func (h *Handler) UpdateMine(ctx context.Context, in UpdateMineInput) (*Settings, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	uid, err := h.subjectToUserID(ctx, p)
 	if err != nil {
@@ -145,7 +146,7 @@ func (h *Handler) UpdateMine(ctx context.Context, in UpdateMineInput) (*Settings
 	current, err := h.repo.Get(ctx, uid)
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		current = DefaultsFor(uid, p.TenantID)
 	}
@@ -153,11 +154,11 @@ func (h *Handler) UpdateMine(ctx context.Context, in UpdateMineInput) (*Settings
 		return nil, err
 	}
 	if err := validate(current); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	saved, err := h.repo.Upsert(ctx, current)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &saved, nil
 }
@@ -167,16 +168,16 @@ func (h *Handler) UpdateMine(ctx context.Context, in UpdateMineInput) (*Settings
 func (h *Handler) GetForUser(ctx context.Context, userID uuid.UUID) (*Settings, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	target, err := h.users.GetByID(ctx, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	// Same-tenant boundary, even for platform admins (they can override via
 	// Cedar policy, but the default keeps tenants isolated).
 	if !hasPlatformAdmin(p) && target.TenantID != p.TenantID {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("user not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "user not found")
 	}
 	if err := h.authorize(ctx, p, cedar.ActionReadUserSettings, target); err != nil {
 		return nil, err
@@ -187,7 +188,7 @@ func (h *Handler) GetForUser(ctx context.Context, userID uuid.UUID) (*Settings, 
 			d := DefaultsFor(userID, target.TenantID)
 			return &d, nil
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &s, nil
 }
@@ -198,10 +199,10 @@ func (h *Handler) GetForUser(ctx context.Context, userID uuid.UUID) (*Settings, 
 func (h *Handler) ListByTenant(ctx context.Context, tenantID uuid.UUID, pageSize int32) ([]Settings, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if !hasPlatformAdmin(p) && tenantID != p.TenantID {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant list denied"))
+		return nil, connect.NewError(connect.CodePermissionDenied, "cross-tenant list denied")
 	}
 	if err := h.authorizeTenant(ctx, p, cedar.ActionReadUserSettings, tenantID); err != nil {
 		return nil, err
@@ -218,20 +219,20 @@ func (h *Handler) ListByTenant(ctx context.Context, tenantID uuid.UUID, pageSize
 func (h *Handler) DeleteForUser(ctx context.Context, userID uuid.UUID) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	target, err := h.users.GetByID(ctx, userID)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err)
+		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	if !hasPlatformAdmin(p) && target.TenantID != p.TenantID {
-		return connect.NewError(connect.CodeNotFound, errors.New("user not found"))
+		return connect.NewError(connect.CodeNotFound, "user not found")
 	}
 	if err := h.authorize(ctx, p, cedar.ActionManageUserSettings, target); err != nil {
 		return err
 	}
 	if err := h.repo.Delete(auth.WithActingTenant(ctx, target.TenantID), userID); err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return nil
 }
@@ -248,7 +249,7 @@ func (h *Handler) DeleteForUser(ctx context.Context, userID uuid.UUID) error {
 func (h *Handler) subjectToUserID(ctx context.Context, p *auth.Principal) (uuid.UUID, error) {
 	if h.users == nil {
 		return uuid.Nil, connect.NewError(connect.CodeInternal,
-			errors.New("user repository not wired"))
+			"user repository not wired")
 	}
 	if id, perr := uuid.Parse(p.Subject); perr == nil {
 		// Fast path — sub claim is the UUID.
@@ -258,8 +259,7 @@ func (h *Handler) subjectToUserID(ctx context.Context, p *auth.Principal) (uuid.
 	}
 	u, err := h.users.GetBySubject(ctx, p.TenantID, p.Subject)
 	if err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("resolve user: %w", err))
+		return uuid.Nil, rpcerr.New(connect.CodeUnauthenticated, fmt.Errorf("resolve user: %w", err))
 	}
 	return u.UserID, nil
 }
@@ -279,7 +279,7 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, action cedar
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }
@@ -295,7 +295,7 @@ func (h *Handler) authorizeTenant(ctx context.Context, p *auth.Principal, action
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }
@@ -323,8 +323,8 @@ func applyMask(s *Settings, in UpdateMineInput) error {
 		case "preferences":
 			s.Preferences = in.Preferences
 		default:
-			return connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("unknown update_mask field %q", field))
+			return connect.Errorf(connect.CodeInvalidArgument,
+				"unknown update_mask field %q", field)
 		}
 	}
 	return nil

@@ -2,10 +2,10 @@ package app
 
 import (
 	"context"
-	"fmt"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
@@ -43,17 +43,17 @@ const (
 )
 
 // subsystemDisabledError builds the canonical CodeUnimplemented error
-// for a disabled subsystem, decorated with the X-Paladin-Reason /
-// X-Paladin-Subsystem response headers and a message naming the config
-// flag operators flip to enable it.
-func subsystemDisabledError(subsystem, configFlag string) error {
-	err := connect.NewError(
+// for a disabled subsystem, with a message naming the config flag
+// operators flip to enable it, and sets the X-Paladin-Reason /
+// X-Paladin-Subsystem response headers on the call.
+func subsystemDisabledError(ctx context.Context, subsystem, configFlag string) error {
+	header := unary.Info(ctx).ResponseHeader()
+	header.Set(HeaderReason, ReasonDisabled)
+	header.Set(HeaderSubsystem, subsystem)
+	return connect.Errorf(
 		connect.CodeUnimplemented,
-		fmt.Errorf("%s subsystem is disabled in this deployment (set %s=true to activate)", subsystem, configFlag),
+		"%s subsystem is disabled in this deployment (set %s=true to activate)", subsystem, configFlag,
 	)
-	err.Meta().Set(HeaderReason, ReasonDisabled)
-	err.Meta().Set(HeaderSubsystem, subsystem)
-	return err
 }
 
 // ─── CapabilityService stub ─────────────────────────────────────────────────
@@ -67,36 +67,36 @@ type disabledCapabilityServiceHandler struct {
 	paladinadminv1connect.UnimplementedCapabilityServiceHandler
 }
 
-func (disabledCapabilityServiceHandler) Issue(context.Context, *connect.Request[adminv1.CapabilityServiceIssueRequest]) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
-	return nil, subsystemDisabledError("capability", "config.capability.enabled")
+func (disabledCapabilityServiceHandler) Issue(ctx context.Context, _ *adminv1.CapabilityServiceIssueRequest) (*adminv1.CapabilityServiceIssueResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }
 
-func (disabledCapabilityServiceHandler) Delegate(context.Context, *connect.Request[adminv1.CapabilityServiceDelegateRequest]) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
-	return nil, subsystemDisabledError("capability", "config.capability.enabled")
+func (disabledCapabilityServiceHandler) Delegate(ctx context.Context, _ *adminv1.CapabilityServiceDelegateRequest) (*adminv1.CapabilityServiceIssueResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }
 
-func (disabledCapabilityServiceHandler) Revoke(context.Context, *connect.Request[adminv1.CapabilityServiceRevokeRequest]) (*connect.Response[adminv1.CapabilityServiceRevokeResponse], error) {
-	return nil, subsystemDisabledError("capability", "config.capability.enabled")
+func (disabledCapabilityServiceHandler) Revoke(ctx context.Context, _ *adminv1.CapabilityServiceRevokeRequest) (*adminv1.CapabilityServiceRevokeResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }
 
-func (disabledCapabilityServiceHandler) RevokeBiscuit(context.Context, *connect.Request[adminv1.CapabilityServiceRevokeBiscuitRequest]) (*connect.Response[adminv1.CapabilityServiceRevokeBiscuitResponse], error) {
-	return nil, subsystemDisabledError("capability", "config.capability.enabled")
+func (disabledCapabilityServiceHandler) RevokeBiscuit(ctx context.Context, _ *adminv1.CapabilityServiceRevokeBiscuitRequest) (*adminv1.CapabilityServiceRevokeBiscuitResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }
 
-func (disabledCapabilityServiceHandler) GetBiscuitUsage(context.Context, *connect.Request[adminv1.CapabilityServiceGetBiscuitUsageRequest]) (*connect.Response[adminv1.CapabilityServiceGetBiscuitUsageResponse], error) {
-	return nil, subsystemDisabledError("capability", "config.capability.enabled")
+func (disabledCapabilityServiceHandler) GetBiscuitUsage(ctx context.Context, _ *adminv1.CapabilityServiceGetBiscuitUsageRequest) (*adminv1.CapabilityServiceGetBiscuitUsageResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }
 
-func (disabledCapabilityServiceHandler) Get(context.Context, *connect.Request[adminv1.CapabilityServiceGetRequest]) (*connect.Response[adminv1.CapabilityServiceGetResponse], error) {
-	return nil, subsystemDisabledError("capability", "config.capability.enabled")
+func (disabledCapabilityServiceHandler) Get(ctx context.Context, _ *adminv1.CapabilityServiceGetRequest) (*adminv1.CapabilityServiceGetResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }
 
-func (disabledCapabilityServiceHandler) List(context.Context, *connect.Request[adminv1.CapabilityServiceListRequest]) (*connect.Response[adminv1.CapabilityServiceListResponse], error) {
-	return nil, subsystemDisabledError("capability", "config.capability.enabled")
+func (disabledCapabilityServiceHandler) List(ctx context.Context, _ *adminv1.CapabilityServiceListRequest) (*adminv1.CapabilityServiceListResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }
 
-func (disabledCapabilityServiceHandler) GetUsage(context.Context, *connect.Request[adminv1.CapabilityServiceGetUsageRequest]) (*connect.Response[adminv1.CapabilityServiceGetUsageResponse], error) {
-	return nil, subsystemDisabledError("capability", "config.capability.enabled")
+func (disabledCapabilityServiceHandler) GetUsage(ctx context.Context, _ *adminv1.CapabilityServiceGetUsageRequest) (*adminv1.CapabilityServiceGetUsageResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }
 
 // ─── APITokenService stub ───────────────────────────────────────────────────
@@ -105,24 +105,24 @@ type disabledAPITokenServiceHandler struct {
 	paladinadminv1connect.UnimplementedAPITokenServiceHandler
 }
 
-func (disabledAPITokenServiceHandler) Create(context.Context, *connect.Request[adminv1.APITokenServiceCreateRequest]) (*connect.Response[adminv1.APITokenServiceCreateResponse], error) {
-	return nil, subsystemDisabledError("api_token", "config.api_token.enabled")
+func (disabledAPITokenServiceHandler) Create(ctx context.Context, _ *adminv1.APITokenServiceCreateRequest) (*adminv1.APITokenServiceCreateResponse, error) {
+	return nil, subsystemDisabledError(ctx, "api_token", "config.api_token.enabled")
 }
 
-func (disabledAPITokenServiceHandler) Revoke(context.Context, *connect.Request[adminv1.APITokenServiceRevokeRequest]) (*connect.Response[adminv1.APITokenServiceRevokeResponse], error) {
-	return nil, subsystemDisabledError("api_token", "config.api_token.enabled")
+func (disabledAPITokenServiceHandler) Revoke(ctx context.Context, _ *adminv1.APITokenServiceRevokeRequest) (*adminv1.APITokenServiceRevokeResponse, error) {
+	return nil, subsystemDisabledError(ctx, "api_token", "config.api_token.enabled")
 }
 
-func (disabledAPITokenServiceHandler) List(context.Context, *connect.Request[adminv1.APITokenServiceListRequest]) (*connect.Response[adminv1.APITokenServiceListResponse], error) {
-	return nil, subsystemDisabledError("api_token", "config.api_token.enabled")
+func (disabledAPITokenServiceHandler) List(ctx context.Context, _ *adminv1.APITokenServiceListRequest) (*adminv1.APITokenServiceListResponse, error) {
+	return nil, subsystemDisabledError(ctx, "api_token", "config.api_token.enabled")
 }
 
-func (disabledAPITokenServiceHandler) GetSelf(context.Context, *connect.Request[adminv1.APITokenServiceGetSelfRequest]) (*connect.Response[adminv1.APITokenServiceGetSelfResponse], error) {
-	return nil, subsystemDisabledError("api_token", "config.api_token.enabled")
+func (disabledAPITokenServiceHandler) GetSelf(ctx context.Context, _ *adminv1.APITokenServiceGetSelfRequest) (*adminv1.APITokenServiceGetSelfResponse, error) {
+	return nil, subsystemDisabledError(ctx, "api_token", "config.api_token.enabled")
 }
 
-func (disabledAPITokenServiceHandler) GetUsage(context.Context, *connect.Request[adminv1.APITokenServiceGetUsageRequest]) (*connect.Response[adminv1.APITokenServiceGetUsageResponse], error) {
-	return nil, subsystemDisabledError("api_token", "config.api_token.enabled")
+func (disabledAPITokenServiceHandler) GetUsage(ctx context.Context, _ *adminv1.APITokenServiceGetUsageRequest) (*adminv1.APITokenServiceGetUsageResponse, error) {
+	return nil, subsystemDisabledError(ctx, "api_token", "config.api_token.enabled")
 }
 
 // Compile-time check: ensure both stubs satisfy the generated handler

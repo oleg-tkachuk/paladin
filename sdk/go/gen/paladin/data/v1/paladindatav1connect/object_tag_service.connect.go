@@ -6,216 +6,225 @@ package paladindatav1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ObjectTagServiceName is the fully-qualified name of the ObjectTagService service.
 	ObjectTagServiceName = "paladin.data.v1.ObjectTagService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ObjectTagServiceGetObjectTagsProcedure is the fully-qualified name of the ObjectTagService's
+	// ObjectTagServiceGetObjectTagsProcedure is the procedure name of the ObjectTagService's
 	// GetObjectTags RPC.
 	ObjectTagServiceGetObjectTagsProcedure = "/paladin.data.v1.ObjectTagService/GetObjectTags"
-	// ObjectTagServicePutObjectTagsProcedure is the fully-qualified name of the ObjectTagService's
+	// ObjectTagServicePutObjectTagsProcedure is the procedure name of the ObjectTagService's
 	// PutObjectTags RPC.
 	ObjectTagServicePutObjectTagsProcedure = "/paladin.data.v1.ObjectTagService/PutObjectTags"
-	// ObjectTagServiceDeleteObjectTagsProcedure is the fully-qualified name of the ObjectTagService's
+	// ObjectTagServiceDeleteObjectTagsProcedure is the procedure name of the ObjectTagService's
 	// DeleteObjectTags RPC.
 	ObjectTagServiceDeleteObjectTagsProcedure = "/paladin.data.v1.ObjectTagService/DeleteObjectTags"
-	// ObjectTagServiceListDistinctTagsProcedure is the fully-qualified name of the ObjectTagService's
+	// ObjectTagServiceListDistinctTagsProcedure is the procedure name of the ObjectTagService's
 	// ListDistinctTags RPC.
 	ObjectTagServiceListDistinctTagsProcedure = "/paladin.data.v1.ObjectTagService/ListDistinctTags"
+)
+
+var (
+	objectTagServiceGetObjectTagsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_tag_service_proto.Services().ByName("ObjectTagService").Methods().ByName("GetObjectTags"),
+			Procedure:        ObjectTagServiceGetObjectTagsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	objectTagServicePutObjectTagsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_tag_service_proto.Services().ByName("ObjectTagService").Methods().ByName("PutObjectTags"),
+			Procedure:        ObjectTagServicePutObjectTagsProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	objectTagServiceDeleteObjectTagsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_tag_service_proto.Services().ByName("ObjectTagService").Methods().ByName("DeleteObjectTags"),
+			Procedure:        ObjectTagServiceDeleteObjectTagsProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	objectTagServiceListDistinctTagsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_object_tag_service_proto.Services().ByName("ObjectTagService").Methods().ByName("ListDistinctTags"),
+			Procedure:        ObjectTagServiceListDistinctTagsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // ObjectTagServiceClient is a client for the paladin.data.v1.ObjectTagService service.
 type ObjectTagServiceClient interface {
 	// GetObjectTags returns the object's tag map.
-	GetObjectTags(context.Context, *connect.Request[v1.GetObjectTagsRequest]) (*connect.Response[v1.GetObjectTagsResponse], error)
+	GetObjectTags(context.Context, *v1.GetObjectTagsRequest) (*v1.GetObjectTagsResponse, error)
 	// PutObjectTags merges the supplied keys into the object's tags; keys absent
 	// from the request are left alone. resource_version is required.
-	PutObjectTags(context.Context, *connect.Request[v1.PutObjectTagsRequest]) (*connect.Response[v1.PutObjectTagsResponse], error)
+	PutObjectTags(context.Context, *v1.PutObjectTagsRequest) (*v1.PutObjectTagsResponse, error)
 	// DeleteObjectTags removes the named keys. Deleting a key that is not set is
 	// not an error. resource_version is required.
-	DeleteObjectTags(context.Context, *connect.Request[v1.DeleteObjectTagsRequest]) (*connect.Response[v1.DeleteObjectTagsResponse], error)
+	DeleteObjectTags(context.Context, *v1.DeleteObjectTagsRequest) (*v1.DeleteObjectTagsResponse, error)
 	// ListDistinctTags enumerates the distinct tag key→values present across an
 	// Collection's live objects, so a UI can populate a tag-facet filter from the
 	// whole tenant scope rather than only the objects on the current page.
-	ListDistinctTags(context.Context, *connect.Request[v1.ListDistinctTagsRequest]) (*connect.Response[v1.ListDistinctTagsResponse], error)
+	ListDistinctTags(context.Context, *v1.ListDistinctTagsRequest) (*v1.ListDistinctTagsResponse, error)
 }
 
 // NewObjectTagServiceClient constructs a client for the paladin.data.v1.ObjectTagService service.
-// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
-// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewObjectTagServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ObjectTagServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	objectTagServiceMethods := v1.File_paladin_data_v1_object_tag_service_proto.Services().ByName("ObjectTagService").Methods()
-	return &objectTagServiceClient{
-		getObjectTags: connect.NewClient[v1.GetObjectTagsRequest, v1.GetObjectTagsResponse](
-			httpClient,
-			baseURL+ObjectTagServiceGetObjectTagsProcedure,
-			connect.WithSchema(objectTagServiceMethods.ByName("GetObjectTags")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		putObjectTags: connect.NewClient[v1.PutObjectTagsRequest, v1.PutObjectTagsResponse](
-			httpClient,
-			baseURL+ObjectTagServicePutObjectTagsProcedure,
-			connect.WithSchema(objectTagServiceMethods.ByName("PutObjectTags")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		deleteObjectTags: connect.NewClient[v1.DeleteObjectTagsRequest, v1.DeleteObjectTagsResponse](
-			httpClient,
-			baseURL+ObjectTagServiceDeleteObjectTagsProcedure,
-			connect.WithSchema(objectTagServiceMethods.ByName("DeleteObjectTags")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		listDistinctTags: connect.NewClient[v1.ListDistinctTagsRequest, v1.ListDistinctTagsResponse](
-			httpClient,
-			baseURL+ObjectTagServiceListDistinctTagsProcedure,
-			connect.WithSchema(objectTagServiceMethods.ByName("ListDistinctTags")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// objectTagServiceClient implements ObjectTagServiceClient.
-type objectTagServiceClient struct {
-	getObjectTags    *connect.Client[v1.GetObjectTagsRequest, v1.GetObjectTagsResponse]
-	putObjectTags    *connect.Client[v1.PutObjectTagsRequest, v1.PutObjectTagsResponse]
-	deleteObjectTags *connect.Client[v1.DeleteObjectTagsRequest, v1.DeleteObjectTagsResponse]
-	listDistinctTags *connect.Client[v1.ListDistinctTagsRequest, v1.ListDistinctTagsResponse]
-}
-
-// GetObjectTags calls paladin.data.v1.ObjectTagService.GetObjectTags.
-func (c *objectTagServiceClient) GetObjectTags(ctx context.Context, req *connect.Request[v1.GetObjectTagsRequest]) (*connect.Response[v1.GetObjectTagsResponse], error) {
-	return c.getObjectTags.CallUnary(ctx, req)
-}
-
-// PutObjectTags calls paladin.data.v1.ObjectTagService.PutObjectTags.
-func (c *objectTagServiceClient) PutObjectTags(ctx context.Context, req *connect.Request[v1.PutObjectTagsRequest]) (*connect.Response[v1.PutObjectTagsResponse], error) {
-	return c.putObjectTags.CallUnary(ctx, req)
-}
-
-// DeleteObjectTags calls paladin.data.v1.ObjectTagService.DeleteObjectTags.
-func (c *objectTagServiceClient) DeleteObjectTags(ctx context.Context, req *connect.Request[v1.DeleteObjectTagsRequest]) (*connect.Response[v1.DeleteObjectTagsResponse], error) {
-	return c.deleteObjectTags.CallUnary(ctx, req)
-}
-
-// ListDistinctTags calls paladin.data.v1.ObjectTagService.ListDistinctTags.
-func (c *objectTagServiceClient) ListDistinctTags(ctx context.Context, req *connect.Request[v1.ListDistinctTagsRequest]) (*connect.Response[v1.ListDistinctTagsResponse], error) {
-	return c.listDistinctTags.CallUnary(ctx, req)
+// Multiple service clients may share a single connect.Client.
+func NewObjectTagServiceClient(client *connect.Client) ObjectTagServiceClient {
+	return &objectTagServiceClient{client: client}
 }
 
 // ObjectTagServiceHandler is an implementation of the paladin.data.v1.ObjectTagService service.
 type ObjectTagServiceHandler interface {
 	// GetObjectTags returns the object's tag map.
-	GetObjectTags(context.Context, *connect.Request[v1.GetObjectTagsRequest]) (*connect.Response[v1.GetObjectTagsResponse], error)
+	GetObjectTags(context.Context, *v1.GetObjectTagsRequest) (*v1.GetObjectTagsResponse, error)
 	// PutObjectTags merges the supplied keys into the object's tags; keys absent
 	// from the request are left alone. resource_version is required.
-	PutObjectTags(context.Context, *connect.Request[v1.PutObjectTagsRequest]) (*connect.Response[v1.PutObjectTagsResponse], error)
+	PutObjectTags(context.Context, *v1.PutObjectTagsRequest) (*v1.PutObjectTagsResponse, error)
 	// DeleteObjectTags removes the named keys. Deleting a key that is not set is
 	// not an error. resource_version is required.
-	DeleteObjectTags(context.Context, *connect.Request[v1.DeleteObjectTagsRequest]) (*connect.Response[v1.DeleteObjectTagsResponse], error)
+	DeleteObjectTags(context.Context, *v1.DeleteObjectTagsRequest) (*v1.DeleteObjectTagsResponse, error)
 	// ListDistinctTags enumerates the distinct tag key→values present across an
 	// Collection's live objects, so a UI can populate a tag-facet filter from the
 	// whole tenant scope rather than only the objects on the current page.
-	ListDistinctTags(context.Context, *connect.Request[v1.ListDistinctTagsRequest]) (*connect.Response[v1.ListDistinctTagsResponse], error)
+	ListDistinctTags(context.Context, *v1.ListDistinctTagsRequest) (*v1.ListDistinctTagsResponse, error)
 }
 
-// NewObjectTagServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewObjectTagServiceHandler(svc ObjectTagServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	objectTagServiceMethods := v1.File_paladin_data_v1_object_tag_service_proto.Services().ByName("ObjectTagService").Methods()
-	objectTagServiceGetObjectTagsHandler := connect.NewUnaryHandler(
-		ObjectTagServiceGetObjectTagsProcedure,
-		svc.GetObjectTags,
-		connect.WithSchema(objectTagServiceMethods.ByName("GetObjectTags")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterObjectTagServiceHandler registers svc as the paladin.data.v1.ObjectTagService
+// implementation on server.
+func RegisterObjectTagServiceHandler(server *connect.Server, svc ObjectTagServiceHandler) {
+	adapter := objectTagServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: objectTagServiceGetObjectTagsSpec(), Handler: adapter.getObjectTags},
+		connect.Method{Spec: objectTagServicePutObjectTagsSpec(), Handler: adapter.putObjectTags},
+		connect.Method{Spec: objectTagServiceDeleteObjectTagsSpec(), Handler: adapter.deleteObjectTags},
+		connect.Method{Spec: objectTagServiceListDistinctTagsSpec(), Handler: adapter.listDistinctTags},
 	)
-	objectTagServicePutObjectTagsHandler := connect.NewUnaryHandler(
-		ObjectTagServicePutObjectTagsProcedure,
-		svc.PutObjectTags,
-		connect.WithSchema(objectTagServiceMethods.ByName("PutObjectTags")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectTagServiceDeleteObjectTagsHandler := connect.NewUnaryHandler(
-		ObjectTagServiceDeleteObjectTagsProcedure,
-		svc.DeleteObjectTags,
-		connect.WithSchema(objectTagServiceMethods.ByName("DeleteObjectTags")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	objectTagServiceListDistinctTagsHandler := connect.NewUnaryHandler(
-		ObjectTagServiceListDistinctTagsProcedure,
-		svc.ListDistinctTags,
-		connect.WithSchema(objectTagServiceMethods.ByName("ListDistinctTags")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.data.v1.ObjectTagService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ObjectTagServiceGetObjectTagsProcedure:
-			objectTagServiceGetObjectTagsHandler.ServeHTTP(w, r)
-		case ObjectTagServicePutObjectTagsProcedure:
-			objectTagServicePutObjectTagsHandler.ServeHTTP(w, r)
-		case ObjectTagServiceDeleteObjectTagsProcedure:
-			objectTagServiceDeleteObjectTagsHandler.ServeHTTP(w, r)
-		case ObjectTagServiceListDistinctTagsProcedure:
-			objectTagServiceListDistinctTagsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedObjectTagServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedObjectTagServiceHandler struct{}
 
-func (UnimplementedObjectTagServiceHandler) GetObjectTags(context.Context, *connect.Request[v1.GetObjectTagsRequest]) (*connect.Response[v1.GetObjectTagsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectTagService.GetObjectTags is not implemented"))
+func (UnimplementedObjectTagServiceHandler) GetObjectTags(context.Context, *v1.GetObjectTagsRequest) (*v1.GetObjectTagsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectTagService.GetObjectTags is not implemented")
 }
 
-func (UnimplementedObjectTagServiceHandler) PutObjectTags(context.Context, *connect.Request[v1.PutObjectTagsRequest]) (*connect.Response[v1.PutObjectTagsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectTagService.PutObjectTags is not implemented"))
+func (UnimplementedObjectTagServiceHandler) PutObjectTags(context.Context, *v1.PutObjectTagsRequest) (*v1.PutObjectTagsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectTagService.PutObjectTags is not implemented")
 }
 
-func (UnimplementedObjectTagServiceHandler) DeleteObjectTags(context.Context, *connect.Request[v1.DeleteObjectTagsRequest]) (*connect.Response[v1.DeleteObjectTagsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectTagService.DeleteObjectTags is not implemented"))
+func (UnimplementedObjectTagServiceHandler) DeleteObjectTags(context.Context, *v1.DeleteObjectTagsRequest) (*v1.DeleteObjectTagsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectTagService.DeleteObjectTags is not implemented")
 }
 
-func (UnimplementedObjectTagServiceHandler) ListDistinctTags(context.Context, *connect.Request[v1.ListDistinctTagsRequest]) (*connect.Response[v1.ListDistinctTagsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.ObjectTagService.ListDistinctTags is not implemented"))
+func (UnimplementedObjectTagServiceHandler) ListDistinctTags(context.Context, *v1.ListDistinctTagsRequest) (*v1.ListDistinctTagsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.ObjectTagService.ListDistinctTags is not implemented")
+}
+
+type objectTagServiceClient struct {
+	client *connect.Client
+}
+
+func (c *objectTagServiceClient) GetObjectTags(ctx context.Context, req *v1.GetObjectTagsRequest) (*v1.GetObjectTagsResponse, error) {
+	var res v1.GetObjectTagsResponse
+	if err := c.client.CallUnary(ctx, objectTagServiceGetObjectTagsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectTagServiceClient) PutObjectTags(ctx context.Context, req *v1.PutObjectTagsRequest) (*v1.PutObjectTagsResponse, error) {
+	var res v1.PutObjectTagsResponse
+	if err := c.client.CallUnary(ctx, objectTagServicePutObjectTagsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectTagServiceClient) DeleteObjectTags(ctx context.Context, req *v1.DeleteObjectTagsRequest) (*v1.DeleteObjectTagsResponse, error) {
+	var res v1.DeleteObjectTagsResponse
+	if err := c.client.CallUnary(ctx, objectTagServiceDeleteObjectTagsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *objectTagServiceClient) ListDistinctTags(ctx context.Context, req *v1.ListDistinctTagsRequest) (*v1.ListDistinctTagsResponse, error) {
+	var res v1.ListDistinctTagsResponse
+	if err := c.client.CallUnary(ctx, objectTagServiceListDistinctTagsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type objectTagServiceHandler struct{ svc ObjectTagServiceHandler }
+
+func (h objectTagServiceHandler) getObjectTags(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetObjectTagsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetObjectTags(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectTagServiceHandler) putObjectTags(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PutObjectTagsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PutObjectTags(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectTagServiceHandler) deleteObjectTags(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteObjectTagsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteObjectTags(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h objectTagServiceHandler) listDistinctTags(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListDistinctTagsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListDistinctTags(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

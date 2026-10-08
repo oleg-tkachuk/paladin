@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
@@ -38,9 +38,9 @@ func TestListUsersRefusesAnUnparseableParent(t *testing.T) {
 	t.Parallel()
 
 	h := &listingUser{}
-	_, err := (&UserServer{H: h}).ListUsers(context.Background(), connect.NewRequest(&pb.ListUsersRequest{
+	_, err := (&UserServer{H: h}).ListUsers(context.Background(), &pb.ListUsersRequest{
 		Parent: "tenants/Not A Slug!",
-	}))
+	})
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want %v (err: %v)", got, connect.CodeInvalidArgument, err)
 	}
@@ -58,9 +58,9 @@ func TestListUsersScopesToTheParent(t *testing.T) {
 		"":                       uuid.Nil, // cross-tenant; the handler checks the role
 	} {
 		h := &listingUser{}
-		if _, err := (&UserServer{H: h}).ListUsers(context.Background(), connect.NewRequest(&pb.ListUsersRequest{
+		if _, err := (&UserServer{H: h}).ListUsers(context.Background(), &pb.ListUsersRequest{
 			Parent: parent,
-		})); err != nil {
+		}); err != nil {
 			t.Fatalf("parent %q: %v", parent, err)
 		}
 		if h.got.TenantID != want {

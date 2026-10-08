@@ -5,16 +5,22 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit"
+	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // smokeStore is the inline Store used by the end-to-end smoke test.
@@ -77,11 +83,15 @@ func (s *smokeStore) PurgeExpired(context.Context, time.Duration) (int64, error)
 // deterministic "always deny with 30s retry-after".
 type denyingLimiter struct{}
 
+// denyingRetryAfter is the wait every denyingLimiter decision asks for.
+const denyingRetryAfter = 30 * time.Second
+
 func (denyingLimiter) Allow(context.Context, uuid.UUID, int) (ratelimit.Decision, error) {
+	const farOverAnyLimit = 999
 	return ratelimit.Decision{
 		Allowed:       false,
-		WeightedCount: 999,
-		RetryAfter:    30 * time.Second,
+		WeightedCount: farOverAnyLimit,
+		RetryAfter:    denyingRetryAfter,
 	}, nil
 }
 func (denyingLimiter) Usage(context.Context, uuid.UUID) (ratelimit.Snapshot, error) {
@@ -90,23 +100,28 @@ func (denyingLimiter) Usage(context.Context, uuid.UUID) (ratelimit.Snapshot, err
 func (denyingLimiter) Sweep(context.Context, time.Duration) (int64, error) { return 0, nil }
 
 // TestRetryAfter_E2E_ConnectTransport boots a real httptest.Server
-// hosting a Connect handler wrapped with APITokenInterceptor +
+// hosting a Connect server wrapped with APITokenInterceptor +
 // denyingLimiter, then calls the endpoint through a real Connect
 // client. Confirms that:
 //
 //   - the rate-limit denial round-trips as connect.CodeResourceExhausted
-//   - the Retry-After header set on err.Meta() inside the interceptor
-//     actually lands on the HTTP response and is observable on the
-//     client-side *connect.Error
+//   - the Retry-After header the interceptor sets on the call's response
+//     header actually lands on the HTTP response of a failed call and is
+//     observable on the client side
 //
 // The unit test in api_token_ratelimit_test.go covers the same logic
 // at the function level; this test is the load-bearing proof that
-// the Connect transport propagates Meta to the wire.
+// the Connect transport carries the header of an error response to the
+// wire.
 func TestRetryAfter_E2E_ConnectTransport(t *testing.T) {
 	t.Parallel()
 
+	const (
+		hmacKey = "smoke-test-hmac-key-0123456789-abc"
+		rpm     = 60
+	)
 	store := newSmokeStore()
-	hasher, err := api_token.NewHasher([]byte("smoke-test-hmac-key-0123456789-abc"))
+	hasher, err := api_token.NewHasher([]byte(hmacKey))
 	if err != nil {
 		t.Fatalf("hasher: %v", err)
 	}
@@ -123,19 +138,20 @@ func TestRetryAfter_E2E_ConnectTransport(t *testing.T) {
 		t.Fatalf("verifier: %v", err)
 	}
 
-	interceptor := APITokenInterceptorWithLimiter(verifier, denyingLimiter{}, "data")
+	interceptor := APITokenInterceptorWithLimiter(verifier, denyingLimiter{}, planeData)
 
-	const procedure = "/auth.smoke.SmokeService/Echo"
-	echo := func(_ context.Context, req *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
-		// We expect this to never run — the interceptor short-circuits
-		// before reaching here. Failing the test if it does keeps the
-		// behavioural contract honest if we ever break the gate order.
-		return connect.NewResponse(&emptypb.Empty{}), nil
-	}
-	h := connect.NewUnaryHandler(procedure, echo, connect.WithInterceptors(interceptor))
-
+	// We expect the handler to never run — the interceptor short-circuits
+	// before reaching it. Failing the test if it does keeps the
+	// behavioural contract honest if we ever break the gate order.
+	var handlerRan atomic.Bool
+	probe := &unarytest.Probe{OnCall: func(context.Context) error {
+		handlerRan.Store(true)
+		return nil
+	}}
+	server := connect.NewServer(interceptor)
+	paladiniamv1connect.RegisterHealthServiceHandler(server, probe)
 	mux := http.NewServeMux()
-	mux.Handle(procedure, h)
+	connecthttp.Mount(mux, server)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -144,21 +160,25 @@ func TestRetryAfter_E2E_ConnectTransport(t *testing.T) {
 	tok, err := issuer.Issue(context.Background(), api_token.IssueRequest{
 		TenantID:     uuid.New(),
 		Name:         "smoke",
-		Audience:     []string{"data"},
+		Audience:     []string{planeData},
 		TTL:          time.Hour,
-		RateLimitRPM: 60,
+		RateLimitRPM: rpm,
 	})
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
 
-	client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, srv.URL+procedure)
-	req := connect.NewRequest(&emptypb.Empty{})
-	req.Header().Set("Authorization", "Bearer "+tok.Plaintext)
+	client := paladiniamv1connect.NewHealthServiceClient(
+		connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL)))
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set(paladin.HeaderAuthorization, bearerPrefix+tok.Plaintext)
 
-	_, err = client.CallUnary(context.Background(), req)
+	_, err = client.GetVersion(ctx, &iamv1.GetVersionRequest{})
 	if err == nil {
 		t.Fatal("expected denial error from interceptor, got nil")
+	}
+	if handlerRan.Load() {
+		t.Error("the handler ran despite the rate-limit denial")
 	}
 
 	var ce *connect.Error
@@ -168,16 +188,17 @@ func TestRetryAfter_E2E_ConnectTransport(t *testing.T) {
 	if ce.Code() != connect.CodeResourceExhausted {
 		t.Errorf("code: got %v, want CodeResourceExhausted", ce.Code())
 	}
-	if got := ce.Meta().Get("Retry-After"); got != "30" {
-		t.Errorf("Retry-After: got %q, want %q", got, "30")
+	want := strconv.Itoa(int(denyingRetryAfter.Seconds()))
+	if got := info.ResponseHeader().Get(paladin.HeaderRetryAfter); got != want {
+		t.Errorf("%s: got %q, want %q", paladin.HeaderRetryAfter, got, want)
 	}
 }
 
 // (A raw-HTTP variant — POST with hand-crafted Connect-protocol body —
 // would prove the byte-level header path independently of how
-// connect-go's client decodes errors. Not added here because crafting
-// a valid Connect request body for emptypb.Empty without the
-// generated client just to observe a header would obscure the test.
-// The connect.Client test above already exercises the real transport;
-// the *connect.Error.Meta() it surfaces is connect-go's view of the
-// HTTP response headers it received over the wire.)
+// connect-go's client decodes responses. Not added here because crafting
+// a valid Connect request body without the generated client just to
+// observe a header would obscure the test. The client call above already
+// exercises the real transport; the response header it reports is
+// connect-go's view of the HTTP response headers it received over the
+// wire.)

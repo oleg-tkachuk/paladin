@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -159,13 +159,13 @@ func (s *Server) principalTenant(header http.Header) (string, error) {
 	}
 	switch {
 	case authz == "":
-		return "", connect.NewError(connect.CodeUnauthenticated, errMissingAuthorization)
+		return "", connect.NewError(connect.CodeUnauthenticated, errMissingAuthorization.Error()).WithCause(errMissingAuthorization)
 	case !strings.HasPrefix(authz, bearerScheme):
-		return "", connect.NewError(connect.CodeUnauthenticated, errExpectedBearer)
+		return "", connect.NewError(connect.CodeUnauthenticated, errExpectedBearer.Error()).WithCause(errExpectedBearer)
 	}
 	token := strings.TrimSpace(strings.TrimPrefix(authz, bearerScheme))
 	if token == "" {
-		return "", connect.NewError(connect.CodeUnauthenticated, errEmptyToken)
+		return "", connect.NewError(connect.CodeUnauthenticated, errEmptyToken.Error()).WithCause(errEmptyToken)
 	}
 	return s.verify(token, kindBearer, connect.CodeUnauthenticated, errJWTMalformed, errJWTExpired)
 }
@@ -203,9 +203,9 @@ func (s *Server) verify(token string, kind credentialKind, code connect.Code, un
 	c, ok := s.credentials[token]
 	switch {
 	case !ok || c.kind != kind:
-		return "", connect.NewError(code, unknown)
+		return "", connect.NewError(code, unknown.Error()).WithCause(unknown)
 	case c.revoked:
-		return "", connect.NewError(code, revoked)
+		return "", connect.NewError(code, revoked.Error()).WithCause(revoked)
 	}
 	return c.tenant, nil
 }
@@ -228,16 +228,16 @@ func (s *Server) authorizeTenant(tenant string, msg proto.Message) error {
 			continue // not a resource name: the RPC refuses it itself
 		}
 		if named != "" && t != named {
-			return connect.NewError(connect.CodePermissionDenied, errNamesSpanTenants)
+			return connect.NewError(connect.CodePermissionDenied, errNamesSpanTenants.Error()).WithCause(errNamesSpanTenants)
 		}
 		named = t
 	}
 	if named != "" && named != tenant {
-		return connect.NewError(connect.CodePermissionDenied, errTenantMismatch)
+		return connect.NewError(connect.CodePermissionDenied, errTenantMismatch.Error()).WithCause(errTenantMismatch)
 	}
 	if f := fields.ByName(uploadIDField); f != nil && f.Kind() == protoreflect.StringKind {
 		if t, ok := s.uploadTenant(msg.ProtoReflect().Get(f).String()); ok && t != tenant {
-			return connect.NewError(connect.CodePermissionDenied, errUploadTenantMismatch)
+			return connect.NewError(connect.CodePermissionDenied, errUploadTenantMismatch.Error()).WithCause(errUploadTenantMismatch)
 		}
 	}
 	return nil

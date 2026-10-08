@@ -6,36 +6,38 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// CELServiceName is the fully-qualified name of the CELService service.
 	CELServiceName = "paladin.admin.v1.CELService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// CELServiceValidateProcedure is the fully-qualified name of the CELService's Validate RPC.
+	// CELServiceValidateProcedure is the procedure name of the CELService's Validate RPC.
 	CELServiceValidateProcedure = "/paladin.admin.v1.CELService/Validate"
+)
+
+var (
+	cELServiceValidateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_cel_service_proto.Services().ByName("CELService").Methods().ByName("Validate"),
+			Procedure:        CELServiceValidateProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // CELServiceClient is a client for the paladin.admin.v1.CELService service.
@@ -43,38 +45,13 @@ type CELServiceClient interface {
 	// Validate compiles a CEL expression against the EventEnvelope schema and
 	// reports errors without storing anything. Used by the console before a
 	// subscription filter is saved.
-	Validate(context.Context, *connect.Request[v1.ValidateCELRequest]) (*connect.Response[v1.ValidateCELResponse], error)
+	Validate(context.Context, *v1.ValidateCELRequest) (*v1.ValidateCELResponse, error)
 }
 
-// NewCELServiceClient constructs a client for the paladin.admin.v1.CELService service. By default,
-// it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and
-// sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC()
-// or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewCELServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) CELServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	cELServiceMethods := v1.File_paladin_admin_v1_cel_service_proto.Services().ByName("CELService").Methods()
-	return &cELServiceClient{
-		validate: connect.NewClient[v1.ValidateCELRequest, v1.ValidateCELResponse](
-			httpClient,
-			baseURL+CELServiceValidateProcedure,
-			connect.WithSchema(cELServiceMethods.ByName("Validate")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// cELServiceClient implements CELServiceClient.
-type cELServiceClient struct {
-	validate *connect.Client[v1.ValidateCELRequest, v1.ValidateCELResponse]
-}
-
-// Validate calls paladin.admin.v1.CELService.Validate.
-func (c *cELServiceClient) Validate(ctx context.Context, req *connect.Request[v1.ValidateCELRequest]) (*connect.Response[v1.ValidateCELResponse], error) {
-	return c.validate.CallUnary(ctx, req)
+// NewCELServiceClient constructs a client for the paladin.admin.v1.CELService service. Multiple
+// service clients may share a single connect.Client.
+func NewCELServiceClient(client *connect.Client) CELServiceClient {
+	return &cELServiceClient{client: client}
 }
 
 // CELServiceHandler is an implementation of the paladin.admin.v1.CELService service.
@@ -82,36 +59,47 @@ type CELServiceHandler interface {
 	// Validate compiles a CEL expression against the EventEnvelope schema and
 	// reports errors without storing anything. Used by the console before a
 	// subscription filter is saved.
-	Validate(context.Context, *connect.Request[v1.ValidateCELRequest]) (*connect.Response[v1.ValidateCELResponse], error)
+	Validate(context.Context, *v1.ValidateCELRequest) (*v1.ValidateCELResponse, error)
 }
 
-// NewCELServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewCELServiceHandler(svc CELServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	cELServiceMethods := v1.File_paladin_admin_v1_cel_service_proto.Services().ByName("CELService").Methods()
-	cELServiceValidateHandler := connect.NewUnaryHandler(
-		CELServiceValidateProcedure,
-		svc.Validate,
-		connect.WithSchema(cELServiceMethods.ByName("Validate")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterCELServiceHandler registers svc as the paladin.admin.v1.CELService implementation on
+// server.
+func RegisterCELServiceHandler(server *connect.Server, svc CELServiceHandler) {
+	adapter := cELServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: cELServiceValidateSpec(), Handler: adapter.validate},
 	)
-	return "/paladin.admin.v1.CELService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case CELServiceValidateProcedure:
-			cELServiceValidateHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedCELServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedCELServiceHandler struct{}
 
-func (UnimplementedCELServiceHandler) Validate(context.Context, *connect.Request[v1.ValidateCELRequest]) (*connect.Response[v1.ValidateCELResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CELService.Validate is not implemented"))
+func (UnimplementedCELServiceHandler) Validate(context.Context, *v1.ValidateCELRequest) (*v1.ValidateCELResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CELService.Validate is not implemented")
+}
+
+type cELServiceClient struct {
+	client *connect.Client
+}
+
+func (c *cELServiceClient) Validate(ctx context.Context, req *v1.ValidateCELRequest) (*v1.ValidateCELResponse, error) {
+	var res v1.ValidateCELResponse
+	if err := c.client.CallUnary(ctx, cELServiceValidateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type cELServiceHandler struct{ svc CELServiceHandler }
+
+func (h cELServiceHandler) validate(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ValidateCELRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Validate(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

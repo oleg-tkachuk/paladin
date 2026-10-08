@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -63,27 +62,27 @@ func TestUserOperationsCarryTheNamedTenant(t *testing.T) {
 		name := "tenants/" + ref + "/users/" + user.String()
 		ops := map[string]func(*UserServer) error{
 			"GetUser": func(s *UserServer) error {
-				_, err := s.GetUser(admin, connect.NewRequest(&pb.GetUserRequest{Name: name}))
+				_, err := s.GetUser(admin, &pb.GetUserRequest{Name: name})
 				return err
 			},
 			"UpdateUser": func(s *UserServer) error {
-				_, err := s.UpdateUser(admin, connect.NewRequest(&pb.UpdateUserRequest{Name: name}))
+				_, err := s.UpdateUser(admin, &pb.UpdateUserRequest{Name: name})
 				return err
 			},
 			"DeleteUser": func(s *UserServer) error {
-				_, err := s.DeleteUser(admin, connect.NewRequest(&pb.DeleteUserRequest{Name: name}))
+				_, err := s.DeleteUser(admin, &pb.DeleteUserRequest{Name: name})
 				return err
 			},
 			"GrantScopes": func(s *UserServer) error {
-				_, err := s.GrantScopes(admin, connect.NewRequest(&pb.GrantScopesRequest{Name: name}))
+				_, err := s.GrantScopes(admin, &pb.GrantScopesRequest{Name: name})
 				return err
 			},
 			"RevokeScopes": func(s *UserServer) error {
-				_, err := s.RevokeScopes(admin, connect.NewRequest(&pb.RevokeScopesRequest{Name: name}))
+				_, err := s.RevokeScopes(admin, &pb.RevokeScopesRequest{Name: name})
 				return err
 			},
 			"ResetPassword": func(s *UserServer) error {
-				_, err := s.ResetPassword(admin, connect.NewRequest(&pb.ResetPasswordRequest{Name: name}))
+				_, err := s.ResetPassword(admin, &pb.ResetPasswordRequest{Name: name})
 				return err
 			},
 		}

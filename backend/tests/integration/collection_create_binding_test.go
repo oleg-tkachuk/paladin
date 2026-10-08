@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
@@ -34,12 +34,12 @@ func TestCreateCollection_UsesDefaultBinding(t *testing.T) {
 	server := admin.NewCollectionServer(handler, tenantRepo, nil)
 
 	ctx := ctxAdmin(t, tid)
-	createNoBucket := func(name string) (*connect.Response[pb.Collection], error) {
-		return server.CreateCollection(ctx, connect.NewRequest(&pb.CreateCollectionRequest{
+	createNoBucket := func(name string) (*pb.Collection, error) {
+		return server.CreateCollection(ctx, &pb.CreateCollectionRequest{
 			Parent:             "tenants/" + tid.String(),
 			Collection:         name,
 			CollectionResource: &pb.Collection{}, // no bucket named
-		}))
+		})
 	}
 
 	// No default binding yet → FAILED_PRECONDITION (not a raw DB error).
@@ -56,7 +56,7 @@ func TestCreateCollection_UsesDefaultBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create with default binding: %v", err)
 	}
-	if b := resp.Msg.GetBucket(); !strings.Contains(b, "paladin-test") {
+	if b := resp.GetBucket(); !strings.Contains(b, "paladin-test") {
 		t.Errorf("created OK bucket = %q, want it to name paladin-test", b)
 	}
 }

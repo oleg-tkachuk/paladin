@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 )
@@ -55,15 +56,15 @@ func (w *latencyWriter) InsertWithOutbox(ctx context.Context, e admindomain.Audi
 //
 // Run: go test ./internal/middleware/ -run '^$' -bench BenchmarkAuditInterceptor -benchmem
 func BenchmarkAuditInterceptor(b *testing.B) {
-	next := func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-		return connect.NewResponse(&auditMsg{Name: "ok"}), nil
+	next := func(context.Context, connect.Spec, proto.Message) (proto.Message, error) {
+		return newAuditedResponse(), nil
 	}
-	req := connect.NewRequest(&auditMsg{Name: "create"})
+	req := newAuditedRequest()
 
 	b.Run("baseline_no_audit", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			_, _ = next(context.Background(), req)
+			_, _ = next(context.Background(), auditedSpec, req)
 		}
 	})
 
@@ -76,12 +77,11 @@ func BenchmarkAuditInterceptor(b *testing.B) {
 		{"insert_500us", &latencyWriter{d: 500 * time.Microsecond}},
 	}
 	for _, tc := range cases {
-		ic := AuditWithMirror(tc.writer, "test", false, nil).(*auditInterceptor)
-		h := ic.WrapUnary(next)
+		h := newAudit(tc.writer).unary(next)
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				_, _ = h(context.Background(), req)
+				_, _ = h(context.Background(), auditedSpec, req)
 			}
 		})
 	}

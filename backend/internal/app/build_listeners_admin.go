@@ -9,7 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
 
@@ -120,7 +121,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// invalid token fails loud. Most admin RPCs gate on roles
 	// (platform.admin); the agent / service paths read the typed
 	// principal via auth.CapabilityFromContext / APITokenFromContext.
-	var capAdmin, apiTokAdmin connect.Interceptor
+	var capAdmin, apiTokAdmin connect.ServerInterceptor
 	if deps.Capability != nil {
 		// Charge-event fan-out is opt-in — high-cardinality (every
 		// chargeable RPC fires), default off in cfg. When enabled
@@ -166,7 +167,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// on metrics it makes one time series per TCP connection, so
 	// rpc_server_duration grows without bound and the cost lands on whoever
 	// stores it.
-	otelInt, err := otelconnect.NewInterceptor()
+	otelInt, err := otelconnect.NewServerInterceptor()
 	if err != nil {
 		l.Fatal("otelconnect interceptor", zap.Error(err))
 	}
@@ -187,69 +188,69 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	}
 	tenantRL := middleware.NewTenantRateLimitInterceptor(tenantRLCfg)
 
-	// The codec, size limits, compression and panic recovery every plane
-	// shares: rpcHandlerOptions.
-	adminOpts := connect.WithHandlerOptions(
-		rpcHandlerOptions(l),
-		connect.WithInterceptors(
-			// Outermost of all: tracing and the failure log inside it see an
-			// internal error as it happened; the caller sees its code and a
-			// request id, not a driver's message.
-			middleware.ScrubInternal(),
-			otelInt,
-			// Outermost after tracing, and BEFORE auth on purpose: connect
-			// applies the first-listed interceptor outermost, so anything
-			// installed after auth cannot see auth's own rejections — and a
-			// wave of failed authentications leaving no log line was the
-			// widest part of this gap. Failures only; successes are otel's job.
-			middleware.LogOutcome(l),
-			// Skip the JWT gate for `paladin_pat_…` bearers so the role-bearing
-			// API-token interceptor below can authenticate them. Without this the
-			// JWT verifier rejects the bearer first with "jwt: malformed token" and
-			// a token carrying platform.capability-issuer never reaches the RPC it
-			// exists to call. Every other case is unchanged — a JWT is verified and
-			// a missing or invalid non-PAT bearer is still rejected, so auth stays
-			// mandatory; a roleless PAT gets no principal here and is denied
-			// downstream exactly as before.
-			auth.InterceptorSkipAPITokens(verifierAdmin),
-			// apiTokAdmin BEFORE RequireAudience, as on the data plane: the audience
-			// check reads the principal, so with the API-token interceptor after it
-			// a PAT bearer was refused as "no authenticated principal" before it
-			// could be authenticated at all. Both paths — JWT and role-bearing PAT —
-			// must land a principal first.
-			apiTokAdmin,
-			auth.RequireAudience(auth.AudienceAdmin),
-			// After auth so the tenant is known, and ahead of the audit and
-			// idempotency writers so a throttled call costs no database work.
-			tenantRL,
-			// See the data plane: after otel (span) and after auth (principal).
-			middleware.LogContextStreaming(l),
-			capAdmin,
-			// Refuses a trashed or purged tenant's credentials; after every
-			// interceptor that establishes a principal, before validation and
-			// idempotency, so a refused call is never answered from memo.
-			tenantGate,
-			// Refuses a change to a tenant in the trash, whoever asks.
-			tenantFreeze,
-			validateInterceptor,
-			// Idempotency-Key gate. RequireOnCreate=true means every
-			// admin-plane Create*/Issue* RPC must carry an `Idempotency-Key`
-			// header — the admin UI (frontend BFF) auto-injects a UUIDv7
-			// per submit, so a double-click or auto-retry collapses on
-			// the same key. The interceptor BOTH enforces the header AND
-			// memoizes the response (replay on a repeat key); the memoize
-			// store is scoped per (tenant, method, key).
-			middleware.NewIdempotencyInterceptor(repos.Idempotency, middleware.IdempotencyConfig{
-				RequireOnCreate: true,
-			}),
-			// Audit writer: synchronous + crash-durable (ADR-0004). The
-			// interceptor inserts the row directly via repos.Audit before the
-			// RPC returns, so a process kill can no longer drop a queued entry
-			// (the compliance trail must survive a crash). Cost is one indexed
-			// append on the response path of each mutating admin RPC.
-			middleware.AuditWithMirror(repos.Audit, auth.AudienceAdmin, false,
-				optionalAuditMirror(cfg.Dispatcher.AuditMirrorEnabled, dispatcher, l.Named("audit-mirror"))),
-		),
+	// The plane's interceptors; the codec, size limits and compression it
+	// shares with the others are rpcMountOptions.
+	adminServer := connect.NewServer(
+		// Outermost of all: a panic anywhere below is answered as an
+		// internal error and logged with its stack.
+		middleware.Recover(l),
+		// Outermost of all: tracing and the failure log inside it see an
+		// internal error as it happened; the caller sees its code and a
+		// request id, not a driver's message.
+		middleware.ScrubInternal(),
+		otelInt,
+		// Outermost after tracing, and BEFORE auth on purpose: connect
+		// applies the first-listed interceptor outermost, so anything
+		// installed after auth cannot see auth's own rejections — and a
+		// wave of failed authentications leaving no log line was the
+		// widest part of this gap. Failures only; successes are otel's job.
+		middleware.LogOutcome(l),
+		// Skip the JWT gate for `paladin_pat_…` bearers so the role-bearing
+		// API-token interceptor below can authenticate them. Without this the
+		// JWT verifier rejects the bearer first with "jwt: malformed token" and
+		// a token carrying platform.capability-issuer never reaches the RPC it
+		// exists to call. Every other case is unchanged — a JWT is verified and
+		// a missing or invalid non-PAT bearer is still rejected, so auth stays
+		// mandatory; a roleless PAT gets no principal here and is denied
+		// downstream exactly as before.
+		auth.InterceptorSkipAPITokens(verifierAdmin),
+		// apiTokAdmin BEFORE RequireAudience, as on the data plane: the audience
+		// check reads the principal, so with the API-token interceptor after it
+		// a PAT bearer was refused as "no authenticated principal" before it
+		// could be authenticated at all. Both paths — JWT and role-bearing PAT —
+		// must land a principal first.
+		apiTokAdmin,
+		auth.RequireAudience(auth.AudienceAdmin),
+		// After auth so the tenant is known, and ahead of the audit and
+		// idempotency writers so a throttled call costs no database work.
+		tenantRL.Intercept,
+		// See the data plane: after otel (span) and after auth (principal).
+		middleware.LogContext(l),
+		capAdmin,
+		// Refuses a trashed or purged tenant's credentials; after every
+		// interceptor that establishes a principal, before validation and
+		// idempotency, so a refused call is never answered from memo.
+		tenantGate,
+		// Refuses a change to a tenant in the trash, whoever asks.
+		tenantFreeze,
+		validateInterceptor,
+		// Idempotency-Key gate. RequireOnCreate=true means every
+		// admin-plane Create*/Issue* RPC must carry an `Idempotency-Key`
+		// header — the admin UI (frontend BFF) auto-injects a UUIDv7
+		// per submit, so a double-click or auto-retry collapses on
+		// the same key. The interceptor BOTH enforces the header AND
+		// memoizes the response (replay on a repeat key); the memoize
+		// store is scoped per (tenant, method, key).
+		middleware.NewIdempotencyInterceptor(repos.Idempotency, middleware.IdempotencyConfig{
+			RequireOnCreate: true,
+		}),
+		// Audit writer: synchronous + crash-durable (ADR-0004). The
+		// interceptor inserts the row directly via repos.Audit before the
+		// RPC returns, so a process kill can no longer drop a queued entry
+		// (the compliance trail must survive a crash). Cost is one indexed
+		// append on the response path of each mutating admin RPC.
+		middleware.AuditWithMirror(repos.Audit, auth.AudienceAdmin, false,
+			optionalAuditMirror(cfg.Dispatcher.AuditMirrorEnabled, dispatcher, l.Named("audit-mirror"))),
 	)
 
 	healthH := NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("admin")
@@ -281,26 +282,26 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	healthH.Register(mux)
 	adminServices := servicesIn(protoregistry.GlobalFiles, adminPackage)
 	mountGRPCStandards(mux, healthH.GRPCChecker(adminServices...), adminServices)
-	mux.Handle(paladinadminv1connect.NewBackendServiceHandler(admin.NewBackendServer(backendH), adminOpts))
-	mux.Handle(paladinadminv1connect.NewBucketServiceHandler(admin.NewBucketServer(bucketV2H, tenantH), adminOpts))
-	mux.Handle(paladinadminv1connect.NewTenantServiceHandler(admin.NewTenantServer(tenantH), adminOpts))
-	mux.Handle(paladinadminv1connect.NewCollectionServiceHandler(admin.NewCollectionServer(collectionH, repos.Tenant, tenantH), adminOpts))
-	mux.Handle(paladinadminv1connect.NewPolicyServiceHandler(admin.NewPolicyServer(policyH), adminOpts))
+	paladinadminv1connect.RegisterBackendServiceHandler(adminServer, admin.NewBackendServer(backendH))
+	paladinadminv1connect.RegisterBucketServiceHandler(adminServer, admin.NewBucketServer(bucketV2H, tenantH))
+	paladinadminv1connect.RegisterTenantServiceHandler(adminServer, admin.NewTenantServer(tenantH))
+	paladinadminv1connect.RegisterCollectionServiceHandler(adminServer, admin.NewCollectionServer(collectionH, repos.Tenant, tenantH))
+	paladinadminv1connect.RegisterPolicyServiceHandler(adminServer, admin.NewPolicyServer(policyH))
 	// CELService — stateless validator for CEL filter / match expressions
 	// the admin UI surfaces inline (lifecycle.match, eventsub.filter,
 	// list-RPC query strings). Same trust posture as PolicyService.Validate:
 	// admin-audience JWT only, no DB, no audit, no Cedar gate.
-	mux.Handle(paladinadminv1connect.NewCELServiceHandler(celh.NewHandler(), adminOpts))
-	mux.Handle(paladinadminv1connect.NewPlatformOperationServiceHandler(admin.NewOperationServer(opH), adminOpts))
-	mux.Handle(paladinadminv1connect.NewQuotaServiceHandler(admin.NewQuotaServer(quotaH), adminOpts))
+	paladinadminv1connect.RegisterCELServiceHandler(adminServer, celh.NewHandler())
+	paladinadminv1connect.RegisterPlatformOperationServiceHandler(adminServer, admin.NewOperationServer(opH))
+	paladinadminv1connect.RegisterQuotaServiceHandler(adminServer, admin.NewQuotaServer(quotaH))
+
 	{
 		var usageStore capability.UsageStore[pgx.Tx]
 		if deps.Capability != nil {
 			usageStore = deps.Capability.Usage
 		}
-		mux.Handle(paladinadminv1connect.NewTenantBudgetServiceHandler(
-			admin.NewTenantBudgetServer(usageStore), adminOpts,
-		))
+		paladinadminv1connect.RegisterTenantBudgetServiceHandler(adminServer, admin.NewTenantBudgetServer(usageStore))
+
 		// BillingService — read-only aggregation over the charges
 		// ledger (the schema baseline (001_initial_schema.sql)). Only mounted with a real handler
 		// when the capability subsystem is wired (pool + usage).
@@ -308,24 +309,17 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		if deps.Capability != nil {
 			billingHandler = billingh.NewHandler(deps.Pool, usageStore, polEngine)
 		}
-		mux.Handle(paladinadminv1connect.NewBillingServiceHandler(
-			admin.NewBillingServer(billingHandler), adminOpts,
-		))
+		paladinadminv1connect.RegisterBillingServiceHandler(adminServer, admin.NewBillingServer(billingHandler))
 	}
-	mux.Handle(paladinadminv1connect.NewAuditLogServiceHandler(admin.NewAuditServer(auditH), adminOpts))
-	mux.Handle(paladinadminv1connect.NewEventSubscriptionServiceHandler(admin.NewEventSubscriptionServer(eventSubH, tenantH), adminOpts))
+	paladinadminv1connect.RegisterAuditLogServiceHandler(adminServer, admin.NewAuditServer(auditH))
+	paladinadminv1connect.RegisterEventSubscriptionServiceHandler(adminServer, admin.NewEventSubscriptionServer(eventSubH, tenantH))
 	// MCPInspectService — read-only operator visibility into the MCP
 	// bridge configuration (profiles, deny-list, tool catalog,
 	// upstreams, transport state). Always mounted; the admin's Cedar
 	// gate keeps it platform-admin only.
-	mux.Handle(paladinadminv1connect.NewMCPInspectServiceHandler(
-		mcpinspecth.NewHandler(cfg.MCP, polEngine),
-		adminOpts,
-	))
-	mux.Handle(paladinadminv1connect.NewSystemServiceHandler(
-		admin.NewSystemServer(systemh.New(cfg, meta.ConfigPath).WithPool(deps.Pool)),
-		adminOpts,
-	))
+	paladinadminv1connect.RegisterMCPInspectServiceHandler(adminServer, mcpinspecth.NewHandler(cfg.MCP, polEngine))
+
+	paladinadminv1connect.RegisterSystemServiceHandler(adminServer, admin.NewSystemServer(systemh.New(cfg, meta.ConfigPath).WithPool(deps.Pool)))
 
 	// Live audit feed — raw-HTTP SSE endpoint (EventSource can't speak
 	// Connect). Auth: the same admin-audience bearer the console's RPCs
@@ -357,7 +351,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Store, deps.Capability.Usage, polEngine).
 			WithBiscuitCopies(deps.Capability.Verifier, deps.Capability.Copies).
 			WithCopyUsage(deps.Capability.CopyUsage)
-		mux.Handle(paladinadminv1connect.NewCapabilityServiceHandler(capH, adminOpts))
+		paladinadminv1connect.RegisterCapabilityServiceHandler(adminServer, capH)
 	} else {
 		// Subsystem disabled — mount the disabled-subsystem stub so
 		// callers receive Connect CodeUnimplemented (HTTP 501) plus
@@ -368,9 +362,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// which can't distinguish "binary lacks this RPC" from "the
 		// operator turned this subsystem off". See disabled_subsystem.go
 		// for the full contract.
-		mux.Handle(paladinadminv1connect.NewCapabilityServiceHandler(
-			disabledCapabilityServiceHandler{}, adminOpts,
-		))
+		paladinadminv1connect.RegisterCapabilityServiceHandler(adminServer, disabledCapabilityServiceHandler{})
 	}
 
 	// APITokenService — Create / Revoke / List / GetSelf. GetSelf is
@@ -380,13 +372,13 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// stub so methods return 501 (see CapabilityService rationale).
 	if deps.APIToken != nil {
 		apiTokH := apitokenh.NewHandler(deps.APIToken.Issuer, deps.APIToken.Store, deps.APIToken.Limiter, polEngine)
-		mux.Handle(paladinadminv1connect.NewAPITokenServiceHandler(apiTokH, adminOpts))
+		paladinadminv1connect.RegisterAPITokenServiceHandler(adminServer, apiTokH)
 	} else {
 		// See disabledCapabilityServiceHandler rationale.
-		mux.Handle(paladinadminv1connect.NewAPITokenServiceHandler(
-			disabledAPITokenServiceHandler{}, adminOpts,
-		))
+		paladinadminv1connect.RegisterAPITokenServiceHandler(adminServer, disabledAPITokenServiceHandler{})
 	}
+
+	connecthttp.Mount(mux, adminServer, rpcMountOptions()...)
 
 	return mux, healthH, nil
 }

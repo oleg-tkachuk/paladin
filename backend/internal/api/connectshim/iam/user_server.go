@@ -7,8 +7,9 @@ import (
 	"strings"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
@@ -52,12 +53,12 @@ func (s *UserServer) tenantParent(ctx context.Context, parent string) (uuid.UUID
 		return uuid.Nil, nil
 	}
 	if !strings.HasPrefix(parent, apiutil.TenantNamePrefix) {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid parent %q (want %s{tenant_id_or_slug})", parent, apiutil.TenantNamePrefix))
+		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
+			"invalid parent %q (want %s{tenant_id_or_slug})", parent, apiutil.TenantNamePrefix)
 	}
 	ref, err := apiutil.ParseTenantNameRef(parent)
 	if err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	if ref.HasID() {
 		return ref.ID, nil
@@ -67,11 +68,11 @@ func (s *UserServer) tenantParent(ctx context.Context, parent string) (uuid.UUID
 		return p.TenantID, nil
 	}
 	if p == nil || !p.HasRole(apiutil.RolePlatformAdmin) {
-		return uuid.Nil, connect.NewError(connect.CodePermissionDenied, errForeignTenantSlug)
+		return uuid.Nil, connect.NewError(connect.CodePermissionDenied, errForeignTenantSlug.Error()).WithCause(errForeignTenantSlug)
 	}
 	t, err := s.tenants.GetBySlug(ctx, ref.Slug)
 	if errors.Is(err, tenanth.ErrNotFound) {
-		return uuid.Nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("tenant %q not found", ref.Slug))
+		return uuid.Nil, connect.Errorf(connect.CodeNotFound, "tenant %q not found", ref.Slug)
 	}
 	if err != nil {
 		return uuid.Nil, err
@@ -79,8 +80,8 @@ func (s *UserServer) tenantParent(ctx context.Context, parent string) (uuid.UUID
 	return t.TenantID, nil
 }
 
-func (s *UserServer) CreateUser(ctx context.Context, req *connect.Request[pb.CreateUserRequest]) (*connect.Response[pb.User], error) {
-	m := req.Msg
+func (s *UserServer) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.User, error) {
+	m := req
 	tenantID, err := s.tenantParent(ctx, m.GetParent())
 	if err != nil {
 		return nil, err
@@ -96,11 +97,11 @@ func (s *UserServer) CreateUser(ctx context.Context, req *connect.Request[pb.Cre
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(userToProto(out)), nil
+	return userToProto(out), nil
 }
 
-func (s *UserServer) GetUser(ctx context.Context, req *connect.Request[pb.GetUserRequest]) (*connect.Response[pb.User], error) {
-	ref, err := s.userRef(ctx, req.Msg.GetName())
+func (s *UserServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.User, error) {
+	ref, err := s.userRef(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -108,22 +109,21 @@ func (s *UserServer) GetUser(ctx context.Context, req *connect.Request[pb.GetUse
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(userToProto(u)), nil
+	return userToProto(u), nil
 }
 
 // updateUserPaths are the UpdateUserRequest fields UpdateUser applies.
 var updateUserPaths = []string{"display_name", "disabled", "roles"}
 
-func (s *UserServer) UpdateUser(ctx context.Context, req *connect.Request[pb.UpdateUserRequest]) (*connect.Response[pb.User], error) {
-	m := req.Msg
+func (s *UserServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb.User, error) {
+	m := req
 	ref, err := s.userRef(ctx, m.GetName())
 	if err != nil {
 		return nil, err
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	if err := convx.CheckMask(m.GetUpdateMask().GetPaths(), updateUserPaths); err != nil {
 		return nil, err
@@ -139,27 +139,26 @@ func (s *UserServer) UpdateUser(ctx context.Context, req *connect.Request[pb.Upd
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(userToProto(out)), nil
+	return userToProto(out), nil
 }
 
-func (s *UserServer) DeleteUser(ctx context.Context, req *connect.Request[pb.DeleteUserRequest]) (*connect.Response[pb.DeleteUserResponse], error) {
-	ref, err := s.userRef(ctx, req.Msg.GetName())
+func (s *UserServer) DeleteUser(ctx context.Context, req *pb.DeleteUserRequest) (*pb.DeleteUserResponse, error) {
+	ref, err := s.userRef(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	if err := s.H.DeleteUser(ctx, ref, rv); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.DeleteUserResponse{}), nil
+	return &pb.DeleteUserResponse{}, nil
 }
 
-func (s *UserServer) ListUsers(ctx context.Context, req *connect.Request[pb.ListUsersRequest]) (*connect.Response[pb.ListUsersResponse], error) {
-	m := req.Msg
+func (s *UserServer) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.ListUsersResponse, error) {
+	m := req
 	// Empty parent is cross-tenant, and the handler enforces the role for it. A
 	// parent that does not parse is refused: it used to be dropped, which turned
 	// a request for one tenant's users into a listing of every tenant's.
@@ -182,47 +181,47 @@ func (s *UserServer) ListUsers(ctx context.Context, req *connect.Request[pb.List
 	for i := range users {
 		out.Users = append(out.Users, userToProto(&users[i]))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *UserServer) GrantScopes(ctx context.Context, req *connect.Request[pb.GrantScopesRequest]) (*connect.Response[pb.User], error) {
-	ref, err := s.userRef(ctx, req.Msg.GetName())
+func (s *UserServer) GrantScopes(ctx context.Context, req *pb.GrantScopesRequest) (*pb.User, error) {
+	ref, err := s.userRef(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	u, err := s.H.GrantScopes(ctx, ref, scopesFromProto(req.Msg.GetScopes()))
+	u, err := s.H.GrantScopes(ctx, ref, scopesFromProto(req.GetScopes()))
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(userToProto(u)), nil
+	return userToProto(u), nil
 }
 
-func (s *UserServer) RevokeScopes(ctx context.Context, req *connect.Request[pb.RevokeScopesRequest]) (*connect.Response[pb.User], error) {
-	ref, err := s.userRef(ctx, req.Msg.GetName())
+func (s *UserServer) RevokeScopes(ctx context.Context, req *pb.RevokeScopesRequest) (*pb.User, error) {
+	ref, err := s.userRef(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	u, err := s.H.RevokeScopes(ctx, ref, scopesFromProto(req.Msg.GetScopes()))
+	u, err := s.H.RevokeScopes(ctx, ref, scopesFromProto(req.GetScopes()))
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(userToProto(u)), nil
+	return userToProto(u), nil
 }
 
-func (s *UserServer) ResetPassword(ctx context.Context, req *connect.Request[pb.ResetPasswordRequest]) (*connect.Response[pb.ResetPasswordResponse], error) {
-	ref, err := s.userRef(ctx, req.Msg.GetName())
+func (s *UserServer) ResetPassword(ctx context.Context, req *pb.ResetPasswordRequest) (*pb.ResetPasswordResponse, error) {
+	ref, err := s.userRef(ctx, req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	pw, err := s.H.ResetPassword(ctx, ref, req.Msg.GetNewPassword())
+	pw, err := s.H.ResetPassword(ctx, ref, req.GetNewPassword())
 	if err != nil {
 		return nil, err
 	}
 	out := &pb.ResetPasswordResponse{}
-	if req.Msg.GetNewPassword() == "" {
+	if req.GetNewPassword() == "" {
 		out.GeneratedPassword = pw
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 var _ paladiniamv1connect.UserServiceHandler = (*UserServer)(nil)
@@ -251,7 +250,7 @@ func userNameParts(name string) (parent string, id uuid.UUID, err error) {
 func (s *UserServer) userRef(ctx context.Context, name string) (userh.UserRef, error) {
 	parent, id, err := userNameParts(name)
 	if err != nil {
-		return userh.UserRef{}, connect.NewError(connect.CodeInvalidArgument, err)
+		return userh.UserRef{}, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	tenant, err := s.tenantParent(ctx, parent)
 	if err != nil {

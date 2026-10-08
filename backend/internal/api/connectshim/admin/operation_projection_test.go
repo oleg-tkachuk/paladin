@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	rpccode "google.golang.org/genproto/googleapis/rpc/code"
 
@@ -36,7 +35,7 @@ func TestListPlatformOperationsSortOrder(t *testing.T) {
 	} {
 		h := &recordingOperation{}
 		if _, err := (&OperationServer{H: h}).ListOperations(context.Background(),
-			connect.NewRequest(&pb.ListOperationsRequest{SortOrder: order})); err != nil {
+			&pb.ListOperationsRequest{SortOrder: order}); err != nil {
 			t.Fatal(err)
 		}
 		if h.newestFirst == nil || *h.newestFirst != newest {

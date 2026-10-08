@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
@@ -81,11 +81,11 @@ func TestUserRPCsResolveASlugParent(t *testing.T) {
 			t.Parallel()
 			for rpc, call := range map[string]func(*UserServer, *listingUser) (uuid.UUID, error){
 				"ListUsers": func(s *UserServer, h *listingUser) (uuid.UUID, error) {
-					_, err := s.ListUsers(tc.ctx, connect.NewRequest(&pb.ListUsersRequest{Parent: "tenants/" + tc.slug}))
+					_, err := s.ListUsers(tc.ctx, &pb.ListUsersRequest{Parent: "tenants/" + tc.slug})
 					return h.got.TenantID, err
 				},
 				"CreateUser": func(s *UserServer, h *listingUser) (uuid.UUID, error) {
-					_, err := s.CreateUser(tc.ctx, connect.NewRequest(&pb.CreateUserRequest{Parent: "tenants/" + tc.slug, Subject: "u"}))
+					_, err := s.CreateUser(tc.ctx, &pb.CreateUserRequest{Parent: "tenants/" + tc.slug, Subject: "u"})
 					return h.created.TenantID, err
 				},
 			} {

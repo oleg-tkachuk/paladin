@@ -13,8 +13,6 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -55,8 +53,8 @@ func callHealth(t *testing.T, ctx context.Context, url string, opts ...paladin.O
 	if err != nil {
 		t.Fatal(err)
 	}
-	health := paladiniamv1connect.NewHealthServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...)
-	_, _ = health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{}))
+	health := paladiniamv1connect.NewHealthServiceClient(c.Connect())
+	_, _ = health.GetVersion(ctx, &iamv1.GetVersionRequest{})
 }
 
 // Each call carries its own caller's capability; a call whose context has

@@ -22,8 +22,6 @@ import (
 	"sort"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -164,7 +162,7 @@ var scenarios = map[string]func(*testing.T, env){
 	},
 	"not_found_is_typed": func(t *testing.T, e env) {
 		name := e.collection.String() + "/objects/00000000-0000-4000-8000-000000000000"
-		_, err := e.data.Object.GetObject(context.Background(), connect.NewRequest(&datav1.GetObjectRequest{Name: name}))
+		_, err := e.data.Object.GetObject(context.Background(), &datav1.GetObjectRequest{Name: name})
 		if !errors.Is(err, paladin.ErrNotFound) {
 			t.Errorf("err = %v, want ErrNotFound", err)
 		}
@@ -182,22 +180,22 @@ var scenarios = map[string]func(*testing.T, env){
 			Parent: e.collection.String(), Key: key(t), ContentType: "text/plain",
 			SizeHintBytes: int64(len(body)), ChecksumValue: sum,
 		}
-		first, err := e.data.Object.UploadObject(ctx, connect.NewRequest(req))
+		first, err := e.data.Object.UploadObject(ctx, req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		again, err := e.data.Object.UploadObject(ctx, connect.NewRequest(req))
+		again, err := e.data.Object.UploadObject(ctx, req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if again.Msg.GetObject().GetName() != first.Msg.GetObject().GetName() {
+		if again.GetObject().GetName() != first.GetObject().GetName() {
 			t.Errorf("a repeat with the same key made %s, want the first response's %s",
-				again.Msg.GetObject().GetName(), first.Msg.GetObject().GetName())
+				again.GetObject().GetName(), first.GetObject().GetName())
 		}
 	},
 	"error_names_the_release": func(t *testing.T, e env) {
 		name := e.collection.String() + "/objects/00000000-0000-4000-8000-000000000000"
-		_, err := e.data.Object.GetObject(context.Background(), connect.NewRequest(&datav1.GetObjectRequest{Name: name}))
+		_, err := e.data.Object.GetObject(context.Background(), &datav1.GetObjectRequest{Name: name})
 		var pe *paladin.Error
 		if !errors.As(err, &pe) || pe.ServerVersion == "" {
 			t.Errorf("err = %v; want a *paladin.Error naming the server's release", err)

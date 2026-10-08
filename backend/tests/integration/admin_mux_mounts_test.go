@@ -32,7 +32,8 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -175,16 +176,17 @@ func TestAdminMux_DisabledSubsystemAnswersThroughTheMux(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	client := paladinadminv1connect.NewCapabilityServiceClient(http.DefaultClient, srv.URL)
+	client := paladinadminv1connect.NewCapabilityServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, srv.URL)))
 	// The validating interceptor runs before the handler, so the request has
 	// to be well-formed or the answer is InvalidArgument and says nothing
 	// about which handler is mounted.
-	req := connect.NewRequest(&adminv1.CapabilityServiceListRequest{
+	req := &adminv1.CapabilityServiceListRequest{
 		TenantId:      uuid.NewString(),
 		PrincipalKind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER,
 		Subject:       "agent-1",
-	})
-	req.Header().Set("Authorization", "Bearer "+token)
+	}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+token)
 
 	_, err = client.List(ctx, req)
 	if err == nil {
@@ -197,10 +199,10 @@ func TestAdminMux_DisabledSubsystemAnswersThroughTheMux(t *testing.T) {
 	if ce.Code() != connect.CodeUnimplemented {
 		t.Fatalf("code = %v, want Unimplemented — a 404 or Unauthenticated here means the stub is not what the mux was given", ce.Code())
 	}
-	if got := ce.Meta().Get(app.HeaderReason); got != app.ReasonDisabled {
+	if got := info.ResponseHeader().Get(app.HeaderReason); got != app.ReasonDisabled {
 		t.Errorf("%s = %q, want %q", app.HeaderReason, got, app.ReasonDisabled)
 	}
-	if got := ce.Meta().Get(app.HeaderSubsystem); got != "capability" {
+	if got := info.ResponseHeader().Get(app.HeaderSubsystem); got != "capability" {
 		t.Errorf("%s = %q, want capability", app.HeaderSubsystem, got)
 	}
 }

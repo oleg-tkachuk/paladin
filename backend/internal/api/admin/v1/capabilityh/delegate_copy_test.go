@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -24,23 +24,23 @@ func TestDelegate_CapabilityPath_NarrowsFromThePresentedCopy(t *testing.T) {
 	copied.Caveats.Ops = []capability.Op{capability.OpGet, capability.OpShare} // put dropped offline
 	ctx := auth.WithCapability(context.Background(), &copied)
 
-	_, err := h.Delegate(ctx, connect.NewRequest(&adminv1.CapabilityServiceDelegateRequest{
+	_, err := h.Delegate(ctx, &adminv1.CapabilityServiceDelegateRequest{
 		ParentId:   record.ID.String(),
 		TtlSeconds: 60,
 		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet), string(capability.OpPut)}},
-	}))
+	})
 	if codeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("a child regained put the copy gave up: code = %v (%v)", codeOf(err), err)
 	}
 
-	resp, err := h.Delegate(ctx, connect.NewRequest(&adminv1.CapabilityServiceDelegateRequest{
+	resp, err := h.Delegate(ctx, &adminv1.CapabilityServiceDelegateRequest{
 		ParentId:   record.ID.String(),
 		TtlSeconds: 60,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("inheriting delegate: %v", err)
 	}
-	if got := resp.Msg.GetCapability().GetCaveats().GetOps(); len(got) != len(copied.Caveats.Ops) {
+	if got := resp.GetCapability().GetCaveats().GetOps(); len(got) != len(copied.Caveats.Ops) {
 		t.Fatalf("inherited ops = %v, want the copy's %v", got, copied.Caveats.Ops)
 	}
 }
@@ -55,7 +55,7 @@ func TestDelegate_CapabilityPath_RefusesACopyWithLimits(t *testing.T) {
 	copied := record
 	copied.Copies = []capability.CopyCeiling{{RevocationID: []byte("copy"), MaxRequests: 1}}
 	_, err := h.Delegate(auth.WithCapability(context.Background(), &copied),
-		connect.NewRequest(&adminv1.CapabilityServiceDelegateRequest{ParentId: record.ID.String(), TtlSeconds: 60}))
+		&adminv1.CapabilityServiceDelegateRequest{ParentId: record.ID.String(), TtlSeconds: 60})
 	if codeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("code = %v, want FailedPrecondition (%v)", codeOf(err), err)
 	}

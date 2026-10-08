@@ -8,7 +8,8 @@ import (
 	"net/http"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -54,15 +55,14 @@ func (s *Server) PublicCollection(collection ...string) paladin.CollectionName {
 // errPublicRule is the server's answer to a request a public collection
 // refuses.
 func errPublicRule(what string) error {
-	err := connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("public collection: %s", what))
-	detail, derr := connect.NewErrorDetail(&errdetails.ErrorInfo{
+	err := connect.Errorf(connect.CodeFailedPrecondition, "public collection: %s", what)
+	detail, derr := connectproto.NewErrorDetail(&errdetails.ErrorInfo{
 		Reason: commonv1.ErrorReason_ERROR_REASON_PUBLIC_COLLECTION_RULE.String(), Domain: paladin.ErrorDomain,
 	})
 	if derr != nil {
 		panic(fmt.Sprintf("paladintest: %v", derr)) // an ErrorInfo always marshals
 	}
-	err.AddDetail(detail)
-	return err
+	return err.WithDetail(detail)
 }
 
 // publicKey names an object in a public collection, or refuses a key the
@@ -77,7 +77,7 @@ func (s *Server) publicKey(parent, key string) (string, error) {
 	}
 	b := make([]byte, publicKeyBytes)
 	if _, err := rand.Read(b); err != nil {
-		return "", connect.NewError(connect.CodeInternal, err)
+		return "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return strings.ToLower(publicKeyEncoding.EncodeToString(b)), nil
 }

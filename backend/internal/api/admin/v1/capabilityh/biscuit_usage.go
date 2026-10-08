@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"connectrpc.com/connect"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -24,18 +26,17 @@ func (h *Handler) WithCopyUsage(reader capability.CopyUsageReader) *Handler {
 // Biscuit and what each has counted. Same permission and scoping as
 // GetUsage: a caller confined to its own tenant learns nothing about another
 // tenant's capability, not even that it exists.
-func (h *Handler) GetBiscuitUsage(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceGetBiscuitUsageRequest]) (*connect.Response[adminv1.CapabilityServiceGetBiscuitUsageResponse], error) {
+func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilityServiceGetBiscuitUsageRequest) (*adminv1.CapabilityServiceGetBiscuitUsageResponse, error) {
 	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
 	if err != nil {
 		return nil, err
 	}
 	if h.copier == nil || h.copyUsage == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			errors.New("biscuit copy usage not wired"))
+		return nil, connect.NewError(connect.CodeUnavailable, "biscuit copy usage not wired")
 	}
-	c, err := h.copier.BiscuitCopy(ctx, req.Msg.GetToken())
+	c, err := h.copier.BiscuitCopy(ctx, req.GetToken())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("token: %w", err))
 	}
 	ctx, err = h.actOnCapabilitysTenant(ctx, caller, c.CapabilityID)
 	if err != nil {
@@ -46,9 +47,9 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *connect.Request[admi
 	record, err := h.store.Get(ctx, c.CapabilityID)
 	if err != nil {
 		if errors.Is(err, capability.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
+			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	ids := make([][]byte, 0, len(c.Limits))
@@ -57,7 +58,7 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *connect.Request[admi
 	}
 	counted, err := h.copyUsage.CopyUsage(ctx, ids)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	byID := make(map[string]capability.CopyUsage, len(counted))
 	for _, u := range counted {
@@ -78,8 +79,8 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *connect.Request[admi
 			Reserved:     apiutil.MoneyOf(unit, u.ReservedAmount),
 		})
 	}
-	return connect.NewResponse(&adminv1.CapabilityServiceGetBiscuitUsageResponse{
+	return &adminv1.CapabilityServiceGetBiscuitUsageResponse{
 		CapabilityId: c.CapabilityID.String(),
 		Copies:       out,
-	}), nil
+	}, nil
 }

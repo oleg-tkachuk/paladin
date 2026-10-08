@@ -3,11 +3,10 @@ package admin
 import (
 	"bytes"
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -51,11 +50,11 @@ func TestListBuckets_ForwardsTheTenantFilterAndCursor(t *testing.T) {
 	h := &recordingBuckets{}
 	srv := &BucketServer{H: h}
 
-	_, err := srv.ListBuckets(context.Background(), connect.NewRequest(&pb.ListBucketsRequest{
+	_, err := srv.ListBuckets(context.Background(), &pb.ListBucketsRequest{
 		Parent:        "storageBackends/primary",
 		OwnerTenantId: owner.String(),
 		Page:          &commonv1.PageRequest{PageToken: "primary/b1"},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("listing: %v", err)
 	}
@@ -75,10 +74,10 @@ func TestUpdateBucket_ForwardsTheOwnerTenant(t *testing.T) {
 	h := &recordingBuckets{}
 	srv := &BucketServer{H: h}
 
-	_, err := srv.UpdateBucket(context.Background(), connect.NewRequest(&pb.UpdateBucketRequest{
+	_, err := srv.UpdateBucket(context.Background(), &pb.UpdateBucketRequest{
 		Name: "storageBackends/primary/buckets/b1", ResourceVersion: "1",
 		Bucket: &pb.Bucket{OwnerTenantId: owner.String()},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -110,10 +109,10 @@ func TestListCollections_ForwardsTheBucketScope(t *testing.T) {
 	h := &recordingCollections{}
 	srv := &CollectionServer{H: h, bindings: okBindings{}}
 
-	_, err := srv.ListCollections(context.Background(), connect.NewRequest(&pb.ListCollectionsRequest{
+	_, err := srv.ListCollections(context.Background(), &pb.ListCollectionsRequest{
 		Parent: "tenants/" + tenantID.String(),
 		Bucket: "storageBackends/primary/buckets/b1",
-	}))
+	})
 	if err != nil {
 		t.Fatalf("listing: %v", err)
 	}
@@ -135,10 +134,10 @@ func TestCreateCollection_KeepsAnExplicitBucket(t *testing.T) {
 	h := &recordingCollections{}
 	srv := &CollectionServer{H: h, bindings: okBindings{}}
 
-	_, err := srv.CreateCollection(context.Background(), connect.NewRequest(&pb.CreateCollectionRequest{
+	_, err := srv.CreateCollection(context.Background(), &pb.CreateCollectionRequest{
 		Parent: "tenants/" + uuid.NewString(), Collection: "c1",
 		CollectionResource: &pb.Collection{Bucket: "storageBackends/other/buckets/b2"},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -165,11 +164,11 @@ func TestSimulateAuthz_ForwardsThePrincipalTenant(t *testing.T) {
 	h := &recordingPolicy{}
 	srv := &PolicyServer{H: h}
 
-	_, err := srv.SimulateAuthz(context.Background(), connect.NewRequest(&pb.SimulateAuthzRequest{
+	_, err := srv.SimulateAuthz(context.Background(), &pb.SimulateAuthzRequest{
 		ResourceName: "tenants/" + tenantID.String() + "/collections/c1",
 		Action:       "read", PrincipalSubject: "tester",
 		PrincipalTenantId: tenantID.String(),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("simulate: %v", err)
 	}
@@ -199,14 +198,14 @@ func TestValidate_ForwardsEveryDiagnosticWithItsSeverity(t *testing.T) {
 			{Severity: policyh.DiagnosticWarning, Message: "second"},
 		},
 	}}}
-	res, err := srv.Validate(context.Background(), connect.NewRequest(&pb.ValidateRequest{CedarPolicy: "x"}))
+	res, err := srv.Validate(context.Background(), &pb.ValidateRequest{CedarPolicy: "x"})
 	if err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	if !res.Msg.GetOk() || len(res.Msg.GetDiagnostics()) != 2 {
-		t.Fatalf("got ok=%v diagnostics=%v, want ok and both warnings", res.Msg.GetOk(), res.Msg.GetDiagnostics())
+	if !res.GetOk() || len(res.GetDiagnostics()) != 2 {
+		t.Fatalf("got ok=%v diagnostics=%v, want ok and both warnings", res.GetOk(), res.GetDiagnostics())
 	}
-	for _, d := range res.Msg.GetDiagnostics() {
+	for _, d := range res.GetDiagnostics() {
 		if d.GetSeverity() != policyh.DiagnosticWarning {
 			t.Errorf("severity = %q, want %q", d.GetSeverity(), policyh.DiagnosticWarning)
 		}
@@ -239,9 +238,9 @@ func TestGetQuota_RoutesByScope(t *testing.T) {
 	t.Run("bucket scope", func(t *testing.T) {
 		h := &recordingQuota{}
 		srv := &QuotaServer{H: h}
-		_, err := srv.GetQuota(context.Background(), connect.NewRequest(&pb.GetQuotaRequest{
+		_, err := srv.GetQuota(context.Background(), &pb.GetQuotaRequest{
 			Name: "storageBackends/primary/buckets/b1/quota",
-		}))
+		})
 		if err != nil {
 			t.Fatalf("get: %v", err)
 		}
@@ -256,9 +255,9 @@ func TestGetQuota_RoutesByScope(t *testing.T) {
 	t.Run("tenant scope", func(t *testing.T) {
 		h := &recordingQuota{}
 		srv := &QuotaServer{H: h}
-		_, err := srv.GetQuota(context.Background(), connect.NewRequest(&pb.GetQuotaRequest{
+		_, err := srv.GetQuota(context.Background(), &pb.GetQuotaRequest{
 			Name: "tenants/" + tenantID.String() + "/quota",
-		}))
+		})
 		if err != nil {
 			t.Fatalf("get: %v", err)
 		}
@@ -304,9 +303,9 @@ func TestListAuditLog_DecodesTheCursor(t *testing.T) {
 	h := &recordingAudit{}
 	srv := &AuditServer{H: h}
 
-	_, err := srv.ListAuditLog(context.Background(), connect.NewRequest(&pb.ListAuditLogRequest{
+	_, err := srv.ListAuditLog(context.Background(), &pb.ListAuditLogRequest{
 		Page: &commonv1.PageRequest{PageToken: at.Format(time.RFC3339Nano) + "/" + id.String()},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("listing: %v", err)
 	}
@@ -326,18 +325,18 @@ func TestListAuditLog_NamesTheTrailTenant(t *testing.T) {
 	h := &recordingAudit{}
 	srv := &AuditServer{H: h}
 
-	if _, err := srv.ListAuditLog(context.Background(), connect.NewRequest(&pb.ListAuditLogRequest{
+	if _, err := srv.ListAuditLog(context.Background(), &pb.ListAuditLogRequest{
 		TenantId: tenant.String(),
-	})); err != nil {
+	}); err != nil {
 		t.Fatalf("listing: %v", err)
 	}
 	if h.args.TrailTenantID != tenant {
 		t.Errorf("trail = %s, want %s", h.args.TrailTenantID, tenant)
 	}
 
-	_, err := srv.ListAuditLog(context.Background(), connect.NewRequest(&pb.ListAuditLogRequest{
+	_, err := srv.ListAuditLog(context.Background(), &pb.ListAuditLogRequest{
 		TenantId: "platform",
-	}))
+	})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("a tenant that is not a UUID: err = %v, want InvalidArgument", err)
 	}
@@ -358,10 +357,10 @@ func TestCreateBucket_ForwardsTheOwnerTenant(t *testing.T) {
 	h := &recordingBucketCreate{}
 	srv := &BucketServer{H: h}
 
-	_, err := srv.CreateBucket(context.Background(), connect.NewRequest(&pb.CreateBucketRequest{
+	_, err := srv.CreateBucket(context.Background(), &pb.CreateBucketRequest{
 		Parent: "storageBackends/primary", BucketId: "b1",
 		Bucket: &pb.Bucket{OwnerTenantId: owner.String()},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -389,9 +388,9 @@ func TestCreateTenant_LeavesAbsentLabelsUnset(t *testing.T) {
 	t.Run("no labels", func(t *testing.T) {
 		h := &recordingTenant{}
 		srv := &TenantServer{H: h}
-		_, err := srv.CreateTenant(context.Background(), connect.NewRequest(&pb.CreateTenantRequest{
+		_, err := srv.CreateTenant(context.Background(), &pb.CreateTenantRequest{
 			TenantId: uuid.NewString(), Tenant: &pb.Tenant{DisplayName: "Acme"},
-		}))
+		})
 		if err != nil {
 			t.Fatalf("create: %v", err)
 		}
@@ -403,10 +402,10 @@ func TestCreateTenant_LeavesAbsentLabelsUnset(t *testing.T) {
 	t.Run("with labels", func(t *testing.T) {
 		h := &recordingTenant{}
 		srv := &TenantServer{H: h}
-		_, err := srv.CreateTenant(context.Background(), connect.NewRequest(&pb.CreateTenantRequest{
+		_, err := srv.CreateTenant(context.Background(), &pb.CreateTenantRequest{
 			TenantId: uuid.NewString(),
 			Tenant:   &pb.Tenant{DisplayName: "Acme", Labels: map[string]string{"tier": "gold"}},
-		}))
+		})
 		if err != nil {
 			t.Fatalf("create: %v", err)
 		}
@@ -422,9 +421,9 @@ func TestCreateTenant_LeavesAbsentLabelsUnset(t *testing.T) {
 // bucket "d" — a number for a bucket nobody named.
 func TestGetQuota_RejectsAFiveSegmentNameThatIsNotABucketQuota(t *testing.T) {
 	srv := &QuotaServer{H: &recordingQuota{}}
-	_, err := srv.GetQuota(context.Background(), connect.NewRequest(&pb.GetQuotaRequest{
+	_, err := srv.GetQuota(context.Background(), &pb.GetQuotaRequest{
 		Name: "a/b/c/d/e",
-	}))
+	})
 	if err == nil {
 		t.Fatal("a name that is not a quota name was accepted")
 	}
@@ -438,9 +437,9 @@ func TestGetQuota_RejectsAFiveSegmentNameThatIsNotABucketQuota(t *testing.T) {
 // would refuse the plain "show me the unlimited tenants" query.
 func TestSummarize_UnlimitedOnlyWithNoThresholdIsAllowed(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
-	_, err := srv.Summarize(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSummarizeRequest{
+	_, err := srv.Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{
 		UnlimitedOnly: true, // ThresholdPct left at zero: absent, not "0%"
-	}))
+	})
 	if err != nil {
 		t.Fatalf("unlimited_only with no threshold was refused: %v", err)
 	}
@@ -448,9 +447,9 @@ func TestSummarize_UnlimitedOnlyWithNoThresholdIsAllowed(t *testing.T) {
 
 func TestSummarize_RejectsUnlimitedOnlyWithAThreshold(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
-	_, err := srv.Summarize(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSummarizeRequest{
+	_, err := srv.Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{
 		UnlimitedOnly: true, ThresholdPct: 80,
-	}))
+	})
 	if err == nil {
 		t.Fatal("two mutually exclusive filters were accepted together")
 	}
@@ -479,9 +478,9 @@ func TestListSubscriptions_NarrowsToTheParentTenant(t *testing.T) {
 	h := &recordingSubs{}
 	srv := &EventSubscriptionServer{H: h, Tenants: failingTenant{}}
 
-	_, err := srv.ListSubscriptions(context.Background(), connect.NewRequest(&pb.ListSubscriptionsRequest{
+	_, err := srv.ListSubscriptions(context.Background(), &pb.ListSubscriptionsRequest{
 		Parent: "tenants/" + tenantID.String(),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("listing: %v", err)
 	}
@@ -496,16 +495,16 @@ func TestListSubscriptions_NarrowsToTheParentTenant(t *testing.T) {
 type deniedPolicy struct{ failingPolicy }
 
 func (deniedPolicy) GetEffectivePolicy(context.Context, string, uuid.UUID) (*policyh.EffectivePolicyOutput, error) {
-	return nil, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+	return nil, connect.NewError(connect.CodePermissionDenied, "denied by policy")
 }
 
 // The handler's code reaches the caller. Every error used to be wrapped as
 // Internal, so a caller refused by policy read it as a server fault.
 func TestGetEffectivePolicy_KeepsTheHandlersCode(t *testing.T) {
 	srv := &PolicyServer{H: deniedPolicy{}}
-	_, err := srv.GetEffectivePolicy(context.Background(), connect.NewRequest(&pb.GetEffectivePolicyRequest{
+	_, err := srv.GetEffectivePolicy(context.Background(), &pb.GetEffectivePolicyRequest{
 		ResourceName: "tenants/" + uuid.NewString(),
-	}))
+	})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("code = %v (%v), want PermissionDenied", connect.CodeOf(err), err)
 	}

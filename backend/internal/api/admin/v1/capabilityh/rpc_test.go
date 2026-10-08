@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/proto"
@@ -113,25 +113,25 @@ func TestIssueMintsAToken(t *testing.T) {
 	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
 	tenant := uuid.New()
 
-	resp, err := h.Issue(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+	resp, err := h.Issue(adminCtx(), &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: tenant.String(), Subject: "alice",
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
 		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
-	if resp.Msg.GetToken() == "" {
+	if resp.GetToken() == "" {
 		t.Error("want a minted token")
 	}
-	if resp.Msg.GetCapability() == nil {
+	if resp.GetCapability() == nil {
 		t.Error("want the capability echoed back")
 	}
 	// The same capability as a Biscuit, which its holder can attenuate.
-	if b := resp.Msg.GetBiscuit(); !capability.IsBiscuit(b) {
+	if b := resp.GetBiscuit(); !capability.IsBiscuit(b) {
 		t.Errorf("want a Biscuit beside the token, got %q", b)
 	} else if _, err := capability.Attenuate(b, capability.Attenuation{Ops: []capability.Op{capability.OpGet}}); err != nil {
 		t.Errorf("the returned Biscuit does not attenuate: %v", err)
@@ -142,9 +142,9 @@ func TestIssueIsCedarGated(t *testing.T) {
 	store := &fakeStore{}
 	h := NewHandler(mkIssuer(t, store), store, nil, &denyAuthorizer{})
 
-	_, err := h.Issue(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+	_, err := h.Issue(adminCtx(), &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{TenantId: uuid.New().String()},
-	}))
+	})
 	if codeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", codeOf(err))
 	}
@@ -161,7 +161,7 @@ func TestIssueRejectsBadSubject(t *testing.T) {
 		"bad lineage": {Subject: &adminv1.CapabilityPrincipal{Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT, TenantId: uuid.New().String(), RunId: "nope"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := h.Issue(adminCtx(), connect.NewRequest(req))
+			_, err := h.Issue(adminCtx(), req)
 			if codeOf(err) != connect.CodeInvalidArgument {
 				t.Errorf("code = %v, want InvalidArgument", codeOf(err))
 			}
@@ -176,9 +176,9 @@ func TestRevokeForwardsArgs(t *testing.T) {
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 	id := uuid.New()
 
-	_, err := h.Revoke(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceRevokeRequest{
+	_, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{
 		Id: id.String(), Reason: "leaked", CascadeChildren: true,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
@@ -202,9 +202,9 @@ func TestRevokeIsCedarGated(t *testing.T) {
 	store := &recordingStore{}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &denyAuthorizer{})
 
-	_, err := h.Revoke(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceRevokeRequest{
+	_, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{
 		Id: uuid.New().String(),
-	}))
+	})
 	if codeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", codeOf(err))
 	}
@@ -217,7 +217,7 @@ func TestRevokeRejectsBadID(t *testing.T) {
 	store := &recordingStore{}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 
-	_, err := h.Revoke(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceRevokeRequest{Id: "nope"}))
+	_, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: "nope"})
 	if codeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", codeOf(err))
 	}
@@ -227,9 +227,9 @@ func TestRevokeStoreErrorIsInternal(t *testing.T) {
 	store := &recordingStore{revokeErr: errors.New("db down")}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 
-	_, err := h.Revoke(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceRevokeRequest{
+	_, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{
 		Id: uuid.New().String(),
-	}))
+	})
 	if codeOf(err) != connect.CodeInternal {
 		t.Fatalf("code = %v, want Internal", codeOf(err))
 	}
@@ -242,7 +242,7 @@ func TestListForwardsFiltersAndPaging(t *testing.T) {
 	store := &recordingStore{listNext: "cursor-2"}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 
-	resp, err := h.List(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceListRequest{
+	resp, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{
 		TenantId:       tenant.String(),
 		PrincipalKind:  adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT,
 		Subject:        "agent-1",
@@ -250,7 +250,7 @@ func TestListForwardsFiltersAndPaging(t *testing.T) {
 		IncludeRevoked: true,
 		PageToken:      "cursor-1",
 		PageSize:       25,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -269,8 +269,8 @@ func TestListForwardsFiltersAndPaging(t *testing.T) {
 	if a.Cursor != "cursor-1" || a.Limit != 25 {
 		t.Errorf("paging = %q / %d", a.Cursor, a.Limit)
 	}
-	if resp.Msg.GetNextPageToken() != "cursor-2" {
-		t.Errorf("next token = %q", resp.Msg.GetNextPageToken())
+	if resp.GetNextPageToken() != "cursor-2" {
+		t.Errorf("next token = %q", resp.GetNextPageToken())
 	}
 }
 
@@ -278,13 +278,13 @@ func TestListEmptyIsNotNil(t *testing.T) {
 	store := &recordingStore{}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 
-	resp, err := h.List(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceListRequest{
+	resp, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{
 		TenantId: uuid.New().String(),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	if resp.Msg.GetCapabilities() == nil {
+	if resp.GetCapabilities() == nil {
 		t.Error("an empty list must serialise as [], not null")
 	}
 }
@@ -293,9 +293,9 @@ func TestListIsCedarGated(t *testing.T) {
 	store := &recordingStore{}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &denyAuthorizer{})
 
-	_, err := h.List(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceListRequest{
+	_, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{
 		TenantId: uuid.New().String(),
-	}))
+	})
 	if codeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", codeOf(err))
 	}
@@ -305,7 +305,7 @@ func TestListRejectsBadTenant(t *testing.T) {
 	store := &recordingStore{}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 
-	_, err := h.List(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceListRequest{TenantId: "nope"}))
+	_, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: "nope"})
 	if codeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", codeOf(err))
 	}
@@ -315,9 +315,9 @@ func TestListStoreErrorIsInternal(t *testing.T) {
 	store := &recordingStore{listErr: errors.New("db down")}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 
-	_, err := h.List(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceListRequest{
+	_, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{
 		TenantId: uuid.New().String(),
-	}))
+	})
 	if codeOf(err) != connect.CodeInternal {
 		t.Fatalf("code = %v, want Internal", codeOf(err))
 	}
@@ -328,9 +328,9 @@ func TestListBadPageTokenIsInvalidArgument(t *testing.T) {
 	store := &recordingStore{listErr: fmt.Errorf("%w: cursor", capability.ErrInvalidRequest)}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 
-	_, err := h.List(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceListRequest{
+	_, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{
 		TenantId: uuid.New().String(), PageToken: "garbage",
-	}))
+	})
 	if codeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", codeOf(err))
 	}
@@ -344,9 +344,9 @@ func TestGetUsageUnwiredIsUnavailable(t *testing.T) {
 	store := &fakeStore{}
 	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
 
-	_, err := h.GetUsage(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceGetUsageRequest{
+	_, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{
 		Id: uuid.New().String(),
-	}))
+	})
 	if codeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("code = %v, want Unavailable", codeOf(err))
 	}
@@ -360,17 +360,17 @@ func TestGetUsageReturnsCounters(t *testing.T) {
 	}}
 	h := NewHandler(mkIssuer(t, store), store, usage, &allowAuthorizer{})
 
-	resp, err := h.GetUsage(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceGetUsageRequest{
+	resp, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{
 		Id: id.String(),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("GetUsage: %v", err)
 	}
 	if usage.got != id {
 		t.Errorf("looked up %v, want %v", usage.got, id)
 	}
-	if resp.Msg.GetRequestCount() != 7 || !proto.Equal(resp.Msg.GetSpent(), &money.Money{CurrencyCode: "EUR", Units: 42}) {
-		t.Errorf("counters = %d / %v", resp.Msg.GetRequestCount(), resp.Msg.GetSpent())
+	if resp.GetRequestCount() != 7 || !proto.Equal(resp.GetSpent(), &money.Money{CurrencyCode: "EUR", Units: 42}) {
+		t.Errorf("counters = %d / %v", resp.GetRequestCount(), resp.GetSpent())
 	}
 }
 
@@ -381,13 +381,13 @@ func TestGetUsageDefaultsUnitCode(t *testing.T) {
 	usage := &fakeUsage{out: capability.Usage{CapabilityID: uuid.New()}}
 	h := NewHandler(mkIssuer(t, store), store, usage, &allowAuthorizer{})
 
-	resp, err := h.GetUsage(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceGetUsageRequest{
+	resp, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{
 		Id: uuid.New().String(),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("GetUsage: %v", err)
 	}
-	if got := resp.Msg.GetSpent().GetCurrencyCode(); got != capability.DefaultUnitCode {
+	if got := resp.GetSpent().GetCurrencyCode(); got != capability.DefaultUnitCode {
 		t.Errorf("unit = %q, want the %q default", got, capability.DefaultUnitCode)
 	}
 }
@@ -397,9 +397,9 @@ func TestGetUsageNotFound(t *testing.T) {
 	usage := &fakeUsage{err: capability.ErrUsageNotFound}
 	h := NewHandler(mkIssuer(t, store), store, usage, &allowAuthorizer{})
 
-	_, err := h.GetUsage(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceGetUsageRequest{
+	_, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{
 		Id: uuid.New().String(),
-	}))
+	})
 	if codeOf(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", codeOf(err))
 	}
@@ -410,9 +410,9 @@ func TestGetUsageStoreErrorIsInternal(t *testing.T) {
 	usage := &fakeUsage{err: errors.New("db down")}
 	h := NewHandler(mkIssuer(t, store), store, usage, &allowAuthorizer{})
 
-	_, err := h.GetUsage(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceGetUsageRequest{
+	_, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{
 		Id: uuid.New().String(),
-	}))
+	})
 	if codeOf(err) != connect.CodeInternal {
 		t.Fatalf("code = %v, want Internal", codeOf(err))
 	}
@@ -422,7 +422,7 @@ func TestGetUsageRejectsBadID(t *testing.T) {
 	store := &fakeStore{}
 	h := NewHandler(mkIssuer(t, store), store, &fakeUsage{}, &allowAuthorizer{})
 
-	_, err := h.GetUsage(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceGetUsageRequest{Id: "nope"}))
+	_, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{Id: "nope"})
 	if codeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", codeOf(err))
 	}
@@ -432,9 +432,9 @@ func TestGetUsageIsCedarGated(t *testing.T) {
 	store := &fakeStore{}
 	h := NewHandler(mkIssuer(t, store), store, &fakeUsage{}, &denyAuthorizer{})
 
-	_, err := h.GetUsage(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceGetUsageRequest{
+	_, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{
 		Id: uuid.New().String(),
-	}))
+	})
 	if codeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", codeOf(err))
 	}
@@ -459,14 +459,14 @@ func TestIssue_NonPlatformAdminCannotIssueForAnotherTenant(t *testing.T) {
 	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
 	caller, victim := uuid.New(), uuid.New()
 
-	_, err := h.Issue(tenantCtx(caller), connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+	_, err := h.Issue(tenantCtx(caller), &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: victim.String(), Subject: "victim",
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
 		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
-	}))
+	})
 
 	if codeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", codeOf(err))
@@ -479,14 +479,14 @@ func TestIssue_TenantAdminMayIssueForItsOwnTenant(t *testing.T) {
 	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
 	own := uuid.New()
 
-	_, err := h.Issue(tenantCtx(own), connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+	_, err := h.Issue(tenantCtx(own), &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: own.String(), Subject: "self",
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
 		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Issue for own tenant: %v", err)
 	}
@@ -499,14 +499,14 @@ func TestIssue_PlatformAdminMayIssueForAnotherTenant(t *testing.T) {
 	store := &fakeStore{}
 	h := NewHandler(mkIssuer(t, store), store, nil, cedartest.Engine(""))
 
-	_, err := h.Issue(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+	_, err := h.Issue(adminCtx(), &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: uuid.New().String(), Subject: "svc",
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
 		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Issue as platform admin: %v", err)
 	}
@@ -531,14 +531,14 @@ func TestIssue_CapabilityIssuerMayIssueForAnotherTenant(t *testing.T) {
 	store := &fakeStore{}
 	h := NewHandler(mkIssuer(t, store), store, nil, cedartest.Engine(""))
 
-	_, err := h.Issue(issuerCtx(uuid.New()), connect.NewRequest(&adminv1.CapabilityServiceIssueRequest{
+	_, err := h.Issue(issuerCtx(uuid.New()), &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: uuid.New().String(), Subject: "svc",
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
 		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Issue as capability-issuer: %v", err)
 	}
@@ -589,14 +589,14 @@ func TestRevokeAndGetUsageActOnTheCapabilitysTenant(t *testing.T) {
 			usage := &fakeUsage{out: capability.Usage{CapabilityID: target.ID}}
 			h := NewHandler(mkIssuer(t, &store.fakeStore), store, usage, cedartest.Engine(tc.tenantPolicy))
 
-			if _, err := h.Revoke(tc.ctx, connect.NewRequest(&adminv1.CapabilityServiceRevokeRequest{
+			if _, err := h.Revoke(tc.ctx, &adminv1.CapabilityServiceRevokeRequest{
 				Id: target.ID.String(),
-			})); err != nil {
+			}); err != nil {
 				t.Fatalf("Revoke: %v", err)
 			}
-			if _, err := h.GetUsage(tc.ctx, connect.NewRequest(&adminv1.CapabilityServiceGetUsageRequest{
+			if _, err := h.GetUsage(tc.ctx, &adminv1.CapabilityServiceGetUsageRequest{
 				Id: target.ID.String(),
-			})); err != nil {
+			}); err != nil {
 				t.Fatalf("GetUsage: %v", err)
 			}
 
@@ -626,9 +626,9 @@ func TestRevokeUnknownIDIsNotFoundForAnAdmin(t *testing.T) {
 	store := &recordingStore{revokeErr: capability.ErrNotFound}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 
-	_, err := h.Revoke(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceRevokeRequest{
+	_, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{
 		Id: uuid.New().String(),
-	}))
+	})
 	if codeOf(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", codeOf(err))
 	}

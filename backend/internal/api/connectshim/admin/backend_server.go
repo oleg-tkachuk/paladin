@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/backendh"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -21,8 +22,8 @@ type BackendServer struct {
 
 func NewBackendServer(h *backendh.Handler) *BackendServer { return &BackendServer{H: h} }
 
-func (s *BackendServer) CreateBackend(ctx context.Context, req *connect.Request[pb.CreateBackendRequest]) (*connect.Response[pb.StorageBackend], error) {
-	m := req.Msg
+func (s *BackendServer) CreateBackend(ctx context.Context, req *pb.CreateBackendRequest) (*pb.StorageBackend, error) {
+	m := req
 	b := backendFromProto(m.GetBackend())
 	if b.BackendID == "" {
 		b.BackendID = m.GetBackendId()
@@ -31,23 +32,23 @@ func (s *BackendServer) CreateBackend(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(backendToProto(out)), nil
+	return backendToProto(out), nil
 }
 
-func (s *BackendServer) GetBackend(ctx context.Context, req *connect.Request[pb.GetBackendRequest]) (*connect.Response[pb.StorageBackend], error) {
-	id, err := backendIDFromName(req.Msg.GetName())
+func (s *BackendServer) GetBackend(ctx context.Context, req *pb.GetBackendRequest) (*pb.StorageBackend, error) {
+	id, err := backendIDFromName(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	out, err := s.H.GetBackend(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(backendToProto(out)), nil
+	return backendToProto(out), nil
 }
 
-func (s *BackendServer) ListBackends(ctx context.Context, req *connect.Request[pb.ListBackendsRequest]) (*connect.Response[pb.ListBackendsResponse], error) {
-	m := req.Msg
+func (s *BackendServer) ListBackends(ctx context.Context, req *pb.ListBackendsRequest) (*pb.ListBackendsResponse, error) {
+	m := req
 	list, next, err := s.H.ListBackends(ctx, m.GetPage().GetPageSize(), m.GetPage().GetPageToken(), m.GetFilter())
 	if err != nil {
 		return nil, err
@@ -56,7 +57,7 @@ func (s *BackendServer) ListBackends(ctx context.Context, req *connect.Request[p
 	for i := range list {
 		out.Backends = append(out.Backends, backendToProto(&list[i]))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // updateBackendPaths are the StorageBackend fields UpdateBackend applies.
@@ -65,16 +66,15 @@ var updateBackendPaths = []string{
 	"credentials_secret_ref", "sse", "events", "cedar_policy",
 }
 
-func (s *BackendServer) UpdateBackend(ctx context.Context, req *connect.Request[pb.UpdateBackendRequest]) (*connect.Response[pb.StorageBackend], error) {
-	m := req.Msg
+func (s *BackendServer) UpdateBackend(ctx context.Context, req *pb.UpdateBackendRequest) (*pb.StorageBackend, error) {
+	m := req
 	id, err := backendIDFromName(m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	if err := convx.CheckMask(m.GetUpdateMask().GetPaths(), updateBackendPaths); err != nil {
 		return nil, err
@@ -85,126 +85,121 @@ func (s *BackendServer) UpdateBackend(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(backendToProto(out)), nil
+	return backendToProto(out), nil
 }
 
-func (s *BackendServer) DeleteBackend(ctx context.Context, req *connect.Request[pb.DeleteBackendRequest]) (*connect.Response[pb.DeleteBackendResponse], error) {
-	id, err := backendIDFromName(req.Msg.GetName())
+func (s *BackendServer) DeleteBackend(ctx context.Context, req *pb.DeleteBackendRequest) (*pb.DeleteBackendResponse, error) {
+	id, err := backendIDFromName(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	// OCC contract. There is no opt-out on this RPC: the old `force` claimed
 	// to delete a backend buckets still reference, which the RESTRICT foreign
 	// key refuses anyway, so the flag bought nothing and cost the guard.
 	if rv == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("resource_version is required"))
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"resource_version is required")
 	}
 	if err := s.H.DeleteBackend(ctx, id, rv); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.DeleteBackendResponse{}), nil
+	return &pb.DeleteBackendResponse{}, nil
 }
 
-func (s *BackendServer) SetBackendEnabled(ctx context.Context, req *connect.Request[pb.SetBackendEnabledRequest]) (*connect.Response[pb.StorageBackend], error) {
-	id, err := backendIDFromName(req.Msg.GetName())
+func (s *BackendServer) SetBackendEnabled(ctx context.Context, req *pb.SetBackendEnabledRequest) (*pb.StorageBackend, error) {
+	id, err := backendIDFromName(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	// OCC contract: a state flip must carry the current version. Unlike
 	// DeleteBackend there is no force escape — rv=0 is rejected so the
 	// flip can never silently clobber a concurrent change.
 	if rv == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("resource_version required"))
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"resource_version required")
 	}
-	out, err := s.H.SetBackendEnabled(ctx, id, req.Msg.GetEnabled(), rv)
+	out, err := s.H.SetBackendEnabled(ctx, id, req.GetEnabled(), rv)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(backendToProto(out)), nil
+	return backendToProto(out), nil
 }
 
-func (s *BackendServer) SetBackendReadOnly(ctx context.Context, req *connect.Request[pb.SetBackendReadOnlyRequest]) (*connect.Response[pb.StorageBackend], error) {
-	id, err := backendIDFromName(req.Msg.GetName())
+func (s *BackendServer) SetBackendReadOnly(ctx context.Context, req *pb.SetBackendReadOnlyRequest) (*pb.StorageBackend, error) {
+	id, err := backendIDFromName(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	// Same OCC contract as SetBackendEnabled: rv=0 is rejected so a drain
 	// flip can never clobber a concurrent change.
 	if rv == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("resource_version required"))
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"resource_version required")
 	}
-	out, err := s.H.SetBackendReadOnly(ctx, id, req.Msg.GetReadOnly(), rv)
+	out, err := s.H.SetBackendReadOnly(ctx, id, req.GetReadOnly(), rv)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(backendToProto(out)), nil
+	return backendToProto(out), nil
 }
 
-func (s *BackendServer) SetBackendMaintenance(ctx context.Context, req *connect.Request[pb.SetBackendMaintenanceRequest]) (*connect.Response[pb.StorageBackend], error) {
-	id, err := backendIDFromName(req.Msg.GetName())
+func (s *BackendServer) SetBackendMaintenance(ctx context.Context, req *pb.SetBackendMaintenanceRequest) (*pb.StorageBackend, error) {
+	id, err := backendIDFromName(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	if rv == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("resource_version required"))
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"resource_version required")
 	}
-	out, err := s.H.SetBackendMaintenance(ctx, id, req.Msg.GetMaintenance(), rv)
+	out, err := s.H.SetBackendMaintenance(ctx, id, req.GetMaintenance(), rv)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(backendToProto(out)), nil
+	return backendToProto(out), nil
 }
 
-func (s *BackendServer) RotateCredentials(ctx context.Context, req *connect.Request[pb.RotateCredentialsRequest]) (*connect.Response[pb.StorageBackend], error) {
-	id, err := backendIDFromName(req.Msg.GetName())
+func (s *BackendServer) RotateCredentials(ctx context.Context, req *pb.RotateCredentialsRequest) (*pb.StorageBackend, error) {
+	id, err := backendIDFromName(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	// grace_period is a Go duration string ("30m", "1h"); empty = instant.
 	var grace time.Duration
-	if gp := req.Msg.GetGracePeriod(); gp != "" {
+	if gp := req.GetGracePeriod(); gp != "" {
 		d, perr := time.ParseDuration(gp)
 		if perr != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("invalid grace_period %q: %w", gp, perr))
+			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid grace_period %q: %w", gp, perr))
 		}
 		grace = d
 	}
-	out, err := s.H.RotateCredentials(ctx, id, req.Msg.GetNewSecretRef(), grace)
+	out, err := s.H.RotateCredentials(ctx, id, req.GetNewSecretRef(), grace)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(backendToProto(out)), nil
+	return backendToProto(out), nil
 }
 
-func (s *BackendServer) TestBackend(ctx context.Context, req *connect.Request[pb.TestBackendRequest]) (*connect.Response[pb.TestBackendResponse], error) {
-	id, err := backendIDFromName(req.Msg.GetName())
+func (s *BackendServer) TestBackend(ctx context.Context, req *pb.TestBackendRequest) (*pb.TestBackendResponse, error) {
+	id, err := backendIDFromName(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	out, err := s.H.TestBackend(ctx, id)
 	if err != nil {
@@ -219,7 +214,7 @@ func (s *BackendServer) TestBackend(ctx context.Context, req *connect.Request[pb
 		resp.Features = featuresToProto(out.Features)
 		resp.Compatibility = compatibilityToProto(out.Features)
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 var _ paladinadminv1connect.BackendServiceHandler = (*BackendServer)(nil)

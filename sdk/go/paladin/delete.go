@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
-
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
 
@@ -29,17 +27,17 @@ type DeleteOptions struct {
 func Delete(ctx context.Context, data *DataPlane, name string, opts DeleteOptions) (deleted bool, _ error) {
 	var err error
 	for range DeleteAttempts {
-		var obj *connect.Response[datav1.Object]
-		obj, err = data.Object.GetObject(ctx, connect.NewRequest(&datav1.GetObjectRequest{Name: name}))
+		var obj *datav1.Object
+		obj, err = data.Object.GetObject(ctx, &datav1.GetObjectRequest{Name: name})
 		if errors.Is(err, ErrNotFound) {
 			return false, nil
 		}
 		if err != nil {
 			return false, err
 		}
-		_, err = data.Object.DeleteObject(ctx, connect.NewRequest(&datav1.DeleteObjectRequest{
-			Name: name, ResourceVersion: obj.Msg.GetResourceVersion(), Permanent: opts.Permanent,
-		}))
+		_, err = data.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{
+			Name: name, ResourceVersion: obj.GetResourceVersion(), Permanent: opts.Permanent,
+		})
 		switch {
 		case err == nil:
 			return true, nil

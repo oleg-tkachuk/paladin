@@ -2,12 +2,13 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"google.golang.org/protobuf/proto"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 )
 
@@ -80,35 +81,32 @@ func NewLoginRateLimiter(perSubjectMax, perIPMax int, procedures ...string) *Log
 	}
 }
 
-func (l *LoginRateLimiter) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if _, throttled := l.procedures[req.Spec().Procedure]; !throttled {
-			return next(ctx, req)
+// Interceptor is the limiter as a Connect server interceptor. It reads the
+// subject from the request message, so it acts on unary calls; Login and
+// RefreshToken are unary.
+func (l *LoginRateLimiter) Interceptor() connect.ServerInterceptor {
+	return unary.Interceptor(func(next unary.Func) unary.Func {
+		return func(ctx context.Context, spec connect.Spec, req proto.Message) (proto.Message, error) {
+			if _, throttled := l.procedures[spec.Procedure]; !throttled {
+				return next(ctx, spec, req)
+			}
+			subject, ip := l.coords(ctx, req)
+			if !l.admit(subject, ip) {
+				return nil, connect.NewError(connect.CodeResourceExhausted,
+					"too many attempts; try again later")
+			}
+			return next(ctx, spec, req)
 		}
-		subject, ip := l.coords(ctx, req)
-		if !l.admit(subject, ip) {
-			return nil, connect.NewError(connect.CodeResourceExhausted,
-				errors.New("too many attempts; try again later"))
-		}
-		return next(ctx, req)
-	}
-}
-
-func (l *LoginRateLimiter) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (l *LoginRateLimiter) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
+	}, nil)
 }
 
 // coords extracts (subject, ip). Subject from the proto body; IP from the
 // resolved client address. Both empty when absent — the limiter still
 // throttles unidentified clients under the shared "ip=" bucket.
-func (l *LoginRateLimiter) coords(ctx context.Context, req connect.AnyRequest) (string, string) {
+func (l *LoginRateLimiter) coords(ctx context.Context, req proto.Message) (string, string) {
 	type subjectGetter interface{ GetSubject() string }
 	subject := ""
-	if m, ok := req.Any().(subjectGetter); ok {
+	if m, ok := req.(subjectGetter); ok {
 		subject = m.GetSubject()
 	}
 	ip := ""

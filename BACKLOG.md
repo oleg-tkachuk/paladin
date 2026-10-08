@@ -368,27 +368,6 @@ open deliberately — each notes why._
 
 ## Dependencies
 
-### Migrate to connect-go v2
-
-- **Status:** Deferred — next up.
-- **Reason:** connect-go v2.0.0 (2026-10-07) is a new Go API: generated code
-takes and returns plain messages instead of `connect.Request[T]` /
-`connect.Response[T]`, handlers register on a `*connect.Server` mounted with
-`connecthttp`, interceptors split into server and client forms and wrap the
-whole call, and only a `*connect.Error` the code creates sends its message to
-the client. otelconnect v0.11 already requires it, so `backend/go.mod` and
-`sdk/go/go.mod` exclude `connectrpc.com/otelconnect v0.11.0` to keep
-`deps:update` on v0.10, the last release for v1. The wire protocol does not
-change; the Go SDK's public API does.
-- **Definition of Done:** the backend and the Go SDK on connect-go v2 with
-regenerated stubs; otelconnect, validate, grpchealth and grpcreflect at
-their v2-compatible releases; handler tests on `connectinprocess` where they
-now need an `httptest.Server`; every error that must reach the caller is a
-`*connect.Error`, with a test pinning that an internal error arrives without
-its text; the Go SDK released as a major with a migration note in
-`docs/upgrading.md`; both `exclude` lines and this entry deleted.
-- **Blockers:** none.
-
 ### Take grpc to the stable release carrying the GO-2026-6443 fix
 
 - **Status:** Open — waiting on upstream. There is nothing to bump to yet.
@@ -428,6 +407,23 @@ rather than on a schedule — the first sign of it mattering would be the
 finding moving from "packages you import" to "your code is affected".
 
 ## Performance / Scale
+
+### One copy of the request per unary interceptor
+
+- **Status:** Deferred.
+- **Reason:** connect-go v2 hands a server interceptor a stream, so
+`internal/api/unary.Interceptor` receives the request itself and hands the
+next layer a copy (`proto.Merge`). The data plane runs five such interceptors
+(capability, acting tenant, quota, idempotency, audit), so a request is
+decoded once and copied five times. Request messages are metadata and small,
+so this is not measured as a cost; a batch request near `MaxRPCRequestBytes`
+is the case that would show it. Passing the message itself down would let a
+handler's mutation reach the audit and idempotency layers above it, which the
+copies prevent.
+- **Definition of Done:** allocation and latency of a maximum-size batch
+request measured through the data-plane chain; if the copies show, layers
+share one message with that mutation hazard ruled out, and this entry goes.
+- **Blockers:** none.
 
 ### Per-table autovacuum tuning
 

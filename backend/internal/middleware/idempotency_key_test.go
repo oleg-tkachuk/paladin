@@ -4,7 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"google.golang.org/protobuf/proto"
 
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
@@ -16,13 +17,12 @@ import (
 func TestIdempotencyKeyResolution(t *testing.T) {
 	t.Parallel()
 
-	newReq := func(header, body string) connect.AnyRequest {
-		msg := &datav1.InitiateMultipartUploadRequest{IdempotencyKey: body}
-		r := connect.NewRequest(msg)
+	newReq := func(header, body string) (*connect.Header, proto.Message) {
+		headers := &connect.Header{}
 		if header != "" {
-			r.Header().Set(idempotencyHeader, header)
+			headers.Set(idempotencyHeader, header)
 		}
-		return r
+		return headers, &datav1.InitiateMultipartUploadRequest{IdempotencyKey: body}
 	}
 
 	t.Run("header alone", func(t *testing.T) {
@@ -67,9 +67,9 @@ func TestIdempotencyKeyResolution(t *testing.T) {
 	})
 
 	t.Run("message without the field falls back to the header", func(t *testing.T) {
-		r := connect.NewRequest(&datav1.GetObjectRequest{})
-		r.Header().Set(idempotencyHeader, "h-2")
-		got, err := idempotencyKey(r)
+		headers := &connect.Header{}
+		headers.Set(idempotencyHeader, "h-2")
+		got, err := idempotencyKey(headers, &datav1.GetObjectRequest{})
 		if err != nil || got != "h-2" {
 			t.Fatalf("got %q, %v; want h-2", got, err)
 		}

@@ -5,8 +5,9 @@ import (
 	"fmt"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -26,14 +27,14 @@ func NewBucketServer(h *bucketh.Handler, tenants TenantResolver) *BucketServer {
 	return &BucketServer{H: h, Tenants: tenants}
 }
 
-func (s *BucketServer) CreateBucket(ctx context.Context, req *connect.Request[pb.CreateBucketRequest]) (*connect.Response[pb.Bucket], error) {
-	if err := requireCompilablePolicy(req.Msg.GetBucket().GetCedarPolicy()); err != nil {
+func (s *BucketServer) CreateBucket(ctx context.Context, req *pb.CreateBucketRequest) (*pb.Bucket, error) {
+	if err := requireCompilablePolicy(req.GetBucket().GetCedarPolicy()); err != nil {
 		return nil, err
 	}
-	m := req.Msg
+	m := req
 	backend, err := backendIDFromName(m.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	src := m.GetBucket()
 	b := admindomain.Bucket{
@@ -60,23 +61,23 @@ func (s *BucketServer) CreateBucket(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(bucketToProto(out)), nil
+	return bucketToProto(out), nil
 }
 
-func (s *BucketServer) GetBucket(ctx context.Context, req *connect.Request[pb.GetBucketRequest]) (*connect.Response[pb.Bucket], error) {
-	backend, name, err := bucketNameParts(req.Msg.GetName())
+func (s *BucketServer) GetBucket(ctx context.Context, req *pb.GetBucketRequest) (*pb.Bucket, error) {
+	backend, name, err := bucketNameParts(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	out, err := s.H.GetBucket(ctx, backend, name)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(bucketToProto(out)), nil
+	return bucketToProto(out), nil
 }
 
-func (s *BucketServer) ListBuckets(ctx context.Context, req *connect.Request[pb.ListBucketsRequest]) (*connect.Response[pb.ListBucketsResponse], error) {
-	m := req.Msg
+func (s *BucketServer) ListBuckets(ctx context.Context, req *pb.ListBucketsRequest) (*pb.ListBucketsResponse, error) {
+	m := req
 	args := admindomain.ListBucketsArgs{
 		PageSize: m.GetPage().GetPageSize(),
 		Filter:   m.GetFilter(),
@@ -95,8 +96,7 @@ func (s *BucketServer) ListBuckets(ctx context.Context, req *connect.Request[pb.
 	if owner := m.GetOwnerTenantId(); owner != "" {
 		id, err := uuid.Parse(owner)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("owner_tenant_id must be a UUID: %w", err))
+			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("owner_tenant_id must be a UUID: %w", err))
 		}
 		args.OwnerTenantID = &id
 	}
@@ -111,11 +111,11 @@ func (s *BucketServer) ListBuckets(ctx context.Context, req *connect.Request[pb.
 	for i := range list {
 		out.Buckets = append(out.Buckets, bucketToProto(&list[i]))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *BucketServer) ListAccessibleBuckets(ctx context.Context, req *connect.Request[pb.ListAccessibleBucketsRequest]) (*connect.Response[pb.ListBucketsResponse], error) {
-	m := req.Msg
+func (s *BucketServer) ListAccessibleBuckets(ctx context.Context, req *pb.ListAccessibleBucketsRequest) (*pb.ListBucketsResponse, error) {
+	m := req
 	id, err := resolveTenantName(ctx, s.Tenants, m.GetTenant())
 	if err != nil {
 		return nil, err
@@ -129,25 +129,24 @@ func (s *BucketServer) ListAccessibleBuckets(ctx context.Context, req *connect.R
 	for i := range list {
 		out.Buckets = append(out.Buckets, bucketToProto(&list[i]))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // updateBucketPaths are the Bucket fields UpdateBucket applies.
 var updateBucketPaths = []string{"display_name", "labels", "owner_tenant_id"}
 
-func (s *BucketServer) UpdateBucket(ctx context.Context, req *connect.Request[pb.UpdateBucketRequest]) (*connect.Response[pb.Bucket], error) {
-	if err := requireCompilablePolicy(req.Msg.GetBucket().GetCedarPolicy()); err != nil {
+func (s *BucketServer) UpdateBucket(ctx context.Context, req *pb.UpdateBucketRequest) (*pb.Bucket, error) {
+	if err := requireCompilablePolicy(req.GetBucket().GetCedarPolicy()); err != nil {
 		return nil, err
 	}
-	m := req.Msg
+	m := req
 	backend, name, err := bucketNameParts(m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	if err := convx.CheckMask(m.GetUpdateMask().GetPaths(), updateBucketPaths); err != nil {
 		return nil, err
@@ -171,18 +170,17 @@ func (s *BucketServer) UpdateBucket(ctx context.Context, req *connect.Request[pb
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(bucketToProto(out)), nil
+	return bucketToProto(out), nil
 }
 
-func (s *BucketServer) DeleteBucket(ctx context.Context, req *connect.Request[pb.DeleteBucketRequest]) (*connect.Response[pb.DeleteBucketResponse], error) {
-	backend, name, err := bucketNameParts(req.Msg.GetName())
+func (s *BucketServer) DeleteBucket(ctx context.Context, req *pb.DeleteBucketRequest) (*pb.DeleteBucketResponse, error) {
+	backend, name, err := bucketNameParts(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	// Same OCC contract as DeleteTenant / DeleteBackend: require a guard
 	// unless the caller explicitly opts out via `force`.
@@ -192,107 +190,102 @@ func (s *BucketServer) DeleteBucket(ctx context.Context, req *connect.Request[pb
 	// bucket was the only one exempt from the concurrency check. Whether the
 	// physical bucket goes and whether the caller holds a current version are
 	// independent decisions.
-	if rv == 0 && !req.Msg.GetSkipVersionCheck() {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("resource_version is required; pass skip_version_check=true to bypass"))
+	if rv == 0 && !req.GetSkipVersionCheck() {
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"resource_version is required; pass skip_version_check=true to bypass")
 	}
 	if err := s.H.DeleteBucket(ctx, bucketh.DeleteBucketInput{
 		BackendID:       backend,
 		BucketName:      name,
 		ExpectedVersion: rv,
-		DeleteOnBackend: req.Msg.GetDeleteOnBackend(),
+		DeleteOnBackend: req.GetDeleteOnBackend(),
 	}); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.DeleteBucketResponse{}), nil
+	return &pb.DeleteBucketResponse{}, nil
 }
 
-func (s *BucketServer) SetBucketPolicy(ctx context.Context, req *connect.Request[pb.SetBucketPolicyRequest]) (*connect.Response[pb.Bucket], error) {
-	if err := requireCompilablePolicy(req.Msg.GetCedarPolicy()); err != nil {
+func (s *BucketServer) SetBucketPolicy(ctx context.Context, req *pb.SetBucketPolicyRequest) (*pb.Bucket, error) {
+	if err := requireCompilablePolicy(req.GetCedarPolicy()); err != nil {
 		return nil, err
 	}
-	backend, name, err := bucketNameParts(req.Msg.GetName())
+	backend, name, err := bucketNameParts(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
-	out, err := s.H.SetPolicy(ctx, backend, name, req.Msg.GetCedarPolicy(), rv)
+	out, err := s.H.SetPolicy(ctx, backend, name, req.GetCedarPolicy(), rv)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(bucketToProto(out)), nil
+	return bucketToProto(out), nil
 }
 
-func (s *BucketServer) SetLifecycleRules(ctx context.Context, req *connect.Request[pb.SetLifecycleRulesRequest]) (*connect.Response[pb.Bucket], error) {
-	backend, name, err := bucketNameParts(req.Msg.GetName())
+func (s *BucketServer) SetLifecycleRules(ctx context.Context, req *pb.SetLifecycleRulesRequest) (*pb.Bucket, error) {
+	backend, name, err := bucketNameParts(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
-	out, err := s.H.SetLifecycleRules(ctx, backend, name, lifecycleFromProto(req.Msg.GetRules()), rv)
+	out, err := s.H.SetLifecycleRules(ctx, backend, name, lifecycleFromProto(req.GetRules()), rv)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(bucketToProto(out)), nil
+	return bucketToProto(out), nil
 }
 
-func (s *BucketServer) SetObjectLock(ctx context.Context, req *connect.Request[pb.SetObjectLockRequest]) (*connect.Response[pb.Bucket], error) {
-	backend, name, err := bucketNameParts(req.Msg.GetName())
+func (s *BucketServer) SetObjectLock(ctx context.Context, req *pb.SetObjectLockRequest) (*pb.Bucket, error) {
+	backend, name, err := bucketNameParts(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
-	out, err := s.H.SetObjectLock(ctx, backend, name, lockFromProto(req.Msg.GetConfig()), rv)
+	out, err := s.H.SetObjectLock(ctx, backend, name, lockFromProto(req.GetConfig()), rv)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(bucketToProto(out)), nil
+	return bucketToProto(out), nil
 }
 
-func (s *BucketServer) SetVersioning(ctx context.Context, req *connect.Request[pb.SetVersioningRequest]) (*connect.Response[pb.Bucket], error) {
-	backend, name, err := bucketNameParts(req.Msg.GetName())
+func (s *BucketServer) SetVersioning(ctx context.Context, req *pb.SetVersioningRequest) (*pb.Bucket, error) {
+	backend, name, err := bucketNameParts(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
-	out, err := s.H.SetVersioning(ctx, backend, name, versioningFromProto(req.Msg.GetVersioning()), rv)
+	out, err := s.H.SetVersioning(ctx, backend, name, versioningFromProto(req.GetVersioning()), rv)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(bucketToProto(out)), nil
+	return bucketToProto(out), nil
 }
 
-func (s *BucketServer) SetReplication(ctx context.Context, req *connect.Request[pb.SetReplicationRequest]) (*connect.Response[pb.Bucket], error) {
-	backend, name, err := bucketNameParts(req.Msg.GetName())
+func (s *BucketServer) SetReplication(ctx context.Context, req *pb.SetReplicationRequest) (*pb.Bucket, error) {
+	backend, name, err := bucketNameParts(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
-	out, err := s.H.SetReplication(ctx, backend, name, replicationFromProto(req.Msg.GetReplication()), rv)
+	out, err := s.H.SetReplication(ctx, backend, name, replicationFromProto(req.GetReplication()), rv)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(bucketToProto(out)), nil
+	return bucketToProto(out), nil
 }
 
 var _ paladinadminv1connect.BucketServiceHandler = (*BucketServer)(nil)

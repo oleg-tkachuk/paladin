@@ -6,10 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 func newTestLimiter(perSubject, perIP int, window time.Duration, now time.Time) *LoginRateLimiter {
@@ -114,17 +116,50 @@ func TestLoginRateLimiterScopesPerTuple(t *testing.T) {
 // fresh bucket for every attempt.
 func TestLoginRateLimiterKeysOnTheResolvedAddress(t *testing.T) {
 	l := NewLoginRateLimiter(0, 0)
-	req := connect.NewRequest(&iamv1.LoginRequest{Subject: "alice"})
-	req.Header().Set("X-Forwarded-For", "192.0.2.66")
+	req := &iamv1.LoginRequest{Subject: "alice"}
 
-	ctx := clientip.WithAddr(context.Background(), netip.MustParseAddr("198.51.100.7"))
-	if subject, ip := l.coords(ctx, req); subject != "alice" || ip != "198.51.100.7" {
+	ctx := clientip.WithAddr(context.Background(), netip.MustParseAddr(resolvedAddr))
+	if subject, ip := l.coords(ctx, req); subject != "alice" || ip != resolvedAddr {
 		t.Errorf("coords = (%q, %q), want alice and the resolved address", subject, ip)
 	}
 	if _, ip := l.coords(context.Background(), req); ip != "" {
 		t.Errorf("ip = %q with no resolved address, want empty — the header is not consulted", ip)
 	}
 }
+
+// The same, through the interceptor with the header actually sent: an
+// attempt naming a fresh forwarded address, from a resolved address whose
+// bucket is full, is refused.
+func TestLoginRateLimiterIgnoresTheForwardingHeader(t *testing.T) {
+	const perIPMax = 1
+	l := NewLoginRateLimiter(0, perIPMax)
+	// Login is left unimplemented: an attempt the limiter admits is answered
+	// Unimplemented by the handler, one it refuses ResourceExhausted.
+	client := paladiniamv1connect.NewAuthServiceClient(unarytest.Client(func(s *connect.Server) {
+		paladiniamv1connect.RegisterAuthServiceHandler(s, paladiniamv1connect.UnimplementedAuthServiceHandler{})
+	}, l.Interceptor()))
+	ctx := clientip.WithAddr(context.Background(), netip.MustParseAddr(resolvedAddr))
+
+	for i, attempt := range []struct {
+		subject, forwardedFor string
+		want                  connect.Code
+	}{
+		{"alice", "192.0.2.66", connect.CodeUnimplemented},
+		{"bob", "192.0.2.67", connect.CodeResourceExhausted},
+	} {
+		_, err := client.Login(unarytest.WithHeader(ctx, forwardedForHeader, attempt.forwardedFor),
+			&iamv1.LoginRequest{Subject: attempt.subject})
+		if got := connect.CodeOf(err); got != attempt.want {
+			t.Errorf("attempt %d: code = %v, want %v — the per-IP bucket must be the resolved address's", i+1, got, attempt.want)
+		}
+	}
+}
+
+// resolvedAddr is the client address the listener resolved.
+const resolvedAddr = "198.51.100.7"
+
+// forwardedForHeader is the forwarding header a caller writes as it likes.
+const forwardedForHeader = "X-Forwarded-For"
 
 func TestLoginRateLimiterProcedureSelection(t *testing.T) {
 	l := NewLoginRateLimiter(0, 0)

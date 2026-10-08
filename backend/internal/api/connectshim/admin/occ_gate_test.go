@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -26,9 +26,9 @@ func TestDeleteCollectionRequiresOCC(t *testing.T) {
 	s := &CollectionServer{}
 
 	t.Run("no version and no force is refused", func(t *testing.T) {
-		_, err := s.DeleteCollection(context.Background(), connect.NewRequest(&pb.DeleteCollectionRequest{
+		_, err := s.DeleteCollection(context.Background(), &pb.DeleteCollectionRequest{
 			Name: "tenants/01a02416-f9f1-7c9c-90f1-b3d04aa1ea71/collections/c1",
-		}))
+		})
 		requireInvalidArgument(t, err, "resource_version is required")
 	})
 
@@ -36,10 +36,10 @@ func TestDeleteCollectionRequiresOCC(t *testing.T) {
 		// This is the case min_len=1 alone does not catch: "abc" satisfies the
 		// length constraint, and the old `rv, _ := parseRV(...)` discarded the
 		// error — landing on 0, which disables the guard.
-		_, err := s.DeleteCollection(context.Background(), connect.NewRequest(&pb.DeleteCollectionRequest{
+		_, err := s.DeleteCollection(context.Background(), &pb.DeleteCollectionRequest{
 			Name:            "tenants/01a02416-f9f1-7c9c-90f1-b3d04aa1ea71/collections/c1",
 			ResourceVersion: "abc",
-		}))
+		})
 		requireInvalidArgument(t, err, "invalid resource_version")
 	})
 }
@@ -54,25 +54,25 @@ func TestDeleteBucketRequiresOCC(t *testing.T) {
 	s := &BucketServer{}
 
 	t.Run("no version and no force is refused", func(t *testing.T) {
-		_, err := s.DeleteBucket(context.Background(), connect.NewRequest(&pb.DeleteBucketRequest{
+		_, err := s.DeleteBucket(context.Background(), &pb.DeleteBucketRequest{
 			Name: "storageBackends/b1/buckets/bk1",
-		}))
+		})
 		requireInvalidArgument(t, err, "resource_version is required")
 	})
 
 	t.Run("delete_on_backend no longer bypasses the guard", func(t *testing.T) {
-		_, err := s.DeleteBucket(context.Background(), connect.NewRequest(&pb.DeleteBucketRequest{
+		_, err := s.DeleteBucket(context.Background(), &pb.DeleteBucketRequest{
 			Name:            "storageBackends/b1/buckets/bk1",
 			DeleteOnBackend: true,
-		}))
+		})
 		requireInvalidArgument(t, err, "resource_version is required")
 	})
 
 	t.Run("unparseable version is refused", func(t *testing.T) {
-		_, err := s.DeleteBucket(context.Background(), connect.NewRequest(&pb.DeleteBucketRequest{
+		_, err := s.DeleteBucket(context.Background(), &pb.DeleteBucketRequest{
 			Name:            "storageBackends/b1/buckets/bk1",
 			ResourceVersion: "not-a-number",
-		}))
+		})
 		requireInvalidArgument(t, err, "invalid resource_version")
 	})
 }
@@ -83,9 +83,9 @@ func TestDeleteTenantRequiresOCC(t *testing.T) {
 	t.Parallel()
 
 	s := &TenantServer{}
-	_, err := s.DeleteTenant(context.Background(), connect.NewRequest(&pb.DeleteTenantRequest{
+	_, err := s.DeleteTenant(context.Background(), &pb.DeleteTenantRequest{
 		Name: "tenants/01a02416-f9f1-7c9c-90f1-b3d04aa1ea71",
-	}))
+	})
 	requireInvalidArgument(t, err, "resource_version is required")
 }
 

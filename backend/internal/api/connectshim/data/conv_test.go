@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -393,7 +393,7 @@ func TestBadName(t *testing.T) {
 	})
 
 	t.Run("permission denial keeps its code", func(t *testing.T) {
-		denial := connect.NewError(connect.CodePermissionDenied, errors.New("URL tenant does not match token tenant"))
+		denial := connect.NewError(connect.CodePermissionDenied, "URL tenant does not match token tenant")
 		if got := code(badName(denial)); got != connect.CodePermissionDenied {
 			t.Errorf("code = %v, want PermissionDenied", got)
 		}
@@ -401,7 +401,7 @@ func TestBadName(t *testing.T) {
 
 	// Call sites that add context with %w must not lose the code either.
 	t.Run("wrapped denial keeps its code", func(t *testing.T) {
-		denial := connect.NewError(connect.CodePermissionDenied, errors.New("nope"))
+		denial := connect.NewError(connect.CodePermissionDenied, "nope")
 		if got := code(badName(fmt.Errorf("source: %w", denial))); got != connect.CodePermissionDenied {
 			t.Errorf("code = %v, want PermissionDenied", got)
 		}

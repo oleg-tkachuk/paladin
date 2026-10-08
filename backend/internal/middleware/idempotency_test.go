@@ -2,18 +2,15 @@ package middleware
 
 import (
 	"context"
-	"errors"
-	"net/http"
-	"net/http/httptest"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
@@ -66,48 +63,57 @@ func TestIsMutationMethod(t *testing.T) {
 	}
 }
 
-// TestReconstructResponse exercises the reflection round-trip:
-// marshal a VersionInfo, throw away the live response wrapper, then
-// rebuild a fresh *connect.Response[VersionInfo] from just the bytes
-// and the wrapper's reflect.Type. The reconstructed value must
-//   - satisfy connect.AnyResponse (the interceptor returns it as-is),
-//   - expose the same proto fields via Any().
+// TestReplayResponseDecodesThroughTheSchema exercises the replay
+// round-trip: marshal a VersionInfo, throw the live message away, then
+// rebuild a fresh one from just the bytes and the method's schema. The
+// replayed value must
+//   - be the method's output type (the interceptor returns it as-is, and
+//     the Connect serializer would blow up at write-time on the wrong type),
+//   - carry the same proto fields.
 //
-// This is the core trick the BACKLOG had previously labeled
-// "architecturally impossible". The trick works because
-// `internalOnly()` is a method on *Response[_], not an instance
-// secret — reflect.New() produces a value whose dynamic type carries
-// the same method set.
-func TestReconstructResponse(t *testing.T) {
-	original := connect.NewResponse(&iamv1.VersionInfo{
+// The schema is the only registry replay needs: the method descriptor names
+// its output type, and the global type registry builds it. There is nothing
+// to register per method, so no method can be missing from a registry.
+func TestReplayResponseDecodesThroughTheSchema(t *testing.T) {
+	original := &iamv1.VersionInfo{
 		Version:   "1.2.3",
 		Commit:    "abc1234",
 		GoVersion: "go1.26.0",
-	})
-	bytes, err := proto.Marshal(original.Msg)
+	}
+	body, err := proto.Marshal(original)
 	if err != nil {
 		t.Fatalf("proto.Marshal: %v", err)
 	}
 
-	respType := reflect.TypeOf(original)
-	any, err := reconstructResponse(respType, bytes)
+	replayed, err := replayResponse(probeSpec(), body)
 	if err != nil {
-		t.Fatalf("reconstructResponse: %v", err)
+		t.Fatalf("replayResponse: %v", err)
 	}
-
-	// The reconstructed value's dynamic type must be the same as
-	// the original wrapper — otherwise the Connect serializer would
-	// blow up at write-time (wrong T).
-	if got, want := reflect.TypeOf(any), respType; got != want {
-		t.Fatalf("reconstructed type = %v, want %v", got, want)
-	}
-
-	got, ok := any.Any().(*iamv1.VersionInfo)
+	got, ok := replayed.(*iamv1.VersionInfo)
 	if !ok {
-		t.Fatalf("reconstructed Any() = %T, want *iamv1.VersionInfo", any.Any())
+		t.Fatalf("replayed %T, want *iamv1.VersionInfo", replayed)
 	}
-	if got.Version != "1.2.3" || got.Commit != "abc1234" || got.GoVersion != "go1.26.0" {
-		t.Fatalf("reconstructed payload mismatch: %+v", got)
+	if !proto.Equal(got, original) {
+		t.Fatalf("replayed payload mismatch: %+v", got)
+	}
+}
+
+// A method with no protobuf schema cannot be replayed. The interceptor treats
+// that as an unreplayable row and runs the handler, so it must be an error
+// rather than an empty message passed off as the cached answer.
+func TestReplayResponseNeedsASchema(t *testing.T) {
+	if _, err := replayResponse(connect.Spec{Procedure: unarytest.ProbeProcedure}, nil); err == nil {
+		t.Fatal("replayed a response for a method with no schema")
+	}
+}
+
+// probeSpec is the Spec of unarytest.Probe's procedure, schema included.
+func probeSpec() connect.Spec {
+	return connect.Spec{
+		StreamType: connect.StreamTypeUnary,
+		Procedure:  unarytest.ProbeProcedure,
+		Schema: iamv1.File_paladin_iam_v1_health_service_proto.Services().
+			ByName("HealthService").Methods().ByName("GetVersion"),
 	}
 }
 
@@ -164,57 +170,50 @@ type stubSystem struct {
 	failOnce bool
 }
 
-func (s *stubSystem) UpdateMine(_ context.Context, _ *connect.Request[iamv1.UpdateMineRequest]) (*connect.Response[iamv1.UserSettings], error) {
+func (s *stubSystem) UpdateMine(_ context.Context, _ *iamv1.UpdateMineRequest) (*iamv1.UserSettings, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
 	if s.failOnce {
 		s.failOnce = false
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("transient"))
+		return nil, connect.NewError(connect.CodeUnavailable, "transient")
 	}
-	return connect.NewResponse(&iamv1.UserSettings{
+	return &iamv1.UserSettings{
 		Name:     "users/me/settings",
 		Timezone: "Europe/Kyiv",
-	}), nil
+	}, nil
 }
 
-// principalInjector wraps the chain with an interceptor that
-// stamps a fixed Principal into the context. The idempotency
+// principalCtx is a context carrying a fixed Principal. The idempotency
 // interceptor needs a tenant; in production that comes from the
-// auth.Interceptor upstream. For the unit-test plane we inline a
-// minimal stand-in.
-func principalInjector(tenantID uuid.UUID) connect.Interceptor {
-	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			ctx = auth.WithPrincipal(ctx, &auth.Principal{
-				TenantID: tenantID,
-				Subject:  "test",
-				Audience: "paladin-iam",
-			})
-			return next(ctx, req)
-		}
+// auth.Interceptor upstream. For the unit-test plane we inline a minimal
+// stand-in: the in-process transport serves the handler on the caller's
+// context, so a principal on it reaches every interceptor.
+func principalCtx(tenantID uuid.UUID) context.Context {
+	return auth.WithPrincipal(context.Background(), &auth.Principal{
+		TenantID: tenantID,
+		Subject:  testSubject,
 	})
 }
 
-func newSystemServer(t *testing.T, store IdempotencyStore, cfg IdempotencyConfig) (paladiniamv1connect.UserSettingsServiceClient, *stubSystem, func()) {
+// testSubject is the principal the unit-test plane calls as.
+const testSubject = "test"
+
+// withIdempotencyKey is ctx for a call that sends key as its Idempotency-Key.
+func withIdempotencyKey(ctx context.Context, key string) context.Context {
+	return unarytest.WithHeader(ctx, idempotencyHeader, key)
+}
+
+// newSystemServer serves stubSystem behind the idempotency interceptor and
+// returns its client, the stub, and the context — one tenant's principal —
+// to call it under.
+func newSystemServer(t *testing.T, store IdempotencyStore, cfg IdempotencyConfig) (paladiniamv1connect.UserSettingsServiceClient, *stubSystem, context.Context) {
 	t.Helper()
-	tenant := uuid.New()
 	svc := &stubSystem{}
-	mux := http.NewServeMux()
-	// Order: principal injector must run BEFORE the idempotency
-	// interceptor so tenantID is in ctx when Get/Put are called.
-	// Connect's WithInterceptors applies in order — first listed
-	// is outermost.
-	path, handler := paladiniamv1connect.NewUserSettingsServiceHandler(svc,
-		connect.WithInterceptors(
-			principalInjector(tenant),
-			NewIdempotencyInterceptor(store, cfg),
-		),
-	)
-	mux.Handle(path, handler)
-	srv := httptest.NewServer(mux)
-	client := paladiniamv1connect.NewUserSettingsServiceClient(srv.Client(), srv.URL)
-	return client, svc, srv.Close
+	client := paladiniamv1connect.NewUserSettingsServiceClient(unarytest.Client(func(s *connect.Server) {
+		paladiniamv1connect.RegisterUserSettingsServiceHandler(s, svc)
+	}, NewIdempotencyInterceptor(store, cfg)))
+	return client, svc, principalCtx(uuid.New())
 }
 
 // TestMemoizeRoundTrip: with a header set, two identical calls hit
@@ -225,21 +224,18 @@ func newSystemServer(t *testing.T, store IdempotencyStore, cfg IdempotencyConfig
 // the call-count check.
 func TestMemoizeRoundTrip(t *testing.T) {
 	store := newMemStore()
-	client, svc, cleanup := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
-	defer cleanup()
+	client, svc, ctx := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
 
 	key := uuid.NewString()
-	req := connect.NewRequest(&iamv1.UpdateMineRequest{})
-	req.Header().Set("Idempotency-Key", key)
+	req := &iamv1.UpdateMineRequest{}
 
-	first, err := client.UpdateMine(context.Background(), req)
+	first, err := client.UpdateMine(withIdempotencyKey(ctx, key), req)
 	if err != nil {
 		t.Fatalf("first call: %v", err)
 	}
 
-	req2 := connect.NewRequest(&iamv1.UpdateMineRequest{})
-	req2.Header().Set("Idempotency-Key", key)
-	second, err := client.UpdateMine(context.Background(), req2)
+	req2 := &iamv1.UpdateMineRequest{}
+	second, err := client.UpdateMine(withIdempotencyKey(ctx, key), req2)
 	if err != nil {
 		t.Fatalf("second call: %v", err)
 	}
@@ -247,8 +243,8 @@ func TestMemoizeRoundTrip(t *testing.T) {
 	if svc.calls != 1 {
 		t.Fatalf("handler must run exactly once on replay; got %d calls", svc.calls)
 	}
-	if first.Msg.Name != second.Msg.Name || first.Msg.Timezone != second.Msg.Timezone {
-		t.Fatalf("replay payload mismatch: %+v vs %+v", first.Msg, second.Msg)
+	if first.Name != second.Name || first.Timezone != second.Timezone {
+		t.Fatalf("replay payload mismatch: %+v vs %+v", first, second)
 	}
 }
 
@@ -256,12 +252,11 @@ func TestMemoizeRoundTrip(t *testing.T) {
 // pass-through. Two calls hit the handler twice, no Put happens.
 func TestNoMemoizeWithoutHeader(t *testing.T) {
 	store := newMemStore()
-	client, svc, cleanup := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
-	defer cleanup()
+	client, svc, ctx := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
 
 	for range 2 {
-		if _, err := client.UpdateMine(context.Background(),
-			connect.NewRequest(&iamv1.UpdateMineRequest{})); err != nil {
+		if _, err := client.UpdateMine(ctx,
+			&iamv1.UpdateMineRequest{}); err != nil {
 			t.Fatalf("call: %v", err)
 		}
 	}
@@ -278,23 +273,20 @@ func TestNoMemoizeWithoutHeader(t *testing.T) {
 // then succeed on retry; both calls must hit the handler.
 func TestNoMemoizeOnError(t *testing.T) {
 	store := newMemStore()
-	client, svc, cleanup := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
-	defer cleanup()
+	client, svc, ctx := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
 	svc.failOnce = true
 
 	key := uuid.NewString()
-	req := connect.NewRequest(&iamv1.UpdateMineRequest{})
-	req.Header().Set("Idempotency-Key", key)
+	req := &iamv1.UpdateMineRequest{}
 
 	// First call: handler returns Unavailable — must NOT cache.
-	if _, err := client.UpdateMine(context.Background(), req); err == nil {
+	if _, err := client.UpdateMine(withIdempotencyKey(ctx, key), req); err == nil {
 		t.Fatal("expected first call to fail")
 	}
 
 	// Second call with same key: must reach handler (retry succeeds).
-	req2 := connect.NewRequest(&iamv1.UpdateMineRequest{})
-	req2.Header().Set("Idempotency-Key", key)
-	if _, err := client.UpdateMine(context.Background(), req2); err != nil {
+	req2 := &iamv1.UpdateMineRequest{}
+	if _, err := client.UpdateMine(withIdempotencyKey(ctx, key), req2); err != nil {
 		t.Fatalf("second call: %v", err)
 	}
 	if svc.calls != 2 {
@@ -314,19 +306,17 @@ func TestNoMemoizeOnError(t *testing.T) {
 // as "guarded".
 func TestSkipMethodsIsNotMemoized(t *testing.T) {
 	store := newMemStore()
-	client, svc, cleanup := newSystemServer(t, store, IdempotencyConfig{
+	client, svc, ctx := newSystemServer(t, store, IdempotencyConfig{
 		TTL: time.Minute,
 		SkipMethods: map[string]bool{
 			paladiniamv1connect.UserSettingsServiceUpdateMineProcedure: true,
 		},
 	})
-	defer cleanup()
 
 	key := uuid.NewString()
 	for i := 0; i < 2; i++ {
-		req := connect.NewRequest(&iamv1.UpdateMineRequest{})
-		req.Header().Set("Idempotency-Key", key)
-		if _, err := client.UpdateMine(context.Background(), req); err != nil {
+		req := &iamv1.UpdateMineRequest{}
+		if _, err := client.UpdateMine(withIdempotencyKey(ctx, key), req); err != nil {
 			t.Fatalf("call %d: %v", i, err)
 		}
 	}
@@ -368,19 +358,16 @@ func TestCredentialMintersAreSkipped(t *testing.T) {
 // and the handler must not run for it.
 func TestKeyReusedWithADifferentRequestIsRefused(t *testing.T) {
 	store := newMemStore()
-	client, svc, cleanup := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
-	defer cleanup()
+	client, svc, ctx := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
 
 	key := uuid.NewString()
-	first := connect.NewRequest(&iamv1.UpdateMineRequest{Timezone: "Europe/Kyiv"})
-	first.Header().Set("Idempotency-Key", key)
-	if _, err := client.UpdateMine(context.Background(), first); err != nil {
+	first := &iamv1.UpdateMineRequest{Timezone: "Europe/Kyiv"}
+	if _, err := client.UpdateMine(withIdempotencyKey(ctx, key), first); err != nil {
 		t.Fatalf("first call: %v", err)
 	}
 
-	other := connect.NewRequest(&iamv1.UpdateMineRequest{Timezone: "Europe/Warsaw"})
-	other.Header().Set("Idempotency-Key", key)
-	_, err := client.UpdateMine(context.Background(), other)
+	other := &iamv1.UpdateMineRequest{Timezone: "Europe/Warsaw"}
+	_, err := client.UpdateMine(withIdempotencyKey(ctx, key), other)
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument for a key reused with another request", connect.CodeOf(err))
 	}
@@ -389,9 +376,8 @@ func TestKeyReusedWithADifferentRequestIsRefused(t *testing.T) {
 	}
 
 	// The same request with the same key still replays.
-	again := connect.NewRequest(&iamv1.UpdateMineRequest{Timezone: "Europe/Kyiv"})
-	again.Header().Set("Idempotency-Key", key)
-	if _, err := client.UpdateMine(context.Background(), again); err != nil {
+	again := &iamv1.UpdateMineRequest{Timezone: "Europe/Kyiv"}
+	if _, err := client.UpdateMine(withIdempotencyKey(ctx, key), again); err != nil {
 		t.Fatalf("replay of the same request: %v", err)
 	}
 	if svc.calls != 1 {
@@ -404,13 +390,11 @@ func TestKeyReusedWithADifferentRequestIsRefused(t *testing.T) {
 // a deploy into a burst of InvalidArgument for keys already in flight.
 func TestRecordWithoutFingerprintStillReplays(t *testing.T) {
 	store := newMemStore()
-	client, svc, cleanup := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
-	defer cleanup()
+	client, svc, ctx := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
 
 	key := uuid.NewString()
-	seed := connect.NewRequest(&iamv1.UpdateMineRequest{Timezone: "Europe/Kyiv"})
-	seed.Header().Set("Idempotency-Key", key)
-	if _, err := client.UpdateMine(context.Background(), seed); err != nil {
+	seed := &iamv1.UpdateMineRequest{Timezone: "Europe/Kyiv"}
+	if _, err := client.UpdateMine(withIdempotencyKey(ctx, key), seed); err != nil {
 		t.Fatalf("seed call: %v", err)
 	}
 	store.mu.Lock()
@@ -420,9 +404,8 @@ func TestRecordWithoutFingerprintStillReplays(t *testing.T) {
 	}
 	store.mu.Unlock()
 
-	other := connect.NewRequest(&iamv1.UpdateMineRequest{Timezone: "Europe/Warsaw"})
-	other.Header().Set("Idempotency-Key", key)
-	if _, err := client.UpdateMine(context.Background(), other); err != nil {
+	other := &iamv1.UpdateMineRequest{Timezone: "Europe/Warsaw"}
+	if _, err := client.UpdateMine(withIdempotencyKey(ctx, key), other); err != nil {
 		t.Fatalf("legacy row must replay, got %v", err)
 	}
 	if svc.calls != 1 {

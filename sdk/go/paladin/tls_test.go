@@ -23,8 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
-
+	"connectrpc.com/connect/v2"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -147,8 +146,8 @@ type mtlsHealth struct {
 	serials []string
 }
 
-func (h *mtlsHealth) GetVersion(_ context.Context, req *connect.Request[iamv1.GetVersionRequest]) (*connect.Response[iamv1.VersionInfo], error) {
-	return connect.NewResponse(&iamv1.VersionInfo{}), nil
+func (h *mtlsHealth) GetVersion(_ context.Context, req *iamv1.GetVersionRequest) (*iamv1.VersionInfo, error) {
+	return &iamv1.VersionInfo{}, nil
 }
 
 func serveMTLS(t *testing.T, ca *authority, server leaf) (*mtlsHealth, string) {
@@ -161,8 +160,8 @@ func serveMTLSWith(t *testing.T, ca *authority, server leaf, adjust func(*httpte
 	t.Helper()
 	h := &mtlsHealth{}
 	mux := http.NewServeMux()
-	path, handler := paladiniamv1connect.NewHealthServiceHandler(h)
-	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := connectHandler(func(s *connect.Server) { paladiniamv1connect.RegisterHealthServiceHandler(s, h) })
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.mu.Lock()
 		h.serials = append(h.serials, r.TLS.PeerCertificates[0].SerialNumber.String())
 		h.mu.Unlock()
@@ -190,7 +189,7 @@ func getVersion(t *testing.T, url string, cfg paladin.TLS) error {
 	if err != nil {
 		return err
 	}
-	_, err = p.IAM.Health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{}))
+	_, err = p.IAM.Health.GetVersion(context.Background(), &iamv1.GetVersionRequest{})
 	return err
 }
 
@@ -265,7 +264,7 @@ func TestTLSPicksUpARotatedClientCertificate(t *testing.T) {
 	}
 	call := func() {
 		t.Helper()
-		if _, err := p.IAM.Health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+		if _, err := p.IAM.Health.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -303,7 +302,7 @@ func TestTLSKeepsTheLastGoodPairWhileARotationIsHalfWritten(t *testing.T) {
 	}
 	later := time.Now().Add(time.Minute)
 	_ = os.Chtimes(f.cert, later, later)
-	if _, err := p.IAM.Health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+	if _, err := p.IAM.Health.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
 		t.Fatalf("a half-written rotation broke the client: %v", err)
 	}
 	if len(h.serials) != 1 || h.serials[0] != first.serial.String() {
@@ -384,7 +383,7 @@ func TestTLSPicksUpARotatedCABundle(t *testing.T) {
 		t.Fatal(err)
 	}
 	call := func() error {
-		_, err := p.IAM.Health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{}))
+		_, err := p.IAM.Health.GetVersion(context.Background(), &iamv1.GetVersionRequest{})
 		return err
 	}
 	if call() == nil {
@@ -462,7 +461,7 @@ func testRetiresAfterARotation(t *testing.T, h2 bool) {
 	}
 	call := func() {
 		t.Helper()
-		if _, err := p.IAM.Health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+		if _, err := p.IAM.Health.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
 			t.Fatal(err)
 		}
 	}

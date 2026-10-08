@@ -5,16 +5,18 @@ import (
 	"runtime"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/usersettingsh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 // userIDFromName is the only thing standing between a caller-supplied string
@@ -34,9 +36,9 @@ func TestGetUser_RejectsMalformedNames(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			srv := &UserServer{H: failingUser{}}
-			_, err := srv.GetUser(context.Background(), connect.NewRequest(&pb.GetUserRequest{
+			_, err := srv.GetUser(context.Background(), &pb.GetUserRequest{
 				Name: name,
-			}))
+			})
 			if err == nil {
 				t.Fatal("a malformed user name was accepted")
 			}
@@ -71,11 +73,12 @@ func TestLogin_ForwardsTheTenantHintHeader(t *testing.T) {
 
 	t.Run("a parseable hint reaches the handler", func(t *testing.T) {
 		h := &recordingAuth{}
-		srv := &AuthServer{H: h}
-		req := connect.NewRequest(&pb.LoginRequest{Subject: "tester", Password: "pw"})
-		req.Header().Set("X-Tenant-Id", tenantID.String())
+		client := paladiniamv1connect.NewAuthServiceClient(unarytest.Client(func(s *connect.Server) {
+			paladiniamv1connect.RegisterAuthServiceHandler(s, &AuthServer{H: h})
+		}))
+		ctx := unarytest.WithHeader(context.Background(), "X-Tenant-Id", tenantID.String())
 
-		if _, err := srv.Login(context.Background(), req); err != nil {
+		if _, err := client.Login(ctx, &pb.LoginRequest{Subject: "tester", Password: "pw"}); err != nil {
 			t.Fatalf("login: %v", err)
 		}
 		if h.login.TenantHint != tenantID {
@@ -87,11 +90,12 @@ func TestLogin_ForwardsTheTenantHintHeader(t *testing.T) {
 
 	t.Run("an unparseable hint is dropped, not passed on", func(t *testing.T) {
 		h := &recordingAuth{}
-		srv := &AuthServer{H: h}
-		req := connect.NewRequest(&pb.LoginRequest{Subject: "tester", Password: "pw"})
-		req.Header().Set("X-Tenant-Id", "not-a-uuid")
+		client := paladiniamv1connect.NewAuthServiceClient(unarytest.Client(func(s *connect.Server) {
+			paladiniamv1connect.RegisterAuthServiceHandler(s, &AuthServer{H: h})
+		}))
+		ctx := unarytest.WithHeader(context.Background(), "X-Tenant-Id", "not-a-uuid")
 
-		if _, err := srv.Login(context.Background(), req); err != nil {
+		if _, err := client.Login(ctx, &pb.LoginRequest{Subject: "tester", Password: "pw"}); err != nil {
 			t.Fatalf("login: %v", err)
 		}
 		if h.login.TenantHint != uuid.Nil {
@@ -107,14 +111,14 @@ func TestListMyMemberships_SurfacesTheNextPageToken(t *testing.T) {
 	srv := &AuthServer{H: h}
 
 	resp, err := srv.ListMyMemberships(context.Background(),
-		connect.NewRequest(&pb.ListMyMembershipsRequest{}))
+		&pb.ListMyMembershipsRequest{})
 	if err != nil {
 		t.Fatalf("listing: %v", err)
 	}
-	if resp.Msg.GetPage().GetNextPageToken() != "cursor-2" {
+	if resp.GetPage().GetNextPageToken() != "cursor-2" {
 		t.Errorf("next page token surfaced as %q — the caller stops reading and "+
 			"believes it has seen every membership",
-			resp.Msg.GetPage().GetNextPageToken())
+			resp.GetPage().GetNextPageToken())
 	}
 }
 
@@ -127,26 +131,26 @@ func TestResetPassword_ReturnsTheGeneratedSecretOnlyWhenItGeneratedOne(t *testin
 	t.Run("no password supplied — the generated one comes back", func(t *testing.T) {
 		srv := &UserServer{H: resettingUser{generated: "s3cret"}}
 		resp, err := srv.ResetPassword(context.Background(),
-			connect.NewRequest(&pb.ResetPasswordRequest{Name: name}))
+			&pb.ResetPasswordRequest{Name: name})
 		if err != nil {
 			t.Fatalf("reset: %v", err)
 		}
-		if resp.Msg.GetGeneratedPassword() != "s3cret" {
+		if resp.GetGeneratedPassword() != "s3cret" {
 			t.Errorf("generated password came back as %q — the account was reset to "+
-				"a secret nobody can read", resp.Msg.GetGeneratedPassword())
+				"a secret nobody can read", resp.GetGeneratedPassword())
 		}
 	})
 
 	t.Run("password supplied — nothing is echoed", func(t *testing.T) {
 		srv := &UserServer{H: resettingUser{generated: "s3cret"}}
 		resp, err := srv.ResetPassword(context.Background(),
-			connect.NewRequest(&pb.ResetPasswordRequest{Name: name, NewPassword: "chosen"}))
+			&pb.ResetPasswordRequest{Name: name, NewPassword: "chosen"})
 		if err != nil {
 			t.Fatalf("reset: %v", err)
 		}
-		if resp.Msg.GetGeneratedPassword() != "" {
+		if resp.GetGeneratedPassword() != "" {
 			t.Errorf("the response carried %q for a caller-chosen password",
-				resp.Msg.GetGeneratedPassword())
+				resp.GetGeneratedPassword())
 		}
 	})
 }
@@ -185,10 +189,10 @@ func TestUserSettings_ReadPathsSucceed(t *testing.T) {
 	srv := &UserSettingsServer{H: &okUserSettings{}}
 	ctx := context.Background()
 
-	if _, err := srv.GetMine(ctx, connect.NewRequest(&pb.GetMineRequest{})); err != nil {
+	if _, err := srv.GetMine(ctx, &pb.GetMineRequest{}); err != nil {
 		t.Errorf("GetMine on well-formed settings: %v", err)
 	}
-	if _, err := srv.UpdateMine(ctx, connect.NewRequest(&pb.UpdateMineRequest{Theme: "dark"})); err != nil {
+	if _, err := srv.UpdateMine(ctx, &pb.UpdateMineRequest{Theme: "dark"}); err != nil {
 		t.Errorf("UpdateMine on well-formed settings: %v", err)
 	}
 }
@@ -197,10 +201,10 @@ func TestListByTenant_ForwardsThePageSize(t *testing.T) {
 	h := &okUserSettings{}
 	srv := &UserSettingsServer{H: h}
 
-	_, err := srv.ListByTenant(context.Background(), connect.NewRequest(&pb.ListByTenantRequest{
+	_, err := srv.ListByTenant(context.Background(), &pb.ListByTenantRequest{
 		Parent: "tenants/" + uuid.NewString(),
 		Page:   &commonpb.PageRequest{PageSize: 25},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("listing: %v", err)
 	}
@@ -216,24 +220,24 @@ func TestListByTenant_ForwardsThePageSize(t *testing.T) {
 func TestGetVersion_FillsAnEmptyGoVersion(t *testing.T) {
 	t.Run("empty — filled from the runtime", func(t *testing.T) {
 		srv := &SystemServer{}
-		resp, err := srv.GetVersion(context.Background(), connect.NewRequest(&pb.GetVersionRequest{}))
+		resp, err := srv.GetVersion(context.Background(), &pb.GetVersionRequest{})
 		if err != nil {
 			t.Fatalf("version: %v", err)
 		}
-		if resp.Msg.GetGoVersion() != runtime.Version() {
+		if resp.GetGoVersion() != runtime.Version() {
 			t.Errorf("go_version came back %q, want the runtime's %q",
-				resp.Msg.GetGoVersion(), runtime.Version())
+				resp.GetGoVersion(), runtime.Version())
 		}
 	})
 
 	t.Run("set at build time — kept as given", func(t *testing.T) {
 		srv := &SystemServer{GoVersion: "go1.99.0"}
-		resp, err := srv.GetVersion(context.Background(), connect.NewRequest(&pb.GetVersionRequest{}))
+		resp, err := srv.GetVersion(context.Background(), &pb.GetVersionRequest{})
 		if err != nil {
 			t.Fatalf("version: %v", err)
 		}
-		if resp.Msg.GetGoVersion() != "go1.99.0" {
-			t.Errorf("the build's go_version was overwritten with %q", resp.Msg.GetGoVersion())
+		if resp.GetGoVersion() != "go1.99.0" {
+			t.Errorf("the build's go_version was overwritten with %q", resp.GetGoVersion())
 		}
 	})
 }
@@ -244,15 +248,15 @@ func TestGetVersion_FillsAnEmptyGoVersion(t *testing.T) {
 // panicking on the first health probe.
 func TestGetHealth_WithoutAHandlerReportsHealthy(t *testing.T) {
 	srv := &SystemServer{Role: "core"}
-	resp, err := srv.GetHealth(context.Background(), connect.NewRequest(&pb.GetHealthRequest{}))
+	resp, err := srv.GetHealth(context.Background(), &pb.GetHealthRequest{})
 	if err != nil {
 		t.Fatalf("health: %v", err)
 	}
-	if resp.Msg.GetStatus() != pb.ComponentStatus_COMPONENT_STATUS_HEALTHY {
-		t.Errorf("status %v with no checks registered", resp.Msg.GetStatus())
+	if resp.GetStatus() != pb.ComponentStatus_COMPONENT_STATUS_HEALTHY {
+		t.Errorf("status %v with no checks registered", resp.GetStatus())
 	}
-	if resp.Msg.GetRole() != "core" {
-		t.Errorf("role %q", resp.Msg.GetRole())
+	if resp.GetRole() != "core" {
+		t.Errorf("role %q", resp.GetRole())
 	}
 }
 
@@ -267,21 +271,21 @@ func TestUserSettings_GetForUserAndListSucceed(t *testing.T) {
 	srv := &UserSettingsServer{H: &settingsWithRows{}}
 	ctx := context.Background()
 
-	if _, err := srv.GetForUser(ctx, connect.NewRequest(&pb.GetForUserRequest{
+	if _, err := srv.GetForUser(ctx, &pb.GetForUserRequest{
 		Name: "users/" + uuid.NewString(),
-	})); err != nil {
+	}); err != nil {
 		t.Errorf("GetForUser on well-formed settings: %v", err)
 	}
 
-	resp, err := srv.ListByTenant(ctx, connect.NewRequest(&pb.ListByTenantRequest{
+	resp, err := srv.ListByTenant(ctx, &pb.ListByTenantRequest{
 		Parent: "tenants/" + uuid.NewString(),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("ListByTenant on well-formed settings: %v", err)
 	}
-	if len(resp.Msg.GetSettings()) != 1 {
+	if len(resp.GetSettings()) != 1 {
 		t.Errorf("the listing carried %d rows, want 1 — the conversion runs per "+
-			"row, so an empty result never exercises it", len(resp.Msg.GetSettings()))
+			"row, so an empty result never exercises it", len(resp.GetSettings()))
 	}
 }
 
@@ -304,23 +308,23 @@ func TestWhoAmI_SurfacesTheTenantSlugFromThePrincipal(t *testing.T) {
 		ctx := auth.WithPrincipal(context.Background(), &auth.Principal{
 			Subject: "tester", TenantSlug: "acme-corp",
 		})
-		resp, err := srv.WhoAmI(ctx, connect.NewRequest(&pb.WhoAmIRequest{}))
+		resp, err := srv.WhoAmI(ctx, &pb.WhoAmIRequest{})
 		if err != nil {
 			t.Fatalf("whoami: %v", err)
 		}
-		if resp.Msg.GetTenantSlug() != "acme-corp" {
-			t.Errorf("tenant_slug came back %q", resp.Msg.GetTenantSlug())
+		if resp.GetTenantSlug() != "acme-corp" {
+			t.Errorf("tenant_slug came back %q", resp.GetTenantSlug())
 		}
 	})
 
 	t.Run("without one — empty, not a failure", func(t *testing.T) {
-		resp, err := srv.WhoAmI(context.Background(), connect.NewRequest(&pb.WhoAmIRequest{}))
+		resp, err := srv.WhoAmI(context.Background(), &pb.WhoAmIRequest{})
 		if err != nil {
 			t.Fatalf("whoami without a principal: %v", err)
 		}
-		if resp.Msg.GetTenantSlug() != "" {
+		if resp.GetTenantSlug() != "" {
 			t.Errorf("tenant_slug came back %q with no principal in context",
-				resp.Msg.GetTenantSlug())
+				resp.GetTenantSlug())
 		}
 	})
 }

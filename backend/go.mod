@@ -6,11 +6,11 @@ require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
 	buf.build/go/protovalidate v1.4.0
 	cel.dev/cel-go v0.32.0
-	connectrpc.com/connect v1.21.0
-	connectrpc.com/grpchealth v1.5.0
-	connectrpc.com/grpcreflect v1.3.1
-	connectrpc.com/otelconnect v0.10.0
-	connectrpc.com/validate v0.7.0
+	connectrpc.com/connect/v2 v2.0.0
+	connectrpc.com/grpchealth/v2 v2.0.0
+	connectrpc.com/grpcreflect/v2 v2.0.0
+	connectrpc.com/otelconnect v0.11.0
+	connectrpc.com/validate v0.8.0
 	cuelang.org/go v0.17.1
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/config v1.33.7
@@ -69,6 +69,7 @@ require (
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/sync v0.23.0
+	google.golang.org/genproto v0.0.0-20261005182115-fad411399dd8
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
@@ -245,7 +246,6 @@ require (
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect
-	google.golang.org/genproto v0.0.0-20261005182115-fad411399dd8 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20261005182115-fad411399dd8 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -262,8 +262,3 @@ require (
 replace github.com/oleg-tkachuk/paladin/capability => ../capability
 
 replace github.com/oleg-tkachuk/paladin/sdk/go => ../sdk/go
-
-// otelconnect v0.11 requires connect-go v2; v0.10 is the last release for
-// connect-go v1. Excluded so `go get -u` stops at v0.10 until the module
-// moves to connect-go v2 (BACKLOG: "Migrate to connect-go v2").
-exclude connectrpc.com/otelconnect v0.11.0

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -41,49 +43,47 @@ func NewBillingServer(h *billingh.Handler) *BillingServer {
 
 func (s *BillingServer) GetTenantSummary(
 	ctx context.Context,
-	req *connect.Request[pb.GetTenantSummaryRequest],
-) (*connect.Response[pb.GetTenantSummaryResponse], error) {
+	req *pb.GetTenantSummaryRequest,
+) (*pb.GetTenantSummaryResponse, error) {
 	if s.H == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			fmt.Errorf("billing: handler not wired"))
+		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
 	}
-	tenantID, err := uuid.Parse(req.Msg.GetTenantId())
+	tenantID, err := uuid.Parse(req.GetTenantId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
 	}
 	sum, err := s.H.GetTenantSummary(ctx, tenantID,
-		timeFromPB(req.Msg.GetPeriodStart()),
-		timeFromPB(req.Msg.GetPeriodEnd()),
+		timeFromPB(req.GetPeriodStart()),
+		timeFromPB(req.GetPeriodEnd()),
 	)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.GetTenantSummaryResponse{
+	return &pb.GetTenantSummaryResponse{
 		Total:           apiutil.MoneyOf(sum.UnitCode, sum.TotalAmount),
 		MaxBudget:       apiutil.MoneyOf(sum.UnitCode, sum.MaxBudgetAmount),
 		ChargeCount:     sum.ChargeCount,
 		TopCapabilities: topEntriesToProto(sum.UnitCode, sum.TopCapabilities),
 		TopActors:       topEntriesToProto(sum.UnitCode, sum.TopActors),
 		TopOps:          topEntriesToProto(sum.UnitCode, sum.TopOps),
-	}), nil
+	}, nil
 }
 
 func (s *BillingServer) GetTenantTimeSeries(
 	ctx context.Context,
-	req *connect.Request[pb.GetTenantTimeSeriesRequest],
-) (*connect.Response[pb.GetTenantTimeSeriesResponse], error) {
+	req *pb.GetTenantTimeSeriesRequest,
+) (*pb.GetTenantTimeSeriesResponse, error) {
 	if s.H == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			fmt.Errorf("billing: handler not wired"))
+		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
 	}
-	tenantID, err := uuid.Parse(req.Msg.GetTenantId())
+	tenantID, err := uuid.Parse(req.GetTenantId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
 	}
 	ts, err := s.H.GetTenantTimeSeries(ctx, tenantID,
-		timeFromPB(req.Msg.GetPeriodStart()),
-		timeFromPB(req.Msg.GetPeriodEnd()),
-		req.Msg.GetGranularity(),
+		timeFromPB(req.GetPeriodStart()),
+		timeFromPB(req.GetPeriodEnd()),
+		req.GetGranularity(),
 	)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func (s *BillingServer) GetTenantTimeSeries(
 			ChargeCount: b.ChargeCount,
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 var _ paladinadminv1connect.BillingServiceHandler = (*BillingServer)(nil)

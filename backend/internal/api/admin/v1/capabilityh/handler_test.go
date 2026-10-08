@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -124,14 +124,14 @@ func TestDelegate_CapabilityPath_AllowedWithOpShare(t *testing.T) {
 	h := NewHandler(issuer, store, nil, authz)
 
 	ctx := auth.WithCapability(context.Background(), &parent)
-	resp, err := h.Delegate(ctx, connect.NewRequest(&adminv1.CapabilityServiceDelegateRequest{
+	resp, err := h.Delegate(ctx, &adminv1.CapabilityServiceDelegateRequest{
 		ParentId:   parent.ID.String(),
 		TtlSeconds: 60,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("delegate: %v", err)
 	}
-	if resp.Msg.GetToken() == "" {
+	if resp.GetToken() == "" {
 		t.Fatal("expected token, got empty")
 	}
 	if authz.called != 0 {
@@ -150,10 +150,10 @@ func TestDelegate_CapabilityPath_DeniedWithoutOpShare(t *testing.T) {
 	h := NewHandler(issuer, store, nil, &allowAuthorizer{})
 
 	ctx := auth.WithCapability(context.Background(), &parent)
-	_, err := h.Delegate(ctx, connect.NewRequest(&adminv1.CapabilityServiceDelegateRequest{
+	_, err := h.Delegate(ctx, &adminv1.CapabilityServiceDelegateRequest{
 		ParentId:   parent.ID.String(),
 		TtlSeconds: 60,
-	}))
+	})
 	if err == nil {
 		t.Fatal("expected PermissionDenied, got nil")
 	}
@@ -175,10 +175,10 @@ func TestDelegate_CapabilityPath_DeniedWithMismatchedParent(t *testing.T) {
 	h := NewHandler(issuer, store, nil, &allowAuthorizer{})
 
 	ctx := auth.WithCapability(context.Background(), &caller)
-	_, err := h.Delegate(ctx, connect.NewRequest(&adminv1.CapabilityServiceDelegateRequest{
+	_, err := h.Delegate(ctx, &adminv1.CapabilityServiceDelegateRequest{
 		ParentId:   other.ID.String(), // not caller's ID
 		TtlSeconds: 60,
-	}))
+	})
 	if err == nil {
 		t.Fatal("expected PermissionDenied, got nil")
 	}
@@ -205,10 +205,10 @@ func TestDelegate_AdminPath_StillRequiresCedar(t *testing.T) {
 		Roles:    []string{"platform.admin"},
 	})
 
-	if _, err := h.Delegate(ctx, connect.NewRequest(&adminv1.CapabilityServiceDelegateRequest{
+	if _, err := h.Delegate(ctx, &adminv1.CapabilityServiceDelegateRequest{
 		ParentId:   parent.ID.String(),
 		TtlSeconds: 60,
-	})); err != nil {
+	}); err != nil {
 		t.Fatalf("delegate: %v", err)
 	}
 	if authz.called == 0 {

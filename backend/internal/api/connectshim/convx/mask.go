@@ -1,11 +1,10 @@
 package convx
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 // CheckMask refuses an update_mask path the RPC does not apply. Before it, an
@@ -23,7 +22,7 @@ func CheckMask(paths, supported []string) error {
 	if len(unknown) == 0 {
 		return nil
 	}
-	return connect.NewError(connect.CodeInvalidArgument,
-		fmt.Errorf("update_mask: unsupported path(s) %s; this RPC updates %s",
-			strings.Join(unknown, ", "), strings.Join(supported, ", ")))
+	return connect.Errorf(connect.CodeInvalidArgument,
+		"update_mask: unsupported path(s) %s; this RPC updates %s",
+		strings.Join(unknown, ", "), strings.Join(supported, ", "))
 }

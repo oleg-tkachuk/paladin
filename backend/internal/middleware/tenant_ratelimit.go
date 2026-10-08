@@ -2,18 +2,19 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"math"
 	"strconv"
 	"sync"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // TenantRateLimitInterceptor caps how fast one tenant can call the data and
@@ -98,60 +99,34 @@ func (i *TenantRateLimitInterceptor) admit(ctx context.Context, tenant uuid.UUID
 	return weighted <= float64(i.capacity), retryAfter
 }
 
-func (i *TenantRateLimitInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+// Intercept charges one token per call; a stream is charged once, at open.
+// Per-message accounting would need the limiter inside the message loop; the
+// streams here are event subscriptions, whose cost is in the subscription,
+// not the frame.
+func (i *TenantRateLimitInterceptor) Intercept(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 		if i.store == nil {
-			return next(ctx, req)
+			return next(ctx, spec, stream)
 		}
 		tenant, err := auth.EffectiveTenant(ctx)
 		if err != nil {
 			// Unauthenticated or tenantless: not this limiter's business.
-			return next(ctx, req)
+			return next(ctx, spec, stream)
 		}
 		id := tenant.String()
 		allowed, retryAfter := i.admit(ctx, tenant)
 		recordTenantRateLimitDecision(ctx, id, allowed)
 		if !allowed {
-			cerr := connect.NewError(connect.CodeResourceExhausted,
-				errors.New("per-tenant request rate exceeded; retry shortly"))
 			// Retry-After is what makes this actionable for an integrating
 			// service: ResourceExhausted alone does not say whether to back
 			// off or give up.
-			cerr.Meta().Set("Retry-After", retryAfterHeader(retryAfter))
-			return nil, cerr
-		}
-		return next(ctx, req)
-	}
-}
-
-func (i *TenantRateLimitInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler charges one token at stream open. Per-message
-// accounting would need the limiter inside the message loop; the streams here
-// are event subscriptions, whose cost is in the subscription, not the frame.
-func (i *TenantRateLimitInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if i.store == nil {
-			return next(ctx, conn)
-		}
-		tenant, err := auth.EffectiveTenant(ctx)
-		if err != nil {
-			return next(ctx, conn)
-		}
-		id := tenant.String()
-		allowed, _ := i.admit(ctx, tenant)
-		recordTenantRateLimitDecision(ctx, id, allowed)
-		if !allowed {
+			unary.Info(ctx).ResponseHeader().Set(paladin.HeaderRetryAfter, retryAfterHeader(retryAfter))
 			return connect.NewError(connect.CodeResourceExhausted,
-				errors.New("per-tenant request rate exceeded; retry shortly"))
+				"per-tenant request rate exceeded; retry shortly")
 		}
-		return next(ctx, conn)
+		return next(ctx, spec, stream)
 	}
 }
-
-var _ connect.Interceptor = (*TenantRateLimitInterceptor)(nil)
 
 // retryAfterHeader renders the seconds left in the bucket, rounded up and
 // floored at 1: a client told to retry in 0 seconds retries immediately and

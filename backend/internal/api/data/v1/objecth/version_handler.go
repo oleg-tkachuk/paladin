@@ -7,12 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -66,7 +67,7 @@ func (h *VersionHandler) authorizeParent(
 		return err
 	}
 	if h.policy == nil {
-		return connect.NewError(connect.CodePermissionDenied, errNoVersionAuthorizer)
+		return connect.NewError(connect.CodePermissionDenied, errNoVersionAuthorizer.Error()).WithCause(errNoVersionAuthorizer)
 	}
 	write := action != cedar.ActionGetObject
 	// Best-effort, as in GetObject: an unbound collection emits no bucket
@@ -87,8 +88,8 @@ func (h *VersionHandler) authorizeParent(
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("policy denied %s on %s/%s", action, parent.Collection, parent.Key))
+		return connect.Errorf(connect.CodePermissionDenied,
+			"policy denied %s on %s/%s", action, parent.Collection, parent.Key)
 	}
 	return nil
 }
@@ -144,11 +145,11 @@ func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput)
 		return nil, "", err
 	}
 	if in.Collection == "" || in.ObjectID == "" {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument, errors.New("collection and object_id are required"))
+		return nil, "", connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
 	}
 	objectID, err := uuid.Parse(in.ObjectID)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
 	}
 	// Confirm the parent object exists + the caller's tenant owns it.
 	parent, err := h.objects.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
@@ -160,7 +161,7 @@ func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput)
 	}
 	out, next, err := h.versions.List(ctx, objectID, in.PageSize, in.PageToken)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInternal, err)
+		return nil, "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return out, next, nil
 }
@@ -174,7 +175,7 @@ func (h *VersionHandler) GetVersion(ctx context.Context, name string) (*ObjectVe
 	}
 	parsed, err := parseVersionName(name)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	// Tenant guard via parent Object lookup.
 	parent, err := h.objects.FindByName(ctx, tenantID, parsed.collection, parsed.objectID.String())
@@ -189,7 +190,7 @@ func (h *VersionHandler) GetVersion(ctx context.Context, name string) (*ObjectVe
 		return nil, apiutil.MapError(err)
 	}
 	if v.ObjectID != parent.ObjectID {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("version does not belong to the named object"))
+		return nil, connect.NewError(connect.CodeNotFound, "version does not belong to the named object")
 	}
 	current, _ := h.versions.CurrentVersionID(ctx, parent.ObjectID)
 	if v.VersionID == current {
@@ -215,12 +216,11 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersi
 	// reach the handler by another route get the same guarantee.
 	if resourceVersion == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("resource_version is required"))
+			"resource_version is required")
 	}
 	expected, err := parseInt64(resourceVersion)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
@@ -228,7 +228,7 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersi
 	}
 	parsed, err := parseVersionName(name)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	parent, err := h.objects.FindByName(ctx, tenantID, parsed.collection, parsed.objectID.String())
 	if err != nil {
@@ -238,28 +238,28 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersi
 		return nil, err
 	}
 	if expected != parent.ResourceVersion {
-		return nil, connect.NewError(connect.CodeAborted,
-			fmt.Errorf("resource_version mismatch: expected %d, current %d",
-				expected, parent.ResourceVersion))
+		return nil, connect.Errorf(connect.CodeAborted,
+			"resource_version mismatch: expected %d, current %d",
+			expected, parent.ResourceVersion)
 	}
 	v, err := h.versions.Get(ctx, parsed.versionID)
 	if err != nil {
 		return nil, apiutil.MapError(err)
 	}
 	if v.ObjectID != parent.ObjectID {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("version does not belong to the named object"))
+		return nil, connect.NewError(connect.CodeNotFound, "version does not belong to the named object")
 	}
 	if v.IsDeleteMarker {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("cannot restore a delete marker; use RestoreObject"))
+			"cannot restore a delete marker; use RestoreObject")
 	}
 	if err := h.versions.SetCurrentVersionID(ctx, parent.ObjectID, v.VersionID); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// Refresh the parent Object envelope so callers see authoritative state.
 	fresh, err := h.objects.FindByName(ctx, tenantID, parsed.collection, parsed.objectID.String())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &fresh, nil
 }

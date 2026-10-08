@@ -7,7 +7,7 @@ import (
 	"math"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/encoding/protowire"
@@ -89,26 +89,26 @@ func (f *fakeUsageStore) ListTenantBudgets(_ context.Context, req capability.Lis
 // Summarize pages through the store's cursor, both ways.
 func TestTenantBudgetServer_Summarize_Pages(t *testing.T) {
 	store := &fakeUsageStore{listNext: "next-page"}
-	resp, err := NewTenantBudgetServer(store).Summarize(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSummarizeRequest{
+	resp, err := NewTenantBudgetServer(store).Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{
 		Limit: 2, PageToken: "this-page",
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if store.lastList.Cursor != "this-page" || store.lastList.Limit != 2 {
 		t.Errorf("store asked for %+v; want the page token and limit sent", store.lastList)
 	}
-	if resp.Msg.GetNextPageToken() != "next-page" {
-		t.Errorf("next_page_token = %q, want the store's cursor", resp.Msg.GetNextPageToken())
+	if resp.GetNextPageToken() != "next-page" {
+		t.Errorf("next_page_token = %q, want the store's cursor", resp.GetNextPageToken())
 	}
 }
 
 // A page token the store cannot read is the caller's to fix.
 func TestTenantBudgetServer_Summarize_BadPageToken(t *testing.T) {
 	store := &fakeUsageStore{listErr: fmt.Errorf("%w: cursor", capability.ErrInvalidRequest)}
-	_, err := NewTenantBudgetServer(store).Summarize(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSummarizeRequest{
+	_, err := NewTenantBudgetServer(store).Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{
 		PageToken: "garbage",
-	}))
+	})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", connect.CodeOf(err))
 	}
@@ -117,9 +117,9 @@ func TestTenantBudgetServer_Summarize_BadPageToken(t *testing.T) {
 func TestTenantBudgetServer_Get_NotFound(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
 	tenantID := uuid.New()
-	_, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
+	_, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
 		TenantId: tenantID.String(),
-	}))
+	})
 	if err == nil {
 		t.Fatal("expected NotFound error")
 	}
@@ -134,25 +134,25 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 	srv := NewTenantBudgetServer(store)
 	tenantID := uuid.New()
 
-	setRes, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	setRes, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:   tenantID.String(),
 		MaxBudget:  &money.Money{CurrencyCode: "USD", Units: 100},
 		ResetSpend: true,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got, want := setRes.Msg.GetBudget().GetMaxBudget(), (&money.Money{CurrencyCode: capability.DefaultUnitCode, Units: 100}); !proto.Equal(got, want) {
+	if got, want := setRes.GetBudget().GetMaxBudget(), (&money.Money{CurrencyCode: capability.DefaultUnitCode, Units: 100}); !proto.Equal(got, want) {
 		t.Errorf("max_budget: got %v, want %v", got, want)
 	}
 
-	getRes, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
+	getRes, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
 		TenantId: tenantID.String(),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got := getRes.Msg.GetBudget().GetTenantId(); got != tenantID.String() {
+	if got := getRes.GetBudget().GetTenantId(); got != tenantID.String() {
 		t.Errorf("tenant_id: got %q, want %q", got, tenantID)
 	}
 }
@@ -163,10 +163,10 @@ func TestTenantBudgetServer_Set_NamesTheBudgetForTheAuditLog(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
 	tenantID := uuid.New()
 	ctx := apiutil.WithResourceSlot(context.Background())
-	if _, err := srv.Set(ctx, connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	if _, err := srv.Set(ctx, &pb.TenantBudgetServiceSetRequest{
 		TenantId:  tenantID.String(),
 		MaxBudget: &money.Money{CurrencyCode: "USD", Units: 100},
-	})); err != nil {
+	}); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 	got := apiutil.ResourceFromContext(ctx)
@@ -194,16 +194,16 @@ func TestTenantBudgetServer_Set_RefusesTheRemovedDouble(t *testing.T) {
 	if err := proto.Unmarshal(raw, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := srv.Set(context.Background(), connect.NewRequest(old)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := srv.Set(context.Background(), old); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("err = %v, want InvalidArgument", err)
 	}
 }
 
 func TestTenantBudgetServer_NilUsageStore_Unavailable(t *testing.T) {
 	srv := NewTenantBudgetServer(nil)
-	_, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
+	_, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
 		TenantId: uuid.New().String(),
-	}))
+	})
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeUnavailable {
 		t.Errorf("expected CodeUnavailable on nil store, got %v", err)
@@ -218,15 +218,15 @@ func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
 	srv := NewTenantBudgetServer(store)
 	tenantID := uuid.New()
 
-	setRes, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	setRes, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:   tenantID.String(),
 		MaxBudget:  &money.Money{CurrencyCode: "EUR", Units: 250},
 		ResetSpend: true,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got, want := setRes.Msg.GetBudget().GetMaxBudget(), (&money.Money{CurrencyCode: "EUR", Units: 250}); !proto.Equal(got, want) {
+	if got, want := setRes.GetBudget().GetMaxBudget(), (&money.Money{CurrencyCode: "EUR", Units: 250}); !proto.Equal(got, want) {
 		t.Errorf("max_budget: got %v, want %v", got, want)
 	}
 }
@@ -235,10 +235,10 @@ func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
 // the boundary with CodeInvalidArgument.
 func TestTenantBudgetServer_Set_BadUnit(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
-	_, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:  uuid.New().String(),
 		MaxBudget: &money.Money{CurrencyCode: "XYZ", Units: 1},
-	}))
+	})
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
 		t.Errorf("expected CodeInvalidArgument on unknown unit, got %v", err)
@@ -247,9 +247,9 @@ func TestTenantBudgetServer_Set_BadUnit(t *testing.T) {
 
 func TestTenantBudgetServer_BadTenantID(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
-	_, err := srv.Get(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceGetRequest{
+	_, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
 		TenantId: "not-a-uuid",
-	}))
+	})
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
 		t.Errorf("expected CodeInvalidArgument, got %v", err)
@@ -260,14 +260,14 @@ func TestTenantBudgetServer_BadTenantID(t *testing.T) {
 // send on the next edit and every second write is a conflict.
 func TestTenantBudgetServer_Set_ReturnsNewVersion(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
-	res, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	res, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:  uuid.New().String(),
 		MaxBudget: &money.Money{CurrencyCode: "USD", Units: 10},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got := res.Msg.GetBudget().GetResourceVersion(); got != "1" {
+	if got := res.GetBudget().GetResourceVersion(); got != "1" {
 		t.Errorf("resource_version = %q, want \"1\"", got)
 	}
 }
@@ -280,18 +280,18 @@ func TestTenantBudgetServer_Set_StaleVersionIsAborted(t *testing.T) {
 	srv := NewTenantBudgetServer(store)
 	tenantID := uuid.New().String()
 
-	if _, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	if _, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:  tenantID,
 		MaxBudget: &money.Money{CurrencyCode: "USD", Units: 10},
-	})); err != nil {
+	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	_, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID,
 		MaxBudget:       &money.Money{CurrencyCode: "USD", Units: 999},
 		ResourceVersion: "1234",
-	}))
+	})
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeAborted {
 		t.Fatalf("err = %v, want CodeAborted", err)
@@ -301,11 +301,11 @@ func TestTenantBudgetServer_Set_StaleVersionIsAborted(t *testing.T) {
 // An unparseable version is a malformed request, not a conflict.
 func TestTenantBudgetServer_Set_BadVersionIsInvalidArgument(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
-	_, err := srv.Set(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSetRequest{
+	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        uuid.New().String(),
 		MaxBudget:       &money.Money{CurrencyCode: "USD", Units: 1},
 		ResourceVersion: "not-a-number",
-	}))
+	})
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
 		t.Fatalf("err = %v, want CodeInvalidArgument", err)

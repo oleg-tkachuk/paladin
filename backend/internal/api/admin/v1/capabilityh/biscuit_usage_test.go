@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/proto"
@@ -30,8 +30,8 @@ func (f *fakeCopyUsage) CopyUsage(ctx context.Context, ids [][]byte) ([]capabili
 	return f.out, f.err
 }
 
-func biscuitUsageReq() *connect.Request[adminv1.CapabilityServiceGetBiscuitUsageRequest] {
-	return connect.NewRequest(&adminv1.CapabilityServiceGetBiscuitUsageRequest{Token: "biscuit"})
+func biscuitUsageReq() *adminv1.CapabilityServiceGetBiscuitUsageRequest {
+	return &adminv1.CapabilityServiceGetBiscuitUsageRequest{Token: "biscuit"}
 }
 
 // Every limit in force is reported, innermost first, with its counters; a
@@ -56,10 +56,10 @@ func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBiscuitUsage: %v", err)
 	}
-	if resp.Msg.GetCapabilityId() != target.ID.String() {
-		t.Errorf("capability %q", resp.Msg.GetCapabilityId())
+	if resp.GetCapabilityId() != target.ID.String() {
+		t.Errorf("capability %q", resp.GetCapabilityId())
 	}
-	got := resp.Msg.GetCopies()
+	got := resp.GetCopies()
 	if len(got) != 2 {
 		t.Fatalf("copies = %v", got)
 	}

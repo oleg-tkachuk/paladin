@@ -7,7 +7,8 @@ import (
 	"runtime/debug"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/protobuf/proto"
 
@@ -109,9 +110,9 @@ func Reason(err error) commonv1.ErrorReason {
 	return commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED
 }
 
-// newError wraps a Connect error from procedure; anything else is returned
-// as it is.
-func newError(procedure string, err error) error {
+// newError wraps a Connect error from procedure, reading what the server sent
+// with it from info; anything else is returned as it is.
+func newError(procedure string, info *connect.CallInfo, err error) error {
 	var cerr *connect.Error
 	if !errors.As(err, &cerr) {
 		return err
@@ -121,15 +122,15 @@ func newError(procedure string, err error) error {
 	}
 	e := &Error{
 		Procedure:     procedure,
-		ServerVersion: cerr.Meta().Get(HeaderServerVersion),
+		ServerVersion: responseMeta(info, HeaderServerVersion),
 		SDKVersion:    moduleVersion(debug.ReadBuildInfo),
 		cause:         cerr,
 	}
-	if after, ok := retryAfter(err); ok {
+	if after, ok := retryAfter(info); ok {
 		e.RetryAfter = after
 	}
 	for _, d := range cerr.Details() {
-		v, derr := d.Value()
+		v, derr := connectproto.UnmarshalErrorDetail(d)
 		if derr != nil {
 			continue // a detail of a type this binary has not linked
 		}
@@ -144,22 +145,13 @@ func newError(procedure string, err error) error {
 // errorInterceptor turns every failed unary call's Connect error into an
 // *Error. Outermost, so retries and token refresh see the Connect error
 // they always have.
-type errorInterceptor struct{}
-
-func (errorInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		resp, err := next(ctx, req)
-		if err != nil {
-			return resp, newError(req.Spec().Procedure, err)
+func errorInterceptor() connect.ClientInterceptor {
+	return interceptor(func(next unaryFunc) unaryFunc {
+		return func(ctx context.Context, spec connect.Spec, req, res any) error {
+			if err := next(ctx, spec, req, res); err != nil {
+				return newError(spec.Procedure, callInfo(ctx), err)
+			}
+			return nil
 		}
-		return resp, nil
-	}
-}
-
-func (errorInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (errorInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
+	}, nil)
 }

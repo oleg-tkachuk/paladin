@@ -6,180 +6,182 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// QuotaServiceName is the fully-qualified name of the QuotaService service.
 	QuotaServiceName = "paladin.admin.v1.QuotaService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// QuotaServiceGetQuotaProcedure is the fully-qualified name of the QuotaService's GetQuota RPC.
+	// QuotaServiceGetQuotaProcedure is the procedure name of the QuotaService's GetQuota RPC.
 	QuotaServiceGetQuotaProcedure = "/paladin.admin.v1.QuotaService/GetQuota"
-	// QuotaServiceSetQuotaProcedure is the fully-qualified name of the QuotaService's SetQuota RPC.
+	// QuotaServiceSetQuotaProcedure is the procedure name of the QuotaService's SetQuota RPC.
 	QuotaServiceSetQuotaProcedure = "/paladin.admin.v1.QuotaService/SetQuota"
-	// QuotaServiceResetUsageProcedure is the fully-qualified name of the QuotaService's ResetUsage RPC.
+	// QuotaServiceResetUsageProcedure is the procedure name of the QuotaService's ResetUsage RPC.
 	QuotaServiceResetUsageProcedure = "/paladin.admin.v1.QuotaService/ResetUsage"
+)
+
+var (
+	quotaServiceGetQuotaSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_quota_service_proto.Services().ByName("QuotaService").Methods().ByName("GetQuota"),
+			Procedure:        QuotaServiceGetQuotaProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	quotaServiceSetQuotaSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_quota_service_proto.Services().ByName("QuotaService").Methods().ByName("SetQuota"),
+			Procedure:        QuotaServiceSetQuotaProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	quotaServiceResetUsageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_quota_service_proto.Services().ByName("QuotaService").Methods().ByName("ResetUsage"),
+			Procedure:        QuotaServiceResetUsageProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 )
 
 // QuotaServiceClient is a client for the paladin.admin.v1.QuotaService service.
 type QuotaServiceClient interface {
 	// GetQuota returns the tenant's limits and its current usage counters.
-	GetQuota(context.Context, *connect.Request[v1.GetQuotaRequest]) (*connect.Response[v1.Quota], error)
+	GetQuota(context.Context, *v1.GetQuotaRequest) (*v1.Quota, error)
 	// SetQuota replaces the tenant's limits. Lowering a limit below current usage
 	// is allowed — it blocks further growth rather than deleting anything.
-	SetQuota(context.Context, *connect.Request[v1.SetQuotaRequest]) (*connect.Response[v1.Quota], error)
+	SetQuota(context.Context, *v1.SetQuotaRequest) (*v1.Quota, error)
 	// ResetUsage zeroes today's admission counters (bytes and objects today)
 	// without touching the limits or the stored totals; the totals are
 	// recomputed from live objects by the quota reconciler. Answers with the
 	// quota as it is after the reset.
-	ResetUsage(context.Context, *connect.Request[v1.ResetUsageRequest]) (*connect.Response[v1.Quota], error)
+	ResetUsage(context.Context, *v1.ResetUsageRequest) (*v1.Quota, error)
 }
 
-// NewQuotaServiceClient constructs a client for the paladin.admin.v1.QuotaService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewQuotaServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) QuotaServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	quotaServiceMethods := v1.File_paladin_admin_v1_quota_service_proto.Services().ByName("QuotaService").Methods()
-	return &quotaServiceClient{
-		getQuota: connect.NewClient[v1.GetQuotaRequest, v1.Quota](
-			httpClient,
-			baseURL+QuotaServiceGetQuotaProcedure,
-			connect.WithSchema(quotaServiceMethods.ByName("GetQuota")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		setQuota: connect.NewClient[v1.SetQuotaRequest, v1.Quota](
-			httpClient,
-			baseURL+QuotaServiceSetQuotaProcedure,
-			connect.WithSchema(quotaServiceMethods.ByName("SetQuota")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		resetUsage: connect.NewClient[v1.ResetUsageRequest, v1.Quota](
-			httpClient,
-			baseURL+QuotaServiceResetUsageProcedure,
-			connect.WithSchema(quotaServiceMethods.ByName("ResetUsage")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// quotaServiceClient implements QuotaServiceClient.
-type quotaServiceClient struct {
-	getQuota   *connect.Client[v1.GetQuotaRequest, v1.Quota]
-	setQuota   *connect.Client[v1.SetQuotaRequest, v1.Quota]
-	resetUsage *connect.Client[v1.ResetUsageRequest, v1.Quota]
-}
-
-// GetQuota calls paladin.admin.v1.QuotaService.GetQuota.
-func (c *quotaServiceClient) GetQuota(ctx context.Context, req *connect.Request[v1.GetQuotaRequest]) (*connect.Response[v1.Quota], error) {
-	return c.getQuota.CallUnary(ctx, req)
-}
-
-// SetQuota calls paladin.admin.v1.QuotaService.SetQuota.
-func (c *quotaServiceClient) SetQuota(ctx context.Context, req *connect.Request[v1.SetQuotaRequest]) (*connect.Response[v1.Quota], error) {
-	return c.setQuota.CallUnary(ctx, req)
-}
-
-// ResetUsage calls paladin.admin.v1.QuotaService.ResetUsage.
-func (c *quotaServiceClient) ResetUsage(ctx context.Context, req *connect.Request[v1.ResetUsageRequest]) (*connect.Response[v1.Quota], error) {
-	return c.resetUsage.CallUnary(ctx, req)
+// NewQuotaServiceClient constructs a client for the paladin.admin.v1.QuotaService service. Multiple
+// service clients may share a single connect.Client.
+func NewQuotaServiceClient(client *connect.Client) QuotaServiceClient {
+	return &quotaServiceClient{client: client}
 }
 
 // QuotaServiceHandler is an implementation of the paladin.admin.v1.QuotaService service.
 type QuotaServiceHandler interface {
 	// GetQuota returns the tenant's limits and its current usage counters.
-	GetQuota(context.Context, *connect.Request[v1.GetQuotaRequest]) (*connect.Response[v1.Quota], error)
+	GetQuota(context.Context, *v1.GetQuotaRequest) (*v1.Quota, error)
 	// SetQuota replaces the tenant's limits. Lowering a limit below current usage
 	// is allowed — it blocks further growth rather than deleting anything.
-	SetQuota(context.Context, *connect.Request[v1.SetQuotaRequest]) (*connect.Response[v1.Quota], error)
+	SetQuota(context.Context, *v1.SetQuotaRequest) (*v1.Quota, error)
 	// ResetUsage zeroes today's admission counters (bytes and objects today)
 	// without touching the limits or the stored totals; the totals are
 	// recomputed from live objects by the quota reconciler. Answers with the
 	// quota as it is after the reset.
-	ResetUsage(context.Context, *connect.Request[v1.ResetUsageRequest]) (*connect.Response[v1.Quota], error)
+	ResetUsage(context.Context, *v1.ResetUsageRequest) (*v1.Quota, error)
 }
 
-// NewQuotaServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewQuotaServiceHandler(svc QuotaServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	quotaServiceMethods := v1.File_paladin_admin_v1_quota_service_proto.Services().ByName("QuotaService").Methods()
-	quotaServiceGetQuotaHandler := connect.NewUnaryHandler(
-		QuotaServiceGetQuotaProcedure,
-		svc.GetQuota,
-		connect.WithSchema(quotaServiceMethods.ByName("GetQuota")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterQuotaServiceHandler registers svc as the paladin.admin.v1.QuotaService implementation on
+// server.
+func RegisterQuotaServiceHandler(server *connect.Server, svc QuotaServiceHandler) {
+	adapter := quotaServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: quotaServiceGetQuotaSpec(), Handler: adapter.getQuota},
+		connect.Method{Spec: quotaServiceSetQuotaSpec(), Handler: adapter.setQuota},
+		connect.Method{Spec: quotaServiceResetUsageSpec(), Handler: adapter.resetUsage},
 	)
-	quotaServiceSetQuotaHandler := connect.NewUnaryHandler(
-		QuotaServiceSetQuotaProcedure,
-		svc.SetQuota,
-		connect.WithSchema(quotaServiceMethods.ByName("SetQuota")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	quotaServiceResetUsageHandler := connect.NewUnaryHandler(
-		QuotaServiceResetUsageProcedure,
-		svc.ResetUsage,
-		connect.WithSchema(quotaServiceMethods.ByName("ResetUsage")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.admin.v1.QuotaService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case QuotaServiceGetQuotaProcedure:
-			quotaServiceGetQuotaHandler.ServeHTTP(w, r)
-		case QuotaServiceSetQuotaProcedure:
-			quotaServiceSetQuotaHandler.ServeHTTP(w, r)
-		case QuotaServiceResetUsageProcedure:
-			quotaServiceResetUsageHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedQuotaServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedQuotaServiceHandler struct{}
 
-func (UnimplementedQuotaServiceHandler) GetQuota(context.Context, *connect.Request[v1.GetQuotaRequest]) (*connect.Response[v1.Quota], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.QuotaService.GetQuota is not implemented"))
+func (UnimplementedQuotaServiceHandler) GetQuota(context.Context, *v1.GetQuotaRequest) (*v1.Quota, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.QuotaService.GetQuota is not implemented")
 }
 
-func (UnimplementedQuotaServiceHandler) SetQuota(context.Context, *connect.Request[v1.SetQuotaRequest]) (*connect.Response[v1.Quota], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.QuotaService.SetQuota is not implemented"))
+func (UnimplementedQuotaServiceHandler) SetQuota(context.Context, *v1.SetQuotaRequest) (*v1.Quota, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.QuotaService.SetQuota is not implemented")
 }
 
-func (UnimplementedQuotaServiceHandler) ResetUsage(context.Context, *connect.Request[v1.ResetUsageRequest]) (*connect.Response[v1.Quota], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.QuotaService.ResetUsage is not implemented"))
+func (UnimplementedQuotaServiceHandler) ResetUsage(context.Context, *v1.ResetUsageRequest) (*v1.Quota, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.QuotaService.ResetUsage is not implemented")
+}
+
+type quotaServiceClient struct {
+	client *connect.Client
+}
+
+func (c *quotaServiceClient) GetQuota(ctx context.Context, req *v1.GetQuotaRequest) (*v1.Quota, error) {
+	var res v1.Quota
+	if err := c.client.CallUnary(ctx, quotaServiceGetQuotaSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *quotaServiceClient) SetQuota(ctx context.Context, req *v1.SetQuotaRequest) (*v1.Quota, error) {
+	var res v1.Quota
+	if err := c.client.CallUnary(ctx, quotaServiceSetQuotaSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *quotaServiceClient) ResetUsage(ctx context.Context, req *v1.ResetUsageRequest) (*v1.Quota, error) {
+	var res v1.Quota
+	if err := c.client.CallUnary(ctx, quotaServiceResetUsageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type quotaServiceHandler struct{ svc QuotaServiceHandler }
+
+func (h quotaServiceHandler) getQuota(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetQuotaRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetQuota(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h quotaServiceHandler) setQuota(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetQuotaRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetQuota(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h quotaServiceHandler) resetUsage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResetUsageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResetUsage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

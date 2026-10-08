@@ -10,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
@@ -38,17 +39,24 @@ type recorder struct {
 	retryAfter string
 }
 
-func (r *recorder) record(h http.Header) error {
+// record keeps the call's request headers and, while failures last, fails it
+// with failCode — Retry-After set in the response header, where the server
+// sets it.
+func (r *recorder) record(ctx context.Context) error {
+	info, _ := connect.CallInfoForServerContext(ctx)
+	h := http.Header{}
+	for key, values := range info.RequestHeader().All() {
+		h[key] = append([]string(nil), values...)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.headers = append(r.headers, h.Clone())
+	r.headers = append(r.headers, h)
 	if r.failures > 0 {
 		r.failures--
-		err := connect.NewError(r.failCode, errors.New("injected"))
 		if r.retryAfter != "" {
-			err.Meta().Set(paladin.HeaderRetryAfter, r.retryAfter)
+			info.ResponseHeader().Set(paladin.HeaderRetryAfter, r.retryAfter)
 		}
-		return err
+		return connect.NewError(r.failCode, "injected")
 	}
 	return nil
 }
@@ -65,25 +73,28 @@ func (r *recorder) last() http.Header {
 	return r.headers[len(r.headers)-1]
 }
 
-func (r *recorder) GetVersion(_ context.Context, req *connect.Request[iamv1.GetVersionRequest]) (*connect.Response[iamv1.VersionInfo], error) {
-	if err := r.record(req.Header()); err != nil {
+func (r *recorder) GetVersion(ctx context.Context, _ *iamv1.GetVersionRequest) (*iamv1.VersionInfo, error) {
+	if err := r.record(ctx); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&iamv1.VersionInfo{}), nil
+	return &iamv1.VersionInfo{}, nil
 }
 
-func (r *recorder) Login(_ context.Context, req *connect.Request[iamv1.LoginRequest]) (*connect.Response[iamv1.LoginResponse], error) {
-	if err := r.record(req.Header()); err != nil {
+func (r *recorder) Login(ctx context.Context, _ *iamv1.LoginRequest) (*iamv1.LoginResponse, error) {
+	if err := r.record(ctx); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&iamv1.LoginResponse{}), nil
+	return &iamv1.LoginResponse{}, nil
 }
 
 func serve(t *testing.T, rec *recorder) string {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle(paladiniamv1connect.NewHealthServiceHandler(rec))
-	mux.Handle(paladiniamv1connect.NewAuthServiceHandler(rec))
+	server := connect.NewServer()
+	paladiniamv1connect.RegisterHealthServiceHandler(server, rec)
+	paladiniamv1connect.RegisterAuthServiceHandler(server, rec)
+	connecthttp.Mount(mux, server)
+
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.URL
@@ -95,8 +106,8 @@ func clients(t *testing.T, url string, opts ...paladin.Option) (paladiniamv1conn
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	return paladiniamv1connect.NewHealthServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...),
-		paladiniamv1connect.NewAuthServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...)
+	return paladiniamv1connect.NewHealthServiceClient(c.Connect()),
+		paladiniamv1connect.NewAuthServiceClient(c.Connect())
 }
 
 func TestNewRejectsBadBaseURL(t *testing.T) {
@@ -142,7 +153,7 @@ func TestCredentialsReachTheServer(t *testing.T) {
 		paladin.WithBearerToken("paladin_pat_abc"),
 		paladin.WithCapability("cap-token"))
 
-	if _, err := health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+	if _, err := health.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	h := rec.last()
@@ -162,7 +173,7 @@ func TestIdempotencyKeyReachesTheServer(t *testing.T) {
 	_, auth := clients(t, serve(t, rec))
 
 	ctx := paladin.WithIdempotencyKey(context.Background(), "key-1")
-	if _, err := auth.Login(ctx, connect.NewRequest(&iamv1.LoginRequest{})); err != nil {
+	if _, err := auth.Login(ctx, &iamv1.LoginRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	if got := rec.last().Get(paladin.HeaderIdempotencyKey); got != "key-1" {
@@ -179,7 +190,7 @@ func TestContextKeySkipsADeclaredRead(t *testing.T) {
 	health, _ := clients(t, serve(t, rec))
 
 	ctx := paladin.WithIdempotencyKey(context.Background(), "key-1")
-	if _, err := health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+	if _, err := health.GetVersion(ctx, &iamv1.GetVersionRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	if got := rec.last().Get(paladin.HeaderIdempotencyKey); got != "" {
@@ -226,9 +237,9 @@ func TestRetries(t *testing.T) {
 			var err error
 			switch tc.call {
 			case "GetVersion":
-				_, err = health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{}))
+				_, err = health.GetVersion(ctx, &iamv1.GetVersionRequest{})
 			case "Login":
-				_, err = auth.Login(ctx, connect.NewRequest(&iamv1.LoginRequest{}))
+				_, err = auth.Login(ctx, &iamv1.LoginRequest{})
 			}
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
@@ -248,7 +259,7 @@ func TestRetryNotAttemptedPastTheDeadline(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), testCallDeadline)
 	defer cancel()
-	_, err := health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{}))
+	_, err := health.GetVersion(ctx, &iamv1.GetVersionRequest{})
 	if connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("err = %v, want the server's Unavailable", err)
 	}
@@ -263,7 +274,7 @@ func TestRetryStopsWhenContextIsCancelled(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(testCallDeadline, cancel)
-	_, err := health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{}))
+	_, err := health.GetVersion(ctx, &iamv1.GetVersionRequest{})
 	if !errors.Is(err, context.Canceled) && connect.CodeOf(err) != connect.CodeCanceled {
 		t.Fatalf("err = %v, want the cancellation", err)
 	}
@@ -278,7 +289,7 @@ func TestRetryHonoursRetryAfter(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), testCallDeadline)
 	defer cancel()
-	if _, err := health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{})); connect.CodeOf(err) != connect.CodeResourceExhausted {
+	if _, err := health.GetVersion(ctx, &iamv1.GetVersionRequest{}); connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("err = %v, want ResourceExhausted", err)
 	}
 	if got := rec.calls(); got != 1 {
@@ -292,7 +303,7 @@ func TestMutatingCallKeepsOneKeyAcrossRetries(t *testing.T) {
 	rec := &recorder{failures: 2, failCode: connect.CodeUnavailable}
 	_, auth := clients(t, serve(t, rec), paladin.WithRetries(3, testRetryDelay))
 
-	if _, err := auth.Login(context.Background(), connect.NewRequest(&iamv1.LoginRequest{})); err != nil {
+	if _, err := auth.Login(context.Background(), &iamv1.LoginRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	rec.mu.Lock()
@@ -313,7 +324,7 @@ func TestEachMutatingCallGetsItsOwnKey(t *testing.T) {
 	_, auth := clients(t, serve(t, rec))
 	keys := map[string]bool{}
 	for range 2 {
-		if _, err := auth.Login(context.Background(), connect.NewRequest(&iamv1.LoginRequest{})); err != nil {
+		if _, err := auth.Login(context.Background(), &iamv1.LoginRequest{}); err != nil {
 			t.Fatal(err)
 		}
 		keys[rec.last().Get(paladin.HeaderIdempotencyKey)] = true
@@ -327,7 +338,7 @@ func TestOptionsReachTheServer(t *testing.T) {
 	const custom = "X-Custom"
 	rec := &recorder{}
 	health, _ := clients(t, serve(t, rec), paladin.WithAPIToken("paladin_pat_xyz"), paladin.WithHeader(custom, "v"))
-	if _, err := health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{})); err != nil {
+	if _, err := health.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	h := rec.last()
@@ -342,25 +353,13 @@ func TestOptionsReachTheServer(t *testing.T) {
 	}
 }
 
-func TestClientOptionsIsACopy(t *testing.T) {
-	c, err := paladin.New("https://a.example")
-	if err != nil {
-		t.Fatal(err)
-	}
-	opts := c.ClientOptions()
-	opts[0] = nil
-	if c.ClientOptions()[0] == nil {
-		t.Fatal("mutating the returned slice changed the client")
-	}
-}
-
 // A call made WithoutIdempotencyKey goes out with none, and so is not
 // retried: repeating it would run the operation twice.
 func TestWithoutIdempotencyKey(t *testing.T) {
 	rec := &recorder{failures: 1, failCode: connect.CodeUnavailable}
 	_, auth := clients(t, serve(t, rec), paladin.WithRetries(3, testRetryDelay))
 	ctx := paladin.WithoutIdempotencyKey(paladin.WithIdempotencyKey(context.Background(), "overridden"))
-	if _, err := auth.Login(ctx, connect.NewRequest(&iamv1.LoginRequest{})); connect.CodeOf(err) != connect.CodeUnavailable {
+	if _, err := auth.Login(ctx, &iamv1.LoginRequest{}); connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("err = %v, want the first failure: the call must not be retried", err)
 	}
 	if rec.calls() != 1 || rec.last().Get(paladin.HeaderIdempotencyKey) != "" {
@@ -384,7 +383,7 @@ func TestRetryHonoursARetryAfterDate(t *testing.T) {
 	health, _ := clients(t, serve(t, rec), paladin.WithRetries(3, testRetryDelay))
 	ctx, cancel := context.WithTimeout(context.Background(), testCallDeadline)
 	defer cancel()
-	if _, err := health.GetVersion(ctx, connect.NewRequest(&iamv1.GetVersionRequest{})); connect.CodeOf(err) != connect.CodeResourceExhausted {
+	if _, err := health.GetVersion(ctx, &iamv1.GetVersionRequest{}); connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("err = %v, want ResourceExhausted", err)
 	}
 	if got := rec.calls(); got != 1 {
@@ -409,9 +408,9 @@ func TestWithRetryableReplacesTheClassifier(t *testing.T) {
 			rec := &recorder{failures: 1, failCode: tc.code}
 			health, auth := clients(t, serve(t, rec), paladin.WithRetries(3, testRetryDelay), paladin.WithRetryable(retryInternal))
 			if tc.call == "GetVersion" {
-				_, _ = health.GetVersion(context.Background(), connect.NewRequest(&iamv1.GetVersionRequest{}))
+				_, _ = health.GetVersion(context.Background(), &iamv1.GetVersionRequest{})
 			} else {
-				_, _ = auth.Login(context.Background(), connect.NewRequest(&iamv1.LoginRequest{}))
+				_, _ = auth.Login(context.Background(), &iamv1.LoginRequest{})
 			}
 			if got := rec.calls(); got != tc.wantCalls {
 				t.Errorf("server saw %d calls, want %d", got, tc.wantCalls)
@@ -422,7 +421,7 @@ func TestWithRetryableReplacesTheClassifier(t *testing.T) {
 	// not retried, whatever it says.
 	rec := &recorder{failures: 1, failCode: connect.CodeInternal}
 	_, auth := clients(t, serve(t, rec), paladin.WithRetries(3, testRetryDelay), paladin.WithRetryable(retryInternal))
-	_, _ = auth.Login(paladin.WithoutIdempotencyKey(context.Background()), connect.NewRequest(&iamv1.LoginRequest{}))
+	_, _ = auth.Login(paladin.WithoutIdempotencyKey(context.Background()), &iamv1.LoginRequest{})
 	if got := rec.calls(); got != 1 {
 		t.Errorf("an unkeyed mutating call was retried: %d calls", got)
 	}

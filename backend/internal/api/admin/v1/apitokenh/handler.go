@@ -18,9 +18,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -72,7 +73,7 @@ func NewHandler(
 func (h *Handler) authorize(ctx context.Context, action cedar.Action) (*auth.Principal, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -81,25 +82,25 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action) (*auth.Pri
 		cedar.RequestContext{},
 	)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if decision != cedar.DecisionAllow {
-		return nil, connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("%s denied", action))
+		return nil, connect.Errorf(connect.CodePermissionDenied,
+			"%s denied", action)
 	}
 	return p, nil
 }
 
 // Create mints an API token and returns the plaintext exactly once.
-func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITokenServiceCreateRequest]) (*connect.Response[adminv1.APITokenServiceCreateResponse], error) {
+func (h *Handler) Create(ctx context.Context, req *adminv1.APITokenServiceCreateRequest) (*adminv1.APITokenServiceCreateResponse, error) {
 	caller, err := h.authorize(ctx, cedar.ActionCreateAPIToken)
 	if err != nil {
 		return nil, err
 	}
 
-	tenantID, err := parseTenantParent(req.Msg.GetParent())
+	tenantID, err := parseTenantParent(req.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 
 	// Minting for somebody else's tenant is a platform operation.
@@ -114,7 +115,7 @@ func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITo
 	// any tenant whose id they can guess.
 	if tenantID != caller.TenantID && !caller.HasRole(apiutil.RolePlatformAdmin) {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("minting an api_token for another tenant requires platform.admin"))
+			"minting an api_token for another tenant requires platform.admin")
 	}
 
 	// Validate every requested scope parses as an auth.Scope. Minting a token
@@ -123,9 +124,9 @@ func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITo
 	// principalFromAPIToken), so an operator would otherwise mint a token that
 	// is dead on arrival. This also pins the scope vocabulary to the resource-
 	// scoping set (tenant:/backend:/bucket:/collection:/*).
-	for _, s := range req.Msg.GetScopes() {
+	for _, s := range req.GetScopes() {
 		if _, perr := auth.ParseScope(s); perr != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("scope: %w", perr))
+			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("scope: %w", perr))
 		}
 	}
 
@@ -136,30 +137,30 @@ func (h *Handler) Create(ctx context.Context, req *connect.Request[adminv1.APITo
 	// on every other admin RPC stop meaning anything. This is deliberately
 	// stricter than the cross-tenant check — that one is about WHOSE token this
 	// is, this one about WHAT AUTHORITY it carries.
-	if len(req.Msg.GetRoles()) > 0 && !caller.HasRole(apiutil.RolePlatformAdmin) {
+	if len(req.GetRoles()) > 0 && !caller.HasRole(apiutil.RolePlatformAdmin) {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("granting roles to an api_token requires platform.admin"))
+			"granting roles to an api_token requires platform.admin")
 	}
 
-	ttl := time.Duration(req.Msg.GetTtlSeconds()) * time.Second
+	ttl := time.Duration(req.GetTtlSeconds()) * time.Second
 
 	tok, err := h.issuer.Issue(ctx, api_token.IssueRequest{
 		TenantID:     tenantID,
-		Name:         req.Msg.GetDisplayName(),
-		Scopes:       req.Msg.GetScopes(),
-		Roles:        req.Msg.GetRoles(),
-		Audience:     req.Msg.GetAudience(),
+		Name:         req.GetDisplayName(),
+		Scopes:       req.GetScopes(),
+		Roles:        req.GetRoles(),
+		Audience:     req.GetAudience(),
 		TTL:          ttl,
-		RateLimitRPM: int(req.Msg.GetRateLimitRpm()),
+		RateLimitRPM: int(req.GetRateLimitRpm()),
 		CreatedBy:    caller.Subject,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&adminv1.APITokenServiceCreateResponse{
+	return &adminv1.APITokenServiceCreateResponse{
 		ApiToken: tokenToProto(*tok),
 		Token:    tok.Plaintext,
-	}), nil
+	}, nil
 }
 
 // parseTokenName decodes "tenants/{tenant}/apiTokens/{id}".
@@ -214,42 +215,42 @@ func parseTenantParent(parent string) (uuid.UUID, error) {
 // their own tenant.
 func scopeToTenant(ctx context.Context, caller *auth.Principal, tenantID uuid.UUID, what string) (context.Context, error) {
 	if tenantID != caller.TenantID && !caller.HasRole(apiutil.RolePlatformAdmin) {
-		return nil, connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("cross-tenant api_token %s denied", what))
+		return nil, connect.Errorf(connect.CodePermissionDenied,
+			"cross-tenant api_token %s denied", what)
 	}
 	return auth.WithActingTenant(ctx, tenantID), nil
 }
 
 // Revoke marks an API token as revoked. Idempotent.
-func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.APITokenServiceRevokeRequest]) (*connect.Response[adminv1.APITokenServiceRevokeResponse], error) {
+func (h *Handler) Revoke(ctx context.Context, req *adminv1.APITokenServiceRevokeRequest) (*adminv1.APITokenServiceRevokeResponse, error) {
 	caller, err := h.authorize(ctx, cedar.ActionRevokeAPIToken)
 	if err != nil {
 		return nil, err
 	}
-	tenantID, id, err := parseTokenName(req.Msg.GetName())
+	tenantID, id, err := parseTokenName(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	ctx, err = scopeToTenant(ctx, caller, tenantID, "revoke")
 	if err != nil {
 		return nil, err
 	}
 	if err := h.store.Revoke(ctx, id); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&adminv1.APITokenServiceRevokeResponse{}), nil
+	return &adminv1.APITokenServiceRevokeResponse{}, nil
 }
 
 // List enumerates API tokens for a tenant. Token plaintext / hash are
 // never returned; callers see metadata only.
-func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.APITokenServiceListRequest]) (*connect.Response[adminv1.APITokenServiceListResponse], error) {
+func (h *Handler) List(ctx context.Context, req *adminv1.APITokenServiceListRequest) (*adminv1.APITokenServiceListResponse, error) {
 	caller, err := h.authorize(ctx, cedar.ActionReadAPIToken)
 	if err != nil {
 		return nil, err
 	}
-	tenantID, err := parseTenantParent(req.Msg.GetParent())
+	tenantID, err := parseTenantParent(req.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	ctx, err = scopeToTenant(ctx, caller, tenantID, "list")
 	if err != nil {
@@ -257,51 +258,51 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.APIToke
 	}
 	tokens, next, err := h.store.ListByTenant(ctx, api_token.ListByTenantArgs{
 		TenantID:       tenantID,
-		IncludeRevoked: req.Msg.GetIncludeRevoked(),
-		IncludeExpired: req.Msg.GetIncludeExpired(),
-		Cursor:         req.Msg.GetPageToken(),
-		Limit:          req.Msg.GetPageSize(),
+		IncludeRevoked: req.GetIncludeRevoked(),
+		IncludeExpired: req.GetIncludeExpired(),
+		Cursor:         req.GetPageToken(),
+		Limit:          req.GetPageSize(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*adminv1.APIToken, 0, len(tokens))
 	for _, t := range tokens {
 		out = append(out, tokenToProto(t))
 	}
-	return connect.NewResponse(&adminv1.APITokenServiceListResponse{
+	return &adminv1.APITokenServiceListResponse{
 		ApiTokens:     out,
 		NextPageToken: next,
-	}), nil
+	}, nil
 }
 
 // GetSelf returns the API token attached to the calling context. NOT_FOUND
 // when the request was authenticated by something other than an API token.
 // No Cedar gate — the bearer of a token can always introspect what they
 // already hold.
-func (h *Handler) GetSelf(ctx context.Context, _ *connect.Request[adminv1.APITokenServiceGetSelfRequest]) (*connect.Response[adminv1.APITokenServiceGetSelfResponse], error) {
+func (h *Handler) GetSelf(ctx context.Context, _ *adminv1.APITokenServiceGetSelfRequest) (*adminv1.APITokenServiceGetSelfResponse, error) {
 	tok, ok := auth.APITokenFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound,
-			fmt.Errorf("request not authenticated via API token"))
+		return nil, connect.Errorf(connect.CodeNotFound,
+			"request not authenticated via API token")
 	}
-	return connect.NewResponse(&adminv1.APITokenServiceGetSelfResponse{
+	return &adminv1.APITokenServiceGetSelfResponse{
 		ApiToken: tokenToProto(*tok),
-	}), nil
+	}, nil
 }
 
 // GetUsage returns a readonly rate-limit snapshot for a token. Cedar-
 // gated under ReadAPIToken so admin-tier callers can inspect any
 // tenant's tokens without a separate per-token authorisation rule.
 // Web UI consumes this from token-detail cards; safe to poll.
-func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.APITokenServiceGetUsageRequest]) (*connect.Response[adminv1.APITokenServiceGetUsageResponse], error) {
+func (h *Handler) GetUsage(ctx context.Context, req *adminv1.APITokenServiceGetUsageRequest) (*adminv1.APITokenServiceGetUsageResponse, error) {
 	caller, err := h.authorize(ctx, cedar.ActionReadAPIToken)
 	if err != nil {
 		return nil, err
 	}
-	tenantID, id, err := parseTokenName(req.Msg.GetName())
+	tenantID, id, err := parseTokenName(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	ctx, err = scopeToTenant(ctx, caller, tenantID, "read")
 	if err != nil {
@@ -310,16 +311,16 @@ func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.API
 	tok, err := h.store.Get(ctx, id)
 	if err != nil {
 		if isNotFound(err) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
+			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	snap, err := h.limiter.Usage(ctx, id)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	resp := &adminv1.APITokenServiceGetUsageResponse{
-		Name:                req.Msg.GetName(),
+		Name:                req.GetName(),
 		LimitRpm:            safecast.Int32(tok.RateLimitRPM),
 		CurrentBucketCount:  snap.CurrentBucketCount,
 		PreviousBucketCount: snap.PreviousBucketCount,
@@ -329,7 +330,7 @@ func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.API
 	if tok.LastUsedAt != nil {
 		resp.LastUsedAt = timestamppb.New(*tok.LastUsedAt)
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // isNotFound matches sentinel errors that indicate "no row" — keeps the

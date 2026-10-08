@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -75,7 +76,7 @@ func newActingTenantFixture(t *testing.T) actingTenantFixture {
 	}
 	srv := httptest.NewServer(dataMux)
 	t.Cleanup(srv.Close)
-	f.objects = paladindatav1connect.NewObjectServiceClient(http.DefaultClient, srv.URL)
+	f.objects = paladindatav1connect.NewObjectServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, srv.URL)))
 
 	iss, err := issuer.New(issuer.Config{
 		Issuer: cfg.Auth.Issuer, SigningKey: []byte(wiringSigningKey), AccessTokenTTL: time.Hour,
@@ -96,10 +97,18 @@ func newActingTenantFixture(t *testing.T) actingTenantFixture {
 	return f
 }
 
-func authed[T any](token string, msg *T) *connect.Request[T] {
-	req := connect.NewRequest(msg)
-	req.Header().Set("Authorization", "Bearer "+token)
-	return req
+// authed is ctx for one call carrying token as its bearer credential.
+func authed(ctx context.Context, token string) context.Context {
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+token)
+	return ctx
+}
+
+// withIdempotencyKey adds key to the request headers of the call ctx is for.
+func withIdempotencyKey(ctx context.Context, key string) context.Context {
+	info, _ := connect.CallInfoForClientContext(ctx)
+	info.RequestHeader().Set("Idempotency-Key", key)
+	return ctx
 }
 
 func collectionOf(tenant uuid.UUID) string {
@@ -119,24 +128,24 @@ func TestDataPlaneAdminActsOnTheNamedTenant(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), actingTenantCallTimeout)
 	defer cancel()
 
-	list, err := f.objects.ListObjects(ctx, authed(admin, &pbdata.ListObjectsRequest{Parent: collectionOf(f.target)}))
+	list, err := f.objects.ListObjects(authed(ctx, admin), &pbdata.ListObjectsRequest{Parent: collectionOf(f.target)})
 	if err != nil {
 		t.Fatalf("ListObjects on the target: %v", err)
 	}
 	var names []string
-	for _, o := range list.Msg.GetObjects() {
+	for _, o := range list.GetObjects() {
 		names = append(names, o.GetName())
 	}
 	if len(names) != 1 || names[0] != objectOf(f.target, f.inTarget) {
 		t.Fatalf("admin listed %v, want only the target's object %s", names, objectOf(f.target, f.inTarget))
 	}
 
-	if _, err := f.objects.UpdateObject(ctx, authed(admin, &pbdata.UpdateObjectRequest{
+	if _, err := f.objects.UpdateObject(authed(ctx, admin), &pbdata.UpdateObjectRequest{
 		Name:            objectOf(f.target, f.inTarget),
 		ResourceVersion: "1",
 		UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
 		Tags:            map[string]string{"set-by": "platform-admin"},
-	})); err != nil {
+	}); err != nil {
 		t.Fatalf("UpdateObject on the target: %v", err)
 	}
 	if got := mustObjectTags(t, f.h.PoolMigrate, f.inTarget); got["set-by"] != "platform-admin" {
@@ -147,8 +156,8 @@ func TestDataPlaneAdminActsOnTheNamedTenant(t *testing.T) {
 	}
 
 	// On its own tenant nothing changes.
-	own, err := f.objects.ListObjects(ctx, authed(admin, &pbdata.ListObjectsRequest{Parent: collectionOf(f.platform)}))
-	if err != nil || len(own.Msg.GetObjects()) != 1 || own.Msg.GetObjects()[0].GetName() != objectOf(f.platform, f.inPlatform) {
+	own, err := f.objects.ListObjects(authed(ctx, admin), &pbdata.ListObjectsRequest{Parent: collectionOf(f.platform)})
+	if err != nil || len(own.GetObjects()) != 1 || own.GetObjects()[0].GetName() != objectOf(f.platform, f.inPlatform) {
 		t.Fatalf("admin on its own tenant: %v, %v", own, err)
 	}
 }
@@ -162,14 +171,14 @@ func TestDataPlaneTenantBoundaries(t *testing.T) {
 	admin := f.mint(f.platform, "platform.admin")
 
 	cases := map[string]error{}
-	_, cases["a member listing another tenant"] = f.objects.ListObjects(ctx,
-		authed(member, &pbdata.ListObjectsRequest{Parent: collectionOf(f.target)}))
-	_, cases["a member reading another tenant's version"] = f.objects.GetObjectVersion(ctx,
-		authed(member, &pbdata.GetObjectVersionRequest{Name: objectOf(f.target, f.inTarget) + "/versions/" + uuid.NewString()}))
-	_, cases["an admin copying across tenants"] = f.objects.CopyObject(ctx,
-		authed(admin, &pbdata.CopyObjectRequest{
+	_, cases["a member listing another tenant"] = f.objects.ListObjects(authed(ctx, member),
+		&pbdata.ListObjectsRequest{Parent: collectionOf(f.target)})
+	_, cases["a member reading another tenant's version"] = f.objects.GetObjectVersion(authed(ctx, member),
+		&pbdata.GetObjectVersionRequest{Name: objectOf(f.target, f.inTarget) + "/versions/" + uuid.NewString()})
+	_, cases["an admin copying across tenants"] = f.objects.CopyObject(authed(ctx, admin),
+		&pbdata.CopyObjectRequest{
 			SourceName: objectOf(f.target, f.inTarget), DestinationCollection: collectionOf(f.platform), DestinationKey: "stolen.txt",
-		}))
+		})
 	for name, err := range cases {
 		if connect.CodeOf(err) != connect.CodePermissionDenied {
 			t.Errorf("%s: code = %v (%v), want PermissionDenied", name, connect.CodeOf(err), err)
@@ -191,18 +200,17 @@ func TestDataPlaneAdminIdempotencyKeyIsPerTenant(t *testing.T) {
 	for _, c := range []struct {
 		tenant, object uuid.UUID
 	}{{f.target, f.inTarget}, {f.platform, f.inPlatform}} {
-		req := authed(admin, &pbdata.UpdateObjectRequest{
+		req := &pbdata.UpdateObjectRequest{
 			Name:            objectOf(c.tenant, c.object),
 			ResourceVersion: "1",
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
 			Tags:            map[string]string{"set-by": "platform-admin"},
-		})
-		req.Header().Set("Idempotency-Key", key)
-		resp, err := f.objects.UpdateObject(ctx, req)
+		}
+		resp, err := f.objects.UpdateObject(withIdempotencyKey(authed(ctx, admin), key), req)
 		if err != nil {
 			t.Fatalf("UpdateObject in %s: %v", c.tenant, err)
 		}
-		if got, want := resp.Msg.GetName(), objectOf(c.tenant, c.object); got != want {
+		if got, want := resp.GetName(), objectOf(c.tenant, c.object); got != want {
 			t.Errorf("answered with %s, want %s — the key replayed another tenant's response", got, want)
 		}
 		if got := mustObjectTags(t, f.h.PoolMigrate, c.object); got["set-by"] != "platform-admin" {
@@ -214,26 +222,24 @@ func TestDataPlaneAdminIdempotencyKeyIsPerTenant(t *testing.T) {
 	// request — is answered from the first call, not run again. Keyed on the
 	// caller while the connection is scoped to the target, the row was
 	// refused by RLS and a retry ran the write twice.
-	retry := authed(admin, &pbdata.UpdateObjectRequest{
+	retry := &pbdata.UpdateObjectRequest{
 		Name:            objectOf(f.target, f.inTarget),
 		ResourceVersion: "1",
 		UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
 		Tags:            map[string]string{"set-by": "platform-admin"},
-	})
-	retry.Header().Set("Idempotency-Key", key)
-	if _, err := f.objects.UpdateObject(ctx, retry); err != nil {
+	}
+	if _, err := f.objects.UpdateObject(withIdempotencyKey(authed(ctx, admin), key), retry); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
 
 	// The key sent with a different request is refused, and writes nothing.
-	other := authed(admin, &pbdata.UpdateObjectRequest{
+	other := &pbdata.UpdateObjectRequest{
 		Name:            objectOf(f.target, f.inTarget),
 		ResourceVersion: "1",
 		UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
 		Tags:            map[string]string{"set-by": "a-different-request-that-must-not-run"},
-	})
-	other.Header().Set("Idempotency-Key", key)
-	if _, err := f.objects.UpdateObject(ctx, other); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	}
+	if _, err := f.objects.UpdateObject(withIdempotencyKey(authed(ctx, admin), key), other); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("a different request under the key: %v, want InvalidArgument", err)
 	}
 	if got := mustObjectTags(t, f.h.PoolMigrate, f.inTarget); got["set-by"] != "platform-admin" {
@@ -253,12 +259,12 @@ func TestDataPlaneAdminWorkIsInTheTenantsTrail(t *testing.T) {
 	for _, c := range []struct {
 		tenant, object uuid.UUID
 	}{{f.target, f.inTarget}, {f.platform, f.inPlatform}} {
-		if _, err := f.objects.UpdateObject(ctx, authed(admin, &pbdata.UpdateObjectRequest{
+		if _, err := f.objects.UpdateObject(authed(ctx, admin), &pbdata.UpdateObjectRequest{
 			Name:            objectOf(c.tenant, c.object),
 			ResourceVersion: "1",
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
 			Tags:            map[string]string{"set-by": "platform-admin"},
-		})); err != nil {
+		}); err != nil {
 			t.Fatalf("UpdateObject in %s: %v", c.tenant, err)
 		}
 	}

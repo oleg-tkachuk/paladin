@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
@@ -98,8 +98,8 @@ func (c *CachedTenantStates) Clear() {
 // Install it after every interceptor that establishes a principal, and before
 // validation and idempotency, so a refused call is neither validated against
 // nor answered from a memoised response.
-func TenantGate(states auth.TenantStateReader) connect.Interceptor {
-	return tenantGate{states: states}
+func TenantGate(states auth.TenantStateReader) connect.ServerInterceptor {
+	return tenantGate{states: states}.intercept
 }
 
 type tenantGate struct{ states auth.TenantStateReader }
@@ -113,7 +113,7 @@ func (g tenantGate) check(ctx context.Context) error {
 	if err != nil {
 		// Unavailable is not scrubbed: the cause stays in the log.
 		logger.FromContext(ctx).Warn("tenant state unreadable; refusing the call", zap.Error(err))
-		return connect.NewError(connect.CodeUnavailable, errTenantStateUnreadable)
+		return connect.NewError(connect.CodeUnavailable, errTenantStateUnreadable.Error()).WithCause(errTenantStateUnreadable)
 	}
 	switch state {
 	case auth.TenantTrashed:
@@ -124,24 +124,11 @@ func (g tenantGate) check(ctx context.Context) error {
 	return nil
 }
 
-func (g tenantGate) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if err := g.check(ctx); err != nil {
-			return nil, err
-		}
-		return next(ctx, req)
-	}
-}
-
-func (g tenantGate) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (g tenantGate) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
+func (g tenantGate) intercept(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 		if err := g.check(ctx); err != nil {
 			return err
 		}
-		return next(ctx, conn)
+		return next(ctx, spec, stream)
 	}
 }

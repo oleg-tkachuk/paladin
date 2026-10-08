@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -84,17 +84,17 @@ func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket str
 	// always scoped to the caller's own tenant.
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if backendID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("backend_id is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "backend_id is required")
 	}
 	if bucket == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("bucket is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "bucket is required")
 	}
 
 	// A capability can authenticate a data-plane call on its own, and the
@@ -114,13 +114,13 @@ func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket str
 	// The backend must already exist — a tenant may not create backends.
 	switch enabled, err := h.backends.BackendEnabled(ctx, backendID); {
 	case errors.Is(err, admindomain.ErrNotFound):
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("unknown storage backend %q", backendID))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"unknown storage backend %q", backendID)
 	case err != nil:
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	case !enabled:
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("storage backend %q is disabled", backendID))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"storage backend %q is disabled", backendID)
 	}
 
 	// Ensure the shared bucket. OwnerTenantID is left empty (uuid.Nil) so the
@@ -181,7 +181,7 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }

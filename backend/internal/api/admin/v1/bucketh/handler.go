@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
@@ -20,6 +20,7 @@ import (
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -141,7 +142,7 @@ func bucketResourceName(tenantID uuid.UUID, backendID, bucketName string) string
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, backendID, bucketName string, ownerTenantID uuid.UUID) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -157,7 +158,7 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, backendID,
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }
@@ -181,12 +182,12 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 	}
 	if in.Bucket.BackendID == "" || in.Bucket.BucketName == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("backend_id and bucket_name required"))
+			"backend_id and bucket_name required")
 	}
 	// The data plane enforces these on every upload; constraints no upload
 	// could satisfy are refused here rather than discovered there.
 	if err := in.Bucket.Constraints.Validate(); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("constraints: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("constraints: %w", err))
 	}
 	if err := h.authorize(ctx, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
 		return nil, err
@@ -200,16 +201,16 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 	// its own pre-check before the row is persisted.
 	switch enabled, err := h.repo.BackendEnabled(ctx, in.Bucket.BackendID); {
 	case errors.Is(err, admindomain.ErrNotFound):
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("backend %q does not exist", in.Bucket.BackendID))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"backend %q does not exist", in.Bucket.BackendID)
 	case err != nil:
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	case !enabled:
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("backend %q is disabled", in.Bucket.BackendID))
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"backend %q is disabled", in.Bucket.BackendID)
 	}
 	if h.configured != nil && !h.configured[in.Bucket.BackendID] {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf(
 			"backend %q is not declared in storage.backends; the data plane and the worker "+
 				"build their storage clients from the configuration only, so a bucket on it "+
 				"could not be provisioned or reached — declare the backend there first", in.Bucket.BackendID))
@@ -229,7 +230,7 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 	if in.ProvisionOnBackend {
 		if h.provisioner == nil {
 			return nil, connect.NewError(connect.CodeUnavailable,
-				errors.New("backend provisioning not wired"))
+				"backend provisioning not wired")
 		}
 		in.Bucket.ProvisionState = admindomain.BucketProvisionStatePending
 	} else {
@@ -282,14 +283,14 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 // no-op), created=true when a new row was written.
 func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admindomain.Bucket, bool, error) {
 	if _, err := auth.PrincipalFromContext(ctx); err != nil {
-		return nil, false, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, false, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if in.Bucket.BackendID == "" || in.Bucket.BucketName == "" {
 		return nil, false, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("backend_id and bucket_name required"))
+			"backend_id and bucket_name required")
 	}
 	if err := in.Bucket.Constraints.Validate(); err != nil {
-		return nil, false, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("constraints: %w", err))
+		return nil, false, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("constraints: %w", err))
 	}
 	// Self-service carries no ConfigurePublicRead check, so it never publishes
 	// (ADR-0027).
@@ -304,19 +305,19 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 	case errors.Is(err, admindomain.ErrNotFound):
 		// fall through to create
 	default:
-		return nil, false, connect.NewError(connect.CodeInternal, err)
+		return nil, false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// Refuse binding to an unknown/disabled backend — same guard CreateBucket
 	// uses (feature 002); a tenant must not create backends.
 	switch enabled, err := h.repo.BackendEnabled(ctx, in.Bucket.BackendID); {
 	case errors.Is(err, admindomain.ErrNotFound):
-		return nil, false, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("backend %q does not exist", in.Bucket.BackendID))
+		return nil, false, connect.Errorf(connect.CodeFailedPrecondition,
+			"backend %q does not exist", in.Bucket.BackendID)
 	case err != nil:
-		return nil, false, connect.NewError(connect.CodeInternal, err)
+		return nil, false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	case !enabled:
-		return nil, false, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("backend %q is disabled", in.Bucket.BackendID))
+		return nil, false, connect.Errorf(connect.CodeFailedPrecondition,
+			"backend %q is disabled", in.Bucket.BackendID)
 	}
 	// A tenant creates its shared bucket; it never takes one that exists —
 	// that would hand it a bucket it does not own — nor Paladin's own.
@@ -327,7 +328,7 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 	if in.ProvisionOnBackend {
 		if h.provisioner == nil {
 			return nil, false, connect.NewError(connect.CodeUnavailable,
-				errors.New("backend provisioning not wired"))
+				"backend provisioning not wired")
 		}
 		in.Bucket.ProvisionState = admindomain.BucketProvisionStatePending
 	} else {
@@ -414,8 +415,7 @@ func (h *Handler) ListBuckets(ctx context.Context, args admindomain.ListBucketsA
 	}
 	page, err = celpkg.FilterPage(h.cel, celpkg.PhysicalBucketSchema, args.Filter, page, bucketRow)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("filter: %w", err))
+		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
 	return page, next, nil
 }
@@ -452,7 +452,7 @@ func (h *Handler) ListAccessibleBuckets(ctx context.Context, tenantID uuid.UUID,
 	}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && tenantID != caller {
 		return nil, "", connect.NewError(connect.CodePermissionDenied,
-			errors.New("cannot enumerate accessible buckets for another tenant"))
+			"cannot enumerate accessible buckets for another tenant")
 	}
 	if err := h.authorize(ctx, cedar.ActionReadBucket, "", "", tenantID); err != nil {
 		return nil, "", err
@@ -532,8 +532,7 @@ func (h *Handler) SetLifecycleRules(ctx context.Context, backendID, bucketName s
 	// later. Empty match = "always match" (worker contract).
 	for i, r := range rules {
 		if err := celpkg.Validate(celpkg.ObjectSchema, r.Match); err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("rule[%d] (id=%q): %w", i, r.ID, err))
+			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("rule[%d] (id=%q): %w", i, r.ID, err))
 		}
 	}
 	if err := h.refuseLifecycleOnPublic(ctx, backendID, bucketName, rules); err != nil {
@@ -564,7 +563,7 @@ func (h *Handler) SetObjectLock(ctx context.Context, backendID, bucketName strin
 		}
 		if !current.Versioning.Enabled {
 			return nil, connect.NewError(connect.CodeFailedPrecondition,
-				errors.New("object lock requires versioning; enable versioning on the bucket first"))
+				"object lock requires versioning; enable versioning on the bucket first")
 		}
 	}
 	if err := h.repo.SetObjectLock(ctx, backendID, bucketName, lock, expectedVersion); err != nil {
@@ -594,7 +593,7 @@ func (h *Handler) SetVersioning(ctx context.Context, backendID, bucketName strin
 		}
 		if current.ObjectLock.Enabled {
 			return nil, connect.NewError(connect.CodeFailedPrecondition,
-				errors.New("cannot disable versioning while object lock is enabled; disable object lock first"))
+				"cannot disable versioning while object lock is enabled; disable object lock first")
 		}
 	}
 	if err := h.repo.SetVersioning(ctx, backendID, bucketName, v, expectedVersion); err != nil {
@@ -676,13 +675,12 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 	refs, err := h.repo.CountBucketReferences(
 		auth.WithCrossTenantRead(ctx), in.BackendID, in.BucketName)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal,
-			fmt.Errorf("count references to bucket: %w", err))
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("count references to bucket: %w", err))
 	}
 	if held := heldBy(refs); held != "" {
-		return connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("bucket %q is still referenced by %s; remove those first",
-				in.BucketName, held))
+		return connect.Errorf(connect.CodeFailedPrecondition,
+			"bucket %q is still referenced by %s; remove those first",
+			in.BucketName, held)
 	}
 	// Outbox model for deletes (mirrors CreateBucket): the row stays in
 	// place flipped to 'deleting', and the bucket-reconciler worker
@@ -695,7 +693,7 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 	// just deletes the row without calling S3) and concentrating the
 	// terminal logic there keeps the handler simple.
 	if in.DeleteOnBackend && h.provisioner == nil {
-		return connect.NewError(connect.CodeUnavailable, errors.New("backend provisioning not wired"))
+		return connect.NewError(connect.CodeUnavailable, "backend provisioning not wired")
 	}
 	if in.DeleteOnBackend {
 		current, err := h.repo.Get(ctx, in.BackendID, in.BucketName)

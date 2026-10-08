@@ -5,7 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -56,7 +57,7 @@ func reasonOf(t *testing.T, err error) commonv1.ErrorReason {
 		t.Fatalf("err = %v, want a connect error", err)
 	}
 	for _, d := range cerr.Details() {
-		v, derr := d.Value()
+		v, derr := connectproto.UnmarshalErrorDetail(d)
 		if derr != nil {
 			continue
 		}
