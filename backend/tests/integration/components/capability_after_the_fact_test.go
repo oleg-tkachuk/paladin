@@ -3,6 +3,7 @@
 package components
 
 import (
+	"errors"
 	"sync"
 	"testing"
 
@@ -128,5 +129,31 @@ func TestSettleRecordsAnOverrunAndReplays(t *testing.T) {
 	again, err := f.usage.Settle(ledgerCtx, capability.SettleRequest{ReservationID: res.ID, Amount: 1, MaxBudget: 20}, nil)
 	if err != nil || !again.Replayed || !again.Overrun || again.ChargeID != r.ChargeID {
 		t.Errorf("replayed settle = %+v, %v; want the overrun charge again", again, err)
+	}
+}
+
+// A Biscuit copy's own budget is crossed and counted under OverrunRecord.
+func TestOverrunRecordCrossesACopyBudget(t *testing.T) {
+	t.Parallel()
+	ctx, f := newLineageFixture(t)
+	f.usage = rlsUsage(t, ctx, f)
+	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
+	copyID := []byte("copy-1")
+	copies := []capability.CopyCeiling{{RevocationID: copyID, MaxBudgetMicros: capability.MicrosPerUnit}}
+	charge := func(p capability.OverrunPolicy) (capability.ChargeReceipt, error) {
+		return f.usage.Charge(ledgerCtx, capability.ChargeRequest{
+			CapabilityID: f.child, TenantID: f.tenant, Amount: 2, MaxBudget: 20, UnitCode: "USD", Copies: copies, Overrun: p,
+		}, nil)
+	}
+	if _, err := charge(capability.OverrunReject); !errors.Is(err, capability.ErrBudgetExceeded) {
+		t.Fatalf("rejecting charge past the copy's budget: err = %v, want ErrBudgetExceeded", err)
+	}
+	r, err := charge(capability.OverrunRecord)
+	if err != nil || !r.Overrun {
+		t.Fatalf("recording charge = %+v, %v; want an overrun", r, err)
+	}
+	got, err := f.usage.CopyUsage(ledgerCtx, [][]byte{copyID})
+	if err != nil || len(got) != 1 || !closeEnough(got[0].SpentAmount, 2) {
+		t.Errorf("copy usage = %+v, %v; want 2 spent", got, err)
 	}
 }
