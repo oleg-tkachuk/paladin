@@ -300,7 +300,7 @@ export default function TenantsPage() {
                     </TableCell>
                     <TableCell className="hidden @5xl:table-cell">
                       <span
-                        className="font-mono text-caption text-muted-foreground"
+                        className="font-mono text-sm text-muted-foreground"
                         title={tenant.tenantId}
                       >
                         {tenant.tenantId.slice(0, 8)}…

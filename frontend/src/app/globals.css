@@ -47,14 +47,6 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Text sizes below the default scale, which starts at text-xs (12px).
-   * Font size only, no --line-height companion: like the literal sizes they
-   * replace, they inherit the line height. */
-  --text-micro: 0.5625rem; /* 9px: initials in a small avatar */
-  --text-tiny: 0.625rem; /* 10px: tight labels, badges, captions */
-  --text-caption: 0.6875rem; /* 11px: identifiers and hints under a value */
-  --text-compact: 0.8125rem; /* 13px: monospace breadcrumbs */
-
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

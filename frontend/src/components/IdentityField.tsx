@@ -73,7 +73,7 @@ export function IdentityField({
         id={id}
         className={cn(
           mono && T.code,
-          truncate && "truncate text-muted-foreground text-caption min-w-0",
+          truncate && "truncate text-muted-foreground text-sm min-w-0",
         )}
         title={truncate ? value : undefined}
       >
@@ -89,7 +89,7 @@ export function IdentityField({
         type="button"
         onClick={handleCopy}
         disabled={!value}
-        className="ml-auto inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-caption text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
+        className="ml-auto inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
         aria-label={`Copy ${label}`}
       >
         {copied ? (

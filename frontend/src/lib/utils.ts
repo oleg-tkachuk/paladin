@@ -1,11 +1,11 @@
 import { clsx, type ClassValue } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
 
-// The text sizes globals.css adds below Tailwind's scale (`--text-<name>`).
-// tailwind-merge has to be told them: a size it does not know reads as a text
-// colour, so `text-tiny text-muted-foreground` kept the colour and dropped the
-// size, and the text rendered at whatever it inherited.
-export const CUSTOM_TEXT_SIZES = ["micro", "tiny", "caption", "compact"];
+// The text sizes globals.css adds to Tailwind's scale (`--text-<name>`); none
+// today. tailwind-merge has to be told any it gets: a size it does not know
+// reads as a text colour, so `text-tiny text-muted-foreground` kept the colour,
+// dropped the size, and the text rendered at whatever it inherited.
+export const CUSTOM_TEXT_SIZES: string[] = [];
 
 const twMerge = extendTailwindMerge({
   extend: { theme: { text: CUSTOM_TEXT_SIZES } },
