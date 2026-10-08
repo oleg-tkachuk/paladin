@@ -266,38 +266,77 @@ func (h *Handler) serveStartup(w http.ResponseWriter, r *http.Request) {
 // (c) parallelising would need to duplicate the Critical-marker so
 // the caller can still tell which failures gate /readyz.
 func (h *Handler) runChecks(ctx context.Context, checks []Check) []failure {
-	if len(checks) == 0 {
-		return nil
-	}
-	timeout := h.Timeout
-	if timeout <= 0 {
-		timeout = DefaultCheckTimeout
-	}
 	var out []failure
 	for _, c := range checks {
-		if c.Disabled {
-			continue
-		}
-		cctx, cancel := context.WithTimeout(ctx, timeout)
-		err := c.Func(cctx)
-		cancel()
-		if err != nil {
-			msg := err.Error()
-			if errors.Is(err, context.DeadlineExceeded) {
-				// Replace the generic stdlib message with one that
-				// names the check + budget so a flapping probe is
-				// debuggable from the response body alone.
-				msg = "check timed out after " + timeout.String()
-			}
+		comp := h.run(ctx, c)
+		if comp.Status == StatusUnhealthy {
 			out = append(out, failure{
 				Name:     c.Name,
-				Error:    msg,
+				Error:    comp.Message,
 				Critical: c.Critical,
 			})
 		}
 	}
 	return out
 }
+
+// timeout is the budget each check gets.
+func (h *Handler) timeout() time.Duration {
+	if h.Timeout <= 0 {
+		return DefaultCheckTimeout
+	}
+	return h.Timeout
+}
+
+// run is the one place a check becomes a component, so /readyz and the
+// snapshot cannot disagree about what a result means: a disabled check is
+// not run, NotInUse is disabled, any other error is unhealthy.
+func (h *Handler) run(ctx context.Context, c Check) Component {
+	comp := Component{
+		Name:     c.Name,
+		Category: string(c.Category),
+		Critical: c.Critical,
+	}
+	if c.Disabled {
+		comp.Status = StatusDisabled
+		return comp
+	}
+	timeout := h.timeout()
+	cctx, cancel := context.WithTimeout(ctx, timeout)
+	start := time.Now()
+	err := c.Func(cctx)
+	comp.LatencyMs = time.Since(start).Milliseconds()
+	cancel()
+
+	var unused *NotInUseError
+	switch {
+	case err == nil:
+		comp.Status = StatusHealthy
+	case errors.As(err, &unused):
+		comp.Status = StatusDisabled
+		comp.Message = unused.Reason
+	case errors.Is(err, context.DeadlineExceeded):
+		// Replace the generic stdlib message with one that names the
+		// budget so a flapping probe is debuggable from the body alone.
+		comp.Status = StatusUnhealthy
+		comp.Message = "check timed out after " + timeout.String()
+	default:
+		comp.Status = StatusUnhealthy
+		comp.Message = err.Error()
+	}
+	return comp
+}
+
+// NotInUseError is what a check returns for a dependency nothing is
+// configured to use right now — a broker no subscription delivers to. The
+// component is shown as disabled, with Reason, rather than as a healthy
+// probe of nothing.
+type NotInUseError struct{ Reason string }
+
+func (e *NotInUseError) Error() string { return e.Reason }
+
+// NotInUse reports that the checked dependency is not in use, and why.
+func NotInUse(reason string) error { return &NotInUseError{Reason: reason} }
 
 // ─── response shape ─────────────────────────────────────────────────────────
 
@@ -330,7 +369,8 @@ type failure struct {
 
 // ComponentStatus enumerates the per-check rollup. Mirrors the proto
 // enum paladin.iam.v1.ComponentStatus 1:1 (HEALTHY/DEGRADED/UNHEALTHY/
-// DISABLED). Disabled is a component's state only, never a role's.
+// DISABLED). Disabled is a component's state only, never a role's: off by
+// configuration (Check.Disabled), or not in use (a check returned NotInUse).
 type ComponentStatus string
 
 const (
@@ -369,45 +409,10 @@ type Snapshot struct {
 // any DEGRADED) → DEGRADED; else HEALTHY. Same asymmetry as /readyz so
 // the kubelet endpoint set and the UI agree.
 func (h *Handler) Snapshot(ctx context.Context, role string) Snapshot {
-	timeout := h.Timeout
-	if timeout <= 0 {
-		timeout = DefaultCheckTimeout
-	}
 	components := make([]Component, 0, len(h.Ready))
 	worst := StatusHealthy
 	for _, c := range h.Ready {
-		if c.Disabled {
-			components = append(components, Component{
-				Name:     c.Name,
-				Status:   StatusDisabled,
-				Category: string(c.Category),
-				Critical: c.Critical,
-			})
-			continue
-		}
-		cctx, cancel := context.WithTimeout(ctx, timeout)
-		start := time.Now()
-		err := c.Func(cctx)
-		latency := time.Since(start)
-		cancel()
-
-		comp := Component{
-			Name:      c.Name,
-			LatencyMs: latency.Milliseconds(),
-			Category:  string(c.Category),
-			Critical:  c.Critical,
-		}
-		switch {
-		case err == nil:
-			comp.Status = StatusHealthy
-		case errors.Is(err, context.DeadlineExceeded):
-			comp.Status = StatusUnhealthy
-			comp.Message = "check timed out after " + timeout.String()
-		default:
-			comp.Status = StatusUnhealthy
-			comp.Message = err.Error()
-		}
-
+		comp := h.run(ctx, c)
 		switch {
 		case comp.Status == StatusUnhealthy && c.Critical:
 			worst = StatusUnhealthy
