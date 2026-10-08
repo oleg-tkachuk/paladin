@@ -416,7 +416,20 @@ dispatcher: {
   // AuditMirrorEnabled mirrors every audit_log row to paladin.audit.<action>.
   // Default OFF; even higher cardinality than charges.
   audit_mirror_enabled: bool | *false
+  // Sinks switches each kind of sink an event subscription delivers to.
+  // Off, the admin API refuses an enabled subscription of the kind, the
+  // dispatcher fails its deliveries and dials none of its brokers, and the
+  // health page shows the kind off by configuration. On by default.
+  sinks: {
+    http:     #SinkSwitch
+    nats:     #SinkSwitch
+    sqs:      #SinkSwitch
+    rabbitmq: #SinkSwitch
+    kafka:    #SinkSwitch
+  }
 }
+
+#SinkSwitch: {enabled: bool | *true}
 
 // Storage is the registry of physical object-storage backends. Each
 // logical object_key picks one by name; every write path must name a
