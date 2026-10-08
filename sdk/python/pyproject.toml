@@ -67,7 +67,7 @@ dev = [
     # runtime the stubs accept (ValidateProtobufRuntimeVersion), so it is the
     # newest release still generating for protobuf 6. A newer one would lock
     # out every protobuf-6 environment.
-    "grpcio-tools==1.84.0",
+    "grpcio-tools==1.81.1",
     "protoc-gen-connectrpc==0.12.1",
     "pytest==9.1.1",
     "ruff==0.16.10",
