@@ -342,6 +342,12 @@ tasks:
       - ./scripts/require-disk.sh "task -t Taskfile.dev.yaml verify-deep:stack"
       - task: backend:test:stack
 
+  verify-deep:stack:run:
+    desc: "verify-deep:stack against images already built and loaded (CI carries them over from verify-e2e:images)"
+    cmds:
+      - ./scripts/require-disk.sh "task -t Taskfile.dev.yaml verify-deep:stack:run"
+      - task: backend:test:stack:run
+
   verify-e2e:
     desc: "Playwright against a stack built from this branch (needs Docker, ~10 min)"
     env: { PALADIN_IMAGE_PREFIX: "{{.GLOBAL_REGISTRY}}/{{.IMAGE_NAMESPACE}}" }
