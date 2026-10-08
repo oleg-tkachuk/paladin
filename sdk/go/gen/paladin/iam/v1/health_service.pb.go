@@ -312,7 +312,10 @@ type ComponentHealth struct {
 	// impact without reading runbooks.
 	Critical bool `protobuf:"varint,6,opt,name=critical,proto3" json:"critical,omitempty"`
 	// Where the component's switch lives.
-	Control       ComponentControl `protobuf:"varint,7,opt,name=control,proto3,enum=paladin.iam.v1.ComponentControl" json:"control,omitempty"`
+	Control ComponentControl `protobuf:"varint,7,opt,name=control,proto3,enum=paladin.iam.v1.ComponentControl" json:"control,omitempty"`
+	// Facts the component reports beside its status, in its order — a pool's
+	// connections in use, the schema version applied. Empty while disabled.
+	Details       []*ComponentDetail `protobuf:"bytes,8,rep,name=details,proto3" json:"details,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -396,6 +399,66 @@ func (x *ComponentHealth) GetControl() ComponentControl {
 	return ComponentControl_COMPONENT_CONTROL_UNSPECIFIED
 }
 
+func (x *ComponentHealth) GetDetails() []*ComponentDetail {
+	if x != nil {
+		return x.Details
+	}
+	return nil
+}
+
+// One fact a component reports, shown as "name: value".
+type ComponentDetail struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentDetail) Reset() {
+	*x = ComponentDetail{}
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentDetail) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentDetail) ProtoMessage() {}
+
+func (x *ComponentDetail) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentDetail.ProtoReflect.Descriptor instead.
+func (*ComponentDetail) Descriptor() ([]byte, []int) {
+	return file_paladin_iam_v1_health_service_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ComponentDetail) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ComponentDetail) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
 type HealthInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Aggregate status — UNHEALTHY iff any *critical* component is
@@ -413,7 +476,7 @@ type HealthInfo struct {
 
 func (x *HealthInfo) Reset() {
 	*x = HealthInfo{}
-	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[4]
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -425,7 +488,7 @@ func (x *HealthInfo) String() string {
 func (*HealthInfo) ProtoMessage() {}
 
 func (x *HealthInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[4]
+	mi := &file_paladin_iam_v1_health_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -438,7 +501,7 @@ func (x *HealthInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthInfo.ProtoReflect.Descriptor instead.
 func (*HealthInfo) Descriptor() ([]byte, []int) {
-	return file_paladin_iam_v1_health_service_proto_rawDescGZIP(), []int{4}
+	return file_paladin_iam_v1_health_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *HealthInfo) GetStatus() ComponentStatus {
@@ -475,7 +538,7 @@ const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"build_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tbuildTime\x12\x1d\n" +
 	"\n" +
 	"go_version\x18\x04 \x01(\tR\tgoVersion\"\x12\n" +
-	"\x10GetHealthRequest\"\x90\x02\n" +
+	"\x10GetHealthRequest\"\xcb\x02\n" +
 	"\x0fComponentHealth\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x127\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x1f.paladin.iam.v1.ComponentStatusR\x06status\x12\x18\n" +
@@ -484,7 +547,11 @@ const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"latency_ms\x18\x04 \x01(\x03R\tlatencyMs\x12\x1a\n" +
 	"\bcategory\x18\x05 \x01(\tR\bcategory\x12\x1a\n" +
 	"\bcritical\x18\x06 \x01(\bR\bcritical\x12:\n" +
-	"\acontrol\x18\a \x01(\x0e2 .paladin.iam.v1.ComponentControlR\acontrol\"\x9a\x01\n" +
+	"\acontrol\x18\a \x01(\x0e2 .paladin.iam.v1.ComponentControlR\acontrol\x129\n" +
+	"\adetails\x18\b \x03(\v2\x1f.paladin.iam.v1.ComponentDetailR\adetails\";\n" +
+	"\x0fComponentDetail\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"\x9a\x01\n" +
 	"\n" +
 	"HealthInfo\x127\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x1f.paladin.iam.v1.ComponentStatusR\x06status\x12?\n" +
@@ -521,7 +588,7 @@ func file_paladin_iam_v1_health_service_proto_rawDescGZIP() []byte {
 }
 
 var file_paladin_iam_v1_health_service_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_paladin_iam_v1_health_service_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_paladin_iam_v1_health_service_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_paladin_iam_v1_health_service_proto_goTypes = []any{
 	(ComponentStatus)(0),          // 0: paladin.iam.v1.ComponentStatus
 	(ComponentControl)(0),         // 1: paladin.iam.v1.ComponentControl
@@ -529,24 +596,26 @@ var file_paladin_iam_v1_health_service_proto_goTypes = []any{
 	(*VersionInfo)(nil),           // 3: paladin.iam.v1.VersionInfo
 	(*GetHealthRequest)(nil),      // 4: paladin.iam.v1.GetHealthRequest
 	(*ComponentHealth)(nil),       // 5: paladin.iam.v1.ComponentHealth
-	(*HealthInfo)(nil),            // 6: paladin.iam.v1.HealthInfo
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(*ComponentDetail)(nil),       // 6: paladin.iam.v1.ComponentDetail
+	(*HealthInfo)(nil),            // 7: paladin.iam.v1.HealthInfo
+	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
 }
 var file_paladin_iam_v1_health_service_proto_depIdxs = []int32{
-	7, // 0: paladin.iam.v1.VersionInfo.build_time:type_name -> google.protobuf.Timestamp
+	8, // 0: paladin.iam.v1.VersionInfo.build_time:type_name -> google.protobuf.Timestamp
 	0, // 1: paladin.iam.v1.ComponentHealth.status:type_name -> paladin.iam.v1.ComponentStatus
 	1, // 2: paladin.iam.v1.ComponentHealth.control:type_name -> paladin.iam.v1.ComponentControl
-	0, // 3: paladin.iam.v1.HealthInfo.status:type_name -> paladin.iam.v1.ComponentStatus
-	5, // 4: paladin.iam.v1.HealthInfo.components:type_name -> paladin.iam.v1.ComponentHealth
-	2, // 5: paladin.iam.v1.HealthService.GetVersion:input_type -> paladin.iam.v1.GetVersionRequest
-	4, // 6: paladin.iam.v1.HealthService.GetHealth:input_type -> paladin.iam.v1.GetHealthRequest
-	3, // 7: paladin.iam.v1.HealthService.GetVersion:output_type -> paladin.iam.v1.VersionInfo
-	6, // 8: paladin.iam.v1.HealthService.GetHealth:output_type -> paladin.iam.v1.HealthInfo
-	7, // [7:9] is the sub-list for method output_type
-	5, // [5:7] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	6, // 3: paladin.iam.v1.ComponentHealth.details:type_name -> paladin.iam.v1.ComponentDetail
+	0, // 4: paladin.iam.v1.HealthInfo.status:type_name -> paladin.iam.v1.ComponentStatus
+	5, // 5: paladin.iam.v1.HealthInfo.components:type_name -> paladin.iam.v1.ComponentHealth
+	2, // 6: paladin.iam.v1.HealthService.GetVersion:input_type -> paladin.iam.v1.GetVersionRequest
+	4, // 7: paladin.iam.v1.HealthService.GetHealth:input_type -> paladin.iam.v1.GetHealthRequest
+	3, // 8: paladin.iam.v1.HealthService.GetVersion:output_type -> paladin.iam.v1.VersionInfo
+	7, // 9: paladin.iam.v1.HealthService.GetHealth:output_type -> paladin.iam.v1.HealthInfo
+	8, // [8:10] is the sub-list for method output_type
+	6, // [6:8] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_paladin_iam_v1_health_service_proto_init() }
@@ -560,7 +629,7 @@ func file_paladin_iam_v1_health_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_iam_v1_health_service_proto_rawDesc), len(file_paladin_iam_v1_health_service_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -17,6 +17,19 @@ type Probe interface {
 	Check(ctx context.Context) error
 }
 
+// Describer is a Probe that also reports details: facts shown beside its
+// status, such as how busy a pool is. Read once the component is checked,
+// whether the check passed or not; never for a component that is off.
+type Describer interface {
+	Details(ctx context.Context) []Detail
+}
+
+// Detail is one fact a component reports, in the order it reports them.
+type Detail struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
 // Spec names a component and says how much it matters.
 type Spec struct {
 	Name     string
@@ -81,6 +94,8 @@ type Check struct {
 	// Func exercises the dependency. Unused while the switch is off, so a
 	// component that is off may leave it nil.
 	Func func(context.Context) error
+	// Describe reports the component's details; nil reports none.
+	Describe func(context.Context) []Detail
 }
 
 // Fixed is a switch decided once, at startup — a configuration key's.
@@ -103,3 +118,11 @@ func (c Check) Enablement(ctx context.Context) (Enablement, error) {
 
 // Check implements Probe.
 func (c Check) Check(ctx context.Context) error { return c.Func(ctx) }
+
+// Details implements Describer.
+func (c Check) Details(ctx context.Context) []Detail {
+	if c.Describe == nil {
+		return nil
+	}
+	return c.Describe(ctx)
+}

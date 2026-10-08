@@ -45,6 +45,8 @@ type Component = {
   category: string;
   critical: boolean;
   control?: Control;
+  // Facts the component reports beside its status, in its order.
+  details?: { name: string; value: string }[];
 };
 
 type Snapshot = {
@@ -268,6 +270,19 @@ function ComponentRow({ c }: { c: Component }) {
         >
           {c.message}
         </pre>
+      )}
+
+      {!!c.details?.length && (
+        // Its own line, apart from the message: details are not an error,
+        // and folding them into the preview would offer to expand them.
+        <dl className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+          {c.details.map((d) => (
+            <div key={d.name} className="flex gap-1">
+              <dt>{d.name}:</dt>
+              <dd className="font-mono tabular-nums">{d.value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
     </div>
   );
