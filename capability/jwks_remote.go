@@ -27,6 +27,7 @@ const (
 )
 
 // RemoteJWKSConfig configures a RemoteJWKSResolver. Only URL is required.
+// The intervals must nest: MinRefreshInterval ≤ RefreshInterval ≤ MaxStale.
 type RemoteJWKSConfig struct {
 	// URL of the issuer's JWKS document, e.g.
 	// https://issuer.example/.well-known/jwks.json.
@@ -96,6 +97,13 @@ func NewRemoteJWKSResolver(cfg RemoteJWKSConfig) (*RemoteJWKSResolver, error) {
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
+	}
+	// A set past MaxStale before it is due a refresh would fail closed
+	// with no fetch having failed, and a refresh due inside the rate limit
+	// would wait it out anyway.
+	if cfg.MinRefreshInterval > cfg.RefreshInterval || cfg.RefreshInterval > cfg.MaxStale {
+		return nil, fmt.Errorf("capability: RemoteJWKSConfig needs MinRefreshInterval (%s) ≤ RefreshInterval (%s) ≤ MaxStale (%s)",
+			cfg.MinRefreshInterval, cfg.RefreshInterval, cfg.MaxStale)
 	}
 	return &RemoteJWKSResolver{cfg: cfg, fetching: make(chan struct{}, 1)}, nil
 }

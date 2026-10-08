@@ -208,3 +208,23 @@ func TestRemoteJWKSWaiterHonoursItsContext(t *testing.T) {
 		t.Fatal("a waiter outlived its context behind another caller's fetch")
 	}
 }
+
+// The intervals must nest: a key set older than MaxStale before it is due a
+// refresh would fail closed with no fetch having failed.
+func TestRemoteJWKSRefusesIntervalsThatDoNotNest(t *testing.T) {
+	const url = "https://issuer.example.com/jwks"
+	cases := map[string]struct {
+		cfg RemoteJWKSConfig
+		ok  bool
+	}{
+		"defaults":                      {RemoteJWKSConfig{URL: url}, true},
+		"equal":                         {RemoteJWKSConfig{URL: url, MinRefreshInterval: time.Minute, RefreshInterval: time.Minute, MaxStale: time.Minute}, true},
+		"stale before due a refresh":    {RemoteJWKSConfig{URL: url, RefreshInterval: time.Hour, MaxStale: time.Minute}, false},
+		"refresh inside the rate limit": {RemoteJWKSConfig{URL: url, MinRefreshInterval: time.Minute, RefreshInterval: time.Second}, false},
+	}
+	for name, tc := range cases {
+		if _, err := NewRemoteJWKSResolver(tc.cfg); (err == nil) != tc.ok {
+			t.Errorf("%s: err = %v, want ok = %v", name, err, tc.ok)
+		}
+	}
+}
