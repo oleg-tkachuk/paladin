@@ -1,6 +1,23 @@
 import { describe, it, expect } from "vitest";
 
-import { cn, timestampToDate, formatDate, formatBytes } from "./utils";
+import { readFileSync } from "node:fs";
+
+import {
+  CUSTOM_TEXT_SIZES,
+  cn,
+  timestampToDate,
+  formatDate,
+  formatBytes,
+} from "./utils";
+
+// The text sizes globals.css defines below Tailwind's scale, read from the
+// file itself so a size added there is tested without touching this list.
+const DEFINED_TEXT_SIZES = [
+  ...readFileSync(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8",
+  ).matchAll(/--text-([a-z]+):/g),
+].map((m) => m[1]);
 
 describe("cn", () => {
   it("joins truthy class values and drops falsy ones", () => {
@@ -10,6 +27,26 @@ describe("cn", () => {
   it("resolves conflicting tailwind utilities (last wins)", () => {
     expect(cn("p-2", "p-4")).toBe("p-4");
     expect(cn("text-sm", "text-lg")).toBe("text-lg");
+  });
+
+  // tailwind-merge read a size it did not know as a text colour and dropped
+  // it beside a real one, so the text rendered at the inherited size.
+  it.each(DEFINED_TEXT_SIZES)("keeps text-%s beside a text colour", (size) => {
+    expect(cn(`text-${size}`, "text-muted-foreground")).toBe(
+      `text-${size} text-muted-foreground`,
+    );
+  });
+
+  it.each(DEFINED_TEXT_SIZES)("lets a later size replace text-%s", (size) => {
+    expect(cn(`text-${size}`, "text-sm")).toBe("text-sm");
+  });
+
+  // A size added to globals.css and not here would be dropped again.
+  it("knows every text size globals.css defines", () => {
+    expect(DEFINED_TEXT_SIZES.length).toBeGreaterThan(0);
+    expect([...CUSTOM_TEXT_SIZES].sort()).toEqual(
+      [...DEFINED_TEXT_SIZES].sort(),
+    );
   });
 });
 
