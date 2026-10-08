@@ -269,7 +269,7 @@ func parseClaims(seg string) (*Capability, error) {
 
 // Decode parses a compact-form token without verifying the signature
 // or applying time / audience / revocation gates. Use only for tooling
-// (`paladin cap show`); production code goes through Verifier.Verify,
+// that displays a token; production code goes through Verifier.Verify,
 // which never reads a claim before the signature has checked out.
 func Decode(token string) (Capability, error) {
 	parts, err := splitToken(token)

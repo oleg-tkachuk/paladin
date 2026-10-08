@@ -98,7 +98,28 @@ The token must carry `typ: paladin-cap+jwt` and a tenant, and may be at most
 `KeyIssuers` (kid → issuer) so one issuer's key cannot sign for another.
 Verifiers running apart from the issuer resolve keys with
 `RemoteJWKSResolver`, which caches the issuer's JWKS, picks up a rotated-in
-kid on first sight (rate-limited), and fails closed after `MaxStale`.
+kid on first sight (rate-limited), and fails closed after `MaxStale`:
+
+```go
+keys, err := capability.NewRemoteJWKSResolver(capability.RemoteJWKSConfig{
+    URL: "https://issuer.example.com/.well-known/jwks.json",
+})
+verifier, err := capability.NewStandardVerifier(capability.VerifierConfig{
+    Keys: keys, Revocations: revocations, TrustedIssuers: []string{"paladin"},
+})
+```
+
+The issuer serves that document with `MarshalJWKS`; `ParseJWKS` reads one
+back, for a resolver of your own. It skips an entry it cannot use — a foreign
+`kty`, no kid, a malformed key — rather than refusing the set, so one bad
+entry does not take every other key out of service mid-rotation.
+
+### Inspect a token without trusting it
+
+`Decode` reads a token's claims and checks nothing; `VerifySignature` checks
+only its signature against one key. Both are for tooling — showing what a
+token grants, or which key signed it. Neither applies expiry, audience or
+revocation, so never authorise a request on either: that is `Verify`.
 
 ## Enforce the caveats on every operation
 
