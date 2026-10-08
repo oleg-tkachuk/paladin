@@ -60,6 +60,13 @@ names what it reads. Renamed, with no change in behaviour:
 
 The metric names are unchanged.
 
+`CacheOption` now configures both revocation caches, so it is built only by
+`WithCacheClock` and `WithMaxEntries`; an option written against
+`*CachedRevocationChecker` no longer compiles. `CachedBiscuitRevocationChecker`
+gains `Sweep`. `WithMetering` returns a store that implements
+`CopyUsageReader` exactly when the store it wraps does — assert the interface
+on its result rather than reaching past it.
+
 What the stores write can now be read back. `Store.GetRecord` returns a
 capability with the principal that issued it and its own revocation entry;
 `BiscuitRevocationStore.GetBiscuitRevocation` returns a revoked copy's entry;
