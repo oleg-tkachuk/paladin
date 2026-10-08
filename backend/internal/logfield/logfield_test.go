@@ -49,3 +49,21 @@ func TestURLRedactsBothUserinfoAndQuery(t *testing.T) {
 		t.Fatalf("URL = %q, want %q", f.String, want)
 	}
 }
+
+// RedactURL is the same redaction as a string, for text that is not a log
+// line: a broker's URL in a health message carried its password.
+func TestRedactURLMatchesURL(t *testing.T) {
+	for _, raw := range []string{
+		"amqp://user:s3cret@rabbit.svc:5672/vhost",
+		"https://hook:s3cret@sink.example.com/in?token=s3cret",
+		"%%s3cret",
+	} {
+		got := RedactURL(raw)
+		if want := URL("url", raw).String; got != want {
+			t.Errorf("RedactURL(%q) = %q, want %q", raw, got, want)
+		}
+		if strings.Contains(got, "s3cret") {
+			t.Errorf("RedactURL(%q) kept the secret: %s", raw, got)
+		}
+	}
+}

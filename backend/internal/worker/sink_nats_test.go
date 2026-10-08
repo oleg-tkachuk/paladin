@@ -2,11 +2,11 @@ package worker
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nats-io/nats.go"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
@@ -178,6 +178,9 @@ func TestNatsTargetFromSinkConfig(t *testing.T) {
 			NatsTarget{URL: "nats://a:4222"}, true},
 		{"no url", `{"subject":"s"}`, NatsTarget{}, false},
 		{"not json", `{`, NatsTarget{}, false},
+		// Resolved only at delivery: a warmup dial with the ref fails.
+		{"secret-ref credentials", `{"url":"nats://a:4222","subject":"s","credentials_ref":"k8s:nats/token"}`,
+			NatsTarget{}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -210,20 +213,43 @@ func TestNatsConnPool_WarmupDialsEachPairOnce(t *testing.T) {
 	}
 }
 
-// Two principals on one server are two connections, but the operator-facing
-// status map names the server once and never the credentials.
-func TestNatsConnPool_StatusesKeyByURLAlone(t *testing.T) {
+// Two principals on one server are two connections; the operator-facing view
+// names the server, never the credentials.
+func TestNatsConnPool_ConnsNameTheServerNotTheCredentials(t *testing.T) {
 	url := runEmbeddedNATS(t)
 	pool := NewNatsConnPool(nil)
 	defer pool.Close()
 
 	pool.Warmup([]NatsTarget{{URL: url}, {URL: url, CredentialsRef: "token:secret-label"}})
 
-	got := pool.Statuses()
-	if len(got) != 1 {
-		t.Fatalf("Statuses() = %v, want one entry for %s", got, url)
+	got := pool.Conns()
+	if len(got) != 2 {
+		t.Fatalf("Conns() = %v, want one per principal", got)
 	}
-	if status, ok := got[url]; !ok || status != nats.CONNECTED {
-		t.Errorf("Statuses() = %v, want %s CONNECTED", got, url)
+	for _, c := range got {
+		if c.URL != url || c.Err != nil {
+			t.Errorf("Conns() = %v, want %s connected", got, url)
+		}
+	}
+	if err := BrokerHealth(got); err != nil {
+		t.Errorf("BrokerHealth = %v, want healthy", err)
+	}
+}
+
+// A server that refused the dial was absent from the pool, so the probe saw
+// nothing wrong. It is reported, redacted, until a dial to it succeeds.
+func TestNatsConnPool_ReportsAFailedDialRedacted(t *testing.T) {
+	pool := NewNatsConnPool(nil)
+	defer pool.Close()
+	// Nothing listens on port 1.
+	pool.Warmup([]NatsTarget{{URL: "nats://u:s3cret@127.0.0.1:1"}})
+
+	got := pool.Conns()
+	if len(got) != 1 || got[0].Err == nil {
+		t.Fatalf("Conns() = %v, want the failed dial", got)
+	}
+	err := BrokerHealth(got)
+	if err == nil || strings.Contains(err.Error(), "s3cret") || !strings.Contains(err.Error(), "127.0.0.1:1") {
+		t.Errorf("BrokerHealth = %v, want the server named, its password not", err)
 	}
 }

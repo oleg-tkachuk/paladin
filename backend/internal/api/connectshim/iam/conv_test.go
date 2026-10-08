@@ -303,6 +303,20 @@ func TestStatusToProto(t *testing.T) {
 	}
 }
 
+func TestControlToProto(t *testing.T) {
+	cases := map[health.Control]pb.ComponentControl{
+		health.ControlAlwaysOn: pb.ComponentControl_COMPONENT_CONTROL_ALWAYS_ON,
+		health.ControlConfig:   pb.ComponentControl_COMPONENT_CONTROL_CONFIG,
+		health.ControlDatabase: pb.ComponentControl_COMPONENT_CONTROL_DATABASE,
+		health.Control(""):     pb.ComponentControl_COMPONENT_CONTROL_UNSPECIFIED,
+	}
+	for in, want := range cases {
+		if got := controlToProto(in); got != want {
+			t.Errorf("controlToProto(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
 func TestSnapshotToProto(t *testing.T) {
 	s := health.Snapshot{
 		Role:   "api",
@@ -310,6 +324,7 @@ func TestSnapshotToProto(t *testing.T) {
 		Components: []health.Component{
 			{Name: "postgres", Status: health.StatusHealthy, LatencyMs: 3, Category: "db", Critical: true},
 			{Name: "s3", Status: health.StatusUnhealthy, Message: "timeout", Category: "storage"},
+			{Name: "nats", Status: health.StatusDisabled, Message: "not in use", Control: health.ControlDatabase},
 		},
 	}
 
@@ -321,8 +336,11 @@ func TestSnapshotToProto(t *testing.T) {
 	if got.Status != statusToProto(health.StatusDegraded) {
 		t.Errorf("Status = %v", got.Status)
 	}
-	if len(got.Components) != 2 {
-		t.Fatalf("got %d components, want 2", len(got.Components))
+	if len(got.Components) != 3 {
+		t.Fatalf("got %d components, want 3", len(got.Components))
+	}
+	if c := got.Components[2]; c.Control != pb.ComponentControl_COMPONENT_CONTROL_DATABASE || c.Message != "not in use" {
+		t.Errorf("component[2] = %+v, want its switch carried over", c)
 	}
 	if got.Components[0].Name != "postgres" || got.Components[0].LatencyMs != 3 ||
 		!got.Components[0].Critical || got.Components[0].Category != "db" {

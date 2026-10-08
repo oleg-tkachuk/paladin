@@ -18,11 +18,22 @@ class ComponentStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     COMPONENT_STATUS_DEGRADED: _ClassVar[ComponentStatus]
     COMPONENT_STATUS_UNHEALTHY: _ClassVar[ComponentStatus]
     COMPONENT_STATUS_DISABLED: _ClassVar[ComponentStatus]
+
+class ComponentControl(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    COMPONENT_CONTROL_UNSPECIFIED: _ClassVar[ComponentControl]
+    COMPONENT_CONTROL_ALWAYS_ON: _ClassVar[ComponentControl]
+    COMPONENT_CONTROL_CONFIG: _ClassVar[ComponentControl]
+    COMPONENT_CONTROL_DATABASE: _ClassVar[ComponentControl]
 COMPONENT_STATUS_UNSPECIFIED: ComponentStatus
 COMPONENT_STATUS_HEALTHY: ComponentStatus
 COMPONENT_STATUS_DEGRADED: ComponentStatus
 COMPONENT_STATUS_UNHEALTHY: ComponentStatus
 COMPONENT_STATUS_DISABLED: ComponentStatus
+COMPONENT_CONTROL_UNSPECIFIED: ComponentControl
+COMPONENT_CONTROL_ALWAYS_ON: ComponentControl
+COMPONENT_CONTROL_CONFIG: ComponentControl
+COMPONENT_CONTROL_DATABASE: ComponentControl
 
 class GetVersionRequest(_message.Message):
     __slots__ = ()
@@ -45,20 +56,22 @@ class GetHealthRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class ComponentHealth(_message.Message):
-    __slots__ = ("name", "status", "message", "latency_ms", "category", "critical")
+    __slots__ = ("name", "status", "message", "latency_ms", "category", "critical", "control")
     NAME_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
     LATENCY_MS_FIELD_NUMBER: _ClassVar[int]
     CATEGORY_FIELD_NUMBER: _ClassVar[int]
     CRITICAL_FIELD_NUMBER: _ClassVar[int]
+    CONTROL_FIELD_NUMBER: _ClassVar[int]
     name: str
     status: ComponentStatus
     message: str
     latency_ms: int
     category: str
     critical: bool
-    def __init__(self, name: _Optional[str] = ..., status: _Optional[_Union[ComponentStatus, str]] = ..., message: _Optional[str] = ..., latency_ms: _Optional[int] = ..., category: _Optional[str] = ..., critical: _Optional[bool] = ...) -> None: ...
+    control: ComponentControl
+    def __init__(self, name: _Optional[str] = ..., status: _Optional[_Union[ComponentStatus, str]] = ..., message: _Optional[str] = ..., latency_ms: _Optional[int] = ..., category: _Optional[str] = ..., critical: _Optional[bool] = ..., control: _Optional[_Union[ComponentControl, str]] = ...) -> None: ...
 
 class HealthInfo(_message.Message):
     __slots__ = ("status", "components", "role")

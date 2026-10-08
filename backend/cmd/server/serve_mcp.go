@@ -414,7 +414,7 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	healthH := &health.Handler{
 		Logger:       l.Named("health"),
 		LogSuccesses: cfg.Runtime.LogProbes,
-		Ready: []health.Check{{
+		Ready: []health.Probe{health.Check{
 			Name:     "process",
 			Category: health.CategorySubsystem,
 			Critical: true,

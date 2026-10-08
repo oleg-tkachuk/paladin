@@ -20,6 +20,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/eventingest"
+	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
@@ -286,11 +287,16 @@ func ingestOpsMux(deps *app.SharedDeps, drv eventingest.Driver, l *zap.Logger) h
 	healthH := app.NewHealthHandler(deps.DB, deps.Cfg.Runtime, l).WithRole("ingest")
 
 	if natsDrv, ok := drv.(*eventingest.NATSDriver); ok {
-		app.AddSubsystemCheck(healthH, "subscriber", true, func(ctx context.Context) error {
-			if st := natsDrv.Status(); st != nats.CONNECTED {
-				return fmt.Errorf("nats subscriber: status=%s", st)
-			}
-			return nil
+		app.AddComponent(healthH, health.Check{
+			Name:     "subscriber",
+			Category: health.CategorySubsystem,
+			Critical: true,
+			Func: func(context.Context) error {
+				if st := natsDrv.Status(); st != nats.CONNECTED {
+					return fmt.Errorf("nats subscriber: status=%s", st)
+				}
+				return nil
+			},
 		})
 	}
 

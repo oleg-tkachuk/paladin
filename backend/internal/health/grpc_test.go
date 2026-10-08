@@ -21,13 +21,13 @@ func failing(critical bool) Check {
 func TestGRPCCheckerAnswersAsReadyz(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
-		ready    []Check
+		ready    []Probe
 		draining bool
 		want     grpchealth.Status
 	}{
 		{"healthy", nil, false, grpchealth.StatusServing},
-		{"a non-critical check fails: degraded, still serving", []Check{failing(false)}, false, grpchealth.StatusServing},
-		{"a critical check fails", []Check{failing(true)}, false, grpchealth.StatusNotServing},
+		{"a non-critical check fails: degraded, still serving", []Probe{failing(false)}, false, grpchealth.StatusServing},
+		{"a critical check fails", []Probe{failing(true)}, false, grpchealth.StatusNotServing},
 		{"draining", nil, true, grpchealth.StatusNotServing},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

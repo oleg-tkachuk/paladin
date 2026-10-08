@@ -85,13 +85,15 @@ type Snapshot = {
   checked_at: string;
 };
 
+// Passed through as the backend sends it; see backend/internal/health.
 type Component = {
   name: string;
-  status: "healthy" | "degraded" | "unhealthy";
+  status: "healthy" | "degraded" | "unhealthy" | "disabled";
   message?: string;
   latency_ms: number;
   category: string;
   critical: boolean;
+  control?: "always_on" | "config" | "database";
 };
 
 // Shared secret gating /system/health.json on the backends. When set
@@ -127,6 +129,7 @@ async function fetchSnapshot(role: string, baseUrl: string): Promise<Snapshot> {
           latency_ms: 0,
           category: "upstream",
           critical: true,
+          control: "always_on",
         },
       ],
       checked_at: new Date().toISOString(),

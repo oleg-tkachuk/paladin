@@ -26,6 +26,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -72,26 +73,6 @@ const (
 	CategoryUpstream Category = "upstream"
 )
 
-// Check is one named health check. Returning a non-nil error fails the
-// probe; the name appears in the JSON failures list so operators can
-// pinpoint the degraded dependency without reading process logs.
-//
-// Category + Critical are optional — zero values default to
-// `CategorySubsystem` + `Critical=true` so legacy call sites that
-// register `health.Check{Name, Func}` keep their old semantics
-// (every check counted toward /readyz).
-type Check struct {
-	Name     string
-	Category Category
-	Critical bool
-	Func     func(context.Context) error
-	// Disabled marks a component that is off by configuration: it is
-	// listed, as StatusDisabled, so the /health page shows it is absent on
-	// purpose, but it is never run, never fails /readyz and never counts
-	// toward a role's status. Func is unused.
-	Disabled bool
-}
-
 // Handler is the probe registrar. Build one per process; share it across
 // all plane muxes so the shutting-down state is unified.
 //
@@ -113,7 +94,7 @@ type Handler struct {
 
 	// Ready checks run on /readyz. Examples: DB ping, S3 reachability.
 	// Empty list = "always ready".
-	Ready []Check
+	Ready []Probe
 
 	// role names the role that produced this Handler ("api", "admin",
 	// "worker", "mcp"). Surfaced on the JSON snapshot endpoint so a
@@ -131,7 +112,7 @@ type Handler struct {
 	// Startup checks run on /startupz. Typically a superset of Ready
 	// during bootstrap (e.g. migrations applied + first DB ping). Once
 	// kubelet observes a 200 it stops polling startupz forever.
-	Startup []Check
+	Startup []Probe
 
 	// shuttingDown flips /readyz to 503 immediately on shutdown signal,
 	// stopping new traffic while /livez stays 200 to let in-flight
@@ -265,38 +246,70 @@ func (h *Handler) serveStartup(w http.ResponseWriter, r *http.Request) {
 // failures preserve cause-first ordering for log readability, and
 // (c) parallelising would need to duplicate the Critical-marker so
 // the caller can still tell which failures gate /readyz.
-func (h *Handler) runChecks(ctx context.Context, checks []Check) []failure {
-	if len(checks) == 0 {
-		return nil
-	}
-	timeout := h.Timeout
-	if timeout <= 0 {
-		timeout = DefaultCheckTimeout
-	}
+func (h *Handler) runChecks(ctx context.Context, checks []Probe) []failure {
 	var out []failure
 	for _, c := range checks {
-		if c.Disabled {
-			continue
-		}
-		cctx, cancel := context.WithTimeout(ctx, timeout)
-		err := c.Func(cctx)
-		cancel()
-		if err != nil {
-			msg := err.Error()
-			if errors.Is(err, context.DeadlineExceeded) {
-				// Replace the generic stdlib message with one that
-				// names the check + budget so a flapping probe is
-				// debuggable from the response body alone.
-				msg = "check timed out after " + timeout.String()
-			}
+		comp := h.run(ctx, c)
+		if comp.Status == StatusUnhealthy {
 			out = append(out, failure{
-				Name:     c.Name,
-				Error:    msg,
-				Critical: c.Critical,
+				Name:     comp.Name,
+				Error:    comp.Message,
+				Critical: comp.Critical,
 			})
 		}
 	}
 	return out
+}
+
+// timeout is the budget each check gets.
+func (h *Handler) timeout() time.Duration {
+	if h.Timeout <= 0 {
+		return DefaultCheckTimeout
+	}
+	return h.Timeout
+}
+
+// run is the one place a probe becomes a component, so /readyz and the
+// snapshot cannot disagree about what a result means. The switch is read
+// first: a component that is off is reported with why, and never checked.
+func (h *Handler) run(ctx context.Context, p Probe) Component {
+	spec := p.Spec()
+	comp := Component{
+		Name:     spec.Name,
+		Category: string(spec.Category),
+		Critical: spec.Critical,
+	}
+	timeout := h.timeout()
+	cctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	start := time.Now()
+
+	en, err := p.Enablement(cctx)
+	comp.Control = en.Control
+	if err == nil && !en.Enabled {
+		comp.Status = StatusDisabled
+		comp.Message = en.Reason
+		return comp
+	}
+	if err == nil {
+		err = p.Check(cctx)
+	} else {
+		err = fmt.Errorf("read whether %s is enabled: %w", spec.Name, err)
+	}
+	comp.LatencyMs = time.Since(start).Milliseconds()
+	switch {
+	case err == nil:
+		comp.Status = StatusHealthy
+	case errors.Is(err, context.DeadlineExceeded):
+		// Replace the generic stdlib message with one that names the
+		// budget so a flapping probe is debuggable from the body alone.
+		comp.Status = StatusUnhealthy
+		comp.Message = "check timed out after " + timeout.String()
+	default:
+		comp.Status = StatusUnhealthy
+		comp.Message = err.Error()
+	}
+	return comp
 }
 
 // ─── response shape ─────────────────────────────────────────────────────────
@@ -330,7 +343,8 @@ type failure struct {
 
 // ComponentStatus enumerates the per-check rollup. Mirrors the proto
 // enum paladin.iam.v1.ComponentStatus 1:1 (HEALTHY/DEGRADED/UNHEALTHY/
-// DISABLED). Disabled is a component's state only, never a role's.
+// DISABLED). Disabled is a component's state only, never a role's: its
+// switch is off (see Enablement).
 type ComponentStatus string
 
 const (
@@ -348,6 +362,8 @@ type Component struct {
 	LatencyMs int64           `json:"latency_ms"`
 	Category  string          `json:"category"`
 	Critical  bool            `json:"critical"`
+	// Control is where the component's switch lives.
+	Control Control `json:"control"`
 }
 
 // Snapshot is the aggregated health view for one role.
@@ -369,47 +385,12 @@ type Snapshot struct {
 // any DEGRADED) → DEGRADED; else HEALTHY. Same asymmetry as /readyz so
 // the kubelet endpoint set and the UI agree.
 func (h *Handler) Snapshot(ctx context.Context, role string) Snapshot {
-	timeout := h.Timeout
-	if timeout <= 0 {
-		timeout = DefaultCheckTimeout
-	}
 	components := make([]Component, 0, len(h.Ready))
 	worst := StatusHealthy
 	for _, c := range h.Ready {
-		if c.Disabled {
-			components = append(components, Component{
-				Name:     c.Name,
-				Status:   StatusDisabled,
-				Category: string(c.Category),
-				Critical: c.Critical,
-			})
-			continue
-		}
-		cctx, cancel := context.WithTimeout(ctx, timeout)
-		start := time.Now()
-		err := c.Func(cctx)
-		latency := time.Since(start)
-		cancel()
-
-		comp := Component{
-			Name:      c.Name,
-			LatencyMs: latency.Milliseconds(),
-			Category:  string(c.Category),
-			Critical:  c.Critical,
-		}
+		comp := h.run(ctx, c)
 		switch {
-		case err == nil:
-			comp.Status = StatusHealthy
-		case errors.Is(err, context.DeadlineExceeded):
-			comp.Status = StatusUnhealthy
-			comp.Message = "check timed out after " + timeout.String()
-		default:
-			comp.Status = StatusUnhealthy
-			comp.Message = err.Error()
-		}
-
-		switch {
-		case comp.Status == StatusUnhealthy && c.Critical:
+		case comp.Status == StatusUnhealthy && comp.Critical:
 			worst = StatusUnhealthy
 		case comp.Status == StatusUnhealthy:
 			if worst == StatusHealthy {

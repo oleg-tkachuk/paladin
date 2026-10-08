@@ -13,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
+	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
 // The ops listeners stopped serving /metrics: every role serves it on
@@ -27,7 +28,7 @@ func TestOpsMuxesDoNotServeMetrics(t *testing.T) {
 	}
 	l := zap.NewNop()
 	workerMux, _ := workerOpsMux(config.Runtime{}, deps, l)
-	dispatcherMux, _ := dispatcherOpsMux(deps, nil, nil, nil, l)
+	dispatcherMux, _ := dispatcherOpsMux(deps, nil, nil, worker.NewNatsConnPool(nil), worker.NewRabbitMQConnPool(nil), l)
 	muxes := map[string]http.Handler{
 		"worker":     workerMux,
 		"dispatcher": dispatcherMux,

@@ -115,6 +115,70 @@ describe("HealthPage disabled component", () => {
   });
 });
 
+// Each row says what switches it, and a disabled one says why it is off.
+describe("HealthPage component switch", () => {
+  beforeEach(() => {
+    payload = {
+      roles: [
+        {
+          role: "dispatcher",
+          status: "healthy",
+          components: [
+            { ...component("postgres", true), control: "always_on" },
+            {
+              name: "rabbitmq",
+              status: "disabled",
+              message:
+                "not in use: no enabled subscription delivers to rabbitmq",
+              latency_ms: 0,
+              critical: false,
+              control: "database",
+            },
+            {
+              name: "postgres-replica",
+              status: "disabled",
+              message:
+                "off by configuration: datastores.postgres.replica.enabled",
+              latency_ms: 0,
+              critical: false,
+              control: "config",
+            },
+          ],
+        },
+      ],
+    };
+  });
+
+  const row = async (name: string) =>
+    (await screen.findByText(name)).closest("button")!;
+
+  it("badges a component switched by the database or by config", async () => {
+    render(<HealthPage />);
+    expect(await row("rabbitmq")).toHaveTextContent("db");
+    expect(await row("postgres-replica")).toHaveTextContent("config");
+  });
+
+  it("badges nothing on a component with no switch", async () => {
+    render(<HealthPage />);
+    const postgres = await row("postgres");
+    expect(postgres).not.toHaveTextContent("db");
+    expect(postgres).not.toHaveTextContent("config");
+  });
+
+  it("shows why a disabled component is off, with nothing to expand", async () => {
+    render(<HealthPage />);
+    const r = await row("rabbitmq");
+    expect(
+      screen.getByText(
+        "not in use: no enabled subscription delivers to rabbitmq",
+      ),
+    ).toBeInTheDocument();
+    expect(r).toHaveTextContent("Disabled");
+    expect(r).not.toHaveAttribute("aria-expanded");
+    expect(r.querySelector("svg")).toBeNull();
+  });
+});
+
 describe("HealthPage component message", () => {
   const withMessage = (message: string) => ({
     roles: [
