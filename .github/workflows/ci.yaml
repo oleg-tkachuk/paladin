@@ -30,9 +30,6 @@ concurrency:
 # Pinned tools, one place each. A floating tool changes what the gate checks
 # with no commit of ours in between.
 env:
-  # The Python SDK cell that installs the wheel without its tls extra: the value
-  # its `tls` matrix key carries, and so the label in that job's name.
-  PY_SDK_NO_TLS: no tls extra
   # renovate: datasource=github-releases depName=go-task/task
   TASK_VERSION: "3.53.1"
   # Must be BUILT with a Go no older than the `go` directive in backend/go.mod
@@ -94,7 +91,6 @@ jobs:
       groups: ${{ steps.filter.outputs.groups }}
       e2e: ${{ steps.filter.outputs.e2e }}
       deep: ${{ steps.filter.outputs.deep }}
-      py-compat: ${{ steps.py-compat.outputs.matrix }}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -151,21 +147,6 @@ jobs:
             printf '%s\n' "relevant=true" >>"$GITHUB_OUTPUT"
           fi
 
-      # The Python SDK's compatibility cells, read here so the matrix job and
-      # `scripts/py-sdk-compat.sh --matrix` run the same list: every python ×
-      # with pair, then each `include` entry as a cell of its own. Spelled out
-      # as one `include` list, because GitHub merges an include entry into a
-      # pair it matches — the no-TLS cell replaced the TLS run of its pair —
-      # and leaves a merged key out of the job's name. `without_tls: true`
-      # becomes `tls: <PY_SDK_NO_TLS>`, the label that name then carries.
-      - name: Read the Python SDK compatibility matrix
-        id: py-compat
-        run: |
-          matrix=$(jq -c '{include: (
-            [.python[] as $p | .with[] as $w | {python: $p, with: $w}]
-            + (.include | map(if .without_tls == true then del(.without_tls) + {tls: env.PY_SDK_NO_TLS} else . end))
-          )}' sdk/python/compat.json)
-          printf 'matrix=%s\n' "$matrix" >>"$GITHUB_OUTPUT"
 
   # The repository's own commit gate, `task -t Taskfile.dev.yaml verify-all`,
   # run as its groups: one job per group the change can reach, each installing
@@ -537,27 +518,23 @@ jobs:
             frontend/test-results/
           retention-days: 7
 
-  # verify-deep, through the same tasks a developer runs, as its two halves on
-  # two runners: the Postgres-backed integration suites (testcontainers), and
-  # the stack gate — the RPC-surface gate, the Go admin e2e suite, S3
-  # conformance, dev-bootstrap twice and the smoke test, against a compose
-  # stack built from this change. Neither half needs the other, and run in one
-  # job the image build waited on the suites for nothing. Only for a change
-  # the backend reaches (ci-groups.sh --needs-deep).
   # The Python SDK's wheel installed beside each protobuf major and Python it
   # declares, and beside a protobuf-6 framework, with its tests run there. The
   # SDK's own lock resolves one protobuf; a consumer's environment resolves
   # another, and this is where a range that admits a runtime the stubs refuse
   # fails.
+  #
+  # Every cell of sdk/python/compat.json in one job: the wheel is built and
+  # the test dependencies resolved once, the cells run side by side, and each
+  # one's log is a folded group (scripts/py-sdk-compat.sh --matrix, the same
+  # run as locally). uv's cache and its managed Pythons persist between runs,
+  # keyed on the SDK's lock and its matrix.
   py-sdk-compat:
-    name: Python SDK # see Verify on the matrix values in the name
+    name: Python SDK compatibility
     needs: [changes]
     if: contains(fromJSON(needs.changes.outputs.groups), 'sdk')
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.changes.outputs.py-compat) }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -570,21 +547,15 @@ jobs:
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: ${{ env.UV_VERSION }}
-          enable-cache: false
+          enable-cache: true
+          cache-python: true
+          prune-cache: true
+          cache-dependency-glob: |
+            sdk/python/uv.lock
+            sdk/python/compat.json
 
-      - name: Install the wheel and run the tests
-        env:
-          PYTHON: ${{ matrix.python }}
-          WITH: ${{ matrix.with }}
-          # Only the cell marked in `changes` drops the extra; a cell without
-          # the key reads as null, which is not equal.
-          WITHOUT_TLS: ${{ matrix.tls == env.PY_SDK_NO_TLS }}
-        run: |
-          if [[ $WITHOUT_TLS == true ]]; then
-            ./scripts/py-sdk-compat.sh --without-tls "$PYTHON" "$WITH"
-          else
-            ./scripts/py-sdk-compat.sh "$PYTHON" "$WITH"
-          fi
+      - name: Install the wheel beside each cell's requirements and run the tests
+        run: ./scripts/py-sdk-compat.sh --matrix
 
   # A consumer saw a process abort at exit on macOS with the SDK loaded
   # (recursive_mutex lock failed). sdk/python/tests/test_lifecycle.py makes and
@@ -608,7 +579,10 @@ jobs:
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: ${{ env.UV_VERSION }}
-          enable-cache: false
+          enable-cache: true
+          cache-python: true
+          prune-cache: true
+          cache-dependency-glob: sdk/python/uv.lock
 
       - name: Run the lifecycle stress
         working-directory: sdk/python
@@ -616,6 +590,13 @@ jobs:
           PALADIN_LIFECYCLE_RUNS: "200"
         run: uv run --frozen pytest tests/test_lifecycle.py
 
+  # verify-deep, through the same tasks a developer runs, as its two halves on
+  # two runners: the Postgres-backed integration suites (testcontainers), and
+  # the stack gate — the RPC-surface gate, the Go admin e2e suite, S3
+  # conformance, dev-bootstrap twice and the smoke test, against a compose
+  # stack built from this change. Neither half needs the other, and run in one
+  # job the image build waited on the suites for nothing. Only for a change
+  # the backend reaches (ci-groups.sh --needs-deep).
   #
   # The stack half runs against the backend image End-to-end images built,
   # when that job ran: building it again here meant restoring, importing and,
