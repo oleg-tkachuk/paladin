@@ -20,11 +20,29 @@ type MeteringStore[TX any] struct {
 
 // WithMetering wraps an inner UsageStore with the metering decorator.
 // nil inner → nil out (a UsageStore was never wired, so no-op).
+//
+// The result implements CopyUsageReader exactly when inner does, so wrapping
+// a store never hides what it can read.
 func WithMetering[TX any](inner UsageStore[TX]) UsageStore[TX] {
 	if inner == nil {
 		return nil
 	}
-	return &MeteringStore[TX]{Inner: inner}
+	m := &MeteringStore[TX]{Inner: inner}
+	if reader, ok := inner.(CopyUsageReader); ok {
+		return &meteringCopyStore[TX]{MeteringStore: m, copies: reader}
+	}
+	return m
+}
+
+// meteringCopyStore is MeteringStore over a store that also reads Biscuit
+// copies' counters. Reading moves nothing, so it emits no metric.
+type meteringCopyStore[TX any] struct {
+	*MeteringStore[TX]
+	copies CopyUsageReader
+}
+
+func (s *meteringCopyStore[TX]) CopyUsage(ctx context.Context, revocationIDs [][]byte) ([]CopyUsage, error) {
+	return s.copies.CopyUsage(ctx, revocationIDs)
 }
 
 // Bump emits paladin.capability.request.bumps with outcome=
