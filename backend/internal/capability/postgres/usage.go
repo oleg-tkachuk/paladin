@@ -625,13 +625,7 @@ func (s *UsageStore) ListTenantBudgets(
 	ctx context.Context,
 	args capability.ListTenantBudgetsRequest,
 ) ([]capability.TenantBudgetSummary, error) {
-	limit := args.Limit
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 500 {
-		limit = 500
-	}
+	limit := capability.PageLimit(args.Limit)
 	threshold, err := numericFromFloat(args.ThresholdPct)
 	if err != nil {
 		return nil, fmt.Errorf("capability/postgres: threshold_pct: %w", err)

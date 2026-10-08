@@ -158,7 +158,7 @@ type TenantBudgets interface {
 	//   - thresholdPct > 0: include only rows where
 	//     spent / max * 100 >= thresholdPct (and max > 0).
 	//   - unlimitedOnly: include only rows where max == 0.
-	//   - limit: hard cap on result count. ≤ 0 → 50.
+	//   - limit: the most rows returned, as PageLimit reads it.
 	//
 	// Rows are returned in descending utilisation order so the most
 	// at-risk tenants surface first.
