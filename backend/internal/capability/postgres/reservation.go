@@ -117,7 +117,81 @@ RETURNING expires_at`,
 	if err := tx.Commit(ctx); err != nil {
 		return capability.Reservation{}, fmt.Errorf("capability/postgres: reserve commit: %w", err)
 	}
-	return capability.Reservation{ID: id, ExpiresAt: expires}, nil
+	return capability.Reservation{
+		ID: id, CapabilityID: req.CapabilityID, TenantID: req.TenantID, Amount: floatFromNumeric(amount),
+		UnitCode: unit, Op: req.Op, Actor: req.Actor, Copies: budgetCeilings(req.Copies), ExpiresAt: expires.UTC(),
+	}, nil
+}
+
+// budgetCeilings is copies with their budgets alone, as a reservation row
+// keeps them.
+func budgetCeilings(copies []capability.CopyCeiling) []capability.CopyCeiling {
+	out := make([]capability.CopyCeiling, 0, len(copies))
+	for _, c := range copies {
+		out = append(out, capability.CopyCeiling{RevocationID: c.RevocationID, MaxBudgetMicros: c.MaxBudgetMicros})
+	}
+	return out
+}
+
+// reservationSelect reads reservation rows as the Meter contract reads one
+// back; a WHERE clause picks which. Under the caller's tenant scoping, as
+// every reservation path runs.
+const reservationSelect = `
+SELECT id, capability_id, tenant_id, amount, unit_code, op, actor_subject,
+       copy_ids, copy_max_budget_micros, expires_at
+FROM   capability_reservations
+`
+
+func scanReservation(row pgx.Row) (capability.Reservation, error) {
+	var (
+		r       capability.Reservation
+		amount  pgtype.Numeric
+		ids     [][]byte
+		budgets []int64
+	)
+	if err := row.Scan(&r.ID, &r.CapabilityID, &r.TenantID, &amount, &r.UnitCode, &r.Op, &r.Actor,
+		&ids, &budgets, &r.ExpiresAt); err != nil {
+		return capability.Reservation{}, err
+	}
+	copies, err := ceilingsOf(ids, budgets)
+	if err != nil {
+		return capability.Reservation{}, err
+	}
+	r.Amount, r.Copies, r.ExpiresAt = floatFromNumeric(amount), copies, r.ExpiresAt.UTC()
+	return r, nil
+}
+
+// GetReservation implements capability.Meter.
+func (s *UsageStore) GetReservation(ctx context.Context, reservationID uuid.UUID) (capability.Reservation, error) {
+	r, err := scanReservation(s.pool.QueryRow(ctx, reservationSelect+`WHERE id = $1`, reservationID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return capability.Reservation{}, capability.ErrReservationNotFound
+	}
+	if err != nil {
+		return capability.Reservation{}, fmt.Errorf("capability/postgres: get reservation: %w", err)
+	}
+	return r, nil
+}
+
+// ListReservations implements capability.Meter.
+func (s *UsageStore) ListReservations(ctx context.Context, capID uuid.UUID) ([]capability.Reservation, error) {
+	rows, err := s.pool.Query(ctx, reservationSelect+`WHERE capability_id = $1 ORDER BY expires_at, id`, capID)
+	if err != nil {
+		return nil, fmt.Errorf("capability/postgres: list reservations: %w", err)
+	}
+	defer rows.Close()
+	out := []capability.Reservation{}
+	for rows.Next() {
+		r, err := scanReservation(rows)
+		if err != nil {
+			return nil, fmt.Errorf("capability/postgres: list reservations: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("capability/postgres: list reservations: %w", err)
+	}
+	return out, nil
 }
 
 func holdCapability(ctx context.Context, tx pgx.Tx, capID uuid.UUID, amount pgtype.Numeric, unit string, maxBudget pgtype.Numeric) error {

@@ -362,6 +362,25 @@ func (f *fakeUsage) Release(_ context.Context, id uuid.UUID) error {
 
 func (f *fakeUsage) ReleaseExpired(context.Context) (int64, error) { return 0, nil }
 
+func (f *fakeUsage) GetReservation(_ context.Context, id uuid.UUID) (capability.Reservation, error) {
+	h, ok := f.holds[id]
+	if !ok {
+		return capability.Reservation{}, capability.ErrReservationNotFound
+	}
+	return capability.Reservation{ID: id, CapabilityID: h.capID, Amount: h.amount}, nil
+}
+
+func (f *fakeUsage) ListReservations(ctx context.Context, capID uuid.UUID) ([]capability.Reservation, error) {
+	out := []capability.Reservation{}
+	for id, h := range f.holds {
+		if h.capID == capID {
+			r, _ := f.GetReservation(ctx, id)
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
 // ChargeByRef finds nothing: the interceptor never charges under an external
 // ref, so this fake keeps none.
 func (f *fakeUsage) GetCharge(_ context.Context, id uuid.UUID) (capability.ChargeRecord, error) {

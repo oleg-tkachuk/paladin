@@ -751,7 +751,7 @@ func (s *UsageStore[TX]) Reserve(_ context.Context, req capability.ReserveReques
 	h.id = uuid.New()
 	s.applyHoldLocked(h, +1)
 	s.holds[h.id] = h
-	return capability.Reservation{ID: h.id, ExpiresAt: h.expires}, nil
+	return h.reservation(), nil
 }
 
 // applyHoldLocked adds (sign +1) or removes (sign -1) a hold on every counter.
@@ -815,6 +815,56 @@ func (s *UsageStore[TX]) Settle(
 	}
 	delete(s.holds, req.ReservationID)
 	return receipt, nil
+}
+
+// reservation is the hold as the Meter contract reads it back.
+func (h hold) reservation() capability.Reservation {
+	return capability.Reservation{
+		ID: h.id, CapabilityID: h.capID, TenantID: h.tenantID, Amount: h.amount, UnitCode: h.unit,
+		Op: h.op, Actor: h.actor, Copies: budgetsOnly(h.copies), ExpiresAt: h.expires,
+	}
+}
+
+// budgetsOnly is copies with their budgets alone, as a hold keeps them.
+func budgetsOnly(copies []capability.CopyCeiling) []capability.CopyCeiling {
+	if len(copies) == 0 {
+		return nil
+	}
+	out := make([]capability.CopyCeiling, len(copies))
+	for i, c := range copies {
+		out[i] = capability.CopyCeiling{RevocationID: slices.Clone(c.RevocationID), MaxBudgetMicros: c.MaxBudgetMicros}
+	}
+	return out
+}
+
+// GetReservation returns a hold that still counts, expired or not.
+func (s *UsageStore[TX]) GetReservation(_ context.Context, reservationID uuid.UUID) (capability.Reservation, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h, ok := s.holds[reservationID]
+	if !ok {
+		return capability.Reservation{}, capability.ErrReservationNotFound
+	}
+	return h.reservation(), nil
+}
+
+// ListReservations returns the capability's own holds, soonest to expire first.
+func (s *UsageStore[TX]) ListReservations(_ context.Context, capID uuid.UUID) ([]capability.Reservation, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []capability.Reservation{}
+	for _, h := range s.holds {
+		if h.capID == capID {
+			out = append(out, h.reservation())
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].ExpiresAt.Equal(out[j].ExpiresAt) {
+			return out[i].ExpiresAt.Before(out[j].ExpiresAt)
+		}
+		return uuidLess(out[i].ID, out[j].ID)
+	})
+	return out, nil
 }
 
 // Release ends a reservation without charging. Idempotent.

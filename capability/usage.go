@@ -128,6 +128,17 @@ type Meter[TX any] interface {
 	// records with the ledger. ErrChargeNotFound when there is none.
 	ChargeByRef(ctx context.Context, capID uuid.UUID, externalRef string) (ChargeRecord, error)
 
+	// GetReservation returns a reservation still holding budget — open,
+	// or expired and not yet released, since until ReleaseExpired runs it
+	// still counts (ExpiresAt tells which). ErrReservationNotFound once it
+	// is settled or released.
+	GetReservation(ctx context.Context, reservationID uuid.UUID) (Reservation, error)
+
+	// ListReservations returns every reservation GetReservation would
+	// return that was made against the capability itself — not its
+	// delegated children — soonest to expire first.
+	ListReservations(ctx context.Context, capID uuid.UUID) ([]Reservation, error)
+
 	// Release ends a reservation without charging. Idempotent: releasing
 	// one that is gone is a no-op.
 	Release(ctx context.Context, reservationID uuid.UUID) error
@@ -303,9 +314,22 @@ type ReserveRequest struct {
 	Copies []CopyCeiling
 }
 
-// Reservation is a committed hold.
+// Reservation is a committed hold, as Reserve made it and as GetReservation
+// and ListReservations read it back.
 type Reservation struct {
-	ID        uuid.UUID
+	ID           uuid.UUID
+	CapabilityID uuid.UUID
+	TenantID     uuid.UUID
+	// Amount is held in UnitCode.
+	Amount   float64
+	UnitCode string
+	// Op and Actor are what Settle will stamp on the charge.
+	Op    string
+	Actor string
+	// Copies are the Biscuit copies the hold is also on, innermost first,
+	// with the budget each is held against; a hold counts no requests, so
+	// their MaxRequests is zero.
+	Copies    []CopyCeiling
 	ExpiresAt time.Time
 }
 
