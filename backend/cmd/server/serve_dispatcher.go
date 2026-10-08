@@ -21,6 +21,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
+	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -146,6 +147,7 @@ func runDispatcher(
 		SQS:      sqsPool,
 		RabbitMQ: rabbitPool,
 		Kafka:    kafkaPool,
+		Sinks:    cfg.Dispatcher.Sinks,
 		// Delivery-time resolver for "k8s:<name>/<key>" refs in sink
 		// credential fields (HTTP HMAC, Kafka SASL/mTLS, NATS creds,
 		// AMQP URL). Referenced Secret names must be in the pod's RBAC
@@ -201,8 +203,13 @@ func runDispatcher(
 			// loop, and gives the health probe something to report before
 			// any row hits the dispatcher. Errors are logged but never
 			// fatal — per-row deliver retries the dial under its own budget.
-			preWarmNATS(workCtx, subs, natsPool, l)
-			preWarmRabbitMQ(workCtx, subs, rabbitPool, l)
+			// A kind switched off is never dialed.
+			if cfg.Dispatcher.Sinks.Enabled(sinkkind.NATS) {
+				preWarmNATS(workCtx, subs, natsPool, l)
+			}
+			if cfg.Dispatcher.Sinks.Enabled(sinkkind.RabbitMQ) {
+				preWarmRabbitMQ(workCtx, subs, rabbitPool, l)
+			}
 
 			go func() {
 				l.Info("dispatcher ops listener", zap.String("addr", opsAddr))
@@ -298,8 +305,9 @@ func newDispatcherPool(ctx context.Context, dsn, password, appName string, l *za
 // shape as the worker / api / admin planes. Subsystem checks:
 //   - outbox: table reachable (a backlog is not a probe failure —
 //     operators route on the count metric instead).
-//   - nats, rabbitmq: worker.BrokerComponent — switched by the database,
-//     in use while an enabled subscription delivers to the kind.
+//   - nats, rabbitmq: worker.BrokerComponent — switched by the config's
+//     dispatcher.sinks, then by the database: in use while an enabled
+//     subscription delivers to the kind.
 func dispatcherOpsMux(deps *app.SharedDeps, runner *worker.OutboxRunner, subs sinkSubscriptions, natsPool *worker.NatsConnPool, rabbitPool *worker.RabbitMQConnPool, l *zap.Logger) (http.Handler, *health.Handler) {
 	healthH := app.NewHealthHandler(deps.DB, deps.Cfg.Runtime, l).WithRole("dispatcher")
 	app.AddComponent(healthH, health.Check{
@@ -311,8 +319,8 @@ func dispatcherOpsMux(deps *app.SharedDeps, runner *worker.OutboxRunner, subs si
 			return err
 		},
 	})
-	app.AddComponent(healthH, worker.BrokerComponent(worker.SinkKindNATS, subs.count(worker.SinkKindNATS), natsPool.Conns))
-	app.AddComponent(healthH, worker.BrokerComponent(worker.SinkKindRabbitMQ, subs.count(worker.SinkKindRabbitMQ), rabbitPool.Conns))
+	app.AddComponent(healthH, worker.BrokerComponent(sinkkind.NATS, deps.Cfg.Dispatcher.Sinks, subs.count(sinkkind.NATS), natsPool.Conns))
+	app.AddComponent(healthH, worker.BrokerComponent(sinkkind.RabbitMQ, deps.Cfg.Dispatcher.Sinks, subs.count(sinkkind.RabbitMQ), rabbitPool.Conns))
 	mux := http.NewServeMux()
 	healthH.Register(mux)
 
@@ -378,7 +386,7 @@ func (subs sinkSubscriptions) count(kind string) func(context.Context) (int, err
 // logged and the dispatcher continues; the per-row deliver path will retry
 // the dial under the row's normal retry budget.
 func preWarmNATS(ctx context.Context, subs sinkSubscriptions, natsPool *worker.NatsConnPool, l *zap.Logger) {
-	cfgs, err := subs(ctx, worker.SinkKindNATS)
+	cfgs, err := subs(ctx, sinkkind.NATS)
 	if err != nil {
 		l.Warn("nats pre-warm: scan failed", zap.Error(err))
 		return
@@ -403,7 +411,7 @@ func preWarmNATS(ctx context.Context, subs sinkSubscriptions, natsPool *worker.N
 // check reports on configured brokers before the first delivery. Best-effort,
 // mirroring preWarmNATS: dial failures are logged, never fatal.
 func preWarmRabbitMQ(ctx context.Context, subs sinkSubscriptions, rabbitPool *worker.RabbitMQConnPool, l *zap.Logger) {
-	cfgs, err := subs(ctx, worker.SinkKindRabbitMQ)
+	cfgs, err := subs(ctx, sinkkind.RabbitMQ)
 	if err != nil {
 		l.Warn("rabbitmq pre-warm: scan failed", zap.Error(err))
 		return

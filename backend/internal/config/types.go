@@ -604,6 +604,25 @@ type Dispatcher struct {
 	// mutation is logged; only flip on with a downstream consumer
 	// already in place.
 	AuditMirrorEnabled bool `yaml:"audit_mirror_enabled" json:"audit_mirror_enabled"`
+
+	// Sinks switches each kind of sink an event subscription delivers to;
+	// see DispatcherSinks.Enabled.
+	Sinks DispatcherSinks `yaml:"sinks" json:"sinks"`
+}
+
+// DispatcherSinks holds one switch per sink kind (package sinkkind). The
+// field tags spell the kinds; a test checks every kind has one.
+type DispatcherSinks struct {
+	HTTP     SinkSwitch `yaml:"http" json:"http"`
+	NATS     SinkSwitch `yaml:"nats" json:"nats"`
+	SQS      SinkSwitch `yaml:"sqs" json:"sqs"`
+	RabbitMQ SinkSwitch `yaml:"rabbitmq" json:"rabbitmq"`
+	Kafka    SinkSwitch `yaml:"kafka" json:"kafka"`
+}
+
+// SinkSwitch turns one sink kind on or off. On by default (schema.cue).
+type SinkSwitch struct {
+	Enabled bool `yaml:"enabled" json:"enabled"`
 }
 
 // OperationsWorker drives the long-running operation queue

@@ -14,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
@@ -23,6 +24,27 @@ type Handler struct {
 	repo       admindomain.EventSubscriptionRepository
 	dispatcher Dispatcher
 	policy     cedar.Authorizer
+	sinks      SinkKinds
+}
+
+// SinkKinds says which sink kinds the dispatcher delivers to
+// (config.DispatcherSinks).
+type SinkKinds interface {
+	Enabled(kind string) bool
+}
+
+// SetSinkKinds attaches the sink-kind switches. Unset, every kind is on.
+func (h *Handler) SetSinkKinds(k SinkKinds) { h.sinks = k }
+
+// refuseOffKind refuses a subscription that would deliver to a kind switched
+// off: the dispatcher would fail every one of its deliveries. A disabled
+// subscription delivers nothing, so it may name any kind.
+func (h *Handler) refuseOffKind(kind string, disabled bool) error {
+	if disabled || h.sinks == nil || h.sinks.Enabled(kind) {
+		return nil
+	}
+	return connect.NewError(connect.CodeFailedPrecondition,
+		fmt.Sprintf("sink kind %s is off by configuration: %s", kind, config.SinkSwitchKey(kind)))
 }
 
 func NewHandler(r admindomain.EventSubscriptionRepository, policy cedar.Authorizer) *Handler {
@@ -79,6 +101,9 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 	if err := celpkg.Validate(celpkg.EventEnvelopeSchema, s.CELFilter); err != nil {
 		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
+	if err := h.refuseOffKind(s.SinkKind, s.Disabled); err != nil {
+		return nil, err
+	}
 	if err := h.repo.Create(ctx, &s); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -133,6 +158,18 @@ func (h *Handler) Update(ctx context.Context, tenantID uuid.UUID, s admindomain.
 		if err := celpkg.Validate(celpkg.EventEnvelopeSchema, s.CELFilter); err != nil {
 			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 		}
+	}
+	// The subscription as this update leaves it: an empty mask replaces it
+	// whole, otherwise a field keeps its stored value unless masked.
+	kind, disabled := current.SinkKind, current.Disabled
+	if len(mask) == 0 || slices.Contains(mask, admindomain.EventSubscriptionPathSink) {
+		kind = s.SinkKind
+	}
+	if len(mask) == 0 || slices.Contains(mask, admindomain.EventSubscriptionPathDisabled) {
+		disabled = s.Disabled
+	}
+	if err := h.refuseOffKind(kind, disabled); err != nil {
+		return nil, err
 	}
 	if err := h.repo.Update(ctx, s, expectedVersion, mask); err != nil {
 		return nil, apiutil.MapError(err)
@@ -219,6 +256,11 @@ func (h *Handler) TestSubscription(ctx context.Context, tenantID, id uuid.UUID) 
 	if h.dispatcher == nil {
 		return connect.NewError(connect.CodeUnimplemented,
 			"event dispatcher not wired; TestSubscription unavailable")
+	}
+	// A test delivery is a delivery: refused for a kind that is off even
+	// while the subscription itself is disabled.
+	if err := h.refuseOffKind(sub.SinkKind, false); err != nil {
+		return err
 	}
 	if err := h.dispatcher.DeliverOne(ctx, *sub, "paladin.test"); err != nil {
 		return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("test delivery failed: %w", err))
