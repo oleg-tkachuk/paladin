@@ -38,6 +38,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0026](0026-storage-backend-features-are-probed.md) | A storage backend's S3 features are probed, recorded and shown | Accepted |
 | [0027](0027-public-collections.md) | Public collections — anonymous reads from a public bucket | Accepted |
 | [0028](0028-bucket-ownership.md) | A bucket row is a claim — Paladin registers only what it means to manage | Accepted |
+| [0029](0029-capability-outside-the-request-path.md) | Capabilities for work the verifier does not see | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
