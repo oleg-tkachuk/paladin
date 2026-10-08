@@ -82,6 +82,12 @@ the whole hold, which both read back the same way. Migration `054` adds
 with the issuer's subject alone. `memstore.Store.IssuedBy` is gone — use
 `GetRecord`.
 
+`ListTenantBudgets` pages like `ListByPrincipal`: it takes a `Cursor` and
+returns the next one, and `TenantBudgetService.Summarize` carries them as
+`page_token` / `next_page_token`. Its order is now utilisation, unclamped,
+then tenant id — the tenant furthest past its ceiling leads, and ties no
+longer fall to the slug.
+
 `capability/storetest` checks a `Store` against the contract, which now says
 what it left open: an id already on record is `ErrAlreadyExists`, revoking an
 unknown id is `ErrNotFound`, `PurgeExpired` drops revocation entries and never

@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"testing"
 
@@ -23,6 +24,11 @@ type fakeUsageStore struct {
 	getErr  error
 	// lastSet is the last SetTenantBudget's arguments.
 	lastSet capability.SetTenantBudgetRequest
+	// lastList is the last ListTenantBudgets' arguments; listNext and
+	// listErr are what it answers.
+	lastList capability.ListTenantBudgetsRequest
+	listNext string
+	listErr  error
 }
 
 func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (capability.TenantBudget, error) {
@@ -74,8 +80,37 @@ func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetT
 	return tb, nil
 }
 
-func (f *fakeUsageStore) ListTenantBudgets(context.Context, capability.ListTenantBudgetsRequest) ([]capability.TenantBudgetSummary, error) {
-	return nil, nil
+func (f *fakeUsageStore) ListTenantBudgets(_ context.Context, req capability.ListTenantBudgetsRequest) ([]capability.TenantBudgetSummary, string, error) {
+	f.lastList = req
+	return nil, f.listNext, f.listErr
+}
+
+// Summarize pages through the store's cursor, both ways.
+func TestTenantBudgetServer_Summarize_Pages(t *testing.T) {
+	store := &fakeUsageStore{listNext: "next-page"}
+	resp, err := NewTenantBudgetServer(store).Summarize(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSummarizeRequest{
+		Limit: 2, PageToken: "this-page",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.lastList.Cursor != "this-page" || store.lastList.Limit != 2 {
+		t.Errorf("store asked for %+v; want the page token and limit sent", store.lastList)
+	}
+	if resp.Msg.GetNextPageToken() != "next-page" {
+		t.Errorf("next_page_token = %q, want the store's cursor", resp.Msg.GetNextPageToken())
+	}
+}
+
+// A page token the store cannot read is the caller's to fix.
+func TestTenantBudgetServer_Summarize_BadPageToken(t *testing.T) {
+	store := &fakeUsageStore{listErr: fmt.Errorf("%w: cursor", capability.ErrInvalidRequest)}
+	_, err := NewTenantBudgetServer(store).Summarize(context.Background(), connect.NewRequest(&pb.TenantBudgetServiceSummarizeRequest{
+		PageToken: "garbage",
+	}))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument", connect.CodeOf(err))
+	}
 }
 
 func TestTenantBudgetServer_Get_NotFound(t *testing.T) {

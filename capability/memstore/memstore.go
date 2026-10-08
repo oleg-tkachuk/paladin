@@ -25,6 +25,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -1018,11 +1019,20 @@ func (s *UsageStore[TX]) SetTenantBudget(_ context.Context, args capability.SetT
 	return b, nil
 }
 
-func (s *UsageStore[TX]) ListTenantBudgets(_ context.Context, args capability.ListTenantBudgetsRequest) ([]capability.TenantBudgetSummary, error) {
+func (s *UsageStore[TX]) ListTenantBudgets(_ context.Context, args capability.ListTenantBudgetsRequest) ([]capability.TenantBudgetSummary, string, error) {
+	var after *budgetRow
+	if args.Cursor != "" {
+		c, err := capability.DecodeTenantBudgetCursor(args.Cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		pct, _ := strconv.ParseFloat(c.Utilisation, 64) // DecodeTenantBudgetCursor checked it
+		after = &budgetRow{pct: pct, tenant: c.TenantID}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	out := make([]capability.TenantBudgetSummary, 0, len(s.budgets))
+	rows := make([]budgetRow, 0, len(s.budgets))
 	for _, b := range s.budgets {
 		unlimited := b.MaxBudgetAmount <= 0
 		if args.UnlimitedOnly && !unlimited {
@@ -1035,22 +1045,46 @@ func (s *UsageStore[TX]) ListTenantBudgets(_ context.Context, args capability.Li
 		if args.ThresholdPct > 0 && pct < args.ThresholdPct {
 			continue
 		}
+		row := budgetRow{pct: pct, tenant: b.TenantID, budget: b}
+		if after != nil && !after.before(row) {
+			continue
+		}
+		rows = append(rows, row)
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].before(rows[j]) })
+
+	limit := int(capability.PageLimit(args.Limit))
+	next := ""
+	if len(rows) > limit {
+		rows = rows[:limit]
+		last := rows[limit-1]
+		next = capability.TenantBudgetCursor{
+			Utilisation: strconv.FormatFloat(last.pct, 'g', -1, 64), TenantID: last.tenant,
+		}.Encode()
+	}
+	out := make([]capability.TenantBudgetSummary, 0, len(rows))
+	for _, r := range rows {
 		out = append(out, capability.TenantBudgetSummary{
-			TenantID: b.TenantID, Budget: b, UtilisationPct: min(pct, maxUtilisationPct),
+			TenantID: r.tenant, Budget: r.budget, UtilisationPct: min(r.pct, maxUtilisationPct),
 		})
 	}
-	// Most at risk first; the relational store breaks ties by slug, which
-	// this store does not keep, so by tenant id.
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].UtilisationPct != out[j].UtilisationPct {
-			return out[i].UtilisationPct > out[j].UtilisationPct
-		}
-		return uuidLess(out[i].TenantID, out[j].TenantID)
-	})
-	if limit := int(capability.PageLimit(args.Limit)); limit < len(out) {
-		out = out[:limit]
+	return out, next, nil
+}
+
+// budgetRow is a tenant budget in ListTenantBudgets' order.
+type budgetRow struct {
+	pct    float64 // unclamped utilisation
+	tenant uuid.UUID
+	budget capability.TenantBudget
+}
+
+// before reports whether r comes before o: higher utilisation first, then the
+// lower tenant id.
+func (r budgetRow) before(o budgetRow) bool {
+	if r.pct != o.pct {
+		return r.pct > o.pct
 	}
-	return out, nil
+	return uuidLess(r.tenant, o.tenant)
 }
 
 func (s *UsageStore[TX]) Delete(_ context.Context, capID uuid.UUID) error {

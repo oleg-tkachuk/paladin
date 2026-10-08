@@ -95,8 +95,8 @@ func (f *fakeUsage) SetTenantBudget(_ context.Context, args capability.SetTenant
 	return capability.TenantBudget{TenantID: args.TenantID, MaxBudgetAmount: args.MaxBudgetAmount, UnitCode: args.UnitCode}, nil
 }
 
-func (f *fakeUsage) ListTenantBudgets(_ context.Context, _ capability.ListTenantBudgetsRequest) ([]capability.TenantBudgetSummary, error) {
-	return nil, nil
+func (f *fakeUsage) ListTenantBudgets(_ context.Context, _ capability.ListTenantBudgetsRequest) ([]capability.TenantBudgetSummary, string, error) {
+	return nil, "", nil
 }
 
 func (f *fakeUsage) Delete(_ context.Context, id uuid.UUID) error {

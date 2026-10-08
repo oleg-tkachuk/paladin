@@ -1,8 +1,10 @@
 package memstore
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -48,7 +50,7 @@ func TestListTenantBudgets(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := u.ListTenantBudgets(ctx, tc.req)
+			got, _, err := u.ListTenantBudgets(ctx, tc.req)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -66,7 +68,7 @@ func TestListTenantBudgets(t *testing.T) {
 			}
 		})
 	}
-	got, _ := u.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{Limit: 1})
+	got, _, _ := u.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{Limit: 1})
 	if got[0].UtilisationPct != maxUtilisationPct {
 		t.Errorf("a tenant past its ceiling reads %v%%, want %d%%", got[0].UtilisationPct, maxUtilisationPct)
 	}
@@ -100,5 +102,47 @@ func TestSetTenantBudgetResetSpend(t *testing.T) {
 	}
 	if _, err := u.GetTenantBudget(ctx, uuid.New()); !errors.Is(err, capability.ErrTenantBudgetNotFound) {
 		t.Errorf("an unknown tenant: err = %v, want ErrTenantBudgetNotFound", err)
+	}
+}
+
+// Pages cover every tenant once, in the order, and the further past its
+// ceiling of two leads although both read 100%.
+func TestListTenantBudgetsPages(t *testing.T) {
+	ctx := context.Background()
+	u := NewUsage[struct{}](nil)
+	further := seedBudget(t, u, 10, 20) // 200%
+	past := seedBudget(t, u, 10, 12)    // 120%
+	half := seedBudget(t, u, 10, 5)
+	tie := []uuid.UUID{seedBudget(t, u, 10, 1), seedBudget(t, u, 10, 1)}
+	slices.SortFunc(tie, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+	want := append([]uuid.UUID{further, past, half}, tie...)
+
+	const pageSize = 2
+	var got []uuid.UUID
+	req := capability.ListTenantBudgetsRequest{Limit: pageSize}
+	for pages := 0; ; pages++ {
+		page, next, err := u.ListTenantBudgets(ctx, req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range page {
+			got = append(got, s.TenantID)
+		}
+		if next == "" {
+			break
+		}
+		if pages > len(want) {
+			t.Fatal("the cursor never reached the last page")
+		}
+		req.Cursor = next
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("paged %v, want %v", got, want)
+	}
+
+	for _, bad := range []string{"garbage", capability.TenantBudgetCursor{Utilisation: "x", TenantID: half}.Encode()} {
+		if _, _, err := u.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{Cursor: bad}); !errors.Is(err, capability.ErrInvalidRequest) {
+			t.Errorf("cursor %q: err = %v, want ErrInvalidRequest", bad, err)
+		}
 	}
 }

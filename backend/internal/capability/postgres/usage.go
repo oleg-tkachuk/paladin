@@ -621,20 +621,40 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTen
 func (s *UsageStore) ListTenantBudgets(
 	ctx context.Context,
 	args capability.ListTenantBudgetsRequest,
-) ([]capability.TenantBudgetSummary, error) {
+) ([]capability.TenantBudgetSummary, string, error) {
 	limit := capability.PageLimit(args.Limit)
 	threshold, err := numericFromFloat(args.ThresholdPct)
 	if err != nil {
-		return nil, fmt.Errorf("capability/postgres: threshold_pct: %w", err)
+		return nil, "", fmt.Errorf("capability/postgres: threshold_pct: %w", err)
+	}
+	var afterPct pgtype.Numeric
+	var afterTenant pgtype.UUID
+	if args.Cursor != "" {
+		c, err := capability.DecodeTenantBudgetCursor(args.Cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		if err := afterPct.Scan(c.Utilisation); err != nil {
+			return nil, "", fmt.Errorf("%w: tenant budget cursor", capability.ErrInvalidRequest)
+		}
+		afterTenant = pgtype.UUID{Bytes: c.TenantID, Valid: true}
 	}
 	rows, err := s.q.ListTenantBudgetSummaries(ctx,
 		args.ExcludeInactive,
 		args.UnlimitedOnly,
 		threshold,
-		limit,
+		afterPct,
+		afterTenant,
+		limit+1, // one past the page says whether another follows
 	)
 	if err != nil {
-		return nil, fmt.Errorf("capability/postgres: list tenant budgets: %w", err)
+		return nil, "", fmt.Errorf("capability/postgres: list tenant budgets: %w", err)
+	}
+	next := ""
+	if len(rows) > int(limit) {
+		rows = rows[:limit]
+		last := rows[len(rows)-1]
+		next = capability.TenantBudgetCursor{Utilisation: last.RawPct, TenantID: uuid.UUID(last.TenantID.Bytes)}.Encode()
 	}
 	out := make([]capability.TenantBudgetSummary, 0, len(rows))
 	for _, r := range rows {
@@ -649,7 +669,7 @@ func (s *UsageStore) ListTenantBudgets(
 			UtilisationPct: floatFromNumeric(r.UtilisationPct),
 		})
 	}
-	return out, nil
+	return out, next, nil
 }
 
 // tenantBudgetFromRow normalises sqlc row types into the public shape.
