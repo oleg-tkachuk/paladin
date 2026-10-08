@@ -118,6 +118,11 @@ type Meter[TX any] interface {
 	// released or expired reservation returns ErrReservationNotFound.
 	Settle(ctx context.Context, req SettleRequest, onCharged func(ctx context.Context, tx TX) error) (ChargeReceipt, error)
 
+	// ChargeByRef returns the charge a capability took under externalRef
+	// (ChargeRequest.ExternalRef), so a reporter can reconcile its own
+	// records with the ledger. ErrChargeNotFound when there is none.
+	ChargeByRef(ctx context.Context, capID uuid.UUID, externalRef string) (ChargeRecord, error)
+
 	// Release ends a reservation without charging. Idempotent: releasing
 	// one that is gone is a no-op.
 	Release(ctx context.Context, reservationID uuid.UUID) error
@@ -214,6 +219,21 @@ type ChargeRequest struct {
 	ExternalRef string
 	// Overrun is what happens when Amount would cross a ceiling.
 	Overrun OverrunPolicy
+}
+
+// ChargeRecord is one charge as the ledger holds it.
+type ChargeRecord struct {
+	ChargeID     uuid.UUID
+	CapabilityID uuid.UUID
+	// Amount is what the charge took; Refunded is what has been returned
+	// from it since.
+	Amount   float64
+	Refunded float64
+	UnitCode string
+	// ExternalRef is the charge's ChargeRequest.ExternalRef; empty for none.
+	ExternalRef string
+	// Overrun reports that the charge crossed a ceiling (OverrunRecord).
+	Overrun bool
 }
 
 // MaxExternalRefBytes bounds ChargeRequest.ExternalRef: long enough for any

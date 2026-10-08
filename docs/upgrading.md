@@ -59,9 +59,10 @@ tree with itself and passes without checking anything.
 - **Breaking, capability module:** settling a reservation that is already
   settled returns that charge with `Replayed` set, where it returned
   `ErrReservationNotFound`. A released or expired reservation still returns it.
-- A `Meter` of your own must honour `ChargeRequest.ExternalRef` and
-  `Overrun`, and `SettleRequest.Overrun`; one that ignores them charges a
-  repeated cost twice and refuses an incurred one.
+- **Breaking, capability module:** `Meter` gains `ChargeByRef`. A `Meter` of
+  your own must also honour `ChargeRequest.ExternalRef` and `Overrun`, and
+  `SettleRequest.Overrun`; run `capability/metertest` from its tests to check
+  that it does.
 - Migrations `051`–`053` add `external_ref`, `reservation_id` and `overrun` to
   `charges`, with two unique partial indexes built concurrently.
 

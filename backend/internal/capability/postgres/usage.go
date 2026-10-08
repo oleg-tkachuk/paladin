@@ -416,6 +416,35 @@ func nullableUUID(id uuid.UUID) pgtype.UUID {
 	return pgtype.UUID{Bytes: id, Valid: id != uuid.Nil}
 }
 
+// chargeRecordQuery reads a charge a capability took under an external ref,
+// with what has been refunded from it.
+const chargeRecordQuery = `
+SELECT ch.id, ch.amount,
+       COALESCE((SELECT sum(cr.amount) FROM charge_refunds cr WHERE cr.charge_id = ch.id), 0),
+       ch.unit_code, ch.overrun
+FROM   charges ch
+WHERE  ch.capability_id = $1 AND ch.external_ref = $2
+`
+
+// ChargeByRef implements capability.Meter.
+func (s *UsageStore) ChargeByRef(ctx context.Context, capID uuid.UUID, externalRef string) (capability.ChargeRecord, error) {
+	if externalRef == "" {
+		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+	}
+	rec := capability.ChargeRecord{CapabilityID: capID, ExternalRef: externalRef}
+	var amount, refunded pgtype.Numeric
+	err := s.pool.QueryRow(ctx, chargeRecordQuery, capID, externalRef).
+		Scan(&rec.ChargeID, &amount, &refunded, &rec.UnitCode, &rec.Overrun)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+	}
+	if err != nil {
+		return capability.ChargeRecord{}, fmt.Errorf("capability/postgres: charge by ref: %w", err)
+	}
+	rec.Amount, rec.Refunded = floatFromNumeric(amount), floatFromNumeric(refunded)
+	return rec, nil
+}
+
 // refundableQuery reads what is left of a charge and resolves the amount to
 // refund, all in numeric so a "refund the rest" is exact.
 const refundableQuery = `

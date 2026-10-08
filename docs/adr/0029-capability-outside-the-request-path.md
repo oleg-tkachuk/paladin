@@ -41,9 +41,12 @@
      rule; the Connect codes are unchanged.
 
 - **Consequences.**
-  - A third-party `Meter` must honour `ExternalRef` and both `Overrun`
-    fields. One that ignores them compiles and is wrong — it charges a
-    repeated cost twice — so the upgrade notes say so.
+  - A request field a store ignores still compiles, so the contract is
+    checked rather than trusted: `capability/metertest` runs it against any
+    `Meter`, as `testing/fstest` does for a file system, and both stores here
+    run it. `Meter` also gains `ChargeByRef`, which reads a named charge back,
+    so a store written before this change stops compiling until it keeps
+    external refs.
   - The ledger gains `external_ref`, `reservation_id` and `overrun`, each
     unique where set (migrations `051`–`053`); repeated charges of one name
     are serialised on an advisory lock with the index as the backstop.
