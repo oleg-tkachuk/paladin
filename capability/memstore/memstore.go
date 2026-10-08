@@ -610,50 +610,17 @@ func (s *UsageStore[TX]) chargeLocked(
 		return err
 	}
 
-	// ── stage: compute, do not publish ──
 	u := s.usage[req.CapabilityID]
+	if err := s.checkCeilingsLocked(ceilingCheck{
+		amount: req.Amount, released: released, maxBudget: req.MaxBudget,
+		capID: req.CapabilityID, tenantID: req.TenantID, ancestors: ancestors, copies: req.Copies,
+	}, crossed); err != nil {
+		return capability.ChargeReceipt{Spent: u.SpentAmount}, err
+	}
 	stagedSpent := u.SpentAmount + req.Amount
 
-	// 0. the copy's own ceilings, innermost first
-	for _, c := range req.Copies {
-		cc := s.copies[string(c.RevocationID)]
-		if c.MaxBudgetMicros > 0 && cc.spent+cc.reserved-released+req.Amount > c.MaxBudget() {
-			if err := crossed(fmt.Errorf("%w: copy %x", capability.ErrBudgetExceeded, c.RevocationID)); err != nil {
-				return capability.ChargeReceipt{Spent: u.SpentAmount}, err
-			}
-		}
-	}
-
-	// 1. capability ceiling
-	if req.MaxBudget > 0 && stagedSpent+u.ReservedAmount-released > req.MaxBudget {
-		if err := crossed(capability.ErrBudgetExceeded); err != nil {
-			return capability.ChargeReceipt{Spent: u.SpentAmount}, err
-		}
-	}
-
-	// 2. ancestor ceilings
-	for _, a := range ancestors {
-		au := s.usage[a.ID]
-		if limit := a.Caveats.MaxBudgetAmount; limit > 0 && au.SpentAmount+au.ReservedAmount-released+req.Amount > limit {
-			if err := crossed(fmt.Errorf("%w: ancestor %s", capability.ErrBudgetExceeded, a.ID)); err != nil {
-				return capability.ChargeReceipt{Spent: u.SpentAmount}, err
-			}
-		}
-	}
-
-	// 3. tenant aggregate ceiling
-	stagedBudget, haveBudget := s.budgets[req.TenantID]
-	if haveBudget {
-		stagedBudget.SpentAmount += req.Amount
-		stagedBudget.ReservedAmount = max0(stagedBudget.ReservedAmount - released)
-		if stagedBudget.MaxBudgetAmount > 0 && stagedBudget.SpentAmount+stagedBudget.ReservedAmount > stagedBudget.MaxBudgetAmount {
-			if err := crossed(capability.ErrTenantBudgetExceeded); err != nil {
-				return capability.ChargeReceipt{Spent: u.SpentAmount}, err
-			}
-		}
-	}
-
-	// 4. the caller's side effect, on the caller's handle
+	// the caller's side effect, on the caller's handle, before anything is
+	// published
 	if onCharged != nil {
 		var tx TX
 		if s.txFactory != nil {
@@ -681,9 +648,11 @@ func (s *UsageStore[TX]) chargeLocked(
 		}
 		s.usage[id] = au
 	}
-	if haveBudget {
-		stagedBudget.UpdatedAt = s.nowFn()
-		s.budgets[req.TenantID] = stagedBudget
+	if b, ok := s.budgets[req.TenantID]; ok {
+		b.SpentAmount += req.Amount
+		b.ReservedAmount = max0(b.ReservedAmount - released)
+		b.UpdatedAt = s.nowFn()
+		s.budgets[req.TenantID] = b
 	}
 	copyIDs := make([][]byte, 0, len(req.Copies))
 	for _, c := range req.Copies {
@@ -702,6 +671,53 @@ func (s *UsageStore[TX]) chargeLocked(
 	}
 	s.ledger = append(s.ledger, entry)
 	return capability.ChargeReceipt{ChargeID: entry.ID, Spent: stagedSpent, Overrun: overrun}, nil
+}
+
+// ceilingCheck is an amount measured against every ceiling. released is
+// the amount of a hold being settled by it, which no longer counts.
+type ceilingCheck struct {
+	amount, released float64
+	maxBudget        float64 // the capability's own, from its token
+	capID, tenantID  uuid.UUID
+	ancestors        []capability.Capability
+	copies           []capability.CopyCeiling
+}
+
+// checkCeilingsLocked measures c against the copy's ceilings innermost
+// first, then the capability's, each ancestor's and the tenant aggregate's,
+// with whatever is already spent and held. Each ceiling c would cross goes
+// to crossed, which returns the error to stop on or nil to carry on.
+// s.mu must be held.
+func (s *UsageStore[TX]) checkCeilingsLocked(c ceilingCheck, crossed func(error) error) error {
+	for _, cp := range c.copies {
+		cc := s.copies[string(cp.RevocationID)]
+		if cp.MaxBudgetMicros > 0 && cc.spent+cc.reserved-c.released+c.amount > cp.MaxBudget() {
+			if err := crossed(fmt.Errorf("%w: copy %x", capability.ErrBudgetExceeded, cp.RevocationID)); err != nil {
+				return err
+			}
+		}
+	}
+	u := s.usage[c.capID]
+	if c.maxBudget > 0 && u.SpentAmount+u.ReservedAmount-c.released+c.amount > c.maxBudget {
+		if err := crossed(capability.ErrBudgetExceeded); err != nil {
+			return err
+		}
+	}
+	for _, a := range c.ancestors {
+		au := s.usage[a.ID]
+		if limit := a.Caveats.MaxBudgetAmount; limit > 0 && au.SpentAmount+au.ReservedAmount-c.released+c.amount > limit {
+			if err := crossed(fmt.Errorf("%w: ancestor %s", capability.ErrBudgetExceeded, a.ID)); err != nil {
+				return err
+			}
+		}
+	}
+	if b, ok := s.budgets[c.tenantID]; ok && b.MaxBudgetAmount > 0 &&
+		b.SpentAmount+c.amount+max0(b.ReservedAmount-c.released) > b.MaxBudgetAmount {
+		if err := crossed(capability.ErrTenantBudgetExceeded); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Reserve holds an amount against every ceiling Charge checks.
@@ -725,25 +741,12 @@ func (s *UsageStore[TX]) Reserve(_ context.Context, req capability.ReserveReques
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, c := range req.Copies {
-		cc := s.copies[string(c.RevocationID)]
-		if c.MaxBudgetMicros > 0 && cc.spent+cc.reserved+req.Amount > c.MaxBudget() {
-			return capability.Reservation{}, fmt.Errorf("%w: copy %x", capability.ErrBudgetExceeded, c.RevocationID)
-		}
-	}
-	u := s.usage[req.CapabilityID]
-	if req.MaxBudget > 0 && u.SpentAmount+u.ReservedAmount+req.Amount > req.MaxBudget {
-		return capability.Reservation{}, capability.ErrBudgetExceeded
-	}
-	for _, a := range ancestors {
-		au := s.usage[a.ID]
-		if limit := a.Caveats.MaxBudgetAmount; limit > 0 && au.SpentAmount+au.ReservedAmount+req.Amount > limit {
-			return capability.Reservation{}, fmt.Errorf("%w: ancestor %s", capability.ErrBudgetExceeded, a.ID)
-		}
-	}
-	b, haveBudget := s.budgets[req.TenantID]
-	if haveBudget && b.MaxBudgetAmount > 0 && b.SpentAmount+b.ReservedAmount+req.Amount > b.MaxBudgetAmount {
-		return capability.Reservation{}, capability.ErrTenantBudgetExceeded
+	refuse := func(err error) error { return err }
+	if err := s.checkCeilingsLocked(ceilingCheck{
+		amount: req.Amount, maxBudget: req.MaxBudget,
+		capID: req.CapabilityID, tenantID: req.TenantID, ancestors: ancestors, copies: req.Copies,
+	}, refuse); err != nil {
+		return capability.Reservation{}, err
 	}
 
 	h := hold{
