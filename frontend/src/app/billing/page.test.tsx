@@ -22,6 +22,9 @@ vi.mock("@/components/ui/Notification", () => ({
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));
 
 import BillingPage from "./page";
+import { moneyFromNanos } from "@/lib/format/money";
+
+const usd = (nanos: bigint) => moneyFromNanos(nanos, "USD");
 
 describe("BillingPage", () => {
   beforeEach(() => {
@@ -50,15 +53,14 @@ describe("BillingPage", () => {
 
   it("shows the empty-period card when the period has no charges", async () => {
     h.summary.mockResolvedValue({
-      totalMicros: 0n,
-      unitCode: "USD",
-      maxBudgetMicros: 0n,
+      total: usd(0n),
+      maxBudget: usd(0n),
       chargeCount: 0n,
       topCapabilities: [],
       topActors: [],
       topOps: [],
     });
-    h.series.mockResolvedValue({ buckets: [], unitCode: "USD" });
+    h.series.mockResolvedValue({ buckets: [] });
 
     render(<BillingPage />);
 

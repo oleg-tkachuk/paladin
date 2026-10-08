@@ -35,7 +35,7 @@ import type { AuditLogEntry } from "@/gen/paladin/admin/v1/types_pb";
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
 import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 import type { TenantBudgetSummary } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
-import { formatMoney, fromMicros } from "@/lib/format/money";
+import { formatMoney, unitOf } from "@/lib/format/money";
 
 // Operation.result is a oneof — case "error" carries google.rpc.Status.
 function opError(o: Operation): string {
@@ -323,9 +323,9 @@ function BudgetAlertsWidget() {
 function BudgetAlertRow({ row }: { row: TenantBudgetSummary }) {
   const pct = Math.round(row.utilisationPct);
   const over = pct >= 100;
-  const spent = fromMicros(row.budget?.spentMicros);
-  const cap = fromMicros(row.budget?.maxBudgetMicros);
-  const unit = row.budget?.unitCode || "UNIT";
+  const spent = row.budget?.spent;
+  const cap = row.budget?.maxBudget;
+  const unit = unitOf(cap?.currencyCode ? cap : spent);
   const handle = row.slug || row.tenantId;
   return (
     <li className="text-xs">
@@ -362,7 +362,8 @@ function BudgetAlertRow({ row }: { row: TenantBudgetSummary }) {
           />
         </div>
         <p className="mt-0.5 text-tiny text-muted-foreground">
-          {formatMoney(spent, unit)} / {formatMoney(cap, unit)}
+          {formatMoney(spent, { fallbackUnit: unit })} /{" "}
+          {formatMoney(cap, { fallbackUnit: unit })}
         </p>
       </Link>
     </li>

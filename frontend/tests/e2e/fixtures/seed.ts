@@ -50,7 +50,7 @@ import {
   PrincipalKind,
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 
-import { fromMicros, parseMicros } from "@/lib/format/money";
+import { moneyFromDecimal, moneyToNumber } from "@/lib/format/money";
 import { SEEDED_ADMIN } from "./credentials";
 import { uniqueSlug, uniqueDisplayName, FIXTURE_SLUG_RE } from "./unique";
 
@@ -537,7 +537,6 @@ export async function seedCapability(opts: {
       resourcePrefixes: [],
       resourceUris: [],
       maxRequests: 100,
-      unitCode: "",
       allowTaintedRead: false,
       idempotencyKeyRequired: false,
       sourceIpCidr: [],
@@ -1283,9 +1282,9 @@ export async function tenantBudget(tenantId: string): Promise<{
   try {
     const res = await client.get({ tenantId });
     return {
-      maxBudgetAmount: fromMicros(res.budget?.maxBudgetMicros),
-      spentAmount: fromMicros(res.budget?.spentMicros),
-      unitCode: res.budget?.unitCode ?? "",
+      maxBudgetAmount: moneyToNumber(res.budget?.maxBudget),
+      spentAmount: moneyToNumber(res.budget?.spent),
+      unitCode: res.budget?.maxBudget?.currencyCode ?? "",
       resourceVersion: res.budget?.resourceVersion ?? "",
     };
   } catch (err) {
@@ -1669,15 +1668,17 @@ export async function setTenantBudget(args: {
   unitCode?: string;
   resetSpend?: boolean;
 }): Promise<string> {
-  const maxBudgetMicros = parseMicros(String(args.maxBudgetAmount));
-  if (maxBudgetMicros === null) {
+  const maxBudget = moneyFromDecimal(
+    String(args.maxBudgetAmount),
+    args.unitCode ?? "USD",
+  );
+  if (maxBudget === null) {
     throw new Error(`setTenantBudget: ${args.maxBudgetAmount} is not a budget`);
   }
   const client = createClient(TenantBudgetService, adminTransport());
   const res = await client.set({
     tenantId: args.tenantId,
-    maxBudgetMicros,
-    unitCode: args.unitCode ?? "USD",
+    maxBudget,
     resetSpend: args.resetSpend ?? false,
     resourceVersion: args.resourceVersion,
   });

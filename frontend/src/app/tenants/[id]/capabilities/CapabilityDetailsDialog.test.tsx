@@ -27,8 +27,7 @@ const CAP = {
   caveats: {
     ops: ["get"],
     maxRequests: 0,
-    maxBudgetMicros: 0n,
-    unitCode: "USD",
+    maxBudget: { currencyCode: "USD", units: 0n, nanos: 0 },
   },
 } as unknown as Capability;
 

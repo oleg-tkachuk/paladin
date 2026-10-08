@@ -16,6 +16,8 @@ import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_api_field_behavior } from "../../../google/api/field_behavior_pb";
+import type { Money } from "../../../google/type/money_pb";
+import { file_google_type_money } from "../../../google/type/money_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -24,11 +26,12 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_tenant_budget_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CixwYWxhZGluL2FkbWluL3YxL3RlbmFudF9idWRnZXRfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSLhAgoMVGVuYW50QnVkZ2V0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQESGAoQcmVzb3VyY2VfdmVyc2lvbhgIIAEoCRI1CgxwZXJpb2Rfc3RhcnQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKcGVyaW9kX2VuZBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEhEKCXVuaXRfY29kZRgHIAEoCRIeChFtYXhfYnVkZ2V0X21pY3JvcxgJIAEoA0ID4EEDEhkKDHNwZW50X21pY3JvcxgKIAEoA0ID4EEDSgQIAhADSgQIAxAEUhFtYXhfYnVkZ2V0X2Ftb3VudFIMc3BlbnRfYW1vdW50IjwKHVRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXF1ZXN0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQEiUAoeVGVuYW50QnVkZ2V0U2VydmljZUdldFJlc3BvbnNlEi4KBmJ1ZGdldBgBIAEoCzIeLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0Io8CCh1UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEiEKEHJlc291cmNlX3ZlcnNpb24YBiABKAlCB7pIBHICEAESEwoLcmVzZXRfc3BlbmQYAyABKAgSLgoKcGVyaW9kX2VuZBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJdW5pdF9jb2RlGAUgASgJEicKEW1heF9idWRnZXRfbWljcm9zGAcgASgDQge6SAQiAigASACIAQFCFAoSX21heF9idWRnZXRfbWljcm9zSgQIAhADUhFtYXhfYnVkZ2V0X2Ftb3VudCJQCh5UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVzcG9uc2USLgoGYnVkZ2V0GAEgASgLMh4ucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXQilQEKE1RlbmFudEJ1ZGdldFN1bW1hcnkSEQoJdGVuYW50X2lkGAEgASgJEgwKBHNsdWcYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEi4KBmJ1ZGdldBgEIAEoCzIeLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0EhcKD3V0aWxpc2F0aW9uX3BjdBgFIAEoASK2AQojVGVuYW50QnVkZ2V0U2VydmljZVN1bW1hcml6ZVJlcXVlc3QSLgoNdGhyZXNob2xkX3BjdBgBIAEoAUIXukgUEhIZAAAAAAAAWUApAAAAAAAAAAASFgoOdW5saW1pdGVkX29ubHkYAiABKAgSGAoQZXhjbHVkZV9pbmFjdGl2ZRgDIAEoCBIZCgVsaW1pdBgEIAEoBUIKukgHGgUY9AMoABISCgpwYWdlX3Rva2VuGAUgASgJInkKJFRlbmFudEJ1ZGdldFNlcnZpY2VTdW1tYXJpemVSZXNwb25zZRI4CglzdW1tYXJpZXMYASADKAsyJS5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFN1bW1hcnkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJMvQCChNUZW5hbnRCdWRnZXRTZXJ2aWNlEm0KA0dldBIvLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZUdldFJlcXVlc3QaMC5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXNwb25zZSIDkAIBEm0KA1NldBIvLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZVNldFJlcXVlc3QaMC5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXNwb25zZSIDkAICEn8KCVN1bW1hcml6ZRI1LnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZVN1bW1hcml6ZVJlcXVlc3QaNi5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTdW1tYXJpemVSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
+    "CixwYWxhZGluL2FkbWluL3YxL3RlbmFudF9idWRnZXRfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSKmAwoMVGVuYW50QnVkZ2V0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQESGAoQcmVzb3VyY2VfdmVyc2lvbhgIIAEoCRI1CgxwZXJpb2Rfc3RhcnQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKcGVyaW9kX2VuZBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEisKCm1heF9idWRnZXQYCyABKAsyEi5nb29nbGUudHlwZS5Nb25leUID4EEDEiYKBXNwZW50GAwgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlCA+BBA0oECAIQA0oECAMQBEoECAcQCEoECAkQCkoECAoQC1IRbWF4X2J1ZGdldF9hbW91bnRSDHNwZW50X2Ftb3VudFIJdW5pdF9jb2RlUhFtYXhfYnVkZ2V0X21pY3Jvc1IMc3BlbnRfbWljcm9zIjwKHVRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXF1ZXN0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQEiUAoeVGVuYW50QnVkZ2V0U2VydmljZUdldFJlc3BvbnNlEi4KBmJ1ZGdldBgBIAEoCzIeLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0IqsDCh1UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEiEKEHJlc291cmNlX3ZlcnNpb24YBiABKAlCB7pIBHICEAESEwoLcmVzZXRfc3BlbmQYAyABKAgSLgoKcGVyaW9kX2VuZBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASwQEKCm1heF9idWRnZXQYCCABKAsyEi5nb29nbGUudHlwZS5Nb25leUKYAbpIlAG6AZABChJtb25leS5ub25fbmVnYXRpdmUSO2FuIGFtb3VudCBpcyBub3QgbmVnYXRpdmUsIGFuZCBpdHMgbmFub3MgYXJlIDAgdG8gOTk5OTk5OTk5Gj10aGlzLnVuaXRzID49IDAgJiYgdGhpcy5uYW5vcyA+PSAwICYmIHRoaXMubmFub3MgPD0gOTk5OTk5OTk5SgQIAhADSgQIBRAGSgQIBxAIUhFtYXhfYnVkZ2V0X2Ftb3VudFIJdW5pdF9jb2RlUhFtYXhfYnVkZ2V0X21pY3JvcyJQCh5UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVzcG9uc2USLgoGYnVkZ2V0GAEgASgLMh4ucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXQilQEKE1RlbmFudEJ1ZGdldFN1bW1hcnkSEQoJdGVuYW50X2lkGAEgASgJEgwKBHNsdWcYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEi4KBmJ1ZGdldBgEIAEoCzIeLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0EhcKD3V0aWxpc2F0aW9uX3BjdBgFIAEoASK2AQojVGVuYW50QnVkZ2V0U2VydmljZVN1bW1hcml6ZVJlcXVlc3QSLgoNdGhyZXNob2xkX3BjdBgBIAEoAUIXukgUEhIZAAAAAAAAWUApAAAAAAAAAAASFgoOdW5saW1pdGVkX29ubHkYAiABKAgSGAoQZXhjbHVkZV9pbmFjdGl2ZRgDIAEoCBIZCgVsaW1pdBgEIAEoBUIKukgHGgUY9AMoABISCgpwYWdlX3Rva2VuGAUgASgJInkKJFRlbmFudEJ1ZGdldFNlcnZpY2VTdW1tYXJpemVSZXNwb25zZRI4CglzdW1tYXJpZXMYASADKAsyJS5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFN1bW1hcnkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJMvQCChNUZW5hbnRCdWRnZXRTZXJ2aWNlEm0KA0dldBIvLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZUdldFJlcXVlc3QaMC5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXNwb25zZSIDkAIBEm0KA1NldBIvLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZVNldFJlcXVlc3QaMC5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXNwb25zZSIDkAICEn8KCVN1bW1hcml6ZRI1LnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZVN1bW1hcml6ZVJlcXVlc3QaNi5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTdW1tYXJpemVSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
     [
       file_buf_validate_validate,
       file_google_protobuf_timestamp,
       file_google_api_field_behavior,
+      file_google_type_money,
     ],
   );
 
@@ -69,28 +72,20 @@ export type TenantBudget = Message<"paladin.admin.v1.TenantBudget"> & {
   updatedAt?: Timestamp | undefined;
 
   /**
-   * unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT
-   * (non-currency metering). One per TenantBudget message.
-   *
-   * @generated from field: string unit_code = 7;
-   */
-  unitCode: string;
-
-  /**
-   * max_budget_micros is the cap in millionths of unit_code; 0 = unlimited
+   * max_budget is the cap, exact to the nano; a zero amount is unlimited
    * (the counter still accumulates so admin tooling can show "current
-   * spend"). Currency given by unit_code.
+   * spend"). Its currency is the tenant's unit. currency_code is an ISO 4217 code the server accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no currency", for metering that is not money.
    *
-   * @generated from field: int64 max_budget_micros = 9;
+   * @generated from field: google.type.Money max_budget = 11;
    */
-  maxBudgetMicros: bigint;
+  maxBudget?: Money | undefined;
 
   /**
-   * spent_micros is the spend in the current period, in millionths.
+   * spent is the spend in the current period, in the tenant's currency.
    *
-   * @generated from field: int64 spent_micros = 10;
+   * @generated from field: google.type.Money spent = 12;
    */
-  spentMicros: bigint;
+  spent?: Money | undefined;
 };
 
 /**
@@ -160,7 +155,7 @@ export type TenantBudgetServiceSetRequest =
     resourceVersion: string;
 
     /**
-     * reset_spend rolls the period: zeros spent_micros, moves
+     * reset_spend rolls the period: zeros spent, moves
      * period_start to now. false leaves the counter alone — the cap
      * changes mid-window.
      *
@@ -177,20 +172,14 @@ export type TenantBudgetServiceSetRequest =
     periodEnd?: Timestamp | undefined;
 
     /**
-     * unit_code optionally pins the currency (ISO 4217 USD/EUR/UAH/
-     * GBP or UNIT). Empty = keep existing or default to "USD".
+     * max_budget is the new cap, exact to the nano, and its currency the
+     * tenant's unit; a zero amount is unlimited in that unit. Absent lifts the
+     * cap and keeps the unit the tenant has, or USD for a new row.
+     * currency_code is an ISO 4217 code the server accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no currency", for metering that is not money.
      *
-     * @generated from field: string unit_code = 5;
+     * @generated from field: google.type.Money max_budget = 8;
      */
-    unitCode: string;
-
-    /**
-     * max_budget_micros is the new cap in millionths of unit_code (1000 USD
-     * = 1000000000); 0 or absent = unlimited.
-     *
-     * @generated from field: optional int64 max_budget_micros = 7;
-     */
-    maxBudgetMicros?: bigint | undefined;
+    maxBudget?: Money | undefined;
   };
 
 /**
@@ -251,7 +240,7 @@ export type TenantBudgetSummary =
 
     /**
      * utilisation_pct = spent / max × 100, capped at 100 for display.
-     * 0 when max_budget_micros == 0 (unlimited / metering-only).
+     * 0 when max_budget is zero (unlimited / metering-only).
      *
      * @generated from field: double utilisation_pct = 5;
      */
@@ -281,7 +270,7 @@ export type TenantBudgetServiceSummarizeRequest =
 
     /**
      * unlimited_only — when true, return only rows where
-     * max_budget_micros == 0 (cap-less metering). Mutually exclusive
+     * max_budget is zero (cap-less metering). Mutually exclusive
      * with a non-zero threshold_pct; the server enforces this.
      *
      * @generated from field: bool unlimited_only = 2;

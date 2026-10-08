@@ -46,8 +46,7 @@ beforeEach(() => {
   h.list.mockResolvedValue({ capabilities: [] });
   h.getUsage.mockResolvedValue({
     requestCount: 0n,
-    spentMicros: 0n,
-    unitCode: "UNIT",
+    spent: { currencyCode: "XXX", units: 0n, nanos: 0 },
   });
   h.issue.mockReset();
   h.revoke.mockReset();
@@ -124,6 +123,40 @@ describe("CapabilitiesPage", () => {
     await waitFor(() => expect(h.issue).toHaveBeenCalled());
   });
 
+  it("sends an unlimited budget as a zero amount in XXX", async () => {
+    h.issue.mockRejectedValue(new Error("boom"));
+    render(<CapabilitiesPage />);
+    await userEvent.click(issueButtons()[0]);
+    await userEvent.type(dialogSubject(), "agent-x");
+    fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+    await waitFor(() => expect(h.issue).toHaveBeenCalled());
+    expect(h.issue.mock.calls[0][0].caveats.maxBudget).toMatchObject({
+      currencyCode: "XXX",
+      units: 0n,
+      nanos: 0,
+    });
+  });
+
+  it("sends a typed budget exactly to the nano", async () => {
+    h.issue.mockRejectedValue(new Error("boom"));
+    render(<CapabilitiesPage />);
+    await userEvent.click(issueButtons()[0]);
+    const dialog = within(screen.getByRole("dialog"));
+    await userEvent.type(dialogSubject(), "agent-x");
+    // The second Unlimited toggle is the budget's; the first is requests'.
+    await userEvent.click(
+      dialog.getAllByRole("button", { name: /Unlimited/ })[1],
+    );
+    await userEvent.type(dialog.getByLabelText(/Max budget/), "0.300000001");
+    fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+    await waitFor(() => expect(h.issue).toHaveBeenCalled());
+    expect(h.issue.mock.calls[0][0].caveats.maxBudget).toMatchObject({
+      currencyCode: "XXX",
+      units: 0n,
+      nanos: 300_000_001,
+    });
+  });
+
   it("reveals the token and seeds the browse list on a successful issue", async () => {
     h.issue.mockResolvedValue({
       token: "cap-jwt-xyz",
@@ -136,8 +169,7 @@ describe("CapabilitiesPage", () => {
           resourceUris: [],
           sourceIpCidr: [],
           maxRequests: 0n,
-          maxBudgetMicros: 0n,
-          unitCode: "UNIT",
+          maxBudget: { currencyCode: "XXX", units: 0n, nanos: 0 },
           allowTaintedRead: false,
           idempotencyKeyRequired: false,
         },
@@ -177,8 +209,7 @@ describe("CapabilitiesPage", () => {
       resourceUris: [],
       sourceIpCidr: [],
       maxRequests: 0n,
-      maxBudgetMicros: 0n,
-      unitCode: "UNIT",
+      maxBudget: { currencyCode: "XXX", units: 0n, nanos: 0 },
       allowTaintedRead: false,
       idempotencyKeyRequired: false,
     },
