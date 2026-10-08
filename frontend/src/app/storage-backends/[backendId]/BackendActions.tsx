@@ -576,7 +576,7 @@ function RotateCredentialsForm({
     >
       <FormSection>
         {currentRef ? (
-          <p className="font-mono text-caption text-muted-foreground">
+          <p className="font-mono text-sm text-muted-foreground">
             current: {currentRef}
           </p>
         ) : null}

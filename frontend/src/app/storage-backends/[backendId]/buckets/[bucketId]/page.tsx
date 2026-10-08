@@ -224,7 +224,7 @@ export default function BucketDetailPage() {
                 <ArchiveBoxIcon className="size-5 text-chart-4" />
                 {bucket.displayName || bucketId}
               </CardTitle>
-              <span className="text-tiny uppercase tracking-wider text-muted-foreground">
+              <span className="text-sm uppercase tracking-wider text-muted-foreground">
                 Bucket
               </span>
             </div>

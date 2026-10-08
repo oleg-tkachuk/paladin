@@ -32,8 +32,9 @@ export const typography = {
   // Always above a value, always uppercase, always muted.
   label: "text-xs uppercase tracking-wider text-muted-foreground font-medium",
 
-  // Smaller variant when space is tight (e.g. inside a Badge).
-  labelTight: "text-tiny uppercase tracking-wider text-muted-foreground",
+  // The label's chip form (inside a Badge): the badge's own text size,
+  // without the medium weight.
+  labelTight: "text-sm uppercase tracking-wider text-muted-foreground",
 
   // ─── Values ────────────────────────────────────────────────────────
   // Headline values shown under a label — counts, numbers, version

@@ -93,7 +93,7 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
         {/* Below sm the trigger shrinks to its icon; the label stays as its
             accessible name. */}
         <span className="truncate max-sm:sr-only">Search anything…</span>
-        <kbd className="ml-auto hidden items-center gap-0.5 rounded border bg-background px-1.5 font-mono text-tiny font-medium text-muted-foreground sm:inline-flex">
+        <kbd className="ml-auto hidden items-center gap-0.5 rounded border bg-background px-1.5 font-mono text-sm font-medium text-muted-foreground sm:inline-flex">
           ⌘K
         </kbd>
       </button>
@@ -128,7 +128,7 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
                   {displayName}
                 </span>
                 {user?.subject && user.subject !== displayName ? (
-                  <span className="truncate font-mono text-caption text-muted-foreground">
+                  <span className="truncate font-mono text-sm text-muted-foreground">
                     {user.subject}
                   </span>
                 ) : null}

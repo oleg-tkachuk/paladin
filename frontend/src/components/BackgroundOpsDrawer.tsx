@@ -151,7 +151,7 @@ export function BackgroundOpsDrawer() {
           {summary.inProgress + summary.failed > 0 && (
             <Badge
               variant={summary.failed > 0 ? "destructive" : "secondary"}
-              className="ml-1 h-4 px-1 text-tiny"
+              className="ml-1 h-4 px-1 text-sm"
             >
               {summary.inProgress + summary.failed}
             </Badge>
@@ -193,7 +193,7 @@ export function BackgroundOpsDrawer() {
               <p className="text-destructive">
                 Operations are unavailable — this list is unknown, not empty.
               </p>
-              <p className="mt-1 font-mono text-tiny text-muted-foreground">
+              <p className="mt-1 font-mono text-sm text-muted-foreground">
                 {error}
               </p>
             </div>
@@ -228,7 +228,7 @@ function Tile({
       <p className={cn("text-2xl font-semibold tabular-nums", accent)}>
         {value}
       </p>
-      <p className="text-tiny uppercase tracking-wider text-muted-foreground">
+      <p className="text-sm uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
     </div>
@@ -290,10 +290,10 @@ function OpRow({
         />
         <div className="min-w-0 flex-1 space-y-0.5">
           <p className="font-medium">{op.type || op.name}</p>
-          <p className="truncate font-mono text-tiny text-muted-foreground">
+          <p className="truncate font-mono text-sm text-muted-foreground">
             {op.name}
           </p>
-          <div className="flex items-center gap-2 text-tiny text-muted-foreground">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>started</span>
             <RelativeTime ts={op.createdAt} />
             {op.done && (
@@ -303,14 +303,14 @@ function OpRow({
             )}
           </div>
           {opError(op) && (
-            <p className="mt-1 font-mono text-tiny text-destructive">
+            <p className="mt-1 font-mono text-sm text-destructive">
               {opError(op)}
             </p>
           )}
           {progress && (
             <p
               className={cn(
-                "mt-1 text-tiny tabular-nums",
+                "mt-1 text-sm tabular-nums",
                 failed ? "text-destructive" : "text-muted-foreground",
               )}
             >
@@ -320,7 +320,7 @@ function OpRow({
             </p>
           )}
           {cancelErr && (
-            <p className="mt-1 font-mono text-tiny text-destructive">
+            <p className="mt-1 font-mono text-sm text-destructive">
               {cancelErr}
             </p>
           )}
@@ -329,7 +329,7 @@ function OpRow({
           <Button
             variant="outline"
             size="sm"
-            className="h-6 shrink-0 px-2 text-tiny"
+            className="h-6 shrink-0 px-2 text-sm"
             disabled={canceling}
             onClick={() => setConfirmCancel(true)}
           >

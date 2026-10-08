@@ -551,7 +551,7 @@ export default function StorageBackendsPage() {
                     </TableCell>
                     <TableCell className="hidden @6xl:table-cell">
                       <span
-                        className="font-mono text-caption text-muted-foreground truncate"
+                        className="font-mono text-sm text-muted-foreground truncate"
                         title={b.endpoint}
                       >
                         {b.endpoint || "—"}
