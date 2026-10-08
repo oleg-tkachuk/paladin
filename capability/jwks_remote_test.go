@@ -171,3 +171,40 @@ func TestRemoteJWKSNeverReachedFailsClosed(t *testing.T) {
 		t.Fatalf("err = %v, want ErrJWKSUnavailable", err)
 	}
 }
+
+// A caller waiting behind another's fetch gives up when its own context
+// does, rather than for as long as that fetch takes.
+func TestRemoteJWKSWaiterHonoursItsContext(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		once.Do(func() { close(entered) })
+		<-release
+		http.Error(w, "slow", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(ts.Close)
+	t.Cleanup(func() { close(release) })
+	r, err := NewRemoteJWKSResolver(RemoteJWKSConfig{URL: ts.URL, Client: ts.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	go func() { _, _ = r.PublicKey(context.Background(), "first") }()
+	<-entered
+
+	ctx, cancel := context.WithTimeout(context.Background(), checkDeadline/10)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := r.PublicKey(ctx, "second")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("waiter's error = %v, want its context's", err)
+		}
+	case <-time.After(checkDeadline):
+		t.Fatal("a waiter outlived its context behind another caller's fetch")
+	}
+}
