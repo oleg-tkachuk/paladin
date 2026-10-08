@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@/test/utils";
+import { fireEvent, render, screen } from "@/test/utils";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/health",
@@ -45,8 +45,15 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+// A card by its title: a role's name also labels its pool in the database card.
 const roleCard = async (role: string) =>
-  (await screen.findByText(role)).closest('[data-slot="card"]')!;
+  (
+    await screen.findByText(
+      (_, el) =>
+        el?.getAttribute("data-slot") === "card-title" &&
+        el.textContent === role,
+    )
+  ).closest('[data-slot="card"]')!;
 
 describe("HealthPage role cards", () => {
   // A fixed column count squeezed five cards into four columns and cut
@@ -165,17 +172,20 @@ describe("HealthPage component switch", () => {
     expect(postgres).not.toHaveTextContent("config");
   });
 
-  it("shows why a disabled component is off, with nothing to expand", async () => {
+  // Why a component is off is the expected state, not news: it was a line
+  // under every disabled row. It now waits behind the row's chevron.
+  it("folds why a disabled component is off behind its chevron", async () => {
     render(<HealthPage />);
+    const reason = "not in use: no enabled subscription delivers to rabbitmq";
     const r = await row("rabbitmq");
-    expect(
-      screen.getByText(
-        "not in use: no enabled subscription delivers to rabbitmq",
-      ),
-    ).toBeInTheDocument();
     expect(r).toHaveTextContent("Disabled");
-    expect(r).not.toHaveAttribute("aria-expanded");
-    expect(r.querySelector("svg")).toBeNull();
+    expect(screen.queryByText(reason)).not.toBeInTheDocument();
+    expect(r).toHaveAttribute("aria-expanded", "false");
+    expect(r.querySelector("svg")).not.toBeNull();
+
+    fireEvent.click(r);
+    expect(r).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(reason)).toBeInTheDocument();
   });
 });
 
@@ -214,6 +224,70 @@ describe("HealthPage component details", () => {
     const row = (await screen.findByText("postgres")).closest("button")!;
     expect(row).not.toHaveAttribute("aria-expanded");
     expect(row.querySelector("svg")).toBeNull();
+  });
+});
+
+// Every role reported the same schema version and replica state, each in its
+// own card. They are gathered into one database card; a role card keeps one
+// row saying whether that role reaches the database.
+describe("HealthPage database card", () => {
+  const db = (name: string, extra: object = {}) => ({
+    name,
+    status: "healthy",
+    latency_ms: 1,
+    category: "database",
+    critical: true,
+    ...extra,
+  });
+  beforeEach(() => {
+    payload = {
+      roles: ["api", "worker"].map((role, i) => ({
+        role,
+        status: "healthy",
+        checked_at: "2026-10-08T18:00:00Z",
+        components: [
+          db("postgres", {
+            details: [{ name: "connections", value: `${i + 3} of 20 in use` }],
+          }),
+          db("postgres-schema", {
+            details: [{ name: "schema applied", value: "56" }],
+          }),
+          db("postgres-replica", {
+            status: "disabled",
+            critical: false,
+            message:
+              "off by configuration: datastores.postgres.replica.enabled",
+          }),
+          component("outbox", true),
+        ],
+      })),
+    };
+  });
+
+  it("gathers the database components into one card", async () => {
+    render(<HealthPage />);
+    const card = await roleCard("database");
+    for (const name of ["postgres", "postgres-schema", "postgres-replica"]) {
+      expect(card).toHaveTextContent(name);
+    }
+    // Said once, being the same for every role.
+    expect(card.textContent!.match(/schema applied/g)).toHaveLength(1);
+    // Each role's own pool, under its role.
+    expect(card).toHaveTextContent("apiconnections:3 of 20 in use");
+    expect(card).toHaveTextContent("workerconnections:4 of 20 in use");
+  });
+
+  it("leaves a role card one database row, online or offline", async () => {
+    render(<HealthPage />);
+    const card = await roleCard("api");
+    expect(card).not.toHaveTextContent("postgres-schema");
+    expect(card).not.toHaveTextContent("postgres-replica");
+    expect(card).not.toHaveTextContent("connections");
+    const pg = Array.from(card.querySelectorAll("button")).find((b) =>
+      b.textContent!.startsWith("postgres"),
+    )!;
+    expect(pg).toHaveTextContent("Online");
+    expect(card).toHaveTextContent("outbox");
   });
 });
 

@@ -4,7 +4,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
-  ChevronDownIcon,
+  ChevronRightIcon,
   ExclamationTriangleIcon,
   MinusCircleIcon,
   XCircleIcon,
@@ -22,41 +22,16 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatTime } from "@/lib/format/locale";
-
-// ─── Types — mirror backend/internal/health.Snapshot wire format ────────────
-//
-// The BFF /api/health/all aggregates one Snapshot per role and returns
-// { roles: Snapshot[] }. We keep the type local to this file because the
-// shape is a UI concern; if the protocol grows a third surface (e.g. a
-// CLI), promote into src/lib/health.ts.
-
-// A role is healthy, degraded or unhealthy; a component can also be disabled,
-// off by configuration, which is never probed and never counts toward a role.
-type RoleStatus = "healthy" | "degraded" | "unhealthy";
-type ComponentStatus = RoleStatus | "disabled";
-// Where a component's on/off switch lives — backend/internal/health.Control.
-type Control = "always_on" | "config" | "database";
-
-type Component = {
-  name: string;
-  status: ComponentStatus;
-  message?: string;
-  latency_ms: number;
-  category: string;
-  critical: boolean;
-  control?: Control;
-  // Facts the component reports beside its status, in its order.
-  details?: { name: string; value: string }[];
-};
-
-type Snapshot = {
-  role: string;
-  status: RoleStatus;
-  components: Component[];
-  checked_at: string;
-};
-
-type HealthAll = { roles: Snapshot[] };
+import {
+  splitDatabase,
+  type Component,
+  type ComponentStatus,
+  type Control,
+  type Detail,
+  type HealthAll,
+  type RoleStatus,
+  type Snapshot,
+} from "@/lib/health";
 
 // Role render order. Operators read top-down; api/admin first because
 // they're the request paths. worker/mcp/dispatcher/ingest are
@@ -156,7 +131,8 @@ function StatusPill({ status }: { status: StateKey }) {
 // A message that does not fit its line (a timeout, a stack trace) gets a
 // chevron that reveals the whole of it in a pre-formatted block; one that
 // fits gets none. A disabled component is muted and shows no latency, since
-// it is never probed.
+// it is never probed, and why it is off stays behind its chevron: it is the
+// expected state, not something to read on every visit.
 
 // The badge of a component that can be switched off, and what switches it.
 // A component with no switch (always_on) carries none.
@@ -176,9 +152,10 @@ function ComponentRow({ c }: { c: Component }) {
   const disabled = c.status === "disabled";
   const preview = useRef<HTMLParagraphElement>(null);
   const cutOff = useCutOff(preview, c.message);
-  // Expanding is only offered when the preview does not already show the
-  // whole message: a toggle that reveals the same text again is noise.
-  const expandable = !!c.message && (cutOff || open);
+  // A disabled row always folds its reason away. Otherwise expanding is only
+  // offered when the preview does not already show the whole message: a
+  // toggle that reveals the same text again is noise.
+  const expandable = !!c.message && (disabled || cutOff || open);
   const control = c.control && CONTROL_BADGE[c.control];
 
   return (
@@ -225,7 +202,7 @@ function ComponentRow({ c }: { c: Component }) {
             className={cn("text-xs font-medium", m.color)}
             aria-label={`status: ${c.status}`}
           >
-            {m.label}
+            {c.statusLabel ?? m.label}
           </span>
           {/* A disabled component is not probed: no latency to show. */}
           {!disabled && (
@@ -234,18 +211,18 @@ function ComponentRow({ c }: { c: Component }) {
             </span>
           )}
           {expandable && (
-            <ChevronDownIcon
+            <ChevronRightIcon
               aria-hidden
               className={cn(
                 "size-4 shrink-0 text-muted-foreground transition-transform",
-                open && "rotate-180",
+                open && "rotate-90",
               )}
             />
           )}
         </div>
       </button>
 
-      {c.message && !open && (
+      {c.message && !open && !disabled && (
         // Collapsed preview: one line, truncated when it does not fit, with
         // the full text in the tooltip.
         <p
@@ -257,7 +234,11 @@ function ComponentRow({ c }: { c: Component }) {
         </p>
       )}
 
-      {c.message && open && (
+      {c.message && open && disabled && (
+        <p className="mt-1 text-xs text-muted-foreground">{c.message}</p>
+      )}
+
+      {c.message && open && !disabled && (
         // Expanded view: pre-formatted code block so timeouts /
         // multi-line stack traces wrap and stay readable. `whitespace-
         // pre-wrap` preserves newlines; `break-all` catches long
@@ -272,18 +253,37 @@ function ComponentRow({ c }: { c: Component }) {
         </pre>
       )}
 
-      {!!c.details?.length && (
-        // Its own line, apart from the message: details are not an error,
-        // and folding them into the preview would offer to expand them.
-        <dl className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-          {c.details.map((d) => (
+      {!!c.details?.length && <DetailList details={c.details} />}
+    </div>
+  );
+}
+
+// DetailList shows a component's details on their own line, apart from the
+// message: they are not an error, and folding them into the preview would
+// offer to expand them. Details about different roles — each role's pool —
+// get a line per role.
+function DetailList({ details }: { details: Detail[] }) {
+  const groups = new Map<string, Detail[]>();
+  for (const d of details) {
+    const key = d.role ?? "";
+    groups.set(key, [...(groups.get(key) ?? []), d]);
+  }
+  return (
+    <div className="mt-1 space-y-0.5">
+      {Array.from(groups, ([role, ds]) => (
+        <dl
+          key={role}
+          className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground"
+        >
+          {role && <dt className="font-mono text-foreground">{role}</dt>}
+          {ds.map((d) => (
             <div key={d.name} className="flex gap-1">
               <dt>{d.name}:</dt>
               <dd className="font-mono tabular-nums">{d.value}</dd>
             </div>
           ))}
         </dl>
-      )}
+      ))}
     </div>
   );
 }
@@ -414,10 +414,18 @@ export default function HealthPage() {
     return out;
   }, [data]);
 
+  // The database card gathers what every role reported of the database;
+  // each role card keeps one row saying whether that role reaches it.
+  const { roles: roleCards, database } = useMemo(
+    () => splitDatabase(orderedRoles),
+    [orderedRoles],
+  );
+  const cards = database ? [database, ...roleCards] : roleCards;
+
   const rollup = rollupOf(orderedRoles);
   const RollupIcon = META[rollup].icon;
   const { ok: healthyComponents, total: totalComponents } = tally(
-    orderedRoles.flatMap((s) => s.components),
+    cards.flatMap((s) => s.components),
   );
 
   const backendVersion = stats?.version?.version || "—";
@@ -539,7 +547,7 @@ export default function HealthPage() {
         </Card>
       ) : (
         <div className={ROLE_GRID}>
-          {orderedRoles.map((s) => (
+          {cards.map((s) => (
             <RoleCard key={s.role} snap={s} />
           ))}
         </div>
