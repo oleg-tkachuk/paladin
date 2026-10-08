@@ -1013,6 +1013,9 @@ func (s *UsageStore[TX]) GetTenantBudget(_ context.Context, tenantID uuid.UUID) 
 }
 
 func (s *UsageStore[TX]) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetRequest) (capability.TenantBudget, error) {
+	if err := capability.ValidateAmount(args.MaxBudgetAmount); err != nil {
+		return capability.TenantBudget{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

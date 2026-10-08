@@ -350,6 +350,13 @@ func checkTenantBudgetReads[TX any](t *testing.T, f fixture[TX]) {
 	if err != nil || set.ReservedAmount != held || set.ResourceVersion != got.ResourceVersion+1 {
 		t.Errorf("SetTenantBudget = %+v, %v; want %v held and the next version", set, err, held)
 	}
+	for _, ceiling := range []capability.Nanos{-1, capability.MaxNanos + 1} {
+		if _, err := f.Usage.SetTenantBudget(f.Ctx, capability.SetTenantBudgetRequest{
+			TenantID: f.Tenant, MaxBudgetAmount: ceiling, UnitCode: unit, ExpectedVersion: set.ResourceVersion,
+		}); !errors.Is(err, capability.ErrInvalidAmount) {
+			t.Errorf("SetTenantBudget(%s): err = %v, want ErrInvalidAmount", ceiling, err)
+		}
+	}
 	listed, _, err := f.Usage.ListTenantBudgets(f.Ctx, capability.ListTenantBudgetsRequest{})
 	if err != nil {
 		t.Fatal(err)

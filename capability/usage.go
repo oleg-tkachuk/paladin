@@ -166,7 +166,8 @@ type TenantBudgets interface {
 	// SetTenantBudget upserts the tenant cap. ResetSpend=true rolls
 	// the accounting period and zeroes the spend — operators call
 	// this on each billing close. ResetSpend=false adjusts the cap
-	// mid-cycle without affecting accumulated spend.
+	// mid-cycle without affecting accumulated spend. A ceiling outside
+	// 0..MaxNanos returns ErrInvalidAmount and changes nothing.
 	SetTenantBudget(ctx context.Context, req SetTenantBudgetRequest) (TenantBudget, error)
 
 	// ListTenantBudgets returns tenant budget rows, with the consumer's
