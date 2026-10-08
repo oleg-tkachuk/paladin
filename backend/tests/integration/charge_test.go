@@ -24,7 +24,7 @@ import (
 //  2. Charge another 4 → cap-side accepts (8 ≤ 10), tenant-side
 //     rejects (8 > 5). Inner store must compensate: cap counter
 //     reverts to 4.
-//  3. Get final state via UsageStore.Get + GetTenantBudget.
+//  3. Get final state via UsageStore.GetUsage + GetTenantBudget.
 func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	h := pgharness.Setup(t)
 	ctx := context.Background()
@@ -63,7 +63,7 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read tenant budget: %v", err)
 	}
-	if _, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+	if _, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 		TenantID:        tenantID,
 		MaxBudgetAmount: 5.0,
 		ResetSpend:      false, // keep the 4 we already charged
@@ -80,7 +80,7 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	}
 
 	// Verify the per-capability counter is back at 4 (not 8).
-	usage, err := store.Get(ctx, capID)
+	usage, err := store.GetUsage(ctx, capID)
 	if err != nil {
 		t.Fatalf("get usage: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestCharge_RefundReturnsExactlyTheCharge(t *testing.T) {
 		t.Fatalf("refund: %v", err)
 	}
 
-	u, err := store.Get(ctx, capID)
+	u, err := store.GetUsage(ctx, capID)
 	if err != nil {
 		t.Fatalf("get usage: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-period")
 
 	// Initial cap 10, charge 7 against an unrelated capability.
-	initial, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+	initial, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 		TenantID:        tenantID,
 		MaxBudgetAmount: 10.0,
 		ResetSpend:      true,
@@ -184,7 +184,7 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	// Roll the period: same cap (10), reset_spend=true. The roll carries the
 	// version the create returned — Charge() does not bump it, so the caller's
 	// read is still current.
-	if _, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+	if _, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 		TenantID:        tenantID,
 		MaxBudgetAmount: 10.0,
 		ResetSpend:      true,

@@ -368,7 +368,7 @@ func TestCopyObjectChargesTheCapabilityBudget(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
-	u, err := usage.Get(ctx, cap.ID)
+	u, err := usage.GetUsage(ctx, cap.ID)
 	if err != nil {
 		t.Fatalf("no usage recorded — the copy was free: %v", err)
 	}
@@ -405,7 +405,7 @@ func TestCopyObjectDoesNotChargeARetryThatChangedNothing(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
-	if _, err := usage.Get(ctx, cap.ID); err == nil {
+	if _, err := usage.GetUsage(ctx, cap.ID); err == nil {
 		t.Error("charged a promote that changed nothing — an at-least-once retry would bill twice")
 	}
 }

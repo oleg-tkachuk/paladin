@@ -16,7 +16,7 @@ func reservationFixture(t *testing.T) (*UsageStore[struct{}], uuid.UUID, uuid.UU
 	now := time.Unix(1_800_000_000, 0)
 	u := NewUsage[struct{}](nil).WithClock(func() time.Time { return now })
 	tenant := uuid.New()
-	if _, err := u.SetTenantBudget(context.Background(), capability.SetTenantBudgetArgs{TenantID: tenant, MaxBudgetAmount: 100}); err != nil {
+	if _, err := u.SetTenantBudget(context.Background(), capability.SetTenantBudgetRequest{TenantID: tenant, MaxBudgetAmount: 100}); err != nil {
 		t.Fatal(err)
 	}
 	return u, uuid.New(), tenant, &now
@@ -39,7 +39,7 @@ func TestReservationsCountAgainstTheCeiling(t *testing.T) {
 	if _, err := u.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenant, Amount: 5, MaxBudget: 10}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("charge past spend+holds: err = %v, want ErrBudgetExceeded", err)
 	}
-	got, _ := u.Get(ctx, capID)
+	got, _ := u.GetUsage(ctx, capID)
 	if got.ReservedAmount != 6 || got.SpentAmount != 0 {
 		t.Errorf("usage = %+v, want 6 held and nothing spent", got)
 	}
@@ -57,7 +57,7 @@ func TestSettleChargesTheActualCostAndReleasesTheHold(t *testing.T) {
 	if _, err := u.Settle(ctx, capability.SettleRequest{ReservationID: r.ID, Amount: 11, MaxBudget: 10}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("settle past the ceiling: err = %v, want ErrBudgetExceeded", err)
 	}
-	if got, _ := u.Get(ctx, capID); got.ReservedAmount != 8 {
+	if got, _ := u.GetUsage(ctx, capID); got.ReservedAmount != 8 {
 		t.Fatalf("a refused settle released the hold: %+v", got)
 	}
 
@@ -65,7 +65,7 @@ func TestSettleChargesTheActualCostAndReleasesTheHold(t *testing.T) {
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
-	got, _ := u.Get(ctx, capID)
+	got, _ := u.GetUsage(ctx, capID)
 	if got.SpentAmount != 3 || got.ReservedAmount != 0 || receipt.ChargeID == uuid.Nil {
 		t.Errorf("after settle usage = %+v receipt = %+v, want 3 spent, 0 held, a charge", got, receipt)
 	}
@@ -79,7 +79,7 @@ func TestSettleChargesTheActualCostAndReleasesTheHold(t *testing.T) {
 	if err != nil || !again.Replayed || again.ChargeID != receipt.ChargeID {
 		t.Errorf("second settle = %+v, %v; want a replay of charge %s", again, err, receipt.ChargeID)
 	}
-	if got, _ := u.Get(ctx, capID); got.SpentAmount != 3 || len(u.Ledger()) != 1 {
+	if got, _ := u.GetUsage(ctx, capID); got.SpentAmount != 3 || len(u.Ledger()) != 1 {
 		t.Errorf("a replayed settle moved spend: %+v, ledger %d rows", got, len(u.Ledger()))
 	}
 }
@@ -94,7 +94,7 @@ func TestReleaseAndExpiryFreeTheHold(t *testing.T) {
 	if err := u.Release(ctx, r.ID); err != nil {
 		t.Fatalf("repeated release: %v", err)
 	}
-	if got, _ := u.Get(ctx, capID); got.ReservedAmount != 0 {
+	if got, _ := u.GetUsage(ctx, capID); got.ReservedAmount != 0 {
 		t.Fatalf("held after release = %v", got.ReservedAmount)
 	}
 
@@ -106,7 +106,7 @@ func TestReleaseAndExpiryFreeTheHold(t *testing.T) {
 	if n, _ := u.ReleaseExpired(ctx); n != 1 {
 		t.Fatalf("ReleaseExpired released %d, want 1", n)
 	}
-	if got, _ := u.Get(ctx, capID); got.ReservedAmount != 0 {
+	if got, _ := u.GetUsage(ctx, capID); got.ReservedAmount != 0 {
 		t.Fatalf("held after expiry sweep = %v", got.ReservedAmount)
 	}
 }
@@ -127,7 +127,7 @@ func TestReservationsCountAgainstAncestors(t *testing.T) {
 	if _, err := u.Reserve(ctx, capability.ReserveRequest{CapabilityID: kids[1], TenantID: tenant, Amount: 20, MaxBudget: 20}); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("sibling hold past the parent: err = %v, want ErrBudgetExceeded", err)
 	}
-	if got, _ := u.Get(ctx, rootID); got.ReservedAmount != 20 {
+	if got, _ := u.GetUsage(ctx, rootID); got.ReservedAmount != 20 {
 		t.Errorf("parent held = %v, want 20", got.ReservedAmount)
 	}
 }

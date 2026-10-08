@@ -165,7 +165,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability verifier: %w", err)
 	}
 
-	// Metering decorator: BumpRequest / Charge / Refund emit OTel
+	// Metering decorator: Bump / Charge / Refund emit OTel
 	// metrics for the runtime counters. Pure pass-through on cold
 	// MeterProvider so test paths and sidecar tools don't pay for
 	// instrument lookups.

@@ -147,7 +147,7 @@ func main() {
 	fmt.Println("over-budget charge refused with ErrBudgetExceeded")
 
 	// 7. Revoke, cascading to everything the orchestrator delegated.
-	must(records.Revoke(ctx, capability.RevokeArgs{
+	must(records.Revoke(ctx, capability.RevokeRequest{
 		ID: parent.ID, Reason: "example finished", Actor: "operator", CascadeChildren: true,
 	}), "revoke")
 

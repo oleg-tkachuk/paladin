@@ -116,7 +116,7 @@ func TestDelegateRefusesRevokedOrExpiredParent(t *testing.T) {
 		t.Errorf("delegate from expired parent = %v, want ErrExpired", err)
 	}
 
-	_ = store.Revoke(ctx, RevokeArgs{ID: parent.ID})
+	_ = store.Revoke(ctx, RevokeRequest{ID: parent.ID})
 	if _, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: *parent, InheritCaveats: true}); !errors.Is(err, ErrRevoked) {
 		t.Errorf("delegate from revoked parent = %v, want ErrRevoked", err)
 	}

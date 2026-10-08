@@ -32,22 +32,22 @@ func codeOf(err error) connect.Code { return connect.CodeOf(err) }
 // configurable failures for the paths the existing tests do not drive.
 type recordingStore struct {
 	fakeStore
-	revokeArgs *capability.RevokeArgs
+	revokeArgs *capability.RevokeRequest
 	revokeErr  error
 	revokeCtx  context.Context
-	listArgs   *capability.ListByPrincipalArgs
+	listArgs   *capability.ListByPrincipalRequest
 	listOut    []capability.Capability
 	listNext   string
 	listErr    error
 }
 
-func (s *recordingStore) Revoke(ctx context.Context, args capability.RevokeArgs) error {
+func (s *recordingStore) Revoke(ctx context.Context, args capability.RevokeRequest) error {
 	s.revokeArgs = &args
 	s.revokeCtx = ctx
 	return s.revokeErr
 }
 
-func (s *recordingStore) ListByPrincipal(_ context.Context, args capability.ListByPrincipalArgs) ([]capability.Capability, string, error) {
+func (s *recordingStore) ListByPrincipal(_ context.Context, args capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
 	s.listArgs = &args
 	return s.listOut, s.listNext, s.listErr
 }
@@ -63,7 +63,7 @@ type fakeUsage struct {
 	ctx context.Context
 }
 
-func (u *fakeUsage) Get(ctx context.Context, id uuid.UUID) (capability.Usage, error) {
+func (u *fakeUsage) GetUsage(ctx context.Context, id uuid.UUID) (capability.Usage, error) {
 	u.got = id
 	u.ctx = ctx
 	return u.out, u.err
@@ -255,7 +255,7 @@ func TestListForwardsFiltersAndPaging(t *testing.T) {
 		t.Fatal("store.ListByPrincipal was not called")
 	}
 	a := store.listArgs
-	if a.TenantID != tenant || a.Subject != "agent-1" || a.PrincipalT != capability.PrincipalAgent {
+	if a.TenantID != tenant || a.Subject != "agent-1" || a.PrincipalType != capability.PrincipalAgent {
 		t.Errorf("filters = %+v", a)
 	}
 	// Include flags widen the result set; dropping one silently hides revoked

@@ -23,7 +23,7 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 	ctx, f := newUsageFixture(t)
 
 	t.Run("first write creates at version 0", func(t *testing.T) {
-		got, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+		got, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 			TenantID: f.tenant, MaxBudgetAmount: 100,
 		})
 		if err != nil {
@@ -35,7 +35,7 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 	})
 
 	t.Run("creating twice at version 0 is a conflict", func(t *testing.T) {
-		_, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+		_, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 			TenantID: f.tenant, MaxBudgetAmount: 999,
 		})
 		if !errors.Is(err, capability.ErrTenantBudgetVersionMismatch) {
@@ -52,7 +52,7 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get: %v", err)
 		}
-		got, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+		got, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 			TenantID: f.tenant, MaxBudgetAmount: 200, ExpectedVersion: cur.ResourceVersion,
 		})
 		if err != nil {
@@ -72,7 +72,7 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get: %v", err)
 		}
-		_, err = f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+		_, err = f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 			TenantID:        f.tenant,
 			MaxBudgetAmount: 400,
 			ExpectedVersion: cur.ResourceVersion - 1, // what a concurrent writer held

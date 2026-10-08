@@ -339,7 +339,7 @@ func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.Capab
 	if err != nil {
 		return nil, err
 	}
-	if err := h.store.Revoke(ctx, capability.RevokeArgs{
+	if err := h.store.Revoke(ctx, capability.RevokeRequest{
 		ID:              id,
 		Reason:          req.Msg.GetReason(),
 		Actor:           caller.Subject,
@@ -380,9 +380,9 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 	// needs the connection scoped to that tenant. Without this the admin
 	// console renders an empty list instead of an error — RLS filters.
 	ctx = auth.WithActingTenant(ctx, tenantID)
-	caps, next, err := h.store.ListByPrincipal(ctx, capability.ListByPrincipalArgs{
+	caps, next, err := h.store.ListByPrincipal(ctx, capability.ListByPrincipalRequest{
 		TenantID:       tenantID,
-		PrincipalT:     protoToPrincipalKind(req.Msg.GetPrincipalKind()),
+		PrincipalType:  protoToPrincipalKind(req.Msg.GetPrincipalKind()),
 		Subject:        req.Msg.GetSubject(),
 		IncludeExpired: req.Msg.GetIncludeExpired(),
 		IncludeRevoked: req.Msg.GetIncludeRevoked(),
@@ -429,7 +429,7 @@ func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.Cap
 	if err != nil {
 		return nil, err
 	}
-	u, err := h.usage.Get(ctx, id)
+	u, err := h.usage.GetUsage(ctx, id)
 	if err != nil {
 		if errors.Is(err, capability.ErrUsageNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err)

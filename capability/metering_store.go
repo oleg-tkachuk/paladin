@@ -27,10 +27,10 @@ func WithMetering[TX any](inner UsageStore[TX]) UsageStore[TX] {
 	return &MeteringStore[TX]{Inner: inner}
 }
 
-// BumpRequest emits paladin.capability.request.bumps with outcome=
+// Bump emits paladin.capability.request.bumps with outcome=
 // allowed | limit_exceeded.
-func (s *MeteringStore[TX]) BumpRequest(ctx context.Context, req RequestBump) (int64, error) {
-	count, err := s.Inner.BumpRequest(ctx, req)
+func (s *MeteringStore[TX]) Bump(ctx context.Context, req BumpRequest) (int64, error) {
+	count, err := s.Inner.Bump(ctx, req)
 	switch {
 	case errors.Is(err, ErrRequestLimitExceeded):
 		recordRequestBump(ctx, req.TenantID, "limit_exceeded")
@@ -119,19 +119,19 @@ func (s *MeteringStore[TX]) ChargeByRef(ctx context.Context, capID uuid.UUID, ex
 	return s.Inner.ChargeByRef(ctx, capID, externalRef)
 }
 
-func (s *MeteringStore[TX]) Get(ctx context.Context, capID uuid.UUID) (Usage, error) {
-	return s.Inner.Get(ctx, capID)
+func (s *MeteringStore[TX]) GetUsage(ctx context.Context, capID uuid.UUID) (Usage, error) {
+	return s.Inner.GetUsage(ctx, capID)
 }
 
 func (s *MeteringStore[TX]) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (TenantBudget, error) {
 	return s.Inner.GetTenantBudget(ctx, tenantID)
 }
 
-func (s *MeteringStore[TX]) SetTenantBudget(ctx context.Context, args SetTenantBudgetArgs) (TenantBudget, error) {
+func (s *MeteringStore[TX]) SetTenantBudget(ctx context.Context, args SetTenantBudgetRequest) (TenantBudget, error) {
 	return s.Inner.SetTenantBudget(ctx, args)
 }
 
-func (s *MeteringStore[TX]) ListTenantBudgets(ctx context.Context, args ListTenantBudgetsArgs) ([]TenantBudgetSummary, error) {
+func (s *MeteringStore[TX]) ListTenantBudgets(ctx context.Context, args ListTenantBudgetsRequest) ([]TenantBudgetSummary, error) {
 	return s.Inner.ListTenantBudgets(ctx, args)
 }
 

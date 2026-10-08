@@ -41,16 +41,16 @@ type BiscuitRevocationStore interface {
 	// Idempotent. Returns ErrNotFound when the capability is not on record
 	// — or not visible to the caller — so a caller cannot revoke a copy of a
 	// capability it cannot see.
-	RevokeBiscuit(ctx context.Context, args RevokeBiscuitArgs) error
+	RevokeBiscuit(ctx context.Context, args RevokeBiscuitRequest) error
 }
 
-// RevokeBiscuitArgs is the input shape for BiscuitRevocationStore.RevokeBiscuit.
-type RevokeBiscuitArgs struct {
+// RevokeBiscuitRequest is the input shape for BiscuitRevocationStore.RevokeBiscuit.
+type RevokeBiscuitRequest struct {
 	// CapabilityID is the capability the Biscuit seals.
 	CapabilityID uuid.UUID
 	// RevocationID is the id to list: BiscuitCopy.RevocationID.
 	RevocationID []byte
-	// Reason and Actor are stored for audit, as on RevokeArgs.
+	// Reason and Actor are stored for audit, as on RevokeRequest.
 	Reason string
 	Actor  string
 }

@@ -22,7 +22,7 @@ type fakeUsageStore struct {
 	budgets map[uuid.UUID]capability.TenantBudget
 	getErr  error
 	// lastSet is the last SetTenantBudget's arguments.
-	lastSet capability.SetTenantBudgetArgs
+	lastSet capability.SetTenantBudgetRequest
 }
 
 func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (capability.TenantBudget, error) {
@@ -36,7 +36,7 @@ func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (capab
 	return tb, nil
 }
 
-func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetArgs) (capability.TenantBudget, error) {
+func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetRequest) (capability.TenantBudget, error) {
 	f.lastSet = args
 	if f.budgets == nil {
 		f.budgets = map[uuid.UUID]capability.TenantBudget{}
@@ -74,7 +74,7 @@ func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetT
 	return tb, nil
 }
 
-func (f *fakeUsageStore) ListTenantBudgets(context.Context, capability.ListTenantBudgetsArgs) ([]capability.TenantBudgetSummary, error) {
+func (f *fakeUsageStore) ListTenantBudgets(context.Context, capability.ListTenantBudgetsRequest) ([]capability.TenantBudgetSummary, error) {
 	return nil, nil
 }
 

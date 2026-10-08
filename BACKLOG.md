@@ -1517,7 +1517,7 @@ finding moving from "packages you import" to "your code is affected".
 
 - **Status:** Deferred.
 - **Reason:** a bounded parent makes every child name an explicit budget, so
-  an orchestrator splitting "what remains" reads `Meter.Get`, does the
+  an orchestrator splitting "what remains" reads `Meter.GetUsage`, does the
   arithmetic and signs a figure that is stale by then.
 - **Definition of Done:** `DelegateRequest` takes a share — a fraction or an
   amount, capped at what remains — computed and held under the meter's lock,
@@ -1540,7 +1540,7 @@ finding moving from "packages you import" to "your code is affected".
 
 - **Status:** Deferred — they cannot live in the module itself.
 - **Reason:** composing `Verify`, the DPoP check, `CheckSource`, `Check` and
-  `BumpRequest` with the right ceilings, and storing records and usage under
+  `Bump` with the right ceilings, and storing records and usage under
   row-level security, is about a thousand lines Paladin keeps under
   `backend/internal`, where no one else can import them. The module may not
   depend on a database driver (`isolation_test.go`) or on Connect, so they

@@ -35,7 +35,7 @@ func TestRevokeIsIdempotent(t *testing.T) {
 	}
 
 	for i := 0; i < 3; i++ {
-		if err := s.Revoke(ctx, capability.RevokeArgs{ID: id, Reason: "leak", Actor: "op"}); err != nil {
+		if err := s.Revoke(ctx, capability.RevokeRequest{ID: id, Reason: "leak", Actor: "op"}); err != nil {
 			t.Fatalf("Revoke #%d: %v", i+1, err)
 		}
 	}
@@ -63,7 +63,7 @@ func TestRevokeCascadesToDescendants(t *testing.T) {
 		}
 	}
 
-	if err := s.Revoke(ctx, capability.RevokeArgs{ID: root, CascadeChildren: true}); err != nil {
+	if err := s.Revoke(ctx, capability.RevokeRequest{ID: root, CascadeChildren: true}); err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
 	for name, id := range map[string]uuid.UUID{"root": root, "child": child, "grandchild": grandchild} {
@@ -88,7 +88,7 @@ func TestRevokingAParentRevokesItsChildrenWithoutCascade(t *testing.T) {
 	_ = s.Insert(ctx, mkCap(child, root, tenant, "child"), capability.Principal{Subject: "test-operator"})
 	_ = s.Insert(ctx, mkCap(grandchild, child, tenant, "grandchild"), capability.Principal{Subject: "test-operator"})
 
-	if err := s.Revoke(ctx, capability.RevokeArgs{ID: child}); err != nil {
+	if err := s.Revoke(ctx, capability.RevokeRequest{ID: child}); err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
 	if r, _ := s.IsRevoked(ctx, root); r {
@@ -116,19 +116,19 @@ func TestBumpRequestRejectsWithoutMutating(t *testing.T) {
 	id := uuid.New()
 
 	for i := int64(1); i <= 2; i++ {
-		n, err := u.BumpRequest(ctx, capability.RequestBump{CapabilityID: id, MaxRequests: 2})
+		n, err := u.Bump(ctx, capability.BumpRequest{CapabilityID: id, MaxRequests: 2})
 		if err != nil || n != i {
 			t.Fatalf("bump %d: n=%d err=%v", i, n, err)
 		}
 	}
-	n, err := u.BumpRequest(ctx, capability.RequestBump{CapabilityID: id, MaxRequests: 2})
+	n, err := u.Bump(ctx, capability.BumpRequest{CapabilityID: id, MaxRequests: 2})
 	if !errors.Is(err, capability.ErrRequestLimitExceeded) {
 		t.Fatalf("want ErrRequestLimitExceeded, got %v", err)
 	}
 	if n != 2 {
 		t.Errorf("returned count = %d, want the unchanged 2", n)
 	}
-	got, _ := u.Get(ctx, id)
+	got, _ := u.GetUsage(ctx, id)
 	if got.RequestCount != 2 {
 		t.Errorf("stored count = %d — a rejected bump mutated state", got.RequestCount)
 	}
@@ -140,7 +140,7 @@ func TestBumpRequestUnlimited(t *testing.T) {
 	u := NewUsage[struct{}](nil)
 	id := uuid.New()
 	for i := 0; i < 50; i++ {
-		if _, err := u.BumpRequest(ctx, capability.RequestBump{CapabilityID: id, MaxRequests: 0}); err != nil {
+		if _, err := u.Bump(ctx, capability.BumpRequest{CapabilityID: id, MaxRequests: 0}); err != nil {
 			t.Fatalf("unlimited bump %d: %v", i, err)
 		}
 	}
@@ -155,9 +155,9 @@ func TestListByPrincipalFilters(t *testing.T) {
 	_ = s.Insert(ctx, mkCap(idA, uuid.Nil, tenantA, "alice"), capability.Principal{Subject: "test-operator"})
 	_ = s.Insert(ctx, mkCap(idB, uuid.Nil, tenantB, "bob"), capability.Principal{Subject: "test-operator"})
 	_ = s.Insert(ctx, mkCap(revoked, uuid.Nil, tenantA, "carol"), capability.Principal{Subject: "test-operator"})
-	_ = s.Revoke(ctx, capability.RevokeArgs{ID: revoked})
+	_ = s.Revoke(ctx, capability.RevokeRequest{ID: revoked})
 
-	got, _, err := s.ListByPrincipal(ctx, capability.ListByPrincipalArgs{TenantID: tenantA})
+	got, _, err := s.ListByPrincipal(ctx, capability.ListByPrincipalRequest{TenantID: tenantA})
 	if err != nil {
 		t.Fatalf("ListByPrincipal: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestListByPrincipalFilters(t *testing.T) {
 		t.Errorf("tenant filter + revoked exclusion failed: %d rows", len(got))
 	}
 
-	got, _, _ = s.ListByPrincipal(ctx, capability.ListByPrincipalArgs{
+	got, _, _ = s.ListByPrincipal(ctx, capability.ListByPrincipalRequest{
 		TenantID: tenantA, IncludeRevoked: true,
 	})
 	if len(got) != 2 {
@@ -184,11 +184,11 @@ func TestListByPrincipalExcludesExpired(t *testing.T) {
 	c.ExpiresAt = time.Now().Add(-time.Hour)
 	_ = s.Insert(ctx, c, capability.Principal{Subject: "test-operator"})
 
-	got, _, _ := s.ListByPrincipal(ctx, capability.ListByPrincipalArgs{TenantID: tenant})
+	got, _, _ := s.ListByPrincipal(ctx, capability.ListByPrincipalRequest{TenantID: tenant})
 	if len(got) != 0 {
 		t.Errorf("expired capability listed by default")
 	}
-	got, _, _ = s.ListByPrincipal(ctx, capability.ListByPrincipalArgs{
+	got, _, _ = s.ListByPrincipal(ctx, capability.ListByPrincipalRequest{
 		TenantID: tenant, IncludeExpired: true,
 	})
 	if len(got) != 1 {
@@ -201,7 +201,7 @@ func TestListByPrincipalExcludesExpired(t *testing.T) {
 func TestSetTenantBudgetDefaultsUnitCode(t *testing.T) {
 	ctx := context.Background()
 	u := NewUsage[struct{}](nil)
-	b, err := u.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{
+	b, err := u.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 		TenantID: uuid.New(), MaxBudgetAmount: 10,
 	})
 	if err != nil {
@@ -216,7 +216,7 @@ func TestRefundReturnsSpendToEveryCounterOnce(t *testing.T) {
 	ctx := context.Background()
 	u := NewUsage[struct{}](nil)
 	id, tenant := uuid.New(), uuid.New()
-	_, _ = u.SetTenantBudget(ctx, capability.SetTenantBudgetArgs{TenantID: tenant, MaxBudgetAmount: 100})
+	_, _ = u.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{TenantID: tenant, MaxBudgetAmount: 100})
 	receipt, err := u.Charge(ctx, capability.ChargeRequest{CapabilityID: id, TenantID: tenant, Amount: 5, MaxBudget: 100, UnitCode: "USD"}, nil)
 	if err != nil {
 		t.Fatalf("Charge: %v", err)
@@ -241,7 +241,7 @@ func TestRefundReturnsSpendToEveryCounterOnce(t *testing.T) {
 		t.Fatalf("unknown charge err = %v, want ErrChargeNotFound", err)
 	}
 
-	got, _ := u.Get(ctx, id)
+	got, _ := u.GetUsage(ctx, id)
 	if got.SpentAmount != 0 {
 		t.Errorf("capability spend = %v, want 0", got.SpentAmount)
 	}
@@ -273,14 +273,14 @@ func TestRevokeBiscuit(t *testing.T) {
 	}
 	copyID, other := []byte("copy"), []byte("other")
 
-	if err := s.RevokeBiscuit(ctx, capability.RevokeBiscuitArgs{CapabilityID: uuid.New(), RevocationID: copyID}); !errors.Is(err, capability.ErrNotFound) {
+	if err := s.RevokeBiscuit(ctx, capability.RevokeBiscuitRequest{CapabilityID: uuid.New(), RevocationID: copyID}); !errors.Is(err, capability.ErrNotFound) {
 		t.Fatalf("unknown capability: err = %v, want ErrNotFound", err)
 	}
-	if err := s.RevokeBiscuit(ctx, capability.RevokeBiscuitArgs{CapabilityID: id}); err == nil {
+	if err := s.RevokeBiscuit(ctx, capability.RevokeBiscuitRequest{CapabilityID: id}); err == nil {
 		t.Fatal("empty revocation id accepted")
 	}
 	for range 2 { // idempotent
-		if err := s.RevokeBiscuit(ctx, capability.RevokeBiscuitArgs{CapabilityID: id, RevocationID: copyID}); err != nil {
+		if err := s.RevokeBiscuit(ctx, capability.RevokeBiscuitRequest{CapabilityID: id, RevocationID: copyID}); err != nil {
 			t.Fatal(err)
 		}
 	}

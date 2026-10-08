@@ -27,7 +27,7 @@ type UsageStore[TX any] interface {
 //
 // # Delegation trees
 //
-// A capability's counters cover its whole subtree: BumpRequest and Charge
+// A capability's counters cover its whole subtree: Bump and Charge
 // apply to the capability AND to every ancestor in its delegation chain, and
 // each ancestor's own ceiling — read from its stored record, not from the
 // caller — must admit the increment. So an orchestrator holding 25.00 that
@@ -40,7 +40,7 @@ type UsageStore[TX any] interface {
 // # Copies of a Biscuit
 //
 // A Biscuit's holder can give a copy limits of its own (CopyCeiling), which
-// arrive as Copies on RequestBump, ChargeRequest and ReserveRequest. Each is
+// arrive as Copies on BumpRequest, ChargeRequest and ReserveRequest. Each is
 // counted under its revocation id, apart from its siblings, and checked
 // before the capability's ceilings; the capability's counters still take
 // every copy's requests and spend. A charge or reservation records the copies
@@ -51,11 +51,11 @@ type UsageStore[TX any] interface {
 // All methods are concurrency-safe. A rejected call mutates nothing, so a
 // retry after rejection is safe.
 type Meter[TX any] interface {
-	// BumpRequest increments the request counter of the capability and of
+	// Bump increments the request counter of the capability and of
 	// each ancestor, and returns the capability's new count. When any
 	// ceiling in the chain would be crossed it returns
 	// ErrRequestLimitExceeded and nothing is mutated.
-	BumpRequest(ctx context.Context, req RequestBump) (newCount int64, err error)
+	Bump(ctx context.Context, req BumpRequest) (newCount int64, err error)
 
 	// Charge adds req.Amount to the spend counters of the capability, of
 	// each ancestor and of the tenant aggregate, writes one charges-ledger
@@ -127,11 +127,11 @@ type Meter[TX any] interface {
 	// one that is gone is a no-op.
 	Release(ctx context.Context, reservationID uuid.UUID) error
 
-	// Get returns the current snapshot. Returns ErrUsageNotFound when no
+	// GetUsage returns the current snapshot. Returns ErrUsageNotFound when no
 	// row exists for the capability — typically means it's never been
 	// used (no requests, no charges). For a capability with delegated
 	// children the counters include the children's usage.
-	Get(ctx context.Context, capID uuid.UUID) (Usage, error)
+	GetUsage(ctx context.Context, capID uuid.UUID) (Usage, error)
 }
 
 // TenantBudgets administers the tenant-aggregate ceilings Charge enforces.
@@ -145,7 +145,7 @@ type TenantBudgets interface {
 	// the accounting period and zeroes the spend — operators call
 	// this on each billing close. ResetSpend=false adjusts the cap
 	// mid-cycle without affecting accumulated spend.
-	SetTenantBudget(ctx context.Context, args SetTenantBudgetArgs) (TenantBudget, error)
+	SetTenantBudget(ctx context.Context, args SetTenantBudgetRequest) (TenantBudget, error)
 
 	// ListTenantBudgets returns tenant budget rows, with the consumer's
 	// display fields where it has them. Filters:
@@ -157,7 +157,7 @@ type TenantBudgets interface {
 	//
 	// Rows are returned in descending utilisation order so the most
 	// at-risk tenants surface first.
-	ListTenantBudgets(ctx context.Context, args ListTenantBudgetsArgs) ([]TenantBudgetSummary, error)
+	ListTenantBudgets(ctx context.Context, args ListTenantBudgetsRequest) ([]TenantBudgetSummary, error)
 }
 
 // UsageHousekeeping reclaims usage rows of capabilities that are gone.
@@ -177,8 +177,8 @@ type UsageHousekeeping interface {
 	ReleaseExpired(ctx context.Context) (int64, error)
 }
 
-// RequestBump is the input to Meter.BumpRequest.
-type RequestBump struct {
+// BumpRequest is the input to Meter.Bump.
+type BumpRequest struct {
 	CapabilityID uuid.UUID
 	// TenantID is the capability's tenant. Used for attribution (metrics);
 	// it is not an authorisation input.
@@ -343,8 +343,8 @@ type TenantBudget struct {
 	ResourceVersion int64
 }
 
-// SetTenantBudgetArgs is the input for UsageStore.SetTenantBudget.
-type SetTenantBudgetArgs struct {
+// SetTenantBudgetRequest is the input for UsageStore.SetTenantBudget.
+type SetTenantBudgetRequest struct {
 	TenantID        uuid.UUID
 	MaxBudgetAmount float64
 	// UnitCode pins the currency. Empty = keep existing or default
@@ -377,9 +377,9 @@ type TenantBudgetSummary struct {
 	UtilisationPct float64
 }
 
-// ListTenantBudgetsArgs is the input shape for
+// ListTenantBudgetsRequest is the input shape for
 // UsageStore.ListTenantBudgets.
-type ListTenantBudgetsArgs struct {
+type ListTenantBudgetsRequest struct {
 	ThresholdPct    float64
 	UnlimitedOnly   bool
 	ExcludeInactive bool
@@ -463,10 +463,10 @@ var (
 	ErrTenantBudgetVersionMismatch = errors.New("capability: tenant budget resource_version mismatch")
 )
 
-// ValidateOverrun reports whether p is an OverrunPolicy this package defines.
+// Validate reports whether p is an OverrunPolicy this package defines.
 // Implementations call it before touching state, so an unknown policy is never
 // read as either one.
-func ValidateOverrun(p OverrunPolicy) error {
+func (p OverrunPolicy) Validate() error {
 	if p > OverrunRecord {
 		return fmt.Errorf("%w: unknown overrun policy %d", ErrInvalidRequest, p)
 	}

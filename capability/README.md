@@ -250,7 +250,7 @@ the `Attenuation`. Each is counted under the revocation id of the block that
 set it, so siblings narrowed apart count apart, while the capability's own
 limits still bound them all; a limit must fit every limit already in force.
 The verifier hands them to the caller as `Capability.Copies`, and the `Meter`
-counts them when they are passed on as `Copies` in `RequestBump`,
+counts them when they are passed on as `Copies` in `BumpRequest`,
 `ChargeRequest` and `ReserveRequest`. A verifier admits such a copy only with
 `MeterCopies` set, which says the `Meter` behind it counts copies; without it
 the token is refused rather than accepted with its limits unkept.
@@ -398,7 +398,7 @@ func TestMeterContract(t *testing.T) {
 ## Revoke
 
 ```go
-records.Revoke(ctx, capability.RevokeArgs{
+records.Revoke(ctx, capability.RevokeRequest{
     ID: cap.ID, Reason: "agent looping", Actor: "operator@example.com",
     CascadeChildren: true,   // takes every sub-agent with it
 })
@@ -438,9 +438,9 @@ missing tenant id, an empty audience entry, a negative TTL, a malformed
 thumbprint, invalid caveats. Anything else they return is the store's or the
 signer's failure, not the caller's.
 
-`Store` and `UsageStore` are **separate types**: both declare a method named
-`Get` with different signatures, so one type cannot satisfy both. `memstore`
-shows the split.
+Every input is a `…Request` and every read names what it reads (`Get`,
+`GetUsage`, `GetTenantBudget`), so one type may implement `Store` and
+`UsageStore` together, or each apart as `memstore` does.
 
 `UsageStore` is generic in `TX` — *your* transaction type. Have none?
 Instantiate `UsageStore[struct{}]` and always pass `nil` for the callback.

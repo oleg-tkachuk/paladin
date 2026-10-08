@@ -19,10 +19,10 @@ type copiesUsage struct {
 	bumps                     int
 }
 
-func (u *copiesUsage) BumpRequest(ctx context.Context, req capability.RequestBump) (int64, error) {
+func (u *copiesUsage) Bump(ctx context.Context, req capability.BumpRequest) (int64, error) {
 	u.bumps++
 	u.bumped = req.Copies
-	return u.fakeUsage.BumpRequest(ctx, req)
+	return u.fakeUsage.Bump(ctx, req)
 }
 
 func (u *copiesUsage) Charge(ctx context.Context, req capability.ChargeRequest, on func(context.Context, pgx.Tx) error) (capability.ChargeReceipt, error) {

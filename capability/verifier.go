@@ -128,7 +128,7 @@ type VerifierConfig struct {
 	// MeterCopies admits Biscuits whose attenuation blocks set a copy's own
 	// request or budget limits (Attenuation.MaxRequests, MaxBudgetMicros).
 	// Set it only when the Meter that enforces caveats counts
-	// RequestBump.Copies and the like; off, such a token is refused with
+	// BumpRequest.Copies and the like; off, such a token is refused with
 	// ErrCopyCountersNotMetered rather than accepted with its limits unkept.
 	MeterCopies bool
 
