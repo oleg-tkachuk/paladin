@@ -194,8 +194,8 @@ export default function StorageBackendDetailPage() {
             <TableRow>
               <TableHead className="w-65">Bucket</TableHead>
               <TableHead>Display name</TableHead>
-              <TableHead className="hidden md:table-cell">Region</TableHead>
-              <TableHead className="hidden md:table-cell">State</TableHead>
+              <TableHead className="hidden @md:table-cell">Region</TableHead>
+              <TableHead className="hidden @md:table-cell">State</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -259,12 +259,12 @@ export default function StorageBackendDetailPage() {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @md:table-cell">
                       <span className="font-mono text-xs text-muted-foreground">
                         {b.region || "—"}
                       </span>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @md:table-cell">
                       <Badge variant="outline" className={T.labelTight}>
                         {b.provisionState || "ready"}
                       </Badge>

@@ -217,14 +217,14 @@ export default function CollectionsPage() {
                 onSort={handleSort}
               />
               <SortableHead
-                className="hidden sm:table-cell"
+                className="hidden @xs:table-cell"
                 label="Display name"
                 column="displayName"
                 current={sort}
                 onSort={handleSort}
               />
               <SortableHead
-                className="hidden md:table-cell"
+                className="hidden @md:table-cell"
                 label="Backend"
                 column="backendId"
                 current={sort}
@@ -297,12 +297,12 @@ export default function CollectionsPage() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell">
+                  <TableCell className="hidden @xs:table-cell">
                     {ok.displayName || (
                       <span className="text-muted-foreground italic">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="hidden md:table-cell">
+                  <TableCell className="hidden @md:table-cell">
                     {/* backendId removed from Collection schema — show bucket binding instead */}
                     {ok.bucket ? (
                       <Badge variant="info" className={T.code}>

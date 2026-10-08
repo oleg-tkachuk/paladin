@@ -176,7 +176,7 @@ export default function TrashPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Tenant</TableHead>
-                <TableHead className="hidden md:table-cell">Trashed</TableHead>
+                <TableHead className="hidden @md:table-cell">Trashed</TableHead>
                 <TableHead className="w-50 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -197,7 +197,7 @@ export default function TrashPage() {
                         />
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @md:table-cell">
                       <RelativeTime ts={t.deletedAt || t.updatedAt} />
                     </TableCell>
                     <TableCell className="text-right">

@@ -413,10 +413,10 @@ export default function StorageBackendsPage() {
               </TableHead>
               <TableHead className="w-55">Backend ID</TableHead>
               <TableHead>Display name</TableHead>
-              <TableHead className="hidden md:table-cell">Kind</TableHead>
-              <TableHead className="hidden md:table-cell">Type</TableHead>
-              <TableHead className="hidden md:table-cell">Region</TableHead>
-              <TableHead className="hidden lg:table-cell">Endpoint</TableHead>
+              <TableHead className="hidden @3xl:table-cell">Kind</TableHead>
+              <TableHead className="hidden @4xl:table-cell">Type</TableHead>
+              <TableHead className="hidden @5xl:table-cell">Region</TableHead>
+              <TableHead className="hidden @6xl:table-cell">Endpoint</TableHead>
               <TableHead className="w-40 text-right">Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -512,12 +512,12 @@ export default function StorageBackendsPage() {
                         )}
                       </Link>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @3xl:table-cell">
                       <Badge variant="outline" className={T.labelTight}>
                         {STORAGE_KIND_LABELS[b.kind] || "—"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @4xl:table-cell">
                       {(() => {
                         const p = providerLabel(b);
                         if (p.label === "—")
@@ -542,12 +542,12 @@ export default function StorageBackendsPage() {
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @5xl:table-cell">
                       <span className="font-mono text-xs text-muted-foreground">
                         {b.region || "—"}
                       </span>
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">
+                    <TableCell className="hidden @6xl:table-cell">
                       <span
                         className="font-mono text-caption text-muted-foreground truncate"
                         title={b.endpoint}
@@ -555,8 +555,10 @@ export default function StorageBackendsPage() {
                         {b.endpoint || "—"}
                       </span>
                     </TableCell>
+                    {/* Up to five badges and three buttons: they wrap onto
+                        a second line rather than widening the table. */}
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
                         <Badge
                           variant={b.enabled ? "outline" : "destructive"}
                           className={T.labelTight}
