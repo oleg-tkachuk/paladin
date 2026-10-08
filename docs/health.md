@@ -13,6 +13,10 @@ component, and every component follows the same contract,
   touched, and it never counts toward the role's status.
 - **Check** — the call that exercises the dependency. It runs only while
   the component is on.
+- **Details**, optional (`health.Describer`) — facts shown beside the
+  status, such as how many pool connections are in use. They are read
+  after the check, whether it passed or not, and never for a component
+  that is off.
 
 The switch lives in one of three places, reported as the row's `control`:
 
@@ -26,7 +30,8 @@ The switch lives in one of three places, reported as the row's `control`:
 
 | role | component | control | critical | check |
 |---|---|---|---|---|
-| all but mcp | `postgres` | always_on | yes | ping the primary |
+| all but mcp | `postgres` | always_on | yes | ping the primary; details: the role's pool — connections in use of its maximum, idle, and how often a query waited for one |
+| all but mcp | `postgres-schema` | always_on | yes | the applied schema is not behind the newest migration this build carries; details: both versions. Ahead is normal mid-rollout |
 | all but mcp | `postgres-replica` | config: `datastores.postgres.replica.enabled` | no | the replica is reachable and within `max_lag` |
 | api, admin | `capability` | config: `capability.enabled` | yes | the capability store answers a lookup |
 | api, admin | `api_token` | config: `api_token.enabled` | no | the token store answers the lookup authentication makes |

@@ -325,6 +325,9 @@ func TestSnapshotToProto(t *testing.T) {
 			{Name: "postgres", Status: health.StatusHealthy, LatencyMs: 3, Category: "db", Critical: true},
 			{Name: "s3", Status: health.StatusUnhealthy, Message: "timeout", Category: "storage"},
 			{Name: "nats", Status: health.StatusDisabled, Message: "not in use", Control: health.ControlDatabase},
+			{Name: "postgres-schema", Status: health.StatusHealthy, Details: []health.Detail{
+				{Name: "schema applied", Value: "56"}, {Name: "schema this build needs", Value: "56"},
+			}},
 		},
 	}
 
@@ -336,8 +339,14 @@ func TestSnapshotToProto(t *testing.T) {
 	if got.Status != statusToProto(health.StatusDegraded) {
 		t.Errorf("Status = %v", got.Status)
 	}
-	if len(got.Components) != 3 {
-		t.Fatalf("got %d components, want 3", len(got.Components))
+	if len(got.Components) != 4 {
+		t.Fatalf("got %d components, want 4", len(got.Components))
+	}
+	if d := got.Components[3].Details; len(d) != 2 || d[0].Name != "schema applied" || d[1].Value != "56" {
+		t.Errorf("component[3] details = %v, want both, in order", d)
+	}
+	if got.Components[0].Details != nil {
+		t.Errorf("component[0] details = %v, want none", got.Components[0].Details)
 	}
 	if c := got.Components[2]; c.Control != pb.ComponentControl_COMPONENT_CONTROL_DATABASE || c.Message != "not in use" {
 		t.Errorf("component[2] = %+v, want its switch carried over", c)

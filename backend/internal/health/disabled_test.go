@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -45,7 +46,7 @@ func TestSnapshotListsAComponentOffByConfigAsDisabled(t *testing.T) {
 		Category: string(CategoryDatabase),
 		Control:  ControlConfig,
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("component = %+v, want %+v", got, want)
 	}
 	if snap.Status != StatusHealthy {

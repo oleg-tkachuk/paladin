@@ -143,17 +143,12 @@ func ParseBuildTime(s string) time.Time {
 // component (e.g. mcp upstreams on the mcp role) be conditionally
 // registered.
 func NewHealthHandler(db *postgres.DB, cfg config.Runtime, l *zap.Logger) *health.Handler {
-	dbPing := health.Check{
-		Name:     "postgres",
-		Category: health.CategoryDatabase,
-		Critical: true,
-		Func:     func(ctx context.Context) error { return db.Ping(ctx) },
-	}
+	dbPing := postgresComponent(db)
 	return &health.Handler{
 		Logger:        l.Named("health"),
 		LogSuccesses:  cfg.LogProbes,
 		SnapshotToken: cfg.HealthSnapshotToken,
-		Ready:         []health.Probe{dbPing, replicaCheck(db)},
+		Ready:         []health.Probe{dbPing, schemaComponent(db), replicaCheck(db)},
 		Startup:       []health.Probe{dbPing},
 	}
 }

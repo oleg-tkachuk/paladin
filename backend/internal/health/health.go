@@ -293,6 +293,9 @@ func (h *Handler) run(ctx context.Context, p Probe) Component {
 	}
 	if err == nil {
 		err = p.Check(cctx)
+		if d, ok := p.(Describer); ok {
+			comp.Details = d.Details(cctx)
+		}
 	} else {
 		err = fmt.Errorf("read whether %s is enabled: %w", spec.Name, err)
 	}
@@ -364,6 +367,8 @@ type Component struct {
 	Critical  bool            `json:"critical"`
 	// Control is where the component's switch lives.
 	Control Control `json:"control"`
+	// Details are the facts a Describer reports beside the status.
+	Details []Detail `json:"details,omitempty"`
 }
 
 // Snapshot is the aggregated health view for one role.
