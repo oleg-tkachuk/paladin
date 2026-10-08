@@ -28,6 +28,10 @@ type Store interface {
 	// holder; a root one by an operator. Passed as an argument rather than
 	// carried on Capability because it is issuance metadata, not a claim —
 	// putting it in the struct would change the token's frozen wire format.
+	//
+	// An id already on record returns ErrAlreadyExists and changes nothing.
+	// A store that knows tenants returns ErrUnknownTenant or
+	// ErrTenantDeleted for a tenant it cannot mint for.
 	Insert(ctx context.Context, c Capability, issuedBy Principal) error
 
 	// Get fetches a capability record by ID. Returns ErrNotFound when
@@ -44,28 +48,34 @@ type Store interface {
 	// the chain is what makes revoking an orchestrator stop the workers it
 	// spawned. Verifiers gate every request on it, so implementations
 	// should make the walk a single round trip (a recursive query) and
-	// bound its depth.
+	// bound its depth. An id not on record is not revoked.
 	IsRevoked(ctx context.Context, id uuid.UUID) (bool, error)
 
 	// Revoke adds an entry to the revocation list. Idempotent: a
-	// duplicate revoke is a no-op.
+	// duplicate revoke is a no-op. An id not on record — or not visible
+	// to the caller — returns ErrNotFound and writes nothing, so a caller
+	// is never told "revoked" about a capability nothing stopped.
 	//
 	// Every descendant stops verifying either way, because IsRevoked
 	// walks the chain. CascadeChildren=true additionally writes a
 	// revocation entry for each descendant, so the audit trail names
 	// every capability that was stopped, not only the one an operator
 	// picked.
-	Revoke(ctx context.Context, args RevokeRequest) error
+	Revoke(ctx context.Context, req RevokeRequest) error
 
-	// PurgeExpired drops revocation rows whose underlying capability
-	// has been expired for at least the supplied grace period. Run by
-	// the housekeeping worker so the revocation list stays bounded.
+	// PurgeExpired drops the revocation entries — of capabilities and of
+	// Biscuit copies — of every capability expired for at least
+	// expiredFor, and returns how many it dropped. The capability records
+	// stay: an expired token fails verification on its expiry alone, so
+	// its revocation entry no longer stops anything. Run by the
+	// housekeeping worker so the revocation lists stay bounded.
 	PurgeExpired(ctx context.Context, expiredFor time.Duration) (int64, error)
 
-	// ListByPrincipal is admin-tooling support: list every active
-	// capability issued to a principal (for display in the UI).
-	// Pagination: cursor-based opaque to caller.
-	ListByPrincipal(ctx context.Context, args ListByPrincipalRequest) ([]Capability, string, error)
+	// ListByPrincipal lists the capabilities issued to one principal, in
+	// ascending id order, a page at a time: it returns at most Limit of
+	// them and a cursor that is empty on the last page and otherwise
+	// fetches the next one. The cursor is opaque.
+	ListByPrincipal(ctx context.Context, req ListByPrincipalRequest) ([]Capability, string, error)
 }
 
 // ErrNotFound is the typed not-found return from Store.Get. It lives in the
@@ -77,6 +87,28 @@ type Store interface {
 // whose record is absent was forged or purged, which is an authentication
 // failure, not a missing entity.
 var ErrNotFound = errors.New("capability: not found")
+
+// ErrAlreadyExists is Store.Insert given an id already on record.
+var ErrAlreadyExists = errors.New("capability: already exists")
+
+// Page sizes of ListByPrincipal: Limit 0 or below means DefaultListLimit,
+// and anything above MaxListLimit is clamped to it.
+const (
+	DefaultListLimit = 50
+	MaxListLimit     = 500
+)
+
+// PageLimit is the page size a store serves for a requested limit.
+func PageLimit(requested int32) int32 {
+	switch {
+	case requested <= 0:
+		return DefaultListLimit
+	case requested > MaxListLimit:
+		return MaxListLimit
+	default:
+		return requested
+	}
+}
 
 // RevokeRequest is the input shape for Store.Revoke.
 type RevokeRequest struct {
@@ -94,11 +126,31 @@ type RevokeRequest struct {
 
 // ListByPrincipalRequest is the input shape for Store.ListByPrincipal.
 type ListByPrincipalRequest struct {
-	TenantID       uuid.UUID
-	PrincipalType  PrincipalType
-	Subject        string
+	// TenantID, PrincipalType and Subject name the principal; all three are
+	// required (Validate).
+	TenantID      uuid.UUID
+	PrincipalType PrincipalType
+	Subject       string
+	// IncludeExpired and IncludeRevoked also list capabilities that have
+	// expired, or that are revoked themselves (not through an ancestor).
 	IncludeExpired bool
 	IncludeRevoked bool
-	Cursor         string
-	Limit          int32
+	// Cursor is the one the previous page returned; empty for the first.
+	Cursor string
+	// Limit is the page size; see PageLimit.
+	Limit int32
+}
+
+// Validate reports whether the request names a principal. Every error
+// matches ErrInvalidRequest.
+func (r ListByPrincipalRequest) Validate() error {
+	switch {
+	case r.TenantID == uuid.Nil:
+		return invalidRequest("list: tenant id required")
+	case r.PrincipalType == "":
+		return invalidRequest("list: principal type required")
+	case r.Subject == "":
+		return invalidRequest("list: subject required")
+	}
+	return nil
 }

@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -44,7 +43,7 @@ SELECT EXISTS (
 // a caller that cannot see the capability gets ErrNotFound and writes nothing.
 func (s *Store) RevokeBiscuit(ctx context.Context, args capability.RevokeBiscuitRequest) error {
 	if len(args.RevocationID) == 0 {
-		return errors.New("capability/postgres: revoke biscuit: revocation id required")
+		return fmt.Errorf("%w: capability/postgres: revoke biscuit: revocation id required", capability.ErrInvalidRequest)
 	}
 	const stmt = `
 WITH target AS (

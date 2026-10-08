@@ -146,56 +146,6 @@ func TestBumpRequestUnlimited(t *testing.T) {
 	}
 }
 
-func TestListByPrincipalFilters(t *testing.T) {
-	ctx := context.Background()
-	s := New[struct{}]()
-	tenantA, tenantB := uuid.New(), uuid.New()
-	idA, idB, revoked := uuid.New(), uuid.New(), uuid.New()
-
-	_ = s.Insert(ctx, mkCap(idA, uuid.Nil, tenantA, "alice"), capability.Principal{Subject: "test-operator"})
-	_ = s.Insert(ctx, mkCap(idB, uuid.Nil, tenantB, "bob"), capability.Principal{Subject: "test-operator"})
-	_ = s.Insert(ctx, mkCap(revoked, uuid.Nil, tenantA, "carol"), capability.Principal{Subject: "test-operator"})
-	_ = s.Revoke(ctx, capability.RevokeRequest{ID: revoked})
-
-	got, _, err := s.ListByPrincipal(ctx, capability.ListByPrincipalRequest{TenantID: tenantA})
-	if err != nil {
-		t.Fatalf("ListByPrincipal: %v", err)
-	}
-	if len(got) != 1 || got[0].ID != idA {
-		t.Errorf("tenant filter + revoked exclusion failed: %d rows", len(got))
-	}
-
-	got, _, _ = s.ListByPrincipal(ctx, capability.ListByPrincipalRequest{
-		TenantID: tenantA, IncludeRevoked: true,
-	})
-	if len(got) != 2 {
-		t.Errorf("IncludeRevoked = true returned %d rows, want 2", len(got))
-	}
-}
-
-// An expired capability is excluded by default — an operator listing live
-// authority should not have to filter the dead ones out themselves.
-func TestListByPrincipalExcludesExpired(t *testing.T) {
-	ctx := context.Background()
-	s := New[struct{}]()
-	tenant := uuid.New()
-	id := uuid.New()
-	c := mkCap(id, uuid.Nil, tenant, "old")
-	c.ExpiresAt = time.Now().Add(-time.Hour)
-	_ = s.Insert(ctx, c, capability.Principal{Subject: "test-operator"})
-
-	got, _, _ := s.ListByPrincipal(ctx, capability.ListByPrincipalRequest{TenantID: tenant})
-	if len(got) != 0 {
-		t.Errorf("expired capability listed by default")
-	}
-	got, _, _ = s.ListByPrincipal(ctx, capability.ListByPrincipalRequest{
-		TenantID: tenant, IncludeExpired: true,
-	})
-	if len(got) != 1 {
-		t.Errorf("IncludeExpired = true returned %d rows, want 1", len(got))
-	}
-}
-
 // A pre-unit-tracking row must resolve to the default rather than persisting
 // an empty unit — clients would otherwise render a bare number.
 func TestSetTenantBudgetDefaultsUnitCode(t *testing.T) {

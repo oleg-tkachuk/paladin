@@ -3,6 +3,7 @@ package capabilityh
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -317,6 +318,19 @@ func TestListStoreErrorIsInternal(t *testing.T) {
 	}))
 	if codeOf(err) != connect.CodeInternal {
 		t.Fatalf("code = %v, want Internal", codeOf(err))
+	}
+}
+
+// A page token the store cannot read is a bad request, not a server fault.
+func TestListBadPageTokenIsInvalidArgument(t *testing.T) {
+	store := &recordingStore{listErr: fmt.Errorf("%w: cursor", capability.ErrInvalidRequest)}
+	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
+
+	_, err := h.List(adminCtx(), connect.NewRequest(&adminv1.CapabilityServiceListRequest{
+		TenantId: uuid.New().String(), PageToken: "garbage",
+	}))
+	if codeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument", codeOf(err))
 	}
 }
 

@@ -50,6 +50,10 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 // 001_initial_schema.sql names it.
 const tenantForeignKey = "capability_records_tenant_id_fkey"
 
+// recordsPrimaryKey is capability_records' primary key, as Postgres names it
+// by default for 001_initial_schema.sql.
+const recordsPrimaryKey = "capability_records_pkey"
+
 // lockLiveTenant refuses a capability for a tenant that does not exist or is
 // in the trash, and holds the tenant's row until the insert commits, so a
 // concurrent delete cannot land between the check and the insert. The
@@ -163,6 +167,9 @@ INSERT INTO capability_records (
 		if pgerr.Is(err, pgerr.ForeignKeyViolation) && pgerr.Constraint(err) == tenantForeignKey {
 			return fmt.Errorf("%w: %s", capability.ErrUnknownTenant, c.Subject.TenantID)
 		}
+		if pgerr.Is(err, pgerr.UniqueViolation) && pgerr.Constraint(err) == recordsPrimaryKey {
+			return fmt.Errorf("%w: %s", capability.ErrAlreadyExists, c.ID)
+		}
 		return fmt.Errorf("capability/postgres: insert: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -251,7 +258,7 @@ SELECT EXISTS (
 // kept as a defensive guard against pathological dataset corruption.
 func (s *Store) Revoke(ctx context.Context, args capability.RevokeRequest) error {
 	if args.ID == uuid.Nil {
-		return errors.New("capability/postgres: revoke ID required")
+		return ErrNotFound // no capability has the nil id
 	}
 
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
@@ -351,16 +358,15 @@ WHERE capability_id IN (
 // id encoded as a hex string; a follow-up page seeks past it. Page size
 // is bounded by Limit (default 50, max 500).
 func (s *Store) ListByPrincipal(ctx context.Context, args capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
-	if args.TenantID == uuid.Nil {
-		return nil, "", errors.New("capability/postgres: tenant_id required")
+	if err := args.Validate(); err != nil {
+		return nil, "", err
 	}
-	limit := args.Limit
-	if limit <= 0 {
-		limit = 50
+	if args.Cursor != "" {
+		if _, err := uuid.Parse(args.Cursor); err != nil {
+			return nil, "", fmt.Errorf("%w: capability/postgres: cursor %q", capability.ErrInvalidRequest, args.Cursor)
+		}
 	}
-	if limit > 500 {
-		limit = 500
-	}
+	limit := capability.PageLimit(args.Limit)
 
 	// Build clauses incrementally so the query plan stays readable.
 	whereExtra := ""

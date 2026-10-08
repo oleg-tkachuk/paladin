@@ -145,7 +145,7 @@ type TenantBudgets interface {
 	// the accounting period and zeroes the spend — operators call
 	// this on each billing close. ResetSpend=false adjusts the cap
 	// mid-cycle without affecting accumulated spend.
-	SetTenantBudget(ctx context.Context, args SetTenantBudgetRequest) (TenantBudget, error)
+	SetTenantBudget(ctx context.Context, req SetTenantBudgetRequest) (TenantBudget, error)
 
 	// ListTenantBudgets returns tenant budget rows, with the consumer's
 	// display fields where it has them. Filters:
@@ -157,7 +157,7 @@ type TenantBudgets interface {
 	//
 	// Rows are returned in descending utilisation order so the most
 	// at-risk tenants surface first.
-	ListTenantBudgets(ctx context.Context, args ListTenantBudgetsRequest) ([]TenantBudgetSummary, error)
+	ListTenantBudgets(ctx context.Context, req ListTenantBudgetsRequest) ([]TenantBudgetSummary, error)
 }
 
 // UsageHousekeeping reclaims usage rows of capabilities that are gone.
