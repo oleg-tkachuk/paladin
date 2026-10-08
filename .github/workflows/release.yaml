@@ -173,12 +173,17 @@ jobs:
 
       # Read from git rather than parsing semantic-release's prose: it tags the
       # commit that was checked out, so no new tag here means no release was
-      # due and there is nothing to publish. "New" is against the list taken
-      # above — see scripts/new-release-tag.sh for why a tag on HEAD is not
-      # enough.
+      # due and there is nothing to publish — unless HEAD carries a tag with no
+      # release, left by a run that failed after pushing it, which a re-run
+      # publishes. "New" is against the list taken above — see
+      # scripts/new-release-tag.sh for why a tag on HEAD is not enough.
       - name: Read the tag it just pushed
         id: tag
         if: steps.head.outputs.release == 'true'
+        env:
+          # A tag on HEAD without a release is one a failed run left behind;
+          # new-release-tag.sh asks GitHub which, so a re-run publishes it.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
