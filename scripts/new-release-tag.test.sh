@@ -14,6 +14,17 @@ script="$(git rev-parse --show-toplevel)/scripts/new-release-tag.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
+# gh stands in for GitHub: `gh release view <tag>` succeeds for the tags
+# listed in $work/released, as for a tag whose release exists.
+mkdir "$work/bin"
+cat >"$work/bin/gh" <<'GH'
+#!/usr/bin/env bash
+[ "$1 $2" = "release view" ] && grep -qxF "$3" "$RELEASED"
+GH
+chmod +x "$work/bin/gh"
+export PATH="$work/bin:$PATH" RELEASED="$work/released"
+: >"$RELEASED"
+
 cd "$work"
 git init -q repo && cd repo
 git -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m one
@@ -37,10 +48,14 @@ git tag v4.2.0
 check "the tag this run pushed" "v4.2.0" "$("$script" "$before")"
 
 git tag --points-at HEAD >"$before"
-check "a tag an earlier run pushed" "" "$("$script" "$before")"
+check "a tag an earlier run pushed and never published" "v4.2.0" "$("$script" "$before")"
+
+echo v4.2.0 >>"$RELEASED"
+check "a tag an earlier run pushed and published" "" "$("$script" "$before")"
 
 git tag v4.2.1
 check "a new tag beside an old one" "v4.2.1" "$("$script" "$before")"
+echo v4.2.1 >>"$RELEASED"
 
 git tag sdk/go/v0.3.0
 git tag capability/v0.2.0
@@ -49,7 +64,13 @@ check "every new module tag" "$(printf 'capability/v0.2.0\nsdk/go/v0.3.0')" "$("
 check "the product is no module" "" "$("$script" "$before" streams | grep -E '^v' || true)"
 
 git tag --points-at HEAD >"$before"
-check "module tags an earlier run pushed" "" "$("$script" "$before" streams)"
+check "module tags an earlier run pushed and never published" "$(printf 'capability/v0.2.0\nsdk/go/v0.3.0')" "$("$script" "$before" streams)"
+
+echo capability/v0.2.0 >>"$RELEASED"
+check "only the module tag left unpublished" "sdk/go/v0.3.0" "$("$script" "$before" streams)"
+
+echo sdk/go/v0.3.0 >>"$RELEASED"
+check "module tags an earlier run pushed and published" "" "$("$script" "$before" streams)"
 
 if [ "$failures" -gt 0 ]; then
     exit 1
