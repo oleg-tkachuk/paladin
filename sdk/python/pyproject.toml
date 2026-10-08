@@ -51,7 +51,7 @@ biscuit = ["biscuit-python>=0.4.0,<0.5"]
 
 [dependency-groups]
 dev = [
-    "opentelemetry-sdk==1.45.0",
+    "opentelemetry-sdk==1.45.1",
     # RPC spans through Client(interceptors=...), which the README documents.
     "connectrpc-otel==0.2.0",
     "cryptography==50.0.2",
@@ -70,7 +70,7 @@ dev = [
     "grpcio-tools==1.81.1",
     "protoc-gen-connectrpc==0.12.1",
     "pytest==9.1.1",
-    "ruff==0.16.9",
+    "ruff==0.16.10",
 ]
 
 [build-system]
