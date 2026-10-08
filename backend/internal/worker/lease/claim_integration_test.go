@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/pgtest"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,7 +37,7 @@ import (
 func startPostgres(tb testing.TB) *pgxpool.Pool {
 	tb.Helper()
 	ctx := context.Background()
-	ctr, err := tcpostgres.Run(ctx, "postgres:17-alpine",
+	ctr, err := tcpostgres.Run(ctx, pgtest.Image,
 		tcpostgres.WithDatabase("paladin"),
 		tcpostgres.WithUsername("paladin"),
 		tcpostgres.WithPassword("paladin"),

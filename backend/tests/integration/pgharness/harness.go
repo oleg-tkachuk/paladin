@@ -46,6 +46,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/pgtest"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver for goose
@@ -59,7 +61,7 @@ import (
 )
 
 const (
-	postgresImage = "postgres:16-alpine"
+	postgresImage = pgtest.Image
 	// migrateRole is the container's bootstrap superuser, and the role goose
 	// applies DDL as.
 	migrateRole     = "paladin_migrate"

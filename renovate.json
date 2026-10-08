@@ -8,7 +8,16 @@
     "Vulnerability remediation is ungrouped and unscheduled — it should not wait for the monthly window.",
     "Code generators are versioned with the stubs they write, and Renovate cannot regenerate those stubs: a generator bump leaves them stale and the stale-stub gates fail. So generators move in their own PR, finished by running `task gen`, or not at all."
   ],
-  "enabledManagers": ["dockerfile", "docker-compose", "github-actions", "gomod", "npm", "pep621"],
+  "enabledManagers": ["dockerfile", "docker-compose", "github-actions", "gomod", "npm", "pep621", "custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The Postgres the Go test suites start, which no built-in manager reads.",
+      "managerFilePatterns": ["/^backend/internal/pgtest/image\\.go$/"],
+      "matchStrings": ["const Image = \"(?<depName>postgres):(?<currentValue>[^\"@]+)(@(?<currentDigest>sha256:[a-f0-9]+))?\""],
+      "datasourceTemplate": "docker"
+    }
+  ],
   "pinDigests": true,
   "postUpdateOptions": ["gomodTidy"],
   "schedule": ["before 6am on monday"],
@@ -23,6 +32,12 @@
       "matchManagers": ["dockerfile", "docker-compose"],
       "matchUpdateTypes": ["digest"],
       "groupName": "base-image digests"
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["postgres"],
+      "groupName": "postgres",
+      "description": "The compose stacks and the Go test suites run one Postgres (scripts/postgres-version.test.sh); moved apart, a test passes against a server no deployment runs."
     },
     {
       "matchManagers": ["github-actions"],

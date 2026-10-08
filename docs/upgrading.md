@@ -44,6 +44,23 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the compose stack runs Postgres 18
+
+`backend/deploy/docker-compose.yaml` and the e2e stack move from Postgres 16 to
+18.6, the version the test suites and the reference cluster run. A major
+cannot read the previous major's data directory, and Postgres 18's image keeps
+its data under `/var/lib/postgresql/18/docker`, so the `paladin_pg_data`
+volume is now mounted at `/var/lib/postgresql`. An existing local volume
+starts empty under 18 with the 16 data left beside it; the local stack's data
+is disposable, so drop the volume and let the stack recreate it:
+
+```
+docker compose -f backend/deploy/docker-compose.yaml down -v
+```
+
+A deployment that keeps its data moves majors with `pg_upgrade`, or, on
+CloudNativePG, a major version upgrade of the cluster.
+
 ## Unreleased — the Go SDK and the server run on connect-go v2
 
 - The Go SDK depends on `connectrpc.com/connect/v2` instead of

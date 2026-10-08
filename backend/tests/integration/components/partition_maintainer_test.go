@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/pgtest"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -29,7 +31,7 @@ func TestPartitionMaintainer_CreateAndDrop(t *testing.T) {
 	ctx := context.Background()
 
 	pgC, err := tcpostgres.Run(ctx,
-		"postgres:16-alpine",
+		pgtest.Image,
 		tcpostgres.WithDatabase("paladin"),
 		tcpostgres.WithUsername("paladin_migrate"),
 		tcpostgres.WithPassword("paladin"),
@@ -126,7 +128,7 @@ func TestPartitionMaintainer_RecoversDefaultOverlap(t *testing.T) {
 	ctx := context.Background()
 
 	pgC, err := tcpostgres.Run(ctx,
-		"postgres:16-alpine",
+		pgtest.Image,
 		tcpostgres.WithDatabase("paladin"),
 		tcpostgres.WithUsername("paladin"),
 		tcpostgres.WithPassword("paladin"),

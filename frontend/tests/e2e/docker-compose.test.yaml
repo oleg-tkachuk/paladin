@@ -197,7 +197,7 @@ services:
         condition: service_started
 
   postgres:
-    image: postgres:16
+    image: postgres:18.6
     environment:
       POSTGRES_DB: paladin
       POSTGRES_USER: paladin
@@ -208,8 +208,9 @@ services:
     # (R-003) lives ABOVE this layer — the entire DB is fresh
     # on every `compose up`, and tests collide-resist within
     # the run via uniqueSlug() helpers.
+    # Postgres 18's data directory is /var/lib/postgresql/18/docker.
     tmpfs:
-      - /var/lib/postgresql/data
+      - /var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U paladin -d paladin"]
       interval: 2s
@@ -249,7 +250,7 @@ services:
   # no RLS policy at all, and why an RLS migration could pass the whole suite
   # and then refuse every login on the cluster.
   promote-app-role:
-    image: postgres:16
+    image: postgres:18.6
     restart: "no"
     environment:
       PGPASSWORD: paladin
