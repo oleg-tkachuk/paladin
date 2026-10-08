@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { ROLES } from "@/constants/roles";
-import { visibleNavigationGroups } from "./Sidebar";
+import { cn } from "@/lib/utils";
+import { GROUP_LABEL_CLASS, visibleNavigationGroups } from "./Sidebar";
 
 const names = (roles: string[] | null) =>
   visibleNavigationGroups(roles).flatMap((g) => g.items.map((i) => i.name));
@@ -41,5 +42,14 @@ describe("visibleNavigationGroups", () => {
 
   it("takes nothing away before the user is known", () => {
     expect(names(null)).toEqual(names([ROLES.platformAdmin]));
+  });
+});
+
+// The label is rendered through cn(), which drops a class it reads as a
+// clash: a size it does not know beside a text colour vanished, and the
+// label came out larger than the items under it.
+describe("group label", () => {
+  it("keeps a font size through cn()", () => {
+    expect(cn(GROUP_LABEL_CLASS).split(" ")).toContain("text-sm");
   });
 });
