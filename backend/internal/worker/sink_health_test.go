@@ -6,7 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
+	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
 )
 
 // The dispatcher reported a broker healthy whenever its pool held nothing
@@ -41,7 +44,7 @@ func TestBrokerComponent(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			count := func(context.Context) (int, error) { return tc.subscriptions, nil }
-			c := BrokerComponent(SinkKindRabbitMQ, count, func() []BrokerConn { return tc.conns })
+			c := BrokerComponent(sinkkind.RabbitMQ, allOn, count, func() []BrokerConn { return tc.conns })
 			got := (&health.Handler{Ready: []health.Probe{c}}).Snapshot(context.Background(), "dispatcher").Components[0]
 			if got.Status != tc.want || !strings.Contains(got.Message, tc.wantMessage) || got.Control != health.ControlDatabase {
 				t.Errorf("component = %+v, want %s with %q, switched by the database", got, tc.want, tc.wantMessage)
@@ -54,7 +57,7 @@ func TestBrokerComponent(t *testing.T) {
 // and no broker is checked.
 func TestBrokerComponentFailsWhenTheSubscriptionsCannotBeRead(t *testing.T) {
 	count := func(context.Context) (int, error) { return 0, errors.New("permission denied") }
-	c := BrokerComponent(SinkKindNATS, count, func() []BrokerConn {
+	c := BrokerComponent(sinkkind.NATS, allOn, count, func() []BrokerConn {
 		t.Error("the pool was read with the switch unknown")
 		return nil
 	})
@@ -64,11 +67,49 @@ func TestBrokerComponentFailsWhenTheSubscriptionsCannotBeRead(t *testing.T) {
 	}
 }
 
+// allOn switches every kind on.
+var allOn = kindSwitch(func(string) bool { return true })
+
+type kindSwitch func(string) bool
+
+func (k kindSwitch) Enabled(kind string) bool { return k(kind) }
+
+// A kind switched off in the configuration is off whatever is stored, and
+// neither the subscriptions nor the pool are read.
+func TestBrokerComponentOffByConfig(t *testing.T) {
+	off := kindSwitch(func(kind string) bool { return kind != sinkkind.RabbitMQ })
+	c := BrokerComponent(sinkkind.RabbitMQ, off,
+		func(context.Context) (int, error) {
+			t.Error("the subscriptions were read for a kind off by configuration")
+			return 1, nil
+		},
+		func() []BrokerConn {
+			t.Error("the pool was read for a kind off by configuration")
+			return nil
+		})
+	got := (&health.Handler{Ready: []health.Probe{c}}).Snapshot(context.Background(), "dispatcher").Components[0]
+	if got.Status != health.StatusDisabled || got.Control != health.ControlConfig ||
+		got.Message != "off by configuration: "+config.SinkSwitchKey(sinkkind.RabbitMQ) {
+		t.Errorf("component = %+v, want off by %s", got, config.SinkSwitchKey(sinkkind.RabbitMQ))
+	}
+}
+
 // Every failing broker is named, in the same order on every probe.
 func TestBrokerHealthNamesEachFailureInOrder(t *testing.T) {
 	down := errors.New("down")
 	err := BrokerHealth([]BrokerConn{{URL: "nats://b", Err: down}, {URL: "nats://a", Err: down}})
 	if got, want := err.Error(), "nats://a: down\nnats://b: down"; got != want {
 		t.Errorf("BrokerHealth = %q, want %q", got, want)
+	}
+}
+
+// A test delivery to a kind switched off is refused before any sink is
+// tried: the pools here are nil, so reaching one would fail differently.
+func TestDeliverOneRefusesAKindOffByConfig(t *testing.T) {
+	off := kindSwitch(func(kind string) bool { return kind != sinkkind.RabbitMQ })
+	d := &Dispatcher{Sinks: off}
+	err := d.DeliverOne(context.Background(), admindomain.EventSubscription{SinkKind: sinkkind.RabbitMQ}, "paladin.test")
+	if err == nil || !strings.Contains(err.Error(), config.SinkSwitchKey(sinkkind.RabbitMQ)) {
+		t.Fatalf("DeliverOne = %v, want refused naming %s", err, config.SinkSwitchKey(sinkkind.RabbitMQ))
 	}
 }

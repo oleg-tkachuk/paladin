@@ -13,6 +13,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
+
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -94,6 +97,38 @@ func TestOutboxRunner_DisabledSubscriptionFailsTheRow(t *testing.T) {
 	}
 	if rec.count() != 0 {
 		t.Errorf("sink saw %d requests for a disabled subscription, want 0", rec.count())
+	}
+}
+
+// httpOff switches the http sink kind off and leaves the rest on.
+type httpOff struct{}
+
+func (httpOff) Enabled(kind string) bool { return kind != sinkkind.HTTP }
+
+// A sink kind switched off in the configuration ends its rows the same way,
+// naming the key that turns it back on; nothing reaches the sink.
+func TestOutboxRunner_OffSinkKindFailsTheRow(t *testing.T) {
+	t.Parallel()
+	f := setupDispatcher(t)
+	rec := newRecorder(http.StatusOK)
+	defer rec.Close()
+
+	tenant := mustCreateTenant(t, f.h.PoolMigrate, "outbox-kind-off")
+	sub := f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL})
+	id := f.queueRow(t, tenant, sub, eventPayload(t, tenant))
+
+	d := f.dispatcher()
+	d.Sinks = httpOff{}
+	f.tickOnce(t, f.outboxRunner(d))
+
+	row := f.deliveryRow(t, id)
+	want := "sink kind http is off by configuration: " + config.SinkSwitchKey(sinkkind.HTTP)
+	if row.Status != "failed" || row.Attempts != 1 || row.LastError != want {
+		t.Fatalf("status=%q attempts=%d last_error=%q, want failed/1/%q",
+			row.Status, row.Attempts, row.LastError, want)
+	}
+	if rec.count() != 0 {
+		t.Errorf("sink saw %d requests for a kind switched off, want 0", rec.count())
 	}
 }
 
