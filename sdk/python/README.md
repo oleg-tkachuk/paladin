@@ -599,7 +599,7 @@ under [`proto/paladin`](../../proto/paladin).
 | `BillingService` | `get_tenant_summary`, `get_tenant_time_series` |
 | `BucketService` | `create_bucket`, `get_bucket`, `update_bucket`, `delete_bucket`, `list_buckets`, `set_bucket_policy`, `set_lifecycle_rules`, `set_object_lock`, `set_versioning`, `set_replication`, `list_accessible_buckets` |
 | `CELService` | `validate` |
-| `CapabilityService` | `issue`, `delegate`, `revoke`, `revoke_biscuit`, `get_biscuit_usage`, `list`, `get_usage` |
+| `CapabilityService` | `issue`, `delegate`, `revoke`, `revoke_biscuit`, `get_biscuit_usage`, `get`, `list`, `get_usage` |
 | `CollectionService` | `create_collection`, `get_collection`, `update_collection`, `delete_collection`, `list_collections`, `set_collection_policy`, `bind_collection_to_bucket` |
 | `EventSubscriptionService` | `create_subscription`, `get_subscription`, `update_subscription`, `delete_subscription`, `list_subscriptions`, `test_subscription`, `redrive_failed_deliveries` |
 | `MCPInspectService` | `inspect`, `list_sessions`, `get_bridge_status` |
