@@ -24,7 +24,7 @@ func MoneyOf(unit string, n capability.Nanos) *money.Money {
 	return &money.Money{
 		CurrencyCode: unit,
 		Units:        int64(n / capability.NanosPerUnit),
-		Nanos:        int32(n % capability.NanosPerUnit), //nolint:gosec // the remainder of a division by 10^9 fits int32
+		Nanos:        int32(n % capability.NanosPerUnit),
 	}
 }
 
