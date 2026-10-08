@@ -98,11 +98,19 @@ tasks:
       # thing that makes the result mean anything, so it is not optional and
       # not a staleness heuristic.
       - task: :release:image:build
+      - task: stack:run
+
+  stack:run:
+    desc: "test:stack against the image already built, without building it: for CI, which carries one over from the end-to-end build"
+    env: { PALADIN_IMAGE_PREFIX: "{{.STACK_IMAGE_PREFIX}}" }
+    cmds:
       # The body is a script rather than an inline `cmd:` because go-task
       # renders every command as a Go template first, and the collision
       # preflight needs `docker ps --format` — whose Go templates go-task
       # eats before Docker ever sees them. Same reason the security tasks
-      # below are thin wrappers.
+      # below are thin wrappers. The script refuses an image whose build
+      # info.env is missing or names another version, so this cannot run
+      # against a stale one.
       - scripts/verify-stack.sh
 
   # ─── Security ────────────────────────────────────────────────────────────
