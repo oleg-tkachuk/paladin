@@ -32,7 +32,7 @@ SET max_budget_usd = EXCLUDED.max_budget_usd,
     resource_version = tenant_budgets.resource_version + 1,
     updated_at     = now()
 WHERE tenant_budgets.resource_version = sqlc.arg('expected_version')::bigint
-RETURNING tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version;
+RETURNING tenant_id, max_budget_usd, spent_usd, reserved_usd, unit_code, period_start, period_end, updated_at, resource_version;
 
 -- name: GetTenantBudget :one
 SELECT tenant_id, max_budget_usd, spent_usd, reserved_usd, unit_code, period_start, period_end, updated_at, resource_version
@@ -84,7 +84,10 @@ WHERE capability_id = $1;
 --                          everything).
 --   exclude_inactive=true → join filters tenants.deleted_at IS NULL.
 --
--- Ordered by utilisation DESC so at-risk tenants surface first.
+-- Ordered most at risk first: by raw utilisation (unclamped, so the
+-- tenant furthest past its ceiling leads), then tenant_id. after_pct and
+-- after_tenant, both set or both NULL, resume after a row of that order
+-- (capability.ListTenantBudgets' cursor); raw_pct is returned to build it.
 SELECT
     tb.tenant_id,
     t.slug,
@@ -95,12 +98,21 @@ SELECT
     tb.period_start,
     tb.period_end,
     tb.updated_at,
+    tb.reserved_usd,
+    tb.resource_version,
     (CASE
       WHEN tb.max_budget_usd = 0 THEN 0::numeric
       ELSE LEAST(100::numeric, (tb.spent_usd / tb.max_budget_usd) * 100)
-    END)::numeric AS utilisation_pct
+    END)::numeric AS utilisation_pct,
+    r.raw_pct::text AS raw_pct
   FROM tenant_budgets AS tb
   JOIN tenants AS t ON t.id = tb.tenant_id
+  CROSS JOIN LATERAL (
+    SELECT CASE WHEN tb.max_budget_usd > 0
+                THEN (tb.spent_usd / tb.max_budget_usd) * 100
+                ELSE 0::numeric
+           END AS raw_pct
+  ) AS r
  WHERE (NOT sqlc.arg('exclude_inactive')::bool OR t.deleted_at IS NULL)
    AND (
      (sqlc.arg('unlimited_only')::bool AND tb.max_budget_usd = 0)
@@ -111,10 +123,8 @@ SELECT
                AND (tb.spent_usd / tb.max_budget_usd) * 100 >= sqlc.arg('threshold_pct')::numeric)
          ))
    )
- ORDER BY
-   CASE WHEN tb.max_budget_usd > 0
-        THEN (tb.spent_usd / tb.max_budget_usd) * 100
-        ELSE 0
-   END DESC,
-   t.slug ASC
+   AND (sqlc.narg('after_pct')::numeric IS NULL
+        OR r.raw_pct < sqlc.narg('after_pct')::numeric
+        OR (r.raw_pct = sqlc.narg('after_pct')::numeric AND tb.tenant_id > sqlc.narg('after_tenant')::uuid))
+ ORDER BY r.raw_pct DESC, tb.tenant_id ASC
  LIMIT sqlc.arg('row_limit')::int;

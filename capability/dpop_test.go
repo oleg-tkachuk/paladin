@@ -8,6 +8,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -29,13 +30,13 @@ func dpopKeys(t *testing.T) map[string]crypto.Signer {
 	return map[string]crypto.Signer{"Ed25519": ed, "P-256": ec}
 }
 
-func boundCap(t *testing.T, key crypto.Signer) *Capability {
+func boundCap(t *testing.T, key crypto.Signer) Capability {
 	t.Helper()
 	jkt, err := KeyThumbprint(key.Public())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &Capability{ID: uuid.New(), ConfirmationJKT: jkt}
+	return Capability{ID: uuid.New(), ConfirmationJKT: jkt}
 }
 
 func TestDPoPAcceptsAProofFromTheBoundKey(t *testing.T) {
@@ -131,7 +132,7 @@ func TestDPoPPathOnlyIgnoresHostButNotPath(t *testing.T) {
 
 func TestDPoPUnboundCapabilityNeedsNoProof(t *testing.T) {
 	v := &DPoPVerifier{Replay: NewMemoryReplayCache(0)}
-	if err := v.Check(context.Background(), &Capability{}, DPoPRequest{}); err != nil {
+	if err := v.Check(context.Background(), Capability{}, DPoPRequest{}); err != nil {
 		t.Fatalf("unbound capability: %v", err)
 	}
 }
@@ -168,20 +169,20 @@ func TestKeyBindingSurvivesTheTokenAndDelegation(t *testing.T) {
 		t.Fatalf("verified binding = %q, %v; want %q", got.ConfirmationJKT, err, jkt)
 	}
 
-	child, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: *parent, InheritCaveats: true})
+	child, _, err := issuer.Delegate(ctx, DelegateRequest{Parent: parent, InheritCaveats: true})
 	if err != nil || child.ConfirmationJKT != jkt {
 		t.Fatalf("child without its own key: binding %q, %v; want the parent's", child.ConfirmationJKT, err)
 	}
 	subKey := dpopKeys(t)["P-256"]
 	subJKT, _ := KeyThumbprint(subKey.Public())
-	child, _, err = issuer.Delegate(ctx, DelegateRequest{Parent: *parent, InheritCaveats: true, ConfirmationJKT: subJKT})
+	child, _, err = issuer.Delegate(ctx, DelegateRequest{Parent: parent, InheritCaveats: true, ConfirmationJKT: subJKT})
 	if err != nil || child.ConfirmationJKT != subJKT {
 		t.Fatalf("child bound to the sub-agent's key: %q, %v", child.ConfirmationJKT, err)
 	}
 
-	unbound := *child
+	unbound := child
 	unbound.ConfirmationJKT = ""
-	if err := Narrows(*parent, unbound); !errors.Is(err, ErrDelegationTooWide) {
+	if err := Narrows(parent, unbound); !errors.Is(err, ErrDelegationTooWide) {
 		t.Fatalf("unbound child of a bound parent: err = %v, want ErrDelegationTooWide", err)
 	}
 }
@@ -234,5 +235,46 @@ func TestDPoPProofFromAnOpaqueSigner(t *testing.T) {
 				t.Fatalf("proof from an opaque signer refused: %v", err)
 			}
 		})
+	}
+}
+
+// Expired ids leave in expiry order as time passes, whatever order they
+// came in, and only they do.
+func TestMemoryReplayCacheForgetsInExpiryOrder(t *testing.T) {
+	ctx := context.Background()
+	now := time.Unix(1_800_000_000, 0)
+	c := NewMemoryReplayCache(0)
+	c.now = func() time.Time { return now }
+	for i, d := range []time.Duration{5, 1, 4, 2, 3} {
+		if c.Seen(ctx, fmt.Sprint(i), now.Add(d*time.Second)) {
+			t.Fatalf("fresh id %d reported seen", i)
+		}
+	}
+	now = now.Add(3 * time.Second) // the ids expiring at 1s, 2s and 3s lapse
+	_ = c.Seen(ctx, "probe", now.Add(time.Hour))
+	if got := len(c.seen); got != 3 {
+		t.Errorf("after the clock passed three expiries, %d ids are held, want 3", got)
+	}
+	for _, live := range []string{"0", "2"} {
+		if !c.Seen(ctx, live, now.Add(time.Hour)) {
+			t.Errorf("live id %s was forgotten", live)
+		}
+	}
+}
+
+// BenchmarkMemoryReplayCacheFull measures a new id offered to a full cache
+// in which nothing has expired — the case a flood of proofs produces.
+func BenchmarkMemoryReplayCacheFull(b *testing.B) {
+	const entries = 100_000
+	ctx := context.Background()
+	now := time.Unix(1_800_000_000, 0)
+	c := NewMemoryReplayCache(entries)
+	c.now = func() time.Time { return now }
+	for i := range entries {
+		c.Seen(ctx, fmt.Sprint(i), now.Add(time.Hour))
+	}
+	b.ResetTimer()
+	for i := 0; b.Loop(); i++ {
+		c.Seen(ctx, fmt.Sprint("new", i), now.Add(time.Hour))
 	}
 }

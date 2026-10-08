@@ -23,7 +23,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { ObjectTableRow } from "@/components/features/objects/ObjectTableRow";
+import { OBJECT_COLUMN_CLASS } from "@/components/features/objects/columns";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 
 import { SortableHead } from "@/components/ui/SortHeader";
@@ -116,6 +118,7 @@ export function ObjectsTable({
             )}
             {visibleColumns.has("object_tag") && (
               <SortableHead
+                className={OBJECT_COLUMN_CLASS.object_tag}
                 label="Object Tags"
                 column="object_tag"
                 current={sort}
@@ -124,7 +127,7 @@ export function ObjectsTable({
             )}
             {visibleColumns.has("mime") && (
               <SortableHead
-                className="hidden lg:table-cell"
+                className={OBJECT_COLUMN_CLASS.mime}
                 label="MIME"
                 column="content_type"
                 current={sort}
@@ -133,7 +136,7 @@ export function ObjectsTable({
             )}
             {visibleColumns.has("size") && (
               <SortableHead
-                className="hidden md:table-cell text-right"
+                className={cn(OBJECT_COLUMN_CLASS.size, "text-right")}
                 label="Size"
                 column="size_bytes"
                 current={sort}
@@ -151,7 +154,7 @@ export function ObjectsTable({
             )}
             {visibleColumns.has("created") && (
               <SortableHead
-                className="hidden sm:table-cell"
+                className={OBJECT_COLUMN_CLASS.created}
                 label="Created"
                 column="created_at"
                 current={sort}

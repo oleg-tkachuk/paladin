@@ -37,6 +37,8 @@ const (
 	// CapabilityServiceGetBiscuitUsageProcedure is the procedure name of the CapabilityService's
 	// GetBiscuitUsage RPC.
 	CapabilityServiceGetBiscuitUsageProcedure = "/paladin.admin.v1.CapabilityService/GetBiscuitUsage"
+	// CapabilityServiceGetProcedure is the procedure name of the CapabilityService's Get RPC.
+	CapabilityServiceGetProcedure = "/paladin.admin.v1.CapabilityService/Get"
 	// CapabilityServiceListProcedure is the procedure name of the CapabilityService's List RPC.
 	CapabilityServiceListProcedure = "/paladin.admin.v1.CapabilityService/List"
 	// CapabilityServiceGetUsageProcedure is the procedure name of the CapabilityService's GetUsage RPC.
@@ -79,6 +81,14 @@ var (
 			StreamType:       connect.StreamTypeUnary,
 			Schema:           v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("GetBiscuitUsage"),
 			Procedure:        CapabilityServiceGetBiscuitUsageProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	capabilityServiceGetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("Get"),
+			Procedure:        CapabilityServiceGetProcedure,
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
@@ -133,6 +143,10 @@ type CapabilityServiceClient interface {
 	// from — with what has been counted against each. A copy gets limits only
 	// by attenuation; one under none returns no copies.
 	GetBiscuitUsage(context.Context, *v1.CapabilityServiceGetBiscuitUsageRequest) (*v1.CapabilityServiceGetBiscuitUsageResponse, error)
+	// Get returns one capability as it is on record: the capability, who
+	// asked for it, and its own revocation if it has one. NOT_FOUND when no
+	// capability has the id, or the caller cannot see it.
+	Get(context.Context, *v1.CapabilityServiceGetRequest) (*v1.CapabilityServiceGetResponse, error)
 	// List enumerates capabilities issued to a principal. Cursor-paginated.
 	List(context.Context, *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error)
 	// GetUsage returns the runtime counters for a capability:
@@ -181,6 +195,10 @@ type CapabilityServiceHandler interface {
 	// from — with what has been counted against each. A copy gets limits only
 	// by attenuation; one under none returns no copies.
 	GetBiscuitUsage(context.Context, *v1.CapabilityServiceGetBiscuitUsageRequest) (*v1.CapabilityServiceGetBiscuitUsageResponse, error)
+	// Get returns one capability as it is on record: the capability, who
+	// asked for it, and its own revocation if it has one. NOT_FOUND when no
+	// capability has the id, or the caller cannot see it.
+	Get(context.Context, *v1.CapabilityServiceGetRequest) (*v1.CapabilityServiceGetResponse, error)
 	// List enumerates capabilities issued to a principal. Cursor-paginated.
 	List(context.Context, *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error)
 	// GetUsage returns the runtime counters for a capability:
@@ -200,6 +218,7 @@ func RegisterCapabilityServiceHandler(server *connect.Server, svc CapabilityServ
 		connect.Method{Spec: capabilityServiceRevokeSpec(), Handler: adapter.revoke},
 		connect.Method{Spec: capabilityServiceRevokeBiscuitSpec(), Handler: adapter.revokeBiscuit},
 		connect.Method{Spec: capabilityServiceGetBiscuitUsageSpec(), Handler: adapter.getBiscuitUsage},
+		connect.Method{Spec: capabilityServiceGetSpec(), Handler: adapter.get},
 		connect.Method{Spec: capabilityServiceListSpec(), Handler: adapter.list},
 		connect.Method{Spec: capabilityServiceGetUsageSpec(), Handler: adapter.getUsage},
 	)
@@ -226,6 +245,10 @@ func (UnimplementedCapabilityServiceHandler) RevokeBiscuit(context.Context, *v1.
 
 func (UnimplementedCapabilityServiceHandler) GetBiscuitUsage(context.Context, *v1.CapabilityServiceGetBiscuitUsageRequest) (*v1.CapabilityServiceGetBiscuitUsageResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.GetBiscuitUsage is not implemented")
+}
+
+func (UnimplementedCapabilityServiceHandler) Get(context.Context, *v1.CapabilityServiceGetRequest) (*v1.CapabilityServiceGetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.Get is not implemented")
 }
 
 func (UnimplementedCapabilityServiceHandler) List(context.Context, *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error) {
@@ -275,6 +298,14 @@ func (c *capabilityServiceClient) RevokeBiscuit(ctx context.Context, req *v1.Cap
 func (c *capabilityServiceClient) GetBiscuitUsage(ctx context.Context, req *v1.CapabilityServiceGetBiscuitUsageRequest) (*v1.CapabilityServiceGetBiscuitUsageResponse, error) {
 	var res v1.CapabilityServiceGetBiscuitUsageResponse
 	if err := c.client.CallUnary(ctx, capabilityServiceGetBiscuitUsageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) Get(ctx context.Context, req *v1.CapabilityServiceGetRequest) (*v1.CapabilityServiceGetResponse, error) {
+	var res v1.CapabilityServiceGetResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceGetSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -352,6 +383,18 @@ func (h capabilityServiceHandler) getBiscuitUsage(ctx context.Context, _ connect
 		return err
 	}
 	res, err := h.svc.GetBiscuitUsage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) get(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceGetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Get(ctx, &req)
 	if err != nil {
 		return err
 	}

@@ -38,13 +38,19 @@ import { CapabilityDetailsDialog } from "./CapabilityDetailsDialog";
 import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
 import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
 import { BiscuitCopyUsageDialog } from "./BiscuitCopyUsageDialog";
-import { PRINCIPAL_KIND_OPTIONS, isExpired } from "./_constants";
+import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS, isExpired } from "./_constants";
 import { capabilityClient } from "@/lib/connect/client";
+import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
-import { formatMoney, fromMicros } from "@/lib/format/money";
+import {
+  ABSTRACT_UNIT_CODE,
+  formatMoney,
+  moneyIsPositive,
+} from "@/lib/format/money";
+import type { Money } from "@/gen/google/type/money_pb";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
 import { ListLoadError } from "@/components/ui/ListLoadError";
@@ -53,11 +59,23 @@ import { ListLoadError } from "@/components/ui/ListLoadError";
 // capability has no usage row yet (GetUsage NotFound).
 type UsageSnap = {
   requestCount: bigint;
-  spentAmount: number;
-  unitCode: string;
+  // Absent on a usage row that has spent nothing in any unit.
+  spent: Money | undefined;
 };
 type UsageMap = Map<string, UsageSnap | "never">;
 const EMPTY_USAGE: UsageMap = new Map();
+
+// Optional columns appear by the width of the table's card, not the viewport:
+// the sidebar takes a fixed share of the window, so a viewport breakpoint
+// showed every column on a card too narrow for them and pushed Status and the
+// actions menu past its right edge. Least useful column goes first; below @xl
+// the ID itself truncates to a prefix, with the full id in its tooltip.
+const COL_AUDIENCE = "hidden @2xl:table-cell";
+const COL_EXPIRES = "hidden @3xl:table-cell";
+const COL_USAGE = "hidden @4xl:table-cell";
+const COL_ISSUED = "hidden @6xl:table-cell";
+// Every header column, hidden ones included: a full-width row must span them all.
+const COLUMN_COUNT = 8;
 
 // Tenant-scoped "last browsed principal", persisted across reloads.
 function readLastBrowse(
@@ -184,15 +202,13 @@ export default function CapabilitiesPage() {
             try {
               const u = await capabilityClient.getUsage(
                 { id: c.id },
-                { signal },
+                notFoundIsAnswer({ signal }),
               );
               return [
                 c.id,
                 {
                   requestCount: u.requestCount,
-                  spentAmount: fromMicros(u.spentMicros),
-                  // UsageRecord without a unit_code is metering-only → UNIT.
-                  unitCode: u.unitCode || "UNIT",
+                  spent: u.spent,
                 },
               ] as const;
             } catch (err) {
@@ -399,16 +415,16 @@ export default function CapabilitiesPage() {
       </Card>
 
       {/* ─── Result table ────────────────────────────────────────────── */}
-      <Card className="p-0">
+      <Card className="@container p-0">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-70">ID</TableHead>
+              <TableHead className="@xl:w-70">ID</TableHead>
               <TableHead>Caveats</TableHead>
-              <TableHead className="hidden md:table-cell">Audience</TableHead>
-              <TableHead className="hidden lg:table-cell">Issued</TableHead>
-              <TableHead className="hidden lg:table-cell">Expires</TableHead>
-              <TableHead className="hidden xl:table-cell">Usage</TableHead>
+              <TableHead className={COL_AUDIENCE}>Audience</TableHead>
+              <TableHead className={COL_ISSUED}>Issued</TableHead>
+              <TableHead className={COL_EXPIRES}>Expires</TableHead>
+              <TableHead className={COL_USAGE}>Usage</TableHead>
               <TableHead className="w-25">Status</TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
@@ -419,14 +435,14 @@ export default function CapabilitiesPage() {
             {loading && visibleItems.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={7} className="py-3">
+                  <TableCell colSpan={COLUMN_COUNT} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : !hasFetched ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-40 text-center">
+                <TableCell colSpan={COLUMN_COUNT} className="h-40 text-center">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <KeyIcon className="size-8 opacity-40" />
                     <p className="text-sm">
@@ -439,7 +455,7 @@ export default function CapabilitiesPage() {
             ) : browseQuery.isError && !browseQuery.data ? (
               // "No capabilities for this principal" for a failed list hides live grants.
               <TableRow>
-                <TableCell colSpan={7} className="h-40 text-center">
+                <TableCell colSpan={COLUMN_COUNT} className="h-40 text-center">
                   <ListLoadError
                     what="Capabilities"
                     reason={errorMessage(browseQuery.error)}
@@ -449,7 +465,7 @@ export default function CapabilitiesPage() {
               </TableRow>
             ) : visibleItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-40 text-center">
+                <TableCell colSpan={COLUMN_COUNT} className="h-40 text-center">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <KeyIcon className="size-8 opacity-40" />
                     <p className="text-sm">
@@ -475,7 +491,7 @@ export default function CapabilitiesPage() {
                   <TableRow key={c.id} className="group">
                     <TableCell>
                       <span
-                        className="block max-w-65 truncate font-mono text-xs"
+                        className="block max-w-24 truncate @xl:max-w-65 font-mono text-xs"
                         title={c.id}
                       >
                         {c.id}
@@ -484,7 +500,7 @@ export default function CapabilitiesPage() {
                         <span
                           className={cn(
                             T.codeSmall,
-                            "block max-w-65 truncate text-muted-foreground",
+                            "block max-w-24 truncate @xl:max-w-65 text-muted-foreground",
                           )}
                           title={`parent: ${c.parentId}`}
                         >
@@ -492,7 +508,9 @@ export default function CapabilitiesPage() {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    {/* Caveats wrap: resource prefixes are free text, and a
+                        long one on a single line would widen the whole table. */}
+                    <TableCell className="whitespace-normal">
                       <div className="flex flex-wrap gap-1">
                         {(c.caveats?.ops ?? []).map((op) => (
                           <Badge
@@ -508,14 +526,14 @@ export default function CapabilitiesPage() {
                         <div
                           className={cn(
                             T.codeSmall,
-                            "mt-1 text-muted-foreground",
+                            "mt-1 break-all text-muted-foreground",
                           )}
                         >
                           {c.caveats!.resourcePrefixes.join(", ")}
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className={COL_AUDIENCE}>
                       <div className="flex flex-wrap gap-1">
                         {c.audience.map((a) => (
                           <Badge
@@ -530,7 +548,7 @@ export default function CapabilitiesPage() {
                     </TableCell>
                     <TableCell
                       className={cn(
-                        "hidden lg:table-cell",
+                        COL_ISSUED,
                         T.code,
                         "text-muted-foreground",
                       )}
@@ -539,14 +557,14 @@ export default function CapabilitiesPage() {
                     </TableCell>
                     <TableCell
                       className={cn(
-                        "hidden lg:table-cell",
+                        COL_EXPIRES,
                         T.code,
                         "text-muted-foreground",
                       )}
                     >
                       {formatTimestampUTC(c.expiresAt)}
                     </TableCell>
-                    <TableCell className={cn("hidden xl:table-cell", T.code)}>
+                    <TableCell className={cn(COL_USAGE, T.code)}>
                       {(() => {
                         const u = usage.get(c.id);
                         if (u === undefined)
@@ -560,15 +578,14 @@ export default function CapabilitiesPage() {
                             </span>
                           );
                         const reqCap = c.caveats?.maxRequests ?? 0;
-                        const budgetCap = fromMicros(
-                          c.caveats?.maxBudgetMicros,
-                        );
-                        // Usage row → caveats → UNIT fallback. The
-                        // "USD" default that lived here lied about
-                        // the actual unit when both were absent
-                        // (legacy / metering-only capabilities).
+                        const budgetCap = c.caveats?.maxBudget;
+                        // Usage row → caveats → XXX fallback. A "USD"
+                        // default would lie about the actual unit when
+                        // both are absent (metering-only capabilities).
                         const cellUnit =
-                          u.unitCode || c.caveats?.unitCode || "UNIT";
+                          u.spent?.currencyCode ||
+                          budgetCap?.currencyCode ||
+                          ABSTRACT_UNIT_CODE;
                         return (
                           <div className="space-y-0.5">
                             <div>
@@ -584,16 +601,17 @@ export default function CapabilitiesPage() {
                               )}
                             </div>
                             <div>
-                              {formatMoney(
-                                u.spentAmount,
-                                cellUnit,
-                                undefined,
-                                4,
-                              )}
-                              {budgetCap > 0 && (
+                              {formatMoney(u.spent, {
+                                fallbackUnit: cellUnit,
+                                fractionDigits: SPEND_DIGITS,
+                              })}
+                              {moneyIsPositive(budgetCap) && (
                                 <span className="text-muted-foreground">
                                   {" "}
-                                  / {formatMoney(budgetCap, cellUnit)}
+                                  /{" "}
+                                  {formatMoney(budgetCap, {
+                                    fallbackUnit: cellUnit,
+                                  })}
                                 </span>
                               )}
                             </div>

@@ -3,6 +3,7 @@ import datetime
 from buf.validate import validate_pb2 as _validate_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.api import field_behavior_pb2 as _field_behavior_pb2
+from google.type import money_pb2 as _money_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -46,7 +47,7 @@ class CapabilityPrincipal(_message.Message):
     def __init__(self, kind: _Optional[_Union[PrincipalKind, str]] = ..., tenant_id: _Optional[str] = ..., subject: _Optional[str] = ..., agent_type: _Optional[str] = ..., agent_version: _Optional[str] = ..., run_id: _Optional[str] = ..., parent_agent_id: _Optional[str] = ..., model: _Optional[str] = ..., mcp_client: _Optional[str] = ...) -> None: ...
 
 class CapabilityCaveats(_message.Message):
-    __slots__ = ("ops", "resource_prefixes", "resource_uris", "max_requests", "allow_tainted_read", "idempotency_key_required", "source_ip_cidr", "unit_code", "max_budget_micros")
+    __slots__ = ("ops", "resource_prefixes", "resource_uris", "max_requests", "allow_tainted_read", "idempotency_key_required", "source_ip_cidr", "max_budget")
     OPS_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_PREFIXES_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_URIS_FIELD_NUMBER: _ClassVar[int]
@@ -54,8 +55,7 @@ class CapabilityCaveats(_message.Message):
     ALLOW_TAINTED_READ_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_REQUIRED_FIELD_NUMBER: _ClassVar[int]
     SOURCE_IP_CIDR_FIELD_NUMBER: _ClassVar[int]
-    UNIT_CODE_FIELD_NUMBER: _ClassVar[int]
-    MAX_BUDGET_MICROS_FIELD_NUMBER: _ClassVar[int]
+    MAX_BUDGET_FIELD_NUMBER: _ClassVar[int]
     ops: _containers.RepeatedScalarFieldContainer[str]
     resource_prefixes: _containers.RepeatedScalarFieldContainer[str]
     resource_uris: _containers.RepeatedScalarFieldContainer[str]
@@ -63,9 +63,8 @@ class CapabilityCaveats(_message.Message):
     allow_tainted_read: bool
     idempotency_key_required: bool
     source_ip_cidr: _containers.RepeatedScalarFieldContainer[str]
-    unit_code: str
-    max_budget_micros: int
-    def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., unit_code: _Optional[str] = ..., max_budget_micros: _Optional[int] = ...) -> None: ...
+    max_budget: _money_pb2.Money
+    def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...
 
 class Capability(_message.Message):
     __slots__ = ("id", "issuer", "subject", "audience", "caveats", "issued_at", "not_before", "expires_at", "parent_id", "generation", "confirmation_jkt")
@@ -172,30 +171,28 @@ class CapabilityServiceGetBiscuitUsageRequest(_message.Message):
     def __init__(self, token: _Optional[str] = ...) -> None: ...
 
 class CapabilityBiscuitCopyUsage(_message.Message):
-    __slots__ = ("revocation_id", "max_requests", "max_budget_micros", "request_count", "spent_micros", "reserved_micros")
+    __slots__ = ("revocation_id", "max_requests", "max_budget", "request_count", "spent", "reserved")
     REVOCATION_ID_FIELD_NUMBER: _ClassVar[int]
     MAX_REQUESTS_FIELD_NUMBER: _ClassVar[int]
-    MAX_BUDGET_MICROS_FIELD_NUMBER: _ClassVar[int]
+    MAX_BUDGET_FIELD_NUMBER: _ClassVar[int]
     REQUEST_COUNT_FIELD_NUMBER: _ClassVar[int]
-    SPENT_MICROS_FIELD_NUMBER: _ClassVar[int]
-    RESERVED_MICROS_FIELD_NUMBER: _ClassVar[int]
+    SPENT_FIELD_NUMBER: _ClassVar[int]
+    RESERVED_FIELD_NUMBER: _ClassVar[int]
     revocation_id: bytes
     max_requests: int
-    max_budget_micros: int
+    max_budget: _money_pb2.Money
     request_count: int
-    spent_micros: int
-    reserved_micros: int
-    def __init__(self, revocation_id: _Optional[bytes] = ..., max_requests: _Optional[int] = ..., max_budget_micros: _Optional[int] = ..., request_count: _Optional[int] = ..., spent_micros: _Optional[int] = ..., reserved_micros: _Optional[int] = ...) -> None: ...
+    spent: _money_pb2.Money
+    reserved: _money_pb2.Money
+    def __init__(self, revocation_id: _Optional[bytes] = ..., max_requests: _Optional[int] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., request_count: _Optional[int] = ..., spent: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., reserved: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...
 
 class CapabilityServiceGetBiscuitUsageResponse(_message.Message):
-    __slots__ = ("capability_id", "unit_code", "copies")
+    __slots__ = ("capability_id", "copies")
     CAPABILITY_ID_FIELD_NUMBER: _ClassVar[int]
-    UNIT_CODE_FIELD_NUMBER: _ClassVar[int]
     COPIES_FIELD_NUMBER: _ClassVar[int]
     capability_id: str
-    unit_code: str
     copies: _containers.RepeatedCompositeFieldContainer[CapabilityBiscuitCopyUsage]
-    def __init__(self, capability_id: _Optional[str] = ..., unit_code: _Optional[str] = ..., copies: _Optional[_Iterable[_Union[CapabilityBiscuitCopyUsage, _Mapping]]] = ...) -> None: ...
+    def __init__(self, capability_id: _Optional[str] = ..., copies: _Optional[_Iterable[_Union[CapabilityBiscuitCopyUsage, _Mapping]]] = ...) -> None: ...
 
 class CapabilityServiceListRequest(_message.Message):
     __slots__ = ("tenant_id", "principal_kind", "subject", "include_expired", "include_revoked", "page_size", "page_token")
@@ -223,6 +220,34 @@ class CapabilityServiceListResponse(_message.Message):
     next_page_token: str
     def __init__(self, capabilities: _Optional[_Iterable[_Union[Capability, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
 
+class CapabilityServiceGetRequest(_message.Message):
+    __slots__ = ("id",)
+    ID_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    def __init__(self, id: _Optional[str] = ...) -> None: ...
+
+class CapabilityRevocation(_message.Message):
+    __slots__ = ("revoked_at", "reason", "actor", "cascade")
+    REVOKED_AT_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    ACTOR_FIELD_NUMBER: _ClassVar[int]
+    CASCADE_FIELD_NUMBER: _ClassVar[int]
+    revoked_at: _timestamp_pb2.Timestamp
+    reason: str
+    actor: str
+    cascade: bool
+    def __init__(self, revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., reason: _Optional[str] = ..., actor: _Optional[str] = ..., cascade: _Optional[bool] = ...) -> None: ...
+
+class CapabilityServiceGetResponse(_message.Message):
+    __slots__ = ("capability", "issued_by", "revocation")
+    CAPABILITY_FIELD_NUMBER: _ClassVar[int]
+    ISSUED_BY_FIELD_NUMBER: _ClassVar[int]
+    REVOCATION_FIELD_NUMBER: _ClassVar[int]
+    capability: Capability
+    issued_by: CapabilityPrincipal
+    revocation: CapabilityRevocation
+    def __init__(self, capability: _Optional[_Union[Capability, _Mapping]] = ..., issued_by: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., revocation: _Optional[_Union[CapabilityRevocation, _Mapping]] = ...) -> None: ...
+
 class CapabilityServiceGetUsageRequest(_message.Message):
     __slots__ = ("id",)
     ID_FIELD_NUMBER: _ClassVar[int]
@@ -230,15 +255,13 @@ class CapabilityServiceGetUsageRequest(_message.Message):
     def __init__(self, id: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceGetUsageResponse(_message.Message):
-    __slots__ = ("capability_id", "request_count", "updated_at", "unit_code", "spent_micros")
+    __slots__ = ("capability_id", "request_count", "updated_at", "spent")
     CAPABILITY_ID_FIELD_NUMBER: _ClassVar[int]
     REQUEST_COUNT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
-    UNIT_CODE_FIELD_NUMBER: _ClassVar[int]
-    SPENT_MICROS_FIELD_NUMBER: _ClassVar[int]
+    SPENT_FIELD_NUMBER: _ClassVar[int]
     capability_id: str
     request_count: int
     updated_at: _timestamp_pb2.Timestamp
-    unit_code: str
-    spent_micros: int
-    def __init__(self, capability_id: _Optional[str] = ..., request_count: _Optional[int] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., unit_code: _Optional[str] = ..., spent_micros: _Optional[int] = ...) -> None: ...
+    spent: _money_pb2.Money
+    def __init__(self, capability_id: _Optional[str] = ..., request_count: _Optional[int] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., spent: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...

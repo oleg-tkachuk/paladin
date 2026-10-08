@@ -176,8 +176,8 @@ export default function TrashPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Tenant</TableHead>
-                <TableHead className="hidden md:table-cell">Trashed</TableHead>
-                <TableHead className="w-50 text-right">Actions</TableHead>
+                <TableHead className="hidden @md:table-cell">Trashed</TableHead>
+                <TableHead className="text-right @md:w-50">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -185,7 +185,7 @@ export default function TrashPage() {
                 const busy = busyId === t.tenantId;
                 return (
                   <TableRow key={t.tenantId}>
-                    <TableCell>
+                    <TableCell className="whitespace-normal break-all">
                       <div className="space-y-1">
                         <p className="font-medium">{t.displayName || t.slug}</p>
                         <IdentityField
@@ -197,7 +197,7 @@ export default function TrashPage() {
                         />
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @md:table-cell">
                       <RelativeTime ts={t.deletedAt || t.updatedAt} />
                     </TableCell>
                     <TableCell className="text-right">

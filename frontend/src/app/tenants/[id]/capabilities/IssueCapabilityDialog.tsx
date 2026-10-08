@@ -31,7 +31,13 @@ import { useNotification } from "@/components/ui/Notification";
 import { capabilityClient } from "@/lib/connect/client";
 import { copyToClipboard, cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { ALLOWED_UNIT_CODES, parseMicros } from "@/lib/format/money";
+import {
+  ABSTRACT_UNIT_CODE,
+  ALLOWED_UNIT_CODES,
+  NANOS_DECIMALS,
+  moneyFromDecimal,
+  moneyIsPositive,
+} from "@/lib/format/money";
 import {
   PrincipalKind,
   type Capability,
@@ -97,7 +103,8 @@ export function IssueCapabilityDialog({
     useState(true);
   const [issueMaxBudget, setIssueMaxBudget] = useState("");
   const [issueMaxBudgetUnlimited, setIssueMaxBudgetUnlimited] = useState(true);
-  const [issueUnitCode, setIssueUnitCode] = useState<string>("UNIT");
+  const [issueUnitCode, setIssueUnitCode] =
+    useState<string>(ABSTRACT_UNIT_CODE);
   const [issueTtl, setIssueTtl] = useState("1h");
   const [issuing, setIssuing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -120,7 +127,7 @@ export function IssueCapabilityDialog({
     setIssueMaxRequestsUnlimited(true);
     setIssueMaxBudget("");
     setIssueMaxBudgetUnlimited(true);
-    setIssueUnitCode("UNIT");
+    setIssueUnitCode(ABSTRACT_UNIT_CODE);
     setIssueTtl("1h");
     setReveal(null);
     setRevealAcknowledged(false);
@@ -144,10 +151,12 @@ export function IssueCapabilityDialog({
   const maxRequests = issueMaxRequestsUnlimited
     ? 0
     : Number.parseInt(issueMaxRequests, 10);
-  // Parsed straight to micros, never through a float: "0.1" is 100000n.
-  const maxBudgetMicros = issueMaxBudgetUnlimited
-    ? 0n
-    : parseMicros(issueMaxBudget);
+  // Parsed straight to Money, never through a float: "0.1" is 100000000
+  // nanos. Unlimited is a zero amount, which keeps the chosen unit.
+  const maxBudget = moneyFromDecimal(
+    issueMaxBudgetUnlimited ? "0" : issueMaxBudget,
+    issueUnitCode,
+  );
   const maxRequestsError =
     !issueMaxRequestsUnlimited &&
     issueMaxRequests !== "" &&
@@ -157,8 +166,8 @@ export function IssueCapabilityDialog({
   const maxBudgetError =
     !issueMaxBudgetUnlimited &&
     issueMaxBudget !== "" &&
-    (maxBudgetMicros === null || maxBudgetMicros <= 0n)
-      ? "A positive amount (up to six decimals), or Unlimited."
+    !moneyIsPositive(maxBudget ?? undefined)
+      ? `A positive amount (up to ${NANOS_DECIMALS} decimals), or Unlimited.`
       : null;
 
   const blockedReason = !tenantId
@@ -194,8 +203,7 @@ export function IssueCapabilityDialog({
           resourcePrefixes: issueResourcePrefixes,
           resourceUris: [],
           maxRequests,
-          maxBudgetMicros: maxBudgetMicros ?? 0n,
-          unitCode: issueUnitCode,
+          maxBudget: maxBudget ?? undefined,
           allowTaintedRead: false,
           idempotencyKeyRequired: false,
           sourceIpCidr: issueSourceCidr,
@@ -442,7 +450,7 @@ export function IssueCapabilityDialog({
           </FormField>
           <FormField
             label="Currency / unit"
-            hint="UNIT meters without a currency."
+            hint="XXX meters without a currency."
           >
             {(control) => (
               <Select

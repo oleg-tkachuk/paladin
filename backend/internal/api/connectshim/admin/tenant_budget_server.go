@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -12,7 +14,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 
@@ -50,8 +51,7 @@ func (s *TenantBudgetServer) Get(
 	req *pb.TenantBudgetServiceGetRequest,
 ) (*pb.TenantBudgetServiceGetResponse, error) {
 	if s.Usage == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			"capability subsystem disabled; tenant budget unavailable")
+		return nil, connect.NewError(connect.CodeUnavailable, "capability subsystem disabled; tenant budget unavailable")
 	}
 	tenantID, err := uuid.Parse(req.GetTenantId())
 	if err != nil {
@@ -78,8 +78,7 @@ func (s *TenantBudgetServer) Set(
 	req *pb.TenantBudgetServiceSetRequest,
 ) (*pb.TenantBudgetServiceSetResponse, error) {
 	if s.Usage == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			"capability subsystem disabled; tenant budget unavailable")
+		return nil, connect.NewError(connect.CodeUnavailable, "capability subsystem disabled; tenant budget unavailable")
 	}
 	m := req
 	tenantID, err := uuid.Parse(m.GetTenantId())
@@ -89,16 +88,6 @@ func (s *TenantBudgetServer) Set(
 	// The request names the tenant by id, so the audit row would name nothing
 	// and the change would be in no tenant's trail.
 	apiutil.StashResource(ctx, apiutil.TenantNamePrefix+tenantID.String()+budgetSegment)
-	// Validate the optional unit_code at the boundary; the store
-	// also re-validates but surfacing InvalidArgument to the caller
-	// here is more useful than the generic Internal we'd otherwise
-	// return. Empty string defers to the existing row's unit_code
-	// (or DEFAULT 'USD' on first insert).
-	unit := m.GetUnitCode()
-	if unit != "" && !capability.IsAllowedUnitCode(unit) {
-		return nil, connect.Errorf(connect.CodeInvalidArgument,
-			"unit_code: %q not in %v", unit, capability.AllowedUnitCodes)
-	}
 	expected, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
 		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("resource_version: %w", err))
@@ -106,11 +95,13 @@ func (s *TenantBudgetServer) Set(
 	if err := apiutil.RefuseRemovedFields(m); err != nil {
 		return nil, err
 	}
-	budget, err := apiutil.AmountFromMicros("max_budget", m.GetMaxBudgetMicros())
+	// An absent max_budget lifts the cap and leaves the unit to the
+	// existing row (or DEFAULT 'USD' on first insert): unit stays "".
+	budget, unit, err := apiutil.NanosOf("max_budget", m.GetMaxBudget())
 	if err != nil {
 		return nil, err
 	}
-	args := capability.SetTenantBudgetArgs{
+	args := capability.SetTenantBudgetRequest{
 		TenantID:        tenantID,
 		MaxBudgetAmount: budget,
 		UnitCode:        unit,
@@ -152,25 +143,28 @@ func (s *TenantBudgetServer) Summarize(
 	req *pb.TenantBudgetServiceSummarizeRequest,
 ) (*pb.TenantBudgetServiceSummarizeResponse, error) {
 	if s.Usage == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			"capability subsystem disabled; tenant budget unavailable")
+		return nil, connect.NewError(connect.CodeUnavailable, "capability subsystem disabled; tenant budget unavailable")
 	}
 	m := req
 	if m.GetUnlimitedOnly() && m.GetThresholdPct() > 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			"unlimited_only is mutually exclusive with a non-zero threshold_pct")
+		return nil, connect.NewError(connect.CodeInvalidArgument, "unlimited_only is mutually exclusive with a non-zero threshold_pct")
 	}
-	rows, err := s.Usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsArgs{
+	rows, next, err := s.Usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{
 		ThresholdPct:    m.GetThresholdPct(),
 		UnlimitedOnly:   m.GetUnlimitedOnly(),
 		ExcludeInactive: m.GetExcludeInactive(),
 		Limit:           m.GetLimit(),
+		Cursor:          m.GetPageToken(),
 	})
 	if err != nil {
+		if errors.Is(err, capability.ErrInvalidRequest) { // a page token the store cannot read
+			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := &pb.TenantBudgetServiceSummarizeResponse{
-		Summaries: make([]*pb.TenantBudgetSummary, 0, len(rows)),
+		Summaries:     make([]*pb.TenantBudgetSummary, 0, len(rows)),
+		NextPageToken: next,
 	}
 	for _, r := range rows {
 		out.Summaries = append(out.Summaries, &pb.TenantBudgetSummary{
@@ -190,15 +184,10 @@ var _ paladinadminv1connect.TenantBudgetServiceHandler = (*TenantBudgetServer)(n
 // Times that are zero come back as nil so the wire payload is tighter
 // (Connect-JSON doesn't need to ship the epoch timestamp).
 func tenantBudgetToProto(tb capability.TenantBudget) *pb.TenantBudget {
-	unit := tb.UnitCode
-	if unit == "" {
-		unit = capability.DefaultUnitCode
-	}
 	out := &pb.TenantBudget{
 		TenantId:        tb.TenantID.String(),
-		MaxBudgetMicros: apiutil.Micros(tb.MaxBudgetAmount),
-		SpentMicros:     apiutil.Micros(tb.SpentAmount),
-		UnitCode:        unit,
+		MaxBudget:       apiutil.MoneyOf(tb.UnitCode, tb.MaxBudgetAmount),
+		Spent:           apiutil.MoneyOf(tb.UnitCode, tb.SpentAmount),
 		ResourceVersion: convx.ResourceVersion(tb.ResourceVersion),
 	}
 	if !tb.PeriodStart.IsZero() {

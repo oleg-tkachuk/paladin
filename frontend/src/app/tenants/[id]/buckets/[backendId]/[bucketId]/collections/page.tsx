@@ -137,10 +137,10 @@ export default function BucketCollectionsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Collection</TableHead>
-              <TableHead className="hidden sm:table-cell">
+              <TableHead className="hidden @xs:table-cell">
                 Display name
               </TableHead>
-              <TableHead className="hidden md:table-cell w-55">
+              <TableHead className="hidden @md:table-cell w-55">
                 Resource version
               </TableHead>
             </TableRow>
@@ -190,14 +190,14 @@ export default function BucketCollectionsPage() {
                       <span className="font-mono text-xs">{c.collection}</span>
                     </Link>
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell">
+                  <TableCell className="hidden @xs:table-cell">
                     {c.displayName || (
                       <span className="text-muted-foreground italic">—</span>
                     )}
                   </TableCell>
                   <TableCell
                     className={cn(
-                      "hidden md:table-cell",
+                      "hidden @md:table-cell",
                       T.codeSmall,
                       "text-muted-foreground",
                     )}

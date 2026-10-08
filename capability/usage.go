@@ -2,10 +2,13 @@ package capability
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
-	"math"
+	"strconv"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 )
@@ -26,7 +29,7 @@ type UsageStore[TX any] interface {
 //
 // # Delegation trees
 //
-// A capability's counters cover its whole subtree: BumpRequest and Charge
+// A capability's counters cover its whole subtree: Bump and Charge
 // apply to the capability AND to every ancestor in its delegation chain, and
 // each ancestor's own ceiling — read from its stored record, not from the
 // caller — must admit the increment. So an orchestrator holding 25.00 that
@@ -39,7 +42,7 @@ type UsageStore[TX any] interface {
 // # Copies of a Biscuit
 //
 // A Biscuit's holder can give a copy limits of its own (CopyCeiling), which
-// arrive as Copies on RequestBump, ChargeRequest and ReserveRequest. Each is
+// arrive as Copies on BumpRequest, ChargeRequest and ReserveRequest. Each is
 // counted under its revocation id, apart from its siblings, and checked
 // before the capability's ceilings; the capability's counters still take
 // every copy's requests and spend. A charge or reservation records the copies
@@ -50,28 +53,39 @@ type UsageStore[TX any] interface {
 // All methods are concurrency-safe. A rejected call mutates nothing, so a
 // retry after rejection is safe.
 type Meter[TX any] interface {
-	// BumpRequest increments the request counter of the capability and of
+	// Bump increments the request counter of the capability and of
 	// each ancestor, and returns the capability's new count. When any
 	// ceiling in the chain would be crossed it returns
 	// ErrRequestLimitExceeded and nothing is mutated.
-	BumpRequest(ctx context.Context, req RequestBump) (newCount int64, err error)
+	Bump(ctx context.Context, req BumpRequest) (newCount int64, err error)
 
 	// Charge adds req.Amount to the spend counters of the capability, of
 	// each ancestor and of the tenant aggregate, writes one charges-ledger
 	// row, and runs onCharged — ALL atomically. Checks, in order:
 	//
-	//   1. The capability's own ceiling (req.MaxBudget, from the verified
+	//   1. Each Biscuit copy's own budget (req.Copies), innermost first →
+	//      ErrBudgetExceeded.
+	//   2. The capability's own ceiling (req.MaxBudget, from the verified
 	//      token) → ErrBudgetExceeded.
-	//   2. Each ancestor's ceiling → ErrBudgetExceeded.
-	//   3. The tenant aggregate ceiling → ErrTenantBudgetExceeded.
+	//   3. Each ancestor's ceiling → ErrBudgetExceeded.
+	//   4. The tenant aggregate ceiling → ErrTenantBudgetExceeded.
 	//
 	// Any rejection, or an error from onCharged, leaves every counter and
-	// the ledger untouched. onCharged runs inside the charge after the
-	// ledger row is written and receives the consumer's transaction handle,
-	// so a side effect such as an outbox write commits with the spend.
-	// Pass nil to skip it.
+	// the ledger untouched. onCharged runs inside the charge, atomically
+	// with it, and receives the consumer's transaction handle, so a side
+	// effect such as an outbox write commits with the spend. Pass nil to
+	// skip it. It must not call back into the Meter: an implementation may
+	// hold its counters while onCharged runs, so a nested call can wait on
+	// itself.
 	//
 	// The returned receipt carries the ledger row's ID; Refund takes it.
+	//
+	// With req.ExternalRef set, Charge is idempotent on (CapabilityID,
+	// ExternalRef): a charge whose pair is already in the ledger moves
+	// nothing, does not run onCharged, and returns that charge's receipt
+	// with Replayed set. With req.Overrun = OverrunRecord, a charge that
+	// would cross a ceiling is committed anyway and the receipt reports it
+	// (ChargeReceipt.Overrun); see OverrunPolicy.
 	Charge(ctx context.Context, req ChargeRequest, onCharged func(ctx context.Context, tx TX) error) (ChargeReceipt, error)
 
 	// Refund returns spend from one recorded charge to every counter that
@@ -85,7 +99,7 @@ type Meter[TX any] interface {
 	// For a cost only known afterwards, prefer Reserve/Settle: a
 	// reservation lapses on its own if the caller never settles it, where
 	// an estimate charged up front stays charged.
-	Refund(ctx context.Context, req RefundRequest) (refunded float64, err error)
+	Refund(ctx context.Context, req RefundRequest) (refunded Nanos, err error)
 
 	// Reserve holds req.Amount against the capability, each ancestor and
 	// the tenant aggregate, checking every ceiling against spend plus
@@ -101,19 +115,45 @@ type Meter[TX any] interface {
 	// below, equal to or above the hold; above it, the excess must fit
 	// every ceiling, or Settle returns the Charge sentinel and the
 	// reservation stays in place for the caller to settle lower or
-	// release. An unknown, settled, released or expired reservation
-	// returns ErrReservationNotFound.
+	// release — unless req.Overrun is OverrunRecord, when the cost is
+	// charged anyway and the receipt reports it.
+	//
+	// Settle is idempotent on the reservation: settling one already
+	// settled moves nothing, does not run onCharged, and returns the
+	// receipt of the charge that settled it, with Replayed set. An unknown,
+	// released or expired reservation returns ErrReservationNotFound.
 	Settle(ctx context.Context, req SettleRequest, onCharged func(ctx context.Context, tx TX) error) (ChargeReceipt, error)
+
+	// GetCharge returns one charge of the ledger, by the ChargeID its
+	// receipt carried — the id Refund takes. ErrChargeNotFound when there
+	// is none.
+	GetCharge(ctx context.Context, chargeID uuid.UUID) (ChargeRecord, error)
+
+	// ChargeByRef returns the charge a capability took under externalRef
+	// (ChargeRequest.ExternalRef), so a reporter can reconcile its own
+	// records with the ledger. ErrChargeNotFound when there is none.
+	ChargeByRef(ctx context.Context, capID uuid.UUID, externalRef string) (ChargeRecord, error)
+
+	// GetReservation returns a reservation still holding budget — open,
+	// or expired and not yet released, since until ReleaseExpired runs it
+	// still counts (ExpiresAt tells which). ErrReservationNotFound once it
+	// is settled or released.
+	GetReservation(ctx context.Context, reservationID uuid.UUID) (Reservation, error)
+
+	// ListReservations returns every reservation GetReservation would
+	// return that was made against the capability itself — not its
+	// delegated children — soonest to expire first.
+	ListReservations(ctx context.Context, capID uuid.UUID) ([]Reservation, error)
 
 	// Release ends a reservation without charging. Idempotent: releasing
 	// one that is gone is a no-op.
 	Release(ctx context.Context, reservationID uuid.UUID) error
 
-	// Get returns the current snapshot. Returns ErrUsageNotFound when no
+	// GetUsage returns the current snapshot. Returns ErrUsageNotFound when no
 	// row exists for the capability — typically means it's never been
 	// used (no requests, no charges). For a capability with delegated
 	// children the counters include the children's usage.
-	Get(ctx context.Context, capID uuid.UUID) (Usage, error)
+	GetUsage(ctx context.Context, capID uuid.UUID) (Usage, error)
 }
 
 // TenantBudgets administers the tenant-aggregate ceilings Charge enforces.
@@ -126,8 +166,9 @@ type TenantBudgets interface {
 	// SetTenantBudget upserts the tenant cap. ResetSpend=true rolls
 	// the accounting period and zeroes the spend — operators call
 	// this on each billing close. ResetSpend=false adjusts the cap
-	// mid-cycle without affecting accumulated spend.
-	SetTenantBudget(ctx context.Context, args SetTenantBudgetArgs) (TenantBudget, error)
+	// mid-cycle without affecting accumulated spend. A ceiling outside
+	// 0..MaxNanos returns ErrInvalidAmount and changes nothing.
+	SetTenantBudget(ctx context.Context, req SetTenantBudgetRequest) (TenantBudget, error)
 
 	// ListTenantBudgets returns tenant budget rows, with the consumer's
 	// display fields where it has them. Filters:
@@ -135,11 +176,15 @@ type TenantBudgets interface {
 	//   - thresholdPct > 0: include only rows where
 	//     spent / max * 100 >= thresholdPct (and max > 0).
 	//   - unlimitedOnly: include only rows where max == 0.
-	//   - limit: hard cap on result count. ≤ 0 → 50.
+	//   - limit: the page size, as PageLimit reads it.
 	//
-	// Rows are returned in descending utilisation order so the most
-	// at-risk tenants surface first.
-	ListTenantBudgets(ctx context.Context, args ListTenantBudgetsArgs) ([]TenantBudgetSummary, error)
+	// Rows come most at risk first: by spent / max × 100 descending —
+	// unclamped, so of two tenants past their ceilings the further one
+	// leads — then by tenant id. A page ends with a cursor that fetches
+	// the next one, empty on the last page. Spend moves between pages, so
+	// a tenant may show on two of them, or on none; a cursor is a place in
+	// the order, not a snapshot.
+	ListTenantBudgets(ctx context.Context, req ListTenantBudgetsRequest) ([]TenantBudgetSummary, string, error)
 }
 
 // UsageHousekeeping reclaims usage rows of capabilities that are gone.
@@ -159,8 +204,8 @@ type UsageHousekeeping interface {
 	ReleaseExpired(ctx context.Context) (int64, error)
 }
 
-// RequestBump is the input to Meter.BumpRequest.
-type RequestBump struct {
+// BumpRequest is the input to Meter.Bump.
+type BumpRequest struct {
 	CapabilityID uuid.UUID
 	// TenantID is the capability's tenant. Used for attribution (metrics);
 	// it is not an authorisation input.
@@ -180,10 +225,10 @@ type ChargeRequest struct {
 	// and the ledger row is filed under it. Required.
 	TenantID uuid.UUID
 	// Amount is the cost, in UnitCode. Must be finite and ≥ 0.
-	Amount float64
+	Amount Nanos
 	// MaxBudget is the capability's own ceiling, from the verified token.
 	// 0 = unlimited.
-	MaxBudget float64
+	MaxBudget Nanos
 	// UnitCode is the currency or unit; empty means DefaultUnitCode. No
 	// conversion happens: a charge in a unit other than the counter's is a
 	// configuration error the caller must prevent.
@@ -194,15 +239,65 @@ type ChargeRequest struct {
 	Actor string
 	// Copies are the presented Biscuit copy's own limits (Capability.Copies).
 	Copies []CopyCeiling
+	// ExternalRef names the cost in the consumer's own records — the id of
+	// the call or the event that reported it — and makes the charge
+	// idempotent on (CapabilityID, ExternalRef). Empty: every call charges.
+	// At most MaxExternalRefBytes long.
+	ExternalRef string
+	// Overrun is what happens when Amount would cross a ceiling.
+	Overrun OverrunPolicy
 }
+
+// ChargeRecord is one charge as the ledger holds it.
+type ChargeRecord struct {
+	ChargeID     uuid.UUID
+	CapabilityID uuid.UUID
+	// Amount is what the charge took; Refunded is what has been returned
+	// from it since.
+	Amount   Nanos
+	Refunded Nanos
+	UnitCode string
+	// ExternalRef is the charge's ChargeRequest.ExternalRef; empty for none.
+	ExternalRef string
+	// Overrun reports that the charge crossed a ceiling (OverrunRecord).
+	Overrun bool
+}
+
+// MaxExternalRefBytes bounds ChargeRequest.ExternalRef: long enough for any
+// UUID, ULID or provider call id, short enough to index.
+const MaxExternalRefBytes = 200
+
+// OverrunPolicy is what a charge does when its amount would cross a ceiling —
+// a Biscuit copy's, the capability's, an ancestor's or the tenant's.
+type OverrunPolicy uint8
+
+const (
+	// OverrunReject refuses the charge with the ceiling's sentinel and
+	// changes nothing. Use it for a cost not yet incurred: the refusal is
+	// what stops it.
+	OverrunReject OverrunPolicy = iota
+	// OverrunRecord commits the charge past the ceiling and reports it in
+	// ChargeReceipt.Overrun. Use it for a cost already incurred — reported
+	// after the fact, out of the request path — where refusing would only
+	// leave the ledger short of what was spent. The crossed ceiling then
+	// refuses every later charge and reservation under OverrunReject.
+	OverrunRecord
+)
 
 // ChargeReceipt is the result of a committed charge.
 type ChargeReceipt struct {
 	// ChargeID identifies the ledger row; pass it to Meter.Refund.
 	ChargeID uuid.UUID
-	// Spent is the capability's spend after the charge (its subtree's,
+	// Spent is the capability's spend as this call returns (its subtree's,
 	// when it has delegated children).
-	Spent float64
+	Spent Nanos
+	// Replayed reports that the charge was already in the ledger — the same
+	// ExternalRef, or a reservation already settled — so this call moved
+	// nothing and ChargeID names the earlier charge.
+	Replayed bool
+	// Overrun reports that the charge crossed at least one ceiling, which
+	// only OverrunRecord allows.
+	Overrun bool
 }
 
 // DefaultReservationTTL is how long a reservation lasts when the request
@@ -215,9 +310,9 @@ type ReserveRequest struct {
 	// TenantID is the capability's tenant. Required.
 	TenantID uuid.UUID
 	// Amount to hold, in UnitCode. Must be finite and ≥ 0.
-	Amount float64
+	Amount Nanos
 	// MaxBudget is the capability's own ceiling, from the verified token.
-	MaxBudget float64
+	MaxBudget Nanos
 	UnitCode  string
 	// TTL is how long the hold lasts if never settled or released.
 	// 0 = DefaultReservationTTL.
@@ -230,9 +325,22 @@ type ReserveRequest struct {
 	Copies []CopyCeiling
 }
 
-// Reservation is a committed hold.
+// Reservation is a committed hold, as Reserve made it and as GetReservation
+// and ListReservations read it back.
 type Reservation struct {
-	ID        uuid.UUID
+	ID           uuid.UUID
+	CapabilityID uuid.UUID
+	TenantID     uuid.UUID
+	// Amount is held in UnitCode.
+	Amount   Nanos
+	UnitCode string
+	// Op and Actor are what Settle will stamp on the charge.
+	Op    string
+	Actor string
+	// Copies are the Biscuit copies the hold is also on, innermost first,
+	// with the budget each is held against; a hold counts no requests, so
+	// their MaxRequests is zero.
+	Copies    []CopyCeiling
 	ExpiresAt time.Time
 }
 
@@ -240,16 +348,18 @@ type Reservation struct {
 type SettleRequest struct {
 	ReservationID uuid.UUID
 	// Amount is the actual cost to charge. Must be finite and ≥ 0.
-	Amount float64
+	Amount Nanos
 	// MaxBudget is the capability's own ceiling, from the verified token.
-	MaxBudget float64
+	MaxBudget Nanos
+	// Overrun is what happens when Amount would cross a ceiling.
+	Overrun OverrunPolicy
 }
 
 // RefundRequest is the input to Meter.Refund.
 type RefundRequest struct {
 	ChargeID uuid.UUID
 	// Amount to refund; 0 = everything not yet refunded from this charge.
-	Amount float64
+	Amount Nanos
 }
 
 // TenantBudget is the snapshot view of the tenant aggregate cap.
@@ -260,10 +370,10 @@ type RefundRequest struct {
 // tracked for a format change, not an invitation to store floats.
 type TenantBudget struct {
 	TenantID        uuid.UUID
-	MaxBudgetAmount float64
-	SpentAmount     float64
+	MaxBudgetAmount Nanos
+	SpentAmount     Nanos
 	// ReservedAmount is held by the tenant's open reservations.
-	ReservedAmount float64
+	ReservedAmount Nanos
 	UnitCode       string
 	PeriodStart    time.Time
 	PeriodEnd      *time.Time
@@ -273,10 +383,10 @@ type TenantBudget struct {
 	ResourceVersion int64
 }
 
-// SetTenantBudgetArgs is the input for UsageStore.SetTenantBudget.
-type SetTenantBudgetArgs struct {
+// SetTenantBudgetRequest is the input for UsageStore.SetTenantBudget.
+type SetTenantBudgetRequest struct {
 	TenantID        uuid.UUID
-	MaxBudgetAmount float64
+	MaxBudgetAmount Nanos
 	// UnitCode pins the currency. Empty = keep existing or default
 	// to DefaultUnitCode on first insert.
 	UnitCode string
@@ -307,23 +417,62 @@ type TenantBudgetSummary struct {
 	UtilisationPct float64
 }
 
-// ListTenantBudgetsArgs is the input shape for
+// ListTenantBudgetsRequest is the input shape for
 // UsageStore.ListTenantBudgets.
-type ListTenantBudgetsArgs struct {
+type ListTenantBudgetsRequest struct {
 	ThresholdPct    float64
 	UnlimitedOnly   bool
 	ExcludeInactive bool
 	Limit           int32
+	// Cursor is the one the previous page returned; empty for the first.
+	Cursor string
+}
+
+// TenantBudgetCursor is a place in ListTenantBudgets' order: the last row's
+// utilisation, in the decimal text its store computed it in, and tenant id.
+type TenantBudgetCursor struct {
+	Utilisation string
+	TenantID    uuid.UUID
+}
+
+// tenantBudgetCursorSep separates the cursor's two fields; neither a decimal
+// nor a uuid contains it.
+const tenantBudgetCursorSep = "|"
+
+// Encode is the cursor as ListTenantBudgets hands it out: opaque, URL-safe.
+func (c TenantBudgetCursor) Encode() string {
+	return base64.RawURLEncoding.EncodeToString([]byte(c.Utilisation + tenantBudgetCursorSep + c.TenantID.String()))
+}
+
+// DecodeTenantBudgetCursor reads a cursor Encode wrote. Anything else is an
+// ErrInvalidRequest.
+func DecodeTenantBudgetCursor(s string) (TenantBudgetCursor, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return TenantBudgetCursor{}, invalidRequest("tenant budget cursor %q", s)
+	}
+	pct, id, ok := strings.Cut(string(raw), tenantBudgetCursorSep)
+	if !ok || pct == "" {
+		return TenantBudgetCursor{}, invalidRequest("tenant budget cursor %q", s)
+	}
+	if _, err := strconv.ParseFloat(pct, 64); err != nil {
+		return TenantBudgetCursor{}, invalidRequest("tenant budget cursor %q", s)
+	}
+	tenant, err := uuid.Parse(id)
+	if err != nil {
+		return TenantBudgetCursor{}, invalidRequest("tenant budget cursor %q", s)
+	}
+	return TenantBudgetCursor{Utilisation: pct, TenantID: tenant}, nil
 }
 
 // Usage is the snapshot view of a capability's runtime counters.
 type Usage struct {
 	CapabilityID uuid.UUID
 	RequestCount int64
-	SpentAmount  float64
+	SpentAmount  Nanos
 	// ReservedAmount is held by open reservations (its subtree's, for a
 	// capability with delegated children).
-	ReservedAmount float64
+	ReservedAmount Nanos
 	UnitCode       string
 }
 
@@ -333,8 +482,8 @@ type CopyUsage struct {
 	RevocationID   []byte
 	CapabilityID   uuid.UUID
 	RequestCount   int64
-	SpentAmount    float64
-	ReservedAmount float64
+	SpentAmount    Nanos
+	ReservedAmount Nanos
 }
 
 // CopyUsageReader reads the counters of Biscuit copies. It is separate from
@@ -361,7 +510,8 @@ var (
 	ErrRefundExceedsCharge = errors.New("capability: refund exceeds charge")
 
 	// ErrReservationNotFound — Settle named a reservation that does not
-	// exist, was already settled or released, or has expired.
+	// exist, was released, or has expired. One already settled is not an
+	// error: Settle returns its charge again (ChargeReceipt.Replayed).
 	ErrReservationNotFound = errors.New("capability: reservation not found")
 
 	// ErrRequestLimitExceeded — capability used MaxRequests times,
@@ -392,11 +542,37 @@ var (
 	ErrTenantBudgetVersionMismatch = errors.New("capability: tenant budget resource_version mismatch")
 )
 
-// ValidateAmount reports whether a charge or refund amount is usable:
-// finite and not negative. Implementations call it before touching state.
-func ValidateAmount(amount float64) error {
-	if math.IsNaN(amount) || math.IsInf(amount, 0) || amount < 0 {
-		return fmt.Errorf("%w: %v", ErrInvalidAmount, amount)
+// Validate reports whether p is an OverrunPolicy this package defines.
+// Implementations call it before touching state, so an unknown policy is never
+// read as either one.
+func (p OverrunPolicy) Validate() error {
+	if p > OverrunRecord {
+		return fmt.Errorf("%w: unknown overrun policy %d", ErrInvalidRequest, p)
+	}
+	return nil
+}
+
+// ValidateExternalRef reports whether ref is usable as
+// ChargeRequest.ExternalRef: empty, or printable text within
+// MaxExternalRefBytes.
+func ValidateExternalRef(ref string) error {
+	if len(ref) > MaxExternalRefBytes {
+		return fmt.Errorf("%w: external ref is %d bytes, at most %d", ErrInvalidRequest, len(ref), MaxExternalRefBytes)
+	}
+	for _, r := range ref {
+		if !unicode.IsPrint(r) {
+			return fmt.Errorf("%w: external ref %q contains a non-printable character", ErrInvalidRequest, ref)
+		}
+	}
+	return nil
+}
+
+// ValidateAmount reports whether a charge or refund amount is usable: not
+// negative and at most MaxNanos. Implementations call it before touching
+// state.
+func ValidateAmount(amount Nanos) error {
+	if amount < 0 || amount > MaxNanos {
+		return fmt.Errorf("%w: %s is outside 0..%s", ErrInvalidAmount, amount, MaxNanos)
 	}
 	return nil
 }

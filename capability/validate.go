@@ -2,7 +2,6 @@ package capability
 
 import (
 	"fmt"
-	"math"
 	"net/netip"
 	"strings"
 	"unicode"
@@ -34,11 +33,11 @@ var readOnlyOps = map[Op]bool{
 // Builtin reports whether op is one of the operations this package defines.
 func (op Op) Builtin() bool { return builtinOps[op] }
 
-// Mutating reports whether op may change state. Built-in read operations are
-// not mutating; every other operation is. OpPresign is read-only by itself —
-// what a presigned URL may do is gated by the get/put assertion that
-// accompanies it.
-func (op Op) Mutating() bool { return !readOnlyOps[op] }
+// Mutating reports whether op may change state when no effect is declared for
+// it (see Op.ResolveEffect). Built-in read operations are not mutating; every
+// other operation is. OpPresign is read-only by itself — what a presigned URL
+// may do is gated by the get/put assertion that accompanies it.
+func (op Op) Mutating() bool { return op.defaultEffect() == EffectWrite }
 
 // Validate reports whether op is well formed: a built-in operation, or a
 // namespaced one of the form "<namespace>:<name>" made of printable,
@@ -87,13 +86,12 @@ func (c Caveats) Validate() error {
 	if c.MaxRequests < 0 {
 		return fmt.Errorf("%w: max_requests %d is negative", ErrInvalidCaveats, c.MaxRequests)
 	}
-	if math.IsNaN(c.MaxBudgetAmount) || math.IsInf(c.MaxBudgetAmount, 0) || c.MaxBudgetAmount < 0 {
-		return fmt.Errorf("%w: max_budget_amount %v must be a finite, non-negative number",
-			ErrInvalidCaveats, c.MaxBudgetAmount)
+	if c.MaxBudgetAmount < 0 || c.MaxBudgetAmount > MaxNanos {
+		return fmt.Errorf("%w: max_budget_amount %s is outside 0..%s",
+			ErrInvalidCaveats, c.MaxBudgetAmount, MaxNanos)
 	}
-	if c.UnitCode != "" && !IsAllowedUnitCode(c.UnitCode) {
-		return fmt.Errorf("%w: unknown unit_code %q (allowed: %v)",
-			ErrInvalidCaveats, c.UnitCode, AllowedUnitCodes)
+	if _, err := NormaliseUnitCode(c.UnitCode); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidCaveats, err)
 	}
 	for _, cidr := range c.SourceIPCIDR {
 		if _, err := netip.ParsePrefix(cidr); err != nil {

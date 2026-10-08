@@ -7,6 +7,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "google/api/field_behavior.proto";
+import "google/type/money.proto";
 
 // BillingService surfaces per-tenant capability spend over the
 // charges ledger (`001_initial_schema.sql`). Distinct from TenantBudgetService —
@@ -39,19 +40,23 @@ message GetTenantSummaryResponse {
   // The double total_amount, replaced by total_micros.
   reserved 1;
   reserved "total_amount";
-  // total_micros is the sum of the period's charges in millionths of
-  // unit_code (1.5 USD = 1500000). Integer, so sums never drift.
-  int64 total_micros = 8;
-  // unit_code mirrors the tenant's pinned unit_code (or USD default).
-  // Mixed-unit periods collapse to whichever unit dominates the row
-  // count — non-issue today (no FX), audit-exposed for the future.
-  string unit_code = 2;
+  // total_micros and unit_code, replaced by total.
+  reserved 2, 8;
+  reserved "total_micros", "unit_code";
+  // total is the sum of the period's charges, exact to the nano. Its
+  // currency is the tenant's unit (or USD); mixed-unit periods collapse to
+  // whichever unit dominates the row count — non-issue today (no FX).
+  // currency_code is ISO 4217, XXX for metering that is not money.
+  google.type.Money total = 10;
   // The double max_budget_amount, replaced by max_budget_micros.
   reserved 3;
   reserved "max_budget_amount";
-  // max_budget_micros is the tenant_budgets cap in millionths of unit_code,
-  // copied for UI convenience so the frontend doesn't need a second RPC.
-  int64 max_budget_micros = 9;
+  // max_budget_micros, replaced by max_budget.
+  reserved 9;
+  reserved "max_budget_micros";
+  // max_budget is the tenant_budgets cap, copied for UI convenience so the
+  // frontend doesn't need a second RPC.
+  google.type.Money max_budget = 11;
   repeated TopEntry top_capabilities = 4;
   repeated TopEntry top_actors = 5;
   repeated TopEntry top_ops = 6;
@@ -66,8 +71,11 @@ message TopEntry {
   reserved 2;
   reserved "amount";
   int64 charge_count = 3;
-  // amount_micros is the amount in millionths of the response's unit_code.
-  int64 amount_micros = 4;
+  // amount_micros, replaced by spent.
+  reserved 4;
+  reserved "amount_micros";
+  // spent is what the entry's charges came to, exact to the nano.
+  google.type.Money spent = 5;
 }
 
 message GetTenantTimeSeriesRequest {
@@ -81,7 +89,9 @@ message GetTenantTimeSeriesRequest {
 
 message GetTenantTimeSeriesResponse {
   repeated TimeBucket buckets = 1;
-  string unit_code = 2;
+  // unit_code, replaced by the currency of each bucket's amount.
+  reserved 2;
+  reserved "unit_code";
 }
 
 message TimeBucket {
@@ -90,6 +100,9 @@ message TimeBucket {
   reserved 2;
   reserved "amount";
   int64 charge_count = 3;
-  // amount_micros is the amount in millionths of the response's unit_code.
-  int64 amount_micros = 4;
+  // amount_micros, replaced by spent.
+  reserved 4;
+  reserved "amount_micros";
+  // spent is what the entry's charges came to, exact to the nano.
+  google.type.Money spent = 5;
 }

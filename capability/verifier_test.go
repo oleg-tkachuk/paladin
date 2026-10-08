@@ -35,19 +35,26 @@ func (m *memStore) Insert(_ context.Context, c Capability, _ Principal) error {
 	m.caps[c.ID] = c
 	return nil
 }
-func (m *memStore) Get(_ context.Context, id uuid.UUID) (*Capability, error) {
+func (m *memStore) Get(_ context.Context, id uuid.UUID) (Capability, error) {
 	atomic.AddInt64(&m.getCalls, 1)
 	c, ok := m.caps[id]
 	if !ok {
-		return nil, errors.New("not found")
+		return Capability{}, errors.New("not found")
 	}
-	return &c, nil
+	return c, nil
+}
+func (m *memStore) GetRecord(ctx context.Context, id uuid.UUID) (Record, error) {
+	c, err := m.Get(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	return Record{Capability: c}, nil
 }
 func (m *memStore) IsRevoked(_ context.Context, id uuid.UUID) (bool, error) {
 	atomic.AddInt64(&m.revCalls, 1)
 	return m.revoked[id], nil
 }
-func (m *memStore) Revoke(_ context.Context, args RevokeArgs) error {
+func (m *memStore) Revoke(_ context.Context, args RevokeRequest) error {
 	m.revoked[args.ID] = true
 	return nil
 }
@@ -59,14 +66,14 @@ func (m *memStore) IsBiscuitRevoked(_ context.Context, ids [][]byte) (bool, erro
 	}
 	return false, nil
 }
-func (m *memStore) RevokeBiscuit(_ context.Context, args RevokeBiscuitArgs) error {
+func (m *memStore) RevokeBiscuit(_ context.Context, args RevokeBiscuitRequest) error {
 	m.copies[string(args.RevocationID)] = true
 	return nil
 }
 func (m *memStore) PurgeExpired(context.Context, time.Duration) (int64, error) {
 	return 0, nil
 }
-func (m *memStore) ListByPrincipal(context.Context, ListByPrincipalArgs) ([]Capability, string, error) {
+func (m *memStore) ListByPrincipal(context.Context, ListByPrincipalRequest) ([]Capability, string, error) {
 	return nil, "", nil
 }
 
@@ -209,7 +216,7 @@ func TestVerify_Revoked(t *testing.T) {
 		Audience: []string{AudiencePlaneData},
 		Caveats:  Caveats{Ops: []Op{OpGet}},
 	})
-	if err := store.Revoke(ctx, RevokeArgs{ID: cap.ID, Reason: "test"}); err != nil {
+	if err := store.Revoke(ctx, RevokeRequest{ID: cap.ID, Reason: "test"}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 	_, err := verifier.Verify(ctx, token, AudiencePlaneData)
@@ -266,7 +273,7 @@ func TestDelegate_NarrowsAndPersists(t *testing.T) {
 		Caveats: Caveats{
 			Ops:              []Op{OpGet, OpList, OpSearch},
 			ResourcePrefixes: []string{"object://acme/"},
-			MaxBudgetAmount:  1.00,
+			MaxBudgetAmount:  MustParseAmount("1.00"),
 		},
 		TTL: time.Hour,
 	})
@@ -275,13 +282,13 @@ func TestDelegate_NarrowsAndPersists(t *testing.T) {
 	}
 
 	child, childToken, err := issuer.Delegate(ctx, DelegateRequest{
-		Parent:   *parent,
+		Parent:   parent,
 		Subject:  Principal{Type: PrincipalAgent, TenantID: tenantID, Subject: "child"},
 		Audience: []string{AudiencePlaneData},
 		Caveats: Caveats{
 			Ops:              []Op{OpGet},
 			ResourcePrefixes: []string{"object://acme/run-42/"},
-			MaxBudgetAmount:  0.10,
+			MaxBudgetAmount:  NanosPerUnit / 10,
 		},
 		TTL: 15 * time.Minute,
 	})
@@ -315,13 +322,54 @@ func TestDelegate_RejectsWidening(t *testing.T) {
 	})
 
 	_, _, err := issuer.Delegate(ctx, DelegateRequest{
-		Parent:   *parent,
+		Parent:   parent,
 		Subject:  Principal{Type: PrincipalAgent, TenantID: tenantID},
 		Audience: []string{AudiencePlaneData, AudiencePlaneAdmin}, // wider!
 		Caveats:  Caveats{Ops: []Op{OpGet}},
 	})
 	if !errors.Is(err, ErrDelegationTooWide) {
 		t.Fatalf("expected ErrDelegationTooWide, got %v", err)
+	}
+}
+
+// A Biscuit copy with limits of its own cannot delegate: the child would
+// count against the capability and never the copy, shedding its limits.
+// A copy without limits of its own delegates as the capability does.
+func TestDelegate_RefusesACopyWithLimitsOfItsOwn(t *testing.T) {
+	t.Parallel()
+	issuer, _, store, _ := buildIssuerVerifier(t)
+	ctx := context.Background()
+	tenantID := uuid.New()
+	parent, _, err := issuer.Issue(ctx, IssueRequest{
+		IssuedBy: Principal{Subject: "test-operator"},
+		Subject:  Principal{Type: PrincipalAgent, TenantID: tenantID},
+		Audience: []string{AudiencePlaneData},
+		Caveats:  Caveats{Ops: []Op{OpGet}, MaxRequests: 100},
+		TTL:      time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("issue parent: %v", err)
+	}
+	delegate := func(from Capability) error {
+		_, _, err := issuer.Delegate(ctx, DelegateRequest{
+			Parent:         from,
+			Subject:        Principal{Type: PrincipalAgent, TenantID: tenantID, Subject: "child"},
+			InheritCaveats: true,
+		})
+		return err
+	}
+
+	copyOf := parent
+	copyOf.Copies = []CopyCeiling{{RevocationID: []byte("block"), MaxRequests: 5}}
+	before := len(store.caps)
+	if err := delegate(copyOf); !errors.Is(err, ErrDelegationTooWide) {
+		t.Fatalf("delegate from a copy with limits: err = %v, want ErrDelegationTooWide", err)
+	}
+	if len(store.caps) != before {
+		t.Error("a refused delegation persisted a child")
+	}
+	if err := delegate(parent); err != nil {
+		t.Errorf("delegate from the capability itself: %v", err)
 	}
 }
 

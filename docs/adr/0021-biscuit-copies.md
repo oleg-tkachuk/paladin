@@ -21,7 +21,8 @@
     verifier refuses a token carrying any listed id, after the capability's
     own revocation. Revoking the capability still stops every copy and the JWT.
   - **A copy may carry limits of its own.** Two facts join the attenuation
-    vocabulary, `paladin_max_requests` and `paladin_max_budget_micros`, each
+    vocabulary, `paladin_max_requests` and `paladin_max_budget_nanos` (the copy's
+    budget in billionths of the capability's unit), each
     within every limit already in force. They are counted under the block's
     id, beside the capability's counters, which still bound all copies
     together; a charge or reservation records the ids it debited, so refunds,

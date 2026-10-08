@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -31,8 +32,7 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 		return nil, err
 	}
 	if h.copier == nil || h.copyUsage == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			"biscuit copy usage not wired")
+		return nil, connect.NewError(connect.CodeUnavailable, "biscuit copy usage not wired")
 	}
 	c, err := h.copier.BiscuitCopy(ctx, req.GetToken())
 	if err != nil {
@@ -65,25 +65,22 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 		byID[string(u.RevocationID)] = u
 	}
 
+	// A copy's amounts are in its capability's unit.
+	unit := record.Caveats.UnitCode
 	out := make([]*adminv1.CapabilityBiscuitCopyUsage, 0, len(c.Limits))
 	for _, l := range c.Limits {
 		u := byID[string(l.RevocationID)] // a copy never used counts zero
 		out = append(out, &adminv1.CapabilityBiscuitCopyUsage{
-			RevocationId:    l.RevocationID,
-			MaxRequests:     l.MaxRequests,
-			MaxBudgetMicros: l.MaxBudgetMicros,
-			RequestCount:    u.RequestCount,
-			SpentMicros:     apiutil.Micros(u.SpentAmount),
-			ReservedMicros:  apiutil.Micros(u.ReservedAmount),
+			RevocationId: l.RevocationID,
+			MaxRequests:  l.MaxRequests,
+			MaxBudget:    apiutil.MoneyOf(unit, l.MaxBudget),
+			RequestCount: u.RequestCount,
+			Spent:        apiutil.MoneyOf(unit, u.SpentAmount),
+			Reserved:     apiutil.MoneyOf(unit, u.ReservedAmount),
 		})
-	}
-	unit := record.Caveats.UnitCode
-	if unit == "" {
-		unit = capability.DefaultUnitCode
 	}
 	return &adminv1.CapabilityServiceGetBiscuitUsageResponse{
 		CapabilityId: c.CapabilityID.String(),
-		UnitCode:     unit,
 		Copies:       out,
 	}, nil
 }

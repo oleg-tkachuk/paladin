@@ -628,10 +628,11 @@ export function SubscriptionEditorDialog({
           htmlFor="sub-filter"
           hint={
             // Identifiers are bare: the EventEnvelope schema declares
-            // kind, tenant_id and severity, not event.kind. The examples
-            // carried an `event.` prefix that the validator rejects, so
-            // anyone copying them got "undeclared reference to 'event'".
-            "Empty = all events. Examples: kind == 'object.uploaded', tenant_id == 't_acme' && severity == 'error'. CEL evaluates against the EventEnvelope."
+            // type, kind, tenant_id and severity_level, not event.kind.
+            // kind is the class alone ("object"), and severity is one of
+            // info / warning / critical — examples that compare either
+            // to anything else validate and then match no event.
+            "Empty = all events. Examples: type == 'paladin.object.uploaded', kind == 'object' && severity_level >= 30. CEL evaluates against the EventEnvelope; every delivery is a CloudEvents 1.0 envelope."
           }
         >
           <Textarea

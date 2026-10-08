@@ -19,10 +19,10 @@ type copiesUsage struct {
 	bumps                     int
 }
 
-func (u *copiesUsage) BumpRequest(ctx context.Context, req capability.RequestBump) (int64, error) {
+func (u *copiesUsage) Bump(ctx context.Context, req capability.BumpRequest) (int64, error) {
 	u.bumps++
 	u.bumped = req.Copies
-	return u.fakeUsage.BumpRequest(ctx, req)
+	return u.fakeUsage.Bump(ctx, req)
 }
 
 func (u *copiesUsage) Charge(ctx context.Context, req capability.ChargeRequest, on func(context.Context, pgx.Tx) error) (capability.ChargeReceipt, error) {
@@ -40,7 +40,7 @@ func (u *copiesUsage) Reserve(ctx context.Context, req capability.ReserveRequest
 func TestCopiesReachTheMeter(t *testing.T) {
 	copies := []capability.CopyCeiling{
 		{RevocationID: []byte("inner"), MaxRequests: 2},
-		{RevocationID: []byte("outer"), MaxBudgetMicros: capability.MicrosPerUnit},
+		{RevocationID: []byte("outer"), MaxBudget: capability.NanosPerUnit},
 	}
 	cap := &capability.Capability{ID: uuid.New(), Subject: capability.Principal{TenantID: uuid.New()}, Copies: copies}
 	usage := &copiesUsage{fakeUsage: newFakeUsage()}
@@ -54,13 +54,13 @@ func TestCopiesReachTheMeter(t *testing.T) {
 	}
 
 	ctx := withLastOpHolder(WithChargeStore(WithCapability(context.Background(), cap), usage))
-	if err := ChargeCapability(ctx, 0.25, ""); err != nil {
+	if err := ChargeCapability(ctx, capability.MustParseAmount("0.25"), ""); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 	if !reflect.DeepEqual(usage.charged, copies) {
 		t.Errorf("charge copies = %+v", usage.charged)
 	}
-	if _, err := ReserveCapability(ctx, 0.25, time.Minute); err != nil {
+	if _, err := ReserveCapability(ctx, capability.MustParseAmount("0.25"), time.Minute); err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
 	if !reflect.DeepEqual(usage.reserved, copies) {

@@ -56,11 +56,15 @@ func invalidRequest(format string, args ...any) error {
 // migration on the domain side.
 const DefaultUnitCode = "USD"
 
+// AbstractUnitCode is the unit of a budget that is not money — requests,
+// credits, anything metered: ISO 4217's XXX, "no currency involved".
+const AbstractUnitCode = "XXX"
+
 // AllowedUnitCodes is the canonical set the backend accepts for
-// caveat / charge / tenant-budget unit_code fields. ISO 4217 fiat
-// codes plus the abstract sentinel UNIT for non-currency metering.
-// Mirrored on the frontend (frontend/src/lib/format/money.ts).
-var AllowedUnitCodes = []string{"USD", "EUR", "UAH", "GBP", "UNIT"}
+// caveat / charge / tenant-budget unit_code fields: ISO 4217 codes, the
+// abstract XXX among them. Mirrored on the frontend
+// (frontend/src/lib/format/money.ts).
+var AllowedUnitCodes = []string{"USD", "EUR", "UAH", "GBP", AbstractUnitCode}
 
 // IsAllowedUnitCode reports whether u is in AllowedUnitCodes. Empty
 // string is NOT treated as valid here — callers that want the empty-
@@ -88,10 +92,20 @@ func NormaliseUnitCode(u string) (string, error) {
 	return u, nil
 }
 
+// canonicalUnitCode is u as NormaliseUnitCode reads it, or u itself when it
+// is unknown — for comparing two units, where an unknown one simply differs.
+func canonicalUnitCode(u string) string {
+	if n, err := NormaliseUnitCode(u); err == nil {
+		return n
+	}
+	return u
+}
+
 // Op is an operation an agent may perform. The package defines a small
 // built-in set (below); a consumer adds its own as namespaced names of the
 // form "<namespace>:<name>" — "tool:search", "mcp:github/create_issue" —
-// which Op.Validate accepts and Op.Mutating treats as state-changing.
+// which Op.Validate accepts. A consumer-defined operation is treated as
+// state-changing unless the server declares otherwise (Effect).
 // Fine-grained method gating can still layer admin-authored policy on top.
 type Op string
 
@@ -237,13 +251,10 @@ type CopyCeiling struct {
 	RevocationID []byte
 	// MaxRequests bounds the requests made with the copy; 0 = no limit here.
 	MaxRequests int64
-	// MaxBudgetMicros bounds the copy's spend, in micros of the
-	// capability's unit; 0 = no limit here.
-	MaxBudgetMicros int64
+	// MaxBudget bounds the copy's spend, in the capability's unit; 0 = no
+	// limit here.
+	MaxBudget Nanos
 }
-
-// MaxBudget is MaxBudgetMicros as an amount, for the Meter's float boundary.
-func (c CopyCeiling) MaxBudget() float64 { return MicrosToAmount(c.MaxBudgetMicros) }
 
 // Caveats is a typed bag of restrictions. Empty values are interpreted
 // as "no restriction on that axis"; explicit bounds are AND-combined.
@@ -273,18 +284,18 @@ type Caveats struct {
 	// be used. 0 = unlimited within the TTL.
 	MaxRequests int
 
-	// MaxBudgetAmount is the cost budget the capability authorises,
-	// expressed in the currency identified by UnitCode. The budget
-	// tracker decrements as LLM / storage operations bill; once
-	// exhausted, the verifier returns ErrBudgetExceeded.
+	// MaxBudgetAmount is the cost budget the capability authorises, in
+	// the currency identified by UnitCode, exact to the nano. The Meter
+	// counts spend against it; once exhausted, a charge returns
+	// ErrBudgetExceeded.
 	//
 	// Renamed from MaxBudgetUSD — same field, no longer USD-pinned.
-	MaxBudgetAmount float64
+	MaxBudgetAmount Nanos
 
-	// UnitCode pins the currency or unit (USD/EUR/UAH/GBP or the
-	// abstract sentinel UNIT). Empty value is interpreted as the
-	// default ("USD") at the application boundary; the in-memory
-	// shape is happy to carry either form.
+	// UnitCode pins the currency or unit: an ISO 4217 code, USD/EUR/UAH/GBP,
+	// or XXX ("no currency") for a budget that is not money. Empty value is
+	// interpreted as the default ("USD") at the application boundary; the
+	// in-memory shape is happy to carry either form.
 	UnitCode string
 
 	// AllowTaintedRead permits non-mutating operations on resources the
@@ -296,8 +307,8 @@ type Caveats struct {
 	AllowTaintedRead bool
 
 	// IdempotencyKeyRequired forces the bearer to send an explicit
-	// idempotency key on mutating ops (Op.Mutating). Enforced by
-	// Caveats.Check from CheckRequest.HasIdempotencyKey.
+	// idempotency key on mutating operations (CheckRequest.Mutating).
+	// Enforced by Caveats.Check from CheckRequest.HasIdempotencyKey.
 	IdempotencyKeyRequired bool
 
 	// SourceIPCIDR optionally pins the capability to clients whose

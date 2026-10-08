@@ -3,11 +3,13 @@ package admin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"testing"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
+	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
@@ -22,7 +24,12 @@ type fakeUsageStore struct {
 	budgets map[uuid.UUID]capability.TenantBudget
 	getErr  error
 	// lastSet is the last SetTenantBudget's arguments.
-	lastSet capability.SetTenantBudgetArgs
+	lastSet capability.SetTenantBudgetRequest
+	// lastList is the last ListTenantBudgets' arguments; listNext and
+	// listErr are what it answers.
+	lastList capability.ListTenantBudgetsRequest
+	listNext string
+	listErr  error
 }
 
 func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (capability.TenantBudget, error) {
@@ -36,7 +43,7 @@ func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (capab
 	return tb, nil
 }
 
-func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetArgs) (capability.TenantBudget, error) {
+func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetRequest) (capability.TenantBudget, error) {
 	f.lastSet = args
 	if f.budgets == nil {
 		f.budgets = map[uuid.UUID]capability.TenantBudget{}
@@ -74,8 +81,37 @@ func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetT
 	return tb, nil
 }
 
-func (f *fakeUsageStore) ListTenantBudgets(context.Context, capability.ListTenantBudgetsArgs) ([]capability.TenantBudgetSummary, error) {
-	return nil, nil
+func (f *fakeUsageStore) ListTenantBudgets(_ context.Context, req capability.ListTenantBudgetsRequest) ([]capability.TenantBudgetSummary, string, error) {
+	f.lastList = req
+	return nil, f.listNext, f.listErr
+}
+
+// Summarize pages through the store's cursor, both ways.
+func TestTenantBudgetServer_Summarize_Pages(t *testing.T) {
+	store := &fakeUsageStore{listNext: "next-page"}
+	resp, err := NewTenantBudgetServer(store).Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{
+		Limit: 2, PageToken: "this-page",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.lastList.Cursor != "this-page" || store.lastList.Limit != 2 {
+		t.Errorf("store asked for %+v; want the page token and limit sent", store.lastList)
+	}
+	if resp.GetNextPageToken() != "next-page" {
+		t.Errorf("next_page_token = %q, want the store's cursor", resp.GetNextPageToken())
+	}
+}
+
+// A page token the store cannot read is the caller's to fix.
+func TestTenantBudgetServer_Summarize_BadPageToken(t *testing.T) {
+	store := &fakeUsageStore{listErr: fmt.Errorf("%w: cursor", capability.ErrInvalidRequest)}
+	_, err := NewTenantBudgetServer(store).Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{
+		PageToken: "garbage",
+	})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument", connect.CodeOf(err))
+	}
 }
 
 func TestTenantBudgetServer_Get_NotFound(t *testing.T) {
@@ -99,18 +135,15 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 	tenantID := uuid.New()
 
 	setRes, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-		TenantId:        tenantID.String(),
-		MaxBudgetMicros: proto.Int64(100_000_000),
-		ResetSpend:      true,
+		TenantId:   tenantID.String(),
+		MaxBudget:  &money.Money{CurrencyCode: "USD", Units: 100},
+		ResetSpend: true,
 	})
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got := setRes.GetBudget().GetMaxBudgetMicros(); got != 100_000_000 {
-		t.Errorf("max_budget_micros: got %d, want 100000000", got)
-	}
-	if got := setRes.GetBudget().GetUnitCode(); got != capability.DefaultUnitCode {
-		t.Errorf("unit_code: got %q, want %q (default)", got, capability.DefaultUnitCode)
+	if got, want := setRes.GetBudget().GetMaxBudget(), (&money.Money{CurrencyCode: capability.DefaultUnitCode, Units: 100}); !proto.Equal(got, want) {
+		t.Errorf("max_budget: got %v, want %v", got, want)
 	}
 
 	getRes, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
@@ -131,8 +164,8 @@ func TestTenantBudgetServer_Set_NamesTheBudgetForTheAuditLog(t *testing.T) {
 	tenantID := uuid.New()
 	ctx := apiutil.WithResourceSlot(context.Background())
 	if _, err := srv.Set(ctx, &pb.TenantBudgetServiceSetRequest{
-		TenantId:        tenantID.String(),
-		MaxBudgetMicros: proto.Int64(100_000_000),
+		TenantId:  tenantID.String(),
+		MaxBudget: &money.Money{CurrencyCode: "USD", Units: 100},
 	}); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
@@ -177,8 +210,8 @@ func TestTenantBudgetServer_NilUsageStore_Unavailable(t *testing.T) {
 	}
 }
 
-// TestTenantBudgetServer_Set_NonUSDUnit covers the new unit_code
-// path: a budget set with unit_code=EUR round-trips through
+// TestTenantBudgetServer_Set_NonUSDUnit covers a non-default
+// currency: a budget set in EUR round-trips through
 // {Set, Get} carrying the EUR designation.
 func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
 	store := &fakeUsageStore{}
@@ -186,16 +219,15 @@ func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
 	tenantID := uuid.New()
 
 	setRes, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-		TenantId:        tenantID.String(),
-		MaxBudgetMicros: proto.Int64(250_000_000),
-		UnitCode:        "EUR",
-		ResetSpend:      true,
+		TenantId:   tenantID.String(),
+		MaxBudget:  &money.Money{CurrencyCode: "EUR", Units: 250},
+		ResetSpend: true,
 	})
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got := setRes.GetBudget().GetUnitCode(); got != "EUR" {
-		t.Errorf("unit_code: got %q, want EUR", got)
+	if got, want := setRes.GetBudget().GetMaxBudget(), (&money.Money{CurrencyCode: "EUR", Units: 250}); !proto.Equal(got, want) {
+		t.Errorf("max_budget: got %v, want %v", got, want)
 	}
 }
 
@@ -204,9 +236,8 @@ func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
 func TestTenantBudgetServer_Set_BadUnit(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
 	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-		TenantId:        uuid.New().String(),
-		MaxBudgetMicros: proto.Int64(1_000_000),
-		UnitCode:        "XYZ",
+		TenantId:  uuid.New().String(),
+		MaxBudget: &money.Money{CurrencyCode: "XYZ", Units: 1},
 	})
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
@@ -230,8 +261,8 @@ func TestTenantBudgetServer_BadTenantID(t *testing.T) {
 func TestTenantBudgetServer_Set_ReturnsNewVersion(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
 	res, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-		TenantId:        uuid.New().String(),
-		MaxBudgetMicros: proto.Int64(10_000_000),
+		TenantId:  uuid.New().String(),
+		MaxBudget: &money.Money{CurrencyCode: "USD", Units: 10},
 	})
 	if err != nil {
 		t.Fatalf("Set: %v", err)
@@ -250,15 +281,15 @@ func TestTenantBudgetServer_Set_StaleVersionIsAborted(t *testing.T) {
 	tenantID := uuid.New().String()
 
 	if _, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-		TenantId:        tenantID,
-		MaxBudgetMicros: proto.Int64(10_000_000),
+		TenantId:  tenantID,
+		MaxBudget: &money.Money{CurrencyCode: "USD", Units: 10},
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID,
-		MaxBudgetMicros: proto.Int64(999_000_000),
+		MaxBudget:       &money.Money{CurrencyCode: "USD", Units: 999},
 		ResourceVersion: "1234",
 	})
 	var connErr *connect.Error
@@ -272,7 +303,7 @@ func TestTenantBudgetServer_Set_BadVersionIsInvalidArgument(t *testing.T) {
 	srv := NewTenantBudgetServer(&fakeUsageStore{})
 	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        uuid.New().String(),
-		MaxBudgetMicros: proto.Int64(1_000_000),
+		MaxBudget:       &money.Money{CurrencyCode: "USD", Units: 1},
 		ResourceVersion: "not-a-number",
 	})
 	var connErr *connect.Error

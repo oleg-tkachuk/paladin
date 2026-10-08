@@ -99,13 +99,13 @@ export function BackendFeatures({
               <TableHead>Feature</TableHead>
               <TableHead>Needed for</TableHead>
               <TableHead>Result</TableHead>
-              <TableHead className="hidden md:table-cell">Detail</TableHead>
+              <TableHead className="hidden @3xl:table-cell">Detail</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {backend.features.map((f) => (
               <TableRow key={f.feature}>
-                <TableCell className="font-medium">
+                <TableCell className="font-medium whitespace-normal">
                   {FEATURE_LABELS[f.feature]}
                   {f.required && (
                     <Badge
@@ -116,7 +116,8 @@ export function BackendFeatures({
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
+                {/* Prose columns wrap rather than widening the table. */}
+                <TableCell className="text-xs whitespace-normal text-muted-foreground">
                   {f.enables}
                 </TableCell>
                 <TableCell>
@@ -132,7 +133,7 @@ export function BackendFeatures({
                     {SUPPORT_LABELS[f.support]}
                   </Badge>
                 </TableCell>
-                <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
+                <TableCell className="hidden @3xl:table-cell text-xs whitespace-normal text-muted-foreground">
                   {f.message || "—"}
                 </TableCell>
               </TableRow>

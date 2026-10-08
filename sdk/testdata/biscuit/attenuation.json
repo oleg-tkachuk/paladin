@@ -7,7 +7,7 @@
     "expires_at": "2026-01-01T00:30:00Z",
     "bind_jkt": "nhJL-4fvkZxa3j-NAU29y8N1wqcS_E-ZMtKfgT23tV0",
     "max_requests": 25,
-    "max_budget_micros": 1500000
+    "max_budget_nanos": 1500000000
   },
   "expect": {
     "ops": ["get"],
@@ -17,6 +17,6 @@
     "expires_at": "2026-01-01T00:30:00Z",
     "confirmation_jkt": "nhJL-4fvkZxa3j-NAU29y8N1wqcS_E-ZMtKfgT23tV0",
     "copy_max_requests": 25,
-    "copy_max_budget_micros": 1500000
+    "copy_max_budget_nanos": 1500000000
   }
 }

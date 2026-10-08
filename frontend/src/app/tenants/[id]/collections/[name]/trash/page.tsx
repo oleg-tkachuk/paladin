@@ -206,12 +206,12 @@ export default function CollectionTrashPage() {
                 />
               </TableHead>
               <TableHead>Name</TableHead>
-              <TableHead className="hidden md:table-cell">Tag</TableHead>
-              <TableHead className="hidden lg:table-cell">MIME</TableHead>
-              <TableHead className="hidden md:table-cell text-right">
+              <TableHead className="hidden @md:table-cell">Tag</TableHead>
+              <TableHead className="hidden @2xl:table-cell">MIME</TableHead>
+              <TableHead className="hidden @md:table-cell text-right">
                 Size
               </TableHead>
-              <TableHead className="hidden sm:table-cell">
+              <TableHead className="hidden @xs:table-cell">
                 <button
                   type="button"
                   onClick={() => setUseRelativeTime((v) => !v)}
@@ -221,7 +221,7 @@ export default function CollectionTrashPage() {
                   <ClockIcon className="size-3" />
                 </button>
               </TableHead>
-              <TableHead className="hidden lg:table-cell text-right">
+              <TableHead className="hidden @2xl:table-cell text-right">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="cursor-help border-b border-dotted border-muted-foreground/50">
@@ -294,26 +294,26 @@ export default function CollectionTrashPage() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="hidden md:table-cell">
+                  <TableCell className="hidden @md:table-cell">
                     <ObjectTagBadge
                       objectTag={obj.tags?.object_tag}
                       linked={!!obj.tags?.object_tag}
                     />
                   </TableCell>
-                  <TableCell className="hidden lg:table-cell text-xs text-muted-foreground font-mono">
+                  <TableCell className="hidden @2xl:table-cell text-xs text-muted-foreground font-mono">
                     {obj.contentType || "binary/octet-stream"}
                   </TableCell>
-                  <TableCell className="hidden md:table-cell text-right text-xs font-mono tabular-nums text-muted-foreground">
+                  <TableCell className="hidden @md:table-cell text-right text-xs font-mono tabular-nums text-muted-foreground">
                     {formatBytes(Number(obj.sizeBytes))}
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell text-xs text-muted-foreground whitespace-nowrap">
+                  <TableCell className="hidden @xs:table-cell text-xs text-muted-foreground whitespace-nowrap">
                     {obj.terminatedAt
                       ? useRelativeTime
                         ? formatDate(timestampToDate(obj.terminatedAt))
                         : formatDateTime(timestampToDate(obj.terminatedAt))
                       : "—"}
                   </TableCell>
-                  <TableCell className="hidden lg:table-cell text-right text-xs font-mono tabular-nums text-muted-foreground">
+                  <TableCell className="hidden @2xl:table-cell text-right text-xs font-mono tabular-nums text-muted-foreground">
                     {obj.resourceVersion || "—"}
                   </TableCell>
                   <TableCell className="text-right">

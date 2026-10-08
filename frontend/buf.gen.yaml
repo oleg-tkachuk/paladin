@@ -10,9 +10,11 @@ plugins:
 inputs:
   - directory: ../proto
   # google.rpc.ErrorInfo, which carries the server's ErrorReason on every
-  # error (errorContract.ts reads it). Not imported by any API file, so the
-  # input above does not bring it; pinned to the commit ../proto/buf.lock
-  # resolves googleapis to, so both generate from the same source.
+  # error (errorContract.ts reads it), and google.type.Money, which every
+  # amount is. The input above generates only this repository's files, so
+  # neither comes with it; pinned to the commit ../proto/buf.lock resolves
+  # googleapis to, so both generate from the same source.
   - module: buf.build/googleapis/googleapis:004180b77378443887d3b55cabc00384
     paths:
       - google/rpc/error_details.proto
+      - google/type/money.proto

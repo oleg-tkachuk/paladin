@@ -14,6 +14,9 @@ vi.mock("@/components/ui/Notification", () => ({
 
 import { BiscuitCopyUsageDialog } from "./BiscuitCopyUsageDialog";
 import { shortRevocationId } from "./_biscuit";
+import { moneyFromDecimal } from "@/lib/format/money";
+
+const xxx = (amount: string) => moneyFromDecimal(amount, "XXX");
 
 const BISCUIT = "En0KEwoEMTIzNBgDIgkKBwgKEgMYgAgSJAgAEiB";
 const JWT = "eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJ4In0.c2ln";
@@ -43,23 +46,22 @@ describe("BiscuitCopyUsageDialog", () => {
   it("shows each limit with what has been used against it", async () => {
     h.getBiscuitUsage.mockResolvedValue({
       capabilityId: "cap-1",
-      unitCode: "UNIT",
       copies: [
         {
           revocationId: INNER,
           maxRequests: 10n,
-          maxBudgetMicros: 0n,
+          maxBudget: xxx("0"),
           requestCount: 3n,
-          spentMicros: 0n,
-          reservedMicros: 0n,
+          spent: xxx("0"),
+          reserved: xxx("0"),
         },
         {
           revocationId: OUTER,
           maxRequests: 0n,
-          maxBudgetMicros: 2_000_000n,
+          maxBudget: xxx("2"),
           requestCount: 7n,
-          spentMicros: 1_250_000n,
-          reservedMicros: 500_000n,
+          spent: xxx("1.25"),
+          reserved: xxx("0.5"),
         },
       ],
     });
@@ -82,14 +84,14 @@ describe("BiscuitCopyUsageDialog", () => {
     expect(inner[1]).toBe("3 / 10");
     expect(outer[0]).toBe(shortRevocationId(OUTER));
     expect(outer[1]).toBe("7"); // no request limit at this block
-    expect(outer[2]).toMatch(/^1\.2500.* \/ 2\.0000/);
-    expect(outer[3]).toMatch(/^0\.5000/);
+    // XXX reads as a number of units, never with the generic "¤" sign.
+    expect(outer[2]).toBe("1.2500 units / 2.0000 units");
+    expect(outer[3]).toBe("0.5000 units");
   });
 
   it("says when no limits were narrowed onto the copy", async () => {
     h.getBiscuitUsage.mockResolvedValue({
       capabilityId: "cap-1",
-      unitCode: "USD",
       copies: [],
     });
     open();
@@ -103,7 +105,6 @@ describe("BiscuitCopyUsageDialog", () => {
   it("reports a refusal from the server and shows no stale result", async () => {
     h.getBiscuitUsage.mockResolvedValueOnce({
       capabilityId: "cap-1",
-      unitCode: "USD",
       copies: [],
     });
     open();

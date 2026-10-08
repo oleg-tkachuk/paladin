@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -56,14 +58,8 @@ func (s *UsageStore) Reserve(ctx context.Context, req capability.ReserveRequest)
 	if err != nil {
 		return capability.Reservation{}, fmt.Errorf("capability/postgres: reserve: %w", err)
 	}
-	amount, err := numericFromFloat(req.Amount)
-	if err != nil {
-		return capability.Reservation{}, err
-	}
-	maxBudget, err := numericFromFloat(req.MaxBudget)
-	if err != nil {
-		return capability.Reservation{}, err
-	}
+	amount := pgmoney.NumericFromNanos(req.Amount)
+	maxBudget := pgmoney.NumericFromNanos(req.MaxBudget)
 	ttl := req.TTL
 	if ttl <= 0 {
 		ttl = capability.DefaultReservationTTL
@@ -105,7 +101,7 @@ func (s *UsageStore) Reserve(ctx context.Context, req capability.ReserveRequest)
 	var expires time.Time
 	if err := tx.QueryRow(ctx, `
 INSERT INTO capability_reservations (id, tenant_id, capability_id, amount, unit_code, op, actor_subject, expires_at,
-                                     copy_ids, copy_max_budget_micros)
+                                     copy_ids, copy_max_budget_nanos)
 VALUES ($1, $2, $3, $4::numeric, $5, $6, $7, now() + ($8::bigint * interval '1 microsecond'), $9::bytea[], $10::bigint[])
 RETURNING expires_at`,
 		id, req.TenantID, req.CapabilityID, amount, unit, req.Op, req.Actor, ttl.Microseconds(),
@@ -117,7 +113,84 @@ RETURNING expires_at`,
 	if err := tx.Commit(ctx); err != nil {
 		return capability.Reservation{}, fmt.Errorf("capability/postgres: reserve commit: %w", err)
 	}
-	return capability.Reservation{ID: id, ExpiresAt: expires}, nil
+	return capability.Reservation{
+		ID: id, CapabilityID: req.CapabilityID, TenantID: req.TenantID, Amount: req.Amount,
+		UnitCode: unit, Op: req.Op, Actor: req.Actor, Copies: budgetCeilings(req.Copies), ExpiresAt: expires.UTC(),
+	}, nil
+}
+
+// budgetCeilings is copies with their budgets alone, as a reservation row
+// keeps them.
+func budgetCeilings(copies []capability.CopyCeiling) []capability.CopyCeiling {
+	out := make([]capability.CopyCeiling, 0, len(copies))
+	for _, c := range copies {
+		out = append(out, capability.CopyCeiling{RevocationID: c.RevocationID, MaxBudget: c.MaxBudget})
+	}
+	return out
+}
+
+// reservationSelect reads reservation rows as the Meter contract reads one
+// back; a WHERE clause picks which. Under the caller's tenant scoping, as
+// every reservation path runs.
+const reservationSelect = `
+SELECT id, capability_id, tenant_id, amount, unit_code, op, actor_subject,
+       copy_ids, copy_max_budget_nanos, expires_at
+FROM   capability_reservations
+`
+
+func scanReservation(row pgx.Row) (capability.Reservation, error) {
+	var (
+		r       capability.Reservation
+		amount  pgtype.Numeric
+		ids     [][]byte
+		budgets []int64
+	)
+	if err := row.Scan(&r.ID, &r.CapabilityID, &r.TenantID, &amount, &r.UnitCode, &r.Op, &r.Actor,
+		&ids, &budgets, &r.ExpiresAt); err != nil {
+		return capability.Reservation{}, err
+	}
+	copies, err := ceilingsOf(ids, budgets)
+	if err != nil {
+		return capability.Reservation{}, err
+	}
+	if r.Amount, err = pgmoney.NanosFromNumeric(amount); err != nil {
+		return capability.Reservation{}, err
+	}
+	r.Copies, r.ExpiresAt = copies, r.ExpiresAt.UTC()
+	return r, nil
+}
+
+// GetReservation implements capability.Meter.
+func (s *UsageStore) GetReservation(ctx context.Context, reservationID uuid.UUID) (capability.Reservation, error) {
+	r, err := scanReservation(s.pool.QueryRow(ctx, reservationSelect+`WHERE id = $1`, reservationID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return capability.Reservation{}, capability.ErrReservationNotFound
+	}
+	if err != nil {
+		return capability.Reservation{}, fmt.Errorf("capability/postgres: get reservation: %w", err)
+	}
+	return r, nil
+}
+
+// ListReservations implements capability.Meter.
+func (s *UsageStore) ListReservations(ctx context.Context, capID uuid.UUID) ([]capability.Reservation, error) {
+	rows, err := s.pool.Query(ctx, reservationSelect+`WHERE capability_id = $1 ORDER BY expires_at, id`, capID)
+	if err != nil {
+		return nil, fmt.Errorf("capability/postgres: list reservations: %w", err)
+	}
+	defer rows.Close()
+	out := []capability.Reservation{}
+	for rows.Next() {
+		r, err := scanReservation(rows)
+		if err != nil {
+			return nil, fmt.Errorf("capability/postgres: list reservations: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("capability/postgres: list reservations: %w", err)
+	}
+	return out, nil
 }
 
 func holdCapability(ctx context.Context, tx pgx.Tx, capID uuid.UUID, amount pgtype.Numeric, unit string, maxBudget pgtype.Numeric) error {
@@ -150,7 +223,7 @@ func takeReservation(ctx context.Context, tx pgx.Tx, id uuid.UUID, live bool) (o
 		stmt += ` AND expires_at > now()`
 	}
 	stmt += ` RETURNING capability_id, tenant_id, amount, unit_code, op, actor_subject,
-	                    copy_ids, copy_max_budget_micros`
+	                    copy_ids, copy_max_budget_nanos`
 	var r openReservation
 	err := tx.QueryRow(ctx, stmt, id).Scan(&r.capID, &r.tenantID, &r.amount, &r.unit, &r.op, &r.actor,
 		&r.copyIDs, &r.copyBudgets)
@@ -191,7 +264,7 @@ WHERE tenant_id = $1`, r.tenantID, r.amount); err != nil {
 // rejection rolls all three back, so the reservation is still there to be
 // settled lower or released. Deleting the row is what serialises two
 // settles of one reservation: the second waits on the row lock, then finds
-// nothing.
+// nothing, and returns the first's charge as a replay.
 func (s *UsageStore) Settle(
 	ctx context.Context,
 	req capability.SettleRequest,
@@ -200,14 +273,11 @@ func (s *UsageStore) Settle(
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
-	amount, err := numericFromFloat(req.Amount)
-	if err != nil {
+	if err := req.Overrun.Validate(); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
-	maxBudget, err := numericFromFloat(req.MaxBudget)
-	if err != nil {
-		return capability.ChargeReceipt{}, err
-	}
+	amount := pgmoney.NumericFromNanos(req.Amount)
+	maxBudget := pgmoney.NumericFromNanos(req.MaxBudget)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -216,10 +286,23 @@ func (s *UsageStore) Settle(
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	r, err := takeReservation(ctx, tx, req.ReservationID, true)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Settled already, or never settleable. A second settle waited on
+		// the first's row lock, so a charge the first made is visible now.
+		var (
+			chargeID, capID uuid.UUID
+			overrun         bool
+		)
+		lErr := tx.QueryRow(ctx, chargeByReservationQuery, req.ReservationID).Scan(&chargeID, &capID, &overrun)
+		if lErr == nil {
+			return replay(ctx, tx, chargeID, capID, overrun)
+		}
+		if errors.Is(lErr, pgx.ErrNoRows) {
 			return capability.ChargeReceipt{}, capability.ErrReservationNotFound
 		}
+		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: settle read charge: %w", lErr)
+	}
+	if err != nil {
 		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: settle read: %w", err)
 	}
 	if err := s.releaseHold(ctx, tx, r); err != nil {
@@ -238,7 +321,8 @@ func (s *UsageStore) Settle(
 		Op:           r.op,
 		Actor:        r.actor,
 		Copies:       copies,
-	}, r.unit, amount, maxBudget, onCharged)
+		Overrun:      req.Overrun,
+	}, req.ReservationID, r.unit, amount, maxBudget, onCharged)
 	if err != nil {
 		return capability.ChargeReceipt{}, err
 	}

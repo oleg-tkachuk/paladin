@@ -63,4 +63,39 @@ enum ErrorReason {
   ERROR_REASON_BUCKET_NOT_ON_BACKEND = 30;
   // A delete on the backend of a bucket Paladin did not create there.
   ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN = 31;
+
+  // A presented capability was refused. Each names the capability module's
+  // reason of the same spelling. The capability's own refusals are permanent:
+  // the same request with the same capability is refused for as long as the
+  // capability lives, so an agent stops rather than retries — a forged,
+  // expired or revoked token, one for another audience, an invalid Biscuit,
+  // an operation, resource or source address outside its caveats, and its
+  // request limit reached. The rest can be lifted by something else, and are
+  // marked below.
+  ERROR_REASON_CAPABILITY_INVALID_SIGNATURE = 32;
+  // The verifier could not fetch the issuer's keys. Not permanent.
+  ERROR_REASON_CAPABILITY_KEYS_UNAVAILABLE = 33;
+  ERROR_REASON_CAPABILITY_EXPIRED = 34;
+  // Not permanent: the capability becomes valid at its not-before time.
+  ERROR_REASON_CAPABILITY_NOT_YET_VALID = 35;
+  ERROR_REASON_CAPABILITY_REVOKED = 36;
+  ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH = 37;
+  ERROR_REASON_CAPABILITY_INVALID_BISCUIT = 38;
+  // The capability is key-bound and the request carried no DPoP proof, an
+  // invalid one, or one already used. Not permanent: sign a fresh proof.
+  ERROR_REASON_CAPABILITY_PROOF_REQUIRED = 39;
+  ERROR_REASON_CAPABILITY_PROOF_INVALID = 40;
+  ERROR_REASON_CAPABILITY_PROOF_REPLAYED = 41;
+  ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED = 42;
+  ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED = 43;
+  ERROR_REASON_CAPABILITY_SOURCE_NOT_ALLOWED = 44;
+  // Not permanent: send the request again with an Idempotency-Key.
+  ERROR_REASON_CAPABILITY_IDEMPOTENCY_KEY_REQUIRED = 45;
+  // Not permanent: an operator may clear the object's taint.
+  ERROR_REASON_CAPABILITY_TAINTED_READ_NOT_ALLOWED = 46;
+  ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED = 47;
+  // Not permanent: budget frees as holds lapse or charges are refunded.
+  ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED = 48;
+  // Not permanent: an operator may raise the tenant's ceiling.
+  ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED = 49;
 }

@@ -3,12 +3,15 @@ package capabilityh
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
+	"google.golang.org/genproto/googleapis/type/money"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
@@ -32,22 +35,22 @@ func codeOf(err error) connect.Code { return connect.CodeOf(err) }
 // configurable failures for the paths the existing tests do not drive.
 type recordingStore struct {
 	fakeStore
-	revokeArgs *capability.RevokeArgs
+	revokeArgs *capability.RevokeRequest
 	revokeErr  error
 	revokeCtx  context.Context
-	listArgs   *capability.ListByPrincipalArgs
+	listArgs   *capability.ListByPrincipalRequest
 	listOut    []capability.Capability
 	listNext   string
 	listErr    error
 }
 
-func (s *recordingStore) Revoke(ctx context.Context, args capability.RevokeArgs) error {
+func (s *recordingStore) Revoke(ctx context.Context, args capability.RevokeRequest) error {
 	s.revokeArgs = &args
 	s.revokeCtx = ctx
 	return s.revokeErr
 }
 
-func (s *recordingStore) ListByPrincipal(_ context.Context, args capability.ListByPrincipalArgs) ([]capability.Capability, string, error) {
+func (s *recordingStore) ListByPrincipal(_ context.Context, args capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
 	s.listArgs = &args
 	return s.listOut, s.listNext, s.listErr
 }
@@ -63,7 +66,7 @@ type fakeUsage struct {
 	ctx context.Context
 }
 
-func (u *fakeUsage) Get(ctx context.Context, id uuid.UUID) (capability.Usage, error) {
+func (u *fakeUsage) GetUsage(ctx context.Context, id uuid.UUID) (capability.Usage, error) {
 	u.got = id
 	u.ctx = ctx
 	return u.out, u.err
@@ -255,7 +258,7 @@ func TestListForwardsFiltersAndPaging(t *testing.T) {
 		t.Fatal("store.ListByPrincipal was not called")
 	}
 	a := store.listArgs
-	if a.TenantID != tenant || a.Subject != "agent-1" || a.PrincipalT != capability.PrincipalAgent {
+	if a.TenantID != tenant || a.Subject != "agent-1" || a.PrincipalType != capability.PrincipalAgent {
 		t.Errorf("filters = %+v", a)
 	}
 	// Include flags widen the result set; dropping one silently hides revoked
@@ -320,6 +323,19 @@ func TestListStoreErrorIsInternal(t *testing.T) {
 	}
 }
 
+// A page token the store cannot read is a bad request, not a server fault.
+func TestListBadPageTokenIsInvalidArgument(t *testing.T) {
+	store := &recordingStore{listErr: fmt.Errorf("%w: cursor", capability.ErrInvalidRequest)}
+	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
+
+	_, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{
+		TenantId: uuid.New().String(), PageToken: "garbage",
+	})
+	if codeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument", codeOf(err))
+	}
+}
+
 // ─── GetUsage ──────────────────────────────────────────────────────────────
 
 // An unwired counter store must be visibly Unavailable rather than reporting
@@ -340,7 +356,7 @@ func TestGetUsageReturnsCounters(t *testing.T) {
 	id := uuid.New()
 	store := &fakeStore{}
 	usage := &fakeUsage{out: capability.Usage{
-		CapabilityID: id, RequestCount: 7, SpentAmount: 42, UnitCode: "EUR",
+		CapabilityID: id, RequestCount: 7, SpentAmount: capability.MustParseAmount("42"), UnitCode: "EUR",
 	}}
 	h := NewHandler(mkIssuer(t, store), store, usage, &allowAuthorizer{})
 
@@ -353,11 +369,8 @@ func TestGetUsageReturnsCounters(t *testing.T) {
 	if usage.got != id {
 		t.Errorf("looked up %v, want %v", usage.got, id)
 	}
-	if resp.GetRequestCount() != 7 || resp.GetSpentMicros() != 42_000_000 {
-		t.Errorf("counters = %d / %d micros", resp.GetRequestCount(), resp.GetSpentMicros())
-	}
-	if resp.GetUnitCode() != "EUR" {
-		t.Errorf("UnitCode = %q, want EUR", resp.GetUnitCode())
+	if resp.GetRequestCount() != 7 || !proto.Equal(resp.GetSpent(), &money.Money{CurrencyCode: "EUR", Units: 42}) {
+		t.Errorf("counters = %d / %v", resp.GetRequestCount(), resp.GetSpent())
 	}
 }
 
@@ -374,8 +387,8 @@ func TestGetUsageDefaultsUnitCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUsage: %v", err)
 	}
-	if resp.GetUnitCode() != capability.DefaultUnitCode {
-		t.Errorf("UnitCode = %q, want the %q default", resp.GetUnitCode(), capability.DefaultUnitCode)
+	if got := resp.GetSpent().GetCurrencyCode(); got != capability.DefaultUnitCode {
+		t.Errorf("unit = %q, want the %q default", got, capability.DefaultUnitCode)
 	}
 }
 
@@ -539,7 +552,7 @@ type lookupStore struct {
 	getCtx context.Context
 }
 
-func (s *lookupStore) Get(ctx context.Context, id uuid.UUID) (*capability.Capability, error) {
+func (s *lookupStore) Get(ctx context.Context, id uuid.UUID) (capability.Capability, error) {
 	s.getCtx = ctx
 	return s.recordingStore.Get(ctx, id)
 }

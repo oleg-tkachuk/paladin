@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func biscuitFixture(t *testing.T) (*Issuer, *StandardVerifier, *memStore, *Capability, string) {
+func biscuitFixture(t *testing.T) (*Issuer, *StandardVerifier, *memStore, Capability, string) {
 	t.Helper()
 	issuer, _, store, pub := buildIssuerVerifier(t)
 	verifier, err := NewStandardVerifier(VerifierConfig{
@@ -232,7 +232,7 @@ func TestBiscuitCannotBeStrippedOrForged(t *testing.T) {
 func TestBiscuitRevokedWithItsCapability(t *testing.T) {
 	_, v, store, cap, token := biscuitFixture(t)
 	narrowed, _ := Attenuate(token, Attenuation{Ops: []Op{OpGet}})
-	if err := store.Revoke(context.Background(), RevokeArgs{ID: cap.ID, Reason: "test"}); err != nil {
+	if err := store.Revoke(context.Background(), RevokeRequest{ID: cap.ID, Reason: "test"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := v.Verify(context.Background(), narrowed, AudiencePlaneData); !errors.Is(err, ErrRevoked) {
@@ -317,7 +317,7 @@ func TestBiscuitAttenuationChainsNeverWiden(t *testing.T) {
 				continue
 			}
 			verified++
-			if err := Narrows(*cap, *got); err != nil {
+			if err := Narrows(cap, got); err != nil {
 				t.Fatalf("a verified chain widened its capability: %v\n%+v", err, got.Caveats)
 			}
 		}

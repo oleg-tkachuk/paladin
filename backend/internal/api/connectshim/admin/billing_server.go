@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
-	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -45,8 +46,7 @@ func (s *BillingServer) GetTenantSummary(
 	req *pb.GetTenantSummaryRequest,
 ) (*pb.GetTenantSummaryResponse, error) {
 	if s.H == nil {
-		return nil, connect.Errorf(connect.CodeUnavailable,
-			"billing: handler not wired")
+		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
 	}
 	tenantID, err := uuid.Parse(req.GetTenantId())
 	if err != nil {
@@ -60,13 +60,12 @@ func (s *BillingServer) GetTenantSummary(
 		return nil, err
 	}
 	return &pb.GetTenantSummaryResponse{
-		TotalMicros:     apiutil.Micros(sum.TotalAmount),
-		UnitCode:        sum.UnitCode,
-		MaxBudgetMicros: apiutil.Micros(sum.MaxBudgetAmount),
+		Total:           apiutil.MoneyOf(sum.UnitCode, sum.TotalAmount),
+		MaxBudget:       apiutil.MoneyOf(sum.UnitCode, sum.MaxBudgetAmount),
 		ChargeCount:     sum.ChargeCount,
-		TopCapabilities: topEntriesToProto(sum.TopCapabilities),
-		TopActors:       topEntriesToProto(sum.TopActors),
-		TopOps:          topEntriesToProto(sum.TopOps),
+		TopCapabilities: topEntriesToProto(sum.UnitCode, sum.TopCapabilities),
+		TopActors:       topEntriesToProto(sum.UnitCode, sum.TopActors),
+		TopOps:          topEntriesToProto(sum.UnitCode, sum.TopOps),
 	}, nil
 }
 
@@ -75,8 +74,7 @@ func (s *BillingServer) GetTenantTimeSeries(
 	req *pb.GetTenantTimeSeriesRequest,
 ) (*pb.GetTenantTimeSeriesResponse, error) {
 	if s.H == nil {
-		return nil, connect.Errorf(connect.CodeUnavailable,
-			"billing: handler not wired")
+		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
 	}
 	tenantID, err := uuid.Parse(req.GetTenantId())
 	if err != nil {
@@ -91,14 +89,13 @@ func (s *BillingServer) GetTenantTimeSeries(
 		return nil, err
 	}
 	out := &pb.GetTenantTimeSeriesResponse{
-		UnitCode: ts.UnitCode,
-		Buckets:  make([]*pb.TimeBucket, 0, len(ts.Buckets)),
+		Buckets: make([]*pb.TimeBucket, 0, len(ts.Buckets)),
 	}
 	for _, b := range ts.Buckets {
 		out.Buckets = append(out.Buckets, &pb.TimeBucket{
-			Start:        timestamppb.New(b.Start),
-			AmountMicros: apiutil.Micros(b.Amount),
-			ChargeCount:  b.ChargeCount,
+			Start:       timestamppb.New(b.Start),
+			Spent:       apiutil.MoneyOf(ts.UnitCode, b.Amount),
+			ChargeCount: b.ChargeCount,
 		})
 	}
 	return out, nil
@@ -106,13 +103,13 @@ func (s *BillingServer) GetTenantTimeSeries(
 
 var _ paladinadminv1connect.BillingServiceHandler = (*BillingServer)(nil)
 
-func topEntriesToProto(in []billingh.TopEntry) []*pb.TopEntry {
+func topEntriesToProto(unit string, in []billingh.TopEntry) []*pb.TopEntry {
 	out := make([]*pb.TopEntry, 0, len(in))
 	for _, e := range in {
 		out = append(out, &pb.TopEntry{
-			Label:        e.Label,
-			AmountMicros: apiutil.Micros(e.Amount),
-			ChargeCount:  e.ChargeCount,
+			Label:       e.Label,
+			Spent:       apiutil.MoneyOf(unit, e.Amount),
+			ChargeCount: e.ChargeCount,
 		})
 	}
 	return out

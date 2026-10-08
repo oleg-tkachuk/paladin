@@ -28,6 +28,9 @@ var (
 type CheckRequest struct {
 	// Op is the operation being performed.
 	Op Op
+	// Effect is what Op does to state, as the server declares it. Leave it
+	// EffectUnspecified for a built-in operation; see Op.ResolveEffect.
+	Effect Effect
 	// Resource is the URI the operation touches. Leave it empty only for an
 	// operation that is not bound to one resource; a resource-restricted
 	// capability refuses such an operation (see Caveats.AllowsResource).
@@ -35,7 +38,8 @@ type CheckRequest struct {
 	// prefix that bounds the whole set.
 	Resource string
 	// HasIdempotencyKey reports whether the request carried an idempotency
-	// key. Consulted only when the caveats require one for a mutating op.
+	// key. Consulted only when the caveats require one for a mutating
+	// operation.
 	HasIdempotencyKey bool
 	// ResourceTainted reports whether the consumer has flagged the resource
 	// with a prompt-injection / PII / secrets signal. A consumer with no
@@ -44,8 +48,22 @@ type CheckRequest struct {
 	ResourceTainted bool
 }
 
+// Mutating reports whether the operation may change state, resolving its
+// declared Effect. A consumer that gates anything else on the operation's
+// effect — a lookup it runs only for reads — asks here, so that it and Check
+// cannot disagree.
+func (req CheckRequest) Mutating() (bool, error) {
+	effect, err := req.Op.ResolveEffect(req.Effect)
+	if err != nil {
+		return false, err
+	}
+	return effect == EffectWrite, nil
+}
+
 // Check evaluates every per-operation caveat against req and returns the first
-// violation, as one of the sentinels above, or nil. It is the one definition
+// violation, as one of the sentinels above, or nil. A declared Effect that
+// Op.ResolveEffect refuses returns ErrEffectConflict, which is a programming
+// error rather than a caveat violation. It is the one definition
 // of what the caveats mean at use time; a consumer that hand-rolls the same
 // checks drifts from it.
 //
@@ -53,6 +71,10 @@ type CheckRequest struct {
 // checked separately by CheckSource. Budget and request-count caveats are
 // stateful and enforced by the UsageStore.
 func (c Caveats) Check(req CheckRequest) error {
+	mutating, err := req.Mutating()
+	if err != nil {
+		return err
+	}
 	if !containsOp(c.Ops, req.Op) {
 		return fmt.Errorf("%w: %q not in %v", ErrOpNotAllowed, req.Op, c.Ops)
 	}
@@ -63,10 +85,10 @@ func (c Caveats) Check(req CheckRequest) error {
 		}
 		return fmt.Errorf("%w: %q", ErrResourceNotAllowed, req.Resource)
 	}
-	if c.IdempotencyKeyRequired && req.Op.Mutating() && !req.HasIdempotencyKey {
+	if c.IdempotencyKeyRequired && mutating && !req.HasIdempotencyKey {
 		return fmt.Errorf("%w: mutating operation %q", ErrIdempotencyKeyRequired, req.Op)
 	}
-	if req.ResourceTainted && !c.AllowTaintedRead && !req.Op.Mutating() {
+	if req.ResourceTainted && !c.AllowTaintedRead && !mutating {
 		return fmt.Errorf("%w: %q", ErrTaintedReadNotAllowed, req.Resource)
 	}
 	return nil

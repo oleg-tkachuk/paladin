@@ -66,7 +66,7 @@ func TestGoldenTokenStillVerifies(t *testing.T) {
 	if cap.Caveats.MaxRequests != 10 {
 		t.Errorf("MaxRequests = %d, want 10", cap.Caveats.MaxRequests)
 	}
-	if cap.Caveats.MaxBudgetAmount != 1.5 {
+	if cap.Caveats.MaxBudgetAmount != 3*NanosPerUnit/2 { // 1.5, as the fixture was issued
 		t.Errorf("MaxBudgetAmount = %v, want 1.5", cap.Caveats.MaxBudgetAmount)
 	}
 	// The unit code is what cross-currency delegation rejection keys on.

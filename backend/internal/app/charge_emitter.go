@@ -2,15 +2,18 @@ package app
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+	"google.golang.org/genproto/googleapis/type/money"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
+	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // eventDispatcher is the producer-side seam the cross-cutting emitters
@@ -71,7 +74,7 @@ func (e *chargeEmitter) EmitChargedTx(
 	ctx context.Context,
 	tx pgx.Tx,
 	tenantID, capabilityID, op, actor string,
-	amount float64,
+	amount capability.Nanos,
 	unitCode string,
 ) error {
 	if tenantID == "" || tenantID == uuid.Nil.String() {
@@ -87,10 +90,7 @@ func (e *chargeEmitter) EmitChargedTx(
 			"tenant_id":     tenantID,
 			"capability_id": capabilityID,
 			"op":            op,
-			"amount":        amount,
-			// Exact, in millionths of unit_code: what a subscriber should sum.
-			"amount_micros": apiutil.Micros(amount),
-			"unit_code":     unitCode,
+			"amount":        moneyPayload(apiutil.MoneyOf(unitCode, amount)),
 		},
 	})
 	if err != nil {
@@ -110,4 +110,16 @@ func (e *chargeEmitter) EmitChargedTx(
 		)
 	}
 	return nil
+}
+
+// moneyPayload is m as the proto JSON mapping writes a google.type.Money,
+// field names as in the proto: units is a string, as int64 always is there.
+// Every field is present, so a subscriber reads a zero rather than an
+// absent key. Exact to the nano: what a subscriber should sum.
+func moneyPayload(m *money.Money) map[string]any {
+	return map[string]any{
+		"currency_code": m.GetCurrencyCode(),
+		"units":         strconv.FormatInt(m.GetUnits(), 10),
+		"nanos":         m.GetNanos(),
+	}
 }

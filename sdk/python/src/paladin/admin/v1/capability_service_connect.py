@@ -18,7 +18,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .capability_service_pb2 import CapabilityServiceDelegateRequest, CapabilityServiceGetBiscuitUsageRequest, CapabilityServiceGetBiscuitUsageResponse, CapabilityServiceGetUsageRequest, CapabilityServiceGetUsageResponse, CapabilityServiceIssueRequest, CapabilityServiceIssueResponse, CapabilityServiceListRequest, CapabilityServiceListResponse, CapabilityServiceRevokeBiscuitRequest, CapabilityServiceRevokeBiscuitResponse, CapabilityServiceRevokeRequest, CapabilityServiceRevokeResponse
+from .capability_service_pb2 import CapabilityServiceDelegateRequest, CapabilityServiceGetBiscuitUsageRequest, CapabilityServiceGetBiscuitUsageResponse, CapabilityServiceGetRequest, CapabilityServiceGetResponse, CapabilityServiceGetUsageRequest, CapabilityServiceGetUsageResponse, CapabilityServiceIssueRequest, CapabilityServiceIssueResponse, CapabilityServiceListRequest, CapabilityServiceListResponse, CapabilityServiceRevokeBiscuitRequest, CapabilityServiceRevokeBiscuitResponse, CapabilityServiceRevokeRequest, CapabilityServiceRevokeResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -103,6 +103,14 @@ class CapabilityService(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    async def get(self, request: CapabilityServiceGetRequest, ctx: RequestContext[CapabilityServiceGetRequest, CapabilityServiceGetResponse], /) -> CapabilityServiceGetResponse:
+        """
+        Get returns one capability as it is on record: the capability, who
+        asked for it, and its own revocation if it has one. NOT_FOUND when no
+        capability has the id, or the caller cannot see it.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
     async def list(self, request: CapabilityServiceListRequest, ctx: RequestContext[CapabilityServiceListRequest, CapabilityServiceListResponse], /) -> CapabilityServiceListResponse:
         """
         List enumerates capabilities issued to a principal. Cursor-paginated.
@@ -181,6 +189,16 @@ class CapabilityServiceASGIApplication(ConnectASGIApplication[CapabilityService]
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=svc.get_biscuit_usage,
+                ),
+                "/paladin.admin.v1.CapabilityService/Get": Endpoint.unary(
+                    method=MethodInfo(
+                        name="Get",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceGetRequest,
+                        output=CapabilityServiceGetResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.get,
                 ),
                 "/paladin.admin.v1.CapabilityService/List": Endpoint.unary(
                     method=MethodInfo(
@@ -395,6 +413,33 @@ class CapabilityServiceClient(ConnectClient):
             use_get=use_get,
         )
 
+    async def get(
+        self,
+        request: CapabilityServiceGetRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> CapabilityServiceGetResponse:
+        """
+        Get returns one capability as it is on record: the capability, who
+        asked for it, and its own revocation if it has one. NOT_FOUND when no
+        capability has the id, or the caller cannot see it.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Get",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceGetRequest,
+                output=CapabilityServiceGetResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
     async def list(
         self,
         request: CapabilityServiceListRequest,
@@ -517,6 +562,14 @@ class CapabilityServiceSync(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    def get(self, request: CapabilityServiceGetRequest, ctx: RequestContext[CapabilityServiceGetRequest, CapabilityServiceGetResponse], /) -> CapabilityServiceGetResponse:
+        """
+        Get returns one capability as it is on record: the capability, who
+        asked for it, and its own revocation if it has one. NOT_FOUND when no
+        capability has the id, or the caller cannot see it.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
     def list(self, request: CapabilityServiceListRequest, ctx: RequestContext[CapabilityServiceListRequest, CapabilityServiceListResponse], /) -> CapabilityServiceListResponse:
         """
         List enumerates capabilities issued to a principal. Cursor-paginated.
@@ -593,6 +646,16 @@ class CapabilityServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=service.get_biscuit_usage,
+                ),
+                "/paladin.admin.v1.CapabilityService/Get": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="Get",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceGetRequest,
+                        output=CapabilityServiceGetResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.get,
                 ),
                 "/paladin.admin.v1.CapabilityService/List": EndpointSync.unary(
                     method=MethodInfo(
@@ -796,6 +859,32 @@ class CapabilityServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.CapabilityService",
                 input=CapabilityServiceGetBiscuitUsageRequest,
                 output=CapabilityServiceGetBiscuitUsageResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def get(
+        self,
+        request: CapabilityServiceGetRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> CapabilityServiceGetResponse:
+        """
+        Get returns one capability as it is on record: the capability, who
+        asked for it, and its own revocation if it has one. NOT_FOUND when no
+        capability has the id, or the caller cannot see it.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Get",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceGetRequest,
+                output=CapabilityServiceGetResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
             ),
             headers=headers,

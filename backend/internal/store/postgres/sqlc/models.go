@@ -415,20 +415,21 @@ type CapabilityRecord struct {
 	NotBefore        pgtype.Timestamptz `json:"not_before"`
 	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
 	ConfirmationJkt  *string            `json:"confirmation_jkt"`
+	IssuedBy         []byte             `json:"issued_by"`
 }
 
 type CapabilityReservation struct {
-	ID                  pgtype.UUID        `json:"id"`
-	TenantID            pgtype.UUID        `json:"tenant_id"`
-	CapabilityID        pgtype.UUID        `json:"capability_id"`
-	Amount              pgtype.Numeric     `json:"amount"`
-	UnitCode            string             `json:"unit_code"`
-	Op                  string             `json:"op"`
-	ActorSubject        string             `json:"actor_subject"`
-	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	CopyIds             [][]byte           `json:"copy_ids"`
-	CopyMaxBudgetMicros []int64            `json:"copy_max_budget_micros"`
+	ID                 pgtype.UUID        `json:"id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	CapabilityID       pgtype.UUID        `json:"capability_id"`
+	Amount             pgtype.Numeric     `json:"amount"`
+	UnitCode           string             `json:"unit_code"`
+	Op                 string             `json:"op"`
+	ActorSubject       string             `json:"actor_subject"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	CopyIds            [][]byte           `json:"copy_ids"`
+	CopyMaxBudgetNanos []int64            `json:"copy_max_budget_nanos"`
 }
 
 type CapabilityRevocation struct {
@@ -450,16 +451,19 @@ type CapabilityUsage struct {
 }
 
 type Charge struct {
-	ID           pgtype.UUID        `json:"id"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	TenantSlug   string             `json:"tenant_slug"`
-	CapabilityID pgtype.UUID        `json:"capability_id"`
-	OccurredAt   pgtype.Timestamptz `json:"occurred_at"`
-	Amount       pgtype.Numeric     `json:"amount"`
-	UnitCode     string             `json:"unit_code"`
-	Op           string             `json:"op"`
-	ActorSubject string             `json:"actor_subject"`
-	CopyIds      [][]byte           `json:"copy_ids"`
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	TenantSlug    string             `json:"tenant_slug"`
+	CapabilityID  pgtype.UUID        `json:"capability_id"`
+	OccurredAt    pgtype.Timestamptz `json:"occurred_at"`
+	Amount        pgtype.Numeric     `json:"amount"`
+	UnitCode      string             `json:"unit_code"`
+	Op            string             `json:"op"`
+	ActorSubject  string             `json:"actor_subject"`
+	CopyIds       [][]byte           `json:"copy_ids"`
+	ExternalRef   *string            `json:"external_ref"`
+	ReservationID pgtype.UUID        `json:"reservation_id"`
+	Overrun       bool               `json:"overrun"`
 }
 
 type ChargeRefund struct {

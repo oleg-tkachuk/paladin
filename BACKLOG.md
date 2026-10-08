@@ -652,6 +652,20 @@ share one message with that mutation hazard ruled out, and this entry goes.
   with the delivery and pool-key tests that cover it.
 - **Blockers:** a customer whose consumers need one topic per tenant.
 
+### Event dispatcher: configurable CloudEvents `source`
+
+- **Status:** Deferred (owner decision, 2026-10-08).
+- **Reason:** `source` is the fixed `cloudEventSource` (`paladin`) on every
+  sink. Dedup does not need more: `id` is the delivery-row UUIDv7, so
+  `source` + `id` stays unique across deployments, and `tenantid` already
+  tells tenants apart.
+- **Definition of Done:** an optional dispatcher config key (for example
+  `config.dispatcher.event_source`) that defaults to `paladin`, validated as
+  a URI-reference, stamped by `newCloudEventEnvelope`, with tests and the
+  envelope table in `docs/event-delivery-dedup.md` updated.
+- **Blockers:** a second Paladin deployment publishing into the same broker
+  or webhook, where consumers need to know which one an event came from.
+
 ### The Python SDK is not published
 
 - **Status:** Deferred (owner decision, 2026-09-30).
@@ -1467,11 +1481,110 @@ share one message with that mutation hazard ruled out, and this entry goes.
   usage types are float64. Storage is exact (`numeric(14,6)`) and every
   conversion rounds to the nearest micro (`AmountToMicros`), which is exact
   below `MaxMicros` (fifteen digits), so nothing drifts today; but the type
-  invites float arithmetic in a consumer's own code. The token claim is a
-  JSON number under the frozen wire format, so it cannot change on its own.
-- **Definition of Done:** int64 micros in the module's API, with the token
-  carrying the budget the same way in a new format version.
-- **Blockers:** the token format version that offline attenuation also needs.
+  invites float arithmetic in a consumer's own code, and `memstore` — the
+  example a third party copies — sums floats itself. Three more defects of
+  the same API wait on the same change: `0` means both "no limit" and a
+  value on `MaxRequests` and `MaxBudgetAmount`, so a capability allowed no
+  spend at all cannot be written; `Caveats.MaxRequests` is an `int` where
+  every counter is `int64`; and a cost below a micro rounds to zero one
+  charge at a time, so many tiny charges are under-counted.
+- **Definition of Done:** integer amounts in the module's API, with the unit
+  decided once — micros, as the wire API already carries them, or a finer
+  unit with `numeric` columns of matching scale — and "no limit" a value of
+  its own rather than zero; `memstore` sums integers; the token carries the
+  budget the same way in a new format version.
+- **Blockers:** the token format version that offline attenuation also
+  needs. The Go API alone could move first, converting at the claim, since
+  that conversion is exact below `MaxMicros`.
+
+### Capability counters other than requests and spend
+
+- **Status:** Deferred — needs the token format version.
+- **Reason:** `MaxRequests` is one counter, bumped once per verified request.
+  An agent has budgets of other shapes — model turns, tool calls — and
+  mapping one onto requests makes every tool call or status poll spend a
+  turn. Per-tool Biscuit copies with limits of their own (ADR-0021) cover
+  part of it today.
+- **Definition of Done:** named counters in the caveats, each narrowed per
+  name at delegation and bumped by name, with operations the server declares
+  as uncounted.
+- **Blockers:** the token format version.
+
+### A run-scoped capability has no lifecycle of its own
+
+- **Status:** Aspirational.
+- **Reason:** a capability issued for one agent run is issued, revoked on
+  every terminal state and on cancellation, and handed to the worker by each
+  consumer for itself. Handing it in a job's input stores a credential
+  wherever the job queue keeps its inputs, for the capability's lifetime.
+- **Definition of Done:** issuance bound to a run id, `RevokeRun` revoking
+  every capability of the run (delegated children and Biscuit copies
+  included), ids learned after issuance attached to the record rather than
+  the token, and a documented way to deliver the token by reference.
+- **Blockers:** none.
+
+### Delegating a share of what is left
+
+- **Status:** Deferred.
+- **Reason:** a bounded parent makes every child name an explicit budget, so
+  an orchestrator splitting "what remains" reads `Meter.GetUsage`, does the
+  arithmetic and signs a figure that is stale by then.
+- **Definition of Done:** `DelegateRequest` takes a share — a fraction or an
+  amount, capped at what remains — computed and held under the meter's lock,
+  so siblings cannot oversubscribe.
+- **Blockers:** none.
+
+### Tenant ceilings by period and by project
+
+- **Status:** Deferred.
+- **Reason:** the tenant aggregate is one open-ended ceiling an operator rolls
+  by hand (`ResetSpend`). A consumer with budgets per day or month, or per
+  project, keeps them beside it — two counters of the same money.
+- **Definition of Done:** the aggregate ceiling behind an interface a
+  consumer can implement, with the built-in tenant aggregate as one
+  implementation; periods and an optional project scope; failing closed,
+  as every other check in the module does.
+- **Blockers:** none.
+
+### A Connect interceptor and a Postgres store a third party can import
+
+- **Status:** Deferred — they cannot live in the module itself.
+- **Reason:** composing `Verify`, the DPoP check, `CheckSource`, `Check` and
+  `Bump` with the right ceilings, and storing records and usage under
+  row-level security, is about a thousand lines Paladin keeps under
+  `backend/internal`, where no one else can import them. The module may not
+  depend on a database driver (`isolation_test.go`) or on Connect, so they
+  belong in modules of their own.
+- **Definition of Done:** a Connect interceptor module and a pgx store module
+  beside `capability/`, each with its own `go.mod`, the store configurable for
+  its schema and its tenant setting and shipping its migrations; Paladin
+  consumes both instead of its internal copies.
+- **Blockers:** none.
+
+### Biscuit copies say nothing about whom they are for
+
+- **Status:** Deferred.
+- **Reason:** a copy is named only by its revocation id, so audit and ledger
+  rows for it cannot say which sub-agent or tool held it. And a retried step
+  that attenuates again gets a new copy with fresh counters, since every block
+  is signed with a fresh key.
+- **Definition of Done:** an audit-only subject fact in the attenuation
+  vocabulary, carried to the copy's counters and ledger rows; and either a
+  documented rule that a copy is minted once per step, or deterministic
+  attenuation with its threat model written down.
+- **Blockers:** the deterministic option makes its seed a secret; that needs
+  the threat model first.
+
+### Capability spans and a decision hook
+
+- **Status:** Deferred.
+- **Reason:** the module emits counters and histograms only: a trace does not
+  show a verification or a charge, and a consumer that audits each decision
+  instruments every call site itself.
+- **Definition of Done:** spans for verify, charge and settle with the
+  capability id and the refusal reason; a hook receiving each decision; settle
+  and refund metrics carrying the tenant and unit as charge does.
+- **Blockers:** none.
 
 ### No scanner sets object taint flags
 

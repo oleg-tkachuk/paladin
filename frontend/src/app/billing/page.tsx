@@ -24,7 +24,15 @@ import { useScope } from "@/context/ScopeContext";
 import { billingClient } from "@/lib/connect/client";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
-import { formatMoney, fromMicros } from "@/lib/format/money";
+import {
+  formatMoney,
+  moneyFromNanos,
+  moneyIsPositive,
+  moneyPercent,
+  moneyToNanos,
+  moneyToNumber,
+  unitOf,
+} from "@/lib/format/money";
 import type {
   GetTenantSummaryResponse,
   GetTenantTimeSeriesResponse,
@@ -46,6 +54,10 @@ import { errorMessage } from "@/hooks/errorContract";
 // and that's fine for an MVP surface.
 
 type Granularity = "hour" | "day" | "week";
+
+// Total spend is shown to four decimals so a sub-cent charge does not read
+// as nothing.
+const SPEND_DIGITS = 4;
 
 type PresetKey = "7d" | "30d" | "90d" | "custom";
 
@@ -126,13 +138,14 @@ function KPITile({
 function BreakdownCard({
   title,
   entries,
-  unitCode,
+  fallbackUnit,
   linkBuilder,
   emptyHint,
 }: {
   title: string;
   entries: TopEntry[];
-  unitCode: string;
+  // Unit for an entry whose amount carries none.
+  fallbackUnit: string;
   linkBuilder?: (label: string) => string;
   emptyHint: string;
 }) {
@@ -157,7 +170,7 @@ function BreakdownCard({
                 label.length > 24
                   ? `${label.slice(0, 8)}…${label.slice(-6)}`
                   : label;
-              const spend = formatMoney(fromMicros(e.amountMicros), unitCode);
+              const spend = formatMoney(e.spent, { fallbackUnit });
               const cell = linkBuilder ? (
                 <Link
                   href={linkBuilder(label)}
@@ -269,16 +282,21 @@ export default function BillingPage() {
 
   // Derived KPI stats. Pulled from the summary; safe to compute
   // even when the response is sparse — formatters handle 0.
-  const total = fromMicros(summary?.totalMicros);
-  // Default to "UNIT" (abstract metering sentinel) instead of
-  // "USD" when the summary doesn't carry a unit_code yet —
-  // operators using non-currency metering or freshly-created
-  // tenants don't see a misleading dollar sign on a zero total.
-  const unit = summary?.unitCode || "UNIT";
-  const max = fromMicros(summary?.maxBudgetMicros);
+  const total = summary?.total;
+  // Default to XXX (no currency) instead of "USD" when the summary
+  // doesn't carry a unit yet — operators using non-currency metering
+  // or freshly-created tenants don't see a misleading dollar sign on
+  // a zero total.
+  const unit = unitOf(total?.currencyCode ? total : summary?.maxBudget);
+  const max = summary?.maxBudget;
+  const capped = moneyIsPositive(max);
   const chargeCount = summary?.chargeCount ? Number(summary.chargeCount) : 0;
-  const remaining = Math.max(0, max - total);
-  const pctOfBudget = max > 0 ? Math.min(100, (total / max) * 100) : 0;
+  const remainingNanos = moneyToNanos(max) - moneyToNanos(total);
+  const remaining = moneyFromNanos(
+    remainingNanos > 0n ? remainingNanos : 0n,
+    unit,
+  );
+  const pctOfBudget = Math.min(100, moneyPercent(total, max) ?? 0);
 
   // Time-series derived values for the annotation under the chart.
   //
@@ -288,22 +306,26 @@ export default function BillingPage() {
   // `timeseries` gives the empty case one stable array for as long as it
   // stays empty, which is what the hooks were written assuming.
   const buckets = useMemo(() => timeseries?.buckets ?? [], [timeseries]);
-  const tsUnit = timeseries?.unitCode || unit;
+  // Each bucket carries its own unit; the summary's is the fallback.
+  const tsUnit =
+    buckets.find((b) => b.spent?.currencyCode)?.spent?.currencyCode || unit;
+  // The chart takes numbers; exactness ends at the display edge.
   const tsValues = useMemo(
-    () => buckets.map((b) => fromMicros(b.amountMicros)),
+    () => buckets.map((b) => moneyToNumber(b.spent)),
     [buckets],
   );
   const peak = useMemo(() => {
     if (buckets.length === 0) return null;
     return buckets.reduce(
-      (acc, b) => (b.amountMicros > acc.amountMicros ? b : acc),
+      (acc, b) => (moneyToNanos(b.spent) > moneyToNanos(acc.spent) ? b : acc),
       buckets[0],
     );
   }, [buckets]);
-  const avg = useMemo(() => {
-    if (buckets.length === 0) return 0;
-    const sum = buckets.reduce((acc, b) => acc + b.amountMicros, 0n);
-    return fromMicros(sum) / buckets.length;
+  // Summed in exact nanos; the per-bucket mean truncates below a nano.
+  const avgNanos = useMemo(() => {
+    if (buckets.length === 0) return 0n;
+    const sum = buckets.reduce((acc, b) => acc + moneyToNanos(b.spent), 0n);
+    return sum / BigInt(buckets.length);
   }, [buckets]);
 
   return (
@@ -381,9 +403,12 @@ export default function BillingPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <KPITile
                 label="Total spend"
-                value={formatMoney(total, unit, undefined, 4)}
+                value={formatMoney(total, {
+                  fallbackUnit: unit,
+                  fractionDigits: SPEND_DIGITS,
+                })}
                 helper={
-                  max > 0
+                  capped
                     ? `${pctOfBudget.toFixed(1)}% of budget`
                     : "no budget configured"
                 }
@@ -396,14 +421,14 @@ export default function BillingPage() {
               <KPITile
                 label="Budget remaining"
                 value={
-                  max > 0 ? (
-                    formatMoney(remaining, unit)
+                  capped ? (
+                    formatMoney(remaining)
                   ) : (
                     <span className={T.helper}>—</span>
                   )
                 }
                 helper={
-                  max > 0 ? (
+                  capped ? (
                     <div className="h-1.5 w-full rounded bg-muted">
                       <div
                         className={cn(
@@ -455,13 +480,14 @@ export default function BillingPage() {
                 <div className={cn(T.hint, "flex flex-wrap gap-x-6 gap-y-1")}>
                   {peak && (
                     <span>
-                      Peak: {formatMoney(fromMicros(peak.amountMicros), tsUnit)}{" "}
+                      Peak: {formatMoney(peak.spent, { fallbackUnit: tsUnit })}{" "}
                       on{" "}
                       {tsToDate(peak.start)?.toISOString().slice(0, 10) ?? "—"}
                     </span>
                   )}
                   <span>
-                    Average: {formatMoney(avg, tsUnit)} per {granularity}
+                    Average: {formatMoney(moneyFromNanos(avgNanos, tsUnit))} per{" "}
+                    {granularity}
                   </span>
                 </div>
               </>
@@ -484,7 +510,7 @@ export default function BillingPage() {
               <BreakdownCard
                 title="Top capabilities"
                 entries={summary?.topCapabilities ?? []}
-                unitCode={unit}
+                fallbackUnit={unit}
                 // Capabilities are tenant-scoped now — link goes to
                 // the active tenant's Capabilities tab. Falls back to a
                 // dead anchor when scope is empty (shouldn't happen on
@@ -500,13 +526,13 @@ export default function BillingPage() {
               <BreakdownCard
                 title="Top actors"
                 entries={summary?.topActors ?? []}
-                unitCode={unit}
+                fallbackUnit={unit}
                 emptyHint="No actor charges in this period."
               />
               <BreakdownCard
                 title="Top ops"
                 entries={summary?.topOps ?? []}
-                unitCode={unit}
+                fallbackUnit={unit}
                 emptyHint="No op charges in this period."
               />
             </div>

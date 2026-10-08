@@ -123,10 +123,10 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
               <TableHead>Tool</TableHead>
               <TableHead>Plane</TableHead>
               <TableHead>Effect</TableHead>
-              <TableHead className="hidden md:table-cell">
+              <TableHead className="hidden @md:table-cell">
                 Capability op
               </TableHead>
-              <TableHead className="hidden lg:table-cell">
+              <TableHead className="hidden @2xl:table-cell">
                 Description
               </TableHead>
             </TableRow>
@@ -167,11 +167,11 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
                     <EffectBadge mutates={t.mutates} />
                   </TableCell>
                   <TableCell
-                    className={`hidden md:table-cell ${T.code} text-muted-foreground`}
+                    className={`hidden @md:table-cell ${T.code} text-muted-foreground`}
                   >
                     {t.capabilityOp || "—"}
                   </TableCell>
-                  <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
+                  <TableCell className="hidden @2xl:table-cell text-xs text-muted-foreground">
                     {t.description}
                   </TableCell>
                 </TableRow>
@@ -199,8 +199,10 @@ export function MCPProfiles({ inspect }: { inspect: MCPInspectResponse }) {
           <TableRow>
             <TableHead>Profile</TableHead>
             <TableHead>Source</TableHead>
-            <TableHead className="hidden md:table-cell">Allows</TableHead>
-            <TableHead className="hidden lg:table-cell">Also denies</TableHead>
+            <TableHead className="hidden @md:table-cell">Allows</TableHead>
+            <TableHead className="hidden @2xl:table-cell">
+              Also denies
+            </TableHead>
             <TableHead className="text-right">Tools visible</TableHead>
           </TableRow>
         </TableHeader>
@@ -220,7 +222,7 @@ export function MCPProfiles({ inspect }: { inspect: MCPInspectResponse }) {
                   {p.source.replace("_", " ")}
                 </Badge>
               </TableCell>
-              <TableCell className="hidden md:table-cell">
+              <TableCell className="hidden @md:table-cell">
                 <div className="flex flex-wrap gap-1">
                   {p.rawPatterns.map((pat) => (
                     <Badge key={pat} variant="outline" className={T.code}>
@@ -229,7 +231,7 @@ export function MCPProfiles({ inspect }: { inspect: MCPInspectResponse }) {
                   ))}
                 </div>
               </TableCell>
-              <TableCell className="hidden lg:table-cell">
+              <TableCell className="hidden @2xl:table-cell">
                 <div className="flex flex-wrap gap-1">
                   {p.deny.length === 0 ? (
                     <span className="text-xs text-muted-foreground">—</span>
@@ -282,7 +284,7 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
           <TableRow>
             <TableHead>Denied</TableHead>
             <TableHead>Plane</TableHead>
-            <TableHead className="hidden lg:table-cell">
+            <TableHead className="hidden @2xl:table-cell">
               Why it matters
             </TableHead>
           </TableRow>
@@ -307,7 +309,7 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
+                <TableCell className="hidden @2xl:table-cell text-xs text-muted-foreground">
                   {t?.description ??
                     (d.includes("*")
                       ? "Every tool whose name starts with this prefix."

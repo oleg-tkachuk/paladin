@@ -129,12 +129,14 @@ export default function UsersPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-65">User</TableHead>
-              <TableHead>Tenant</TableHead>
-              <TableHead>Roles</TableHead>
-              <TableHead className="hidden md:table-cell">Last login</TableHead>
+              <TableHead className="@md:w-65">User</TableHead>
+              <TableHead className="hidden @lg:table-cell">Tenant</TableHead>
+              <TableHead className="hidden @md:table-cell">Roles</TableHead>
+              <TableHead className="hidden @md:table-cell">
+                Last login
+              </TableHead>
               <TableHead className="w-20">State</TableHead>
-              <TableHead className="w-30 text-right">Actions</TableHead>
+              <TableHead className="text-right @md:w-30">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -201,7 +203,7 @@ export default function UsersPage() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden @lg:table-cell">
                       {tenant ? (
                         <Link
                           href={`/tenants/${encodeURIComponent(tenant.slug)}`}
@@ -215,7 +217,7 @@ export default function UsersPage() {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden @md:table-cell">
                       <div className="flex flex-wrap gap-1">
                         {u.roles.length === 0 ? (
                           <span className="text-xs text-muted-foreground">
@@ -234,7 +236,7 @@ export default function UsersPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @md:table-cell">
                       <RelativeTime ts={u.lastLoginAt} />
                     </TableCell>
                     <TableCell>
