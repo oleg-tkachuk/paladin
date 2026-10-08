@@ -38,7 +38,9 @@ concurrency:
 
 jobs:
   analyze:
-    name: Analyze (${{ matrix.language }})
+    # A plain name: GitHub appends the matrix value, "(go)". An interpolated one
+    # is shown raw whenever the job is skipped.
+    name: Analyze
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -46,17 +48,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Go is built by hand: the tree holds three modules (backend,
-          # capability, sdk/go), and autobuild finds none of them at the root.
-          - language: go
-            build-mode: manual
-          - language: javascript-typescript
-            build-mode: none
-          - language: python
-            build-mode: none
-          - language: actions
-            build-mode: none
+        # Only the language, so it alone is appended to the name. Go is built
+        # by hand (see build-mode below); the rest need no build.
+        language: [go, javascript-typescript, python, actions]
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,7 +73,9 @@ jobs:
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
+          # Go is built by hand: the tree holds three modules (backend,
+          # capability, sdk/go), and autobuild finds none of them at the root.
+          build-mode: ${{ matrix.language == 'go' && 'manual' || 'none' }}
 
       - name: Build the Go modules
         if: matrix.language == 'go'
