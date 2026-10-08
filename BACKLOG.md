@@ -1565,6 +1565,50 @@ finding moving from "packages you import" to "your code is affected".
 - **Blockers:** the deterministic option makes its seed a secret; that needs
   the threat model first.
 
+### The admin API cannot read a capability's record
+
+- **Status:** Deferred.
+- **Reason:** the module now reads back who issued a capability, its
+  revocation entry, a revoked Biscuit copy and a charge by id
+  (`Store.GetRecord`, `GetBiscuitRevocation`, `Meter.GetCharge`), but
+  `CapabilityService` has no RPC for any of them: an operator sees a
+  capability only in a list, and never why or by whom it was revoked.
+  `CapabilityServiceRevokeResponse` also keeps an unused slot for how many
+  descendants a cascade revoked, which `Store.Revoke` does not report.
+- **Definition of Done:** `CapabilityService.Get` returning the record with
+  its issuer and revocation, the console showing it, and either a revoke
+  count from `Store.Revoke` in the response or the slot's comment removed.
+- **Blockers:** none.
+
+### Two lists page two ways
+
+- **Status:** Deferred — an API change for the console.
+- **Reason:** `ListByPrincipal` pages with a cursor; `ListTenantBudgets`
+  returns at most a page and no cursor, so tenants past `MaxListLimit` cannot
+  be listed at all.
+- **Definition of Done:** `ListTenantBudgets` takes and returns a cursor over
+  its utilisation order, through the admin RPC and the console.
+- **Blockers:** a stable cursor over an order that changes as tenants spend.
+
+### No read of an open reservation
+
+- **Status:** Deferred.
+- **Reason:** `Reserve` returns an id and an expiry, and the held amount shows
+  only in the totals (`Usage.ReservedAmount`); nothing reads one hold back, or
+  lists a capability's holds, so a stuck hold is found by subtraction.
+- **Definition of Done:** `Meter.GetReservation` and a per-capability list,
+  in `metertest` and both stores.
+- **Blockers:** none.
+
+### `Capability` crosses the API by pointer and by value
+
+- **Status:** Deferred — churn with no behaviour behind it.
+- **Reason:** `Verify`, `Get` and `Delegate` return `*Capability`, while
+  `Insert`, `ListByPrincipal`, `Narrows` and `Record` use values.
+- **Definition of Done:** one convention, applied in the module's next
+  breaking release.
+- **Blockers:** none.
+
 ### Capability spans and a decision hook
 
 - **Status:** Deferred.
