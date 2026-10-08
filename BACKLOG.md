@@ -1576,7 +1576,9 @@ finding moving from "packages you import" to "your code is affected".
   `CapabilityServiceRevokeResponse` also keeps an unused slot for how many
   descendants a cascade revoked, which `Store.Revoke` does not report.
 - **Definition of Done:** `CapabilityService.Get` returning the record with
-  its issuer and revocation, the console showing it, and either a revoke
+  its issuer and revocation — with `storetest` also run under the app role,
+  since the revocation join relies on the policy of `004` — the console
+  showing it, and either a revoke
   count from `Store.Revoke` in the response or the slot's comment removed.
 - **Blockers:** none.
 
