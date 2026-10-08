@@ -130,6 +130,25 @@ for an operation over a set, pass the prefix that bounds the set.
 `AllowTaintedRead` can only act on a taint signal you supply; if you track
 none, it protects nothing, and you should say so.
 
+Your own operations are namespaced (`tool:retrieve`, `mcp:github/create_issue`)
+and are treated as writes unless you declare otherwise, so an undeclared one
+needs an idempotency key under `IdempotencyKeyRequired` and is never refused as
+a tainted read. Declare the effect where you define the operation — a method
+option, a tool registry — and pass it on every check:
+
+```go
+err := cap.Caveats.Check(capability.CheckRequest{
+    Op:       "tool:retrieve",
+    Effect:   capability.EffectRead, // from your operation's definition
+    Resource: "corpus/public/",
+})
+```
+
+A built-in operation keeps its own effect: declaring `put` a read returns
+`ErrEffectConflict`, a programming error rather than a caveat violation. Gate
+anything else on the effect through `CheckRequest.Mutating`, so it and `Check`
+cannot disagree.
+
 ## Delegate — attenuate, never escalate
 
 An orchestrator narrows its own authority and hands the result to a worker it
