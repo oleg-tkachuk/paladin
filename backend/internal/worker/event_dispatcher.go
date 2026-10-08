@@ -47,6 +47,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -153,6 +157,9 @@ type Dispatcher struct {
 	// kafka subs configured. Owned by the dispatcher pod's main; closed at
 	// shutdown.
 	Kafka *KafkaWriterPool
+	// Sinks says which sink kinds may be delivered to
+	// (config.DispatcherSinks). nil = every kind.
+	Sinks SinkKinds
 	// MaxAttempts caps retry per subscription on the synchronous
 	// DeliverOne path. <=0 → 3. The outbox loop's retry budget is
 	// driven by OutboxRunner.DefaultMaxAttempts instead.
@@ -510,6 +517,9 @@ func payloadInt(p map[string]any, key string) int64 {
 // lookup, filter evaluation, AND the outbox — the operator clicked
 // "Test Webhook" and wants the connectivity / signature result now.
 func (d *Dispatcher) DeliverOne(ctx context.Context, sub admindomain.EventSubscription, eventType string) error {
+	if err := d.sinkKindOff(sub.SinkKind); err != nil {
+		return err
+	}
 	_, err := d.deliver(ctx, sub, Event{
 		Type:         eventType,
 		At:           time.Now().UTC(),
@@ -522,6 +532,19 @@ func (d *Dispatcher) DeliverOne(ctx context.Context, sub admindomain.EventSubscr
 	return err
 }
 
+// SinkKinds says which sink kinds the dispatcher delivers to.
+type SinkKinds interface {
+	Enabled(kind string) bool
+}
+
+// sinkKindOff is why kind may not be delivered to, nil while it may.
+func (d *Dispatcher) sinkKindOff(kind string) error {
+	if d.Sinks == nil || d.Sinks.Enabled(kind) {
+		return nil
+	}
+	return fmt.Errorf("sink kind %s is off by configuration: %s", kind, config.SinkSwitchKey(kind))
+}
+
 // deliver is the shared sink-branching path. Used by DeliverOne (sync)
 // and by OutboxRunner. Returns (statusCode, err): statusCode is the
 // HTTP response code for the http sink and 0 for non-HTTP sinks /
@@ -529,15 +552,15 @@ func (d *Dispatcher) DeliverOne(ctx context.Context, sub admindomain.EventSubscr
 // admin UI can render the per-sink result uniformly.
 func (d *Dispatcher) deliver(ctx context.Context, sub admindomain.EventSubscription, evt Event) (int, error) {
 	switch sub.SinkKind {
-	case "http":
+	case sinkkind.HTTP:
 		return d.deliverHTTPWithStatus(ctx, sub, evt)
-	case SinkKindNATS:
+	case sinkkind.NATS:
 		return d.deliverNATS(ctx, sub, evt)
-	case "sqs":
+	case sinkkind.SQS:
 		return d.deliverSQS(ctx, sub, evt)
-	case SinkKindRabbitMQ:
+	case sinkkind.RabbitMQ:
 		return d.deliverRabbitMQ(ctx, sub, evt)
-	case "kafka":
+	case sinkkind.Kafka:
 		return d.deliverKafka(ctx, sub, evt)
 	default:
 		return 0, fmt.Errorf("unknown sink kind %q", sub.SinkKind)
@@ -974,6 +997,12 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 			r.markFailed(ctx, tx, p.id, p.attempts, 0, "subscription disabled", true)
 			continue
 		}
+		if err := r.Dispatcher.sinkKindOff(sub.SinkKind); err != nil {
+			// Same again for a kind switched off: nothing will deliver it
+			// until it is switched on, and then the row can be redriven.
+			r.markFailed(ctx, tx, p.id, p.attempts, 0, err.Error(), true)
+			continue
+		}
 
 		if key, cfg, ok := sqsGroupTarget(sub); ok && r.Dispatcher.SQS != nil {
 			sqsCfgs[key] = cfg
@@ -1179,7 +1208,7 @@ func (r *OutboxRunner) maxAttemptsFor(sub admindomain.EventSubscription) int {
 	if def <= 0 {
 		def = DefaultOutboxMaxAttempts
 	}
-	if sub.SinkKind != "http" {
+	if sub.SinkKind != sinkkind.HTTP {
 		return def
 	}
 	var sink struct {

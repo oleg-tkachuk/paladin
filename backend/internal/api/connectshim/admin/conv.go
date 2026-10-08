@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -137,7 +139,7 @@ func eventsToProto(e admindomain.EventSourceConfig) *pb.EventSourceConfig {
 		PollInterval: durationpb.New(e.PollInterval),
 	}
 	switch e.Target {
-	case "sqs":
+	case sinkkind.SQS:
 		out.Target = pb.EventTarget_EVENT_TARGET_SQS
 	case "redis":
 		out.Target = pb.EventTarget_EVENT_TARGET_REDIS
@@ -426,23 +428,23 @@ func eventSubToProto(s *admindomain.EventSubscription) *pb.EventSubscription {
 func sinkFromConfig(kind string, cfg []byte) *pb.EventSink {
 	out := &pb.EventSink{}
 	switch kind {
-	case "http":
+	case sinkkind.HTTP:
 		var v pb.HttpSink
 		_ = json.Unmarshal(cfg, &v)
 		out.Target = &pb.EventSink_Http{Http: &v}
-	case "kafka":
+	case sinkkind.Kafka:
 		var v pb.KafkaSink
 		_ = json.Unmarshal(cfg, &v)
 		out.Target = &pb.EventSink_Kafka{Kafka: &v}
-	case "sqs":
+	case sinkkind.SQS:
 		var v pb.SqsSink
 		_ = json.Unmarshal(cfg, &v)
 		out.Target = &pb.EventSink_Sqs{Sqs: &v}
-	case "nats":
+	case sinkkind.NATS:
 		var v pb.NatsSink
 		_ = json.Unmarshal(cfg, &v)
 		out.Target = &pb.EventSink_Nats{Nats: &v}
-	case "rabbitmq":
+	case sinkkind.RabbitMQ:
 		var v pb.RabbitMqSink
 		_ = json.Unmarshal(cfg, &v)
 		out.Target = &pb.EventSink_Rabbitmq{Rabbitmq: &v}
@@ -457,19 +459,19 @@ func sinkToConfig(sink *pb.EventSink) (kind string, cfg []byte) {
 	switch t := sink.GetTarget().(type) {
 	case *pb.EventSink_Http:
 		b, _ := json.Marshal(t.Http)
-		return "http", b
+		return sinkkind.HTTP, b
 	case *pb.EventSink_Kafka:
 		b, _ := json.Marshal(t.Kafka)
-		return "kafka", b
+		return sinkkind.Kafka, b
 	case *pb.EventSink_Sqs:
 		b, _ := json.Marshal(t.Sqs)
-		return "sqs", b
+		return sinkkind.SQS, b
 	case *pb.EventSink_Nats:
 		b, _ := json.Marshal(t.Nats)
-		return "nats", b
+		return sinkkind.NATS, b
 	case *pb.EventSink_Rabbitmq:
 		b, _ := json.Marshal(t.Rabbitmq)
-		return "rabbitmq", b
+		return sinkkind.RabbitMQ, b
 	}
 	return "", nil
 }

@@ -44,6 +44,9 @@ type fakeRepo struct {
 	requeued     int64
 	requeueErr   error
 	requeueCalls int
+	// updateCalls counts Update calls, so a refused update can be shown
+	// not to have reached the store.
+	updateCalls int
 }
 
 func (f *fakeRepo) Create(_ context.Context, s *admindomain.EventSubscription) error {
@@ -65,6 +68,7 @@ func (f *fakeRepo) List(_ context.Context, args admindomain.ListEventSubscriptio
 	return nil, "", nil
 }
 func (f *fakeRepo) Update(context.Context, admindomain.EventSubscription, int64, []string) error {
+	f.updateCalls++
 	return f.updateErr
 }
 func (f *fakeRepo) Delete(context.Context, uuid.UUID, int64) error { return f.deleteErr }

@@ -253,8 +253,10 @@ func ProvideQuotaHandler(repos Repos, pe *policy.Engine) *quotah.Handler {
 func ProvideAuditHandler(repos Repos, pe *policy.Engine) *audith.Handler {
 	return audith.NewHandler(repos.Audit, pe)
 }
-func ProvideEventSubHandler(repos Repos, pe *policy.Engine) *eventsubh.Handler {
-	return eventsubh.NewHandler(repos.EventSub, pe)
+func ProvideEventSubHandler(repos Repos, pe *policy.Engine, sinks config.DispatcherSinks) *eventsubh.Handler {
+	h := eventsubh.NewHandler(repos.EventSub, pe)
+	h.SetSinkKinds(sinks)
+	return h
 }
 
 func ProvidePolicyHandler(engine *policy.Engine, store policy.Store) *policyh.Handler {
