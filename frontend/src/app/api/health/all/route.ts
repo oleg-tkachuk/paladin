@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/session";
 
 import { resolveHealthToken } from "./token";
+import type { Snapshot } from "@/lib/health";
 
 // Health aggregator — fans out to /system/health.json on each backend
 // role and returns a merged response the /health UI page renders. Each
@@ -77,25 +78,6 @@ const ROLES: { name: string; envKey: string; defaultUrl: string }[] = [
 // without making the page hang on a wedged one. Not a kubelet probe
 // target: the console's probes use /api/health/live.
 const TIMEOUT_MS = 5000;
-
-type Snapshot = {
-  role: string;
-  status: "healthy" | "degraded" | "unhealthy";
-  components: Component[];
-  checked_at: string;
-};
-
-// Passed through as the backend sends it; see backend/internal/health.
-type Component = {
-  name: string;
-  status: "healthy" | "degraded" | "unhealthy" | "disabled";
-  message?: string;
-  latency_ms: number;
-  category: string;
-  critical: boolean;
-  control?: "always_on" | "config" | "database";
-  details?: { name: string; value: string }[];
-};
 
 // Shared secret gating /system/health.json on the backends. When set
 // (prod), the backends reject an unauthenticated snapshot fetch with 401;
