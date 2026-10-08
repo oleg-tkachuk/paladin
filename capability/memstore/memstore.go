@@ -402,6 +402,10 @@ func (s *Store[TX]) ListByPrincipal(_ context.Context, req capability.ListByPrin
 	return out, out[len(out)-1].ID.String(), nil
 }
 
+// maxUtilisationPct is where TenantBudgetSummary.UtilisationPct is clamped:
+// a tenant past its ceiling is at 100%, not beyond.
+const maxUtilisationPct = 100
+
 // uuidLess orders ids as Postgres orders the uuid type: bytewise.
 func uuidLess(a, b uuid.UUID) bool { return bytes.Compare(a[:], b[:]) < 0 }
 
@@ -952,6 +956,10 @@ func (s *UsageStore[TX]) SetTenantBudget(_ context.Context, args capability.SetT
 	b.MaxBudgetAmount = args.MaxBudgetAmount
 	b.UnitCode = normalised
 	b.PeriodEnd = args.PeriodEnd
+	if args.ResetSpend {
+		b.SpentAmount = 0
+		b.PeriodStart = s.nowFn()
+	}
 	if b.PeriodStart.IsZero() {
 		b.PeriodStart = s.nowFn()
 	}
@@ -979,14 +987,19 @@ func (s *UsageStore[TX]) ListTenantBudgets(_ context.Context, args capability.Li
 			continue
 		}
 		out = append(out, capability.TenantBudgetSummary{
-			TenantID: b.TenantID, Budget: b, UtilisationPct: pct,
+			TenantID: b.TenantID, Budget: b, UtilisationPct: min(pct, maxUtilisationPct),
 		})
 	}
+	// Most at risk first; the relational store breaks ties by slug, which
+	// this store does not keep, so by tenant id.
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].TenantID.String() < out[j].TenantID.String()
+		if out[i].UtilisationPct != out[j].UtilisationPct {
+			return out[i].UtilisationPct > out[j].UtilisationPct
+		}
+		return uuidLess(out[i].TenantID, out[j].TenantID)
 	})
-	if args.Limit > 0 && int(args.Limit) < len(out) {
-		out = out[:args.Limit]
+	if limit := int(capability.PageLimit(args.Limit)); limit < len(out) {
+		out = out[:limit]
 	}
 	return out, nil
 }
