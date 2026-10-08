@@ -37,6 +37,11 @@
     },
     {
       "matchManagers": ["npm"],
+      "minimumReleaseAge": "1 day",
+      "description": "pnpm refuses a lockfile naming a release younger than its minimumReleaseAge (frontend/pnpm-workspace.yaml); proposing one sooner fails every install in CI. At least as long as pnpm's, which scripts/release-age.test.sh checks."
+    },
+    {
+      "matchManagers": ["npm"],
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "npm dependencies",
       "schedule": ["before 6am on the first day of the month"]
