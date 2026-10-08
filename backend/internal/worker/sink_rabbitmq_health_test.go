@@ -8,17 +8,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// Statuses + Warmup back the dispatcher's /system/health.json "rabbitmq"
-// subsystem check.
+// Conns + Warmup back the dispatcher's /system/health.json "rabbitmq" check.
 
-func TestRabbitMQConnPool_StatusesEmpty(t *testing.T) {
+func TestRabbitMQConnPool_ConnsEmpty(t *testing.T) {
 	p := NewRabbitMQConnPool(zap.NewNop())
-	if got := p.Statuses(); len(got) != 0 {
-		t.Errorf("fresh pool Statuses() = %v, want empty (healthy-but-empty)", got)
+	if got := p.Conns(); len(got) != 0 {
+		t.Errorf("fresh pool Conns() = %v, want empty", got)
 	}
 }
 
-func TestRabbitMQConnPool_WarmupAndStatuses(t *testing.T) {
+func TestRabbitMQConnPool_WarmupAndConns(t *testing.T) {
 	p := NewRabbitMQConnPool(zap.NewNop())
 	// Health is decided per-URL: brokers with "bad" in the URL dial to an
 	// unhealthy connection (the dispatcher used them, then the conn dropped).
@@ -28,38 +27,76 @@ func TestRabbitMQConnPool_WarmupAndStatuses(t *testing.T) {
 
 	p.Warmup([]string{"amqp://ok-1", "amqp://bad-1", "amqp://ok-2"})
 
-	st := p.Statuses()
-	if len(st) != 3 {
-		t.Fatalf("Statuses() = %v, want 3 dialed brokers", st)
+	got := conns(p.Conns())
+	if len(got) != 3 {
+		t.Fatalf("Conns() = %v, want 3 dialed brokers", got)
 	}
-	if !st["amqp://ok-1"] || !st["amqp://ok-2"] {
-		t.Errorf("healthy brokers reported unhealthy: %v", st)
+	if got["amqp://ok-1"] != nil || got["amqp://ok-2"] != nil {
+		t.Errorf("healthy brokers reported failing: %v", got)
 	}
-	if st["amqp://bad-1"] {
-		t.Error("a dropped connection should report unhealthy")
+	if got["amqp://bad-1"] == nil {
+		t.Error("a dropped connection should report failing")
 	}
 }
 
-func TestRabbitMQConnPool_WarmupDialErrorNotCached(t *testing.T) {
+// A broker that refused the dial was left out of the pool, and the probe,
+// seeing only the connections it held, reported healthy. The failure is now
+// reported, with the password redacted, until a dial succeeds.
+func TestRabbitMQConnPool_ReportsAFailedDialUntilOneSucceeds(t *testing.T) {
 	p := NewRabbitMQConnPool(zap.NewNop())
+	reachable := false
 	p.newPub = func(url string, _ *tls.Config) (rabbitPublisher, error) {
-		if strings.Contains(url, "unreachable") {
+		if strings.Contains(url, "flaky") && !reachable {
 			return nil, errDialFail
 		}
 		return &fakeRabbit{isHealthy: true}, nil
 	}
+	const flaky = "amqp://user:s3cret@flaky:5672"
 
-	p.Warmup([]string{"amqp://reachable", "amqp://unreachable"})
+	p.Warmup([]string{"amqp://reachable", flaky})
+	got := conns(p.Conns())
+	const redacted = "amqp://user:xxxxx@flaky:5672"
+	if got[redacted] == nil || got["amqp://reachable"] != nil {
+		t.Fatalf("Conns() = %v, want the failed dial reported, redacted", got)
+	}
 
-	st := p.Statuses()
-	// A broker that never dialed isn't in the pool — the probe only reports
-	// on connections the dispatcher actually holds.
-	if _, ok := st["amqp://unreachable"]; ok {
-		t.Error("a failed dial must not be cached / reported")
+	reachable = true
+	p.Warmup([]string{flaky})
+	if got := conns(p.Conns()); got[redacted] != nil || len(got) != 2 {
+		t.Errorf("Conns() = %v, want the failure gone once a dial succeeds", got)
 	}
-	if !st["amqp://reachable"] {
-		t.Errorf("reachable broker missing/unhealthy: %v", st)
+}
+
+func TestRabbitWarmupURL(t *testing.T) {
+	cases := []struct {
+		name, raw, want string
+		ok              bool
+	}{
+		{"url auth", `{"url":"amqp://u:p@h/v","exchange":"e"}`, "amqp://u:p@h/v", true},
+		// Each of these dials differently at delivery than the URL alone.
+		{"secret-ref url", `{"url":"k8s:rabbit/url","exchange":"e"}`, "", false},
+		{"client cert", `{"url":"amqps://h","tls_client_cert":"PEM","tls_client_key":"PEM"}`, "", false},
+		{"private ca", `{"url":"amqps://h","tls_ca_cert":"PEM"}`, "", false},
+		{"no url", `{"exchange":"e"}`, "", false},
+		{"not json", `{`, "", false},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := RabbitWarmupURL([]byte(tc.raw))
+			if got != tc.want || ok != tc.ok {
+				t.Errorf("RabbitWarmupURL = %q, %v; want %q, %v", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+// conns indexes Conns by URL.
+func conns(cs []BrokerConn) map[string]error {
+	out := make(map[string]error, len(cs))
+	for _, c := range cs {
+		out[c.URL] = c.Err
+	}
+	return out
 }
 
 var errDialFail = &dialErr{}

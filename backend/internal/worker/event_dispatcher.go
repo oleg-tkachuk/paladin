@@ -531,11 +531,11 @@ func (d *Dispatcher) deliver(ctx context.Context, sub admindomain.EventSubscript
 	switch sub.SinkKind {
 	case "http":
 		return d.deliverHTTPWithStatus(ctx, sub, evt)
-	case "nats":
+	case SinkKindNATS:
 		return d.deliverNATS(ctx, sub, evt)
 	case "sqs":
 		return d.deliverSQS(ctx, sub, evt)
-	case "rabbitmq":
+	case SinkKindRabbitMQ:
 		return d.deliverRabbitMQ(ctx, sub, evt)
 	case "kafka":
 		return d.deliverKafka(ctx, sub, evt)

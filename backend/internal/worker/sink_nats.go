@@ -50,7 +50,10 @@ import (
 type NatsConnPool struct {
 	mu    sync.Mutex
 	conns map[natsPoolKey]*nats.Conn
-	log   *zap.Logger
+	// failed holds the last failed dial per key, until a dial to it
+	// succeeds, so the health probe names a server it cannot reach.
+	failed map[natsPoolKey]BrokerConn
+	log    *zap.Logger
 }
 
 // NewNatsConnPool builds an empty connection pool. See type doc for
@@ -60,8 +63,9 @@ func NewNatsConnPool(log *zap.Logger) *NatsConnPool {
 		log = zap.NewNop()
 	}
 	return &NatsConnPool{
-		conns: make(map[natsPoolKey]*nats.Conn),
-		log:   log,
+		conns:  make(map[natsPoolKey]*nats.Conn),
+		failed: make(map[natsPoolKey]BrokerConn),
+		log:    log,
 	}
 }
 
@@ -103,6 +107,23 @@ func (p *NatsConnPool) get(url, credentialsRef string) (*nats.Conn, error) {
 		nats.ReconnectWait(time.Second),
 		nats.MaxReconnects(-1),
 	}
+	c, err := dialNATS(url, credentialsRef, opts)
+	if err != nil {
+		p.failed[key] = BrokerConn{URL: logfield.RedactURL(url), Err: err}
+		return nil, err
+	}
+	delete(p.failed, key)
+	p.conns[key] = c
+	p.log.Info("nats: connection opened",
+		logfield.URL("url", url),
+		logfield.URL("connected_url", c.ConnectedUrl()),
+	)
+	return c, nil
+}
+
+// dialNATS connects with credentialsRef's auth. The URL in its error is
+// redacted: the error reaches the health page and the delivery's last_error.
+func dialNATS(url, credentialsRef string, opts []nats.Option) (*nats.Conn, error) {
 	authOpt, err := parseNatsCredentials(credentialsRef)
 	if err != nil {
 		return nil, err
@@ -112,13 +133,8 @@ func (p *NatsConnPool) get(url, credentialsRef string) (*nats.Conn, error) {
 	}
 	c, err := nats.Connect(url, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("nats dial %s: %w", url, err)
+		return nil, fmt.Errorf("nats dial %s: %w", logfield.RedactURL(url), err)
 	}
-	p.conns[key] = c
-	p.log.Info("nats: connection opened",
-		logfield.URL("url", url),
-		logfield.URL("connected_url", c.ConnectedUrl()),
-	)
 	return c, nil
 }
 
@@ -136,6 +152,7 @@ func (p *NatsConnPool) Close() {
 		}
 		delete(p.conns, k)
 	}
+	clear(p.failed)
 }
 
 // Warmup eagerly dials each distinct (url, credentialsRef) pair. Errors are
@@ -172,26 +189,36 @@ type NatsTarget struct {
 
 // NatsTargetFromSinkConfig reads the pool target out of a nats subscription's
 // stored sink_config. ok is false for a config that does not decode or names
-// no URL — nothing a warmup could dial.
+// no URL — nothing a warmup could dial — and for credentials held in a Secret
+// ref: resolved only at delivery, so a warmup dial with the ref as it stands
+// fails, and would report a server as unreachable that delivery reaches.
 func NatsTargetFromSinkConfig(raw []byte) (t NatsTarget, ok bool) {
 	var cfg natsSinkConfig
 	if err := json.Unmarshal(raw, &cfg); err != nil || cfg.URL == "" {
 		return NatsTarget{}, false
 	}
+	if strings.HasPrefix(cfg.CredentialsRef, sinkSecretPrefix) {
+		return NatsTarget{}, false
+	}
 	return NatsTarget{URL: cfg.URL, CredentialsRef: cfg.CredentialsRef}, true
 }
 
-// Statuses returns a snapshot of (url, status) for every pooled conn.
-// The dispatcher's health probe walks this to surface per-server
-// connectivity in /system/health.json.
-func (p *NatsConnPool) Statuses() map[string]nats.Status {
+// Conns reports every server the pool has dialed, for the dispatcher's
+// "nats" health check: held connections, connected or not, and dials that
+// failed. Credentials stay out: a URL appears once per principal, redacted.
+func (p *NatsConnPool) Conns() []BrokerConn {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make(map[string]nats.Status, len(p.conns))
+	out := make([]BrokerConn, 0, len(p.conns)+len(p.failed))
 	for k, c := range p.conns {
-		// Keyed by URL alone: the credentials label stays out of the
-		// operator-facing status map.
-		out[k.url] = c.Status()
+		bc := BrokerConn{URL: logfield.RedactURL(k.url)}
+		if st := c.Status(); st != nats.CONNECTED {
+			bc.Err = fmt.Errorf("%w: status %s", errConnectionLost, st)
+		}
+		out = append(out, bc)
+	}
+	for _, f := range p.failed {
+		out = append(out, f)
 	}
 	return out
 }
@@ -420,7 +447,7 @@ type natsBatchItem struct {
 // the batch is a core publish, which the stream neither acknowledges nor
 // deduplicates.
 func natsGroupTarget(sub admindomain.EventSubscription) (key natsPoolKey, ok bool) {
-	if sub.SinkKind != "nats" {
+	if sub.SinkKind != SinkKindNATS {
 		return natsPoolKey{}, false
 	}
 	var cfg natsSinkConfig
