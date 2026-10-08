@@ -44,6 +44,27 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — capability refusals carry a reason; costs reported later
+
+- A refused capability now carries a `google.rpc.ErrorInfo` in the `paladin`
+  domain, with a reason from the new `ERROR_REASON_CAPABILITY_*` values:
+  expired, revoked, op not allowed, budget exceeded and the rest. The Connect
+  codes are unchanged. The comments on `ErrorReason` say which refusals are
+  permanent — the same request with the same capability will never pass — so
+  a client can stop instead of retrying.
+- The capability module: `CheckRequest.Effect` declares what a consumer-defined
+  operation does to state; `ReasonOf` and `Reason.Permanent` name a refusal;
+  `ChargeRequest.ExternalRef` makes a charge idempotent, and `Overrun:
+  OverrunRecord` records a cost already incurred past a ceiling.
+- **Breaking, capability module:** settling a reservation that is already
+  settled returns that charge with `Replayed` set, where it returned
+  `ErrReservationNotFound`. A released or expired reservation still returns it.
+- A `Meter` of your own must honour `ChargeRequest.ExternalRef` and
+  `Overrun`, and `SettleRequest.Overrun`; one that ignores them charges a
+  repeated cost twice and refuses an incurred one.
+- Migrations `051`–`053` add `external_ref`, `reservation_id` and `overrun` to
+  `charges`, with two unique partial indexes built concurrently.
+
 ## Unreleased — the Python SDK runs on connectrpc
 
 - The Python SDK depends on `connectrpc` 0.12 (connect-python's successor)
