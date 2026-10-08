@@ -611,7 +611,7 @@ func TestDispatcher_NATSDelivery(t *testing.T) {
 	if err := d.DeliverOne(context.Background(), sub, "paladin.object.uploaded"); err != nil {
 		t.Fatalf("DeliverOne (2): %v", err)
 	}
-	if got := pool.Statuses(); len(got) != 1 {
+	if got := pool.Conns(); len(got) != 1 {
 		t.Errorf("pool size: got %d want 1 (connection reuse)", len(got))
 	}
 }
