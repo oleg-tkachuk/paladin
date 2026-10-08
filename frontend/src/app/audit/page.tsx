@@ -192,7 +192,7 @@ export default function AuditPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-45">When</TableHead>
+              <TableHead className="@md:w-45">When</TableHead>
               <TableHead>Action</TableHead>
               <TableHead>Actor</TableHead>
               <TableHead className="hidden @2xl:table-cell">Resource</TableHead>
@@ -246,7 +246,10 @@ export default function AuditPage() {
                     }}
                   >
                     <TableCell
-                      className={cn(T.codeSmall, "text-muted-foreground")}
+                      className={cn(
+                        T.codeSmall,
+                        "whitespace-normal text-muted-foreground @md:whitespace-nowrap",
+                      )}
                     >
                       {formatTimestampUTC(e.at)}
                     </TableCell>

@@ -39,6 +39,7 @@ import { ListLoadError } from "@/components/ui/ListLoadError";
 
 // Optional columns appear by the width of the table's card (see Table):
 // least useful goes first, so Status and the actions menu always fit.
+const COL_PREFIX = "hidden @md:table-cell";
 const COL_AUDIENCE = "hidden @2xl:table-cell";
 const COL_EXPIRES = "hidden @3xl:table-cell";
 const COL_RATE = "hidden @4xl:table-cell";
@@ -229,7 +230,7 @@ export default function M2MTokensPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-35">Prefix</TableHead>
+              <TableHead className={cn(COL_PREFIX, "w-35")}>Prefix</TableHead>
               <TableHead>Name</TableHead>
               <TableHead className={COL_AUDIENCE}>Audience</TableHead>
               <TableHead className={COL_RATE}>Rate (rpm)</TableHead>
@@ -289,7 +290,7 @@ export default function M2MTokensPage() {
                 const expired = isExpired(t);
                 return (
                   <TableRow key={t.id} className="group">
-                    <TableCell>
+                    <TableCell className={COL_PREFIX}>
                       <span className="font-mono text-xs">
                         paladin_pat_{t.prefix}…
                       </span>

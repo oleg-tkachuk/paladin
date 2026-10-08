@@ -239,7 +239,7 @@ export default function TenantBucketsPage() {
           <TableHeader>
             <TableRow>
               <SortableHead
-                className="w-45"
+                className="@md:w-45"
                 label="Backend"
                 column="backend"
                 current={sort}
@@ -261,7 +261,7 @@ export default function TenantBucketsPage() {
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead className="w-35">Status</TableHead>
+              <TableHead className="@md:w-35">Status</TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
