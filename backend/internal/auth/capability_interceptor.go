@@ -214,7 +214,7 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 		if token == "" {
 			return next(ctx, req)
 		}
-		cap, err := i.verifier.Verify(ctx, token, i.audience)
+		verified, err := i.verifier.Verify(ctx, token, i.audience)
 		if err != nil {
 			// Token was supplied AND failed verification. We surface
 			// this as PermissionDenied — the caller chose to present
@@ -222,6 +222,7 @@ func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 			// silently would mask the misconfiguration.
 			return nil, capabilityError(connect.CodePermissionDenied, err)
 		}
+		cap := &verified // the request's context holds it by reference
 		if err := i.checkPossession(ctx, cap, token, req.Header().Get(paladin.HeaderDPoP),
 			req.HTTPMethod(), req.Spec().Procedure); err != nil {
 			return nil, capabilityError(connect.CodePermissionDenied, err)
@@ -254,10 +255,11 @@ func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		if token == "" {
 			return next(ctx, conn)
 		}
-		cap, err := i.verifier.Verify(ctx, token, i.audience)
+		verified, err := i.verifier.Verify(ctx, token, i.audience)
 		if err != nil {
 			return capabilityError(connect.CodePermissionDenied, err)
 		}
+		cap := &verified // the stream's context holds it by reference
 		if err := i.checkPossession(ctx, cap, token, conn.RequestHeader().Get(paladin.HeaderDPoP),
 			http.MethodPost, conn.Spec().Procedure); err != nil {
 			return capabilityError(connect.CodePermissionDenied, err)
@@ -294,7 +296,7 @@ func (i *capabilityInterceptor) checkPossession(ctx context.Context, cap *capabi
 	if method == "" {
 		method = http.MethodPost
 	}
-	return i.dpop.Check(ctx, cap, capability.DPoPRequest{
+	return i.dpop.Check(ctx, *cap, capability.DPoPRequest{
 		Proof:         proof,
 		Method:        method,
 		URL:           procedure,
@@ -382,7 +384,7 @@ func (i *capabilityInterceptor) enforceCaveats(
 	// subtree, and the store reads it from the ancestor's record. A Biscuit
 	// copy with limits of its own is counted the same way.
 	if i.usage != nil && (cap.Caveats.MaxRequests > 0 || cap.ParentID != uuid.Nil || len(cap.Copies) > 0) {
-		if _, err := i.usage.BumpRequest(ledgerContext(ctx, cap), capability.RequestBump{
+		if _, err := i.usage.Bump(ledgerContext(ctx, cap), capability.BumpRequest{
 			CapabilityID: cap.ID,
 			TenantID:     cap.Subject.TenantID,
 			MaxRequests:  int64(cap.Caveats.MaxRequests),

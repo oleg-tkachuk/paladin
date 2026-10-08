@@ -46,7 +46,7 @@ func (h *Handler) RevokeBiscuit(ctx context.Context, req *connect.Request[adminv
 	if err != nil {
 		return nil, err
 	}
-	if err := h.copies.RevokeBiscuit(ctx, capability.RevokeBiscuitArgs{
+	if err := h.copies.RevokeBiscuit(ctx, capability.RevokeBiscuitRequest{
 		CapabilityID: c.CapabilityID,
 		RevocationID: c.RevocationID,
 		Reason:       req.Msg.GetReason(),

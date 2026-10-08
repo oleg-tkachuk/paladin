@@ -50,6 +50,10 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 // 001_initial_schema.sql names it.
 const tenantForeignKey = "capability_records_tenant_id_fkey"
 
+// recordsPrimaryKey is capability_records' primary key, as Postgres names it
+// by default for 001_initial_schema.sql.
+const recordsPrimaryKey = "capability_records_pkey"
+
 // lockLiveTenant refuses a capability for a tenant that does not exist or is
 // in the trash, and holds the tenant's row until the insert commits, so a
 // concurrent delete cannot land between the check and the insert. The
@@ -92,6 +96,10 @@ func (s *Store) Insert(ctx context.Context, c capability.Capability, issuedBy ca
 	if err != nil {
 		return fmt.Errorf("capability/postgres: marshal principal: %w", err)
 	}
+	issuedByPayload, err := json.Marshal(issuedBy)
+	if err != nil {
+		return fmt.Errorf("capability/postgres: marshal issuing principal: %w", err)
+	}
 	caveats, err := json.Marshal(c.Caveats)
 	if err != nil {
 		return fmt.Errorf("capability/postgres: marshal caveats: %w", err)
@@ -101,11 +109,13 @@ func (s *Store) Insert(ctx context.Context, c capability.Capability, issuedBy ca
 INSERT INTO capability_records (
     id, tenant_id, issuer, principal_kind, principal_subject,
     principal_payload, audience, caveats, parent_id, generation,
-    issued_at, not_before, expires_at, created_by, confirmation_jkt
+    issued_at, not_before, expires_at, created_by, confirmation_jkt,
+    issued_by
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6::jsonb, $7, $8::jsonb, $9, $10,
-    $11, $12, $13, $14, NULLIF($15, '')
+    $11, $12, $13, $14, NULLIF($15, ''),
+    $16::jsonb
 );
 `
 	var parent *uuid.UUID
@@ -156,12 +166,16 @@ INSERT INTO capability_records (
 		// module still depends on no auth pipeline.
 		issuedBy.Subject,
 		c.ConfirmationJKT,
+		issuedByPayload,
 	); err != nil {
 		// The lock above makes this unreachable short of a tenant removed by
 		// something that ignores it; the constraint is the last word either
 		// way, and says nothing about the request.
 		if pgerr.Is(err, pgerr.ForeignKeyViolation) && pgerr.Constraint(err) == tenantForeignKey {
 			return fmt.Errorf("%w: %s", capability.ErrUnknownTenant, c.Subject.TenantID)
+		}
+		if pgerr.Is(err, pgerr.UniqueViolation) && pgerr.Constraint(err) == recordsPrimaryKey {
+			return fmt.Errorf("%w: %s", capability.ErrAlreadyExists, c.ID)
 		}
 		return fmt.Errorf("capability/postgres: insert: %w", err)
 	}
@@ -172,7 +186,7 @@ INSERT INTO capability_records (
 }
 
 // Get implements capability.Store.
-func (s *Store) Get(ctx context.Context, id uuid.UUID) (*capability.Capability, error) {
+func (s *Store) Get(ctx context.Context, id uuid.UUID) (capability.Capability, error) {
 	const stmt = `
 SELECT id, tenant_id, issuer, principal_kind, principal_subject,
        principal_payload, audience, caveats, parent_id, generation,
@@ -180,8 +194,62 @@ SELECT id, tenant_id, issuer, principal_kind, principal_subject,
 FROM   capability_records
 WHERE  id = $1;
 `
-	row := s.pool.QueryRow(ctx, stmt, id)
-	return scanRow(row)
+	c, err := scanRow(s.pool.QueryRow(ctx, stmt, id))
+	if err != nil {
+		return capability.Capability{}, err
+	}
+	return *c, nil
+}
+
+// getRecordQuery is Get's columns, then who issued the capability and its
+// own revocation entry, if any. capability_revocations is visible through
+// the capability it names (004), so the join sees what Get sees.
+const getRecordQuery = `
+SELECT cr.id, cr.tenant_id, cr.issuer, cr.principal_kind, cr.principal_subject,
+       cr.principal_payload, cr.audience, cr.caveats, cr.parent_id, cr.generation,
+       cr.issued_at, cr.not_before, cr.expires_at, COALESCE(cr.confirmation_jkt, ''),
+       cr.created_by, cr.issued_by,
+       rv.revoked_at, COALESCE(rv.reason, ''), COALESCE(rv.actor, ''), COALESCE(rv.cascade, false)
+FROM   capability_records cr
+LEFT   JOIN capability_revocations rv ON rv.id = cr.id
+WHERE  cr.id = $1;
+`
+
+// trailingScanner scans a row into scanRow's destinations, then into extra:
+// a query that selects Get's columns first and more after them.
+type trailingScanner struct {
+	row   scanner
+	extra []any
+}
+
+func (t trailingScanner) Scan(dest ...any) error { return t.row.Scan(append(dest, t.extra...)...) }
+
+// GetRecord implements capability.Store.
+func (s *Store) GetRecord(ctx context.Context, id uuid.UUID) (capability.Record, error) {
+	var (
+		createdBy     string
+		issuedByRaw   []byte
+		revokedAt     *time.Time
+		reason, actor string
+		cascade       bool
+	)
+	c, err := scanRow(trailingScanner{
+		row:   s.pool.QueryRow(ctx, getRecordQuery, id),
+		extra: []any{&createdBy, &issuedByRaw, &revokedAt, &reason, &actor, &cascade},
+	})
+	if err != nil {
+		return capability.Record{}, err
+	}
+	rec := capability.Record{Capability: *c, IssuedBy: capability.Principal{Subject: createdBy}}
+	if issuedByRaw != nil {
+		if err := json.Unmarshal(issuedByRaw, &rec.IssuedBy); err != nil {
+			return capability.Record{}, fmt.Errorf("capability/postgres: parse issuing principal: %w", err)
+		}
+	}
+	if revokedAt != nil {
+		rec.Revocation = &capability.Revocation{RevokedAt: revokedAt.UTC(), Reason: reason, Actor: actor, Cascade: cascade}
+	}
+	return rec, nil
 }
 
 // IsRevoked implements capability.Store: true when the capability or any
@@ -249,9 +317,9 @@ SELECT EXISTS (
 // records are a forest (parent_id is nullable, no cycles by construction
 // because the FK is set NULL on parent delete), but a depth limit is
 // kept as a defensive guard against pathological dataset corruption.
-func (s *Store) Revoke(ctx context.Context, args capability.RevokeArgs) error {
+func (s *Store) Revoke(ctx context.Context, args capability.RevokeRequest) error {
 	if args.ID == uuid.Nil {
-		return errors.New("capability/postgres: revoke ID required")
+		return ErrNotFound // no capability has the nil id
 	}
 
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
@@ -350,21 +418,20 @@ WHERE capability_id IN (
 // ListByPrincipal implements capability.Store. Cursor is the last seen
 // id encoded as a hex string; a follow-up page seeks past it. Page size
 // is bounded by Limit (default 50, max 500).
-func (s *Store) ListByPrincipal(ctx context.Context, args capability.ListByPrincipalArgs) ([]capability.Capability, string, error) {
-	if args.TenantID == uuid.Nil {
-		return nil, "", errors.New("capability/postgres: tenant_id required")
+func (s *Store) ListByPrincipal(ctx context.Context, args capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
+	if err := args.Validate(); err != nil {
+		return nil, "", err
 	}
-	limit := args.Limit
-	if limit <= 0 {
-		limit = 50
+	if args.Cursor != "" {
+		if _, err := uuid.Parse(args.Cursor); err != nil {
+			return nil, "", fmt.Errorf("%w: capability/postgres: cursor %q", capability.ErrInvalidRequest, args.Cursor)
+		}
 	}
-	if limit > 500 {
-		limit = 500
-	}
+	limit := capability.PageLimit(args.Limit)
 
 	// Build clauses incrementally so the query plan stays readable.
 	whereExtra := ""
-	bindArgs := []any{args.TenantID, string(args.PrincipalT), args.Subject}
+	bindArgs := []any{args.TenantID, string(args.PrincipalType), args.Subject}
 	if !args.IncludeExpired {
 		whereExtra += " AND cr.expires_at > NOW()"
 	}

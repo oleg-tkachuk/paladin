@@ -165,12 +165,15 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability verifier: %w", err)
 	}
 
-	// Metering decorator: BumpRequest / Charge / Refund emit OTel
+	// Metering decorator: Bump / Charge / Refund emit OTel
 	// metrics for the runtime counters. Pure pass-through on cold
 	// MeterProvider so test paths and sidecar tools don't pay for
 	// instrument lookups.
-	pgUsage := capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage"))
-	usage := capability.WithMetering(pgUsage)
+	usage := capability.WithMetering[pgx.Tx](capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage")))
+	copyUsage, ok := usage.(capability.CopyUsageReader)
+	if !ok {
+		return nil, errors.New("app: the capability usage store reads no Biscuit copy counters")
+	}
 
 	replay, err := capabilitypg.NewReplayCache(deps.Pool, deps.Logger.Named("dpop-replay"))
 	if err != nil {
@@ -180,7 +183,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	return &CapabilityBundle{
 		Store:        store,
 		Copies:       store,
-		CopyUsage:    pgUsage,
+		CopyUsage:    copyUsage,
 		Usage:        usage,
 		Issuer:       issuer,
 		Verifier:     verifier,

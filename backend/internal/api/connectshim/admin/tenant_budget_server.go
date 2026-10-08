@@ -112,7 +112,7 @@ func (s *TenantBudgetServer) Set(
 	if err != nil {
 		return nil, err
 	}
-	args := capability.SetTenantBudgetArgs{
+	args := capability.SetTenantBudgetRequest{
 		TenantID:        tenantID,
 		MaxBudgetAmount: budget,
 		UnitCode:        unit,
@@ -162,17 +162,22 @@ func (s *TenantBudgetServer) Summarize(
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("unlimited_only is mutually exclusive with a non-zero threshold_pct"))
 	}
-	rows, err := s.Usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsArgs{
+	rows, next, err := s.Usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{
 		ThresholdPct:    m.GetThresholdPct(),
 		UnlimitedOnly:   m.GetUnlimitedOnly(),
 		ExcludeInactive: m.GetExcludeInactive(),
 		Limit:           m.GetLimit(),
+		Cursor:          m.GetPageToken(),
 	})
 	if err != nil {
+		if errors.Is(err, capability.ErrInvalidRequest) { // a page token the store cannot read
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	out := &pb.TenantBudgetServiceSummarizeResponse{
-		Summaries: make([]*pb.TenantBudgetSummary, 0, len(rows)),
+		Summaries:     make([]*pb.TenantBudgetSummary, 0, len(rows)),
+		NextPageToken: next,
 	}
 	for _, r := range rows {
 		out.Summaries = append(out.Summaries, &pb.TenantBudgetSummary{

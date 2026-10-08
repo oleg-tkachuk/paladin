@@ -104,7 +104,7 @@ func TestCharge_FanoutCommitsOnSameTx(t *testing.T) {
 	}
 
 	// Counter committed.
-	usage, err := store.Get(ctx, capID)
+	usage, err := store.GetUsage(ctx, capID)
 	if err != nil {
 		t.Fatalf("get usage: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestCharge_FanoutErrorRollsBackEverything(t *testing.T) {
 	}
 
 	// Counter never committed → no usage row at all.
-	if _, err := store.Get(ctx, capID); !errors.Is(err, capability.ErrUsageNotFound) {
+	if _, err := store.GetUsage(ctx, capID); !errors.Is(err, capability.ErrUsageNotFound) {
 		t.Errorf("usage after rollback: err = %v, want ErrUsageNotFound (counter must not have committed)", err)
 	}
 	// Ledger row rolled back.

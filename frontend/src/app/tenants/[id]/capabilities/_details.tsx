@@ -1,6 +1,9 @@
 import React from "react";
 
-import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
+import type {
+  Capability,
+  CapabilityServiceGetResponse,
+} from "@/gen/paladin/admin/v1/capability_service_pb";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -13,15 +16,29 @@ type UsageEntry =
   | "never"
   | undefined;
 
+// RecordEntry is the capability's record as read by CapabilityService.Get:
+// undefined while loading, "unavailable" when the read failed.
+export type RecordEntry =
+  CapabilityServiceGetResponse | "unavailable" | undefined;
+
+// recordText is what a field read from the record shows while there is none.
+function recordText(record: RecordEntry): string | undefined {
+  if (record === undefined) return "loading…";
+  if (record === "unavailable") return "unavailable";
+  return undefined;
+}
+
 // DetailsBody renders every field of a Capability in a stacked label/value
 // layout. Long mono strings (id, parent_id, prefixes) `break-all` so the dialog
 // doesn't blow out horizontally on UUIDs. Extracted from page.tsx (props-only).
 export function DetailsBody({
   cap,
   usageEntry,
+  record,
 }: {
   cap: Capability;
   usageEntry: UsageEntry;
+  record: RecordEntry;
 }) {
   // Capability without an explicit unit_code (legacy or metering-only) renders
   // as UNIT, not USD — the bare "$" would imply currency where none is pinned.
@@ -206,6 +223,10 @@ export function DetailsBody({
         />
       </DetailsSection>
 
+      <DetailsSection title="Issuance & revocation">
+        <IssuanceRows record={record} />
+      </DetailsSection>
+
       <DetailsSection title="Lifetime">
         <DetailRow
           label="Status"
@@ -232,6 +253,65 @@ export function DetailsBody({
         />
       </DetailsSection>
     </div>
+  );
+}
+
+// IssuanceRows shows who asked for the capability and its own revocation
+// entry. A capability stopped only through an ancestor has none of its own.
+function IssuanceRows({ record }: { record: RecordEntry }) {
+  const pending = recordText(record);
+  if (pending !== undefined || typeof record !== "object") {
+    return (
+      <>
+        <DetailRow label="Issued by" value={pending} />
+        <DetailRow label="Revoked" value={pending} />
+      </>
+    );
+  }
+  const issuer = record.issuedBy;
+  const issuerKind = PRINCIPAL_KIND_OPTIONS.find(
+    (o) => Number(o.value) === issuer?.kind,
+  )?.label;
+  const rev = record.revocation;
+  return (
+    <>
+      <DetailRow
+        label="Issued by"
+        value={
+          issuer?.subject
+            ? issuerKind
+              ? `${issuer.subject} (${issuerKind})`
+              : issuer.subject
+            : "—"
+        }
+        mono
+        breakAll
+      />
+      {rev ? (
+        <>
+          <DetailRow
+            label="Revoked"
+            value={formatTimestampUTC(rev.revokedAt)}
+            mono
+          />
+          <DetailRow
+            label="Revoked by"
+            value={rev.actor || "—"}
+            mono
+            breakAll
+          />
+          <DetailRow label="Reason" value={rev.reason || "—"} />
+          <DetailRow
+            label="Cascade"
+            value={
+              rev.cascade ? "yes — with everything delegated from it" : "no"
+            }
+          />
+        </>
+      ) : (
+        <DetailRow label="Revoked" value="not revoked itself" />
+      )}
+    </>
   );
 }
 

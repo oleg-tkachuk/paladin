@@ -40,7 +40,7 @@ func newFakeUsage() *fakeUsage {
 	}
 }
 
-func (f *fakeUsage) BumpRequest(_ context.Context, req capability.RequestBump) (int64, error) {
+func (f *fakeUsage) Bump(_ context.Context, req capability.BumpRequest) (int64, error) {
 	next := f.requests[req.CapabilityID] + 1
 	if req.MaxRequests > 0 && next > req.MaxRequests {
 		return 0, capability.ErrRequestLimitExceeded
@@ -78,7 +78,7 @@ func (f *fakeUsage) Refund(_ context.Context, req capability.RefundRequest) (flo
 	return amount, nil
 }
 
-func (f *fakeUsage) Get(_ context.Context, id uuid.UUID) (capability.Usage, error) {
+func (f *fakeUsage) GetUsage(_ context.Context, id uuid.UUID) (capability.Usage, error) {
 	c, ok := f.requests[id]
 	s, sok := f.spent[id]
 	if !ok && !sok {
@@ -91,12 +91,12 @@ func (f *fakeUsage) GetTenantBudget(_ context.Context, _ uuid.UUID) (capability.
 	return capability.TenantBudget{}, capability.ErrTenantBudgetNotFound
 }
 
-func (f *fakeUsage) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetArgs) (capability.TenantBudget, error) {
+func (f *fakeUsage) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetRequest) (capability.TenantBudget, error) {
 	return capability.TenantBudget{TenantID: args.TenantID, MaxBudgetAmount: args.MaxBudgetAmount, UnitCode: args.UnitCode}, nil
 }
 
-func (f *fakeUsage) ListTenantBudgets(_ context.Context, _ capability.ListTenantBudgetsArgs) ([]capability.TenantBudgetSummary, error) {
-	return nil, nil
+func (f *fakeUsage) ListTenantBudgets(_ context.Context, _ capability.ListTenantBudgetsRequest) ([]capability.TenantBudgetSummary, string, error) {
+	return nil, "", nil
 }
 
 func (f *fakeUsage) Delete(_ context.Context, id uuid.UUID) error {
@@ -134,7 +134,7 @@ func TestChargeCapability_RecordsAndAllows(t *testing.T) {
 	if err := ChargeCapability(ctx, 0.30, ""); err != nil {
 		t.Fatalf("second charge: %v", err)
 	}
-	u, _ := store.Get(ctx, cap.ID)
+	u, _ := store.GetUsage(ctx, cap.ID)
 	if u.SpentAmount < 0.59 || u.SpentAmount > 0.61 { // float wiggle
 		t.Errorf("spent = %v, want ~0.60", u.SpentAmount)
 	}
@@ -181,7 +181,7 @@ func TestChargeCapability_NegativeOrZero_NoOp(t *testing.T) {
 	if err := ChargeCapability(ctx, -1, ""); err != nil {
 		t.Errorf("negative charge must be no-op, got %v", err)
 	}
-	if u, _ := store.Get(ctx, cap.ID); u.SpentAmount != 0 {
+	if u, _ := store.GetUsage(ctx, cap.ID); u.SpentAmount != 0 {
 		t.Errorf("spent should be 0, got %v", u.SpentAmount)
 	}
 }
@@ -198,7 +198,7 @@ func TestChargeRequest_NoAmountInContext_NoOp(t *testing.T) {
 	if err := ChargeRequest(ctx); err != nil {
 		t.Errorf("no amount stamped = no-op, got %v", err)
 	}
-	if u, _ := store.Get(ctx, cap.ID); u.SpentAmount != 0 {
+	if u, _ := store.GetUsage(ctx, cap.ID); u.SpentAmount != 0 {
 		t.Errorf("spent should stay 0, got %v", u.SpentAmount)
 	}
 }
@@ -214,7 +214,7 @@ func TestChargeRequest_AmountPresent_Charges(t *testing.T) {
 	if err := ChargeRequest(ctx); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
-	u, _ := store.Get(ctx, cap.ID)
+	u, _ := store.GetUsage(ctx, cap.ID)
 	if u.SpentAmount < 0.0009 || u.SpentAmount > 0.0011 {
 		t.Errorf("spent = %v, want ~0.001", u.SpentAmount)
 	}
@@ -254,7 +254,7 @@ func TestChargeCapability_NonUSDUnit_RecordsUnit(t *testing.T) {
 	if err := ChargeCapability(ctx, 0.50, ""); err != nil {
 		t.Fatalf("EUR charge: %v", err)
 	}
-	u, _ := store.Get(ctx, cap.ID)
+	u, _ := store.GetUsage(ctx, cap.ID)
 	if u.SpentAmount < 0.49 || u.SpentAmount > 0.51 {
 		t.Errorf("EUR spent = %v, want ~0.50", u.SpentAmount)
 	}
@@ -281,13 +281,13 @@ func TestRefundLastCharge_PartialThenRest(t *testing.T) {
 	if err := RefundLastCharge(ctx, 0.30); err != nil {
 		t.Fatalf("partial refund: %v", err)
 	}
-	if u, _ := store.Get(ctx, cap.ID); u.SpentAmount < 0.19 || u.SpentAmount > 0.21 {
+	if u, _ := store.GetUsage(ctx, cap.ID); u.SpentAmount < 0.19 || u.SpentAmount > 0.21 {
 		t.Errorf("spent after partial refund = %v, want ~0.20", u.SpentAmount)
 	}
 	if err := RefundLastCharge(ctx, 0); err != nil {
 		t.Fatalf("refund of the rest: %v", err)
 	}
-	if u, _ := store.Get(ctx, cap.ID); u.SpentAmount != 0 {
+	if u, _ := store.GetUsage(ctx, cap.ID); u.SpentAmount != 0 {
 		t.Errorf("spent after full refund = %v, want 0", u.SpentAmount)
 	}
 }
@@ -362,8 +362,35 @@ func (f *fakeUsage) Release(_ context.Context, id uuid.UUID) error {
 
 func (f *fakeUsage) ReleaseExpired(context.Context) (int64, error) { return 0, nil }
 
+func (f *fakeUsage) GetReservation(_ context.Context, id uuid.UUID) (capability.Reservation, error) {
+	h, ok := f.holds[id]
+	if !ok {
+		return capability.Reservation{}, capability.ErrReservationNotFound
+	}
+	return capability.Reservation{ID: id, CapabilityID: h.capID, Amount: h.amount}, nil
+}
+
+func (f *fakeUsage) ListReservations(ctx context.Context, capID uuid.UUID) ([]capability.Reservation, error) {
+	out := []capability.Reservation{}
+	for id, h := range f.holds {
+		if h.capID == capID {
+			r, _ := f.GetReservation(ctx, id)
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
 // ChargeByRef finds nothing: the interceptor never charges under an external
 // ref, so this fake keeps none.
+func (f *fakeUsage) GetCharge(_ context.Context, id uuid.UUID) (capability.ChargeRecord, error) {
+	c, ok := f.charges[id]
+	if !ok {
+		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+	}
+	return capability.ChargeRecord{ChargeID: id, CapabilityID: c.capID, Amount: c.amount, Refunded: c.refunded}, nil
+}
+
 func (f *fakeUsage) ChargeByRef(context.Context, uuid.UUID, string) (capability.ChargeRecord, error) {
 	return capability.ChargeRecord{}, capability.ErrChargeNotFound
 }

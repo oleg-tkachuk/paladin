@@ -148,11 +148,18 @@ message TenantBudgetServiceSummarizeRequest {
   // true; an admin auditing a recovery scenario sets false.
   bool exclude_inactive = 3;
 
-  // limit — cap result count. 0 = server default (50). The widget
+  // limit — the page size. 0 = server default (50). The widget
   // typically asks for 10.
   int32 limit = 4 [(buf.validate.field).int32 = {gte: 0, lte: 500}];
+
+  // page_token — the next_page_token of the previous page; empty for the
+  // first. Rows come most at risk first, then by tenant id. Spend moves
+  // between pages, so a tenant may show on two of them or on none.
+  string page_token = 5;
 }
 
 message TenantBudgetServiceSummarizeResponse {
   repeated TenantBudgetSummary summaries = 1;
+  // next_page_token fetches the next page; empty on the last one.
+  string next_page_token = 2;
 }

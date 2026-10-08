@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,17 +39,32 @@ type BiscuitRevocationStore interface {
 	// RevokeBiscuit lists one revocation id of a capability's Biscuit.
 	// Idempotent. Returns ErrNotFound when the capability is not on record
 	// — or not visible to the caller — so a caller cannot revoke a copy of a
-	// capability it cannot see.
-	RevokeBiscuit(ctx context.Context, args RevokeBiscuitArgs) error
+	// capability it cannot see, and an ErrInvalidRequest for an empty
+	// revocation id.
+	RevokeBiscuit(ctx context.Context, req RevokeBiscuitRequest) error
+
+	// GetBiscuitRevocation reads back what RevokeBiscuit wrote for one
+	// revocation id. ErrNotFound when the id is not revoked, or belongs to a
+	// capability the caller cannot see.
+	GetBiscuitRevocation(ctx context.Context, revocationID []byte) (BiscuitRevocation, error)
 }
 
-// RevokeBiscuitArgs is the input shape for BiscuitRevocationStore.RevokeBiscuit.
-type RevokeBiscuitArgs struct {
+// BiscuitRevocation is one revoked Biscuit copy, as RevokeBiscuit wrote it.
+type BiscuitRevocation struct {
+	CapabilityID uuid.UUID
+	RevocationID []byte
+	RevokedAt    time.Time
+	Reason       string
+	Actor        string
+}
+
+// RevokeBiscuitRequest is the input shape for BiscuitRevocationStore.RevokeBiscuit.
+type RevokeBiscuitRequest struct {
 	// CapabilityID is the capability the Biscuit seals.
 	CapabilityID uuid.UUID
 	// RevocationID is the id to list: BiscuitCopy.RevocationID.
 	RevocationID []byte
-	// Reason and Actor are stored for audit, as on RevokeArgs.
+	// Reason and Actor are stored for audit, as on RevokeRequest.
 	Reason string
 	Actor  string
 }
@@ -90,76 +104,39 @@ func (v *StandardVerifier) BiscuitCopy(ctx context.Context, token string) (Biscu
 }
 
 // CachedBiscuitRevocationChecker caches IsBiscuitRevoked answers per token —
-// keyed by its whole list of revocation ids — under the same TTL and bound as
-// CachedRevocationChecker, and is cleared the same way.
+// keyed by its whole list of revocation ids — under the same TTL, bound and
+// sharing of concurrent misses as CachedRevocationChecker, and is cleared the
+// same way. It has no Invalidate: a revoked id is part of the key of every
+// token carrying it, so only Clear reaches them all.
 type CachedBiscuitRevocationChecker struct {
-	upstream   BiscuitRevocationLookup
-	ttl        time.Duration
-	maxEntries int
-	now        func() time.Time
-
-	mu      sync.Mutex
-	entries map[[sha256.Size]byte]cacheEntry
+	upstream BiscuitRevocationLookup
+	cache    *ttlCache[[sha256.Size]byte]
 }
 
 // NewCachedBiscuitRevocationChecker wires a cache over an upstream lookup.
-// ttl follows NewCachedRevocationChecker: 0 is the default, < 0 disables
-// caching. WithCacheClock and WithMaxEntries apply as they do there.
+// ttl and the options apply as they do to NewCachedRevocationChecker.
 func NewCachedBiscuitRevocationChecker(upstream BiscuitRevocationLookup, ttl time.Duration, opts ...CacheOption) *CachedBiscuitRevocationChecker {
-	// The options are written against CachedRevocationChecker; read them
-	// off one rather than keeping a second option type.
-	base := NewCachedRevocationChecker(nil, ttl, opts...)
 	return &CachedBiscuitRevocationChecker{
-		upstream:   upstream,
-		ttl:        base.ttl,
-		maxEntries: base.maxEntries,
-		now:        base.now,
-		entries:    make(map[[sha256.Size]byte]cacheEntry),
+		upstream: upstream,
+		cache:    newTTLCache[[sha256.Size]byte](newCacheConfig(ttl, opts)),
 	}
 }
 
-// IsBiscuitRevoked serves a fresh cached answer or asks upstream. An upstream
+// IsBiscuitRevoked serves a fresh cached answer, or asks upstream once on
+// behalf of every concurrent caller asking about the same token. An upstream
 // error is returned and never cached.
 func (c *CachedBiscuitRevocationChecker) IsBiscuitRevoked(ctx context.Context, revocationIDs [][]byte) (bool, error) {
-	if c.ttl < 0 {
+	return c.cache.get(ctx, biscuitCacheKey(revocationIDs), func(ctx context.Context) (bool, error) {
 		return c.upstream.IsBiscuitRevoked(ctx, revocationIDs)
-	}
-	key := biscuitCacheKey(revocationIDs)
-	c.mu.Lock()
-	if e, ok := c.entries[key]; ok && e.expires.After(c.now()) {
-		c.mu.Unlock()
-		return e.revoked, nil
-	}
-	c.mu.Unlock()
-
-	revoked, err := c.upstream.IsBiscuitRevoked(ctx, revocationIDs)
-	if err != nil {
-		return false, err
-	}
-	c.mu.Lock()
-	if len(c.entries) >= c.maxEntries {
-		now := c.now()
-		for k, e := range c.entries {
-			if !e.expires.After(now) {
-				delete(c.entries, k)
-			}
-		}
-		if len(c.entries) >= c.maxEntries {
-			clear(c.entries)
-		}
-	}
-	c.entries[key] = cacheEntry{revoked: revoked, expires: c.now().Add(c.ttl)}
-	c.mu.Unlock()
-	return revoked, nil
+	})
 }
 
 // Clear drops every entry; wire it to the same revocation notification as
 // CachedRevocationChecker.Clear.
-func (c *CachedBiscuitRevocationChecker) Clear() {
-	c.mu.Lock()
-	clear(c.entries)
-	c.mu.Unlock()
-}
+func (c *CachedBiscuitRevocationChecker) Clear() { c.cache.clear() }
+
+// Sweep drops every expired entry and returns how many it dropped.
+func (c *CachedBiscuitRevocationChecker) Sweep() int { return c.cache.sweep() }
 
 // biscuitCacheKey hashes the ids length-prefixed, so no two lists share a key.
 func biscuitCacheKey(ids [][]byte) [sha256.Size]byte {

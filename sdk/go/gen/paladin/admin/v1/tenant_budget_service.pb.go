@@ -458,9 +458,13 @@ type TenantBudgetServiceSummarizeRequest struct {
 	// tenants (deleted_at IS NOT NULL). The dashboard widget passes
 	// true; an admin auditing a recovery scenario sets false.
 	ExcludeInactive bool `protobuf:"varint,3,opt,name=exclude_inactive,json=excludeInactive,proto3" json:"exclude_inactive,omitempty"`
-	// limit — cap result count. 0 = server default (50). The widget
+	// limit — the page size. 0 = server default (50). The widget
 	// typically asks for 10.
-	Limit         int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	Limit int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	// page_token — the next_page_token of the previous page; empty for the
+	// first. Rows come most at risk first, then by tenant id. Spend moves
+	// between pages, so a tenant may show on two of them or on none.
+	PageToken     string `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -523,9 +527,18 @@ func (x *TenantBudgetServiceSummarizeRequest) GetLimit() int32 {
 	return 0
 }
 
+func (x *TenantBudgetServiceSummarizeRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type TenantBudgetServiceSummarizeResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Summaries     []*TenantBudgetSummary `protobuf:"bytes,1,rep,name=summaries,proto3" json:"summaries,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Summaries []*TenantBudgetSummary `protobuf:"bytes,1,rep,name=summaries,proto3" json:"summaries,omitempty"`
+	// next_page_token fetches the next page; empty on the last one.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -567,6 +580,13 @@ func (x *TenantBudgetServiceSummarizeResponse) GetSummaries() []*TenantBudgetSum
 	return nil
 }
 
+func (x *TenantBudgetServiceSummarizeResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 var File_paladin_admin_v1_tenant_budget_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
@@ -605,15 +625,18 @@ const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x126\n" +
 	"\x06budget\x18\x04 \x01(\v2\x1e.paladin.admin.v1.TenantBudgetR\x06budget\x12'\n" +
-	"\x0futilisation_pct\x18\x05 \x01(\x01R\x0eutilisationPct\"\xd7\x01\n" +
+	"\x0futilisation_pct\x18\x05 \x01(\x01R\x0eutilisationPct\"\xf6\x01\n" +
 	"#TenantBudgetServiceSummarizeRequest\x12<\n" +
 	"\rthreshold_pct\x18\x01 \x01(\x01B\x17\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00Y@)\x00\x00\x00\x00\x00\x00\x00\x00R\fthresholdPct\x12%\n" +
 	"\x0eunlimited_only\x18\x02 \x01(\bR\runlimitedOnly\x12)\n" +
 	"\x10exclude_inactive\x18\x03 \x01(\bR\x0fexcludeInactive\x12 \n" +
 	"\x05limit\x18\x04 \x01(\x05B\n" +
-	"\xbaH\a\x1a\x05\x18\xf4\x03(\x00R\x05limit\"k\n" +
+	"\xbaH\a\x1a\x05\x18\xf4\x03(\x00R\x05limit\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x05 \x01(\tR\tpageToken\"\x93\x01\n" +
 	"$TenantBudgetServiceSummarizeResponse\x12C\n" +
-	"\tsummaries\x18\x01 \x03(\v2%.paladin.admin.v1.TenantBudgetSummaryR\tsummaries2\xf4\x02\n" +
+	"\tsummaries\x18\x01 \x03(\v2%.paladin.admin.v1.TenantBudgetSummaryR\tsummaries\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xf4\x02\n" +
 	"\x13TenantBudgetService\x12m\n" +
 	"\x03Get\x12/.paladin.admin.v1.TenantBudgetServiceGetRequest\x1a0.paladin.admin.v1.TenantBudgetServiceGetResponse\"\x03\x90\x02\x01\x12m\n" +
 	"\x03Set\x12/.paladin.admin.v1.TenantBudgetServiceSetRequest\x1a0.paladin.admin.v1.TenantBudgetServiceSetResponse\"\x03\x90\x02\x02\x12\x7f\n" +

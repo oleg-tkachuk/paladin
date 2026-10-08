@@ -231,7 +231,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("parent_id: %w", err))
 	}
 
-	var parent *capability.Capability
+	var parent capability.Capability
 	// Path 2: capability-authenticated caller. Gated entirely by the
 	// caller's own caveats — no Cedar admin check.
 	if callerCap, ok := auth.CapabilityFromContext(ctx); ok {
@@ -253,7 +253,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 		// Narrow from the capability as presented: a Biscuit copy's
 		// attenuation is not in the stored record, and narrowing from the
 		// record would hand the child what the copy gave up.
-		parent = callerCap
+		parent = *callerCap
 	} else {
 		// Path 1: admin. Re-use the existing Cedar gate.
 		if _, err := h.authorize(ctx, cedar.ActionDelegateCapability); err != nil {
@@ -298,7 +298,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 	}
 
 	cap, token, err := h.issuer.Delegate(ctx, capability.DelegateRequest{
-		Parent:          *parent,
+		Parent:          parent,
 		Subject:         delegSubj,
 		Audience:        audience,
 		Caveats:         caveats,
@@ -339,7 +339,7 @@ func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.Capab
 	if err != nil {
 		return nil, err
 	}
-	if err := h.store.Revoke(ctx, capability.RevokeArgs{
+	if err := h.store.Revoke(ctx, capability.RevokeRequest{
 		ID:              id,
 		Reason:          req.Msg.GetReason(),
 		Actor:           caller.Subject,
@@ -380,9 +380,9 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 	// needs the connection scoped to that tenant. Without this the admin
 	// console renders an empty list instead of an error — RLS filters.
 	ctx = auth.WithActingTenant(ctx, tenantID)
-	caps, next, err := h.store.ListByPrincipal(ctx, capability.ListByPrincipalArgs{
+	caps, next, err := h.store.ListByPrincipal(ctx, capability.ListByPrincipalRequest{
 		TenantID:       tenantID,
-		PrincipalT:     protoToPrincipalKind(req.Msg.GetPrincipalKind()),
+		PrincipalType:  protoToPrincipalKind(req.Msg.GetPrincipalKind()),
 		Subject:        req.Msg.GetSubject(),
 		IncludeExpired: req.Msg.GetIncludeExpired(),
 		IncludeRevoked: req.Msg.GetIncludeRevoked(),
@@ -390,7 +390,9 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 		Limit:          req.Msg.GetPageSize(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		// A page token the store cannot read is the caller's to fix
+		// (ErrInvalidRequest → InvalidArgument); anything else is Internal.
+		return nil, apiutil.MapError(err)
 	}
 
 	out := make([]*adminv1.Capability, 0, len(caps))
@@ -412,6 +414,40 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 // Authorization: same Cedar action as List (read-side admin), so
 // the operator who can List a tenant's caps can also see their
 // usage.
+// Get returns one capability as it is on record. Gated as List and GetUsage
+// are, and scoped to the capability's tenant the way GetUsage is.
+func (h *Handler) Get(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceGetRequest]) (*connect.Response[adminv1.CapabilityServiceGetResponse], error) {
+	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
+	if err != nil {
+		return nil, err
+	}
+	id, err := uuid.Parse(req.Msg.GetId())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
+	}
+	ctx, err = h.actOnCapabilitysTenant(ctx, caller, id)
+	if err != nil {
+		return nil, err
+	}
+	rec, err := h.store.GetRecord(ctx, id)
+	if err != nil {
+		if errors.Is(err, capability.ErrNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, apiutil.MapError(err)
+	}
+	out := &adminv1.CapabilityServiceGetResponse{
+		Capability: capabilityToProto(&rec.Capability),
+		IssuedBy:   principalToProto(rec.IssuedBy),
+	}
+	if r := rec.Revocation; r != nil {
+		out.Revocation = &adminv1.CapabilityRevocation{
+			RevokedAt: timestamppb.New(r.RevokedAt), Reason: r.Reason, Actor: r.Actor, Cascade: r.Cascade,
+		}
+	}
+	return connect.NewResponse(out), nil
+}
+
 func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceGetUsageRequest]) (*connect.Response[adminv1.CapabilityServiceGetUsageResponse], error) {
 	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
 	if err != nil {
@@ -429,7 +465,7 @@ func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.Cap
 	if err != nil {
 		return nil, err
 	}
-	u, err := h.usage.Get(ctx, id)
+	u, err := h.usage.GetUsage(ctx, id)
 	if err != nil {
 		if errors.Is(err, capability.ErrUsageNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err)
@@ -526,13 +562,13 @@ func stashCapabilityInScope(ctx context.Context, id uuid.UUID) {
 	}
 }
 
-func (h *Handler) issued(cap *capability.Capability, token string) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
+func (h *Handler) issued(cap capability.Capability, token string) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
 	bisc, err := h.issuer.Biscuit(cap)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&adminv1.CapabilityServiceIssueResponse{
-		Capability: capabilityToProto(cap),
+		Capability: capabilityToProto(&cap),
 		Token:      token,
 		Biscuit:    bisc,
 	}), nil

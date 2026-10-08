@@ -38,9 +38,12 @@
 //     [RemoteJWKSResolver] fetches an issuer's JWKS for verifiers that run
 //     apart from it.
 //
-// Store and UsageStore are deliberately separate types: both declare a method
-// named Get with different signatures, so no single type can satisfy both.
-// Any implementer will hit this; the memstore subpackage shows the split.
+// A Capability crosses the API by value, in and out: no caller can alter one
+// another holds, and one that is not there is an error, never nil.
+//
+// Every read names what it reads — Store.Get a record, Meter.GetUsage the
+// counters, TenantBudgets.GetTenantBudget a ceiling — so one type may
+// implement Store and UsageStore together, or each apart as memstore does.
 //
 // # No-transaction mode
 //

@@ -105,7 +105,7 @@ func (f *billingFixture) seedBudget(t *testing.T, tenant uuid.UUID, max float64,
 	if err != nil && !errors.Is(err, capability.ErrTenantBudgetNotFound) {
 		t.Fatalf("read budget: %v", err)
 	}
-	if _, err := f.store.SetTenantBudget(context.Background(), capability.SetTenantBudgetArgs{
+	if _, err := f.store.SetTenantBudget(context.Background(), capability.SetTenantBudgetRequest{
 		TenantID:        tenant,
 		MaxBudgetAmount: max,
 		UnitCode:        unit,
@@ -175,7 +175,7 @@ func TestBilling_ChargeWritesLedgerRow(t *testing.T) {
 	f.charge(t, capID, 2.50, "USD", "presign.put", "agent-1", tenant)
 
 	// capability_usage running total
-	usage, err := f.store.Get(context.Background(), capID)
+	usage, err := f.store.GetUsage(context.Background(), capID)
 	if err != nil {
 		t.Fatalf("get usage: %v", err)
 	}
