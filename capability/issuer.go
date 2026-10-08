@@ -31,6 +31,9 @@ type Issuer struct {
 	defaultTTL time.Duration
 }
 
+// defaultIssueTTL is IssuerConfig.DefaultTTL when unset.
+const defaultIssueTTL = 15 * time.Minute
+
 // IssuerConfig is the wiring for Issuer.New.
 type IssuerConfig struct {
 	// Signer mints tokens. Production wraps a KMS-held private key;
@@ -65,7 +68,7 @@ func NewIssuer(cfg IssuerConfig) (*Issuer, error) {
 		return nil, errors.New("capability: IssuerConfig.IssuerName required")
 	}
 	if cfg.DefaultTTL == 0 {
-		cfg.DefaultTTL = 15 * time.Minute
+		cfg.DefaultTTL = defaultIssueTTL
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
