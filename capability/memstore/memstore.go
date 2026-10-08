@@ -454,6 +454,25 @@ func (s *UsageStore[TX]) Charge(
 	return s.chargeLocked(ctx, req, unit, ancestorIDs(ancestors), ancestors, nil, onCharged)
 }
 
+// ChargeByRef returns the charge a capability took under externalRef.
+func (s *UsageStore[TX]) ChargeByRef(_ context.Context, capID uuid.UUID, externalRef string) (capability.ChargeRecord, error) {
+	if externalRef == "" {
+		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.findLocked(func(e LedgerEntry) bool {
+		return e.CapabilityID == capID && e.ExternalRef == externalRef
+	})
+	if !ok {
+		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+	}
+	return capability.ChargeRecord{
+		ChargeID: e.ID, CapabilityID: e.CapabilityID, Amount: e.Amount, Refunded: e.Refunded,
+		UnitCode: e.UnitCode, ExternalRef: e.ExternalRef, Overrun: e.Overrun,
+	}, nil
+}
+
 // findLocked returns the first ledger entry match accepts. s.mu must be held.
 func (s *UsageStore[TX]) findLocked(match func(LedgerEntry) bool) (LedgerEntry, bool) {
 	i := slices.IndexFunc(s.ledger, match)

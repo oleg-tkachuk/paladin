@@ -362,7 +362,8 @@ receipt, err := usage.Charge(ctx, capability.ChargeRequest{
 ```
 
 A settle is idempotent on its reservation in the same way: settling one twice
-returns the first charge.
+returns the first charge. `ChargeByRef` reads a named charge back, so a
+reporter can reconcile its own records with the ledger.
 
 **It has already been spent.** Refusing it would only leave the ledger short.
 `OverrunRecord` charges it past every ceiling it crosses and sets
@@ -377,6 +378,22 @@ price that is not known yet is not a price of zero: hold the estimate and
 settle when it is known, or let the hold lapse and count against the ceilings
 until `ReleaseExpired` runs. Costs below a micro round to zero one at a time;
 sum them on your side and charge the total.
+
+## Check your own store
+
+Most of the `Meter` contract lives in request fields, so a store that ignores
+one still compiles. Run the module's checks from your store's tests:
+
+```go
+func TestMeterContract(t *testing.T) {
+    metertest.Run(t, func(t *testing.T) metertest.Env[MyTx] {
+        return metertest.Env[MyTx]{Ctx: ctx, Usage: newStore(t), Tenant: tenant,
+            NewCapability: recordCapability}
+    })
+}
+```
+
+`memstore` runs the same checks.
 
 ## Revoke
 
