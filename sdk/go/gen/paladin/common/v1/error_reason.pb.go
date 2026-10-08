@@ -81,6 +81,40 @@ const (
 	ErrorReason_ERROR_REASON_BUCKET_NOT_ON_BACKEND ErrorReason = 30
 	// A delete on the backend of a bucket Paladin did not create there.
 	ErrorReason_ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN ErrorReason = 31
+	// A presented capability was refused. Each names the capability module's
+	// reason of the same spelling. The capability's own refusals are permanent:
+	// the same request with the same capability is refused for as long as the
+	// capability lives, so an agent stops rather than retries — a forged,
+	// expired or revoked token, one for another audience, an invalid Biscuit,
+	// an operation, resource or source address outside its caveats, and its
+	// request limit reached. The rest can be lifted by something else, and are
+	// marked below.
+	ErrorReason_ERROR_REASON_CAPABILITY_INVALID_SIGNATURE ErrorReason = 32
+	// The verifier could not fetch the issuer's keys. Not permanent.
+	ErrorReason_ERROR_REASON_CAPABILITY_KEYS_UNAVAILABLE ErrorReason = 33
+	ErrorReason_ERROR_REASON_CAPABILITY_EXPIRED          ErrorReason = 34
+	// Not permanent: the capability becomes valid at its not-before time.
+	ErrorReason_ERROR_REASON_CAPABILITY_NOT_YET_VALID     ErrorReason = 35
+	ErrorReason_ERROR_REASON_CAPABILITY_REVOKED           ErrorReason = 36
+	ErrorReason_ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH ErrorReason = 37
+	ErrorReason_ERROR_REASON_CAPABILITY_INVALID_BISCUIT   ErrorReason = 38
+	// The capability is key-bound and the request carried no DPoP proof, an
+	// invalid one, or one already used. Not permanent: sign a fresh proof.
+	ErrorReason_ERROR_REASON_CAPABILITY_PROOF_REQUIRED       ErrorReason = 39
+	ErrorReason_ERROR_REASON_CAPABILITY_PROOF_INVALID        ErrorReason = 40
+	ErrorReason_ERROR_REASON_CAPABILITY_PROOF_REPLAYED       ErrorReason = 41
+	ErrorReason_ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED       ErrorReason = 42
+	ErrorReason_ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED ErrorReason = 43
+	ErrorReason_ERROR_REASON_CAPABILITY_SOURCE_NOT_ALLOWED   ErrorReason = 44
+	// Not permanent: send the request again with an Idempotency-Key.
+	ErrorReason_ERROR_REASON_CAPABILITY_IDEMPOTENCY_KEY_REQUIRED ErrorReason = 45
+	// Not permanent: an operator may clear the object's taint.
+	ErrorReason_ERROR_REASON_CAPABILITY_TAINTED_READ_NOT_ALLOWED ErrorReason = 46
+	ErrorReason_ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED   ErrorReason = 47
+	// Not permanent: budget frees as holds lapse or charges are refunded.
+	ErrorReason_ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED ErrorReason = 48
+	// Not permanent: an operator may raise the tenant's ceiling.
+	ErrorReason_ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED ErrorReason = 49
 )
 
 // Enum value maps for ErrorReason.
@@ -118,40 +152,76 @@ var (
 		29: "ERROR_REASON_BUCKET_RESERVED",
 		30: "ERROR_REASON_BUCKET_NOT_ON_BACKEND",
 		31: "ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN",
+		32: "ERROR_REASON_CAPABILITY_INVALID_SIGNATURE",
+		33: "ERROR_REASON_CAPABILITY_KEYS_UNAVAILABLE",
+		34: "ERROR_REASON_CAPABILITY_EXPIRED",
+		35: "ERROR_REASON_CAPABILITY_NOT_YET_VALID",
+		36: "ERROR_REASON_CAPABILITY_REVOKED",
+		37: "ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH",
+		38: "ERROR_REASON_CAPABILITY_INVALID_BISCUIT",
+		39: "ERROR_REASON_CAPABILITY_PROOF_REQUIRED",
+		40: "ERROR_REASON_CAPABILITY_PROOF_INVALID",
+		41: "ERROR_REASON_CAPABILITY_PROOF_REPLAYED",
+		42: "ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED",
+		43: "ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED",
+		44: "ERROR_REASON_CAPABILITY_SOURCE_NOT_ALLOWED",
+		45: "ERROR_REASON_CAPABILITY_IDEMPOTENCY_KEY_REQUIRED",
+		46: "ERROR_REASON_CAPABILITY_TAINTED_READ_NOT_ALLOWED",
+		47: "ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED",
+		48: "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED",
+		49: "ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED",
 	}
 	ErrorReason_value = map[string]int32{
-		"ERROR_REASON_UNSPECIFIED":                    0,
-		"ERROR_REASON_NOT_FOUND":                      1,
-		"ERROR_REASON_VERSION_CONFLICT":               2,
-		"ERROR_REASON_ALREADY_EXISTS":                 3,
-		"ERROR_REASON_INVALID_ARGUMENT":               4,
-		"ERROR_REASON_PERMISSION_DENIED":              5,
-		"ERROR_REASON_FAILED_PRECONDITION":            6,
-		"ERROR_REASON_UNAUTHENTICATED":                7,
-		"ERROR_REASON_SUBJECT_TAKEN":                  8,
-		"ERROR_REASON_COLLECTION_NOT_EMPTY":           9,
-		"ERROR_REASON_COLLECTION_EXISTS":              10,
-		"ERROR_REASON_BUCKET_NOT_FOUND":               11,
-		"ERROR_REASON_POLICY_UNPARSEABLE":             12,
-		"ERROR_REASON_SLUG_TAKEN":                     13,
-		"ERROR_REASON_TENANT_ID_TAKEN":                14,
-		"ERROR_REASON_DISPLAY_NAME_TAKEN":             15,
-		"ERROR_REASON_TENANT_ALREADY_DELETED":         16,
-		"ERROR_REASON_TENANT_NOT_TRASHED":             17,
-		"ERROR_REASON_DEFAULT_BINDING_BUCKET_MISSING": 18,
-		"ERROR_REASON_TENANT_HAS_CHILDREN":            19,
-		"ERROR_REASON_OBJECT_TAG_EXISTS":              20,
-		"ERROR_REASON_BACKEND_DISABLED":               21,
-		"ERROR_REASON_BACKEND_READ_ONLY":              22,
-		"ERROR_REASON_OBJECT_VERSION_NOT_FOUND":       23,
-		"ERROR_REASON_CONFLICT":                       24,
-		"ERROR_REASON_TENANT_NOT_FOUND":               25,
-		"ERROR_REASON_BACKEND_FEATURE_UNSUPPORTED":    26,
-		"ERROR_REASON_PUBLIC_COLLECTION_RULE":         27,
-		"ERROR_REASON_BUCKET_EXISTS_ON_BACKEND":       28,
-		"ERROR_REASON_BUCKET_RESERVED":                29,
-		"ERROR_REASON_BUCKET_NOT_ON_BACKEND":          30,
-		"ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN":  31,
+		"ERROR_REASON_UNSPECIFIED":                         0,
+		"ERROR_REASON_NOT_FOUND":                           1,
+		"ERROR_REASON_VERSION_CONFLICT":                    2,
+		"ERROR_REASON_ALREADY_EXISTS":                      3,
+		"ERROR_REASON_INVALID_ARGUMENT":                    4,
+		"ERROR_REASON_PERMISSION_DENIED":                   5,
+		"ERROR_REASON_FAILED_PRECONDITION":                 6,
+		"ERROR_REASON_UNAUTHENTICATED":                     7,
+		"ERROR_REASON_SUBJECT_TAKEN":                       8,
+		"ERROR_REASON_COLLECTION_NOT_EMPTY":                9,
+		"ERROR_REASON_COLLECTION_EXISTS":                   10,
+		"ERROR_REASON_BUCKET_NOT_FOUND":                    11,
+		"ERROR_REASON_POLICY_UNPARSEABLE":                  12,
+		"ERROR_REASON_SLUG_TAKEN":                          13,
+		"ERROR_REASON_TENANT_ID_TAKEN":                     14,
+		"ERROR_REASON_DISPLAY_NAME_TAKEN":                  15,
+		"ERROR_REASON_TENANT_ALREADY_DELETED":              16,
+		"ERROR_REASON_TENANT_NOT_TRASHED":                  17,
+		"ERROR_REASON_DEFAULT_BINDING_BUCKET_MISSING":      18,
+		"ERROR_REASON_TENANT_HAS_CHILDREN":                 19,
+		"ERROR_REASON_OBJECT_TAG_EXISTS":                   20,
+		"ERROR_REASON_BACKEND_DISABLED":                    21,
+		"ERROR_REASON_BACKEND_READ_ONLY":                   22,
+		"ERROR_REASON_OBJECT_VERSION_NOT_FOUND":            23,
+		"ERROR_REASON_CONFLICT":                            24,
+		"ERROR_REASON_TENANT_NOT_FOUND":                    25,
+		"ERROR_REASON_BACKEND_FEATURE_UNSUPPORTED":         26,
+		"ERROR_REASON_PUBLIC_COLLECTION_RULE":              27,
+		"ERROR_REASON_BUCKET_EXISTS_ON_BACKEND":            28,
+		"ERROR_REASON_BUCKET_RESERVED":                     29,
+		"ERROR_REASON_BUCKET_NOT_ON_BACKEND":               30,
+		"ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN":       31,
+		"ERROR_REASON_CAPABILITY_INVALID_SIGNATURE":        32,
+		"ERROR_REASON_CAPABILITY_KEYS_UNAVAILABLE":         33,
+		"ERROR_REASON_CAPABILITY_EXPIRED":                  34,
+		"ERROR_REASON_CAPABILITY_NOT_YET_VALID":            35,
+		"ERROR_REASON_CAPABILITY_REVOKED":                  36,
+		"ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH":        37,
+		"ERROR_REASON_CAPABILITY_INVALID_BISCUIT":          38,
+		"ERROR_REASON_CAPABILITY_PROOF_REQUIRED":           39,
+		"ERROR_REASON_CAPABILITY_PROOF_INVALID":            40,
+		"ERROR_REASON_CAPABILITY_PROOF_REPLAYED":           41,
+		"ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED":           42,
+		"ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED":     43,
+		"ERROR_REASON_CAPABILITY_SOURCE_NOT_ALLOWED":       44,
+		"ERROR_REASON_CAPABILITY_IDEMPOTENCY_KEY_REQUIRED": 45,
+		"ERROR_REASON_CAPABILITY_TAINTED_READ_NOT_ALLOWED": 46,
+		"ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED":   47,
+		"ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED":          48,
+		"ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED":   49,
 	}
 )
 
@@ -186,7 +256,7 @@ var File_paladin_common_v1_error_reason_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\xa6\t\n" +
+	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\xe6\x0f\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ERROR_REASON_NOT_FOUND\x10\x01\x12!\n" +
@@ -220,7 +290,25 @@ const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"%ERROR_REASON_BUCKET_EXISTS_ON_BACKEND\x10\x1c\x12 \n" +
 	"\x1cERROR_REASON_BUCKET_RESERVED\x10\x1d\x12&\n" +
 	"\"ERROR_REASON_BUCKET_NOT_ON_BACKEND\x10\x1e\x12.\n" +
-	"*ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN\x10\x1fBNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
+	"*ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN\x10\x1f\x12-\n" +
+	")ERROR_REASON_CAPABILITY_INVALID_SIGNATURE\x10 \x12,\n" +
+	"(ERROR_REASON_CAPABILITY_KEYS_UNAVAILABLE\x10!\x12#\n" +
+	"\x1fERROR_REASON_CAPABILITY_EXPIRED\x10\"\x12)\n" +
+	"%ERROR_REASON_CAPABILITY_NOT_YET_VALID\x10#\x12#\n" +
+	"\x1fERROR_REASON_CAPABILITY_REVOKED\x10$\x12-\n" +
+	")ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH\x10%\x12+\n" +
+	"'ERROR_REASON_CAPABILITY_INVALID_BISCUIT\x10&\x12*\n" +
+	"&ERROR_REASON_CAPABILITY_PROOF_REQUIRED\x10'\x12)\n" +
+	"%ERROR_REASON_CAPABILITY_PROOF_INVALID\x10(\x12*\n" +
+	"&ERROR_REASON_CAPABILITY_PROOF_REPLAYED\x10)\x12*\n" +
+	"&ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED\x10*\x120\n" +
+	",ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED\x10+\x12.\n" +
+	"*ERROR_REASON_CAPABILITY_SOURCE_NOT_ALLOWED\x10,\x124\n" +
+	"0ERROR_REASON_CAPABILITY_IDEMPOTENCY_KEY_REQUIRED\x10-\x124\n" +
+	"0ERROR_REASON_CAPABILITY_TAINTED_READ_NOT_ALLOWED\x10.\x122\n" +
+	".ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED\x10/\x12+\n" +
+	"'ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED\x100\x122\n" +
+	".ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED\x101BNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_error_reason_proto_rawDescOnce sync.Once

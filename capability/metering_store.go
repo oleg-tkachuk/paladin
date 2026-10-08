@@ -53,6 +53,9 @@ func (s *MeteringStore[TX]) Charge(
 	onCharged func(ctx context.Context, tx TX) error,
 ) (ChargeReceipt, error) {
 	receipt, err := s.Inner.Charge(ctx, req, onCharged)
+	if err == nil && receipt.Replayed {
+		return receipt, nil // nothing moved, so nothing to count
+	}
 	unit := req.UnitCode
 	if unit == "" {
 		unit = DefaultUnitCode
@@ -96,6 +99,9 @@ func (s *MeteringStore[TX]) Reserve(ctx context.Context, req ReserveRequest) (Re
 // here; the charge is recorded without them.
 func (s *MeteringStore[TX]) Settle(ctx context.Context, req SettleRequest, onCharged func(ctx context.Context, tx TX) error) (ChargeReceipt, error) {
 	receipt, err := s.Inner.Settle(ctx, req, onCharged)
+	if err == nil && receipt.Replayed {
+		return receipt, nil // nothing moved, so nothing to count
+	}
 	switch {
 	case err == nil:
 		recordChargeAttempt(ctx, uuid.Nil, "", req.Amount, receipt.Spent, "allowed")
@@ -108,6 +114,10 @@ func (s *MeteringStore[TX]) Settle(ctx context.Context, req SettleRequest, onCha
 }
 
 // Pure pass-throughs — reads and admin writes don't move counters, no metric.
+
+func (s *MeteringStore[TX]) ChargeByRef(ctx context.Context, capID uuid.UUID, externalRef string) (ChargeRecord, error) {
+	return s.Inner.ChargeByRef(ctx, capID, externalRef)
+}
 
 func (s *MeteringStore[TX]) Get(ctx context.Context, capID uuid.UUID) (Usage, error) {
 	return s.Inner.Get(ctx, capID)

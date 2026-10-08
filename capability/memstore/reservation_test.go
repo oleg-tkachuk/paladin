@@ -75,8 +75,12 @@ func TestSettleChargesTheActualCostAndReleasesTheHold(t *testing.T) {
 	if l := u.Ledger(); len(l) != 1 || l[0].Op != "llm" || l[0].Actor != "agent" {
 		t.Errorf("ledger = %+v, want one charge carrying the reservation's op and actor", l)
 	}
-	if _, err := u.Settle(ctx, capability.SettleRequest{ReservationID: r.ID, Amount: 1, MaxBudget: 10}, nil); !errors.Is(err, capability.ErrReservationNotFound) {
-		t.Errorf("second settle: err = %v, want ErrReservationNotFound", err)
+	again, err := u.Settle(ctx, capability.SettleRequest{ReservationID: r.ID, Amount: 1, MaxBudget: 10}, nil)
+	if err != nil || !again.Replayed || again.ChargeID != receipt.ChargeID {
+		t.Errorf("second settle = %+v, %v; want a replay of charge %s", again, err, receipt.ChargeID)
+	}
+	if got, _ := u.Get(ctx, capID); got.SpentAmount != 3 || len(u.Ledger()) != 1 {
+		t.Errorf("a replayed settle moved spend: %+v, ledger %d rows", got, len(u.Ledger()))
 	}
 }
 

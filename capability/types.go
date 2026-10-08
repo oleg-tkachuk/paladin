@@ -91,7 +91,8 @@ func NormaliseUnitCode(u string) (string, error) {
 // Op is an operation an agent may perform. The package defines a small
 // built-in set (below); a consumer adds its own as namespaced names of the
 // form "<namespace>:<name>" — "tool:search", "mcp:github/create_issue" —
-// which Op.Validate accepts and Op.Mutating treats as state-changing.
+// which Op.Validate accepts. A consumer-defined operation is treated as
+// state-changing unless the server declares otherwise (Effect).
 // Fine-grained method gating can still layer admin-authored policy on top.
 type Op string
 
@@ -296,8 +297,8 @@ type Caveats struct {
 	AllowTaintedRead bool
 
 	// IdempotencyKeyRequired forces the bearer to send an explicit
-	// idempotency key on mutating ops (Op.Mutating). Enforced by
-	// Caveats.Check from CheckRequest.HasIdempotencyKey.
+	// idempotency key on mutating operations (CheckRequest.Mutating).
+	// Enforced by Caveats.Check from CheckRequest.HasIdempotencyKey.
 	IdempotencyKeyRequired bool
 
 	// SourceIPCIDR optionally pins the capability to clients whose

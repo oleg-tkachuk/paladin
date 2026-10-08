@@ -422,10 +422,11 @@ the last of a budget.
 
 ```mermaid
 flowchart TB
-    req(["ChargeRequest<br/>CapabilityID · TenantID · Amount · MaxBudget · UnitCode · Copies"])
-    sreq(["SettleRequest<br/>ReservationID · Amount · MaxBudget"])
+    req(["ChargeRequest<br/>CapabilityID · TenantID · Amount · MaxBudget · UnitCode · Copies<br/>ExternalRef · Overrun"])
+    sreq(["SettleRequest<br/>ReservationID · Amount · MaxBudget · Overrun"])
     hold{"reservation open"}
-    val{"ValidateAmount<br/>NormaliseUnitCode"}
+    val{"ValidateAmount · ValidateOverrun<br/>ValidateExternalRef · NormaliseUnitCode"}
+    seen{"ExternalRef already charged<br/>to this capability"}
 
     subgraph stage ["stage — compute, publish nothing"]
         direction TB
@@ -444,10 +445,11 @@ flowchart TB
         w2["each ancestor spend += Amount"]
         w3["tenant spend += Amount"]
         w0["settling: the hold leaves reserved everywhere"]
-        w4["ledger row: ChargeID · Ancestors · copy ids · Op · Actor"]
+        w4["ledger row: ChargeID · Ancestors · copy ids · Op · Actor<br/>ExternalRef · ReservationID · Overrun"]
     end
 
-    ok(["ChargeReceipt{ChargeID, Spent}"])
+    ok(["ChargeReceipt{ChargeID, Spent, Overrun}"])
+    replay(["ChargeReceipt{Replayed}<br/>the earlier charge; nothing moves"])
     refund["Refund(ChargeID, Amount)<br/>returns spend to every counter the charge took it from"]
 
     e0["ErrInvalidAmount · unit error"]
@@ -457,16 +459,18 @@ flowchart TB
     e4["the callback's error"]
     e5["ErrReservationNotFound"]
 
-    req --> val -- ok --> c0
+    req --> val -- ok --> seen -- no --> c0
+    seen -- yes --> replay
     sreq --> hold -- "yes: its own hold<br/>is not counted" --> c0
-    hold -- "settled · released · expired" --> e5
+    hold -- "settled" --> replay
+    hold -- "released · expired" --> e5
     cb -- nil --> w5 --> w1 --> w2 --> w3 --> w0 --> w4 --> ok
     ok -. "later" .-> refund
     val -- invalid --> e0
-    c0 -- no --> e1
-    c1 -- no --> e1
-    c2 -- no --> e2
-    c3 -- no --> e3
+    c0 -- "no, OverrunReject" --> e1
+    c1 -- "no, OverrunReject" --> e1
+    c2 -- "no, OverrunReject" --> e2
+    c3 -- "no, OverrunReject" --> e3
     cb -- error --> e4
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
@@ -474,8 +478,8 @@ flowchart TB
     classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
     classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
-    class req,sreq,ok client
-    class val,hold,c0,c1,c2,c3 role
+    class req,sreq,ok,replay client
+    class val,seen,hold,c0,c1,c2,c3 role
     class cb optional
     class w5,w1,w2,w3,w0,w4,refund store
     class e0,e1,e2,e3,e4,e5 external
@@ -486,7 +490,11 @@ capability's, then each ancestor's. A reservation keeps its copies' budgets,
 so `Settle` checks them without being handed the token again.
 
 A settle rejected by a ceiling leaves the reservation in place, to be settled
-lower or released with `Release`. A hold never settled lapses at its
+lower or released with `Release`. Under `OverrunRecord` no ceiling rejects: a
+check that fails marks the charge as an overrun and the stage goes on, since
+the cost has already been incurred; the crossed ceiling then refuses whatever
+follows under `OverrunReject`. A charge named by `ExternalRef`, or a settle of
+a reservation already settled, returns the earlier charge and moves nothing. A hold never settled lapses at its
 `ExpiresAt`, but keeps counting until `ReleaseExpired` runs, which errs towards
 refusing spend rather than allowing too much.
 

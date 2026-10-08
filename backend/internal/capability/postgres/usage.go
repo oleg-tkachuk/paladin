@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -71,6 +72,42 @@ func NewUsageStore(q *sqlc.Queries, pool *pgxpool.Pool, log *zap.Logger) *UsageS
 
 // maxLineageDepth bounds the ancestor walk, matching Revoke's cascade guard.
 const maxLineageDepth = 64
+
+// noCeiling is the ceiling argument the counter queries read as "no limit".
+// An overrun under OverrunRecord re-runs a refused query with it.
+var noCeiling = pgtype.Numeric{Int: big.NewInt(0), Valid: true}
+
+// chargeTenantPastCeilingQuery adds to the tenant aggregate whatever its
+// ceiling, as ChargeTenantBudget does short of the check: a cost already
+// incurred, recorded under OverrunRecord.
+const chargeTenantPastCeilingQuery = `
+INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, updated_at)
+VALUES ($1, 0, $2::numeric, COALESCE(NULLIF($3::text, ''), 'USD'), now(), now())
+ON CONFLICT (tenant_id) DO UPDATE
+SET spent_usd  = tenant_budgets.spent_usd + $2::numeric,
+    updated_at = now()
+RETURNING spent_usd;
+`
+
+// chargeByRefQuery finds the charge a capability already took under an
+// external ref.
+const chargeByRefQuery = `SELECT id, overrun FROM charges WHERE capability_id = $1 AND external_ref = $2`
+
+// chargeByReservationQuery finds the charge that settled a reservation.
+const chargeByReservationQuery = `SELECT id, capability_id, overrun FROM charges WHERE reservation_id = $1`
+
+// spentQuery reads a capability's spend for a replayed receipt.
+const spentQuery = `SELECT COALESCE((SELECT spent_usd FROM capability_usage WHERE capability_id = $1), 0)`
+
+// replay is the receipt for a charge already in the ledger, returned when the
+// same charge arrives again: nothing moves, and Spent is read as it is now.
+func replay(ctx context.Context, tx pgx.Tx, chargeID, capID uuid.UUID, overrun bool) (capability.ChargeReceipt, error) {
+	var spent pgtype.Numeric
+	if err := tx.QueryRow(ctx, spentQuery, capID).Scan(&spent); err != nil {
+		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: replay read spend: %w", err)
+	}
+	return capability.ChargeReceipt{ChargeID: chargeID, Spent: floatFromNumeric(spent), Replayed: true, Overrun: overrun}, nil
+}
 
 // ancestor is one link of a capability's delegation chain, with the ceilings
 // its own record carries. The ceilings are read from capability_records, not
@@ -190,6 +227,12 @@ func (s *UsageStore) Charge(
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
+	if err := capability.ValidateOverrun(req.Overrun); err != nil {
+		return capability.ChargeReceipt{}, err
+	}
+	if err := capability.ValidateExternalRef(req.ExternalRef); err != nil {
+		return capability.ChargeReceipt{}, err
+	}
 	if req.TenantID == uuid.Nil {
 		// The ledger row and the tenant ceiling both need one, and a
 		// capability always has one — the verifier refuses a tenantless token.
@@ -214,7 +257,27 @@ func (s *UsageStore) Charge(
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // no-op after a successful commit
 
-	receipt, err := s.chargeInTx(ctx, tx, req, resolvedUnit, amountNumeric, maxBudgetNumeric, onCharged)
+	if req.ExternalRef != "" {
+		// Serialise charges of one (capability, ref): the second waits, then
+		// finds the first's row. The unique index (052) is the backstop.
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`,
+			req.CapabilityID.String()+":"+req.ExternalRef); err != nil {
+			return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge lock: %w", err)
+		}
+		var (
+			chargeID uuid.UUID
+			overrun  bool
+		)
+		err := tx.QueryRow(ctx, chargeByRefQuery, req.CapabilityID, req.ExternalRef).Scan(&chargeID, &overrun)
+		if err == nil {
+			return replay(ctx, tx, chargeID, req.CapabilityID, overrun)
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge read ref: %w", err)
+		}
+	}
+
+	receipt, err := s.chargeInTx(ctx, tx, req, uuid.Nil, resolvedUnit, amountNumeric, maxBudgetNumeric, onCharged)
 	if err != nil {
 		return capability.ChargeReceipt{}, err
 	}
@@ -226,22 +289,36 @@ func (s *UsageStore) Charge(
 
 // chargeInTx is Charge's body on a transaction the caller owns: the
 // capability, ancestor and tenant counters, the ledger row and onCharged.
-// The caller commits. Settle runs it after releasing a hold on the same tx.
+// The caller commits. Settle runs it after releasing a hold on the same tx,
+// naming the reservation; a direct charge passes uuid.Nil.
+//
+// Each counter query refuses an amount past its ceiling by returning no row.
+// Under OverrunRecord a refused one runs again with noCeiling and the receipt
+// reports the overrun; a refusal returns no error from Postgres, so the
+// transaction is still usable for the second run.
 func (s *UsageStore) chargeInTx(
 	ctx context.Context,
 	tx pgx.Tx,
 	req capability.ChargeRequest,
+	reservationID uuid.UUID,
 	resolvedUnit string,
 	amountNumeric, maxBudgetNumeric pgtype.Numeric,
 	onCharged func(ctx context.Context, tx pgx.Tx) error,
 ) (capability.ChargeReceipt, error) {
 	qtx := s.q.WithTx(tx)
+	record := req.Overrun == capability.OverrunRecord
 
-	if err := addCopySpend(ctx, tx, req.CapabilityID, req.Copies, amountNumeric, copySpent); err != nil {
+	overrun, err := addCopySpendPast(ctx, tx, req.CapabilityID, req.Copies, amountNumeric, copySpent, req.Overrun)
+	if err != nil {
 		return capability.ChargeReceipt{}, err
 	}
 	spent, err := qtx.ChargeCapability(ctx, pgtype.UUID{Bytes: req.CapabilityID, Valid: true},
 		amountNumeric, resolvedUnit, maxBudgetNumeric)
+	if errors.Is(err, pgx.ErrNoRows) && record {
+		overrun = true
+		spent, err = qtx.ChargeCapability(ctx, pgtype.UUID{Bytes: req.CapabilityID, Valid: true},
+			amountNumeric, resolvedUnit, noCeiling)
+	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return capability.ChargeReceipt{}, capability.ErrBudgetExceeded
@@ -254,8 +331,14 @@ func (s *UsageStore) chargeInTx(
 		return capability.ChargeReceipt{}, err
 	}
 	for _, a := range ancestors {
-		if _, err := qtx.ChargeCapability(ctx, pgtype.UUID{Bytes: a.id, Valid: true},
-			amountNumeric, resolvedUnit, a.maxBudget); err != nil {
+		_, err := qtx.ChargeCapability(ctx, pgtype.UUID{Bytes: a.id, Valid: true},
+			amountNumeric, resolvedUnit, a.maxBudget)
+		if errors.Is(err, pgx.ErrNoRows) && record {
+			overrun = true
+			_, err = qtx.ChargeCapability(ctx, pgtype.UUID{Bytes: a.id, Valid: true},
+				amountNumeric, resolvedUnit, noCeiling)
+		}
+		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return capability.ChargeReceipt{}, fmt.Errorf("%w: ancestor %s", capability.ErrBudgetExceeded, a.id)
 			}
@@ -263,8 +346,14 @@ func (s *UsageStore) chargeInTx(
 		}
 	}
 
-	if _, tErr := qtx.ChargeTenantBudget(ctx, pgtype.UUID{Bytes: req.TenantID, Valid: true},
-		amountNumeric, resolvedUnit); tErr != nil {
+	_, tErr := qtx.ChargeTenantBudget(ctx, pgtype.UUID{Bytes: req.TenantID, Valid: true},
+		amountNumeric, resolvedUnit)
+	if errors.Is(tErr, pgx.ErrNoRows) && record {
+		overrun = true
+		var tenantSpent pgtype.Numeric
+		tErr = tx.QueryRow(ctx, chargeTenantPastCeilingQuery, req.TenantID, amountNumeric, resolvedUnit).Scan(&tenantSpent)
+	}
+	if tErr != nil {
 		// Rollback (deferred) compensates every bump above — no explicit
 		// refund needed now that all of them live on one tx.
 		if errors.Is(tErr, pgx.ErrNoRows) {
@@ -281,10 +370,13 @@ func (s *UsageStore) chargeInTx(
 		// charge is a record of what was true when it happened. Resolved in
 		// the same statement so it cannot drift from tenant_id.
 		`INSERT INTO charges (id, tenant_id, tenant_slug, capability_id,
-		                      amount, unit_code, op, actor_subject, copy_ids)
-		 SELECT $1, $2, t.slug, $3, $4::numeric, $5, $6, $7, $8::bytea[]
+		                      amount, unit_code, op, actor_subject, copy_ids,
+		                      external_ref, reservation_id, overrun)
+		 SELECT $1, $2, t.slug, $3, $4::numeric, $5, $6, $7, $8::bytea[],
+		        NULLIF($9::text, ''), $10::uuid, $11
 		   FROM tenants t WHERE t.id = $2`,
 		ledgerID, req.TenantID, req.CapabilityID, amountNumeric, resolvedUnit, req.Op, req.Actor, copyIDs(req.Copies),
+		req.ExternalRef, nullableUUID(reservationID), overrun,
 	)
 	if lErr != nil {
 		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge ledger insert: %w", lErr)
@@ -316,7 +408,41 @@ func (s *UsageStore) chargeInTx(
 		}
 	}
 
-	return capability.ChargeReceipt{ChargeID: ledgerID, Spent: floatFromNumeric(spent)}, nil
+	return capability.ChargeReceipt{ChargeID: ledgerID, Spent: floatFromNumeric(spent), Overrun: overrun}, nil
+}
+
+// nullableUUID is id for a uuid column, with uuid.Nil as NULL.
+func nullableUUID(id uuid.UUID) pgtype.UUID {
+	return pgtype.UUID{Bytes: id, Valid: id != uuid.Nil}
+}
+
+// chargeRecordQuery reads a charge a capability took under an external ref,
+// with what has been refunded from it.
+const chargeRecordQuery = `
+SELECT ch.id, ch.amount,
+       COALESCE((SELECT sum(cr.amount) FROM charge_refunds cr WHERE cr.charge_id = ch.id), 0),
+       ch.unit_code, ch.overrun
+FROM   charges ch
+WHERE  ch.capability_id = $1 AND ch.external_ref = $2
+`
+
+// ChargeByRef implements capability.Meter.
+func (s *UsageStore) ChargeByRef(ctx context.Context, capID uuid.UUID, externalRef string) (capability.ChargeRecord, error) {
+	if externalRef == "" {
+		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+	}
+	rec := capability.ChargeRecord{CapabilityID: capID, ExternalRef: externalRef}
+	var amount, refunded pgtype.Numeric
+	err := s.pool.QueryRow(ctx, chargeRecordQuery, capID, externalRef).
+		Scan(&rec.ChargeID, &amount, &refunded, &rec.UnitCode, &rec.Overrun)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+	}
+	if err != nil {
+		return capability.ChargeRecord{}, fmt.Errorf("capability/postgres: charge by ref: %w", err)
+	}
+	rec.Amount, rec.Refunded = floatFromNumeric(amount), floatFromNumeric(refunded)
+	return rec, nil
 }
 
 // refundableQuery reads what is left of a charge and resolves the amount to
