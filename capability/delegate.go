@@ -75,17 +75,9 @@ func narrowsCaveats(parent, child Caveats) error {
 	// We don't auto-convert between currencies — a delegated child
 	// in EUR off a USD parent is a configuration mistake (which
 	// budget does the eventual charge land on?) and is rejected at
-	// issuance. Empty values are normalised to DefaultUnitCode for
-	// the comparison so legacy parents without an explicit unit
-	// don't reject every new child.
-	parentUnit := parent.UnitCode
-	if parentUnit == "" {
-		parentUnit = DefaultUnitCode
-	}
-	childUnit := child.UnitCode
-	if childUnit == "" {
-		childUnit = DefaultUnitCode
-	}
+	// issuance. Both are compared as NormaliseUnitCode reads them, so
+	// a parent with no explicit unit does not reject every new child.
+	parentUnit, childUnit := canonicalUnitCode(parent.UnitCode), canonicalUnitCode(child.UnitCode)
 	if parentUnit != childUnit {
 		return fmt.Errorf("%w: parent unit_code %q vs child %q",
 			ErrUnitCodeMismatch, parentUnit, childUnit)

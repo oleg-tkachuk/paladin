@@ -123,3 +123,16 @@ func mustParse(t *testing.T, s string) Nanos {
 	}
 	return n
 }
+
+// The abstract unit is ISO 4217's XXX; UNIT, its name before, is refused.
+func TestAbstractUnitIsXXX(t *testing.T) {
+	if got, err := NormaliseUnitCode(AbstractUnitCode); err != nil || got != "XXX" {
+		t.Errorf("NormaliseUnitCode(XXX) = %q, %v", got, err)
+	}
+	if _, err := NormaliseUnitCode("UNIT"); err == nil {
+		t.Error("UNIT is still accepted")
+	}
+	if err := (Caveats{Ops: []Op{OpGet}, UnitCode: "UNIT"}).Validate(); !errors.Is(err, ErrInvalidCaveats) {
+		t.Errorf("caveats in UNIT: err = %v, want ErrInvalidCaveats", err)
+	}
+}
