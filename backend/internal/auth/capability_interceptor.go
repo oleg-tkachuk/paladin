@@ -914,8 +914,10 @@ func assertCapabilityOp(ctx context.Context, op capability.Op, resourceURI strin
 	}
 	// The taint check can cost a lookup, so it runs only once everything else
 	// has passed, and only where it can refuse: a read of a named object by
-	// a capability that was not allowed tainted reads.
-	if resourceURI != "" && !op.Mutating() && !cap.Caveats.AllowTaintedRead {
+	// a capability that was not allowed tainted reads. Check has resolved the
+	// operation's effect already, so asking again cannot fail.
+	mutating, _ := req.Mutating()
+	if resourceURI != "" && !mutating && !cap.Caveats.AllowTaintedRead {
 		isTainted, err := tainted(ctx)
 		if err != nil {
 			// Fail closed: "could not tell" is not "clean".
