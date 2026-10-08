@@ -290,6 +290,7 @@ func TestStatusToProto(t *testing.T) {
 		health.StatusHealthy:   pb.ComponentStatus_COMPONENT_STATUS_HEALTHY,
 		health.StatusDegraded:  pb.ComponentStatus_COMPONENT_STATUS_DEGRADED,
 		health.StatusUnhealthy: pb.ComponentStatus_COMPONENT_STATUS_UNHEALTHY,
+		health.StatusDisabled:  pb.ComponentStatus_COMPONENT_STATUS_DISABLED,
 		// Anything unrecognised must be UNSPECIFIED rather than defaulting to
 		// healthy — a probe bug must never read as "all good".
 		health.ComponentStatus("weird"): pb.ComponentStatus_COMPONENT_STATUS_UNSPECIFIED,

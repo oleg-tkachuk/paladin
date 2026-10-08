@@ -85,11 +85,11 @@ type Check struct {
 	Category Category
 	Critical bool
 	Func     func(context.Context) error
-	// Note is surfaced on the GetHealth RPC response even when the
-	// check passes. Use it to label informational components — e.g.
-	// "disabled" for an off-by-config subsystem so the /health page
-	// shows the row instead of silently omitting it. Empty by default.
-	Note string
+	// Disabled marks a component that is off by configuration: it is
+	// listed, as StatusDisabled, so the /health page shows it is absent on
+	// purpose, but it is never run, never fails /readyz and never counts
+	// toward a role's status. Func is unused.
+	Disabled bool
 }
 
 // Handler is the probe registrar. Build one per process; share it across
@@ -275,6 +275,9 @@ func (h *Handler) runChecks(ctx context.Context, checks []Check) []failure {
 	}
 	var out []failure
 	for _, c := range checks {
+		if c.Disabled {
+			continue
+		}
 		cctx, cancel := context.WithTimeout(ctx, timeout)
 		err := c.Func(cctx)
 		cancel()
@@ -326,13 +329,15 @@ type failure struct {
 // authenticated path doesn't drift from the JSON path.
 
 // ComponentStatus enumerates the per-check rollup. Mirrors the proto
-// enum paladin.iam.v1.ComponentStatus 1:1 (HEALTHY/DEGRADED/UNHEALTHY).
+// enum paladin.iam.v1.ComponentStatus 1:1 (HEALTHY/DEGRADED/UNHEALTHY/
+// DISABLED). Disabled is a component's state only, never a role's.
 type ComponentStatus string
 
 const (
 	StatusHealthy   ComponentStatus = "healthy"
 	StatusDegraded  ComponentStatus = "degraded"
 	StatusUnhealthy ComponentStatus = "unhealthy"
+	StatusDisabled  ComponentStatus = "disabled"
 )
 
 // Component is one row in a Snapshot.
@@ -371,6 +376,15 @@ func (h *Handler) Snapshot(ctx context.Context, role string) Snapshot {
 	components := make([]Component, 0, len(h.Ready))
 	worst := StatusHealthy
 	for _, c := range h.Ready {
+		if c.Disabled {
+			components = append(components, Component{
+				Name:     c.Name,
+				Status:   StatusDisabled,
+				Category: string(c.Category),
+				Critical: c.Critical,
+			})
+			continue
+		}
 		cctx, cancel := context.WithTimeout(ctx, timeout)
 		start := time.Now()
 		err := c.Func(cctx)
@@ -386,7 +400,6 @@ func (h *Handler) Snapshot(ctx context.Context, role string) Snapshot {
 		switch {
 		case err == nil:
 			comp.Status = StatusHealthy
-			comp.Message = c.Note
 		case errors.Is(err, context.DeadlineExceeded):
 			comp.Status = StatusUnhealthy
 			comp.Message = "check timed out after " + timeout.String()

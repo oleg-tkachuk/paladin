@@ -57,6 +57,9 @@ enum ComponentStatus {
   COMPONENT_STATUS_HEALTHY = 1;
   COMPONENT_STATUS_DEGRADED = 2;
   COMPONENT_STATUS_UNHEALTHY = 3;
+  // Off by configuration: listed so its absence reads as intended, never
+  // probed, and never part of the overall status.
+  COMPONENT_STATUS_DISABLED = 4;
 }
 
 message ComponentHealth {

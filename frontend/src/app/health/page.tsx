@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
   ChevronDownIcon,
   ExclamationTriangleIcon,
+  MinusCircleIcon,
   XCircleIcon,
   ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
@@ -29,7 +30,10 @@ import { formatTime } from "@/lib/format/locale";
 // shape is a UI concern; if the protocol grows a third surface (e.g. a
 // CLI), promote into src/lib/health.ts.
 
-type ComponentStatus = "healthy" | "degraded" | "unhealthy";
+// A role is healthy, degraded or unhealthy; a component can also be disabled,
+// off by configuration, which is never probed and never counts toward a role.
+type RoleStatus = "healthy" | "degraded" | "unhealthy";
+type ComponentStatus = RoleStatus | "disabled";
 
 type Component = {
   name: string;
@@ -42,7 +46,7 @@ type Component = {
 
 type Snapshot = {
   role: string;
-  status: ComponentStatus;
+  status: RoleStatus;
   components: Component[];
   checked_at: string;
 };
@@ -90,6 +94,12 @@ const META: Record<
     color: "text-destructive",
     dot: "bg-destructive",
   },
+  disabled: {
+    label: "Disabled",
+    icon: MinusCircleIcon,
+    color: "text-muted-foreground",
+    dot: "bg-muted-foreground/40",
+  },
   unknown: {
     label: "Unknown",
     icon: ShieldCheckIcon,
@@ -103,7 +113,7 @@ const META: Record<
 // any non-critical unhealthy or any degraded → degraded; else healthy.
 function rollupOf(snaps: Snapshot[]): StateKey {
   if (snaps.length === 0) return "unknown";
-  let worst: ComponentStatus = "healthy";
+  let worst: RoleStatus = "healthy";
   for (const s of snaps) {
     if (s.status === "unhealthy") return "unhealthy";
     if (s.status === "degraded") worst = "degraded";
@@ -136,36 +146,45 @@ function StatusPill({ status }: { status: StateKey }) {
 //
 // Two-line shape:
 //   line 1: dot • name • req-badge • status pill • latency
-//   line 2: message — truncated to 1 line, click chevron to expand
+//   line 2: message — truncated to 1 line
 //
-// The expand toggle solves the original "timeout error doesn't fit" bug:
-// instead of cramming long errors into a 10px sliver next to the latency,
-// we show the first line truncated by default and let the operator click
-// the chevron (or anywhere on the row) to reveal the full text in a
-// pre-formatted block. Healthy components with a `note` (e.g. "disabled")
-// render the same way but in muted italics.
+// A message that does not fit its line (a timeout, a stack trace) gets a
+// chevron that reveals the whole of it in a pre-formatted block; one that
+// fits gets none. A disabled component is muted and shows no latency, since
+// it is never probed.
 
 function ComponentRow({ c }: { c: Component }) {
   const [open, setOpen] = useState(false);
   const m = META[c.status];
-  const hasMessage = !!c.message;
-  const noteLike = c.status === "healthy" && hasMessage;
+  const disabled = c.status === "disabled";
+  const preview = useRef<HTMLParagraphElement>(null);
+  const cutOff = useCutOff(preview, c.message);
+  // Expanding is only offered when the preview does not already show the
+  // whole message: a toggle that reveals the same text again is noise.
+  const expandable = !!c.message && (cutOff || open);
 
   return (
     <div className="border-b border-border/40 py-2 last:border-b-0">
       <button
         type="button"
-        onClick={() => hasMessage && setOpen((v) => !v)}
+        onClick={() => expandable && setOpen((v) => !v)}
+        aria-expanded={expandable ? open : undefined}
         className={cn(
           "flex w-full items-center justify-between gap-3 text-left",
-          hasMessage && "cursor-pointer hover:opacity-80",
-          !hasMessage && "cursor-default",
+          expandable ? "cursor-pointer hover:opacity-80" : "cursor-default",
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
           <span className={cn("size-2 shrink-0 rounded-full", m.dot)} />
-          <span className="truncate font-mono text-sm">{c.name}</span>
-          {c.critical && (
+          <span
+            className={cn(
+              "truncate font-mono text-sm",
+              disabled && "text-muted-foreground",
+            )}
+          >
+            {c.name}
+          </span>
+          {c.critical && !disabled && (
             <Badge
               variant="outline"
               className="shrink-0 px-1.5 py-0 text-sm font-normal"
@@ -181,11 +200,15 @@ function ComponentRow({ c }: { c: Component }) {
           >
             {m.label}
           </span>
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
-            {c.latency_ms}ms
-          </span>
-          {hasMessage && (
+          {/* A disabled component is not probed: no latency to show. */}
+          {!disabled && (
+            <span className="font-mono text-xs tabular-nums text-muted-foreground">
+              {c.latency_ms}ms
+            </span>
+          )}
+          {expandable && (
             <ChevronDownIcon
+              aria-hidden
               className={cn(
                 "size-4 shrink-0 text-muted-foreground transition-transform",
                 open && "rotate-180",
@@ -195,23 +218,19 @@ function ComponentRow({ c }: { c: Component }) {
         </div>
       </button>
 
-      {hasMessage && !open && (
-        // Collapsed preview: single line, truncated. Click anywhere on
-        // the row to expand. The full text is also discoverable via the
-        // expanded view below — we keep the title attribute as a fast
-        // tooltip path for desktop hover users.
+      {c.message && !open && (
+        // Collapsed preview: one line, truncated when it does not fit, with
+        // the full text in the tooltip.
         <p
-          className={cn(
-            "mt-1 truncate text-xs",
-            noteLike ? "italic text-muted-foreground" : "text-muted-foreground",
-          )}
+          ref={preview}
+          className="mt-1 truncate text-xs text-muted-foreground"
           title={c.message}
         >
           {c.message}
         </p>
       )}
 
-      {hasMessage && open && (
+      {c.message && open && (
         // Expanded view: pre-formatted code block so timeouts /
         // multi-line stack traces wrap and stay readable. `whitespace-
         // pre-wrap` preserves newlines; `break-all` catches long
@@ -220,7 +239,6 @@ function ComponentRow({ c }: { c: Component }) {
           className={cn(
             "mt-2 overflow-x-auto rounded-md bg-muted/60 px-3 py-2 text-xs",
             "whitespace-pre-wrap break-all font-mono leading-relaxed",
-            noteLike && "italic text-muted-foreground",
           )}
         >
           {c.message}
@@ -228,6 +246,27 @@ function ComponentRow({ c }: { c: Component }) {
       )}
     </div>
   );
+}
+
+// useCutOff is whether the one-line preview hides part of message: it runs
+// past the line, or has more than one. Re-measured as the card resizes.
+function useCutOff(
+  ref: React.RefObject<HTMLElement | null>,
+  message: string | undefined,
+): boolean {
+  const [cutOff, setCutOff] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !message) return;
+    const measure = () =>
+      setCutOff(message.includes("\n") || el.scrollWidth > el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, message]);
+  return cutOff;
 }
 
 // The role cards' grid: as many columns as fit cards no narrower than their
@@ -240,11 +279,20 @@ const ROLE_GRID =
 
 // ─── Role card — one per backend role ───────────────────────────────────────
 
+// tally counts the healthy components among those probed: a disabled one is
+// neither, so it is left out of both.
+function tally(components: Component[]): { ok: number; total: number } {
+  const probed = components.filter((c) => c.status !== "disabled");
+  return {
+    ok: probed.filter((c) => c.status === "healthy").length,
+    total: probed.length,
+  };
+}
+
 function RoleCard({ snap }: { snap: Snapshot }) {
   const m = META[snap.status];
   const Icon = m.icon;
-  const ok = snap.components.filter((c) => c.status === "healthy").length;
-  const total = snap.components.length;
+  const { ok, total } = tally(snap.components);
   return (
     // gap-0 py-0: the header and the rows carry their own padding, and the
     // card's default gap stacked on it left a blank band under the header.
@@ -328,13 +376,8 @@ export default function HealthPage() {
 
   const rollup = rollupOf(orderedRoles);
   const RollupIcon = META[rollup].icon;
-  const totalComponents = orderedRoles.reduce(
-    (n, s) => n + s.components.length,
-    0,
-  );
-  const healthyComponents = orderedRoles.reduce(
-    (n, s) => n + s.components.filter((c) => c.status === "healthy").length,
-    0,
+  const { ok: healthyComponents, total: totalComponents } = tally(
+    orderedRoles.flatMap((s) => s.components),
   );
 
   const backendVersion = stats?.version?.version || "—";
