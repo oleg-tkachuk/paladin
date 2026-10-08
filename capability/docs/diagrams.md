@@ -212,7 +212,7 @@ flowchart TB
         direction TB
         vocab{"only paladin_* facts<br/>no rules · no checks"}
         narrow{"Narrows(cur, next)<br/>ops · resources · planes · expiry · binding"}
-        lim{"sets max_requests / max_budget_micros?"}
+        lim{"sets max_requests / max_budget_nanos?"}
         meter{"MeterCopies"}
         fit{"within the capability's limit<br/>and every enclosing copy's"}
         copies["Capability.Copies gains<br/>{revocation id, limits}, innermost first"]
@@ -424,7 +424,7 @@ flowchart TB
 - **Revocation.** `BiscuitCopy` checks a copy as `Verify` does and names its
   capability and last block's id; `BiscuitRevocationStore.RevokeBiscuit` lists
   it. Revoking the capability still stops every copy and the JWT.
-- **Limits.** A block may set `max_requests` and `max_budget_micros`, within
+- **Limits.** A block may set `max_requests` and `max_budget_nanos`, within
   every limit in force. The `Meter` counts each under the block's id, beside
   the capability's own counters, and a charge or reservation records the ids
   it debited so a refund, settle or release returns to them.
@@ -436,6 +436,9 @@ flowchart TB
   copy, and would shed its limits.
 
 ## Charge: stage, then commit
+
+Every amount on this path is `Nanos`, an `int64` count of billionths of the
+unit, so each comparison and sum below is exact.
 
 `Meter.Charge` checks every ceiling — each Biscuit copy's, the capability's,
 each ancestor's and the tenant's — and runs the consumer's side effect before

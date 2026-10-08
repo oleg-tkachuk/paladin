@@ -46,6 +46,10 @@
 // A Capability crosses the API by value, in and out: no caller can alter one
 // another holds, and one that is not there is an error, never nil.
 //
+// Every amount is [Nanos], an int64 count of billionths of the unit
+// (UnitCode, an ISO 4217 code; XXX for a budget that is not money), so spend
+// sums, compares and refunds exactly, with no rounding left to the consumer.
+//
 // Every read names what it reads — Store.Get a record, Meter.GetUsage the
 // counters, TenantBudgets.GetTenantBudget a ceiling — so one type may
 // implement Store and UsageStore together, or each apart as memstore does.

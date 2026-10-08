@@ -64,7 +64,7 @@ cap, token, _ := issuer.Issue(ctx, capability.IssueRequest{
         Ops:              []capability.Op{capability.OpGet, capability.OpShare},
         ResourcePrefixes: []string{"corpus/public/"},
         MaxRequests:      500,
-        MaxBudgetAmount:  25.00,
+        MaxBudgetAmount:  capability.MustParseAmount("25.00"),
         UnitCode:         "USD",
     },
 })
@@ -183,7 +183,7 @@ child, childToken, err := issuer.Delegate(ctx, capability.DelegateRequest{
     Caveats: capability.Caveats{
         Ops:              []capability.Op{capability.OpGet},  // dropped OpShare
         ResourcePrefixes: []string{"corpus/public/2026/"},     // narrowed
-        MaxBudgetAmount:  2.00,                                // 25.00 → 2.00
+        MaxBudgetAmount:  capability.MustParseAmount("2.00"),  // 25.00 → 2.00
         UnitCode:         "USD",                               // MUST match parent
     },
 })
@@ -266,7 +266,7 @@ anything else (Datalog rules and checks included), makes the whole token
 invalid. An attenuated copy spends its capability's budget and request
 count, and revoking the capability revokes every copy.
 
-A copy can also get limits of its own: `MaxRequests` and `MaxBudgetMicros` on
+A copy can also get limits of its own: `MaxRequests` and `MaxBudget` on
 the `Attenuation`. Each is counted under the revocation id of the block that
 set it, so siblings narrowed apart count apart, while the capability's own
 limits still bound them all; a limit must fit every limit already in force.
@@ -300,8 +300,8 @@ cannot be re-wrapped in a fresh Biscuit.
 ```go
 receipt, err := usage.Charge(ctx, capability.ChargeRequest{
     CapabilityID: cap.ID, TenantID: tenantID,
-    Amount: 0.35, MaxBudget: cap.Caveats.MaxBudgetAmount, UnitCode: "USD",
-    Op: "search", Actor: "orchestrator",
+    Amount: capability.MustParseAmount("0.35"), MaxBudget: cap.Caveats.MaxBudgetAmount,
+    UnitCode: "USD", Op: "search", Actor: "orchestrator",
 }, nil)
 if errors.Is(err, capability.ErrBudgetExceeded) {
     // rejected at the auth boundary — before your business logic ran
@@ -315,7 +315,7 @@ rejects, no counter moves, so a retry after rejection is safe.
 `receipt.ChargeID` names the ledger row. Refund against it:
 
 ```go
-usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: 0.10}) // partial
+usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: capability.MustParseAmount("0.10")}) // partial
 usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID})               // the rest
 ```
 
@@ -323,10 +323,27 @@ A refund returns spend to every counter the charge took it from, and never
 more than the charge: `Amount: 0` refunds what is left, so a retried full
 refund is a no-op.
 
-Amounts are float64 in this API and exact in practice: `AmountToMicros`
-rounds an amount to whole millionths and `MicrosToAmount` reverses it
-without loss for anything below `MaxMicros` (fifteen significant digits,
-just under a billion units). Store and sum micros, not floats.
+## Amounts are exact
+
+Every amount is `capability.Nanos`: an `int64` count of billionths of the
+unit, so 0.35 USD is `350_000_000`. Sums, ceilings, holds and refunds are
+integer arithmetic, exact however many charges they take: a tenth and two
+tenths fit under a ceiling of three tenths, and ten tenths make one. Nothing
+on your side needs rounding, summing apart or correcting.
+
+- **Writing one.** `ParseAmount("0.35")` reads a decimal exactly and refuses
+  anything finer than a nano rather than round it; `MustParseAmount` is the
+  same for a literal in your code. A price that reaches you as a `float64`
+  goes through `AmountFromFloat`, which rounds once, to the nearest nano.
+- **Reading one.** `String()` writes the exact decimal (`"0.35"`);
+  `Float64()` is for display and metrics only.
+- **Range.** Up to `MaxNanos`, just under a billion units. A charge that
+  would take a counter past it is refused with `ErrInvalidAmount`.
+- **Units.** `UnitCode` is an ISO 4217 code: USD, EUR, UAH or GBP, or XXX,
+  ISO 4217's code for "no currency", for a budget that is not money.
+
+In a token the budget is still a plain JSON number of units
+(`"MaxBudgetAmount": 1.5`), read and written without a float in between.
 
 
 ## Reserve before a cost is known
@@ -401,8 +418,7 @@ A reporter with no token in hand reads the ceiling from the capability's
 stored record (`Store.Get`), as the meter already does for every ancestor. A
 price that is not known yet is not a price of zero: hold the estimate and
 settle when it is known, or let the hold lapse and count against the ceilings
-until `ReleaseExpired` runs. Costs below a micro round to zero one at a time;
-sum them on your side and charge the total.
+until `ReleaseExpired` runs.
 
 ## Check your own store
 
