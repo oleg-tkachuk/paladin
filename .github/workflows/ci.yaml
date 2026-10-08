@@ -152,13 +152,19 @@ jobs:
           fi
 
       # The Python SDK's compatibility cells, read here so the matrix job and
-      # `scripts/py-sdk-compat.sh --matrix` run the same list. A cell's
-      # `without_tls: true` becomes `tls: <PY_SDK_NO_TLS>`, since GitHub
-      # appends a cell's values to the job's name and "true" says nothing there.
+      # `scripts/py-sdk-compat.sh --matrix` run the same list: every python ×
+      # with pair, then each `include` entry as a cell of its own. Spelled out
+      # as one `include` list, because GitHub merges an include entry into a
+      # pair it matches — the no-TLS cell replaced the TLS run of its pair —
+      # and leaves a merged key out of the job's name. `without_tls: true`
+      # becomes `tls: <PY_SDK_NO_TLS>`, the label that name then carries.
       - name: Read the Python SDK compatibility matrix
         id: py-compat
         run: |
-          matrix=$(jq -c '.include |= map(if .without_tls == true then del(.without_tls) + {tls: env.PY_SDK_NO_TLS} else . end)' sdk/python/compat.json)
+          matrix=$(jq -c '{include: (
+            [.python[] as $p | .with[] as $w | {python: $p, with: $w}]
+            + (.include | map(if .without_tls == true then del(.without_tls) + {tls: env.PY_SDK_NO_TLS} else . end))
+          )}' sdk/python/compat.json)
           printf 'matrix=%s\n' "$matrix" >>"$GITHUB_OUTPUT"
 
   # The repository's own commit gate, `task -t Taskfile.dev.yaml verify-all`,
