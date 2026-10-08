@@ -311,9 +311,11 @@ export default function EventsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Sink</TableHead>
-              <TableHead className="hidden md:table-cell">Filter</TableHead>
+              <TableHead className="hidden @3xl:table-cell">Filter</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="hidden lg:table-cell">Last test</TableHead>
+              <TableHead className="hidden @4xl:table-cell">
+                Last test
+              </TableHead>
               <TableHead className="w-12 text-right" />
             </TableRow>
           </TableHeader>
@@ -380,14 +382,17 @@ export default function EventsPage() {
                           </Badge>
                         </div>
                         <span
-                          className={cn(T.codeSmall, "truncate max-w-105")}
+                          className={cn(
+                            T.codeSmall,
+                            "max-w-40 truncate @lg:max-w-105",
+                          )}
                           title={summary.detail}
                         >
                           {summary.detail}
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @3xl:table-cell">
                       {sub.filter ? (
                         <span
                           className={cn(T.code, "block truncate max-w-65")}
@@ -422,7 +427,7 @@ export default function EventsPage() {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">
+                    <TableCell className="hidden @4xl:table-cell">
                       {testing ? (
                         <span className={cn(T.hint)}>Testing…</span>
                       ) : last ? (

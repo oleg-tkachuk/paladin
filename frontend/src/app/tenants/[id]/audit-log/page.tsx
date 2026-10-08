@@ -145,11 +145,11 @@ export default function TenantAuditLogPage() {
               <TableHead className="w-45">When</TableHead>
               <TableHead>Action</TableHead>
               <TableHead>Actor</TableHead>
-              <TableHead className="hidden lg:table-cell">Resource</TableHead>
-              <TableHead className="hidden xl:table-cell w-45">
+              <TableHead className="hidden @2xl:table-cell">Resource</TableHead>
+              <TableHead className="hidden @4xl:table-cell w-45">
                 Request
               </TableHead>
-              <TableHead className="hidden 2xl:table-cell w-35">
+              <TableHead className="hidden @6xl:table-cell w-35">
                 Capability
               </TableHead>
             </TableRow>
@@ -189,11 +189,18 @@ export default function TenantAuditLogPage() {
                     >
                       {formatTimestampUTC(e.at)}
                     </TableCell>
-                    <TableCell>
+                    {/* Action, actor and resource are long unbroken
+                        identifiers (RPC paths, `apikey:<uuid>`, resource
+                        names): they wrap, or one row widens the table past
+                        its card. */}
+                    <TableCell className="max-w-80 whitespace-normal">
                       <div className="space-y-1">
                         <Badge
                           variant={actionPalette(e.action, hasError)}
-                          className={T.code}
+                          className={cn(
+                            T.code,
+                            "h-auto max-w-full whitespace-normal break-all",
+                          )}
                         >
                           {e.action || "(unknown)"}
                         </Badge>
@@ -207,7 +214,7 @@ export default function TenantAuditLogPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-normal break-all">
                       <div className="space-y-0.5">
                         <span className={T.body}>
                           {e.actorSubject ? (
@@ -232,14 +239,14 @@ export default function TenantAuditLogPage() {
                     </TableCell>
                     <TableCell
                       className={cn(
-                        "hidden lg:table-cell",
+                        "hidden @2xl:table-cell whitespace-normal break-all",
                         T.code,
                         "text-muted-foreground",
                       )}
                     >
                       {e.resourceName || "—"}
                     </TableCell>
-                    <TableCell className="hidden xl:table-cell">
+                    <TableCell className="hidden @4xl:table-cell">
                       {e.requestId ? (
                         <span
                           className={cn(T.code, "text-muted-foreground")}
@@ -259,7 +266,7 @@ export default function TenantAuditLogPage() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="hidden 2xl:table-cell">
+                    <TableCell className="hidden @6xl:table-cell">
                       {e.capabilityId ? (
                         // Copyable, not a link: this went to /capabilities,
                         // a page that does not exist, and the tenant's

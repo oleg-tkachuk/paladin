@@ -132,7 +132,9 @@ export default function UsersPage() {
               <TableHead className="w-65">User</TableHead>
               <TableHead>Tenant</TableHead>
               <TableHead>Roles</TableHead>
-              <TableHead className="hidden md:table-cell">Last login</TableHead>
+              <TableHead className="hidden @md:table-cell">
+                Last login
+              </TableHead>
               <TableHead className="w-20">State</TableHead>
               <TableHead className="w-30 text-right">Actions</TableHead>
             </TableRow>
@@ -234,7 +236,7 @@ export default function UsersPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @md:table-cell">
                       <RelativeTime ts={u.lastLoginAt} />
                     </TableCell>
                     <TableCell>

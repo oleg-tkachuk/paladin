@@ -6,9 +6,13 @@ import { cn } from "@/lib/utils";
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
+    // A size container, so a page shows optional columns by the width the
+    // table actually has (`hidden @2xl:table-cell`), not the viewport's: the
+    // sidebar takes a fixed share of the window, and a viewport breakpoint
+    // counts width the table never gets.
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className="@container relative w-full overflow-x-auto"
     >
       <table
         data-slot="table"
