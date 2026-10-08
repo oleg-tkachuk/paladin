@@ -202,7 +202,7 @@ describe("HealthPage component details", () => {
             {
               ...component("postgres", true),
               details: [
-                { name: "connections", value: "3 of 20 in use" },
+                { name: "in use", value: "3/20" },
                 { name: "idle", value: "2" },
               ],
             },
@@ -216,7 +216,7 @@ describe("HealthPage component details", () => {
     render(<HealthPage />);
     const row = (await screen.findByText("postgres")).closest("button")!;
     const list = row.parentElement!.querySelector("dl")!;
-    expect(list).toHaveTextContent("connections:3 of 20 in useidle:2");
+    expect(list).toHaveTextContent("in use3/20idle2");
   });
 
   it("offers nothing to expand for details alone", async () => {
@@ -247,7 +247,10 @@ describe("HealthPage database card", () => {
         checked_at: "2026-10-08T18:00:00Z",
         components: [
           db("postgres", {
-            details: [{ name: "connections", value: `${i + 3} of 20 in use` }],
+            details: [
+              { name: "in use", value: `${i + 3}/20` },
+              { name: "idle", value: `${i + 7}` },
+            ],
           }),
           db("postgres-schema", {
             details: [{ name: "schema applied", value: "56" }],
@@ -272,9 +275,17 @@ describe("HealthPage database card", () => {
     }
     // Said once, being the same for every role.
     expect(card.textContent!.match(/schema applied/g)).toHaveLength(1);
-    // Each role's own pool, under its role.
-    expect(card).toHaveTextContent("apiconnections:3 of 20 in use");
-    expect(card).toHaveTextContent("workerconnections:4 of 20 in use");
+    // Each role's own pool: a table, a role to a column, a fact to a row,
+    // so the same fact lines up across roles.
+    const table = card.querySelector("table")!;
+    const rows = Array.from(table.querySelectorAll("tr"), (tr) =>
+      Array.from(tr.children, (c) => c.textContent),
+    );
+    expect(rows).toEqual([
+      ["", "api", "worker"],
+      ["in use", "3/20", "4/20"],
+      ["idle", "7", "8"],
+    ]);
   });
 
   it("leaves a role card one database row, online or offline", async () => {
