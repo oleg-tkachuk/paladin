@@ -180,6 +180,12 @@ const navigationGroups: Array<{
  * fail on its first request. Until the user is known (null) nothing is taken
  * away, so an operator's sidebar does not flash short on load.
  */
+// A group's label (CORE, MANAGEMENT, …). text-sm is a size cn() keeps:
+// text-tiny here was dropped as a colour clash with text-muted-foreground,
+// and the label rendered at the inherited 16px, above its own items.
+export const GROUP_LABEL_CLASS =
+  "px-2 pb-1.5 text-sm font-semibold uppercase tracking-wider text-muted-foreground";
+
 export function visibleNavigationGroups(roles: readonly string[] | null) {
   if (roles === null || canUseAdminPlane(roles)) return navigationGroups;
   return navigationGroups
@@ -353,7 +359,7 @@ function SidebarBody({
                       // gap is the only spacing concern that needs
                       // calling out — items inside a group keep their
                       // tight space-y-0.5.
-                      "px-2 pb-1.5 text-tiny font-semibold uppercase tracking-wider text-muted-foreground",
+                      GROUP_LABEL_CLASS,
                       groupIdx > 0 && "mt-7",
                     )}
                   >

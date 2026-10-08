@@ -230,6 +230,14 @@ function ComponentRow({ c }: { c: Component }) {
   );
 }
 
+// The role cards' grid: as many columns as fit cards no narrower than their
+// widest row, so no component name is cut off; one column when even one card
+// does not fit. 23rem holds the widest row there is, `iam_listener` with its
+// `required` badge, `Unhealthy` and a four-digit latency (321px), plus the
+// card's padding. min(100%, …) keeps a phone-width page to one card that fits.
+const ROLE_GRID =
+  "grid gap-3 grid-cols-[repeat(auto-fit,minmax(min(100%,23rem),1fr))]";
+
 // ─── Role card — one per backend role ───────────────────────────────────────
 
 function RoleCard({ snap }: { snap: Snapshot }) {
@@ -238,7 +246,9 @@ function RoleCard({ snap }: { snap: Snapshot }) {
   const ok = snap.components.filter((c) => c.status === "healthy").length;
   const total = snap.components.length;
   return (
-    <Card className="flex flex-col">
+    // gap-0 py-0: the header and the rows carry their own padding, and the
+    // card's default gap stacked on it left a blank band under the header.
+    <Card className="flex flex-col gap-0 py-0">
       <CardHeader className="flex flex-row items-center justify-between gap-2 px-4 py-3">
         <div className="flex items-center gap-2 min-w-0">
           <Icon className={cn("size-5 shrink-0", m.color)} />
@@ -431,11 +441,9 @@ export default function HealthPage() {
         </CardContent>
       </Card>
 
-      {/* ─── Per-role cards. 1-up on mobile, 2-up on tablet, 4-up on
-              desktop so the 4 backend roles fit on one row of a 1080p
-              monitor without wasting horizontal space. ───────────────── */}
+      {/* ─── Per-role cards, as many to a row as fit whole (ROLE_GRID). */}
       {!data && loading ? (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className={ROLE_GRID}>
           {ROLE_ORDER.map((r) => (
             <Skeleton key={r} className="h-45 rounded-xl" />
           ))}
@@ -447,7 +455,7 @@ export default function HealthPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className={ROLE_GRID}>
           {orderedRoles.map((s) => (
             <RoleCard key={s.role} snap={s} />
           ))}
