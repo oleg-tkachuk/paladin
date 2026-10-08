@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -18,6 +18,7 @@ import (
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 type Handler struct {
@@ -57,7 +58,7 @@ func readCtx(ctx context.Context) context.Context {
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, target authstore.User) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -74,7 +75,7 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, target aut
 	}
 	if decision != cedar.DecisionAllow {
 		return connect.NewError(connect.CodePermissionDenied,
-			errors.New("denied by policy"))
+			"denied by policy")
 	}
 	return nil
 }
@@ -107,15 +108,15 @@ func (h *Handler) CreateUser(ctx context.Context, in CreateUserInput) (*authstor
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !hasPlatformAdmin(p) && in.TenantID != caller {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("cannot create user in foreign tenant"))
+			"cannot create user in foreign tenant")
 	}
 	// Input first: without a subject the request names no user, and Cedar
 	// would be asked about the Tenant instead.
 	if in.Subject == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("subject required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "subject required")
 	}
 	if in.InitialPassword == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("initial_password required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "initial_password required")
 	}
 	if err := h.authorize(ctx, cedar.ActionManageUser,
 		authstore.User{TenantID: in.TenantID, Subject: in.Subject}); err != nil {
@@ -123,7 +124,7 @@ func (h *Handler) CreateUser(ctx context.Context, in CreateUserInput) (*authstor
 	}
 	hash, err := auth.HashPassword(in.InitialPassword)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	u, err := h.users.Create(auth.WithActingTenant(ctx, in.TenantID), authstore.User{
 		TenantID:     in.TenantID,
@@ -159,7 +160,7 @@ func (h *Handler) load(ctx context.Context, ref UserRef) (authstore.User, error)
 		return authstore.User{}, err
 	}
 	if u.TenantID != ref.TenantID {
-		return authstore.User{}, connect.NewError(connect.CodeNotFound, errUserNotFound)
+		return authstore.User{}, connect.NewError(connect.CodeNotFound, errUserNotFound.Error()).WithCause(errUserNotFound)
 	}
 	return u, nil
 }
@@ -171,7 +172,7 @@ func notFound(err error) error {
 	if errors.As(err, &cerr) {
 		return cerr
 	}
-	return connect.NewError(connect.CodeNotFound, err)
+	return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 }
 
 // ─── Read ───────────────────────────────────────────────────────────────────
@@ -190,7 +191,7 @@ func (h *Handler) GetUser(ctx context.Context, ref UserRef) (*authstore.User, er
 	}
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !hasPlatformAdmin(p) && u.TenantID != caller {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("user not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "user not found")
 	}
 	if err := h.authorize(ctx, cedar.ActionReadUser, u); err != nil {
 		return nil, err
@@ -220,7 +221,7 @@ func (h *Handler) UpdateUser(ctx context.Context, in UpdateUserInput) (*authstor
 	}
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !hasPlatformAdmin(p) && current.TenantID != caller {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant update denied"))
+		return nil, connect.NewError(connect.CodePermissionDenied, "cross-tenant update denied")
 	}
 	if err := h.authorize(ctx, cedar.ActionManageUser, current); err != nil {
 		return nil, err
@@ -255,7 +256,7 @@ func (h *Handler) DeleteUser(ctx context.Context, ref UserRef, expectedVersion i
 	}
 	p, _ := auth.PrincipalFromContext(ctx)
 	if !hasPlatformAdmin(p) && u.TenantID != caller {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant delete denied"))
+		return connect.NewError(connect.CodePermissionDenied, "cross-tenant delete denied")
 	}
 	if err := h.authorize(ctx, cedar.ActionManageUser, u); err != nil {
 		return err
@@ -288,7 +289,7 @@ func (h *Handler) ListUsers(ctx context.Context, in ListUsersInput) ([]authstore
 			scope = caller
 		}
 	} else if !hasPlatformAdmin(p) && scope != caller {
-		return nil, "", connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant list denied"))
+		return nil, "", connect.NewError(connect.CodePermissionDenied, "cross-tenant list denied")
 	}
 	// Cedar authz scope: the default policy template grants
 	// ReadUser to members of Tenant::"<their-slug>". When this is a
@@ -347,8 +348,7 @@ func (h *Handler) ListUsers(ctx context.Context, in ListUsersInput) ([]authstore
 	// not understand is decided here, where the rows are.
 	page, err = celpkg.FilterPage(h.cel, celpkg.UserSchema, in.Filter, page, userRow)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("filter: %w", err))
+		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
 	return page, next, nil
 }
@@ -385,7 +385,7 @@ func (h *Handler) GrantScopes(ctx context.Context, ref UserRef, scopes []auth.Sc
 	current.Scopes = mergeScopes(current.Scopes, scopes)
 	updated, err := h.users.Update(auth.WithActingTenant(ctx, current.TenantID), current, 0)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &updated, nil
 }
@@ -401,7 +401,7 @@ func (h *Handler) RevokeScopes(ctx context.Context, ref UserRef, scopes []auth.S
 	current.Scopes = removeScopes(current.Scopes, scopes)
 	updated, err := h.users.Update(auth.WithActingTenant(ctx, current.TenantID), current, 0)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &updated, nil
 }
@@ -421,10 +421,10 @@ func (h *Handler) ResetPassword(ctx context.Context, ref UserRef, newPassword st
 	}
 	hash, err := auth.HashPassword(newPassword)
 	if err != nil {
-		return "", connect.NewError(connect.CodeInvalidArgument, err)
+		return "", connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	if err := h.users.UpdatePasswordHash(auth.WithActingTenant(ctx, current.TenantID), current.UserID, hash); err != nil {
-		return "", connect.NewError(connect.CodeInternal, fmt.Errorf("reset password: %w", err))
+		return "", rpcerr.New(connect.CodeInternal, fmt.Errorf("reset password: %w", err))
 	}
 	return newPassword, nil
 }

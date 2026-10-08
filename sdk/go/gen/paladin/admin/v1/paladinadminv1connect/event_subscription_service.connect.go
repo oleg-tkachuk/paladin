@@ -6,55 +6,103 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// EventSubscriptionServiceName is the fully-qualified name of the EventSubscriptionService service.
 	EventSubscriptionServiceName = "paladin.admin.v1.EventSubscriptionService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// EventSubscriptionServiceCreateSubscriptionProcedure is the fully-qualified name of the
+	// EventSubscriptionServiceCreateSubscriptionProcedure is the procedure name of the
 	// EventSubscriptionService's CreateSubscription RPC.
 	EventSubscriptionServiceCreateSubscriptionProcedure = "/paladin.admin.v1.EventSubscriptionService/CreateSubscription"
-	// EventSubscriptionServiceGetSubscriptionProcedure is the fully-qualified name of the
+	// EventSubscriptionServiceGetSubscriptionProcedure is the procedure name of the
 	// EventSubscriptionService's GetSubscription RPC.
 	EventSubscriptionServiceGetSubscriptionProcedure = "/paladin.admin.v1.EventSubscriptionService/GetSubscription"
-	// EventSubscriptionServiceUpdateSubscriptionProcedure is the fully-qualified name of the
+	// EventSubscriptionServiceUpdateSubscriptionProcedure is the procedure name of the
 	// EventSubscriptionService's UpdateSubscription RPC.
 	EventSubscriptionServiceUpdateSubscriptionProcedure = "/paladin.admin.v1.EventSubscriptionService/UpdateSubscription"
-	// EventSubscriptionServiceDeleteSubscriptionProcedure is the fully-qualified name of the
+	// EventSubscriptionServiceDeleteSubscriptionProcedure is the procedure name of the
 	// EventSubscriptionService's DeleteSubscription RPC.
 	EventSubscriptionServiceDeleteSubscriptionProcedure = "/paladin.admin.v1.EventSubscriptionService/DeleteSubscription"
-	// EventSubscriptionServiceListSubscriptionsProcedure is the fully-qualified name of the
+	// EventSubscriptionServiceListSubscriptionsProcedure is the procedure name of the
 	// EventSubscriptionService's ListSubscriptions RPC.
 	EventSubscriptionServiceListSubscriptionsProcedure = "/paladin.admin.v1.EventSubscriptionService/ListSubscriptions"
-	// EventSubscriptionServiceTestSubscriptionProcedure is the fully-qualified name of the
+	// EventSubscriptionServiceTestSubscriptionProcedure is the procedure name of the
 	// EventSubscriptionService's TestSubscription RPC.
 	EventSubscriptionServiceTestSubscriptionProcedure = "/paladin.admin.v1.EventSubscriptionService/TestSubscription"
-	// EventSubscriptionServiceRedriveFailedDeliveriesProcedure is the fully-qualified name of the
+	// EventSubscriptionServiceRedriveFailedDeliveriesProcedure is the procedure name of the
 	// EventSubscriptionService's RedriveFailedDeliveries RPC.
 	EventSubscriptionServiceRedriveFailedDeliveriesProcedure = "/paladin.admin.v1.EventSubscriptionService/RedriveFailedDeliveries"
+)
+
+var (
+	eventSubscriptionServiceCreateSubscriptionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_event_subscription_service_proto.Services().ByName("EventSubscriptionService").Methods().ByName("CreateSubscription"),
+			Procedure:  EventSubscriptionServiceCreateSubscriptionProcedure,
+		}
+	})
+	eventSubscriptionServiceGetSubscriptionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_event_subscription_service_proto.Services().ByName("EventSubscriptionService").Methods().ByName("GetSubscription"),
+			Procedure:        EventSubscriptionServiceGetSubscriptionProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	eventSubscriptionServiceUpdateSubscriptionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_event_subscription_service_proto.Services().ByName("EventSubscriptionService").Methods().ByName("UpdateSubscription"),
+			Procedure:        EventSubscriptionServiceUpdateSubscriptionProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	eventSubscriptionServiceDeleteSubscriptionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_event_subscription_service_proto.Services().ByName("EventSubscriptionService").Methods().ByName("DeleteSubscription"),
+			Procedure:        EventSubscriptionServiceDeleteSubscriptionProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	eventSubscriptionServiceListSubscriptionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_event_subscription_service_proto.Services().ByName("EventSubscriptionService").Methods().ByName("ListSubscriptions"),
+			Procedure:        EventSubscriptionServiceListSubscriptionsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	eventSubscriptionServiceTestSubscriptionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_event_subscription_service_proto.Services().ByName("EventSubscriptionService").Methods().ByName("TestSubscription"),
+			Procedure:  EventSubscriptionServiceTestSubscriptionProcedure,
+		}
+	})
+	eventSubscriptionServiceRedriveFailedDeliveriesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_event_subscription_service_proto.Services().ByName("EventSubscriptionService").Methods().ByName("RedriveFailedDeliveries"),
+			Procedure:        EventSubscriptionServiceRedriveFailedDeliveriesProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 )
 
 // EventSubscriptionServiceClient is a client for the paladin.admin.v1.EventSubscriptionService
@@ -63,135 +111,35 @@ type EventSubscriptionServiceClient interface {
 	// CreateSubscription registers a delivery target for the tenant's events.
 	// Exactly one sink (http / kafka / sqs) must be configured. Delivery is
 	// at-least-once via the transactional outbox (ADR-0003).
-	CreateSubscription(context.Context, *connect.Request[v1.CreateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
+	CreateSubscription(context.Context, *v1.CreateSubscriptionRequest) (*v1.EventSubscription, error)
 	// GetSubscription returns the subscription including its sink configuration;
 	// secret references are returned as references, never resolved.
-	GetSubscription(context.Context, *connect.Request[v1.GetSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
+	GetSubscription(context.Context, *v1.GetSubscriptionRequest) (*v1.EventSubscription, error)
 	// UpdateSubscription replaces the filter and sink. resource_version is
 	// required. In-flight deliveries already queued are not re-targeted.
-	UpdateSubscription(context.Context, *connect.Request[v1.UpdateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
+	UpdateSubscription(context.Context, *v1.UpdateSubscriptionRequest) (*v1.EventSubscription, error)
 	// DeleteSubscription stops future deliveries. Events already in the outbox
 	// are dropped rather than delivered to a subscription that no longer
 	// exists.
-	DeleteSubscription(context.Context, *connect.Request[v1.DeleteSubscriptionRequest]) (*connect.Response[v1.DeleteSubscriptionResponse], error)
+	DeleteSubscription(context.Context, *v1.DeleteSubscriptionRequest) (*v1.DeleteSubscriptionResponse, error)
 	// ListSubscriptions returns the tenant's subscriptions, disabled ones
 	// included.
-	ListSubscriptions(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error)
+	ListSubscriptions(context.Context, *v1.ListSubscriptionsRequest) (*v1.ListSubscriptionsResponse, error)
 	// TestSubscription delivers a synthetic event to the configured sink.
-	TestSubscription(context.Context, *connect.Request[v1.TestSubscriptionRequest]) (*connect.Response[v1.TestSubscriptionResponse], error)
+	TestSubscription(context.Context, *v1.TestSubscriptionRequest) (*v1.TestSubscriptionResponse, error)
 	// RedriveFailedDeliveries queues the subscription's failed deliveries —
 	// those that exhausted their attempts — to be sent again, with a fresh
 	// attempt budget. Failed rows are kept until the event-delivery retention
 	// removes them. A disabled subscription is refused: its deliveries would
 	// fail again at once.
-	RedriveFailedDeliveries(context.Context, *connect.Request[v1.RedriveFailedDeliveriesRequest]) (*connect.Response[v1.RedriveFailedDeliveriesResponse], error)
+	RedriveFailedDeliveries(context.Context, *v1.RedriveFailedDeliveriesRequest) (*v1.RedriveFailedDeliveriesResponse, error)
 }
 
 // NewEventSubscriptionServiceClient constructs a client for the
-// paladin.admin.v1.EventSubscriptionService service. By default, it uses the Connect protocol with
-// the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use
-// the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewEventSubscriptionServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) EventSubscriptionServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	eventSubscriptionServiceMethods := v1.File_paladin_admin_v1_event_subscription_service_proto.Services().ByName("EventSubscriptionService").Methods()
-	return &eventSubscriptionServiceClient{
-		createSubscription: connect.NewClient[v1.CreateSubscriptionRequest, v1.EventSubscription](
-			httpClient,
-			baseURL+EventSubscriptionServiceCreateSubscriptionProcedure,
-			connect.WithSchema(eventSubscriptionServiceMethods.ByName("CreateSubscription")),
-			connect.WithClientOptions(opts...),
-		),
-		getSubscription: connect.NewClient[v1.GetSubscriptionRequest, v1.EventSubscription](
-			httpClient,
-			baseURL+EventSubscriptionServiceGetSubscriptionProcedure,
-			connect.WithSchema(eventSubscriptionServiceMethods.ByName("GetSubscription")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		updateSubscription: connect.NewClient[v1.UpdateSubscriptionRequest, v1.EventSubscription](
-			httpClient,
-			baseURL+EventSubscriptionServiceUpdateSubscriptionProcedure,
-			connect.WithSchema(eventSubscriptionServiceMethods.ByName("UpdateSubscription")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		deleteSubscription: connect.NewClient[v1.DeleteSubscriptionRequest, v1.DeleteSubscriptionResponse](
-			httpClient,
-			baseURL+EventSubscriptionServiceDeleteSubscriptionProcedure,
-			connect.WithSchema(eventSubscriptionServiceMethods.ByName("DeleteSubscription")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		listSubscriptions: connect.NewClient[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse](
-			httpClient,
-			baseURL+EventSubscriptionServiceListSubscriptionsProcedure,
-			connect.WithSchema(eventSubscriptionServiceMethods.ByName("ListSubscriptions")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		testSubscription: connect.NewClient[v1.TestSubscriptionRequest, v1.TestSubscriptionResponse](
-			httpClient,
-			baseURL+EventSubscriptionServiceTestSubscriptionProcedure,
-			connect.WithSchema(eventSubscriptionServiceMethods.ByName("TestSubscription")),
-			connect.WithClientOptions(opts...),
-		),
-		redriveFailedDeliveries: connect.NewClient[v1.RedriveFailedDeliveriesRequest, v1.RedriveFailedDeliveriesResponse](
-			httpClient,
-			baseURL+EventSubscriptionServiceRedriveFailedDeliveriesProcedure,
-			connect.WithSchema(eventSubscriptionServiceMethods.ByName("RedriveFailedDeliveries")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// eventSubscriptionServiceClient implements EventSubscriptionServiceClient.
-type eventSubscriptionServiceClient struct {
-	createSubscription      *connect.Client[v1.CreateSubscriptionRequest, v1.EventSubscription]
-	getSubscription         *connect.Client[v1.GetSubscriptionRequest, v1.EventSubscription]
-	updateSubscription      *connect.Client[v1.UpdateSubscriptionRequest, v1.EventSubscription]
-	deleteSubscription      *connect.Client[v1.DeleteSubscriptionRequest, v1.DeleteSubscriptionResponse]
-	listSubscriptions       *connect.Client[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse]
-	testSubscription        *connect.Client[v1.TestSubscriptionRequest, v1.TestSubscriptionResponse]
-	redriveFailedDeliveries *connect.Client[v1.RedriveFailedDeliveriesRequest, v1.RedriveFailedDeliveriesResponse]
-}
-
-// CreateSubscription calls paladin.admin.v1.EventSubscriptionService.CreateSubscription.
-func (c *eventSubscriptionServiceClient) CreateSubscription(ctx context.Context, req *connect.Request[v1.CreateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error) {
-	return c.createSubscription.CallUnary(ctx, req)
-}
-
-// GetSubscription calls paladin.admin.v1.EventSubscriptionService.GetSubscription.
-func (c *eventSubscriptionServiceClient) GetSubscription(ctx context.Context, req *connect.Request[v1.GetSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error) {
-	return c.getSubscription.CallUnary(ctx, req)
-}
-
-// UpdateSubscription calls paladin.admin.v1.EventSubscriptionService.UpdateSubscription.
-func (c *eventSubscriptionServiceClient) UpdateSubscription(ctx context.Context, req *connect.Request[v1.UpdateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error) {
-	return c.updateSubscription.CallUnary(ctx, req)
-}
-
-// DeleteSubscription calls paladin.admin.v1.EventSubscriptionService.DeleteSubscription.
-func (c *eventSubscriptionServiceClient) DeleteSubscription(ctx context.Context, req *connect.Request[v1.DeleteSubscriptionRequest]) (*connect.Response[v1.DeleteSubscriptionResponse], error) {
-	return c.deleteSubscription.CallUnary(ctx, req)
-}
-
-// ListSubscriptions calls paladin.admin.v1.EventSubscriptionService.ListSubscriptions.
-func (c *eventSubscriptionServiceClient) ListSubscriptions(ctx context.Context, req *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error) {
-	return c.listSubscriptions.CallUnary(ctx, req)
-}
-
-// TestSubscription calls paladin.admin.v1.EventSubscriptionService.TestSubscription.
-func (c *eventSubscriptionServiceClient) TestSubscription(ctx context.Context, req *connect.Request[v1.TestSubscriptionRequest]) (*connect.Response[v1.TestSubscriptionResponse], error) {
-	return c.testSubscription.CallUnary(ctx, req)
-}
-
-// RedriveFailedDeliveries calls paladin.admin.v1.EventSubscriptionService.RedriveFailedDeliveries.
-func (c *eventSubscriptionServiceClient) RedriveFailedDeliveries(ctx context.Context, req *connect.Request[v1.RedriveFailedDeliveriesRequest]) (*connect.Response[v1.RedriveFailedDeliveriesResponse], error) {
-	return c.redriveFailedDeliveries.CallUnary(ctx, req)
+// paladin.admin.v1.EventSubscriptionService service. Multiple service clients may share a single
+// connect.Client.
+func NewEventSubscriptionServiceClient(client *connect.Client) EventSubscriptionServiceClient {
+	return &eventSubscriptionServiceClient{client: client}
 }
 
 // EventSubscriptionServiceHandler is an implementation of the
@@ -200,133 +148,220 @@ type EventSubscriptionServiceHandler interface {
 	// CreateSubscription registers a delivery target for the tenant's events.
 	// Exactly one sink (http / kafka / sqs) must be configured. Delivery is
 	// at-least-once via the transactional outbox (ADR-0003).
-	CreateSubscription(context.Context, *connect.Request[v1.CreateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
+	CreateSubscription(context.Context, *v1.CreateSubscriptionRequest) (*v1.EventSubscription, error)
 	// GetSubscription returns the subscription including its sink configuration;
 	// secret references are returned as references, never resolved.
-	GetSubscription(context.Context, *connect.Request[v1.GetSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
+	GetSubscription(context.Context, *v1.GetSubscriptionRequest) (*v1.EventSubscription, error)
 	// UpdateSubscription replaces the filter and sink. resource_version is
 	// required. In-flight deliveries already queued are not re-targeted.
-	UpdateSubscription(context.Context, *connect.Request[v1.UpdateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error)
+	UpdateSubscription(context.Context, *v1.UpdateSubscriptionRequest) (*v1.EventSubscription, error)
 	// DeleteSubscription stops future deliveries. Events already in the outbox
 	// are dropped rather than delivered to a subscription that no longer
 	// exists.
-	DeleteSubscription(context.Context, *connect.Request[v1.DeleteSubscriptionRequest]) (*connect.Response[v1.DeleteSubscriptionResponse], error)
+	DeleteSubscription(context.Context, *v1.DeleteSubscriptionRequest) (*v1.DeleteSubscriptionResponse, error)
 	// ListSubscriptions returns the tenant's subscriptions, disabled ones
 	// included.
-	ListSubscriptions(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error)
+	ListSubscriptions(context.Context, *v1.ListSubscriptionsRequest) (*v1.ListSubscriptionsResponse, error)
 	// TestSubscription delivers a synthetic event to the configured sink.
-	TestSubscription(context.Context, *connect.Request[v1.TestSubscriptionRequest]) (*connect.Response[v1.TestSubscriptionResponse], error)
+	TestSubscription(context.Context, *v1.TestSubscriptionRequest) (*v1.TestSubscriptionResponse, error)
 	// RedriveFailedDeliveries queues the subscription's failed deliveries —
 	// those that exhausted their attempts — to be sent again, with a fresh
 	// attempt budget. Failed rows are kept until the event-delivery retention
 	// removes them. A disabled subscription is refused: its deliveries would
 	// fail again at once.
-	RedriveFailedDeliveries(context.Context, *connect.Request[v1.RedriveFailedDeliveriesRequest]) (*connect.Response[v1.RedriveFailedDeliveriesResponse], error)
+	RedriveFailedDeliveries(context.Context, *v1.RedriveFailedDeliveriesRequest) (*v1.RedriveFailedDeliveriesResponse, error)
 }
 
-// NewEventSubscriptionServiceHandler builds an HTTP handler from the service implementation. It
-// returns the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewEventSubscriptionServiceHandler(svc EventSubscriptionServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	eventSubscriptionServiceMethods := v1.File_paladin_admin_v1_event_subscription_service_proto.Services().ByName("EventSubscriptionService").Methods()
-	eventSubscriptionServiceCreateSubscriptionHandler := connect.NewUnaryHandler(
-		EventSubscriptionServiceCreateSubscriptionProcedure,
-		svc.CreateSubscription,
-		connect.WithSchema(eventSubscriptionServiceMethods.ByName("CreateSubscription")),
-		connect.WithHandlerOptions(opts...),
+// RegisterEventSubscriptionServiceHandler registers svc as the
+// paladin.admin.v1.EventSubscriptionService implementation on server.
+func RegisterEventSubscriptionServiceHandler(server *connect.Server, svc EventSubscriptionServiceHandler) {
+	adapter := eventSubscriptionServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: eventSubscriptionServiceCreateSubscriptionSpec(), Handler: adapter.createSubscription},
+		connect.Method{Spec: eventSubscriptionServiceGetSubscriptionSpec(), Handler: adapter.getSubscription},
+		connect.Method{Spec: eventSubscriptionServiceUpdateSubscriptionSpec(), Handler: adapter.updateSubscription},
+		connect.Method{Spec: eventSubscriptionServiceDeleteSubscriptionSpec(), Handler: adapter.deleteSubscription},
+		connect.Method{Spec: eventSubscriptionServiceListSubscriptionsSpec(), Handler: adapter.listSubscriptions},
+		connect.Method{Spec: eventSubscriptionServiceTestSubscriptionSpec(), Handler: adapter.testSubscription},
+		connect.Method{Spec: eventSubscriptionServiceRedriveFailedDeliveriesSpec(), Handler: adapter.redriveFailedDeliveries},
 	)
-	eventSubscriptionServiceGetSubscriptionHandler := connect.NewUnaryHandler(
-		EventSubscriptionServiceGetSubscriptionProcedure,
-		svc.GetSubscription,
-		connect.WithSchema(eventSubscriptionServiceMethods.ByName("GetSubscription")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	eventSubscriptionServiceUpdateSubscriptionHandler := connect.NewUnaryHandler(
-		EventSubscriptionServiceUpdateSubscriptionProcedure,
-		svc.UpdateSubscription,
-		connect.WithSchema(eventSubscriptionServiceMethods.ByName("UpdateSubscription")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	eventSubscriptionServiceDeleteSubscriptionHandler := connect.NewUnaryHandler(
-		EventSubscriptionServiceDeleteSubscriptionProcedure,
-		svc.DeleteSubscription,
-		connect.WithSchema(eventSubscriptionServiceMethods.ByName("DeleteSubscription")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	eventSubscriptionServiceListSubscriptionsHandler := connect.NewUnaryHandler(
-		EventSubscriptionServiceListSubscriptionsProcedure,
-		svc.ListSubscriptions,
-		connect.WithSchema(eventSubscriptionServiceMethods.ByName("ListSubscriptions")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	eventSubscriptionServiceTestSubscriptionHandler := connect.NewUnaryHandler(
-		EventSubscriptionServiceTestSubscriptionProcedure,
-		svc.TestSubscription,
-		connect.WithSchema(eventSubscriptionServiceMethods.ByName("TestSubscription")),
-		connect.WithHandlerOptions(opts...),
-	)
-	eventSubscriptionServiceRedriveFailedDeliveriesHandler := connect.NewUnaryHandler(
-		EventSubscriptionServiceRedriveFailedDeliveriesProcedure,
-		svc.RedriveFailedDeliveries,
-		connect.WithSchema(eventSubscriptionServiceMethods.ByName("RedriveFailedDeliveries")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.admin.v1.EventSubscriptionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case EventSubscriptionServiceCreateSubscriptionProcedure:
-			eventSubscriptionServiceCreateSubscriptionHandler.ServeHTTP(w, r)
-		case EventSubscriptionServiceGetSubscriptionProcedure:
-			eventSubscriptionServiceGetSubscriptionHandler.ServeHTTP(w, r)
-		case EventSubscriptionServiceUpdateSubscriptionProcedure:
-			eventSubscriptionServiceUpdateSubscriptionHandler.ServeHTTP(w, r)
-		case EventSubscriptionServiceDeleteSubscriptionProcedure:
-			eventSubscriptionServiceDeleteSubscriptionHandler.ServeHTTP(w, r)
-		case EventSubscriptionServiceListSubscriptionsProcedure:
-			eventSubscriptionServiceListSubscriptionsHandler.ServeHTTP(w, r)
-		case EventSubscriptionServiceTestSubscriptionProcedure:
-			eventSubscriptionServiceTestSubscriptionHandler.ServeHTTP(w, r)
-		case EventSubscriptionServiceRedriveFailedDeliveriesProcedure:
-			eventSubscriptionServiceRedriveFailedDeliveriesHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedEventSubscriptionServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedEventSubscriptionServiceHandler struct{}
 
-func (UnimplementedEventSubscriptionServiceHandler) CreateSubscription(context.Context, *connect.Request[v1.CreateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.EventSubscriptionService.CreateSubscription is not implemented"))
+func (UnimplementedEventSubscriptionServiceHandler) CreateSubscription(context.Context, *v1.CreateSubscriptionRequest) (*v1.EventSubscription, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.EventSubscriptionService.CreateSubscription is not implemented")
 }
 
-func (UnimplementedEventSubscriptionServiceHandler) GetSubscription(context.Context, *connect.Request[v1.GetSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.EventSubscriptionService.GetSubscription is not implemented"))
+func (UnimplementedEventSubscriptionServiceHandler) GetSubscription(context.Context, *v1.GetSubscriptionRequest) (*v1.EventSubscription, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.EventSubscriptionService.GetSubscription is not implemented")
 }
 
-func (UnimplementedEventSubscriptionServiceHandler) UpdateSubscription(context.Context, *connect.Request[v1.UpdateSubscriptionRequest]) (*connect.Response[v1.EventSubscription], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.EventSubscriptionService.UpdateSubscription is not implemented"))
+func (UnimplementedEventSubscriptionServiceHandler) UpdateSubscription(context.Context, *v1.UpdateSubscriptionRequest) (*v1.EventSubscription, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.EventSubscriptionService.UpdateSubscription is not implemented")
 }
 
-func (UnimplementedEventSubscriptionServiceHandler) DeleteSubscription(context.Context, *connect.Request[v1.DeleteSubscriptionRequest]) (*connect.Response[v1.DeleteSubscriptionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.EventSubscriptionService.DeleteSubscription is not implemented"))
+func (UnimplementedEventSubscriptionServiceHandler) DeleteSubscription(context.Context, *v1.DeleteSubscriptionRequest) (*v1.DeleteSubscriptionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.EventSubscriptionService.DeleteSubscription is not implemented")
 }
 
-func (UnimplementedEventSubscriptionServiceHandler) ListSubscriptions(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.EventSubscriptionService.ListSubscriptions is not implemented"))
+func (UnimplementedEventSubscriptionServiceHandler) ListSubscriptions(context.Context, *v1.ListSubscriptionsRequest) (*v1.ListSubscriptionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.EventSubscriptionService.ListSubscriptions is not implemented")
 }
 
-func (UnimplementedEventSubscriptionServiceHandler) TestSubscription(context.Context, *connect.Request[v1.TestSubscriptionRequest]) (*connect.Response[v1.TestSubscriptionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.EventSubscriptionService.TestSubscription is not implemented"))
+func (UnimplementedEventSubscriptionServiceHandler) TestSubscription(context.Context, *v1.TestSubscriptionRequest) (*v1.TestSubscriptionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.EventSubscriptionService.TestSubscription is not implemented")
 }
 
-func (UnimplementedEventSubscriptionServiceHandler) RedriveFailedDeliveries(context.Context, *connect.Request[v1.RedriveFailedDeliveriesRequest]) (*connect.Response[v1.RedriveFailedDeliveriesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.EventSubscriptionService.RedriveFailedDeliveries is not implemented"))
+func (UnimplementedEventSubscriptionServiceHandler) RedriveFailedDeliveries(context.Context, *v1.RedriveFailedDeliveriesRequest) (*v1.RedriveFailedDeliveriesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.EventSubscriptionService.RedriveFailedDeliveries is not implemented")
+}
+
+type eventSubscriptionServiceClient struct {
+	client *connect.Client
+}
+
+func (c *eventSubscriptionServiceClient) CreateSubscription(ctx context.Context, req *v1.CreateSubscriptionRequest) (*v1.EventSubscription, error) {
+	var res v1.EventSubscription
+	if err := c.client.CallUnary(ctx, eventSubscriptionServiceCreateSubscriptionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *eventSubscriptionServiceClient) GetSubscription(ctx context.Context, req *v1.GetSubscriptionRequest) (*v1.EventSubscription, error) {
+	var res v1.EventSubscription
+	if err := c.client.CallUnary(ctx, eventSubscriptionServiceGetSubscriptionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *eventSubscriptionServiceClient) UpdateSubscription(ctx context.Context, req *v1.UpdateSubscriptionRequest) (*v1.EventSubscription, error) {
+	var res v1.EventSubscription
+	if err := c.client.CallUnary(ctx, eventSubscriptionServiceUpdateSubscriptionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *eventSubscriptionServiceClient) DeleteSubscription(ctx context.Context, req *v1.DeleteSubscriptionRequest) (*v1.DeleteSubscriptionResponse, error) {
+	var res v1.DeleteSubscriptionResponse
+	if err := c.client.CallUnary(ctx, eventSubscriptionServiceDeleteSubscriptionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *eventSubscriptionServiceClient) ListSubscriptions(ctx context.Context, req *v1.ListSubscriptionsRequest) (*v1.ListSubscriptionsResponse, error) {
+	var res v1.ListSubscriptionsResponse
+	if err := c.client.CallUnary(ctx, eventSubscriptionServiceListSubscriptionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *eventSubscriptionServiceClient) TestSubscription(ctx context.Context, req *v1.TestSubscriptionRequest) (*v1.TestSubscriptionResponse, error) {
+	var res v1.TestSubscriptionResponse
+	if err := c.client.CallUnary(ctx, eventSubscriptionServiceTestSubscriptionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *eventSubscriptionServiceClient) RedriveFailedDeliveries(ctx context.Context, req *v1.RedriveFailedDeliveriesRequest) (*v1.RedriveFailedDeliveriesResponse, error) {
+	var res v1.RedriveFailedDeliveriesResponse
+	if err := c.client.CallUnary(ctx, eventSubscriptionServiceRedriveFailedDeliveriesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type eventSubscriptionServiceHandler struct {
+	svc EventSubscriptionServiceHandler
+}
+
+func (h eventSubscriptionServiceHandler) createSubscription(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateSubscriptionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateSubscription(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h eventSubscriptionServiceHandler) getSubscription(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSubscriptionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSubscription(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h eventSubscriptionServiceHandler) updateSubscription(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateSubscriptionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateSubscription(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h eventSubscriptionServiceHandler) deleteSubscription(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteSubscriptionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteSubscription(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h eventSubscriptionServiceHandler) listSubscriptions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSubscriptionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSubscriptions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h eventSubscriptionServiceHandler) testSubscription(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TestSubscriptionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TestSubscription(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h eventSubscriptionServiceHandler) redriveFailedDeliveries(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RedriveFailedDeliveriesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RedriveFailedDeliveries(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

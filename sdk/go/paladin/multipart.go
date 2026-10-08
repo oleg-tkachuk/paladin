@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -39,7 +39,7 @@ type MultipartInput struct {
 // presigned yet — a part URL is signed for the part's checksum, which only
 // the holder of the bytes can compute.
 func BeginMultipart(ctx context.Context, data *DataPlane, in MultipartInput) (UploadSession, error) {
-	init, err := data.MultipartUpload.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
+	init, err := data.MultipartUpload.InitiateMultipartUpload(ctx, &datav1.InitiateMultipartUploadRequest{
 		Parent:            in.Parent,
 		Key:               in.Key,
 		ContentType:       in.ContentType,
@@ -47,15 +47,15 @@ func BeginMultipart(ctx context.Context, data *DataPlane, in MultipartInput) (Up
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
 		Metadata:          in.Metadata,
 		Tags:              in.Tags,
-	}))
+	})
 	if err != nil {
 		return UploadSession{}, err
 	}
 	session := UploadSession{
-		ObjectName: init.Msg.GetObject().GetName(),
-		UploadID:   init.Msg.GetUploadId(),
-		PartSize:   init.Msg.GetRecommendedPartSize(),
-		TotalParts: init.Msg.GetTotalParts(),
+		ObjectName: init.GetObject().GetName(),
+		UploadID:   init.GetUploadId(),
+		PartSize:   init.GetRecommendedPartSize(),
+		TotalParts: init.GetTotalParts(),
 	}
 	if session.PartSize <= 0 || session.TotalParts <= 0 {
 		_ = AbortMultipart(context.WithoutCancel(ctx), data, session)
@@ -69,16 +69,16 @@ func BeginMultipart(ctx context.Context, data *DataPlane, in MultipartInput) (Up
 // other size or digest. Call it again for a part whose URL expired. Every
 // call mints a fresh URL, so none shares the context's idempotency key.
 func PresignPart(ctx context.Context, data *DataPlane, session UploadSession, number int32, checksum string) (*commonv1.PresignedUrl, error) {
-	signed, err := data.MultipartUpload.PresignPart(ownKeys(ctx), connect.NewRequest(&datav1.PresignPartRequest{
+	signed, err := data.MultipartUpload.PresignPart(ownKeys(ctx), &datav1.PresignPartRequest{
 		ObjectName: session.ObjectName, UploadId: session.UploadID, PartNumber: number, ChecksumValue: checksum,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
-	if signed.Msg.GetUploadUrl().GetUrl() == "" {
+	if signed.GetUploadUrl().GetUrl() == "" {
 		return nil, ErrNoUploadURL
 	}
-	return signed.Msg.GetUploadUrl(), nil
+	return signed.GetUploadUrl(), nil
 }
 
 // CompleteMultipart assembles the parts — each with the ETag storage answered
@@ -94,29 +94,29 @@ func CompleteMultipart(ctx context.Context, data *DataPlane, session UploadSessi
 			PartNumber: p.GetPartNumber(), Etag: normalizeETag(p.GetEtag()), ChecksumValue: p.GetChecksumValue(),
 		}
 	}
-	done, err := data.MultipartUpload.CompleteMultipartUpload(ctx, connect.NewRequest(&datav1.CompleteMultipartUploadRequest{
+	done, err := data.MultipartUpload.CompleteMultipartUpload(ctx, &datav1.CompleteMultipartUploadRequest{
 		ObjectName: session.ObjectName, UploadId: session.UploadID, Parts: completed,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
-	if done.Msg.GetCollection() != "" {
-		return done.Msg, nil
+	if done.GetCollection() != "" {
+		return done, nil
 	}
 	// Best effort: the upload is complete, and a caller allowed to write but
 	// not to read — a put-only capability — must not see it fail here.
-	if got, err := data.Object.GetObject(ctx, connect.NewRequest(&datav1.GetObjectRequest{Name: session.ObjectName})); err == nil {
-		return got.Msg, nil
+	if got, err := data.Object.GetObject(ctx, &datav1.GetObjectRequest{Name: session.ObjectName}); err == nil {
+		return got, nil
 	}
-	return done.Msg, nil
+	return done, nil
 }
 
 // AbortMultipart closes an open upload and drops its parts. An upload already
 // gone — aborted, completed, swept — is not an error: the parts are gone too.
 func AbortMultipart(ctx context.Context, data *DataPlane, session UploadSession) error {
-	_, err := data.MultipartUpload.AbortMultipartUpload(ctx, connect.NewRequest(&datav1.AbortMultipartUploadRequest{
+	_, err := data.MultipartUpload.AbortMultipartUpload(ctx, &datav1.AbortMultipartUploadRequest{
 		ObjectName: session.ObjectName, UploadId: session.UploadID,
-	}))
+	})
 	if connect.CodeOf(err) == connect.CodeNotFound {
 		return nil
 	}

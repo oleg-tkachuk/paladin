@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"iter"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -39,7 +38,7 @@ func Pages[Req, Res any, PReq interface {
 	proto.Message
 }, Item any](
 	ctx context.Context,
-	call func(context.Context, *connect.Request[Req]) (*connect.Response[Res], error),
+	call func(context.Context, *Req) (*Res, error),
 	req PReq,
 	items func(PRes) []Item,
 ) iter.Seq2[Item, error] {
@@ -47,12 +46,12 @@ func Pages[Req, Res any, PReq interface {
 		var zero Item
 		next := proto.Clone(req).(PReq)
 		for {
-			resp, err := call(ctx, connect.NewRequest((*Req)(next)))
+			resp, err := call(ctx, (*Req)(next))
 			if err != nil {
 				yield(zero, err)
 				return
 			}
-			msg := PRes(resp.Msg)
+			msg := PRes(resp)
 			for _, item := range items(msg) {
 				if !yield(item, nil) {
 					return

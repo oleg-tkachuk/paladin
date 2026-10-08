@@ -16,7 +16,7 @@ fixture() { # fixture <with the cedar module: yes|no>
     mkdir -p "$work/backend/deploy" "$work/frontend"
     {
         printf 'module example.com/fixture\n\ngo 1.30.1\n\nrequire (\n'
-        printf '\tconnectrpc.com/connect v1.99.0\n'
+        printf '\tconnectrpc.com/connect/v2 v2.99.0\n'
         [[ "$1" == yes ]] && printf '\tgithub.com/cedar-policy/cedar-go v1.9.1\n'
         printf '\tgithub.com/modelcontextprotocol/go-sdk v1.10.2\n)\n'
     } >"$work/backend/go.mod"
@@ -27,7 +27,7 @@ fixture() { # fixture <with the cedar module: yes|no>
 
 fixture yes
 got=$(BADGE_ROOT="$work" "$script" 2>/dev/null | jq -c .)
-want='{"go":"1.30.1","postgresql":"18","connect":"1.99.0","cedar":"1.9.1","mcp":"1.10.2","nextjs":"17.0.1"}'
+want='{"go":"1.30.1","postgresql":"18","connect":"2.99.0","cedar":"1.9.1","mcp":"1.10.2","nextjs":"17.0.1"}'
 [[ "$got" == "$want" ]] || fail "versions: got $got, want $want"
 
 fixture no

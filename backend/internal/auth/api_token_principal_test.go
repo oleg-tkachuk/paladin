@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // recordingVerifier is a TokenVerifier that records whether it was called — so a test can
@@ -24,68 +24,54 @@ func (r *recordingVerifier) Verify(_ context.Context, _ string) (*Principal, err
 	return r.principal, r.err
 }
 
-func newReq(authz string) *connect.Request[emptypb.Empty] {
-	req := connect.NewRequest(&emptypb.Empty{})
-	if authz != "" {
-		req.Header().Set("Authorization", authz)
-	}
-	return req
-}
-
 // TestInterceptorSkipAPITokens proves the data-plane JWT gate passes an `paladin_pat_…` bearer
 // through untouched (deferring to the API-token interceptor) while still verifying JWTs and
 // rejecting a missing bearer.
 func TestInterceptorSkipAPITokens(t *testing.T) {
+	const jwtLike = "aaa.bbb.ccc"
 	tid := uuid.New()
 	t.Run("PAT bearer skips JWT verification", func(t *testing.T) {
 		v := &recordingVerifier{}
-		var sawPrincipal bool
-		next := func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			_, err := PrincipalFromContext(ctx)
-			sawPrincipal = err == nil
-			return connect.NewResponse(&emptypb.Empty{}), nil
-		}
-		_, err := InterceptorSkipAPITokens(v).WrapUnary(next)(context.Background(), newReq("Bearer paladin_pat_abc123"))
-		if err != nil {
-			t.Fatalf("PAT bearer should pass through, got %v", err)
+		c := callProbe(context.Background(), []connect.ServerInterceptor{InterceptorSkipAPITokens(v)},
+			paladin.HeaderAuthorization, bearerPrefix+api_token.TokenPrefix+"abc123")
+		if c.err != nil {
+			t.Fatalf("PAT bearer should pass through, got %v", c.err)
 		}
 		if v.called {
 			t.Error("JWT verifier must NOT be called for a PAT bearer")
 		}
-		if sawPrincipal {
+		if _, err := PrincipalFromContext(c.handlerCtx); err == nil {
 			t.Error("the JWT gate must not set a principal for a PAT (the API-token interceptor does)")
 		}
 	})
 
 	t.Run("JWT bearer is verified and sets the principal", func(t *testing.T) {
 		v := &recordingVerifier{principal: &Principal{TenantID: tid, Audience: AudienceData}}
-		var gotTenant uuid.UUID
-		next := func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			if p, err := PrincipalFromContext(ctx); err == nil {
-				gotTenant = p.TenantID
-			}
-			return connect.NewResponse(&emptypb.Empty{}), nil
-		}
-		if _, err := InterceptorSkipAPITokens(v).WrapUnary(next)(context.Background(), newReq("Bearer aaa.bbb.ccc")); err != nil {
-			t.Fatal(err)
+		c := callProbe(context.Background(), []connect.ServerInterceptor{InterceptorSkipAPITokens(v)},
+			paladin.HeaderAuthorization, bearerPrefix+jwtLike)
+		if c.err != nil {
+			t.Fatal(c.err)
 		}
 		if !v.called {
 			t.Error("JWT verifier must be called for a non-PAT bearer")
 		}
-		if gotTenant != tid {
-			t.Errorf("principal tenant = %v, want %v", gotTenant, tid)
+		p, err := PrincipalFromContext(c.handlerCtx)
+		if err != nil {
+			t.Fatalf("no principal: %v", err)
+		}
+		if p.TenantID != tid {
+			t.Errorf("principal tenant = %v, want %v", p.TenantID, tid)
 		}
 	})
 
 	t.Run("missing bearer is rejected", func(t *testing.T) {
 		v := &recordingVerifier{}
-		next := func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
-			t.Fatal("handler must not run without auth")
-			return nil, nil
+		c := callProbe(context.Background(), []connect.ServerInterceptor{InterceptorSkipAPITokens(v)})
+		if c.reached() {
+			t.Error("handler must not run without auth")
 		}
-		_, err := InterceptorSkipAPITokens(v).WrapUnary(next)(context.Background(), newReq(""))
-		if connect.CodeOf(err) != connect.CodeUnauthenticated {
-			t.Fatalf("missing bearer: got %v, want Unauthenticated", err)
+		if connect.CodeOf(c.err) != connect.CodeUnauthenticated {
+			t.Fatalf("missing bearer: got %v, want Unauthenticated", c.err)
 		}
 	})
 }

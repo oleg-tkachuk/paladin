@@ -7,11 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
@@ -37,11 +39,11 @@ func callThroughGate(t *testing.T, states auth.TenantStateReader, p *auth.Princi
 	if p != nil {
 		ctx = auth.WithPrincipal(ctx, p)
 	}
-	next := connect.UnaryFunc(func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
+	probe := &unarytest.Probe{OnCall: func(context.Context) error {
 		called = true
-		return nil, nil
-	})
-	_, err = TenantGate(states).WrapUnary(next)(ctx, nil)
+		return nil
+	}}
+	_, err = unarytest.CallProbe(ctx, probe, []connect.ServerInterceptor{TenantGate(states)})
 	return called, err
 }
 
@@ -51,7 +53,7 @@ func reasonOf(err error) string {
 		return ""
 	}
 	for _, d := range cerr.Details() {
-		if v, verr := d.Value(); verr == nil {
+		if v, verr := connectproto.UnmarshalErrorDetail(d); verr == nil {
 			if info, ok := v.(*errdetails.ErrorInfo); ok {
 				return info.GetReason()
 			}

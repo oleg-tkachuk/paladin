@@ -9,8 +9,9 @@ import (
 	"strings"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
@@ -59,8 +60,7 @@ func (s *CollectionServer) tenantParent(ctx context.Context, parent string) (uui
 	tenant, _, _ := strings.Cut(strings.TrimPrefix(parent, apiutil.TenantNamePrefix), "/")
 	ref, err := apiutil.ParseTenantNameRef(tenant)
 	if err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid tenant parent %q: %w", parent, err))
+		return uuid.Nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid tenant parent %q: %w", parent, err))
 	}
 	if ref.HasID() {
 		return ref.ID, nil
@@ -72,11 +72,11 @@ func (s *CollectionServer) tenantParent(ctx context.Context, parent string) (uui
 	return t.TenantID, nil
 }
 
-func (s *CollectionServer) CreateCollection(ctx context.Context, req *connect.Request[pb.CreateCollectionRequest]) (*connect.Response[pb.Collection], error) {
-	if err := requireCompilablePolicy(req.Msg.GetCollectionResource().GetCedarPolicy()); err != nil {
+func (s *CollectionServer) CreateCollection(ctx context.Context, req *pb.CreateCollectionRequest) (*pb.Collection, error) {
+	if err := requireCompilablePolicy(req.GetCollectionResource().GetCedarPolicy()); err != nil {
 		return nil, err
 	}
-	m := req.Msg
+	m := req
 	tenantID, err := s.tenantParent(ctx, m.GetParent())
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func (s *CollectionServer) CreateCollection(ctx context.Context, req *connect.Re
 		if err != nil {
 			if errors.Is(err, tenanth.ErrNotFound) {
 				return nil, connect.NewError(connect.CodeFailedPrecondition,
-					errors.New("no bucket specified and the tenant has no default binding; set one via SetTenantDefaultBinding or name a bucket"))
+					"no bucket specified and the tenant has no default binding; set one via SetTenantDefaultBinding or name a bucket")
 			}
 			return nil, err
 		}
@@ -118,37 +118,36 @@ func (s *CollectionServer) CreateCollection(ctx context.Context, req *connect.Re
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(collectionDomainToProto(out)), nil
+	return collectionDomainToProto(out), nil
 }
 
-func (s *CollectionServer) GetCollection(ctx context.Context, req *connect.Request[pb.GetCollectionRequest]) (*connect.Response[pb.Collection], error) {
-	ref, err := resolve.ResolveCollectionName(ctx, req.Msg.GetName())
+func (s *CollectionServer) GetCollection(ctx context.Context, req *pb.GetCollectionRequest) (*pb.Collection, error) {
+	ref, err := resolve.ResolveCollectionName(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	out, err := s.H.GetCollection(ctx, ref.TenantID, ref.Collection)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(collectionDomainToProto(out)), nil
+	return collectionDomainToProto(out), nil
 }
 
 // updateCollectionPaths are the Collection fields UpdateCollection applies.
 var updateCollectionPaths = []string{"display_name", "cedar_policy"}
 
-func (s *CollectionServer) UpdateCollection(ctx context.Context, req *connect.Request[pb.UpdateCollectionRequest]) (*connect.Response[pb.Collection], error) {
-	if err := requireCompilablePolicy(req.Msg.GetCollectionResource().GetCedarPolicy()); err != nil {
+func (s *CollectionServer) UpdateCollection(ctx context.Context, req *pb.UpdateCollectionRequest) (*pb.Collection, error) {
+	if err := requireCompilablePolicy(req.GetCollectionResource().GetCedarPolicy()); err != nil {
 		return nil, err
 	}
-	m := req.Msg
+	m := req
 	ref, err := resolve.ResolveCollectionName(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	src := m.GetCollectionResource()
 	args := objectkey.UpdateCollectionArgs{
@@ -172,26 +171,25 @@ func (s *CollectionServer) UpdateCollection(ctx context.Context, req *connect.Re
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(collectionDomainToProto(out)), nil
+	return collectionDomainToProto(out), nil
 }
 
-func (s *CollectionServer) DeleteCollection(ctx context.Context, req *connect.Request[pb.DeleteCollectionRequest]) (*connect.Response[pb.DeleteCollectionResponse], error) {
-	ref, err := resolve.ResolveCollectionName(ctx, req.Msg.GetName())
+func (s *CollectionServer) DeleteCollection(ctx context.Context, req *pb.DeleteCollectionRequest) (*pb.DeleteCollectionResponse, error) {
+	ref, err := resolve.ResolveCollectionName(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	// Same OCC contract as DeleteTenant / DeleteBackend: require a guard
 	// unless the caller explicitly opts out. Without this the request had a
 	// force flag but no guard to force past — an omitted resource_version
 	// simply skipped the check (expected_version=0 disables it in SQL).
-	if rv == 0 && !req.Msg.GetSkipVersionCheck() {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("resource_version is required; pass force=true to bypass"))
+	if rv == 0 && !req.GetSkipVersionCheck() {
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"resource_version is required; pass force=true to bypass")
 	}
 	// ref.TenantID, not the caller's: a C-shape name says which tenant's
 	// collection this is, and Get and List have always read it. Delete used to
@@ -199,11 +197,11 @@ func (s *CollectionServer) DeleteCollection(ctx context.Context, req *connect.Re
 	if err := s.H.DeleteCollection(ctx, ref.TenantID, ref.Collection, rv); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.DeleteCollectionResponse{}), nil
+	return &pb.DeleteCollectionResponse{}, nil
 }
 
-func (s *CollectionServer) ListCollections(ctx context.Context, req *connect.Request[pb.ListCollectionsRequest]) (*connect.Response[pb.ListCollectionsResponse], error) {
-	m := req.Msg
+func (s *CollectionServer) ListCollections(ctx context.Context, req *pb.ListCollectionsRequest) (*pb.ListCollectionsResponse, error) {
+	m := req
 	args := objectkey.ListCollectionsArgs{
 		PageSize:  m.GetPage().GetPageSize(),
 		PageToken: m.GetPage().GetPageToken(),
@@ -217,8 +215,7 @@ func (s *CollectionServer) ListCollections(ctx context.Context, req *connect.Req
 	if b := m.GetBucket(); b != "" {
 		backend, bucket, err := bucketRef(b)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("bucket: %w", err))
+			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("bucket: %w", err))
 		}
 		args.BackendID = backend
 		args.BucketName = bucket
@@ -231,20 +228,19 @@ func (s *CollectionServer) ListCollections(ctx context.Context, req *connect.Req
 	for i := range list {
 		out.Collections = append(out.Collections, collectionDomainToProto(&list[i]))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *CollectionServer) SetCollectionPolicy(ctx context.Context, req *connect.Request[pb.SetCollectionPolicyRequest]) (*connect.Response[pb.Collection], error) {
-	ref, err := resolve.ResolveCollectionName(ctx, req.Msg.GetName())
+func (s *CollectionServer) SetCollectionPolicy(ctx context.Context, req *pb.SetCollectionPolicyRequest) (*pb.Collection, error) {
+	ref, err := resolve.ResolveCollectionName(ctx, req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	rv, err := convx.ParseRV(req.Msg.GetResourceVersion())
+	rv, err := convx.ParseRV(req.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
-	policy := req.Msg.GetCedarPolicy()
+	policy := req.GetCedarPolicy()
 	if err := requireCompilablePolicy(policy); err != nil {
 		return nil, err
 	}
@@ -257,25 +253,24 @@ func (s *CollectionServer) SetCollectionPolicy(ctx context.Context, req *connect
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(collectionDomainToProto(out)), nil
+	return collectionDomainToProto(out), nil
 }
 
-func (s *CollectionServer) BindCollectionToBucket(ctx context.Context, req *connect.Request[pb.BindCollectionToBucketRequest]) (*connect.Response[pb.Collection], error) {
-	m := req.Msg
+func (s *CollectionServer) BindCollectionToBucket(ctx context.Context, req *pb.BindCollectionToBucketRequest) (*pb.Collection, error) {
+	m := req
 	ref, err := resolve.ResolveCollectionName(ctx, m.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	out, err := s.H.BindCollectionToBucket(ctx, ref.TenantID, ref.Collection, m.GetBucket(), rv)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(collectionDomainToProto(out)), nil
+	return collectionDomainToProto(out), nil
 }
 
 var _ paladinadminv1connect.CollectionServiceHandler = (*CollectionServer)(nil)

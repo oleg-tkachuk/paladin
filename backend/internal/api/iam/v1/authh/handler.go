@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
@@ -24,6 +24,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 // reuseAuditor records refresh-token reuse to the audit log (admin console).
@@ -168,11 +169,11 @@ type LoginOutput struct {
 func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error) {
 	if in.Subject == "" {
 		metrics.RecordLoginAttempt(ctx, "invalid_argument")
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("subject required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "subject required")
 	}
 	if in.Password == "" {
 		metrics.RecordLoginAttempt(ctx, "invalid_argument")
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("password required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "password required")
 	}
 
 	u, err := h.resolveLoginUser(ctx, in)
@@ -199,7 +200,7 @@ func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error
 	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, uuid.Nil, uuid.Nil)
 	if err != nil {
 		metrics.RecordLoginAttempt(ctx, "error")
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	metrics.RecordLoginAttempt(ctx, "ok")
 
@@ -246,11 +247,11 @@ type RefreshOutput struct {
 
 func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOutput, error) {
 	if in.RefreshToken == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("refresh_token required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "refresh_token required")
 	}
 	jti, userID, tenantID, err := h.parseRefresh(in.RefreshToken)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 
 	stored, err := h.refresh.Get(ctx, jti)
@@ -275,20 +276,20 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 				}
 			}
 			h.onRefreshReuse(ctx, jti, userID, tenantID)
-			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
+			return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
 		}
 		if errors.Is(err, authstore.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
+			return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if h.now().After(stored.ExpiresAt) {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token expired"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token expired")
 	}
 	// Presenting a token is what makes it no longer a lost successor its
 	// parent's holder may collect — see recoverLostRotation.
 	if err := h.refresh.MarkUsed(auth.WithActingTenant(ctx, stored.TenantID), jti); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
 	u, audience, err := h.eligibleFor(ctx, userID, tenantID, in.RequestedAudience)
@@ -311,11 +312,11 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 			h.onRefreshRaceLost(ctx, jti, userID)
 			return nil, errRotatedBySibling
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	access, newRefresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, stored.FamilyID, jti)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &RefreshOutput{
 		AccessToken:      access,
@@ -355,15 +356,15 @@ type ExchangeAudienceOutput struct {
 
 func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput) (*ExchangeAudienceOutput, error) {
 	if in.RefreshToken == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("refresh_token required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "refresh_token required")
 	}
 	if in.TargetAudience == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("target_audience required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "target_audience required")
 	}
 
 	jti, userID, tenantID, err := h.parseRefresh(in.RefreshToken)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	stored, err := h.refresh.Get(ctx, jti)
 	if err != nil {
@@ -393,31 +394,31 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 				stored, err = tok, nil
 			} else {
 				h.onRefreshReplayed(ctx, jti, userID, tenantID)
-				return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
+				return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
 			}
 		}
 	}
 	if err != nil {
 		if errors.Is(err, authstore.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token rejected"))
+			return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if h.now().After(stored.ExpiresAt) {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("refresh token expired"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token expired")
 	}
 	if !stored.Revoked {
 		if err := h.refresh.MarkUsed(auth.WithActingTenant(ctx, stored.TenantID), jti); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 	}
 
 	u, err := h.users.GetByID(ctx, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("user no longer exists"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "user no longer exists")
 	}
 	if u.Disabled || u.TenantID != tenantID {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("user no longer eligible"))
+		return nil, connect.NewError(connect.CodePermissionDenied, "user no longer eligible")
 	}
 
 	if err := h.assertAudienceAllowed(u, in.TargetAudience); err != nil {
@@ -427,7 +428,7 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 	// Mint access only — refresh chain stays intact.
 	access, accessExp, err := h.mintAccess(ctx, u, in.TargetAudience)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &ExchangeAudienceOutput{
 		AccessToken:     access,
@@ -439,7 +440,7 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 
 func (h *Handler) Revoke(ctx context.Context, token string) error {
 	if token == "" {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("token required"))
+		return connect.NewError(connect.CodeInvalidArgument, "token required")
 	}
 	jti, _, tokenTenant, err := h.parseRefresh(token)
 	if err == nil {
@@ -480,17 +481,17 @@ type WhoAmIOutput struct {
 func (h *Handler) WhoAmI(ctx context.Context, routePageToken string) (*WhoAmIOutput, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	// Subject in JWT is the user_id (UUID) when the token was minted via Login.
 	id, parseErr := uuid.Parse(p.Subject)
 	if parseErr != nil {
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("malformed principal subject %q", p.Subject))
+		return nil, connect.Errorf(connect.CodeInternal,
+			"malformed principal subject %q", p.Subject)
 	}
 	u, err := h.users.GetByID(ctx, id)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	out := &WhoAmIOutput{User: u, Audience: p.Audience}
 	// Route table is best-effort: WhoAmI's primary job is identity, so a
@@ -535,7 +536,7 @@ func (h *Handler) ListMyMemberships(ctx context.Context, in ListMembershipsInput
 	}
 	afterCreated, afterID, err := decodeMembershipCursor(in.PageToken)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, "", connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	limit := in.PageSize
 	if limit <= 0 {
@@ -548,7 +549,7 @@ func (h *Handler) ListMyMemberships(ctx context.Context, in ListMembershipsInput
 	matches, err := h.users.ListMembershipsBySubject(
 		auth.WithCrossTenantRead(ctx), cur.Subject, afterCreated, afterID, limit+1)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInternal, err)
+		return nil, "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	var next string
 	if len(matches) > int(limit) {
@@ -591,7 +592,7 @@ type SwitchTenantOutput struct {
 // tenant's session does not touch the new one.
 func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, requestedAudience string) (*SwitchTenantOutput, error) {
 	if targetTenantID == uuid.Nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("target tenant required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "target tenant required")
 	}
 	cur, err := h.callerUser(ctx)
 	if err != nil {
@@ -618,17 +619,17 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 	case errors.Is(err, authstore.ErrNotFound):
 		// leave target nil — handled by the generic refusal below
 	default:
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// Same generic phrasing whether the tenant exists or the caller just isn't
 	// a member — don't leak tenant existence.
 	if target == nil {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("not a member of the target tenant"))
+			"not a member of the target tenant")
 	}
 	if target.Disabled {
 		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("user is disabled in the target tenant"))
+			"user is disabled in the target tenant")
 	}
 
 	audience := requestedAudience
@@ -644,7 +645,7 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 
 	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, *target, audience, uuid.Nil, uuid.Nil)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// SwitchTenant stamps last_login_at on the row in the TARGET tenant while
 	// the session is still scoped to the current one — the same shape as the
@@ -671,16 +672,16 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 func (h *Handler) callerUser(ctx context.Context) (authstore.User, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, err)
+		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	id, perr := uuid.Parse(p.Subject)
 	if perr != nil {
-		return authstore.User{}, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("malformed principal subject %q", p.Subject))
+		return authstore.User{}, connect.Errorf(connect.CodeInternal,
+			"malformed principal subject %q", p.Subject)
 	}
 	u, err := h.users.GetByID(ctx, id)
 	if err != nil {
-		return authstore.User{}, connect.NewError(connect.CodeNotFound, err)
+		return authstore.User{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	return u, nil
 }
@@ -706,29 +707,29 @@ func (h *Handler) auditTenantSwitch(ctx context.Context, from, to authstore.User
 
 func (h *Handler) ChangePassword(ctx context.Context, oldPw, newPw string) error {
 	if newPw == "" {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("new password required"))
+		return connect.NewError(connect.CodeInvalidArgument, "new password required")
 	}
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	id, err := uuid.Parse(p.Subject)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	u, err := h.users.GetByID(ctx, id)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err)
+		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	if err := auth.CheckPassword(u.PasswordHash, oldPw); err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, errors.New("invalid old password"))
+		return connect.NewError(connect.CodeUnauthenticated, "invalid old password")
 	}
 	hash, err := auth.HashPassword(newPw)
 	if err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	if err := h.users.UpdatePasswordHash(ctx, id, hash); err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// Defensive: invalidate all refresh tokens on password change.
 	_, _ = h.refresh.RevokeForUser(ctx, id)
@@ -753,10 +754,10 @@ func (h *Handler) assertAudienceAllowed(u authstore.User, audience string) error
 			}
 		}
 		return connect.NewError(connect.CodePermissionDenied,
-			errors.New("insufficient role for paladin-admin audience"))
+			"insufficient role for paladin-admin audience")
 	default:
-		return connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("unsupported audience %q", audience))
+		return connect.Errorf(connect.CodeInvalidArgument,
+			"unsupported audience %q", audience)
 	}
 }
 
@@ -792,19 +793,19 @@ func (h *Handler) resolveLoginUser(ctx context.Context, in LoginInput) (authstor
 		if err != nil {
 			if errors.Is(err, authstore.ErrNotFound) {
 				// Same generic message — do not leak whether subject exists.
-				return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid credentials"))
+				return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, "invalid credentials")
 			}
-			return authstore.User{}, connect.NewError(connect.CodeInternal, err)
+			return authstore.User{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		return checkLoginRow(u, in.Password)
 	}
 	matches, err := h.users.FindBySubjectGlobal(ctx, in.Subject)
 	if err != nil {
-		return authstore.User{}, connect.NewError(connect.CodeInternal, err)
+		return authstore.User{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	switch len(matches) {
 	case 0:
-		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid credentials"))
+		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, "invalid credentials")
 	case 1:
 		// Single membership keeps the precise error taxonomy (disabled /
 		// federated) — nothing to disambiguate, so nothing leaks.
@@ -829,7 +830,7 @@ func (h *Handler) resolveLoginUser(ctx context.Context, in LoginInput) (authstor
 		}
 	}
 	if best == nil {
-		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid credentials"))
+		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, "invalid credentials")
 	}
 	return *best, nil
 }
@@ -838,14 +839,14 @@ func (h *Handler) resolveLoginUser(ctx context.Context, in LoginInput) (authstor
 // (no local password), and the bcrypt comparison itself.
 func checkLoginRow(u authstore.User, password string) (authstore.User, error) {
 	if u.Disabled {
-		return authstore.User{}, connect.NewError(connect.CodePermissionDenied, errors.New("user disabled"))
+		return authstore.User{}, connect.NewError(connect.CodePermissionDenied, "user disabled")
 	}
 	if len(u.PasswordHash) == 0 {
 		return authstore.User{}, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("user has no password (federated)"))
+			"user has no password (federated)")
 	}
 	if err := auth.CheckPassword(u.PasswordHash, password); err != nil {
-		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid credentials"))
+		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, "invalid credentials")
 	}
 	return u, nil
 }
@@ -879,10 +880,10 @@ func (h *Handler) mintAccess(ctx context.Context, u authstore.User, audience str
 func (h *Handler) eligibleFor(ctx context.Context, userID, tenantID uuid.UUID, requested string) (authstore.User, string, error) {
 	u, err := h.users.GetByID(ctx, userID)
 	if err != nil {
-		return authstore.User{}, "", connect.NewError(connect.CodeUnauthenticated, errors.New("user no longer exists"))
+		return authstore.User{}, "", connect.NewError(connect.CodeUnauthenticated, "user no longer exists")
 	}
 	if u.Disabled || u.TenantID != tenantID {
-		return authstore.User{}, "", connect.NewError(connect.CodePermissionDenied, errors.New("user no longer eligible"))
+		return authstore.User{}, "", connect.NewError(connect.CodePermissionDenied, "user no longer eligible")
 	}
 	audience := requested
 	if audience == "" {
@@ -945,7 +946,7 @@ func (h *Handler) unusedSuccessorOf(ctx context.Context, parent authstore.Refres
 func (h *Handler) recoverLostRotation(ctx context.Context, parent authstore.RefreshToken, requestedAudience string) (*RefreshOutput, error) {
 	succ, ok, err := h.unusedSuccessorOf(ctx, parent)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if !ok {
 		return nil, nil
@@ -956,7 +957,7 @@ func (h *Handler) recoverLostRotation(ctx context.Context, parent authstore.Refr
 	}
 	access, accessExp, err := h.mintAccess(ctx, u, audience)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	refresh, refreshExp, err := h.issuer.MintRefresh(issuer.RefreshClaims{
 		Subject:   u.UserID.String(),
@@ -966,7 +967,7 @@ func (h *Handler) recoverLostRotation(ctx context.Context, parent authstore.Refr
 		ExpiresAt: succ.ExpiresAt,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("mint refresh: %w", err))
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("mint refresh: %w", err))
 	}
 	logger.FromContext(ctx).Info("re-issued a rotation whose response was lost",
 		zap.String("user_id", u.UserID.String()),
@@ -1091,7 +1092,7 @@ const supersessionGrace = 30 * time.Second
 // So a stolen token that lost its race still cannot obtain one, and reuse
 // detection on this path stays exactly as strict as it was.
 var errRotatedBySibling = connect.NewError(connect.CodeAborted,
-	errors.New("refresh token was rotated by a concurrent request; derive an access token with ExchangeAudience instead"))
+	"refresh token was rotated by a concurrent request; derive an access token with ExchangeAudience instead")
 
 // onRefreshRaceLost records a lost rotation race. Info, not Warn: this is an
 // expected outcome of two tabs bootstrapping together, and logging it as a

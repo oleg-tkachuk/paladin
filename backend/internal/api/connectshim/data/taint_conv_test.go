@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 
@@ -29,7 +29,7 @@ func TestTaintRoundTripsBetweenStoredNamesAndTheEnum(t *testing.T) {
 
 func TestSetObjectTaintUnimplementedWhenNotWired(t *testing.T) {
 	s := &ObjectServer{}
-	_, err := s.SetObjectTaint(context.Background(), connect.NewRequest(&pb.SetObjectTaintRequest{Name: "x"}))
+	_, err := s.SetObjectTaint(context.Background(), &pb.SetObjectTaintRequest{Name: "x"})
 	if connect.CodeOf(err) != connect.CodeUnimplemented {
 		t.Fatalf("err = %v, want Unimplemented", err)
 	}

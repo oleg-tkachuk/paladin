@@ -2,9 +2,8 @@ package auth
 
 import (
 	"context"
-	"fmt"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -25,44 +24,31 @@ const (
 //
 // This is the primary mechanism that prevents an `paladin-data` JWT (handed to a
 // browser) from calling admin RPCs even if the routing layer mis-forwards.
-func RequireAudience(want string) connect.Interceptor {
-	return &audienceInterceptor{want: want}
+func RequireAudience(want string) connect.ServerInterceptor {
+	return (&audienceInterceptor{want: want}).intercept
 }
 
 type audienceInterceptor struct {
 	want string
 }
 
-func (a *audienceInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if err := a.check(ctx); err != nil {
-			return nil, err
-		}
-		return next(ctx, req)
-	}
-}
-
-func (a *audienceInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (a *audienceInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
+func (a *audienceInterceptor) intercept(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 		if err := a.check(ctx); err != nil {
 			return err
 		}
-		return next(ctx, conn)
+		return next(ctx, spec, stream)
 	}
 }
 
 func (a *audienceInterceptor) check(ctx context.Context) error {
 	p, err := PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if p.Audience != a.want {
-		return connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("token audience %q is not allowed on %q plane", p.Audience, a.want))
+		return connect.Errorf(connect.CodePermissionDenied,
+			"token audience %q is not allowed on %q plane", p.Audience, a.want)
 	}
 	return nil
 }

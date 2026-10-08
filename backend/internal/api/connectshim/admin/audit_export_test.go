@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/audith"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -31,15 +31,15 @@ func TestExportAuditLogIsAFinishedOperation(t *testing.T) {
 		GeneratedAt: time.Unix(1_767_225_600, 0).UTC(),
 		RowCount:    rows,
 	}}}
-	resp, err := srv.ExportAuditLog(context.Background(), connect.NewRequest(&pb.ExportAuditLogRequest{}))
+	resp, err := srv.ExportAuditLog(context.Background(), &pb.ExportAuditLogRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resp.Msg.GetDone() {
+	if !resp.GetDone() {
 		t.Error("the export is not done")
 	}
 	var got audith.ExportAuditLogResult
-	if err := json.Unmarshal(resp.Msg.GetResponse().GetValue(), &got); err != nil {
+	if err := json.Unmarshal(resp.GetResponse().GetValue(), &got); err != nil {
 		t.Fatalf("the result does not decode: %v", err)
 	}
 	if got.RowCount != rows {
@@ -53,7 +53,7 @@ func TestExportAuditLogRefusesAResultItCannotEncode(t *testing.T) {
 	srv := &AuditServer{H: exportingAudit{result: &audith.ExportAuditLogResult{
 		Entries: []audith.ExportAuditLogEntry{{Before: json.RawMessage(`{`)}},
 	}}}
-	_, err := srv.ExportAuditLog(context.Background(), connect.NewRequest(&pb.ExportAuditLogRequest{}))
+	_, err := srv.ExportAuditLog(context.Background(), &pb.ExportAuditLogRequest{})
 	if connect.CodeOf(err) != connect.CodeInternal {
 		t.Errorf("err = %v, want Internal", err)
 	}

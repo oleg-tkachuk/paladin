@@ -15,7 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -41,15 +42,15 @@ type pagedObjects struct {
 	calls    int
 }
 
-func (p *pagedObjects) ListObjects(_ context.Context, req *connect.Request[datav1.ListObjectsRequest]) (*connect.Response[datav1.ListObjectsResponse], error) {
+func (p *pagedObjects) ListObjects(_ context.Context, req *datav1.ListObjectsRequest) (*datav1.ListObjectsResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls++
 	if p.calls == p.failAt {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("injected"))
+		return nil, connect.NewError(connect.CodeUnavailable, "injected")
 	}
 	start := 0
-	if tok := req.Msg.GetPage().GetPageToken(); tok != "" {
+	if tok := req.GetPage().GetPageToken(); tok != "" {
 		_, _ = fmt.Sscanf(tok, "%d", &start)
 	}
 	end := min(start+p.pageSize, len(p.items))
@@ -60,13 +61,15 @@ func (p *pagedObjects) ListObjects(_ context.Context, req *connect.Request[datav
 	if end < len(p.items) {
 		resp.Page.NextPageToken = fmt.Sprint(end)
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 func objectClient(t *testing.T, h paladindatav1connect.ObjectServiceHandler) paladindatav1connect.ObjectServiceClient {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle(paladindatav1connect.NewObjectServiceHandler(h))
+	server := connect.NewServer()
+	paladindatav1connect.RegisterObjectServiceHandler(server, h)
+	connecthttp.Mount(mux, server)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	p, err := paladin.Connect(paladin.Endpoints{Data: srv.URL})
@@ -127,8 +130,8 @@ func TestPagesYieldsTheErrorAndStops(t *testing.T) {
 }
 
 func TestPagesRefusesAnUnpagedRPC(t *testing.T) {
-	get := func(context.Context, *connect.Request[datav1.GetObjectRequest]) (*connect.Response[datav1.Object], error) {
-		return connect.NewResponse(&datav1.Object{}), nil
+	get := func(context.Context, *datav1.GetObjectRequest) (*datav1.Object, error) {
+		return &datav1.Object{}, nil
 	}
 	for _, err := range paladin.Pages(context.Background(), get, &datav1.GetObjectRequest{},
 		func(*datav1.Object) []string { return nil }) {
@@ -268,24 +271,24 @@ func (d *dataPlane) signed(path string) *commonv1.PresignedUrl {
 	return &commonv1.PresignedUrl{Url: d.storageURL + path, RequiredHeaders: map[string]string{requiredHeader: requiredValue}}
 }
 
-func (d *dataPlane) UploadObject(_ context.Context, req *connect.Request[datav1.UploadObjectRequest]) (*connect.Response[datav1.UploadObjectResponse], error) {
-	name := req.Msg.GetParent() + "/objects/" + req.Msg.GetKey()
-	return connect.NewResponse(&datav1.UploadObjectResponse{
-		Object: &datav1.Object{Name: name}, UploadUrl: d.signed("/" + req.Msg.GetKey()),
-	}), nil
+func (d *dataPlane) UploadObject(_ context.Context, req *datav1.UploadObjectRequest) (*datav1.UploadObjectResponse, error) {
+	name := req.GetParent() + "/objects/" + req.GetKey()
+	return &datav1.UploadObjectResponse{
+		Object: &datav1.Object{Name: name}, UploadUrl: d.signed("/" + req.GetKey()),
+	}, nil
 }
 
-func (d *dataPlane) CompleteObject(_ context.Context, req *connect.Request[datav1.CompleteObjectRequest]) (*connect.Response[datav1.Object], error) {
+func (d *dataPlane) CompleteObject(_ context.Context, req *datav1.CompleteObjectRequest) (*datav1.Object, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.completed[req.Msg.GetName()] = req.Msg.GetEtag()
-	d.checksums[req.Msg.GetName()] = req.Msg.GetChecksumValue()
-	return connect.NewResponse(&datav1.Object{Name: req.Msg.GetName()}), nil
+	d.completed[req.GetName()] = req.GetEtag()
+	d.checksums[req.GetName()] = req.GetChecksumValue()
+	return &datav1.Object{Name: req.GetName()}, nil
 }
 
-func (d *dataPlane) DownloadObject(_ context.Context, req *connect.Request[datav1.DownloadObjectRequest]) (*connect.Response[datav1.DownloadObjectResponse], error) {
-	key := req.Msg.GetName()[strings.LastIndex(req.Msg.GetName(), "/"):]
-	object := &datav1.Object{Name: req.Msg.GetName()}
+func (d *dataPlane) DownloadObject(_ context.Context, req *datav1.DownloadObjectRequest) (*datav1.DownloadObjectResponse, error) {
+	key := req.GetName()[strings.LastIndex(req.GetName(), "/"):]
+	object := &datav1.Object{Name: req.GetName()}
 	if d.described != nil {
 		object = d.described
 	}
@@ -293,41 +296,41 @@ func (d *dataPlane) DownloadObject(_ context.Context, req *connect.Request[datav
 	if d.noURL {
 		resp.DownloadUrl = nil
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
-func (d *dataPlane) LookupObject(_ context.Context, req *connect.Request[datav1.LookupObjectRequest]) (*connect.Response[datav1.Object], error) {
+func (d *dataPlane) LookupObject(_ context.Context, req *datav1.LookupObjectRequest) (*datav1.Object, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.lookedUp = append(d.lookedUp, req.Msg.GetParent()+"|"+req.Msg.GetKey())
-	return connect.NewResponse(&datav1.Object{Name: req.Msg.GetParent() + "/objects/" + req.Msg.GetKey()}), nil
+	d.lookedUp = append(d.lookedUp, req.GetParent()+"|"+req.GetKey())
+	return &datav1.Object{Name: req.GetParent() + "/objects/" + req.GetKey()}, nil
 }
 
-func (d *dataPlane) InitiateMultipartUpload(_ context.Context, req *connect.Request[datav1.InitiateMultipartUploadRequest]) (*connect.Response[datav1.InitiateMultipartUploadResponse], error) {
-	return connect.NewResponse(&datav1.InitiateMultipartUploadResponse{
-		Object: &datav1.Object{Name: req.Msg.GetParent() + "/objects/" + req.Msg.GetKey()}, UploadId: "u1",
+func (d *dataPlane) InitiateMultipartUpload(_ context.Context, req *datav1.InitiateMultipartUploadRequest) (*datav1.InitiateMultipartUploadResponse, error) {
+	return &datav1.InitiateMultipartUploadResponse{
+		Object: &datav1.Object{Name: req.GetParent() + "/objects/" + req.GetKey()}, UploadId: "u1",
 		RecommendedPartSize: d.partSize,
-	}), nil
+	}, nil
 }
 
-func (d *dataPlane) PresignPart(_ context.Context, req *connect.Request[datav1.PresignPartRequest]) (*connect.Response[datav1.PresignPartResponse], error) {
-	return connect.NewResponse(&datav1.PresignPartResponse{
-		UploadUrl: d.signed(fmt.Sprintf("/mp?part=%d", req.Msg.GetPartNumber())),
-	}), nil
+func (d *dataPlane) PresignPart(_ context.Context, req *datav1.PresignPartRequest) (*datav1.PresignPartResponse, error) {
+	return &datav1.PresignPartResponse{
+		UploadUrl: d.signed(fmt.Sprintf("/mp?part=%d", req.GetPartNumber())),
+	}, nil
 }
 
-func (d *dataPlane) CompleteMultipartUpload(_ context.Context, req *connect.Request[datav1.CompleteMultipartUploadRequest]) (*connect.Response[datav1.Object], error) {
+func (d *dataPlane) CompleteMultipartUpload(_ context.Context, req *datav1.CompleteMultipartUploadRequest) (*datav1.Object, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.parts = req.Msg.GetParts()
-	return connect.NewResponse(&datav1.Object{Name: req.Msg.GetObjectName()}), nil
+	d.parts = req.GetParts()
+	return &datav1.Object{Name: req.GetObjectName()}, nil
 }
 
-func (d *dataPlane) AbortMultipartUpload(context.Context, *connect.Request[datav1.AbortMultipartUploadRequest]) (*connect.Response[datav1.AbortMultipartUploadResponse], error) {
+func (d *dataPlane) AbortMultipartUpload(context.Context, *datav1.AbortMultipartUploadRequest) (*datav1.AbortMultipartUploadResponse, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.aborted++
-	return connect.NewResponse(&datav1.AbortMultipartUploadResponse{}), nil
+	return &datav1.AbortMultipartUploadResponse{}, nil
 }
 
 func newTransfer(t *testing.T, partSize int64, opts ...paladin.Option) (*paladin.DataPlane, *dataPlane, *storage) {
@@ -343,8 +346,11 @@ func newTransfer(t *testing.T, partSize int64, opts ...paladin.Option) (*paladin
 func connectData(t *testing.T, dp *dataPlane, opts ...paladin.Option) *paladin.DataPlane {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle(paladindatav1connect.NewObjectServiceHandler(dp))
-	mux.Handle(paladindatav1connect.NewMultipartUploadServiceHandler(dp))
+	server := connect.NewServer()
+	paladindatav1connect.RegisterObjectServiceHandler(server, dp)
+	paladindatav1connect.RegisterMultipartUploadServiceHandler(server, dp)
+	connecthttp.Mount(mux, server)
+
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	p, err := paladin.Connect(paladin.Endpoints{Data: srv.URL}, opts...)

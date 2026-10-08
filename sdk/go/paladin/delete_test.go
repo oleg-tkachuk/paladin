@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -24,7 +24,7 @@ func TestDelete(t *testing.T) {
 		if err != nil || !deleted {
 			t.Fatalf("permanent=%v: deleted=%v err=%v", permanent, deleted, err)
 		}
-		if _, err := p.Data.Object.GetObject(ctx, connect.NewRequest(&datav1.GetObjectRequest{Name: obj.GetName()})); !errors.Is(err, paladin.ErrNotFound) {
+		if _, err := p.Data.Object.GetObject(ctx, &datav1.GetObjectRequest{Name: obj.GetName()}); !errors.Is(err, paladin.ErrNotFound) {
 			t.Errorf("permanent=%v: the object is still there: %v", permanent, err)
 		}
 		// Again: already gone is not an error.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
@@ -40,20 +41,22 @@ func TestExtractCapabilityToken(t *testing.T) {
 }
 
 // TestCapabilityInterceptor_NilVerifier confirms the interceptor is a
-// pass-through when the capability subsystem is disabled — the
-// returned value implements connect.Interceptor and forwards calls
-// unchanged.
+// pass-through when the capability subsystem is disabled: a call carrying
+// a capability reaches the handler unchanged, with no capability verified
+// onto its context.
 func TestCapabilityInterceptor_NilVerifier(t *testing.T) {
 	t.Parallel()
-	i := CapabilityInterceptor(nil, "data", nil, 0, "")
+	const unverifiable = "eyJ0eXAiOiJKV1QifQ.e30.sig"
+	i := CapabilityInterceptor(nil, planeData, nil, 0, "")
 	if i == nil {
 		t.Fatalf("nil interceptor returned")
 	}
-	// passthroughInterceptor.WrapUnary returns its argument verbatim;
-	// confirming via reflection-free identity is enough — the type
-	// switch works because we return the concrete passthroughInterceptor.
-	if _, ok := i.(passthroughInterceptor); !ok {
-		t.Fatalf("expected passthroughInterceptor, got %T", i)
+	c := callProbe(context.Background(), []connect.ServerInterceptor{i}, HeaderCapability, unverifiable)
+	if c.err != nil {
+		t.Fatalf("expected a pass-through, got %v", c.err)
+	}
+	if _, ok := CapabilityFromContext(c.handlerCtx); ok {
+		t.Error("a disabled subsystem put a capability on the context")
 	}
 }
 

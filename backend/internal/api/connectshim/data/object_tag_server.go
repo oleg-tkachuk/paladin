@@ -5,8 +5,9 @@ import (
 	"fmt"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -24,8 +25,8 @@ type ObjectTagServer struct {
 
 func NewObjectTagServer(h *objecth.Handler) *ObjectTagServer { return &ObjectTagServer{H: h} }
 
-func (s *ObjectTagServer) GetObjectTags(ctx context.Context, req *connect.Request[pb.GetObjectTagsRequest]) (*connect.Response[pb.GetObjectTagsResponse], error) {
-	ctx, collection, objectID, err := objectNameParts(ctx, req.Msg.GetName())
+func (s *ObjectTagServer) GetObjectTags(ctx context.Context, req *pb.GetObjectTagsRequest) (*pb.GetObjectTagsResponse, error) {
+	ctx, collection, objectID, err := objectNameParts(ctx, req.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
@@ -33,19 +34,18 @@ func (s *ObjectTagServer) GetObjectTags(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.GetObjectTagsResponse{Tags: out.Tags}), nil
+	return &pb.GetObjectTagsResponse{Tags: out.Tags}, nil
 }
 
-func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *connect.Request[pb.PutObjectTagsRequest]) (*connect.Response[pb.PutObjectTagsResponse], error) {
-	m := req.Msg
+func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *pb.PutObjectTagsRequest) (*pb.PutObjectTagsResponse, error) {
+	m := req
 	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	out, err := s.H.UpdateObject(ctx, objecth.UpdateObjectInput{
 		Collection:      collection,
@@ -57,19 +57,18 @@ func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.PutObjectTagsResponse{Tags: out.Tags}), nil
+	return &pb.PutObjectTagsResponse{Tags: out.Tags}, nil
 }
 
-func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Request[pb.DeleteObjectTagsRequest]) (*connect.Response[pb.DeleteObjectTagsResponse], error) {
-	m := req.Msg
+func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *pb.DeleteObjectTagsRequest) (*pb.DeleteObjectTagsResponse, error) {
+	m := req
 	ctx, collection, objectID, err := objectNameParts(ctx, m.GetName())
 	if err != nil {
 		return nil, badName(err)
 	}
 	rv, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid resource_version: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	current, err := s.H.GetObject(ctx, collection, objectID)
 	if err != nil {
@@ -100,16 +99,16 @@ func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *connect.Req
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.DeleteObjectTagsResponse{Tags: out.Tags}), nil
+	return &pb.DeleteObjectTagsResponse{Tags: out.Tags}, nil
 }
 
-func (s *ObjectTagServer) ListDistinctTags(ctx context.Context, req *connect.Request[pb.ListDistinctTagsRequest]) (*connect.Response[pb.ListDistinctTagsResponse], error) {
-	ctx, collection, err := collectionNameParts(ctx, req.Msg.GetParent())
+func (s *ObjectTagServer) ListDistinctTags(ctx context.Context, req *pb.ListDistinctTagsRequest) (*pb.ListDistinctTagsResponse, error) {
+	ctx, collection, err := collectionNameParts(ctx, req.GetParent())
 	if err != nil {
 		return nil, badName(err)
 	}
 	page, err := s.H.ListDistinctTags(ctx, collection,
-		req.Msg.GetPage().GetPageToken(), req.Msg.GetPage().GetPageSize())
+		req.GetPage().GetPageToken(), req.GetPage().GetPageSize())
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +124,7 @@ func (s *ObjectTagServer) ListDistinctTags(ctx context.Context, req *connect.Req
 	if page.NextKey != "" {
 		out.Page = &commonpb.PageResponse{NextPageToken: page.NextKey}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 var _ paladindatav1connect.ObjectTagServiceHandler = (*ObjectTagServer)(nil)

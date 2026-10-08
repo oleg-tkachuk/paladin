@@ -1,12 +1,12 @@
 package objecth
 
 import (
-	"errors"
 	"fmt"
 	"mime"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 // maxContentDispositionBytes bounds the response-content-disposition a
@@ -39,30 +39,30 @@ func NormalizeContentDisposition(raw string) (string, error) {
 		return "", nil
 	}
 	if len(raw) > maxContentDispositionBytes {
-		return "", connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("content_disposition is %d bytes, at most %d", len(raw), maxContentDispositionBytes))
+		return "", connect.Errorf(connect.CodeInvalidArgument,
+			"content_disposition is %d bytes, at most %d", len(raw), maxContentDispositionBytes)
 	}
 	dtype, params, err := mime.ParseMediaType(raw)
 	if err != nil {
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("content_disposition: %w", err))
+		return "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("content_disposition: %w", err))
 	}
 	if dtype != dispositionInline && dtype != dispositionAttachment {
-		return "", connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("content_disposition type %q: want %s or %s", dtype, dispositionInline, dispositionAttachment))
+		return "", connect.Errorf(connect.CodeInvalidArgument,
+			"content_disposition type %q: want %s or %s", dtype, dispositionInline, dispositionAttachment)
 	}
 	for k := range params {
 		if k != dispositionFilename {
-			return "", connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("content_disposition parameter %q: only %s is accepted", k, dispositionFilename))
+			return "", connect.Errorf(connect.CodeInvalidArgument,
+				"content_disposition parameter %q: only %s is accepted", k, dispositionFilename)
 		}
 	}
 	if name, ok := params[dispositionFilename]; ok && strings.ContainsAny(name, "/\\") {
 		return "", connect.NewError(connect.CodeInvalidArgument,
-			errors.New("content_disposition filename must not contain a path separator"))
+			"content_disposition filename must not contain a path separator")
 	}
 	out := mime.FormatMediaType(dtype, params)
 	if out == "" {
-		return "", connect.NewError(connect.CodeInvalidArgument, errors.New("content_disposition cannot be encoded"))
+		return "", connect.NewError(connect.CodeInvalidArgument, "content_disposition cannot be encoded")
 	}
 	return out, nil
 }

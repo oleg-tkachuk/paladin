@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 // The guard exists because its absence was reachable from a button. Anything

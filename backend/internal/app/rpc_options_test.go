@@ -8,12 +8,15 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 )
 
 const settingsPath = "/paladin.iam.v1.UserSettingsService/GetForUser"
@@ -27,20 +30,24 @@ type settingsStub struct {
 	calls     int
 }
 
-func (s *settingsStub) GetForUser(_ context.Context, _ *connect.Request[iamv1.GetForUserRequest],
-) (*connect.Response[iamv1.UserSettings], error) {
+func (s *settingsStub) GetForUser(_ context.Context, _ *iamv1.GetForUserRequest,
+) (*iamv1.UserSettings, error) {
 	s.calls++
 	if s.panics {
 		panic("boom")
 	}
-	return connect.NewResponse(&iamv1.UserSettings{Name: strings.Repeat("n", s.nameBytes)}), nil
+	return &iamv1.UserSettings{Name: strings.Repeat("n", s.nameBytes)}, nil
 }
 
 func serveWithRPCOptions(t *testing.T, stub *settingsStub) (string, *observer.ObservedLogs) {
 	t.Helper()
 	core, logs := observer.New(zap.ErrorLevel)
 	mux := http.NewServeMux()
-	mux.Handle(paladiniamv1connect.NewUserSettingsServiceHandler(stub, rpcHandlerOptions(zap.New(core))))
+	// The plane's panic recovery is its server's first interceptor; the rest
+	// of what is pinned here is the mount options every plane shares.
+	server := connect.NewServer(middleware.Recover(zap.New(core)))
+	paladiniamv1connect.RegisterUserSettingsServiceHandler(server, stub)
+	connecthttp.Mount(mux, server, rpcMountOptions()...)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.URL, logs
@@ -73,10 +80,10 @@ func postJSON(t *testing.T, url, body string, header http.Header) (int, http.Hea
 func TestAnOversizedRequestIsRefusedBeforeTheHandler(t *testing.T) {
 	stub := &settingsStub{}
 	url, _ := serveWithRPCOptions(t, stub)
-	client := paladiniamv1connect.NewUserSettingsServiceClient(http.DefaultClient, url)
-	_, err := client.GetForUser(context.Background(), connect.NewRequest(&iamv1.GetForUserRequest{
+	client := paladiniamv1connect.NewUserSettingsServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, url)))
+	_, err := client.GetForUser(context.Background(), &iamv1.GetForUserRequest{
 		Name: strings.Repeat("x", MaxRPCRequestBytes+1),
-	}))
+	})
 	if got := connect.CodeOf(err); got != connect.CodeResourceExhausted {
 		t.Fatalf("code = %v (%v), want resource_exhausted", got, err)
 	}
@@ -89,8 +96,8 @@ func TestAnOversizedRequestIsRefusedBeforeTheHandler(t *testing.T) {
 // its procedure, and the caller learns nothing of the panic.
 func TestAPanicIsAnInternalErrorAndLogged(t *testing.T) {
 	url, logs := serveWithRPCOptions(t, &settingsStub{panics: true})
-	client := paladiniamv1connect.NewUserSettingsServiceClient(http.DefaultClient, url)
-	_, err := client.GetForUser(context.Background(), connect.NewRequest(&iamv1.GetForUserRequest{Name: "u"}))
+	client := paladiniamv1connect.NewUserSettingsServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, url)))
+	_, err := client.GetForUser(context.Background(), &iamv1.GetForUserRequest{Name: "u"})
 	if got := connect.CodeOf(err); got != connect.CodeInternal {
 		t.Fatalf("code = %v (%v), want internal", got, err)
 	}

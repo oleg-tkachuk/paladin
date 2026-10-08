@@ -73,10 +73,11 @@ const (
 	establishingCapInterceptor = "CapabilityEstablishingInterceptor"
 	// capabilitySkippingJWTGate lets a capability-only request past the JWT gate.
 	capabilitySkippingJWTGate = "InterceptorSkipTokensAndCapabilities"
-	// iamOptsDecl opens the iam plane's interceptor chain.
-	iamOptsDecl = "iamOpts := connect.WithHandlerOptions("
-	// optsBlockEnd closes a top-level connect.WithHandlerOptions(...) block.
-	optsBlockEnd = "\n\t)\n"
+	// iamServerDecl opens the iam plane's interceptor chain: the plane's one
+	// server, built with its interceptors.
+	iamServerDecl = "iamServer := connect.NewServer("
+	// serverBlockEnd closes a top-level connect.NewServer(...) call.
+	serverBlockEnd = "\n\t)\n"
 	// capabilityWordStem and capDataVar, lower-cased, would appear in the iam
 	// chain if a capability interceptor were mounted there — by constructor
 	// name, or as the data plane's variable reused.
@@ -105,11 +106,11 @@ func readSource(t *testing.T, parts ...string) string {
 
 func iamInterceptorBlock(t *testing.T, src string) string {
 	t.Helper()
-	start := strings.Index(src, iamOptsDecl)
+	start := strings.Index(src, iamServerDecl)
 	if start < 0 {
-		t.Fatalf("could not find %q — the iam wiring moved; update this gate", iamOptsDecl)
+		t.Fatalf("could not find %q — the iam wiring moved; update this gate", iamServerDecl)
 	}
-	end := strings.Index(src[start:], optsBlockEnd)
+	end := strings.Index(src[start:], serverBlockEnd)
 	if end < 0 {
 		t.Fatalf("could not find the end of the iam interceptor chain")
 	}

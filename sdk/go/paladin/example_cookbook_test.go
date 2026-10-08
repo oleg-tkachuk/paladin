@@ -19,7 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -145,14 +145,14 @@ func Example_resumableMultipart() {
 	ctx := context.Background()
 	body := bytes.Repeat([]byte("x"), 2*paladintest.PartSize+10)
 
-	init, err := p.Data.MultipartUpload.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{ContentType: testContentType,
+	init, err := p.Data.MultipartUpload.InitiateMultipartUpload(ctx, &datav1.InitiateMultipartUploadRequest{ContentType: testContentType,
 		Parent: srv.Collection().String(), Key: "big.bin", SizeBytes: int64(len(body)),
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
-	}))
+	})
 	if err != nil {
 		panic(err)
 	}
-	name, uploadID, size := init.Msg.GetObject().GetName(), init.Msg.GetUploadId(), init.Msg.GetRecommendedPartSize()
+	name, uploadID, size := init.GetObject().GetName(), init.GetUploadId(), init.GetRecommendedPartSize()
 	part := func(n int32) []byte {
 		start := int64(n-1) * size
 		return body[start:min(start+size, int64(len(body)))]
@@ -167,25 +167,25 @@ func Example_resumableMultipart() {
 		return s
 	}
 	send := func(n int32) {
-		signed, err := p.Data.MultipartUpload.PresignPart(ctx, connect.NewRequest(&datav1.PresignPartRequest{
+		signed, err := p.Data.MultipartUpload.PresignPart(ctx, &datav1.PresignPartRequest{
 			ObjectName: name, UploadId: uploadID, PartNumber: n, ChecksumValue: sum(n),
-		}))
+		})
 		if err != nil {
 			panic(err)
 		}
-		if _, err := p.Data.Transfer().Put(ctx, signed.Msg.GetUploadUrl(), bytes.NewReader(part(n)), int64(len(part(n)))); err != nil {
+		if _, err := p.Data.Transfer().Put(ctx, signed.GetUploadUrl(), bytes.NewReader(part(n)), int64(len(part(n)))); err != nil {
 			panic(err)
 		}
 	}
 	send(1) // … and then the process died.
 
 	// On restart, with name and uploadID kept from before:
-	listed, err := p.Data.MultipartUpload.ListParts(ctx, connect.NewRequest(&datav1.ListPartsRequest{ObjectName: name, UploadId: uploadID}))
+	listed, err := p.Data.MultipartUpload.ListParts(ctx, &datav1.ListPartsRequest{ObjectName: name, UploadId: uploadID})
 	if err != nil {
 		panic(err)
 	}
 	have := map[int32]string{}
-	for _, pt := range listed.Msg.GetParts() {
+	for _, pt := range listed.GetParts() {
 		have[pt.GetPartNumber()] = pt.GetEtag()
 	}
 	count := int32((int64(len(body)) + size - 1) / size) //nolint:gosec // a few parts
@@ -195,20 +195,20 @@ func Example_resumableMultipart() {
 			send(n)
 		}
 	}
-	listed, err = p.Data.MultipartUpload.ListParts(ctx, connect.NewRequest(&datav1.ListPartsRequest{ObjectName: name, UploadId: uploadID}))
+	listed, err = p.Data.MultipartUpload.ListParts(ctx, &datav1.ListPartsRequest{ObjectName: name, UploadId: uploadID})
 	if err != nil {
 		panic(err)
 	}
-	for _, pt := range listed.Msg.GetParts() {
+	for _, pt := range listed.GetParts() {
 		parts = append(parts, &datav1.CompletedPart{PartNumber: pt.GetPartNumber(), Etag: pt.GetEtag(), ChecksumValue: sum(pt.GetPartNumber())})
 	}
-	done, err := p.Data.MultipartUpload.CompleteMultipartUpload(ctx, connect.NewRequest(&datav1.CompleteMultipartUploadRequest{
+	done, err := p.Data.MultipartUpload.CompleteMultipartUpload(ctx, &datav1.CompleteMultipartUploadRequest{
 		ObjectName: name, UploadId: uploadID, Parts: parts,
-	}))
+	})
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(len(have), len(parts), done.Msg.GetSizeBytes() == int64(len(body)))
+	fmt.Println(len(have), len(parts), done.GetSizeBytes() == int64(len(body)))
 	// Output: 1 3 true
 }
 
@@ -360,11 +360,11 @@ func settle(ctx context.Context, data *paladin.DataPlane, in paladin.UploadInput
 	case datav1.ObjectState_OBJECT_STATE_PENDING:
 		// Its bytes may have landed with the answer lost: the server HEADs
 		// storage and completes it if so.
-		done, err := data.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{
+		done, err := data.Object.CompleteObject(ctx, &datav1.CompleteObjectRequest{
 			Name: existing.GetName(), ChecksumValue: sum,
-		}))
+		})
 		if err == nil {
-			return done.Msg, nil
+			return done, nil
 		}
 		if !errors.Is(err, paladin.ErrFailedPrecondition) {
 			return nil, err
@@ -374,9 +374,9 @@ func settle(ctx context.Context, data *paladin.DataPlane, in paladin.UploadInput
 		return nil, fmt.Errorf("%w: %s is %s", errKeyTaken, existing.GetName(), existing.GetState())
 	}
 	// Permanently: an object in the trash keeps its key.
-	_, err = data.Object.DeleteObject(ctx, connect.NewRequest(&datav1.DeleteObjectRequest{
+	_, err = data.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{
 		Name: existing.GetName(), ResourceVersion: existing.GetResourceVersion(), Permanent: true,
-	}))
+	})
 	return nil, err
 }
 
@@ -455,7 +455,7 @@ func Example_migratingFromConnectJSON() {
 	//   → if status == 404 and body.code == "not_found": …
 	// After:
 	missing := srv.Collection().String() + "/objects/00000000-0000-4000-8000-000000000000"
-	_, err := p.Data.Object.GetObject(context.Background(), connect.NewRequest(&datav1.GetObjectRequest{Name: missing}))
+	_, err := p.Data.Object.GetObject(context.Background(), &datav1.GetObjectRequest{Name: missing})
 	fmt.Println(errors.Is(err, paladin.ErrNotFound))
 	// Output: true
 }
@@ -473,11 +473,11 @@ func ExampleWait() {
 	}
 	name := "tenants/7f3c…/operations/01a…"
 	op, err := paladin.Wait(ctx, func(ctx context.Context) (*datav1.Operation, error) {
-		r, err := p.Data.Operation.GetOperation(ctx, connect.NewRequest(&datav1.GetOperationRequest{Name: name}))
+		r, err := p.Data.Operation.GetOperation(ctx, &datav1.GetOperationRequest{Name: name})
 		if err != nil {
 			return nil, err
 		}
-		return r.Msg, nil
+		return r, nil
 	})
 	var failed *paladin.OperationError
 	switch {

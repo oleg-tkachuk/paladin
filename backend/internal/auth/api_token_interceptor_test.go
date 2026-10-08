@@ -1,9 +1,10 @@
 package auth
 
 import (
+	"context"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
+	"connectrpc.com/connect/v2"
 )
 
 // TestExtractAPIToken covers the header parsing branches: X-Paladin-API-Token
@@ -36,15 +37,16 @@ func TestExtractAPIToken(t *testing.T) {
 }
 
 // TestAPITokenInterceptor_NilVerifier confirms passthrough when the
-// subsystem is disabled — same shape as CapabilityInterceptor.
+// subsystem is disabled — same shape as CapabilityInterceptor: a call
+// carrying a token reaches the handler with no token stamped.
 func TestAPITokenInterceptor_NilVerifier(t *testing.T) {
 	t.Parallel()
-	i := APITokenInterceptor(nil, "data")
-	if _, ok := i.(passthroughInterceptor); !ok {
-		t.Fatalf("expected passthroughInterceptor, got %T", i)
+	c := callProbe(context.Background(), []connect.ServerInterceptor{APITokenInterceptor(nil, planeData)},
+		HeaderAPIToken, unknownPAT)
+	if c.err != nil {
+		t.Fatalf("expected a pass-through, got %v", c.err)
+	}
+	if _, ok := APITokenFromContext(c.handlerCtx); ok {
+		t.Error("a disabled subsystem stamped a token on the context")
 	}
 }
-
-// silence lint about unused import — api_token is referenced by the
-// extracted symbol prefix in extractAPIToken's contract.
-var _ = api_token.TokenPrefix

@@ -2,17 +2,15 @@ package middleware
 
 import (
 	"context"
-	"errors"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
@@ -46,7 +44,7 @@ func TestFailureLevelPerCode(t *testing.T) {
 	for _, c := range cases {
 		core, logs := observer.New(zap.DebugLevel)
 		logFailure(zap.New(core), "/pkg.Svc/M", "req-1", time.Millisecond,
-			connect.NewError(c.code, errors.New("boom")))
+			connect.NewError(c.code, "boom"))
 		all := logs.All()
 		if len(all) != 1 {
 			t.Fatalf("%v: wrote %d lines, want 1", c.code, len(all))
@@ -72,7 +70,7 @@ func TestSuccessIsSilent(t *testing.T) {
 func TestFailureCarriesTheFieldsThatMakeItActionable(t *testing.T) {
 	core, logs := observer.New(zap.DebugLevel)
 	logFailure(zap.New(core), "/paladin.admin.v1.TenantService/ListTenants", "req-42",
-		1500*time.Millisecond, connect.NewError(connect.CodeInternal, errors.New("pool exhausted")))
+		1500*time.Millisecond, connect.NewError(connect.CodeInternal, "pool exhausted"))
 
 	got := logs.All()[0].ContextMap()
 	for k, want := range map[string]any{
@@ -96,7 +94,7 @@ func TestFailureCarriesTheFieldsThatMakeItActionable(t *testing.T) {
 // helper that takes the process down is worse than the silence it replaced.
 func TestNilLoggerIsNotFatal(t *testing.T) {
 	logFailure(nil, "/pkg.Svc/M", "", time.Millisecond,
-		connect.NewError(connect.CodeInternal, errors.New("boom")))
+		connect.NewError(connect.CodeInternal, "boom"))
 }
 
 // The ordering claim, asserted rather than commented.
@@ -111,25 +109,21 @@ func TestOutcomeLoggerSeesAuthRejections(t *testing.T) {
 
 	// An interceptor that rejects exactly as auth.NewInterceptor does, and a
 	// handler that must therefore never run.
-	reject := connect.UnaryInterceptorFunc(func(connect.UnaryFunc) connect.UnaryFunc {
-		return func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
-			return nil, connect.NewError(connect.CodeUnauthenticated,
-				errors.New("missing Authorization header"))
+	reject := connect.ServerInterceptor(func(connect.ServerFunc) connect.ServerFunc {
+		return func(context.Context, connect.Spec, connect.ServerStream) error {
+			return connect.NewError(connect.CodeUnauthenticated,
+				"missing Authorization header")
 		}
 	})
 
-	mux := http.NewServeMux()
-	path, handler := paladiniamv1connect.NewUserSettingsServiceHandler(&stubSettings{},
+	client := paladiniamv1connect.NewUserSettingsServiceClient(unarytest.Client(func(s *connect.Server) {
+		paladiniamv1connect.RegisterUserSettingsServiceHandler(s, &stubSettings{})
+	},
 		// The production order: outcome logging first, auth second.
-		connect.WithInterceptors(LogOutcome(zap.New(core)), reject),
-	)
-	mux.Handle(path, handler)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	client := paladiniamv1connect.NewUserSettingsServiceClient(srv.Client(), srv.URL)
+		LogOutcome(zap.New(core)), reject,
+	))
 	if _, err := client.GetMine(context.Background(),
-		connect.NewRequest(&iamv1.GetMineRequest{})); err == nil {
+		&iamv1.GetMineRequest{}); err == nil {
 		t.Fatal("expected the rejection to reach the caller")
 	}
 

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
-	"connectrpc.com/grpchealth"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/grpchealth/v2"
 )
 
 const testService = "paladin.iam.v1.HealthService"

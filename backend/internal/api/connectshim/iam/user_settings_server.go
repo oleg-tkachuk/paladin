@@ -11,7 +11,7 @@ import (
 	"errors"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -40,32 +40,32 @@ var _ paladiniamv1connect.UserSettingsServiceHandler = (*UserSettingsServer)(nil
 
 func (s *UserSettingsServer) GetMine(
 	ctx context.Context,
-	_ *connect.Request[pb.GetMineRequest],
-) (*connect.Response[pb.UserSettings], error) {
+	_ *pb.GetMineRequest,
+) (*pb.UserSettings, error) {
 	out, err := s.H.GetMine(ctx)
 	if err != nil {
 		return nil, err
 	}
 	msg, err := settingsToProto(out)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(msg), nil
+	return msg, nil
 }
 
 func (s *UserSettingsServer) UpdateMine(
 	ctx context.Context,
-	req *connect.Request[pb.UpdateMineRequest],
-) (*connect.Response[pb.UserSettings], error) {
-	prefs, err := structToBytes(req.Msg.GetPreferences())
+	req *pb.UpdateMineRequest,
+) (*pb.UserSettings, error) {
+	prefs, err := structToBytes(req.GetPreferences())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	out, err := s.H.UpdateMine(ctx, usersettingsh.UpdateMineInput{
-		UpdateMask:  paths(req.Msg.GetUpdateMask()),
-		Timezone:    req.Msg.GetTimezone(),
-		Locale:      req.Msg.GetLocale(),
-		Theme:       req.Msg.GetTheme(),
+		UpdateMask:  paths(req.GetUpdateMask()),
+		Timezone:    req.GetTimezone(),
+		Locale:      req.GetLocale(),
+		Theme:       req.GetTheme(),
 		Preferences: prefs,
 	})
 	if err != nil {
@@ -73,18 +73,18 @@ func (s *UserSettingsServer) UpdateMine(
 	}
 	msg, err := settingsToProto(out)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(msg), nil
+	return msg, nil
 }
 
 func (s *UserSettingsServer) GetForUser(
 	ctx context.Context,
-	req *connect.Request[pb.GetForUserRequest],
-) (*connect.Response[pb.UserSettings], error) {
-	uid, err := parseUserResourceName(req.Msg.GetName())
+	req *pb.GetForUserRequest,
+) (*pb.UserSettings, error) {
+	uid, err := parseUserResourceName(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	out, err := s.H.GetForUser(ctx, uid)
 	if err != nil {
@@ -92,21 +92,21 @@ func (s *UserSettingsServer) GetForUser(
 	}
 	msg, err := settingsToProto(out)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(msg), nil
+	return msg, nil
 }
 
 func (s *UserSettingsServer) ListByTenant(
 	ctx context.Context,
-	req *connect.Request[pb.ListByTenantRequest],
-) (*connect.Response[pb.ListByTenantResponse], error) {
-	tid, err := parseTenantParent(req.Msg.GetParent())
+	req *pb.ListByTenantRequest,
+) (*pb.ListByTenantResponse, error) {
+	tid, err := parseTenantParent(req.GetParent())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	pageSize := int32(0)
-	if p := req.Msg.GetPage(); p != nil {
+	if p := req.GetPage(); p != nil {
 		pageSize = p.GetPageSize()
 	}
 	out, err := s.H.ListByTenant(ctx, tid, pageSize)
@@ -117,29 +117,29 @@ func (s *UserSettingsServer) ListByTenant(
 	for _, s := range out {
 		msg, err := settingsToProto(&s)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		items = append(items, msg)
 	}
-	return connect.NewResponse(&pb.ListByTenantResponse{
+	return &pb.ListByTenantResponse{
 		Settings: items,
 		// Domain handler doesn't paginate yet — reflect that with an empty
 		// next_page_token. When it learns to, swap in the real cursor.
-	}), nil
+	}, nil
 }
 
 func (s *UserSettingsServer) DeleteForUser(
 	ctx context.Context,
-	req *connect.Request[pb.DeleteForUserRequest],
-) (*connect.Response[pb.DeleteForUserResponse], error) {
-	uid, err := parseUserResourceName(req.Msg.GetName())
+	req *pb.DeleteForUserRequest,
+) (*pb.DeleteForUserResponse, error) {
+	uid, err := parseUserResourceName(req.GetName())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	if err := s.H.DeleteForUser(ctx, uid); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.DeleteForUserResponse{}), nil
+	return &pb.DeleteForUserResponse{}, nil
 }
 
 // ─── conversions ────────────────────────────────────────────────────────────

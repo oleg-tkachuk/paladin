@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -51,10 +51,10 @@ func (r *recordingStore) ListByTenant(ctx context.Context, a api_token.ListByTen
 	return nil, "", nil
 }
 
-func listReq(tenantID uuid.UUID) *connect.Request[adminv1.APITokenServiceListRequest] {
-	return connect.NewRequest(&adminv1.APITokenServiceListRequest{
+func listReq(tenantID uuid.UUID) *adminv1.APITokenServiceListRequest {
+	return &adminv1.APITokenServiceListRequest{
 		Parent: "tenants/" + tenantID.String(),
-	})
+	}
 }
 
 func TestListRefusesAForeignTenant(t *testing.T) {
@@ -98,10 +98,10 @@ func TestRevokeCrossesTenantsForPlatformAdmin(t *testing.T) {
 	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
 	target, tokenID := uuid.New(), uuid.New()
 
-	if _, err := h.Revoke(ctxAs("platform.admin"), connect.NewRequest(
+	if _, err := h.Revoke(ctxAs("platform.admin"),
 		&adminv1.APITokenServiceRevokeRequest{
 			Name: "tenants/" + target.String() + "/apiTokens/" + tokenID.String(),
-		})); err != nil {
+		}); err != nil {
 		t.Fatalf("platform.admin could not revoke another tenant's token: %v", err)
 	}
 	if store.revokedActing != target {
@@ -114,10 +114,10 @@ func TestRevokeRefusesAForeignTenant(t *testing.T) {
 	store := &recordingStore{}
 	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
 
-	_, err := h.Revoke(ctxAs("tenant.admin"), connect.NewRequest(
+	_, err := h.Revoke(ctxAs("tenant.admin"),
 		&adminv1.APITokenServiceRevokeRequest{
 			Name: "tenants/" + uuid.NewString() + "/apiTokens/" + uuid.NewString(),
-		}))
+		})
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", code(err))
 	}
@@ -131,8 +131,8 @@ func TestRevokeRejectsABareId(t *testing.T) {
 
 	// The old shape. It is refused rather than guessed at: an id without its
 	// parent has no scope, and inferring one is what this change removes.
-	_, err := h.Revoke(ctxAs("platform.admin"), connect.NewRequest(
-		&adminv1.APITokenServiceRevokeRequest{Name: uuid.NewString()}))
+	_, err := h.Revoke(ctxAs("platform.admin"),
+		&adminv1.APITokenServiceRevokeRequest{Name: uuid.NewString()})
 	if code(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", code(err))
 	}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -21,9 +21,9 @@ func TestListCollectionsResolvesASlugParent(t *testing.T) {
 	tenants := &slugTenant{slug: "acme", id: uuid.New()}
 	srv := &CollectionServer{H: h, bindings: okBindings{}, tenants: tenants}
 
-	_, err := srv.ListCollections(context.Background(), connect.NewRequest(&pb.ListCollectionsRequest{
+	_, err := srv.ListCollections(context.Background(), &pb.ListCollectionsRequest{
 		Parent: "tenants/acme",
-	}))
+	})
 	if err != nil {
 		t.Fatalf("listing: %v", err)
 	}
@@ -39,11 +39,11 @@ func TestCreateCollectionResolvesASlugParent(t *testing.T) {
 	tenants := &slugTenant{slug: "acme", id: uuid.New()}
 	srv := &CollectionServer{H: h, bindings: okBindings{}, tenants: tenants}
 
-	_, err := srv.CreateCollection(context.Background(), connect.NewRequest(&pb.CreateCollectionRequest{
+	_, err := srv.CreateCollection(context.Background(), &pb.CreateCollectionRequest{
 		Parent:             "tenants/acme",
 		Collection:         "invoices",
 		CollectionResource: &pb.Collection{Bucket: "storageBackends/primary/buckets/b1"},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -72,9 +72,9 @@ func TestCollectionParentErrors(t *testing.T) {
 				bindings: okBindings{},
 				tenants:  &slugTenant{slug: "acme", id: uuid.New()},
 			}
-			_, err := srv.ListCollections(context.Background(), connect.NewRequest(&pb.ListCollectionsRequest{
+			_, err := srv.ListCollections(context.Background(), &pb.ListCollectionsRequest{
 				Parent: tc.parent,
-			}))
+			})
 			if got := connect.CodeOf(err); got != tc.want {
 				t.Fatalf("code = %v, want %v (err: %v)", got, tc.want, err)
 			}
@@ -95,9 +95,9 @@ func TestCollectionParentWithoutLookup(t *testing.T) {
 	} {
 		h := &recordingCollections{}
 		srv := &CollectionServer{H: h, bindings: okBindings{}}
-		if _, err := srv.ListCollections(context.Background(), connect.NewRequest(&pb.ListCollectionsRequest{
+		if _, err := srv.ListCollections(context.Background(), &pb.ListCollectionsRequest{
 			Parent: parent,
-		})); err != nil {
+		}); err != nil {
 			t.Fatalf("parent %q: %v", parent, err)
 		}
 		if h.listArgs.TenantID != want {

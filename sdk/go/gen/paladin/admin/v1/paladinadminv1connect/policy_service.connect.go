@@ -6,180 +6,182 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// PolicyServiceName is the fully-qualified name of the PolicyService service.
 	PolicyServiceName = "paladin.admin.v1.PolicyService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// PolicyServiceValidateProcedure is the fully-qualified name of the PolicyService's Validate RPC.
+	// PolicyServiceValidateProcedure is the procedure name of the PolicyService's Validate RPC.
 	PolicyServiceValidateProcedure = "/paladin.admin.v1.PolicyService/Validate"
-	// PolicyServiceSimulateAuthzProcedure is the fully-qualified name of the PolicyService's
-	// SimulateAuthz RPC.
+	// PolicyServiceSimulateAuthzProcedure is the procedure name of the PolicyService's SimulateAuthz
+	// RPC.
 	PolicyServiceSimulateAuthzProcedure = "/paladin.admin.v1.PolicyService/SimulateAuthz"
-	// PolicyServiceGetEffectivePolicyProcedure is the fully-qualified name of the PolicyService's
+	// PolicyServiceGetEffectivePolicyProcedure is the procedure name of the PolicyService's
 	// GetEffectivePolicy RPC.
 	PolicyServiceGetEffectivePolicyProcedure = "/paladin.admin.v1.PolicyService/GetEffectivePolicy"
+)
+
+var (
+	policyServiceValidateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_policy_service_proto.Services().ByName("PolicyService").Methods().ByName("Validate"),
+			Procedure:        PolicyServiceValidateProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	policyServiceSimulateAuthzSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_policy_service_proto.Services().ByName("PolicyService").Methods().ByName("SimulateAuthz"),
+			Procedure:        PolicyServiceSimulateAuthzProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	policyServiceGetEffectivePolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_policy_service_proto.Services().ByName("PolicyService").Methods().ByName("GetEffectivePolicy"),
+			Procedure:        PolicyServiceGetEffectivePolicyProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // PolicyServiceClient is a client for the paladin.admin.v1.PolicyService service.
 type PolicyServiceClient interface {
 	// Validate parses + type-checks Cedar text against the Paladin schema.
-	Validate(context.Context, *connect.Request[v1.ValidateRequest]) (*connect.Response[v1.ValidateResponse], error)
+	Validate(context.Context, *v1.ValidateRequest) (*v1.ValidateResponse, error)
 	// SimulateAuthz answers "would this principal be allowed to take this
 	// action against this resource right now?" without performing the action.
 	// Useful for UI access-pre-flight and for LLM tools.
-	SimulateAuthz(context.Context, *connect.Request[v1.SimulateAuthzRequest]) (*connect.Response[v1.SimulateAuthzResponse], error)
+	SimulateAuthz(context.Context, *v1.SimulateAuthzRequest) (*v1.SimulateAuthzResponse, error)
 	// GetEffectivePolicy returns the merged policy stack for a target
 	// (tenant + bucket + collection inheritance), useful for debugging.
-	GetEffectivePolicy(context.Context, *connect.Request[v1.GetEffectivePolicyRequest]) (*connect.Response[v1.GetEffectivePolicyResponse], error)
+	GetEffectivePolicy(context.Context, *v1.GetEffectivePolicyRequest) (*v1.GetEffectivePolicyResponse, error)
 }
 
-// NewPolicyServiceClient constructs a client for the paladin.admin.v1.PolicyService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewPolicyServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PolicyServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	policyServiceMethods := v1.File_paladin_admin_v1_policy_service_proto.Services().ByName("PolicyService").Methods()
-	return &policyServiceClient{
-		validate: connect.NewClient[v1.ValidateRequest, v1.ValidateResponse](
-			httpClient,
-			baseURL+PolicyServiceValidateProcedure,
-			connect.WithSchema(policyServiceMethods.ByName("Validate")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		simulateAuthz: connect.NewClient[v1.SimulateAuthzRequest, v1.SimulateAuthzResponse](
-			httpClient,
-			baseURL+PolicyServiceSimulateAuthzProcedure,
-			connect.WithSchema(policyServiceMethods.ByName("SimulateAuthz")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		getEffectivePolicy: connect.NewClient[v1.GetEffectivePolicyRequest, v1.GetEffectivePolicyResponse](
-			httpClient,
-			baseURL+PolicyServiceGetEffectivePolicyProcedure,
-			connect.WithSchema(policyServiceMethods.ByName("GetEffectivePolicy")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// policyServiceClient implements PolicyServiceClient.
-type policyServiceClient struct {
-	validate           *connect.Client[v1.ValidateRequest, v1.ValidateResponse]
-	simulateAuthz      *connect.Client[v1.SimulateAuthzRequest, v1.SimulateAuthzResponse]
-	getEffectivePolicy *connect.Client[v1.GetEffectivePolicyRequest, v1.GetEffectivePolicyResponse]
-}
-
-// Validate calls paladin.admin.v1.PolicyService.Validate.
-func (c *policyServiceClient) Validate(ctx context.Context, req *connect.Request[v1.ValidateRequest]) (*connect.Response[v1.ValidateResponse], error) {
-	return c.validate.CallUnary(ctx, req)
-}
-
-// SimulateAuthz calls paladin.admin.v1.PolicyService.SimulateAuthz.
-func (c *policyServiceClient) SimulateAuthz(ctx context.Context, req *connect.Request[v1.SimulateAuthzRequest]) (*connect.Response[v1.SimulateAuthzResponse], error) {
-	return c.simulateAuthz.CallUnary(ctx, req)
-}
-
-// GetEffectivePolicy calls paladin.admin.v1.PolicyService.GetEffectivePolicy.
-func (c *policyServiceClient) GetEffectivePolicy(ctx context.Context, req *connect.Request[v1.GetEffectivePolicyRequest]) (*connect.Response[v1.GetEffectivePolicyResponse], error) {
-	return c.getEffectivePolicy.CallUnary(ctx, req)
+// NewPolicyServiceClient constructs a client for the paladin.admin.v1.PolicyService service.
+// Multiple service clients may share a single connect.Client.
+func NewPolicyServiceClient(client *connect.Client) PolicyServiceClient {
+	return &policyServiceClient{client: client}
 }
 
 // PolicyServiceHandler is an implementation of the paladin.admin.v1.PolicyService service.
 type PolicyServiceHandler interface {
 	// Validate parses + type-checks Cedar text against the Paladin schema.
-	Validate(context.Context, *connect.Request[v1.ValidateRequest]) (*connect.Response[v1.ValidateResponse], error)
+	Validate(context.Context, *v1.ValidateRequest) (*v1.ValidateResponse, error)
 	// SimulateAuthz answers "would this principal be allowed to take this
 	// action against this resource right now?" without performing the action.
 	// Useful for UI access-pre-flight and for LLM tools.
-	SimulateAuthz(context.Context, *connect.Request[v1.SimulateAuthzRequest]) (*connect.Response[v1.SimulateAuthzResponse], error)
+	SimulateAuthz(context.Context, *v1.SimulateAuthzRequest) (*v1.SimulateAuthzResponse, error)
 	// GetEffectivePolicy returns the merged policy stack for a target
 	// (tenant + bucket + collection inheritance), useful for debugging.
-	GetEffectivePolicy(context.Context, *connect.Request[v1.GetEffectivePolicyRequest]) (*connect.Response[v1.GetEffectivePolicyResponse], error)
+	GetEffectivePolicy(context.Context, *v1.GetEffectivePolicyRequest) (*v1.GetEffectivePolicyResponse, error)
 }
 
-// NewPolicyServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewPolicyServiceHandler(svc PolicyServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	policyServiceMethods := v1.File_paladin_admin_v1_policy_service_proto.Services().ByName("PolicyService").Methods()
-	policyServiceValidateHandler := connect.NewUnaryHandler(
-		PolicyServiceValidateProcedure,
-		svc.Validate,
-		connect.WithSchema(policyServiceMethods.ByName("Validate")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterPolicyServiceHandler registers svc as the paladin.admin.v1.PolicyService implementation
+// on server.
+func RegisterPolicyServiceHandler(server *connect.Server, svc PolicyServiceHandler) {
+	adapter := policyServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: policyServiceValidateSpec(), Handler: adapter.validate},
+		connect.Method{Spec: policyServiceSimulateAuthzSpec(), Handler: adapter.simulateAuthz},
+		connect.Method{Spec: policyServiceGetEffectivePolicySpec(), Handler: adapter.getEffectivePolicy},
 	)
-	policyServiceSimulateAuthzHandler := connect.NewUnaryHandler(
-		PolicyServiceSimulateAuthzProcedure,
-		svc.SimulateAuthz,
-		connect.WithSchema(policyServiceMethods.ByName("SimulateAuthz")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	policyServiceGetEffectivePolicyHandler := connect.NewUnaryHandler(
-		PolicyServiceGetEffectivePolicyProcedure,
-		svc.GetEffectivePolicy,
-		connect.WithSchema(policyServiceMethods.ByName("GetEffectivePolicy")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.admin.v1.PolicyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case PolicyServiceValidateProcedure:
-			policyServiceValidateHandler.ServeHTTP(w, r)
-		case PolicyServiceSimulateAuthzProcedure:
-			policyServiceSimulateAuthzHandler.ServeHTTP(w, r)
-		case PolicyServiceGetEffectivePolicyProcedure:
-			policyServiceGetEffectivePolicyHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedPolicyServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedPolicyServiceHandler struct{}
 
-func (UnimplementedPolicyServiceHandler) Validate(context.Context, *connect.Request[v1.ValidateRequest]) (*connect.Response[v1.ValidateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.PolicyService.Validate is not implemented"))
+func (UnimplementedPolicyServiceHandler) Validate(context.Context, *v1.ValidateRequest) (*v1.ValidateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.PolicyService.Validate is not implemented")
 }
 
-func (UnimplementedPolicyServiceHandler) SimulateAuthz(context.Context, *connect.Request[v1.SimulateAuthzRequest]) (*connect.Response[v1.SimulateAuthzResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.PolicyService.SimulateAuthz is not implemented"))
+func (UnimplementedPolicyServiceHandler) SimulateAuthz(context.Context, *v1.SimulateAuthzRequest) (*v1.SimulateAuthzResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.PolicyService.SimulateAuthz is not implemented")
 }
 
-func (UnimplementedPolicyServiceHandler) GetEffectivePolicy(context.Context, *connect.Request[v1.GetEffectivePolicyRequest]) (*connect.Response[v1.GetEffectivePolicyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.PolicyService.GetEffectivePolicy is not implemented"))
+func (UnimplementedPolicyServiceHandler) GetEffectivePolicy(context.Context, *v1.GetEffectivePolicyRequest) (*v1.GetEffectivePolicyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.PolicyService.GetEffectivePolicy is not implemented")
+}
+
+type policyServiceClient struct {
+	client *connect.Client
+}
+
+func (c *policyServiceClient) Validate(ctx context.Context, req *v1.ValidateRequest) (*v1.ValidateResponse, error) {
+	var res v1.ValidateResponse
+	if err := c.client.CallUnary(ctx, policyServiceValidateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyServiceClient) SimulateAuthz(ctx context.Context, req *v1.SimulateAuthzRequest) (*v1.SimulateAuthzResponse, error) {
+	var res v1.SimulateAuthzResponse
+	if err := c.client.CallUnary(ctx, policyServiceSimulateAuthzSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyServiceClient) GetEffectivePolicy(ctx context.Context, req *v1.GetEffectivePolicyRequest) (*v1.GetEffectivePolicyResponse, error) {
+	var res v1.GetEffectivePolicyResponse
+	if err := c.client.CallUnary(ctx, policyServiceGetEffectivePolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type policyServiceHandler struct{ svc PolicyServiceHandler }
+
+func (h policyServiceHandler) validate(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ValidateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Validate(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyServiceHandler) simulateAuthz(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SimulateAuthzRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SimulateAuthz(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyServiceHandler) getEffectivePolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetEffectivePolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetEffectivePolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

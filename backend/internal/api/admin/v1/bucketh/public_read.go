@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -55,7 +55,7 @@ func (h *Handler) checkPublicBucket(ctx context.Context, in CreateBucketInput) e
 		return apiutil.MapError(err)
 	}
 	if err := checkPublicBaseURL(b.PublicBaseURL); err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	if err := h.authorize(ctx, cedar.ActionConfigurePublicRead, b.BackendID, b.BucketName, b.OwnerTenantID); err != nil {
 		return err
@@ -66,7 +66,7 @@ func (h *Handler) checkPublicBucket(ctx context.Context, in CreateBucketInput) e
 	backend, err := h.backends.Get(ctx, b.BackendID)
 	switch {
 	case errors.Is(err, admindomain.ErrNotFound):
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("backend %q does not exist", b.BackendID))
+		return connect.Errorf(connect.CodeFailedPrecondition, "backend %q does not exist", b.BackendID)
 	case err != nil:
 		return apiutil.MapError(err)
 	}

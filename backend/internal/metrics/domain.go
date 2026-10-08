@@ -3,7 +3,7 @@ package metrics
 import (
 	"context"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

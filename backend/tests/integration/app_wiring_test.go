@@ -41,7 +41,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
@@ -127,17 +128,18 @@ func TestApp_AssembledMuxesEmitLifecycleEvents(t *testing.T) {
 		t.Fatalf("mint: %v", err)
 	}
 
-	client := paladindatav1connect.NewObjectServiceClient(http.DefaultClient, srv.URL)
-	req := connect.NewRequest(&pbdata.UpdateObjectRequest{
+	client := paladindatav1connect.NewObjectServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, srv.URL)))
+	req := &pbdata.UpdateObjectRequest{
 		Name:            "tenants/" + tenant.String() + "/collections/docs/objects/" + objID.String(),
 		ResourceVersion: "1",
 		UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
 		Tags:            map[string]string{"env": "wiring"},
-	})
-	req.Header().Set("Authorization", "Bearer "+token)
+	}
 
 	callCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
+	callCtx, info := connect.NewClientContext(callCtx)
+	info.RequestHeader().Set("Authorization", "Bearer "+token)
 	if _, err := client.UpdateObject(callCtx, req); err != nil {
 		t.Fatalf("UpdateObject through the assembled mux: %v", err)
 	}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
@@ -28,7 +28,7 @@ var errSlugNeedsResolver = errors.New("tenant must be named by its uuid here")
 func resolveTenantName(ctx context.Context, tenants TenantResolver, name string) (uuid.UUID, error) {
 	ref, err := apiutil.ParseTenantNameRef(name)
 	if err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	return resolveTenantRef(ctx, tenants, ref)
 }
@@ -40,7 +40,7 @@ func resolveTenantRef(ctx context.Context, tenants TenantResolver, ref apiutil.T
 		return ref.ID, nil
 	}
 	if tenants == nil {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument, errSlugNeedsResolver)
+		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument, errSlugNeedsResolver.Error()).WithCause(errSlugNeedsResolver)
 	}
 	t, err := tenants.GetTenantBySlug(ctx, ref.Slug)
 	if err != nil {

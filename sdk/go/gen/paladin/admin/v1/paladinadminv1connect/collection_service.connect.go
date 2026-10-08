@@ -6,55 +6,104 @@ package paladinadminv1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// CollectionServiceName is the fully-qualified name of the CollectionService service.
 	CollectionServiceName = "paladin.admin.v1.CollectionService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// CollectionServiceCreateCollectionProcedure is the fully-qualified name of the CollectionService's
+	// CollectionServiceCreateCollectionProcedure is the procedure name of the CollectionService's
 	// CreateCollection RPC.
 	CollectionServiceCreateCollectionProcedure = "/paladin.admin.v1.CollectionService/CreateCollection"
-	// CollectionServiceGetCollectionProcedure is the fully-qualified name of the CollectionService's
+	// CollectionServiceGetCollectionProcedure is the procedure name of the CollectionService's
 	// GetCollection RPC.
 	CollectionServiceGetCollectionProcedure = "/paladin.admin.v1.CollectionService/GetCollection"
-	// CollectionServiceUpdateCollectionProcedure is the fully-qualified name of the CollectionService's
+	// CollectionServiceUpdateCollectionProcedure is the procedure name of the CollectionService's
 	// UpdateCollection RPC.
 	CollectionServiceUpdateCollectionProcedure = "/paladin.admin.v1.CollectionService/UpdateCollection"
-	// CollectionServiceDeleteCollectionProcedure is the fully-qualified name of the CollectionService's
+	// CollectionServiceDeleteCollectionProcedure is the procedure name of the CollectionService's
 	// DeleteCollection RPC.
 	CollectionServiceDeleteCollectionProcedure = "/paladin.admin.v1.CollectionService/DeleteCollection"
-	// CollectionServiceListCollectionsProcedure is the fully-qualified name of the CollectionService's
+	// CollectionServiceListCollectionsProcedure is the procedure name of the CollectionService's
 	// ListCollections RPC.
 	CollectionServiceListCollectionsProcedure = "/paladin.admin.v1.CollectionService/ListCollections"
-	// CollectionServiceSetCollectionPolicyProcedure is the fully-qualified name of the
-	// CollectionService's SetCollectionPolicy RPC.
+	// CollectionServiceSetCollectionPolicyProcedure is the procedure name of the CollectionService's
+	// SetCollectionPolicy RPC.
 	CollectionServiceSetCollectionPolicyProcedure = "/paladin.admin.v1.CollectionService/SetCollectionPolicy"
-	// CollectionServiceBindCollectionToBucketProcedure is the fully-qualified name of the
-	// CollectionService's BindCollectionToBucket RPC.
+	// CollectionServiceBindCollectionToBucketProcedure is the procedure name of the CollectionService's
+	// BindCollectionToBucket RPC.
 	CollectionServiceBindCollectionToBucketProcedure = "/paladin.admin.v1.CollectionService/BindCollectionToBucket"
+)
+
+var (
+	collectionServiceCreateCollectionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_collection_service_proto.Services().ByName("CollectionService").Methods().ByName("CreateCollection"),
+			Procedure:  CollectionServiceCreateCollectionProcedure,
+		}
+	})
+	collectionServiceGetCollectionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_collection_service_proto.Services().ByName("CollectionService").Methods().ByName("GetCollection"),
+			Procedure:        CollectionServiceGetCollectionProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	collectionServiceUpdateCollectionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_collection_service_proto.Services().ByName("CollectionService").Methods().ByName("UpdateCollection"),
+			Procedure:        CollectionServiceUpdateCollectionProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	collectionServiceDeleteCollectionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_collection_service_proto.Services().ByName("CollectionService").Methods().ByName("DeleteCollection"),
+			Procedure:        CollectionServiceDeleteCollectionProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	collectionServiceListCollectionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_collection_service_proto.Services().ByName("CollectionService").Methods().ByName("ListCollections"),
+			Procedure:        CollectionServiceListCollectionsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	collectionServiceSetCollectionPolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_collection_service_proto.Services().ByName("CollectionService").Methods().ByName("SetCollectionPolicy"),
+			Procedure:        CollectionServiceSetCollectionPolicyProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	collectionServiceBindCollectionToBucketSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_collection_service_proto.Services().ByName("CollectionService").Methods().ByName("BindCollectionToBucket"),
+			Procedure:        CollectionServiceBindCollectionToBucketProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 )
 
 // CollectionServiceClient is a client for the paladin.admin.v1.CollectionService service.
@@ -62,134 +111,32 @@ type CollectionServiceClient interface {
 	// CreateCollection creates a namespace for objects and binds it to a bucket.
 	// The collection name may contain slashes ("team/project" is one
 	// collection, not two).
-	CreateCollection(context.Context, *connect.Request[v1.CreateCollectionRequest]) (*connect.Response[v1.Collection], error)
+	CreateCollection(context.Context, *v1.CreateCollectionRequest) (*v1.Collection, error)
 	// GetCollection returns the collection and the bucket it is bound to.
-	GetCollection(context.Context, *connect.Request[v1.GetCollectionRequest]) (*connect.Response[v1.Collection], error)
+	GetCollection(context.Context, *v1.GetCollectionRequest) (*v1.Collection, error)
 	// UpdateCollection applies update_mask; resource_version is required. The
 	// tenant and the collection name are immutable.
-	UpdateCollection(context.Context, *connect.Request[v1.UpdateCollectionRequest]) (*connect.Response[v1.Collection], error)
+	UpdateCollection(context.Context, *v1.UpdateCollectionRequest) (*v1.Collection, error)
 	// DeleteCollection refuses while the collection still holds objects — the
 	// foreign key enforces that, and no flag overrides it.
-	DeleteCollection(context.Context, *connect.Request[v1.DeleteCollectionRequest]) (*connect.Response[v1.DeleteCollectionResponse], error)
+	DeleteCollection(context.Context, *v1.DeleteCollectionRequest) (*v1.DeleteCollectionResponse, error)
 	// ListCollections returns the collections under a tenant, or across all
 	// tenants for a platform admin.
-	ListCollections(context.Context, *connect.Request[v1.ListCollectionsRequest]) (*connect.Response[v1.ListCollectionsResponse], error)
+	ListCollections(context.Context, *v1.ListCollectionsRequest) (*v1.ListCollectionsResponse, error)
 	// SetCollectionPolicy replaces the collection's Cedar policy. It composes
 	// with — does not replace — the tenant's inherited policy: a request must
 	// pass both.
-	SetCollectionPolicy(context.Context, *connect.Request[v1.SetCollectionPolicyRequest]) (*connect.Response[v1.Collection], error)
+	SetCollectionPolicy(context.Context, *v1.SetCollectionPolicyRequest) (*v1.Collection, error)
 	// BindCollectionToBucket / RebindCollection is intentionally distinct from
 	// UpdateCollection — re-binding has data-locality implications worth a
 	// separate audit entry.
-	BindCollectionToBucket(context.Context, *connect.Request[v1.BindCollectionToBucketRequest]) (*connect.Response[v1.Collection], error)
+	BindCollectionToBucket(context.Context, *v1.BindCollectionToBucketRequest) (*v1.Collection, error)
 }
 
 // NewCollectionServiceClient constructs a client for the paladin.admin.v1.CollectionService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewCollectionServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) CollectionServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	collectionServiceMethods := v1.File_paladin_admin_v1_collection_service_proto.Services().ByName("CollectionService").Methods()
-	return &collectionServiceClient{
-		createCollection: connect.NewClient[v1.CreateCollectionRequest, v1.Collection](
-			httpClient,
-			baseURL+CollectionServiceCreateCollectionProcedure,
-			connect.WithSchema(collectionServiceMethods.ByName("CreateCollection")),
-			connect.WithClientOptions(opts...),
-		),
-		getCollection: connect.NewClient[v1.GetCollectionRequest, v1.Collection](
-			httpClient,
-			baseURL+CollectionServiceGetCollectionProcedure,
-			connect.WithSchema(collectionServiceMethods.ByName("GetCollection")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		updateCollection: connect.NewClient[v1.UpdateCollectionRequest, v1.Collection](
-			httpClient,
-			baseURL+CollectionServiceUpdateCollectionProcedure,
-			connect.WithSchema(collectionServiceMethods.ByName("UpdateCollection")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		deleteCollection: connect.NewClient[v1.DeleteCollectionRequest, v1.DeleteCollectionResponse](
-			httpClient,
-			baseURL+CollectionServiceDeleteCollectionProcedure,
-			connect.WithSchema(collectionServiceMethods.ByName("DeleteCollection")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		listCollections: connect.NewClient[v1.ListCollectionsRequest, v1.ListCollectionsResponse](
-			httpClient,
-			baseURL+CollectionServiceListCollectionsProcedure,
-			connect.WithSchema(collectionServiceMethods.ByName("ListCollections")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		setCollectionPolicy: connect.NewClient[v1.SetCollectionPolicyRequest, v1.Collection](
-			httpClient,
-			baseURL+CollectionServiceSetCollectionPolicyProcedure,
-			connect.WithSchema(collectionServiceMethods.ByName("SetCollectionPolicy")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		bindCollectionToBucket: connect.NewClient[v1.BindCollectionToBucketRequest, v1.Collection](
-			httpClient,
-			baseURL+CollectionServiceBindCollectionToBucketProcedure,
-			connect.WithSchema(collectionServiceMethods.ByName("BindCollectionToBucket")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// collectionServiceClient implements CollectionServiceClient.
-type collectionServiceClient struct {
-	createCollection       *connect.Client[v1.CreateCollectionRequest, v1.Collection]
-	getCollection          *connect.Client[v1.GetCollectionRequest, v1.Collection]
-	updateCollection       *connect.Client[v1.UpdateCollectionRequest, v1.Collection]
-	deleteCollection       *connect.Client[v1.DeleteCollectionRequest, v1.DeleteCollectionResponse]
-	listCollections        *connect.Client[v1.ListCollectionsRequest, v1.ListCollectionsResponse]
-	setCollectionPolicy    *connect.Client[v1.SetCollectionPolicyRequest, v1.Collection]
-	bindCollectionToBucket *connect.Client[v1.BindCollectionToBucketRequest, v1.Collection]
-}
-
-// CreateCollection calls paladin.admin.v1.CollectionService.CreateCollection.
-func (c *collectionServiceClient) CreateCollection(ctx context.Context, req *connect.Request[v1.CreateCollectionRequest]) (*connect.Response[v1.Collection], error) {
-	return c.createCollection.CallUnary(ctx, req)
-}
-
-// GetCollection calls paladin.admin.v1.CollectionService.GetCollection.
-func (c *collectionServiceClient) GetCollection(ctx context.Context, req *connect.Request[v1.GetCollectionRequest]) (*connect.Response[v1.Collection], error) {
-	return c.getCollection.CallUnary(ctx, req)
-}
-
-// UpdateCollection calls paladin.admin.v1.CollectionService.UpdateCollection.
-func (c *collectionServiceClient) UpdateCollection(ctx context.Context, req *connect.Request[v1.UpdateCollectionRequest]) (*connect.Response[v1.Collection], error) {
-	return c.updateCollection.CallUnary(ctx, req)
-}
-
-// DeleteCollection calls paladin.admin.v1.CollectionService.DeleteCollection.
-func (c *collectionServiceClient) DeleteCollection(ctx context.Context, req *connect.Request[v1.DeleteCollectionRequest]) (*connect.Response[v1.DeleteCollectionResponse], error) {
-	return c.deleteCollection.CallUnary(ctx, req)
-}
-
-// ListCollections calls paladin.admin.v1.CollectionService.ListCollections.
-func (c *collectionServiceClient) ListCollections(ctx context.Context, req *connect.Request[v1.ListCollectionsRequest]) (*connect.Response[v1.ListCollectionsResponse], error) {
-	return c.listCollections.CallUnary(ctx, req)
-}
-
-// SetCollectionPolicy calls paladin.admin.v1.CollectionService.SetCollectionPolicy.
-func (c *collectionServiceClient) SetCollectionPolicy(ctx context.Context, req *connect.Request[v1.SetCollectionPolicyRequest]) (*connect.Response[v1.Collection], error) {
-	return c.setCollectionPolicy.CallUnary(ctx, req)
-}
-
-// BindCollectionToBucket calls paladin.admin.v1.CollectionService.BindCollectionToBucket.
-func (c *collectionServiceClient) BindCollectionToBucket(ctx context.Context, req *connect.Request[v1.BindCollectionToBucketRequest]) (*connect.Response[v1.Collection], error) {
-	return c.bindCollectionToBucket.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewCollectionServiceClient(client *connect.Client) CollectionServiceClient {
+	return &collectionServiceClient{client: client}
 }
 
 // CollectionServiceHandler is an implementation of the paladin.admin.v1.CollectionService service.
@@ -197,132 +144,216 @@ type CollectionServiceHandler interface {
 	// CreateCollection creates a namespace for objects and binds it to a bucket.
 	// The collection name may contain slashes ("team/project" is one
 	// collection, not two).
-	CreateCollection(context.Context, *connect.Request[v1.CreateCollectionRequest]) (*connect.Response[v1.Collection], error)
+	CreateCollection(context.Context, *v1.CreateCollectionRequest) (*v1.Collection, error)
 	// GetCollection returns the collection and the bucket it is bound to.
-	GetCollection(context.Context, *connect.Request[v1.GetCollectionRequest]) (*connect.Response[v1.Collection], error)
+	GetCollection(context.Context, *v1.GetCollectionRequest) (*v1.Collection, error)
 	// UpdateCollection applies update_mask; resource_version is required. The
 	// tenant and the collection name are immutable.
-	UpdateCollection(context.Context, *connect.Request[v1.UpdateCollectionRequest]) (*connect.Response[v1.Collection], error)
+	UpdateCollection(context.Context, *v1.UpdateCollectionRequest) (*v1.Collection, error)
 	// DeleteCollection refuses while the collection still holds objects — the
 	// foreign key enforces that, and no flag overrides it.
-	DeleteCollection(context.Context, *connect.Request[v1.DeleteCollectionRequest]) (*connect.Response[v1.DeleteCollectionResponse], error)
+	DeleteCollection(context.Context, *v1.DeleteCollectionRequest) (*v1.DeleteCollectionResponse, error)
 	// ListCollections returns the collections under a tenant, or across all
 	// tenants for a platform admin.
-	ListCollections(context.Context, *connect.Request[v1.ListCollectionsRequest]) (*connect.Response[v1.ListCollectionsResponse], error)
+	ListCollections(context.Context, *v1.ListCollectionsRequest) (*v1.ListCollectionsResponse, error)
 	// SetCollectionPolicy replaces the collection's Cedar policy. It composes
 	// with — does not replace — the tenant's inherited policy: a request must
 	// pass both.
-	SetCollectionPolicy(context.Context, *connect.Request[v1.SetCollectionPolicyRequest]) (*connect.Response[v1.Collection], error)
+	SetCollectionPolicy(context.Context, *v1.SetCollectionPolicyRequest) (*v1.Collection, error)
 	// BindCollectionToBucket / RebindCollection is intentionally distinct from
 	// UpdateCollection — re-binding has data-locality implications worth a
 	// separate audit entry.
-	BindCollectionToBucket(context.Context, *connect.Request[v1.BindCollectionToBucketRequest]) (*connect.Response[v1.Collection], error)
+	BindCollectionToBucket(context.Context, *v1.BindCollectionToBucketRequest) (*v1.Collection, error)
 }
 
-// NewCollectionServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewCollectionServiceHandler(svc CollectionServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	collectionServiceMethods := v1.File_paladin_admin_v1_collection_service_proto.Services().ByName("CollectionService").Methods()
-	collectionServiceCreateCollectionHandler := connect.NewUnaryHandler(
-		CollectionServiceCreateCollectionProcedure,
-		svc.CreateCollection,
-		connect.WithSchema(collectionServiceMethods.ByName("CreateCollection")),
-		connect.WithHandlerOptions(opts...),
+// RegisterCollectionServiceHandler registers svc as the paladin.admin.v1.CollectionService
+// implementation on server.
+func RegisterCollectionServiceHandler(server *connect.Server, svc CollectionServiceHandler) {
+	adapter := collectionServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: collectionServiceCreateCollectionSpec(), Handler: adapter.createCollection},
+		connect.Method{Spec: collectionServiceGetCollectionSpec(), Handler: adapter.getCollection},
+		connect.Method{Spec: collectionServiceUpdateCollectionSpec(), Handler: adapter.updateCollection},
+		connect.Method{Spec: collectionServiceDeleteCollectionSpec(), Handler: adapter.deleteCollection},
+		connect.Method{Spec: collectionServiceListCollectionsSpec(), Handler: adapter.listCollections},
+		connect.Method{Spec: collectionServiceSetCollectionPolicySpec(), Handler: adapter.setCollectionPolicy},
+		connect.Method{Spec: collectionServiceBindCollectionToBucketSpec(), Handler: adapter.bindCollectionToBucket},
 	)
-	collectionServiceGetCollectionHandler := connect.NewUnaryHandler(
-		CollectionServiceGetCollectionProcedure,
-		svc.GetCollection,
-		connect.WithSchema(collectionServiceMethods.ByName("GetCollection")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	collectionServiceUpdateCollectionHandler := connect.NewUnaryHandler(
-		CollectionServiceUpdateCollectionProcedure,
-		svc.UpdateCollection,
-		connect.WithSchema(collectionServiceMethods.ByName("UpdateCollection")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	collectionServiceDeleteCollectionHandler := connect.NewUnaryHandler(
-		CollectionServiceDeleteCollectionProcedure,
-		svc.DeleteCollection,
-		connect.WithSchema(collectionServiceMethods.ByName("DeleteCollection")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	collectionServiceListCollectionsHandler := connect.NewUnaryHandler(
-		CollectionServiceListCollectionsProcedure,
-		svc.ListCollections,
-		connect.WithSchema(collectionServiceMethods.ByName("ListCollections")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	collectionServiceSetCollectionPolicyHandler := connect.NewUnaryHandler(
-		CollectionServiceSetCollectionPolicyProcedure,
-		svc.SetCollectionPolicy,
-		connect.WithSchema(collectionServiceMethods.ByName("SetCollectionPolicy")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	collectionServiceBindCollectionToBucketHandler := connect.NewUnaryHandler(
-		CollectionServiceBindCollectionToBucketProcedure,
-		svc.BindCollectionToBucket,
-		connect.WithSchema(collectionServiceMethods.ByName("BindCollectionToBucket")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.admin.v1.CollectionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case CollectionServiceCreateCollectionProcedure:
-			collectionServiceCreateCollectionHandler.ServeHTTP(w, r)
-		case CollectionServiceGetCollectionProcedure:
-			collectionServiceGetCollectionHandler.ServeHTTP(w, r)
-		case CollectionServiceUpdateCollectionProcedure:
-			collectionServiceUpdateCollectionHandler.ServeHTTP(w, r)
-		case CollectionServiceDeleteCollectionProcedure:
-			collectionServiceDeleteCollectionHandler.ServeHTTP(w, r)
-		case CollectionServiceListCollectionsProcedure:
-			collectionServiceListCollectionsHandler.ServeHTTP(w, r)
-		case CollectionServiceSetCollectionPolicyProcedure:
-			collectionServiceSetCollectionPolicyHandler.ServeHTTP(w, r)
-		case CollectionServiceBindCollectionToBucketProcedure:
-			collectionServiceBindCollectionToBucketHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedCollectionServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedCollectionServiceHandler struct{}
 
-func (UnimplementedCollectionServiceHandler) CreateCollection(context.Context, *connect.Request[v1.CreateCollectionRequest]) (*connect.Response[v1.Collection], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CollectionService.CreateCollection is not implemented"))
+func (UnimplementedCollectionServiceHandler) CreateCollection(context.Context, *v1.CreateCollectionRequest) (*v1.Collection, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CollectionService.CreateCollection is not implemented")
 }
 
-func (UnimplementedCollectionServiceHandler) GetCollection(context.Context, *connect.Request[v1.GetCollectionRequest]) (*connect.Response[v1.Collection], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CollectionService.GetCollection is not implemented"))
+func (UnimplementedCollectionServiceHandler) GetCollection(context.Context, *v1.GetCollectionRequest) (*v1.Collection, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CollectionService.GetCollection is not implemented")
 }
 
-func (UnimplementedCollectionServiceHandler) UpdateCollection(context.Context, *connect.Request[v1.UpdateCollectionRequest]) (*connect.Response[v1.Collection], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CollectionService.UpdateCollection is not implemented"))
+func (UnimplementedCollectionServiceHandler) UpdateCollection(context.Context, *v1.UpdateCollectionRequest) (*v1.Collection, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CollectionService.UpdateCollection is not implemented")
 }
 
-func (UnimplementedCollectionServiceHandler) DeleteCollection(context.Context, *connect.Request[v1.DeleteCollectionRequest]) (*connect.Response[v1.DeleteCollectionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CollectionService.DeleteCollection is not implemented"))
+func (UnimplementedCollectionServiceHandler) DeleteCollection(context.Context, *v1.DeleteCollectionRequest) (*v1.DeleteCollectionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CollectionService.DeleteCollection is not implemented")
 }
 
-func (UnimplementedCollectionServiceHandler) ListCollections(context.Context, *connect.Request[v1.ListCollectionsRequest]) (*connect.Response[v1.ListCollectionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CollectionService.ListCollections is not implemented"))
+func (UnimplementedCollectionServiceHandler) ListCollections(context.Context, *v1.ListCollectionsRequest) (*v1.ListCollectionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CollectionService.ListCollections is not implemented")
 }
 
-func (UnimplementedCollectionServiceHandler) SetCollectionPolicy(context.Context, *connect.Request[v1.SetCollectionPolicyRequest]) (*connect.Response[v1.Collection], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CollectionService.SetCollectionPolicy is not implemented"))
+func (UnimplementedCollectionServiceHandler) SetCollectionPolicy(context.Context, *v1.SetCollectionPolicyRequest) (*v1.Collection, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CollectionService.SetCollectionPolicy is not implemented")
 }
 
-func (UnimplementedCollectionServiceHandler) BindCollectionToBucket(context.Context, *connect.Request[v1.BindCollectionToBucketRequest]) (*connect.Response[v1.Collection], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.admin.v1.CollectionService.BindCollectionToBucket is not implemented"))
+func (UnimplementedCollectionServiceHandler) BindCollectionToBucket(context.Context, *v1.BindCollectionToBucketRequest) (*v1.Collection, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CollectionService.BindCollectionToBucket is not implemented")
+}
+
+type collectionServiceClient struct {
+	client *connect.Client
+}
+
+func (c *collectionServiceClient) CreateCollection(ctx context.Context, req *v1.CreateCollectionRequest) (*v1.Collection, error) {
+	var res v1.Collection
+	if err := c.client.CallUnary(ctx, collectionServiceCreateCollectionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *collectionServiceClient) GetCollection(ctx context.Context, req *v1.GetCollectionRequest) (*v1.Collection, error) {
+	var res v1.Collection
+	if err := c.client.CallUnary(ctx, collectionServiceGetCollectionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *collectionServiceClient) UpdateCollection(ctx context.Context, req *v1.UpdateCollectionRequest) (*v1.Collection, error) {
+	var res v1.Collection
+	if err := c.client.CallUnary(ctx, collectionServiceUpdateCollectionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *collectionServiceClient) DeleteCollection(ctx context.Context, req *v1.DeleteCollectionRequest) (*v1.DeleteCollectionResponse, error) {
+	var res v1.DeleteCollectionResponse
+	if err := c.client.CallUnary(ctx, collectionServiceDeleteCollectionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *collectionServiceClient) ListCollections(ctx context.Context, req *v1.ListCollectionsRequest) (*v1.ListCollectionsResponse, error) {
+	var res v1.ListCollectionsResponse
+	if err := c.client.CallUnary(ctx, collectionServiceListCollectionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *collectionServiceClient) SetCollectionPolicy(ctx context.Context, req *v1.SetCollectionPolicyRequest) (*v1.Collection, error) {
+	var res v1.Collection
+	if err := c.client.CallUnary(ctx, collectionServiceSetCollectionPolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *collectionServiceClient) BindCollectionToBucket(ctx context.Context, req *v1.BindCollectionToBucketRequest) (*v1.Collection, error) {
+	var res v1.Collection
+	if err := c.client.CallUnary(ctx, collectionServiceBindCollectionToBucketSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type collectionServiceHandler struct{ svc CollectionServiceHandler }
+
+func (h collectionServiceHandler) createCollection(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateCollectionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateCollection(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h collectionServiceHandler) getCollection(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCollectionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCollection(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h collectionServiceHandler) updateCollection(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateCollectionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateCollection(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h collectionServiceHandler) deleteCollection(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteCollectionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteCollection(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h collectionServiceHandler) listCollections(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListCollectionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListCollections(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h collectionServiceHandler) setCollectionPolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetCollectionPolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetCollectionPolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h collectionServiceHandler) bindCollectionToBucket(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BindCollectionToBucketRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BindCollectionToBucket(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

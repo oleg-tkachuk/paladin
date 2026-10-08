@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -27,13 +28,13 @@ type AuditServer struct {
 
 func NewAuditServer(h *audith.Handler) *AuditServer { return &AuditServer{H: h} }
 
-func (s *AuditServer) ListAuditLog(ctx context.Context, req *connect.Request[pb.ListAuditLogRequest]) (*connect.Response[pb.ListAuditLogResponse], error) {
-	m := req.Msg
+func (s *AuditServer) ListAuditLog(ctx context.Context, req *pb.ListAuditLogRequest) (*pb.ListAuditLogResponse, error) {
+	m := req
 	args := admindomain.ListAuditArgs{PageSize: m.GetPage().GetPageSize()}
 	if id := m.GetTenantId(); id != "" {
 		tenant, err := uuid.Parse(id)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
+			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
 		}
 		args.TrailTenantID = tenant
 	}
@@ -48,29 +49,29 @@ func (s *AuditServer) ListAuditLog(ctx context.Context, req *connect.Request[pb.
 	for i := range list {
 		out.Entries = append(out.Entries, auditEntryToProto(&list[i]))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (s *AuditServer) GetAuditLogEntry(ctx context.Context, req *connect.Request[pb.GetAuditLogEntryRequest]) (*connect.Response[pb.AuditLogEntry], error) {
-	id, err := uuid.Parse(req.Msg.GetEntryId())
+func (s *AuditServer) GetAuditLogEntry(ctx context.Context, req *pb.GetAuditLogEntryRequest) (*pb.AuditLogEntry, error) {
+	id, err := uuid.Parse(req.GetEntryId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	out, err := s.H.GetAuditLogEntry(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(auditEntryToProto(out)), nil
+	return auditEntryToProto(out), nil
 }
 
-func (s *AuditServer) ExportAuditLog(ctx context.Context, req *connect.Request[pb.ExportAuditLogRequest]) (*connect.Response[pb.Operation], error) {
-	res, err := s.H.ExportAuditLog(ctx, req.Msg.GetFilter(), req.Msg.GetDestination())
+func (s *AuditServer) ExportAuditLog(ctx context.Context, req *pb.ExportAuditLogRequest) (*pb.Operation, error) {
+	res, err := s.H.ExportAuditLog(ctx, req.GetFilter(), req.GetDestination())
 	if err != nil {
 		return nil, err
 	}
 	payload, err := json.Marshal(res)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("export: marshal result: %w", err))
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("export: marshal result: %w", err))
 	}
 	now := timestamppb.New(res.GeneratedAt)
 	op := &pb.Operation{
@@ -86,7 +87,7 @@ func (s *AuditServer) ExportAuditLog(ctx context.Context, req *connect.Request[p
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	return connect.NewResponse(op), nil
+	return op, nil
 }
 
 var _ paladinadminv1connect.AuditLogServiceHandler = (*AuditServer)(nil)

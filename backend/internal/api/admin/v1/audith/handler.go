@@ -6,11 +6,10 @@ package audith
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -18,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 // exportRowCap bounds how many entries one ExportAuditLog call materialises.
@@ -45,7 +45,7 @@ func NewHandler(r admindomain.AuditRepository, policy cedar.Authorizer) *Handler
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID uuid.UUID) error {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -57,7 +57,7 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID u
 		return apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return nil
 }
@@ -81,11 +81,11 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
 		if args.ActorTenantID != uuid.Nil && args.ActorTenantID != caller {
 			return nil, "", connect.NewError(connect.CodePermissionDenied,
-				errors.New("cross-tenant audit denied"))
+				"cross-tenant audit denied")
 		}
 		if args.TrailTenantID != uuid.Nil && args.TrailTenantID != caller {
 			return nil, "", connect.NewError(connect.CodePermissionDenied,
-				errors.New("cross-tenant audit denied"))
+				"cross-tenant audit denied")
 		}
 		args.ActorTenantID = caller
 	}
@@ -94,7 +94,7 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 	}
 	prog, err := h.cel.Compile(celpkg.AuditLogSchema, filter)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
 	// Best-effort SQL pushdown of recognized conjuncts. The full CEL
 	// program still runs in-memory below; pushdown only narrows the
@@ -122,7 +122,7 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 		for i := range page {
 			match, err := celpkg.Match(prog, auditEntryRow(page[i]))
 			if err != nil {
-				return nil, "", connect.NewError(connect.CodeInternal, fmt.Errorf("filter eval: %w", err))
+				return nil, "", rpcerr.New(connect.CodeInternal, fmt.Errorf("filter eval: %w", err))
 			}
 			if !match {
 				continue
@@ -204,7 +204,7 @@ func (h *Handler) GetAuditLogEntry(ctx context.Context, id uuid.UUID) (*admindom
 		return nil, apiutil.MapError(err)
 	}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && e.ActorTenantID != caller {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("audit entry not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "audit entry not found")
 	}
 	if err := h.authorize(ctx, cedar.ActionReadAuditLog, e.ActorTenantID); err != nil {
 		return nil, err
@@ -264,7 +264,7 @@ func (h *Handler) ExportAuditLog(ctx context.Context, filter, destination string
 	}
 	prog, err := h.cel.Compile(celpkg.AuditLogSchema, filter)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
 	applyAuditPushdown(&args, filter)
 
@@ -277,15 +277,13 @@ func (h *Handler) ExportAuditLog(ctx context.Context, filter, destination string
 	for {
 		page, next, err := h.repo.List(ctx, args)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal,
-				fmt.Errorf("export: list page: %w", err))
+			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("export: list page: %w", err))
 		}
 		for i := range page {
 			if filter != "" {
 				match, err := celpkg.Match(prog, auditEntryRow(page[i]))
 				if err != nil {
-					return nil, connect.NewError(connect.CodeInternal,
-						fmt.Errorf("export: filter eval: %w", err))
+					return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("export: filter eval: %w", err))
 				}
 				if !match {
 					continue

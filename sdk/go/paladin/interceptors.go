@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 type idempotencyKeyCtx struct{}
@@ -89,9 +89,9 @@ type headerInterceptor struct {
 	capability func(context.Context) string
 }
 
-func (h *headerInterceptor) apply(ctx context.Context, dst http.Header) {
+func (h *headerInterceptor) apply(ctx context.Context, dst *connect.Header) {
 	for name, values := range h.headers {
-		dst[name] = append([]string(nil), values...)
+		dst.SetValues(name, append([]string(nil), values...))
 	}
 	if h.capability != nil {
 		if token := h.capability(ctx); token != "" {
@@ -107,7 +107,7 @@ type bodyIdempotencyKey interface{ GetIdempotencyKey() string }
 // idempotencyKeyFor picks the key a unary call sends: the context's, else the
 // request's own field, else a fresh one when the call has side effects the
 // contract makes no promise about. ok is false when the call needs none.
-func idempotencyKeyFor(ctx context.Context, req connect.AnyRequest) (string, bool) {
+func idempotencyKeyFor(ctx context.Context, spec connect.Spec, req any) (string, bool) {
 	if withoutKey(ctx) {
 		return "", false
 	}
@@ -115,42 +115,43 @@ func idempotencyKeyFor(ctx context.Context, req connect.AnyRequest) (string, boo
 	// carries one, not even the context's: the server does not memoise a
 	// read, and an idempotent call — RegenerateUploadUrl — must run again
 	// when repeated rather than hand back the URL it is replacing.
-	if req.Spec().IdempotencyLevel != connect.IdempotencyUnknown {
+	if spec.IdempotencyLevel != connect.IdempotencyUnknown {
 		return "", false
 	}
 	if key, ok := IdempotencyKey(ctx); ok {
 		return key, true
 	}
-	if body, ok := req.Any().(bodyIdempotencyKey); ok && body.GetIdempotencyKey() != "" {
+	if body, ok := req.(bodyIdempotencyKey); ok && body.GetIdempotencyKey() != "" {
 		return body.GetIdempotencyKey(), true
 	}
 	return rand.Text(), true
 }
 
-func (h *headerInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		h.apply(ctx, req.Header())
+func (h *headerInterceptor) interceptor() connect.ClientInterceptor {
+	return interceptor(h.unary, h.stream)
+}
+
+func (h *headerInterceptor) unary(next unaryFunc) unaryFunc {
+	return func(ctx context.Context, spec connect.Spec, req, res any) error {
+		header := callInfo(ctx).RequestHeader()
+		h.apply(ctx, header)
 		// Before the retry interceptor, so every attempt carries the same key.
-		if key, ok := idempotencyKeyFor(ctx, req); ok {
-			req.Header().Set(HeaderIdempotencyKey, key)
+		if key, ok := idempotencyKeyFor(ctx, spec, req); ok {
+			header.Set(HeaderIdempotencyKey, key)
 		}
-		return next(ctx, req)
+		return next(ctx, spec, req, res)
 	}
 }
 
-func (h *headerInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
-		conn := next(ctx, spec)
-		h.apply(ctx, conn.RequestHeader())
+func (h *headerInterceptor) stream(next connect.ClientFunc) connect.ClientFunc {
+	return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+		header := callInfo(ctx).RequestHeader()
+		h.apply(ctx, header)
 		if key, ok := IdempotencyKey(ctx); ok {
-			conn.RequestHeader().Set(HeaderIdempotencyKey, key)
+			header.Set(HeaderIdempotencyKey, key)
 		}
-		return conn
+		return next(ctx, spec)
 	}
-}
-
-func (h *headerInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
 }
 
 // retryPolicy repeats unary calls that are safe to repeat. Streams are never
@@ -165,26 +166,32 @@ type retryPolicy struct {
 	observe   observer
 }
 
-func (r *retryPolicy) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+func (r *retryPolicy) interceptor() connect.ClientInterceptor {
+	return interceptor(r.unary, nil)
+}
+
+func (r *retryPolicy) unary(next unaryFunc) unaryFunc {
+	return func(ctx context.Context, spec connect.Spec, req, res any) error {
+		info := callInfo(ctx)
 		ceiling := r.baseDelay
 		for attempt := 1; ; attempt++ {
-			resp, err := next(ctx, req)
-			if err == nil || attempt >= r.attempts || !r.retryable(req, err) {
-				return resp, err
+			clearResponse(info)
+			err := next(ctx, spec, req, res)
+			if err == nil || attempt >= r.attempts || !r.retryable(spec, info, err) {
+				return err
 			}
-			wait := r.wait(ceiling, err)
+			wait := r.wait(ceiling, info)
 			if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < wait {
 				// The retry could not start in time; the caller gets the
 				// server's answer rather than a deadline error.
-				return resp, err
+				return err
 			}
-			r.observe.retry(ctx, RetryEvent{Procedure: req.Spec().Procedure, Attempt: attempt, Wait: wait, Err: err})
+			r.observe.retry(ctx, RetryEvent{Procedure: spec.Procedure, Attempt: attempt, Wait: wait, Err: err})
 			timer := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				return nil, ctx.Err()
+				return ctx.Err()
 			case <-timer.C:
 			}
 			ceiling = min(ceiling*2, r.maxDelay)
@@ -195,22 +202,18 @@ func (r *retryPolicy) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 // wait is how long to pause before the next attempt: a random share of the
 // ceiling, so clients that failed together do not retry together, and never
 // less than the server's Retry-After.
-func (r *retryPolicy) wait(ceiling time.Duration, err error) time.Duration {
+func (r *retryPolicy) wait(ceiling time.Duration, info *connect.CallInfo) time.Duration {
 	wait := time.Duration(mathrand.Int64N(int64(ceiling) + 1)) //nolint:gosec // jitter, not a secret
-	if after, ok := retryAfter(err); ok && after > wait {
+	if after, ok := retryAfter(info); ok && after > wait {
 		wait = after
 	}
 	return wait
 }
 
-// retryAfter reads the server's Retry-After from a Connect error: a number of
-// seconds, or an HTTP date (RFC 9110), which waits until then.
-func retryAfter(err error) (time.Duration, bool) {
-	var cerr *connect.Error
-	if !errors.As(err, &cerr) {
-		return 0, false
-	}
-	return parseRetryAfter(cerr.Meta().Get(HeaderRetryAfter), time.Now())
+// retryAfter reads the server's Retry-After from the call's response: a number
+// of seconds, or an HTTP date (RFC 9110), which waits until then.
+func retryAfter(info *connect.CallInfo) (time.Duration, bool) {
+	return parseRetryAfter(responseMeta(info, HeaderRetryAfter), time.Now())
 }
 
 func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
@@ -230,14 +233,6 @@ func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
 	return max(at.Sub(now), 0), true
 }
 
-func (r *retryPolicy) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (r *retryPolicy) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
-}
-
 // DefaultRetryable is the failures retried unless WithRetryable says
 // otherwise: Unavailable and ResourceExhausted, the two a server sends for a
 // condition that passes.
@@ -253,7 +248,7 @@ func DefaultRetryable(err error) bool {
 // retryable reports whether err is transient and the call safe to repeat:
 // declared free of side effects or idempotent, or carrying an idempotency key.
 // The second half is not the classifier's to decide.
-func (r *retryPolicy) retryable(req connect.AnyRequest, err error) bool {
+func (r *retryPolicy) retryable(spec connect.Spec, info *connect.CallInfo, err error) bool {
 	var cerr *connect.Error
 	if !errors.As(err, &cerr) {
 		return false
@@ -265,8 +260,8 @@ func (r *retryPolicy) retryable(req connect.AnyRequest, err error) bool {
 	if !transient(err) {
 		return false
 	}
-	if req.Spec().IdempotencyLevel != connect.IdempotencyUnknown {
+	if spec.IdempotencyLevel != connect.IdempotencyUnknown {
 		return true
 	}
-	return req.Header().Get(HeaderIdempotencyKey) != ""
+	return info.RequestHeader().Get(HeaderIdempotencyKey) != ""
 }

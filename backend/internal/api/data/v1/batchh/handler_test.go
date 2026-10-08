@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -208,7 +208,7 @@ func TestBatchDelete(t *testing.T) {
 	})
 
 	t.Run("submitter error propagates", func(t *testing.T) {
-		sub := &fakeSubmitter{err: connect.NewError(connect.CodeUnavailable, errors.New("db down"))}
+		sub := &fakeSubmitter{err: connect.NewError(connect.CodeUnavailable, "db down")}
 		h := newHandler(sub, allowAll())
 		_, err := h.BatchDelete(authedCtx(tid), BatchDeleteArgs{ObjectIDs: ids(1)})
 		wantCode(t, err, connect.CodeUnavailable)

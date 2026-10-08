@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
-
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
@@ -157,7 +155,7 @@ func uploadSingle(ctx context.Context, data *DataPlane, in UploadInput) (*datav1
 	if err != nil {
 		return nil, err
 	}
-	allocated, err := data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+	allocated, err := data.Object.UploadObject(ctx, &datav1.UploadObjectRequest{
 		Parent:            in.Parent,
 		Key:               in.Key,
 		ContentType:       in.ContentType,
@@ -167,21 +165,21 @@ func uploadSingle(ctx context.Context, data *DataPlane, in UploadInput) (*datav1
 		Metadata:          in.Metadata,
 		Tags:              in.Tags,
 		Transport:         datav1.PresignTransport_PRESIGN_TRANSPORT_PUT,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
-	url, object := allocated.Msg.GetUploadUrl(), allocated.Msg.GetObject()
+	url, object := allocated.GetUploadUrl(), allocated.GetObject()
 	if url.GetUrl() == "" || object == nil {
 		return nil, ErrNoUploadURL
 	}
 	transfer := data.Transfer()
 	regenerate := func(ctx context.Context) (*commonv1.PresignedUrl, error) {
-		resp, err := data.Presign.RegenerateUploadUrl(ctx, connect.NewRequest(&datav1.RegenerateUploadUrlRequest{Name: object.GetName()}))
+		resp, err := data.Presign.RegenerateUploadUrl(ctx, &datav1.RegenerateUploadUrlRequest{Name: object.GetName()})
 		if err != nil {
 			return nil, err
 		}
-		return resp.Msg.GetUploadUrl(), nil
+		return resp.GetUploadUrl(), nil
 	}
 	var etag string
 	err = withRetries(ctx, transfer.attempts, url, regenerate, func(ctx context.Context, signed *commonv1.PresignedUrl) error {
@@ -195,13 +193,13 @@ func uploadSingle(ctx context.Context, data *DataPlane, in UploadInput) (*datav1
 	if err != nil && !AlreadyStored(err) {
 		return nil, err
 	}
-	done, err := data.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{
+	done, err := data.Object.CompleteObject(ctx, &datav1.CompleteObjectRequest{
 		Name: object.GetName(), Etag: etag, ChecksumValue: sum,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
-	return done.Msg, nil
+	return done, nil
 }
 
 func uploadMultipart(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOptions) (_ *datav1.Object, err error) {
@@ -238,7 +236,7 @@ func openSession(ctx context.Context, data *DataPlane, in UploadInput, opts Uplo
 		stored, err := storedParts(ctx, data, *opts.Resume)
 		return *opts.Resume, stored, err
 	}
-	init, err := data.MultipartUpload.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
+	init, err := data.MultipartUpload.InitiateMultipartUpload(ctx, &datav1.InitiateMultipartUploadRequest{
 		Parent:            in.Parent,
 		Key:               in.Key,
 		ContentType:       in.ContentType,
@@ -246,15 +244,15 @@ func openSession(ctx context.Context, data *DataPlane, in UploadInput, opts Uplo
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
 		Metadata:          in.Metadata,
 		Tags:              in.Tags,
-	}))
+	})
 	if err != nil {
 		return UploadSession{}, nil, err
 	}
 	session := UploadSession{
-		ObjectName: init.Msg.GetObject().GetName(),
-		UploadID:   init.Msg.GetUploadId(),
-		PartSize:   init.Msg.GetRecommendedPartSize(),
-		TotalParts: init.Msg.GetTotalParts(),
+		ObjectName: init.GetObject().GetName(),
+		UploadID:   init.GetUploadId(),
+		PartSize:   init.GetRecommendedPartSize(),
+		TotalParts: init.GetTotalParts(),
 	}
 	if session.PartSize <= 0 {
 		session.PartSize = DefaultMultipartThreshold
@@ -273,16 +271,16 @@ func storedParts(ctx context.Context, data *DataPlane, s UploadSession) (map[int
 	out := map[int32]*datav1.PartInfo{}
 	token := ""
 	for {
-		resp, err := data.MultipartUpload.ListParts(ctx, connect.NewRequest(&datav1.ListPartsRequest{
+		resp, err := data.MultipartUpload.ListParts(ctx, &datav1.ListPartsRequest{
 			ObjectName: s.ObjectName, UploadId: s.UploadID, Page: &commonv1.PageRequest{PageToken: token},
-		}))
+		})
 		if err != nil {
 			return nil, err
 		}
-		for _, p := range resp.Msg.GetParts() {
+		for _, p := range resp.GetParts() {
 			out[p.GetPartNumber()] = p
 		}
-		if token = resp.Msg.GetPage().GetNextPageToken(); token == "" {
+		if token = resp.GetPage().GetNextPageToken(); token == "" {
 			return out, nil
 		}
 	}

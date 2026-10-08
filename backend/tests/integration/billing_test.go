@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/genproto/googleapis/type/money"
@@ -511,22 +511,22 @@ func TestBilling_MoneyIsExact(t *testing.T) {
 
 	srv := connectshim.NewBillingServer(f.handler)
 	end := time.Now().UTC().Add(time.Hour)
-	resp, err := srv.GetTenantSummary(ctxAdmin(t, tenant), connect.NewRequest(&pb.GetTenantSummaryRequest{
+	resp, err := srv.GetTenantSummary(ctxAdmin(t, tenant), &pb.GetTenantSummaryRequest{
 		TenantId:    tenant.String(),
 		PeriodStart: timestamppb.New(end.Add(-24 * time.Hour)),
 		PeriodEnd:   timestamppb.New(end),
-	}))
+	})
 	if err != nil {
 		t.Fatalf("GetTenantSummary: %v", err)
 	}
-	if got, want := resp.Msg.GetTotal(), (&money.Money{CurrencyCode: "USD", Nanos: 500_000_000}); !proto.Equal(got, want) {
+	if got, want := resp.GetTotal(), (&money.Money{CurrencyCode: "USD", Nanos: 500_000_000}); !proto.Equal(got, want) {
 		t.Errorf("total = %v, want %v", got, want)
 	}
-	if got, want := resp.Msg.GetMaxBudget(), (&money.Money{CurrencyCode: "USD", Units: 19, Nanos: 990_000_000}); !proto.Equal(got, want) {
+	if got, want := resp.GetMaxBudget(), (&money.Money{CurrencyCode: "USD", Units: 19, Nanos: 990_000_000}); !proto.Equal(got, want) {
 		t.Errorf("max_budget = %v, want %v", got, want)
 	}
 	var top capability.Nanos
-	for _, e := range resp.Msg.GetTopOps() {
+	for _, e := range resp.GetTopOps() {
 		n, _, err := apiutil.NanosOf("spent", e.GetSpent())
 		if err != nil {
 			t.Fatalf("top op %q: %v", e.GetLabel(), err)

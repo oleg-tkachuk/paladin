@@ -4,40 +4,40 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"errors"
+	"net/http"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // errKeyReused is the server's answer to a key reused for another request.
-var errKeyReused = connect.NewError(connect.CodeInvalidArgument, errors.New(
+var errKeyReused = connect.NewError(connect.CodeInvalidArgument,
 	"idempotency: this Idempotency-Key was already used for a different request to this method; "+
-		"use a new key for a new request"))
+		"use a new key for a new request")
 
 // memoise answers a call the way the server's idempotency interceptor does: a
 // call the contract declares free of side effects runs as it is; one with a
 // key replays the response first given to the same request with that key, and
 // is refused when the key last went with a different request. A test that
 // shares one key across requests fails here as it would against Paladin.
-func (s *Server) memoise(ctx context.Context, req connect.AnyRequest, msg proto.Message,
-	next connect.UnaryFunc,
-) (connect.AnyResponse, error) {
-	if req.Spec().IdempotencyLevel == connect.IdempotencyNoSideEffects {
-		return next(ctx, req)
+func (s *Server) memoise(ctx context.Context, spec connect.Spec, header http.Header, req proto.Message,
+	next unaryHandler,
+) (proto.Message, error) {
+	if spec.IdempotencyLevel == connect.IdempotencyNoSideEffects {
+		return next(ctx, spec, req)
 	}
-	key := req.Header().Get(paladin.HeaderIdempotencyKey)
+	key := header.Get(paladin.HeaderIdempotencyKey)
 	if key == "" {
-		return next(ctx, req)
+		return next(ctx, spec, req)
 	}
-	encoded, err := proto.MarshalOptions{Deterministic: true}.Marshal(msg)
+	encoded, err := proto.MarshalOptions{Deterministic: true}.Marshal(req)
 	if err != nil {
-		return next(ctx, req)
+		return next(ctx, spec, req)
 	}
 	sum := sha256.Sum256(encoded)
-	slot := req.Spec().Procedure + "\x00" + key
+	slot := spec.Procedure + "\x00" + key
 
 	s.mu.Lock()
 	prior, seen := s.replays[slot]
@@ -48,7 +48,7 @@ func (s *Server) memoise(ctx context.Context, req connect.AnyRequest, msg proto.
 		}
 		return prior.response, nil
 	}
-	resp, err := next(ctx, req)
+	resp, err := next(ctx, spec, req)
 	if err != nil {
 		return resp, err
 	}

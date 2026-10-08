@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -20,7 +21,7 @@ func reasonOf(t *testing.T, err error) string {
 		return ""
 	}
 	for _, d := range cerr.Details() {
-		v, verr := d.Value()
+		v, verr := connectproto.UnmarshalErrorDetail(d)
 		if verr != nil {
 			t.Fatalf("detail does not decode: %v", verr)
 		}
@@ -52,7 +53,7 @@ func TestMapError(t *testing.T) {
 		{"unknown → internal, no reason", errors.New("boom"), connect.CodeInternal, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
 		{
 			"already a connect error passes through",
-			connect.NewError(connect.CodeUnavailable, errors.New("down")),
+			connect.NewError(connect.CodeUnavailable, "down"),
 			connect.CodeUnavailable,
 			commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED,
 		},

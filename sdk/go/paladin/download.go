@@ -16,8 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
-
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
@@ -251,11 +249,11 @@ func Download(ctx context.Context, data *DataPlane, name string, opts DownloadOp
 	// Bound to the object's ETag: the URL serves only the bytes this
 	// response describes, so a range read — which the checksum cannot
 	// verify — never splices in a different object written at the key.
-	resp, err := data.Object.DownloadObject(ownKeys(ctx), connect.NewRequest(&datav1.DownloadObjectRequest{Name: name, RequireEtagMatch: true}))
+	resp, err := data.Object.DownloadObject(ownKeys(ctx), &datav1.DownloadObjectRequest{Name: name, RequireEtagMatch: true})
 	if err != nil {
 		return nil, err
 	}
-	signed, object := resp.Msg.GetDownloadUrl(), resp.Msg.GetObject()
+	signed, object := resp.GetDownloadUrl(), resp.GetObject()
 	if signed.GetUrl() == "" {
 		return nil, ErrNoDownloadURL
 	}
@@ -266,14 +264,14 @@ func Download(ctx context.Context, data *DataPlane, name string, opts DownloadOp
 	// A retry asks for a fresh URL; it is bound to the object's ETag as it is
 	// then, so an object replaced in between is reported, not read.
 	presign := func(ctx context.Context) (*commonv1.PresignedUrl, error) {
-		again, err := data.Object.DownloadObject(ownKeys(ctx), connect.NewRequest(&datav1.DownloadObjectRequest{Name: name, RequireEtagMatch: true}))
+		again, err := data.Object.DownloadObject(ownKeys(ctx), &datav1.DownloadObjectRequest{Name: name, RequireEtagMatch: true})
 		if err != nil {
 			return nil, err
 		}
-		if again.Msg.GetObject().GetEtag() != object.GetEtag() {
+		if again.GetObject().GetEtag() != object.GetEtag() {
 			return nil, ErrObjectChanged
 		}
-		return again.Msg.GetDownloadUrl(), nil
+		return again.GetDownloadUrl(), nil
 	}
 	transfer, start := data.Transfer(), time.Now()
 	var got *http.Response
@@ -341,13 +339,13 @@ func (r *ObjectReader) expect(object *datav1.Object) {
 
 // LookupObject returns the object a paladin:// URI names, found by its key.
 func LookupObject(ctx context.Context, data *DataPlane, uri ObjectURI) (*datav1.Object, error) {
-	resp, err := data.Object.LookupObject(ctx, connect.NewRequest(&datav1.LookupObjectRequest{
+	resp, err := data.Object.LookupObject(ctx, &datav1.LookupObjectRequest{
 		Parent: uri.Parent(), Key: uri.Key,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 // DownloadURI is Download for the object a paladin:// URI names.

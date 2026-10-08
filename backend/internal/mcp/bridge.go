@@ -21,7 +21,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -221,11 +221,11 @@ func addTool[Args any](
 // An error from the Connect call becomes a tool result with isError set, its
 // text from toolError; a successful payload lands as a single text-content
 // block of indented JSON so the LLM can read fields by name.
-func jsonResult[T any](resp *connect.Response[T], err error) (*mcpsdk.CallToolResult, any, error) {
+func jsonResult[T any](resp *T, err error) (*mcpsdk.CallToolResult, any, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	b, mErr := json.MarshalIndent(resp.Msg, "", "  ")
+	b, mErr := json.MarshalIndent(resp, "", "  ")
 	if mErr != nil {
 		return nil, nil, fmt.Errorf("marshal response: %w", mErr)
 	}
@@ -366,9 +366,9 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Name:        "paladin_list_backends",
 		Description: "List all storage backends. Read-only.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listBackendsArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Backend.ListBackends(ctx, connect.NewRequest(&adminv1.ListBackendsRequest{
+		return jsonResult(c.Backend.ListBackends(ctx, &adminv1.ListBackendsRequest{
 			Page: &commonv1.PageRequest{PageSize: in.PageSize},
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -379,26 +379,26 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		if in.BackendID != "" {
 			req.Parent = "storageBackends/" + in.BackendID
 		}
-		return jsonResult(c.Bucket.ListBuckets(ctx, connect.NewRequest(req)))
+		return jsonResult(c.Bucket.ListBuckets(ctx, req))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_tenants",
 		Description: "List all tenants. Platform-admin only.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listTenantsArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Tenant.ListTenants(ctx, connect.NewRequest(&adminv1.ListTenantsRequest{
+		return jsonResult(c.Tenant.ListTenants(ctx, &adminv1.ListTenantsRequest{
 			Page: &commonv1.PageRequest{PageSize: in.PageSize},
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_collections",
 		Description: "List collections (logical namespaces) within a tenant.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listCollectionsArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.OKey.ListCollections(ctx, connect.NewRequest(&adminv1.ListCollectionsRequest{
+		return jsonResult(c.OKey.ListCollections(ctx, &adminv1.ListCollectionsRequest{
 			Parent: "tenants/" + in.TenantID,
 			Page:   &commonv1.PageRequest{PageSize: in.PageSize},
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -406,78 +406,78 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "List objects within a collection, optionally filtered by CEL.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in queryObjectsArgs) (*mcpsdk.CallToolResult, any, error) {
 		parent := fmt.Sprintf("tenants/%s/collections/%s", in.TenantID, in.Collection)
-		return jsonResult(c.Object.ListObjects(ctx, connect.NewRequest(&datav1.ListObjectsRequest{
+		return jsonResult(c.Object.ListObjects(ctx, &datav1.ListObjectsRequest{
 			Parent: parent,
 			Filter: in.Filter,
 			Page:   &commonv1.PageRequest{PageSize: in.PageSize},
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_quota",
 		Description: "Inspect a tenant or bucket quota.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getQuotaArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Quota.GetQuota(ctx, connect.NewRequest(&adminv1.GetQuotaRequest{Name: in.Name})))
+		return jsonResult(c.Quota.GetQuota(ctx, &adminv1.GetQuotaRequest{Name: in.Name}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_validate_policy",
 		Description: "Type-check a Cedar policy against the Paladin schema.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in validatePolicyArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Policy.Validate(ctx, connect.NewRequest(&adminv1.ValidateRequest{
+		return jsonResult(c.Policy.Validate(ctx, &adminv1.ValidateRequest{
 			CedarPolicy: in.CedarPolicy,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_versions",
 		Description: "List the version history of an object (newest first). Empty when bucket versioning is off.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listVersionsArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Object.ListObjectVersions(ctx, connect.NewRequest(&datav1.ListObjectVersionsRequest{
+		return jsonResult(c.Object.ListObjectVersions(ctx, &datav1.ListObjectVersionsRequest{
 			Parent: in.ObjectName,
 			Page:   &commonv1.PageRequest{PageSize: in.PageSize},
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_version",
 		Description: "Fetch metadata for a specific object version.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getVersionArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Object.GetObjectVersion(ctx, connect.NewRequest(&datav1.GetObjectVersionRequest{
+		return jsonResult(c.Object.GetObjectVersion(ctx, &datav1.GetObjectVersionRequest{
 			Name: in.VersionName,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_effective_policy",
 		Description: "Return the merged Cedar policy stack the engine compiles for a resource (tenant + collection layers).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getEffectivePolicyArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Policy.GetEffectivePolicy(ctx, connect.NewRequest(&adminv1.GetEffectivePolicyRequest{
+		return jsonResult(c.Policy.GetEffectivePolicy(ctx, &adminv1.GetEffectivePolicyRequest{
 			ResourceName: in.ResourceName,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_simulate_authz",
 		Description: "Dry-run authorization: would `principal_subject` (with the given roles) be allowed to perform `action` on `resource_name`?",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in simulateAuthzArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Policy.SimulateAuthz(ctx, connect.NewRequest(&adminv1.SimulateAuthzRequest{
+		return jsonResult(c.Policy.SimulateAuthz(ctx, &adminv1.SimulateAuthzRequest{
 			PrincipalSubject:  in.PrincipalSubject,
 			PrincipalTenantId: in.PrincipalTenantID,
 			PrincipalRoles:    in.PrincipalRoles,
 			Action:            in.Action,
 			ResourceName:      in.ResourceName,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_audit_recent",
 		Description: "Fetch the most recent audit log entries.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in auditRecentArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Audit.ListAuditLog(ctx, connect.NewRequest(&adminv1.ListAuditLogRequest{
+		return jsonResult(c.Audit.ListAuditLog(ctx, &adminv1.ListAuditLogRequest{
 			Page:   &commonv1.PageRequest{PageSize: in.PageSize},
 			Filter: in.Filter,
-		})))
+		}))
 	})
 
 	// ─── Single-resource Get tools ─────────────────────────────────────
@@ -489,55 +489,55 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Name:        "paladin_get_tenant",
 		Description: "Fetch a single tenant by resource name.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Tenant.GetTenant(ctx, connect.NewRequest(&adminv1.GetTenantRequest{Name: in.Name})))
+		return jsonResult(c.Tenant.GetTenant(ctx, &adminv1.GetTenantRequest{Name: in.Name}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_bucket",
 		Description: "Fetch a single bucket (storageBackends/{b}/buckets/{n}).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Bucket.GetBucket(ctx, connect.NewRequest(&adminv1.GetBucketRequest{Name: in.Name})))
+		return jsonResult(c.Bucket.GetBucket(ctx, &adminv1.GetBucketRequest{Name: in.Name}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_collection",
 		Description: "Fetch a single collection (tenants/{tenant_id_or_slug}/collections/{ok}).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.OKey.GetCollection(ctx, connect.NewRequest(&adminv1.GetCollectionRequest{Name: in.Name})))
+		return jsonResult(c.OKey.GetCollection(ctx, &adminv1.GetCollectionRequest{Name: in.Name}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_object",
 		Description: "Fetch object metadata (NOT the body — body is fetched via paladin_presign_download).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Object.GetObject(ctx, connect.NewRequest(&datav1.GetObjectRequest{Name: in.Name})))
+		return jsonResult(c.Object.GetObject(ctx, &datav1.GetObjectRequest{Name: in.Name}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_lookup_object",
 		Description: "Resolve an object by its human key within a collection (the inverse of having the object_id). Returns the same metadata as paladin_get_object.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in lookupObjectArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Object.LookupObject(ctx, connect.NewRequest(&datav1.LookupObjectRequest{
+		return jsonResult(c.Object.LookupObject(ctx, &datav1.LookupObjectRequest{
 			Parent: in.Parent,
 			Key:    in.Key,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_count_objects",
 		Description: "Count objects under a collection, optionally narrowed by a CEL filter. Cheaper than paging paladin_query_objects when only the total is needed.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in countObjectsArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Object.CountObjects(ctx, connect.NewRequest(&datav1.CountObjectsRequest{
+		return jsonResult(c.Object.CountObjects(ctx, &datav1.CountObjectsRequest{
 			Parent: in.Parent,
 			Filter: in.Filter,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_object_tags",
 		Description: "Read the tag map for a single object.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.ObjectTag.GetObjectTags(ctx, connect.NewRequest(&datav1.GetObjectTagsRequest{Name: in.Name})))
+		return jsonResult(c.ObjectTag.GetObjectTags(ctx, &datav1.GetObjectTagsRequest{Name: in.Name}))
 	})
 
 	// Subscription / operations introspection.
@@ -546,17 +546,17 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Name:        "paladin_list_subscriptions",
 		Description: "List event subscriptions, optionally for one bucket parent.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listChildrenArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.EventSub.ListSubscriptions(ctx, connect.NewRequest(&adminv1.ListSubscriptionsRequest{
+		return jsonResult(c.EventSub.ListSubscriptions(ctx, &adminv1.ListSubscriptionsRequest{
 			Parent: in.Parent,
 			Page:   &commonv1.PageRequest{PageSize: in.PageSize},
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_subscription",
 		Description: "Read a single event subscription by resource name.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.EventSub.GetSubscription(ctx, connect.NewRequest(&adminv1.GetSubscriptionRequest{Name: in.Name})))
+		return jsonResult(c.EventSub.GetSubscription(ctx, &adminv1.GetSubscriptionRequest{Name: in.Name}))
 	})
 
 	// CEL expression validator. Same trust posture as PolicyService.Validate
@@ -568,26 +568,26 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Name:        "paladin_validate_cel",
 		Description: "Compile-check a CEL expression against a Paladin schema. Returns {valid, message, line, column}. Empty expression always validates.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in validateCELArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.CEL.Validate(ctx, connect.NewRequest(&adminv1.ValidateCELRequest{
+		return jsonResult(c.CEL.Validate(ctx, &adminv1.ValidateCELRequest{
 			Schema:     in.Schema,
 			Expression: in.Expression,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_operations",
 		Description: "List long-running operations (BatchDelete / BatchCopy / …) for the active tenant.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listOperationsArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.DataOperation.ListOperations(ctx, connect.NewRequest(&datav1.ListOperationsRequest{
+		return jsonResult(c.DataOperation.ListOperations(ctx, &datav1.ListOperationsRequest{
 			Page: &commonv1.PageRequest{PageSize: in.PageSize},
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_operation",
 		Description: "Fetch a single long-running operation (state + response payload).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.DataOperation.GetOperation(ctx, connect.NewRequest(&datav1.GetOperationRequest{Name: in.Name})))
+		return jsonResult(c.DataOperation.GetOperation(ctx, &datav1.GetOperationRequest{Name: in.Name}))
 	})
 
 	// Tag / multipart read surface (data plane).
@@ -596,21 +596,21 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Name:        "paladin_list_distinct_tags",
 		Description: "List the distinct tag keys/values currently in use under a collection — useful before filtering or tagging. Keys are paged; a key with more values than the server cap comes back with truncated=true.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listChildrenArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.ObjectTag.ListDistinctTags(ctx, connect.NewRequest(&datav1.ListDistinctTagsRequest{
+		return jsonResult(c.ObjectTag.ListDistinctTags(ctx, &datav1.ListDistinctTagsRequest{
 			Parent: in.Parent,
 			Page:   &commonv1.PageRequest{PageSize: in.PageSize, PageToken: in.PageToken},
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_parts",
 		Description: "List the parts uploaded so far for an in-progress multipart upload.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listPartsArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Multipart.ListParts(ctx, connect.NewRequest(&datav1.ListPartsRequest{
+		return jsonResult(c.Multipart.ListParts(ctx, &datav1.ListPartsRequest{
 			ObjectName: in.ObjectName,
 			UploadId:   in.UploadID,
 			Page:       &commonv1.PageRequest{PageSize: in.PageSize},
-		})))
+		}))
 	})
 
 	// Admin discovery gaps.
@@ -619,14 +619,14 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Name:        "paladin_get_audit_entry",
 		Description: "Read a single audit-log entry by its id (the granular companion to paladin_audit_recent).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in auditEntryArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Audit.GetAuditLogEntry(ctx, connect.NewRequest(&adminv1.GetAuditLogEntryRequest{EntryId: in.EntryID})))
+		return jsonResult(c.Audit.GetAuditLogEntry(ctx, &adminv1.GetAuditLogEntryRequest{EntryId: in.EntryID}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_system_config",
 		Description: "Read the platform's effective runtime configuration (admin-profile only; not exposed to agent_safe).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, _ struct{}) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.System.GetConfig(ctx, connect.NewRequest(&adminv1.GetConfigRequest{})))
+		return jsonResult(c.System.GetConfig(ctx, &adminv1.GetConfigRequest{}))
 	})
 
 	// Budget, billing and platform operations — read-only.
@@ -635,19 +635,19 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Name:        "paladin_get_tenant_budget",
 		Description: "Read a tenant's capability budget: the cap, what has been spent this period, and the unit.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in tenantIDArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Budget.Get(ctx, connect.NewRequest(&adminv1.TenantBudgetServiceGetRequest{TenantId: in.TenantID})))
+		return jsonResult(c.Budget.Get(ctx, &adminv1.TenantBudgetServiceGetRequest{TenantId: in.TenantID}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_budget_summary",
 		Description: "Summarise capability budgets across tenants, optionally only those near or over their cap (admin profile only).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in budgetSummaryArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Budget.Summarize(ctx, connect.NewRequest(&adminv1.TenantBudgetServiceSummarizeRequest{
+		return jsonResult(c.Budget.Summarize(ctx, &adminv1.TenantBudgetServiceSummarizeRequest{
 			ThresholdPct:    in.ThresholdPct,
 			UnlimitedOnly:   in.UnlimitedOnly,
 			ExcludeInactive: in.ExcludeInactive,
 			Limit:           in.Limit,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -658,9 +658,9 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return jsonResult(c.Billing.GetTenantSummary(ctx, connect.NewRequest(&adminv1.GetTenantSummaryRequest{
+		return jsonResult(c.Billing.GetTenantSummary(ctx, &adminv1.GetTenantSummaryRequest{
 			TenantId: in.TenantID, PeriodStart: start, PeriodEnd: end,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -671,26 +671,26 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return jsonResult(c.Billing.GetTenantTimeSeries(ctx, connect.NewRequest(&adminv1.GetTenantTimeSeriesRequest{
+		return jsonResult(c.Billing.GetTenantTimeSeries(ctx, &adminv1.GetTenantTimeSeriesRequest{
 			TenantId: in.TenantID, PeriodStart: start, PeriodEnd: end, Granularity: in.Granularity,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_platform_operations",
 		Description: "List platform-wide long-running operations — bucket provisioning, migrations between backends.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listPlatformOperationsArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.PlatOp.ListOperations(ctx, connect.NewRequest(&adminv1.ListOperationsRequest{
+		return jsonResult(c.PlatOp.ListOperations(ctx, &adminv1.ListOperationsRequest{
 			Page:   &commonv1.PageRequest{PageSize: in.PageSize, PageToken: in.PageToken},
 			Filter: in.Filter,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_platform_operation",
 		Description: "Read one platform-wide long-running operation: state, progress and result.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.PlatOp.GetOperation(ctx, connect.NewRequest(&adminv1.GetOperationRequest{Name: in.Name})))
+		return jsonResult(c.PlatOp.GetOperation(ctx, &adminv1.GetOperationRequest{Name: in.Name}))
 	})
 }
 
@@ -803,7 +803,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Name:        "paladin_create_collection",
 		Description: "Create a collection (logical namespace) under a tenant + bucket binding.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in createCollectionArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.OKey.CreateCollection(ctx, connect.NewRequest(&adminv1.CreateCollectionRequest{
+		return jsonResult(c.OKey.CreateCollection(ctx, &adminv1.CreateCollectionRequest{
 			Parent:     "tenants/" + in.TenantID,
 			Collection: in.Collection,
 			CollectionResource: &adminv1.Collection{
@@ -811,7 +811,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 				Bucket:      in.Bucket,
 				CedarPolicy: in.CedarPolicy,
 			},
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -822,33 +822,33 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return jsonResult(c.Users.GrantScopes(ctx, connect.NewRequest(&iamv1.GrantScopesRequest{
+		return jsonResult(c.Users.GrantScopes(ctx, &iamv1.GrantScopesRequest{
 			Name:   in.UserName,
 			Scopes: scopes,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_restore_version",
 		Description: "Make the named version `current` again (versioning must be enabled on the parent bucket).",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in restoreVersionArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Object.RestoreObjectVersion(ctx, connect.NewRequest(&datav1.RestoreObjectVersionRequest{
+		return jsonResult(c.Object.RestoreObjectVersion(ctx, &datav1.RestoreObjectVersionRequest{
 			Name:            in.VersionName,
 			ResourceVersion: in.ResourceVersion,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_create_user",
 		Description: "Create a new user under a tenant. Initial password is returned only via secret channels — do NOT echo it back to the LLM transcript.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in createUserArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Users.CreateUser(ctx, connect.NewRequest(&iamv1.CreateUserRequest{
+		return jsonResult(c.Users.CreateUser(ctx, &iamv1.CreateUserRequest{
 			Parent:          "tenants/" + in.TenantID,
 			Subject:         in.Subject,
 			DisplayName:     in.DisplayName,
 			InitialPassword: in.InitialPassword,
 			Roles:           in.Roles,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -874,11 +874,11 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 				},
 			})
 		}
-		return jsonResult(c.Bucket.SetLifecycleRules(ctx, connect.NewRequest(&adminv1.SetLifecycleRulesRequest{
+		return jsonResult(c.Bucket.SetLifecycleRules(ctx, &adminv1.SetLifecycleRulesRequest{
 			Name:            in.BucketName,
 			ResourceVersion: in.ResourceVersion,
 			Rules:           pbRules,
-		})))
+		}))
 	})
 
 	// EventSubscription mutating surface. The Test variant is non-
@@ -894,10 +894,10 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return jsonResult(c.EventSub.CreateSubscription(ctx, connect.NewRequest(&adminv1.CreateSubscriptionRequest{
+		return jsonResult(c.EventSub.CreateSubscription(ctx, &adminv1.CreateSubscriptionRequest{
 			Parent:       "tenants/" + in.TenantID,
 			Subscription: sub,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -909,12 +909,12 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return jsonResult(c.EventSub.UpdateSubscription(ctx, connect.NewRequest(&adminv1.UpdateSubscriptionRequest{
+		return jsonResult(c.EventSub.UpdateSubscription(ctx, &adminv1.UpdateSubscriptionRequest{
 			Name:            in.Name,
 			ResourceVersion: in.ResourceVersion,
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"filter", "sink", "disabled"}},
 			Subscription:    sub,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -922,17 +922,17 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "Delete an event subscription. Existing in-flight deliveries continue; no events sent after this point.",
 		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in deleteSubscriptionArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.EventSub.DeleteSubscription(ctx, connect.NewRequest(&adminv1.DeleteSubscriptionRequest{
+		return jsonResult(c.EventSub.DeleteSubscription(ctx, &adminv1.DeleteSubscriptionRequest{
 			Name:            in.Name,
 			ResourceVersion: in.ResourceVersion,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_test_subscription",
 		Description: "Deliver a synthetic event to the configured sink. Returns {delivered, status_code, error_message}. Safe — does not mutate any state.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.EventSub.TestSubscription(ctx, connect.NewRequest(&adminv1.TestSubscriptionRequest{Name: in.Name})))
+		return jsonResult(c.EventSub.TestSubscription(ctx, &adminv1.TestSubscriptionRequest{Name: in.Name}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -945,10 +945,10 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		// sending only the ones named would have zeroed the rest.
 		q := &adminv1.Quota{}
 		version := quotaNoRowVersion
-		cur, err := c.Quota.GetQuota(ctx, connect.NewRequest(&adminv1.GetQuotaRequest{Name: in.Name}))
+		cur, err := c.Quota.GetQuota(ctx, &adminv1.GetQuotaRequest{Name: in.Name})
 		switch {
 		case err == nil:
-			q, version = cur.Msg, cur.Msg.GetResourceVersion()
+			q, version = cur, cur.GetResourceVersion()
 		case connect.CodeOf(err) != connect.CodeNotFound:
 			return nil, nil, err
 		}
@@ -971,22 +971,22 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		if len(paths) == 0 {
 			return nil, nil, errors.New("name at least one cap to change")
 		}
-		return jsonResult(c.Quota.SetQuota(ctx, connect.NewRequest(&adminv1.SetQuotaRequest{
+		return jsonResult(c.Quota.SetQuota(ctx, &adminv1.SetQuotaRequest{
 			Name:            in.Name,
 			ResourceVersion: version,
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: paths},
 			Quota:           q,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_audit_export",
 		Description: "Export a point-in-time JSON snapshot of audit-log entries (for SOC-2 / ISO-27001 evidence). Returns an Operation with the materialised dump in `response`. Capped at 10k rows — `truncated=true` signals the caller should narrow `filter`.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in auditExportArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Audit.ExportAuditLog(ctx, connect.NewRequest(&adminv1.ExportAuditLogRequest{
+		return jsonResult(c.Audit.ExportAuditLog(ctx, &adminv1.ExportAuditLogRequest{
 			Filter:      in.Filter,
 			Destination: in.Destination,
-		})))
+		}))
 	})
 
 	// ─── Presign trio ──────────────────────────────────────────────────
@@ -1008,7 +1008,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Name:        "paladin_upload_object",
 		Description: "Reserve a new object slot and return a presigned PUT URL. Agent uploads bytes directly to S3, then calls paladin_complete_object to promote the row to AVAILABLE.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in uploadObjectArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+		return jsonResult(c.Object.UploadObject(ctx, &datav1.UploadObjectRequest{
 			Parent:            in.Parent,
 			Key:               in.Key,
 			ContentType:       in.ContentType,
@@ -1018,18 +1018,18 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 			Metadata:          in.Metadata,
 			Tags:              in.Tags,
 			IdempotencyKey:    in.IdempotencyKey,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_complete_object",
 		Description: "Promote a PENDING object to AVAILABLE after the agent finished its presigned PUT. Etag from the S3 response goes into `etag`; checksum is optional.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in completeObjectArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Object.CompleteObject(ctx, connect.NewRequest(&datav1.CompleteObjectRequest{
+		return jsonResult(c.Object.CompleteObject(ctx, &datav1.CompleteObjectRequest{
 			Name:          in.Name,
 			Etag:          in.Etag,
 			ChecksumValue: in.ChecksumValue,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -1044,17 +1044,17 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		if in.TtlSeconds > 0 {
 			req.Ttl = durationpb.New(time.Duration(in.TtlSeconds) * time.Second)
 		}
-		return jsonResult(c.Presign.PresignDownload(ctx, connect.NewRequest(req)))
+		return jsonResult(c.Presign.PresignDownload(ctx, req))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_set_object_tags",
 		Description: "Replace the tag map on an existing object. Pass an empty `tags` map to clear all tags.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in setObjectTagsArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.ObjectTag.PutObjectTags(ctx, connect.NewRequest(&datav1.PutObjectTagsRequest{
+		return jsonResult(c.ObjectTag.PutObjectTags(ctx, &datav1.PutObjectTagsRequest{
 			Name: in.Name,
 			Tags: in.Tags,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -1062,11 +1062,11 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "Delete an object. Default is a soft delete (recoverable via paladin_restore_version); set `permanent` to purge it irrecoverably. Locked objects refuse deletion unless the caller holds GOVERNANCE bypass.",
 		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in deleteObjectArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Object.DeleteObject(ctx, connect.NewRequest(&datav1.DeleteObjectRequest{
+		return jsonResult(c.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{
 			Name:            in.Name,
 			ResourceVersion: in.ResourceVersion,
 			Permanent:       in.Permanent,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -1074,11 +1074,11 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "Server-side copy of an object to a destination collection + key. The source is left in place (use paladin_delete_object after for a move).",
 		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in copyObjectArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Object.CopyObject(ctx, connect.NewRequest(&datav1.CopyObjectRequest{
+		return jsonResult(c.Object.CopyObject(ctx, &datav1.CopyObjectRequest{
 			SourceName:            in.SourceName,
 			DestinationCollection: in.DestinationCollection,
 			DestinationKey:        in.DestinationKey,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -1086,21 +1086,21 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "Asynchronously delete many objects under one collection. Select either by explicit `names` (≤100) or a CEL `filter`. Returns a long-running Operation; poll it via paladin_get_operation.",
 		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchDeleteArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Batch.BatchDeleteObjects(ctx, connect.NewRequest(&datav1.BatchDeleteObjectsRequest{
+		return jsonResult(c.Batch.BatchDeleteObjects(ctx, &datav1.BatchDeleteObjectsRequest{
 			Parent: in.Parent,
 			Selector: &datav1.ObjectSelector{
 				Names:  in.Names,
 				Filter: in.Filter,
 			},
 			Permanent: in.Permanent,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_batch_copy",
 		Description: "Asynchronously server-side-copy many objects into a destination collection. Select sources by `names` (≤100) or CEL `filter`; each destination key is computed by `destination_key_template` (a CEL expression over the source Object). Returns an Operation; poll via paladin_get_operation.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchCopyArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Batch.BatchCopyObjects(ctx, connect.NewRequest(&datav1.BatchCopyObjectsRequest{
+		return jsonResult(c.Batch.BatchCopyObjects(ctx, &datav1.BatchCopyObjectsRequest{
 			SourceParent: in.SourceParent,
 			Selector: &datav1.ObjectSelector{
 				Names:  in.Names,
@@ -1108,20 +1108,20 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 			},
 			DestinationCollection:  in.DestinationCollection,
 			DestinationKeyTemplate: in.DestinationKeyTemplate,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_batch_restore",
 		Description: "Asynchronously restore many soft-deleted objects under one collection. Select by `names` (≤100) or CEL `filter`. Returns an Operation; poll via paladin_get_operation.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchRestoreArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Batch.BatchRestoreObjects(ctx, connect.NewRequest(&datav1.BatchRestoreObjectsRequest{
+		return jsonResult(c.Batch.BatchRestoreObjects(ctx, &datav1.BatchRestoreObjectsRequest{
 			Parent: in.Parent,
 			Selector: &datav1.ObjectSelector{
 				Names:  in.Names,
 				Filter: in.Filter,
 			},
-		})))
+		}))
 	})
 
 	// Object / tag metadata mutations (data plane).
@@ -1141,25 +1141,25 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		if len(in.UpdateMask) > 0 {
 			req.UpdateMask = &fieldmaskpb.FieldMask{Paths: in.UpdateMask}
 		}
-		return jsonResult(c.Object.UpdateObject(ctx, connect.NewRequest(req)))
+		return jsonResult(c.Object.UpdateObject(ctx, req))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_delete_object_tags",
 		Description: "Remove specific tag keys from an object. Pass the keys to drop in `keys`; the rest are left intact. (Use paladin_set_object_tags with an empty map to clear all tags at once.)",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in deleteObjectTagsArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.ObjectTag.DeleteObjectTags(ctx, connect.NewRequest(&datav1.DeleteObjectTagsRequest{
+		return jsonResult(c.ObjectTag.DeleteObjectTags(ctx, &datav1.DeleteObjectTagsRequest{
 			Name:            in.Name,
 			ResourceVersion: in.ResourceVersion,
 			Keys:            in.Keys,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_batch_update_tags",
 		Description: "Asynchronously merge (or, with `replace`, overwrite) a tag map across many objects under one collection. Select by `names` (≤100) or CEL `filter`. Returns an Operation; poll via paladin_get_operation.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchUpdateTagsArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Batch.BatchUpdateTags(ctx, connect.NewRequest(&datav1.BatchUpdateTagsRequest{
+		return jsonResult(c.Batch.BatchUpdateTags(ctx, &datav1.BatchUpdateTagsRequest{
 			Parent: in.Parent,
 			Selector: &datav1.ObjectSelector{
 				Names:  in.Names,
@@ -1167,7 +1167,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 			},
 			Tags:    in.Tags,
 			Replace: in.Replace,
-		})))
+		}))
 	})
 
 	// Upload-flow surface: single-shot re-sign + the multipart lifecycle.
@@ -1180,14 +1180,14 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		if in.TtlSeconds > 0 {
 			req.Ttl = durationpb.New(time.Duration(in.TtlSeconds) * time.Second)
 		}
-		return jsonResult(c.Presign.RegenerateUploadUrl(ctx, connect.NewRequest(req)))
+		return jsonResult(c.Presign.RegenerateUploadUrl(ctx, req))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_initiate_multipart_upload",
 		Description: "Begin a multipart upload for a large object. Returns an upload_id + object name; presign each part with paladin_presign_part, then finalise with paladin_complete_multipart_upload.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in initiateMultipartArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Multipart.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
+		return jsonResult(c.Multipart.InitiateMultipartUpload(ctx, &datav1.InitiateMultipartUploadRequest{
 			Parent:            in.Parent,
 			Key:               in.Key,
 			ContentType:       in.ContentType,
@@ -1195,7 +1195,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 			ChecksumAlgorithm: checksumAlgorithm(in.ChecksumAlgo),
 			Metadata:          in.Metadata,
 			Tags:              in.Tags,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -1211,7 +1211,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		if in.TtlSeconds > 0 {
 			req.Ttl = durationpb.New(time.Duration(in.TtlSeconds) * time.Second)
 		}
-		return jsonResult(c.Multipart.PresignPart(ctx, connect.NewRequest(req)))
+		return jsonResult(c.Multipart.PresignPart(ctx, req))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -1226,21 +1226,21 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 				ChecksumValue: p.ChecksumValue,
 			})
 		}
-		return jsonResult(c.Multipart.CompleteMultipartUpload(ctx, connect.NewRequest(&datav1.CompleteMultipartUploadRequest{
+		return jsonResult(c.Multipart.CompleteMultipartUpload(ctx, &datav1.CompleteMultipartUploadRequest{
 			ObjectName: in.ObjectName,
 			UploadId:   in.UploadID,
 			Parts:      parts,
-		})))
+		}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_abort_multipart_upload",
 		Description: "Abort an in-progress multipart upload and discard its uploaded parts. Safe — it never touches a committed object.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in abortMultipartArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Multipart.AbortMultipartUpload(ctx, connect.NewRequest(&datav1.AbortMultipartUploadRequest{
+		return jsonResult(c.Multipart.AbortMultipartUpload(ctx, &datav1.AbortMultipartUploadRequest{
 			ObjectName: in.ObjectName,
 			UploadId:   in.UploadID,
-		})))
+		}))
 	})
 
 	// Operation control (data plane) + quota maintenance (admin).
@@ -1249,7 +1249,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Name:        "paladin_cancel_operation",
 		Description: "Request cancellation of a running long-running operation (e.g. a batch job). Returns the operation's updated state.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.DataOperation.CancelOperation(ctx, connect.NewRequest(&datav1.CancelOperationRequest{Name: in.Name})))
+		return jsonResult(c.DataOperation.CancelOperation(ctx, &datav1.CancelOperationRequest{Name: in.Name}))
 	})
 
 	addTool(s, filter, &mcpsdk.Tool{
@@ -1257,7 +1257,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Description: "Reset the accumulated usage counters on a tenant- or bucket-scoped quota (admin-profile only). Does not change the quota limits.",
 		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
-		return jsonResult(c.Quota.ResetUsage(ctx, connect.NewRequest(&adminv1.ResetUsageRequest{Name: in.Name})))
+		return jsonResult(c.Quota.ResetUsage(ctx, &adminv1.ResetUsageRequest{Name: in.Name}))
 	})
 }
 
@@ -1400,33 +1400,33 @@ type auditEntryArgs struct {
 func registerResources(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addJSONResource(s, filter, "paladin_list_backends", "paladin://backends", "Storage backends", "All registered storage backends as JSON.",
 		func(ctx context.Context) (any, error) {
-			r, err := c.Backend.ListBackends(ctx, connect.NewRequest(&adminv1.ListBackendsRequest{
+			r, err := c.Backend.ListBackends(ctx, &adminv1.ListBackendsRequest{
 				Page: &commonv1.PageRequest{PageSize: 200},
-			}))
+			})
 			if err != nil {
 				return nil, err
 			}
-			return r.Msg, nil
+			return r, nil
 		})
 	addJSONResource(s, filter, "paladin_list_buckets", "paladin://buckets", "Buckets", "All buckets across all backends.",
 		func(ctx context.Context) (any, error) {
-			r, err := c.Bucket.ListBuckets(ctx, connect.NewRequest(&adminv1.ListBucketsRequest{
+			r, err := c.Bucket.ListBuckets(ctx, &adminv1.ListBucketsRequest{
 				Page: &commonv1.PageRequest{PageSize: 200},
-			}))
+			})
 			if err != nil {
 				return nil, err
 			}
-			return r.Msg, nil
+			return r, nil
 		})
 	addJSONResource(s, filter, "paladin_list_tenants", "paladin://tenants", "Tenants", "All tenants.",
 		func(ctx context.Context) (any, error) {
-			r, err := c.Tenant.ListTenants(ctx, connect.NewRequest(&adminv1.ListTenantsRequest{
+			r, err := c.Tenant.ListTenants(ctx, &adminv1.ListTenantsRequest{
 				Page: &commonv1.PageRequest{PageSize: 200},
-			}))
+			})
 			if err != nil {
 				return nil, err
 			}
-			return r.Msg, nil
+			return r, nil
 		})
 }
 

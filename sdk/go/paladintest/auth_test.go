@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -215,17 +215,17 @@ func TestStrictAuthRefusesAnotherTenantsUpload(t *testing.T) {
 	srv := paladintest.New(t, paladintest.WithStrictAuth())
 	ctx := context.Background()
 	mine := srv.Connect(paladin.WithBearerToken(srv.IssueBearerToken(srv.Tenant())))
-	up, err := mine.Data.MultipartUpload.InitiateMultipartUpload(ctx, connect.NewRequest(&datav1.InitiateMultipartUploadRequest{
+	up, err := mine.Data.MultipartUpload.InitiateMultipartUpload(ctx, &datav1.InitiateMultipartUploadRequest{
 		Parent: srv.Collection().String(), Key: "k", SizeBytes: 1, ContentType: testContentType,
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256,
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	theirs := srv.Connect(paladin.WithBearerToken(srv.IssueBearerToken(uuid.NewString())))
-	_, err = theirs.Data.MultipartUpload.PresignPart(ctx, connect.NewRequest(&datav1.PresignPartRequest{
-		UploadId: up.Msg.GetUploadId(), PartNumber: 1, ChecksumValue: emptySHA256,
-	}))
+	_, err = theirs.Data.MultipartUpload.PresignPart(ctx, &datav1.PresignPartRequest{
+		UploadId: up.GetUploadId(), PartNumber: 1, ChecksumValue: emptySHA256,
+	})
 	wantRefused(t, err, uploadTenantMismatch)
 }
 

@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -88,24 +89,24 @@ func MapError(err error) error {
 	}
 	for sentinel, m := range canonical {
 		if errors.Is(err, sentinel) {
-			return withReason(connect.NewError(m.code, err), m.reason)
+			return withReason(connect.NewError(m.code, err.Error()).WithCause(err), m.reason)
 		}
 	}
 	registryMu.RLock()
 	defer registryMu.RUnlock()
 	for sentinel, m := range registry {
 		if errors.Is(err, sentinel) {
-			return withReason(connect.NewError(m.code, err), m.reason)
+			return withReason(connect.NewError(m.code, err.Error()).WithCause(err), m.reason)
 		}
 	}
-	return connect.NewError(connect.CodeInternal, err)
+	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }
 
 // withReason attaches the ErrorInfo for reason to e.
 func withReason(e *connect.Error, reason commonv1.ErrorReason) *connect.Error {
-	detail, err := connect.NewErrorDetail(&errdetails.ErrorInfo{Reason: reason.String(), Domain: paladin.ErrorDomain})
-	if err == nil { // only a message that cannot be marshalled fails, and this one can
-		e.AddDetail(detail)
+	detail, err := connectproto.NewErrorDetail(&errdetails.ErrorInfo{Reason: reason.String(), Domain: paladin.ErrorDomain})
+	if err != nil { // only a message that cannot be marshalled fails, and this one can
+		return e
 	}
-	return e
+	return e.WithDetail(detail)
 }

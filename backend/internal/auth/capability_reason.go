@@ -3,7 +3,8 @@ package auth
 import (
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"github.com/oleg-tkachuk/paladin/capability"
@@ -28,7 +29,7 @@ func capabilityErrorReason(r capability.Reason) commonv1.ErrorReason {
 // spent or revoked capability, which it should stop using, from a request it
 // can fix, without reading the message.
 func capabilityError(code connect.Code, err error) *connect.Error {
-	e := connect.NewError(code, err)
+	e := connect.NewError(code, err.Error()).WithCause(err)
 	r, ok := capability.ReasonOf(err)
 	if !ok {
 		return e
@@ -37,9 +38,9 @@ func capabilityError(code connect.Code, err error) *connect.Error {
 	if reason == commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED {
 		return e
 	}
-	detail, dErr := connect.NewErrorDetail(&errdetails.ErrorInfo{Reason: reason.String(), Domain: paladin.ErrorDomain})
-	if dErr == nil { // only a message that cannot be marshalled fails, and this one can
-		e.AddDetail(detail)
+	detail, dErr := connectproto.NewErrorDetail(&errdetails.ErrorInfo{Reason: reason.String(), Domain: paladin.ErrorDomain})
+	if dErr != nil { // only a message that cannot be marshalled fails, and this one can
+		return e
 	}
-	return e
+	return e.WithDetail(detail)
 }

@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -16,6 +16,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 type Handler struct {
@@ -41,7 +42,7 @@ func NewHandler(r admindomain.EventSubscriptionRepository, policy cedar.Authoriz
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID uuid.UUID) (context.Context, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return ctx, connect.NewError(connect.CodeUnauthenticated, err)
+		return ctx, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -53,7 +54,7 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID u
 		return ctx, apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return ctx, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return ctx, connect.NewError(connect.CodePermissionDenied, "denied by policy")
 	}
 	return auth.WithActingTenant(ctx, tenantID), nil
 }
@@ -67,7 +68,7 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 		return nil, err
 	}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && s.TenantID != caller {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("cross-tenant denied"))
+		return nil, connect.NewError(connect.CodePermissionDenied, "cross-tenant denied")
 	}
 	if ctx, err = h.authorize(ctx, cedar.ActionManageSubscription, s.TenantID); err != nil {
 		return nil, err
@@ -76,10 +77,10 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 	// fails it closed at fan-out time and the operator sees silent
 	// non-delivery hours later (see worker.Dispatcher.subscriptionMatches).
 	if err := celpkg.Validate(celpkg.EventEnvelopeSchema, s.CELFilter); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
 	if err := h.repo.Create(ctx, &s); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// repo.Create stamps the generated SubscriptionID onto s; without
 	// the pointer receiver this Get would look up the caller's zero
@@ -88,7 +89,7 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 	// CodeInternal back to the operator.
 	got, err := h.repo.Get(ctx, s.SubscriptionID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &got, nil
 }
@@ -104,7 +105,7 @@ func (h *Handler) Get(ctx context.Context, tenantID, id uuid.UUID) (*admindomain
 		return nil, err
 	}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && tenantID != caller {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("subscription not found"))
+		return nil, connect.NewError(connect.CodeNotFound, "subscription not found")
 	}
 	if ctx, err = h.authorize(ctx, cedar.ActionReadSubscription, tenantID); err != nil {
 		return nil, err
@@ -130,7 +131,7 @@ func (h *Handler) Update(ctx context.Context, tenantID uuid.UUID, s admindomain.
 	// applying (e.g. a sink-only update).
 	if len(mask) == 0 || slices.Contains(mask, admindomain.EventSubscriptionPathFilter) {
 		if err := celpkg.Validate(celpkg.EventEnvelopeSchema, s.CELFilter); err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 		}
 	}
 	if err := h.repo.Update(ctx, s, expectedVersion, mask); err != nil {
@@ -198,7 +199,7 @@ func (h *Handler) RedriveFailedDeliveries(ctx context.Context, tenantID, id uuid
 		return 0, err
 	}
 	if sub.Disabled {
-		return 0, connect.NewError(connect.CodeFailedPrecondition, errRedriveDisabled)
+		return 0, connect.NewError(connect.CodeFailedPrecondition, errRedriveDisabled.Error()).WithCause(errRedriveDisabled)
 	}
 	n, err := h.repo.RequeueFailedDeliveries(ctx, sub.SubscriptionID)
 	if err != nil {
@@ -217,11 +218,10 @@ func (h *Handler) TestSubscription(ctx context.Context, tenantID, id uuid.UUID) 
 	}
 	if h.dispatcher == nil {
 		return connect.NewError(connect.CodeUnimplemented,
-			errors.New("event dispatcher not wired; TestSubscription unavailable"))
+			"event dispatcher not wired; TestSubscription unavailable")
 	}
 	if err := h.dispatcher.DeliverOne(ctx, *sub, "paladin.test"); err != nil {
-		return connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("test delivery failed: %w", err))
+		return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("test delivery failed: %w", err))
 	}
 	return nil
 }

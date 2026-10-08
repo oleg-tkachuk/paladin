@@ -7,7 +7,7 @@ import (
 	"slices"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -37,9 +37,9 @@ var ErrObjectNotFound = errors.New("object not found")
 // as a missing object.
 func objectLookupError(err error) error {
 	if errors.Is(err, ErrObjectNotFound) {
-		return connect.NewError(connect.CodeNotFound, ErrObjectNotFound)
+		return connect.NewError(connect.CodeNotFound, ErrObjectNotFound.Error()).WithCause(ErrObjectNotFound)
 	}
-	return connect.NewError(connect.CodeInternal, err)
+	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }
 
 // ErrUnknownTaintSignal rejects a signal outside the closed set.
@@ -75,7 +75,7 @@ func NewTaintHandler(objects Repository, taints TaintRepository, policy cedar.Au
 func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string, signals []string) (*Object, error) {
 	signals, err := normaliseTaint(signals)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
@@ -83,7 +83,7 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 	}
 	if collection == "" || objectID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("collection and object_id are required"))
+			"collection and object_id are required")
 	}
 	obj, err := h.objects.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
@@ -110,19 +110,19 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 			cedar.RequestContext{SizeBytes: obj.SizeBytes, ContentType: obj.ContentType, Now: time.Now()},
 		)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		if decision != cedar.DecisionAllow {
 			return nil, connect.NewError(connect.CodePermissionDenied,
-				errors.New("not authorised to set taint on this object"))
+				"not authorised to set taint on this object")
 		}
 	}
 	stored, err := h.taints.SetTaint(ctx, tenantID, obj.ObjectID, signals)
 	if errors.Is(err, ErrObjectNotFound) {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	obj.Taint = stored
 	return &obj, nil

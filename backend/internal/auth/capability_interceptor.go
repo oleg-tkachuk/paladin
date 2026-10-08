@@ -9,11 +9,14 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+	"google.golang.org/protobuf/proto"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/capability"
@@ -96,7 +99,7 @@ func CapabilityInterceptor(
 	chargePerRequestAmount capability.Nanos,
 	chargePerRequestUnit string,
 	opts ...CapabilityOption,
-) connect.Interceptor {
+) connect.ServerInterceptor {
 	return CapabilityInterceptorWithEvents(verifier, audience, usage,
 		chargePerRequestAmount, chargePerRequestUnit, nil, opts...)
 }
@@ -125,9 +128,27 @@ func CapabilityInterceptorWithEvents(
 	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
-) connect.Interceptor {
+) connect.ServerInterceptor {
+	ci := newCapabilityInterceptor(verifier, audience, usage, chargePerRequestAmount, chargePerRequestUnit, emitter, opts...)
+	if ci == nil {
+		return passthrough
+	}
+	return ci.interceptor()
+}
+
+// newCapabilityInterceptor is nil when there is no verifier: the capability
+// subsystem is off.
+func newCapabilityInterceptor(
+	verifier *capability.StandardVerifier,
+	audience string,
+	usage capability.UsageStore[pgx.Tx],
+	chargePerRequestAmount capability.Nanos,
+	chargePerRequestUnit string,
+	emitter ChargeEventEmitter,
+	opts ...CapabilityOption,
+) *capabilityInterceptor {
 	if verifier == nil {
-		return passthroughInterceptor{}
+		return nil
 	}
 	ci := &capabilityInterceptor{
 		verifier:               verifier,
@@ -161,14 +182,13 @@ func CapabilityEstablishingInterceptor(
 	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
-) connect.Interceptor {
-	i := CapabilityInterceptorWithEvents(verifier, audience, usage,
-		chargePerRequestAmount, chargePerRequestUnit, emitter, opts...)
-	if ci, ok := i.(*capabilityInterceptor); ok {
-		ci.establishPrincipal = true
+) connect.ServerInterceptor {
+	ci := newCapabilityInterceptor(verifier, audience, usage, chargePerRequestAmount, chargePerRequestUnit, emitter, opts...)
+	if ci == nil {
+		return passthrough
 	}
-
-	return i
+	ci.establishPrincipal = true
+	return ci.interceptor()
 }
 
 // TaintLookup reports whether the object a capability resource URI names
@@ -208,78 +228,78 @@ type capabilityInterceptor struct {
 	taintLookup            TaintLookup
 }
 
-func (i *capabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		token := extractCapabilityToken(req.Header().Get(HeaderCapability), req.Header().Get("Authorization"))
-		if token == "" {
-			return next(ctx, req)
-		}
-		verified, err := i.verifier.Verify(ctx, token, i.audience)
-		if err != nil {
-			// Token was supplied AND failed verification. We surface
-			// this as PermissionDenied — the caller chose to present
-			// a capability and it didn't pass; falling through to JWT
-			// silently would mask the misconfiguration.
-			return nil, capabilityError(connect.CodePermissionDenied, err)
-		}
-		cap := &verified // the request's context holds it by reference
-		if err := i.checkPossession(ctx, cap, token, req.Header().Get(paladin.HeaderDPoP),
-			req.HTTPMethod(), req.Spec().Procedure); err != nil {
-			return nil, capabilityError(connect.CodePermissionDenied, err)
-		}
-		if err := i.enforceCaveats(ctx, cap); err != nil {
-			return nil, err
-		}
-		ctx = WithCapability(ctx, cap)
-		ctx, err = i.withCapabilityPrincipal(ctx, cap)
-		if err != nil {
-			return nil, capabilityError(connect.CodePermissionDenied, err)
-		}
-		ctx = WithChargeStore(ctx, i.usage)
-		ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
-		ctx = WithChargeEventEmitter(ctx, i.emitter)
-		ctx = withLastOpHolder(ctx)
-		ctx = withIdempotencyKeyPresent(ctx, requestHasIdempotencyKey(req))
-		ctx = withTaintLookup(ctx, i.taintLookup)
-		return next(ctx, req)
-	}
+// interceptor verifies the capability a call carries. A unary call's
+// idempotency key may be in its request message as well as its header, so
+// the unary path reads the message; a stream has only the header.
+func (i *capabilityInterceptor) interceptor() connect.ServerInterceptor {
+	return unary.Interceptor(
+		func(next unary.Func) unary.Func {
+			return func(ctx context.Context, spec connect.Spec, req proto.Message) (proto.Message, error) {
+				header := unary.Info(ctx).RequestHeader()
+				ctx, err := i.establish(ctx, spec, header, requestHasIdempotencyKey(header, req))
+				if err != nil {
+					return nil, err
+				}
+				return next(ctx, spec, req)
+			}
+		},
+		func(next connect.ServerFunc) connect.ServerFunc {
+			return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+				header := unary.Info(ctx).RequestHeader()
+				ctx, err := i.establish(ctx, spec, header, header.Get(paladin.HeaderIdempotencyKey) != "")
+				if err != nil {
+					return err
+				}
+				return next(ctx, spec, stream)
+			}
+		},
+	)
 }
 
-func (i *capabilityInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
+// establish verifies the call's capability, if it carries one, and returns
+// the context the call runs under.
+func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec, header *connect.Header, hasKey bool) (context.Context, error) {
+	token := extractCapabilityToken(header.Get(HeaderCapability), header.Get("Authorization"))
+	if token == "" {
+		return ctx, nil
+	}
+	verified, err := i.verifier.Verify(ctx, token, i.audience)
+	if err != nil {
+		// Token was supplied AND failed verification. We surface
+		// this as PermissionDenied — the caller chose to present
+		// a capability and it didn't pass; falling through to JWT
+		// silently would mask the misconfiguration.
+		return ctx, capabilityError(connect.CodePermissionDenied, err)
+	}
+	cap := &verified // the request's context holds it by reference
+	if err := i.checkPossession(ctx, cap, token, header.Get(paladin.HeaderDPoP),
+		httpMethod(ctx), spec.Procedure); err != nil {
+		return ctx, capabilityError(connect.CodePermissionDenied, err)
+	}
+	if err := i.enforceCaveats(ctx, cap); err != nil {
+		return ctx, err
+	}
+	ctx = WithCapability(ctx, cap)
+	ctx, err = i.withCapabilityPrincipal(ctx, cap)
+	if err != nil {
+		return ctx, capabilityError(connect.CodePermissionDenied, err)
+	}
+	ctx = WithChargeStore(ctx, i.usage)
+	ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
+	ctx = WithChargeEventEmitter(ctx, i.emitter)
+	ctx = withLastOpHolder(ctx)
+	ctx = withIdempotencyKeyPresent(ctx, hasKey)
+	ctx = withTaintLookup(ctx, i.taintLookup)
+	return ctx, nil
 }
 
-func (i *capabilityInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		token := extractCapabilityToken(conn.RequestHeader().Get(HeaderCapability), conn.RequestHeader().Get("Authorization"))
-		if token == "" {
-			return next(ctx, conn)
-		}
-		verified, err := i.verifier.Verify(ctx, token, i.audience)
-		if err != nil {
-			return capabilityError(connect.CodePermissionDenied, err)
-		}
-		cap := &verified // the stream's context holds it by reference
-		if err := i.checkPossession(ctx, cap, token, conn.RequestHeader().Get(paladin.HeaderDPoP),
-			http.MethodPost, conn.Spec().Procedure); err != nil {
-			return capabilityError(connect.CodePermissionDenied, err)
-		}
-		if err := i.enforceCaveats(ctx, cap); err != nil {
-			return err
-		}
-		ctx = WithCapability(ctx, cap)
-		ctx, err = i.withCapabilityPrincipal(ctx, cap)
-		if err != nil {
-			return capabilityError(connect.CodePermissionDenied, err)
-		}
-		ctx = WithChargeStore(ctx, i.usage)
-		ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
-		ctx = WithChargeEventEmitter(ctx, i.emitter)
-		ctx = withLastOpHolder(ctx)
-		ctx = withIdempotencyKeyPresent(ctx, conn.RequestHeader().Get(paladin.HeaderIdempotencyKey) != "")
-		ctx = withTaintLookup(ctx, i.taintLookup)
-		return next(ctx, conn)
+// httpMethod is the method the call came in with: POST, or GET for a
+// Connect GET of a side-effect-free call.
+func httpMethod(ctx context.Context) string {
+	if info, ok := connecthttp.ServerInfoForContext(ctx); ok {
+		return info.HTTPMethod()
 	}
+	return http.MethodPost
 }
 
 // checkPossession enforces a key-bound capability's DPoP proof. An unbound
@@ -949,11 +969,11 @@ type idempotencyKeyCarrier interface {
 	GetIdempotencyKey() string
 }
 
-func requestHasIdempotencyKey(req connect.AnyRequest) bool {
-	if req.Header().Get(paladin.HeaderIdempotencyKey) != "" {
+func requestHasIdempotencyKey(header *connect.Header, req proto.Message) bool {
+	if header.Get(paladin.HeaderIdempotencyKey) != "" {
 		return true
 	}
-	c, ok := req.Any().(idempotencyKeyCarrier)
+	c, ok := req.(idempotencyKeyCarrier)
 	return ok && c.GetIdempotencyKey() != ""
 }
 
@@ -1000,17 +1020,5 @@ func readLastCharge(ctx context.Context) uuid.UUID {
 	return uuid.Nil
 }
 
-// passthroughInterceptor is the no-op variant returned when the
-// capability subsystem is disabled. Implements connect.Interceptor by
-// forwarding every callback unchanged.
-type passthroughInterceptor struct{}
-
-func (passthroughInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return next
-}
-func (passthroughInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-func (passthroughInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
-}
+// passthrough is the no-op interceptor returned when a subsystem is off.
+func passthrough(next connect.ServerFunc) connect.ServerFunc { return next }

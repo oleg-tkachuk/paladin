@@ -3,8 +3,6 @@ package data
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/storagebootstraph"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
@@ -22,17 +20,17 @@ func NewStorageBootstrapServer(h *storagebootstraph.Handler) *StorageBootstrapSe
 	return &StorageBootstrapServer{H: h}
 }
 
-func (s *StorageBootstrapServer) EnsureTenantStorage(ctx context.Context, req *connect.Request[pb.EnsureTenantStorageRequest]) (*connect.Response[pb.EnsureTenantStorageResponse], error) {
-	m := req.Msg
+func (s *StorageBootstrapServer) EnsureTenantStorage(ctx context.Context, req *pb.EnsureTenantStorageRequest) (*pb.EnsureTenantStorageResponse, error) {
+	m := req
 	res, err := s.H.EnsureTenantStorage(ctx, m.GetBackendId(), m.GetBucket(), m.GetCollections())
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.EnsureTenantStorageResponse{
+	return &pb.EnsureTenantStorageResponse{
 		BucketCreated:       res.BucketCreated,
 		CollectionsCreated:  res.CollectionsCreated,
 		CollectionsExisting: res.CollectionsExisting,
-	}), nil
+	}, nil
 }
 
 var _ paladindatav1connect.StorageBootstrapServiceHandler = (*StorageBootstrapServer)(nil)

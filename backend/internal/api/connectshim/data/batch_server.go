@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
@@ -19,8 +18,8 @@ type BatchServer struct {
 
 func NewBatchServer(h *batchh.Handler) *BatchServer { return &BatchServer{H: h} }
 
-func (s *BatchServer) BatchDeleteObjects(ctx context.Context, req *connect.Request[pb.BatchDeleteObjectsRequest]) (*connect.Response[pb.Operation], error) {
-	m := req.Msg
+func (s *BatchServer) BatchDeleteObjects(ctx context.Context, req *pb.BatchDeleteObjectsRequest) (*pb.Operation, error) {
+	m := req
 	ctx, collection, err := collectionNameParts(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
@@ -37,14 +36,14 @@ func (s *BatchServer) BatchDeleteObjects(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.Operation{
+	return &pb.Operation{
 		Name: fmt.Sprintf("operations/%s", opID),
 		Type: "BatchDelete",
-	}), nil
+	}, nil
 }
 
-func (s *BatchServer) BatchCopyObjects(ctx context.Context, req *connect.Request[pb.BatchCopyObjectsRequest]) (*connect.Response[pb.Operation], error) {
-	m := req.Msg
+func (s *BatchServer) BatchCopyObjects(ctx context.Context, req *pb.BatchCopyObjectsRequest) (*pb.Operation, error) {
+	m := req
 	ctx, srcOK, err := collectionNameParts(ctx, m.GetSourceParent())
 	if err != nil {
 		return nil, badName(fmt.Errorf("source: %w", err))
@@ -66,14 +65,14 @@ func (s *BatchServer) BatchCopyObjects(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.Operation{
+	return &pb.Operation{
 		Name: fmt.Sprintf("operations/%s", opID),
 		Type: "BatchCopy",
-	}), nil
+	}, nil
 }
 
-func (s *BatchServer) BatchRestoreObjects(ctx context.Context, req *connect.Request[pb.BatchRestoreObjectsRequest]) (*connect.Response[pb.Operation], error) {
-	m := req.Msg
+func (s *BatchServer) BatchRestoreObjects(ctx context.Context, req *pb.BatchRestoreObjectsRequest) (*pb.Operation, error) {
+	m := req
 	ctx, collection, err := collectionNameParts(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
@@ -89,14 +88,14 @@ func (s *BatchServer) BatchRestoreObjects(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.Operation{
+	return &pb.Operation{
 		Name: fmt.Sprintf("operations/%s", opID),
 		Type: "BatchRestoreObjects",
-	}), nil
+	}, nil
 }
 
-func (s *BatchServer) BatchUpdateTags(ctx context.Context, req *connect.Request[pb.BatchUpdateTagsRequest]) (*connect.Response[pb.Operation], error) {
-	m := req.Msg
+func (s *BatchServer) BatchUpdateTags(ctx context.Context, req *pb.BatchUpdateTagsRequest) (*pb.Operation, error) {
+	m := req
 	ctx, collection, err := collectionNameParts(ctx, m.GetParent())
 	if err != nil {
 		return nil, badName(err)
@@ -114,10 +113,10 @@ func (s *BatchServer) BatchUpdateTags(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.Operation{
+	return &pb.Operation{
 		Name: fmt.Sprintf("operations/%s", opID),
 		Type: "BatchUpdateTags",
-	}), nil
+	}, nil
 }
 
 var _ paladindatav1connect.BatchServiceHandler = (*BatchServer)(nil)

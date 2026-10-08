@@ -17,7 +17,7 @@ cd "$root"
 readonly GO_MOD=backend/go.mod
 readonly PACKAGE_JSON=frontend/package.json
 readonly COMPOSE=backend/deploy/docker-compose.yaml
-readonly MOD_CONNECT=connectrpc.com/connect
+readonly MOD_CONNECT=connectrpc.com/connect/v2
 readonly MOD_CEDAR=github.com/cedar-policy/cedar-go
 readonly MOD_MCP=github.com/modelcontextprotocol/go-sdk
 # The image Paladin's own stack runs; "postgres:16" → "16".

@@ -6,40 +6,49 @@ package paladindatav1connect
 
 import (
 	context "context"
-	errors "errors"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// PresignServiceName is the fully-qualified name of the PresignService service.
 	PresignServiceName = "paladin.data.v1.PresignService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// PresignServiceRegenerateUploadUrlProcedure is the fully-qualified name of the PresignService's
+	// PresignServiceRegenerateUploadUrlProcedure is the procedure name of the PresignService's
 	// RegenerateUploadUrl RPC.
 	PresignServiceRegenerateUploadUrlProcedure = "/paladin.data.v1.PresignService/RegenerateUploadUrl"
-	// PresignServicePresignDownloadProcedure is the fully-qualified name of the PresignService's
+	// PresignServicePresignDownloadProcedure is the procedure name of the PresignService's
 	// PresignDownload RPC.
 	PresignServicePresignDownloadProcedure = "/paladin.data.v1.PresignService/PresignDownload"
+)
+
+var (
+	presignServiceRegenerateUploadUrlSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_presign_service_proto.Services().ByName("PresignService").Methods().ByName("RegenerateUploadUrl"),
+			Procedure:        PresignServiceRegenerateUploadUrlProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	presignServicePresignDownloadSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_data_v1_presign_service_proto.Services().ByName("PresignService").Methods().ByName("PresignDownload"),
+			Procedure:  PresignServicePresignDownloadProcedure,
+		}
+	})
 )
 
 // PresignServiceClient is a client for the paladin.data.v1.PresignService service.
@@ -47,53 +56,16 @@ type PresignServiceClient interface {
 	// RegenerateUploadUrl issues a fresh PUT URL for an object still PENDING —
 	// for when the first URL expired before the client finished. It is signed
 	// for the size, Content-Type and checksum the object was registered with.
-	RegenerateUploadUrl(context.Context, *connect.Request[v1.RegenerateUploadUrlRequest]) (*connect.Response[v1.RegenerateUploadUrlResponse], error)
+	RegenerateUploadUrl(context.Context, *v1.RegenerateUploadUrlRequest) (*v1.RegenerateUploadUrlResponse, error)
 	// PresignDownload issues a time-limited GET URL. TTL is capped by
 	// limits.presign.max_ttl; asking for longer is InvalidArgument.
-	PresignDownload(context.Context, *connect.Request[v1.PresignDownloadRequest]) (*connect.Response[v1.PresignDownloadResponse], error)
+	PresignDownload(context.Context, *v1.PresignDownloadRequest) (*v1.PresignDownloadResponse, error)
 }
 
-// NewPresignServiceClient constructs a client for the paladin.data.v1.PresignService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewPresignServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PresignServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	presignServiceMethods := v1.File_paladin_data_v1_presign_service_proto.Services().ByName("PresignService").Methods()
-	return &presignServiceClient{
-		regenerateUploadUrl: connect.NewClient[v1.RegenerateUploadUrlRequest, v1.RegenerateUploadUrlResponse](
-			httpClient,
-			baseURL+PresignServiceRegenerateUploadUrlProcedure,
-			connect.WithSchema(presignServiceMethods.ByName("RegenerateUploadUrl")),
-			connect.WithIdempotency(connect.IdempotencyIdempotent),
-			connect.WithClientOptions(opts...),
-		),
-		presignDownload: connect.NewClient[v1.PresignDownloadRequest, v1.PresignDownloadResponse](
-			httpClient,
-			baseURL+PresignServicePresignDownloadProcedure,
-			connect.WithSchema(presignServiceMethods.ByName("PresignDownload")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// presignServiceClient implements PresignServiceClient.
-type presignServiceClient struct {
-	regenerateUploadUrl *connect.Client[v1.RegenerateUploadUrlRequest, v1.RegenerateUploadUrlResponse]
-	presignDownload     *connect.Client[v1.PresignDownloadRequest, v1.PresignDownloadResponse]
-}
-
-// RegenerateUploadUrl calls paladin.data.v1.PresignService.RegenerateUploadUrl.
-func (c *presignServiceClient) RegenerateUploadUrl(ctx context.Context, req *connect.Request[v1.RegenerateUploadUrlRequest]) (*connect.Response[v1.RegenerateUploadUrlResponse], error) {
-	return c.regenerateUploadUrl.CallUnary(ctx, req)
-}
-
-// PresignDownload calls paladin.data.v1.PresignService.PresignDownload.
-func (c *presignServiceClient) PresignDownload(ctx context.Context, req *connect.Request[v1.PresignDownloadRequest]) (*connect.Response[v1.PresignDownloadResponse], error) {
-	return c.presignDownload.CallUnary(ctx, req)
+// NewPresignServiceClient constructs a client for the paladin.data.v1.PresignService service.
+// Multiple service clients may share a single connect.Client.
+func NewPresignServiceClient(client *connect.Client) PresignServiceClient {
+	return &presignServiceClient{client: client}
 }
 
 // PresignServiceHandler is an implementation of the paladin.data.v1.PresignService service.
@@ -101,51 +73,75 @@ type PresignServiceHandler interface {
 	// RegenerateUploadUrl issues a fresh PUT URL for an object still PENDING —
 	// for when the first URL expired before the client finished. It is signed
 	// for the size, Content-Type and checksum the object was registered with.
-	RegenerateUploadUrl(context.Context, *connect.Request[v1.RegenerateUploadUrlRequest]) (*connect.Response[v1.RegenerateUploadUrlResponse], error)
+	RegenerateUploadUrl(context.Context, *v1.RegenerateUploadUrlRequest) (*v1.RegenerateUploadUrlResponse, error)
 	// PresignDownload issues a time-limited GET URL. TTL is capped by
 	// limits.presign.max_ttl; asking for longer is InvalidArgument.
-	PresignDownload(context.Context, *connect.Request[v1.PresignDownloadRequest]) (*connect.Response[v1.PresignDownloadResponse], error)
+	PresignDownload(context.Context, *v1.PresignDownloadRequest) (*v1.PresignDownloadResponse, error)
 }
 
-// NewPresignServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewPresignServiceHandler(svc PresignServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	presignServiceMethods := v1.File_paladin_data_v1_presign_service_proto.Services().ByName("PresignService").Methods()
-	presignServiceRegenerateUploadUrlHandler := connect.NewUnaryHandler(
-		PresignServiceRegenerateUploadUrlProcedure,
-		svc.RegenerateUploadUrl,
-		connect.WithSchema(presignServiceMethods.ByName("RegenerateUploadUrl")),
-		connect.WithIdempotency(connect.IdempotencyIdempotent),
-		connect.WithHandlerOptions(opts...),
+// RegisterPresignServiceHandler registers svc as the paladin.data.v1.PresignService implementation
+// on server.
+func RegisterPresignServiceHandler(server *connect.Server, svc PresignServiceHandler) {
+	adapter := presignServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: presignServiceRegenerateUploadUrlSpec(), Handler: adapter.regenerateUploadUrl},
+		connect.Method{Spec: presignServicePresignDownloadSpec(), Handler: adapter.presignDownload},
 	)
-	presignServicePresignDownloadHandler := connect.NewUnaryHandler(
-		PresignServicePresignDownloadProcedure,
-		svc.PresignDownload,
-		connect.WithSchema(presignServiceMethods.ByName("PresignDownload")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/paladin.data.v1.PresignService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case PresignServiceRegenerateUploadUrlProcedure:
-			presignServiceRegenerateUploadUrlHandler.ServeHTTP(w, r)
-		case PresignServicePresignDownloadProcedure:
-			presignServicePresignDownloadHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedPresignServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedPresignServiceHandler struct{}
 
-func (UnimplementedPresignServiceHandler) RegenerateUploadUrl(context.Context, *connect.Request[v1.RegenerateUploadUrlRequest]) (*connect.Response[v1.RegenerateUploadUrlResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.PresignService.RegenerateUploadUrl is not implemented"))
+func (UnimplementedPresignServiceHandler) RegenerateUploadUrl(context.Context, *v1.RegenerateUploadUrlRequest) (*v1.RegenerateUploadUrlResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.PresignService.RegenerateUploadUrl is not implemented")
 }
 
-func (UnimplementedPresignServiceHandler) PresignDownload(context.Context, *connect.Request[v1.PresignDownloadRequest]) (*connect.Response[v1.PresignDownloadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("paladin.data.v1.PresignService.PresignDownload is not implemented"))
+func (UnimplementedPresignServiceHandler) PresignDownload(context.Context, *v1.PresignDownloadRequest) (*v1.PresignDownloadResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.PresignService.PresignDownload is not implemented")
+}
+
+type presignServiceClient struct {
+	client *connect.Client
+}
+
+func (c *presignServiceClient) RegenerateUploadUrl(ctx context.Context, req *v1.RegenerateUploadUrlRequest) (*v1.RegenerateUploadUrlResponse, error) {
+	var res v1.RegenerateUploadUrlResponse
+	if err := c.client.CallUnary(ctx, presignServiceRegenerateUploadUrlSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *presignServiceClient) PresignDownload(ctx context.Context, req *v1.PresignDownloadRequest) (*v1.PresignDownloadResponse, error) {
+	var res v1.PresignDownloadResponse
+	if err := c.client.CallUnary(ctx, presignServicePresignDownloadSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type presignServiceHandler struct{ svc PresignServiceHandler }
+
+func (h presignServiceHandler) regenerateUploadUrl(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RegenerateUploadUrlRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RegenerateUploadUrl(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h presignServiceHandler) presignDownload(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PresignDownloadRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PresignDownload(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

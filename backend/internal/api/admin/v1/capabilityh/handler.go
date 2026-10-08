@@ -21,11 +21,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
 	"github.com/jackc/pgx/v5"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -86,7 +88,7 @@ func hasOp(ops []capability.Op, want capability.Op) bool {
 func (h *Handler) authorize(ctx context.Context, action cedar.Action) (*auth.Principal, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -95,11 +97,10 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action) (*auth.Pri
 		cedar.RequestContext{},
 	)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if decision != cedar.DecisionAllow {
-		return nil, connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("%s denied", action))
+		return nil, connect.Errorf(connect.CodePermissionDenied, "%s denied", action)
 	}
 	return p, nil
 }
@@ -130,22 +131,22 @@ func (h *Handler) actOnCapabilitysTenant(ctx context.Context, caller *auth.Princ
 	case errors.Is(err, capability.ErrNotFound):
 		return ctx, nil
 	case err != nil:
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return auth.WithActingTenant(ctx, c.Subject.TenantID), nil
 }
 
 // Issue mints a top-level capability. Gated by IssueCapability; issuing for
 // another tenant additionally requires a role that spans tenants.
-func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceIssueRequest]) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
+func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssueRequest) (*adminv1.CapabilityServiceIssueResponse, error) {
 	caller, err := h.authorize(ctx, cedar.ActionIssueCapability)
 	if err != nil {
 		return nil, err
 	}
 
-	subj, err := protoToPrincipal(req.Msg.GetSubject())
+	subj, err := protoToPrincipal(req.GetSubject())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 
 	// Issuing FOR another tenant is a platform operation.
@@ -163,18 +164,17 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 		// tenant. It carries no other authority — it cannot create or delete a
 		// tenant, and it cannot mint an API token — so handing it out is a much
 		// smaller decision than handing out platform.admin.
-		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("issuing a capability for another tenant requires platform.admin or platform.capability-issuer"))
+		return nil, connect.NewError(connect.CodePermissionDenied, "issuing a capability for another tenant requires platform.admin or platform.capability-issuer")
 	}
 
-	caveats, err := protoToCaveats(req.Msg.GetCaveats())
+	caveats, err := protoToCaveats(req.GetCaveats())
 	if err != nil {
 		return nil, err
 	}
 
-	ttl := time.Duration(req.Msg.GetTtlSeconds()) * time.Second
+	ttl := time.Duration(req.GetTtlSeconds()) * time.Second
 	var nbf time.Time
-	if t := req.Msg.GetNotBefore(); t.IsValid() {
+	if t := req.GetNotBefore(); t.IsValid() {
 		nbf = t.AsTime()
 	}
 
@@ -191,11 +191,11 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 			Subject:  caller.Subject,
 			Type:     capability.PrincipalUser,
 		},
-		Audience:        req.Msg.GetAudience(),
+		Audience:        req.GetAudience(),
 		Caveats:         caveats,
 		TTL:             ttl,
 		NotBefore:       nbf,
-		ConfirmationJKT: req.Msg.GetConfirmationJkt(),
+		ConfirmationJKT: req.GetConfirmationJkt(),
 	})
 	if err != nil {
 		// By kind: a malformed request, a tenant that is not (or no longer)
@@ -224,10 +224,10 @@ func (h *Handler) Issue(ctx context.Context, req *connect.Request[adminv1.Capabi
 //
 // Caveat narrowing is enforced downstream by Issuer.Delegate
 // (ErrDelegationTooWide); this handler only gates *who* may delegate.
-func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceDelegateRequest]) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
-	parentID, err := uuid.Parse(req.Msg.GetParentId())
+func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDelegateRequest) (*adminv1.CapabilityServiceIssueResponse, error) {
+	parentID, err := uuid.Parse(req.GetParentId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("parent_id: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("parent_id: %w", err))
 	}
 
 	var parent capability.Capability
@@ -235,12 +235,10 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 	// caller's own caveats — no Cedar admin check.
 	if callerCap, ok := auth.CapabilityFromContext(ctx); ok {
 		if !hasOp(callerCap.Caveats.Ops, capability.OpShare) {
-			return nil, connect.NewError(connect.CodePermissionDenied,
-				errors.New("capability: caller lacks OpShare"))
+			return nil, connect.NewError(connect.CodePermissionDenied, "capability: caller lacks OpShare")
 		}
 		if callerCap.ID != parentID {
-			return nil, connect.NewError(connect.CodePermissionDenied,
-				errors.New("capability: parent_id must equal caller's own capability id"))
+			return nil, connect.NewError(connect.CodePermissionDenied, "capability: parent_id must equal caller's own capability id")
 		}
 		// A child's requests and spend reach its ancestors' counters, not a
 		// Biscuit copy's own, so a copy with limits of its own would shed them
@@ -248,8 +246,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 		// refuses it too, as ErrDelegationTooWide; asking first answers with
 		// a precondition the caller can act on, not a permission denial.
 		if len(callerCap.Copies) > 0 {
-			return nil, connect.NewError(connect.CodeFailedPrecondition,
-				errors.New("capability: a Biscuit copy with limits of its own cannot delegate; attenuate it instead"))
+			return nil, connect.NewError(connect.CodeFailedPrecondition, "capability: a Biscuit copy with limits of its own cannot delegate; attenuate it instead")
 		}
 		// Narrow from the capability as presented: a Biscuit copy's
 		// attenuation is not in the stored record, and narrowing from the
@@ -262,7 +259,7 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 		}
 		if parent, err = h.store.Get(ctx, parentID); err != nil {
 			if errors.Is(err, capability.ErrNotFound) {
-				return nil, connect.NewError(connect.CodeNotFound, err)
+				return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 			}
 			// The store failing is not the parent being absent.
 			return nil, apiutil.MapError(err)
@@ -272,28 +269,28 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 	// No caveats in the request means "the parent's, unchanged" — asked for
 	// explicitly, so that caveats which ARE sent are never silently replaced.
 	var caveats capability.Caveats
-	inherit := req.Msg.GetCaveats() == nil
+	inherit := req.GetCaveats() == nil
 	if !inherit {
-		if caveats, err = protoToCaveats(req.Msg.GetCaveats()); err != nil {
+		if caveats, err = protoToCaveats(req.GetCaveats()); err != nil {
 			return nil, err
 		}
 	}
 	audience := parent.Audience
-	if a := req.Msg.GetAudience(); len(a) > 0 {
+	if a := req.GetAudience(); len(a) > 0 {
 		audience = a
 	}
-	ttl := time.Duration(req.Msg.GetTtlSeconds()) * time.Second
+	ttl := time.Duration(req.GetTtlSeconds()) * time.Second
 	var nbf time.Time
-	if t := req.Msg.GetNotBefore(); t.IsValid() {
+	if t := req.GetNotBefore(); t.IsValid() {
 		nbf = t.AsTime()
 	}
 
 	// Resolve subject explicitly: msg.subject if supplied, else parent's.
 	delegSubj := parent.Subject
-	if msg := req.Msg.GetSubject(); msg != nil {
+	if msg := req.GetSubject(); msg != nil {
 		s, perr := protoToPrincipal(msg)
 		if perr != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, perr)
+			return nil, connect.NewError(connect.CodeInvalidArgument, perr.Error()).WithCause(perr)
 		}
 		delegSubj = s
 	}
@@ -306,17 +303,17 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 		InheritCaveats:  inherit,
 		TTL:             ttl,
 		NotBefore:       nbf,
-		ConfirmationJKT: req.Msg.GetConfirmationJkt(),
+		ConfirmationJKT: req.GetConfirmationJkt(),
 	})
 	if err != nil {
 		switch {
 		case errors.Is(err, capability.ErrDelegationTooWide),
 			errors.Is(err, capability.ErrUnitCodeMismatch):
-			return nil, connect.NewError(connect.CodePermissionDenied, err)
+			return nil, connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
 		case errors.Is(err, capability.ErrRevoked), errors.Is(err, capability.ErrExpired):
 			// The parent can no longer delegate; that is a state the caller
 			// must act on, not a malformed request.
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 		}
 		return nil, apiutil.MapError(err)
 	}
@@ -326,15 +323,15 @@ func (h *Handler) Delegate(ctx context.Context, req *connect.Request[adminv1.Cap
 
 // Revoke adds the capability ID to the revocation list. Idempotent for a
 // capability the caller can see; NotFound for one it cannot.
-func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceRevokeRequest]) (*connect.Response[adminv1.CapabilityServiceRevokeResponse], error) {
+func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevokeRequest) (*adminv1.CapabilityServiceRevokeResponse, error) {
 	caller, err := h.authorize(ctx, cedar.ActionRevokeCapability)
 	if err != nil {
 		return nil, err
 	}
 
-	id, err := uuid.Parse(req.Msg.GetId())
+	id, err := uuid.Parse(req.GetId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
 	}
 	ctx, err = h.actOnCapabilitysTenant(ctx, caller, id)
 	if err != nil {
@@ -342,40 +339,39 @@ func (h *Handler) Revoke(ctx context.Context, req *connect.Request[adminv1.Capab
 	}
 	if err := h.store.Revoke(ctx, capability.RevokeRequest{
 		ID:              id,
-		Reason:          req.Msg.GetReason(),
+		Reason:          req.GetReason(),
 		Actor:           caller.Subject,
-		CascadeChildren: req.Msg.GetCascadeChildren(),
+		CascadeChildren: req.GetCascadeChildren(),
 	}); err != nil {
 		// The store scopes the revoke to capabilities the caller can see, so
 		// a not-found here covers both "no such id" and "belongs to another
 		// tenant". Both answer NotFound: telling the caller which one it was
 		// would turn this endpoint into an id oracle.
 		if errors.Is(err, capability.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
+			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	stashCapabilityInScope(ctx, id)
-	return connect.NewResponse(&adminv1.CapabilityServiceRevokeResponse{}), nil
+	return &adminv1.CapabilityServiceRevokeResponse{}, nil
 }
 
 // List enumerates capabilities issued to a principal.
-func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceListRequest]) (*connect.Response[adminv1.CapabilityServiceListResponse], error) {
+func (h *Handler) List(ctx context.Context, req *adminv1.CapabilityServiceListRequest) (*adminv1.CapabilityServiceListResponse, error) {
 	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
 	if err != nil {
 		return nil, err
 	}
 
-	tenantID, err := uuid.Parse(req.Msg.GetTenantId())
+	tenantID, err := uuid.Parse(req.GetTenantId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
 	}
 	// Same gate as Issue: ReadCapability in a tenant's own policy must not become a
 	// read of every other tenant's capabilities. Cedar above authorised the
 	// ACTION against the caller's own tenant, not against this one.
 	if tenantID != caller.TenantID && !spansTenants(caller) {
-		return nil, connect.NewError(connect.CodePermissionDenied,
-			errors.New("listing another tenant's capabilities requires platform.admin or platform.capability-issuer"))
+		return nil, connect.NewError(connect.CodePermissionDenied, "listing another tenant's capabilities requires platform.admin or platform.capability-issuer")
 	}
 	// capability_records is RLS-isolated, so reading another tenant's rows
 	// needs the connection scoped to that tenant. Without this the admin
@@ -383,12 +379,12 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 	ctx = auth.WithActingTenant(ctx, tenantID)
 	caps, next, err := h.store.ListByPrincipal(ctx, capability.ListByPrincipalRequest{
 		TenantID:       tenantID,
-		PrincipalType:  protoToPrincipalKind(req.Msg.GetPrincipalKind()),
-		Subject:        req.Msg.GetSubject(),
-		IncludeExpired: req.Msg.GetIncludeExpired(),
-		IncludeRevoked: req.Msg.GetIncludeRevoked(),
-		Cursor:         req.Msg.GetPageToken(),
-		Limit:          req.Msg.GetPageSize(),
+		PrincipalType:  protoToPrincipalKind(req.GetPrincipalKind()),
+		Subject:        req.GetSubject(),
+		IncludeExpired: req.GetIncludeExpired(),
+		IncludeRevoked: req.GetIncludeRevoked(),
+		Cursor:         req.GetPageToken(),
+		Limit:          req.GetPageSize(),
 	})
 	if err != nil {
 		// A page token the store cannot read is the caller's to fix
@@ -400,10 +396,10 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 	for i := range caps {
 		out = append(out, capabilityToProto(&caps[i]))
 	}
-	return connect.NewResponse(&adminv1.CapabilityServiceListResponse{
+	return &adminv1.CapabilityServiceListResponse{
 		Capabilities:  out,
 		NextPageToken: next,
-	}), nil
+	}, nil
 }
 
 // GetUsage returns the runtime counters (request_count, spent_usd)
@@ -417,14 +413,14 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 // usage.
 // Get returns one capability as it is on record. Gated as List and GetUsage
 // are, and scoped to the capability's tenant the way GetUsage is.
-func (h *Handler) Get(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceGetRequest]) (*connect.Response[adminv1.CapabilityServiceGetResponse], error) {
+func (h *Handler) Get(ctx context.Context, req *adminv1.CapabilityServiceGetRequest) (*adminv1.CapabilityServiceGetResponse, error) {
 	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
 	if err != nil {
 		return nil, err
 	}
-	id, err := uuid.Parse(req.Msg.GetId())
+	id, err := uuid.Parse(req.GetId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
 	}
 	ctx, err = h.actOnCapabilitysTenant(ctx, caller, id)
 	if err != nil {
@@ -433,7 +429,7 @@ func (h *Handler) Get(ctx context.Context, req *connect.Request[adminv1.Capabili
 	rec, err := h.store.GetRecord(ctx, id)
 	if err != nil {
 		if errors.Is(err, capability.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
+			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
 		return nil, apiutil.MapError(err)
 	}
@@ -446,21 +442,20 @@ func (h *Handler) Get(ctx context.Context, req *connect.Request[adminv1.Capabili
 			RevokedAt: timestamppb.New(r.RevokedAt), Reason: r.Reason, Actor: r.Actor, Cascade: r.Cascade,
 		}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
-func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.CapabilityServiceGetUsageRequest]) (*connect.Response[adminv1.CapabilityServiceGetUsageResponse], error) {
+func (h *Handler) GetUsage(ctx context.Context, req *adminv1.CapabilityServiceGetUsageRequest) (*adminv1.CapabilityServiceGetUsageResponse, error) {
 	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
 	if err != nil {
 		return nil, err
 	}
 	if h.usage == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			fmt.Errorf("capability runtime counter store not wired"))
+		return nil, connect.Errorf(connect.CodeUnavailable, "capability runtime counter store not wired")
 	}
-	id, err := uuid.Parse(req.Msg.GetId())
+	id, err := uuid.Parse(req.GetId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
 	}
 	ctx, err = h.actOnCapabilitysTenant(ctx, caller, id)
 	if err != nil {
@@ -469,18 +464,18 @@ func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.Cap
 	u, err := h.usage.GetUsage(ctx, id)
 	if err != nil {
 		if errors.Is(err, capability.ErrUsageNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
+			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&adminv1.CapabilityServiceGetUsageResponse{
+	return &adminv1.CapabilityServiceGetUsageResponse{
 		CapabilityId: u.CapabilityID.String(),
 		RequestCount: u.RequestCount,
 		Spent:        apiutil.MoneyOf(u.UnitCode, u.SpentAmount),
 		// updated_at not surfaced today — the UsageStore.Get value
 		// doesn't carry it consistently across the postgres /
 		// metering decorators. Add when telemetry needs it.
-	}), nil
+	}, nil
 }
 
 // ─── proto ↔ domain converters ──────────────────────────────────────────────
@@ -558,16 +553,16 @@ func stashCapabilityInScope(ctx context.Context, id uuid.UUID) {
 	}
 }
 
-func (h *Handler) issued(cap capability.Capability, token string) (*connect.Response[adminv1.CapabilityServiceIssueResponse], error) {
+func (h *Handler) issued(cap capability.Capability, token string) (*adminv1.CapabilityServiceIssueResponse, error) {
 	bisc, err := h.issuer.Biscuit(cap)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return connect.NewResponse(&adminv1.CapabilityServiceIssueResponse{
+	return &adminv1.CapabilityServiceIssueResponse{
 		Capability: capabilityToProto(&cap),
 		Token:      token,
 		Biscuit:    bisc,
-	}), nil
+	}, nil
 }
 
 func protoToCaveats(c *adminv1.CapabilityCaveats) (capability.Caveats, error) {

@@ -22,8 +22,6 @@ annotation packages the stubs import. Nothing of the server.
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -39,7 +37,7 @@ if err != nil {
 }
 // Every service of every plane; each call carries the token for its plane
 // and, when it has side effects, an idempotency key.
-tenant, err := p.Admin.Tenant.CreateTenant(ctx, connect.NewRequest(&adminv1.CreateTenantRequest{ /* … */ }))
+tenant, err := p.Admin.Tenant.CreateTenant(ctx, &adminv1.CreateTenantRequest{ /* … */ })
 ```
 
 With an API token instead of a session, pass
@@ -61,12 +59,12 @@ names without `Service`: `p.Data.Object`, `p.Admin.EventSubscription`,
 | Data | `gen/paladin/data/v1/paladindatav1connect` | objects, multipart uploads, tags, batches, presigning |
 | IAM | `gen/paladin/iam/v1/paladiniamv1connect` | login, tokens, users, health |
 
-For one plane alone, `New` gives the pieces the generated `New…ServiceClient`
-constructors take:
+For one plane alone, `New` gives the `*connect.Client` the generated
+`New…ServiceClient` constructors take:
 
 ```go
 c, err := paladin.New(adminURL, paladin.WithTokenSource(session, paladin.AudienceAdmin))
-tenants := paladinadminv1connect.NewTenantServiceClient(c.HTTPClient(), c.BaseURL(), c.ClientOptions()...)
+tenants := paladinadminv1connect.NewTenantServiceClient(c.Connect())
 ```
 
 ## `paladin` package
@@ -76,9 +74,11 @@ tenants := paladinadminv1connect.NewTenantServiceClient(c.HTTPClient(), c.BaseUR
 | Function | Does |
 | --- | --- |
 | `New(baseURL string, opts ...Option) (*Client, error)` | A client for the plane at `baseURL`. Returns `ErrEmptyBaseURL`, `ErrInvalidBaseURL` (not an absolute `http`/`https` URL) or `ErrInvalidRetries`. A trailing `/` is dropped. |
-| `(*Client) HTTPClient() connect.HTTPClient` | First argument of every generated `New…ServiceClient`. |
-| `(*Client) BaseURL() string` | Second argument. |
-| `(*Client) ClientOptions() []connect.ClientOption` | The rest. A copy; changing it does not change the client. |
+| `(*Client) Connect() *connect.Client` | The argument of every generated `New…ServiceClient`: the transport to the plane, with the client's credentials, retries and error handling around every call. |
+| `(*Client) BaseURL() string` | The URL of the plane. |
+
+A client reads responses up to `MaxResponseBytes` (16 MiB) and sends requests
+up to `MaxRequestBytes` (4 MiB), the limits the server keeps.
 
 ### Options
 
@@ -88,11 +88,12 @@ tenants := paladinadminv1connect.NewTenantServiceClient(c.HTTPClient(), c.BaseUR
 | `WithAPIToken(token)` | Sends an API token in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. |
 | `WithCapability(token)` | Sends a capability token in `X-Paladin-Capability`: the JWT or its Biscuit form, narrowed offline with `capability.Attenuate` or not. Can be combined with a bearer token. |
 | `WithCapabilitySource(source)` | Sends the capability `source(ctx)` returns for each call, for a client acting for many callers; an empty one leaves `WithCapability`'s. DPoP proofs sign over it. |
-| `WithDPoP(key)` | Proves possession of `key` — any `crypto.Signer` with an Ed25519 or P-256 public key, a KMS-held one included — on every call that sends a capability: each request, each retry included, carries a fresh RFC 9449 proof in `DPoP`. A capability issued with `confirmation_jkt = DPoPThumbprint(key.Public())` is refused without one. Proofs are signed for `POST`, so do not combine it with `connect.WithHTTPGet`. |
+| `WithDPoP(key)` | Proves possession of `key` — any `crypto.Signer` with an Ed25519 or P-256 public key, a KMS-held one included — on every call that sends a capability: each request, each retry included, carries a fresh RFC 9449 proof in `DPoP`. A capability issued with `confirmation_jkt = DPoPThumbprint(key.Public())` is refused without one. Proofs are signed for `POST`, so do not combine it with `connecthttp.WithHTTPGet`. |
 | `WithHeader(name, value)` | Sends a header on every call, replacing what the SDK would send there — `User-Agent` included, which is `paladin-sdk-go/<module version>` by default. |
 | `WithRetries(attempts, baseDelay)` | Retries a unary call on `Unavailable` or `ResourceExhausted`, up to `attempts` calls in total. The wait is drawn at random up to a ceiling that doubles from `baseDelay` (zero means `DefaultRetryBaseDelay`, 100ms) to `DefaultRetryMaxDelay` (5s), and is never shorter than the server's `Retry-After`, given in seconds or as an HTTP date. A retry that could not start before the context's deadline is not made, and the server's error is returned. Only calls safe to repeat are retried: RPCs the contract declares side-effect free or idempotent, and calls that carry an idempotency key — which every other call does, see below. Streams are never retried. |
 | `WithHTTPClient(c)` | Replaces `http.DefaultClient` — for timeouts, proxies, custom TLS. |
-| `WithClientOptions(opts...)` | Passes Connect options through, e.g. `connect.WithGRPC()` or `connect.WithSendGzip()`. |
+| `WithTransportOptions(opts...)` | Passes options to the Connect HTTP transport, e.g. `connecthttp.WithGRPC()` or `connecthttp.WithSendGzip()`. |
+| `WithInterceptors(interceptors...)` | Adds `connect.ClientInterceptor`s inside the SDK's own, so they see every attempt of a retried call with its credentials set. |
 
 ### Idempotency
 
@@ -317,12 +318,12 @@ every presigned request, and W3C trace context carried to the server and to
 storage:
 
 ```go
-otelInterceptor, err := otelconnect.NewInterceptor()        // connectrpc.com/otelconnect
+otelInterceptor, err := otelconnect.NewClientInterceptor()  // connectrpc.com/otelconnect
 transfer, err := paladin.NewTransfer(paladin.WithTransferHTTPClient(&http.Client{
 	Transport: otelhttp.NewTransport(http.DefaultTransport), // go.opentelemetry.io/contrib/…/otelhttp
 }))
 p, err := paladin.Connect(endpoints,
-	paladin.WithClientOptions(connect.WithInterceptors(otelInterceptor)),
+	paladin.WithInterceptors(otelInterceptor),
 	paladin.WithTransfer(transfer))
 ```
 
@@ -540,8 +541,9 @@ them from here, so the two cannot drift.
 
 ## Services and methods
 
-Every method takes a `context.Context` and a `*connect.Request[…Request]`
-and returns a `*connect.Response[…]`. The request and response messages, and
+Every method takes a `context.Context` and the request message and returns
+the response message; headers are on the call's `connect.CallInfo`
+(`connect.NewClientContext`). The request and response messages, and
 what each field means, are documented in the `.proto` files under
 [`proto/paladin`](../../proto/paladin).
 

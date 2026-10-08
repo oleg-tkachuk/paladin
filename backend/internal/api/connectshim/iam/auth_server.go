@@ -4,10 +4,11 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
@@ -22,11 +23,12 @@ type AuthServer struct {
 
 func NewAuthServer(h *authh.Handler) *AuthServer { return &AuthServer{H: h} }
 
-func (s *AuthServer) Login(ctx context.Context, req *connect.Request[pb.LoginRequest]) (*connect.Response[pb.LoginResponse], error) {
-	m := req.Msg
+func (s *AuthServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
+	info := unary.Info(ctx)
+	m := req
 	var tenant uuid.UUID
 	// Tenant hint comes via header "X-Tenant-Id" (set by frontend / proxy).
-	if h := req.Header().Get("X-Tenant-Id"); h != "" {
+	if h := info.RequestHeader().Get("X-Tenant-Id"); h != "" {
 		if id, err := uuid.Parse(h); err == nil {
 			tenant = id
 		}
@@ -46,7 +48,7 @@ func (s *AuthServer) Login(ctx context.Context, req *connect.Request[pb.LoginReq
 	// right for users created near login time but balloons for accounts
 	// minted hours / days earlier.
 	now := time.Now()
-	return connect.NewResponse(&pb.LoginResponse{
+	return &pb.LoginResponse{
 		Tokens: &pb.TokenPair{
 			AccessToken:             out.AccessToken,
 			AccessExpiresInSeconds:  int32(out.AccessExpiresAt.Sub(now).Seconds()),
@@ -56,19 +58,19 @@ func (s *AuthServer) Login(ctx context.Context, req *connect.Request[pb.LoginReq
 			Audience:                out.Audience,
 		},
 		User: userToProto(&out.User),
-	}), nil
+	}, nil
 }
 
-func (s *AuthServer) RefreshToken(ctx context.Context, req *connect.Request[pb.RefreshTokenRequest]) (*connect.Response[pb.RefreshTokenResponse], error) {
+func (s *AuthServer) RefreshToken(ctx context.Context, req *pb.RefreshTokenRequest) (*pb.RefreshTokenResponse, error) {
 	out, err := s.H.RefreshToken(ctx, authh.RefreshInput{
-		RefreshToken:      req.Msg.GetRefreshToken(),
-		RequestedAudience: req.Msg.GetRequestedAudience(),
+		RefreshToken:      req.GetRefreshToken(),
+		RequestedAudience: req.GetRequestedAudience(),
 	})
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
-	return connect.NewResponse(&pb.RefreshTokenResponse{
+	return &pb.RefreshTokenResponse{
 		Tokens: &pb.TokenPair{
 			AccessToken:             out.AccessToken,
 			AccessExpiresInSeconds:  int32(out.AccessExpiresAt.Sub(now).Seconds()),
@@ -77,18 +79,18 @@ func (s *AuthServer) RefreshToken(ctx context.Context, req *connect.Request[pb.R
 			TokenType:               "Bearer",
 			Audience:                out.Audience,
 		},
-	}), nil
+	}, nil
 }
 
-func (s *AuthServer) Revoke(ctx context.Context, req *connect.Request[pb.RevokeRequest]) (*connect.Response[pb.RevokeResponse], error) {
-	if err := s.H.Revoke(ctx, req.Msg.GetToken()); err != nil {
+func (s *AuthServer) Revoke(ctx context.Context, req *pb.RevokeRequest) (*pb.RevokeResponse, error) {
+	if err := s.H.Revoke(ctx, req.GetToken()); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.RevokeResponse{}), nil
+	return &pb.RevokeResponse{}, nil
 }
 
-func (s *AuthServer) WhoAmI(ctx context.Context, req *connect.Request[pb.WhoAmIRequest]) (*connect.Response[pb.WhoAmIResponse], error) {
-	out, err := s.H.WhoAmI(ctx, req.Msg.GetRoutePageToken())
+func (s *AuthServer) WhoAmI(ctx context.Context, req *pb.WhoAmIRequest) (*pb.WhoAmIResponse, error) {
+	out, err := s.H.WhoAmI(ctx, req.GetRoutePageToken())
 	if err != nil {
 		return nil, err
 	}
@@ -102,14 +104,14 @@ func (s *AuthServer) WhoAmI(ctx context.Context, req *connect.Request[pb.WhoAmIR
 	if p, perr := auth.PrincipalFromContext(ctx); perr == nil {
 		tenantSlug = p.TenantSlug
 	}
-	return connect.NewResponse(&pb.WhoAmIResponse{
+	return &pb.WhoAmIResponse{
 		User:            userToProto(&out.User),
 		Audience:        out.Audience,
 		TenantSlug:      tenantSlug,
 		Routes:          collectionRoutesToProto(out.Routes),
 		RoutesTruncated: out.RoutesTruncated,
 		NextPageToken:   out.NextPageToken,
-	}), nil
+	}, nil
 }
 
 // collectionRoutesToProto maps the handler's route table (ADR-0014 Phase 4)
@@ -131,34 +133,34 @@ func collectionRoutesToProto(routes []authh.CollectionRoute) []*pb.CollectionRou
 	return out
 }
 
-func (s *AuthServer) ChangePassword(ctx context.Context, req *connect.Request[pb.ChangePasswordRequest]) (*connect.Response[pb.ChangePasswordResponse], error) {
-	if err := s.H.ChangePassword(ctx, req.Msg.GetOldPassword(), req.Msg.GetNewPassword()); err != nil {
+func (s *AuthServer) ChangePassword(ctx context.Context, req *pb.ChangePasswordRequest) (*pb.ChangePasswordResponse, error) {
+	if err := s.H.ChangePassword(ctx, req.GetOldPassword(), req.GetNewPassword()); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.ChangePasswordResponse{}), nil
+	return &pb.ChangePasswordResponse{}, nil
 }
 
-func (s *AuthServer) ExchangeAudience(ctx context.Context, req *connect.Request[pb.ExchangeAudienceRequest]) (*connect.Response[pb.ExchangeAudienceResponse], error) {
+func (s *AuthServer) ExchangeAudience(ctx context.Context, req *pb.ExchangeAudienceRequest) (*pb.ExchangeAudienceResponse, error) {
 	out, err := s.H.ExchangeAudience(ctx, authh.ExchangeAudienceInput{
-		RefreshToken:   req.Msg.GetRefreshToken(),
-		TargetAudience: req.Msg.GetTargetAudience(),
+		RefreshToken:   req.GetRefreshToken(),
+		TargetAudience: req.GetTargetAudience(),
 	})
 	if err != nil {
 		return nil, err
 	}
 	// access_expires_in_seconds: relative TTL, like Login/RefreshToken.
 	ttl := int32(time.Until(out.AccessExpiresAt).Seconds())
-	return connect.NewResponse(&pb.ExchangeAudienceResponse{
+	return &pb.ExchangeAudienceResponse{
 		AccessToken:            out.AccessToken,
 		AccessExpiresInSeconds: ttl,
 		TokenType:              "Bearer",
-	}), nil
+	}, nil
 }
 
-func (s *AuthServer) ListMyMemberships(ctx context.Context, req *connect.Request[pb.ListMyMembershipsRequest]) (*connect.Response[pb.ListMyMembershipsResponse], error) {
+func (s *AuthServer) ListMyMemberships(ctx context.Context, req *pb.ListMyMembershipsRequest) (*pb.ListMyMembershipsResponse, error) {
 	ms, next, err := s.H.ListMyMemberships(ctx, authh.ListMembershipsInput{
-		PageSize:  req.Msg.GetPage().GetPageSize(),
-		PageToken: req.Msg.GetPage().GetPageToken(),
+		PageSize:  req.GetPage().GetPageSize(),
+		PageToken: req.GetPage().GetPageToken(),
 	})
 	if err != nil {
 		return nil, err
@@ -177,20 +179,20 @@ func (s *AuthServer) ListMyMemberships(ctx context.Context, req *connect.Request
 	if next != "" {
 		resp.Page = &commonpb.PageResponse{NextPageToken: next}
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
-func (s *AuthServer) SwitchTenant(ctx context.Context, req *connect.Request[pb.SwitchTenantRequest]) (*connect.Response[pb.SwitchTenantResponse], error) {
-	target, err := uuid.Parse(req.Msg.GetTargetTenantId())
+func (s *AuthServer) SwitchTenant(ctx context.Context, req *pb.SwitchTenantRequest) (*pb.SwitchTenantResponse, error) {
+	target, err := uuid.Parse(req.GetTargetTenantId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	out, err := s.H.SwitchTenant(ctx, target, req.Msg.GetRequestedAudience())
+	out, err := s.H.SwitchTenant(ctx, target, req.GetRequestedAudience())
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
-	return connect.NewResponse(&pb.SwitchTenantResponse{
+	return &pb.SwitchTenantResponse{
 		Tokens: &pb.TokenPair{
 			AccessToken:             out.AccessToken,
 			AccessExpiresInSeconds:  int32(out.AccessExpiresAt.Sub(now).Seconds()),
@@ -200,7 +202,7 @@ func (s *AuthServer) SwitchTenant(ctx context.Context, req *connect.Request[pb.S
 			Audience:                out.Audience,
 		},
 		User: userToProto(&out.User),
-	}), nil
+	}, nil
 }
 
 var _ paladiniamv1connect.AuthServiceHandler = (*AuthServer)(nil)

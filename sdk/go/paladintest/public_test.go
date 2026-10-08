@@ -9,8 +9,6 @@ import (
 	"regexp"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -53,9 +51,9 @@ func TestAPublicObjectIsServedAtItsURL(t *testing.T) {
 	if status != http.StatusOK || !bytes.Equal(got, body) || header.Get("Cache-Control") != paladintest.PublicCacheControl {
 		t.Fatalf("GET = %d %q %v, want the bytes with the collection's Cache-Control", status, got, header)
 	}
-	if _, err := p.Data.Object.DeleteObject(ctx, connect.NewRequest(&datav1.DeleteObjectRequest{
+	if _, err := p.Data.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{
 		Name: obj.GetName(), ResourceVersion: obj.GetResourceVersion(), Permanent: true,
-	})); err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if status, _, _ := get(t, obj.GetPublicUrl()); status != http.StatusNotFound {
@@ -67,18 +65,18 @@ func TestAPublicCollectionRefusesWhatTheServerDoes(t *testing.T) {
 	srv := paladintest.New(t)
 	p := srv.Connect()
 	ctx := context.Background()
-	_, err := p.Data.Object.UploadObject(ctx, connect.NewRequest(&datav1.UploadObjectRequest{
+	_, err := p.Data.Object.UploadObject(ctx, &datav1.UploadObjectRequest{
 		Parent: srv.PublicCollection().String(), Key: "chosen.jpg", ContentType: "image/jpeg", SizeHintBytes: 1,
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256, ChecksumValue: oneByteSHA256,
-	}))
+	})
 	if paladin.Reason(err) != commonv1.ErrorReason_ERROR_REASON_PUBLIC_COLLECTION_RULE {
 		t.Errorf("a client's key: err = %v, want the public collection rule", err)
 	}
 
 	obj := srv.Put(srv.PublicCollection(), "", "image/jpeg", []byte("x"))
-	_, err = p.Data.Object.DeleteObject(ctx, connect.NewRequest(&datav1.DeleteObjectRequest{
+	_, err = p.Data.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{
 		Name: obj.GetName(), ResourceVersion: obj.GetResourceVersion(),
-	}))
+	})
 	if !errors.Is(err, paladin.ErrFailedPrecondition) || paladin.Reason(err) != commonv1.ErrorReason_ERROR_REASON_PUBLIC_COLLECTION_RULE {
 		t.Errorf("a delete to the trash: err = %v, want the public collection rule", err)
 	}
@@ -92,18 +90,18 @@ func TestAPublicCollectionRefusesWhatTheServerDoes(t *testing.T) {
 func TestAPublicUploadIsBoundToItsCacheControl(t *testing.T) {
 	srv := paladintest.New(t)
 	p := srv.Connect()
-	resp, err := p.Data.Object.UploadObject(context.Background(), connect.NewRequest(&datav1.UploadObjectRequest{
+	resp, err := p.Data.Object.UploadObject(context.Background(), &datav1.UploadObjectRequest{
 		Parent: srv.PublicCollection().String(), ContentType: "image/jpeg", SizeHintBytes: 1,
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256, ChecksumValue: oneByteSHA256,
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	headers := resp.Msg.GetUploadUrl().GetRequiredHeaders()
+	headers := resp.GetUploadUrl().GetRequiredHeaders()
 	if headers["Cache-Control"] != paladintest.PublicCacheControl {
 		t.Fatalf("required headers %v, want the Cache-Control", headers)
 	}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPut, resp.Msg.GetUploadUrl().GetUrl(), bytes.NewReader([]byte("x")))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPut, resp.GetUploadUrl().GetUrl(), bytes.NewReader([]byte("x")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,21 +132,21 @@ func TestAPrivateObjectHasNoPublicURL(t *testing.T) {
 // of Paladin's states.
 func TestAPublicObjectIsServedAsSoonAsItsBytesLand(t *testing.T) {
 	srv := paladintest.New(t)
-	resp, err := srv.Connect().Data.Object.UploadObject(context.Background(), connect.NewRequest(&datav1.UploadObjectRequest{
+	resp, err := srv.Connect().Data.Object.UploadObject(context.Background(), &datav1.UploadObjectRequest{
 		Parent: srv.PublicCollection().String(), ContentType: "image/jpeg", SizeHintBytes: 1,
 		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256, ChecksumValue: oneByteSHA256,
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status, _, _ := get(t, resp.Msg.GetObject().GetPublicUrl()); status != http.StatusNotFound {
+	if status, _, _ := get(t, resp.GetObject().GetPublicUrl()); status != http.StatusNotFound {
 		t.Fatalf("before the PUT GET = %d, want 404", status)
 	}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPut, resp.Msg.GetUploadUrl().GetUrl(), bytes.NewReader([]byte("x")))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPut, resp.GetUploadUrl().GetUrl(), bytes.NewReader([]byte("x")))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for k, v := range resp.Msg.GetUploadUrl().GetRequiredHeaders() {
+	for k, v := range resp.GetUploadUrl().GetRequiredHeaders() {
 		req.Header.Set(k, v)
 	}
 	put, err := http.DefaultClient.Do(req)
@@ -156,7 +154,7 @@ func TestAPublicObjectIsServedAsSoonAsItsBytesLand(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = put.Body.Close()
-	if status, got, _ := get(t, resp.Msg.GetObject().GetPublicUrl()); status != http.StatusOK || string(got) != "x" {
+	if status, got, _ := get(t, resp.GetObject().GetPublicUrl()); status != http.StatusOK || string(got) != "x" {
 		t.Errorf("after the PUT, before Complete, GET = %d %q, want the bytes", status, got)
 	}
 }
