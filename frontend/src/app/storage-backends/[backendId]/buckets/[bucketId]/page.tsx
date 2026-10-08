@@ -354,9 +354,11 @@ export default function BucketDetailPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-65">Folder</TableHead>
+                    <TableHead className="@md:w-65">Folder</TableHead>
                     <TableHead>Display name</TableHead>
-                    <TableHead className="w-45 text-right">Browse</TableHead>
+                    <TableHead className="@md:w-45 text-right">
+                      Browse
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

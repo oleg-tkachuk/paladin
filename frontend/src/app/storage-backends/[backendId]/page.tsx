@@ -192,7 +192,7 @@ export default function StorageBackendDetailPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-65">Bucket</TableHead>
+              <TableHead className="@md:w-65">Bucket</TableHead>
               <TableHead>Display name</TableHead>
               <TableHead className="hidden @md:table-cell">Region</TableHead>
               <TableHead className="hidden @md:table-cell">State</TableHead>

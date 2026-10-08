@@ -159,7 +159,7 @@ export default function TenantsPage() {
           <TableHeader>
             <TableRow>
               <SortableHead
-                className="w-55"
+                className="@md:w-55"
                 label="Slug"
                 column="slug"
                 current={sort}
@@ -245,7 +245,7 @@ export default function TenantsPage() {
                         <div className="flex size-8 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
                           <BuildingOfficeIcon className="size-4" />
                         </div>
-                        <span className="font-medium group-hover:underline">
+                        <span className="font-medium break-all whitespace-normal group-hover:underline">
                           {tenant.slug || (
                             <span className="text-muted-foreground italic">
                               (no slug)

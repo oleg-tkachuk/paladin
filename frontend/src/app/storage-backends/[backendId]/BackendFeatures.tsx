@@ -105,7 +105,7 @@ export function BackendFeatures({
           <TableBody>
             {backend.features.map((f) => (
               <TableRow key={f.feature}>
-                <TableCell className="font-medium">
+                <TableCell className="font-medium whitespace-normal">
                   {FEATURE_LABELS[f.feature]}
                   {f.required && (
                     <Badge
