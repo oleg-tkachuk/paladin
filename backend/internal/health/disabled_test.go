@@ -9,6 +9,7 @@ import (
 
 // failIfRun stands in for a disabled component's probe: it must never run.
 func failIfRun(t *testing.T) func(context.Context) error {
+	t.Helper()
 	return func(context.Context) error {
 		t.Error("a disabled check was run")
 		return errors.New("ran")
