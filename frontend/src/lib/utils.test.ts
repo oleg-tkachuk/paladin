@@ -31,19 +31,40 @@ describe("cn", () => {
 
   // tailwind-merge read a size it did not know as a text colour and dropped
   // it beside a real one, so the text rendered at the inherited size.
-  it.each(DEFINED_TEXT_SIZES)("keeps text-%s beside a text colour", (size) => {
-    expect(cn(`text-${size}`, "text-muted-foreground")).toBe(
-      `text-${size} text-muted-foreground`,
-    );
-  });
+  it.each([...DEFINED_TEXT_SIZES, "sm"])(
+    "keeps text-%s beside a text colour",
+    (size) => {
+      expect(cn(`text-${size}`, "text-muted-foreground")).toBe(
+        `text-${size} text-muted-foreground`,
+      );
+    },
+  );
 
-  it.each(DEFINED_TEXT_SIZES)("lets a later size replace text-%s", (size) => {
-    expect(cn(`text-${size}`, "text-sm")).toBe("text-sm");
-  });
+  it.each([...DEFINED_TEXT_SIZES, "xs"])(
+    "lets a later size replace text-%s",
+    (size) => {
+      expect(cn(`text-${size}`, "text-sm")).toBe("text-sm");
+    },
+  );
 
   // A size added to globals.css and not here would be dropped again.
+  // The sizes below text-sm were retired: through cn() they had rendered at
+  // the inherited 14–16px, which is the size the console is read at. A class
+  // naming one now would compile to nothing and leave the text unsized.
+  it("leaves no class naming a retired text size", () => {
+    const sources = import.meta.glob<string>(
+      ["/src/**/*.{ts,tsx}", "!/src/**/*.test.{ts,tsx}", "!/src/gen/**"],
+      { query: "?raw", import: "default", eager: true },
+    );
+    const RETIRED =
+      /^(?!\s*\/\/).*(?<![\w-])text-(?:micro|tiny|caption|compact)(?![\w-])/m;
+    const offenders = Object.entries(sources)
+      .filter(([, src]) => RETIRED.test(src))
+      .map(([path]) => path);
+    expect(offenders).toEqual([]);
+  });
+
   it("knows every text size globals.css defines", () => {
-    expect(DEFINED_TEXT_SIZES.length).toBeGreaterThan(0);
     expect([...CUSTOM_TEXT_SIZES].sort()).toEqual(
       [...DEFINED_TEXT_SIZES].sort(),
     );

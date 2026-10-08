@@ -122,7 +122,7 @@ export default function StorageBackendDetailPage() {
                   </span>
                 )}
               </CardTitle>
-              <span className="text-tiny uppercase tracking-wider text-muted-foreground">
+              <span className="text-sm uppercase tracking-wider text-muted-foreground">
                 Storage backend
               </span>
             </div>
@@ -299,7 +299,7 @@ function Row({
       <span
         className={cn(
           mono && T.code,
-          truncate && "truncate text-muted-foreground text-caption",
+          truncate && "truncate text-muted-foreground text-sm",
         )}
         title={truncate ? v : undefined}
       >

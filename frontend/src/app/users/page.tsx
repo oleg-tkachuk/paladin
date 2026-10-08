@@ -197,7 +197,7 @@ export default function UsersPage() {
                               </span>
                             )}
                           </Link>
-                          <p className="truncate font-mono text-caption text-muted-foreground">
+                          <p className="truncate font-mono text-sm text-muted-foreground">
                             {u.subject}
                           </p>
                         </div>
@@ -212,7 +212,7 @@ export default function UsersPage() {
                           {tenant.slug}
                         </Link>
                       ) : (
-                        <span className="font-mono text-tiny text-muted-foreground">
+                        <span className="font-mono text-sm text-muted-foreground">
                           {u.tenantId.slice(0, 8)}…
                         </span>
                       )}

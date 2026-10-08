@@ -67,7 +67,7 @@ export function Breadcrumbs() {
                   aria-current="page"
                   className={cn(
                     "max-w-55 truncate font-medium text-foreground",
-                    mono && "font-mono text-compact",
+                    mono && "font-mono text-sm",
                   )}
                 >
                   {label}
@@ -78,7 +78,7 @@ export function Breadcrumbs() {
                   title={title}
                   className={cn(
                     "max-w-45 truncate text-muted-foreground transition-colors hover:text-foreground",
-                    mono && "font-mono text-compact",
+                    mono && "font-mono text-sm",
                   )}
                 >
                   {label}
