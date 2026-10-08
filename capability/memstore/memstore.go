@@ -406,6 +406,9 @@ func (s *Store[TX]) ListByPrincipal(_ context.Context, req capability.ListByPrin
 // a tenant past its ceiling is at 100%, not beyond.
 const maxUtilisationPct = 100
 
+// percent turns a fraction into a percentage.
+const percent = 100
+
 // uuidLess orders ids as Postgres orders the uuid type: bytewise.
 func uuidLess(a, b uuid.UUID) bool { return bytes.Compare(a[:], b[:]) < 0 }
 
@@ -1040,7 +1043,7 @@ func (s *UsageStore[TX]) ListTenantBudgets(_ context.Context, args capability.Li
 		}
 		var pct float64
 		if !unlimited {
-			pct = b.SpentAmount / b.MaxBudgetAmount * 100
+			pct = b.SpentAmount / b.MaxBudgetAmount * percent
 		}
 		if args.ThresholdPct > 0 && pct < args.ThresholdPct {
 			continue

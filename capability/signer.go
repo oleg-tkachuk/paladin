@@ -139,7 +139,7 @@ func (s *ed25519Signer) Sign(c Capability) (string, error) {
 		return "", errors.New("capability: ExpiresAt must be after IssuedAt")
 	}
 
-	header := jwtHeader{Alg: "EdDSA", Kid: s.keyID, Typ: TokenType}
+	header := jwtHeader{Alg: algEdDSA, Kid: s.keyID, Typ: TokenType}
 	claims := jwtClaims{
 		Issuer:           c.Issuer,
 		Subject:          c.Subject.Subject,
@@ -216,7 +216,7 @@ func parseHeader(seg string) (jwtHeader, error) {
 	if err := json.Unmarshal(raw, &h); err != nil {
 		return jwtHeader{}, fmt.Errorf("capability: parse header: %w", err)
 	}
-	if h.Alg != "EdDSA" {
+	if h.Alg != algEdDSA {
 		return jwtHeader{}, fmt.Errorf("capability: unexpected alg %q (want EdDSA)", h.Alg)
 	}
 	return h, nil

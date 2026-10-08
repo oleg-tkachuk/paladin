@@ -17,6 +17,15 @@ import (
 // ErrInvalidSignature — an issuer we cannot reach verifies nothing.
 var ErrJWKSUnavailable = errors.New("capability: JWKS unavailable")
 
+// RemoteJWKSConfig defaults, documented on its fields.
+const (
+	defaultJWKSFetchTimeout       = 10 * time.Second
+	defaultJWKSRefreshInterval    = 5 * time.Minute
+	defaultJWKSMinRefreshInterval = 10 * time.Second
+	defaultJWKSMaxStale           = time.Hour
+	defaultJWKSMaxDocumentBytes   = 1 << 20
+)
+
 // RemoteJWKSConfig configures a RemoteJWKSResolver. Only URL is required.
 type RemoteJWKSConfig struct {
 	// URL of the issuer's JWKS document, e.g.
@@ -68,19 +77,19 @@ func NewRemoteJWKSResolver(cfg RemoteJWKSConfig) (*RemoteJWKSResolver, error) {
 		return nil, errors.New("capability: RemoteJWKSConfig.URL required")
 	}
 	if cfg.Client == nil {
-		cfg.Client = &http.Client{Timeout: 10 * time.Second}
+		cfg.Client = &http.Client{Timeout: defaultJWKSFetchTimeout}
 	}
 	if cfg.RefreshInterval <= 0 {
-		cfg.RefreshInterval = 5 * time.Minute
+		cfg.RefreshInterval = defaultJWKSRefreshInterval
 	}
 	if cfg.MinRefreshInterval <= 0 {
-		cfg.MinRefreshInterval = 10 * time.Second
+		cfg.MinRefreshInterval = defaultJWKSMinRefreshInterval
 	}
 	if cfg.MaxStale <= 0 {
-		cfg.MaxStale = time.Hour
+		cfg.MaxStale = defaultJWKSMaxStale
 	}
 	if cfg.MaxDocumentBytes <= 0 {
-		cfg.MaxDocumentBytes = 1 << 20
+		cfg.MaxDocumentBytes = defaultJWKSMaxDocumentBytes
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
