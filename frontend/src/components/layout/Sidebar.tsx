@@ -180,9 +180,9 @@ const navigationGroups: Array<{
  * fail on its first request. Until the user is known (null) nothing is taken
  * away, so an operator's sidebar does not flash short on load.
  */
-// The product name over the release line. One step above the release, which
-// is set in a monospace that reads larger than its size: at the same 14px the
-// name looked the smaller of the two.
+// The product name over the release line (BuildVersion, text-xs). At the
+// same 14px the name looked the smaller of the two, the release being a
+// monospace that reads larger than its size.
 export const BRAND_NAME_CLASS = "block text-base font-semibold tracking-tight";
 
 // A group's label (CORE, MANAGEMENT, …). text-sm is a size cn() keeps:

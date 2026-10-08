@@ -58,8 +58,8 @@ describe("group label", () => {
   });
 });
 
-// The release under the name is 14px monospace, which reads larger than
-// 14px sans: the name sits a size above it so it does not look the smaller.
+// The release under the name is a monospace, which reads larger than its
+// size: the name sits above it so it does not look the smaller.
 describe("brand name", () => {
   it("is set a size above the release line", () => {
     expect(cn(BRAND_NAME_CLASS).split(" ")).toContain("text-base");
