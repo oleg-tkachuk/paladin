@@ -13,6 +13,7 @@ import (
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
+	money "google.golang.org/genproto/googleapis/type/money"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -203,17 +204,12 @@ type CapabilityCaveats struct {
 	AllowTaintedRead       bool     `protobuf:"varint,6,opt,name=allow_tainted_read,json=allowTaintedRead,proto3" json:"allow_tainted_read,omitempty"`
 	IdempotencyKeyRequired bool     `protobuf:"varint,7,opt,name=idempotency_key_required,json=idempotencyKeyRequired,proto3" json:"idempotency_key_required,omitempty"`
 	SourceIpCidr           []string `protobuf:"bytes,8,rep,name=source_ip_cidr,json=sourceIpCidr,proto3" json:"source_ip_cidr,omitempty"`
-	// unit_code is the currency code (USD/EUR/UAH/GBP) or the
-	// abstract sentinel UNIT for non-currency metering. Empty in
-	// the request defaults to "USD" server-side; the validator
-	// rejects any other unrecognised value.
-	UnitCode string `protobuf:"bytes,9,opt,name=unit_code,json=unitCode,proto3" json:"unit_code,omitempty"`
-	// max_budget_micros is the cost budget in millionths of unit_code (25
-	// USD = 25000000); 0 or absent = no budget. Currency is given by
-	// unit_code; default "USD" when empty.
-	MaxBudgetMicros *int64 `protobuf:"varint,10,opt,name=max_budget_micros,json=maxBudgetMicros,proto3,oneof" json:"max_budget_micros,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// max_budget is the cost budget, exact to the nano, and its currency is
+	// the unit every charge against the capability is in. A zero amount is no
+	// budget in that unit; absent is no budget in USD. currency_code is an ISO 4217 code the server accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no currency", for metering that is not money.
+	MaxBudget     *money.Money `protobuf:"bytes,11,opt,name=max_budget,json=maxBudget,proto3" json:"max_budget,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CapabilityCaveats) Reset() {
@@ -295,18 +291,11 @@ func (x *CapabilityCaveats) GetSourceIpCidr() []string {
 	return nil
 }
 
-func (x *CapabilityCaveats) GetUnitCode() string {
+func (x *CapabilityCaveats) GetMaxBudget() *money.Money {
 	if x != nil {
-		return x.UnitCode
+		return x.MaxBudget
 	}
-	return ""
-}
-
-func (x *CapabilityCaveats) GetMaxBudgetMicros() int64 {
-	if x != nil && x.MaxBudgetMicros != nil {
-		return *x.MaxBudgetMicros
-	}
-	return 0
+	return nil
 }
 
 // Capability is the typed metadata view of an issued or stored
@@ -938,15 +927,15 @@ type CapabilityBiscuitCopyUsage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// revocation_id is the id of the block that set the limits.
 	RevocationId []byte `protobuf:"bytes,1,opt,name=revocation_id,json=revocationId,proto3" json:"revocation_id,omitempty"`
-	// max_requests and max_budget_micros are the limits; 0 sets none.
-	MaxRequests     int64 `protobuf:"varint,2,opt,name=max_requests,json=maxRequests,proto3" json:"max_requests,omitempty"`
-	MaxBudgetMicros int64 `protobuf:"varint,3,opt,name=max_budget_micros,json=maxBudgetMicros,proto3" json:"max_budget_micros,omitempty"`
-	RequestCount    int64 `protobuf:"varint,4,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
-	// spent_micros and reserved_micros are in millionths of unit_code.
-	SpentMicros    int64 `protobuf:"varint,5,opt,name=spent_micros,json=spentMicros,proto3" json:"spent_micros,omitempty"`
-	ReservedMicros int64 `protobuf:"varint,6,opt,name=reserved_micros,json=reservedMicros,proto3" json:"reserved_micros,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// max_requests and max_budget are the limits; 0 sets none.
+	MaxRequests  int64        `protobuf:"varint,2,opt,name=max_requests,json=maxRequests,proto3" json:"max_requests,omitempty"`
+	MaxBudget    *money.Money `protobuf:"bytes,7,opt,name=max_budget,json=maxBudget,proto3" json:"max_budget,omitempty"`
+	RequestCount int64        `protobuf:"varint,4,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
+	// spent and reserved are in the capability's currency.
+	Spent         *money.Money `protobuf:"bytes,8,opt,name=spent,proto3" json:"spent,omitempty"`
+	Reserved      *money.Money `protobuf:"bytes,9,opt,name=reserved,proto3" json:"reserved,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CapabilityBiscuitCopyUsage) Reset() {
@@ -993,11 +982,11 @@ func (x *CapabilityBiscuitCopyUsage) GetMaxRequests() int64 {
 	return 0
 }
 
-func (x *CapabilityBiscuitCopyUsage) GetMaxBudgetMicros() int64 {
+func (x *CapabilityBiscuitCopyUsage) GetMaxBudget() *money.Money {
 	if x != nil {
-		return x.MaxBudgetMicros
+		return x.MaxBudget
 	}
-	return 0
+	return nil
 }
 
 func (x *CapabilityBiscuitCopyUsage) GetRequestCount() int64 {
@@ -1007,25 +996,23 @@ func (x *CapabilityBiscuitCopyUsage) GetRequestCount() int64 {
 	return 0
 }
 
-func (x *CapabilityBiscuitCopyUsage) GetSpentMicros() int64 {
+func (x *CapabilityBiscuitCopyUsage) GetSpent() *money.Money {
 	if x != nil {
-		return x.SpentMicros
+		return x.Spent
 	}
-	return 0
+	return nil
 }
 
-func (x *CapabilityBiscuitCopyUsage) GetReservedMicros() int64 {
+func (x *CapabilityBiscuitCopyUsage) GetReserved() *money.Money {
 	if x != nil {
-		return x.ReservedMicros
+		return x.Reserved
 	}
-	return 0
+	return nil
 }
 
 type CapabilityServiceGetBiscuitUsageResponse struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	CapabilityId string                 `protobuf:"bytes,1,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
-	// unit_code is the capability's unit, which its copies' budgets share.
-	UnitCode string `protobuf:"bytes,2,opt,name=unit_code,json=unitCode,proto3" json:"unit_code,omitempty"`
 	// copies are innermost first: the copy itself when it set limits, then the
 	// copies it was attenuated from.
 	Copies        []*CapabilityBiscuitCopyUsage `protobuf:"bytes,3,rep,name=copies,proto3" json:"copies,omitempty"`
@@ -1066,13 +1053,6 @@ func (*CapabilityServiceGetBiscuitUsageResponse) Descriptor() ([]byte, []int) {
 func (x *CapabilityServiceGetBiscuitUsageResponse) GetCapabilityId() string {
 	if x != nil {
 		return x.CapabilityId
-	}
-	return ""
-}
-
-func (x *CapabilityServiceGetBiscuitUsageResponse) GetUnitCode() string {
-	if x != nil {
-		return x.UnitCode
 	}
 	return ""
 }
@@ -1456,10 +1436,8 @@ type CapabilityServiceGetUsageResponse struct {
 	CapabilityId string                 `protobuf:"bytes,1,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
 	RequestCount int64                  `protobuf:"varint,2,opt,name=request_count,json=requestCount,proto3" json:"request_count,omitempty"`
 	UpdatedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	// unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT.
-	UnitCode string `protobuf:"bytes,5,opt,name=unit_code,json=unitCode,proto3" json:"unit_code,omitempty"`
-	// spent_micros is the accumulated spend in millionths of unit_code.
-	SpentMicros   int64 `protobuf:"varint,6,opt,name=spent_micros,json=spentMicros,proto3" json:"spent_micros,omitempty"`
+	// spent is the accumulated spend, in the capability's currency.
+	Spent         *money.Money `protobuf:"bytes,7,opt,name=spent,proto3" json:"spent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1515,25 +1493,18 @@ func (x *CapabilityServiceGetUsageResponse) GetUpdatedAt() *timestamppb.Timestam
 	return nil
 }
 
-func (x *CapabilityServiceGetUsageResponse) GetUnitCode() string {
+func (x *CapabilityServiceGetUsageResponse) GetSpent() *money.Money {
 	if x != nil {
-		return x.UnitCode
+		return x.Spent
 	}
-	return ""
-}
-
-func (x *CapabilityServiceGetUsageResponse) GetSpentMicros() int64 {
-	if x != nil {
-		return x.SpentMicros
-	}
-	return 0
+	return nil
 }
 
 var File_paladin_admin_v1_capability_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\n" +
-	")paladin/admin/v1/capability_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xd8\x02\n" +
+	")paladin/admin/v1/capability_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x17google/type/money.proto\"\xd8\x02\n" +
 	"\x13CapabilityPrincipal\x12?\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1f.paladin.admin.v1.PrincipalKindB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12%\n" +
@@ -1547,7 +1518,7 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\x0fparent_agent_id\x18\r \x01(\tR\rparentAgentId\x12\x14\n" +
 	"\x05model\x18\x0e \x01(\tR\x05model\x12\x1d\n" +
 	"\n" +
-	"mcp_client\x18\x0f \x01(\tR\tmcpClient\"\xb8\x03\n" +
+	"mcp_client\x18\x0f \x01(\tR\tmcpClient\"\xc4\x04\n" +
 	"\x11CapabilityCaveats\x12\x1a\n" +
 	"\x03ops\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\x03ops\x12+\n" +
 	"\x11resource_prefixes\x18\x02 \x03(\tR\x10resourcePrefixes\x12#\n" +
@@ -1555,11 +1526,12 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\fmax_requests\x18\x04 \x01(\x05R\vmaxRequests\x12,\n" +
 	"\x12allow_tainted_read\x18\x06 \x01(\bR\x10allowTaintedRead\x128\n" +
 	"\x18idempotency_key_required\x18\a \x01(\bR\x16idempotencyKeyRequired\x12$\n" +
-	"\x0esource_ip_cidr\x18\b \x03(\tR\fsourceIpCidr\x12\x1b\n" +
-	"\tunit_code\x18\t \x01(\tR\bunitCode\x128\n" +
-	"\x11max_budget_micros\x18\n" +
-	" \x01(\x03B\a\xbaH\x04\"\x02(\x00H\x00R\x0fmaxBudgetMicros\x88\x01\x01B\x14\n" +
-	"\x12_max_budget_microsJ\x04\b\x05\x10\x06R\x11max_budget_amount\"\x80\x04\n" +
+	"\x0esource_ip_cidr\x18\b \x03(\tR\fsourceIpCidr\x12\xcc\x01\n" +
+	"\n" +
+	"max_budget\x18\v \x01(\v2\x12.google.type.MoneyB\x98\x01\xbaH\x94\x01\xba\x01\x90\x01\n" +
+	"\x12money.non_negative\x12;an amount is not negative, and its nanos are 0 to 999999999\x1a=this.units >= 0 && this.nanos >= 0 && this.nanos <= 999999999R\tmaxBudgetJ\x04\b\x05\x10\x06J\x04\b\t\x10\n" +
+	"J\x04\b\n" +
+	"\x10\vR\x11max_budget_amountR\tunit_codeR\x11max_budget_micros\"\x80\x04\n" +
 	"\n" +
 	"Capability\x12\x13\n" +
 	"\x02id\x18\x01 \x01(\tB\x03\xe0A\x03R\x02id\x12\x1b\n" +
@@ -1616,18 +1588,18 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\rcapability_id\x18\x01 \x01(\tR\fcapabilityId\"K\n" +
 	"'CapabilityServiceGetBiscuitUsageRequest\x12 \n" +
 	"\x05token\x18\x01 \x01(\tB\n" +
-	"\xbaH\x04r\x02\x10\x01\x80\x01\x01R\x05token\"\x81\x02\n" +
+	"\xbaH\x04r\x02\x10\x01\x80\x01\x01R\x05token\"\xda\x02\n" +
 	"\x1aCapabilityBiscuitCopyUsage\x12#\n" +
 	"\rrevocation_id\x18\x01 \x01(\fR\frevocationId\x12!\n" +
-	"\fmax_requests\x18\x02 \x01(\x03R\vmaxRequests\x12*\n" +
-	"\x11max_budget_micros\x18\x03 \x01(\x03R\x0fmaxBudgetMicros\x12#\n" +
-	"\rrequest_count\x18\x04 \x01(\x03R\frequestCount\x12!\n" +
-	"\fspent_micros\x18\x05 \x01(\x03R\vspentMicros\x12'\n" +
-	"\x0freserved_micros\x18\x06 \x01(\x03R\x0ereservedMicros\"\xb2\x01\n" +
+	"\fmax_requests\x18\x02 \x01(\x03R\vmaxRequests\x121\n" +
+	"\n" +
+	"max_budget\x18\a \x01(\v2\x12.google.type.MoneyR\tmaxBudget\x12#\n" +
+	"\rrequest_count\x18\x04 \x01(\x03R\frequestCount\x12(\n" +
+	"\x05spent\x18\b \x01(\v2\x12.google.type.MoneyR\x05spent\x12.\n" +
+	"\breserved\x18\t \x01(\v2\x12.google.type.MoneyR\breservedJ\x04\b\x03\x10\x04J\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\x11max_budget_microsR\fspent_microsR\x0freserved_micros\"\xa6\x01\n" +
 	"(CapabilityServiceGetBiscuitUsageResponse\x12#\n" +
-	"\rcapability_id\x18\x01 \x01(\tR\fcapabilityId\x12\x1b\n" +
-	"\tunit_code\x18\x02 \x01(\tR\bunitCode\x12D\n" +
-	"\x06copies\x18\x03 \x03(\v2,.paladin.admin.v1.CapabilityBiscuitCopyUsageR\x06copies\"\xd3\x02\n" +
+	"\rcapability_id\x18\x01 \x01(\tR\fcapabilityId\x12D\n" +
+	"\x06copies\x18\x03 \x03(\v2,.paladin.admin.v1.CapabilityBiscuitCopyUsageR\x06copiesJ\x04\b\x02\x10\x03R\tunit_code\"\xd3\x02\n" +
 	"\x1cCapabilityServiceListRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12R\n" +
 	"\x0eprincipal_kind\x18\x02 \x01(\x0e2\x1f.paladin.admin.v1.PrincipalKindB\n" +
@@ -1658,14 +1630,13 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"revocation\x18\x03 \x01(\v2&.paladin.admin.v1.CapabilityRevocationR\n" +
 	"revocation\"<\n" +
 	" CapabilityServiceGetUsageRequest\x12\x18\n" +
-	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\xfc\x01\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\x8b\x02\n" +
 	"!CapabilityServiceGetUsageResponse\x12#\n" +
 	"\rcapability_id\x18\x01 \x01(\tR\fcapabilityId\x12#\n" +
 	"\rrequest_count\x18\x02 \x01(\x03R\frequestCount\x129\n" +
 	"\n" +
-	"updated_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1b\n" +
-	"\tunit_code\x18\x05 \x01(\tR\bunitCode\x12!\n" +
-	"\fspent_micros\x18\x06 \x01(\x03R\vspentMicrosJ\x04\b\x03\x10\x04R\fspent_amount*~\n" +
+	"updated_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12(\n" +
+	"\x05spent\x18\a \x01(\v2\x12.google.type.MoneyR\x05spentJ\x04\b\x03\x10\x04J\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\fspent_amountR\tunit_codeR\fspent_micros*~\n" +
 	"\rPrincipalKind\x12\x1e\n" +
 	"\x1aPRINCIPAL_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13PRINCIPAL_KIND_USER\x10\x01\x12\x18\n" +
@@ -1717,51 +1688,57 @@ var file_paladin_admin_v1_capability_service_proto_goTypes = []any{
 	(*CapabilityServiceGetResponse)(nil),             // 18: paladin.admin.v1.CapabilityServiceGetResponse
 	(*CapabilityServiceGetUsageRequest)(nil),         // 19: paladin.admin.v1.CapabilityServiceGetUsageRequest
 	(*CapabilityServiceGetUsageResponse)(nil),        // 20: paladin.admin.v1.CapabilityServiceGetUsageResponse
-	(*timestamppb.Timestamp)(nil),                    // 21: google.protobuf.Timestamp
+	(*money.Money)(nil),                              // 21: google.type.Money
+	(*timestamppb.Timestamp)(nil),                    // 22: google.protobuf.Timestamp
 }
 var file_paladin_admin_v1_capability_service_proto_depIdxs = []int32{
 	0,  // 0: paladin.admin.v1.CapabilityPrincipal.kind:type_name -> paladin.admin.v1.PrincipalKind
-	1,  // 1: paladin.admin.v1.Capability.subject:type_name -> paladin.admin.v1.CapabilityPrincipal
-	2,  // 2: paladin.admin.v1.Capability.caveats:type_name -> paladin.admin.v1.CapabilityCaveats
-	21, // 3: paladin.admin.v1.Capability.issued_at:type_name -> google.protobuf.Timestamp
-	21, // 4: paladin.admin.v1.Capability.not_before:type_name -> google.protobuf.Timestamp
-	21, // 5: paladin.admin.v1.Capability.expires_at:type_name -> google.protobuf.Timestamp
-	1,  // 6: paladin.admin.v1.CapabilityServiceIssueRequest.subject:type_name -> paladin.admin.v1.CapabilityPrincipal
-	2,  // 7: paladin.admin.v1.CapabilityServiceIssueRequest.caveats:type_name -> paladin.admin.v1.CapabilityCaveats
-	21, // 8: paladin.admin.v1.CapabilityServiceIssueRequest.not_before:type_name -> google.protobuf.Timestamp
-	3,  // 9: paladin.admin.v1.CapabilityServiceIssueResponse.capability:type_name -> paladin.admin.v1.Capability
-	1,  // 10: paladin.admin.v1.CapabilityServiceDelegateRequest.subject:type_name -> paladin.admin.v1.CapabilityPrincipal
-	2,  // 11: paladin.admin.v1.CapabilityServiceDelegateRequest.caveats:type_name -> paladin.admin.v1.CapabilityCaveats
-	21, // 12: paladin.admin.v1.CapabilityServiceDelegateRequest.not_before:type_name -> google.protobuf.Timestamp
-	12, // 13: paladin.admin.v1.CapabilityServiceGetBiscuitUsageResponse.copies:type_name -> paladin.admin.v1.CapabilityBiscuitCopyUsage
-	0,  // 14: paladin.admin.v1.CapabilityServiceListRequest.principal_kind:type_name -> paladin.admin.v1.PrincipalKind
-	3,  // 15: paladin.admin.v1.CapabilityServiceListResponse.capabilities:type_name -> paladin.admin.v1.Capability
-	21, // 16: paladin.admin.v1.CapabilityRevocation.revoked_at:type_name -> google.protobuf.Timestamp
-	3,  // 17: paladin.admin.v1.CapabilityServiceGetResponse.capability:type_name -> paladin.admin.v1.Capability
-	1,  // 18: paladin.admin.v1.CapabilityServiceGetResponse.issued_by:type_name -> paladin.admin.v1.CapabilityPrincipal
-	17, // 19: paladin.admin.v1.CapabilityServiceGetResponse.revocation:type_name -> paladin.admin.v1.CapabilityRevocation
-	21, // 20: paladin.admin.v1.CapabilityServiceGetUsageResponse.updated_at:type_name -> google.protobuf.Timestamp
-	4,  // 21: paladin.admin.v1.CapabilityService.Issue:input_type -> paladin.admin.v1.CapabilityServiceIssueRequest
-	6,  // 22: paladin.admin.v1.CapabilityService.Delegate:input_type -> paladin.admin.v1.CapabilityServiceDelegateRequest
-	7,  // 23: paladin.admin.v1.CapabilityService.Revoke:input_type -> paladin.admin.v1.CapabilityServiceRevokeRequest
-	9,  // 24: paladin.admin.v1.CapabilityService.RevokeBiscuit:input_type -> paladin.admin.v1.CapabilityServiceRevokeBiscuitRequest
-	11, // 25: paladin.admin.v1.CapabilityService.GetBiscuitUsage:input_type -> paladin.admin.v1.CapabilityServiceGetBiscuitUsageRequest
-	16, // 26: paladin.admin.v1.CapabilityService.Get:input_type -> paladin.admin.v1.CapabilityServiceGetRequest
-	14, // 27: paladin.admin.v1.CapabilityService.List:input_type -> paladin.admin.v1.CapabilityServiceListRequest
-	19, // 28: paladin.admin.v1.CapabilityService.GetUsage:input_type -> paladin.admin.v1.CapabilityServiceGetUsageRequest
-	5,  // 29: paladin.admin.v1.CapabilityService.Issue:output_type -> paladin.admin.v1.CapabilityServiceIssueResponse
-	5,  // 30: paladin.admin.v1.CapabilityService.Delegate:output_type -> paladin.admin.v1.CapabilityServiceIssueResponse
-	8,  // 31: paladin.admin.v1.CapabilityService.Revoke:output_type -> paladin.admin.v1.CapabilityServiceRevokeResponse
-	10, // 32: paladin.admin.v1.CapabilityService.RevokeBiscuit:output_type -> paladin.admin.v1.CapabilityServiceRevokeBiscuitResponse
-	13, // 33: paladin.admin.v1.CapabilityService.GetBiscuitUsage:output_type -> paladin.admin.v1.CapabilityServiceGetBiscuitUsageResponse
-	18, // 34: paladin.admin.v1.CapabilityService.Get:output_type -> paladin.admin.v1.CapabilityServiceGetResponse
-	15, // 35: paladin.admin.v1.CapabilityService.List:output_type -> paladin.admin.v1.CapabilityServiceListResponse
-	20, // 36: paladin.admin.v1.CapabilityService.GetUsage:output_type -> paladin.admin.v1.CapabilityServiceGetUsageResponse
-	29, // [29:37] is the sub-list for method output_type
-	21, // [21:29] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	21, // 1: paladin.admin.v1.CapabilityCaveats.max_budget:type_name -> google.type.Money
+	1,  // 2: paladin.admin.v1.Capability.subject:type_name -> paladin.admin.v1.CapabilityPrincipal
+	2,  // 3: paladin.admin.v1.Capability.caveats:type_name -> paladin.admin.v1.CapabilityCaveats
+	22, // 4: paladin.admin.v1.Capability.issued_at:type_name -> google.protobuf.Timestamp
+	22, // 5: paladin.admin.v1.Capability.not_before:type_name -> google.protobuf.Timestamp
+	22, // 6: paladin.admin.v1.Capability.expires_at:type_name -> google.protobuf.Timestamp
+	1,  // 7: paladin.admin.v1.CapabilityServiceIssueRequest.subject:type_name -> paladin.admin.v1.CapabilityPrincipal
+	2,  // 8: paladin.admin.v1.CapabilityServiceIssueRequest.caveats:type_name -> paladin.admin.v1.CapabilityCaveats
+	22, // 9: paladin.admin.v1.CapabilityServiceIssueRequest.not_before:type_name -> google.protobuf.Timestamp
+	3,  // 10: paladin.admin.v1.CapabilityServiceIssueResponse.capability:type_name -> paladin.admin.v1.Capability
+	1,  // 11: paladin.admin.v1.CapabilityServiceDelegateRequest.subject:type_name -> paladin.admin.v1.CapabilityPrincipal
+	2,  // 12: paladin.admin.v1.CapabilityServiceDelegateRequest.caveats:type_name -> paladin.admin.v1.CapabilityCaveats
+	22, // 13: paladin.admin.v1.CapabilityServiceDelegateRequest.not_before:type_name -> google.protobuf.Timestamp
+	21, // 14: paladin.admin.v1.CapabilityBiscuitCopyUsage.max_budget:type_name -> google.type.Money
+	21, // 15: paladin.admin.v1.CapabilityBiscuitCopyUsage.spent:type_name -> google.type.Money
+	21, // 16: paladin.admin.v1.CapabilityBiscuitCopyUsage.reserved:type_name -> google.type.Money
+	12, // 17: paladin.admin.v1.CapabilityServiceGetBiscuitUsageResponse.copies:type_name -> paladin.admin.v1.CapabilityBiscuitCopyUsage
+	0,  // 18: paladin.admin.v1.CapabilityServiceListRequest.principal_kind:type_name -> paladin.admin.v1.PrincipalKind
+	3,  // 19: paladin.admin.v1.CapabilityServiceListResponse.capabilities:type_name -> paladin.admin.v1.Capability
+	22, // 20: paladin.admin.v1.CapabilityRevocation.revoked_at:type_name -> google.protobuf.Timestamp
+	3,  // 21: paladin.admin.v1.CapabilityServiceGetResponse.capability:type_name -> paladin.admin.v1.Capability
+	1,  // 22: paladin.admin.v1.CapabilityServiceGetResponse.issued_by:type_name -> paladin.admin.v1.CapabilityPrincipal
+	17, // 23: paladin.admin.v1.CapabilityServiceGetResponse.revocation:type_name -> paladin.admin.v1.CapabilityRevocation
+	22, // 24: paladin.admin.v1.CapabilityServiceGetUsageResponse.updated_at:type_name -> google.protobuf.Timestamp
+	21, // 25: paladin.admin.v1.CapabilityServiceGetUsageResponse.spent:type_name -> google.type.Money
+	4,  // 26: paladin.admin.v1.CapabilityService.Issue:input_type -> paladin.admin.v1.CapabilityServiceIssueRequest
+	6,  // 27: paladin.admin.v1.CapabilityService.Delegate:input_type -> paladin.admin.v1.CapabilityServiceDelegateRequest
+	7,  // 28: paladin.admin.v1.CapabilityService.Revoke:input_type -> paladin.admin.v1.CapabilityServiceRevokeRequest
+	9,  // 29: paladin.admin.v1.CapabilityService.RevokeBiscuit:input_type -> paladin.admin.v1.CapabilityServiceRevokeBiscuitRequest
+	11, // 30: paladin.admin.v1.CapabilityService.GetBiscuitUsage:input_type -> paladin.admin.v1.CapabilityServiceGetBiscuitUsageRequest
+	16, // 31: paladin.admin.v1.CapabilityService.Get:input_type -> paladin.admin.v1.CapabilityServiceGetRequest
+	14, // 32: paladin.admin.v1.CapabilityService.List:input_type -> paladin.admin.v1.CapabilityServiceListRequest
+	19, // 33: paladin.admin.v1.CapabilityService.GetUsage:input_type -> paladin.admin.v1.CapabilityServiceGetUsageRequest
+	5,  // 34: paladin.admin.v1.CapabilityService.Issue:output_type -> paladin.admin.v1.CapabilityServiceIssueResponse
+	5,  // 35: paladin.admin.v1.CapabilityService.Delegate:output_type -> paladin.admin.v1.CapabilityServiceIssueResponse
+	8,  // 36: paladin.admin.v1.CapabilityService.Revoke:output_type -> paladin.admin.v1.CapabilityServiceRevokeResponse
+	10, // 37: paladin.admin.v1.CapabilityService.RevokeBiscuit:output_type -> paladin.admin.v1.CapabilityServiceRevokeBiscuitResponse
+	13, // 38: paladin.admin.v1.CapabilityService.GetBiscuitUsage:output_type -> paladin.admin.v1.CapabilityServiceGetBiscuitUsageResponse
+	18, // 39: paladin.admin.v1.CapabilityService.Get:output_type -> paladin.admin.v1.CapabilityServiceGetResponse
+	15, // 40: paladin.admin.v1.CapabilityService.List:output_type -> paladin.admin.v1.CapabilityServiceListResponse
+	20, // 41: paladin.admin.v1.CapabilityService.GetUsage:output_type -> paladin.admin.v1.CapabilityServiceGetUsageResponse
+	34, // [34:42] is the sub-list for method output_type
+	26, // [26:34] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_capability_service_proto_init() }
@@ -1769,7 +1746,6 @@ func file_paladin_admin_v1_capability_service_proto_init() {
 	if File_paladin_admin_v1_capability_service_proto != nil {
 		return
 	}
-	file_paladin_admin_v1_capability_service_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

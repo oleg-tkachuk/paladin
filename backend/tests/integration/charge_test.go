@@ -12,8 +12,10 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 	"github.com/oleg-tkachuk/paladin/capability"
@@ -44,12 +46,12 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	seedCapRecord(t, h, capID, tenantID)
 
 	// First charge: 4. Cap allows 10, tenant allows 5. Both fit.
-	spent, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: 4.0, MaxBudget: 10.0, UnitCode: "USD", Op: "", Actor: ""}, nil)
+	spent, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: capability.MustParseAmount("4.0"), MaxBudget: capability.MustParseAmount("10.0"), UnitCode: "USD", Op: "", Actor: ""}, nil)
 	if err != nil {
 		t.Fatalf("first charge: %v", err)
 	}
-	if spent.Spent < 3.99 || spent.Spent > 4.01 {
-		t.Errorf("spent after first charge = %v, want ~4.00", spent.Spent)
+	if spent.Spent != capability.MustParseAmount("4") {
+		t.Errorf("spent after first charge = %v, want 4.00", spent.Spent)
 	}
 
 	// Configure a tenant cap of 5 (default = 0 = unlimited; we want
@@ -65,7 +67,7 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	}
 	if _, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 		TenantID:        tenantID,
-		MaxBudgetAmount: 5.0,
+		MaxBudgetAmount: capability.MustParseAmount("5.0"),
 		ResetSpend:      false, // keep the 4 we already charged
 		ExpectedVersion: cur.ResourceVersion,
 	}); err != nil {
@@ -74,7 +76,7 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 
 	// Second charge: 4. Cap accepts (8 ≤ 10). Tenant rejects (8 > 5).
 	// Inner store should compensate the per-cap counter.
-	_, err = store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: 4.0, MaxBudget: 10.0, UnitCode: "USD", Op: "", Actor: ""}, nil)
+	_, err = store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: capability.MustParseAmount("4.0"), MaxBudget: capability.MustParseAmount("10.0"), UnitCode: "USD", Op: "", Actor: ""}, nil)
 	if !errors.Is(err, capability.ErrTenantBudgetExceeded) {
 		t.Fatalf("second charge: want ErrTenantBudgetExceeded, got %v", err)
 	}
@@ -84,8 +86,8 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get usage: %v", err)
 	}
-	if usage.SpentAmount < 3.99 || usage.SpentAmount > 4.01 {
-		t.Errorf("post-rejection cap spent = %v, want ~4.00 (compensation didn't fire)", usage.SpentAmount)
+	if usage.SpentAmount != capability.MustParseAmount("4") {
+		t.Errorf("post-rejection cap spent = %v, want 4.00 (compensation didn't fire)", usage.SpentAmount)
 	}
 
 	// Verify the tenant counter is at 4 too — the rejected charge
@@ -94,8 +96,8 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get tenant budget: %v", err)
 	}
-	if tb.SpentAmount < 3.99 || tb.SpentAmount > 4.01 {
-		t.Errorf("tenant spent = %v, want ~4.00", tb.SpentAmount)
+	if tb.SpentAmount != capability.MustParseAmount("4") {
+		t.Errorf("tenant spent = %v, want 4.00", tb.SpentAmount)
 	}
 }
 
@@ -117,12 +119,12 @@ func TestCharge_RefundReturnsExactlyTheCharge(t *testing.T) {
 	capID := uuid.New()
 	seedCapRecord(t, h, capID, tenantID)
 
-	receipt, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: 1.0, MaxBudget: 0, UnitCode: "USD", Op: "", Actor: ""}, nil)
+	receipt, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: capability.MustParseAmount("1.0"), MaxBudget: 0, UnitCode: "USD", Op: "", Actor: ""}, nil)
 	if err != nil {
 		t.Fatalf("seed charge: %v", err)
 	}
 	// Refund more than was charged — refused, and nothing moves.
-	if _, err := store.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: 5.0}); !errors.Is(err, capability.ErrRefundExceedsCharge) {
+	if _, err := store.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: capability.MustParseAmount("5.0")}); !errors.Is(err, capability.ErrRefundExceedsCharge) {
 		t.Fatalf("over-refund err = %v, want ErrRefundExceedsCharge", err)
 	}
 	// Refund the whole charge — both counters back to 0.
@@ -164,7 +166,7 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	// Initial cap 10, charge 7 against an unrelated capability.
 	initial, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 		TenantID:        tenantID,
-		MaxBudgetAmount: 10.0,
+		MaxBudgetAmount: capability.MustParseAmount("10.0"),
 		ResetSpend:      true,
 	})
 	if err != nil {
@@ -172,12 +174,12 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	}
 	capID := uuid.New()
 	seedCapRecord(t, h, capID, tenantID)
-	if _, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: 7.0, MaxBudget: 0, UnitCode: "USD", Op: "", Actor: ""}, nil); err != nil {
+	if _, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: capability.MustParseAmount("7.0"), MaxBudget: 0, UnitCode: "USD", Op: "", Actor: ""}, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 
 	tb, _ := store.GetTenantBudget(ctx, tenantID)
-	if tb.SpentAmount < 6.99 || tb.SpentAmount > 7.01 {
+	if tb.SpentAmount != capability.MustParseAmount("7") {
 		t.Fatalf("pre-roll spent = %v, want 7", tb.SpentAmount)
 	}
 
@@ -186,7 +188,7 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	// read is still current.
 	if _, err := store.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 		TenantID:        tenantID,
-		MaxBudgetAmount: 10.0,
+		MaxBudgetAmount: capability.MustParseAmount("10.0"),
 		ResetSpend:      true,
 		ExpectedVersion: initial.ResourceVersion,
 	}); err != nil {
@@ -225,19 +227,19 @@ func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {
 		t.Fatalf("seed capability_records: %v", err)
 	}
 
-	if _, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: 2.5, MaxBudget: 10.0, UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, nil); err != nil {
+	if _, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: capability.MustParseAmount("2.5"), MaxBudget: capability.MustParseAmount("10.0"), UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 
 	var (
 		count    int64
-		amount   float64
+		amount   pgtype.Numeric
 		unitCode string
 		op       string
 		actor    string
 	)
 	if err := h.PoolMigrate.QueryRow(ctx,
-		`SELECT COUNT(*), COALESCE(SUM(amount), 0)::float8,
+		`SELECT COUNT(*), COALESCE(SUM(amount), 0),
 		        COALESCE((SELECT unit_code FROM charges WHERE tenant_id = $1 LIMIT 1), ''),
 		        COALESCE((SELECT op FROM charges WHERE tenant_id = $1 LIMIT 1), ''),
 		        COALESCE((SELECT actor_subject FROM charges WHERE tenant_id = $1 LIMIT 1), '')
@@ -248,8 +250,8 @@ func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {
 	if count != 1 {
 		t.Errorf("ledger rows = %d, want 1", count)
 	}
-	if amount < 2.49 || amount > 2.51 {
-		t.Errorf("ledger amount = %v, want ~2.50", amount)
+	if got, err := pgmoney.NanosFromNumeric(amount); err != nil || got != capability.MustParseAmount("2.5") {
+		t.Errorf("ledger amount = %v (%v), want 2.50", got, err)
 	}
 	if unitCode != "USD" || op != "presign.put" || actor != "agent-1" {
 		t.Errorf("ledger metadata = (%q, %q, %q), want (USD, presign.put, agent-1)",

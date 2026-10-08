@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
@@ -169,7 +170,7 @@ func TestProtoToCaveatsNil(t *testing.T) {
 	}
 }
 
-// Pre-currency-rename clients never set unit_code; the server must fill the
+// A client that sets no max_budget names no unit; the server must fill the
 // default rather than minting a capability with a blank currency.
 func TestProtoToCaveatsDefaultsUnitCode(t *testing.T) {
 	got := mustCaveats(t, &adminv1.CapabilityCaveats{})
@@ -179,7 +180,7 @@ func TestProtoToCaveatsDefaultsUnitCode(t *testing.T) {
 }
 
 func TestProtoToCaveatsKeepsExplicitUnitCode(t *testing.T) {
-	got := mustCaveats(t, &adminv1.CapabilityCaveats{UnitCode: "EUR"})
+	got := mustCaveats(t, &adminv1.CapabilityCaveats{MaxBudget: &money.Money{CurrencyCode: "EUR"}})
 	if got.UnitCode != "EUR" {
 		t.Errorf("UnitCode = %q, want EUR", got.UnitCode)
 	}
@@ -190,8 +191,7 @@ func TestProtoToCaveatsProjectsEveryField(t *testing.T) {
 		ResourcePrefixes:       []string{"tenants/a/"},
 		ResourceUris:           []string{"paladin://x"},
 		MaxRequests:            10,
-		MaxBudgetMicros:        proto.Int64(250_000_000),
-		UnitCode:               "UAH",
+		MaxBudget:              &money.Money{CurrencyCode: "UAH", Units: 250},
 		AllowTaintedRead:       true,
 		IdempotencyKeyRequired: true,
 		SourceIpCidr:           []string{"10.0.0.0/8"},
@@ -204,8 +204,8 @@ func TestProtoToCaveatsProjectsEveryField(t *testing.T) {
 	if len(got.ResourceURIs) != 1 || got.ResourceURIs[0] != "paladin://x" {
 		t.Errorf("ResourceURIs = %v", got.ResourceURIs)
 	}
-	if got.MaxRequests != 10 || got.MaxBudgetAmount != 250 {
-		t.Errorf("limits = %d / %v", got.MaxRequests, got.MaxBudgetAmount)
+	if got.MaxRequests != 10 || got.MaxBudgetAmount != 250*capability.NanosPerUnit || got.UnitCode != "UAH" {
+		t.Errorf("limits = %d / %v %s", got.MaxRequests, got.MaxBudgetAmount, got.UnitCode)
 	}
 	// These three are the security-relevant caveats; a dropped flag widens the
 	// capability beyond what the issuer asked for.
@@ -229,16 +229,16 @@ func mustCaveats(t *testing.T, c *adminv1.CapabilityCaveats) capability.Caveats 
 	return got
 }
 
-// The budget arrives in micros; absent is no budget.
-func TestProtoToCaveatsBudgetMicros(t *testing.T) {
-	got := mustCaveats(t, &adminv1.CapabilityCaveats{MaxBudgetMicros: proto.Int64(19_990_000)})
-	if got.MaxBudgetAmount != 19.99 {
+// The budget arrives as Money, exact to the nano; absent is no budget.
+func TestProtoToCaveatsBudgetMoney(t *testing.T) {
+	got := mustCaveats(t, &adminv1.CapabilityCaveats{MaxBudget: &money.Money{CurrencyCode: "USD", Units: 19, Nanos: 990_000_000}})
+	if got.MaxBudgetAmount != capability.MustParseAmount("19.99") {
 		t.Errorf("budget = %v, want 19.99", got.MaxBudgetAmount)
 	}
 	if got := mustCaveats(t, &adminv1.CapabilityCaveats{}); got.MaxBudgetAmount != 0 {
 		t.Errorf("absent: budget = %v, want 0", got.MaxBudgetAmount)
 	}
-	_, err := protoToCaveats(&adminv1.CapabilityCaveats{MaxBudgetMicros: proto.Int64(-1)})
+	_, err := protoToCaveats(&adminv1.CapabilityCaveats{MaxBudget: &money.Money{CurrencyCode: "USD", Units: -1}})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("negative: err = %v, want InvalidArgument", err)
 	}
@@ -263,10 +263,10 @@ func TestProtoToCaveatsRefusesTheRemovedDouble(t *testing.T) {
 	}
 }
 
-func TestCaveatsToProtoBudgetMicros(t *testing.T) {
-	out := caveatsToProto(capability.Caveats{MaxBudgetAmount: 0.3})
-	if out.GetMaxBudgetMicros() != 300_000 {
-		t.Errorf("budget = %d micros, want 300000", out.GetMaxBudgetMicros())
+func TestCaveatsToProtoBudgetMoney(t *testing.T) {
+	out := caveatsToProto(capability.Caveats{MaxBudgetAmount: capability.MustParseAmount("0.3"), UnitCode: "EUR"})
+	if want := (&money.Money{CurrencyCode: "EUR", Nanos: 300_000_000}); !proto.Equal(out.GetMaxBudget(), want) {
+		t.Errorf("budget = %v, want %v", out.GetMaxBudget(), want)
 	}
 }
 

@@ -55,7 +55,7 @@ func mkCap(tenant uuid.UUID, subject string, expires time.Time) capability.Capab
 			Ops:                    []capability.Op{capability.OpGet, capability.OpList},
 			ResourceURIs:           []string{"paladin://docs/"},
 			MaxRequests:            42,
-			MaxBudgetAmount:        12.5,
+			MaxBudgetAmount:        capability.MustParseAmount("12.5"),
 			UnitCode:               "USD",
 			AllowTaintedRead:       true,
 			IdempotencyKeyRequired: true,

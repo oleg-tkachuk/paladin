@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
+	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // fakeEventDispatcher records every Dispatch/DispatchTx call so the
@@ -54,7 +56,7 @@ func TestChargeEmitter_EmitsChargedEvent(t *testing.T) {
 
 	tenant := uuid.New().String()
 	cap := uuid.New().String()
-	if err := e.EmitChargedTx(context.Background(), nil, tenant, cap, "get", "agent-1", 1.5, "USD"); err != nil {
+	if err := e.EmitChargedTx(context.Background(), nil, tenant, cap, "get", "agent-1", capability.MustParseAmount("1.5"), "USD"); err != nil {
 		t.Fatalf("EmitChargedTx: %v", err)
 	}
 
@@ -84,11 +86,15 @@ func TestChargeEmitter_EmitsChargedEvent(t *testing.T) {
 		"tenant_id":     tenant,
 		"capability_id": cap,
 		"op":            "get",
-		"amount":        1.5,
-		"unit_code":     "USD",
+		"amount":        map[string]any{"currency_code": "USD", "units": "1", "nanos": int32(500_000_000)},
 	} {
-		if got := c.evt.Payload[k]; got != want {
+		if got := c.evt.Payload[k]; !reflect.DeepEqual(got, want) {
 			t.Errorf("payload[%q] = %v, want %v", k, got, want)
+		}
+	}
+	for _, k := range []string{"amount_micros", "unit_code"} {
+		if got, ok := c.evt.Payload[k]; ok {
+			t.Errorf("payload[%q] = %v, want the key gone", k, got)
 		}
 	}
 }
@@ -100,7 +106,7 @@ func TestChargeEmitter_DropsTenantless(t *testing.T) {
 	for _, tenant := range []string{"", uuid.Nil.String()} {
 		fake := &fakeEventDispatcher{}
 		e := &chargeEmitter{dispatcher: fake, log: zap.NewNop()}
-		if err := e.EmitChargedTx(context.Background(), nil, tenant, uuid.New().String(), "get", "a", 1, "USD"); err != nil {
+		if err := e.EmitChargedTx(context.Background(), nil, tenant, uuid.New().String(), "get", "a", capability.NanosPerUnit, "USD"); err != nil {
 			t.Fatalf("tenant %q: EmitChargedTx: %v", tenant, err)
 		}
 		if len(fake.calls) != 0 {
@@ -115,7 +121,7 @@ func TestChargeEmitter_DropsTenantless(t *testing.T) {
 func TestChargeEmitter_PropagatesDispatchError(t *testing.T) {
 	fake := &fakeEventDispatcher{err: errors.New("outbox down")}
 	e := &chargeEmitter{dispatcher: fake, log: zap.NewNop()}
-	err := e.EmitChargedTx(context.Background(), nil, uuid.New().String(), uuid.New().String(), "get", "a", 1, "USD")
+	err := e.EmitChargedTx(context.Background(), nil, uuid.New().String(), uuid.New().String(), "get", "a", capability.NanosPerUnit, "USD")
 	if err == nil {
 		t.Fatal("EmitChargedTx returned nil, want the dispatch error to propagate")
 	}

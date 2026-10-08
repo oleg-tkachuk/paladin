@@ -8,6 +8,8 @@ import (
 	"math/big"
 	"strconv"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -106,7 +108,11 @@ func replay(ctx context.Context, tx pgx.Tx, chargeID, capID uuid.UUID, overrun b
 	if err := tx.QueryRow(ctx, spentQuery, capID).Scan(&spent); err != nil {
 		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: replay read spend: %w", err)
 	}
-	return capability.ChargeReceipt{ChargeID: chargeID, Spent: floatFromNumeric(spent), Replayed: true, Overrun: overrun}, nil
+	spentNanos, err := pgmoney.NanosFromNumeric(spent)
+	if err != nil {
+		return capability.ChargeReceipt{}, err
+	}
+	return capability.ChargeReceipt{ChargeID: chargeID, Spent: spentNanos, Replayed: true, Overrun: overrun}, nil
 }
 
 // ancestor is one link of a capability's delegation chain, with the ceilings
@@ -242,14 +248,8 @@ func (s *UsageStore) Charge(
 	if err != nil {
 		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge: %w", err)
 	}
-	amountNumeric, err := numericFromFloat(req.Amount)
-	if err != nil {
-		return capability.ChargeReceipt{}, err
-	}
-	maxBudgetNumeric, err := numericFromFloat(req.MaxBudget)
-	if err != nil {
-		return capability.ChargeReceipt{}, err
-	}
+	amountNumeric := pgmoney.NumericFromNanos(req.Amount)
+	maxBudgetNumeric := pgmoney.NumericFromNanos(req.MaxBudget)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -401,14 +401,18 @@ func (s *UsageStore) chargeInTx(
 			logger.FromContext(ctx).Warn("capability/postgres: charge rolled back on fan-out failure",
 				zap.String("capability_id", req.CapabilityID.String()),
 				zap.String("tenant_id", req.TenantID.String()),
-				zap.Float64("amount", req.Amount),
+				zap.Stringer("amount", req.Amount),
 				zap.Error(fErr),
 			)
 			return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge fan-out: %w", fErr)
 		}
 	}
 
-	return capability.ChargeReceipt{ChargeID: ledgerID, Spent: floatFromNumeric(spent), Overrun: overrun}, nil
+	spentNanos, err := pgmoney.NanosFromNumeric(spent)
+	if err != nil {
+		return capability.ChargeReceipt{}, err
+	}
+	return capability.ChargeReceipt{ChargeID: ledgerID, Spent: spentNanos, Overrun: overrun}, nil
 }
 
 // nullableUUID is id for a uuid column, with uuid.Nil as NULL.
@@ -439,7 +443,12 @@ func (s *UsageStore) readCharge(ctx context.Context, where string, args ...any) 
 	if err != nil {
 		return capability.ChargeRecord{}, fmt.Errorf("capability/postgres: read charge: %w", err)
 	}
-	rec.Amount, rec.Refunded = floatFromNumeric(amount), floatFromNumeric(refunded)
+	if rec.Amount, err = pgmoney.NanosFromNumeric(amount); err != nil {
+		return capability.ChargeRecord{}, err
+	}
+	if rec.Refunded, err = pgmoney.NanosFromNumeric(refunded); err != nil {
+		return capability.ChargeRecord{}, err
+	}
 	return rec, nil
 }
 
@@ -484,14 +493,11 @@ WHERE  ch.id = $1;
 // row lock (SELECT ... FOR UPDATE, which needs an UPDATE policy) is not
 // available, and without serialisation two refunds could each see the full
 // remainder.
-func (s *UsageStore) Refund(ctx context.Context, req capability.RefundRequest) (float64, error) {
+func (s *UsageStore) Refund(ctx context.Context, req capability.RefundRequest) (capability.Nanos, error) {
 	if err := capability.ValidateAmount(req.Amount); err != nil {
 		return 0, err
 	}
-	amountNumeric, err := numericFromFloat(req.Amount)
-	if err != nil {
-		return 0, err
-	}
+	amountNumeric := pgmoney.NumericFromNanos(req.Amount)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -521,7 +527,10 @@ func (s *UsageStore) Refund(ctx context.Context, req capability.RefundRequest) (
 	if exceeds {
 		return 0, fmt.Errorf("%w: charge %s", capability.ErrRefundExceedsCharge, req.ChargeID)
 	}
-	refunded := floatFromNumeric(refund)
+	refunded, err := pgmoney.NanosFromNumeric(refund)
+	if err != nil {
+		return 0, err
+	}
 	if refunded == 0 {
 		return 0, nil // nothing left: a repeated full refund is a no-op
 	}
@@ -568,15 +577,15 @@ func (s *UsageStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (c
 		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: get tenant budget: %w", err)
 	}
 	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.ReservedUsd, row.UnitCode,
-		row.PeriodStart, row.PeriodEnd, row.UpdatedAt, row.ResourceVersion), nil
+		row.PeriodStart, row.PeriodEnd, row.UpdatedAt, row.ResourceVersion)
 }
 
 // SetTenantBudget implements capability.UsageStore[pgx.Tx].
 func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTenantBudgetRequest) (capability.TenantBudget, error) {
-	maxBudget, err := numericFromFloat(args.MaxBudgetAmount)
-	if err != nil {
+	if err := capability.ValidateAmount(args.MaxBudgetAmount); err != nil {
 		return capability.TenantBudget{}, err
 	}
+	maxBudget := pgmoney.NumericFromNanos(args.MaxBudgetAmount)
 	// Empty UnitCode passed through verbatim — the SQL preserves
 	// the existing row's unit_code on conflict in that case (or
 	// inserts 'USD' on first row). A non-empty value is validated.
@@ -609,7 +618,7 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTen
 		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: set tenant budget: %w", err)
 	}
 	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.ReservedUsd, row.UnitCode,
-		row.PeriodStart, row.PeriodEnd, row.UpdatedAt, row.ResourceVersion), nil
+		row.PeriodStart, row.PeriodEnd, row.UpdatedAt, row.ResourceVersion)
 }
 
 // ListTenantBudgets joins tenant_budgets with tenants and applies the
@@ -658,14 +667,18 @@ func (s *UsageStore) ListTenantBudgets(
 	}
 	out := make([]capability.TenantBudgetSummary, 0, len(rows))
 	for _, r := range rows {
+		budget, err := tenantBudgetFromRow(
+			r.TenantID, r.MaxBudgetUsd, r.SpentUsd, r.ReservedUsd, r.UnitCode,
+			r.PeriodStart, r.PeriodEnd, r.UpdatedAt, r.ResourceVersion,
+		)
+		if err != nil {
+			return nil, "", err
+		}
 		out = append(out, capability.TenantBudgetSummary{
-			TenantID:    uuid.UUID(r.TenantID.Bytes),
-			Slug:        r.Slug,
-			DisplayName: r.DisplayName,
-			Budget: tenantBudgetFromRow(
-				r.TenantID, r.MaxBudgetUsd, r.SpentUsd, r.ReservedUsd, r.UnitCode,
-				r.PeriodStart, r.PeriodEnd, r.UpdatedAt, r.ResourceVersion,
-			),
+			TenantID:       uuid.UUID(r.TenantID.Bytes),
+			Slug:           r.Slug,
+			DisplayName:    r.DisplayName,
+			Budget:         budget,
 			UtilisationPct: floatFromNumeric(r.UtilisationPct),
 		})
 	}
@@ -679,14 +692,21 @@ func tenantBudgetFromRow(
 	unitCode string,
 	periodStart, periodEnd, updatedAt pgtype.Timestamptz,
 	resourceVersion int64,
-) capability.TenantBudget {
+) (capability.TenantBudget, error) {
 	out := capability.TenantBudget{
 		TenantID:        uuid.UUID(tenantID.Bytes),
-		MaxBudgetAmount: floatFromNumeric(maxBudget),
-		SpentAmount:     floatFromNumeric(spent),
-		ReservedAmount:  floatFromNumeric(reserved),
 		UnitCode:        unitCode,
 		ResourceVersion: resourceVersion,
+	}
+	var err error
+	if out.MaxBudgetAmount, err = pgmoney.NanosFromNumeric(maxBudget); err != nil {
+		return capability.TenantBudget{}, err
+	}
+	if out.SpentAmount, err = pgmoney.NanosFromNumeric(spent); err != nil {
+		return capability.TenantBudget{}, err
+	}
+	if out.ReservedAmount, err = pgmoney.NanosFromNumeric(reserved); err != nil {
+		return capability.TenantBudget{}, err
 	}
 	if periodStart.Valid {
 		out.PeriodStart = periodStart.Time
@@ -698,7 +718,7 @@ func tenantBudgetFromRow(
 	if updatedAt.Valid {
 		out.UpdatedAt = updatedAt.Time
 	}
-	return out
+	return out, nil
 }
 
 // Get implements capability.UsageStore[pgx.Tx].
@@ -710,11 +730,19 @@ func (s *UsageStore) GetUsage(ctx context.Context, capID uuid.UUID) (capability.
 		}
 		return capability.Usage{}, fmt.Errorf("capability/postgres: get usage: %w", err)
 	}
+	spent, err := pgmoney.NanosFromNumeric(row.SpentUsd)
+	if err != nil {
+		return capability.Usage{}, err
+	}
+	reserved, err := pgmoney.NanosFromNumeric(row.ReservedUsd)
+	if err != nil {
+		return capability.Usage{}, err
+	}
 	return capability.Usage{
 		CapabilityID:   uuid.UUID(row.CapabilityID.Bytes),
 		RequestCount:   row.RequestCount,
-		SpentAmount:    floatFromNumeric(row.SpentUsd),
-		ReservedAmount: floatFromNumeric(row.ReservedUsd),
+		SpentAmount:    spent,
+		ReservedAmount: reserved,
 		UnitCode:       row.UnitCode,
 	}, nil
 }
@@ -736,7 +764,9 @@ func (s *UsageStore) PurgeOrphans(ctx context.Context) (int64, error) {
 	return n, nil
 }
 
-// numericFromFloat converts a float64 amount into pgtype.Numeric.
+// numericFromFloat converts a float64 into pgtype.Numeric. Only a percentage
+// travels as a float — ListTenantBudgetsRequest.ThresholdPct; money goes
+// through numericFromNanos.
 // pgtype takes the value as a string parse of the textual form;
 // strconv.FormatFloat with 'f' / -1 / 64 gives a tight representation
 // without surprises on edge values.
@@ -760,8 +790,8 @@ func numericFromFloat(v float64) (pgtype.Numeric, error) {
 	return n, nil
 }
 
-// floatFromNumeric pulls a pgtype.Numeric back into float64. Lossy on
-// the last bit — fine here because spend granularity is 6 decimals.
+// floatFromNumeric pulls a pgtype.Numeric back into float64, lossy on the
+// last bit: for a percentage, UtilisationPct, never for money.
 func floatFromNumeric(n pgtype.Numeric) float64 {
 	if !n.Valid {
 		return 0
