@@ -3,12 +3,10 @@
 // of both the current and previous bucket so callers see a consistent
 // weighted count without round-trip-multiplied races.
 //
-// The increment is unconditional — even denied requests count toward
-// the bucket. That keeps logic simple and produces the desired
-// "rate-limited callers don't get to spend future quota on rejected
-// calls" behaviour. The marginal over-attribution (a denied request
-// adds to the next bucket's weighted history) is negligible against
-// the 95%-accurate sliding-window approximation.
+// Only an admitted request is counted. A denied one adds nothing, so the
+// Retry-After a denial carries holds: a caller that waits it out gets in,
+// however often it asked meanwhile. Counting denials made every retry push the
+// window further out, and a client honouring Retry-After was refused again.
 package postgres
 
 import (
@@ -38,16 +36,11 @@ func New(pool *pgxpool.Pool) (*Limiter, error) {
 
 // Allow implements ratelimit.Limiter.
 //
-// The single statement:
-//
-//  1. Bumps the current minute bucket (INSERT ON CONFLICT ... count+1).
-//  2. Reads the previous minute bucket count (defaulting to 0 when
-//     no row exists yet — typical for a fresh token).
-//  3. Computes the weighted count using the elapsed-in-current ratio.
-//
-// Decision.Allowed is computed in Go from the returned weighted count
-// vs the supplied capacity. RetryAfter = bucket_end - now in the
-// denied case.
+// One statement reads both buckets and bumps the current one only when the
+// request fits: the insert proposes a row only if the request fits an empty
+// current bucket, and the conflict update re-checks against the locked row,
+// so concurrent requests cannot both take the last slot. The previous
+// bucket's share and the elapsed time come from the same NOW().
 func (l *Limiter) Allow(ctx context.Context, tokenID uuid.UUID, capacity int) (ratelimit.Decision, error) {
 	if capacity <= 0 {
 		// Unlimited fast-path. Don't touch the table.
@@ -57,12 +50,8 @@ func (l *Limiter) Allow(ctx context.Context, tokenID uuid.UUID, capacity int) (r
 	const stmt = `
 WITH
   cur_start AS (SELECT date_trunc('minute', NOW()) AS s),
-  bumped AS (
-    INSERT INTO api_token_rate_buckets (token_id, bucket_start, count)
-    VALUES ($1, (SELECT s FROM cur_start), 1)
-    ON CONFLICT (token_id, bucket_start) DO UPDATE
-      SET count = api_token_rate_buckets.count + 1
-    RETURNING count
+  elapsed AS (
+    SELECT EXTRACT(EPOCH FROM NOW() - (SELECT s FROM cur_start))::float8 AS sec
   ),
   prev_count AS (
     SELECT COALESCE(SUM(count), 0)::bigint AS c
@@ -70,35 +59,52 @@ WITH
     WHERE token_id = $1
       AND bucket_start = (SELECT s - interval '1 minute' FROM cur_start)
   ),
-  elapsed AS (
-    SELECT EXTRACT(EPOCH FROM NOW() - (SELECT s FROM cur_start))::float8 AS sec
+  cur_count AS (
+    SELECT COALESCE(SUM(count), 0)::bigint AS c
+    FROM api_token_rate_buckets
+    WHERE token_id = $1
+      AND bucket_start = (SELECT s FROM cur_start)
+  ),
+  prev_share AS (
+    SELECT (SELECT c FROM prev_count)::float8
+      * (1.0 - (SELECT sec FROM elapsed) / $3::float8) AS w
+  ),
+  bumped AS (
+    INSERT INTO api_token_rate_buckets (token_id, bucket_start, count)
+    SELECT $1, (SELECT s FROM cur_start), 1
+    WHERE 1 + (SELECT w FROM prev_share) <= $2
+    ON CONFLICT (token_id, bucket_start) DO UPDATE
+      SET count = api_token_rate_buckets.count + 1
+      WHERE api_token_rate_buckets.count + 1 + (SELECT w FROM prev_share) <= $2
+    RETURNING count
   )
 SELECT
-  (SELECT count FROM bumped)::float8
-    + (SELECT c FROM prev_count)::float8 * (1.0 - (SELECT sec FROM elapsed) / 60.0)
-    AS weighted_count,
-  (60.0 - (SELECT sec FROM elapsed))::float8 AS retry_after_seconds;
+  (SELECT count FROM bumped)::bigint AS admitted,
+  (SELECT c FROM cur_count) AS current_count,
+  (SELECT c FROM prev_count) AS previous_count,
+  (SELECT sec FROM elapsed) AS elapsed_seconds;
 `
 
-	var weighted, retryAfter float64
-	if err := l.pool.QueryRow(ctx, stmt, tokenID).Scan(&weighted, &retryAfter); err != nil {
+	var (
+		admitted            *int64
+		curCount, prevCount int64
+		elapsedSec          float64
+	)
+	if err := l.pool.QueryRow(ctx, stmt, tokenID, capacity, ratelimit.Window.Seconds()).
+		Scan(&admitted, &curCount, &prevCount, &elapsedSec); err != nil {
 		return ratelimit.Decision{}, fmt.Errorf("ratelimit/postgres: bump: %w", err)
 	}
-
-	allowed := weighted <= float64(capacity)
-	d := ratelimit.Decision{
-		Allowed:       allowed,
-		WeightedCount: weighted,
+	elapsed := time.Duration(elapsedSec * float64(time.Second))
+	if admitted != nil {
+		return ratelimit.Decision{
+			Allowed:       true,
+			WeightedCount: ratelimit.Weighted(*admitted, prevCount, elapsed),
+		}, nil
 	}
-	if !allowed {
-		// Round up so a 0.4s remaining returns 1s — clients shouldn't
-		// retry mid-bucket only to be told no again.
-		d.RetryAfter = time.Duration((retryAfter*1e9)+1) * time.Nanosecond
-		if d.RetryAfter < time.Second {
-			d.RetryAfter = time.Second
-		}
-	}
-	return d, nil
+	return ratelimit.Decision{
+		WeightedCount: ratelimit.Weighted(curCount+1, prevCount, elapsed),
+		RetryAfter:    ratelimit.RetryAfter(curCount, prevCount, elapsed, capacity),
+	}, nil
 }
 
 // Usage implements ratelimit.Limiter — readonly snapshot. Reads both
@@ -131,11 +137,10 @@ SELECT
 		Scan(&curCount, &prevCount, &elapsed, &resetsAt); err != nil {
 		return ratelimit.Snapshot{}, fmt.Errorf("ratelimit/postgres: usage: %w", err)
 	}
-	weighted := float64(curCount) + float64(prevCount)*(1.0-elapsed/60.0)
 	return ratelimit.Snapshot{
 		CurrentBucketCount:  curCount,
 		PreviousBucketCount: prevCount,
-		WeightedCount:       weighted,
+		WeightedCount:       ratelimit.Weighted(curCount, prevCount, time.Duration(elapsed*float64(time.Second))),
 		WindowResetsAt:      resetsAt.UTC(),
 	}, nil
 }
