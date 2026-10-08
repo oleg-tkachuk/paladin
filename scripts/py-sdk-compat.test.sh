@@ -101,3 +101,23 @@ if failures:
     sys.exit(1)
 print(f"python sdk: gencode {floor} = declared floor; matrix covers {len(pythons)} Pythons and protobuf {sorted(map(str, tested))}")
 PY
+
+# The cells py-sdk-compat.sh runs: every python × with pair, and each include
+# entry as a cell of its own. GitHub's matrix had merged the no-TLS entry into
+# its pair, so that pair never ran with the extra; this holds the runner to
+# the list compat.json describes.
+cells=$("$root/scripts/py-sdk-compat.sh" --list)
+want=$(jq '(.python | length) * (.with | length) + (.include | length)' "$SDK/compat.json")
+got=$(wc -l <<<"$cells" | tr -d ' ')
+if [[ $got != "$want" ]]; then
+    echo "!!! py-sdk-compat.sh --list gives $got cells, compat.json describes $want" >&2
+    exit 1
+fi
+while IFS=$'\t' read -r python with tls; do
+    [[ $tls == false ]] || continue
+    if ! grep -qxF "$(printf '%s\t%s\ttrue' "$python" "$with")" <<<"$cells"; then
+        echo "!!! the no-TLS cell python $python, $with replaced its TLS run" >&2
+        exit 1
+    fi
+done <<<"$cells"
+echo "python sdk: py-sdk-compat.sh runs all $got cells"
