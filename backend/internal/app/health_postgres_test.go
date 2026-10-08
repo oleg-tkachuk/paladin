@@ -31,7 +31,7 @@ func TestPoolDetails(t *testing.T) {
 	want := []health.Detail{
 		{Name: detailConnections, Value: "3 of 20 in use"},
 		{Name: detailIdle, Value: "2"},
-		{Name: detailWaited, Value: "7 times since start"},
+		{Name: detailNoIdle, Value: "7 times since start"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("poolDetails = %v, want %v", got, want)
