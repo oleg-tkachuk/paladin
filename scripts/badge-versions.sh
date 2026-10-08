@@ -20,7 +20,8 @@ readonly COMPOSE=backend/deploy/docker-compose.yaml
 readonly MOD_CONNECT=connectrpc.com/connect/v2
 readonly MOD_CEDAR=github.com/cedar-policy/cedar-go
 readonly MOD_MCP=github.com/modelcontextprotocol/go-sdk
-# The image Paladin's own stack runs; "postgres:16" → "16".
+# The image Paladin's own stack runs; "postgres:18.6" → "18.6", and a digest
+# Renovate pins after the tag ("postgres:18@sha256:…") is not part of it.
 readonly POSTGRES_IMAGE=postgres
 
 for tool in go jq yq; do
@@ -40,7 +41,7 @@ cedar=$(require "$MOD_CEDAR")
 mcp=$(require "$MOD_MCP")
 nextjs=$(jq -er '.dependencies.next | ltrimstr("^") | ltrimstr("~")' "$PACKAGE_JSON")
 postgres=$(yq --yaml-fix-merge-anchor-to-spec=true -e ".services[] | select(.image | test(\"^${POSTGRES_IMAGE}:\")) | .image" "$COMPOSE" |
-    head -1 | sed "s/^${POSTGRES_IMAGE}://")
+    head -1 | sed -e "s/^${POSTGRES_IMAGE}://" -e 's/@.*//')
 
 jq -n \
     --arg go "$go_version" \

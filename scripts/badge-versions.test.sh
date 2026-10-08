@@ -11,7 +11,7 @@ trap 'rm -rf "$work"' EXIT
 failed=0
 fail() { printf 'FAIL %s\n' "$1"; failed=1; }
 
-fixture() { # fixture <with the cedar module: yes|no>
+fixture() { # fixture <with the cedar module: yes|no> [postgres image tag]
     rm -rf "${work:?}"/*
     mkdir -p "$work/backend/deploy" "$work/frontend"
     {
@@ -21,7 +21,7 @@ fixture() { # fixture <with the cedar module: yes|no>
         printf '\tgithub.com/modelcontextprotocol/go-sdk v1.10.2\n)\n'
     } >"$work/backend/go.mod"
     printf '{"dependencies": {"next": "^17.0.1"}}\n' >"$work/frontend/package.json"
-    printf 'services:\n  cache:\n    image: redis:8\n  postgres:\n    image: postgres:18\n' \
+    printf 'services:\n  cache:\n    image: redis:8\n  postgres:\n    image: postgres:%s\n' "${2:-18}" \
         >"$work/backend/deploy/docker-compose.yaml"
 }
 
@@ -29,6 +29,11 @@ fixture yes
 got=$(BADGE_ROOT="$work" "$script" 2>/dev/null | jq -c .)
 want='{"go":"1.30.1","postgresql":"18","connect":"2.99.0","cedar":"1.9.1","mcp":"1.10.2","nextjs":"17.0.1"}'
 [[ "$got" == "$want" ]] || fail "versions: got $got, want $want"
+
+# Renovate pins a digest after the tag; the badge reads the version, not it.
+fixture yes "18@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336"
+got=$(BADGE_ROOT="$work" "$script" 2>/dev/null | jq -r .postgresql)
+[[ "$got" == 18 ]] || fail "a digest-pinned image: got postgresql $got, want 18"
 
 fixture no
 if BADGE_ROOT="$work" "$script" >/dev/null 2>&1; then
