@@ -105,7 +105,20 @@ func snapshotToProto(s health.Snapshot) *pb.HealthInfo {
 			Category:  c.Category,
 			Critical:  c.Critical,
 			Control:   controlToProto(c.Control),
+			Details:   detailsToProto(c.Details),
 		})
+	}
+	return out
+}
+
+// detailsToProto keeps a component's details in their order.
+func detailsToProto(ds []health.Detail) []*pb.ComponentDetail {
+	if len(ds) == 0 {
+		return nil
+	}
+	out := make([]*pb.ComponentDetail, 0, len(ds))
+	for _, d := range ds {
+		out = append(out, &pb.ComponentDetail{Name: d.Name, Value: d.Value})
 	}
 	return out
 }
