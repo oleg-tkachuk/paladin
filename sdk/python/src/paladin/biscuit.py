@@ -33,7 +33,7 @@ FACT_PLANE = "paladin_plane"
 FACT_EXPIRES = "paladin_expires"
 FACT_BIND = "paladin_bind"
 FACT_MAX_REQUESTS = "paladin_max_requests"
-FACT_MAX_BUDGET_MICROS = "paladin_max_budget_micros"
+FACT_MAX_BUDGET_NANOS = "paladin_max_budget_nanos"
 # The sealed JWT's claim holding the public key that roots the Biscuit.
 ROOT_CLAIM = "paladin_bsk"
 # A JWK thumbprint is a base64url SHA-256 digest.
@@ -126,7 +126,7 @@ def attenuate(
     expires_at: datetime | None = None,
     bind_jkt: str | None = None,
     max_requests: int | None = None,
-    max_budget_micros: int | None = None,
+    max_budget_nanos: int | None = None,
 ) -> str:
     """``token`` narrowed by one appended block, as a new token; ``token``
     itself keeps working as before.
@@ -139,9 +139,9 @@ def attenuate(
     ``expires_at`` (timezone-aware, kept to the second) shortens the
     lifetime. ``bind_jkt`` — ``dpop_thumbprint(key.public_key())`` — binds
     the token to a key; only an unbound token can be bound offline.
-    ``max_requests`` and ``max_budget_micros`` give the new copy limits of its
-    own — requests made with it, and its spend in micros of the capability's
-    unit — counted apart from other copies and within every limit already in
+    ``max_requests`` and ``max_budget_nanos`` give the new copy limits of its
+    own — requests made with it, and its spend in nanos, billionths of the
+    capability's unit — counted apart from other copies and within every limit already in
     force.
 
     Raises ``ValueError`` for a token that is not a Paladin Biscuit, and
@@ -169,8 +169,8 @@ def attenuate(
         facts.append((FACT_BIND, _thumbprint(bind_jkt)))
     if max_requests is not None:
         facts.append((FACT_MAX_REQUESTS, _positive("max_requests", max_requests)))
-    if max_budget_micros is not None:
-        facts.append((FACT_MAX_BUDGET_MICROS, _positive("max_budget_micros", max_budget_micros)))
+    if max_budget_nanos is not None:
+        facts.append((FACT_MAX_BUDGET_NANOS, _positive("max_budget_nanos", max_budget_nanos)))
 
     ba = _biscuit()
     root = _root_key(ba, token)

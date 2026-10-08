@@ -24,13 +24,25 @@ import {
 import { useNotification } from "@/components/ui/Notification";
 import { capabilityClient } from "@/lib/connect/client";
 import { errorMessage } from "@/hooks/errorContract";
-import { formatMoney, fromMicros } from "@/lib/format/money";
-import type { CapabilityServiceGetBiscuitUsageResponse } from "@/gen/paladin/admin/v1/capability_service_pb";
+import { formatMoney, moneyIsPositive } from "@/lib/format/money";
+import type {
+  CapabilityBiscuitCopyUsage,
+  CapabilityServiceGetBiscuitUsageResponse,
+} from "@/gen/paladin/admin/v1/capability_service_pb";
+import type { Money } from "@/gen/google/type/money_pb";
 import { isJWT, shortRevocationId } from "./_biscuit";
+import { SPEND_DIGITS } from "./_constants";
 
-// Spend is shown to four decimals, as the capabilities table shows it, so a
-// sub-cent charge does not read as nothing.
-const SPEND_DIGITS = 4;
+// rowUnit is the unit of one copy's amounts. Its spent, budget and hold
+// share it, so an amount that arrives without one borrows the row's.
+function rowUnit(c: CapabilityBiscuitCopyUsage): string | undefined {
+  return (
+    c.maxBudget?.currencyCode ||
+    c.spent?.currencyCode ||
+    c.reserved?.currencyCode ||
+    undefined
+  );
+}
 
 /**
  * Shows one copy of a capability's Biscuit: each request and budget limit in
@@ -77,9 +89,8 @@ export function BiscuitCopyUsageDialog({
     }
   };
 
-  const unit = result?.unitCode ?? "";
-  const money = (micros: bigint) =>
-    formatMoney(fromMicros(micros), unit, undefined, SPEND_DIGITS);
+  const money = (m: Money | undefined, fallbackUnit: string | undefined) =>
+    formatMoney(m, { fallbackUnit, fractionDigits: SPEND_DIGITS });
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
@@ -157,11 +168,11 @@ export function BiscuitCopyUsageDialog({
                         {c.maxRequests > 0n && ` / ${c.maxRequests}`}
                       </TableCell>
                       <TableCell>
-                        {money(c.spentMicros)}
-                        {c.maxBudgetMicros > 0n &&
-                          ` / ${money(c.maxBudgetMicros)}`}
+                        {money(c.spent, rowUnit(c))}
+                        {moneyIsPositive(c.maxBudget) &&
+                          ` / ${money(c.maxBudget, rowUnit(c))}`}
                       </TableCell>
-                      <TableCell>{money(c.reservedMicros)}</TableCell>
+                      <TableCell>{money(c.reserved, rowUnit(c))}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

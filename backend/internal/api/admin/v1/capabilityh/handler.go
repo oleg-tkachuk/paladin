@@ -27,7 +27,6 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -474,15 +473,10 @@ func (h *Handler) GetUsage(ctx context.Context, req *connect.Request[adminv1.Cap
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	unit := u.UnitCode
-	if unit == "" {
-		unit = capability.DefaultUnitCode
-	}
 	return connect.NewResponse(&adminv1.CapabilityServiceGetUsageResponse{
 		CapabilityId: u.CapabilityID.String(),
 		RequestCount: u.RequestCount,
-		SpentMicros:  apiutil.Micros(u.SpentAmount),
-		UnitCode:     unit,
+		Spent:        apiutil.MoneyOf(u.UnitCode, u.SpentAmount),
 		// updated_at not surfaced today — the UsageStore.Get value
 		// doesn't carry it consistently across the postgres /
 		// metering decorators. Add when telemetry needs it.
@@ -583,14 +577,11 @@ func protoToCaveats(c *adminv1.CapabilityCaveats) (capability.Caveats, error) {
 	if err := apiutil.RefuseRemovedFields(c); err != nil {
 		return capability.Caveats{}, err
 	}
-	budget, err := apiutil.AmountFromMicros("max_budget", c.GetMaxBudgetMicros())
+	// An absent max_budget is no budget, in the default unit.
+	budget, unit, err := apiutil.NanosOf("max_budget", c.GetMaxBudget())
 	if err != nil {
 		return capability.Caveats{}, err
 	}
-	// Empty unit_code on the wire ⇒ default to USD server-side.
-	// Old clients (pre-currency rename) never set the field; new
-	// clients may pin EUR/UAH/GBP/UNIT explicitly.
-	unit := c.GetUnitCode()
 	if unit == "" {
 		unit = capability.DefaultUnitCode
 	}
@@ -645,16 +636,11 @@ func principalKindToProto(t capability.PrincipalType) adminv1.PrincipalKind {
 }
 
 func caveatsToProto(c capability.Caveats) *adminv1.CapabilityCaveats {
-	unit := c.UnitCode
-	if unit == "" {
-		unit = capability.DefaultUnitCode
-	}
 	out := &adminv1.CapabilityCaveats{
 		ResourcePrefixes:       c.ResourcePrefixes,
 		ResourceUris:           c.ResourceURIs,
 		MaxRequests:            safecast.Int32(c.MaxRequests),
-		MaxBudgetMicros:        proto.Int64(apiutil.Micros(c.MaxBudgetAmount)),
-		UnitCode:               unit,
+		MaxBudget:              apiutil.MoneyOf(c.UnitCode, c.MaxBudgetAmount),
 		AllowTaintedRead:       c.AllowTaintedRead,
 		IdempotencyKeyRequired: c.IdempotencyKeyRequired,
 		SourceIpCidr:           c.SourceIPCIDR,

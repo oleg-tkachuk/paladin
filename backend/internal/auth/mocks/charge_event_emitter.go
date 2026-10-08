@@ -7,6 +7,8 @@ package auth
 import (
 	"context"
 
+	"github.com/oleg-tkachuk/paladin/capability"
+
 	"github.com/jackc/pgx/v5"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -48,7 +50,7 @@ func (_m *MockChargeEventEmitter) EXPECT() *MockChargeEventEmitter_Expecter {
 }
 
 // EmitChargedTx provides a mock function for the type MockChargeEventEmitter
-func (_mock *MockChargeEventEmitter) EmitChargedTx(ctx context.Context, tx pgx.Tx, tenantID string, capabilityID string, op string, actor string, amount float64, unitCode string) error {
+func (_mock *MockChargeEventEmitter) EmitChargedTx(ctx context.Context, tx pgx.Tx, tenantID string, capabilityID string, op string, actor string, amount capability.Nanos, unitCode string) error {
 	ret := _mock.Called(ctx, tx, tenantID, capabilityID, op, actor, amount, unitCode)
 
 	if len(ret) == 0 {
@@ -56,7 +58,7 @@ func (_mock *MockChargeEventEmitter) EmitChargedTx(ctx context.Context, tx pgx.T
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, pgx.Tx, string, string, string, string, float64, string) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, pgx.Tx, string, string, string, string, capability.Nanos, string) error); ok {
 		r0 = returnFunc(ctx, tx, tenantID, capabilityID, op, actor, amount, unitCode)
 	} else {
 		r0 = ret.Error(0)
@@ -76,13 +78,13 @@ type MockChargeEventEmitter_EmitChargedTx_Call struct {
 //   - capabilityID string
 //   - op string
 //   - actor string
-//   - amount float64
+//   - amount capability.Nanos
 //   - unitCode string
 func (_e *MockChargeEventEmitter_Expecter) EmitChargedTx(ctx any, tx any, tenantID any, capabilityID any, op any, actor any, amount any, unitCode any) *MockChargeEventEmitter_EmitChargedTx_Call {
 	return &MockChargeEventEmitter_EmitChargedTx_Call{Call: _e.mock.On("EmitChargedTx", ctx, tx, tenantID, capabilityID, op, actor, amount, unitCode)}
 }
 
-func (_c *MockChargeEventEmitter_EmitChargedTx_Call) Run(run func(ctx context.Context, tx pgx.Tx, tenantID string, capabilityID string, op string, actor string, amount float64, unitCode string)) *MockChargeEventEmitter_EmitChargedTx_Call {
+func (_c *MockChargeEventEmitter_EmitChargedTx_Call) Run(run func(ctx context.Context, tx pgx.Tx, tenantID string, capabilityID string, op string, actor string, amount capability.Nanos, unitCode string)) *MockChargeEventEmitter_EmitChargedTx_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -108,9 +110,9 @@ func (_c *MockChargeEventEmitter_EmitChargedTx_Call) Run(run func(ctx context.Co
 		if args[5] != nil {
 			arg5 = args[5].(string)
 		}
-		var arg6 float64
+		var arg6 capability.Nanos
 		if args[6] != nil {
-			arg6 = args[6].(float64)
+			arg6 = args[6].(capability.Nanos)
 		}
 		var arg7 string
 		if args[7] != nil {
@@ -135,7 +137,7 @@ func (_c *MockChargeEventEmitter_EmitChargedTx_Call) Return(err error) *MockChar
 	return _c
 }
 
-func (_c *MockChargeEventEmitter_EmitChargedTx_Call) RunAndReturn(run func(ctx context.Context, tx pgx.Tx, tenantID string, capabilityID string, op string, actor string, amount float64, unitCode string) error) *MockChargeEventEmitter_EmitChargedTx_Call {
+func (_c *MockChargeEventEmitter_EmitChargedTx_Call) RunAndReturn(run func(ctx context.Context, tx pgx.Tx, tenantID string, capabilityID string, op string, actor string, amount capability.Nanos, unitCode string) error) *MockChargeEventEmitter_EmitChargedTx_Call {
 	_c.Call.Return(run)
 	return _c
 }

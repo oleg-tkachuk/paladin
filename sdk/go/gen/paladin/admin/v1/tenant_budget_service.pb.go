@@ -13,6 +13,7 @@ import (
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
+	money "google.golang.org/genproto/googleapis/type/money"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -36,15 +37,12 @@ type TenantBudget struct {
 	// period_end is optional — NULL means open-ended.
 	PeriodEnd *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
 	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	// unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT
-	// (non-currency metering). One per TenantBudget message.
-	UnitCode string `protobuf:"bytes,7,opt,name=unit_code,json=unitCode,proto3" json:"unit_code,omitempty"`
-	// max_budget_micros is the cap in millionths of unit_code; 0 = unlimited
+	// max_budget is the cap, exact to the nano; a zero amount is unlimited
 	// (the counter still accumulates so admin tooling can show "current
-	// spend"). Currency given by unit_code.
-	MaxBudgetMicros int64 `protobuf:"varint,9,opt,name=max_budget_micros,json=maxBudgetMicros,proto3" json:"max_budget_micros,omitempty"`
-	// spent_micros is the spend in the current period, in millionths.
-	SpentMicros   int64 `protobuf:"varint,10,opt,name=spent_micros,json=spentMicros,proto3" json:"spent_micros,omitempty"`
+	// spend"). Its currency is the tenant's unit. currency_code is an ISO 4217 code the server accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no currency", for metering that is not money.
+	MaxBudget *money.Money `protobuf:"bytes,11,opt,name=max_budget,json=maxBudget,proto3" json:"max_budget,omitempty"`
+	// spent is the spend in the current period, in the tenant's currency.
+	Spent         *money.Money `protobuf:"bytes,12,opt,name=spent,proto3" json:"spent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -114,25 +112,18 @@ func (x *TenantBudget) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *TenantBudget) GetUnitCode() string {
+func (x *TenantBudget) GetMaxBudget() *money.Money {
 	if x != nil {
-		return x.UnitCode
+		return x.MaxBudget
 	}
-	return ""
+	return nil
 }
 
-func (x *TenantBudget) GetMaxBudgetMicros() int64 {
+func (x *TenantBudget) GetSpent() *money.Money {
 	if x != nil {
-		return x.MaxBudgetMicros
+		return x.Spent
 	}
-	return 0
-}
-
-func (x *TenantBudget) GetSpentMicros() int64 {
-	if x != nil {
-		return x.SpentMicros
-	}
-	return 0
+	return nil
 }
 
 type TenantBudgetServiceGetRequest struct {
@@ -231,21 +222,20 @@ type TenantBudgetServiceSetRequest struct {
 	//   its UI reported success. Pass the version from a prior Get; "0" asserts
 	//   no budget row exists yet, and is itself a conflict if one does.
 	ResourceVersion string `protobuf:"bytes,6,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	// reset_spend rolls the period: zeros spent_micros, moves
+	// reset_spend rolls the period: zeros spent, moves
 	// period_start to now. false leaves the counter alone — the cap
 	// changes mid-window.
 	ResetSpend bool `protobuf:"varint,3,opt,name=reset_spend,json=resetSpend,proto3" json:"reset_spend,omitempty"`
 	// period_end pins a closing time for the new accounting window.
 	// Optional; nil = open-ended.
 	PeriodEnd *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
-	// unit_code optionally pins the currency (ISO 4217 USD/EUR/UAH/
-	// GBP or UNIT). Empty = keep existing or default to "USD".
-	UnitCode string `protobuf:"bytes,5,opt,name=unit_code,json=unitCode,proto3" json:"unit_code,omitempty"`
-	// max_budget_micros is the new cap in millionths of unit_code (1000 USD
-	// = 1000000000); 0 or absent = unlimited.
-	MaxBudgetMicros *int64 `protobuf:"varint,7,opt,name=max_budget_micros,json=maxBudgetMicros,proto3,oneof" json:"max_budget_micros,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// max_budget is the new cap, exact to the nano, and its currency the
+	// tenant's unit; a zero amount is unlimited in that unit. Absent lifts the
+	// cap and keeps the unit the tenant has, or USD for a new row.
+	// currency_code is an ISO 4217 code the server accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no currency", for metering that is not money.
+	MaxBudget     *money.Money `protobuf:"bytes,8,opt,name=max_budget,json=maxBudget,proto3" json:"max_budget,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TenantBudgetServiceSetRequest) Reset() {
@@ -306,18 +296,11 @@ func (x *TenantBudgetServiceSetRequest) GetPeriodEnd() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *TenantBudgetServiceSetRequest) GetUnitCode() string {
+func (x *TenantBudgetServiceSetRequest) GetMaxBudget() *money.Money {
 	if x != nil {
-		return x.UnitCode
+		return x.MaxBudget
 	}
-	return ""
-}
-
-func (x *TenantBudgetServiceSetRequest) GetMaxBudgetMicros() int64 {
-	if x != nil && x.MaxBudgetMicros != nil {
-		return *x.MaxBudgetMicros
-	}
-	return 0
+	return nil
 }
 
 type TenantBudgetServiceSetResponse struct {
@@ -374,7 +357,7 @@ type TenantBudgetSummary struct {
 	DisplayName string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Budget      *TenantBudget          `protobuf:"bytes,4,opt,name=budget,proto3" json:"budget,omitempty"`
 	// utilisation_pct = spent / max × 100, capped at 100 for display.
-	// 0 when max_budget_micros == 0 (unlimited / metering-only).
+	// 0 when max_budget is zero (unlimited / metering-only).
 	UtilisationPct float64 `protobuf:"fixed64,5,opt,name=utilisation_pct,json=utilisationPct,proto3" json:"utilisation_pct,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -451,7 +434,7 @@ type TenantBudgetServiceSummarizeRequest struct {
 	// 0 = no threshold (return everything matching the other filters).
 	ThresholdPct float64 `protobuf:"fixed64,1,opt,name=threshold_pct,json=thresholdPct,proto3" json:"threshold_pct,omitempty"`
 	// unlimited_only — when true, return only rows where
-	// max_budget_micros == 0 (cap-less metering). Mutually exclusive
+	// max_budget is zero (cap-less metering). Mutually exclusive
 	// with a non-zero threshold_pct; the server enforces this.
 	UnlimitedOnly bool `protobuf:"varint,2,opt,name=unlimited_only,json=unlimitedOnly,proto3" json:"unlimited_only,omitempty"`
 	// exclude_inactive — when true (default), skip soft-deleted
@@ -591,7 +574,7 @@ var File_paladin_admin_v1_tenant_budget_service_proto protoreflect.FileDescripto
 
 const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"\n" +
-	",paladin/admin/v1/tenant_budget_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xc7\x03\n" +
+	",paladin/admin/v1/tenant_budget_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x17google/type/money.proto\"\xf6\x03\n" +
 	"\fTenantBudget\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12)\n" +
 	"\x10resource_version\x18\b \x01(\tR\x0fresourceVersion\x12B\n" +
@@ -599,25 +582,26 @@ const file_paladin_admin_v1_tenant_budget_service_proto_rawDesc = "" +
 	"\n" +
 	"period_end\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tperiodEnd\x12>\n" +
 	"\n" +
-	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\x12\x1b\n" +
-	"\tunit_code\x18\a \x01(\tR\bunitCode\x12/\n" +
-	"\x11max_budget_micros\x18\t \x01(\x03B\x03\xe0A\x03R\x0fmaxBudgetMicros\x12&\n" +
-	"\fspent_micros\x18\n" +
-	" \x01(\x03B\x03\xe0A\x03R\vspentMicrosJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04R\x11max_budget_amountR\fspent_amount\"F\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\x126\n" +
+	"\n" +
+	"max_budget\x18\v \x01(\v2\x12.google.type.MoneyB\x03\xe0A\x03R\tmaxBudget\x12-\n" +
+	"\x05spent\x18\f \x01(\v2\x12.google.type.MoneyB\x03\xe0A\x03R\x05spentJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\a\x10\bJ\x04\b\t\x10\n" +
+	"J\x04\b\n" +
+	"\x10\vR\x11max_budget_amountR\fspent_amountR\tunit_codeR\x11max_budget_microsR\fspent_micros\"F\n" +
 	"\x1dTenantBudgetServiceGetRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\"X\n" +
 	"\x1eTenantBudgetServiceGetResponse\x126\n" +
-	"\x06budget\x18\x01 \x01(\v2\x1e.paladin.admin.v1.TenantBudgetR\x06budget\"\xdc\x02\n" +
+	"\x06budget\x18\x01 \x01(\v2\x1e.paladin.admin.v1.TenantBudgetR\x06budget\"\xe8\x03\n" +
 	"\x1dTenantBudgetServiceSetRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x122\n" +
 	"\x10resource_version\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12\x1f\n" +
 	"\vreset_spend\x18\x03 \x01(\bR\n" +
 	"resetSpend\x129\n" +
 	"\n" +
-	"period_end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12\x1b\n" +
-	"\tunit_code\x18\x05 \x01(\tR\bunitCode\x128\n" +
-	"\x11max_budget_micros\x18\a \x01(\x03B\a\xbaH\x04\"\x02(\x00H\x00R\x0fmaxBudgetMicros\x88\x01\x01B\x14\n" +
-	"\x12_max_budget_microsJ\x04\b\x02\x10\x03R\x11max_budget_amount\"X\n" +
+	"period_end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12\xcc\x01\n" +
+	"\n" +
+	"max_budget\x18\b \x01(\v2\x12.google.type.MoneyB\x98\x01\xbaH\x94\x01\xba\x01\x90\x01\n" +
+	"\x12money.non_negative\x12;an amount is not negative, and its nanos are 0 to 999999999\x1a=this.units >= 0 && this.nanos >= 0 && this.nanos <= 999999999R\tmaxBudgetJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06J\x04\b\a\x10\bR\x11max_budget_amountR\tunit_codeR\x11max_budget_micros\"X\n" +
 	"\x1eTenantBudgetServiceSetResponse\x126\n" +
 	"\x06budget\x18\x01 \x01(\v2\x1e.paladin.admin.v1.TenantBudgetR\x06budget\"\xca\x01\n" +
 	"\x13TenantBudgetSummary\x12\x1b\n" +
@@ -665,27 +649,31 @@ var file_paladin_admin_v1_tenant_budget_service_proto_goTypes = []any{
 	(*TenantBudgetServiceSummarizeRequest)(nil),  // 6: paladin.admin.v1.TenantBudgetServiceSummarizeRequest
 	(*TenantBudgetServiceSummarizeResponse)(nil), // 7: paladin.admin.v1.TenantBudgetServiceSummarizeResponse
 	(*timestamppb.Timestamp)(nil),                // 8: google.protobuf.Timestamp
+	(*money.Money)(nil),                          // 9: google.type.Money
 }
 var file_paladin_admin_v1_tenant_budget_service_proto_depIdxs = []int32{
 	8,  // 0: paladin.admin.v1.TenantBudget.period_start:type_name -> google.protobuf.Timestamp
 	8,  // 1: paladin.admin.v1.TenantBudget.period_end:type_name -> google.protobuf.Timestamp
 	8,  // 2: paladin.admin.v1.TenantBudget.updated_at:type_name -> google.protobuf.Timestamp
-	0,  // 3: paladin.admin.v1.TenantBudgetServiceGetResponse.budget:type_name -> paladin.admin.v1.TenantBudget
-	8,  // 4: paladin.admin.v1.TenantBudgetServiceSetRequest.period_end:type_name -> google.protobuf.Timestamp
-	0,  // 5: paladin.admin.v1.TenantBudgetServiceSetResponse.budget:type_name -> paladin.admin.v1.TenantBudget
-	0,  // 6: paladin.admin.v1.TenantBudgetSummary.budget:type_name -> paladin.admin.v1.TenantBudget
-	5,  // 7: paladin.admin.v1.TenantBudgetServiceSummarizeResponse.summaries:type_name -> paladin.admin.v1.TenantBudgetSummary
-	1,  // 8: paladin.admin.v1.TenantBudgetService.Get:input_type -> paladin.admin.v1.TenantBudgetServiceGetRequest
-	3,  // 9: paladin.admin.v1.TenantBudgetService.Set:input_type -> paladin.admin.v1.TenantBudgetServiceSetRequest
-	6,  // 10: paladin.admin.v1.TenantBudgetService.Summarize:input_type -> paladin.admin.v1.TenantBudgetServiceSummarizeRequest
-	2,  // 11: paladin.admin.v1.TenantBudgetService.Get:output_type -> paladin.admin.v1.TenantBudgetServiceGetResponse
-	4,  // 12: paladin.admin.v1.TenantBudgetService.Set:output_type -> paladin.admin.v1.TenantBudgetServiceSetResponse
-	7,  // 13: paladin.admin.v1.TenantBudgetService.Summarize:output_type -> paladin.admin.v1.TenantBudgetServiceSummarizeResponse
-	11, // [11:14] is the sub-list for method output_type
-	8,  // [8:11] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	9,  // 3: paladin.admin.v1.TenantBudget.max_budget:type_name -> google.type.Money
+	9,  // 4: paladin.admin.v1.TenantBudget.spent:type_name -> google.type.Money
+	0,  // 5: paladin.admin.v1.TenantBudgetServiceGetResponse.budget:type_name -> paladin.admin.v1.TenantBudget
+	8,  // 6: paladin.admin.v1.TenantBudgetServiceSetRequest.period_end:type_name -> google.protobuf.Timestamp
+	9,  // 7: paladin.admin.v1.TenantBudgetServiceSetRequest.max_budget:type_name -> google.type.Money
+	0,  // 8: paladin.admin.v1.TenantBudgetServiceSetResponse.budget:type_name -> paladin.admin.v1.TenantBudget
+	0,  // 9: paladin.admin.v1.TenantBudgetSummary.budget:type_name -> paladin.admin.v1.TenantBudget
+	5,  // 10: paladin.admin.v1.TenantBudgetServiceSummarizeResponse.summaries:type_name -> paladin.admin.v1.TenantBudgetSummary
+	1,  // 11: paladin.admin.v1.TenantBudgetService.Get:input_type -> paladin.admin.v1.TenantBudgetServiceGetRequest
+	3,  // 12: paladin.admin.v1.TenantBudgetService.Set:input_type -> paladin.admin.v1.TenantBudgetServiceSetRequest
+	6,  // 13: paladin.admin.v1.TenantBudgetService.Summarize:input_type -> paladin.admin.v1.TenantBudgetServiceSummarizeRequest
+	2,  // 14: paladin.admin.v1.TenantBudgetService.Get:output_type -> paladin.admin.v1.TenantBudgetServiceGetResponse
+	4,  // 15: paladin.admin.v1.TenantBudgetService.Set:output_type -> paladin.admin.v1.TenantBudgetServiceSetResponse
+	7,  // 16: paladin.admin.v1.TenantBudgetService.Summarize:output_type -> paladin.admin.v1.TenantBudgetServiceSummarizeResponse
+	14, // [14:17] is the sub-list for method output_type
+	11, // [11:14] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_tenant_budget_service_proto_init() }
@@ -693,7 +681,6 @@ func file_paladin_admin_v1_tenant_budget_service_proto_init() {
 	if File_paladin_admin_v1_tenant_budget_service_proto != nil {
 		return
 	}
-	file_paladin_admin_v1_tenant_budget_service_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

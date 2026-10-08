@@ -7,14 +7,13 @@ import type {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { formatMoney, fromMicros } from "@/lib/format/money";
-import { PRINCIPAL_KIND_OPTIONS, isExpired } from "./_constants";
+import type { Money } from "@/gen/google/type/money_pb";
+import { formatMoney, moneyIsPositive, unitOf } from "@/lib/format/money";
+import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS, isExpired } from "./_constants";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 type UsageEntry =
-  | { requestCount: bigint; spentAmount: number; unitCode: string }
-  | "never"
-  | undefined;
+  { requestCount: bigint; spent: Money | undefined } | "never" | undefined;
 
 // RecordEntry is the capability's record as read by CapabilityService.Get:
 // undefined while loading, "unavailable" when the read failed.
@@ -40,9 +39,9 @@ export function DetailsBody({
   usageEntry: UsageEntry;
   record: RecordEntry;
 }) {
-  // Capability without an explicit unit_code (legacy or metering-only) renders
-  // as UNIT, not USD — the bare "$" would imply currency where none is pinned.
-  const unit = cap.caveats?.unitCode || "UNIT";
+  // Capability without a budget unit (metering-only) renders as XXX, not
+  // USD — the bare "$" would imply currency where none is pinned.
+  const unit = unitOf(cap.caveats?.maxBudget);
   const principalKindLabel =
     PRINCIPAL_KIND_OPTIONS.find((o) => Number(o.value) === cap.subject?.kind)
       ?.label ?? `kind:${cap.subject?.kind}`;
@@ -199,8 +198,8 @@ export function DetailsBody({
         <DetailRow
           label="Max budget"
           value={
-            (cap.caveats?.maxBudgetMicros ?? 0n) > 0n
-              ? formatMoney(fromMicros(cap.caveats?.maxBudgetMicros), unit)
+            moneyIsPositive(cap.caveats?.maxBudget)
+              ? formatMoney(cap.caveats?.maxBudget)
               : "unlimited"
           }
           mono
@@ -211,13 +210,14 @@ export function DetailsBody({
             usageEntry === undefined
               ? "loading…"
               : usageEntry === "never"
-                ? formatMoney(0, unit, undefined, 4)
-                : formatMoney(
-                    usageEntry.spentAmount,
-                    usageEntry.unitCode || unit,
-                    undefined,
-                    4,
-                  )
+                ? formatMoney(undefined, {
+                    fallbackUnit: unit,
+                    fractionDigits: SPEND_DIGITS,
+                  })
+                : formatMoney(usageEntry.spent, {
+                    fallbackUnit: unit,
+                    fractionDigits: SPEND_DIGITS,
+                  })
           }
           mono
         />

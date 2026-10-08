@@ -44,6 +44,56 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — money is exact: nanos in the core, `google.type.Money` on the wire
+
+Amounts were `float64` in the capability module, so spend drifted — 0.1 then
+0.2 was refused under a ceiling of 0.3 — and the API carried micros, so a
+cost below a millionth rounded away. Every amount is now counted exactly, to
+the nano (a billionth of the unit), and nothing on the client's side needs
+summing apart or correcting.
+
+- **Breaking, capability module.** Every amount is `capability.Nanos`
+  (`int64` billionths) instead of `float64`: request, receipt, usage, budget
+  and caveat fields alike, and `Meter.Refund` returns `Nanos`. Write one with
+  `ParseAmount`/`MustParseAmount("0.35")`, or `AmountFromFloat` for a price
+  that arrives as a float; `MicrosPerUnit`, `MaxMicros`, `AmountToMicros` and
+  `MicrosToAmount` are gone. `CopyCeiling.MaxBudgetMicros` and
+  `Attenuation.MaxBudgetMicros` are `MaxBudget Nanos`. An untyped integer
+  constant still compiles but now means nanos: `Amount: 5` is five
+  billionths, so convert literals with `MustParseAmount`. A token's budget is
+  still a JSON number of units, so issued tokens verify unchanged.
+- **Breaking, unit codes.** Unit codes are ISO 4217: USD, EUR, UAH, GBP, and
+  XXX — ISO 4217's code for "no currency" — for a budget that is not money.
+  `UNIT`, the name XXX replaces, is refused everywhere: in tokens, records,
+  requests and `capability.charge_per_request_unit`. Reissue a capability
+  that carries it.
+- **Breaking, Biscuit.** A copy's budget is the attenuation fact
+  `paladin_max_budget_nanos`; `paladin_max_budget_micros` is no longer part
+  of the vocabulary, and a copy carrying it is refused. The Python SDK's
+  `attenuate` takes `max_budget_nanos`. Attenuate such a copy again.
+- **Breaking, API.** Every `*_micros` field and the `unit_code` beside it are
+  replaced by a `google.type.Money` that carries both, exact to the nano:
+  `CapabilityCaveats.max_budget`, `CapabilityServiceGetUsageResponse.spent`,
+  `CapabilityBiscuitCopyUsage.max_budget`/`spent`/`reserved`,
+  `TenantBudget.max_budget`/`spent`, `TenantBudgetServiceSetRequest.max_budget`,
+  `GetTenantSummaryResponse.total`/`max_budget`, and `spent` on `TopEntry`
+  and `TimeBucket`. The old numbers and names are reserved, and a binary
+  request that still sends one is refused rather than read as unlimited. A
+  zero `max_budget` is no budget in its currency; an absent one is no budget
+  in USD, and on `TenantBudgetService.Set` lifts the cap and keeps the unit.
+- **Breaking, events.** `paladin.capability.charged` carries `amount` as a
+  Money object — `{"currency_code": "USD", "units": "1", "nanos": 500000000}`,
+  `units` a string as in the proto JSON mapping — in place of the float
+  `amount`, `amount_micros` and `unit_code`. A subscription filter on the
+  old keys matches nothing.
+- **Database.** Migrations 055 and 056 widen every money column to nine
+  decimals — a catalog change, not a rewrite — bounded at
+  `capability.MaxNanos` by a CHECK, and rename
+  `capability_reservations.copy_max_budget_micros` to `copy_max_budget_nanos`
+  with its values in nanos.
+- **Configuration.** `capability.charge_per_request_amount` is read exactly,
+  to nine decimals, and refuses a negative value.
+
 ## Unreleased — a Biscuit copy with limits cannot delegate
 
 **Behaviour, capability module.** `Issuer.Delegate` refuses a `Parent` that

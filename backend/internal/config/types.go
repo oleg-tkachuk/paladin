@@ -5,6 +5,7 @@ import (
 	"time"
 
 	yaml "github.com/oasdiff/yaml3"
+	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 type Config struct {
@@ -1126,7 +1127,7 @@ type Capability struct {
 	//
 	// Renamed from ChargePerRequest — same semantic, just no longer
 	// USD-pinned in name.
-	ChargePerRequestAmount float64 `yaml:"charge_per_request_amount" json:"charge_per_request_amount"`
+	ChargePerRequestAmount capability.Nanos `yaml:"charge_per_request_amount" json:"charge_per_request_amount"`
 
 	// ChargePerRequestUnit pins the currency / unit for the auto-
 	// charge amount. Empty falls back to the capability's own

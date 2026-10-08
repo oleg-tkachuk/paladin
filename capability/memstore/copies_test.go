@@ -13,8 +13,11 @@ import (
 // Copy counters: each Biscuit copy that set limits of its own counts apart
 // from its siblings, and the capability's counters still take all of them.
 
-func copyCeiling(id string, requests, budgetMicros int64) capability.CopyCeiling {
-	return capability.CopyCeiling{RevocationID: []byte(id), MaxRequests: requests, MaxBudgetMicros: budgetMicros}
+// unit is one unit of the capability's currency.
+const unit capability.Nanos = capability.NanosPerUnit
+
+func copyCeiling(id string, requests int64, budget capability.Nanos) capability.CopyCeiling {
+	return capability.CopyCeiling{RevocationID: []byte(id), MaxRequests: requests, MaxBudget: budget}
 }
 
 func newCopyFixture(t *testing.T) (context.Context, *UsageStore[struct{}], uuid.UUID, uuid.UUID) {
@@ -77,20 +80,20 @@ func TestCopyRequestLimits(t *testing.T) {
 
 func TestCopyBudgetChargeAndRefund(t *testing.T) {
 	ctx, u, capID, tenant := newCopyFixture(t)
-	c := copyCeiling("copy", 0, 2*capability.MicrosPerUnit)
-	charge := func(amount float64) (capability.ChargeReceipt, error) {
+	c := copyCeiling("copy", 0, 2*unit)
+	charge := func(amount capability.Nanos) (capability.ChargeReceipt, error) {
 		return u.Charge(ctx, capability.ChargeRequest{
 			CapabilityID: capID, TenantID: tenant, Amount: amount, Copies: []capability.CopyCeiling{c},
 		}, nil)
 	}
-	r, err := charge(1.5)
+	r, err := charge(3 * unit / 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := charge(1); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := charge(unit); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("copy past its budget: %v", err)
 	}
-	if got, _ := u.GetUsage(ctx, capID); got.SpentAmount != 1.5 {
+	if got, _ := u.GetUsage(ctx, capID); got.SpentAmount != 3*unit/2 {
 		t.Fatalf("a refused charge moved the capability to %v", got.SpentAmount)
 	}
 	// Refund returns to the copy without being told about it.
@@ -100,38 +103,38 @@ func TestCopyBudgetChargeAndRefund(t *testing.T) {
 	if got := u.copies["copy"].spent; got != 0 {
 		t.Fatalf("copy spend after refund = %v", got)
 	}
-	if _, err := charge(2); err != nil {
+	if _, err := charge(2 * unit); err != nil {
 		t.Fatalf("after refund: %v", err)
 	}
 }
 
 func TestCopyBudgetReservations(t *testing.T) {
 	ctx, u, capID, tenant := newCopyFixture(t)
-	c := copyCeiling("copy", 0, 2*capability.MicrosPerUnit)
-	reserve := func(amount float64) (capability.Reservation, error) {
+	c := copyCeiling("copy", 0, 2*unit)
+	reserve := func(amount capability.Nanos) (capability.Reservation, error) {
 		return u.Reserve(ctx, capability.ReserveRequest{
 			CapabilityID: capID, TenantID: tenant, Amount: amount, Copies: []capability.CopyCeiling{c},
 		})
 	}
-	r, err := reserve(1.5)
+	r, err := reserve(3 * unit / 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := reserve(1); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := reserve(unit); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("a hold past the copy's budget: %v", err)
 	}
 	// Settling above what the copy has room for is refused, and the hold stays.
-	if _, err := u.Settle(ctx, capability.SettleRequest{ReservationID: r.ID, Amount: 2.5}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := u.Settle(ctx, capability.SettleRequest{ReservationID: r.ID, Amount: 5 * unit / 2}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("settle past the copy's budget: %v", err)
 	}
-	if _, err := u.Settle(ctx, capability.SettleRequest{ReservationID: r.ID, Amount: 1.75}, nil); err != nil {
+	if _, err := u.Settle(ctx, capability.SettleRequest{ReservationID: r.ID, Amount: 7 * unit / 4}, nil); err != nil {
 		t.Fatalf("settle: %v", err)
 	}
-	if got := u.copies["copy"]; got.spent != 1.75 || got.reserved != 0 {
+	if got := u.copies["copy"]; got.spent != 7*unit/4 || got.reserved != 0 {
 		t.Fatalf("copy after settle = %+v", got)
 	}
 	// Release returns a hold to the copy.
-	r2, err := reserve(0.25)
+	r2, err := reserve(unit / 4)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,21 +178,21 @@ func TestCopyCountersPurgedWithTheirCapability(t *testing.T) {
 // CopyUsage reads back what was counted, and leaves out a copy never used.
 func TestCopyUsageReadsTheCounters(t *testing.T) {
 	ctx, u, capID, tenant := newCopyFixture(t)
-	c := copyCeiling("read", 5, 2*capability.MicrosPerUnit)
+	c := copyCeiling("read", 5, 2*unit)
 	if _, err := u.Bump(ctx, capability.BumpRequest{CapabilityID: capID, TenantID: tenant, Copies: []capability.CopyCeiling{c}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := u.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenant, Amount: 0.5, Copies: []capability.CopyCeiling{c}}, nil); err != nil {
+	if _, err := u.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenant, Amount: unit / 2, Copies: []capability.CopyCeiling{c}}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := u.Reserve(ctx, capability.ReserveRequest{CapabilityID: capID, TenantID: tenant, Amount: 0.25, Copies: []capability.CopyCeiling{c}}); err != nil {
+	if _, err := u.Reserve(ctx, capability.ReserveRequest{CapabilityID: capID, TenantID: tenant, Amount: unit / 4, Copies: []capability.CopyCeiling{c}}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := u.CopyUsage(ctx, [][]byte{[]byte("read"), []byte("never")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := capability.CopyUsage{RevocationID: []byte("read"), CapabilityID: capID, RequestCount: 1, SpentAmount: 0.5, ReservedAmount: 0.25}
+	want := capability.CopyUsage{RevocationID: []byte("read"), CapabilityID: capID, RequestCount: 1, SpentAmount: unit / 2, ReservedAmount: unit / 4}
 	if len(got) != 1 || string(got[0].RevocationID) != "read" || got[0].CapabilityID != want.CapabilityID ||
 		got[0].RequestCount != want.RequestCount || got[0].SpentAmount != want.SpentAmount || got[0].ReservedAmount != want.ReservedAmount {
 		t.Fatalf("CopyUsage = %+v, want [%+v]", got, want)

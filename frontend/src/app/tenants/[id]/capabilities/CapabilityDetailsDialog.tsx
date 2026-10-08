@@ -16,13 +16,12 @@ import { useNotification } from "@/components/ui/Notification";
 import { copyToClipboard } from "@/lib/utils";
 import { capabilityClient } from "@/lib/connect/client";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
+import type { Money } from "@/gen/google/type/money_pb";
 
 import { DetailsBody, type RecordEntry } from "./_details";
 
 type UsageEntry =
-  | { requestCount: bigint; spentAmount: number; unitCode: string }
-  | "never"
-  | undefined;
+  { requestCount: bigint; spent: Money | undefined } | "never" | undefined;
 
 /**
  * Read-only capability details dialog, extracted from the capabilities page.

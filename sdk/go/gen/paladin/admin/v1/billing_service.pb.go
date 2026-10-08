@@ -13,6 +13,7 @@ import (
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
+	money "google.golang.org/genproto/googleapis/type/money"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -87,20 +88,18 @@ func (x *GetTenantSummaryRequest) GetPeriodEnd() *timestamppb.Timestamp {
 
 type GetTenantSummaryResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// total_micros is the sum of the period's charges in millionths of
-	// unit_code (1.5 USD = 1500000). Integer, so sums never drift.
-	TotalMicros int64 `protobuf:"varint,8,opt,name=total_micros,json=totalMicros,proto3" json:"total_micros,omitempty"`
-	// unit_code mirrors the tenant's pinned unit_code (or USD default).
-	// Mixed-unit periods collapse to whichever unit dominates the row
-	// count — non-issue today (no FX), audit-exposed for the future.
-	UnitCode string `protobuf:"bytes,2,opt,name=unit_code,json=unitCode,proto3" json:"unit_code,omitempty"`
-	// max_budget_micros is the tenant_budgets cap in millionths of unit_code,
-	// copied for UI convenience so the frontend doesn't need a second RPC.
-	MaxBudgetMicros int64       `protobuf:"varint,9,opt,name=max_budget_micros,json=maxBudgetMicros,proto3" json:"max_budget_micros,omitempty"`
-	TopCapabilities []*TopEntry `protobuf:"bytes,4,rep,name=top_capabilities,json=topCapabilities,proto3" json:"top_capabilities,omitempty"`
-	TopActors       []*TopEntry `protobuf:"bytes,5,rep,name=top_actors,json=topActors,proto3" json:"top_actors,omitempty"`
-	TopOps          []*TopEntry `protobuf:"bytes,6,rep,name=top_ops,json=topOps,proto3" json:"top_ops,omitempty"`
-	ChargeCount     int64       `protobuf:"varint,7,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
+	// total is the sum of the period's charges, exact to the nano. Its
+	// currency is the tenant's unit (or USD); mixed-unit periods collapse to
+	// whichever unit dominates the row count — non-issue today (no FX).
+	// currency_code is ISO 4217, XXX for metering that is not money.
+	Total *money.Money `protobuf:"bytes,10,opt,name=total,proto3" json:"total,omitempty"`
+	// max_budget is the tenant_budgets cap, copied for UI convenience so the
+	// frontend doesn't need a second RPC.
+	MaxBudget       *money.Money `protobuf:"bytes,11,opt,name=max_budget,json=maxBudget,proto3" json:"max_budget,omitempty"`
+	TopCapabilities []*TopEntry  `protobuf:"bytes,4,rep,name=top_capabilities,json=topCapabilities,proto3" json:"top_capabilities,omitempty"`
+	TopActors       []*TopEntry  `protobuf:"bytes,5,rep,name=top_actors,json=topActors,proto3" json:"top_actors,omitempty"`
+	TopOps          []*TopEntry  `protobuf:"bytes,6,rep,name=top_ops,json=topOps,proto3" json:"top_ops,omitempty"`
+	ChargeCount     int64        `protobuf:"varint,7,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -135,25 +134,18 @@ func (*GetTenantSummaryResponse) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_billing_service_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *GetTenantSummaryResponse) GetTotalMicros() int64 {
+func (x *GetTenantSummaryResponse) GetTotal() *money.Money {
 	if x != nil {
-		return x.TotalMicros
+		return x.Total
 	}
-	return 0
+	return nil
 }
 
-func (x *GetTenantSummaryResponse) GetUnitCode() string {
+func (x *GetTenantSummaryResponse) GetMaxBudget() *money.Money {
 	if x != nil {
-		return x.UnitCode
+		return x.MaxBudget
 	}
-	return ""
-}
-
-func (x *GetTenantSummaryResponse) GetMaxBudgetMicros() int64 {
-	if x != nil {
-		return x.MaxBudgetMicros
-	}
-	return 0
+	return nil
 }
 
 func (x *GetTenantSummaryResponse) GetTopCapabilities() []*TopEntry {
@@ -190,8 +182,8 @@ type TopEntry struct {
 	// depending on which list this entry belongs to.
 	Label       string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
 	ChargeCount int64  `protobuf:"varint,3,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
-	// amount_micros is the amount in millionths of the response's unit_code.
-	AmountMicros  int64 `protobuf:"varint,4,opt,name=amount_micros,json=amountMicros,proto3" json:"amount_micros,omitempty"`
+	// spent is what the entry's charges came to, exact to the nano.
+	Spent         *money.Money `protobuf:"bytes,5,opt,name=spent,proto3" json:"spent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -240,11 +232,11 @@ func (x *TopEntry) GetChargeCount() int64 {
 	return 0
 }
 
-func (x *TopEntry) GetAmountMicros() int64 {
+func (x *TopEntry) GetSpent() *money.Money {
 	if x != nil {
-		return x.AmountMicros
+		return x.Spent
 	}
-	return 0
+	return nil
 }
 
 type GetTenantTimeSeriesRequest struct {
@@ -320,7 +312,6 @@ func (x *GetTenantTimeSeriesRequest) GetGranularity() string {
 type GetTenantTimeSeriesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Buckets       []*TimeBucket          `protobuf:"bytes,1,rep,name=buckets,proto3" json:"buckets,omitempty"`
-	UnitCode      string                 `protobuf:"bytes,2,opt,name=unit_code,json=unitCode,proto3" json:"unit_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -362,19 +353,12 @@ func (x *GetTenantTimeSeriesResponse) GetBuckets() []*TimeBucket {
 	return nil
 }
 
-func (x *GetTenantTimeSeriesResponse) GetUnitCode() string {
-	if x != nil {
-		return x.UnitCode
-	}
-	return ""
-}
-
 type TimeBucket struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Start       *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
 	ChargeCount int64                  `protobuf:"varint,3,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
-	// amount_micros is the amount in millionths of the response's unit_code.
-	AmountMicros  int64 `protobuf:"varint,4,opt,name=amount_micros,json=amountMicros,proto3" json:"amount_micros,omitempty"`
+	// spent is what the entry's charges came to, exact to the nano.
+	Spent         *money.Money `protobuf:"bytes,5,opt,name=spent,proto3" json:"spent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -423,50 +407,51 @@ func (x *TimeBucket) GetChargeCount() int64 {
 	return 0
 }
 
-func (x *TimeBucket) GetAmountMicros() int64 {
+func (x *TimeBucket) GetSpent() *money.Money {
 	if x != nil {
-		return x.AmountMicros
+		return x.Spent
 	}
-	return 0
+	return nil
 }
 
 var File_paladin_admin_v1_billing_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"\n" +
-	"&paladin/admin/v1/billing_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xba\x01\n" +
+	"&paladin/admin/v1/billing_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x17google/type/money.proto\"\xba\x01\n" +
 	"\x17GetTenantSummaryRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12=\n" +
 	"\fperiod_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
 	"\n" +
-	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"\x8d\x03\n" +
-	"\x18GetTenantSummaryResponse\x12!\n" +
-	"\ftotal_micros\x18\b \x01(\x03R\vtotalMicros\x12\x1b\n" +
-	"\tunit_code\x18\x02 \x01(\tR\bunitCode\x12*\n" +
-	"\x11max_budget_micros\x18\t \x01(\x03R\x0fmaxBudgetMicros\x12E\n" +
+	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"\xbc\x03\n" +
+	"\x18GetTenantSummaryResponse\x12(\n" +
+	"\x05total\x18\n" +
+	" \x01(\v2\x12.google.type.MoneyR\x05total\x121\n" +
+	"\n" +
+	"max_budget\x18\v \x01(\v2\x12.google.type.MoneyR\tmaxBudget\x12E\n" +
 	"\x10top_capabilities\x18\x04 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\x0ftopCapabilities\x129\n" +
 	"\n" +
 	"top_actors\x18\x05 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\ttopActors\x123\n" +
 	"\atop_ops\x18\x06 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\x06topOps\x12!\n" +
-	"\fcharge_count\x18\a \x01(\x03R\vchargeCountJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04R\ftotal_amountR\x11max_budget_amount\"v\n" +
+	"\fcharge_count\x18\a \x01(\x03R\vchargeCountJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\b\x10\tJ\x04\b\x03\x10\x04J\x04\b\t\x10\n" +
+	"R\ftotal_amountR\ftotal_microsR\tunit_codeR\x11max_budget_amountR\x11max_budget_micros\"\x90\x01\n" +
 	"\bTopEntry\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12!\n" +
-	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount\x12#\n" +
-	"\ramount_micros\x18\x04 \x01(\x03R\famountMicrosJ\x04\b\x02\x10\x03R\x06amount\"\xdf\x01\n" +
+	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount\x12(\n" +
+	"\x05spent\x18\x05 \x01(\v2\x12.google.type.MoneyR\x05spentJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05R\x06amountR\ramount_micros\"\xdf\x01\n" +
 	"\x1aGetTenantTimeSeriesRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12=\n" +
 	"\fperiod_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
 	"\n" +
 	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12 \n" +
-	"\vgranularity\x18\x04 \x01(\tR\vgranularity\"r\n" +
+	"\vgranularity\x18\x04 \x01(\tR\vgranularity\"f\n" +
 	"\x1bGetTenantTimeSeriesResponse\x126\n" +
-	"\abuckets\x18\x01 \x03(\v2\x1c.paladin.admin.v1.TimeBucketR\abuckets\x12\x1b\n" +
-	"\tunit_code\x18\x02 \x01(\tR\bunitCode\"\x99\x01\n" +
+	"\abuckets\x18\x01 \x03(\v2\x1c.paladin.admin.v1.TimeBucketR\abucketsJ\x04\b\x02\x10\x03R\tunit_code\"\xb3\x01\n" +
 	"\n" +
 	"TimeBucket\x125\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x05start\x12!\n" +
-	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount\x12#\n" +
-	"\ramount_micros\x18\x04 \x01(\x03R\famountMicrosJ\x04\b\x02\x10\x03R\x06amount2\xf9\x01\n" +
+	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount\x12(\n" +
+	"\x05spent\x18\x05 \x01(\v2\x12.google.type.MoneyR\x05spentJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05R\x06amountR\ramount_micros2\xf9\x01\n" +
 	"\x0eBillingService\x12n\n" +
 	"\x10GetTenantSummary\x12).paladin.admin.v1.GetTenantSummaryRequest\x1a*.paladin.admin.v1.GetTenantSummaryResponse\"\x03\x90\x02\x01\x12w\n" +
 	"\x13GetTenantTimeSeries\x12,.paladin.admin.v1.GetTenantTimeSeriesRequest\x1a-.paladin.admin.v1.GetTenantTimeSeriesResponse\"\x03\x90\x02\x01BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
@@ -492,26 +477,31 @@ var file_paladin_admin_v1_billing_service_proto_goTypes = []any{
 	(*GetTenantTimeSeriesResponse)(nil), // 4: paladin.admin.v1.GetTenantTimeSeriesResponse
 	(*TimeBucket)(nil),                  // 5: paladin.admin.v1.TimeBucket
 	(*timestamppb.Timestamp)(nil),       // 6: google.protobuf.Timestamp
+	(*money.Money)(nil),                 // 7: google.type.Money
 }
 var file_paladin_admin_v1_billing_service_proto_depIdxs = []int32{
 	6,  // 0: paladin.admin.v1.GetTenantSummaryRequest.period_start:type_name -> google.protobuf.Timestamp
 	6,  // 1: paladin.admin.v1.GetTenantSummaryRequest.period_end:type_name -> google.protobuf.Timestamp
-	2,  // 2: paladin.admin.v1.GetTenantSummaryResponse.top_capabilities:type_name -> paladin.admin.v1.TopEntry
-	2,  // 3: paladin.admin.v1.GetTenantSummaryResponse.top_actors:type_name -> paladin.admin.v1.TopEntry
-	2,  // 4: paladin.admin.v1.GetTenantSummaryResponse.top_ops:type_name -> paladin.admin.v1.TopEntry
-	6,  // 5: paladin.admin.v1.GetTenantTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
-	6,  // 6: paladin.admin.v1.GetTenantTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
-	5,  // 7: paladin.admin.v1.GetTenantTimeSeriesResponse.buckets:type_name -> paladin.admin.v1.TimeBucket
-	6,  // 8: paladin.admin.v1.TimeBucket.start:type_name -> google.protobuf.Timestamp
-	0,  // 9: paladin.admin.v1.BillingService.GetTenantSummary:input_type -> paladin.admin.v1.GetTenantSummaryRequest
-	3,  // 10: paladin.admin.v1.BillingService.GetTenantTimeSeries:input_type -> paladin.admin.v1.GetTenantTimeSeriesRequest
-	1,  // 11: paladin.admin.v1.BillingService.GetTenantSummary:output_type -> paladin.admin.v1.GetTenantSummaryResponse
-	4,  // 12: paladin.admin.v1.BillingService.GetTenantTimeSeries:output_type -> paladin.admin.v1.GetTenantTimeSeriesResponse
-	11, // [11:13] is the sub-list for method output_type
-	9,  // [9:11] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	7,  // 2: paladin.admin.v1.GetTenantSummaryResponse.total:type_name -> google.type.Money
+	7,  // 3: paladin.admin.v1.GetTenantSummaryResponse.max_budget:type_name -> google.type.Money
+	2,  // 4: paladin.admin.v1.GetTenantSummaryResponse.top_capabilities:type_name -> paladin.admin.v1.TopEntry
+	2,  // 5: paladin.admin.v1.GetTenantSummaryResponse.top_actors:type_name -> paladin.admin.v1.TopEntry
+	2,  // 6: paladin.admin.v1.GetTenantSummaryResponse.top_ops:type_name -> paladin.admin.v1.TopEntry
+	7,  // 7: paladin.admin.v1.TopEntry.spent:type_name -> google.type.Money
+	6,  // 8: paladin.admin.v1.GetTenantTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
+	6,  // 9: paladin.admin.v1.GetTenantTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
+	5,  // 10: paladin.admin.v1.GetTenantTimeSeriesResponse.buckets:type_name -> paladin.admin.v1.TimeBucket
+	6,  // 11: paladin.admin.v1.TimeBucket.start:type_name -> google.protobuf.Timestamp
+	7,  // 12: paladin.admin.v1.TimeBucket.spent:type_name -> google.type.Money
+	0,  // 13: paladin.admin.v1.BillingService.GetTenantSummary:input_type -> paladin.admin.v1.GetTenantSummaryRequest
+	3,  // 14: paladin.admin.v1.BillingService.GetTenantTimeSeries:input_type -> paladin.admin.v1.GetTenantTimeSeriesRequest
+	1,  // 15: paladin.admin.v1.BillingService.GetTenantSummary:output_type -> paladin.admin.v1.GetTenantSummaryResponse
+	4,  // 16: paladin.admin.v1.BillingService.GetTenantTimeSeries:output_type -> paladin.admin.v1.GetTenantTimeSeriesResponse
+	15, // [15:17] is the sub-list for method output_type
+	13, // [13:15] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_billing_service_proto_init() }

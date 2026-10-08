@@ -64,7 +64,7 @@ def _expected_facts(args: dict[str, Any]) -> set[str]:
         | {f"{pb.FACT_EXPIRES}({expires})", f'{pb.FACT_BIND}("{args["bind_jkt"]}")'}
         | {
             f"{pb.FACT_MAX_REQUESTS}({args['max_requests']})",
-            f"{pb.FACT_MAX_BUDGET_MICROS}({args['max_budget_micros']})",
+            f"{pb.FACT_MAX_BUDGET_NANOS}({args['max_budget_nanos']})",
         }
     )
 
@@ -79,7 +79,7 @@ def test_vocabulary_matches_shared_spec() -> None:
         pb.FACT_EXPIRES: "date",
         pb.FACT_BIND: "string",
         pb.FACT_MAX_REQUESTS: "integer",
-        pb.FACT_MAX_BUDGET_MICROS: "integer",
+        pb.FACT_MAX_BUDGET_NANOS: "integer",
     }
     assert spec["authority"]["fact"] == pb.FACT_CAPABILITY
     assert spec["authority"]["root_claim"] == pb.ROOT_CLAIM
@@ -160,9 +160,9 @@ def test_refuses_a_token_whose_chain_is_broken() -> None:
         ({"bind_jkt": "short"}, ValueError, "thumbprint"),
         ({"bind_jkt": JKT + "="}, ValueError, "thumbprint"),
         ({"max_requests": 0}, ValueError, "positive"),
-        ({"max_budget_micros": -1}, ValueError, "positive"),
+        ({"max_budget_nanos": -1}, ValueError, "positive"),
         ({"max_requests": True}, TypeError, "int"),
-        ({"max_budget_micros": 1.5}, TypeError, "int"),
+        ({"max_budget_nanos": 1.5}, TypeError, "int"),
     ],
 )
 def test_refuses_malformed_arguments(

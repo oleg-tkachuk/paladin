@@ -22,10 +22,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
@@ -59,11 +61,11 @@ func newUsageFixture(t *testing.T) (context.Context, usageFixture) {
 
 // spentOn reads the per-capability counter straight from the table, so the
 // assertion does not depend on the same code path it is checking.
-func (f usageFixture) spentOn(t *testing.T, ctx context.Context) float64 {
+func (f usageFixture) spentOn(t *testing.T, ctx context.Context) capability.Nanos {
 	t.Helper()
-	var spent float64
+	var spent pgtype.Numeric
 	err := f.pool.QueryRow(ctx,
-		`SELECT COALESCE(spent_usd, 0)::float8 FROM capability_usage WHERE capability_id = $1`, f.capID,
+		`SELECT COALESCE(spent_usd, 0) FROM capability_usage WHERE capability_id = $1`, f.capID,
 	).Scan(&spent)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0
@@ -71,14 +73,14 @@ func (f usageFixture) spentOn(t *testing.T, ctx context.Context) float64 {
 	if err != nil {
 		t.Fatalf("read capability spend: %v", err)
 	}
-	return spent
+	return nanosFrom(t, spent)
 }
 
-func (f usageFixture) tenantSpent(t *testing.T, ctx context.Context) float64 {
+func (f usageFixture) tenantSpent(t *testing.T, ctx context.Context) capability.Nanos {
 	t.Helper()
-	var spent float64
+	var spent pgtype.Numeric
 	err := f.pool.QueryRow(ctx,
-		`SELECT COALESCE(spent_usd, 0)::float8 FROM tenant_budgets WHERE tenant_id = $1`, f.tenant,
+		`SELECT COALESCE(spent_usd, 0) FROM tenant_budgets WHERE tenant_id = $1`, f.tenant,
 	).Scan(&spent)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0
@@ -86,7 +88,7 @@ func (f usageFixture) tenantSpent(t *testing.T, ctx context.Context) float64 {
 	if err != nil {
 		t.Fatalf("read tenant spend: %v", err)
 	}
-	return spent
+	return nanosFrom(t, spent)
 }
 
 func (f usageFixture) ledgerRows(t *testing.T, ctx context.Context) int {
@@ -95,6 +97,16 @@ func (f usageFixture) ledgerRows(t *testing.T, ctx context.Context) int {
 	if err := f.pool.QueryRow(ctx,
 		`SELECT count(*) FROM charges WHERE capability_id = $1`, f.capID).Scan(&n); err != nil {
 		t.Fatalf("count charges: %v", err)
+	}
+	return n
+}
+
+// nanosFrom reads a money column, scanned as numeric, exactly.
+func nanosFrom(t *testing.T, v pgtype.Numeric) capability.Nanos {
+	t.Helper()
+	n, err := pgmoney.NanosFromNumeric(v)
+	if err != nil {
+		t.Fatalf("read money column: %v", err)
 	}
 	return n
 }
@@ -152,20 +164,20 @@ func TestChargeWritesLedgerAtomically(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
-	spent, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: 2.50, MaxBudget: 0, UnitCode: "USD", Op: "objects.put", Actor: "user:alice"}, nil)
+	spent, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("2.50"), MaxBudget: 0, UnitCode: "USD", Op: "objects.put", Actor: "user:alice"}, nil)
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
-	if !closeEnough(spent.Spent, 2.50) {
+	if spent.Spent != capability.MustParseAmount("2.50") {
 		t.Errorf("returned spend %v, want 2.50", spent.Spent)
 	}
 	if spent.ChargeID == uuid.Nil {
 		t.Error("receipt carries no charge ID")
 	}
-	if got := f.spentOn(t, ctx); !closeEnough(got, 2.50) {
+	if got := f.spentOn(t, ctx); got != capability.MustParseAmount("2.50") {
 		t.Errorf("capability counter %v, want 2.50", got)
 	}
-	if got := f.tenantSpent(t, ctx); !closeEnough(got, 2.50) {
+	if got := f.tenantSpent(t, ctx); got != capability.MustParseAmount("2.50") {
 		t.Errorf("tenant counter %v, want 2.50", got)
 	}
 	if n := f.ledgerRows(t, ctx); n != 1 {
@@ -194,7 +206,7 @@ func TestChargeWritesLedgerAtomically(t *testing.T) {
 func TestChargeRejectsNegative(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
-	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: -1, MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err == nil {
+	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: -capability.NanosPerUnit, MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err == nil {
 		t.Fatal("negative charge accepted")
 	}
 	if n := f.ledgerRows(t, ctx); n != 0 {
@@ -208,17 +220,17 @@ func TestChargeCapExceededLeavesNothingBehind(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
-	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: 8, MaxBudget: 10, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err != nil {
+	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("8"), MaxBudget: capability.MustParseAmount("10"), UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err != nil {
 		t.Fatalf("first charge: %v", err)
 	}
-	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: 5, MaxBudget: 10, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("5"), MaxBudget: capability.MustParseAmount("10"), UnitCode: "USD", Op: "op", Actor: "actor"}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("over-cap charge: want ErrBudgetExceeded, got %v", err)
 	}
 
-	if got := f.spentOn(t, ctx); !closeEnough(got, 8) {
+	if got := f.spentOn(t, ctx); got != capability.MustParseAmount("8") {
 		t.Errorf("capability counter moved to %v on a refused charge, want 8", got)
 	}
-	if got := f.tenantSpent(t, ctx); !closeEnough(got, 8) {
+	if got := f.tenantSpent(t, ctx); got != capability.MustParseAmount("8") {
 		t.Errorf("tenant counter moved to %v on a refused charge, want 8", got)
 	}
 	if n := f.ledgerRows(t, ctx); n != 1 {
@@ -236,12 +248,12 @@ func TestChargeTenantBudgetExceededRollsBackCapability(t *testing.T) {
 	ctx, f := newUsageFixture(t)
 
 	if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-		TenantID: f.tenant, MaxBudgetAmount: 10, UnitCode: "USD",
+		TenantID: f.tenant, MaxBudgetAmount: capability.MustParseAmount("10"), UnitCode: "USD",
 	}); err != nil {
 		t.Fatalf("set tenant budget: %v", err)
 	}
 
-	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: 25, MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); !errors.Is(err, capability.ErrTenantBudgetExceeded) {
+	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("25"), MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); !errors.Is(err, capability.ErrTenantBudgetExceeded) {
 		t.Fatalf("want ErrTenantBudgetExceeded, got %v", err)
 	}
 
@@ -264,7 +276,7 @@ func TestChargeFanOutFailureRollsBackEverything(t *testing.T) {
 	ctx, f := newUsageFixture(t)
 
 	boom := errors.New("outbox unavailable")
-	_, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: 3, MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, func(context.Context, pgx.Tx) error { return boom })
+	_, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("3"), MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, func(context.Context, pgx.Tx) error { return boom })
 	if !errors.Is(err, boom) {
 		t.Fatalf("want the fan-out error, got %v", err)
 	}
@@ -287,19 +299,19 @@ func TestChargeFanOutRunsOnTheChargeTransaction(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
-	var sawSpend float64
-	_, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: 4, MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, func(c context.Context, tx pgx.Tx) error {
+	var sawSpend pgtype.Numeric
+	_, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("4"), MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, func(c context.Context, tx pgx.Tx) error {
 		// Uncommitted at this point: only the charge's own transaction
 		// can see the row.
 		return tx.QueryRow(c,
-			`SELECT spent_usd::float8 FROM capability_usage WHERE capability_id = $1`, f.capID,
+			`SELECT spent_usd FROM capability_usage WHERE capability_id = $1`, f.capID,
 		).Scan(&sawSpend)
 	})
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
-	if !closeEnough(sawSpend, 4) {
-		t.Errorf("fan-out saw spend %v, want 4 — it is not running on the charge transaction", sawSpend)
+	if got := nanosFrom(t, sawSpend); got != capability.MustParseAmount("4") {
+		t.Errorf("fan-out saw spend %v, want 4 — it is not running on the charge transaction", got)
 	}
 }
 
@@ -310,7 +322,7 @@ func TestChargeRequiresTenant(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
-	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, Amount: 1.25, UnitCode: "USD"}, nil); err == nil {
+	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, Amount: capability.MustParseAmount("1.25"), UnitCode: "USD"}, nil); err == nil {
 		t.Fatal("tenant-less charge accepted")
 	}
 	if got := f.spentOn(t, ctx); got != 0 {
@@ -327,7 +339,7 @@ func TestChargeRequiresTenant(t *testing.T) {
 func TestChargeRejectsUnknownUnitCode(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
-	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: 1, MaxBudget: 0, UnitCode: "XYZ", Op: "op", Actor: "actor"}, nil); err == nil {
+	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("1"), MaxBudget: 0, UnitCode: "XYZ", Op: "op", Actor: "actor"}, nil); err == nil {
 		t.Fatal("unknown unit code accepted")
 	}
 }
@@ -340,25 +352,25 @@ func TestRefundIsBoundToItsCharge(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
-	receipt, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: 5, UnitCode: "USD", Op: "op", Actor: "actor"}, nil)
+	receipt, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("5"), UnitCode: "USD", Op: "op", Actor: "actor"}, nil)
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 
-	if got, err := f.usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: 2}); err != nil || !closeEnough(got, 2) {
+	if got, err := f.usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: capability.MustParseAmount("2")}); err != nil || got != capability.MustParseAmount("2") {
 		t.Fatalf("partial refund = %v, %v; want 2", got, err)
 	}
-	if got := f.spentOn(t, ctx); !closeEnough(got, 3) {
+	if got := f.spentOn(t, ctx); got != capability.MustParseAmount("3") {
 		t.Errorf("capability counter %v after 5−2, want 3", got)
 	}
-	if got := f.tenantSpent(t, ctx); !closeEnough(got, 3) {
+	if got := f.tenantSpent(t, ctx); got != capability.MustParseAmount("3") {
 		t.Errorf("tenant counter %v after 5−2, want 3", got)
 	}
 
-	if _, err := f.usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: 99}); !errors.Is(err, capability.ErrRefundExceedsCharge) {
+	if _, err := f.usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: capability.MustParseAmount("99")}); !errors.Is(err, capability.ErrRefundExceedsCharge) {
 		t.Fatalf("over-refund err = %v, want ErrRefundExceedsCharge", err)
 	}
-	if got, err := f.usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID}); err != nil || !closeEnough(got, 3) {
+	if got, err := f.usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID}); err != nil || got != capability.MustParseAmount("3") {
 		t.Fatalf("refund of the rest = %v, %v; want 3", got, err)
 	}
 	if got, err := f.usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID}); err != nil || got != 0 {
@@ -382,7 +394,7 @@ func TestRefundIsBoundToItsCharge(t *testing.T) {
 	if _, err := f.usage.Refund(ctx, capability.RefundRequest{ChargeID: uuid.New()}); !errors.Is(err, capability.ErrChargeNotFound) {
 		t.Errorf("unknown charge err = %v, want ErrChargeNotFound", err)
 	}
-	if _, err := f.usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: -1}); !errors.Is(err, capability.ErrInvalidAmount) {
+	if _, err := f.usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: -capability.NanosPerUnit}); !errors.Is(err, capability.ErrInvalidAmount) {
 		t.Errorf("negative refund err = %v, want ErrInvalidAmount", err)
 	}
 }
@@ -400,7 +412,7 @@ func TestTenantBudgetLifecycle(t *testing.T) {
 
 	end := time.Now().Add(30 * 24 * time.Hour).UTC().Truncate(time.Microsecond)
 	if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-		TenantID: f.tenant, MaxBudgetAmount: 100, UnitCode: "EUR", PeriodEnd: &end,
+		TenantID: f.tenant, MaxBudgetAmount: capability.MustParseAmount("100"), UnitCode: "EUR", PeriodEnd: &end,
 	}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
@@ -409,14 +421,14 @@ func TestTenantBudgetLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if !closeEnough(got.MaxBudgetAmount, 100) || got.UnitCode != "EUR" {
+	if got.MaxBudgetAmount != capability.MustParseAmount("100") || got.UnitCode != "EUR" {
 		t.Errorf("budget: %+v", got)
 	}
 	if got.PeriodEnd == nil || !got.PeriodEnd.Equal(end) {
 		t.Errorf("period_end: got %v want %v", got.PeriodEnd, end)
 	}
 
-	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: 40, MaxBudget: 0, UnitCode: "EUR", Op: "op", Actor: "actor"}, nil); err != nil {
+	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("40"), MaxBudget: 0, UnitCode: "EUR", Op: "op", Actor: "actor"}, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 
@@ -426,7 +438,7 @@ func TestTenantBudgetLifecycle(t *testing.T) {
 			t.Fatalf("get: %v", err)
 		}
 		if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-			TenantID: f.tenant, MaxBudgetAmount: 200, ExpectedVersion: cur.ResourceVersion,
+			TenantID: f.tenant, MaxBudgetAmount: capability.MustParseAmount("200"), ExpectedVersion: cur.ResourceVersion,
 		}); err != nil {
 			t.Fatalf("set: %v", err)
 		}
@@ -434,7 +446,7 @@ func TestTenantBudgetLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get: %v", err)
 		}
-		if !closeEnough(got.SpentAmount, 40) {
+		if got.SpentAmount != capability.MustParseAmount("40") {
 			t.Errorf("spend reset by a cap change: got %v want 40", got.SpentAmount)
 		}
 		if got.UnitCode != "EUR" {
@@ -448,7 +460,7 @@ func TestTenantBudgetLifecycle(t *testing.T) {
 			t.Fatalf("get: %v", err)
 		}
 		if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-			TenantID: f.tenant, MaxBudgetAmount: 200, ResetSpend: true, ExpectedVersion: cur.ResourceVersion,
+			TenantID: f.tenant, MaxBudgetAmount: capability.MustParseAmount("200"), ResetSpend: true, ExpectedVersion: cur.ResourceVersion,
 		}); err != nil {
 			t.Fatalf("set: %v", err)
 		}
@@ -463,7 +475,7 @@ func TestTenantBudgetLifecycle(t *testing.T) {
 
 	t.Run("invalid unit_code is refused", func(t *testing.T) {
 		if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-			TenantID: f.tenant, MaxBudgetAmount: 1, UnitCode: "XYZ",
+			TenantID: f.tenant, MaxBudgetAmount: capability.MustParseAmount("1"), UnitCode: "XYZ",
 		}); err == nil {
 			t.Error("invalid unit_code accepted")
 		}
@@ -481,16 +493,16 @@ func TestListTenantBudgets(t *testing.T) {
 	unlimited, _ := mkTenant(t, ctx, f.pool, "shared")
 	lowUse, _ := mkTenant(t, ctx, f.pool, "shared")
 
-	if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{TenantID: nearCap, MaxBudgetAmount: 100}); err != nil {
+	if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{TenantID: nearCap, MaxBudgetAmount: capability.MustParseAmount("100")}); err != nil {
 		t.Fatalf("set near-cap: %v", err)
 	}
 	if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{TenantID: unlimited, MaxBudgetAmount: 0}); err != nil {
 		t.Fatalf("set unlimited: %v", err)
 	}
-	if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{TenantID: lowUse, MaxBudgetAmount: 100}); err != nil {
+	if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{TenantID: lowUse, MaxBudgetAmount: capability.MustParseAmount("100")}); err != nil {
 		t.Fatalf("set low-use: %v", err)
 	}
-	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: nearCap, Amount: 90, MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err != nil {
+	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: nearCap, Amount: capability.MustParseAmount("90"), MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err != nil {
 		t.Fatalf("charge near-cap: %v", err)
 	}
 
@@ -555,10 +567,10 @@ func TestListTenantBudgets(t *testing.T) {
 func TestListTenantBudgetsPages(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
-	const ceiling = 10.0
+	ceiling := capability.MustParseAmount("10")
 	// Spend per tenant, in the order the list must return them; the last two
 	// tie, so tenant id decides between them.
-	spends := []float64{20, 12, 5, 1, 1}
+	spends := []capability.Nanos{20 * capability.NanosPerUnit, 12 * capability.NanosPerUnit, 5 * capability.NanosPerUnit, capability.NanosPerUnit, capability.NanosPerUnit}
 	var want []uuid.UUID
 	for i, spent := range spends {
 		tenant := f.tenant
@@ -617,7 +629,7 @@ func TestUsageGetDeleteAndPurgeOrphans(t *testing.T) {
 		t.Fatalf("unknown capability: want ErrUsageNotFound, got %v", err)
 	}
 
-	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: 3, MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err != nil {
+	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("3"), MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 	if _, err := f.usage.Bump(ctx, capability.BumpRequest{CapabilityID: f.capID, MaxRequests: 0}); err != nil {
@@ -628,7 +640,7 @@ func TestUsageGetDeleteAndPurgeOrphans(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if got.RequestCount != 1 || !closeEnough(got.SpentAmount, 3) || got.UnitCode != "USD" {
+	if got.RequestCount != 1 || got.SpentAmount != capability.MustParseAmount("3") || got.UnitCode != "USD" {
 		t.Errorf("usage: %+v", got)
 	}
 
@@ -671,7 +683,7 @@ func TestTenantBudgetCapCannotBeNullOrNaN(t *testing.T) {
 	ctx, f := newUsageFixture(t)
 
 	if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-		TenantID: f.tenant, MaxBudgetAmount: 100, UnitCode: "USD",
+		TenantID: f.tenant, MaxBudgetAmount: capability.MustParseAmount("100"), UnitCode: "USD",
 	}); err != nil {
 		t.Fatalf("set budget: %v", err)
 	}
@@ -692,28 +704,28 @@ func TestTenantBudgetCapCannotBeNullOrNaN(t *testing.T) {
 		}
 	})
 
-	t.Run("the encoder refuses a non-finite amount", func(t *testing.T) {
-		for _, bad := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+	t.Run("the store refuses an amount out of range", func(t *testing.T) {
+		for _, bad := range []capability.Nanos{-capability.NanosPerUnit, capability.MaxNanos + 1} {
 			if _, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
 				TenantID: f.tenant, MaxBudgetAmount: bad,
 			}); err == nil {
 				t.Errorf("SetTenantBudget accepted %v as a cap", bad)
 			}
 		}
-		if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: math.NaN(), MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err == nil {
-			t.Error("Charge accepted a NaN amount")
+		if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MaxNanos + 1, MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err == nil {
+			t.Error("Charge accepted an amount beyond MaxNanos")
 		}
 	})
 
 	t.Run("a spend still works after all of that", func(t *testing.T) {
-		if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: 5, MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err != nil {
+		if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("5"), MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err != nil {
 			t.Fatalf("charge: %v", err)
 		}
 		got, err := f.usage.GetTenantBudget(ctx, f.tenant)
 		if err != nil {
 			t.Fatalf("get: %v", err)
 		}
-		if !closeEnough(got.SpentAmount, 5) {
+		if got.SpentAmount != capability.MustParseAmount("5") {
 			t.Errorf("spent %v, want 5", got.SpentAmount)
 		}
 	})
@@ -736,7 +748,7 @@ func TestChargeAlwaysWritesTheLedger(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
 
-	for i, amount := range []float64{1, 2.5, 0.001} {
+	for i, amount := range []capability.Nanos{capability.MustParseAmount("1"), capability.MustParseAmount("2.5"), capability.MustParseAmount("0.001")} {
 		if _, err := f.usage.Charge(ctx, capability.ChargeRequest{CapabilityID: f.capID, TenantID: f.tenant, Amount: amount, MaxBudget: 0, UnitCode: "USD", Op: "op", Actor: "actor"}, nil); err != nil {
 			t.Fatalf("charge %d: %v", i, err)
 		}

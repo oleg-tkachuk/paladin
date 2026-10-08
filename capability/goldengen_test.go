@@ -101,7 +101,7 @@ func TestGenerateGoldenToken(t *testing.T) {
 			Ops:              []Op{OpGet},
 			ResourcePrefixes: []string{"golden/"},
 			MaxRequests:      10,
-			MaxBudgetAmount:  1.5,
+			MaxBudgetAmount:  3 * NanosPerUnit / 2, // 1.5
 			UnitCode:         "USD",
 		},
 		TTL: time.Hour,

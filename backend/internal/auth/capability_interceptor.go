@@ -93,7 +93,7 @@ func CapabilityInterceptor(
 	verifier *capability.StandardVerifier,
 	audience string,
 	usage capability.UsageStore[pgx.Tx],
-	chargePerRequestAmount float64,
+	chargePerRequestAmount capability.Nanos,
 	chargePerRequestUnit string,
 	opts ...CapabilityOption,
 ) connect.Interceptor {
@@ -121,7 +121,7 @@ func CapabilityInterceptorWithEvents(
 	verifier *capability.StandardVerifier,
 	audience string,
 	usage capability.UsageStore[pgx.Tx],
-	chargePerRequestAmount float64,
+	chargePerRequestAmount capability.Nanos,
 	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
@@ -157,7 +157,7 @@ func CapabilityEstablishingInterceptor(
 	verifier *capability.StandardVerifier,
 	audience string,
 	usage capability.UsageStore[pgx.Tx],
-	chargePerRequestAmount float64,
+	chargePerRequestAmount capability.Nanos,
 	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
@@ -201,7 +201,7 @@ type capabilityInterceptor struct {
 	// JWT or API token stays additive, exactly as before.
 	establishPrincipal     bool
 	usage                  capability.UsageStore[pgx.Tx]
-	chargePerRequestAmount float64
+	chargePerRequestAmount capability.Nanos
 	chargePerRequestUnit   string
 	emitter                ChargeEventEmitter
 	dpop                   *capability.DPoPVerifier
@@ -515,7 +515,7 @@ type chargeEventsKey struct{}
 // the fan-out commits atomically with the charge (or rolls back with
 // it). An error propagates up and rolls the charge back.
 type ChargeEventEmitter interface {
-	EmitChargedTx(ctx context.Context, tx pgx.Tx, tenantID, capabilityID, op, actor string, amount float64, unitCode string) error
+	EmitChargedTx(ctx context.Context, tx pgx.Tx, tenantID, capabilityID, op, actor string, amount capability.Nanos, unitCode string) error
 }
 
 // WithChargeEventEmitter stamps the optional emitter on ctx. Wiring
@@ -540,7 +540,7 @@ func chargeEventEmitterFromContext(ctx context.Context) ChargeEventEmitter {
 // amount + unit avoids two context lookups per charge (the unit is
 // always read alongside the amount).
 type chargeAmount struct {
-	Amount float64
+	Amount capability.Nanos
 	Unit   string
 }
 
@@ -561,7 +561,7 @@ func WithChargeStore(ctx context.Context, s capability.UsageStore[pgx.Tx]) conte
 // An empty unit string means "use the capability's own UnitCode at
 // charge time"; the resolution happens in ChargeCapability so
 // callers don't have to reach across config + capability state.
-func WithChargeAmount(ctx context.Context, amount float64, unit string) context.Context {
+func WithChargeAmount(ctx context.Context, amount capability.Nanos, unit string) context.Context {
 	if amount <= 0 {
 		return ctx
 	}
@@ -572,7 +572,7 @@ func WithChargeAmount(ctx context.Context, amount float64, unit string) context.
 // cost (e.g. presign issuance, batch op kickoff, future LLM calls)
 // call this once the work is committed:
 //
-//	if err := auth.ChargeCapability(ctx, 0.0001); err != nil {
+//	if err := auth.ChargeCapability(ctx, capability.MustParseAmount("0.0001"), "USD"); err != nil {
 //	    return nil, err
 //	}
 //
@@ -597,7 +597,7 @@ func WithChargeAmount(ctx context.Context, amount float64, unit string) context.
 // cost (e.g. presign issuance, batch op kickoff, future LLM calls)
 // call this once the work is committed:
 //
-//	if err := auth.ChargeCapability(ctx, 0.0001, "USD"); err != nil {
+//	if err := auth.ChargeCapability(ctx, capability.MustParseAmount("0.0001"), "USD"); err != nil {
 //	    return nil, err
 //	}
 //
@@ -624,7 +624,7 @@ func WithChargeAmount(ctx context.Context, amount float64, unit string) context.
 //
 // Refunds are exposed via auth.RefundLastCharge for handlers that
 // detect a partial failure after the charge.
-func ChargeCapability(ctx context.Context, amount float64, unit string) error {
+func ChargeCapability(ctx context.Context, amount capability.Nanos, unit string) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
 		return nil
@@ -692,7 +692,7 @@ func ChargeCapability(ctx context.Context, amount float64, unit string) error {
 		metrics.RecordCapabilityCharge(ctx, tenantID.String(), "error", 0)
 		return capabilityError(connect.CodeUnavailable, err)
 	}
-	metrics.RecordCapabilityCharge(ctx, tenantID.String(), "charged", amount)
+	metrics.RecordCapabilityCharge(ctx, tenantID.String(), "charged", amount.Float64())
 	stampLastCharge(ctx, receipt.ChargeID)
 	return nil
 }
@@ -733,7 +733,7 @@ func ChargeRequest(ctx context.Context) error {
 // full refund a no-op rather than a second credit. A partial refund larger
 // than what is left is refused. No-op when no capability is on context, no
 // store is wired, or this request has made no charge.
-func RefundLastCharge(ctx context.Context, amount float64) error {
+func RefundLastCharge(ctx context.Context, amount capability.Nanos) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
 		return nil
@@ -763,7 +763,7 @@ func RefundLastCharge(ctx context.Context, amount float64) error {
 //
 // Returns uuid.Nil and no error when there is nothing to hold against: no
 // capability on the context, or no store wired.
-func ReserveCapability(ctx context.Context, amount float64, ttl time.Duration) (uuid.UUID, error) {
+func ReserveCapability(ctx context.Context, amount capability.Nanos, ttl time.Duration) (uuid.UUID, error) {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
 		return uuid.Nil, nil
@@ -796,7 +796,7 @@ func ReserveCapability(ctx context.Context, amount float64, ttl time.Duration) (
 // SettleReservation charges the actual cost in place of a hold made by
 // ReserveCapability. A cost above the hold must fit the ceilings; if it
 // does not, the hold stays and the call returns ResourceExhausted.
-func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount float64) error {
+func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount capability.Nanos) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok || reservationID == uuid.Nil {
 		return nil
