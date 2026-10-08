@@ -40,6 +40,7 @@ import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
 import { BiscuitCopyUsageDialog } from "./BiscuitCopyUsageDialog";
 import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS, isExpired } from "./_constants";
 import { capabilityClient } from "@/lib/connect/client";
+import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
@@ -189,7 +190,7 @@ export default function CapabilitiesPage() {
             try {
               const u = await capabilityClient.getUsage(
                 { id: c.id },
-                { signal },
+                notFoundIsAnswer({ signal }),
               );
               return [
                 c.id,

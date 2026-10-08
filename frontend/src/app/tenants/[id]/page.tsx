@@ -47,6 +47,7 @@ import {
   auditClient,
   tenantBudgetClient,
 } from "@/lib/connect/client";
+import { notFoundIsAnswer } from "@/lib/connect/expected";
 import type {
   TenantBudget,
   TenantBudgetServiceGetResponse,
@@ -227,7 +228,10 @@ export default function TenantOverviewPage() {
     (async () => {
       try {
         const res: TenantBudgetServiceGetResponse =
-          await tenantBudgetClient.get({ tenantId: tenant.tenantId });
+          await tenantBudgetClient.get(
+            { tenantId: tenant.tenantId },
+            notFoundIsAnswer(),
+          );
         if (cancelled) return;
         setBudget(res.budget ?? null);
         setBudgetMissing(!res.budget);
