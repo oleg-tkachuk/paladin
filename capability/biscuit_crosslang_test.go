@@ -104,7 +104,7 @@ type biscuitCase struct {
 		ExpiresAt        time.Time `json:"expires_at"`
 		ConfirmationJKT  string    `json:"confirmation_jkt"`
 		CopyMaxRequests  int64     `json:"copy_max_requests"`
-		CopyMaxBudget    int64     `json:"copy_max_budget_micros"`
+		CopyMaxBudget    int64     `json:"copy_max_budget_nanos"`
 	} `json:"expect"`
 }
 
@@ -150,8 +150,8 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 		t.Errorf("ConfirmationJKT = %q, want %q", got.ConfirmationJKT, want.ConfirmationJKT)
 	}
 	if len(got.Copies) != 1 || got.Copies[0].MaxRequests != want.CopyMaxRequests ||
-		got.Copies[0].MaxBudget != Nanos(want.CopyMaxBudget*nanosPerMicro) {
-		t.Errorf("Copies = %+v, want one with %d requests and %d micros",
+		got.Copies[0].MaxBudget != Nanos(want.CopyMaxBudget) {
+		t.Errorf("Copies = %+v, want one with %d requests and %d nanos",
 			got.Copies, want.CopyMaxRequests, want.CopyMaxBudget)
 	}
 	if _, err := v.Verify(ctx, token, AudiencePlaneMCP); err == nil {

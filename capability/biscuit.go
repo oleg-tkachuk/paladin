@@ -51,14 +51,7 @@ const (
 	biscuitFactBind           = "paladin_bind"             // string: a JWK thumbprint
 	biscuitFactMaxRequests    = "paladin_max_requests"     // integer: a copy's own request limit
 	biscuitFactMaxBudget      = "paladin_max_budget_nanos" // integer: a copy's own budget, in nanos
-	// biscuitFactMaxBudgetMicros is the budget fact Biscuits carried while
-	// amounts were micros. It is read, as nanos × nanosPerMicro, so a copy
-	// attenuated then keeps its limit; Attenuate writes biscuitFactMaxBudget.
-	biscuitFactMaxBudgetMicros = "paladin_max_budget_micros" // integer: a copy's own budget, in micros
 )
-
-// nanosPerMicro converts the legacy micros budget fact to Nanos.
-const nanosPerMicro = 1_000
 
 // ErrCopyCountersNotMetered — a Biscuit sets a copy's own request or budget
 // limit, and the verifier was not told that its Meter counts copies. The
@@ -393,21 +386,15 @@ func (f *blockFacts) read(fact decodedFact, boundJKT string) error {
 			return errors.New("a key-bound token cannot be rebound offline")
 		}
 		f.bind = s
-	case biscuitFactMaxRequests, biscuitFactMaxBudget, biscuitFactMaxBudgetMicros:
+	case biscuitFactMaxRequests, biscuitFactMaxBudget:
 		n, ok := fact.term.(int64)
 		if !ok || n <= 0 {
 			return fmt.Errorf("%s takes a positive integer", fact.name)
 		}
-		switch fact.name {
-		case biscuitFactMaxRequests:
+		if fact.name == biscuitFactMaxRequests {
 			f.ceiling.MaxRequests = n
-		case biscuitFactMaxBudget:
+		} else {
 			f.ceiling.MaxBudget = Nanos(n)
-		default:
-			if n > int64(MaxNanos)/nanosPerMicro {
-				return fmt.Errorf("%s %d exceeds %s", fact.name, n, MaxNanos)
-			}
-			f.ceiling.MaxBudget = Nanos(n * nanosPerMicro)
 		}
 	default:
 		return fmt.Errorf("fact %q is not part of the attenuation vocabulary", fact.name)
