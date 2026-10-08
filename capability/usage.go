@@ -411,7 +411,8 @@ var (
 	ErrRefundExceedsCharge = errors.New("capability: refund exceeds charge")
 
 	// ErrReservationNotFound — Settle named a reservation that does not
-	// exist, was already settled or released, or has expired.
+	// exist, was released, or has expired. One already settled is not an
+	// error: Settle returns its charge again (ChargeReceipt.Replayed).
 	ErrReservationNotFound = errors.New("capability: reservation not found")
 
 	// ErrRequestLimitExceeded — capability used MaxRequests times,

@@ -150,3 +150,28 @@ func TestSettleRecordsAnOverrunOnlyWhenAsked(t *testing.T) {
 		t.Errorf("replayed settle = %+v, %v; want the overrun charge again", again, err)
 	}
 }
+
+// A Biscuit copy's own budget is a ceiling like the others: refused under
+// OverrunReject, crossed and counted under OverrunRecord.
+func TestOverrunRecordCrossesACopyBudget(t *testing.T) {
+	ctx := context.Background()
+	u, capID, tenant, _ := reservationFixture(t)
+	copyID := []byte("copy-1")
+	copies := []capability.CopyCeiling{{RevocationID: copyID, MaxBudgetMicros: capability.MicrosPerUnit}}
+	charge := func(p capability.OverrunPolicy) (capability.ChargeReceipt, error) {
+		return u.Charge(ctx, capability.ChargeRequest{
+			CapabilityID: capID, TenantID: tenant, Amount: 2, MaxBudget: 10, Copies: copies, Overrun: p,
+		}, nil)
+	}
+	if _, err := charge(capability.OverrunReject); !errors.Is(err, capability.ErrBudgetExceeded) {
+		t.Fatalf("rejecting charge past the copy's budget: err = %v, want ErrBudgetExceeded", err)
+	}
+	r, err := charge(capability.OverrunRecord)
+	if err != nil || !r.Overrun {
+		t.Fatalf("recording charge = %+v, %v; want an overrun", r, err)
+	}
+	got, err := u.CopyUsage(ctx, [][]byte{copyID})
+	if err != nil || len(got) != 1 || got[0].SpentAmount != 2 {
+		t.Errorf("copy usage = %+v, %v; want 2 spent", got, err)
+	}
+}
