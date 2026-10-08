@@ -49,25 +49,14 @@ func TestReadBlockFacts(t *testing.T) {
 	}
 }
 
-// A copy's budget reads in nanos, and from the micros fact Biscuits carried
-// before, scaled — so a copy attenuated then keeps its limit.
-func TestReadBlockFactsBudgetUnits(t *testing.T) {
-	cases := map[string]struct {
-		fact string
-		n    int64
-		want Nanos
-	}{
-		"nanos":         {biscuitFactMaxBudget, 1_500, 1_500},
-		"legacy micros": {biscuitFactMaxBudgetMicros, 1_500, 1_500 * nanosPerMicro},
+// A copy's budget is nanos; the micros fact Biscuits carried before is no
+// longer part of the vocabulary.
+func TestReadBlockFactsBudgetIsNanos(t *testing.T) {
+	f, err := readBlockFacts(decodedBlock{facts: []decodedFact{{name: biscuitFactMaxBudget, term: int64(1_500)}}}, "")
+	if err != nil || f.ceiling.MaxBudget != 1_500 {
+		t.Errorf("budget = %s, %v; want 1500 nanos", f.ceiling.MaxBudget, err)
 	}
-	for name, c := range cases {
-		f, err := readBlockFacts(decodedBlock{facts: []decodedFact{{name: c.fact, term: c.n}}}, "")
-		if err != nil || f.ceiling.MaxBudget != c.want {
-			t.Errorf("%s: budget = %s, %v; want %s", name, f.ceiling.MaxBudget, err, c.want)
-		}
-	}
-	tooMany := int64(MaxNanos)/nanosPerMicro + 1
-	if _, err := readBlockFacts(decodedBlock{facts: []decodedFact{{name: biscuitFactMaxBudgetMicros, term: tooMany}}}, ""); err == nil {
-		t.Error("a micros budget past MaxNanos was read")
+	if _, err := readBlockFacts(decodedBlock{facts: []decodedFact{{name: "paladin_max_budget_micros", term: int64(1_500)}}}, ""); err == nil {
+		t.Error("the micros budget fact was read")
 	}
 }
