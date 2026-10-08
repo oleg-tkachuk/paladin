@@ -71,7 +71,7 @@ func main() {
 			Ops:              []capability.Op{capability.OpGet, capability.OpShare},
 			ResourcePrefixes: []string{"corpus/public/"},
 			MaxRequests:      500,
-			MaxBudgetAmount:  25.00,
+			MaxBudgetAmount:  capability.MustParseAmount("25.00"),
 			UnitCode:         "USD",
 		},
 	})
@@ -106,7 +106,7 @@ func main() {
 			Ops:              []capability.Op{capability.OpGet}, // dropped OpShare
 			ResourcePrefixes: []string{"corpus/public/2026/"},   // narrowed
 			MaxRequests:      50,
-			MaxBudgetAmount:  2.00, // 25.00 → 2.00
+			MaxBudgetAmount:  capability.MustParseAmount("2.00"), // 25.00 → 2.00
 			UnitCode:         "USD",
 		},
 	})
@@ -124,7 +124,7 @@ func main() {
 		TTL:      time.Minute,
 		Caveats: capability.Caveats{
 			Ops:             []capability.Op{capability.OpGet},
-			MaxBudgetAmount: 999, // wider than the parent's 25.00
+			MaxBudgetAmount: capability.MustParseAmount("999"), // wider than the parent's 25.00
 			UnitCode:        "USD",
 		},
 	})
@@ -136,11 +136,11 @@ func main() {
 	// 6. Charge against the budget. The capability's ceiling, each ancestor's
 	//    and the tenant's all apply; a rejection by any leaves every counter
 	//    untouched, so a retry is always safe.
-	receipt, err := usage.Charge(ctx, capability.ChargeRequest{CapabilityID: parent.ID, TenantID: tenantID, Amount: 0.35, MaxBudget: parent.Caveats.MaxBudgetAmount, UnitCode: "USD", Op: "search", Actor: "research-orchestrator"}, nil)
+	receipt, err := usage.Charge(ctx, capability.ChargeRequest{CapabilityID: parent.ID, TenantID: tenantID, Amount: capability.MustParseAmount("0.35"), MaxBudget: parent.Caveats.MaxBudgetAmount, UnitCode: "USD", Op: "search", Actor: "research-orchestrator"}, nil)
 	must(err, "charge")
-	fmt.Printf("charged  0.35 USD, spent now %.2f\n", receipt.Spent)
+	fmt.Printf("charged  0.35 USD, spent now %s\n", receipt.Spent)
 
-	_, err = usage.Charge(ctx, capability.ChargeRequest{CapabilityID: parent.ID, TenantID: tenantID, Amount: 999, MaxBudget: parent.Caveats.MaxBudgetAmount, UnitCode: "USD", Op: "search", Actor: "research-orchestrator"}, nil)
+	_, err = usage.Charge(ctx, capability.ChargeRequest{CapabilityID: parent.ID, TenantID: tenantID, Amount: capability.MustParseAmount("999"), MaxBudget: parent.Caveats.MaxBudgetAmount, UnitCode: "USD", Op: "search", Actor: "research-orchestrator"}, nil)
 	if !errors.Is(err, capability.ErrBudgetExceeded) {
 		log.Fatalf("over-budget charge should have been refused, got %v", err)
 	}

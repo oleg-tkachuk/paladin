@@ -2,37 +2,60 @@ package apiutil
 
 import (
 	"fmt"
-	"math"
 
 	"connectrpc.com/connect"
+	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/capability"
 )
 
-// Money crosses the API as int64 micros (`*_micros`); the store still holds
-// float64 amounts. These helpers are the only place the two meet.
+// Money crosses the API as google.type.Money and is counted as
+// capability.Nanos; these helpers are the only place the two meet, and
+// neither goes through a float64.
 
-// Micros is an amount for a `*_micros` response field. A response reports
-// what the store holds, so this never refuses: amounts beyond
-// capability.MaxMicros (no single stored value reaches it) still round to
-// the nearest micro.
-func Micros(amount float64) int64 {
-	if math.IsNaN(amount) || amount <= 0 {
-		return 0
+// MoneyOf is n of unit as a google.type.Money; unit "" is
+// capability.DefaultUnitCode, as everywhere a unit is left out.
+func MoneyOf(unit string, n capability.Nanos) *money.Money {
+	if unit == "" {
+		unit = capability.DefaultUnitCode
 	}
-	return int64(math.Round(amount * capability.MicrosPerUnit))
+	return &money.Money{
+		CurrencyCode: unit,
+		Units:        int64(n / capability.NanosPerUnit),
+		Nanos:        int32(n % capability.NanosPerUnit),
+	}
 }
 
-// AmountFromMicros resolves a request's `<field>_micros` value; an absent
-// optional field reads as 0, which every money field means as "unlimited".
-func AmountFromMicros(field string, micros int64) (float64, error) {
-	if micros < 0 || micros > capability.MaxMicros {
-		return 0, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("%s_micros: %d is outside 0..%d", field, micros, int64(capability.MaxMicros)))
+// NanosOf resolves a request's Money field to its amount and its unit, a
+// code capability.NormaliseUnitCode accepts. An absent field is zero with an
+// empty unit, so the caller decides what absent means. A negative amount,
+// nanos outside 0..999999999, one past capability.MaxNanos or an unknown
+// currency is InvalidArgument naming field.
+func NanosOf(field string, m *money.Money) (capability.Nanos, string, error) {
+	if m == nil {
+		return 0, "", nil
 	}
-	return capability.MicrosToAmount(micros), nil
+	invalid := func(format string, args ...any) (capability.Nanos, string, error) {
+		return 0, "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s: "+format, append([]any{field}, args...)...))
+	}
+	unit, err := capability.NormaliseUnitCode(m.GetCurrencyCode())
+	if err != nil {
+		return invalid("%w", err)
+	}
+	units, nanos := m.GetUnits(), int64(m.GetNanos())
+	if units < 0 || nanos < 0 || nanos >= capability.NanosPerUnit {
+		return invalid("units %d and nanos %d are not a non-negative amount", units, nanos)
+	}
+	if units > int64(capability.MaxNanos/capability.NanosPerUnit) {
+		return invalid("%d units exceed %s", units, capability.MaxNanos)
+	}
+	n := capability.Nanos(units*capability.NanosPerUnit + nanos)
+	if err := capability.ValidateAmount(n); err != nil {
+		return invalid("%w", err)
+	}
+	return n, unit, nil
 }
 
 // RefuseRemovedFields refuses msg when it carries a field the contract has

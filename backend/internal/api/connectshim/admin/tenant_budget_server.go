@@ -90,16 +90,6 @@ func (s *TenantBudgetServer) Set(
 	// The request names the tenant by id, so the audit row would name nothing
 	// and the change would be in no tenant's trail.
 	apiutil.StashResource(ctx, apiutil.TenantNamePrefix+tenantID.String()+budgetSegment)
-	// Validate the optional unit_code at the boundary; the store
-	// also re-validates but surfacing InvalidArgument to the caller
-	// here is more useful than the generic Internal we'd otherwise
-	// return. Empty string defers to the existing row's unit_code
-	// (or DEFAULT 'USD' on first insert).
-	unit := m.GetUnitCode()
-	if unit != "" && !capability.IsAllowedUnitCode(unit) {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("unit_code: %q not in %v", unit, capability.AllowedUnitCodes))
-	}
 	expected, err := convx.ParseRV(m.GetResourceVersion())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
@@ -108,7 +98,9 @@ func (s *TenantBudgetServer) Set(
 	if err := apiutil.RefuseRemovedFields(m); err != nil {
 		return nil, err
 	}
-	budget, err := apiutil.AmountFromMicros("max_budget", m.GetMaxBudgetMicros())
+	// An absent max_budget lifts the cap and leaves the unit to the
+	// existing row (or DEFAULT 'USD' on first insert): unit stays "".
+	budget, unit, err := apiutil.NanosOf("max_budget", m.GetMaxBudget())
 	if err != nil {
 		return nil, err
 	}
@@ -197,15 +189,10 @@ var _ paladinadminv1connect.TenantBudgetServiceHandler = (*TenantBudgetServer)(n
 // Times that are zero come back as nil so the wire payload is tighter
 // (Connect-JSON doesn't need to ship the epoch timestamp).
 func tenantBudgetToProto(tb capability.TenantBudget) *pb.TenantBudget {
-	unit := tb.UnitCode
-	if unit == "" {
-		unit = capability.DefaultUnitCode
-	}
 	out := &pb.TenantBudget{
 		TenantId:        tb.TenantID.String(),
-		MaxBudgetMicros: apiutil.Micros(tb.MaxBudgetAmount),
-		SpentMicros:     apiutil.Micros(tb.SpentAmount),
-		UnitCode:        unit,
+		MaxBudget:       apiutil.MoneyOf(tb.UnitCode, tb.MaxBudgetAmount),
+		Spent:           apiutil.MoneyOf(tb.UnitCode, tb.SpentAmount),
 		ResourceVersion: convx.ResourceVersion(tb.ResourceVersion),
 	}
 	if !tb.PeriodStart.IsZero() {

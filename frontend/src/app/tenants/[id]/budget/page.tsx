@@ -41,25 +41,30 @@ import { tenantBudgetClient } from "@/lib/connect/client";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import {
-  formatMoney,
+  ABSTRACT_UNIT_CODE,
   ALLOWED_UNIT_CODES,
-  fromMicros,
-  microsToInput,
-  parseMicros,
+  formatMoney,
+  moneyFromDecimal,
+  moneyIsPositive,
+  moneyPercent,
+  moneyToDecimal,
+  moneyToNanos,
+  NANOS_DECIMALS,
+  unitOf,
 } from "@/lib/format/money";
+import type { Money } from "@/gen/google/type/money_pb";
 import { Select } from "@/components/ui/Select";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
 import { useTenant, useTenantChangesBlocked } from "../tenant-context";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
 
-function formatAmount(n: number, unit: string): string {
-  return formatMoney(n, unit);
-}
-
-function progressColour(spent: number, max: number): string {
-  if (max <= 0) return "bg-primary/40";
-  const pct = (spent / max) * 100;
+function progressColour(
+  spent: Money | undefined,
+  max: Money | undefined,
+): string {
+  const pct = moneyPercent(spent, max);
+  if (pct === null) return "bg-primary/40";
   if (pct >= 90) return "bg-destructive";
   if (pct >= 70) return "bg-warning";
   return "bg-success";
@@ -106,10 +111,10 @@ export default function TenantBudgetPage() {
 
   const [maxBudget, setMaxBudget] = useState<string>("");
   // Form picker default. Cold-start (no existing budget) starts on
-  // UNIT — the abstract metering sentinel — so the page doesn't
-  // assume operators want USD. The hydration effect below replaces
-  // this with budget.unitCode whenever a snapshot loads.
-  const [unitCode, setUnitCode] = useState<string>("UNIT");
+  // XXX — ISO 4217's "no currency" — so the page doesn't assume
+  // operators want USD. The hydration below replaces this with the
+  // budget's unit whenever a snapshot loads.
+  const [unitCode, setUnitCode] = useState<string>(ABSTRACT_UNIT_CODE);
   const [resetSpend, setResetSpend] = useState<boolean>(false);
   // Period close date (YYYY-MM-DD, local). Blank leaves the server's window
   // untouched; a value pins when the billing period ends.
@@ -134,8 +139,10 @@ export default function TenantBudgetPage() {
   if (budget !== seededFrom && !edited) {
     setSeededFrom(budget);
     if (budget) {
-      setMaxBudget(microsToInput(budget.maxBudgetMicros));
-      if (budget.unitCode) setUnitCode(budget.unitCode);
+      setMaxBudget(moneyToDecimal(budget.maxBudget));
+      const stored =
+        budget.maxBudget?.currencyCode || budget.spent?.currencyCode;
+      if (stored) setUnitCode(stored);
       setPeriodEnd(
         budget.periodEnd
           ? new Date(Number(budget.periodEnd.seconds) * 1000)
@@ -145,7 +152,7 @@ export default function TenantBudgetPage() {
       );
     } else {
       setMaxBudget("");
-      setUnitCode("UNIT");
+      setUnitCode(ABSTRACT_UNIT_CODE);
       setPeriodEnd("");
     }
     setResetSpend(false);
@@ -153,14 +160,14 @@ export default function TenantBudgetPage() {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    // Straight to micros, never through a float: "0.1" is exactly 100000n.
-    const cap = parseMicros(maxBudget || "0");
+    // Straight to Money, never through a float: "0.1" is exactly 100000000
+    // nanos. Zero is sent too: it is unlimited in the chosen unit.
+    const cap = moneyFromDecimal(maxBudget || "0", unitCode);
     if (cap === null) {
       showNotification({
         type: "error",
         title: "Validation",
-        message:
-          "Max budget must be a non-negative amount with at most six decimals.",
+        message: `Max budget must be a non-negative amount with at most ${NANOS_DECIMALS} decimals.`,
       });
       return;
     }
@@ -168,8 +175,7 @@ export default function TenantBudgetPage() {
     try {
       await tenantBudgetClient.set({
         tenantId,
-        maxBudgetMicros: cap,
-        unitCode,
+        maxBudget: cap,
         resetSpend,
         // OCC guard. "0" asserts no row exists yet — the create case — and is
         // itself rejected if someone created one in the meantime. Anything
@@ -189,8 +195,8 @@ export default function TenantBudgetPage() {
         type: "success",
         title: "Budget updated",
         message: resetSpend
-          ? `Cap set to ${formatAmount(fromMicros(cap), unitCode)} and period rolled.`
-          : `Cap set to ${formatAmount(fromMicros(cap), unitCode)}.`,
+          ? `Cap set to ${formatMoney(cap)} and period rolled.`
+          : `Cap set to ${formatMoney(cap)}.`,
       });
     } catch (err) {
       // Aborted is the OCC guard, not a fault: the row moved under us. Refetch
@@ -217,15 +223,15 @@ export default function TenantBudgetPage() {
     }
   };
 
-  const spent = fromMicros(budget?.spentMicros);
-  const cap = fromMicros(budget?.maxBudgetMicros);
-  // Display fallback when an existing budget row carries no
-  // unit_code (legacy data minted before the field was wired).
-  // UNIT is correct: rendering "$0.00" for what's actually
-  // metering would lie about the configured currency.
-  const budgetUnit = budget?.unitCode || "UNIT";
-  const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : 0;
-  const overCap = cap > 0 && spent >= cap;
+  const spent = budget?.spent;
+  const cap = budget?.maxBudget;
+  // Display fallback when an existing budget row carries no unit.
+  // XXX is correct: rendering "$0.00" for what's actually metering
+  // would lie about the configured currency.
+  const budgetUnit = unitOf(cap?.currencyCode ? cap : spent);
+  const capped = moneyIsPositive(cap);
+  const pct = Math.min(100, moneyPercent(spent, cap) ?? 0);
+  const overCap = capped && moneyToNanos(spent) >= moneyToNanos(cap);
 
   return (
     <div className="space-y-4">
@@ -276,13 +282,15 @@ export default function TenantBudgetPage() {
               <div>
                 <Label className="text-xs text-muted-foreground">Spent</Label>
                 <div className="font-mono text-2xl">
-                  {formatAmount(spent, budgetUnit)}
+                  {formatMoney(spent, { fallbackUnit: budgetUnit })}
                 </div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">Cap</Label>
                 <div className="font-mono text-2xl">
-                  {cap > 0 ? formatAmount(cap, budgetUnit) : "∞ unlimited"}
+                  {capped
+                    ? formatMoney(cap, { fallbackUnit: budgetUnit })
+                    : "∞ unlimited"}
                 </div>
               </div>
               <div>
@@ -311,7 +319,7 @@ export default function TenantBudgetPage() {
               </div>
             </div>
 
-            {cap > 0 && (
+            {capped && (
               <div>
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>{pct.toFixed(1)}% used</span>
@@ -369,7 +377,9 @@ export default function TenantBudgetPage() {
                 <Input
                   id="max-budget"
                   type="number"
-                  step="0.01"
+                  // Amounts are exact to the nano; a coarser step would have
+                  // the browser refuse a finer one before handleSubmit sees it.
+                  step="any"
                   min={0}
                   placeholder="0 = unlimited"
                   value={maxBudget}
@@ -399,7 +409,7 @@ export default function TenantBudgetPage() {
                   className="w-full"
                 />
                 <p className={T.hint}>
-                  ISO 4217 fiat or UNIT for non-currency metering.
+                  ISO 4217 fiat, or XXX for metering that is not money.
                 </p>
               </div>
 

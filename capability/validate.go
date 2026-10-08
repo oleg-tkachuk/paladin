@@ -2,7 +2,6 @@ package capability
 
 import (
 	"fmt"
-	"math"
 	"net/netip"
 	"strings"
 	"unicode"
@@ -87,13 +86,12 @@ func (c Caveats) Validate() error {
 	if c.MaxRequests < 0 {
 		return fmt.Errorf("%w: max_requests %d is negative", ErrInvalidCaveats, c.MaxRequests)
 	}
-	if math.IsNaN(c.MaxBudgetAmount) || math.IsInf(c.MaxBudgetAmount, 0) || c.MaxBudgetAmount < 0 {
-		return fmt.Errorf("%w: max_budget_amount %v must be a finite, non-negative number",
-			ErrInvalidCaveats, c.MaxBudgetAmount)
+	if c.MaxBudgetAmount < 0 || c.MaxBudgetAmount > MaxNanos {
+		return fmt.Errorf("%w: max_budget_amount %s is outside 0..%s",
+			ErrInvalidCaveats, c.MaxBudgetAmount, MaxNanos)
 	}
-	if c.UnitCode != "" && !IsAllowedUnitCode(c.UnitCode) {
-		return fmt.Errorf("%w: unknown unit_code %q (allowed: %v)",
-			ErrInvalidCaveats, c.UnitCode, AllowedUnitCodes)
+	if _, err := NormaliseUnitCode(c.UnitCode); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidCaveats, err)
 	}
 	for _, cidr := range c.SourceIPCIDR {
 		if _, err := netip.ParsePrefix(cidr); err != nil {

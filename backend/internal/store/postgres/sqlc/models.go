@@ -419,17 +419,17 @@ type CapabilityRecord struct {
 }
 
 type CapabilityReservation struct {
-	ID                  pgtype.UUID        `json:"id"`
-	TenantID            pgtype.UUID        `json:"tenant_id"`
-	CapabilityID        pgtype.UUID        `json:"capability_id"`
-	Amount              pgtype.Numeric     `json:"amount"`
-	UnitCode            string             `json:"unit_code"`
-	Op                  string             `json:"op"`
-	ActorSubject        string             `json:"actor_subject"`
-	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	CopyIds             [][]byte           `json:"copy_ids"`
-	CopyMaxBudgetMicros []int64            `json:"copy_max_budget_micros"`
+	ID                 pgtype.UUID        `json:"id"`
+	TenantID           pgtype.UUID        `json:"tenant_id"`
+	CapabilityID       pgtype.UUID        `json:"capability_id"`
+	Amount             pgtype.Numeric     `json:"amount"`
+	UnitCode           string             `json:"unit_code"`
+	Op                 string             `json:"op"`
+	ActorSubject       string             `json:"actor_subject"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	CopyIds            [][]byte           `json:"copy_ids"`
+	CopyMaxBudgetNanos []int64            `json:"copy_max_budget_nanos"`
 }
 
 type CapabilityRevocation struct {

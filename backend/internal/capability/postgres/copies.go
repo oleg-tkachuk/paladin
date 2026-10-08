@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -80,10 +82,7 @@ func addCopySpendPast(ctx context.Context, tx pgx.Tx, capID uuid.UUID, copies []
 	amount pgtype.Numeric, counter string, overrun capability.OverrunPolicy,
 ) (crossed bool, err error) {
 	for _, c := range copies {
-		limit, err := numericFromFloat(c.MaxBudget())
-		if err != nil {
-			return false, err
-		}
+		limit := pgmoney.NumericFromNanos(c.MaxBudget)
 		var spent pgtype.Numeric
 		err = tx.QueryRow(ctx, addCopySpendQuery, c.RevocationID, capID, amount, counter, limit).Scan(&spent)
 		if errors.Is(err, pgx.ErrNoRows) && overrun == capability.OverrunRecord {
@@ -137,7 +136,7 @@ func copyBudgets(copies []capability.CopyCeiling) []int64 {
 	}
 	out := make([]int64, 0, len(copies))
 	for _, c := range copies {
-		out = append(out, c.MaxBudgetMicros)
+		out = append(out, int64(c.MaxBudget))
 	}
 	return out
 }
@@ -150,7 +149,7 @@ func ceilingsOf(ids [][]byte, budgets []int64) ([]capability.CopyCeiling, error)
 	}
 	out := make([]capability.CopyCeiling, 0, len(ids))
 	for i, id := range ids {
-		out = append(out, capability.CopyCeiling{RevocationID: id, MaxBudgetMicros: budgets[i]})
+		out = append(out, capability.CopyCeiling{RevocationID: id, MaxBudget: capability.Nanos(budgets[i])})
 	}
 	return out, nil
 }
@@ -181,7 +180,12 @@ WHERE  revocation_id = ANY($1::bytea[])`, revocationIDs)
 		if err := rows.Scan(&u.RevocationID, &u.CapabilityID, &u.RequestCount, &spent, &reserved); err != nil {
 			return nil, fmt.Errorf("capability/postgres: copy usage scan: %w", err)
 		}
-		u.SpentAmount, u.ReservedAmount = floatFromNumeric(spent), floatFromNumeric(reserved)
+		if u.SpentAmount, err = pgmoney.NanosFromNumeric(spent); err != nil {
+			return nil, err
+		}
+		if u.ReservedAmount, err = pgmoney.NanosFromNumeric(reserved); err != nil {
+			return nil, err
+		}
 		out = append(out, u)
 	}
 	if err := rows.Err(); err != nil {

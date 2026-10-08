@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -100,7 +99,7 @@ type Meter[TX any] interface {
 	// For a cost only known afterwards, prefer Reserve/Settle: a
 	// reservation lapses on its own if the caller never settles it, where
 	// an estimate charged up front stays charged.
-	Refund(ctx context.Context, req RefundRequest) (refunded float64, err error)
+	Refund(ctx context.Context, req RefundRequest) (refunded Nanos, err error)
 
 	// Reserve holds req.Amount against the capability, each ancestor and
 	// the tenant aggregate, checking every ceiling against spend plus
@@ -167,7 +166,8 @@ type TenantBudgets interface {
 	// SetTenantBudget upserts the tenant cap. ResetSpend=true rolls
 	// the accounting period and zeroes the spend — operators call
 	// this on each billing close. ResetSpend=false adjusts the cap
-	// mid-cycle without affecting accumulated spend.
+	// mid-cycle without affecting accumulated spend. A ceiling outside
+	// 0..MaxNanos returns ErrInvalidAmount and changes nothing.
 	SetTenantBudget(ctx context.Context, req SetTenantBudgetRequest) (TenantBudget, error)
 
 	// ListTenantBudgets returns tenant budget rows, with the consumer's
@@ -225,10 +225,10 @@ type ChargeRequest struct {
 	// and the ledger row is filed under it. Required.
 	TenantID uuid.UUID
 	// Amount is the cost, in UnitCode. Must be finite and ≥ 0.
-	Amount float64
+	Amount Nanos
 	// MaxBudget is the capability's own ceiling, from the verified token.
 	// 0 = unlimited.
-	MaxBudget float64
+	MaxBudget Nanos
 	// UnitCode is the currency or unit; empty means DefaultUnitCode. No
 	// conversion happens: a charge in a unit other than the counter's is a
 	// configuration error the caller must prevent.
@@ -254,8 +254,8 @@ type ChargeRecord struct {
 	CapabilityID uuid.UUID
 	// Amount is what the charge took; Refunded is what has been returned
 	// from it since.
-	Amount   float64
-	Refunded float64
+	Amount   Nanos
+	Refunded Nanos
 	UnitCode string
 	// ExternalRef is the charge's ChargeRequest.ExternalRef; empty for none.
 	ExternalRef string
@@ -290,7 +290,7 @@ type ChargeReceipt struct {
 	ChargeID uuid.UUID
 	// Spent is the capability's spend as this call returns (its subtree's,
 	// when it has delegated children).
-	Spent float64
+	Spent Nanos
 	// Replayed reports that the charge was already in the ledger — the same
 	// ExternalRef, or a reservation already settled — so this call moved
 	// nothing and ChargeID names the earlier charge.
@@ -310,9 +310,9 @@ type ReserveRequest struct {
 	// TenantID is the capability's tenant. Required.
 	TenantID uuid.UUID
 	// Amount to hold, in UnitCode. Must be finite and ≥ 0.
-	Amount float64
+	Amount Nanos
 	// MaxBudget is the capability's own ceiling, from the verified token.
-	MaxBudget float64
+	MaxBudget Nanos
 	UnitCode  string
 	// TTL is how long the hold lasts if never settled or released.
 	// 0 = DefaultReservationTTL.
@@ -332,7 +332,7 @@ type Reservation struct {
 	CapabilityID uuid.UUID
 	TenantID     uuid.UUID
 	// Amount is held in UnitCode.
-	Amount   float64
+	Amount   Nanos
 	UnitCode string
 	// Op and Actor are what Settle will stamp on the charge.
 	Op    string
@@ -348,9 +348,9 @@ type Reservation struct {
 type SettleRequest struct {
 	ReservationID uuid.UUID
 	// Amount is the actual cost to charge. Must be finite and ≥ 0.
-	Amount float64
+	Amount Nanos
 	// MaxBudget is the capability's own ceiling, from the verified token.
-	MaxBudget float64
+	MaxBudget Nanos
 	// Overrun is what happens when Amount would cross a ceiling.
 	Overrun OverrunPolicy
 }
@@ -359,7 +359,7 @@ type SettleRequest struct {
 type RefundRequest struct {
 	ChargeID uuid.UUID
 	// Amount to refund; 0 = everything not yet refunded from this charge.
-	Amount float64
+	Amount Nanos
 }
 
 // TenantBudget is the snapshot view of the tenant aggregate cap.
@@ -370,10 +370,10 @@ type RefundRequest struct {
 // tracked for a format change, not an invitation to store floats.
 type TenantBudget struct {
 	TenantID        uuid.UUID
-	MaxBudgetAmount float64
-	SpentAmount     float64
+	MaxBudgetAmount Nanos
+	SpentAmount     Nanos
 	// ReservedAmount is held by the tenant's open reservations.
-	ReservedAmount float64
+	ReservedAmount Nanos
 	UnitCode       string
 	PeriodStart    time.Time
 	PeriodEnd      *time.Time
@@ -386,7 +386,7 @@ type TenantBudget struct {
 // SetTenantBudgetRequest is the input for UsageStore.SetTenantBudget.
 type SetTenantBudgetRequest struct {
 	TenantID        uuid.UUID
-	MaxBudgetAmount float64
+	MaxBudgetAmount Nanos
 	// UnitCode pins the currency. Empty = keep existing or default
 	// to DefaultUnitCode on first insert.
 	UnitCode string
@@ -469,10 +469,10 @@ func DecodeTenantBudgetCursor(s string) (TenantBudgetCursor, error) {
 type Usage struct {
 	CapabilityID uuid.UUID
 	RequestCount int64
-	SpentAmount  float64
+	SpentAmount  Nanos
 	// ReservedAmount is held by open reservations (its subtree's, for a
 	// capability with delegated children).
-	ReservedAmount float64
+	ReservedAmount Nanos
 	UnitCode       string
 }
 
@@ -482,8 +482,8 @@ type CopyUsage struct {
 	RevocationID   []byte
 	CapabilityID   uuid.UUID
 	RequestCount   int64
-	SpentAmount    float64
-	ReservedAmount float64
+	SpentAmount    Nanos
+	ReservedAmount Nanos
 }
 
 // CopyUsageReader reads the counters of Biscuit copies. It is separate from
@@ -567,11 +567,12 @@ func ValidateExternalRef(ref string) error {
 	return nil
 }
 
-// ValidateAmount reports whether a charge or refund amount is usable:
-// finite and not negative. Implementations call it before touching state.
-func ValidateAmount(amount float64) error {
-	if math.IsNaN(amount) || math.IsInf(amount, 0) || amount < 0 {
-		return fmt.Errorf("%w: %v", ErrInvalidAmount, amount)
+// ValidateAmount reports whether a charge or refund amount is usable: not
+// negative and at most MaxNanos. Implementations call it before touching
+// state.
+func ValidateAmount(amount Nanos) error {
+	if amount < 0 || amount > MaxNanos {
+		return fmt.Errorf("%w: %s is outside 0..%s", ErrInvalidAmount, amount, MaxNanos)
 	}
 	return nil
 }

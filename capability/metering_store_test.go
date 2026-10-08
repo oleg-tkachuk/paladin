@@ -83,7 +83,7 @@ func TestMeteringStoreCountsNoReplay(t *testing.T) {
 	ctx := context.Background()
 	usage := capability.WithMetering[struct{}](memstore.NewUsage[struct{}](nil))
 	tenant, capID := uuid.New(), uuid.New()
-	charge := capability.ChargeRequest{CapabilityID: capID, TenantID: tenant, Amount: 1, ExternalRef: "call-1"}
+	charge := capability.ChargeRequest{CapabilityID: capID, TenantID: tenant, Amount: capability.MustParseAmount("1"), ExternalRef: "call-1"}
 
 	before := count.Load()
 	if _, err := usage.Charge(ctx, charge, nil); err != nil {
@@ -100,15 +100,15 @@ func TestMeteringStoreCountsNoReplay(t *testing.T) {
 		t.Errorf("a replayed charge took %d measurements", got-after)
 	}
 
-	res, err := usage.Reserve(ctx, capability.ReserveRequest{CapabilityID: capID, TenantID: tenant, Amount: 1})
+	res, err := usage.Reserve(ctx, capability.ReserveRequest{CapabilityID: capID, TenantID: tenant, Amount: capability.MustParseAmount("1")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := usage.Settle(ctx, capability.SettleRequest{ReservationID: res.ID, Amount: 1}, nil); err != nil {
+	if _, err := usage.Settle(ctx, capability.SettleRequest{ReservationID: res.ID, Amount: capability.MustParseAmount("1")}, nil); err != nil {
 		t.Fatal(err)
 	}
 	after = count.Load()
-	if r, err := usage.Settle(ctx, capability.SettleRequest{ReservationID: res.ID, Amount: 1}, nil); err != nil || !r.Replayed {
+	if r, err := usage.Settle(ctx, capability.SettleRequest{ReservationID: res.ID, Amount: capability.MustParseAmount("1")}, nil); err != nil || !r.Replayed {
 		t.Fatalf("repeated settle = %+v, %v; want a replay", r, err)
 	}
 	if got := count.Load(); got != after {
@@ -166,7 +166,7 @@ func TestMeteringStorePassesEveryCallThrough(t *testing.T) {
 		}
 	}
 
-	if _, err := usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{TenantID: tenant, MaxBudgetAmount: 10}); err != nil {
+	if _, err := usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{TenantID: tenant, MaxBudgetAmount: capability.MustParseAmount("10")}); err != nil {
 		t.Fatal(err)
 	}
 	measured("Bump", func() error {
@@ -175,32 +175,32 @@ func TestMeteringStorePassesEveryCallThrough(t *testing.T) {
 	})
 	var receipt capability.ChargeReceipt
 	measured("Charge", func() (err error) {
-		receipt, err = usage.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenant, Amount: 2, ExternalRef: "r"}, nil)
+		receipt, err = usage.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenant, Amount: capability.MustParseAmount("2"), ExternalRef: "r"}, nil)
 		return err
 	})
 	measured("Refund", func() error {
-		_, err := usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: 1})
+		_, err := usage.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: capability.MustParseAmount("1")})
 		return err
 	})
 	var res capability.Reservation
 	measured("Reserve", func() (err error) {
-		res, err = usage.Reserve(ctx, capability.ReserveRequest{CapabilityID: capID, TenantID: tenant, Amount: 1})
+		res, err = usage.Reserve(ctx, capability.ReserveRequest{CapabilityID: capID, TenantID: tenant, Amount: capability.MustParseAmount("1")})
 		return err
 	})
 
 	if err := usage.Release(ctx, res.ID); err != nil {
 		t.Errorf("Release: %v", err)
 	}
-	if u, err := usage.GetUsage(ctx, capID); err != nil || u.RequestCount != 1 || u.SpentAmount != 1 {
+	if u, err := usage.GetUsage(ctx, capID); err != nil || u.RequestCount != 1 || u.SpentAmount != capability.NanosPerUnit {
 		t.Errorf("GetUsage = %+v, %v", u, err)
 	}
-	if b, err := usage.GetTenantBudget(ctx, tenant); err != nil || b.SpentAmount != 1 {
+	if b, err := usage.GetTenantBudget(ctx, tenant); err != nil || b.SpentAmount != capability.NanosPerUnit {
 		t.Errorf("GetTenantBudget = %+v, %v", b, err)
 	}
 	if l, _, err := usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{}); err != nil || len(l) != 1 {
 		t.Errorf("ListTenantBudgets = %+v, %v", l, err)
 	}
-	if c, err := usage.GetCharge(ctx, receipt.ChargeID); err != nil || c.Refunded != 1 {
+	if c, err := usage.GetCharge(ctx, receipt.ChargeID); err != nil || c.Refunded != capability.NanosPerUnit {
 		t.Errorf("GetCharge = %+v, %v", c, err)
 	}
 	if c, err := usage.ChargeByRef(ctx, capID, "r"); err != nil || c.ChargeID != receipt.ChargeID {

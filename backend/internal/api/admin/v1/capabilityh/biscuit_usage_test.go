@@ -8,6 +8,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/genproto/googleapis/type/money"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -41,11 +43,11 @@ func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 	store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
 	limits := []capability.CopyCeiling{
 		{RevocationID: []byte("inner"), MaxRequests: 10},
-		{RevocationID: []byte("outer"), MaxBudgetMicros: 2 * capability.MicrosPerUnit},
+		{RevocationID: []byte("outer"), MaxBudget: 2 * capability.NanosPerUnit},
 	}
 	copier := &fakeCopier{copy: capability.BiscuitCopy{CapabilityID: target.ID, RevocationID: []byte("inner"), Limits: limits}}
 	reader := &fakeCopyUsage{out: []capability.CopyUsage{
-		{RevocationID: []byte("outer"), CapabilityID: target.ID, RequestCount: 7, SpentAmount: 1.25, ReservedAmount: 0.5},
+		{RevocationID: []byte("outer"), CapabilityID: target.ID, RequestCount: 7, SpentAmount: capability.MustParseAmount("1.25"), ReservedAmount: capability.MustParseAmount("0.5")},
 	}}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{}).
 		WithBiscuitCopies(copier, &copyStore{}).WithCopyUsage(reader)
@@ -54,8 +56,8 @@ func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBiscuitUsage: %v", err)
 	}
-	if resp.Msg.GetCapabilityId() != target.ID.String() || resp.Msg.GetUnitCode() != "EUR" {
-		t.Errorf("capability %q unit %q", resp.Msg.GetCapabilityId(), resp.Msg.GetUnitCode())
+	if resp.Msg.GetCapabilityId() != target.ID.String() {
+		t.Errorf("capability %q", resp.Msg.GetCapabilityId())
 	}
 	got := resp.Msg.GetCopies()
 	if len(got) != 2 {
@@ -65,8 +67,10 @@ func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 	if !bytes.Equal(in.GetRevocationId(), []byte("inner")) || in.GetMaxRequests() != 10 || in.GetRequestCount() != 0 {
 		t.Errorf("innermost = %v", in)
 	}
-	if !bytes.Equal(out.GetRevocationId(), []byte("outer")) || out.GetMaxBudgetMicros() != 2*capability.MicrosPerUnit ||
-		out.GetRequestCount() != 7 || out.GetSpentMicros() != 1_250_000 || out.GetReservedMicros() != 500_000 {
+	if !bytes.Equal(out.GetRevocationId(), []byte("outer")) || out.GetRequestCount() != 7 ||
+		!proto.Equal(out.GetMaxBudget(), &money.Money{CurrencyCode: "EUR", Units: 2}) ||
+		!proto.Equal(out.GetSpent(), &money.Money{CurrencyCode: "EUR", Units: 1, Nanos: 250_000_000}) ||
+		!proto.Equal(out.GetReserved(), &money.Money{CurrencyCode: "EUR", Nanos: 500_000_000}) {
 		t.Errorf("outermost = %v", out)
 	}
 	if len(reader.ids) != 2 {

@@ -10,6 +10,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/genproto/googleapis/type/money"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
@@ -354,7 +356,7 @@ func TestGetUsageReturnsCounters(t *testing.T) {
 	id := uuid.New()
 	store := &fakeStore{}
 	usage := &fakeUsage{out: capability.Usage{
-		CapabilityID: id, RequestCount: 7, SpentAmount: 42, UnitCode: "EUR",
+		CapabilityID: id, RequestCount: 7, SpentAmount: capability.MustParseAmount("42"), UnitCode: "EUR",
 	}}
 	h := NewHandler(mkIssuer(t, store), store, usage, &allowAuthorizer{})
 
@@ -367,11 +369,8 @@ func TestGetUsageReturnsCounters(t *testing.T) {
 	if usage.got != id {
 		t.Errorf("looked up %v, want %v", usage.got, id)
 	}
-	if resp.Msg.GetRequestCount() != 7 || resp.Msg.GetSpentMicros() != 42_000_000 {
-		t.Errorf("counters = %d / %d micros", resp.Msg.GetRequestCount(), resp.Msg.GetSpentMicros())
-	}
-	if resp.Msg.GetUnitCode() != "EUR" {
-		t.Errorf("UnitCode = %q, want EUR", resp.Msg.GetUnitCode())
+	if resp.Msg.GetRequestCount() != 7 || !proto.Equal(resp.Msg.GetSpent(), &money.Money{CurrencyCode: "EUR", Units: 42}) {
+		t.Errorf("counters = %d / %v", resp.Msg.GetRequestCount(), resp.Msg.GetSpent())
 	}
 }
 
@@ -388,8 +387,8 @@ func TestGetUsageDefaultsUnitCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUsage: %v", err)
 	}
-	if resp.Msg.GetUnitCode() != capability.DefaultUnitCode {
-		t.Errorf("UnitCode = %q, want the %q default", resp.Msg.GetUnitCode(), capability.DefaultUnitCode)
+	if got := resp.Msg.GetSpent().GetCurrencyCode(); got != capability.DefaultUnitCode {
+		t.Errorf("unit = %q, want the %q default", got, capability.DefaultUnitCode)
 	}
 }
 

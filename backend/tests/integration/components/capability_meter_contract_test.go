@@ -14,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/capability/metertest"
 )
 
@@ -34,7 +35,7 @@ func TestMeterContract(t *testing.T) {
 			Ctx:    auth.WithActingTenant(ctx, tenant),
 			Usage:  capstore.NewUsageStore(sqlc.New(pool), pool, zap.NewNop()),
 			Tenant: tenant,
-			NewCapability: func(parent uuid.UUID, maxBudget float64) (uuid.UUID, error) {
+			NewCapability: func(parent uuid.UUID, maxBudget capability.Nanos) (uuid.UUID, error) {
 				c := mkCap(tenant, "agent:"+uuid.NewString()[:8], time.Now().Add(contractTTL))
 				c.ParentID = parent
 				c.Caveats.MaxBudgetAmount = maxBudget

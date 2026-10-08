@@ -7,6 +7,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "google/api/field_behavior.proto";
+import "google/type/money.proto";
 
 // CapabilityService manages capability tokens — short-lived, signed,
 // delegable, individually revocable authorisation primitives for agent
@@ -130,15 +131,17 @@ message CapabilityCaveats {
   bool allow_tainted_read = 6;
   bool idempotency_key_required = 7;
   repeated string source_ip_cidr = 8;
-  // unit_code is the currency code (USD/EUR/UAH/GBP) or the
-  // abstract sentinel UNIT for non-currency metering. Empty in
-  // the request defaults to "USD" server-side; the validator
-  // rejects any other unrecognised value.
-  string unit_code = 9;
-  // max_budget_micros is the cost budget in millionths of unit_code (25
-  // USD = 25000000); 0 or absent = no budget. Currency is given by
-  // unit_code; default "USD" when empty.
-  optional int64 max_budget_micros = 10 [(buf.validate.field).int64.gte = 0];
+  // unit_code and max_budget_micros, replaced by max_budget.
+  reserved 9, 10;
+  reserved "unit_code", "max_budget_micros";
+  // max_budget is the cost budget, exact to the nano, and its currency is
+  // the unit every charge against the capability is in. A zero amount is no
+  // budget in that unit; absent is no budget in USD. currency_code is an ISO 4217 code the server accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no currency", for metering that is not money.
+  google.type.Money max_budget = 11 [(buf.validate.field).cel = {
+    id: "money.non_negative"
+    message: "an amount is not negative, and its nanos are 0 to 999999999"
+    expression: "this.units >= 0 && this.nanos >= 0 && this.nanos <= 999999999"
+  }];
 }
 
 // Capability is the typed metadata view of an issued or stored
@@ -245,19 +248,24 @@ message CapabilityServiceGetBiscuitUsageRequest {
 message CapabilityBiscuitCopyUsage {
   // revocation_id is the id of the block that set the limits.
   bytes revocation_id = 1;
-  // max_requests and max_budget_micros are the limits; 0 sets none.
+  // max_budget_micros, spent_micros and reserved_micros, replaced by
+  // max_budget, spent and reserved.
+  reserved 3, 5, 6;
+  reserved "max_budget_micros", "spent_micros", "reserved_micros";
+  // max_requests and max_budget are the limits; 0 sets none.
   int64 max_requests = 2;
-  int64 max_budget_micros = 3;
+  google.type.Money max_budget = 7;
   int64 request_count = 4;
-  // spent_micros and reserved_micros are in millionths of unit_code.
-  int64 spent_micros = 5;
-  int64 reserved_micros = 6;
+  // spent and reserved are in the capability's currency.
+  google.type.Money spent = 8;
+  google.type.Money reserved = 9;
 }
 
 message CapabilityServiceGetBiscuitUsageResponse {
   string capability_id = 1;
-  // unit_code is the capability's unit, which its copies' budgets share.
-  string unit_code = 2;
+  // unit_code, replaced by the currency of each copy's amounts.
+  reserved 2;
+  reserved "unit_code";
   // copies are innermost first: the copy itself when it set limits, then the
   // copies it was attenuated from.
   repeated CapabilityBiscuitCopyUsage copies = 3;
@@ -313,8 +321,9 @@ message CapabilityServiceGetUsageResponse {
   reserved 3;
   reserved "spent_amount";
   google.protobuf.Timestamp updated_at = 4;
-  // unit_code is the ISO 4217 code (USD/EUR/UAH/GBP) or UNIT.
-  string unit_code = 5;
-  // spent_micros is the accumulated spend in millionths of unit_code.
-  int64 spent_micros = 6;
+  // unit_code and spent_micros, replaced by spent.
+  reserved 5, 6;
+  reserved "unit_code", "spent_micros";
+  // spent is the accumulated spend, in the capability's currency.
+  google.type.Money spent = 7;
 }

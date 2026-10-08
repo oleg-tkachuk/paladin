@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -42,21 +41,23 @@ type Env[TX any] struct {
 	// NewCapability records a capability of Tenant with the given parent
 	// (uuid.Nil for a root) and budget, so the Meter finds its lineage and
 	// its ceiling, and returns its id.
-	NewCapability func(parent uuid.UUID, maxBudget float64) (uuid.UUID, error)
+	NewCapability func(parent uuid.UUID, maxBudget capability.Nanos) (uuid.UUID, error)
 }
 
 // The ceilings every check works under: a root, a child narrower than it,
 // and a tenant aggregate between the two sums.
 const (
-	rootBudget   = 25.0
-	childBudget  = 20.0
-	tenantBudget = 30.0
+	// one is one unit; cent a hundredth of one.
+	one  capability.Nanos = capability.NanosPerUnit
+	cent                  = one / 100
+
+	rootBudget   = 25 * one
+	childBudget  = 20 * one
+	tenantBudget = 30 * one
 	// unit is the currency every amount is in.
 	unit = capability.DefaultUnitCode
 	// concurrentDeliveries is how many times one cost arrives at once.
 	concurrentDeliveries = 20
-	// tolerance absorbs a store's decimal round trip of an amount.
-	tolerance = 1e-9
 )
 
 // fixture is an Env with a root, a child under it, and the tenant's ceiling set.
@@ -95,7 +96,7 @@ func (f fixture[TX]) charge(req capability.ChargeRequest, onCharged func(context
 	return f.Usage.Charge(f.Ctx, req, onCharged)
 }
 
-func (f fixture[TX]) spent(t *testing.T, id uuid.UUID) float64 {
+func (f fixture[TX]) spent(t *testing.T, id uuid.UUID) capability.Nanos {
 	t.Helper()
 	u, err := f.Usage.GetUsage(f.Ctx, id)
 	if errors.Is(err, capability.ErrUsageNotFound) {
@@ -107,7 +108,7 @@ func (f fixture[TX]) spent(t *testing.T, id uuid.UUID) float64 {
 	return u.SpentAmount
 }
 
-func (f fixture[TX]) tenantSpent(t *testing.T) float64 {
+func (f fixture[TX]) tenantSpent(t *testing.T) capability.Nanos {
 	t.Helper()
 	b, err := f.Usage.GetTenantBudget(f.Ctx, f.Tenant)
 	if err != nil {
@@ -115,8 +116,6 @@ func (f fixture[TX]) tenantSpent(t *testing.T) float64 {
 	}
 	return b.SpentAmount
 }
-
-func near(a, b float64) bool { return math.Abs(a-b) < tolerance }
 
 // Run runs every check as a subtest, each on a fresh Env from setup.
 func Run[TX any](t *testing.T, setup func(t *testing.T) Env[TX]) {
@@ -135,6 +134,7 @@ func Run[TX any](t *testing.T, setup func(t *testing.T) Env[TX]) {
 		{"OverrunRecordCrossesACopyBudget", checkCopyOverrun[TX]},
 		{"TenantBudgetReadsAgree", checkTenantBudgetReads[TX]},
 		{"ReservationsReadBack", checkReservations[TX]},
+		{"SumsExactly", checkSumsExactly[TX]},
 	}
 	for _, c := range checks {
 		t.Run(c.name, func(t *testing.T) { c.run(t, newFixture(t, setup)) })
@@ -143,7 +143,7 @@ func Run[TX any](t *testing.T, setup func(t *testing.T) Env[TX]) {
 
 func checkRejectionMovesNothing[TX any](t *testing.T, f fixture[TX]) {
 	ran := false
-	_, err := f.charge(capability.ChargeRequest{Amount: childBudget + 1}, func(context.Context, TX) error { ran = true; return nil })
+	_, err := f.charge(capability.ChargeRequest{Amount: childBudget + one}, func(context.Context, TX) error { ran = true; return nil })
 	if !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("charge past the ceiling: err = %v, want ErrBudgetExceeded", err)
 	}
@@ -155,27 +155,27 @@ func checkRejectionMovesNothing[TX any](t *testing.T, f fixture[TX]) {
 func checkExternalRefChargesOnce[TX any](t *testing.T, f fixture[TX]) {
 	fanOuts := 0
 	onCharged := func(context.Context, TX) error { fanOuts++; return nil }
-	first, err := f.charge(capability.ChargeRequest{Amount: 2, ExternalRef: "call-1"}, onCharged)
+	first, err := f.charge(capability.ChargeRequest{Amount: 2 * one, ExternalRef: "call-1"}, onCharged)
 	if err != nil || first.Replayed {
 		t.Fatalf("first charge = %+v, %v", first, err)
 	}
-	again, err := f.charge(capability.ChargeRequest{Amount: 5, ExternalRef: "call-1"}, onCharged)
-	if err != nil || !again.Replayed || again.ChargeID != first.ChargeID || !near(again.Spent, 2) {
+	again, err := f.charge(capability.ChargeRequest{Amount: 5 * one, ExternalRef: "call-1"}, onCharged)
+	if err != nil || !again.Replayed || again.ChargeID != first.ChargeID || again.Spent != 2*one {
 		t.Fatalf("repeated charge = %+v, %v; want a replay of %s at spend 2", again, err, first.ChargeID)
 	}
 	if fanOuts != 1 {
 		t.Errorf("onCharged ran %d times, want once", fanOuts)
 	}
 	// The name is per capability, and no name never deduplicates.
-	if r, err := f.charge(capability.ChargeRequest{CapabilityID: f.root, MaxBudget: rootBudget, Amount: 1, ExternalRef: "call-1"}, nil); err != nil || r.Replayed {
+	if r, err := f.charge(capability.ChargeRequest{CapabilityID: f.root, MaxBudget: rootBudget, Amount: one, ExternalRef: "call-1"}, nil); err != nil || r.Replayed {
 		t.Errorf("same ref on another capability = %+v, %v; want a fresh charge", r, err)
 	}
 	for range 2 {
-		if r, err := f.charge(capability.ChargeRequest{Amount: 1}, nil); err != nil || r.Replayed {
+		if r, err := f.charge(capability.ChargeRequest{Amount: one}, nil); err != nil || r.Replayed {
 			t.Errorf("charge without a ref = %+v, %v; want a fresh charge", r, err)
 		}
 	}
-	if got := f.spent(t, f.child); !near(got, 4) {
+	if got := f.spent(t, f.child); got != 4*one {
 		t.Errorf("child spent %v, want 2 + 1 + 1", got)
 	}
 }
@@ -189,7 +189,7 @@ func checkExternalRefConcurrent[TX any](t *testing.T, f fixture[TX]) {
 	)
 	for range concurrentDeliveries {
 		wg.Go(func() {
-			r, err := f.charge(capability.ChargeRequest{Amount: 2, ExternalRef: "call-1"}, nil)
+			r, err := f.charge(capability.ChargeRequest{Amount: 2 * one, ExternalRef: "call-1"}, nil)
 			if err != nil {
 				t.Errorf("charge: %v", err)
 				return
@@ -206,7 +206,7 @@ func checkExternalRefConcurrent[TX any](t *testing.T, f fixture[TX]) {
 	if fresh != 1 || len(charges) != 1 {
 		t.Fatalf("%d fresh charges over %d charge ids, want one of each", fresh, len(charges))
 	}
-	if got := f.spent(t, f.root); !near(got, 2) {
+	if got := f.spent(t, f.root); got != 2*one {
 		t.Errorf("root spent %v, want 2", got)
 	}
 }
@@ -215,16 +215,16 @@ func checkChargeByRef[TX any](t *testing.T, f fixture[TX]) {
 	if _, err := f.Usage.ChargeByRef(f.Ctx, f.child, "call-1"); !errors.Is(err, capability.ErrChargeNotFound) {
 		t.Fatalf("before any charge: err = %v, want ErrChargeNotFound", err)
 	}
-	r, err := f.charge(capability.ChargeRequest{Amount: 3, ExternalRef: "call-1"}, nil)
+	r, err := f.charge(capability.ChargeRequest{Amount: 3 * one, ExternalRef: "call-1"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.Usage.Refund(f.Ctx, capability.RefundRequest{ChargeID: r.ChargeID, Amount: 1}); err != nil {
+	if _, err := f.Usage.Refund(f.Ctx, capability.RefundRequest{ChargeID: r.ChargeID, Amount: one}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := f.Usage.ChargeByRef(f.Ctx, f.child, "call-1")
-	if err != nil || got.ChargeID != r.ChargeID || got.CapabilityID != f.child || !near(got.Amount, 3) ||
-		!near(got.Refunded, 1) || got.ExternalRef != "call-1" || got.UnitCode != unit || got.Overrun {
+	if err != nil || got.ChargeID != r.ChargeID || got.CapabilityID != f.child || got.Amount != 3*one ||
+		got.Refunded != one || got.ExternalRef != "call-1" || got.UnitCode != unit || got.Overrun {
 		t.Fatalf("ChargeByRef = %+v, %v; want charge %s of 3 with 1 refunded", got, err, r.ChargeID)
 	}
 	if byID, err := f.Usage.GetCharge(f.Ctx, r.ChargeID); err != nil || byID != got {
@@ -253,7 +253,7 @@ func checkMalformed[TX any](t *testing.T, f fixture[TX]) {
 		}
 	}
 	if _, err := f.Usage.Settle(f.Ctx, capability.SettleRequest{
-		ReservationID: uuid.New(), Amount: 1, Overrun: capability.OverrunRecord + 1,
+		ReservationID: uuid.New(), Amount: one, Overrun: capability.OverrunRecord + 1,
 	}, nil); !errors.Is(err, capability.ErrInvalidRequest) {
 		t.Errorf("settle with an unknown overrun: err = %v, want ErrInvalidRequest", err)
 	}
@@ -264,25 +264,25 @@ func checkMalformed[TX any](t *testing.T, f fixture[TX]) {
 
 func checkOverrunRecord[TX any](t *testing.T, f fixture[TX]) {
 	// 40 crosses the child's 20, the root's 25 and the tenant's 30.
-	const amount = 40.0
+	const amount = 40 * one
 	if _, err := f.charge(capability.ChargeRequest{Amount: amount}, nil); err == nil {
 		t.Fatal("a rejecting charge past every ceiling was accepted")
 	}
 	r, err := f.charge(capability.ChargeRequest{Amount: amount, Overrun: capability.OverrunRecord}, nil)
-	if err != nil || !r.Overrun || r.Replayed || !near(r.Spent, amount) {
+	if err != nil || !r.Overrun || r.Replayed || r.Spent != amount {
 		t.Fatalf("recording charge = %+v, %v; want %v spent, overrun", r, err, amount)
 	}
-	if got := f.spent(t, f.root); !near(got, amount) {
+	if got := f.spent(t, f.root); got != amount {
 		t.Errorf("root spent %v, want %v", got, amount)
 	}
-	if got := f.tenantSpent(t); !near(got, amount) {
+	if got := f.tenantSpent(t); got != amount {
 		t.Errorf("tenant spent %v, want %v", got, amount)
 	}
-	if _, err := f.charge(capability.ChargeRequest{Amount: 0.01}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := f.charge(capability.ChargeRequest{Amount: cent}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Errorf("after an overrun a rejecting charge: err = %v, want ErrBudgetExceeded", err)
 	}
 	if _, err := f.Usage.Reserve(f.Ctx, capability.ReserveRequest{
-		CapabilityID: f.child, TenantID: f.Tenant, Amount: 0.01, MaxBudget: childBudget, UnitCode: unit,
+		CapabilityID: f.child, TenantID: f.Tenant, Amount: cent, MaxBudget: childBudget, UnitCode: unit,
 	}); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Errorf("after an overrun a reservation: err = %v, want ErrBudgetExceeded", err)
 	}
@@ -290,28 +290,28 @@ func checkOverrunRecord[TX any](t *testing.T, f fixture[TX]) {
 
 func checkSettle[TX any](t *testing.T, f fixture[TX]) {
 	res, err := f.Usage.Reserve(f.Ctx, capability.ReserveRequest{
-		CapabilityID: f.child, TenantID: f.Tenant, Amount: 10, MaxBudget: childBudget, UnitCode: unit,
+		CapabilityID: f.child, TenantID: f.Tenant, Amount: 10 * one, MaxBudget: childBudget, UnitCode: unit,
 	})
 	if err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
-	settle := func(amount float64, p capability.OverrunPolicy) (capability.ChargeReceipt, error) {
+	settle := func(amount capability.Nanos, p capability.OverrunPolicy) (capability.ChargeReceipt, error) {
 		return f.Usage.Settle(f.Ctx, capability.SettleRequest{
 			ReservationID: res.ID, Amount: amount, MaxBudget: childBudget, Overrun: p,
 		}, nil)
 	}
-	if _, err := settle(24, capability.OverrunReject); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := settle(24*one, capability.OverrunReject); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("rejecting settle past the ceiling: err = %v, want ErrBudgetExceeded", err)
 	}
-	r, err := settle(24, capability.OverrunRecord)
-	if err != nil || !r.Overrun || !near(r.Spent, 24) {
+	r, err := settle(24*one, capability.OverrunRecord)
+	if err != nil || !r.Overrun || r.Spent != 24*one {
 		t.Fatalf("recording settle = %+v, %v; want 24 spent, overrun", r, err)
 	}
 	if u, err := f.Usage.GetUsage(f.Ctx, f.root); err != nil || u.ReservedAmount != 0 {
 		t.Errorf("root after settling = %+v, %v; want nothing held", u, err)
 	}
-	again, err := settle(1, capability.OverrunReject)
-	if err != nil || !again.Replayed || !again.Overrun || again.ChargeID != r.ChargeID || !near(again.Spent, 24) {
+	again, err := settle(one, capability.OverrunReject)
+	if err != nil || !again.Replayed || !again.Overrun || again.ChargeID != r.ChargeID || again.Spent != 24*one {
 		t.Errorf("settling again = %+v, %v; want a replay of %s", again, err, r.ChargeID)
 	}
 	if err := f.Usage.Release(f.Ctx, res.ID); err != nil {
@@ -334,21 +334,28 @@ func checkSettle[TX any](t *testing.T, f fixture[TX]) {
 // GetTenantBudget, SetTenantBudget and ListTenantBudgets read one row; each
 // returns all of it.
 func checkTenantBudgetReads[TX any](t *testing.T, f fixture[TX]) {
-	const held = 3.0
+	const held = 3 * one
 	if _, err := f.Usage.Reserve(f.Ctx, capability.ReserveRequest{
 		CapabilityID: f.child, TenantID: f.Tenant, Amount: held, MaxBudget: childBudget, UnitCode: unit,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := f.Usage.GetTenantBudget(f.Ctx, f.Tenant)
-	if err != nil || !near(got.ReservedAmount, held) || got.ResourceVersion == 0 {
+	if err != nil || got.ReservedAmount != held || got.ResourceVersion == 0 {
 		t.Fatalf("GetTenantBudget = %+v, %v; want %v held and a version", got, err, held)
 	}
 	set, err := f.Usage.SetTenantBudget(f.Ctx, capability.SetTenantBudgetRequest{
 		TenantID: f.Tenant, MaxBudgetAmount: tenantBudget, UnitCode: unit, ExpectedVersion: got.ResourceVersion,
 	})
-	if err != nil || !near(set.ReservedAmount, held) || set.ResourceVersion != got.ResourceVersion+1 {
+	if err != nil || set.ReservedAmount != held || set.ResourceVersion != got.ResourceVersion+1 {
 		t.Errorf("SetTenantBudget = %+v, %v; want %v held and the next version", set, err, held)
+	}
+	for _, ceiling := range []capability.Nanos{-1, capability.MaxNanos + 1} {
+		if _, err := f.Usage.SetTenantBudget(f.Ctx, capability.SetTenantBudgetRequest{
+			TenantID: f.Tenant, MaxBudgetAmount: ceiling, UnitCode: unit, ExpectedVersion: set.ResourceVersion,
+		}); !errors.Is(err, capability.ErrInvalidAmount) {
+			t.Errorf("SetTenantBudget(%s): err = %v, want ErrInvalidAmount", ceiling, err)
+		}
 	}
 	listed, _, err := f.Usage.ListTenantBudgets(f.Ctx, capability.ListTenantBudgetsRequest{})
 	if err != nil {
@@ -358,7 +365,7 @@ func checkTenantBudgetReads[TX any](t *testing.T, f fixture[TX]) {
 	if i < 0 {
 		t.Fatalf("ListTenantBudgets left out the tenant: %+v", listed)
 	}
-	if b := listed[i].Budget; !near(b.ReservedAmount, held) || b.ResourceVersion != set.ResourceVersion {
+	if b := listed[i].Budget; b.ReservedAmount != held || b.ResourceVersion != set.ResourceVersion {
 		t.Errorf("listed budget = %+v; want %v held at version %d", b, held, set.ResourceVersion)
 	}
 }
@@ -368,7 +375,7 @@ func sameReservation(got, want capability.Reservation) string {
 	switch {
 	case got.ID != want.ID, got.CapabilityID != want.CapabilityID, got.TenantID != want.TenantID:
 		return "ids differ"
-	case !near(got.Amount, want.Amount), got.UnitCode != want.UnitCode:
+	case got.Amount != want.Amount, got.UnitCode != want.UnitCode:
 		return "amount differs"
 	case got.Op != want.Op, got.Actor != want.Actor:
 		return "op or actor differs"
@@ -378,7 +385,7 @@ func sameReservation(got, want capability.Reservation) string {
 		return "copies differ"
 	}
 	for i := range got.Copies {
-		if !bytes.Equal(got.Copies[i].RevocationID, want.Copies[i].RevocationID) || got.Copies[i].MaxBudgetMicros != want.Copies[i].MaxBudgetMicros || got.Copies[i].MaxRequests != 0 {
+		if !bytes.Equal(got.Copies[i].RevocationID, want.Copies[i].RevocationID) || got.Copies[i].MaxBudget != want.Copies[i].MaxBudget || got.Copies[i].MaxRequests != 0 {
 			return "copies differ"
 		}
 	}
@@ -389,14 +396,14 @@ func sameReservation(got, want capability.Reservation) string {
 // and a settled or released hold is gone from both.
 func checkReservations[TX any](t *testing.T, f fixture[TX]) {
 	const (
-		held   = 2.0
+		held   = 2 * one
 		sooner = time.Minute
 		later  = 2 * time.Minute
 		// copyLimit holds every reservation below, through the one copy.
 		copyLimit = 10
 	)
-	copies := []capability.CopyCeiling{{RevocationID: []byte("copy-1"), MaxRequests: copyLimit, MaxBudgetMicros: capability.MicrosPerUnit * copyLimit}}
-	reserve := func(capID uuid.UUID, ceiling float64, ttl time.Duration) capability.Reservation {
+	copies := []capability.CopyCeiling{{RevocationID: []byte("copy-1"), MaxRequests: copyLimit, MaxBudget: copyLimit * one}}
+	reserve := func(capID uuid.UUID, ceiling capability.Nanos, ttl time.Duration) capability.Reservation {
 		t.Helper()
 		r, err := f.Usage.Reserve(f.Ctx, capability.ReserveRequest{
 			CapabilityID: capID, TenantID: f.Tenant, Amount: held, MaxBudget: ceiling, UnitCode: unit,
@@ -410,7 +417,7 @@ func checkReservations[TX any](t *testing.T, f fixture[TX]) {
 	first := reserve(f.child, childBudget, sooner)
 	second := reserve(f.child, childBudget, later)
 	onRoot := reserve(f.root, rootBudget, sooner)
-	if first.CapabilityID != f.child || first.TenantID != f.Tenant || !near(first.Amount, held) ||
+	if first.CapabilityID != f.child || first.TenantID != f.Tenant || first.Amount != held ||
 		first.Op != "llm" || first.Actor != "agent" || len(first.Copies) != 1 || first.Copies[0].MaxRequests != 0 {
 		t.Errorf("Reserve returned %+v; want the whole hold, copies with their budgets alone", first)
 	}
@@ -459,11 +466,11 @@ func checkReservations[TX any](t *testing.T, f fixture[TX]) {
 
 func checkCopyOverrun[TX any](t *testing.T, f fixture[TX]) {
 	copyID := []byte("copy-1")
-	copies := []capability.CopyCeiling{{RevocationID: copyID, MaxBudgetMicros: capability.MicrosPerUnit}}
-	if _, err := f.charge(capability.ChargeRequest{Amount: 2, Copies: copies}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
+	copies := []capability.CopyCeiling{{RevocationID: copyID, MaxBudget: one}}
+	if _, err := f.charge(capability.ChargeRequest{Amount: 2 * one, Copies: copies}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
 		t.Fatalf("rejecting charge past the copy's budget: err = %v, want ErrBudgetExceeded", err)
 	}
-	r, err := f.charge(capability.ChargeRequest{Amount: 2, Copies: copies, Overrun: capability.OverrunRecord}, nil)
+	r, err := f.charge(capability.ChargeRequest{Amount: 2 * one, Copies: copies, Overrun: capability.OverrunRecord}, nil)
 	if err != nil || !r.Overrun {
 		t.Fatalf("recording charge = %+v, %v; want an overrun", r, err)
 	}
@@ -472,7 +479,37 @@ func checkCopyOverrun[TX any](t *testing.T, f fixture[TX]) {
 		return // a Meter that does not read copies back is checked no further
 	}
 	got, err := reader.CopyUsage(f.Ctx, [][]byte{copyID})
-	if err != nil || len(got) != 1 || !near(got[0].SpentAmount, 2) {
+	if err != nil || len(got) != 1 || got[0].SpentAmount != 2*one {
 		t.Errorf("copy usage = %+v, %v; want 2 spent", got, err)
+	}
+}
+
+// checkSumsExactly holds a store to exact amounts: a tenth and two tenths fit
+// under a ceiling of three tenths with not a nano to spare, and seven tenths
+// add up to seven tenths — the sums a float64 gets wrong.
+func checkSumsExactly[TX any](t *testing.T, f fixture[TX]) {
+	tenth, threeTenths := one/10, 3*one/10
+	id, err := f.NewCapability(uuid.Nil, threeTenths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, amount := range []capability.Nanos{tenth, 2 * tenth} {
+		if _, err := f.charge(capability.ChargeRequest{CapabilityID: id, Amount: amount, MaxBudget: threeTenths}, nil); err != nil {
+			t.Fatalf("charging %s under a ceiling of %s: %v", amount, threeTenths, err)
+		}
+	}
+	if got := f.spent(t, id); got != threeTenths {
+		t.Errorf("spent %s, want exactly %s", got, threeTenths)
+	}
+	if _, err := f.charge(capability.ChargeRequest{CapabilityID: id, Amount: 1, MaxBudget: threeTenths}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
+		t.Errorf("a nano past the ceiling: err = %v, want ErrBudgetExceeded", err)
+	}
+	for range 7 {
+		if _, err := f.charge(capability.ChargeRequest{CapabilityID: f.root, MaxBudget: rootBudget, Amount: tenth}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := f.spent(t, f.root); got != 7*tenth {
+		t.Errorf("seven tenths spent as %s", got)
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -56,14 +58,8 @@ func (s *UsageStore) Reserve(ctx context.Context, req capability.ReserveRequest)
 	if err != nil {
 		return capability.Reservation{}, fmt.Errorf("capability/postgres: reserve: %w", err)
 	}
-	amount, err := numericFromFloat(req.Amount)
-	if err != nil {
-		return capability.Reservation{}, err
-	}
-	maxBudget, err := numericFromFloat(req.MaxBudget)
-	if err != nil {
-		return capability.Reservation{}, err
-	}
+	amount := pgmoney.NumericFromNanos(req.Amount)
+	maxBudget := pgmoney.NumericFromNanos(req.MaxBudget)
 	ttl := req.TTL
 	if ttl <= 0 {
 		ttl = capability.DefaultReservationTTL
@@ -105,7 +101,7 @@ func (s *UsageStore) Reserve(ctx context.Context, req capability.ReserveRequest)
 	var expires time.Time
 	if err := tx.QueryRow(ctx, `
 INSERT INTO capability_reservations (id, tenant_id, capability_id, amount, unit_code, op, actor_subject, expires_at,
-                                     copy_ids, copy_max_budget_micros)
+                                     copy_ids, copy_max_budget_nanos)
 VALUES ($1, $2, $3, $4::numeric, $5, $6, $7, now() + ($8::bigint * interval '1 microsecond'), $9::bytea[], $10::bigint[])
 RETURNING expires_at`,
 		id, req.TenantID, req.CapabilityID, amount, unit, req.Op, req.Actor, ttl.Microseconds(),
@@ -118,7 +114,7 @@ RETURNING expires_at`,
 		return capability.Reservation{}, fmt.Errorf("capability/postgres: reserve commit: %w", err)
 	}
 	return capability.Reservation{
-		ID: id, CapabilityID: req.CapabilityID, TenantID: req.TenantID, Amount: floatFromNumeric(amount),
+		ID: id, CapabilityID: req.CapabilityID, TenantID: req.TenantID, Amount: req.Amount,
 		UnitCode: unit, Op: req.Op, Actor: req.Actor, Copies: budgetCeilings(req.Copies), ExpiresAt: expires.UTC(),
 	}, nil
 }
@@ -128,7 +124,7 @@ RETURNING expires_at`,
 func budgetCeilings(copies []capability.CopyCeiling) []capability.CopyCeiling {
 	out := make([]capability.CopyCeiling, 0, len(copies))
 	for _, c := range copies {
-		out = append(out, capability.CopyCeiling{RevocationID: c.RevocationID, MaxBudgetMicros: c.MaxBudgetMicros})
+		out = append(out, capability.CopyCeiling{RevocationID: c.RevocationID, MaxBudget: c.MaxBudget})
 	}
 	return out
 }
@@ -138,7 +134,7 @@ func budgetCeilings(copies []capability.CopyCeiling) []capability.CopyCeiling {
 // every reservation path runs.
 const reservationSelect = `
 SELECT id, capability_id, tenant_id, amount, unit_code, op, actor_subject,
-       copy_ids, copy_max_budget_micros, expires_at
+       copy_ids, copy_max_budget_nanos, expires_at
 FROM   capability_reservations
 `
 
@@ -157,7 +153,10 @@ func scanReservation(row pgx.Row) (capability.Reservation, error) {
 	if err != nil {
 		return capability.Reservation{}, err
 	}
-	r.Amount, r.Copies, r.ExpiresAt = floatFromNumeric(amount), copies, r.ExpiresAt.UTC()
+	if r.Amount, err = pgmoney.NanosFromNumeric(amount); err != nil {
+		return capability.Reservation{}, err
+	}
+	r.Copies, r.ExpiresAt = copies, r.ExpiresAt.UTC()
 	return r, nil
 }
 
@@ -224,7 +223,7 @@ func takeReservation(ctx context.Context, tx pgx.Tx, id uuid.UUID, live bool) (o
 		stmt += ` AND expires_at > now()`
 	}
 	stmt += ` RETURNING capability_id, tenant_id, amount, unit_code, op, actor_subject,
-	                    copy_ids, copy_max_budget_micros`
+	                    copy_ids, copy_max_budget_nanos`
 	var r openReservation
 	err := tx.QueryRow(ctx, stmt, id).Scan(&r.capID, &r.tenantID, &r.amount, &r.unit, &r.op, &r.actor,
 		&r.copyIDs, &r.copyBudgets)
@@ -277,14 +276,8 @@ func (s *UsageStore) Settle(
 	if err := req.Overrun.Validate(); err != nil {
 		return capability.ChargeReceipt{}, err
 	}
-	amount, err := numericFromFloat(req.Amount)
-	if err != nil {
-		return capability.ChargeReceipt{}, err
-	}
-	maxBudget, err := numericFromFloat(req.MaxBudget)
-	if err != nil {
-		return capability.ChargeReceipt{}, err
-	}
+	amount := pgmoney.NumericFromNanos(req.Amount)
+	maxBudget := pgmoney.NumericFromNanos(req.MaxBudget)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
