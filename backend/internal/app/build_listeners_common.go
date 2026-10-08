@@ -161,8 +161,7 @@ func NewHealthHandler(db *postgres.DB, cfg config.Runtime, l *zap.Logger) *healt
 func replicaCheck(db *postgres.DB) health.Check {
 	c := health.Check{Name: "postgres-replica", Category: health.CategoryDatabase}
 	if db == nil || !db.Reads.HasReplica() {
-		c.Note = "disabled"
-		c.Func = func(context.Context) error { return nil }
+		c.Disabled = true
 		return c
 	}
 	c.Func = func(context.Context) error { return db.Reads.HealthErr() }
@@ -181,17 +180,14 @@ func AddSubsystemCheck(h *health.Handler, name string, critical bool, fn func(ct
 	})
 }
 
-// AddDisabledSubsystem registers an always-healthy informational
-// component for a subsystem that is off-by-config. Surfaces a "disabled"
-// note on the /health page so operators see the row instead of having
-// to grep config to confirm a subsystem is intentionally absent.
-// Critical=false: a disabled subsystem must never fail /readyz.
+// AddDisabledSubsystem lists a subsystem that is off by configuration, so
+// the /health page shows it as disabled rather than leaving operators to
+// grep config to confirm it is absent on purpose. It is never run and
+// never fails /readyz.
 func AddDisabledSubsystem(h *health.Handler, name string) {
 	h.Ready = append(h.Ready, health.Check{
 		Name:     name,
 		Category: health.CategorySubsystem,
-		Critical: false,
-		Func:     func(ctx context.Context) error { return nil },
-		Note:     "disabled",
+		Disabled: true,
 	})
 }
