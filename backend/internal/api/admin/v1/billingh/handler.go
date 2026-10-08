@@ -14,17 +14,18 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
-
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
 	"github.com/oleg-tkachuk/paladin/capability"
 )
 
@@ -60,10 +61,15 @@ func NewHandler(pool *pgxpool.Pool, usage capability.UsageStore[pgx.Tx], policy 
 // entity carrying the queried tenant_id, so policies can pin
 // "tenant.admin reads own tenant only" via resource.tenant_id ==
 // principal.tenant_id.
-func (h *Handler) authorize(ctx context.Context, tenantID uuid.UUID) error {
+//
+// On allow it returns ctx acting on tenantID: the ledger and the budget are
+// read under row-level security, and a platform admin reading another
+// tenant would otherwise see that tenant's rows filtered to nothing — a
+// summary of zeros, with nothing to say why.
+func (h *Handler) authorize(ctx context.Context, tenantID uuid.UUID) (context.Context, error) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(p),
@@ -72,12 +78,32 @@ func (h *Handler) authorize(ctx context.Context, tenantID uuid.UUID) error {
 		cedar.RequestContext{Now: time.Now()},
 	)
 	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
+		return nil, apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("denied by policy"))
 	}
-	return nil
+	return auth.WithActingTenant(ctx, tenantID), nil
+}
+
+// tenantBudget reads tenantID's budget for a summary that only decorates
+// with it. A tenant with no budget row has none to show; any other failure
+// is logged rather than returned, since the ledger figures stand without
+// it, but a summary that shows no cap for a tenant that has one must leave
+// a trace of why.
+func (h *Handler) tenantBudget(ctx context.Context, tenantID uuid.UUID) (capability.TenantBudget, bool) {
+	if h.usage == nil {
+		return capability.TenantBudget{}, false
+	}
+	tb, err := h.usage.GetTenantBudget(ctx, tenantID)
+	if err != nil {
+		if !errors.Is(err, capability.ErrTenantBudgetNotFound) {
+			logger.FromContext(ctx).Warn("billing: tenant budget unreadable; summary shows no cap",
+				zap.String("tenant_id", tenantID.String()), zap.Error(err))
+		}
+		return capability.TenantBudget{}, false
+	}
+	return tb, true
 }
 
 // resolvePeriod computes the start/end window. Both args are optional;
@@ -120,7 +146,8 @@ type TopEntry struct {
 // pool == nil then short-circuits to Unavailable (capability
 // subsystem disabled in this deployment).
 func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, periodStart, periodEnd time.Time) (*Summary, error) {
-	if err := h.authorize(ctx, tenantID); err != nil {
+	ctx, err := h.authorize(ctx, tenantID)
+	if err != nil {
 		return nil, err
 	}
 	if h.pool == nil {
@@ -162,12 +189,10 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 	// Tenant budget cap join — best-effort. Missing row ⇒ no cap;
 	// out.MaxBudgetAmount stays 0 which the frontend renders as
 	// "no cap configured".
-	if h.usage != nil {
-		if tb, err := h.usage.GetTenantBudget(ctx, tenantID); err == nil {
-			out.MaxBudgetAmount = tb.MaxBudgetAmount
-			if out.UnitCode == "" {
-				out.UnitCode = tb.UnitCode
-			}
+	if tb, ok := h.tenantBudget(ctx, tenantID); ok {
+		out.MaxBudgetAmount = tb.MaxBudgetAmount
+		if out.UnitCode == "" {
+			out.UnitCode = tb.UnitCode
 		}
 	}
 	if out.UnitCode == "" {
@@ -278,7 +303,8 @@ func granularityStep(granularity string) time.Duration {
 // "year" and we don't want to expose those without a deliberate
 // product call.
 func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, periodStart, periodEnd time.Time, granularity string) (*TimeSeries, error) {
-	if err := h.authorize(ctx, tenantID); err != nil {
+	ctx, err := h.authorize(ctx, tenantID)
+	if err != nil {
 		return nil, err
 	}
 	// Input validation (granularity + period + bucket bound) runs before the
@@ -357,8 +383,8 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 	).Scan(&out.UnitCode); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("billing: timeseries unit: %w", err))
 	}
-	if out.UnitCode == "" && h.usage != nil {
-		if tb, err := h.usage.GetTenantBudget(ctx, tenantID); err == nil {
+	if out.UnitCode == "" {
+		if tb, ok := h.tenantBudget(ctx, tenantID); ok {
 			out.UnitCode = tb.UnitCode
 		}
 	}

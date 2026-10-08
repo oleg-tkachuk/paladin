@@ -537,3 +537,45 @@ func TestBilling_MoneyIsExact(t *testing.T) {
 		t.Errorf("top ops sum to %v, want %v", top, want)
 	}
 }
+
+// A platform admin reads another tenant's billing through the pool the
+// server uses, row-level security and all: the handler must act on the
+// tenant the request names, or the policies hide every row of it and the
+// summary reads as zero with nothing saying why.
+func TestBilling_AdminReadsAnotherTenantUnderRLS(t *testing.T) {
+	t.Parallel()
+	f := setupBilling(t)
+	appStore := capabilitypg.NewUsageStore(sqlc.New(f.h.PoolApp), f.h.PoolApp, nil)
+	handler := billingh.NewHandler(f.h.PoolApp, appStore, allowAuth{})
+
+	home := mustCreateTenant(t, f.h.PoolMigrate, "bil-rls-home")
+	other := mustCreateTenant(t, f.h.PoolMigrate, "bil-rls-other")
+	capOther := f.seedCapability(t, other, "agent-other")
+	f.seedBudget(t, other, capability.MustParseAmount("12.000000001"), "USD")
+	f.charge(t, capOther, capability.MustParseAmount("0.3"), "USD", "get", "agent-other", other)
+
+	end := time.Now().UTC().Add(time.Hour)
+	start := end.Add(-24 * time.Hour)
+	ctx := ctxAdmin(t, home)
+	sum, err := handler.GetTenantSummary(ctx, other, start, end)
+	if err != nil {
+		t.Fatalf("summary: %v", err)
+	}
+	if sum.TotalAmount != capability.MustParseAmount("0.3") || sum.ChargeCount != 1 {
+		t.Errorf("summary of another tenant = %s over %d charges, want 0.3 over 1", sum.TotalAmount, sum.ChargeCount)
+	}
+	if sum.MaxBudgetAmount != capability.MustParseAmount("12.000000001") {
+		t.Errorf("summary budget = %s, want 12.000000001", sum.MaxBudgetAmount)
+	}
+	ts, err := handler.GetTenantTimeSeries(ctx, other, start, end, "day")
+	if err != nil {
+		t.Fatalf("time series: %v", err)
+	}
+	var total capability.Nanos
+	for _, b := range ts.Buckets {
+		total += b.Amount
+	}
+	if total != capability.MustParseAmount("0.3") {
+		t.Errorf("time series of another tenant sums to %s, want 0.3", total)
+	}
+}
