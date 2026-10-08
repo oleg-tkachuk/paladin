@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { tenantClient } from "@/lib/connect/client";
+import { notFoundIsAnswer } from "@/lib/connect/expected";
 
 /**
  * RenamedSlugHint inspects the current `/tenants/<slug>/…` path and, when that
@@ -35,7 +36,7 @@ export function RenamedSlugHint() {
       try {
         const res = await tenantClient.resolveRenamedSlug(
           { oldSlug },
-          { signal },
+          notFoundIsAnswer({ signal }),
         );
         return res.newSlug || null;
       } catch (e: unknown) {

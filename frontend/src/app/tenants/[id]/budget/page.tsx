@@ -38,6 +38,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useNotification } from "@/components/ui/Notification";
 import { tenantBudgetClient } from "@/lib/connect/client";
+import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import {
@@ -81,7 +82,10 @@ export default function TenantBudgetPage() {
     retry: false, // queryFn toasts real failures; NotFound is a normal state.
     queryFn: async ({ signal }) => {
       try {
-        const res = await tenantBudgetClient.get({ tenantId }, { signal });
+        const res = await tenantBudgetClient.get(
+          { tenantId },
+          notFoundIsAnswer({ signal }),
+        );
         return { budget: res.budget ?? null, notFound: false };
       } catch (err) {
         // An aborted query is not a failure the operator needs to see:

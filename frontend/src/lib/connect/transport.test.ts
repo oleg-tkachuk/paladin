@@ -190,3 +190,64 @@ describe("auth interceptor when the audience is refused", () => {
     expect(exchangeCalls).toBe(1);
   });
 });
+
+// A read whose NotFound is a state ("never used", "no budget yet") was logged
+// as an RPC error on every page view. The caller opts out per call; NotFound
+// anywhere else, and any other failure of an opted-out call, is still logged.
+describe("logging interceptor and an expected NotFound", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/api/auth/exchange")) {
+          return json({ token: "tok", expiresAt: 9_999_999_999_000 });
+        }
+        return json({ code: "not_found", message: "no budget row" }, 404);
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  const call = async (opts?: object) => {
+    const { tenantBudgetClient } = await import("@/lib/connect/client");
+    return tenantBudgetClient.get({ tenantId: "t" }, opts).catch((e) => e);
+  };
+
+  it("does not log a NotFound the caller declared an answer", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { notFoundIsAnswer } = await import("./expected");
+    const { Code } = await import("@connectrpc/connect");
+    const err = await call(notFoundIsAnswer());
+    expect(err.code).toBe(Code.NotFound); // still reaches the caller
+    expect(logged).not.toHaveBeenCalled();
+  });
+
+  it("logs a NotFound nobody declared", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    await call();
+    expect(logged).toHaveBeenCalledWith("[RPC Error] Get:", expect.anything());
+  });
+
+  it("logs any other failure of a call that expects NotFound", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/api/auth/exchange")) {
+          return json({ token: "tok", expiresAt: 9_999_999_999_000 });
+        }
+        return json({ code: "unavailable", message: "down" }, 503);
+      }),
+    );
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { notFoundIsAnswer } = await import("./expected");
+    await call(notFoundIsAnswer());
+    expect(logged).toHaveBeenCalledWith("[RPC Error] Get:", expect.anything());
+  });
+});

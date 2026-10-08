@@ -26,6 +26,7 @@ import {
 import { useNotification } from "@/components/ui/Notification";
 import { useTenant } from "../tenant-context";
 import { apiTokenClient } from "@/lib/connect/client";
+import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
@@ -105,7 +106,7 @@ export default function M2MTokensPage() {
             try {
               const u = await apiTokenClient.getUsage(
                 { name: t.name },
-                { signal },
+                notFoundIsAnswer({ signal }),
               );
               return [
                 t.id,

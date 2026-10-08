@@ -39,6 +39,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useNotification } from "@/components/ui/Notification";
 import { quotaClient } from "@/lib/connect/client";
+import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { QuotaSchema } from "@/gen/paladin/admin/v1/types_pb";
 import { cn, formatBytes } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -95,7 +96,10 @@ export default function TenantQuotasPage() {
     retry: false, // queryFn toasts real failures; NotFound is a normal state.
     queryFn: async ({ signal }) => {
       try {
-        const res = await quotaClient.getQuota({ name: quotaName }, { signal });
+        const res = await quotaClient.getQuota(
+          { name: quotaName },
+          notFoundIsAnswer({ signal }),
+        );
         return { quota: res, notFound: false };
       } catch (err) {
         // An aborted query is not a failure the operator needs to see:
