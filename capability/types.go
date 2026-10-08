@@ -238,13 +238,10 @@ type CopyCeiling struct {
 	RevocationID []byte
 	// MaxRequests bounds the requests made with the copy; 0 = no limit here.
 	MaxRequests int64
-	// MaxBudgetMicros bounds the copy's spend, in micros of the
-	// capability's unit; 0 = no limit here.
-	MaxBudgetMicros int64
+	// MaxBudget bounds the copy's spend, in the capability's unit; 0 = no
+	// limit here.
+	MaxBudget Nanos
 }
-
-// MaxBudget is MaxBudgetMicros as an amount, for the Meter's float boundary.
-func (c CopyCeiling) MaxBudget() float64 { return MicrosToAmount(c.MaxBudgetMicros) }
 
 // Caveats is a typed bag of restrictions. Empty values are interpreted
 // as "no restriction on that axis"; explicit bounds are AND-combined.
@@ -280,7 +277,7 @@ type Caveats struct {
 	// exhausted, the verifier returns ErrBudgetExceeded.
 	//
 	// Renamed from MaxBudgetUSD — same field, no longer USD-pinned.
-	MaxBudgetAmount float64
+	MaxBudgetAmount Nanos
 
 	// UnitCode pins the currency or unit (USD/EUR/UAH/GBP or the
 	// abstract sentinel UNIT). Empty value is interpreted as the

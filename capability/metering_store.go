@@ -90,7 +90,7 @@ func (s *MeteringStore[TX]) Charge(
 }
 
 // Refund emits paladin.capability.refund.amount.
-func (s *MeteringStore[TX]) Refund(ctx context.Context, req RefundRequest) (float64, error) {
+func (s *MeteringStore[TX]) Refund(ctx context.Context, req RefundRequest) (Nanos, error) {
 	refunded, err := s.Inner.Refund(ctx, req)
 	if err == nil && refunded > 0 {
 		recordRefund(ctx, refunded)

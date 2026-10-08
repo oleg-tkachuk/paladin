@@ -23,7 +23,7 @@ func TestMeterContract(t *testing.T) {
 			Ctx:    context.Background(),
 			Usage:  NewUsage(records),
 			Tenant: tenant,
-			NewCapability: func(parent uuid.UUID, maxBudget float64) (uuid.UUID, error) {
+			NewCapability: func(parent uuid.UUID, maxBudget capability.Nanos) (uuid.UUID, error) {
 				c := capability.Capability{
 					ID: uuid.New(), ParentID: parent, ExpiresAt: time.Now().Add(contractTTL),
 					Subject: capability.Principal{TenantID: tenant, Subject: "agent"},

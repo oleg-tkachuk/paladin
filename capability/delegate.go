@@ -95,7 +95,7 @@ func narrowsCaveats(parent, child Caveats) error {
 	// just above) so we don't need an FX rate.
 	if parent.MaxBudgetAmount > 0 {
 		if child.MaxBudgetAmount <= 0 || child.MaxBudgetAmount > parent.MaxBudgetAmount {
-			return fmt.Errorf("%w: child budget %.4f exceeds parent %.4f",
+			return fmt.Errorf("%w: child budget %s exceeds parent %s",
 				ErrDelegationTooWide, child.MaxBudgetAmount, parent.MaxBudgetAmount)
 		}
 	}

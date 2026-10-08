@@ -19,7 +19,7 @@ func TestWithTxFactoryThreadsTheHandle(t *testing.T) {
 	u := NewUsage[*fakeTx](nil).WithTxFactory(func() *fakeTx { return &fakeTx{id: handleID} })
 	var got *fakeTx
 	if _, err := u.Charge(context.Background(), capability.ChargeRequest{
-		CapabilityID: uuid.New(), TenantID: uuid.New(), Amount: 1,
+		CapabilityID: uuid.New(), TenantID: uuid.New(), Amount: capability.MustParseAmount("1"),
 	}, func(_ context.Context, tx *fakeTx) error { got = tx; return nil }); err != nil {
 		t.Fatal(err)
 	}

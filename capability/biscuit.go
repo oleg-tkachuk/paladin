@@ -42,16 +42,23 @@ import (
 
 // Facts of the attenuation vocabulary. Each takes one term.
 const (
-	biscuitFactCapability     = "paladin_capability"        // authority only: the sealed JWT
-	biscuitFactOp             = "paladin_op"                // string: an Op the token keeps
-	biscuitFactResourcePrefix = "paladin_resource_prefix"   // string
-	biscuitFactResourceURI    = "paladin_resource_uri"      // string
-	biscuitFactPlane          = "paladin_plane"             // string: an audience the token keeps
-	biscuitFactExpires        = "paladin_expires"           // date: an earlier expiry
-	biscuitFactBind           = "paladin_bind"              // string: a JWK thumbprint
-	biscuitFactMaxRequests    = "paladin_max_requests"      // integer: a copy's own request limit
-	biscuitFactMaxBudget      = "paladin_max_budget_micros" // integer: a copy's own budget, in micros
+	biscuitFactCapability     = "paladin_capability"       // authority only: the sealed JWT
+	biscuitFactOp             = "paladin_op"               // string: an Op the token keeps
+	biscuitFactResourcePrefix = "paladin_resource_prefix"  // string
+	biscuitFactResourceURI    = "paladin_resource_uri"     // string
+	biscuitFactPlane          = "paladin_plane"            // string: an audience the token keeps
+	biscuitFactExpires        = "paladin_expires"          // date: an earlier expiry
+	biscuitFactBind           = "paladin_bind"             // string: a JWK thumbprint
+	biscuitFactMaxRequests    = "paladin_max_requests"     // integer: a copy's own request limit
+	biscuitFactMaxBudget      = "paladin_max_budget_nanos" // integer: a copy's own budget, in nanos
+	// biscuitFactMaxBudgetMicros is the budget fact Biscuits carried while
+	// amounts were micros. It is read, as nanos × nanosPerMicro, so a copy
+	// attenuated then keeps its limit; Attenuate writes biscuitFactMaxBudget.
+	biscuitFactMaxBudgetMicros = "paladin_max_budget_micros" // integer: a copy's own budget, in micros
 )
+
+// nanosPerMicro converts the legacy micros budget fact to Nanos.
+const nanosPerMicro = 1_000
 
 // ErrCopyCountersNotMetered — a Biscuit sets a copy's own request or budget
 // limit, and the verifier was not told that its Meter counts copies. The
@@ -113,12 +120,12 @@ type Attenuation struct {
 	// unbound token can be bound offline: a bound one stays bound to its key,
 	// because rebinding needs no key and anyone could do it.
 	ConfirmationJKT string
-	// MaxRequests and MaxBudgetMicros give this copy limits of its own,
-	// counted apart from its siblings' and within the capability's: requests
-	// made with it, and its spend in micros of the capability's unit. 0
-	// sets none. Each must be within every limit already in force.
-	MaxRequests     int64
-	MaxBudgetMicros int64
+	// MaxRequests and MaxBudget give this copy limits of its own, counted
+	// apart from its siblings' and within the capability's: requests made
+	// with it, and its spend in the capability's unit. 0 sets none. Each
+	// must be within every limit already in force.
+	MaxRequests int64
+	MaxBudget   Nanos
 }
 
 // Attenuate appends a block that narrows token. It needs no key and no
@@ -154,14 +161,14 @@ func Attenuate(token string, a Attenuation) (string, error) {
 		}
 		errs = append(errs, add(biscuitFactBind, biscuit.String(a.ConfirmationJKT)))
 	}
-	if a.MaxRequests < 0 || a.MaxBudgetMicros < 0 {
+	if a.MaxRequests < 0 || a.MaxBudget < 0 {
 		return "", fmt.Errorf("%w: copy limits cannot be negative", ErrBiscuitAttenuation)
 	}
 	if a.MaxRequests > 0 {
 		errs = append(errs, add(biscuitFactMaxRequests, biscuit.Integer(a.MaxRequests)))
 	}
-	if a.MaxBudgetMicros > 0 {
-		errs = append(errs, add(biscuitFactMaxBudget, biscuit.Integer(a.MaxBudgetMicros)))
+	if a.MaxBudget > 0 {
+		errs = append(errs, add(biscuitFactMaxBudget, biscuit.Integer(a.MaxBudget)))
 	}
 	if err := errors.Join(errs...); err != nil {
 		return "", fmt.Errorf("capability: attenuation block: %w", err)
@@ -329,7 +336,7 @@ type blockFacts struct {
 }
 
 // set reports whether a block put a limit on its copy.
-func (c CopyCeiling) set() bool { return c.MaxRequests > 0 || c.MaxBudgetMicros > 0 }
+func (c CopyCeiling) set() bool { return c.MaxRequests > 0 || c.MaxBudget > 0 }
 
 // readBlockFacts reads blk's facts, refusing any outside the vocabulary or
 // with the wrong term. boundJKT is the key cur is already bound to, which a
@@ -386,15 +393,21 @@ func (f *blockFacts) read(fact decodedFact, boundJKT string) error {
 			return errors.New("a key-bound token cannot be rebound offline")
 		}
 		f.bind = s
-	case biscuitFactMaxRequests, biscuitFactMaxBudget:
+	case biscuitFactMaxRequests, biscuitFactMaxBudget, biscuitFactMaxBudgetMicros:
 		n, ok := fact.term.(int64)
 		if !ok || n <= 0 {
 			return fmt.Errorf("%s takes a positive integer", fact.name)
 		}
-		if fact.name == biscuitFactMaxRequests {
+		switch fact.name {
+		case biscuitFactMaxRequests:
 			f.ceiling.MaxRequests = n
-		} else {
-			f.ceiling.MaxBudgetMicros = n
+		case biscuitFactMaxBudget:
+			f.ceiling.MaxBudget = Nanos(n)
+		default:
+			if n > int64(MaxNanos)/nanosPerMicro {
+				return fmt.Errorf("%s %d exceeds %s", fact.name, n, MaxNanos)
+			}
+			f.ceiling.MaxBudget = Nanos(n * nanosPerMicro)
 		}
 	default:
 		return fmt.Errorf("fact %q is not part of the attenuation vocabulary", fact.name)
@@ -436,15 +449,12 @@ func copyCeilingNarrows(cur Capability, c CopyCeiling) error {
 			return err
 		}
 	}
-	if c.MaxBudgetMicros > 0 {
-		if c.MaxBudgetMicros > MaxMicros {
-			return fmt.Errorf("copy budget %d exceeds %d micros", c.MaxBudgetMicros, int64(MaxMicros))
+	if c.MaxBudget > 0 {
+		if c.MaxBudget > MaxNanos {
+			return fmt.Errorf("copy budget %s exceeds %s", c.MaxBudget, MaxNanos)
 		}
-		own, err := budgetMicros(cur.Caveats)
-		if err != nil {
-			return err
-		}
-		if err := limitNarrows("budget micros", c.MaxBudgetMicros, own, cur.Copies, func(o CopyCeiling) int64 { return o.MaxBudgetMicros }); err != nil {
+		own := int64(cur.Caveats.MaxBudgetAmount)
+		if err := limitNarrows("budget nanos", int64(c.MaxBudget), own, cur.Copies, func(o CopyCeiling) int64 { return int64(o.MaxBudget) }); err != nil {
 			return err
 		}
 	}
@@ -463,15 +473,6 @@ func limitNarrows(what string, n, own int64, outer []CopyCeiling, of func(CopyCe
 		}
 	}
 	return nil
-}
-
-// budgetMicros is the capability's budget ceiling in micros; 0 when it has
-// none.
-func budgetMicros(c Caveats) (int64, error) {
-	if c.MaxBudgetAmount <= 0 {
-		return 0, nil
-	}
-	return AmountToMicros(c.MaxBudgetAmount)
 }
 
 func biscuitFact(name string, term biscuit.Term) biscuit.Fact {

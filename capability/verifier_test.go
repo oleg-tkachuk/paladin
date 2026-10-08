@@ -273,7 +273,7 @@ func TestDelegate_NarrowsAndPersists(t *testing.T) {
 		Caveats: Caveats{
 			Ops:              []Op{OpGet, OpList, OpSearch},
 			ResourcePrefixes: []string{"object://acme/"},
-			MaxBudgetAmount:  1.00,
+			MaxBudgetAmount:  MustParseAmount("1.00"),
 		},
 		TTL: time.Hour,
 	})
@@ -288,7 +288,7 @@ func TestDelegate_NarrowsAndPersists(t *testing.T) {
 		Caveats: Caveats{
 			Ops:              []Op{OpGet},
 			ResourcePrefixes: []string{"object://acme/run-42/"},
-			MaxBudgetAmount:  0.10,
+			MaxBudgetAmount:  NanosPerUnit / 10,
 		},
 		TTL: 15 * time.Minute,
 	})

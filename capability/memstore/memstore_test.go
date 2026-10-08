@@ -3,7 +3,6 @@ package memstore
 import (
 	"context"
 	"errors"
-	"math"
 	"testing"
 	"time"
 
@@ -152,7 +151,7 @@ func TestSetTenantBudgetDefaultsUnitCode(t *testing.T) {
 	ctx := context.Background()
 	u := NewUsage[struct{}](nil)
 	b, err := u.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-		TenantID: uuid.New(), MaxBudgetAmount: 10,
+		TenantID: uuid.New(), MaxBudgetAmount: capability.MustParseAmount("10"),
 	})
 	if err != nil {
 		t.Fatalf("SetTenantBudget: %v", err)
@@ -166,8 +165,8 @@ func TestRefundReturnsSpendToEveryCounterOnce(t *testing.T) {
 	ctx := context.Background()
 	u := NewUsage[struct{}](nil)
 	id, tenant := uuid.New(), uuid.New()
-	_, _ = u.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{TenantID: tenant, MaxBudgetAmount: 100})
-	receipt, err := u.Charge(ctx, capability.ChargeRequest{CapabilityID: id, TenantID: tenant, Amount: 5, MaxBudget: 100, UnitCode: "USD"}, nil)
+	_, _ = u.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{TenantID: tenant, MaxBudgetAmount: capability.MustParseAmount("100")})
+	receipt, err := u.Charge(ctx, capability.ChargeRequest{CapabilityID: id, TenantID: tenant, Amount: capability.MustParseAmount("5"), MaxBudget: capability.MustParseAmount("100"), UnitCode: "USD"}, nil)
 	if err != nil {
 		t.Fatalf("Charge: %v", err)
 	}
@@ -175,16 +174,16 @@ func TestRefundReturnsSpendToEveryCounterOnce(t *testing.T) {
 	// A partial refund, then a refund of "the rest": the second must return
 	// exactly what the first left, and a third must return nothing — a
 	// retried full refund is a no-op, not a second credit.
-	if got, err := u.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: 2}); err != nil || got != 2 {
+	if got, err := u.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: capability.MustParseAmount("2")}); err != nil || got != 2*unit {
 		t.Fatalf("partial refund = %v, %v; want 2, nil", got, err)
 	}
-	if got, err := u.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID}); err != nil || got != 3 {
+	if got, err := u.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID}); err != nil || got != 3*unit {
 		t.Fatalf("remainder refund = %v, %v; want 3, nil", got, err)
 	}
 	if got, err := u.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID}); err != nil || got != 0 {
 		t.Fatalf("repeated full refund = %v, %v; want 0, nil", got, err)
 	}
-	if _, err := u.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: 1}); !errors.Is(err, capability.ErrRefundExceedsCharge) {
+	if _, err := u.Refund(ctx, capability.RefundRequest{ChargeID: receipt.ChargeID, Amount: capability.MustParseAmount("1")}); !errors.Is(err, capability.ErrRefundExceedsCharge) {
 		t.Fatalf("over-refund err = %v, want ErrRefundExceedsCharge", err)
 	}
 	if _, err := u.Refund(ctx, capability.RefundRequest{ChargeID: uuid.New()}); !errors.Is(err, capability.ErrChargeNotFound) {
@@ -204,7 +203,7 @@ func TestRefundReturnsSpendToEveryCounterOnce(t *testing.T) {
 func TestChargeRejectsInvalidAmounts(t *testing.T) {
 	ctx := context.Background()
 	u := NewUsage[struct{}](nil)
-	for _, amt := range []float64{-1, math.NaN(), math.Inf(1)} {
+	for _, amt := range []capability.Nanos{-1, capability.MaxNanos + 1} {
 		_, err := u.Charge(ctx, capability.ChargeRequest{CapabilityID: uuid.New(), TenantID: uuid.New(), Amount: amt}, nil)
 		if !errors.Is(err, capability.ErrInvalidAmount) {
 			t.Errorf("Charge(%v) err = %v, want ErrInvalidAmount", amt, err)
