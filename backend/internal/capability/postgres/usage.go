@@ -567,10 +567,8 @@ func (s *UsageStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (c
 		}
 		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: get tenant budget: %w", err)
 	}
-	got := tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt)
-	got.ReservedAmount = floatFromNumeric(row.ReservedUsd)
-	got.ResourceVersion = row.ResourceVersion
-	return got, nil
+	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.ReservedUsd, row.UnitCode,
+		row.PeriodStart, row.PeriodEnd, row.UpdatedAt, row.ResourceVersion), nil
 }
 
 // SetTenantBudget implements capability.UsageStore[pgx.Tx].
@@ -610,9 +608,8 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTen
 		}
 		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: set tenant budget: %w", err)
 	}
-	out := tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.UnitCode, row.PeriodStart, row.PeriodEnd, row.UpdatedAt)
-	out.ResourceVersion = row.ResourceVersion
-	return out, nil
+	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.ReservedUsd, row.UnitCode,
+		row.PeriodStart, row.PeriodEnd, row.UpdatedAt, row.ResourceVersion), nil
 }
 
 // ListTenantBudgets joins tenant_budgets with tenants and applies the
@@ -646,8 +643,8 @@ func (s *UsageStore) ListTenantBudgets(
 			Slug:        r.Slug,
 			DisplayName: r.DisplayName,
 			Budget: tenantBudgetFromRow(
-				r.TenantID, r.MaxBudgetUsd, r.SpentUsd, r.UnitCode,
-				r.PeriodStart, r.PeriodEnd, r.UpdatedAt,
+				r.TenantID, r.MaxBudgetUsd, r.SpentUsd, r.ReservedUsd, r.UnitCode,
+				r.PeriodStart, r.PeriodEnd, r.UpdatedAt, r.ResourceVersion,
 			),
 			UtilisationPct: floatFromNumeric(r.UtilisationPct),
 		})
@@ -658,15 +655,18 @@ func (s *UsageStore) ListTenantBudgets(
 // tenantBudgetFromRow normalises sqlc row types into the public shape.
 func tenantBudgetFromRow(
 	tenantID pgtype.UUID,
-	maxBudget, spent pgtype.Numeric,
+	maxBudget, spent, reserved pgtype.Numeric,
 	unitCode string,
 	periodStart, periodEnd, updatedAt pgtype.Timestamptz,
+	resourceVersion int64,
 ) capability.TenantBudget {
 	out := capability.TenantBudget{
 		TenantID:        uuid.UUID(tenantID.Bytes),
 		MaxBudgetAmount: floatFromNumeric(maxBudget),
 		SpentAmount:     floatFromNumeric(spent),
+		ReservedAmount:  floatFromNumeric(reserved),
 		UnitCode:        unitCode,
+		ResourceVersion: resourceVersion,
 	}
 	if periodStart.Valid {
 		out.PeriodStart = periodStart.Time
