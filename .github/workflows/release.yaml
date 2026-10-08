@@ -195,7 +195,9 @@ jobs:
   # instead, because the library builds for the host's architecture only and
   # the published image is multi-arch.
   publish:
-    name: Publish ${{ matrix.component }}
+    # A plain name: GitHub appends the matrix value, "(backend)". An
+    # interpolated one is shown raw whenever the job is skipped.
+    name: Publish
     needs: [release]
     if: needs.release.outputs.tag != ''
     runs-on: ubuntu-26.04
