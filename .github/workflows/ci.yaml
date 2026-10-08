@@ -30,6 +30,9 @@ concurrency:
 # Pinned tools, one place each. A floating tool changes what the gate checks
 # with no commit of ours in between.
 env:
+  # The Python SDK cell that installs the wheel without its tls extra: the value
+  # its `tls` matrix key carries, and so the label in that job's name.
+  PY_SDK_NO_TLS: no tls extra
   # renovate: datasource=github-releases depName=go-task/task
   TASK_VERSION: "3.53.1"
   # Must be BUILT with a Go no older than the `go` directive in backend/go.mod
@@ -149,17 +152,24 @@ jobs:
           fi
 
       # The Python SDK's compatibility cells, read here so the matrix job and
-      # `scripts/py-sdk-compat.sh --matrix` run the same list.
+      # `scripts/py-sdk-compat.sh --matrix` run the same list. A cell's
+      # `without_tls: true` becomes `tls: <PY_SDK_NO_TLS>`, since GitHub
+      # appends a cell's values to the job's name and "true" says nothing there.
       - name: Read the Python SDK compatibility matrix
         id: py-compat
-        run: printf 'matrix=%s\n' "$(jq -c . sdk/python/compat.json)" >>"$GITHUB_OUTPUT"
+        run: |
+          matrix=$(jq -c '.include |= map(if .without_tls == true then del(.without_tls) + {tls: env.PY_SDK_NO_TLS} else . end)' sdk/python/compat.json)
+          printf 'matrix=%s\n' "$matrix" >>"$GITHUB_OUTPUT"
 
   # The repository's own commit gate, `task -t Taskfile.dev.yaml verify-all`,
   # run as its groups: one job per group the change can reach, each installing
   # only what that group runs. Together the groups are exactly verify-all, so
   # CI and a developer's machine check the same thing. No Docker.
   test:
-    name: Verify (${{ matrix.group }})
+    # A plain name: GitHub appends the matrix values itself, "(…)". A name that
+    # interpolates the matrix is shown raw, ${{ … }} and all, whenever the job
+    # is skipped, since a skipped job's matrix is never expanded.
+    name: Verify
     needs: [changes]
     if: needs.changes.outputs.groups != '[]'
     strategy:
@@ -437,7 +447,7 @@ jobs:
   # the images above and names any test that passed only on its retry. Only
   # for a change the console or the backend reaches (ci-groups.sh --needs-e2e).
   e2e:
-    name: End-to-end (${{ matrix.shard }})
+    name: End-to-end # see Verify on the matrix values in the name
     needs: [changes, e2e-images]
     if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-26.04
@@ -534,7 +544,7 @@ jobs:
   # another, and this is where a range that admits a runtime the stubs refuse
   # fails.
   py-sdk-compat:
-    name: Python SDK (${{ matrix.python }}, ${{ matrix.with }}${{ matrix.without_tls == true && ', no tls extra' || '' }})
+    name: Python SDK # see Verify on the matrix values in the name
     needs: [changes]
     if: contains(fromJSON(needs.changes.outputs.groups), 'sdk')
     strategy:
@@ -560,9 +570,9 @@ jobs:
         env:
           PYTHON: ${{ matrix.python }}
           WITH: ${{ matrix.with }}
-          # A cell without the key reads as null, which GitHub's expressions
-          # count equal to false: only an explicit true drops the extra.
-          WITHOUT_TLS: ${{ matrix.without_tls == true }}
+          # Only the cell marked in `changes` drops the extra; a cell without
+          # the key reads as null, which is not equal.
+          WITHOUT_TLS: ${{ matrix.tls == env.PY_SDK_NO_TLS }}
         run: |
           if [[ $WITHOUT_TLS == true ]]; then
             ./scripts/py-sdk-compat.sh --without-tls "$PYTHON" "$WITH"
@@ -607,7 +617,7 @@ jobs:
   # for an image already on hand. A change the Playwright suite does not reach
   # (the SDKs alone) has no such image, and the stack half builds its own.
   deep:
-    name: Deep (${{ matrix.half }})
+    name: Deep # see Verify on the matrix values in the name
     needs: [changes, e2e-images]
     # Not skipped with e2e-images: a change with no Playwright run still gets
     # this one, building its own image.
