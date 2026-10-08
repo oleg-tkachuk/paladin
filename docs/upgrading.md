@@ -81,8 +81,9 @@ summing apart or correcting.
   request that still sends one is refused rather than read as unlimited. A
   zero `max_budget` is no budget in its currency; an absent one is no budget
   in USD, and on `TenantBudgetService.Set` lifts the cap and keeps the unit.
-- **Breaking, events.** `paladin.capability.charged` carries `amount` as a
-  Money object — `{"currency_code": "USD", "units": "1", "nanos": 500000000}`,
+- **Breaking, events.** `paladin.capability.charged` carries `amount`, in the
+  CloudEvents envelope's `data`, as a Money object —
+  `{"currency_code": "USD", "units": "1", "nanos": 500000000}`,
   `units` a string as in the proto JSON mapping — in place of the float
   `amount`, `amount_micros` and `unit_code`. A subscription filter on the
   old keys matches nothing.

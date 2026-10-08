@@ -74,7 +74,7 @@ Paladin is one Go binary. Each role below runs as its own Deployment
 | `admin` | tenants, buckets, storage backends, quotas, policies, capabilities, audit |
 | `mcp` | the api and admin operations, as tools for AI agents |
 | `worker` | background jobs: bucket provisioning, trash purge, lifecycle, migration between backends |
-| `dispatcher` | delivers events to webhooks and message brokers |
+| `dispatcher` | delivers events, as CloudEvents 1.0, to webhooks and message brokers ([event-delivery-dedup.md](docs/event-delivery-dedup.md)) |
 | `ingest` | turns storage-side notifications into object updates; off by default |
 | `console` | the web UI, with a BFF in front of `api` and `admin`; its own chart and Deployment |
 

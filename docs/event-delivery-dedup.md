@@ -5,6 +5,33 @@ Paladin delivers subscription events through a transactional outbox
 the outbox row commit atomically, then a background dispatcher drains the outbox
 and delivers to the configured sink (HTTP, NATS, SQS, Kafka, RabbitMQ).
 
+## The envelope: CloudEvents 1.0
+
+Every delivery is a [CloudEvents 1.0](https://github.com/cloudevents/spec)
+envelope in structured mode — the attributes and the event in one JSON body —
+whichever sink carries it. The HTTP sink posts it as
+`application/cloudevents+json`; the broker sinks publish the same body. An HTTP
+subscription with `format: "raw"` gets the bare event JSON instead, for a
+receiver written before CloudEvents became the default.
+
+| Attribute | Value |
+|---|---|
+| `specversion` | `1.0` |
+| `type` | the event type: `paladin.object.uploaded`, `paladin.capability.charged`, `paladin.audit.<action>` |
+| `source` | `paladin` |
+| `id` | the delivery id, stable across retries — the dedup key below |
+| `time` | when the event happened, RFC 3339 |
+| `subject` | the resource name of what it is about, as the producer names it: `capabilities/<id>`, `tenants/<id>/users/<id>`, `storageBackends/<id>` |
+| `tenantid` | an extension attribute: the tenant the event belongs to |
+| `datacontenttype` | `application/json` |
+| `data` | the event's own fields; amounts are `google.type.Money` objects in the proto JSON mapping, `{"currency_code": "USD", "units": "1", "nanos": 500000000}` |
+
+A subscription's CEL filter sees `type`, `tenant_id`, `resource_name`,
+`actor_subject`, `kind` (the class alone: `object`, `capability`),
+`severity_level` and the other envelope fields as bare names —
+`type == "paladin.capability.charged"`, not `event.type`, which the server
+refuses.
+
 ## Delivery is at-least-once
 
 A delivery row is retried until the sink acknowledges it. Redelivery of an event
