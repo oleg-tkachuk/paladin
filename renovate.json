@@ -5,10 +5,12 @@
   "description": [
     "Container base images: the Dockerfiles pin FROM tags by @sha256 for bit-reproducible builds, and a digest pin without automation rots — Renovate keeps tag and digest in lockstep.",
     "Go and npm: enabled for minor/patch only, grouped into one PR per half per month. Majors stay manual, matching `task deps:update` (minor/patch, no majors, cross a major deliberately per CHANGELOG). Grouping rather than disabling: a public repository needs the security half of dependency automation to work, and a manager that is switched off raises no PR when an advisory lands.",
-    "Vulnerability remediation is ungrouped and unscheduled — it should not wait for the monthly window."
+    "Vulnerability remediation is ungrouped and unscheduled — it should not wait for the monthly window.",
+    "Code generators are versioned with the stubs they write, and Renovate cannot regenerate those stubs: a generator bump leaves them stale and the stale-stub gates fail. So generators move in their own PR, finished by running `task gen`, or not at all."
   ],
   "enabledManagers": ["dockerfile", "docker-compose", "github-actions", "gomod", "npm", "pep621"],
   "pinDigests": true,
+  "postUpdateOptions": ["gomodTidy"],
   "schedule": ["before 6am on monday"],
   "prHourlyLimit": 2,
   "packageRules": [
@@ -44,6 +46,18 @@
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "python sdk dependencies",
       "schedule": ["before 6am on the first day of the month"]
+    },
+    {
+      "matchManagers": ["pep621"],
+      "matchPackageNames": ["grpcio-tools"],
+      "enabled": false,
+      "description": "Its protoc's version becomes the oldest protobuf runtime the Python SDK's stubs accept (ValidateProtobufRuntimeVersion). The SDK supports protobuf 6, so it stays on the newest release generating for it; see sdk/python/pyproject.toml."
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["@bufbuild/buf", "@bufbuild/protoc-gen-es", "@bufbuild/protobuf"],
+      "groupName": "proto code generators",
+      "description": "protoc-gen-es writes the console's stubs and must match the @bufbuild/protobuf runtime that reads them. Apart from the other npm updates, so the stale-stub gate failing here until `task gen` is run blocks nothing else."
     },
     {
       "matchManagers": ["gomod", "npm", "pep621"],
