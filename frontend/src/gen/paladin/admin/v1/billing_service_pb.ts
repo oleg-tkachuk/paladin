@@ -16,6 +16,8 @@ import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_api_field_behavior } from "../../../google/api/field_behavior_pb";
+import type { Money } from "../../../google/type/money_pb";
+import { file_google_type_money } from "../../../google/type/money_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -24,11 +26,12 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_billing_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiZwYWxhZGluL2FkbWluL3YxL2JpbGxpbmdfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSKYAQoXR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIrQCChhHZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2USFAoMdG90YWxfbWljcm9zGAggASgDEhEKCXVuaXRfY29kZRgCIAEoCRIZChFtYXhfYnVkZ2V0X21pY3JvcxgJIAEoAxI0ChB0b3BfY2FwYWJpbGl0aWVzGAQgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIuCgp0b3BfYWN0b3JzGAUgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIrCgd0b3Bfb3BzGAYgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIUCgxjaGFyZ2VfY291bnQYByABKANKBAgBEAJKBAgDEARSDHRvdGFsX2Ftb3VudFIRbWF4X2J1ZGdldF9hbW91bnQiVAoIVG9wRW50cnkSDQoFbGFiZWwYASABKAkSFAoMY2hhcmdlX2NvdW50GAMgASgDEhUKDWFtb3VudF9taWNyb3MYBCABKANKBAgCEANSBmFtb3VudCKwAQoaR2V0VGVuYW50VGltZVNlcmllc1JlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2dyYW51bGFyaXR5GAQgASgJIl8KG0dldFRlbmFudFRpbWVTZXJpZXNSZXNwb25zZRItCgdidWNrZXRzGAEgAygLMhwucGFsYWRpbi5hZG1pbi52MS5UaW1lQnVja2V0EhEKCXVuaXRfY29kZRgCIAEoCSJ3CgpUaW1lQnVja2V0Ei4KBXN0YXJ0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEhQKDGNoYXJnZV9jb3VudBgDIAEoAxIVCg1hbW91bnRfbWljcm9zGAQgASgDSgQIAhADUgZhbW91bnQy+QEKDkJpbGxpbmdTZXJ2aWNlEm4KEEdldFRlbmFudFN1bW1hcnkSKS5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFN1bW1hcnlSZXF1ZXN0GioucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2UiA5ACARJ3ChNHZXRUZW5hbnRUaW1lU2VyaWVzEiwucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRUaW1lU2VyaWVzUmVxdWVzdBotLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50VGltZVNlcmllc1Jlc3BvbnNlIgOQAgFCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
+    "CiZwYWxhZGluL2FkbWluL3YxL2JpbGxpbmdfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSKYAQoXR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIvkCChhHZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2USIQoFdG90YWwYCiABKAsyEi5nb29nbGUudHlwZS5Nb25leRImCgptYXhfYnVkZ2V0GAsgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXkSNAoQdG9wX2NhcGFiaWxpdGllcxgEIAMoCzIaLnBhbGFkaW4uYWRtaW4udjEuVG9wRW50cnkSLgoKdG9wX2FjdG9ycxgFIAMoCzIaLnBhbGFkaW4uYWRtaW4udjEuVG9wRW50cnkSKwoHdG9wX29wcxgGIAMoCzIaLnBhbGFkaW4uYWRtaW4udjEuVG9wRW50cnkSFAoMY2hhcmdlX2NvdW50GAcgASgDSgQIARACSgQIAhADSgQICBAJSgQIAxAESgQICRAKUgx0b3RhbF9hbW91bnRSDHRvdGFsX21pY3Jvc1IJdW5pdF9jb2RlUhFtYXhfYnVkZ2V0X2Ftb3VudFIRbWF4X2J1ZGdldF9taWNyb3MidQoIVG9wRW50cnkSDQoFbGFiZWwYASABKAkSFAoMY2hhcmdlX2NvdW50GAMgASgDEiEKBXNwZW50GAUgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlKBAgCEANKBAgEEAVSBmFtb3VudFINYW1vdW50X21pY3JvcyKwAQoaR2V0VGVuYW50VGltZVNlcmllc1JlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2dyYW51bGFyaXR5GAQgASgJIl0KG0dldFRlbmFudFRpbWVTZXJpZXNSZXNwb25zZRItCgdidWNrZXRzGAEgAygLMhwucGFsYWRpbi5hZG1pbi52MS5UaW1lQnVja2V0SgQIAhADUgl1bml0X2NvZGUimAEKClRpbWVCdWNrZXQSLgoFc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSFAoMY2hhcmdlX2NvdW50GAMgASgDEiEKBXNwZW50GAUgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlKBAgCEANKBAgEEAVSBmFtb3VudFINYW1vdW50X21pY3JvczL5AQoOQmlsbGluZ1NlcnZpY2USbgoQR2V0VGVuYW50U3VtbWFyeRIpLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QaKi5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFN1bW1hcnlSZXNwb25zZSIDkAIBEncKE0dldFRlbmFudFRpbWVTZXJpZXMSLC5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFRpbWVTZXJpZXNSZXF1ZXN0Gi0ucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRUaW1lU2VyaWVzUmVzcG9uc2UiA5ACAUJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
       file_google_protobuf_timestamp,
       file_google_api_field_behavior,
+      file_google_type_money,
     ],
   );
 
@@ -67,29 +70,22 @@ export const GetTenantSummaryRequestSchema: GenMessage<GetTenantSummaryRequest> 
 export type GetTenantSummaryResponse =
   Message<"paladin.admin.v1.GetTenantSummaryResponse"> & {
     /**
-     * total_micros is the sum of the period's charges in millionths of
-     * unit_code (1.5 USD = 1500000). Integer, so sums never drift.
+     * total is the sum of the period's charges, exact to the nano. Its
+     * currency is the tenant's unit (or USD); mixed-unit periods collapse to
+     * whichever unit dominates the row count — non-issue today (no FX).
+     * currency_code is ISO 4217, XXX for metering that is not money.
      *
-     * @generated from field: int64 total_micros = 8;
+     * @generated from field: google.type.Money total = 10;
      */
-    totalMicros: bigint;
+    total?: Money | undefined;
 
     /**
-     * unit_code mirrors the tenant's pinned unit_code (or USD default).
-     * Mixed-unit periods collapse to whichever unit dominates the row
-     * count — non-issue today (no FX), audit-exposed for the future.
+     * max_budget is the tenant_budgets cap, copied for UI convenience so the
+     * frontend doesn't need a second RPC.
      *
-     * @generated from field: string unit_code = 2;
+     * @generated from field: google.type.Money max_budget = 11;
      */
-    unitCode: string;
-
-    /**
-     * max_budget_micros is the tenant_budgets cap in millionths of unit_code,
-     * copied for UI convenience so the frontend doesn't need a second RPC.
-     *
-     * @generated from field: int64 max_budget_micros = 9;
-     */
-    maxBudgetMicros: bigint;
+    maxBudget?: Money | undefined;
 
     /**
      * @generated from field: repeated paladin.admin.v1.TopEntry top_capabilities = 4;
@@ -138,11 +134,11 @@ export type TopEntry = Message<"paladin.admin.v1.TopEntry"> & {
   chargeCount: bigint;
 
   /**
-   * amount_micros is the amount in millionths of the response's unit_code.
+   * spent is what the entry's charges came to, exact to the nano.
    *
-   * @generated from field: int64 amount_micros = 4;
+   * @generated from field: google.type.Money spent = 5;
    */
-  amountMicros: bigint;
+  spent?: Money | undefined;
 };
 
 /**
@@ -199,11 +195,6 @@ export type GetTenantTimeSeriesResponse =
      * @generated from field: repeated paladin.admin.v1.TimeBucket buckets = 1;
      */
     buckets: TimeBucket[];
-
-    /**
-     * @generated from field: string unit_code = 2;
-     */
-    unitCode: string;
   };
 
 /**
@@ -229,11 +220,11 @@ export type TimeBucket = Message<"paladin.admin.v1.TimeBucket"> & {
   chargeCount: bigint;
 
   /**
-   * amount_micros is the amount in millionths of the response's unit_code.
+   * spent is what the entry's charges came to, exact to the nano.
    *
-   * @generated from field: int64 amount_micros = 4;
+   * @generated from field: google.type.Money spent = 5;
    */
-  amountMicros: bigint;
+  spent?: Money | undefined;
 };
 
 /**
