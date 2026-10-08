@@ -77,6 +77,15 @@ describe("BuildVersion", () => {
     expect(screen.queryByText("Control Plane")).not.toBeInTheDocument();
   });
 
+  // The release is a line under the product name: a size below it, and set
+  // smaller still because its monospace reads larger than its size.
+  it("sets the release a size below the product name", () => {
+    backend("11.9.0", "a1b2c3d4e5f6");
+    show();
+    const link = screen.getByRole("link", { name: /v11\.9\.0/ });
+    expect(link.classList).toContain("text-xs");
+  });
+
   it("lists the backend, its build time and the console in the tooltip", async () => {
     backend("11.9.0", "a1b2c3d");
     show();
