@@ -32,9 +32,17 @@ The switch lives in one of three places, reported as the row's `control`:
 | api, admin | `api_token` | config: `api_token.enabled` | no | the token store answers the lookup authentication makes |
 | api | `iam_listener` | always_on | yes | the iam listener accepts a connection |
 | dispatcher | `outbox` | always_on | yes | the outbox table is readable |
-| dispatcher | `nats`, `rabbitmq` | database: an enabled event subscription of that sink kind | no | every broker the pool has dialed is connected |
+| dispatcher | `nats`, `rabbitmq` | config: `dispatcher.sinks.<kind>.enabled`, then database: an enabled event subscription of that sink kind | no | every broker the pool has dialed is connected |
 | ingest | `subscriber` | always_on (NATS driver only) | yes | the NATS subscription is connected |
 | mcp | `process` | always_on | yes | none: it reports that the process answers |
+
+A sink kind has both switches. `dispatcher.sinks.<kind>.enabled` decides
+whether the deployment delivers to the kind at all; it is on by default. Off,
+the admin API refuses to create or enable a subscription of the kind, or to
+send it a test delivery, and the dispatcher fails the kind's queued
+deliveries, naming the key, and dials none of its brokers. Switched back on,
+those deliveries can be redriven. While the kind is on, the database decides
+whether it is in use.
 
 The dispatcher's pools learn about a broker by dialing it. URL-authenticated
 sinks are dialed at startup. A sink whose credentials are a Secret ref, or

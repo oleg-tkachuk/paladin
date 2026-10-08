@@ -58,7 +58,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	bucketV2H := wire.ProvideBucketV2Handler(repos, storage, polEngine, cfg)
 	quotaH := wire.ProvideQuotaHandler(repos, polEngine)
 	auditH := wire.ProvideAuditHandler(repos, polEngine)
-	eventSubH := wire.ProvideEventSubHandler(repos, polEngine)
+	eventSubH := wire.ProvideEventSubHandler(repos, polEngine, cfg.Dispatcher.Sinks)
 	// Admin pod owns the producer side of the outbox — Dispatch writes
 	// rows; the dispatcher pod (a separate Deployment, see
 	// cmd/server/serve_dispatcher.go) consumes them. The same struct
@@ -82,6 +82,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		SQS:         worker.NewSQSClientPool(l.Named("sqs-pool")),
 		RabbitMQ:    worker.NewRabbitMQConnPool(l.Named("rabbitmq-pool")),
 		Kafka:       worker.NewKafkaWriterPool(l.Named("kafka-pool")),
+		Sinks:       cfg.Dispatcher.Sinks,
 		Secrets:     NewSinkSecretResolver(l.Named("sink-secrets")),
 		Logger:      l.Named("event-dispatcher"),
 		MaxAttempts: 3,

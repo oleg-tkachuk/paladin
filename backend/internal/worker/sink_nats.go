@@ -36,6 +36,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
+	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
 )
 
 // NatsConnPool keeps one *nats.Conn per unique (url, credentials_ref)
@@ -447,7 +448,7 @@ type natsBatchItem struct {
 // the batch is a core publish, which the stream neither acknowledges nor
 // deduplicates.
 func natsGroupTarget(sub admindomain.EventSubscription) (key natsPoolKey, ok bool) {
-	if sub.SinkKind != SinkKindNATS {
+	if sub.SinkKind != sinkkind.NATS {
 		return natsPoolKey{}, false
 	}
 	var cfg natsSinkConfig

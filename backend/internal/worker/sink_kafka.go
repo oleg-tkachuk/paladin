@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
+
 	"github.com/google/uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl"
@@ -261,7 +263,7 @@ type kafkaBatchItem struct {
 // refs that resolve equal — safe). Malformed rows return ok=false and take the
 // per-row deliver path, failing with the same error text as before batching.
 func kafkaGroupTarget(sub admindomain.EventSubscription) (key kafkaWriterKey, ok bool) {
-	if sub.SinkKind != "kafka" {
+	if sub.SinkKind != sinkkind.Kafka {
 		return kafkaWriterKey{}, false
 	}
 	var cfg kafkaSinkConfig

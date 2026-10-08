@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
@@ -187,7 +189,7 @@ type sqsBatchItem struct {
 // required fields) return ok=false and take the per-row deliver path, so
 // they fail with exactly the same error text as before batching existed.
 func sqsGroupTarget(sub admindomain.EventSubscription) (key string, cfg sqsSinkConfig, ok bool) {
-	if sub.SinkKind != "sqs" {
+	if sub.SinkKind != sinkkind.SQS {
 		return "", cfg, false
 	}
 	if err := json.Unmarshal(sub.SinkConfig, &cfg); err != nil {

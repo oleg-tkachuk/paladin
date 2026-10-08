@@ -6,14 +6,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
-)
-
-// Sink kinds as event_subscriptions.sink_kind stores them, for the sinks
-// whose brokers the dispatcher holds connections to.
-const (
-	SinkKindNATS     = "nats"
-	SinkKindRabbitMQ = "rabbitmq"
 )
 
 // BrokerConn is what a sink pool knows of one broker it has dialed: its URL,
@@ -28,15 +22,19 @@ type BrokerConn struct {
 var errConnectionLost = errors.New("connection lost")
 
 // BrokerComponent is the dispatcher's health component for one sink kind.
-// Its switch is the database: the kind is in use while an enabled
-// subscription delivers to it — subscriptions counts them — and off
-// otherwise, its broker never dialed for health. Never critical: a broker
-// outage stops only its own sinks.
-func BrokerComponent(kind string, subscriptions func(context.Context) (int, error), conns func() []BrokerConn) health.Check {
+// It has two switches. The configuration's comes first: a kind switched off
+// there is off whatever is stored. Otherwise the database decides: the kind
+// is in use while an enabled subscription delivers to it — subscriptions
+// counts them. Off either way, its broker is never dialed for health.
+// Never critical: a broker outage stops only its own sinks.
+func BrokerComponent(kind string, sinks SinkKinds, subscriptions func(context.Context) (int, error), conns func() []BrokerConn) health.Check {
 	return health.Check{
 		Name:     kind,
 		Category: health.CategoryUpstream,
 		Switch: func(ctx context.Context) (health.Enablement, error) {
+			if !sinks.Enabled(kind) {
+				return health.ByConfig(false, config.SinkSwitchKey(kind)), nil
+			}
 			n, err := subscriptions(ctx)
 			if err != nil {
 				return health.Enablement{Control: health.ControlDatabase}, fmt.Errorf("list %s subscriptions: %w", kind, err)
