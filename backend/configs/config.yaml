@@ -299,6 +299,15 @@ dispatcher:
   base_backoff: 5s                      # first retry delay; doubles per attempt
   max_backoff: 1h                       # cap for the exponential curve
   default_max_attempts: 5               # used when sub HttpSink.MaxAttempts==0
+  # One switch per sink kind. Off: the admin API refuses an enabled
+  # subscription of the kind, its deliveries fail, none of its brokers is
+  # dialed, and the health page shows it off by configuration.
+  sinks:
+    http: {enabled: true}
+    nats: {enabled: true}
+    sqs: {enabled: true}
+    rabbitmq: {enabled: true}
+    kafka: {enabled: true}
 
 # ─── Storage backends ───────────────────────────────────────────────────────
 # Registry of physical object-storage backends. Each logical ObjectKey picks

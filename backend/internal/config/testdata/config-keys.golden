@@ -194,6 +194,17 @@ dispatcher.ops.trusted_proxies
 dispatcher.ops.write_timeout
 dispatcher.ops_url
 dispatcher.poll_interval
+dispatcher.sinks
+dispatcher.sinks.http
+dispatcher.sinks.http.enabled
+dispatcher.sinks.kafka
+dispatcher.sinks.kafka.enabled
+dispatcher.sinks.nats
+dispatcher.sinks.nats.enabled
+dispatcher.sinks.rabbitmq
+dispatcher.sinks.rabbitmq.enabled
+dispatcher.sinks.sqs
+dispatcher.sinks.sqs.enabled
 ingest
 ingest.dedup_ttl
 ingest.driver

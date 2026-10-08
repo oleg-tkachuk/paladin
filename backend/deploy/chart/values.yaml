@@ -987,6 +987,15 @@ config:
     base_backoff: 5s
     max_backoff: 1h
     default_max_attempts: 5
+    # One switch per sink kind. Off: the admin API refuses an enabled
+    # subscription of the kind, its deliveries fail, none of its brokers is
+    # dialed, and the health page shows it off by configuration.
+    sinks:
+      http: {enabled: true}
+      nats: {enabled: true}
+      sqs: {enabled: true}
+      rabbitmq: {enabled: true}
+      kafka: {enabled: true}
 
   storage:
     backends:
