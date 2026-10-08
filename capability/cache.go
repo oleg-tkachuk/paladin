@@ -35,14 +35,87 @@ const DefaultRevocationCacheEntries = 100_000
 //
 // Concurrent misses for the same id share one upstream call.
 type CachedRevocationChecker struct {
-	upstream   RevocationLookup
+	upstream RevocationLookup
+	cache    *ttlCache[uuid.UUID]
+}
+
+// cacheConfig is what the CacheOptions set, for either checker.
+type cacheConfig struct {
 	ttl        time.Duration
 	maxEntries int
 	now        func() time.Time
+}
+
+// CacheOption configures a CachedRevocationChecker or a
+// CachedBiscuitRevocationChecker.
+type CacheOption func(*cacheConfig)
+
+// WithCacheClock replaces time.Now; tests use it to step through expiry.
+func WithCacheClock(now func() time.Time) CacheOption {
+	return func(c *cacheConfig) { c.now = now }
+}
+
+// WithMaxEntries bounds the number of cached entries. ≤ 0 keeps the default.
+func WithMaxEntries(n int) CacheOption {
+	return func(c *cacheConfig) {
+		if n > 0 {
+			c.maxEntries = n
+		}
+	}
+}
+
+// newCacheConfig applies opts over the defaults. ttl of 0 falls back to
+// DefaultRevocationCacheTTL; ttl < 0 disables caching.
+func newCacheConfig(ttl time.Duration, opts []CacheOption) cacheConfig {
+	if ttl == 0 {
+		ttl = DefaultRevocationCacheTTL
+	}
+	cfg := cacheConfig{ttl: ttl, maxEntries: DefaultRevocationCacheEntries, now: time.Now}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	return cfg
+}
+
+// NewCachedRevocationChecker wires a cache over an upstream lookup. ttl
+// of 0 falls back to DefaultRevocationCacheTTL; ttl < 0 disables caching
+// (every call hits upstream — useful for tests).
+func NewCachedRevocationChecker(upstream RevocationLookup, ttl time.Duration, opts ...CacheOption) *CachedRevocationChecker {
+	return &CachedRevocationChecker{upstream: upstream, cache: newTTLCache[uuid.UUID](newCacheConfig(ttl, opts))}
+}
+
+// IsRevoked serves a fresh cached answer, or asks upstream once on behalf of
+// every concurrent caller asking about the same id. An upstream error is
+// returned to all of them and is never cached.
+func (c *CachedRevocationChecker) IsRevoked(ctx context.Context, id uuid.UUID) (bool, error) {
+	return c.cache.get(ctx, id, func(ctx context.Context) (bool, error) { return c.upstream.IsRevoked(ctx, id) })
+}
+
+// Invalidate drops a single entry. Other processes catch up within the TTL
+// unless they are told — see Clear, which a consumer wires to a revocation
+// notification so they are.
+func (c *CachedRevocationChecker) Invalidate(id uuid.UUID) { c.cache.invalidate(id) }
+
+// Clear drops every entry. A consumer that learns of a revocation from
+// elsewhere — a database notification, a message bus — calls it so the next
+// check goes upstream at once instead of waiting out the TTL. It drops
+// everything, not only the revoked id, because an answer cached for a
+// descendant is also an answer about the revoked ancestor.
+func (c *CachedRevocationChecker) Clear() { c.cache.clear() }
+
+// Sweep drops every expired entry and returns how many it dropped.
+// Optional housekeeping — lookups skip stale entries anyway.
+func (c *CachedRevocationChecker) Sweep() int { return c.cache.sweep() }
+
+// ttlCache caches a yes/no answer per key for a TTL, bounded in size, with
+// concurrent misses for one key sharing one lookup. Both revocation checkers
+// are this cache over their own key.
+type ttlCache[K comparable] struct {
+	cfg cacheConfig
 
 	mu       sync.Mutex
-	entries  map[uuid.UUID]cacheEntry
-	inflight map[uuid.UUID]*lookupCall
+	entries  map[K]cacheEntry
+	inflight map[K]*lookupCall
 }
 
 type cacheEntry struct {
@@ -56,66 +129,31 @@ type lookupCall struct {
 	err     error
 }
 
-// CacheOption configures a CachedRevocationChecker.
-type CacheOption func(*CachedRevocationChecker)
-
-// WithCacheClock replaces time.Now; tests use it to step through expiry.
-func WithCacheClock(now func() time.Time) CacheOption {
-	return func(c *CachedRevocationChecker) { c.now = now }
+func newTTLCache[K comparable](cfg cacheConfig) *ttlCache[K] {
+	return &ttlCache[K]{cfg: cfg, entries: make(map[K]cacheEntry), inflight: make(map[K]*lookupCall)}
 }
 
-// WithMaxEntries bounds the number of cached ids. ≤ 0 keeps the default.
-func WithMaxEntries(n int) CacheOption {
-	return func(c *CachedRevocationChecker) {
-		if n > 0 {
-			c.maxEntries = n
-		}
-	}
-}
-
-// NewCachedRevocationChecker wires a cache over an upstream lookup. ttl
-// of 0 falls back to DefaultRevocationCacheTTL; ttl < 0 disables caching
-// (every call hits upstream — useful for tests).
-func NewCachedRevocationChecker(upstream RevocationLookup, ttl time.Duration, opts ...CacheOption) *CachedRevocationChecker {
-	if ttl == 0 {
-		ttl = DefaultRevocationCacheTTL
-	}
-	c := &CachedRevocationChecker{
-		upstream:   upstream,
-		ttl:        ttl,
-		maxEntries: DefaultRevocationCacheEntries,
-		now:        time.Now,
-		entries:    make(map[uuid.UUID]cacheEntry),
-		inflight:   make(map[uuid.UUID]*lookupCall),
-	}
-	for _, o := range opts {
-		o(c)
-	}
-	return c
-}
-
-// IsRevoked serves a fresh cached answer, or asks upstream once on behalf of
-// every concurrent caller asking about the same id. An upstream error is
-// returned to all of them and is never cached.
-func (c *CachedRevocationChecker) IsRevoked(ctx context.Context, id uuid.UUID) (bool, error) {
-	if c.ttl < 0 {
-		return c.upstream.IsRevoked(ctx, id)
+// get serves a fresh entry for key, or runs lookup once for every
+// concurrent caller missing it. An error is returned and never cached.
+func (c *ttlCache[K]) get(ctx context.Context, key K, lookup func(context.Context) (bool, error)) (bool, error) {
+	if c.cfg.ttl < 0 {
+		return lookup(ctx)
 	}
 
 	c.mu.Lock()
-	if e, ok := c.entries[id]; ok && e.expires.After(c.now()) {
+	if e, ok := c.entries[key]; ok && e.expires.After(c.cfg.now()) {
 		c.mu.Unlock()
 		return e.revoked, nil
 	}
-	if call, ok := c.inflight[id]; ok {
+	if call, ok := c.inflight[key]; ok {
 		c.mu.Unlock()
 		select {
 		case <-call.done:
 			// The leader's request may have been cancelled or timed out on
-			// its own account. That is no answer about the id, so a waiter
+			// its own account. That is no answer about the key, so a waiter
 			// whose own context is still live asks for itself.
 			if call.err != nil && isContextErr(call.err) && ctx.Err() == nil {
-				return c.upstream.IsRevoked(ctx, id)
+				return lookup(ctx)
 			}
 			return call.revoked, call.err
 		case <-ctx.Done():
@@ -123,67 +161,58 @@ func (c *CachedRevocationChecker) IsRevoked(ctx context.Context, id uuid.UUID) (
 		}
 	}
 	call := &lookupCall{done: make(chan struct{})}
-	c.inflight[id] = call
+	c.inflight[key] = call
 	c.mu.Unlock()
 
-	call.revoked, call.err = c.upstream.IsRevoked(ctx, id)
+	call.revoked, call.err = lookup(ctx)
 
 	c.mu.Lock()
-	delete(c.inflight, id)
+	delete(c.inflight, key)
 	if call.err == nil {
 		c.makeRoomLocked()
-		c.entries[id] = cacheEntry{revoked: call.revoked, expires: c.now().Add(c.ttl)}
+		c.entries[key] = cacheEntry{revoked: call.revoked, expires: c.cfg.now().Add(c.cfg.ttl)}
 	}
 	c.mu.Unlock()
 	close(call.done)
 	return call.revoked, call.err
 }
 
-// makeRoomLocked keeps the cache under maxEntries.
-func (c *CachedRevocationChecker) makeRoomLocked() {
-	if len(c.entries) < c.maxEntries {
+// makeRoomLocked keeps the cache under maxEntries: expired entries go
+// first and, if that frees nothing, everything does.
+func (c *ttlCache[K]) makeRoomLocked() {
+	if len(c.entries) < c.cfg.maxEntries {
 		return
 	}
 	c.sweepLocked()
-	if len(c.entries) >= c.maxEntries {
+	if len(c.entries) >= c.cfg.maxEntries {
 		clear(c.entries)
 	}
 }
 
-// Invalidate drops a single entry. Other processes catch up within the TTL
-// unless they are told — see Clear, which a consumer wires to a revocation
-// notification so they are.
-func (c *CachedRevocationChecker) Invalidate(id uuid.UUID) {
+func (c *ttlCache[K]) invalidate(key K) {
 	c.mu.Lock()
-	delete(c.entries, id)
+	delete(c.entries, key)
 	c.mu.Unlock()
 }
 
-// Clear drops every entry. A consumer that learns of a revocation from
-// elsewhere — a database notification, a message bus — calls it so the next
-// check goes upstream at once instead of waiting out the TTL. It drops
-// everything, not only the revoked id, because an answer cached for a
-// descendant is also an answer about the revoked ancestor.
-func (c *CachedRevocationChecker) Clear() {
+func (c *ttlCache[K]) clear() {
 	c.mu.Lock()
 	clear(c.entries)
 	c.mu.Unlock()
 }
 
-// Sweep drops every expired entry and returns how many it dropped.
-// Optional housekeeping — lookups skip stale entries anyway.
-func (c *CachedRevocationChecker) Sweep() int {
+func (c *ttlCache[K]) sweep() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.sweepLocked()
 }
 
-func (c *CachedRevocationChecker) sweepLocked() int {
-	now := c.now()
+func (c *ttlCache[K]) sweepLocked() int {
+	now := c.cfg.now()
 	dropped := 0
-	for id, e := range c.entries {
+	for k, e := range c.entries {
 		if !e.expires.After(now) {
-			delete(c.entries, id)
+			delete(c.entries, k)
 			dropped++
 		}
 	}

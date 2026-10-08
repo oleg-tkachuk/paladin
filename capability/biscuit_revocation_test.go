@@ -315,8 +315,8 @@ func TestCachedBiscuitRevocationChecker(t *testing.T) {
 		c := NewCachedBiscuitRevocationChecker(up, ttl, WithMaxEntries(bound))
 		for i := range bound * 3 {
 			_, _ = c.IsBiscuitRevoked(ctx, [][]byte{{byte(i)}})
-			if len(c.entries) > bound {
-				t.Fatalf("%d entries, bound %d", len(c.entries), bound)
+			if len(c.cache.entries) > bound {
+				t.Fatalf("%d entries, bound %d", len(c.cache.entries), bound)
 			}
 		}
 	})
