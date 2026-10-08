@@ -26,6 +26,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { cn, formatBytes, formatDate, timestampToDate } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { formatDateTime } from "@/lib/format/locale";
+import { OBJECT_COLUMN_CLASS } from "./columns";
 
 interface ObjectTableRowProps {
   obj: Object$;
@@ -184,7 +185,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
 
       {/* Collection — namespace badge */}
       {visibleColumns.has("object_key") && (
-        <td className="hidden md:table-cell px-6 py-4">
+        <td className="hidden @md:table-cell px-6 py-4">
           <span
             className={cn(
               T.code,
@@ -199,7 +200,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
       {/* Object Tags — every key:value pair as a chip cluster.
           Click anywhere starts inline edit; Enter saves, Esc cancels. */}
       {visibleColumns.has("object_tag") && (
-        <td className="px-6 py-4">
+        <td className={cn(OBJECT_COLUMN_CLASS.object_tag, "px-6 py-4")}>
           {isEditingLabels ? (
             <div
               className="flex items-center gap-2 p-1.5 rounded-xl bg-primary/10 border border-primary/30 animate-scale-in"
@@ -287,14 +288,24 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
 
       {/* MIME Type */}
       {visibleColumns.has("mime") && (
-        <td className="px-6 py-4 text-xs font-mono text-muted-foreground">
+        <td
+          className={cn(
+            OBJECT_COLUMN_CLASS.mime,
+            "px-6 py-4 text-xs font-mono text-muted-foreground",
+          )}
+        >
           {obj.contentType || "binary/octet-stream"}
         </td>
       )}
 
       {/* Size */}
       {visibleColumns.has("size") && (
-        <td className="hidden md:table-cell px-6 py-4 text-right text-muted-foreground font-mono text-xs whitespace-nowrap">
+        <td
+          className={cn(
+            OBJECT_COLUMN_CLASS.size,
+            "px-6 py-4 text-right text-muted-foreground font-mono text-xs whitespace-nowrap",
+          )}
+        >
           {formatBytes(obj.sizeBytes)}
         </td>
       )}
@@ -314,7 +325,12 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
 
       {/* Created */}
       {visibleColumns.has("created") && (
-        <td className="hidden sm:table-cell px-6 py-4 text-right text-muted-foreground font-mono text-xs whitespace-nowrap">
+        <td
+          className={cn(
+            OBJECT_COLUMN_CLASS.created,
+            "px-6 py-4 text-right text-muted-foreground font-mono text-xs whitespace-nowrap",
+          )}
+        >
           {obj.createdAt
             ? useRelativeTime
               ? formatDate(timestampToDate(obj.createdAt))

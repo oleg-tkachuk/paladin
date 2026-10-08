@@ -171,11 +171,11 @@ export default function TenantsPage() {
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead className="hidden md:table-cell">
+              <TableHead className="hidden @4xl:table-cell">
                 Storage (backend/bucket)
               </TableHead>
-              <TableHead className="hidden md:table-cell">Labels</TableHead>
-              <TableHead className="hidden lg:table-cell w-70">
+              <TableHead className="hidden @md:table-cell">Labels</TableHead>
+              <TableHead className="hidden @5xl:table-cell w-70">
                 Tenant ID
               </TableHead>
               <TableHead className="w-12 text-right">
@@ -254,7 +254,8 @@ export default function TenantsPage() {
                         </span>
                       </Link>
                     </TableCell>
-                    <TableCell>
+                    {/* Free text: wraps rather than widening the table. */}
+                    <TableCell className="whitespace-normal break-words">
                       <Link
                         href={detailHref}
                         className="hover:text-primary hover:underline"
@@ -266,7 +267,7 @@ export default function TenantsPage() {
                         )}
                       </Link>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @4xl:table-cell">
                       {db ? (
                         <span className="font-mono text-xs">
                           {db.backend}/{db.bucket}
@@ -275,7 +276,7 @@ export default function TenantsPage() {
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden @md:table-cell">
                       {labelEntries.length === 0 ? (
                         <span className="text-xs text-muted-foreground">—</span>
                       ) : (
@@ -297,7 +298,7 @@ export default function TenantsPage() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">
+                    <TableCell className="hidden @5xl:table-cell">
                       <span
                         className="font-mono text-caption text-muted-foreground"
                         title={tenant.tenantId}

@@ -228,11 +228,11 @@ export default function BucketsPage() {
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead className="hidden sm:table-cell">
+              <TableHead className="hidden @xs:table-cell">
                 Display name
               </TableHead>
               <SortableHead
-                className="hidden md:table-cell"
+                className="hidden @md:table-cell"
                 label="Region"
                 column="region"
                 current={sort}
@@ -338,7 +338,7 @@ export default function BucketsPage() {
                         </span>
                       </Link>
                     </TableCell>
-                    <TableCell className="hidden sm:table-cell font-medium">
+                    <TableCell className="hidden @xs:table-cell font-medium">
                       <Link href={detailHref} className="hover:text-primary">
                         {b.displayName || (
                           <span className="text-muted-foreground italic">
@@ -347,7 +347,7 @@ export default function BucketsPage() {
                         )}
                       </Link>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground text-xs font-mono">
+                    <TableCell className="hidden @md:table-cell text-muted-foreground text-xs font-mono">
                       {b.region || "—"}
                     </TableCell>
                     <TableCell>

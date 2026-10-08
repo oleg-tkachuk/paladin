@@ -286,14 +286,14 @@ export default function TenantCollectionsPage() {
                 onSort={handleSort}
               />
               <SortableHead
-                className="hidden sm:table-cell"
+                className="hidden @xs:table-cell"
                 label="Display name"
                 column="displayName"
                 current={sort}
                 onSort={handleSort}
               />
               <SortableHead
-                className="hidden md:table-cell"
+                className="hidden @md:table-cell"
                 label="Bucket"
                 column="bucket"
                 current={sort}
@@ -369,14 +369,22 @@ export default function TenantCollectionsPage() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell">
+                  <TableCell className="hidden @xs:table-cell whitespace-normal break-words">
                     {ok.displayName || (
                       <span className="text-muted-foreground italic">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="hidden md:table-cell">
+                  {/* The bucket is a full resource name: it breaks rather
+                      than widening the table. */}
+                  <TableCell className="hidden @md:table-cell whitespace-normal">
                     {ok.bucket ? (
-                      <Badge variant="info" className={T.code}>
+                      <Badge
+                        variant="info"
+                        className={cn(
+                          T.code,
+                          "h-auto max-w-full whitespace-normal break-all",
+                        )}
+                      >
                         {ok.bucket}
                       </Badge>
                     ) : (
