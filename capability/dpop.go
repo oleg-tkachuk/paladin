@@ -37,6 +37,29 @@ const DPoPTokenType = "dpop+jwt"
 // DefaultDPoPWindow is how far a proof's iat may be from the verifier's clock.
 const DefaultDPoPWindow = time.Minute
 
+// JWS algorithms and JWK members a proof may use (RFC 7518, RFC 8037).
+const (
+	algEdDSA      = "EdDSA"
+	algES256      = "ES256"
+	jwkKtyOKP     = "OKP"
+	jwkKtyEC      = "EC"
+	jwkCrvEd25519 = "Ed25519"
+	jwkCrvP256    = "P-256"
+)
+
+const (
+	// p256CoordinateBytes is the size of a P-256 point coordinate, and of
+	// each half of an ES256 signature.
+	p256CoordinateBytes = 32
+	// es256SignatureBytes is a JWS ES256 signature: r || s, not DER.
+	es256SignatureBytes = 2 * p256CoordinateBytes
+	// dpopJTIBytes is the randomness in a proof's jti.
+	dpopJTIBytes = 16
+	// defaultReplayCacheEntries bounds a MemoryReplayCache built with no
+	// explicit bound.
+	defaultReplayCacheEntries = 100_000
+)
+
 // Proof-of-possession rejections. Each also matches ErrInvalidSignature, so a
 // consumer that maps only that sentinel still refuses them.
 var (
@@ -82,7 +105,7 @@ type DPoPJWK struct {
 func PublicJWK(pub crypto.PublicKey) (DPoPJWK, error) {
 	switch k := pub.(type) {
 	case ed25519.PublicKey:
-		return DPoPJWK{Kty: "OKP", Crv: "Ed25519", X: b64(k)}, nil
+		return DPoPJWK{Kty: jwkKtyOKP, Crv: jwkCrvEd25519, X: b64(k)}, nil
 	case *ecdsa.PublicKey:
 		if k.Curve != elliptic.P256() {
 			return DPoPJWK{}, errors.New("capability: DPoP EC keys must be P-256")
@@ -91,7 +114,8 @@ func PublicJWK(pub crypto.PublicKey) (DPoPJWK, error) {
 		if err != nil {
 			return DPoPJWK{}, fmt.Errorf("capability: DPoP EC key: %w", err)
 		}
-		return DPoPJWK{Kty: "EC", Crv: "P-256", X: b64(raw[1:33]), Y: b64(raw[33:])}, nil
+		x, y := raw[1:1+p256CoordinateBytes], raw[1+p256CoordinateBytes:]
+		return DPoPJWK{Kty: jwkKtyEC, Crv: jwkCrvP256, X: b64(x), Y: b64(y)}, nil
 	}
 	return DPoPJWK{}, fmt.Errorf("capability: unsupported DPoP key type %T", pub)
 }
@@ -102,10 +126,10 @@ func (j DPoPJWK) Thumbprint() (string, error) {
 	// RFC 7638: the required members only, lexicographic order, no spaces.
 	var canonical string
 	switch j.Kty {
-	case "OKP":
-		canonical = fmt.Sprintf(`{"crv":%q,"kty":"OKP","x":%q}`, j.Crv, j.X)
-	case "EC":
-		canonical = fmt.Sprintf(`{"crv":%q,"kty":"EC","x":%q,"y":%q}`, j.Crv, j.X, j.Y)
+	case jwkKtyOKP:
+		canonical = fmt.Sprintf(`{"crv":%q,"kty":%q,"x":%q}`, j.Crv, jwkKtyOKP, j.X)
+	case jwkKtyEC:
+		canonical = fmt.Sprintf(`{"crv":%q,"kty":%q,"x":%q,"y":%q}`, j.Crv, jwkKtyEC, j.X, j.Y)
 	default:
 		return "", fmt.Errorf("capability: unsupported JWK kty %q", j.Kty)
 	}
@@ -119,14 +143,14 @@ func (j DPoPJWK) publicKey() (crypto.PublicKey, error) {
 		return nil, err
 	}
 	switch {
-	case j.Kty == "OKP" && j.Crv == "Ed25519":
+	case j.Kty == jwkKtyOKP && j.Crv == jwkCrvEd25519:
 		if len(x) != ed25519.PublicKeySize {
 			return nil, errors.New("Ed25519 key wrong length")
 		}
 		return ed25519.PublicKey(x), nil
-	case j.Kty == "EC" && j.Crv == "P-256":
+	case j.Kty == jwkKtyEC && j.Crv == jwkCrvP256:
 		y, err := base64.RawURLEncoding.DecodeString(j.Y)
-		if err != nil || len(x) != 32 || len(y) != 32 {
+		if err != nil || len(x) != p256CoordinateBytes || len(y) != p256CoordinateBytes {
 			return nil, errors.New("P-256 key malformed")
 		}
 		raw := append(append([]byte{4}, x...), y...)
@@ -159,11 +183,11 @@ func NewDPoPProof(key crypto.Signer, method, rawURL, token string, now time.Time
 	if err != nil {
 		return "", err
 	}
-	alg := "EdDSA"
-	if jwk.Kty == "EC" {
-		alg = "ES256"
+	alg := algEdDSA
+	if jwk.Kty == jwkKtyEC {
+		alg = algES256
 	}
-	jti := make([]byte, 16)
+	jti := make([]byte, dpopJTIBytes)
 	if _, err := rand.Read(jti); err != nil {
 		return "", fmt.Errorf("capability: DPoP jti: %w", err)
 	}
@@ -203,10 +227,9 @@ func signDPoP(key crypto.Signer, input []byte) ([]byte, error) {
 		if rest, err := asn1.Unmarshal(der, &rs); err != nil || len(rest) > 0 {
 			return nil, errors.New("capability: DPoP sign: malformed ECDSA signature")
 		}
-		// JWS ES256 is the raw r || s, 32 bytes each, not DER.
-		sig := make([]byte, 64)
-		rs.R.FillBytes(sig[:32])
-		rs.S.FillBytes(sig[32:])
+		sig := make([]byte, es256SignatureBytes)
+		rs.R.FillBytes(sig[:p256CoordinateBytes])
+		rs.S.FillBytes(sig[p256CoordinateBytes:])
 		return sig, nil
 	}
 	return nil, fmt.Errorf("capability: unsupported DPoP key type %T", key.Public())
@@ -215,14 +238,14 @@ func signDPoP(key crypto.Signer, input []byte) ([]byte, error) {
 func verifyDPoPSignature(pub crypto.PublicKey, alg string, input, sig []byte) bool {
 	switch k := pub.(type) {
 	case ed25519.PublicKey:
-		return alg == "EdDSA" && ed25519.Verify(k, input, sig)
+		return alg == algEdDSA && ed25519.Verify(k, input, sig)
 	case *ecdsa.PublicKey:
-		if alg != "ES256" || len(sig) != 64 {
+		if alg != algES256 || len(sig) != es256SignatureBytes {
 			return false
 		}
 		digest := sha256.Sum256(input)
-		r := new(big.Int).SetBytes(sig[:32])
-		s := new(big.Int).SetBytes(sig[32:])
+		r := new(big.Int).SetBytes(sig[:p256CoordinateBytes])
+		s := new(big.Int).SetBytes(sig[p256CoordinateBytes:])
 		return ecdsa.Verify(k, digest[:], r, s)
 	}
 	return false
@@ -388,7 +411,7 @@ type MemoryReplayCache struct {
 // NewMemoryReplayCache bounds the cache at maxEntries (≤ 0: 100 000).
 func NewMemoryReplayCache(maxEntries int) *MemoryReplayCache {
 	if maxEntries <= 0 {
-		maxEntries = 100_000
+		maxEntries = defaultReplayCacheEntries
 	}
 	return &MemoryReplayCache{seen: map[string]time.Time{}, maxEntries: maxEntries, now: time.Now}
 }

@@ -332,6 +332,47 @@ func TestDelegate_RejectsWidening(t *testing.T) {
 	}
 }
 
+// A Biscuit copy with limits of its own cannot delegate: the child would
+// count against the capability and never the copy, shedding its limits.
+// A copy without limits of its own delegates as the capability does.
+func TestDelegate_RefusesACopyWithLimitsOfItsOwn(t *testing.T) {
+	t.Parallel()
+	issuer, _, store, _ := buildIssuerVerifier(t)
+	ctx := context.Background()
+	tenantID := uuid.New()
+	parent, _, err := issuer.Issue(ctx, IssueRequest{
+		IssuedBy: Principal{Subject: "test-operator"},
+		Subject:  Principal{Type: PrincipalAgent, TenantID: tenantID},
+		Audience: []string{AudiencePlaneData},
+		Caveats:  Caveats{Ops: []Op{OpGet}, MaxRequests: 100},
+		TTL:      time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("issue parent: %v", err)
+	}
+	delegate := func(from Capability) error {
+		_, _, err := issuer.Delegate(ctx, DelegateRequest{
+			Parent:         from,
+			Subject:        Principal{Type: PrincipalAgent, TenantID: tenantID, Subject: "child"},
+			InheritCaveats: true,
+		})
+		return err
+	}
+
+	copyOf := parent
+	copyOf.Copies = []CopyCeiling{{RevocationID: []byte("block"), MaxRequests: 5}}
+	before := len(store.caps)
+	if err := delegate(copyOf); !errors.Is(err, ErrDelegationTooWide) {
+		t.Fatalf("delegate from a copy with limits: err = %v, want ErrDelegationTooWide", err)
+	}
+	if len(store.caps) != before {
+		t.Error("a refused delegation persisted a child")
+	}
+	if err := delegate(parent); err != nil {
+		t.Errorf("delegate from the capability itself: %v", err)
+	}
+}
+
 // TestCache_HitsAndMisses confirms the revocation cache short-circuits
 // repeat lookups within the TTL window.
 func TestCache_HitsAndMisses(t *testing.T) {
