@@ -82,6 +82,8 @@ SELECT
     tb.period_start,
     tb.period_end,
     tb.updated_at,
+    tb.reserved_usd,
+    tb.resource_version,
     (CASE
       WHEN tb.max_budget_usd = 0 THEN 0::numeric
       ELSE LEAST(100::numeric, (tb.spent_usd / tb.max_budget_usd) * 100)
@@ -108,16 +110,18 @@ SELECT
 `
 
 type ListTenantBudgetSummariesRow struct {
-	TenantID       pgtype.UUID        `json:"tenant_id"`
-	Slug           string             `json:"slug"`
-	DisplayName    string             `json:"display_name"`
-	MaxBudgetUsd   pgtype.Numeric     `json:"max_budget_usd"`
-	SpentUsd       pgtype.Numeric     `json:"spent_usd"`
-	UnitCode       string             `json:"unit_code"`
-	PeriodStart    pgtype.Timestamptz `json:"period_start"`
-	PeriodEnd      pgtype.Timestamptz `json:"period_end"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	UtilisationPct pgtype.Numeric     `json:"utilisation_pct"`
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	Slug            string             `json:"slug"`
+	DisplayName     string             `json:"display_name"`
+	MaxBudgetUsd    pgtype.Numeric     `json:"max_budget_usd"`
+	SpentUsd        pgtype.Numeric     `json:"spent_usd"`
+	UnitCode        string             `json:"unit_code"`
+	PeriodStart     pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd       pgtype.Timestamptz `json:"period_end"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ReservedUsd     pgtype.Numeric     `json:"reserved_usd"`
+	ResourceVersion int64              `json:"resource_version"`
+	UtilisationPct  pgtype.Numeric     `json:"utilisation_pct"`
 }
 
 // Cross-tenant join of tenant_budgets ⨝ tenants. Returns slug +
@@ -157,6 +161,8 @@ func (q *Queries) ListTenantBudgetSummaries(ctx context.Context, excludeInactive
 			&i.PeriodStart,
 			&i.PeriodEnd,
 			&i.UpdatedAt,
+			&i.ReservedUsd,
+			&i.ResourceVersion,
 			&i.UtilisationPct,
 		); err != nil {
 			return nil, err
@@ -210,13 +216,14 @@ SET max_budget_usd = EXCLUDED.max_budget_usd,
     resource_version = tenant_budgets.resource_version + 1,
     updated_at     = now()
 WHERE tenant_budgets.resource_version = $6::bigint
-RETURNING tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version
+RETURNING tenant_id, max_budget_usd, spent_usd, reserved_usd, unit_code, period_start, period_end, updated_at, resource_version
 `
 
 type SetTenantBudgetRow struct {
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	MaxBudgetUsd    pgtype.Numeric     `json:"max_budget_usd"`
 	SpentUsd        pgtype.Numeric     `json:"spent_usd"`
+	ReservedUsd     pgtype.Numeric     `json:"reserved_usd"`
 	UnitCode        string             `json:"unit_code"`
 	PeriodStart     pgtype.Timestamptz `json:"period_start"`
 	PeriodEnd       pgtype.Timestamptz `json:"period_end"`
@@ -259,6 +266,7 @@ func (q *Queries) SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, max
 		&i.TenantID,
 		&i.MaxBudgetUsd,
 		&i.SpentUsd,
+		&i.ReservedUsd,
 		&i.UnitCode,
 		&i.PeriodStart,
 		&i.PeriodEnd,

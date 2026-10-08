@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -130,6 +131,7 @@ func Run[TX any](t *testing.T, setup func(t *testing.T) Env[TX]) {
 		{"OverrunRecordCrossesEveryCeiling", checkOverrunRecord[TX]},
 		{"SettleReplaysAndRecordsAnOverrun", checkSettle[TX]},
 		{"OverrunRecordCrossesACopyBudget", checkCopyOverrun[TX]},
+		{"TenantBudgetReadsAgree", checkTenantBudgetReads[TX]},
 	}
 	for _, c := range checks {
 		t.Run(c.name, func(t *testing.T) { c.run(t, newFixture(t, setup)) })
@@ -323,6 +325,38 @@ func checkSettle[TX any](t *testing.T, f fixture[TX]) {
 	}
 	if _, err := f.Usage.Settle(f.Ctx, capability.SettleRequest{ReservationID: other.ID, Amount: 0}, nil); !errors.Is(err, capability.ErrReservationNotFound) {
 		t.Errorf("settling a released reservation: err = %v, want ErrReservationNotFound", err)
+	}
+}
+
+// GetTenantBudget, SetTenantBudget and ListTenantBudgets read one row; each
+// returns all of it.
+func checkTenantBudgetReads[TX any](t *testing.T, f fixture[TX]) {
+	const held = 3.0
+	if _, err := f.Usage.Reserve(f.Ctx, capability.ReserveRequest{
+		CapabilityID: f.child, TenantID: f.Tenant, Amount: held, MaxBudget: childBudget, UnitCode: unit,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.Usage.GetTenantBudget(f.Ctx, f.Tenant)
+	if err != nil || !near(got.ReservedAmount, held) || got.ResourceVersion == 0 {
+		t.Fatalf("GetTenantBudget = %+v, %v; want %v held and a version", got, err, held)
+	}
+	set, err := f.Usage.SetTenantBudget(f.Ctx, capability.SetTenantBudgetRequest{
+		TenantID: f.Tenant, MaxBudgetAmount: tenantBudget, UnitCode: unit, ExpectedVersion: got.ResourceVersion,
+	})
+	if err != nil || !near(set.ReservedAmount, held) || set.ResourceVersion != got.ResourceVersion+1 {
+		t.Errorf("SetTenantBudget = %+v, %v; want %v held and the next version", set, err, held)
+	}
+	listed, err := f.Usage.ListTenantBudgets(f.Ctx, capability.ListTenantBudgetsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(listed, func(s capability.TenantBudgetSummary) bool { return s.TenantID == f.Tenant })
+	if i < 0 {
+		t.Fatalf("ListTenantBudgets left out the tenant: %+v", listed)
+	}
+	if b := listed[i].Budget; !near(b.ReservedAmount, held) || b.ResourceVersion != set.ResourceVersion {
+		t.Errorf("listed budget = %+v; want %v held at version %d", b, held, set.ResourceVersion)
 	}
 }
 

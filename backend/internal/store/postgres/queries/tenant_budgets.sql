@@ -32,7 +32,7 @@ SET max_budget_usd = EXCLUDED.max_budget_usd,
     resource_version = tenant_budgets.resource_version + 1,
     updated_at     = now()
 WHERE tenant_budgets.resource_version = sqlc.arg('expected_version')::bigint
-RETURNING tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version;
+RETURNING tenant_id, max_budget_usd, spent_usd, reserved_usd, unit_code, period_start, period_end, updated_at, resource_version;
 
 -- name: GetTenantBudget :one
 SELECT tenant_id, max_budget_usd, spent_usd, reserved_usd, unit_code, period_start, period_end, updated_at, resource_version
@@ -95,6 +95,8 @@ SELECT
     tb.period_start,
     tb.period_end,
     tb.updated_at,
+    tb.reserved_usd,
+    tb.resource_version,
     (CASE
       WHEN tb.max_budget_usd = 0 THEN 0::numeric
       ELSE LEAST(100::numeric, (tb.spent_usd / tb.max_budget_usd) * 100)
