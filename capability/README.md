@@ -381,8 +381,10 @@ sum them on your side and charge the total.
 
 ## Check your own store
 
-Most of the `Meter` contract lives in request fields, so a store that ignores
-one still compiles. Run the module's checks from your store's tests:
+Much of each contract lives in request fields and in which sentinel comes
+back, so a store that gets one wrong still compiles. Run the module's checks
+from your store's tests — `storetest` for a `Store` (and a
+`BiscuitRevocationStore`), `metertest` for a `Meter`:
 
 ```go
 func TestMeterContract(t *testing.T) {
@@ -393,7 +395,7 @@ func TestMeterContract(t *testing.T) {
 }
 ```
 
-`memstore` runs the same checks.
+`memstore` and Paladin's relational stores run the same checks.
 
 ## Revoke
 

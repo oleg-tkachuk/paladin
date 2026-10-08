@@ -60,6 +60,14 @@ names what it reads. Renamed, with no change in behaviour:
 
 The metric names are unchanged.
 
+`capability/storetest` checks a `Store` against the contract, which now says
+what it left open: an id already on record is `ErrAlreadyExists`, revoking an
+unknown id is `ErrNotFound`, `PurgeExpired` drops revocation entries and never
+records, and `ListByPrincipal` takes the whole principal and pages in id order
+(`PageLimit`). `memstore` follows it: it used to accept a duplicate, revoke an
+unknown id, delete expired records, list without paging, and cascade a
+revocation down from capabilities revoked earlier as well as the one named.
+
 ## Unreleased — capability refusals carry a reason; costs reported later
 
 - A refused capability now carries a `google.rpc.ErrorInfo` in the `paladin`

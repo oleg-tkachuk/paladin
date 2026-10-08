@@ -40,8 +40,9 @@ type BiscuitRevocationStore interface {
 	// RevokeBiscuit lists one revocation id of a capability's Biscuit.
 	// Idempotent. Returns ErrNotFound when the capability is not on record
 	// — or not visible to the caller — so a caller cannot revoke a copy of a
-	// capability it cannot see.
-	RevokeBiscuit(ctx context.Context, args RevokeBiscuitRequest) error
+	// capability it cannot see, and an ErrInvalidRequest for an empty
+	// revocation id.
+	RevokeBiscuit(ctx context.Context, req RevokeBiscuitRequest) error
 }
 
 // RevokeBiscuitRequest is the input shape for BiscuitRevocationStore.RevokeBiscuit.

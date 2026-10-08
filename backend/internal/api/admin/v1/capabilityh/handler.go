@@ -390,7 +390,9 @@ func (h *Handler) List(ctx context.Context, req *connect.Request[adminv1.Capabil
 		Limit:          req.Msg.GetPageSize(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		// A page token the store cannot read is the caller's to fix
+		// (ErrInvalidRequest → InvalidArgument); anything else is Internal.
+		return nil, apiutil.MapError(err)
 	}
 
 	out := make([]*adminv1.Capability, 0, len(caps))

@@ -18,6 +18,7 @@
 package memstore
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -168,6 +169,9 @@ func (s *UsageStore[TX]) Ledger() []LedgerEntry {
 func (s *Store[TX]) Insert(_ context.Context, c capability.Capability, issuedBy capability.Principal) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, ok := s.caps[c.ID]; ok {
+		return fmt.Errorf("%w: %s", capability.ErrAlreadyExists, c.ID)
+	}
 	s.caps[c.ID] = c
 	s.issuedBy[c.ID] = issuedBy
 	return nil
@@ -247,27 +251,28 @@ const maxLineageDepth = 64
 func (s *Store[TX]) Revoke(_ context.Context, args capability.RevokeRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, ok := s.caps[args.ID]; !ok {
+		return capability.ErrNotFound
+	}
 	s.revoked[args.ID] = true
 	if !args.CascadeChildren {
 		return nil
 	}
-	// Repeat to depth: each pass revokes children of anything already revoked,
-	// until a pass changes nothing. Obvious beats clever here.
-	for {
-		changed := false
+	// Breadth-first down the delegation tree from args.ID alone, to the
+	// depth the relational store walks: a capability revoked earlier without
+	// cascade elsewhere in the store is not a root of this walk.
+	level := []uuid.UUID{args.ID}
+	for depth := 0; len(level) > 0 && depth < maxLineageDepth; depth++ {
+		var next []uuid.UUID
 		for id, c := range s.caps {
-			if s.revoked[id] || c.ParentID == uuid.Nil {
-				continue
-			}
-			if s.revoked[c.ParentID] {
+			if slices.Contains(level, c.ParentID) {
 				s.revoked[id] = true
-				changed = true
+				next = append(next, id)
 			}
 		}
-		if !changed {
-			return nil
-		}
+		level = next
 	}
+	return nil
 }
 
 // IsBiscuitRevoked implements capability.BiscuitRevocationLookup.
@@ -285,7 +290,7 @@ func (s *Store[TX]) IsBiscuitRevoked(_ context.Context, revocationIDs [][]byte) 
 // RevokeBiscuit implements capability.BiscuitRevocationStore.
 func (s *Store[TX]) RevokeBiscuit(_ context.Context, args capability.RevokeBiscuitRequest) error {
 	if len(args.RevocationID) == 0 {
-		return errors.New("memstore: revocation id required")
+		return fmt.Errorf("%w: memstore: revocation id required", capability.ErrInvalidRequest)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -302,47 +307,61 @@ func (s *Store[TX]) PurgeExpired(_ context.Context, expiredFor time.Duration) (i
 	cutoff := s.nowFn().Add(-expiredFor)
 	var n int64
 	for id, c := range s.caps {
-		if !c.ExpiresAt.IsZero() && c.ExpiresAt.Before(cutoff) {
-			delete(s.caps, id)
+		if c.ExpiresAt.IsZero() || !c.ExpiresAt.Before(cutoff) {
+			continue
+		}
+		if s.revoked[id] {
 			delete(s.revoked, id)
-			maps.DeleteFunc(s.revokedCopies, func(_ string, c uuid.UUID) bool { return c == id })
 			n++
 		}
+		before := len(s.revokedCopies)
+		maps.DeleteFunc(s.revokedCopies, func(_ string, c uuid.UUID) bool { return c == id })
+		n += int64(before - len(s.revokedCopies))
 	}
 	return n, nil
 }
 
-func (s *Store[TX]) ListByPrincipal(_ context.Context, args capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
+func (s *Store[TX]) ListByPrincipal(_ context.Context, req capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
+	if err := req.Validate(); err != nil {
+		return nil, "", err
+	}
+	var after uuid.UUID
+	if req.Cursor != "" {
+		var err error
+		if after, err = uuid.Parse(req.Cursor); err != nil {
+			return nil, "", fmt.Errorf("%w: memstore: cursor %q", capability.ErrInvalidRequest, req.Cursor)
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	now := s.nowFn()
 	out := make([]capability.Capability, 0, len(s.caps))
 	for id, c := range s.caps {
-		if args.TenantID != uuid.Nil && c.Subject.TenantID != args.TenantID {
+		switch {
+		case c.Subject.TenantID != req.TenantID, c.Subject.Type != req.PrincipalType, c.Subject.Subject != req.Subject:
 			continue
-		}
-		if args.PrincipalType != "" && c.Subject.Type != args.PrincipalType {
+		case !req.IncludeExpired && !c.ExpiresAt.After(now):
 			continue
-		}
-		if args.Subject != "" && c.Subject.Subject != args.Subject {
+		case !req.IncludeRevoked && s.revoked[id]:
 			continue
-		}
-		if !args.IncludeExpired && !c.ExpiresAt.IsZero() && c.ExpiresAt.Before(now) {
-			continue
-		}
-		if !args.IncludeRevoked && s.revoked[id] {
+		case req.Cursor != "" && !uuidLess(after, id):
 			continue
 		}
 		out = append(out, c)
 	}
-	// Stable order so tests and readers see the same sequence every run.
-	sort.Slice(out, func(i, j int) bool { return out[i].ID.String() < out[j].ID.String() })
-	if args.Limit > 0 && int(args.Limit) < len(out) {
-		out = out[:args.Limit]
+	// Ascending id, the order the cursor seeks in.
+	sort.Slice(out, func(i, j int) bool { return uuidLess(out[i].ID, out[j].ID) })
+	limit := int(capability.PageLimit(req.Limit))
+	if len(out) <= limit {
+		return out, "", nil
 	}
-	return out, "", nil
+	out = out[:limit]
+	return out, out[len(out)-1].ID.String(), nil
 }
+
+// uuidLess orders ids as Postgres orders the uuid type: bytewise.
+func uuidLess(a, b uuid.UUID) bool { return bytes.Compare(a[:], b[:]) < 0 }
 
 // ─── capability.UsageStore[TX] ─────────────────────────────────────────────
 
