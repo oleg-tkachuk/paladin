@@ -142,7 +142,7 @@ export default function TenantAuditLogPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-45">When</TableHead>
+              <TableHead className="@md:w-45">When</TableHead>
               <TableHead>Action</TableHead>
               <TableHead>Actor</TableHead>
               <TableHead className="hidden @2xl:table-cell">Resource</TableHead>
@@ -185,7 +185,10 @@ export default function TenantAuditLogPage() {
                     className={cn(hasError && "bg-destructive/5")}
                   >
                     <TableCell
-                      className={cn(T.codeSmall, "text-muted-foreground")}
+                      className={cn(
+                        T.codeSmall,
+                        "whitespace-normal text-muted-foreground @md:whitespace-nowrap",
+                      )}
                     >
                       {formatTimestampUTC(e.at)}
                     </TableCell>
