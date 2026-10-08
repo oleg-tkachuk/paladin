@@ -56,11 +56,15 @@ func invalidRequest(format string, args ...any) error {
 // migration on the domain side.
 const DefaultUnitCode = "USD"
 
+// AbstractUnitCode is the unit of a budget that is not money — requests,
+// credits, anything metered: ISO 4217's XXX, "no currency involved".
+const AbstractUnitCode = "XXX"
+
 // AllowedUnitCodes is the canonical set the backend accepts for
-// caveat / charge / tenant-budget unit_code fields. ISO 4217 fiat
-// codes plus the abstract sentinel UNIT for non-currency metering.
-// Mirrored on the frontend (frontend/src/lib/format/money.ts).
-var AllowedUnitCodes = []string{"USD", "EUR", "UAH", "GBP", "UNIT"}
+// caveat / charge / tenant-budget unit_code fields: ISO 4217 codes, the
+// abstract XXX among them. Mirrored on the frontend
+// (frontend/src/lib/format/money.ts).
+var AllowedUnitCodes = []string{"USD", "EUR", "UAH", "GBP", AbstractUnitCode}
 
 // IsAllowedUnitCode reports whether u is in AllowedUnitCodes. Empty
 // string is NOT treated as valid here — callers that want the empty-
@@ -86,6 +90,15 @@ func NormaliseUnitCode(u string) (string, error) {
 		return "", fmt.Errorf("capability: unknown unit_code %q (allowed: %v)", u, AllowedUnitCodes)
 	}
 	return u, nil
+}
+
+// canonicalUnitCode is u as NormaliseUnitCode reads it, or u itself when it
+// is unknown — for comparing two units, where an unknown one simply differs.
+func canonicalUnitCode(u string) string {
+	if n, err := NormaliseUnitCode(u); err == nil {
+		return n
+	}
+	return u
 }
 
 // Op is an operation an agent may perform. The package defines a small
