@@ -34,6 +34,9 @@ const (
 	ComponentStatus_COMPONENT_STATUS_HEALTHY     ComponentStatus = 1
 	ComponentStatus_COMPONENT_STATUS_DEGRADED    ComponentStatus = 2
 	ComponentStatus_COMPONENT_STATUS_UNHEALTHY   ComponentStatus = 3
+	// Off by configuration: listed so its absence reads as intended, never
+	// probed, and never part of the overall status.
+	ComponentStatus_COMPONENT_STATUS_DISABLED ComponentStatus = 4
 )
 
 // Enum value maps for ComponentStatus.
@@ -43,12 +46,14 @@ var (
 		1: "COMPONENT_STATUS_HEALTHY",
 		2: "COMPONENT_STATUS_DEGRADED",
 		3: "COMPONENT_STATUS_UNHEALTHY",
+		4: "COMPONENT_STATUS_DISABLED",
 	}
 	ComponentStatus_value = map[string]int32{
 		"COMPONENT_STATUS_UNSPECIFIED": 0,
 		"COMPONENT_STATUS_HEALTHY":     1,
 		"COMPONENT_STATUS_DEGRADED":    2,
 		"COMPONENT_STATUS_UNHEALTHY":   3,
+		"COMPONENT_STATUS_DISABLED":    4,
 	}
 )
 
@@ -418,12 +423,13 @@ const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"\n" +
 	"components\x18\x02 \x03(\v2\x1f.paladin.iam.v1.ComponentHealthR\n" +
 	"components\x12\x12\n" +
-	"\x04role\x18\x03 \x01(\tR\x04role*\x90\x01\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role*\xaf\x01\n" +
 	"\x0fComponentStatus\x12 \n" +
 	"\x1cCOMPONENT_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18COMPONENT_STATUS_HEALTHY\x10\x01\x12\x1d\n" +
 	"\x19COMPONENT_STATUS_DEGRADED\x10\x02\x12\x1e\n" +
-	"\x1aCOMPONENT_STATUS_UNHEALTHY\x10\x032\xb2\x01\n" +
+	"\x1aCOMPONENT_STATUS_UNHEALTHY\x10\x03\x12\x1d\n" +
+	"\x19COMPONENT_STATUS_DISABLED\x10\x042\xb2\x01\n" +
 	"\rHealthService\x12Q\n" +
 	"\n" +
 	"GetVersion\x12!.paladin.iam.v1.GetVersionRequest\x1a\x1b.paladin.iam.v1.VersionInfo\"\x03\x90\x02\x01\x12N\n" +
