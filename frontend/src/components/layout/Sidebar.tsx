@@ -180,6 +180,11 @@ const navigationGroups: Array<{
  * fail on its first request. Until the user is known (null) nothing is taken
  * away, so an operator's sidebar does not flash short on load.
  */
+// The product name over the release line. One step above the release, which
+// is set in a monospace that reads larger than its size: at the same 14px the
+// name looked the smaller of the two.
+export const BRAND_NAME_CLASS = "block text-base font-semibold tracking-tight";
+
 // A group's label (CORE, MANAGEMENT, …). text-sm is a size cn() keeps:
 // text-tiny here was dropped as a colour clash with text-muted-foreground,
 // and the label rendered at the inherited 16px, above its own items.
@@ -312,10 +317,7 @@ function SidebarBody({
           </Link>
           {!collapsed && (
             <div className="min-w-0 leading-tight">
-              <Link
-                href="/"
-                className="block text-sm font-semibold tracking-tight"
-              >
+              <Link href="/" className={BRAND_NAME_CLASS}>
                 Paladin
               </Link>
               <BuildVersion
