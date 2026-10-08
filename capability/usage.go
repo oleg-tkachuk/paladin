@@ -64,10 +64,12 @@ type Meter[TX any] interface {
 	// each ancestor and of the tenant aggregate, writes one charges-ledger
 	// row, and runs onCharged — ALL atomically. Checks, in order:
 	//
-	//   1. The capability's own ceiling (req.MaxBudget, from the verified
+	//   1. Each Biscuit copy's own budget (req.Copies), innermost first →
+	//      ErrBudgetExceeded.
+	//   2. The capability's own ceiling (req.MaxBudget, from the verified
 	//      token) → ErrBudgetExceeded.
-	//   2. Each ancestor's ceiling → ErrBudgetExceeded.
-	//   3. The tenant aggregate ceiling → ErrTenantBudgetExceeded.
+	//   3. Each ancestor's ceiling → ErrBudgetExceeded.
+	//   4. The tenant aggregate ceiling → ErrTenantBudgetExceeded.
 	//
 	// Any rejection, or an error from onCharged, leaves every counter and
 	// the ledger untouched. onCharged runs inside the charge, atomically
