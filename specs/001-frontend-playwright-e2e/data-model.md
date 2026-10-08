@@ -24,7 +24,7 @@ Materialised by `docker-compose.test.yaml`.
 
 | Field | Value |
 |---|---|
-| Image | `postgres:16` |
+| Image | `postgres:18.6` |
 | Healthcheck | `pg_isready -U paladin` |
 | Env | `POSTGRES_USER=paladin`, `POSTGRES_PASSWORD=paladin-e2e`, `POSTGRES_DB=paladin` |
 | Volume | tmpfs (not persisted between runs) |

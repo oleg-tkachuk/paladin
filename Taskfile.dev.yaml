@@ -261,6 +261,7 @@ tasks:
       - task: verify:new-release-tag
       - task: verify:stream-release-notes
       - task: verify:badge-versions
+      - task: verify:postgres-version
       - task: verify:warm-go-proxy
       - task: verify:release-head
       - task: verify:release-rules
@@ -572,6 +573,11 @@ tasks:
     desc: "Fail when the README's stack badges would read a version from the wrong place"
     cmds:
       - ./scripts/badge-versions.test.sh
+
+  verify:postgres-version:
+    desc: "Fail when the compose stacks and the Go test suites run different Postgres versions"
+    cmds:
+      - ./scripts/postgres-version.test.sh
 
   verify:stream-release-notes:
     desc: "Fail when an SDK or capability release lists commits that are not its own"
