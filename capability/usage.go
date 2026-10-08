@@ -70,10 +70,12 @@ type Meter[TX any] interface {
 	//   3. The tenant aggregate ceiling → ErrTenantBudgetExceeded.
 	//
 	// Any rejection, or an error from onCharged, leaves every counter and
-	// the ledger untouched. onCharged runs inside the charge after the
-	// ledger row is written and receives the consumer's transaction handle,
-	// so a side effect such as an outbox write commits with the spend.
-	// Pass nil to skip it.
+	// the ledger untouched. onCharged runs inside the charge, atomically
+	// with it, and receives the consumer's transaction handle, so a side
+	// effect such as an outbox write commits with the spend. Pass nil to
+	// skip it. It must not call back into the Meter: an implementation may
+	// hold its counters while onCharged runs, so a nested call can wait on
+	// itself.
 	//
 	// The returned receipt carries the ledger row's ID; Refund takes it.
 	//
