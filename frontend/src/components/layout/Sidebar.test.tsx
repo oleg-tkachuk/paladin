@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { ROLES } from "@/constants/roles";
 import { cn } from "@/lib/utils";
-import { GROUP_LABEL_CLASS, visibleNavigationGroups } from "./Sidebar";
+import {
+  BRAND_NAME_CLASS,
+  GROUP_LABEL_CLASS,
+  visibleNavigationGroups,
+} from "./Sidebar";
 
 const names = (roles: string[] | null) =>
   visibleNavigationGroups(roles).flatMap((g) => g.items.map((i) => i.name));
@@ -51,5 +55,13 @@ describe("visibleNavigationGroups", () => {
 describe("group label", () => {
   it("keeps a font size through cn()", () => {
     expect(cn(GROUP_LABEL_CLASS).split(" ")).toContain("text-sm");
+  });
+});
+
+// The release under the name is 14px monospace, which reads larger than
+// 14px sans: the name sits a size above it so it does not look the smaller.
+describe("brand name", () => {
+  it("is set a size above the release line", () => {
+    expect(cn(BRAND_NAME_CLASS).split(" ")).toContain("text-base");
   });
 });
