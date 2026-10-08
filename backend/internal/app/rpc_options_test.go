@@ -151,3 +151,54 @@ func TestAnOversizedResponseIsNotSent(t *testing.T) {
 		t.Fatalf("status = %d, want 429 (resource_exhausted)", status)
 	}
 }
+
+// refuseAll stands in for a plane's auth chain: it refuses every call it sees
+// and counts them.
+type refuseAll struct{ seen int }
+
+func (r *refuseAll) Wrap(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		r.seen++
+		return connect.NewError(connect.CodeUnauthenticated, "refused")
+	}
+}
+
+// A method a plane does not serve, on a service it does, is answered
+// Unimplemented ahead of the interceptors: no plane sets an unknown-method
+// handler, so connect never reaches the chain. docs/upgrading.md says so.
+func TestAnUnknownMethodIsUnimplementedBeforeTheInterceptors(t *testing.T) {
+	gate := &refuseAll{}
+	server := connect.NewServer(gate.Wrap)
+	paladiniamv1connect.RegisterUserSettingsServiceHandler(server, &settingsStub{})
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, server, rpcMountOptions()...)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	unknown := strings.TrimSuffix(settingsPath, "GetForUser") + "NoSuchMethod"
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, srv.URL+unknown, strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"code":"unimplemented"`) {
+		t.Fatalf("unknown method answered %d %s, want unimplemented", resp.StatusCode, body)
+	}
+	if gate.seen != 0 {
+		t.Fatalf("the interceptor chain ran %d times for an unknown method", gate.seen)
+	}
+	// The same chain does refuse a method the plane serves, so the silence
+	// above is the unknown method's doing, not a gate that never runs.
+	if status, _ := postJSON(t, srv.URL, `{}`, nil); status != http.StatusUnauthorized || gate.seen != 1 {
+		t.Fatalf("known method: status %d, gate ran %d times; want 401 once", status, gate.seen)
+	}
+}

@@ -63,10 +63,11 @@ tree with itself and passes without checking anything.
   largest the server sends; connect-go v2 alone would stop at 4 MiB.
 - On the wire nothing changes: a client on connect-go v1, or any other Connect
   or gRPC client, keeps working against the server.
-- A method a plane does not serve, on a service it does, now passes the
-  plane's interceptors before it is answered `Unimplemented`: an
-  unauthenticated caller gets `Unauthenticated` first. An unknown service is
-  answered `Unimplemented` as before.
+- A method a plane does not serve, on a service it does, is answered with a
+  Connect error, code `unimplemented` (HTTP 501), where it used to get a bare
+  `404 page not found`. As before, it is answered ahead of the plane's
+  interceptors, so a caller without credentials gets the same answer. An
+  unknown service is answered `Unimplemented` as before.
 
 ## Unreleased — money is exact: nanos in the core, `google.type.Money` on the wire
 
