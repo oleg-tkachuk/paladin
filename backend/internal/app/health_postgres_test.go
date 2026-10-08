@@ -29,9 +29,9 @@ func (s fakeStat) EmptyAcquireCount() int64 { return s.waits }
 func TestPoolDetails(t *testing.T) {
 	got := poolDetails(fakeStat{acquired: 3, max: 20, idle: 2, waits: 7})
 	want := []health.Detail{
-		{Name: detailConnections, Value: "3 of 20 in use"},
+		{Name: detailConnections, Value: "3/20"},
 		{Name: detailIdle, Value: "2"},
-		{Name: detailNoIdle, Value: "7 times since start"},
+		{Name: detailNoIdle, Value: "7"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("poolDetails = %v, want %v", got, want)
