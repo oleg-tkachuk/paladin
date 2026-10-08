@@ -411,13 +411,15 @@ export default function StorageBackendsPage() {
                   }
                 />
               </TableHead>
-              <TableHead className="w-55">Backend ID</TableHead>
-              <TableHead>Display name</TableHead>
+              <TableHead className="@md:w-55">Backend ID</TableHead>
+              <TableHead className="hidden @md:table-cell">
+                Display name
+              </TableHead>
               <TableHead className="hidden @3xl:table-cell">Kind</TableHead>
               <TableHead className="hidden @4xl:table-cell">Type</TableHead>
               <TableHead className="hidden @5xl:table-cell">Region</TableHead>
               <TableHead className="hidden @6xl:table-cell">Endpoint</TableHead>
-              <TableHead className="w-40 text-right">Status</TableHead>
+              <TableHead className="@md:w-40 text-right">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -498,12 +500,12 @@ export default function StorageBackendsPage() {
                         <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
                           <ServerStackIcon className="size-4" />
                         </div>
-                        <span className="font-medium group-hover:underline">
+                        <span className="font-medium break-all whitespace-normal group-hover:underline">
                           {b.backendId}
                         </span>
                       </Link>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden @md:table-cell">
                       <Link href={detailHref} className="hover:text-primary">
                         {b.displayName || (
                           <span className="text-muted-foreground italic">

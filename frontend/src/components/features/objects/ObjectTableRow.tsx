@@ -127,7 +127,10 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
       )}
       onClick={(e) => onToggleSelect(obj.objectId, e, obj.key)}
     >
-      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+      <td
+        className="px-2 py-3 @lg:px-6 @lg:py-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         <input
           type="checkbox"
           aria-label={`Select object ${obj.key}`}
@@ -139,7 +142,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
 
       {/* Name / ID */}
       {visibleColumns.has("key") && (
-        <td className="px-6 py-4">
+        <td className="px-2 py-3 @lg:px-6 @lg:py-4">
           <div className="flex items-center gap-3">
             <div
               className={cn(
@@ -169,12 +172,12 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
             >
               <div>
                 <div
-                  className="font-medium text-foreground group-hover:text-primary transition-colors truncate max-w-50"
+                  className="font-medium text-foreground group-hover:text-primary transition-colors truncate max-w-24 @lg:max-w-50"
                   title={obj.key}
                 >
                   {obj.key.split("/").pop()}
                 </div>
-                <div className="text-xs text-muted-foreground font-mono">
+                <div className="text-xs text-muted-foreground font-mono break-all">
                   {obj.objectId}
                 </div>
               </div>
@@ -185,7 +188,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
 
       {/* Collection — namespace badge */}
       {visibleColumns.has("object_key") && (
-        <td className="hidden @md:table-cell px-6 py-4">
+        <td className="hidden @md:table-cell px-2 py-3 @lg:px-6 @lg:py-4">
           <span
             className={cn(
               T.code,
@@ -200,7 +203,12 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
       {/* Object Tags — every key:value pair as a chip cluster.
           Click anywhere starts inline edit; Enter saves, Esc cancels. */}
       {visibleColumns.has("object_tag") && (
-        <td className={cn(OBJECT_COLUMN_CLASS.object_tag, "px-6 py-4")}>
+        <td
+          className={cn(
+            OBJECT_COLUMN_CLASS.object_tag,
+            "px-2 py-3 @lg:px-6 @lg:py-4",
+          )}
+        >
           {isEditingLabels ? (
             <div
               className="flex items-center gap-2 p-1.5 rounded-xl bg-primary/10 border border-primary/30 animate-scale-in"
@@ -291,7 +299,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
         <td
           className={cn(
             OBJECT_COLUMN_CLASS.mime,
-            "px-6 py-4 text-xs font-mono text-muted-foreground",
+            "px-2 py-3 @lg:px-6 @lg:py-4 text-xs font-mono text-muted-foreground",
           )}
         >
           {obj.contentType || "binary/octet-stream"}
@@ -303,7 +311,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
         <td
           className={cn(
             OBJECT_COLUMN_CLASS.size,
-            "px-6 py-4 text-right text-muted-foreground font-mono text-xs whitespace-nowrap",
+            "px-2 py-3 @lg:px-6 @lg:py-4 text-right text-muted-foreground font-mono text-xs whitespace-nowrap",
           )}
         >
           {formatBytes(obj.sizeBytes)}
@@ -312,7 +320,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
 
       {/* Status */}
       {visibleColumns.has("status") && (
-        <td className="px-6 py-4 whitespace-nowrap">
+        <td className="px-2 py-3 @lg:px-6 @lg:py-4 whitespace-nowrap">
           <span
             className={`text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${
               STATUS_STYLES[obj.state] || "bg-muted/10 text-muted-foreground"
@@ -328,7 +336,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
         <td
           className={cn(
             OBJECT_COLUMN_CLASS.created,
-            "px-6 py-4 text-right text-muted-foreground font-mono text-xs whitespace-nowrap",
+            "px-2 py-3 @lg:px-6 @lg:py-4 text-right text-muted-foreground font-mono text-xs whitespace-nowrap",
           )}
         >
           {obj.createdAt
@@ -341,7 +349,10 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
 
       {/* Actions */}
       {visibleColumns.has("actions") && (
-        <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+        <td
+          className="px-2 py-3 @lg:px-6 @lg:py-4"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex justify-end items-center">
             <Dropdown align="right" width="w-56">
               <Dropdown.Trigger
