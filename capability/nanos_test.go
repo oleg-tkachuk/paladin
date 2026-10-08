@@ -136,3 +136,16 @@ func TestAbstractUnitIsXXX(t *testing.T) {
 		t.Errorf("caveats in UNIT: err = %v, want ErrInvalidCaveats", err)
 	}
 }
+
+func TestNanosText(t *testing.T) {
+	var n Nanos
+	if err := n.UnmarshalText([]byte("0.35")); err != nil || n != 350_000_000 {
+		t.Errorf("UnmarshalText(0.35) = %d, %v", int64(n), err)
+	}
+	if b, err := n.MarshalText(); err != nil || string(b) != "0.35" {
+		t.Errorf("MarshalText = %s, %v", b, err)
+	}
+	if err := n.UnmarshalText([]byte("0.0000000001")); !errors.Is(err, ErrInvalidAmount) {
+		t.Errorf("text finer than a nano: err = %v, want ErrInvalidAmount", err)
+	}
+}

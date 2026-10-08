@@ -146,3 +146,18 @@ func (n *Nanos) UnmarshalJSON(b []byte) error {
 	*n = v
 	return nil
 }
+
+// MarshalText writes n as a decimal number of units, as String does.
+func (n Nanos) MarshalText() ([]byte, error) { return []byte(n.String()), nil }
+
+// UnmarshalText reads a decimal number of units exactly, as ParseAmount
+// does: configuration that carries an amount — a YAML scalar, an
+// environment variable — reads it without a float64 in between.
+func (n *Nanos) UnmarshalText(b []byte) error {
+	v, err := ParseAmount(string(b))
+	if err != nil {
+		return err
+	}
+	*n = v
+	return nil
+}
