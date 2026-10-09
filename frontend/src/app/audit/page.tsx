@@ -20,7 +20,6 @@ import { ExportAuditLogDialog } from "./ExportAuditLogDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -33,6 +32,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { ActorName } from "@/components/features/audit/ActorName";
+import { AuditActionCell } from "@/components/features/audit/AuditActionCell";
 import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 // /audit — read-only view of admin/v1.AuditLogService.ListAuditLog.
@@ -43,23 +43,6 @@ import { formatTimestampUTC } from "@/lib/format/timestamp";
 // resource / error). The free-text search box filters client-side over
 // the loaded page; bigger filtering moves to the CEL `filter` arg in a
 // follow-up if it becomes useful.
-
-function actionPalette(
-  action: string,
-  hasError: boolean,
-): "destructive" | "warning" | "info" | "success" | "outline" {
-  if (hasError) return "destructive";
-  const a = action.toLowerCase();
-  // Security events (e.g. refresh-token reuse) stand out even without an error.
-  if (a.includes("delete") || a.includes("revoke") || a.includes("reuse"))
-    return "destructive";
-  if (a.includes("update") || a.includes("rotate") || a.includes("set"))
-    return "warning";
-  if (a.includes("create") || a.includes("login")) return "success";
-  if (a.includes("get") || a.includes("list") || a.includes("read"))
-    return "info";
-  return "outline";
-}
 
 export default function AuditPage() {
   const { entries, loading, error, nextCursor, refresh, loadMore } =
@@ -253,30 +236,14 @@ export default function AuditPage() {
                     >
                       {formatTimestampUTC(e.at)}
                     </TableCell>
-                    {/* Action, actor and resource are long unbroken
-                        identifiers (RPC paths, `apikey:<uuid>`, resource
-                        names): they wrap, or one row widens the table past
-                        its card. */}
+                    {/* Actor and resource are long unbroken identifiers
+                        (`apikey:<uuid>`, resource names): they wrap, or one
+                        row widens the table past its card. */}
                     <TableCell className="max-w-80 whitespace-normal">
-                      <div className="space-y-1">
-                        <Badge
-                          variant={actionPalette(e.action, hasError)}
-                          className={cn(
-                            T.code,
-                            "h-auto max-w-full whitespace-normal break-all",
-                          )}
-                        >
-                          {e.action || "(unknown)"}
-                        </Badge>
-                        {hasError && (
-                          <div className="flex items-start gap-1.5 text-xs text-destructive">
-                            <ExclamationTriangleIcon className="mt-0.5 size-3 shrink-0" />
-                            <span className="line-clamp-2">
-                              {e.errorMessage}
-                            </span>
-                          </div>
-                        )}
-                      </div>
+                      <AuditActionCell
+                        action={e.action}
+                        errorMessage={e.errorMessage}
+                      />
                     </TableCell>
                     <TableCell className="whitespace-normal break-all">
                       <div className="space-y-0.5">
