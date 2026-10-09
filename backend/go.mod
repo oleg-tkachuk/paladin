@@ -10,7 +10,7 @@ require (
 	connectrpc.com/grpchealth/v2 v2.0.0
 	connectrpc.com/grpcreflect/v2 v2.0.0
 	connectrpc.com/otelconnect v0.12.0
-	connectrpc.com/validate v0.8.0
+	connectrpc.com/validate v0.9.0
 	cuelang.org/go v0.17.1
 	github.com/aws/aws-sdk-go-v2 v1.47.2
 	github.com/aws/aws-sdk-go-v2/config v1.33.8
@@ -41,8 +41,8 @@ require (
 	// (research R-004 — without that job, `replace` would mask a broken module).
 	// Paladin consumes it in-tree through the replace below, so its releases do
 	// not wait on the module's own tags. See capability/README.md §Versioning.
-	github.com/oleg-tkachuk/paladin/capability v0.17.0
-	github.com/oleg-tkachuk/paladin/sdk/go v0.56.0
+	github.com/oleg-tkachuk/paladin/capability v0.17.1
+	github.com/oleg-tkachuk/paladin/sdk/go v0.56.2
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/rabbitmq/amqp091-go v1.15.0
@@ -81,7 +81,7 @@ require (
 
 require (
 	cel.dev/expr v0.25.3 // indirect
-	connectrpc.com/connect v1.19.1 // indirect
+	connectrpc.com/connect v1.21.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4 // indirect
