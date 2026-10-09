@@ -6,8 +6,8 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
-	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
@@ -36,7 +36,7 @@ func TestList_CapabilityIssuerMayListAnotherTenant(t *testing.T) {
 // under the caller's own tenant, so it could never reach what the issuer
 // minted for others. Cedar refuses before the store is asked.
 func TestDelegate_CapabilityIssuerIsRefused(t *testing.T) {
-	parent := mkParent(uuid.New(), capability.OpGet)
+	parent := mkParent(uuid.New(), limes.OpGet)
 	store := &fakeStore{cap: &parent}
 	h := NewHandler(mkIssuer(t, store), store, nil, cedartest.Engine(""))
 
@@ -61,7 +61,7 @@ func TestCapabilityActions_DeniedWithoutAGrant(t *testing.T) {
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: own.String(), Subject: "self",
 		},
 		Audience: []string{"paladin-data"}, TtlSeconds: 300,
-		Caveats: &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
+		Caveats: &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
 	})
 	_, revokeErr := h.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: uuid.New().String()})
 	_, listErr := h.List(ctx, &adminv1.CapabilityServiceListRequest{TenantId: own.String()})

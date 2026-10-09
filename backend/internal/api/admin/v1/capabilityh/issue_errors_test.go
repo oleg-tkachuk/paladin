@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -27,7 +27,7 @@ type failingInsertStore struct {
 	err error
 }
 
-func (s *failingInsertStore) Insert(context.Context, capability.Capability, capability.Principal) error {
+func (s *failingInsertStore) Insert(context.Context, limes.Capability, limes.Principal) error {
 	return s.err
 }
 
@@ -40,9 +40,9 @@ func issueRequest(tenant uuid.UUID) *adminv1.CapabilityServiceIssueRequest {
 		Subject: &adminv1.CapabilityPrincipal{
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE, TenantId: tenant.String(), Subject: "svc",
 		},
-		Audience:   []string{capability.AudiencePlaneData},
+		Audience:   []string{limes.AudiencePlaneData},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
+		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
 	}
 }
 
@@ -56,8 +56,8 @@ var issuanceCases = []struct {
 	code   connect.Code
 	reason commonv1.ErrorReason
 }{
-	{"an unknown tenant", fmt.Errorf("%w: %s", capability.ErrUnknownTenant, uuid.NewString()), connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_TENANT_NOT_FOUND},
-	{"a deleted tenant", fmt.Errorf("%w: %s", capability.ErrTenantDeleted, uuid.NewString()), connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_ALREADY_DELETED},
+	{"an unknown tenant", fmt.Errorf("%w: %s", limes.ErrUnknownTenant, uuid.NewString()), connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_TENANT_NOT_FOUND},
+	{"a deleted tenant", fmt.Errorf("%w: %s", limes.ErrTenantDeleted, uuid.NewString()), connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_ALREADY_DELETED},
 	{"a store failure", errDriver, connect.CodeInternal, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
 }
 
@@ -75,7 +75,7 @@ func TestIssueAnswersAFailureByItsKind(t *testing.T) {
 func TestDelegateAnswersAFailureByItsKind(t *testing.T) {
 	for _, tc := range issuanceCases {
 		t.Run(tc.name, func(t *testing.T) {
-			parent := mkParent(uuid.New(), capability.OpGet, capability.OpShare)
+			parent := mkParent(uuid.New(), limes.OpGet, limes.OpShare)
 			store := &failingInsertStore{fakeStore: fakeStore{cap: &parent}, err: tc.err}
 			h := NewHandler(mkIssuer(t, store), store, nil, &denyAuthorizer{})
 			_, err := h.Delegate(auth.WithCapability(context.Background(), &parent), &adminv1.CapabilityServiceDelegateRequest{
@@ -135,15 +135,15 @@ func reasonOf(t *testing.T, err error) commonv1.ErrorReason {
 // failingGetStore fails the parent lookup as a store outage does.
 type failingGetStore struct{ fakeStore }
 
-func (*failingGetStore) Get(context.Context, uuid.UUID) (capability.Capability, error) {
-	return capability.Capability{}, errDriver
+func (*failingGetStore) Get(context.Context, uuid.UUID) (limes.Capability, error) {
+	return limes.Capability{}, errDriver
 }
 
 // The admin path answered NotFound for any failure to read the parent, an
 // outage included, so a caller dropped a parent that was there.
 func TestDelegateTellsAMissingParentFromAStoreFailure(t *testing.T) {
 	for name, tc := range map[string]struct {
-		store capability.Store
+		store limes.Store
 		code  connect.Code
 	}{
 		"a missing parent": {&fakeStore{}, connect.CodeNotFound},

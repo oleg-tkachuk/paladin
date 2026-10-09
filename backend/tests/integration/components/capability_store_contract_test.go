@@ -8,7 +8,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 
-	"github.com/oleg-tkachuk/paladin/capability/storetest"
+	"github.com/oleg-tkachuk/limes/storetest"
 )
 
 // The module's Store contract against the relational store.

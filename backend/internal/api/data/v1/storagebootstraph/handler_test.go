@@ -7,12 +7,12 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // ─── fakes ────────────────────────────────────────────────────────────────
@@ -238,14 +238,14 @@ func TestEnsureTenantStorage_CapabilityOp(t *testing.T) {
 	caller := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000a6")
 	cases := []struct {
 		name    string
-		caveats capability.Caveats
+		caveats limes.Caveats
 		want    connect.Code // zero: allowed
 	}{
-		{"manage allowed", capability.Caveats{Ops: []capability.Op{capability.OpManage}}, 0},
-		{"put only refused", capability.Caveats{Ops: []capability.Op{capability.OpGet, capability.OpPut}}, connect.CodePermissionDenied},
+		{"manage allowed", limes.Caveats{Ops: []limes.Op{limes.OpManage}}, 0},
+		{"put only refused", limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpPut}}, connect.CodePermissionDenied},
 		{
 			"resource-restricted manage refused",
-			capability.Caveats{Ops: []capability.Op{capability.OpManage}, ResourcePrefixes: []string{"paladin://t/docs"}},
+			limes.Caveats{Ops: []limes.Op{limes.OpManage}, ResourcePrefixes: []string{"paladin://t/docs"}},
 			connect.CodePermissionDenied,
 		},
 	}
@@ -255,7 +255,7 @@ func TestEnsureTenantStorage_CapabilityOp(t *testing.T) {
 			buckets := &fakeBuckets{}
 			authz := &recordingAuthorizer{allow: true}
 			h := newHandler(authz, backends, buckets, &fakeCollections{})
-			ctx := auth.WithCapability(ctxWithPAT(caller), &capability.Capability{Caveats: tc.caveats})
+			ctx := auth.WithCapability(ctxWithPAT(caller), &limes.Capability{Caveats: tc.caveats})
 
 			_, err := h.EnsureTenantStorage(ctx, backendID, bucket, []string{"docs"})
 			if tc.want == 0 {

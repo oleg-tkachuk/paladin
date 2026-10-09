@@ -18,6 +18,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -26,7 +27,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // Config is how long URLs live (internal/presignttl) and the global upload
@@ -132,10 +132,10 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 	// Presigned GET URL grants OpGet on the underlying object; gate
 	// on both OpPresign (the act of issuing a URL) and OpGet (the op
 	// the URL ultimately authorises).
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPresign, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpGet, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	// Resolve the (backend, bucket) BEFORE authz so a bucket:/collection:-
@@ -231,10 +231,10 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 			"object was registered without a size and checksum; start a new upload")
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), collection, key)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPresign, objectURI); err != nil {
 		return UploadURL{}, err
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return UploadURL{}, err
 	}
 	// Resolve the (backend, bucket) BEFORE authz so a bucket:/collection:-

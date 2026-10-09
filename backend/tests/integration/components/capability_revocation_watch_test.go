@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oleg-tkachuk/limes"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // A revocation committed anywhere must reach a replica's cache by
@@ -21,7 +21,7 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 
 	// The "other replica": its own pool, its own cache, its own watcher.
 	replica := newCapStore(t, rlsPool(t, ctx, f.pool))
-	cache := capability.NewCachedRevocationChecker(replica, time.Hour)
+	cache := limes.NewCachedRevocationChecker(replica, time.Hour)
 	watchCtx, stop := context.WithCancel(ctx)
 	t.Cleanup(stop)
 	watcher := capstore.NewRevocationWatcher(f.pool, cache.Clear)
@@ -35,7 +35,7 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 
 	// Revoked through the first pool — a different connection, as another
 	// replica would.
-	if err := f.records.Revoke(ctx, capability.RevokeRequest{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
+	if err := f.records.Revoke(ctx, limes.RevokeRequest{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 

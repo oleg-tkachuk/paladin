@@ -66,21 +66,20 @@ jobs:
           # the root to key its cache on unless told where they are.
           cache-dependency-path: |
             backend/go.sum
-            capability/go.sum
             sdk/go/go.sum
 
       - name: Initialise CodeQL
         uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           languages: ${{ matrix.language }}
-          # Go is built by hand: the tree holds three modules (backend,
-          # capability, sdk/go), and autobuild finds none of them at the root.
+          # Go is built by hand: the tree holds two modules (backend, sdk/go),
+          # and autobuild finds neither of them at the root.
           build-mode: ${{ matrix.language == 'go' && 'manual' || 'none' }}
 
       - name: Build the Go modules
         if: matrix.language == 'go'
         run: |
-          for module in backend capability sdk/go; do
+          for module in backend sdk/go; do
             (cd "$module" && go build ./...)
           done
 

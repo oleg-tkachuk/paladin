@@ -23,12 +23,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // defaultPeriod is the lookback when the caller omits period_start /
@@ -44,7 +44,7 @@ const topN = 10
 // reaching for tenant_budgets directly).
 type Handler struct {
 	pool   *pgxpool.Pool
-	usage  capability.UsageStore[pgx.Tx]
+	usage  limes.UsageStore[pgx.Tx]
 	policy cedar.Authorizer
 }
 
@@ -52,7 +52,7 @@ type Handler struct {
 // be nil only when the capability subsystem is disabled (the listener
 // builder still needs to register a stub so the BFF allowlist doesn't
 // 404).
-func NewHandler(pool *pgxpool.Pool, usage capability.UsageStore[pgx.Tx], policy cedar.Authorizer) *Handler {
+func NewHandler(pool *pgxpool.Pool, usage limes.UsageStore[pgx.Tx], policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("billingh: policy authorizer is required")
 	}
@@ -93,17 +93,17 @@ func (h *Handler) authorize(ctx context.Context, tenantID uuid.UUID) (context.Co
 // is logged rather than returned, since the ledger figures stand without
 // it, but a summary that shows no cap for a tenant that has one must leave
 // a trace of why.
-func (h *Handler) tenantBudget(ctx context.Context, tenantID uuid.UUID) (capability.TenantBudget, bool) {
+func (h *Handler) tenantBudget(ctx context.Context, tenantID uuid.UUID) (limes.TenantBudget, bool) {
 	if h.usage == nil {
-		return capability.TenantBudget{}, false
+		return limes.TenantBudget{}, false
 	}
 	tb, err := h.usage.GetTenantBudget(ctx, tenantID)
 	if err != nil {
-		if !errors.Is(err, capability.ErrTenantBudgetNotFound) {
+		if !errors.Is(err, limes.ErrTenantBudgetNotFound) {
 			logger.FromContext(ctx).Warn("billing: tenant budget unreadable; summary shows no cap",
 				zap.String("tenant_id", tenantID.String()), zap.Error(err))
 		}
-		return capability.TenantBudget{}, false
+		return limes.TenantBudget{}, false
 	}
 	return tb, true
 }
@@ -127,9 +127,9 @@ func resolvePeriod(start, end time.Time) (time.Time, time.Time, error) {
 
 // Summary is the in-memory shape returned by GetTenantSummary.
 type Summary struct {
-	TotalAmount     capability.Nanos
+	TotalAmount     limes.Nanos
 	UnitCode        string
-	MaxBudgetAmount capability.Nanos
+	MaxBudgetAmount limes.Nanos
 	ChargeCount     int64
 	TopCapabilities []TopEntry
 	TopActors       []TopEntry
@@ -139,7 +139,7 @@ type Summary struct {
 // TopEntry mirrors the proto shape one-to-one.
 type TopEntry struct {
 	Label       string
-	Amount      capability.Nanos
+	Amount      limes.Nanos
 	ChargeCount int64
 }
 
@@ -197,7 +197,7 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 		}
 	}
 	if out.UnitCode == "" {
-		out.UnitCode = capability.DefaultUnitCode
+		out.UnitCode = limes.DefaultUnitCode
 	}
 
 	out.TopCapabilities, err = h.queryTopBy(ctx, tenantID, start, end, "capability_id::text")
@@ -262,7 +262,7 @@ type TimeSeries struct {
 // TimeBucket mirrors the proto shape.
 type TimeBucket struct {
 	Start       time.Time
-	Amount      capability.Nanos
+	Amount      limes.Nanos
 	ChargeCount int64
 }
 
@@ -387,7 +387,7 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 		}
 	}
 	if out.UnitCode == "" {
-		out.UnitCode = capability.DefaultUnitCode
+		out.UnitCode = limes.DefaultUnitCode
 	}
 	return out, nil
 }

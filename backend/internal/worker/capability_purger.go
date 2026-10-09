@@ -5,7 +5,7 @@
 // removing its revocation row is safe.
 //
 // Lives next to the other housekeeping workers but in its own file
-// because it needs the capability.Store interface, which the
+// because it needs the limes.Store interface, which the
 // surrounding housekeeping workers don't import. Keeping it isolated
 // also lets the cmd/server build_jobs registration treat it as a
 // distinct cadence (default 1h, separate from audit log / operations
@@ -20,8 +20,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // ReplayPurger drops DPoP proof ids that can no longer be replayed, at most
@@ -39,8 +39,8 @@ const DefaultCapabilityExpiredFor = 24 * time.Hour
 // capability is gone; when Replay is wired, it drops expired DPoP proof
 // ids. Disabled when Interval <= 0.
 type CapabilityPurger struct {
-	Store      capability.Store
-	Usage      capability.UsageStore[pgx.Tx]
+	Store      limes.Store
+	Usage      limes.UsageStore[pgx.Tx]
 	Replay     ReplayPurger
 	Interval   time.Duration
 	ExpiredFor time.Duration

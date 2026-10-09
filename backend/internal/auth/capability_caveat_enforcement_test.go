@@ -1,7 +1,7 @@
 package auth
 
 // enforceCaveats is what turns a capability's restrictions into refusals. The
-// match itself (capability.Caveats.CheckSource) is tested in the module; these
+// match itself (limes.Caveats.CheckSource) is tested in the module; these
 // tests prove the interceptor reaches it. That is the shape of the risk: the
 // check works, and nothing proves it is reached.
 //
@@ -21,8 +21,8 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // erroringUsage returns a chosen error from BumpRequest so the fail-closed
@@ -32,15 +32,15 @@ type erroringUsage struct {
 	err error
 }
 
-func (e erroringUsage) Bump(ctx context.Context, req capability.BumpRequest) (int64, error) {
+func (e erroringUsage) Bump(ctx context.Context, req limes.BumpRequest) (int64, error) {
 	if e.err != nil {
 		return 0, e.err
 	}
 	return e.fakeUsage.Bump(ctx, req)
 }
 
-func capWithCaveats(c capability.Caveats) *capability.Capability {
-	return &capability.Capability{ID: uuid.New(), Caveats: c}
+func capWithCaveats(c limes.Caveats) *limes.Capability {
+	return &limes.Capability{ID: uuid.New(), Caveats: c}
 }
 
 // from is a request context carrying addr as the resolved client address,
@@ -55,12 +55,12 @@ func TestEnforceCaveats_SourceIPAllowList(t *testing.T) {
 	t.Run("no allow-list means no IP check", func(t *testing.T) {
 		// Nothing configured: the caveat must not run at all, so a request
 		// with no IP header whatsoever still passes.
-		if err := i.enforceCaveats(context.Background(), capWithCaveats(capability.Caveats{})); err != nil {
+		if err := i.enforceCaveats(context.Background(), capWithCaveats(limes.Caveats{})); err != nil {
 			t.Fatalf("unrestricted capability refused: %v", err)
 		}
 	})
 
-	restricted := capWithCaveats(capability.Caveats{SourceIPCIDR: []string{"10.0.0.0/8", "192.168.1.0/24"}})
+	restricted := capWithCaveats(limes.Caveats{SourceIPCIDR: []string{"10.0.0.0/8", "192.168.1.0/24"}})
 
 	t.Run("an address inside the list passes", func(t *testing.T) {
 		for _, ip := range []string{"10.1.2.3", "192.168.1.7"} {
@@ -102,7 +102,7 @@ func TestEnforceCaveats_MaxRequests(t *testing.T) {
 		// The operator opted out of usage accounting; the caveat cannot be
 		// enforced atomically, and the code says so rather than pretending.
 		i := &capabilityInterceptor{}
-		c := capWithCaveats(capability.Caveats{MaxRequests: 1})
+		c := capWithCaveats(limes.Caveats{MaxRequests: 1})
 		for n := range 3 {
 			if err := i.enforceCaveats(context.Background(), c); err != nil {
 				t.Fatalf("call %d refused with no usage store: %v", n, err)
@@ -113,7 +113,7 @@ func TestEnforceCaveats_MaxRequests(t *testing.T) {
 	t.Run("a cap of zero is unlimited", func(t *testing.T) {
 		usage := newFakeUsage()
 		i := &capabilityInterceptor{usage: usage}
-		c := capWithCaveats(capability.Caveats{MaxRequests: 0})
+		c := capWithCaveats(limes.Caveats{MaxRequests: 0})
 		for n := range 3 {
 			if err := i.enforceCaveats(context.Background(), c); err != nil {
 				t.Fatalf("call %d refused under an unlimited cap: %v", n, err)
@@ -127,7 +127,7 @@ func TestEnforceCaveats_MaxRequests(t *testing.T) {
 	t.Run("the cap is counted and then enforced", func(t *testing.T) {
 		usage := newFakeUsage()
 		i := &capabilityInterceptor{usage: usage}
-		c := capWithCaveats(capability.Caveats{MaxRequests: 2})
+		c := capWithCaveats(limes.Caveats{MaxRequests: 2})
 
 		for n := range 2 {
 			if err := i.enforceCaveats(context.Background(), c); err != nil {
@@ -152,7 +152,7 @@ func TestEnforceCaveats_MaxRequests(t *testing.T) {
 		i := &capabilityInterceptor{
 			usage: erroringUsage{fakeUsage: newFakeUsage(), err: boom},
 		}
-		err := i.enforceCaveats(context.Background(), capWithCaveats(capability.Caveats{MaxRequests: 5}))
+		err := i.enforceCaveats(context.Background(), capWithCaveats(limes.Caveats{MaxRequests: 5}))
 		if err == nil {
 			t.Fatal("a capped capability was allowed when its counter could not be bumped")
 		}

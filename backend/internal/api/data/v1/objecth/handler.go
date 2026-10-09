@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
@@ -42,7 +43,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // EventProducer mirrors the seam used by the admin handlers — narrow
@@ -690,7 +690,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 		return nil, err
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), in.Collection, in.Key)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return nil, err
 	}
 	policy := uploadpolicy.For(h.presign.Limits, meta.Constraints)
@@ -861,7 +861,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 		return nil, objectLookupError(err)
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), obj.Collection, obj.Key)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return nil, err
 	}
 	principal, _ := auth.PrincipalFromContext(ctx)
@@ -1005,7 +1005,7 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	// part of the collection is refused rather than shown every row's name —
 	// nothing filters rows by resource caveat, and an empty URI here used to
 	// skip the resource check entirely.
-	if err := auth.AssertCapabilityOp(ctx, capability.OpList, capabilityCollectionURI(tenantID, in.Collection)); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpList, capabilityCollectionURI(tenantID, in.Collection)); err != nil {
 		return nil, "", err
 	}
 	// Resolve the collection→bucket binding so a bucket:/collection:-scoped PAT
@@ -1108,7 +1108,7 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*Coun
 	if err != nil {
 		return nil, err
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpList, capabilityCollectionURI(tenantID, in.Collection)); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpList, capabilityCollectionURI(tenantID, in.Collection)); err != nil {
 		return nil, err
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
@@ -1171,7 +1171,7 @@ func (h *Handler) ListDistinctTags(
 	if err != nil {
 		return DistinctTagPage{}, err
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpList, capabilityCollectionURI(tenantID, collection)); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpList, capabilityCollectionURI(tenantID, collection)); err != nil {
 		return DistinctTagPage{}, err
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
@@ -1221,7 +1221,7 @@ func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (*
 		return nil, objectLookupError(err)
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), obj.Collection, obj.Key)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpGet, objectURI); err != nil {
 		return nil, err
 	}
 	// Resolve the collection→bucket binding (obj carries no bucket — the find
@@ -1270,7 +1270,7 @@ func (h *Handler) LookupObject(ctx context.Context, collection, key string) (*Ob
 		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), obj.Collection, obj.Key)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpGet, objectURI); err != nil {
 		return nil, err
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
@@ -1327,10 +1327,10 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	// Download issues a presigned URL — capability needs OpPresign and
 	// OpGet (the underlying op the URL grants). Two assertions, one per
 	// caveat axis; either failure short-circuits.
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPresign, objectURI); err != nil {
 		return nil, err
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpGet, objectURI); err != nil {
 		return nil, err
 	}
 	if obj.State != statemachine.StateAvailable {
@@ -1419,7 +1419,7 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 		return nil, objectLookupError(err)
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), in.Collection, cur.Key)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return nil, err
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
@@ -1495,7 +1495,7 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 		return objectLookupError(err)
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), collection, obj.Key)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpDelete, objectURI); err != nil {
 		return err
 	}
 	// Populate the physical (backend, bucket) on the authz Resource so a
@@ -1777,7 +1777,7 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	objectURI := paladin.ObjectResource(tenantID.String(), obj.Collection, obj.Key)
 	// Restore is conceptually a Put (re-creates the live object from a
 	// soft-deleted row). Capability gate on OpPut.
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return nil, err
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
@@ -1903,7 +1903,7 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	// underlying access model treats source-readable-and-dest-writable
 	// as the union of the same Cedar policy below.
 	destURI := paladin.ObjectResource(tenantID.String(), in.DestCollection, destKey)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, destURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, destURI); err != nil {
 		return nil, err
 	}
 	// The copy creates an object in the destination bucket, so it obeys that

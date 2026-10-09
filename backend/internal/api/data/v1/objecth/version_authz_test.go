@@ -9,9 +9,9 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // The versioning RPCs ran with no Cedar check and no capability check: inside
@@ -123,10 +123,10 @@ func TestVersionRPCsAskCedarForTheObjectActions(t *testing.T) {
 // principal everything: the capability narrows, it never widens.
 func TestReadOnlyCapabilityCannotRestoreAVersion(t *testing.T) {
 	f := newVersionFixture(t, allowAll{})
-	f.ctx = auth.WithCapability(f.ctx, &capability.Capability{
+	f.ctx = auth.WithCapability(f.ctx, &limes.Capability{
 		ID:      uuid.New(),
-		Subject: capability.Principal{TenantID: f.tenantID, Type: capability.PrincipalAgent},
-		Caveats: capability.Caveats{Ops: []capability.Op{capability.OpGet, capability.OpList}},
+		Subject: limes.Principal{TenantID: f.tenantID, Type: limes.PrincipalAgent},
+		Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpList}},
 	})
 	if err := f.get(); err != nil {
 		t.Fatalf("GetVersion with a read capability: %v", err)

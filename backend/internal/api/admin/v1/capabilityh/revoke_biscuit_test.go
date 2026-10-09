@@ -9,36 +9,36 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // fakeCopier names a fixed copy, or fails, and records the token it read.
 type fakeCopier struct {
-	copy  capability.BiscuitCopy
+	copy  limes.BiscuitCopy
 	err   error
 	token string
 }
 
-func (c *fakeCopier) BiscuitCopy(_ context.Context, token string) (capability.BiscuitCopy, error) {
+func (c *fakeCopier) BiscuitCopy(_ context.Context, token string) (limes.BiscuitCopy, error) {
 	c.token = token
 	return c.copy, c.err
 }
 
 // copyStore records what RevokeBiscuit was asked to list, and on which context.
 type copyStore struct {
-	args *capability.RevokeBiscuitRequest
+	args *limes.RevokeBiscuitRequest
 	ctx  context.Context
 	err  error
 }
 
 func (s *copyStore) IsBiscuitRevoked(context.Context, [][]byte) (bool, error) { return false, nil }
-func (s *copyStore) GetBiscuitRevocation(context.Context, []byte) (capability.BiscuitRevocation, error) {
-	return capability.BiscuitRevocation{}, capability.ErrNotFound
+func (s *copyStore) GetBiscuitRevocation(context.Context, []byte) (limes.BiscuitRevocation, error) {
+	return limes.BiscuitRevocation{}, limes.ErrNotFound
 }
-func (s *copyStore) RevokeBiscuit(ctx context.Context, args capability.RevokeBiscuitRequest) error {
+func (s *copyStore) RevokeBiscuit(ctx context.Context, args limes.RevokeBiscuitRequest) error {
 	s.args, s.ctx = &args, ctx
 	return s.err
 }
@@ -49,9 +49,9 @@ func revokeBiscuitReq() *adminv1.CapabilityServiceRevokeBiscuitRequest {
 
 func TestRevokeBiscuitListsTheCopy(t *testing.T) {
 	owner := uuid.New()
-	target := mkParent(owner, capability.OpGet)
+	target := mkParent(owner, limes.OpGet)
 	store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
-	copier := &fakeCopier{copy: capability.BiscuitCopy{CapabilityID: target.ID, RevocationID: []byte("last-block")}}
+	copier := &fakeCopier{copy: limes.BiscuitCopy{CapabilityID: target.ID, RevocationID: []byte("last-block")}}
 	copies := &copyStore{}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{}).WithBiscuitCopies(copier, copies)
 
@@ -81,7 +81,7 @@ func TestRevokeBiscuitListsTheCopy(t *testing.T) {
 
 func TestRevokeBiscuitRefusals(t *testing.T) {
 	id := uuid.New()
-	good := capability.BiscuitCopy{CapabilityID: id, RevocationID: []byte("x")}
+	good := limes.BiscuitCopy{CapabilityID: id, RevocationID: []byte("x")}
 	cases := map[string]struct {
 		authz  cedar.Authorizer
 		copier BiscuitCopier
@@ -90,8 +90,8 @@ func TestRevokeBiscuitRefusals(t *testing.T) {
 	}{
 		"Cedar denies":           {&denyAuthorizer{}, &fakeCopier{copy: good}, &copyStore{}, connect.CodePermissionDenied},
 		"not wired":              {&allowAuthorizer{}, nil, nil, connect.CodeUnavailable},
-		"not a genuine Biscuit":  {&allowAuthorizer{}, &fakeCopier{err: capability.ErrInvalidSignature}, &copyStore{}, connect.CodeInvalidArgument},
-		"capability not visible": {&allowAuthorizer{}, &fakeCopier{copy: good}, &copyStore{err: capability.ErrNotFound}, connect.CodeNotFound},
+		"not a genuine Biscuit":  {&allowAuthorizer{}, &fakeCopier{err: limes.ErrInvalidSignature}, &copyStore{}, connect.CodeInvalidArgument},
+		"capability not visible": {&allowAuthorizer{}, &fakeCopier{copy: good}, &copyStore{err: limes.ErrNotFound}, connect.CodeNotFound},
 		"store fails":            {&allowAuthorizer{}, &fakeCopier{copy: good}, &copyStore{err: errors.New("db down")}, connect.CodeInternal},
 	}
 	for name, tc := range cases {

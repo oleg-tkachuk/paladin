@@ -16,12 +16,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
-// UsageStore implements capability.UsageStore[pgx.Tx] against the schema baseline (001_initial_schema.sql)'s
+// UsageStore implements limes.UsageStore[pgx.Tx] against the schema baseline (001_initial_schema.sql)'s
 // capability_usage table. Single-row UPSERT per call → concurrency-safe
 // without explicit locking.
 //
@@ -45,7 +45,7 @@ type UsageStore struct {
 }
 
 // NewUsageStore wires the sqlc-generated queries to the
-// capability.UsageStore[pgx.Tx] interface.
+// limes.UsageStore[pgx.Tx] interface.
 //
 // pool is REQUIRED. It used to be optional, with a nil value selecting a
 // "test stub path" that ran the counters and skipped the charges ledger and
@@ -103,16 +103,16 @@ const spentQuery = `SELECT COALESCE((SELECT spent_usd FROM capability_usage WHER
 
 // replay is the receipt for a charge already in the ledger, returned when the
 // same charge arrives again: nothing moves, and Spent is read as it is now.
-func replay(ctx context.Context, tx pgx.Tx, chargeID, capID uuid.UUID, overrun bool) (capability.ChargeReceipt, error) {
+func replay(ctx context.Context, tx pgx.Tx, chargeID, capID uuid.UUID, overrun bool) (limes.ChargeReceipt, error) {
 	var spent pgtype.Numeric
 	if err := tx.QueryRow(ctx, spentQuery, capID).Scan(&spent); err != nil {
-		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: replay read spend: %w", err)
+		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: replay read spend: %w", err)
 	}
 	spentNanos, err := pgmoney.NanosFromNumeric(spent)
 	if err != nil {
-		return capability.ChargeReceipt{}, err
+		return limes.ChargeReceipt{}, err
 	}
-	return capability.ChargeReceipt{ChargeID: chargeID, Spent: spentNanos, Replayed: true, Overrun: overrun}, nil
+	return limes.ChargeReceipt{ChargeID: chargeID, Spent: spentNanos, Replayed: true, Overrun: overrun}, nil
 }
 
 // ancestor is one link of a capability's delegation chain, with the ceilings
@@ -166,11 +166,11 @@ func ancestorsOf(ctx context.Context, tx pgx.Tx, capID uuid.UUID) ([]ancestor, e
 	return out, nil
 }
 
-// BumpRequest implements capability.Meter. The capability and every
+// BumpRequest implements limes.Meter. The capability and every
 // ancestor are bumped in one transaction, leaf first and then nearest
 // ancestor first — the same order every charge takes, so two requests
 // sharing part of a chain lock it in the same order and cannot deadlock.
-func (s *UsageStore) Bump(ctx context.Context, req capability.BumpRequest) (int64, error) {
+func (s *UsageStore) Bump(ctx context.Context, req limes.BumpRequest) (int64, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("capability/postgres: bump begin: %w", err)
@@ -184,7 +184,7 @@ func (s *UsageStore) Bump(ctx context.Context, req capability.BumpRequest) (int6
 	count, err := qtx.BumpCapabilityRequestCount(ctx, pgtype.UUID{Bytes: req.CapabilityID, Valid: true}, req.MaxRequests)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, capability.ErrRequestLimitExceeded
+			return 0, limes.ErrRequestLimitExceeded
 		}
 		return 0, fmt.Errorf("capability/postgres: bump: %w", err)
 	}
@@ -195,7 +195,7 @@ func (s *UsageStore) Bump(ctx context.Context, req capability.BumpRequest) (int6
 	for _, a := range ancestors {
 		if _, err := qtx.BumpCapabilityRequestCount(ctx, pgtype.UUID{Bytes: a.id, Valid: true}, a.maxRequests); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return 0, fmt.Errorf("%w: ancestor %s", capability.ErrRequestLimitExceeded, a.id)
+				return 0, fmt.Errorf("%w: ancestor %s", limes.ErrRequestLimitExceeded, a.id)
 			}
 			return 0, fmt.Errorf("capability/postgres: bump ancestor: %w", err)
 		}
@@ -206,10 +206,10 @@ func (s *UsageStore) Bump(ctx context.Context, req capability.BumpRequest) (int6
 	return count, nil
 }
 
-// Charge implements capability.Meter.
+// Charge implements limes.Meter.
 //
 // unitCode pins the currency for newly-inserted rows. Empty value
-// resolves to capability.DefaultUnitCode. An existing row's unit_code is
+// resolves to limes.DefaultUnitCode. An existing row's unit_code is
 // preserved on conflict (the SQL uses the arg only on INSERT) so callers
 // cannot accidentally re-denominate an existing counter.
 //
@@ -227,33 +227,33 @@ func (s *UsageStore) Bump(ctx context.Context, req capability.BumpRequest) (int6
 //     orphaned from the spend they describe.
 func (s *UsageStore) Charge(
 	ctx context.Context,
-	req capability.ChargeRequest,
+	req limes.ChargeRequest,
 	onCharged func(ctx context.Context, tx pgx.Tx) error,
-) (capability.ChargeReceipt, error) {
-	if err := capability.ValidateAmount(req.Amount); err != nil {
-		return capability.ChargeReceipt{}, err
+) (limes.ChargeReceipt, error) {
+	if err := limes.ValidateAmount(req.Amount); err != nil {
+		return limes.ChargeReceipt{}, err
 	}
 	if err := req.Overrun.Validate(); err != nil {
-		return capability.ChargeReceipt{}, err
+		return limes.ChargeReceipt{}, err
 	}
-	if err := capability.ValidateExternalRef(req.ExternalRef); err != nil {
-		return capability.ChargeReceipt{}, err
+	if err := limes.ValidateExternalRef(req.ExternalRef); err != nil {
+		return limes.ChargeReceipt{}, err
 	}
 	if req.TenantID == uuid.Nil {
 		// The ledger row and the tenant ceiling both need one, and a
 		// capability always has one — the verifier refuses a tenantless token.
-		return capability.ChargeReceipt{}, errors.New("capability/postgres: charge requires a tenant")
+		return limes.ChargeReceipt{}, errors.New("capability/postgres: charge requires a tenant")
 	}
-	resolvedUnit, err := capability.NormaliseUnitCode(req.UnitCode)
+	resolvedUnit, err := limes.NormaliseUnitCode(req.UnitCode)
 	if err != nil {
-		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge: %w", err)
+		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge: %w", err)
 	}
 	amountNumeric := pgmoney.NumericFromNanos(req.Amount)
 	maxBudgetNumeric := pgmoney.NumericFromNanos(req.MaxBudget)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge begin: %w", err)
+		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // no-op after a successful commit
 
@@ -262,7 +262,7 @@ func (s *UsageStore) Charge(
 		// finds the first's row. The unique index (052) is the backstop.
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`,
 			req.CapabilityID.String()+":"+req.ExternalRef); err != nil {
-			return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge lock: %w", err)
+			return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge lock: %w", err)
 		}
 		var (
 			chargeID uuid.UUID
@@ -273,16 +273,16 @@ func (s *UsageStore) Charge(
 			return replay(ctx, tx, chargeID, req.CapabilityID, overrun)
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
-			return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge read ref: %w", err)
+			return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge read ref: %w", err)
 		}
 	}
 
 	receipt, err := s.chargeInTx(ctx, tx, req, uuid.Nil, resolvedUnit, amountNumeric, maxBudgetNumeric, onCharged)
 	if err != nil {
-		return capability.ChargeReceipt{}, err
+		return limes.ChargeReceipt{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge commit: %w", err)
+		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge commit: %w", err)
 	}
 	return receipt, nil
 }
@@ -299,18 +299,18 @@ func (s *UsageStore) Charge(
 func (s *UsageStore) chargeInTx(
 	ctx context.Context,
 	tx pgx.Tx,
-	req capability.ChargeRequest,
+	req limes.ChargeRequest,
 	reservationID uuid.UUID,
 	resolvedUnit string,
 	amountNumeric, maxBudgetNumeric pgtype.Numeric,
 	onCharged func(ctx context.Context, tx pgx.Tx) error,
-) (capability.ChargeReceipt, error) {
+) (limes.ChargeReceipt, error) {
 	qtx := s.q.WithTx(tx)
-	record := req.Overrun == capability.OverrunRecord
+	record := req.Overrun == limes.OverrunRecord
 
 	overrun, err := addCopySpendPast(ctx, tx, req.CapabilityID, req.Copies, amountNumeric, copySpent, req.Overrun)
 	if err != nil {
-		return capability.ChargeReceipt{}, err
+		return limes.ChargeReceipt{}, err
 	}
 	spent, err := qtx.ChargeCapability(ctx, pgtype.UUID{Bytes: req.CapabilityID, Valid: true},
 		amountNumeric, resolvedUnit, maxBudgetNumeric)
@@ -321,14 +321,14 @@ func (s *UsageStore) chargeInTx(
 	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return capability.ChargeReceipt{}, capability.ErrBudgetExceeded
+			return limes.ChargeReceipt{}, limes.ErrBudgetExceeded
 		}
-		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge: %w", err)
+		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge: %w", err)
 	}
 
 	ancestors, err := ancestorsOf(ctx, tx, req.CapabilityID)
 	if err != nil {
-		return capability.ChargeReceipt{}, err
+		return limes.ChargeReceipt{}, err
 	}
 	for _, a := range ancestors {
 		_, err := qtx.ChargeCapability(ctx, pgtype.UUID{Bytes: a.id, Valid: true},
@@ -340,9 +340,9 @@ func (s *UsageStore) chargeInTx(
 		}
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return capability.ChargeReceipt{}, fmt.Errorf("%w: ancestor %s", capability.ErrBudgetExceeded, a.id)
+				return limes.ChargeReceipt{}, fmt.Errorf("%w: ancestor %s", limes.ErrBudgetExceeded, a.id)
 			}
-			return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge ancestor: %w", err)
+			return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge ancestor: %w", err)
 		}
 	}
 
@@ -357,9 +357,9 @@ func (s *UsageStore) chargeInTx(
 		// Rollback (deferred) compensates every bump above — no explicit
 		// refund needed now that all of them live on one tx.
 		if errors.Is(tErr, pgx.ErrNoRows) {
-			return capability.ChargeReceipt{}, capability.ErrTenantBudgetExceeded
+			return limes.ChargeReceipt{}, limes.ErrTenantBudgetExceeded
 		}
-		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge tenant: %w", tErr)
+		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge tenant: %w", tErr)
 	}
 
 	// Ledger row on the same tx — atomic with the counters.
@@ -379,13 +379,13 @@ func (s *UsageStore) chargeInTx(
 		req.ExternalRef, nullableUUID(reservationID), overrun,
 	)
 	if lErr != nil {
-		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge ledger insert: %w", lErr)
+		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge ledger insert: %w", lErr)
 	}
 	if tag.RowsAffected() != 1 {
 		// The INSERT ... SELECT found no tenant row. Committing would record
 		// spend with no ledger entry — and hand back a charge ID no refund
 		// could ever find.
-		return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge ledger: tenant %s not found", req.TenantID)
+		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge ledger: tenant %s not found", req.TenantID)
 	}
 
 	// Transactional-outbox fan-out on the same tx (ADR-0003): the
@@ -404,15 +404,15 @@ func (s *UsageStore) chargeInTx(
 				zap.Stringer("amount", req.Amount),
 				zap.Error(fErr),
 			)
-			return capability.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge fan-out: %w", fErr)
+			return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge fan-out: %w", fErr)
 		}
 	}
 
 	spentNanos, err := pgmoney.NanosFromNumeric(spent)
 	if err != nil {
-		return capability.ChargeReceipt{}, err
+		return limes.ChargeReceipt{}, err
 	}
-	return capability.ChargeReceipt{ChargeID: ledgerID, Spent: spentNanos, Overrun: overrun}, nil
+	return limes.ChargeReceipt{ChargeID: ledgerID, Spent: spentNanos, Overrun: overrun}, nil
 }
 
 // nullableUUID is id for a uuid column, with uuid.Nil as NULL.
@@ -430,37 +430,37 @@ FROM   charges ch
 `
 
 // readCharge runs chargeRecordSelect with where and its args.
-func (s *UsageStore) readCharge(ctx context.Context, where string, args ...any) (capability.ChargeRecord, error) {
+func (s *UsageStore) readCharge(ctx context.Context, where string, args ...any) (limes.ChargeRecord, error) {
 	var (
-		rec              capability.ChargeRecord
+		rec              limes.ChargeRecord
 		amount, refunded pgtype.Numeric
 	)
 	err := s.pool.QueryRow(ctx, chargeRecordSelect+where, args...).
 		Scan(&rec.ChargeID, &rec.CapabilityID, &amount, &refunded, &rec.UnitCode, &rec.ExternalRef, &rec.Overrun)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+		return limes.ChargeRecord{}, limes.ErrChargeNotFound
 	}
 	if err != nil {
-		return capability.ChargeRecord{}, fmt.Errorf("capability/postgres: read charge: %w", err)
+		return limes.ChargeRecord{}, fmt.Errorf("capability/postgres: read charge: %w", err)
 	}
 	if rec.Amount, err = pgmoney.NanosFromNumeric(amount); err != nil {
-		return capability.ChargeRecord{}, err
+		return limes.ChargeRecord{}, err
 	}
 	if rec.Refunded, err = pgmoney.NanosFromNumeric(refunded); err != nil {
-		return capability.ChargeRecord{}, err
+		return limes.ChargeRecord{}, err
 	}
 	return rec, nil
 }
 
-// GetCharge implements capability.Meter.
-func (s *UsageStore) GetCharge(ctx context.Context, chargeID uuid.UUID) (capability.ChargeRecord, error) {
+// GetCharge implements limes.Meter.
+func (s *UsageStore) GetCharge(ctx context.Context, chargeID uuid.UUID) (limes.ChargeRecord, error) {
 	return s.readCharge(ctx, `WHERE ch.id = $1`, chargeID)
 }
 
-// ChargeByRef implements capability.Meter.
-func (s *UsageStore) ChargeByRef(ctx context.Context, capID uuid.UUID, externalRef string) (capability.ChargeRecord, error) {
+// ChargeByRef implements limes.Meter.
+func (s *UsageStore) ChargeByRef(ctx context.Context, capID uuid.UUID, externalRef string) (limes.ChargeRecord, error) {
 	if externalRef == "" {
-		return capability.ChargeRecord{}, capability.ErrChargeNotFound
+		return limes.ChargeRecord{}, limes.ErrChargeNotFound
 	}
 	return s.readCharge(ctx, `WHERE ch.capability_id = $1 AND ch.external_ref = $2`, capID, externalRef)
 }
@@ -486,15 +486,15 @@ CROSS  JOIN LATERAL (
 WHERE  ch.id = $1;
 `
 
-// Refund implements capability.Meter.
+// Refund implements limes.Meter.
 //
 // Concurrent refunds of one charge are serialised on a transaction-scoped
 // advisory lock keyed by the charge: charges is append-only by policy, so a
 // row lock (SELECT ... FOR UPDATE, which needs an UPDATE policy) is not
 // available, and without serialisation two refunds could each see the full
 // remainder.
-func (s *UsageStore) Refund(ctx context.Context, req capability.RefundRequest) (capability.Nanos, error) {
-	if err := capability.ValidateAmount(req.Amount); err != nil {
+func (s *UsageStore) Refund(ctx context.Context, req limes.RefundRequest) (limes.Nanos, error) {
+	if err := limes.ValidateAmount(req.Amount); err != nil {
 		return 0, err
 	}
 	amountNumeric := pgmoney.NumericFromNanos(req.Amount)
@@ -520,12 +520,12 @@ func (s *UsageStore) Refund(ctx context.Context, req capability.RefundRequest) (
 	if err := tx.QueryRow(ctx, refundableQuery, req.ChargeID, amountNumeric).
 		Scan(&capID, &tenantID, &copies, &refund, &exceeds); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, capability.ErrChargeNotFound
+			return 0, limes.ErrChargeNotFound
 		}
 		return 0, fmt.Errorf("capability/postgres: refund read: %w", err)
 	}
 	if exceeds {
-		return 0, fmt.Errorf("%w: charge %s", capability.ErrRefundExceedsCharge, req.ChargeID)
+		return 0, fmt.Errorf("%w: charge %s", limes.ErrRefundExceedsCharge, req.ChargeID)
 	}
 	refunded, err := pgmoney.NanosFromNumeric(refund)
 	if err != nil {
@@ -567,23 +567,23 @@ func (s *UsageStore) Refund(ctx context.Context, req capability.RefundRequest) (
 	return refunded, nil
 }
 
-// GetTenantBudget implements capability.UsageStore[pgx.Tx].
-func (s *UsageStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (capability.TenantBudget, error) {
+// GetTenantBudget implements limes.UsageStore[pgx.Tx].
+func (s *UsageStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (limes.TenantBudget, error) {
 	row, err := s.q.GetTenantBudget(ctx, pgtype.UUID{Bytes: tenantID, Valid: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return capability.TenantBudget{}, capability.ErrTenantBudgetNotFound
+			return limes.TenantBudget{}, limes.ErrTenantBudgetNotFound
 		}
-		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: get tenant budget: %w", err)
+		return limes.TenantBudget{}, fmt.Errorf("capability/postgres: get tenant budget: %w", err)
 	}
 	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.ReservedUsd, row.UnitCode,
 		row.PeriodStart, row.PeriodEnd, row.UpdatedAt, row.ResourceVersion)
 }
 
-// SetTenantBudget implements capability.UsageStore[pgx.Tx].
-func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTenantBudgetRequest) (capability.TenantBudget, error) {
-	if err := capability.ValidateAmount(args.MaxBudgetAmount); err != nil {
-		return capability.TenantBudget{}, err
+// SetTenantBudget implements limes.UsageStore[pgx.Tx].
+func (s *UsageStore) SetTenantBudget(ctx context.Context, args limes.SetTenantBudgetRequest) (limes.TenantBudget, error) {
+	if err := limes.ValidateAmount(args.MaxBudgetAmount); err != nil {
+		return limes.TenantBudget{}, err
 	}
 	maxBudget := pgmoney.NumericFromNanos(args.MaxBudgetAmount)
 	// Empty UnitCode passed through verbatim — the SQL preserves
@@ -591,8 +591,8 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTen
 	// inserts 'USD' on first row). A non-empty value is validated.
 	unit := args.UnitCode
 	if unit != "" {
-		if !capability.IsAllowedUnitCode(unit) {
-			return capability.TenantBudget{}, fmt.Errorf("capability/postgres: SetTenantBudget: invalid unit_code %q", unit)
+		if !limes.IsAllowedUnitCode(unit) {
+			return limes.TenantBudget{}, fmt.Errorf("capability/postgres: SetTenantBudget: invalid unit_code %q", unit)
 		}
 	}
 	var periodEnd pgtype.Timestamptz
@@ -613,9 +613,9 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTen
 		// version guard did not hold: the row exists and its version is not the
 		// one the caller read.
 		if errors.Is(err, pgx.ErrNoRows) {
-			return capability.TenantBudget{}, capability.ErrTenantBudgetVersionMismatch
+			return limes.TenantBudget{}, limes.ErrTenantBudgetVersionMismatch
 		}
-		return capability.TenantBudget{}, fmt.Errorf("capability/postgres: set tenant budget: %w", err)
+		return limes.TenantBudget{}, fmt.Errorf("capability/postgres: set tenant budget: %w", err)
 	}
 	return tenantBudgetFromRow(row.TenantID, row.MaxBudgetUsd, row.SpentUsd, row.ReservedUsd, row.UnitCode,
 		row.PeriodStart, row.PeriodEnd, row.UpdatedAt, row.ResourceVersion)
@@ -629,9 +629,9 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args capability.SetTen
 // numeric-precision path inside Postgres where it belongs).
 func (s *UsageStore) ListTenantBudgets(
 	ctx context.Context,
-	args capability.ListTenantBudgetsRequest,
-) ([]capability.TenantBudgetSummary, string, error) {
-	limit := capability.PageLimit(args.Limit)
+	args limes.ListTenantBudgetsRequest,
+) ([]limes.TenantBudgetSummary, string, error) {
+	limit := limes.PageLimit(args.Limit)
 	threshold, err := numericFromFloat(args.ThresholdPct)
 	if err != nil {
 		return nil, "", fmt.Errorf("capability/postgres: threshold_pct: %w", err)
@@ -639,12 +639,12 @@ func (s *UsageStore) ListTenantBudgets(
 	var afterPct pgtype.Numeric
 	var afterTenant pgtype.UUID
 	if args.Cursor != "" {
-		c, err := capability.DecodeTenantBudgetCursor(args.Cursor)
+		c, err := limes.DecodeTenantBudgetCursor(args.Cursor)
 		if err != nil {
 			return nil, "", err
 		}
 		if err := afterPct.Scan(c.Utilisation); err != nil {
-			return nil, "", fmt.Errorf("%w: tenant budget cursor", capability.ErrInvalidRequest)
+			return nil, "", fmt.Errorf("%w: tenant budget cursor", limes.ErrInvalidRequest)
 		}
 		afterTenant = pgtype.UUID{Bytes: c.TenantID, Valid: true}
 	}
@@ -663,9 +663,9 @@ func (s *UsageStore) ListTenantBudgets(
 	if len(rows) > int(limit) {
 		rows = rows[:limit]
 		last := rows[len(rows)-1]
-		next = capability.TenantBudgetCursor{Utilisation: last.RawPct, TenantID: uuid.UUID(last.TenantID.Bytes)}.Encode()
+		next = limes.TenantBudgetCursor{Utilisation: last.RawPct, TenantID: uuid.UUID(last.TenantID.Bytes)}.Encode()
 	}
-	out := make([]capability.TenantBudgetSummary, 0, len(rows))
+	out := make([]limes.TenantBudgetSummary, 0, len(rows))
 	for _, r := range rows {
 		budget, err := tenantBudgetFromRow(
 			r.TenantID, r.MaxBudgetUsd, r.SpentUsd, r.ReservedUsd, r.UnitCode,
@@ -674,7 +674,7 @@ func (s *UsageStore) ListTenantBudgets(
 		if err != nil {
 			return nil, "", err
 		}
-		out = append(out, capability.TenantBudgetSummary{
+		out = append(out, limes.TenantBudgetSummary{
 			TenantID:       uuid.UUID(r.TenantID.Bytes),
 			Slug:           r.Slug,
 			DisplayName:    r.DisplayName,
@@ -692,21 +692,21 @@ func tenantBudgetFromRow(
 	unitCode string,
 	periodStart, periodEnd, updatedAt pgtype.Timestamptz,
 	resourceVersion int64,
-) (capability.TenantBudget, error) {
-	out := capability.TenantBudget{
+) (limes.TenantBudget, error) {
+	out := limes.TenantBudget{
 		TenantID:        uuid.UUID(tenantID.Bytes),
 		UnitCode:        unitCode,
 		ResourceVersion: resourceVersion,
 	}
 	var err error
 	if out.MaxBudgetAmount, err = pgmoney.NanosFromNumeric(maxBudget); err != nil {
-		return capability.TenantBudget{}, err
+		return limes.TenantBudget{}, err
 	}
 	if out.SpentAmount, err = pgmoney.NanosFromNumeric(spent); err != nil {
-		return capability.TenantBudget{}, err
+		return limes.TenantBudget{}, err
 	}
 	if out.ReservedAmount, err = pgmoney.NanosFromNumeric(reserved); err != nil {
-		return capability.TenantBudget{}, err
+		return limes.TenantBudget{}, err
 	}
 	if periodStart.Valid {
 		out.PeriodStart = periodStart.Time
@@ -721,24 +721,24 @@ func tenantBudgetFromRow(
 	return out, nil
 }
 
-// Get implements capability.UsageStore[pgx.Tx].
-func (s *UsageStore) GetUsage(ctx context.Context, capID uuid.UUID) (capability.Usage, error) {
+// Get implements limes.UsageStore[pgx.Tx].
+func (s *UsageStore) GetUsage(ctx context.Context, capID uuid.UUID) (limes.Usage, error) {
 	row, err := s.q.GetCapabilityUsage(ctx, pgtype.UUID{Bytes: capID, Valid: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return capability.Usage{}, capability.ErrUsageNotFound
+			return limes.Usage{}, limes.ErrUsageNotFound
 		}
-		return capability.Usage{}, fmt.Errorf("capability/postgres: get usage: %w", err)
+		return limes.Usage{}, fmt.Errorf("capability/postgres: get usage: %w", err)
 	}
 	spent, err := pgmoney.NanosFromNumeric(row.SpentUsd)
 	if err != nil {
-		return capability.Usage{}, err
+		return limes.Usage{}, err
 	}
 	reserved, err := pgmoney.NanosFromNumeric(row.ReservedUsd)
 	if err != nil {
-		return capability.Usage{}, err
+		return limes.Usage{}, err
 	}
-	return capability.Usage{
+	return limes.Usage{
 		CapabilityID:   uuid.UUID(row.CapabilityID.Bytes),
 		RequestCount:   row.RequestCount,
 		SpentAmount:    spent,
@@ -747,7 +747,7 @@ func (s *UsageStore) GetUsage(ctx context.Context, capID uuid.UUID) (capability.
 	}, nil
 }
 
-// Delete implements capability.UsageStore[pgx.Tx].
+// Delete implements limes.UsageStore[pgx.Tx].
 func (s *UsageStore) Delete(ctx context.Context, capID uuid.UUID) error {
 	if _, err := s.q.DeleteCapabilityUsage(ctx, pgtype.UUID{Bytes: capID, Valid: true}); err != nil {
 		return fmt.Errorf("capability/postgres: delete usage: %w", err)
@@ -755,7 +755,7 @@ func (s *UsageStore) Delete(ctx context.Context, capID uuid.UUID) error {
 	return nil
 }
 
-// PurgeOrphans implements capability.UsageStore[pgx.Tx].
+// PurgeOrphans implements limes.UsageStore[pgx.Tx].
 func (s *UsageStore) PurgeOrphans(ctx context.Context) (int64, error) {
 	n, err := s.q.PurgeCapabilityUsageOrphans(ctx)
 	if err != nil {
@@ -806,4 +806,4 @@ func floatFromNumeric(n pgtype.Numeric) float64 {
 // Compile-time conformance, instantiated over Paladin's actual transaction type.
 // This is also the assertion that keeps FR-014 honest: Paladin satisfies the same
 // published contract a third party would, with no privileged access.
-var _ capability.UsageStore[pgx.Tx] = (*UsageStore)(nil)
+var _ limes.UsageStore[pgx.Tx] = (*UsageStore)(nil)

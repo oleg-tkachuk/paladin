@@ -10,11 +10,11 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
-	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
@@ -60,7 +60,7 @@ func (h *VersionHandler) authorizeParent(
 	tenantID uuid.UUID,
 	principal *auth.Principal,
 	parent Object,
-	op capability.Op,
+	op limes.Op,
 	action cedar.Action,
 ) error {
 	if err := auth.AssertCapabilityOp(ctx, op, CapabilityObjectURI(tenantID, parent.Collection, parent.Key)); err != nil {
@@ -156,7 +156,7 @@ func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput)
 	if err != nil {
 		return nil, "", objectLookupError(err)
 	}
-	if err := h.authorizeParent(ctx, tenantID, principal, parent, capability.OpGet, cedar.ActionGetObject); err != nil {
+	if err := h.authorizeParent(ctx, tenantID, principal, parent, limes.OpGet, cedar.ActionGetObject); err != nil {
 		return nil, "", err
 	}
 	out, next, err := h.versions.List(ctx, objectID, in.PageSize, in.PageToken)
@@ -182,7 +182,7 @@ func (h *VersionHandler) GetVersion(ctx context.Context, name string) (*ObjectVe
 	if err != nil {
 		return nil, objectLookupError(err)
 	}
-	if err := h.authorizeParent(ctx, tenantID, principal, parent, capability.OpGet, cedar.ActionGetObject); err != nil {
+	if err := h.authorizeParent(ctx, tenantID, principal, parent, limes.OpGet, cedar.ActionGetObject); err != nil {
 		return nil, err
 	}
 	v, err := h.versions.Get(ctx, parsed.versionID)
@@ -234,7 +234,7 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersi
 	if err != nil {
 		return nil, objectLookupError(err)
 	}
-	if err := h.authorizeParent(ctx, tenantID, principal, parent, capability.OpPut, cedar.ActionPutObject); err != nil {
+	if err := h.authorizeParent(ctx, tenantID, principal, parent, limes.OpPut, cedar.ActionPutObject); err != nil {
 		return nil, err
 	}
 	if expected != parent.ResourceVersion {

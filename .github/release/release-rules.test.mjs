@@ -19,7 +19,6 @@ const BACKEND = ["backend/internal/api/handler.go"];
 const SDK = ["sdk/go/paladin/client.go"];
 const PYTHON_SDK = ["sdk/python/src/paladin/client.py"];
 const PROTO = ["proto/paladin/data/v1/object_service.proto"];
-const CAPABILITY = ["capability/mint.go"];
 const UPGRADING = ["docs/upgrading.md"];
 
 // [stream, commit message, files it changed, release wanted]
@@ -33,15 +32,13 @@ const cases = [
   ["product", "docs: explain a thing", BACKEND, null],
   ["product", "chore: tidy", BACKEND, null],
   ["product", "refactor(api): move a thing", BACKEND, null],
-  // The backend compiles capability/ and sdk/go/ in: a change there changes
-  // its image, so the product releases it.
-  ["product", "fix(capability): a module fix ships in the backend", CAPABILITY, "patch"],
+  // The backend compiles sdk/go/ in: a change there changes its image, so the
+  // product releases it.
   ["product", "feat(sdk): the Go SDK is compiled into the backend", SDK, "minor"],
   ["product", "feat(sdk): only the Python SDK", PYTHON_SDK, null],
   ["product", "feat(sdk): the Python SDK and the server", [...PYTHON_SDK, ...BACKEND], "minor"],
   // A module's own breaking change is not a product major.
   ["product", "feat(sdk)!: the Go SDK's API breaks", SDK, "minor"],
-  ["product", "feat(capability)!: the module's API breaks", CAPABILITY, "minor"],
   ["product", "feat(sdk)!: the SDK and the server break together", [...SDK, ...BACKEND], "major"],
   ["product", "feat(api)!: a contract break is the server's", PROTO, "major"],
   // Its upgrade notes do not make a module's break the product's: what
@@ -61,11 +58,10 @@ const cases = [
   ["sdk", "feat(api): only the server", BACKEND, null],
   ["sdk", "docs(sdk): explain a helper", SDK, null],
 
-  ["capability", "feat(capability): add a caveat", CAPABILITY, "minor"],
-  ["capability", "fix(capability): repair a check", CAPABILITY, "patch"],
-  ["capability", "feat(capability)!: before 1.0 a break is a minor", CAPABILITY, "minor"],
-  ["capability", "fix(api): only the server", BACKEND, null],
-  ["capability", "feat(sdk): only the SDK", SDK, null],
+  // The capability primitive moved to its own repository (limes): a go.mod
+  // bump that takes a new limes is a backend change like any other.
+  ["product", "build(deps): take a new limes", ["backend/go.mod", "backend/go.sum"], null],
+  ["product", "fix(auth): adopt a limes fix", ["backend/go.mod", "backend/go.sum"], "patch"],
 ];
 
 const logger = { log() {}, error() {}, warn() {}, success() {} };

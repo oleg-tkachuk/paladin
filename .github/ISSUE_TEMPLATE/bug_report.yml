@@ -22,7 +22,6 @@ body:
         - backend — API / admin plane
         - backend — worker / dispatcher / ingest
         - backend — auth, policy, capability
-        - capability module (standalone)
         - frontend — admin console / BFF
         - deployment — Helm chart, compose, migrations
         - docs

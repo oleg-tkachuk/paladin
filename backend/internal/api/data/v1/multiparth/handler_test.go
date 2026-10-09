@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
@@ -18,7 +19,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // --- fakes -----------------------------------------------------------------
@@ -298,9 +298,9 @@ func authedCtx(tid uuid.UUID) context.Context {
 
 // authedCtxWithCap authorises exactly `ops`; a missing op drives the
 // PermissionDenied branch of auth.AssertCapabilityOp.
-func authedCtxWithCap(tid uuid.UUID, ops ...capability.Op) context.Context {
-	return auth.WithCapability(authedCtx(tid), &capability.Capability{
-		Caveats: capability.Caveats{Ops: ops},
+func authedCtxWithCap(tid uuid.UUID, ops ...limes.Op) context.Context {
+	return auth.WithCapability(authedCtx(tid), &limes.Capability{
+		Caveats: limes.Caveats{Ops: ops},
 	})
 }
 
@@ -372,7 +372,7 @@ func TestInitiateMultipartUpload(t *testing.T) {
 	})
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, capability.OpGet) // no OpPut
+		ctx := authedCtxWithCap(tid, limes.OpGet) // no OpPut
 		_, err := newHandler(&fakeRepo{}, &fakeStorage{}, allow()).
 			InitiateMultipartUpload(ctx, base)
 		wantCode(t, err, connect.CodePermissionDenied)
@@ -520,7 +520,7 @@ func TestCompleteMultipartUpload(t *testing.T) {
 	})
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, capability.OpGet) // no OpPut
+		ctx := authedCtxWithCap(tid, limes.OpGet) // no OpPut
 		_, err := newHandler(okSession(), &fakeStorage{}, allow()).
 			CompleteMultipartUpload(ctx, CompleteArgs{UploadID: "up-1"})
 		wantCode(t, err, connect.CodePermissionDenied)
@@ -602,7 +602,7 @@ func TestAbortMultipartUpload(t *testing.T) {
 	})
 
 	t.Run("capability lacks delete op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, capability.OpGet) // no OpDelete
+		ctx := authedCtxWithCap(tid, limes.OpGet) // no OpDelete
 		err := newHandler(okSession(), &fakeStorage{}, allow()).
 			AbortMultipartUpload(ctx, "up-1", SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
@@ -678,14 +678,14 @@ func TestPresignPart(t *testing.T) {
 	})
 
 	t.Run("capability lacks presign op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, capability.OpPut) // has put, not presign
+		ctx := authedCtxWithCap(tid, limes.OpPut) // has put, not presign
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, allow()).
 			PresignPart(ctx, "up-1", 1, time.Minute, testPartChecksum, SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, capability.OpPresign) // has presign, not put
+		ctx := authedCtxWithCap(tid, limes.OpPresign) // has presign, not put
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, allow()).
 			PresignPart(ctx, "up-1", 1, time.Minute, testPartChecksum, SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)
@@ -834,7 +834,7 @@ func TestListParts(t *testing.T) {
 	})
 
 	t.Run("capability lacks list op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, capability.OpGet) // no OpList
+		ctx := authedCtxWithCap(tid, limes.OpGet) // no OpList
 		_, _, err := newHandler(okSession(nil), &fakeStorage{}, allow()).
 			ListParts(ctx, "up-1", 10, "", SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)

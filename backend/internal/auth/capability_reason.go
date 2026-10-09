@@ -7,12 +7,12 @@ import (
 	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
-// capabilityReasonPrefix spells a capability.Reason as an ErrorReason value
+// capabilityReasonPrefix spells a limes.Reason as an ErrorReason value
 // name: "budget_exceeded" is ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED. One rule
 // rather than a table, so a reason the module adds cannot be mapped wrong —
 // only left unmapped, which TestEveryCapabilityReasonHasAnErrorReason refuses.
@@ -20,7 +20,7 @@ const capabilityReasonPrefix = "ERROR_REASON_CAPABILITY_"
 
 // capabilityErrorReason is r's ErrorReason; ERROR_REASON_UNSPECIFIED when the
 // proto has no value for it.
-func capabilityErrorReason(r capability.Reason) commonv1.ErrorReason {
+func capabilityErrorReason(r limes.Reason) commonv1.ErrorReason {
 	return commonv1.ErrorReason(commonv1.ErrorReason_value[capabilityReasonPrefix+strings.ToUpper(string(r))])
 }
 
@@ -30,7 +30,7 @@ func capabilityErrorReason(r capability.Reason) commonv1.ErrorReason {
 // can fix, without reading the message.
 func capabilityError(code connect.Code, err error) *connect.Error {
 	e := connect.NewError(code, err.Error()).WithCause(err)
-	r, ok := capability.ReasonOf(err)
+	r, ok := limes.ReasonOf(err)
 	if !ok {
 		return e
 	}

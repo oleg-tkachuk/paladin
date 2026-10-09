@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 // A first charge used to skip the ceiling: the INSERT path of the upsert
@@ -15,9 +15,9 @@ import (
 func TestFirstChargeRespectsTheCeiling(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
-	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{
-		CapabilityID: f.capID, TenantID: f.tenant, Amount: capability.MustParseAmount("50"), MaxBudget: capability.MustParseAmount("10"), UnitCode: "USD",
-	}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := f.usage.Charge(ctx, limes.ChargeRequest{
+		CapabilityID: f.capID, TenantID: f.tenant, Amount: limes.MustParseAmount("50"), MaxBudget: limes.MustParseAmount("10"), UnitCode: "USD",
+	}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
 		t.Fatalf("first charge above the cap: err = %v, want ErrBudgetExceeded", err)
 	}
 	if got := f.spentOn(t, ctx); got != 0 {
@@ -33,9 +33,9 @@ func TestFirstChargeOfAnAncestorRespectsItsCeiling(t *testing.T) {
 	ctx, f := newLineageFixture(t)
 	// The child's own ceiling is 20; the parent's 25. The parent has never
 	// been charged, so its usage row does not exist yet. 30 fits neither.
-	if _, err := f.usage.Charge(ctx, capability.ChargeRequest{
-		CapabilityID: f.child, TenantID: f.tenant, Amount: capability.MustParseAmount("30"), MaxBudget: 0, UnitCode: "USD",
-	}, nil); !errors.Is(err, capability.ErrBudgetExceeded) {
+	if _, err := f.usage.Charge(ctx, limes.ChargeRequest{
+		CapabilityID: f.child, TenantID: f.tenant, Amount: limes.MustParseAmount("30"), MaxBudget: 0, UnitCode: "USD",
+	}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
 		t.Fatalf("first charge above the parent's ceiling: err = %v, want ErrBudgetExceeded", err)
 	}
 }

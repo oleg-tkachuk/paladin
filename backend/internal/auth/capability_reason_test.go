@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -39,7 +39,7 @@ func wireReason(t *testing.T, err error) string {
 // A reason the module adds without a proto value would reach clients as no
 // reason at all.
 func TestEveryCapabilityReasonHasAnErrorReason(t *testing.T) {
-	for _, r := range capability.Reasons() {
+	for _, r := range limes.Reasons() {
 		if capabilityErrorReason(r) == commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED {
 			t.Errorf("capability reason %q has no %s value in ErrorReason", r, capabilityReasonPrefix)
 		}
@@ -52,10 +52,10 @@ func TestCapabilityErrorCarriesTheReason(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"expired", fmt.Errorf("verify: %w", capability.ErrExpired), "ERROR_REASON_CAPABILITY_EXPIRED"},
-		{"budget", capability.ErrBudgetExceeded, "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED"},
+		{"expired", fmt.Errorf("verify: %w", limes.ErrExpired), "ERROR_REASON_CAPABILITY_EXPIRED"},
+		{"budget", limes.ErrBudgetExceeded, "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED"},
 		{"store failure", errors.New("connection reset"), ""},
-		{"programming error", capability.ErrEffectConflict, ""},
+		{"programming error", limes.ErrEffectConflict, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -68,16 +68,16 @@ func TestCapabilityErrorCarriesTheReason(t *testing.T) {
 
 // The reason reaches the wire from the paths a handler takes.
 func TestCapabilityRefusalsCarryTheirReason(t *testing.T) {
-	cap := &capability.Capability{ID: uuid.New(), Caveats: capability.Caveats{
-		Ops: []capability.Op{capability.OpGet}, MaxBudgetAmount: capability.MustParseAmount("1"),
+	cap := &limes.Capability{ID: uuid.New(), Caveats: limes.Caveats{
+		Ops: []limes.Op{limes.OpGet}, MaxBudgetAmount: limes.MustParseAmount("1"),
 	}}
 	ctx := WithChargeStore(WithCapability(context.Background(), cap), newFakeUsage())
 
-	err := AssertCapabilityOp(ctx, capability.OpPut, "object://acme/foo")
+	err := AssertCapabilityOp(ctx, limes.OpPut, "object://acme/foo")
 	if got := wireReason(t, err); got != "ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED" {
 		t.Errorf("op refusal reason = %q", got)
 	}
-	err = ChargeCapability(ctx, 2*capability.NanosPerUnit, "")
+	err = ChargeCapability(ctx, 2*limes.NanosPerUnit, "")
 	if got := wireReason(t, err); got != "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED" {
 		t.Errorf("budget refusal reason = %q", got)
 	}

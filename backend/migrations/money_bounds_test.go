@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 // moneyBoundsMigration bounds every money column; SQL cannot import the Go
@@ -17,7 +17,7 @@ var moneyCheck = regexp.MustCompile(`CHECK \(scale\((\w+)\) <= (\d+) AND (\w+) <
 // nanosDecimals is the scale a Nanos carries.
 const nanosDecimals = "9"
 
-// Every money column is bounded at capability.MaxNanos, nine decimals.
+// Every money column is bounded at limes.MaxNanos, nine decimals.
 func TestMoneyColumnsAreBoundedAtMaxNanos(t *testing.T) {
 	raw, err := FS.ReadFile(moneyBoundsMigration)
 	if err != nil {
@@ -30,8 +30,8 @@ func TestMoneyColumnsAreBoundedAtMaxNanos(t *testing.T) {
 	}
 	for _, m := range checks {
 		column, scale, bounded, bound := m[1], m[2], m[3], m[4]
-		if column != bounded || scale != nanosDecimals || bound != capability.MaxNanos.String() {
-			t.Errorf("%s: scale %s, bound %s on %s; want scale %s, bound %s", column, scale, bound, bounded, nanosDecimals, capability.MaxNanos)
+		if column != bounded || scale != nanosDecimals || bound != limes.MaxNanos.String() {
+			t.Errorf("%s: scale %s, bound %s on %s; want scale %s, bound %s", column, scale, bound, bounded, nanosDecimals, limes.MaxNanos)
 		}
 	}
 }

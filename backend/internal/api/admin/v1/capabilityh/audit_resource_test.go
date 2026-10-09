@@ -8,9 +8,9 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
@@ -34,7 +34,7 @@ func TestIssueNamesTheCapabilityUnderItsTenant(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
+		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
 	})
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
@@ -47,7 +47,7 @@ func TestIssueNamesTheCapabilityUnderItsTenant(t *testing.T) {
 
 func TestDelegateNamesTheChildUnderItsTenant(t *testing.T) {
 	tenant := uuid.New()
-	parent := mkParent(tenant, capability.OpGet, capability.OpShare)
+	parent := mkParent(tenant, limes.OpGet, limes.OpShare)
 	store := &fakeStore{cap: &parent}
 	h := NewHandler(mkIssuer(t, store), store, nil, &denyAuthorizer{})
 
@@ -69,7 +69,7 @@ func TestDelegateNamesTheChildUnderItsTenant(t *testing.T) {
 // across tenants, and the caller's own for a caller confined to it.
 func TestRevokeNamesTheCapabilityUnderItsTenant(t *testing.T) {
 	owner := uuid.New()
-	target := mkParent(owner, capability.OpGet)
+	target := mkParent(owner, limes.OpGet)
 	cases := map[string]context.Context{
 		"platform admin":         callerCtx(uuid.New(), "platform.admin"),
 		"tenant-confined caller": callerCtx(owner),
@@ -95,7 +95,7 @@ func TestRevokeNamesTheCapabilityUnderItsTenant(t *testing.T) {
 // tenant, NotFound may mean another tenant's capability, whose tenant the
 // handler does not know.
 func TestRevokeRefusedNamesNothing(t *testing.T) {
-	store := &recordingStore{revokeErr: capability.ErrNotFound}
+	store := &recordingStore{revokeErr: limes.ErrNotFound}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 	ctx := withSlot(callerCtx(uuid.New()))
 	_, err := h.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: uuid.NewString()})
@@ -109,9 +109,9 @@ func TestRevokeRefusedNamesNothing(t *testing.T) {
 
 func TestRevokeBiscuitNamesTheCapabilityUnderItsTenant(t *testing.T) {
 	owner := uuid.New()
-	target := mkParent(owner, capability.OpGet)
+	target := mkParent(owner, limes.OpGet)
 	store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
-	copier := &fakeCopier{copy: capability.BiscuitCopy{CapabilityID: target.ID, RevocationID: []byte("last-block")}}
+	copier := &fakeCopier{copy: limes.BiscuitCopy{CapabilityID: target.ID, RevocationID: []byte("last-block")}}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{}).WithBiscuitCopies(copier, &copyStore{})
 
 	ctx := withSlot(callerCtx(uuid.New(), "platform.admin"))

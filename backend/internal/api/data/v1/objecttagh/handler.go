@@ -13,9 +13,9 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 type ObjectTag struct {
@@ -65,7 +65,7 @@ func (h *Handler) CreateObjectTag(ctx context.Context, args CreateArgs) (*Object
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpTag, ""); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpTag, ""); err != nil {
 		return nil, err
 	}
 	args.TenantID = t
@@ -85,7 +85,7 @@ func (h *Handler) GetObjectTag(ctx context.Context, slug string) (*ObjectTag, er
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, ""); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpGet, ""); err != nil {
 		return nil, err
 	}
 	ot, err := h.repo.Get(ctx, t, slug)
@@ -100,7 +100,7 @@ func (h *Handler) UpdateObjectTag(ctx context.Context, args UpdateArgs) (*Object
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpTag, ""); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpTag, ""); err != nil {
 		return nil, err
 	}
 	args.TenantID = t
@@ -116,7 +116,7 @@ func (h *Handler) DeleteObjectTag(ctx context.Context, slug string, expectedVers
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpTag, ""); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpTag, ""); err != nil {
 		return err
 	}
 	if err := h.repo.Delete(ctx, t, slug, expectedVersion); err != nil {
@@ -130,7 +130,7 @@ func (h *Handler) ListObjectTags(ctx context.Context, pageSize int32, pageToken 
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpList, ""); err != nil {
 		return nil, "", err
 	}
 	return h.repo.List(ctx, t, pageSize, pageToken)
