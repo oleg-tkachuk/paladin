@@ -38,7 +38,7 @@ func authzOAuth(t *testing.T, policy, clientID string) Decision {
 // The built-in policy permits AuthorizeOAuth for any authenticated principal,
 // so consent works out of the box with an empty tenant policy.
 func TestAuthorizeOAuth_DefaultPermit(t *testing.T) {
-	if got := authzOAuth(t, "", "claude-desktop"); got != DecisionAllow {
+	if got := authzOAuth(t, "", "desktop-agent"); got != DecisionAllow {
 		t.Fatalf("default decision = %v, want Allow", got)
 	}
 }
@@ -52,7 +52,7 @@ when { context.oauth_client_id == "blocked-client" };`
 	if got := authzOAuth(t, policy, "blocked-client"); got != DecisionDeny {
 		t.Errorf("blocked client decision = %v, want Deny", got)
 	}
-	if got := authzOAuth(t, policy, "claude-desktop"); got != DecisionAllow {
+	if got := authzOAuth(t, policy, "desktop-agent"); got != DecisionAllow {
 		t.Errorf("other client decision = %v, want Allow", got)
 	}
 }
@@ -61,7 +61,7 @@ when { context.oauth_client_id == "blocked-client" };`
 func TestAuthorizeOAuth_TenantForbidByScope(t *testing.T) {
 	const policy = `forbid(principal, action == Action::"AuthorizeOAuth", resource)
 when { context.oauth_scopes.contains("paladin.read") };`
-	if got := authzOAuth(t, policy, "claude-desktop"); got != DecisionDeny {
+	if got := authzOAuth(t, policy, "desktop-agent"); got != DecisionDeny {
 		t.Fatalf("scope-forbid decision = %v, want Deny", got)
 	}
 }

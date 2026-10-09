@@ -14,7 +14,7 @@ func TestRedirectTo(t *testing.T) {
 	}{
 		{"no query on the registered uri", "https://app.example/cb", "s1", "app.example", "https://app.example/cb?"},
 		{"registered uri with a query", "https://app.example/cb?tenant=acme", "s1", "app.example", "https://app.example/cb?tenant=acme&"},
-		{"custom scheme", "claude-desktop://cb", "s1", "cb", "claude-desktop://cb?"},
+		{"custom scheme", "desktop-agent://cb", "s1", "cb", "desktop-agent://cb?"},
 		{"a state built to move the host", "https://app.example/cb", "x@evil.test/#", "app.example", "https://app.example/cb?"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

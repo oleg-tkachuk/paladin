@@ -32,9 +32,9 @@ func TestOAuthStore(t *testing.T) {
 
 	t.Run("client upsert + get roundtrip", func(t *testing.T) {
 		want := oauth.Client{
-			ClientID:         "claude-desktop",
-			ClientName:       "Claude Desktop",
-			RedirectURIs:     []string{"claude-desktop://callback", "https://claude.ai/cb"},
+			ClientID:         "desktop-agent",
+			ClientName:       "Desktop Agent",
+			RedirectURIs:     []string{"desktop-agent://callback", "https://desktop-agent.example/cb"},
 			AllowedScopes:    []string{"paladin.read", "paladin.write"},
 			AllowedAudiences: []string{"paladin-data"},
 			Public:           true,
@@ -51,12 +51,12 @@ func TestOAuthStore(t *testing.T) {
 			t.Fatalf("roundtrip mismatch: %+v", got)
 		}
 		// Upsert is idempotent — second call updates, doesn't error.
-		want.ClientName = "Claude Desktop v2"
+		want.ClientName = "Desktop Agent v2"
 		if err := store.UpsertClient(ctx, want); err != nil {
 			t.Fatalf("UpsertClient (update): %v", err)
 		}
 		got, _ = store.GetClient(ctx, want.ClientID)
-		if got.ClientName != "Claude Desktop v2" {
+		if got.ClientName != "Desktop Agent v2" {
 			t.Fatalf("upsert did not update: %q", got.ClientName)
 		}
 	})
@@ -74,10 +74,10 @@ func TestOAuthStore(t *testing.T) {
 		}
 		ac := oauth.AuthCode{
 			Code:            code,
-			ClientID:        "claude-desktop",
+			ClientID:        "desktop-agent",
 			UserID:          userID,
 			TenantID:        tenantID,
-			RedirectURI:     "claude-desktop://callback",
+			RedirectURI:     "desktop-agent://callback",
 			CodeChallenge:   oauth.ComputeS256Challenge("verifier-xyz-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 			ChallengeMethod: oauth.PKCEMethodS256,
 			Scopes:          []string{"paladin.read"},
@@ -107,10 +107,10 @@ func TestOAuthStore(t *testing.T) {
 		code, _ := oauth.GenerateCode()
 		ac := oauth.AuthCode{
 			Code:            code,
-			ClientID:        "claude-desktop",
+			ClientID:        "desktop-agent",
 			UserID:          userID,
 			TenantID:        tenantID,
-			RedirectURI:     "claude-desktop://callback",
+			RedirectURI:     "desktop-agent://callback",
 			CodeChallenge:   "x",
 			ChallengeMethod: oauth.PKCEMethodS256,
 			Audience:        "paladin-data",

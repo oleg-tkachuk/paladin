@@ -122,7 +122,7 @@ func testHandler(t *testing.T, store Store, refresh authstore.RefreshTokenReposi
 	t.Helper()
 	return testHandlerCfg(t, store, refresh, u, config.OAuthAS{
 		Enabled: true, DynamicRegistration: true, AuthorizationCodeTTL: time.Minute,
-		AllowedRedirectSchemes: []string{"https", "claude-desktop"},
+		AllowedRedirectSchemes: []string{"https", "desktop-agent"},
 	})
 }
 
@@ -142,7 +142,7 @@ func sampleUser() authstore.User {
 }
 
 func publicClient() Client {
-	return Client{ClientID: "claude-desktop", ClientName: "Claude Desktop", RedirectURIs: []string{"claude-desktop://cb"}, AllowedScopes: []string{"paladin.read"}, AllowedAudiences: []string{"paladin-data"}, Public: true}
+	return Client{ClientID: "desktop-agent", ClientName: "Desktop Agent", RedirectURIs: []string{"desktop-agent://cb"}, AllowedScopes: []string{"paladin.read"}, AllowedAudiences: []string{"paladin-data"}, Public: true}
 }
 
 // ─── tests ───────────────────────────────────────────────────────────────────
@@ -156,13 +156,13 @@ func TestToken_AuthCodeHappyPath(t *testing.T) {
 
 	verifier := strings.Repeat("a", 50)
 	_ = store.CreateCode(context.Background(), AuthCode{
-		Code: "thecode", ClientID: "claude-desktop", UserID: u.UserID, TenantID: u.TenantID,
-		RedirectURI: "claude-desktop://cb", CodeChallenge: ComputeS256Challenge(verifier),
+		Code: "thecode", ClientID: "desktop-agent", UserID: u.UserID, TenantID: u.TenantID,
+		RedirectURI: "desktop-agent://cb", CodeChallenge: ComputeS256Challenge(verifier),
 		ChallengeMethod: PKCEMethodS256, Scopes: []string{"paladin.read"}, Audience: "paladin-data",
 		ExpiresAt: time.Now().Add(time.Minute),
 	})
 
-	form := url.Values{"grant_type": {"authorization_code"}, "code": {"thecode"}, "client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"}, "code_verifier": {verifier}}
+	form := url.Values{"grant_type": {"authorization_code"}, "code": {"thecode"}, "client_id": {"desktop-agent"}, "redirect_uri": {"desktop-agent://cb"}, "code_verifier": {verifier}}
 	rec := postForm(h, "/oauth/token", form)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
@@ -184,11 +184,11 @@ func TestToken_PKCEMismatch(t *testing.T) {
 	h := testHandler(t, store, &memRefresh{}, u)
 
 	_ = store.CreateCode(context.Background(), AuthCode{
-		Code: "c2", ClientID: "claude-desktop", RedirectURI: "claude-desktop://cb",
+		Code: "c2", ClientID: "desktop-agent", RedirectURI: "desktop-agent://cb",
 		CodeChallenge: ComputeS256Challenge(strings.Repeat("a", 50)), ChallengeMethod: PKCEMethodS256,
 		Audience: "paladin-data", UserID: u.UserID, TenantID: u.TenantID, ExpiresAt: time.Now().Add(time.Minute),
 	})
-	form := url.Values{"grant_type": {"authorization_code"}, "code": {"c2"}, "client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"}, "code_verifier": {strings.Repeat("b", 50)}}
+	form := url.Values{"grant_type": {"authorization_code"}, "code": {"c2"}, "client_id": {"desktop-agent"}, "redirect_uri": {"desktop-agent://cb"}, "code_verifier": {strings.Repeat("b", 50)}}
 	rec := postForm(h, "/oauth/token", form)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_grant") {
 		t.Fatalf("status = %d body=%s, want 400 invalid_grant", rec.Code, rec.Body.String())
@@ -202,11 +202,11 @@ func TestToken_CodeSingleUse(t *testing.T) {
 	h := testHandler(t, store, &memRefresh{}, u)
 	verifier := strings.Repeat("a", 50)
 	_ = store.CreateCode(context.Background(), AuthCode{
-		Code: "c3", ClientID: "claude-desktop", RedirectURI: "claude-desktop://cb",
+		Code: "c3", ClientID: "desktop-agent", RedirectURI: "desktop-agent://cb",
 		CodeChallenge: ComputeS256Challenge(verifier), ChallengeMethod: PKCEMethodS256,
 		Audience: "paladin-data", UserID: u.UserID, TenantID: u.TenantID, ExpiresAt: time.Now().Add(time.Minute),
 	})
-	form := url.Values{"grant_type": {"authorization_code"}, "code": {"c3"}, "client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"}, "code_verifier": {verifier}}
+	form := url.Values{"grant_type": {"authorization_code"}, "code": {"c3"}, "client_id": {"desktop-agent"}, "redirect_uri": {"desktop-agent://cb"}, "code_verifier": {verifier}}
 	if rec := postForm(h, "/oauth/token", form); rec.Code != http.StatusOK {
 		t.Fatalf("first exchange failed: %d", rec.Code)
 	}
@@ -220,7 +220,7 @@ func TestAuthorize_GetRendersConsent(t *testing.T) {
 	store.clients[publicClient().ClientID] = publicClient()
 	h := testHandler(t, store, &memRefresh{}, sampleUser())
 
-	q := url.Values{"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"}, "scope": {"paladin.read"}, "code_challenge": {"x"}, "code_challenge_method": {"S256"}, "state": {"st"}}
+	q := url.Values{"client_id": {"desktop-agent"}, "redirect_uri": {"desktop-agent://cb"}, "scope": {"paladin.read"}, "code_challenge": {"x"}, "code_challenge_method": {"S256"}, "state": {"st"}}
 	rec := httptest.NewRecorder()
 	h.handleAuthorize(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Authorize access") {
@@ -235,7 +235,7 @@ func TestAuthorize_PostAllowIssuesCode(t *testing.T) {
 	h := testHandler(t, store, &memRefresh{}, u)
 
 	form := url.Values{
-		"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"}, "scope": {"paladin.read"},
+		"client_id": {"desktop-agent"}, "redirect_uri": {"desktop-agent://cb"}, "scope": {"paladin.read"},
 		"code_challenge": {ComputeS256Challenge(strings.Repeat("a", 50))}, "code_challenge_method": {"S256"},
 		"state": {"st"}, "action": {"allow"}, "username": {"svc@acme"}, "password": {"hunter2hunter2"},
 		"tenant": {u.TenantID.String()},
@@ -255,7 +255,7 @@ func TestAuthorize_PostDenyRedirectsError(t *testing.T) {
 	store.clients[publicClient().ClientID] = publicClient()
 	h := testHandler(t, store, &memRefresh{}, sampleUser())
 	form := url.Values{
-		"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"},
+		"client_id": {"desktop-agent"}, "redirect_uri": {"desktop-agent://cb"},
 		"code_challenge": {"x"}, "code_challenge_method": {"S256"}, "action": {"deny"},
 	}
 	rec := postForm(h, "/oauth/authorize", form)
@@ -315,11 +315,11 @@ func TestToken_RateLimited(t *testing.T) {
 	// capacity 1 → second token request is throttled before any DB work.
 	h := testHandlerCfg(t, store, &memRefresh{}, u, config.OAuthAS{
 		Enabled: true, TokenRateLimitPerMinute: 1,
-		AllowedRedirectSchemes: []string{"https", "claude-desktop"},
+		AllowedRedirectSchemes: []string{"https", "desktop-agent"},
 	})
 	form := url.Values{
-		"grant_type": {"authorization_code"}, "client_id": {"claude-desktop"},
-		"code": {"nope"}, "redirect_uri": {"claude-desktop://cb"},
+		"grant_type": {"authorization_code"}, "client_id": {"desktop-agent"},
+		"code": {"nope"}, "redirect_uri": {"desktop-agent://cb"},
 		"code_verifier": {strings.Repeat("a", 50)},
 	}
 	// First request consumes the single token (fails on bad code with 400).
@@ -377,7 +377,7 @@ func TestFullFlow_AuthorizeTokenRefresh(t *testing.T) {
 
 	// 1. /authorize POST allow → 302 with code.
 	aform := url.Values{
-		"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"},
+		"client_id": {"desktop-agent"}, "redirect_uri": {"desktop-agent://cb"},
 		"scope":          {"paladin.read"},
 		"code_challenge": {ComputeS256Challenge(verifier)}, "code_challenge_method": {"S256"},
 		"state": {"st"}, "action": {"allow"},
@@ -395,8 +395,8 @@ func TestFullFlow_AuthorizeTokenRefresh(t *testing.T) {
 
 	// 2. /token authorization_code → access + refresh.
 	trec := postForm(h, "/oauth/token", url.Values{
-		"grant_type": {"authorization_code"}, "code": {code}, "client_id": {"claude-desktop"},
-		"redirect_uri": {"claude-desktop://cb"}, "code_verifier": {verifier},
+		"grant_type": {"authorization_code"}, "code": {code}, "client_id": {"desktop-agent"},
+		"redirect_uri": {"desktop-agent://cb"}, "code_verifier": {verifier},
 	})
 	if trec.Code != http.StatusOK {
 		t.Fatalf("token status = %d body=%s", trec.Code, trec.Body.String())
@@ -409,7 +409,7 @@ func TestFullFlow_AuthorizeTokenRefresh(t *testing.T) {
 
 	// 3. /token refresh_token → new access.
 	rrec := postForm(h, "/oauth/token", url.Values{
-		"grant_type": {"refresh_token"}, "client_id": {"claude-desktop"},
+		"grant_type": {"refresh_token"}, "client_id": {"desktop-agent"},
 		"refresh_token": {tok.RefreshToken},
 	})
 	if rrec.Code != http.StatusOK {
@@ -431,7 +431,7 @@ func TestAuthorize_CedarGate(t *testing.T) {
 	verifier := strings.Repeat("a", 50)
 	allowForm := func(u authstore.User) url.Values {
 		return url.Values{
-			"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"}, "scope": {"paladin.read"},
+			"client_id": {"desktop-agent"}, "redirect_uri": {"desktop-agent://cb"}, "scope": {"paladin.read"},
 			"code_challenge": {ComputeS256Challenge(verifier)}, "code_challenge_method": {"S256"},
 			"state": {"st"}, "action": {"allow"},
 			"username": {"svc@acme"}, "password": {"hunter2hunter2"}, "tenant": {u.TenantID.String()},
@@ -486,7 +486,7 @@ func TestToken_RefreshReuseDetected(t *testing.T) {
 	}
 
 	rec := postForm(h, "/oauth/token", url.Values{
-		"grant_type": {"refresh_token"}, "client_id": {"claude-desktop"}, "refresh_token": {rt},
+		"grant_type": {"refresh_token"}, "client_id": {"desktop-agent"}, "refresh_token": {rt},
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 invalid_grant", rec.Code)
@@ -507,10 +507,10 @@ func TestAuthorize_SkipConsent(t *testing.T) {
 	store := newMemStore()
 	store.clients[publicClient().ClientID] = publicClient()
 	h := testHandler(t, store, &memRefresh{}, sampleUser()).
-		WithSkipConsent(map[string]bool{"claude-desktop": true})
+		WithSkipConsent(map[string]bool{"desktop-agent": true})
 
 	q := url.Values{
-		"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"},
+		"client_id": {"desktop-agent"}, "redirect_uri": {"desktop-agent://cb"},
 		"scope": {"paladin.read"}, "code_challenge": {"x"}, "code_challenge_method": {"S256"},
 	}
 	rec := httptest.NewRecorder()
@@ -536,14 +536,14 @@ func TestAuthorize_ConsentURLRedirect_SkipConsent(t *testing.T) {
 	store.clients[publicClient().ClientID] = publicClient()
 	cfg := config.OAuthAS{
 		Enabled: true, AuthorizationCodeTTL: time.Minute,
-		AllowedRedirectSchemes: []string{"https", "claude-desktop"},
+		AllowedRedirectSchemes: []string{"https", "desktop-agent"},
 		ConsentURL:             "https://ui.example.com/oauth/consent",
 	}
 	h := testHandlerCfg(t, store, &memRefresh{}, sampleUser(), cfg).
-		WithSkipConsent(map[string]bool{"claude-desktop": true})
+		WithSkipConsent(map[string]bool{"desktop-agent": true})
 
 	q := url.Values{
-		"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"},
+		"client_id": {"desktop-agent"}, "redirect_uri": {"desktop-agent://cb"},
 		"scope": {"paladin.read"}, "code_challenge": {"x"}, "code_challenge_method": {"S256"},
 	}
 	rec := httptest.NewRecorder()
