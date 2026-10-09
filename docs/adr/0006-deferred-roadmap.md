@@ -44,8 +44,8 @@ JetStream ingest upgrade. **Trigger:** customer ask + a chosen client
 library per sink.
 
 ### Agentic / MCP
-OAuth 2.0 authorization-code flow for MCP clients (Claude Desktop /
-Cursor); live session enumeration on the streamable-HTTP transport.
+OAuth 2.0 authorization-code flow for MCP clients (desktop agents,
+IDE plugins); live session enumeration on the streamable-HTTP transport.
 
 ### Storage & data
 Real `StorageReplicator`; per-tenant S3 bucket layout; cross-region DB

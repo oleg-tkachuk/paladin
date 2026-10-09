@@ -60,8 +60,8 @@ func TestToken_CodeIsBoundToBothClientAndRedirectURI(t *testing.T) {
 	u := sampleUser()
 
 	cases := map[string]struct{ clientID, redirectURI string }{
-		"wrong client, right redirect_uri": {"other-client", "claude-desktop://cb"},
-		"right client, wrong redirect_uri": {"claude-desktop", "https://attacker.example/cb"},
+		"wrong client, right redirect_uri": {"other-client", "desktop-agent://cb"},
+		"right client, wrong redirect_uri": {"desktop-agent", "https://attacker.example/cb"},
 		"both wrong":                       {"other-client", "https://attacker.example/cb"},
 	}
 	for name, tc := range cases {
@@ -72,11 +72,11 @@ func TestToken_CodeIsBoundToBothClientAndRedirectURI(t *testing.T) {
 			// only the binding stands between it and a token.
 			other := publicClient()
 			other.ClientID = "other-client"
-			other.RedirectURIs = []string{"claude-desktop://cb", "https://attacker.example/cb"}
+			other.RedirectURIs = []string{"desktop-agent://cb", "https://attacker.example/cb"}
 			store.clients[other.ClientID] = other
 
 			h := testHandler(t, store, &memRefresh{}, u)
-			seedCode(t, store, "bound", "claude-desktop", "claude-desktop://cb", verifier, u)
+			seedCode(t, store, "bound", "desktop-agent", "desktop-agent://cb", verifier, u)
 
 			rec := postForm(h, "/oauth/token", url.Values{
 				"grant_type": {"authorization_code"}, "code": {"bound"},
@@ -178,11 +178,11 @@ func TestToken_DisabledUserCannotRedeemACode(t *testing.T) {
 	store := newMemStore()
 	store.clients[publicClient().ClientID] = publicClient()
 	h := testHandler(t, store, &memRefresh{}, u)
-	seedCode(t, store, "disabled", "claude-desktop", "claude-desktop://cb", verifier, u)
+	seedCode(t, store, "disabled", "desktop-agent", "desktop-agent://cb", verifier, u)
 
 	rec := postForm(h, "/oauth/token", url.Values{
 		"grant_type": {"authorization_code"}, "code": {"disabled"},
-		"client_id": {"claude-desktop"}, "redirect_uri": {"claude-desktop://cb"},
+		"client_id": {"desktop-agent"}, "redirect_uri": {"desktop-agent://cb"},
 		"code_verifier": {verifier},
 	})
 	if rec.Code == http.StatusOK {
@@ -198,7 +198,7 @@ func TestToken_DisabledUserCannotRedeemACode(t *testing.T) {
 // hands the code to whoever controls the path — so the near-misses matter
 // more than the obvious mismatch.
 func TestRegisteredRedirect_IsExact(t *testing.T) {
-	c := Client{RedirectURIs: []string{"https://app.example/cb", "claude-desktop://cb"}}
+	c := Client{RedirectURIs: []string{"https://app.example/cb", "desktop-agent://cb"}}
 
 	for _, want := range c.RedirectURIs {
 		if got, ok := registeredRedirect(c, want); !ok || got != want {

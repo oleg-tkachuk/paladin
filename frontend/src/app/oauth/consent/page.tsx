@@ -16,7 +16,7 @@ import { Card } from "@/components/ui/Card";
  *
  * The form is a NATIVE <form method="post"> (not fetch/BFF): on approval the
  * backend responds 302 to the client's redirect_uri — often a custom scheme
- * like claude-desktop:// — which only a real browser navigation can follow.
+ * like desktop-agent:// — which only a real browser navigation can follow.
  * A fetch-based submit would trap that redirect.
  */
 

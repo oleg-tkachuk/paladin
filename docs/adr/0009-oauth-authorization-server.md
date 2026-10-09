@@ -9,7 +9,7 @@
 - **Context:** ADR-0008 made the MCP server a spec-compliant OAuth Resource
   Server — it advertises where to authenticate and validates bearers — but
   nothing *mints* those bearers via a browser auth-code flow. Standard MCP
-  clients (Claude Desktop / Cursor) open a browser at the AS's `/authorize`,
+  clients (desktop agents, IDE plugins) open a browser at the AS's `/authorize`,
   consent, and exchange a code for a token. We choose **Paladin IAM as the
   Authorization Server** (not a federated IdP) so the agentic plane has a
   self-contained auth story; the federated-OIDC option (Phase 5b.1) is **not
@@ -43,7 +43,7 @@ raw HTTP (RFC 6749 is form-encoded, not Connect), gated by `auth.oauth.enabled`.
   `grant_type=refresh_token`. PKCE verified; codes are single-use.
 - **`POST /oauth/register`** (RFC 7591) — dynamic client registration,
   flag-gated (`auth.oauth.dynamic_registration`); first-party clients
-  (`claude-desktop`, `cursor`) may be pre-seeded in config. Confidential
+  (`desktop-agent`, `cursor`) may be pre-seeded in config. Confidential
   clients get a `client_secret` hashed with the existing bcrypt helper.
 
 **Storage** (migration 043, pgx-backed store):
@@ -91,7 +91,7 @@ may grant which scopes to which clients.
   the polished Next.js page (`frontend/src/app/oauth/consent`) which POSTs the
   credentials + decision back. The form is a native cross-origin POST (not
   fetch) so the browser follows the backend's 302 to the client redirect_uri
-  — including custom schemes like `claude-desktop://`.
+  — including custom schemes like `desktop-agent://`.
 - **Hardening, as shipped:** `/oauth/token` is rate-limited per `client_id`
   (in-memory token bucket, `token_rate_limit_per_minute`, default 60/min →
   429 + Retry-After) and supports CORS for browser public clients
@@ -106,7 +106,7 @@ may grant which scopes to which clients.
   warning, and writes an audit row (`iam.RefreshTokenReuseDetected`,
   is_error) that surfaces — highlighted — in the admin audit console.
 - **Skip-consent (trusted clients):** seed clients may set `skip_consent` —
-  the operator pre-authorizes a first-party app (claude-desktop/cursor), so
+  the operator pre-authorizes a first-party app (desktop-agent/cursor), so
   `/authorize` renders a plain login with no per-user consent screen. Never
   available to dynamically-registered clients. This is the
   sessionless-appropriate form of "skip re-consent": Paladin has no browser

@@ -56,7 +56,7 @@ func TestOAuthFlowE2E(t *testing.T) {
 
 	store := oauth.NewPgxStore(pool)
 	if err := store.UpsertClient(ctx, oauth.Client{
-		ClientID: "claude-desktop", RedirectURIs: []string{"https://app.example.com/cb"},
+		ClientID: "desktop-agent", RedirectURIs: []string{"https://app.example.com/cb"},
 		AllowedScopes: []string{"paladin.read"}, AllowedAudiences: []string{"paladin-data"}, Public: true,
 	}); err != nil {
 		t.Fatalf("seed client: %v", err)
@@ -78,7 +78,7 @@ func TestOAuthFlowE2E(t *testing.T) {
 
 	// 1. /authorize — login + consent → 302 with code.
 	authResp := postFormRaw(t, client, srv.URL+"/oauth/authorize", url.Values{
-		"client_id": {"claude-desktop"}, "redirect_uri": {"https://app.example.com/cb"},
+		"client_id": {"desktop-agent"}, "redirect_uri": {"https://app.example.com/cb"},
 		"scope": {"paladin.read"}, "code_challenge": {challenge}, "code_challenge_method": {"S256"},
 		"state": {"xyz"}, "action": {"allow"},
 		"username": {"svc@acme"}, "password": {password}, "tenant": {tenantID.String()},
@@ -95,7 +95,7 @@ func TestOAuthFlowE2E(t *testing.T) {
 
 	// 2. /token — exchange code for tokens.
 	tok := postToken(t, client, srv.URL, url.Values{
-		"grant_type": {"authorization_code"}, "code": {code}, "client_id": {"claude-desktop"},
+		"grant_type": {"authorization_code"}, "code": {code}, "client_id": {"desktop-agent"},
 		"redirect_uri": {"https://app.example.com/cb"}, "code_verifier": {verifier},
 	})
 	if tok.AccessToken == "" || tok.RefreshToken == "" {
@@ -104,7 +104,7 @@ func TestOAuthFlowE2E(t *testing.T) {
 
 	// 3. /token — refresh rotation.
 	tok2 := postToken(t, client, srv.URL, url.Values{
-		"grant_type": {"refresh_token"}, "client_id": {"claude-desktop"}, "refresh_token": {tok.RefreshToken},
+		"grant_type": {"refresh_token"}, "client_id": {"desktop-agent"}, "refresh_token": {tok.RefreshToken},
 	})
 	if tok2.AccessToken == "" {
 		t.Fatal("refresh did not return a new access token")
@@ -112,7 +112,7 @@ func TestOAuthFlowE2E(t *testing.T) {
 
 	// 4. Reusing the original (now-rotated) code must fail — single-use.
 	bad := postFormRaw(t, client, srv.URL+"/oauth/token", url.Values{
-		"grant_type": {"authorization_code"}, "code": {code}, "client_id": {"claude-desktop"},
+		"grant_type": {"authorization_code"}, "code": {code}, "client_id": {"desktop-agent"},
 		"redirect_uri": {"https://app.example.com/cb"}, "code_verifier": {verifier},
 	})
 	if bad.StatusCode != http.StatusBadRequest {

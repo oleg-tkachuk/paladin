@@ -287,7 +287,7 @@ func TestToken_RefreshRechecksTheOwner(t *testing.T) {
 	}
 	exchange := func(h *Handler, rt string) int {
 		return postForm(h, "/oauth/token", url.Values{
-			"grant_type": {"refresh_token"}, "client_id": {"claude-desktop"}, "refresh_token": {rt},
+			"grant_type": {"refresh_token"}, "client_id": {"desktop-agent"}, "refresh_token": {rt},
 		}).Code
 	}
 

@@ -181,7 +181,7 @@ Produced:
 
 ### Agent context update
 
-`CLAUDE.md` updated between the `<!-- SPECKIT START -->` and
+The agent context file is updated between the `<!-- SPECKIT START -->` and
 `<!-- SPECKIT END -->` markers to point at this plan
 (`specs/001-frontend-playwright-e2e/plan.md`).
 
