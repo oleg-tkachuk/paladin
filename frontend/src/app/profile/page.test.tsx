@@ -20,6 +20,7 @@ vi.mock("@/components/features/ChangePasswordCard", () => ({
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { setDisplayTimeZone } from "@/lib/format/locale";
 import { USER_SETTINGS_QUERY_KEY } from "@/lib/theme";
 import ProfilePage from "./page";
 import { SETTINGS_APPLIED_NOTE } from "./_constants";
@@ -52,11 +53,15 @@ describe("ProfilePage sync footer", () => {
       resourceVersion: "3",
       updatedAt: { seconds: BigInt(Date.parse("2026-09-30T10:00:00Z") / 1000) },
     });
+    setDisplayTimeZone("UTC");
     render(<ProfilePage />);
 
-    expect(
-      await screen.findByText(/Last synced 2026-09-30 10:00:00Z/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Last synced/)).toBeInTheDocument();
+    expect(screen.getByText("2026-09-30 10:00:00 +00:00")).toHaveAttribute(
+      "title",
+      "2026-09-30 10:00:00Z",
+    );
+    setDisplayTimeZone(undefined);
   });
 });
 

@@ -42,7 +42,7 @@ import { CompletionMode } from "@/gen/paladin/common/v1/resource_pb";
 import { T } from "@/lib/ui/typography";
 
 import { useCollection } from "./collection-context";
-import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { Timestamp } from "@/components/Timestamp";
 import { errorMessage } from "@/hooks/errorContract";
 import { fieldMask } from "@/lib/connect/fieldMask";
 
@@ -187,12 +187,12 @@ export default function CollectionOverviewPage() {
 
           <dt className="text-muted-foreground">Created</dt>
           <dd className="font-mono text-xs">
-            {formatTimestampUTC(collection.createdAt)}
+            <Timestamp ts={collection.createdAt} />
           </dd>
 
           <dt className="text-muted-foreground">Updated</dt>
           <dd className="font-mono text-xs">
-            {formatTimestampUTC(collection.updatedAt)}
+            <Timestamp ts={collection.updatedAt} />
           </dd>
         </dl>
 

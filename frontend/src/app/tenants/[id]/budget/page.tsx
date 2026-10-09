@@ -58,7 +58,7 @@ import { Select } from "@/components/ui/Select";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
 import { useTenant, useTenantChangesBlocked } from "../tenant-context";
-import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { Timestamp } from "@/components/Timestamp";
 
 function progressColour(
   spent: Money | undefined,
@@ -308,7 +308,7 @@ export default function TenantBudgetPage() {
                   Period start
                 </Label>
                 <div className="font-mono text-sm text-muted-foreground">
-                  {formatTimestampUTC(budget.periodStart)}
+                  <Timestamp ts={budget.periodStart} />
                 </div>
               </div>
               <div>
@@ -316,9 +316,11 @@ export default function TenantBudgetPage() {
                   Period end
                 </Label>
                 <div className="font-mono text-sm text-muted-foreground">
-                  {budget.periodEnd
-                    ? formatTimestampUTC(budget.periodEnd)
-                    : "open-ended"}
+                  {budget.periodEnd ? (
+                    <Timestamp ts={budget.periodEnd} />
+                  ) : (
+                    "open-ended"
+                  )}
                 </div>
               </div>
             </div>
