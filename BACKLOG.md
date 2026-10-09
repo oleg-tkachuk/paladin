@@ -1454,28 +1454,19 @@ share one message with that mutation hazard ruled out, and this entry goes.
   iam are not gated — no capability carries a request there on its own —
   and `capability_planes_test.go` fails if that stops being true.
 
-### The capability module's Go API still takes float64 amounts
+### limes caveats spell "no limit" as zero
 
-- **Status:** Deferred — a breaking change to the module's public API.
-- **Reason:** `Caveats.MaxBudgetAmount`, `ChargeRequest.Amount` and the
-  usage types are float64. Storage is exact (`numeric(14,6)`) and every
-  conversion rounds to the nearest micro (`AmountToMicros`), which is exact
-  below `MaxMicros` (fifteen digits), so nothing drifts today; but the type
-  invites float arithmetic in a consumer's own code, and `memstore` — the
-  example a third party copies — sums floats itself. Three more defects of
-  the same API wait on the same change: `0` means both "no limit" and a
-  value on `MaxRequests` and `MaxBudgetAmount`, so a capability allowed no
-  spend at all cannot be written; `Caveats.MaxRequests` is an `int` where
-  every counter is `int64`; and a cost below a micro rounds to zero one
-  charge at a time, so many tiny charges are under-counted.
-- **Definition of Done:** integer amounts in the module's API, with the unit
-  decided once — micros, as the wire API already carries them, or a finer
-  unit with `numeric` columns of matching scale — and "no limit" a value of
-  its own rather than zero; `memstore` sums integers; the token carries the
-  budget the same way in a new format version.
+- **Status:** Deferred — a breaking change to limes's public API.
+- **Reason:** amounts are integer nanos end to end, but `0` still means both
+  "no limit" and a value on `Caveats.MaxRequests`, `Caveats.MaxBudgetAmount`
+  and a copy's `MaxRequests` / `MaxBudget`, so a capability allowed no spend
+  or no requests at all cannot be written. `Caveats.MaxRequests` is also an
+  `int` where every other counter is `int64`.
+- **Definition of Done:** in limes, "no limit" a value of its own rather than
+  zero and `Caveats.MaxRequests` an `int64`; the token carries the limits the
+  same way in a new format version; Paladin moves to that limes release.
 - **Blockers:** the token format version that offline attenuation also
-  needs. The Go API alone could move first, converting at the claim, since
-  that conversion is exact below `MaxMicros`.
+  needs.
 
 ### Capability counters other than requests and spend
 
@@ -1536,7 +1527,7 @@ share one message with that mutation hazard ruled out, and this entry goes.
   depend on a database driver (`isolation_test.go`) or on Connect, so they
   belong in modules of their own.
 - **Definition of Done:** a Connect interceptor module and a pgx store module
-  beside `capability/`, each with its own `go.mod`, the store configurable for
+  beside limes, each with its own `go.mod`, the store configurable for
   its schema and its tenant setting and shipping its migrations; Paladin
   consumes both instead of its internal copies.
 - **Blockers:** none.
