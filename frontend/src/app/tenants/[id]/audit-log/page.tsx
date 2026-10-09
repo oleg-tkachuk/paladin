@@ -39,7 +39,7 @@ import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../tenant-context";
 import { ActorName } from "@/components/features/audit/ActorName";
-import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { Timestamp } from "@/components/Timestamp";
 
 function actionPalette(
   action: string,
@@ -190,7 +190,7 @@ export default function TenantAuditLogPage() {
                         "whitespace-normal text-muted-foreground @md:whitespace-nowrap",
                       )}
                     >
-                      {formatTimestampUTC(e.at)}
+                      <Timestamp ts={e.at} />
                     </TableCell>
                     {/* Action, actor and resource are long unbroken
                         identifiers (RPC paths, `apikey:<uuid>`, resource

@@ -52,7 +52,7 @@ import {
 } from "@/lib/format/money";
 import type { Money } from "@/gen/google/type/money_pb";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
-import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { Timestamp } from "@/components/Timestamp";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 
 // Per-capability usage snapshot keyed by capability id; "never" ⇒ the
@@ -553,7 +553,7 @@ export default function CapabilitiesPage() {
                         "text-muted-foreground",
                       )}
                     >
-                      {formatTimestampUTC(c.issuedAt)}
+                      <Timestamp ts={c.issuedAt} />
                     </TableCell>
                     <TableCell
                       className={cn(
@@ -562,7 +562,7 @@ export default function CapabilitiesPage() {
                         "text-muted-foreground",
                       )}
                     >
-                      {formatTimestampUTC(c.expiresAt)}
+                      <Timestamp ts={c.expiresAt} />
                     </TableCell>
                     <TableCell className={cn(COL_USAGE, T.code)}>
                       {(() => {
