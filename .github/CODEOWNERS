@@ -7,7 +7,6 @@
 # swept along in a large diff:
 /backend/internal/auth/   @oleg-tkachuk
 /backend/internal/policy/ @oleg-tkachuk
-/capability/              @oleg-tkachuk
 /backend/migrations/      @oleg-tkachuk
 /.github/                 @oleg-tkachuk
 /docs/security-model.md   @oleg-tkachuk

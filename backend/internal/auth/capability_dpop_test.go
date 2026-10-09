@@ -14,9 +14,9 @@ import (
 	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/memstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
-	"github.com/oleg-tkachuk/paladin/capability"
-	"github.com/oleg-tkachuk/paladin/capability/memstore"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -35,8 +35,8 @@ const dpopProcedure = unarytest.ProbeProcedure
 const otherProcedure = "/auth.dpop.v1.Svc/Other"
 
 type dpopFixture struct {
-	issuer   *capability.Issuer
-	verifier *capability.StandardVerifier
+	issuer   *limes.Issuer
+	verifier *limes.StandardVerifier
 	key      ed25519.PrivateKey
 	jkt      string
 }
@@ -47,17 +47,17 @@ func newDPoPFixture(t *testing.T) *dpopFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	signer, err := capability.NewEd25519Signer("k1", priv)
+	signer, err := limes.NewEd25519Signer("k1", priv)
 	if err != nil {
 		t.Fatal(err)
 	}
 	store := memstore.New[any]()
-	issuer, err := capability.NewIssuer(capability.IssuerConfig{Signer: signer, Store: store, IssuerName: "paladin-test"})
+	issuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: "paladin-test"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	verifier, err := capability.NewStandardVerifier(capability.VerifierConfig{
-		Keys:           capability.NewStaticKeyResolver(map[string]ed25519.PublicKey{"k1": pub}),
+	verifier, err := limes.NewStandardVerifier(limes.VerifierConfig{
+		Keys:           limes.NewStaticKeyResolver(map[string]ed25519.PublicKey{"k1": pub}),
 		Revocations:    store,
 		TrustedIssuers: []string{"paladin-test"},
 	})
@@ -68,7 +68,7 @@ func newDPoPFixture(t *testing.T) *dpopFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jkt, err := capability.KeyThumbprint(agentKey.Public())
+	jkt, err := limes.KeyThumbprint(agentKey.Public())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,11 +77,11 @@ func newDPoPFixture(t *testing.T) *dpopFixture {
 
 func (f *dpopFixture) mint(t *testing.T, jkt string) string {
 	t.Helper()
-	_, tok, err := f.issuer.Issue(context.Background(), capability.IssueRequest{
-		IssuedBy:        capability.Principal{Subject: "op"},
-		Subject:         capability.Principal{TenantID: uuid.New(), Subject: "agent"},
-		Audience:        []string{capability.AudiencePlaneData},
-		Caveats:         capability.Caveats{Ops: []capability.Op{capability.OpGet}},
+	_, tok, err := f.issuer.Issue(context.Background(), limes.IssueRequest{
+		IssuedBy:        limes.Principal{Subject: "op"},
+		Subject:         limes.Principal{TenantID: uuid.New(), Subject: "agent"},
+		Audience:        []string{limes.AudiencePlaneData},
+		Caveats:         limes.Caveats{Ops: []limes.Op{limes.OpGet}},
 		TTL:             time.Hour,
 		ConfirmationJKT: jkt,
 	})
@@ -93,7 +93,7 @@ func (f *dpopFixture) mint(t *testing.T, jkt string) string {
 
 func (f *dpopFixture) proof(t *testing.T, url, token string) string {
 	t.Helper()
-	p, err := capability.NewDPoPProof(f.key, http.MethodPost, url, token, time.Now())
+	p, err := limes.NewDPoPProof(f.key, http.MethodPost, url, token, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func call(c paladiniamv1connect.HealthServiceClient, token, proof string) error 
 	ctx, info := connect.NewClientContext(context.Background())
 	info.RequestHeader().Set(HeaderCapability, token)
 	if proof != "" {
-		info.RequestHeader().Set(capability.DPoPHeader, proof)
+		info.RequestHeader().Set(limes.DPoPHeader, proof)
 	}
 	_, err := c.GetVersion(ctx, &iamv1.GetVersionRequest{})
 	return err
@@ -126,8 +126,8 @@ func call(c paladiniamv1connect.HealthServiceClient, token, proof string) error 
 
 func TestCapabilityDPoP_Unary(t *testing.T) {
 	f := newDPoPFixture(t)
-	dpop := &capability.DPoPVerifier{Replay: capability.NewMemoryReplayCache(0)}
-	client, base := serve(t, CapabilityInterceptor(f.verifier, capability.AudiencePlaneData, nil, 0, "", WithDPoP(dpop)))
+	dpop := &limes.DPoPVerifier{Replay: limes.NewMemoryReplayCache(0)}
+	client, base := serve(t, CapabilityInterceptor(f.verifier, limes.AudiencePlaneData, nil, 0, "", WithDPoP(dpop)))
 	bound := f.mint(t, f.jkt)
 
 	if err := call(client, bound, f.proof(t, base+dpopProcedure, bound)); err != nil {
@@ -167,7 +167,7 @@ func TestCapabilityDPoP_Unary(t *testing.T) {
 // quietly treat a bound capability as a bearer token.
 func TestCapabilityDPoP_BoundRefusedWithoutAVerifier(t *testing.T) {
 	f := newDPoPFixture(t)
-	client, base := serve(t, CapabilityInterceptor(f.verifier, capability.AudiencePlaneData, nil, 0, ""))
+	client, base := serve(t, CapabilityInterceptor(f.verifier, limes.AudiencePlaneData, nil, 0, ""))
 	bound := f.mint(t, f.jkt)
 	err := call(client, bound, f.proof(t, base+dpopProcedure, bound))
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
@@ -184,15 +184,15 @@ func TestCapabilityDPoP_BoundRefusedWithoutAVerifier(t *testing.T) {
 // headers; with no HTTP transport the method is the POST Connect uses.
 func TestCapabilityDPoP_Streaming(t *testing.T) {
 	f := newDPoPFixture(t)
-	dpop := &capability.DPoPVerifier{Replay: capability.NewMemoryReplayCache(0)}
-	i := CapabilityInterceptor(f.verifier, capability.AudiencePlaneData, nil, 0, "", WithDPoP(dpop))
+	dpop := &limes.DPoPVerifier{Replay: limes.NewMemoryReplayCache(0)}
+	i := CapabilityInterceptor(f.verifier, limes.AudiencePlaneData, nil, 0, "", WithDPoP(dpop))
 	bound := f.mint(t, f.jkt)
 
 	run := func(proof string) (context.Context, error) {
 		h := &connect.Header{}
 		h.Set(HeaderCapability, bound)
 		if proof != "" {
-			h.Set(capability.DPoPHeader, proof)
+			h.Set(limes.DPoPHeader, proof)
 		}
 		return callStream(context.Background(), []connect.ServerInterceptor{i}, h)
 	}
@@ -204,12 +204,12 @@ func TestCapabilityDPoP_Streaming(t *testing.T) {
 		t.Error("the verified capability did not reach the stream handler")
 	}
 	_, err = run("")
-	if connect.CodeOf(err) != connect.CodePermissionDenied || !errors.Is(err, capability.ErrDPoPRequired) {
+	if connect.CodeOf(err) != connect.CodePermissionDenied || !errors.Is(err, limes.ErrDPoPRequired) {
 		t.Fatalf("missing proof: err = %v, want PermissionDenied wrapping ErrDPoPRequired", err)
 	}
 }
 
-// The Go SDK signs its own proofs — it does not import the capability module —
+// The Go SDK signs its own proofs — it does not import limes —
 // so the two implementations are held together here, against the server.
 func TestCapabilityDPoP_GoSDKInteroperates(t *testing.T) {
 	f := newDPoPFixture(t)
@@ -217,8 +217,8 @@ func TestCapabilityDPoP_GoSDKInteroperates(t *testing.T) {
 	if err != nil || jkt != f.jkt {
 		t.Fatalf("SDK thumbprint = %q, %v; server computes %q", jkt, err, f.jkt)
 	}
-	dpop := &capability.DPoPVerifier{Replay: capability.NewMemoryReplayCache(0)}
-	_, base := serve(t, CapabilityInterceptor(f.verifier, capability.AudiencePlaneData, nil, 0, "", WithDPoP(dpop)))
+	dpop := &limes.DPoPVerifier{Replay: limes.NewMemoryReplayCache(0)}
+	_, base := serve(t, CapabilityInterceptor(f.verifier, limes.AudiencePlaneData, nil, 0, "", WithDPoP(dpop)))
 
 	bound := f.mint(t, f.jkt)
 	sdk, err := paladin.New(base+"/", paladin.WithCapability(bound), paladin.WithDPoP(f.key))

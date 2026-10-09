@@ -31,25 +31,25 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // Handler wires the dependencies the four RPCs need.
 type Handler struct {
-	issuer *capability.Issuer
-	store  capability.Store
-	usage  capability.UsageStore[pgx.Tx]
+	issuer *limes.Issuer
+	store  limes.Store
+	usage  limes.UsageStore[pgx.Tx]
 	policy cedar.Authorizer
 
 	// copier and copies serve RevokeBiscuit; see WithBiscuitCopies.
 	copier BiscuitCopier
-	copies capability.BiscuitRevocationStore
+	copies limes.BiscuitRevocationStore
 	// copyUsage serves GetBiscuitUsage; see WithCopyUsage.
-	copyUsage capability.CopyUsageReader
+	copyUsage limes.CopyUsageReader
 }
 
 // NewHandler builds the Handler. issuer / store / policy are required;
@@ -57,9 +57,9 @@ type Handler struct {
 // be nil when the operator hasn't wired the runtime-counter store —
 // GetUsage then returns CodeUnavailable so the misconfig is visible.
 func NewHandler(
-	issuer *capability.Issuer,
-	store capability.Store,
-	usage capability.UsageStore[pgx.Tx],
+	issuer *limes.Issuer,
+	store limes.Store,
+	usage limes.UsageStore[pgx.Tx],
 	policy cedar.Authorizer,
 ) *Handler {
 	if issuer == nil || store == nil || policy == nil {
@@ -71,7 +71,7 @@ func NewHandler(
 // hasOp reports whether the caveat op-set includes the requested op.
 // Empty op-set means "no operation allowed", so the result is false in
 // that case.
-func hasOp(ops []capability.Op, want capability.Op) bool {
+func hasOp(ops []limes.Op, want limes.Op) bool {
 	for _, o := range ops {
 		if o == want {
 			return true
@@ -128,7 +128,7 @@ func (h *Handler) actOnCapabilitysTenant(ctx context.Context, caller *auth.Princ
 	}
 	c, err := h.store.Get(auth.WithCrossTenantRead(ctx), id)
 	switch {
-	case errors.Is(err, capability.ErrNotFound):
+	case errors.Is(err, limes.ErrNotFound):
 		return ctx, nil
 	case err != nil:
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -181,15 +181,15 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 	// The row lands under the subject's tenant, so the connection has to be
 	// scoped there — the cross-tenant gate above is what makes this safe.
 	ctx = auth.WithActingTenant(ctx, subj.TenantID)
-	cap, token, err := h.issuer.Issue(ctx, capability.IssueRequest{
+	cap, token, err := h.issuer.Issue(ctx, limes.IssueRequest{
 		Subject: subj,
 		// Who ASKED for this capability, as opposed to who it authorises.
 		// Taken from the authorized caller so it cannot be spoofed by the
 		// request body.
-		IssuedBy: capability.Principal{
+		IssuedBy: limes.Principal{
 			TenantID: caller.TenantID,
 			Subject:  caller.Subject,
-			Type:     capability.PrincipalUser,
+			Type:     limes.PrincipalUser,
 		},
 		Audience:        req.GetAudience(),
 		Caveats:         caveats,
@@ -230,11 +230,11 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("parent_id: %w", err))
 	}
 
-	var parent capability.Capability
+	var parent limes.Capability
 	// Path 2: capability-authenticated caller. Gated entirely by the
 	// caller's own caveats — no Cedar admin check.
 	if callerCap, ok := auth.CapabilityFromContext(ctx); ok {
-		if !hasOp(callerCap.Caveats.Ops, capability.OpShare) {
+		if !hasOp(callerCap.Caveats.Ops, limes.OpShare) {
 			return nil, connect.NewError(connect.CodePermissionDenied, "capability: caller lacks OpShare")
 		}
 		if callerCap.ID != parentID {
@@ -258,7 +258,7 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 			return nil, err
 		}
 		if parent, err = h.store.Get(ctx, parentID); err != nil {
-			if errors.Is(err, capability.ErrNotFound) {
+			if errors.Is(err, limes.ErrNotFound) {
 				return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 			}
 			// The store failing is not the parent being absent.
@@ -268,7 +268,7 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 
 	// No caveats in the request means "the parent's, unchanged" — asked for
 	// explicitly, so that caveats which ARE sent are never silently replaced.
-	var caveats capability.Caveats
+	var caveats limes.Caveats
 	inherit := req.GetCaveats() == nil
 	if !inherit {
 		if caveats, err = protoToCaveats(req.GetCaveats()); err != nil {
@@ -295,7 +295,7 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		delegSubj = s
 	}
 
-	cap, token, err := h.issuer.Delegate(ctx, capability.DelegateRequest{
+	cap, token, err := h.issuer.Delegate(ctx, limes.DelegateRequest{
 		Parent:          parent,
 		Subject:         delegSubj,
 		Audience:        audience,
@@ -307,10 +307,10 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 	})
 	if err != nil {
 		switch {
-		case errors.Is(err, capability.ErrDelegationTooWide),
-			errors.Is(err, capability.ErrUnitCodeMismatch):
+		case errors.Is(err, limes.ErrDelegationTooWide),
+			errors.Is(err, limes.ErrUnitCodeMismatch):
 			return nil, connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
-		case errors.Is(err, capability.ErrRevoked), errors.Is(err, capability.ErrExpired):
+		case errors.Is(err, limes.ErrRevoked), errors.Is(err, limes.ErrExpired):
 			// The parent can no longer delegate; that is a state the caller
 			// must act on, not a malformed request.
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
@@ -337,7 +337,7 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevo
 	if err != nil {
 		return nil, err
 	}
-	if err := h.store.Revoke(ctx, capability.RevokeRequest{
+	if err := h.store.Revoke(ctx, limes.RevokeRequest{
 		ID:              id,
 		Reason:          req.GetReason(),
 		Actor:           caller.Subject,
@@ -347,7 +347,7 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevo
 		// a not-found here covers both "no such id" and "belongs to another
 		// tenant". Both answer NotFound: telling the caller which one it was
 		// would turn this endpoint into an id oracle.
-		if errors.Is(err, capability.ErrNotFound) {
+		if errors.Is(err, limes.ErrNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -377,7 +377,7 @@ func (h *Handler) List(ctx context.Context, req *adminv1.CapabilityServiceListRe
 	// needs the connection scoped to that tenant. Without this the admin
 	// console renders an empty list instead of an error — RLS filters.
 	ctx = auth.WithActingTenant(ctx, tenantID)
-	caps, next, err := h.store.ListByPrincipal(ctx, capability.ListByPrincipalRequest{
+	caps, next, err := h.store.ListByPrincipal(ctx, limes.ListByPrincipalRequest{
 		TenantID:       tenantID,
 		PrincipalType:  protoToPrincipalKind(req.GetPrincipalKind()),
 		Subject:        req.GetSubject(),
@@ -428,7 +428,7 @@ func (h *Handler) Get(ctx context.Context, req *adminv1.CapabilityServiceGetRequ
 	}
 	rec, err := h.store.GetRecord(ctx, id)
 	if err != nil {
-		if errors.Is(err, capability.ErrNotFound) {
+		if errors.Is(err, limes.ErrNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
 		return nil, apiutil.MapError(err)
@@ -463,7 +463,7 @@ func (h *Handler) GetUsage(ctx context.Context, req *adminv1.CapabilityServiceGe
 	}
 	u, err := h.usage.GetUsage(ctx, id)
 	if err != nil {
-		if errors.Is(err, capability.ErrUsageNotFound) {
+		if errors.Is(err, limes.ErrUsageNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -480,21 +480,21 @@ func (h *Handler) GetUsage(ctx context.Context, req *adminv1.CapabilityServiceGe
 
 // ─── proto ↔ domain converters ──────────────────────────────────────────────
 
-func protoToPrincipal(p *adminv1.CapabilityPrincipal) (capability.Principal, error) {
+func protoToPrincipal(p *adminv1.CapabilityPrincipal) (limes.Principal, error) {
 	if p == nil {
-		return capability.Principal{}, errors.New("principal required")
+		return limes.Principal{}, errors.New("principal required")
 	}
 	tenantID, err := uuid.Parse(p.GetTenantId())
 	if err != nil {
-		return capability.Principal{}, fmt.Errorf("subject.tenant_id: %w", err)
+		return limes.Principal{}, fmt.Errorf("subject.tenant_id: %w", err)
 	}
-	out := capability.Principal{
+	out := limes.Principal{
 		Type:     protoToPrincipalKind(p.GetKind()),
 		TenantID: tenantID,
 		Subject:  p.GetSubject(),
 	}
 	if p.GetKind() == adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT {
-		out.Agent = &capability.AgentPrincipal{
+		out.Agent = &limes.AgentPrincipal{
 			AgentType:    p.GetAgentType(),
 			AgentVersion: p.GetAgentVersion(),
 			Model:        p.GetModel(),
@@ -503,14 +503,14 @@ func protoToPrincipal(p *adminv1.CapabilityPrincipal) (capability.Principal, err
 		if rid := p.GetRunId(); rid != "" {
 			parsed, err := uuid.Parse(rid)
 			if err != nil {
-				return capability.Principal{}, fmt.Errorf("subject.run_id: %w", err)
+				return limes.Principal{}, fmt.Errorf("subject.run_id: %w", err)
 			}
 			out.Agent.RunID = parsed
 		}
 		if pid := p.GetParentAgentId(); pid != "" {
 			parsed, err := uuid.Parse(pid)
 			if err != nil {
-				return capability.Principal{}, fmt.Errorf("subject.parent_agent_id: %w", err)
+				return limes.Principal{}, fmt.Errorf("subject.parent_agent_id: %w", err)
 			}
 			out.Agent.ParentAgentID = parsed
 		}
@@ -518,14 +518,14 @@ func protoToPrincipal(p *adminv1.CapabilityPrincipal) (capability.Principal, err
 	return out, nil
 }
 
-func protoToPrincipalKind(k adminv1.PrincipalKind) capability.PrincipalType {
+func protoToPrincipalKind(k adminv1.PrincipalKind) limes.PrincipalType {
 	switch k {
 	case adminv1.PrincipalKind_PRINCIPAL_KIND_USER:
-		return capability.PrincipalUser
+		return limes.PrincipalUser
 	case adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT:
-		return capability.PrincipalAgent
+		return limes.PrincipalAgent
 	case adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE:
-		return capability.PrincipalService
+		return limes.PrincipalService
 	default:
 		return ""
 	}
@@ -553,7 +553,7 @@ func stashCapabilityInScope(ctx context.Context, id uuid.UUID) {
 	}
 }
 
-func (h *Handler) issued(cap capability.Capability, token string) (*adminv1.CapabilityServiceIssueResponse, error) {
+func (h *Handler) issued(cap limes.Capability, token string) (*adminv1.CapabilityServiceIssueResponse, error) {
 	bisc, err := h.issuer.Biscuit(cap)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -565,22 +565,22 @@ func (h *Handler) issued(cap capability.Capability, token string) (*adminv1.Capa
 	}, nil
 }
 
-func protoToCaveats(c *adminv1.CapabilityCaveats) (capability.Caveats, error) {
+func protoToCaveats(c *adminv1.CapabilityCaveats) (limes.Caveats, error) {
 	if c == nil {
-		return capability.Caveats{}, nil
+		return limes.Caveats{}, nil
 	}
 	if err := apiutil.RefuseRemovedFields(c); err != nil {
-		return capability.Caveats{}, err
+		return limes.Caveats{}, err
 	}
 	// An absent max_budget is no budget, in the default unit.
 	budget, unit, err := apiutil.NanosOf("max_budget", c.GetMaxBudget())
 	if err != nil {
-		return capability.Caveats{}, err
+		return limes.Caveats{}, err
 	}
 	if unit == "" {
-		unit = capability.DefaultUnitCode
+		unit = limes.DefaultUnitCode
 	}
-	out := capability.Caveats{
+	out := limes.Caveats{
 		ResourcePrefixes:       c.GetResourcePrefixes(),
 		ResourceURIs:           c.GetResourceUris(),
 		MaxRequests:            int(c.GetMaxRequests()),
@@ -591,12 +591,12 @@ func protoToCaveats(c *adminv1.CapabilityCaveats) (capability.Caveats, error) {
 		SourceIPCIDR:           c.GetSourceIpCidr(),
 	}
 	for _, op := range c.GetOps() {
-		out.Ops = append(out.Ops, capability.Op(op))
+		out.Ops = append(out.Ops, limes.Op(op))
 	}
 	return out, nil
 }
 
-func principalToProto(p capability.Principal) *adminv1.CapabilityPrincipal {
+func principalToProto(p limes.Principal) *adminv1.CapabilityPrincipal {
 	out := &adminv1.CapabilityPrincipal{
 		Kind:     principalKindToProto(p.Type),
 		TenantId: p.TenantID.String(),
@@ -617,20 +617,20 @@ func principalToProto(p capability.Principal) *adminv1.CapabilityPrincipal {
 	return out
 }
 
-func principalKindToProto(t capability.PrincipalType) adminv1.PrincipalKind {
+func principalKindToProto(t limes.PrincipalType) adminv1.PrincipalKind {
 	switch t {
-	case capability.PrincipalUser:
+	case limes.PrincipalUser:
 		return adminv1.PrincipalKind_PRINCIPAL_KIND_USER
-	case capability.PrincipalAgent:
+	case limes.PrincipalAgent:
 		return adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT
-	case capability.PrincipalService:
+	case limes.PrincipalService:
 		return adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE
 	default:
 		return adminv1.PrincipalKind_PRINCIPAL_KIND_UNSPECIFIED
 	}
 }
 
-func caveatsToProto(c capability.Caveats) *adminv1.CapabilityCaveats {
+func caveatsToProto(c limes.Caveats) *adminv1.CapabilityCaveats {
 	out := &adminv1.CapabilityCaveats{
 		ResourcePrefixes:       c.ResourcePrefixes,
 		ResourceUris:           c.ResourceURIs,
@@ -646,7 +646,7 @@ func caveatsToProto(c capability.Caveats) *adminv1.CapabilityCaveats {
 	return out
 }
 
-func capabilityToProto(c *capability.Capability) *adminv1.Capability {
+func capabilityToProto(c *limes.Capability) *adminv1.Capability {
 	out := &adminv1.Capability{
 		Id:              c.ID.String(),
 		Issuer:          c.Issuer,

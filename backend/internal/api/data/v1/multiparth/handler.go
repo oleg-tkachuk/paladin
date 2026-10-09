@@ -20,6 +20,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -32,7 +33,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
-	"github.com/oleg-tkachuk/paladin/capability"
 	"go.uber.org/zap"
 )
 
@@ -288,7 +288,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		return nil, err
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), args.Collection, args.Key)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return nil, err
 	}
 	// The plan honours limits.* narrowed by the bucket: max_multipart_size,
@@ -350,7 +350,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 		return objecth.Object{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return objecth.Object{}, err
 	}
 	// The session anchored its (backend, bucket) at initiate time; pass it to
@@ -451,7 +451,7 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, wan
 		return err
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
-	if err := auth.AssertCapabilityOp(ctx, capability.OpDelete, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpDelete, objectURI); err != nil {
 		return err
 	}
 	// Session-anchored (backend, bucket) → authz enforces bucket:/collection:
@@ -529,10 +529,10 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	// Presigned part URL grants Put on the underlying object; gate on
 	// both OpPresign (the act of issuing a URL) and OpPut (the op the
 	// URL ultimately authorises). Either failure short-circuits.
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPresign, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPresign, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpPut, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	// Session-anchored (backend, bucket) → authz enforces bucket:/collection:
@@ -643,7 +643,7 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	}
 	// The parts all belong to the session's one object, so that object is
 	// the resource the listing touches.
-	if err := auth.AssertCapabilityOp(ctx, capability.OpList,
+	if err := auth.AssertCapabilityOp(ctx, limes.OpList,
 		paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)); err != nil {
 		return nil, "", err
 	}

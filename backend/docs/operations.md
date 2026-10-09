@@ -66,7 +66,7 @@ version `go.mod` pins.
 ## Image
 
 [`deploy/Dockerfile`](../deploy/Dockerfile) builds from the repository root (it
-copies `capability/` and `sdk/go/`) into a distroless `nonroot` image with the
+copies `sdk/go/`) into a distroless `nonroot` image with the
 binary at `/app/bin/paladin-core`. No config is baked in.
 
 ```bash

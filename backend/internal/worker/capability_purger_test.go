@@ -10,13 +10,13 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 // purgeOnlyStore answers PurgeExpired; any other Store method panics through
 // the nil embedded interface, which the purger must never call.
 type purgeOnlyStore struct {
-	capability.Store
+	limes.Store
 	err error
 }
 
@@ -97,7 +97,7 @@ func (b *batches) next() (int64, error) {
 // sweepingUsage answers the two sweeps the purger makes; any other method
 // panics through the nil embedded interface.
 type sweepingUsage struct {
-	capability.UsageStore[pgx.Tx]
+	limes.UsageStore[pgx.Tx]
 	release, orphans batches
 }
 
@@ -142,7 +142,7 @@ func TestCapabilityPurgerReportsAFailedUsageSweep(t *testing.T) {
 
 // countingStore reports n purged revocations.
 type countingStore struct {
-	capability.Store
+	limes.Store
 	n int64
 }
 

@@ -172,8 +172,9 @@ client = paladin.Client(data_url, capability=narrowed)
 
 The block holds only the facts the server reads
 ([`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json),
-which the server's tests check too); a token the SDK attenuated is verified by
-the server's code in `capability/`'s tests.
+a copy of the vocabulary [limes](https://github.com/oleg-tkachuk/limes)
+defines); a token the SDK attenuated is verified by limes in the server's
+tests.
 
 `CapabilityService.revoke_biscuit` revokes one copy: the token sent and every
 copy attenuated from it. The copy it came from, its siblings and the
@@ -552,7 +553,7 @@ tests hold its parsers to as well. Where they differ, it is on purpose:
 | Minimum TLS version | `TLS.MinVersion`, 1.2 by default | `TLS(min_version=…)`, `ssl.TLSVersion.TLSv1_2` by default | |
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
 | Webhook signatures | `VerifyWebhook`, options for the window and clock | `verify_webhook`, keyword arguments | Each language's idiom; both run the vectors in `sdk/testdata/webhook_signatures.json`. |
-| Biscuit attenuation | `capability.Attenuate`, from the capability module | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
+| Biscuit attenuation | `limes.Attenuate`, from [limes](https://github.com/oleg-tkachuk/limes) | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `connectrpc-otel` through `interceptors`, and `pyqwest`'s own spans through `http_client` and `Transfer(otel=True)` | |
 | Bulk transfers | `DownloadMany`, a callback per reader; `UploadMany`, objects in input order and failures by index | `download_many` / `adownload_many` and `upload_many` / `aupload_many`, iterators of results as each finishes | Each language's idiom. |
 | asyncio | — | An `a…` form of every workflow | Go has goroutines. |

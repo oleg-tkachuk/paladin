@@ -6,11 +6,11 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 func TestNanosNumericRoundTripIsExact(t *testing.T) {
-	for _, n := range []capability.Nanos{0, 1, 300_000_000, capability.NanosPerUnit, capability.MaxNanos} {
+	for _, n := range []limes.Nanos{0, 1, 300_000_000, limes.NanosPerUnit, limes.MaxNanos} {
 		got, err := NanosFromNumeric(NumericFromNanos(n))
 		if err != nil || got != n {
 			t.Errorf("%s → %s, %v", n, got, err)
@@ -23,7 +23,7 @@ func TestNanosNumericRoundTripIsExact(t *testing.T) {
 func TestNanosFromNumericReadsAnyScale(t *testing.T) {
 	cases := []struct {
 		v    pgtype.Numeric
-		want capability.Nanos
+		want limes.Nanos
 	}{
 		{pgtype.Numeric{Int: big.NewInt(15), Exp: -1, Valid: true}, 1_500_000_000},    // 1.5
 		{pgtype.Numeric{Int: big.NewInt(350_000), Exp: -6, Valid: true}, 350_000_000}, // 0.350000, a numeric(14,6) row

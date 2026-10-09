@@ -9,28 +9,28 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
-	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // recordStore answers GetRecord with rec, or err, and records the context.
 type recordStore struct {
 	fakeStore
-	rec    capability.Record
+	rec    limes.Record
 	err    error
 	getCtx context.Context
 }
 
-func (s *recordStore) GetRecord(ctx context.Context, id uuid.UUID) (capability.Record, error) {
+func (s *recordStore) GetRecord(ctx context.Context, id uuid.UUID) (limes.Record, error) {
 	s.getCtx = ctx
 	if s.err != nil {
-		return capability.Record{}, s.err
+		return limes.Record{}, s.err
 	}
 	if id != s.rec.Capability.ID {
-		return capability.Record{}, capability.ErrNotFound
+		return limes.Record{}, limes.ErrNotFound
 	}
 	return s.rec, nil
 }
@@ -41,12 +41,12 @@ func getReq(id string) *adminv1.CapabilityServiceGetRequest {
 
 func TestGetReturnsTheRecord(t *testing.T) {
 	owner := uuid.New()
-	c := mkParent(owner, capability.OpGet)
+	c := mkParent(owner, limes.OpGet)
 	revokedAt := time.Unix(1_800_000_000, 0).UTC()
-	issuer := capability.Principal{Type: capability.PrincipalUser, TenantID: owner, Subject: "operator"}
-	store := &recordStore{rec: capability.Record{
+	issuer := limes.Principal{Type: limes.PrincipalUser, TenantID: owner, Subject: "operator"}
+	store := &recordStore{rec: limes.Record{
 		Capability: c, IssuedBy: issuer,
-		Revocation: &capability.Revocation{RevokedAt: revokedAt, Reason: "leak", Actor: "sec", Cascade: true},
+		Revocation: &limes.Revocation{RevokedAt: revokedAt, Reason: "leak", Actor: "sec", Cascade: true},
 	}}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 
@@ -72,7 +72,7 @@ func TestGetReturnsTheRecord(t *testing.T) {
 }
 
 func TestGetErrors(t *testing.T) {
-	c := mkParent(uuid.New(), capability.OpGet)
+	c := mkParent(uuid.New(), limes.OpGet)
 	cases := []struct {
 		name  string
 		store *recordStore
@@ -80,10 +80,10 @@ func TestGetErrors(t *testing.T) {
 		id    string
 		want  connect.Code
 	}{
-		{"unknown id", &recordStore{rec: capability.Record{Capability: c}}, &allowAuthorizer{}, uuid.New().String(), connect.CodeNotFound},
+		{"unknown id", &recordStore{rec: limes.Record{Capability: c}}, &allowAuthorizer{}, uuid.New().String(), connect.CodeNotFound},
 		{"malformed id", &recordStore{}, &allowAuthorizer{}, "nope", connect.CodeInvalidArgument},
 		{"store failure", &recordStore{err: errors.New("db down")}, &allowAuthorizer{}, c.ID.String(), connect.CodeInternal},
-		{"denied", &recordStore{rec: capability.Record{Capability: c}}, &denyAuthorizer{}, c.ID.String(), connect.CodePermissionDenied},
+		{"denied", &recordStore{rec: limes.Record{Capability: c}}, &denyAuthorizer{}, c.ID.String(), connect.CodePermissionDenied},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -100,8 +100,8 @@ func TestGetErrors(t *testing.T) {
 // connection, as Revoke and GetUsage do; RLS would hide it otherwise.
 func TestGetActsOnTheCapabilitysTenant(t *testing.T) {
 	owner := uuid.New()
-	c := mkParent(owner, capability.OpGet)
-	store := &recordStore{fakeStore: fakeStore{cap: &c}, rec: capability.Record{Capability: c}}
+	c := mkParent(owner, limes.OpGet)
+	store := &recordStore{fakeStore: fakeStore{cap: &c}, rec: limes.Record{Capability: c}}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, cedartest.Engine(""))
 
 	if _, err := h.Get(callerCtx(uuid.New(), "platform.admin"), getReq(c.ID.String())); err != nil {

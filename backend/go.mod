@@ -36,14 +36,8 @@ require (
 	github.com/nats-io/nats.go v1.54.0
 	github.com/nats-io/nkeys v0.4.16
 	github.com/oasdiff/yaml3 v0.0.14
-	// The capability primitive lives in a sibling module so the boundary is
-	// mechanical rather than a convention: a separate go.mod is what lets the
-	// standalone CI job build it with no Paladin checkout and assert that no
-	// database driver and no storage SDK reach its resolved dependency graph
-	// (research R-004 — without that job, `replace` would mask a broken module).
-	// Paladin consumes it in-tree through the replace below, so its releases do
-	// not wait on the module's own tags. See capability/README.md §Versioning.
-	github.com/oleg-tkachuk/paladin/capability v0.17.1
+	// limes is the capability primitive the auth planes run on.
+	github.com/oleg-tkachuk/limes v0.2.0
 	github.com/oleg-tkachuk/paladin/sdk/go v0.56.2
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/prometheus/client_golang v1.25.0
@@ -261,7 +255,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-replace github.com/oleg-tkachuk/paladin/capability => ../capability
 
 replace github.com/oleg-tkachuk/paladin/sdk/go => ../sdk/go

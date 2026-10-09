@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 // SetTenantBudget upserted the cap with no version guard, so two operators
@@ -23,8 +23,8 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 	ctx, f := newUsageFixture(t)
 
 	t.Run("first write creates at version 0", func(t *testing.T) {
-		got, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-			TenantID: f.tenant, MaxBudgetAmount: capability.MustParseAmount("100"),
+		got, err := f.usage.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+			TenantID: f.tenant, MaxBudgetAmount: limes.MustParseAmount("100"),
 		})
 		if err != nil {
 			t.Fatalf("create: %v", err)
@@ -35,14 +35,14 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 	})
 
 	t.Run("creating twice at version 0 is a conflict", func(t *testing.T) {
-		_, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-			TenantID: f.tenant, MaxBudgetAmount: capability.MustParseAmount("999"),
+		_, err := f.usage.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+			TenantID: f.tenant, MaxBudgetAmount: limes.MustParseAmount("999"),
 		})
-		if !errors.Is(err, capability.ErrTenantBudgetVersionMismatch) {
+		if !errors.Is(err, limes.ErrTenantBudgetVersionMismatch) {
 			t.Fatalf("err = %v, want ErrTenantBudgetVersionMismatch — 0 asserts the row does not exist", err)
 		}
 		after, _ := f.usage.GetTenantBudget(ctx, f.tenant)
-		if after.MaxBudgetAmount == capability.MustParseAmount("999") {
+		if after.MaxBudgetAmount == limes.MustParseAmount("999") {
 			t.Error("the rejected write landed anyway")
 		}
 	})
@@ -52,13 +52,13 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get: %v", err)
 		}
-		got, err := f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
-			TenantID: f.tenant, MaxBudgetAmount: capability.MustParseAmount("200"), ExpectedVersion: cur.ResourceVersion,
+		got, err := f.usage.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+			TenantID: f.tenant, MaxBudgetAmount: limes.MustParseAmount("200"), ExpectedVersion: cur.ResourceVersion,
 		})
 		if err != nil {
 			t.Fatalf("update: %v", err)
 		}
-		if got.MaxBudgetAmount != capability.MustParseAmount("200") {
+		if got.MaxBudgetAmount != limes.MustParseAmount("200") {
 			t.Errorf("max_budget = %v, want 200", got.MaxBudgetAmount)
 		}
 		if got.ResourceVersion <= cur.ResourceVersion {
@@ -72,16 +72,16 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get: %v", err)
 		}
-		_, err = f.usage.SetTenantBudget(ctx, capability.SetTenantBudgetRequest{
+		_, err = f.usage.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
 			TenantID:        f.tenant,
-			MaxBudgetAmount: capability.MustParseAmount("400"),
+			MaxBudgetAmount: limes.MustParseAmount("400"),
 			ExpectedVersion: cur.ResourceVersion - 1, // what a concurrent writer held
 		})
-		if !errors.Is(err, capability.ErrTenantBudgetVersionMismatch) {
+		if !errors.Is(err, limes.ErrTenantBudgetVersionMismatch) {
 			t.Fatalf("err = %v, want ErrTenantBudgetVersionMismatch", err)
 		}
 		after, _ := f.usage.GetTenantBudget(ctx, f.tenant)
-		if after.MaxBudgetAmount == capability.MustParseAmount("400") {
+		if after.MaxBudgetAmount == limes.MustParseAmount("400") {
 			t.Error("stale write overwrote the current cap")
 		}
 		if after.ResourceVersion != cur.ResourceVersion {

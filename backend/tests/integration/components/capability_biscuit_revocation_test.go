@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // A revoked copy is seen by the verifier's connection, which has no tenant on
@@ -27,7 +27,7 @@ func TestBiscuitCopyRevokedBeforeTheTenantIsKnown(t *testing.T) {
 	}
 	revoked, other := []byte("revoked-copy"), []byte("other-copy")
 	for range 2 { // idempotent
-		if err := seed.RevokeBiscuit(ctx, capability.RevokeBiscuitRequest{
+		if err := seed.RevokeBiscuit(ctx, limes.RevokeBiscuitRequest{
 			CapabilityID: c.ID, RevocationID: revoked, Reason: "leak", Actor: "user:ops",
 		}); err != nil {
 			t.Fatalf("revoke copy: %v", err)
@@ -72,10 +72,10 @@ func TestBiscuitCopyRevokeIsTenantScoped(t *testing.T) {
 
 	scoped := newCapStore(t, rlsPool(t, ctx, admin))
 	ctxA := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenantA})
-	err := scoped.RevokeBiscuit(ctxA, capability.RevokeBiscuitRequest{
+	err := scoped.RevokeBiscuit(ctxA, limes.RevokeBiscuitRequest{
 		CapabilityID: victim.ID, RevocationID: []byte("hostile"), Reason: "hostile", Actor: "user:attacker",
 	})
-	if !errors.Is(err, capability.ErrNotFound) {
+	if !errors.Is(err, limes.ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 	var rows int
@@ -90,7 +90,7 @@ func TestBiscuitCopyRevokeIsTenantScoped(t *testing.T) {
 
 	// The owning tenant can.
 	ctxB := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenantB})
-	if err := scoped.RevokeBiscuit(ctxB, capability.RevokeBiscuitRequest{
+	if err := scoped.RevokeBiscuit(ctxB, limes.RevokeBiscuitRequest{
 		CapabilityID: victim.ID, RevocationID: []byte("own"),
 	}); err != nil {
 		t.Errorf("owning tenant: %v", err)
@@ -107,11 +107,11 @@ func TestBiscuitCopiesPurgedWithTheirCapability(t *testing.T) {
 	store := newCapStore(t, admin)
 	longExpired := mkCap(tenant, "agent:long", time.Now().Add(-48*time.Hour))
 	live := mkCap(tenant, "agent:live", time.Now().Add(time.Hour))
-	for _, c := range []capability.Capability{longExpired, live} {
+	for _, c := range []limes.Capability{longExpired, live} {
 		if err := store.Insert(ctx, c, seedIssuer); err != nil {
 			t.Fatalf("insert: %v", err)
 		}
-		if err := store.RevokeBiscuit(ctx, capability.RevokeBiscuitRequest{
+		if err := store.RevokeBiscuit(ctx, limes.RevokeBiscuitRequest{
 			CapabilityID: c.ID, RevocationID: []byte(c.Subject.Subject),
 		}); err != nil {
 			t.Fatalf("revoke copy: %v", err)
@@ -126,7 +126,7 @@ func TestBiscuitCopiesPurgedWithTheirCapability(t *testing.T) {
 		t.Fatalf("purged %d rows, want 1", n)
 	}
 	for _, tc := range []struct {
-		cap  capability.Capability
+		cap  limes.Capability
 		want bool
 	}{
 		{longExpired, false},
@@ -149,7 +149,7 @@ func TestBiscuitCopyRevocationNotifies(t *testing.T) {
 	ctx, f := newLineageFixture(t)
 
 	replica := newCapStore(t, rlsPool(t, ctx, f.pool))
-	cache := capability.NewCachedBiscuitRevocationChecker(replica, time.Hour)
+	cache := limes.NewCachedBiscuitRevocationChecker(replica, time.Hour)
 	watchCtx, stop := context.WithCancel(ctx)
 	t.Cleanup(stop)
 	if err := capstore.NewRevocationWatcher(f.pool, cache.Clear).Start(watchCtx); err != nil {
@@ -160,7 +160,7 @@ func TestBiscuitCopyRevocationNotifies(t *testing.T) {
 		t.Fatalf("before revoke: revoked=%v err=%v", r, err)
 	}
 
-	if err := f.records.RevokeBiscuit(ctx, capability.RevokeBiscuitRequest{
+	if err := f.records.RevokeBiscuit(ctx, limes.RevokeBiscuitRequest{
 		CapabilityID: f.root, RevocationID: ids[0], Reason: "test", Actor: "user:ops",
 	}); err != nil {
 		t.Fatalf("revoke copy: %v", err)

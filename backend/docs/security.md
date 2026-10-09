@@ -14,7 +14,7 @@ a kind, a tenant and a role set.
 | User access token | JWT, HS256, one per audience (`paladin-data`, `paladin-admin`, `paladin-iam`) | `AuthService.Login`, `RefreshToken`, `ExchangeAudience`, `SwitchTenant` | signed with `auth.signing_key` (`internal/auth/issuer`); with `auth.jwks_url` set the planes verify against that JWKS instead |
 | Refresh token | JWT, HS256, audience `paladin-iam` | `Login`, rotation in `RefreshToken` | stored by jti in `refresh_tokens`; rotation and reuse detection below |
 | API token | opaque, `TokenPrefix` + random body (`internal/auth/api_token/format.go`) | `APITokenService.Create` | stored as a keyed SHA-256 digest; per-token rate limit in `api_token_rate_buckets` |
-| Capability token | JWT, EdDSA (Ed25519), `typ: paladin-cap+jwt`, or its Biscuit form; in `X-Paladin-Capability` or `Authorization: Capability <token>` | `CapabilityService.Issue` | budgeted, delegable only by narrowing, revocable (a Biscuit copy can be revoked alone); a key-bound capability (`cnf.jkt`) also needs a DPoP proof; the [`capability`](../../capability/) module |
+| Capability token | JWT, EdDSA (Ed25519), `typ: limes-cap+jwt` ([limes](https://github.com/oleg-tkachuk/limes)), or its Biscuit form; in `X-Paladin-Capability` or `Authorization: Capability <token>` | `CapabilityService.Issue` | budgeted, delegable only by narrowing, revocable (a Biscuit copy can be revoked alone); a key-bound capability (`cnf.jkt`) also needs a DPoP proof; the [`capability`](../../capability/) module |
 
 For MCP clients, the api role serves an OAuth 2.1 authorization server under
 `/oauth/*` ([ADR-0009](../../docs/adr/0009-oauth-authorization-server.md)) and
@@ -47,7 +47,7 @@ Applied in order on every request:
    `collection:`; `internal/auth/scope.go`) narrow what it reaches, and a
    capability's caveats narrow further: an operation set, resource prefixes or
    URIs, source CIDRs, request and budget ceilings, tainted-object reads and a
-   required idempotency key (`capability/types.go`).
+   required idempotency key (limes's `Caveats`).
 3. **Row-level security.** Tenant tables are `FORCE ROW LEVEL SECURITY`. The
    runtime role `paladin_app` is `NOBYPASSRLS`; each transaction sets
    `paladin.tenant_id` (or `paladin.cross_tenant` for an authorised

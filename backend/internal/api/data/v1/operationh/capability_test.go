@@ -7,8 +7,8 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // TestOperationRPCsAssertCapabilityOp pins the op each RPC requires of a
@@ -46,19 +46,19 @@ func TestOperationRPCsAssertCapabilityOp(t *testing.T) {
 	cases := []struct {
 		name     string
 		rpc      string
-		caveats  capability.Caveats
+		caveats  limes.Caveats
 		wantCode connect.Code // zero: allowed
 	}{
-		{"get with get", "GetOperation", capability.Caveats{Ops: []capability.Op{capability.OpGet}}, 0},
-		{"get without get", "GetOperation", capability.Caveats{Ops: []capability.Op{capability.OpList}}, connect.CodePermissionDenied},
-		{"list with list", "ListOperations", capability.Caveats{Ops: []capability.Op{capability.OpList}}, 0},
-		{"list without list", "ListOperations", capability.Caveats{Ops: []capability.Op{capability.OpGet}}, connect.CodePermissionDenied},
-		{"cancel with manage", "CancelOperation", capability.Caveats{Ops: []capability.Op{capability.OpManage}}, 0},
-		{"cancel with delete only", "CancelOperation", capability.Caveats{Ops: []capability.Op{capability.OpDelete}}, connect.CodePermissionDenied},
+		{"get with get", "GetOperation", limes.Caveats{Ops: []limes.Op{limes.OpGet}}, 0},
+		{"get without get", "GetOperation", limes.Caveats{Ops: []limes.Op{limes.OpList}}, connect.CodePermissionDenied},
+		{"list with list", "ListOperations", limes.Caveats{Ops: []limes.Op{limes.OpList}}, 0},
+		{"list without list", "ListOperations", limes.Caveats{Ops: []limes.Op{limes.OpGet}}, connect.CodePermissionDenied},
+		{"cancel with manage", "CancelOperation", limes.Caveats{Ops: []limes.Op{limes.OpManage}}, 0},
+		{"cancel with delete only", "CancelOperation", limes.Caveats{Ops: []limes.Op{limes.OpDelete}}, connect.CodePermissionDenied},
 		{
 			"resource-restricted capability refused",
 			"GetOperation",
-			capability.Caveats{Ops: []capability.Op{capability.OpGet}, ResourcePrefixes: []string{"paladin://t/c"}},
+			limes.Caveats{Ops: []limes.Op{limes.OpGet}, ResourcePrefixes: []string{"paladin://t/c"}},
 			connect.CodePermissionDenied,
 		},
 	}
@@ -67,7 +67,7 @@ func TestOperationRPCsAssertCapabilityOp(t *testing.T) {
 			t.Parallel()
 			fr := okRepo()
 			az := allowAuthorizer()
-			ctx := auth.WithCapability(authedCtx(tid), &capability.Capability{Caveats: tc.caveats})
+			ctx := auth.WithCapability(authedCtx(tid), &limes.Capability{Caveats: tc.caveats})
 			err := calls[tc.rpc](NewHandler(fr, az), ctx)
 			if tc.wantCode == 0 {
 				if err != nil {

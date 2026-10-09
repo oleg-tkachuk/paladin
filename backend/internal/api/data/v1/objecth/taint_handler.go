@@ -10,10 +10,10 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // Taint signals an object's content can be flagged with. The closed set the
@@ -89,7 +89,7 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 	if err != nil {
 		return nil, objectLookupError(err)
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpManage,
+	if err := auth.AssertCapabilityOp(ctx, limes.OpManage,
 		CapabilityObjectURI(tenantID, obj.Collection, obj.Key)); err != nil {
 		return nil, err
 	}

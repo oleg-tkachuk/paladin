@@ -11,9 +11,9 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
@@ -35,52 +35,52 @@ func (d *denyAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ c
 	return cedar.DecisionDeny, nil
 }
 
-// fakeStore is the minimum capability.Store used by Delegate. Get is
+// fakeStore is the minimum limes.Store used by Delegate. Get is
 // the only method the handler reaches before issuer.Delegate runs;
 // Insert is hit by Issuer when the gate allows. Other methods panic so
 // regressions that touch them are loud.
 type fakeStore struct {
-	cap *capability.Capability
+	cap *limes.Capability
 }
 
-func (s *fakeStore) Insert(_ context.Context, _ capability.Capability, _ capability.Principal) error {
+func (s *fakeStore) Insert(_ context.Context, _ limes.Capability, _ limes.Principal) error {
 	return nil
 }
-func (s *fakeStore) Get(_ context.Context, id uuid.UUID) (capability.Capability, error) {
+func (s *fakeStore) Get(_ context.Context, id uuid.UUID) (limes.Capability, error) {
 	if s.cap != nil && s.cap.ID == id {
 		return *s.cap, nil
 	}
-	return capability.Capability{}, capability.ErrNotFound // the Store contract's sentinel
+	return limes.Capability{}, limes.ErrNotFound // the Store contract's sentinel
 }
-func (s *fakeStore) GetRecord(ctx context.Context, id uuid.UUID) (capability.Record, error) {
+func (s *fakeStore) GetRecord(ctx context.Context, id uuid.UUID) (limes.Record, error) {
 	c, err := s.Get(ctx, id)
 	if err != nil {
-		return capability.Record{}, err
+		return limes.Record{}, err
 	}
-	return capability.Record{Capability: c}, nil
+	return limes.Record{Capability: c}, nil
 }
 func (s *fakeStore) IsRevoked(context.Context, uuid.UUID) (bool, error) { return false, nil }
-func (s *fakeStore) Revoke(context.Context, capability.RevokeRequest) error {
+func (s *fakeStore) Revoke(context.Context, limes.RevokeRequest) error {
 	return errors.New("not used")
 }
 func (s *fakeStore) PurgeExpired(context.Context, time.Duration) (int64, error) {
 	return 0, errors.New("not used")
 }
-func (s *fakeStore) ListByPrincipal(context.Context, capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
+func (s *fakeStore) ListByPrincipal(context.Context, limes.ListByPrincipalRequest) ([]limes.Capability, string, error) {
 	return nil, "", errors.New("not used")
 }
 
-func mkIssuer(t *testing.T, store capability.Store) *capability.Issuer {
+func mkIssuer(t *testing.T, store limes.Store) *limes.Issuer {
 	t.Helper()
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("genkey: %v", err)
 	}
-	signer, err := capability.NewEd25519Signer("k1", priv)
+	signer, err := limes.NewEd25519Signer("k1", priv)
 	if err != nil {
 		t.Fatalf("signer: %v", err)
 	}
-	iss, err := capability.NewIssuer(capability.IssuerConfig{
+	iss, err := limes.NewIssuer(limes.IssuerConfig{
 		Signer:     signer,
 		Store:      store,
 		IssuerName: "paladin-test",
@@ -92,21 +92,21 @@ func mkIssuer(t *testing.T, store capability.Store) *capability.Issuer {
 	return iss
 }
 
-func mkParent(tenantID uuid.UUID, ops ...capability.Op) capability.Capability {
+func mkParent(tenantID uuid.UUID, ops ...limes.Op) limes.Capability {
 	now := time.Now().UTC()
-	return capability.Capability{
+	return limes.Capability{
 		ID:     uuid.New(),
 		Issuer: "paladin-test",
-		Subject: capability.Principal{
-			Type:     capability.PrincipalAgent,
+		Subject: limes.Principal{
+			Type:     limes.PrincipalAgent,
 			TenantID: tenantID,
 			Subject:  "agent-42",
 		},
-		Audience:   []string{capability.AudiencePlaneData},
+		Audience:   []string{limes.AudiencePlaneData},
 		IssuedAt:   now,
 		ExpiresAt:  now.Add(time.Hour),
 		Generation: 1,
-		Caveats:    capability.Caveats{Ops: ops},
+		Caveats:    limes.Caveats{Ops: ops},
 	}
 }
 
@@ -117,7 +117,7 @@ func mkParent(tenantID uuid.UUID, ops ...capability.Op) capability.Capability {
 // path.
 func TestDelegate_CapabilityPath_AllowedWithOpShare(t *testing.T) {
 	tenantID := uuid.New()
-	parent := mkParent(tenantID, capability.OpGet, capability.OpShare)
+	parent := mkParent(tenantID, limes.OpGet, limes.OpShare)
 	store := &fakeStore{cap: &parent}
 	issuer := mkIssuer(t, store)
 	authz := &denyAuthorizer{}
@@ -144,7 +144,7 @@ func TestDelegate_CapabilityPath_AllowedWithOpShare(t *testing.T) {
 // matches.
 func TestDelegate_CapabilityPath_DeniedWithoutOpShare(t *testing.T) {
 	tenantID := uuid.New()
-	parent := mkParent(tenantID, capability.OpGet, capability.OpList) // no OpShare
+	parent := mkParent(tenantID, limes.OpGet, limes.OpList) // no OpShare
 	store := &fakeStore{cap: &parent}
 	issuer := mkIssuer(t, store)
 	h := NewHandler(issuer, store, nil, &allowAuthorizer{})
@@ -168,8 +168,8 @@ func TestDelegate_CapabilityPath_DeniedWithoutOpShare(t *testing.T) {
 // capability.
 func TestDelegate_CapabilityPath_DeniedWithMismatchedParent(t *testing.T) {
 	tenantID := uuid.New()
-	caller := mkParent(tenantID, capability.OpShare)
-	other := mkParent(tenantID, capability.OpShare)
+	caller := mkParent(tenantID, limes.OpShare)
+	other := mkParent(tenantID, limes.OpShare)
 	store := &fakeStore{cap: &other}
 	issuer := mkIssuer(t, store)
 	h := NewHandler(issuer, store, nil, &allowAuthorizer{})
@@ -192,7 +192,7 @@ func TestDelegate_CapabilityPath_DeniedWithMismatchedParent(t *testing.T) {
 // existing Cedar check.
 func TestDelegate_AdminPath_StillRequiresCedar(t *testing.T) {
 	tenantID := uuid.New()
-	parent := mkParent(tenantID, capability.OpGet, capability.OpShare)
+	parent := mkParent(tenantID, limes.OpGet, limes.OpShare)
 	store := &fakeStore{cap: &parent}
 	issuer := mkIssuer(t, store)
 	authz := &allowAuthorizer{}

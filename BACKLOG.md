@@ -1419,26 +1419,6 @@ share one message with that mutation hazard ruled out, and this entry goes.
   not.
 - **Blockers:** none.
 
-### Capability module CI: deny network egress in the standalone job
-
-- **Status:** Deferred — considered, not urgent.
-- **Reason:** SC-006 claims the module suite runs with no network. The
-  standalone job already satisfies the no-database and no-container halves (a
-  bare runner), and — more importantly — the dependency-graph assertion already
-  enforces the property that actually matters: no database driver, no storage
-  SDK in the resolved graph. A network-egress firewall would add a weaker
-  belt-and-braces guarantee (no test reaches out at runtime) at real flakiness
-  risk on shared CI runners, where a firewall step interacts badly with module
-  fetch and container networking. Not worth rushing for marginal assurance over
-  a guard that already holds.
-- **Definition of Done:**
-  - A step denies egress (firewall or a network-restricted runner) AFTER
-    `go mod download`, so dependency resolution still works, and BEFORE
-    `go test`.
-  - A deliberately network-touching test is shown to FAIL under it, so the
-    control is proven rather than assumed.
-- **Blockers:** none. A judgment call, currently made as "not yet".
-
 ### The MCP bridge cannot forward a key-bound capability
 
 - **Status:** Deferred — follows from DPoP binding.
@@ -1455,10 +1435,10 @@ share one message with that mutation hazard ruled out, and this entry goes.
 ### Offline attenuation covers a fixed vocabulary, not arbitrary Datalog
 
 - **Status:** Deferred — the vocabulary covers what Paladin enforces.
-- **Reason:** a Biscuit holder narrows it with `paladin_op`,
-  `paladin_resource_prefix` / `_uri`, `paladin_plane`, `paladin_expires`,
-  `paladin_bind` and the copy limits `paladin_max_requests` /
-  `paladin_max_budget_micros`, which the verifier folds into a Capability
+- **Reason:** a Biscuit holder narrows it with limes's `limes_op`,
+  `limes_resource_prefix` / `_uri`, `limes_plane`, `limes_expires`,
+  `limes_bind` and the copy limits `limes_max_requests` /
+  `limes_max_budget_nanos`, which the verifier folds into a Capability
   through `Narrows` and `Capability.Copies`. A block with Datalog rules or
   checks is refused rather than half-enforced: a check that reads `operation`
   or `resource` can only be evaluated where a handler names them

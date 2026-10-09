@@ -23,17 +23,16 @@ check() {
     fi
 }
 
-all='["backend","capability","sdk","frontend","repo"]'
+all='["backend","sdk","frontend","repo"]'
 
 check "documentation only"        '[]' README.md docs/install.md backend/README.md docs/diagram.svg
 check "nothing changed"           '[]'
 check "gitignore and licence"     '[]' .gitignore LICENSE NOTICE
 check "a console file"            '["frontend","repo"]' frontend/src/app/page.tsx
 check "a backend file"            '["backend","repo"]' backend/internal/mcp/bridge.go
-check "capability reaches backend" '["backend","capability","repo"]' capability/token.go
 check "the Go SDK reaches backend" '["backend","sdk","repo"]' sdk/go/client.go
 check "the Python SDK only"       '["sdk","repo"]' sdk/python/pyproject.toml
-check "shared SDK fixtures reach their readers" '["backend","capability","sdk","repo"]' sdk/testdata/names.json
+check "shared SDK fixtures reach their readers" '["backend","sdk","repo"]' sdk/testdata/names.json
 check "the contract reaches all its readers" '["backend","sdk","frontend","repo"]' proto/paladin/admin/v1/tenant_service.proto
 check "a chart"                   '["frontend","repo"]' frontend/deploy/chart/values.yaml
 check "root config"               '["repo"]' .checkov.yaml
@@ -62,15 +61,14 @@ check_e2e() {
     fi
 }
 check_e2e "a console change"      true  '["frontend","repo"]'
-check_e2e "a backend change"      true  '["backend","capability","repo"]'
+check_e2e "a backend change"      true  '["backend","repo"]'
 check_e2e "everything"            true  "$all"
 check_e2e "the Python SDK only"   false '["sdk","repo"]'
 check_e2e "repository config"     false '["repo"]'
 check_e2e "documentation only"    false '[]'
 
 # verify-deep runs for backend code and for the SDKs, whose scenarios run in
-# the stack gate; capability and the contract reach it through the backend
-# group.
+# the stack gate; the contract reaches it through the backend group.
 check_deep() {
     local name=$1 want=$2 groups=$3 got
     got="$(printf '%s' "$groups" | "$script" --needs-deep)"
@@ -80,7 +78,7 @@ check_deep() {
     fi
 }
 check_deep "a backend change"     true  '["backend","repo"]'
-check_deep "capability"           true  "$(printf '%s\n' capability/token.go | "$script")"
+check_deep "the shared SDK fixtures" true "$(printf '%s\n' sdk/testdata/biscuit/seed.biscuit | "$script")"
 check_deep "everything"           true  "$all"
 check_deep "a console change"     false '["frontend","repo"]'
 check_deep "the Python SDK only"  true  '["sdk","repo"]'

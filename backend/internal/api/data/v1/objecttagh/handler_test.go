@@ -9,8 +9,8 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // fakeRepo is a configurable in-memory Repository. It records the args the
@@ -63,9 +63,9 @@ func authedCtx(tid uuid.UUID) context.Context {
 
 // authedCtxWithCap authorises exactly `ops`; a missing op drives the
 // PermissionDenied branch of auth.AssertCapabilityOp.
-func authedCtxWithCap(tid uuid.UUID, ops ...capability.Op) context.Context {
-	return auth.WithCapability(authedCtx(tid), &capability.Capability{
-		Caveats: capability.Caveats{Ops: ops},
+func authedCtxWithCap(tid uuid.UUID, ops ...limes.Op) context.Context {
+	return auth.WithCapability(authedCtx(tid), &limes.Capability{
+		Caveats: limes.Caveats{Ops: ops},
 	})
 }
 
@@ -90,7 +90,7 @@ func TestCreateObjectTag(t *testing.T) {
 
 	t.Run("capability lacks tag op → permission denied", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{})
-		ctx := authedCtxWithCap(tid, capability.OpGet) // no OpTag
+		ctx := authedCtxWithCap(tid, limes.OpGet) // no OpTag
 		_, err := h.CreateObjectTag(ctx, CreateArgs{Slug: "s"})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})

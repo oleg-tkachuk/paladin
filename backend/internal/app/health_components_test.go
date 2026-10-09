@@ -8,11 +8,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // componentOf runs p as the health page would.
@@ -38,12 +38,12 @@ func TestReplicaCheckDisabledWithoutReplica(t *testing.T) {
 
 // capStore answers Get with err; nothing else is called.
 type capStore struct {
-	capability.Store
+	limes.Store
 	err error
 }
 
-func (s capStore) Get(context.Context, uuid.UUID) (capability.Capability, error) {
-	return capability.Capability{}, s.err
+func (s capStore) Get(context.Context, uuid.UUID) (limes.Capability, error) {
+	return limes.Capability{}, s.err
 }
 
 // tokenStore answers FindByDigest with err; nothing else is called.
@@ -67,7 +67,7 @@ func TestSubsystemComponentsCheckTheirStore(t *testing.T) {
 		want health.ComponentStatus
 	}{
 		{"capability off", &SharedDeps{}, config.KeyCapabilityEnabled, health.StatusDisabled},
-		{"capability store answers", &SharedDeps{Capability: &CapabilityBundle{Store: capStore{err: capability.ErrNotFound}}},
+		{"capability store answers", &SharedDeps{Capability: &CapabilityBundle{Store: capStore{err: limes.ErrNotFound}}},
 			config.KeyCapabilityEnabled, health.StatusHealthy},
 		{"capability store fails", &SharedDeps{Capability: &CapabilityBundle{Store: capStore{err: denied}}},
 			config.KeyCapabilityEnabled, health.StatusUnhealthy},

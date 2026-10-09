@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/memstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
-	"github.com/oleg-tkachuk/paladin/capability"
-	"github.com/oleg-tkachuk/paladin/capability/memstore"
 )
 
 // The tail of CompleteObject and CopyObject — everything after the state
@@ -338,21 +338,21 @@ func TestCopyObjectReportsBothFailuresWhenCompensationAlsoFails(t *testing.T) {
 // meaning "how much this principal may store" the moment one way of storing
 // is exempt.
 
-func budgetedCtx(t *testing.T, tenantID uuid.UUID, maxBudget capability.Nanos) (context.Context, *capability.Capability, *memstore.UsageStore[pgx.Tx]) {
+func budgetedCtx(t *testing.T, tenantID uuid.UUID, maxBudget limes.Nanos) (context.Context, *limes.Capability, *memstore.UsageStore[pgx.Tx]) {
 	t.Helper()
-	cap := &capability.Capability{
+	cap := &limes.Capability{
 		ID:      uuid.New(),
-		Subject: capability.Principal{TenantID: tenantID, Subject: "agent:a"},
+		Subject: limes.Principal{TenantID: tenantID, Subject: "agent:a"},
 		// Ops must name put or the gate refuses before the charge is
 		// reached; no prefixes means every URI is in scope.
-		Caveats: capability.Caveats{
-			Ops:             []capability.Op{capability.OpPut},
+		Caveats: limes.Caveats{
+			Ops:             []limes.Op{limes.OpPut},
 			MaxBudgetAmount: maxBudget,
 		},
 	}
 	usage := memstore.NewUsage[pgx.Tx](nil)
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
-	ctx = auth.WithChargeAmount(auth.WithChargeStore(auth.WithCapability(ctx, cap), usage), capability.NanosPerUnit, "")
+	ctx = auth.WithChargeAmount(auth.WithChargeStore(auth.WithCapability(ctx, cap), usage), limes.NanosPerUnit, "")
 	return ctx, cap, usage
 }
 
@@ -361,7 +361,7 @@ func TestCopyObjectChargesTheCapabilityBudget(t *testing.T) {
 	repo := &completeRepo{}
 	h, _, _, _, _, tenantID := tailHandler(t, repo, noopStorage{}, sm)
 	repo.obj = copySource(tenantID)
-	ctx, cap, usage := budgetedCtx(t, tenantID, 10*capability.NanosPerUnit)
+	ctx, cap, usage := budgetedCtx(t, tenantID, 10*limes.NanosPerUnit)
 
 	if _, err := h.CopyObject(ctx, CopyObjectInput{
 		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
@@ -372,7 +372,7 @@ func TestCopyObjectChargesTheCapabilityBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no usage recorded — the copy was free: %v", err)
 	}
-	if u.SpentAmount != capability.NanosPerUnit {
+	if u.SpentAmount != limes.NanosPerUnit {
 		t.Errorf("spent = %v, want 1", u.SpentAmount)
 	}
 }
@@ -382,7 +382,7 @@ func TestCopyObjectRefusesWhenTheBudgetIsSpent(t *testing.T) {
 	repo := &completeRepo{}
 	h, _, _, _, _, tenantID := tailHandler(t, repo, noopStorage{}, sm)
 	repo.obj = copySource(tenantID)
-	ctx, _, _ := budgetedCtx(t, tenantID, capability.NanosPerUnit)
+	ctx, _, _ := budgetedCtx(t, tenantID, limes.NanosPerUnit)
 
 	in := CopyObjectInput{SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst"}
 	if _, err := h.CopyObject(ctx, in); err != nil {
@@ -398,7 +398,7 @@ func TestCopyObjectDoesNotChargeARetryThatChangedNothing(t *testing.T) {
 	repo := &completeRepo{}
 	h, _, _, _, _, tenantID := tailHandler(t, repo, noopStorage{}, sm)
 	repo.obj = copySource(tenantID)
-	ctx, cap, usage := budgetedCtx(t, tenantID, 10*capability.NanosPerUnit)
+	ctx, cap, usage := budgetedCtx(t, tenantID, 10*limes.NanosPerUnit)
 
 	if _, err := h.CopyObject(ctx, CopyObjectInput{
 		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",

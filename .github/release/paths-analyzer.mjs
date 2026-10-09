@@ -10,7 +10,7 @@
 //
 // `modules` re-reads the commits whose every file is under `modules.paths`
 // with `modules.releaseRules` added: a break in the API of a module the
-// product compiles in — the Go SDK, the capability module — is that module's
+// product compiles in — the Go SDK — is that module's
 // break, not the product's, and must not cut a product major.
 //
 // `documentation` names the files a commit's place is not decided by: a

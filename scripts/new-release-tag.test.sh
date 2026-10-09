@@ -62,16 +62,15 @@ check "a new tag beside an old one" "v4.2.1" "$(run "$before")"
 echo v4.2.1 >>"$RELEASED"
 
 git tag sdk/go/v0.3.0
+# The capability module released here as capability/v* before it moved to its
+# own repository; those tags are history, never a stream this run cut.
 git tag capability/v0.2.0
 check "a module tag is not the product's" "v4.2.1" "$(run "$before")"
-check "every new module tag" "$(printf 'capability/v0.2.0\nsdk/go/v0.3.0')" "$(run "$before" streams)"
+check "every new module tag" "sdk/go/v0.3.0" "$(run "$before" streams)"
 check "the product is no module" "" "$(run "$before" streams | grep -E '^v' || true)"
 
 git tag --points-at HEAD >"$before"
-check "module tags an earlier run pushed and never published" "$(printf 'capability/v0.2.0\nsdk/go/v0.3.0')" "$(run "$before" streams)"
-
-echo capability/v0.2.0 >>"$RELEASED"
-check "only the module tag left unpublished" "sdk/go/v0.3.0" "$(run "$before" streams)"
+check "a module tag an earlier run pushed and never published" "sdk/go/v0.3.0" "$(run "$before" streams)"
 
 echo sdk/go/v0.3.0 >>"$RELEASED"
 check "module tags an earlier run pushed and published" "" "$(run "$before" streams)"

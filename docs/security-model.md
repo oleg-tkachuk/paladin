@@ -75,5 +75,5 @@ If you are looking for where to start, these are the load-bearing pieces:
 - [`docs/adr/0008-mcp-oauth-resource-server.md`](adr/0008-mcp-oauth-resource-server.md)
   and [`0009-oauth-authorization-server.md`](adr/0009-oauth-authorization-server.md)
   — the token-issuing surfaces.
-- [`capability/README.md`](../capability/README.md) — the primitive itself,
-  including its threat model.
+- [limes](https://github.com/oleg-tkachuk/limes) — the capability primitive
+  itself, including its threat model.

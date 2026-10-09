@@ -10,9 +10,9 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // CapabilityBundle bundles the ready-to-use issuer / verifier / store
@@ -20,19 +20,19 @@ import (
 // when capability is enabled; nil otherwise. Callers (interceptor,
 // admin handler) pull the pieces they need.
 type CapabilityBundle struct {
-	Store capability.Store
+	Store limes.Store
 	// Copies records revoked copies of a capability's Biscuit.
-	Copies capability.BiscuitRevocationStore
+	Copies limes.BiscuitRevocationStore
 	// CopyUsage reads the counters of Biscuit copies with limits of their own.
-	CopyUsage capability.CopyUsageReader
-	Usage     capability.UsageStore[pgx.Tx]
-	Issuer    *capability.Issuer
-	Verifier  *capability.StandardVerifier
-	Keys      *capability.StaticKeyResolver
+	CopyUsage limes.CopyUsageReader
+	Usage     limes.UsageStore[pgx.Tx]
+	Issuer    *limes.Issuer
+	Verifier  *limes.StandardVerifier
+	Keys      *limes.StaticKeyResolver
 
 	// DPoP checks the RFC 9449 proof a key-bound capability must arrive
 	// with, against Replay.
-	DPoP *capability.DPoPVerifier
+	DPoP *limes.DPoPVerifier
 
 	// Replay records the DPoP proof ids every replica has accepted, so a
 	// proof replayed against any of them is refused. The capability
@@ -78,7 +78,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, errors.New("app: capability.issuer_name required when enabled")
 	}
 
-	kid, pub, priv, generated, err := capability.MustLoadOrGenerate(cfg.SigningKeyPath, cfg.SigningKeyKID)
+	kid, pub, priv, generated, err := limes.MustLoadOrGenerate(cfg.SigningKeyPath, cfg.SigningKeyKID)
 	if err != nil {
 		return nil, fmt.Errorf("app: capability key: %w", err)
 	}
@@ -106,7 +106,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		)
 	}
 
-	signer, err := capability.NewEd25519Signer(kid, priv)
+	signer, err := limes.NewEd25519Signer(kid, priv)
 	if err != nil {
 		return nil, fmt.Errorf("app: capability signer: %w", err)
 	}
@@ -116,7 +116,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability store: %w", err)
 	}
 
-	issuer, err := capability.NewIssuer(capability.IssuerConfig{
+	issuer, err := limes.NewIssuer(limes.IssuerConfig{
 		Signer:     signer,
 		Store:      store,
 		IssuerName: cfg.IssuerName,
@@ -126,15 +126,15 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability issuer: %w", err)
 	}
 
-	keys := capability.NewStaticKeyResolver(map[string]ed25519.PublicKey{kid: pub})
+	keys := limes.NewStaticKeyResolver(map[string]ed25519.PublicKey{kid: pub})
 
 	trusted := cfg.TrustedIssuers
 	if len(trusted) == 0 {
 		trusted = []string{cfg.IssuerName}
 	}
 
-	cache := capability.NewCachedRevocationChecker(store, cfg.RevocationCacheTTL)
-	copies := capability.NewCachedBiscuitRevocationChecker(store, cfg.RevocationCacheTTL)
+	cache := limes.NewCachedRevocationChecker(store, cfg.RevocationCacheTTL)
+	copies := limes.NewCachedBiscuitRevocationChecker(store, cfg.RevocationCacheTTL)
 
 	// Revocations made on any replica clear this one's cache at once; the
 	// TTL above is only the fallback for while the LISTEN connection is
@@ -148,7 +148,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability revocation watch: %w", err)
 	}
 	deps.RegisterWatcherStop(stopWatch)
-	verifier, err := capability.NewStandardVerifier(capability.VerifierConfig{
+	verifier, err := limes.NewStandardVerifier(limes.VerifierConfig{
 		Keys:           keys,
 		Revocations:    cache,
 		TrustedIssuers: trusted,
@@ -169,8 +169,8 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// metrics for the runtime counters. Pure pass-through on cold
 	// MeterProvider so test paths and sidecar tools don't pay for
 	// instrument lookups.
-	usage := capability.WithMetering[pgx.Tx](capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage")))
-	copyUsage, ok := usage.(capability.CopyUsageReader)
+	usage := limes.WithMetering[pgx.Tx](capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage")))
+	copyUsage, ok := usage.(limes.CopyUsageReader)
 	if !ok {
 		return nil, errors.New("app: the capability usage store reads no Biscuit copy counters")
 	}
@@ -188,7 +188,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Issuer:       issuer,
 		Verifier:     verifier,
 		Keys:         keys,
-		DPoP:         &capability.DPoPVerifier{Replay: replay},
+		DPoP:         &limes.DPoPVerifier{Replay: replay},
 		Replay:       replay,
 		PublicKeys:   map[string]ed25519.PublicKey{kid: pub},
 		IssuerName:   cfg.IssuerName,

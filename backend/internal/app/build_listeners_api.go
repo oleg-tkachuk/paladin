@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes"
 	connectdata "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/data"
 	connectiam "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/iam"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
@@ -28,7 +29,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/wire"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
-	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
@@ -142,7 +142,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// capability subsystem is off (deps.Capability == nil) the helper
 	// returns a no-op, so existing JWT-only deploys are unaffected.
 	// When a capability token IS supplied, the interceptor stamps
-	// *capability.Capability on the context and handlers branch via
+	// *limes.Capability on the context and handlers branch via
 	// auth.CapabilityFromContext.
 	//
 	// IAM plane intentionally has NO capability interceptor: capabilities
@@ -175,7 +175,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		}
 		capData = auth.CapabilityEstablishingInterceptor(
 			deps.Capability.Verifier,
-			capability.AudiencePlaneData,
+			limes.AudiencePlaneData,
 			deps.Capability.Usage,
 			cfg.Capability.ChargePerRequestAmount,
 			cfg.Capability.ChargePerRequestUnit,

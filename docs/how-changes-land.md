@@ -6,8 +6,8 @@ The commit type is what decides the next release, so a subject that does not
 follow the format releases nothing.
 
 [`ci.yaml`](../.github/workflows/ci.yaml) runs the groups of `verify-all` a
-change can reach — `verify-backend`, `verify-capability`, `verify-sdk`,
-`verify-frontend` and `verify-repo`, one job each — and audits the workflows
+change can reach — `verify-backend`, `verify-sdk`, `verify-frontend` and
+`verify-repo`, one job each — and audits the workflows
 with actionlint and zizmor. A change the `sdk` group reaches also installs the
 Python SDK's wheel beside each protobuf major and Python it supports, every
 cell of [`sdk/python/compat.json`](../sdk/python/compat.json) side by side in
@@ -30,9 +30,8 @@ Any other green push to `main` dispatches
 [`release.yaml`](../.github/workflows/release.yaml). semantic-release computes
 the next tag from the commits since the last one; both images and both charts
 are pushed to GHCR at that version, and the GitHub release with generated
-notes is created once all of them are. The same run cuts `sdk/go/v*` and
-`capability/v*` when a commit touched those modules; the `api/v*` baseline is
-cut by hand. See [releasing.md](releasing.md).
+notes is created once all of them are. The same run cuts `sdk/go/v*` when a
+commit touched the SDK; the `api/v*` baseline is cut by hand. See [releasing.md](releasing.md).
 
 ```mermaid
 flowchart LR
@@ -45,10 +44,10 @@ flowchart LR
     wf["<b>Workflow</b><br/>syntax · audit"]
     ok{{"<b>All checks passed</b><br/>required by main"}}
     head{"head is the<br/>commit CI passed?"}
-    tag["semantic-release<br/>three streams"]
+    tag["semantic-release<br/>two streams"]
     pub["<b>publish</b> backend · frontend<br/>image → sign → SBOM per platform<br/>chart → sign · verify all"]
     ann["<b>GitHub release</b> vX.Y.Z<br/>notes + SBOMs · latest"]
-    mods["<b>sdk/go/v*</b> · <b>capability/v*</b><br/>GitHub release, not latest<br/>Go proxy told of the tag"]
+    mods["<b>sdk/go/v*</b><br/>GitHub release, not latest<br/>Go proxy told of the tag"]
     badges["<b>Badges</b><br/>stack versions → badges branch"]
 
     chg --> v & py & img & deep & wf

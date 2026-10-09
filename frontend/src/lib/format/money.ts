@@ -5,8 +5,8 @@
 // exact — parsing, comparing and summing in bigint nanos — and convert to a
 // JavaScript number only at the display edge (ratios, chart points).
 //
-// Mirrors the backend's capability.AllowedUnitCodes set
-// (capability/types.go): four ISO 4217 fiat codes plus XXX, ISO 4217's code
+// Mirrors limes.AllowedUnitCodes, the set the backend accepts
+// (github.com/oleg-tkachuk/limes, types.go): four ISO 4217 fiat codes plus XXX, ISO 4217's code
 // for "no currency", for metering that is not money. The backend validates
 // writes; the frontend mirrors the list to populate the unit pickers.
 import { create } from "@bufbuild/protobuf";
@@ -36,7 +36,7 @@ export function isISOCurrency(code: string): boolean {
 }
 
 // NANOS_PER_UNIT is how many nanos make one unit, mirroring
-// capability.NanosPerUnit; NANOS_DECIMALS is the decimal places that carries.
+// limes.NanosPerUnit; NANOS_DECIMALS is the decimal places that carries.
 export const NANOS_PER_UNIT = 1_000_000_000n;
 export const NANOS_DECIMALS = 9;
 

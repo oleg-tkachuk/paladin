@@ -104,7 +104,7 @@ includes:
       # credentials. Excluding it drops 141 of 188 findings, all of them noise,
       # and leaves the ones in code somebody wrote.
       GOSEC_FLAGS: -exclude-dir=sqlc -exclude-dir=mocks -exclude-generated
-      GO_MODULES: ["capability", "backend", "sdk/go"]
+      GO_MODULES: ["backend", "sdk/go"]
   # Policy scanning over the YAML a cluster applies — the charts, the
   # Dockerfiles and these workflows. Separate from `sec:` because it asks a
   # different question of a different tree: `sec:` scans the Go modules and
@@ -127,13 +127,6 @@ includes:
       # chart that refuses them. verify:chart-scan scans the rendered charts.
       CHECKOV_FRAMEWORKS: ["kubernetes", "dockerfile", "github_actions"]
       CHECKOV_VERSION: '{{.CHECKOV_VERSION}}'
-  # The third Go tree. It is a library with no image and no chart, so it is not
-  # a monorepo component and carries no Taskfile of its own — the library's go
-  # module aimed at its directory is the whole surface it needs.
-  capability:
-    taskfile: '{{printf .TASKLIB "go"}}'
-    dir: capability
-    vars: { PROJECT_NAME: capability }
   # The Go SDK: generated stubs plus a thin client, its own module so a
   # consumer does not inherit the backend's dependency graph. Two includes
   # because the library splits the Go verbs from codegen.
@@ -174,7 +167,6 @@ tasks:
             "  task -t Taskfile.dev.yaml verify-all         the commit gate: seconds, no Docker" \
             "  task -t Taskfile.dev.yaml verify-deep        Postgres-backed suites; Docker, ~3 min" \
             "  task -t Taskfile.dev.yaml verify-e2e         Playwright on this branch; Docker, ~10 min" \
-            "  task -t Taskfile.dev.yaml verify-capability  the capability module on its own" \
             "  task -t Taskfile.dev.yaml verify-go-sdk      the Go SDK on its own" \
             "  task -t Taskfile.dev.yaml verify-py-sdk      the Python SDK on its own" \
             "  task -t Taskfile.dev.yaml test               unit tests, both halves" \
@@ -195,11 +187,6 @@ tasks:
     # changed, so a group here and a CI job there check the same thing.
     cmds:
       - task: verify-backend
-      # The third Go tree. Every lefthook Go job is `root: backend/` and this
-      # aggregate reached backend + frontend only, so `capability/` was checked
-      # by nothing a developer runs — its CI job caught an unformatted file that
-      # had been committed and pushed.
-      - task: verify-capability
       - task: verify-sdk
       - task: verify-frontend
       - task: verify-repo
@@ -208,7 +195,7 @@ tasks:
   verify-backend:
     desc: "The backend: gofmt, tests, the tagged suites compiling, lint, sqlc, image metadata"
     cmds:
-      # As the capability module's and the Go SDK's gates do. The backend's
+      # As the Go SDK's gate does. The backend's
       # formatting was left to lefthook's pre-commit gofmt, which a commit
       # made without the hooks installed skips: an unsorted import reached
       # main that way, and neither golangci-lint (no formatters configured)
@@ -305,16 +292,6 @@ tasks:
     # same cells (sdk/python/compat.json) as parallel jobs.
     cmds:
       - ./scripts/py-sdk-compat.sh --matrix
-
-  verify-capability:
-    desc: "gofmt + lint + test the capability module (the third Go tree)"
-    # golangci-lint rather than the bare `go vet` this replaces: govet is one of
-    # its default linters, so the check only widens, and the module is clean
-    # under it today.
-    cmds:
-      - task: capability:fmt:check
-      - task: capability:lint
-      - task: capability:test
 
   verify-deep:
     desc: "The gates verify-all cannot run: Postgres-backed suites and everything needing a live stack"
@@ -592,7 +569,7 @@ tasks:
       - ./scripts/release-age.test.sh
 
   verify:stream-release-notes:
-    desc: "Fail when an SDK or capability release lists commits that are not its own"
+    desc: "Fail when an SDK release lists commits that are not its own"
     cmds:
       - ./scripts/stream-release-notes.test.sh
 
