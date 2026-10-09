@@ -44,6 +44,37 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the capability primitive is limes
+
+The capability module moved out of this repository to
+[limes](https://github.com/oleg-tkachuk/limes) (`github.com/oleg-tkachuk/limes`,
+package `limes`), and its wire format dropped the `paladin_` prefix with it.
+
+- **Breaking, capability tokens.** Every token issued before this release is
+  refused after it: the JWT `typ` is `limes-cap+jwt`, the claims are
+  `limes_principal`, `limes_caveats`, `limes_parent_id`, `limes_gen` and
+  `limes_bsk`, and the Biscuit facts are `limes_op`, `limes_resource_prefix`,
+  `limes_resource_uri`, `limes_plane`, `limes_expires`, `limes_bind`,
+  `limes_max_requests` and `limes_max_budget_nanos`. The signing key is
+  unchanged; issue capabilities again.
+- **Breaking, Python SDK.** `attenuate` writes the `limes_*` facts, so an SDK
+  of this release narrows only tokens a server of this release issued, and
+  the other way round.
+- **Go SDK.** Attenuate Biscuits with `limes.Attenuate` from
+  `github.com/oleg-tkachuk/limes`; `github.com/oleg-tkachuk/paladin/capability`
+  is no longer released (the last tag is `capability/v0.17.1`).
+- **Metrics.** The primitive's own instruments are `limes.charge.amount`,
+  `limes.charge.decisions`, `limes.charge.current_spend`,
+  `limes.request.bumps`, `limes.refund.amount` and
+  `limes.reservation.decisions` (`limes_*` in Prometheus). Under their old
+  `paladin.capability.*` names the charge histogram normalised to the same
+  Prometheus name as Paladin's own `paladin_capability_charge_amount`; it no
+  longer does. Paladin's `paladin_capability_charges_total`,
+  `paladin_capability_charge_amount` and the `paladin.capability.charged`
+  event are unchanged.
+- Error text from the primitive starts with `limes:` rather than
+  `capability:`; match errors with `errors.Is`, as before.
+
 ## Unreleased — the compose stack runs Postgres 18
 
 `backend/deploy/docker-compose.yaml` and the e2e stack move from Postgres 16 to

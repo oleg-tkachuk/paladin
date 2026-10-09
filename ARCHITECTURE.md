@@ -17,8 +17,8 @@ The problem it was built for is agentic workloads: an orchestrator spawns
 sub-agents, each calling tools that cost money, and every call needs four
 answers — may it, can it afford it, whose spend was it, and can I stop it
 right now. A long-lived API key answers none of them. That is what the
-[`capability`](capability/) primitive is for, and it is usable on its own,
-without the rest of this system.
+capability primitive, [limes](https://github.com/oleg-tkachuk/limes), is for,
+and it is a library of its own, usable without the rest of this system.
 
 ## The shape
 
@@ -270,7 +270,6 @@ the schema and the deployment. The path from a pull request to a signed release 
 ```
 backend/      Go control plane — see backend/README.md
 frontend/     Next.js BFF + admin console — see frontend/README.md
-capability/   standalone Go module, no DB and no storage SDK
 docs/         ADRs, runbooks, configuration reference
 specs/        spec-driven-development artifacts per feature
 proto/        the API contract the backend, console and SDKs generate from
