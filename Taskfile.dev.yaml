@@ -526,7 +526,7 @@ tasks:
   verify:release-rules:
     desc: "Fail when a commit type cuts a different release than it should"
     cmds:
-      - node scripts/release-rules.test.mjs
+      - node .github/release/release-rules.test.mjs
 
   verify:image-sources:
     desc: "Fail when the backend image does not copy a directory the server imports"
