@@ -109,7 +109,7 @@ config:
         - client_id: "desktop-agent"
           redirect_uris:
             - "desktop-agent://callback"
-            - "https://desktop-agent.example/oauth/callback"
+            - "https://claude.ai/api/mcp/auth_callback"
           allowed_scopes: ["paladin.read", "paladin.write"]
           allowed_audiences: ["paladin-data"]
           public: true
