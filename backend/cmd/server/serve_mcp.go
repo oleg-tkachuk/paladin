@@ -37,7 +37,7 @@ var (
 // go-sdk. Two transports for the protocol facing the LLM client:
 //
 //   - stdio:  reads JSON-RPC frames from stdin, writes to stdout. For
-//     local IDE plugins (Claude Desktop / Cursor / Cline). All
+//     local IDE plugins and desktop agents. All
 //     logs route to stderr to keep the protocol stream clean.
 //
 //   - http:   streamable-HTTP per the MCP spec, mounted on /mcp. Token

@@ -1,6 +1,6 @@
 // OAuth 2.1 Resource-Server surface for the streamable-HTTP MCP server
 // (ADR-0008). This is the RS half only: it makes the MCP server
-// *discoverable* by standard MCP clients (Claude Desktop / Cursor) and
+// *discoverable* by standard MCP clients (desktop agents, IDE plugins) and
 // *enforces* a bearer token at the edge. The Authorization Server itself
 // (/authorize, /token, dynamic client registration) lives in
 // internal/auth/oauth (ADR-0009) — here we only advertise where it lives and

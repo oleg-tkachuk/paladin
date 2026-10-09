@@ -74,7 +74,7 @@ cap, token, err := issuer.Issue(ctx, capability.IssueRequest{
         TenantID: tenantID,
         Subject:  "research-orchestrator",
         Agent: &capability.AgentPrincipal{
-            AgentType: "claude-code",
+            AgentType: "coding-agent",
             Model:     "opus",
             RunID:     runID,          // makes every later charge attributable
         },
