@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import tomllib
 from importlib import metadata
 from pathlib import Path
 from typing import Any
@@ -26,17 +27,18 @@ UNKNOWN = "0.0.0" + UNKNOWN_VERSION_LABEL
 COMMIT = "19d4c8f6e586bd5e1a71c5ef471e2db7caa93904"
 
 
-def _setting(name: str) -> str:
-    # tomllib arrives in Python 3.11; the SDK supports 3.10.
-    found = re.search(rf"^{name} = (.+)$", (SDK / "pyproject.toml").read_text(), re.MULTILINE)
-    assert found, f"pyproject.toml sets no {name}"
-    return found.group(1)
+def _setting(name: str) -> Any:
+    raw_options = tomllib.loads((SDK / "pyproject.toml").read_text())["tool"]["hatch"]["version"][
+        "raw-options"
+    ]
+    assert name in raw_options, f"pyproject.toml sets no {name}"
+    return raw_options[name]
 
 
 def _match_pattern() -> str:
-    found = re.search(r'"--match", "([^"]+)"', _setting("git_describe_command"))
-    assert found, "git_describe_command has no --match"
-    return found.group(1)
+    command: list[str] = _setting("git_describe_command")
+    assert "--match" in command, "git_describe_command has no --match"
+    return command[command.index("--match") + 1]
 
 
 def test_the_archive_describes_the_tags_the_build_matches() -> None:
@@ -52,13 +54,11 @@ def test_git_archive_fills_the_file_in() -> None:
 
 
 def test_a_build_without_a_version_says_so() -> None:
-    assert _setting("fallback_version").strip('"').endswith(UNKNOWN_VERSION_LABEL)
+    assert _setting("fallback_version").endswith(UNKNOWN_VERSION_LABEL)
 
 
 def test_the_code_reads_tags_as_the_build_does() -> None:
-    # pyproject.toml's string escapes its backslashes; the code's is raw.
-    tag_regex = _setting("tag_regex").strip('"').replace("\\\\", "\\")
-    assert RELEASE_TAG.pattern == tag_regex
+    assert RELEASE_TAG.pattern == _setting("tag_regex")
 
 
 def _direct_url(revision: str | None) -> str:

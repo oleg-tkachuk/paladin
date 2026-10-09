@@ -54,7 +54,7 @@ class Authority:
     def __init__(self, name: str = "test CA") -> None:
         self.key = ec.generate_private_key(ec.SECP256R1())
         self.name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         self.cert = (
             x509.CertificateBuilder()
             .subject_name(self.name)
@@ -95,7 +95,7 @@ class Authority:
     ) -> Leaf:
         """A leaf for a client or a server; ``uris`` makes it an X.509-SVID."""
         key = ec.generate_private_key(ec.SECP256R1())
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         names: list[x509.GeneralName] = [x509.DNSName(d) for d in dns]
         names += [x509.UniformResourceIdentifier(u) for u in uris]
         if ips:

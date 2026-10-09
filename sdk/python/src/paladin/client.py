@@ -23,7 +23,7 @@ from collections.abc import Awaitable, Callable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from importlib import metadata
 from typing import Any, TypeVar
@@ -444,7 +444,7 @@ def parse_retry_after(value: str, now: datetime | None = None) -> float | None:
         return None
     if at.tzinfo is None:
         return None
-    return max((at - (now or datetime.now(timezone.utc))).total_seconds(), 0.0)
+    return max((at - (now or datetime.now(UTC))).total_seconds(), 0.0)
 
 
 def default_retryable(err: ConnectError) -> bool:

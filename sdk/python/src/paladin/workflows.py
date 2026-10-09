@@ -14,7 +14,7 @@ from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor
 from concurrent.futures import wait as wait_futures
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
-from typing import IO, Any, TypeVar
+from typing import IO, Any
 
 from connectrpc.code import Code
 from google.protobuf import field_mask_pb2
@@ -41,9 +41,6 @@ from paladin.transfer import (
     range_header,
     require_partial,
 )
-
-T = TypeVar("T")
-M = TypeVar("M", bound=Message)
 
 # Paging fields: every List request carries a PageRequest in `page`, and
 # every response a PageResponse in `page`.
@@ -103,7 +100,7 @@ async def apages(
         _paged(req).page.page_token = token
 
 
-def _copy(message: M) -> M:
+def _copy[M: Message](message: M) -> M:
     out = type(message)()
     out.CopyFrom(message)
     return out
@@ -151,7 +148,7 @@ def _finished(op: Any) -> bool:
     return True
 
 
-def wait(
+def wait[T](
     get: Callable[[], T],
     *,
     poll: float = DEFAULT_POLL_INTERVAL,
@@ -175,7 +172,7 @@ def wait(
         pause = min(pause * 2, max_poll)
 
 
-async def await_operation(
+async def await_operation[T](
     get: Callable[[], Awaitable[T]],
     *,
     poll: float = DEFAULT_POLL_INTERVAL,
@@ -868,8 +865,6 @@ async def adownload_uri(
 DEFAULT_BULK_CONCURRENCY = 8
 """Objects the ``…_many`` workflows move at once."""
 
-R = TypeVar("R")
-
 
 @dataclass(frozen=True, eq=False)
 class UploadItem:
@@ -885,7 +880,7 @@ class UploadItem:
     tags: dict[str, str] | None = None
 
 
-def _bounded(
+def _bounded[T, R](
     fn: Callable[[T], R], items: Iterable[T], concurrency: int
 ) -> Iterator[tuple[T, R | BaseException]]:
     """``fn`` over ``items`` in threads, ``concurrency`` at a time, yielding
@@ -909,7 +904,7 @@ def _bounded(
         yield from drain(0)
 
 
-async def _abounded(
+async def _abounded[T, R](
     fn: Callable[[T], Awaitable[R]], items: Iterable[T], concurrency: int
 ) -> AsyncIterator[tuple[T, R | BaseException]]:
     """``_bounded`` as tasks on the running loop."""

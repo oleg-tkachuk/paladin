@@ -150,7 +150,7 @@ requires one on `Create*` and `Issue*` calls.
 same capability as a Biscuit v3 token, which whoever holds it can narrow with
 no key and no call to the server — to hand a sub-agent less than it was given.
 Install the `biscuit` extra (`pip install "paladin-sdk[biscuit] @ git+…"`);
-`biscuit-python` ships wheels for CPython 3.10–3.13, and elsewhere builds
+`biscuit-python` ships a wheel for CPython 3.13, and elsewhere builds
 from source with Rust.
 
 ```python
@@ -651,7 +651,7 @@ they no longer match the contract.
 
 | | Supported | Why the bound |
 | --- | --- | --- |
-| Python | 3.10–3.14 | `requires-python`; each is tested |
+| Python | 3.13–3.14 | `requires-python`; each is tested |
 | `protobuf` | `>=6.33.5,<8` | the stubs' gencode version is the floor; 6.x and 7.x are tested |
 | `connectrpc` | `>=0.12.1,<0.13` | pre-1.0: a minor may change the API the generated clients call |
 | `googleapis-common-protos` | `>=1.75.5,<2` | the first release that accepts protobuf 7 |

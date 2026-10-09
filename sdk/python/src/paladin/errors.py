@@ -12,7 +12,7 @@ releases.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import Any, TypeVar
+from typing import Any
 
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError, ErrorDetail
@@ -31,8 +31,6 @@ _UNSPECIFIED = error_reason_pb2.ERROR_REASON_UNSPECIFIED
 TYPE_URL_PREFIX = "type.googleapis.com/"
 """The prefix of an ``Any``'s type URL; the message's full name follows."""
 
-M = TypeVar("M", bound=Message)
-
 
 def error_detail(message: Message) -> ErrorDetail:
     """A ``google.protobuf`` message as a ``ConnectError`` detail.
@@ -49,7 +47,7 @@ def error_detail(message: Message) -> ErrorDetail:
     )
 
 
-def unpack_detail(detail: ErrorDetail, message_type: type[M]) -> M | None:
+def unpack_detail[M: Message](detail: ErrorDetail, message_type: type[M]) -> M | None:
     """``detail`` as a ``message_type``, or None when it holds another type."""
     if detail.type_name != message_type.DESCRIPTOR.full_name:
         return None

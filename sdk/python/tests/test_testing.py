@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 
 import pytest
@@ -494,7 +494,7 @@ def _fetch(url: object, headers: Mapping[str, str]) -> tuple[int, bytes, Mapping
 
 def _expires(url: object) -> datetime:
     return datetime.strptime(url.expires_at_rfc3339, "%Y-%m-%dT%H:%M:%SZ").replace(  # type: ignore[attr-defined]
-        tzinfo=timezone.utc
+        tzinfo=UTC
     )
 
 
@@ -502,7 +502,7 @@ def test_presign_download_reads_the_object(fake: FakePaladin) -> None:
     p = fake.connect()
     body = b"presigned body"
     obj = fake.put(fake.collection(), "k", "text/plain", body)
-    before = datetime.now(timezone.utc)
+    before = datetime.now(UTC)
     url = _presign(p, name=obj.name).download_url
     assert url.method == "GET"
     assert not url.required_headers
@@ -510,7 +510,7 @@ def test_presign_download_reads_the_object(fake: FakePaladin) -> None:
     second = timedelta(seconds=1)
     expires = _expires(url)
     assert before + DEFAULT_DOWNLOAD_TTL - second <= expires
-    assert expires <= datetime.now(timezone.utc) + DEFAULT_DOWNLOAD_TTL + second
+    assert expires <= datetime.now(UTC) + DEFAULT_DOWNLOAD_TTL + second
     status, got, _ = _fetch(url, url.required_headers)
     assert (status, got) == (HTTPStatus.OK, body)
 
@@ -529,7 +529,7 @@ def test_presign_download_honours_the_request(fake: FakePaladin) -> None:
         content_disposition=disposition,
         require_etag_match=True,
     ).download_url
-    left = _expires(url) - datetime.now(timezone.utc)
+    left = _expires(url) - datetime.now(UTC)
     assert ttl - timedelta(minutes=1) <= left <= ttl + timedelta(seconds=1)
     assert url.required_headers["If-Match"] == f'"{obj.etag}"'
     status, _, headers = _fetch(url, url.required_headers)

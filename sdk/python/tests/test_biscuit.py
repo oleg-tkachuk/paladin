@@ -13,7 +13,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +41,7 @@ def _seed() -> str:
 def _case() -> dict[str, Any]:
     case = json.loads(CASE.read_text())
     args = dict(case["attenuate"])
-    args["expires_at"] = datetime.fromisoformat(args["expires_at"].replace("Z", "+00:00"))
+    args["expires_at"] = datetime.fromisoformat(args["expires_at"])
     return args
 
 
@@ -57,7 +57,7 @@ def _facts(token: str, block: int) -> set[str]:
 
 
 def _expected_facts(args: dict[str, Any]) -> set[str]:
-    expires = args["expires_at"].astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    expires = args["expires_at"].astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return (
         {f'{pb.FACT_OP}("{v}")' for v in args["ops"]}
         | {f'{pb.FACT_RESOURCE_PREFIX}("{v}")' for v in args["resource_prefixes"]}
