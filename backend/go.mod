@@ -38,7 +38,7 @@ require (
 	github.com/oasdiff/yaml3 v0.0.14
 	// limes is the capability primitive the auth planes run on.
 	github.com/oleg-tkachuk/limes v0.2.0
-	github.com/oleg-tkachuk/paladin/sdk/go v0.56.2
+	github.com/oleg-tkachuk/paladin/sdk/go v0.57.0
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/rabbitmq/amqp091-go v1.15.0
