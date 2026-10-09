@@ -10,7 +10,8 @@ move. The repository opens for contributions once it is done, and this file
 changes with it.
 
 Until then it is published for reading and reuse. The licence is
-[Apache-2.0](../LICENSE).
+[AGPL-3.0-only](../LICENSE); `proto/`, `sdk/` and `capability/` are
+Apache-2.0 — see [NOTICE](../NOTICE).
 
 **Security fixes are the exception, and they are welcome.** See
 [SECURITY.md](SECURITY.md) for how to report one privately.
