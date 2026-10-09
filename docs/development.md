@@ -128,7 +128,7 @@ trust relationship, a storage or transport choice — wants an ADR in
 [`docs/adr/README.md`](adr/README.md) explains it.
 
 Adding a dependency under a copyleft or source-available licence requires
-an ADR. Everything currently in the tree is Apache-2.0, MIT or BSD.
+an ADR. Every dependency currently in the tree is Apache-2.0, MIT or BSD.
 
 ## Spec-driven development
 
@@ -164,7 +164,9 @@ correction or a small feature needs none of this.
   follow-up PR is better than growing this one.
 - Explain *why* in the description. The what is in the diff.
 
-Contributions are accepted under the Apache License 2.0 (see LICENSE §5).
+Contributions are accepted under the licence of the directory they touch:
+AGPL-3.0-only, or Apache-2.0 under `proto/`, `sdk/` and `capability/` (see
+[NOTICE](../NOTICE) and [ADR-0030](adr/0030-agpl-with-apache-client-surface.md)).
 There is no CLA.
 
 ## Getting help

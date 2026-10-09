@@ -3,7 +3,12 @@
 [![ci](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml)
 [![release](https://img.shields.io/github/v/release/oleg-tkachuk/paladin?sort=semver)](https://github.com/oleg-tkachuk/paladin/releases/latest)
 [![sdk](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fproxy.golang.org%2Fgithub.com%2Foleg-tkachuk%2Fpaladin%2Fsdk%2Fgo%2F%40latest&query=%24.Version&label=sdk)](sdk/go/README.md)
-[![license](https://img.shields.io/github/license/oleg-tkachuk/paladin)](LICENSE)
+
+[![license: backend & console](https://img.shields.io/badge/license%3A%20backend%20%26%20console-AGPL--3.0--only-A42E2B)](LICENSE)
+[![license: proto](https://img.shields.io/badge/license%3A%20proto-Apache--2.0-blue)](proto/LICENSE)
+[![license: Go SDK](https://img.shields.io/badge/license%3A%20Go%20SDK-Apache--2.0-blue)](sdk/go/LICENSE)
+[![license: Python SDK](https://img.shields.io/badge/license%3A%20Python%20SDK-Apache--2.0-blue)](sdk/python/LICENSE)
+[![license: capability](https://img.shields.io/badge/license%3A%20capability-Apache--2.0-blue)](capability/LICENSE)
 
 [![Go](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Foleg-tkachuk%2Fpaladin%2Fbadges%2Fversions.json&query=%24.go&label=Go&color=00ADD8&logo=go&logoColor=white)](backend/go.mod)
 [![PostgreSQL](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Foleg-tkachuk%2Fpaladin%2Fbadges%2Fversions.json&query=%24.postgresql&label=PostgreSQL&color=4169E1&logo=postgresql&logoColor=white)](https://www.postgresql.org)
@@ -207,4 +212,7 @@ Compatibility is not kept across releases yet, and only `main` is supported —
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+AGPL-3.0-only — see [LICENSE](LICENSE) and [NOTICE](NOTICE). The API
+contract in [`proto/`](proto/), the Go and Python SDKs in [`sdk/`](sdk/) and
+the [`capability`](capability/) module are Apache-2.0, each under its own
+`LICENSE`, so a client can embed them without taking on the AGPL.
