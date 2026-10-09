@@ -45,6 +45,33 @@ describe("AuditEntryDetailDialog", () => {
     expect(screen.getByText(/"versioning": false/)).toBeInTheDocument();
   });
 
+  it("wraps identifiers and the action instead of overflowing the dialog", async () => {
+    const action = "/paladin.admin.v1.CapabilityService/Issue";
+    const resource =
+      "tenants/01a120f8-26c4-71fb-b70f-08579e18a292/capabilities/b907cb1f";
+    h.get.mockResolvedValue({
+      entryId: "e3",
+      at: { seconds: 1_700_000_000n },
+      action,
+      actorSubject: "",
+      actorTenantId: "",
+      resourceName: resource,
+      requestId: "",
+      sourceIp: "",
+      capabilityId: "",
+      errorMessage: "",
+      beforeJson: new Uint8Array(),
+      afterJson: enc({ subject: resource }),
+    });
+
+    render(<AuditEntryDetailDialog entryId="e3" onOpenChange={() => {}} />);
+
+    expect(await screen.findByText(action)).toHaveClass("break-all");
+    expect(screen.getByText(resource)).toHaveClass("break-all");
+    expect(screen.getByText(/"subject":/)).toHaveClass("whitespace-pre-wrap");
+    expect(screen.getByRole("dialog")).toHaveClass("sm:max-w-2xl");
+  });
+
   it("does not fetch while closed (entryId null)", () => {
     render(<AuditEntryDetailDialog entryId={null} onOpenChange={() => {}} />);
     expect(h.get).not.toHaveBeenCalled();

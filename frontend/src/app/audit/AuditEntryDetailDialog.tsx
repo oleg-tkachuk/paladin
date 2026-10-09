@@ -17,7 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -57,7 +56,7 @@ export function AuditEntryDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Audit entry</DialogTitle>
           <DialogDescription className={cn(T.code, "text-muted-foreground")}>
@@ -76,15 +75,11 @@ export function AuditEntryDetailDialog({
             {errorMessage(error, "Failed to load")}
           </p>
         ) : data ? (
-          <div className="max-h-[70vh] space-y-3 overflow-y-auto text-xs">
+          <div className="max-h-[70vh] min-w-0 space-y-3 overflow-y-auto text-xs">
             <Field k="when" mono>
               <Timestamp ts={data.at} />
             </Field>
-            <Field k="action" v={data.action || "—"}>
-              <Badge variant="outline" className={T.code}>
-                {data.action || "—"}
-              </Badge>
-            </Field>
+            <Field k="action" v={data.action || "—"} mono />
             <Field k="actor" v={data.actorSubject || "system"}>
               <ActorName
                 subject={data.actorSubject}
@@ -138,11 +133,20 @@ function Field({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-3">
-      <span className="w-24 shrink-0 uppercase tracking-wider text-muted-foreground">
+    // Label above the value on a narrow screen, beside it from sm up. A mono
+    // value is an identifier — a UUID, a resource path, an RPC method — with
+    // no word boundary to wrap at, so it breaks anywhere rather than
+    // overflowing the dialog.
+    <div className="grid gap-0.5 sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-3">
+      <span className="uppercase tracking-wider text-muted-foreground">
         {k}
       </span>
-      <span className={cn("min-w-0 flex-1 break-words", mono && T.code)}>
+      <span
+        className={cn(
+          "min-w-0",
+          mono ? cn(T.code, "break-all") : "break-words",
+        )}
+      >
         {children ?? v}
       </span>
     </div>
@@ -153,7 +157,7 @@ function Snapshot({ label, json }: { label: string; json: string }) {
   return (
     <div className="space-y-1">
       <p className="uppercase tracking-wider text-muted-foreground">{label}</p>
-      <pre className="max-h-64 overflow-auto rounded-md border border-border bg-muted/40 p-2 font-mono text-sm leading-relaxed">
+      <pre className="max-h-64 overflow-y-auto rounded-md border border-border bg-muted/40 p-2 font-mono text-sm leading-relaxed whitespace-pre-wrap break-all">
         {json}
       </pre>
     </div>
