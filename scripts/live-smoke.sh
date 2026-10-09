@@ -16,7 +16,7 @@
 #   KUBE_CONTEXT=orbstack ./scripts/live-smoke.sh
 #
 # Runs as `task -t Taskfile.dev.yaml verify:live`. Not part of verify-all: it
-# needs a running cluster. Requires: kubectl, curl, jq, uuidgen.
+# needs a running cluster. Requires: kubectl, curl, jq, uuidgen, openssl.
 
 set -uo pipefail
 
@@ -44,6 +44,8 @@ readonly CAPABILITY_MAX_REQUESTS=50
 # The object every check that needs one uses.
 readonly OBJECT_BODY=hello
 readonly COLLECTION=docs
+# Every upload is bound to its checksum; the smoke object uses SHA-256.
+readonly CHECKSUM_ALGORITHM=CHECKSUM_ALGORITHM_SHA256
 # Connect error codes, as the JSON protocol spells them.
 readonly CODE_INVALID_ARGUMENT=invalid_argument
 readonly CODE_PERMISSION_DENIED=permission_denied
@@ -51,7 +53,7 @@ readonly CODE_NOT_FOUND=not_found
 readonly HTTP_OK=200
 readonly HTTP_UNAUTHORIZED=401
 
-for tool in kubectl curl jq uuidgen; do
+for tool in kubectl curl jq uuidgen openssl; do
     command -v "$tool" >/dev/null 2>&1 || { echo "!!! $tool is not installed" >&2; exit 1; }
 done
 
@@ -224,11 +226,19 @@ reader=$(printf %s "$r" | jq -r '.token // empty')
 capabilities+=("$(printf %s "$r" | jq -r '.capability.id // empty')")
 expect "writer and read-only capabilities" "$r" test -n "$writer" -a -n "$reader"
 
-r=$(cap_rpc "$writer" ObjectService/UploadObject \
-    "{\"parent\":\"tenants/$tenant/collections/$COLLECTION\",\"key\":\"smoke.txt\",\"contentType\":\"text/plain\",\"sizeHintBytes\":${#OBJECT_BODY}}")
+checksum=$(printf %s "$OBJECT_BODY" | openssl dgst -sha256 -binary | openssl base64 -A)
+r=$(cap_rpc "$writer" ObjectService/UploadObject "$(jq -cn --arg p "tenants/$tenant/collections/$COLLECTION" \
+    --argjson size "${#OBJECT_BODY}" --arg alg "$CHECKSUM_ALGORITHM" --arg sum "$checksum" \
+    '{parent:$p,key:"smoke.txt",contentType:"text/plain",sizeHintBytes:$size,checksumAlgorithm:$alg,checksumValue:$sum}')")
 url=$(printf %s "$r" | jq -r '.uploadUrl.url // empty')
 object=$(printf %s "$r" | jq -r '.object.name // empty')
-curl -sk -o /dev/null -X PUT -H 'Content-Type: text/plain' --data-binary "$OBJECT_BODY" "$url"
+# The signature covers the required headers; curl writes Content-Length and
+# Host itself, from the body and the URL.
+upload_headers=()
+while IFS= read -r h; do upload_headers+=(-H "$h"); done < <(printf %s "$r" |
+    jq -r '.uploadUrl.requiredHeaders // {} | to_entries[]
+        | select(.key | ascii_downcase | IN("content-length", "host") | not) | "\(.key): \(.value)"')
+curl -sk -o /dev/null -X PUT "${upload_headers[@]+"${upload_headers[@]}"}" --data-binary "$OBJECT_BODY" "$url"
 r=$(cap_rpc "$writer" ObjectService/CompleteObject "{\"name\":\"$object\"}")
 object_rv=$(printf %s "$r" | jq -r '.resourceVersion // empty')
 expect "object uploaded" "$r" test -n "$object_rv"
