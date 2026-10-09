@@ -33,7 +33,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { ActorName } from "@/components/features/audit/ActorName";
-import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { Timestamp } from "@/components/Timestamp";
 
 // /audit — read-only view of admin/v1.AuditLogService.ListAuditLog.
 //
@@ -251,7 +251,7 @@ export default function AuditPage() {
                         "whitespace-normal text-muted-foreground @md:whitespace-nowrap",
                       )}
                     >
-                      {formatTimestampUTC(e.at)}
+                      <Timestamp ts={e.at} />
                     </TableCell>
                     {/* Action, actor and resource are long unbroken
                         identifiers (RPC paths, `apikey:<uuid>`, resource

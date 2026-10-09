@@ -22,7 +22,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { ActorName } from "@/components/features/audit/ActorName";
-import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { Timestamp } from "@/components/Timestamp";
 import { errorMessage } from "@/hooks/errorContract";
 
 // Decode a bytes state-snapshot to a display string. The backend stores
@@ -77,7 +77,9 @@ export function AuditEntryDetailDialog({
           </p>
         ) : data ? (
           <div className="max-h-[70vh] space-y-3 overflow-y-auto text-xs">
-            <Field k="when" v={formatTimestampUTC(data.at)} mono />
+            <Field k="when" mono>
+              <Timestamp ts={data.at} />
+            </Field>
             <Field k="action" v={data.action || "—"}>
               <Badge variant="outline" className={T.code}>
                 {data.action || "—"}
