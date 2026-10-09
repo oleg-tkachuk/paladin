@@ -8,8 +8,8 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
-from typing import Any, TypeVar
+from datetime import UTC, datetime
+from typing import Any
 
 import pyqwest
 
@@ -36,8 +36,6 @@ _TRANSPORT_ERRORS = (
     pyqwest.WriteError,
     pyqwest.RemoteProtocolError,
 )
-
-T = TypeVar("T")
 
 
 def expired(err: BaseException) -> bool:
@@ -72,10 +70,10 @@ def presign_expiry(signed: Any) -> datetime | None:
     if not raw:
         return None
     try:
-        exp = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        exp = datetime.fromisoformat(raw)
     except ValueError:
         return None
-    return exp if exp.tzinfo is not None else exp.replace(tzinfo=timezone.utc)
+    return exp if exp.tzinfo is not None else exp.replace(tzinfo=UTC)
 
 
 def usable(signed: Any, now: float | None = None) -> bool:
@@ -84,7 +82,7 @@ def usable(signed: Any, now: float | None = None) -> bool:
     exp = presign_expiry(signed)
     if exp is None:
         return True
-    current = datetime.now(timezone.utc).timestamp() if now is None else now
+    current = datetime.now(UTC).timestamp() if now is None else now
     return exp.timestamp() - current > PRESIGN_EXPIRY_SKEW
 
 
@@ -93,7 +91,7 @@ def backoff(attempt: int) -> float:
     return min(_BACKOFF_BASE * (2 ** (attempt - 1)), _BACKOFF_MAX)
 
 
-def with_retries(
+def with_retries[T](
     attempts: int,
     first: Any,
     presign: Callable[[], Any],
@@ -117,7 +115,7 @@ def with_retries(
         signed = None
 
 
-async def awith_retries(
+async def awith_retries[T](
     attempts: int,
     first: Any,
     presign: Callable[[], Awaitable[Any]],

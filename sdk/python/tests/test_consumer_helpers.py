@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from contextvars import ContextVar
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from connectrpc.code import Code
@@ -27,7 +27,7 @@ from paladin import (
 from paladin.iam.v1 import health_service_pb2
 from paladin.iam.v1.health_service_connect import HealthServiceClient, HealthServiceClientSync
 
-T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T0 = datetime(2026, 1, 1, tzinfo=UTC)
 LIFETIME = timedelta(minutes=5)
 caller: ContextVar[str] = ContextVar("caller", default="")
 

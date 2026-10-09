@@ -20,7 +20,7 @@ import base64
 import binascii
 import json
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 # The attenuation vocabulary; tests/test_biscuit.py checks each name against
@@ -164,7 +164,7 @@ def attenuate(
             raise TypeError(f"expires_at takes a datetime, got {type(expires_at).__name__}")
         if expires_at.tzinfo is None:
             raise ValueError("expires_at must be timezone-aware")
-        facts.append((FACT_EXPIRES, expires_at.astimezone(timezone.utc).replace(microsecond=0)))
+        facts.append((FACT_EXPIRES, expires_at.astimezone(UTC).replace(microsecond=0)))
     if bind_jkt is not None:
         facts.append((FACT_BIND, _thumbprint(bind_jkt)))
     if max_requests is not None:
