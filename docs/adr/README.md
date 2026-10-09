@@ -39,6 +39,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0027](0027-public-collections.md) | Public collections — anonymous reads from a public bucket | Accepted |
 | [0028](0028-bucket-ownership.md) | A bucket row is a claim — Paladin registers only what it means to manage | Accepted |
 | [0029](0029-capability-outside-the-request-path.md) | Capabilities for work the verifier does not see | Accepted |
+| [0030](0030-agpl-with-apache-client-surface.md) | AGPL for the service, Apache-2.0 for what clients embed | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
