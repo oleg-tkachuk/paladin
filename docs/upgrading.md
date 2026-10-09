@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — the capability primitive is limes
+## v26.0.0, sdk/go/v0.57.0 — the capability primitive is limes
 
 The capability module moved out of this repository to
 [limes](https://github.com/oleg-tkachuk/limes) (`github.com/oleg-tkachuk/limes`,
@@ -75,7 +75,7 @@ package `limes`), and its wire format dropped the `paladin_` prefix with it.
 - Error text from the primitive starts with `limes:` rather than
   `capability:`; match errors with `errors.Is`, as before.
 
-## Unreleased — the compose stack runs Postgres 18
+## v25.5.0 — the compose stack runs Postgres 18
 
 `backend/deploy/docker-compose.yaml` and the e2e stack move from Postgres 16 to
 18.6, the version the test suites and the reference cluster run. A major
@@ -92,7 +92,7 @@ docker compose -f backend/deploy/docker-compose.yaml down -v
 A deployment that keeps its data moves majors with `pg_upgrade`, or, on
 CloudNativePG, a major version upgrade of the cluster.
 
-## Unreleased — the Go SDK and the server run on connect-go v2
+## v25.0.0, sdk/go/v0.53.0 — the Go SDK and the server run on connect-go v2
 
 - The Go SDK depends on `connectrpc.com/connect/v2` instead of
   `connectrpc.com/connect`. Generated clients take and return plain messages:
@@ -117,7 +117,7 @@ CloudNativePG, a major version upgrade of the cluster.
   interceptors, so a caller without credentials gets the same answer. An
   unknown service is answered `Unimplemented` as before.
 
-## Unreleased — money is exact: nanos in the core, `google.type.Money` on the wire
+## v24.0.0, sdk/go/v0.52.0 — money is exact: nanos in the core, `google.type.Money` on the wire
 
 Amounts were `float64` in the capability module, so spend drifted — 0.1 then
 0.2 was refused under a ceiling of 0.3 — and the API carried micros, so a
@@ -168,7 +168,7 @@ summing apart or correcting.
 - **Configuration.** `capability.charge_per_request_amount` is read exactly,
   to nine decimals, and refuses a negative value.
 
-## Unreleased — a Biscuit copy with limits cannot delegate
+## v23.0.1 — a Biscuit copy with limits cannot delegate
 
 **Behaviour, capability module.** `Issuer.Delegate` refuses a `Parent` that
 carries `Copies` — a Biscuit copy with limits of its own — with
@@ -181,7 +181,7 @@ that do not nest, `MinRefreshInterval ≤ RefreshInterval ≤ MaxStale`, after
 applying the defaults. A `MaxStale` below `RefreshInterval` made the resolver
 fail closed with no fetch having failed.
 
-## Unreleased — the capability module's API, made uniform
+## v23.0.0, sdk/go/v0.51.0 — the capability module's API, made uniform
 
 **Breaking, capability module.** Every input is a `…Request` and every read
 names what it reads. Renamed, with no change in behaviour:
@@ -238,7 +238,7 @@ records, and `ListByPrincipal` takes the whole principal and pages in id order
 unknown id, delete expired records, list without paging, and cascade a
 revocation down from capabilities revoked earlier as well as the one named.
 
-## Unreleased — capability refusals carry a reason; costs reported later
+## v22.0.0, sdk/go/v0.50.0 — capability refusals carry a reason; costs reported later
 
 - A refused capability now carries a `google.rpc.ErrorInfo` in the `paladin`
   domain, with a reason from the new `ERROR_REASON_CAPABILITY_*` values:
@@ -260,7 +260,7 @@ revocation down from capabilities revoked earlier as well as the one named.
 - Migrations `051`–`053` add `external_ref`, `reservation_id` and `overrun` to
   `charges`, with two unique partial indexes built concurrently.
 
-## Unreleased — the Python SDK runs on connectrpc
+## sdk/go/v0.47.0 — the Python SDK runs on connectrpc
 
 - The Python SDK depends on `connectrpc` 0.12 (connect-python's successor)
   instead of `connect-python` 0.9. Messages stay `google.protobuf`: the stubs
@@ -278,7 +278,7 @@ revocation down from capabilities revoked earlier as well as the one named.
 - `connectrpc_otel.OpenTelemetryInterceptor(client=True)` now works in
   `interceptors`, and traces each RPC.
 
-## Unreleased — Paladin registers only the buckets it means to manage
+## v21.0.0, sdk/go/v0.48.0 — Paladin registers only the buckets it means to manage
 
 - `CreateBucket` with `provision_on_backend` refuses a bucket the backend
   already holds (`ALREADY_EXISTS`, `BUCKET_EXISTS_ON_BACKEND`); register an
@@ -296,7 +296,7 @@ revocation down from capabilities revoked earlier as well as the one named.
 - A CreateBucket on a name another S3 account owns now fails instead of
   being taken as success.
 
-## Unreleased — background jobs pass a trashed tenant by
+## v20.1.0 — background jobs pass a trashed tenant by
 
 - Lifecycle expiry, replication, the object-trash hard-deleter, the pending
   upload reconciler and storage-event promotion, storage-layout migrations,
@@ -304,7 +304,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   on restore. Its queued operations stay `PENDING` and its events stay
   pending meanwhile; a purge removes both with the tenant.
 
-## Unreleased — a delete helper in both SDKs
+## v20.1.0, sdk/go/v0.45.0 — a delete helper in both SDKs
 
 - `paladin.Delete` (Go) and `paladin.delete` / `adelete` (Python) supply the
   `resource_version` every `DeleteObject` requires: they read the object,
@@ -313,7 +313,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   done. A consumer that called `DeleteObject` without a version — refused by
   the server and by both fakes — can switch to them.
 
-## Unreleased — a tenant in the trash is frozen
+## v20.0.0 — a tenant in the trash is frozen
 
 - Every change to a tenant in the trash is refused — `FAILED_PRECONDITION`,
   reason `TENANT_ALREADY_DELETED` — on the data, admin and IAM planes,
@@ -326,7 +326,7 @@ revocation down from capabilities revoked earlier as well as the one named.
 - A slug a trashed tenant held and a live tenant has since taken names the
   live tenant everywhere; before, which one it resolved to was undefined.
 
-## Unreleased — public collections
+## v20.0.0, sdk/go/v0.44.0 — public collections
 
 - A bucket can be created **public** (`Bucket.public_read`, with
   `provision_on_backend`) and a collection **public**
@@ -349,7 +349,7 @@ revocation down from capabilities revoked earlier as well as the one named.
 - Both SDK fakes serve public collections (`PublicCollection`,
   `public_collection`).
 
-## Unreleased — a storage backend's S3 features are probed
+## v20.0.0, sdk/go/v0.44.0 — a storage backend's S3 features are probed
 
 - `TestBackend` now also probes, on a reachable backend, each S3 feature
   Paladin uses — conditional PUT, SHA-256 checksums, multipart upload,
@@ -365,7 +365,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   the admin listener's default 30-second write timeout. A deployment that
   lowered `admin.server.write_timeout` below 25 seconds should raise it.
 
-## Unreleased — a trashed tenant's credentials stop working
+## v20.0.0 — a trashed tenant's credentials stop working
 
 - **Every plane refuses a credential whose tenant is in the trash** —
   `FAILED_PRECONDITION` with reason `TENANT_ALREADY_DELETED` — and one whose
@@ -380,7 +380,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   their tenant's, and a trashed platform tenant must not lock out the admins
   who could restore it.
 
-## Unreleased — an internal error no longer carries its cause
+## v19.0.0, sdk/go/v0.44.0 — an internal error no longer carries its cause
 
 - **An RPC that fails on the server's side answers `internal error; request
   id <id>`** with its code (`internal`, `unknown`, `data_loss`), its details
@@ -390,7 +390,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   sent without one is given one. Code that parsed an internal error's message
   has nothing to parse.
 
-## Unreleased — capability issuance answers each failure by its kind
+## v18.0.0, sdk/go/v0.43.0 — capability issuance answers each failure by its kind
 
 - **`CapabilityService/Issue` and `Delegate` no longer answer every failure
   `INVALID_ARGUMENT`.** A malformed request still does. A subject tenant that
@@ -405,7 +405,7 @@ revocation down from capabilities revoked earlier as well as the one named.
 - The `capability` module's request errors match `ErrInvalidRequest`, and
   their messages now read `capability: invalid request: …`.
 
-## Unreleased — a multipart download's checksum is verified
+## sdk/go/v0.42.0 — a multipart download's checksum is verified
 
 - **A multipart object completed from now on records a composite checksum**:
   the digest of its parts' digests, in S3's COMPOSITE form
@@ -419,7 +419,7 @@ revocation down from capabilities revoked earlier as well as the one named.
 - An older SDK ignores the new field; a new SDK against an older server sees
   no part size and does not check a composite.
 
-## Unreleased — the SDK fakes refuse what the server refuses
+## v17.0.0, sdk/go/v0.41.0 — the SDK fakes refuse what the server refuses
 
 - **`paladintest` (Go) validates every request** with the contract's
   protovalidate rules, as the server does: a test that uploads with no
@@ -434,7 +434,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   (`paladin-sdk[testing]`), for protovalidate, and holds requests to the same
   rules — `InvalidArgumentError`, `VersionConflictError`, `UNIMPLEMENTED`.
 
-## Unreleased — the Python SDK's `TLS` needs the `tls` extra
+## v16.0.0, sdk/go/v0.40.0 — the Python SDK's `TLS` needs the `tls` extra
 
 - **`paladin.TLS(...)` raises `ImportError` unless the SDK is installed with
   the `tls` extra**: `paladin-sdk[tls] @ git+…`. `httpcore`, `h2`, `anyio` and
@@ -443,7 +443,7 @@ revocation down from capabilities revoked earlier as well as the one named.
 - **`cryptography` moved to the `tls` and `dpop` extras.** A client given
   `dpop_key=` needs `paladin-sdk[dpop]`, which it was already documented to.
 
-## Unreleased — `CompleteMultipartUpload` returns the stored object
+## v15.2.0, sdk/go/v0.39.0 — `CompleteMultipartUpload` returns the stored object
 
 - **`CompleteMultipartUpload` answers with the whole object** — collection,
   key, size, checksum, timestamps — where it carried the name alone. A client
@@ -454,7 +454,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   (`BeginMultipart`, `PresignPart`, `CompleteMultipart`, `AbortMultipart`),
   `Ensure`, and a per-key `CapabilityCache`; Python gains `capability_source`.
 
-## Unreleased — SDK idempotency keys, errors and names
+## v15.1.0, sdk/go/v0.38.0 — SDK idempotency keys, errors and names
 
 - **A context or block idempotency key no longer goes on calls the contract
   declares side-effect free or idempotent**, and the helpers give their
@@ -474,7 +474,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   another is minted, and the Go SDK reports an IAM outage as `Unavailable`
   rather than `Unauthenticated`.
 
-## Unreleased — a reused `Idempotency-Key` with a different request is refused
+## v15.0.1, sdk/go/v0.38.0 — a reused `Idempotency-Key` with a different request is refused
 
 - **The same `Idempotency-Key` sent with a different request to the same
   method answers `InvalidArgument`** instead of replaying the first request's
@@ -485,7 +485,7 @@ revocation down from capabilities revoked earlier as well as the one named.
 ||||||| parent of 4f8da27e (docs: record the SDK changes consumers can observe, and the gaps left open)
 
 
-## Unreleased — `housekeeping.pending_ttl` and `delete_orphaned_parts` are removed
+## v15.0.0 — `housekeeping.pending_ttl` and `delete_orphaned_parts` are removed
 
 - **A config that sets `worker.jobs.housekeeping.pending_ttl` or
   `worker.jobs.housekeeping.delete_orphaned_parts` no longer loads.** Neither
@@ -494,7 +494,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   freed when the multipart reaper aborts it after `multipart_ttl` — whatever
   `delete_orphaned_parts` said. Delete both keys before upgrading.
 
-## Unreleased — `storage.backends.<name>.auth.mode` has no default
+## v15.0.0 — `storage.backends.<name>.auth.mode` has no default
 
 - **A storage backend that names no `auth.mode` no longer loads.** The schema
   used to fill `default_chain`, so a backend configured without credentials
@@ -503,7 +503,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   (`static_keys`).
 ||||||| parent of 8b21df7d (fix(config)!: remove housekeeping.pending_ttl and delete_orphaned_parts)
 
-## Unreleased — `security.reject_tenant_mismatch` is removed
+## v14.0.0 — `security.reject_tenant_mismatch` is removed
 
 - **A config that sets `security.reject_tenant_mismatch` no longer loads.**
   The key was read by nothing: the REST middleware it once switched went with
@@ -512,7 +512,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   key said. The strict loader rejects it now, so delete it from any values
   file or overlay before upgrading. Nothing about tenant checks changes.
 
-## Unreleased — a multipart upload to a taken key is `AlreadyExists`
+## v11.2.0, sdk/go/v0.31.0 — a multipart upload to a taken key is `AlreadyExists`
 
 - **`InitiateMultipartUpload` at a key another object holds answers
   `AlreadyExists`**, as `UploadObject` always has. It answered `Internal`, so
@@ -525,7 +525,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   test that uploaded twice to one key against the fake now meets
   `ErrAlreadyExists` / `AlreadyExistsError`, as it would against the server.
 
-## Unreleased — the data plane acts on the tenant a platform admin names
+## v11.1.1 — the data plane acts on the tenant a platform admin names
 
 - **A platform admin's data-plane calls on another tenant now reach that
   tenant.** They used to act on the admin's own tenant — empty lists, and
@@ -535,14 +535,14 @@ revocation down from capabilities revoked earlier as well as the one named.
   names span two tenants is `PermissionDenied`, and so is a version name or a
   multipart completion naming a tenant other than the caller's, which used to
   be served the caller's own tenant silently.
-## Unreleased — webhook deliveries no longer carry `X-Paladin-Signature`
+## v11.0.0 — webhook deliveries no longer carry `X-Paladin-Signature`
 
 - **The body-only `X-Paladin-Signature` is gone**, after one release
   (v10.5.0) beside `X-Paladin-Webhook-Signature`. A subscriber that still
   verifies it refuses every delivery: verify `X-Paladin-Webhook-Signature`
   with `paladin.VerifyWebhook` or `paladin.verify_webhook` instead.
 
-## Unreleased — webhook deliveries carry a timestamped signature
+## v10.5.0 — webhook deliveries carry a timestamped signature
 
 - **An HTTP subscription with a signing secret now also receives
   `X-Paladin-Webhook-Signature: t=<unix seconds>,v1=<hex>`**, an HMAC-SHA256 of
@@ -556,7 +556,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   this release, and removed in the next: move verification before upgrading
   past it.
 
-## Unreleased — `BatchUpdateTags` is capped like the other batch RPCs
+## v10.4.1, sdk/go/v0.29.0 — `BatchUpdateTags` is capped like the other batch RPCs
 
 - **The handler refuses more than 10 000 object ids with
   `InvalidArgument`,** as `BatchDelete`, `BatchCopy` and
@@ -566,7 +566,7 @@ revocation down from capabilities revoked earlier as well as the one named.
   100 by the proto validation; the cap reaches only code that calls the
   handler directly.
 
-## Unreleased — money is micros only; the deprecated doubles are gone
+## v10.0.0, sdk/go/v0.26.0 — money is micros only; the deprecated doubles are gone
 
 The double money fields deprecated beside `*_micros` are removed and their
 numbers and names reserved: `CapabilityCaveats.max_budget_amount`,
@@ -617,7 +617,7 @@ millionths of `unit_code`, so 25 USD is `25000000`.
   and `If-Match`; the storage endpoint's CORS must allow them and expose
   `ETag` before the console is upgraded.
 
-## Unreleased — a Biscuit copy's usage can be read
+## v10.5.0 — a Biscuit copy's usage can be read
 
 - **Go: `BiscuitCopy` names the copy's limits** (`Limits`), and names a copy
   carrying limits on a verifier without `MeterCopies` too, where it used to
@@ -626,7 +626,7 @@ millionths of `unit_code`, so 25 USD is `25000000`.
   `Meter` to show them. `CapabilityService.GetBiscuitUsage` and the console's
   "Copy usage" serve them.
 
-## Unreleased — a Biscuit copy can carry request and budget limits of its own
+## v10.4.0, sdk/go/v0.28.0 — a Biscuit copy can carry request and budget limits of its own
 
 - **Go: a `Meter` of your own should count `Copies`.** `RequestBump`,
   `ChargeRequest` and `ReserveRequest` carry the presented copy's limits;
@@ -642,7 +642,7 @@ millionths of `unit_code`, so 25 USD is `25000000`.
   copy had given up offline. A copy with limits of its own cannot delegate at
   all (`FailedPrecondition`): attenuate it instead.
 
-## Unreleased — one copy of a Biscuit can be revoked on its own
+## v10.1.0 — one copy of a Biscuit can be revoked on its own
 
 - **Go: a verifier with `AcceptBiscuit` needs `BiscuitRevocations`.**
   `NewStandardVerifier` refuses the config without it. Implement
@@ -666,7 +666,7 @@ millionths of `unit_code`, so 25 USD is `25000000`.
   refused. Every request with a key-bound capability costs one write; the
   capability purger deletes expired ids on its existing interval.
 
-## Unreleased — batches act only on their own collection, and take restricted capabilities
+## v10.3.0 — batches act only on their own collection, and take restricted capabilities
 
 - **A batch acts only on objects of the collection it names.** An object id
   from another collection of the tenant is reported as not found, like an id
@@ -682,7 +682,7 @@ millionths of `unit_code`, so 25 USD is `25000000`.
   `AllowTaintedRead` cannot copy a tainted object.
 - Calls made with a JWT or API token and no capability are unaffected.
 
-## Unreleased — capabilities need the op for operations and storage bootstrap
+## v7.1.0, sdk/go/v0.24.0 — capabilities need the op for operations and storage bootstrap
 
 - **`OperationService` asserts a capability op.** `GetOperation` needs `get`,
   `ListOperations` `list`, and `CancelOperation` `manage`. A capability
@@ -694,7 +694,7 @@ millionths of `unit_code`, so 25 USD is `25000000`.
 - Calls made with a JWT or API token and no capability are unaffected.
 
 
-## Unreleased — uploads are held to `limits.*` and bucket constraints
+## v7.0.0, sdk/go/v0.24.0 — uploads are held to `limits.*` and bucket constraints
 
 - **`limits.*` is enforced.** `max_object_size` now refuses a larger single
   PUT/POST, `max_multipart_size` a larger multipart upload, and
@@ -718,7 +718,7 @@ millionths of `unit_code`, so 25 USD is `25000000`.
 - **Bucket creation validates constraints.** Constraints no upload could
   satisfy are refused by CreateBucket.
 
-## Unreleased — the Python SDK knows its version under Poetry
+## sdk/go/v0.23.1 — the Python SDK knows its version under Poetry
 
 - **`sdk_version()`, the `User-Agent` and errors report the release** when
   the package is installed from its git tag by a tool that builds without
@@ -749,7 +749,7 @@ millionths of `unit_code`, so 25 USD is `25000000`.
   makes and drops clients and transfers in fresh interpreters, 200 times per
   CI run, and fails on any abort.
 
-## Unreleased — the SDKs answer a consumer's review
+## v6.7.0, sdk/go/v0.20.0 — the SDKs answer a consumer's review
 
 The contract does not change. What a caller may notice:
 
@@ -840,7 +840,7 @@ client for every service of each plane, `Pages`, `Wait`, `Mask`, `Upload`,
 `audience`. Retries wait a random share of the doubling ceiling and never less
 than the server's `Retry-After`.
 
-## Unreleased — clients read the contract; the three prefix lists are gone
+## v4.0.0, sdk/go/v0.11.0 — clients read the contract; the three prefix lists are gone
 
 No proto change and no wire change. `backend/internal/rpcmeta` answers "is this
 a read" and "should a client stamp an Idempotency-Key" from the descriptor, and
@@ -873,7 +873,7 @@ If you integrate with Paladin, this is the rule to implement. `buf` puts
 `@bufbuild/protobuf` exposes it as `method.idempotency`, and the Go runtime as
 `MethodOptions.GetIdempotencyLevel()`.
 
-## Unreleased — 112 of 142 RPCs declare an idempotency_level
+## v4.0.0, sdk/go/v0.11.0 — 112 of 142 RPCs declare an idempotency_level
 
 Nine more: one read and eight idempotent writes. The remaining 30 are the
 honest residue — every one of them creates, mints, charges or submits, and
@@ -908,7 +908,7 @@ standard "re-read and retry" signal; these two do not.
 
 **Cutting the baseline.** This needs `api/v0.9.0`.
 
-## Unreleased — 103 of 142 RPCs declare an idempotency_level
+## v4.0.0, sdk/go/v0.11.0 — 103 of 142 RPCs declare an idempotency_level
 
 Thirteen more `NO_SIDE_EFFECTS`, and they are the ones the earlier passes said
 were unreachable: `GetHealth`, `GetQuota`, `GetObjectTags`, `GetObjectLock`,
@@ -942,7 +942,7 @@ inferred.
 
 **Cutting the baseline.** This needs `api/v0.8.0`.
 
-## Unreleased — 90 of 142 RPCs declare an idempotency_level
+## v4.0.0, sdk/go/v0.11.0 — 90 of 142 RPCs declare an idempotency_level
 
 Extends the previous entry; the same procedure and the same reasoning. 54 more
 declarations: 44 `IDEMPOTENT` and 10 `NO_SIDE_EFFECTS` on method names that
@@ -967,7 +967,7 @@ clear enough from the code to promise anything.
 
 **Cutting the baseline.** This needs `api/v0.7.0`.
 
-## Unreleased — 36 read RPCs declare `idempotency_level = NO_SIDE_EFFECTS`
+## v4.0.0, sdk/go/v0.11.0 — 36 read RPCs declare `idempotency_level = NO_SIDE_EFFECTS`
 
 A deliberate breaking change under the procedure above: `buf` puts
 `RPC_SAME_IDEMPOTENCY_LEVEL` in the WIRE category, so declaring the option at
@@ -997,7 +997,7 @@ both shapes.
 Until it is tagged and `breaking_against` bumped, `verify-all` fails on
 this change by design.
 
-## Unreleased — API tokens are addressed by resource name
+## v4.0.0, sdk/go/v0.11.0 — API tokens are addressed by resource name
 
 `APITokenService` was the only service in the API where `name` did not mean a
 resource name, and the only one whose RPCs took a bare uuid.
@@ -1036,7 +1036,7 @@ privileged read path around the enforcement mechanism.
 `APIToken.id` and `tenant_id` are unchanged and still returned, so a caller
 that wants the raw parts does not have to parse the name.
 
-## Unreleased — a failed operation fills `Operation.error`, not `Operation.response`
+## v4.0.0 — a failed operation fills `Operation.error`, not `Operation.response`
 
 `Operation.result` is a oneof of `google.rpc.Status error` and
 `google.protobuf.Any response`. Both API planes used to put every stored
@@ -1063,7 +1063,7 @@ A client that read failure detail out of `response` needs to read
 `error.details[0]` instead. A client that only reads successes is unaffected:
 the `response` arm still carries them.
 
-## Unreleased — `force` is gone from the delete RPCs
+## v4.0.0, sdk/go/v0.11.0 — `force` is gone from the delete RPCs
 
 One word meant four different things, and two of them were dangerous.
 
