@@ -17,7 +17,7 @@ dependencies = [
     # relay transports, which this package builds directly — not only through
     # connectrpc, whose own floor (0.5.1) predates what is used here.
     # Pre-1.0: the range stops at the next minor.
-    "pyqwest>=0.11.0,<0.12",
+    "pyqwest>=0.12,<0.13",
     # Both majors: workers that share an image with protobuf-6 libraries
     # (grpcio-tools, hatchet-sdk) can install the SDK. The floor is the gencode
     # version of the protoc in grpcio-tools below, and the one
