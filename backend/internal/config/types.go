@@ -340,7 +340,7 @@ type OAuthAS struct {
 	// the token exchange must happen. Spec recommends ≤10m; we default 60s.
 	AuthorizationCodeTTL time.Duration `yaml:"authorization_code_ttl" json:"authorization_code_ttl"`
 	// AllowedRedirectSchemes restricts registered redirect_uri schemes
-	// (e.g. https, claude-desktop, cursor). Empty → https only.
+	// (e.g. https, desktop-agent, cursor). Empty → https only.
 	AllowedRedirectSchemes []string `yaml:"allowed_redirect_schemes" json:"allowed_redirect_schemes"`
 	// ConsentURL, when set, is the front-end consent page the /authorize GET
 	// redirects to (after validating the request) instead of server-rendering
@@ -371,7 +371,7 @@ type OAuthSeedClient struct {
 	AllowedAudiences []string `yaml:"allowed_audiences" json:"allowed_audiences"`
 	Public           bool     `yaml:"public" json:"public"`
 	// SkipConsent pre-authorizes this client: the operator trusts it (a
-	// first-party app like claude-desktop), so /authorize goes straight to
+	// first-party app like desktop-agent), so /authorize goes straight to
 	// login without the per-user consent screen. Only configurable here, never
 	// via dynamic registration — a self-registered client can never skip
 	// consent.
@@ -1062,7 +1062,7 @@ type MCPUpstreamTLS struct {
 	InsecureSkipVerify bool   `yaml:"insecure_skip_verify" json:"insecure_skip_verify"`
 }
 
-// MCPStdio configures the local stdio bridge (Claude Desktop / Cursor /
+// MCPStdio configures the local stdio bridge (desktop agents /
 // IDE plugins). Profile selects which tool catalog the binary registers
 // — the safe default is "read_only" (read-only inspection tools only),
 // "agent_safe" adds presign + tag mutations, "admin" exposes everything

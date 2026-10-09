@@ -85,7 +85,7 @@ config:
 
     # OAuth 2.1 Authorization Server (ADR-0009): the /oauth/authorize +
     # /oauth/token + /oauth/register endpoints that mint the bearers the MCP
-    # Resource Server validates. For the end-to-end Claude Desktop / Cursor
+    # Resource Server validates. For the end-to-end desktop-client
     # flow you must ALSO enable the RS side under `config.mcp.oauth`
     # (ADR-0008) so the MCP server advertises this AS in its discovery
     # metadata. Tokens reuse the signing_key + access/refresh TTLs above.
@@ -100,16 +100,16 @@ config:
       authorization_code_ttl: "60s"
       # Schemes a registered redirect_uri may use (desktop clients use custom
       # schemes). redirect_uris are still matched EXACTLY, per client.
-      allowed_redirect_schemes: ["https", "claude-desktop", "cursor"]
+      allowed_redirect_schemes: ["https", "desktop-agent", "cursor"]
       # First-party clients seeded (idempotent upsert) at boot so the flow
       # works without DCR. Public = PKCE-only, no secret in config.
       # NOTE: confirm each redirect_uri against the client's published OAuth
       # docs before rollout — they are matched exactly.
       seed_clients:
-        - client_id: "claude-desktop"
+        - client_id: "desktop-agent"
           redirect_uris:
-            - "claude-desktop://callback"
-            - "https://claude.ai/api/mcp/auth_callback"
+            - "desktop-agent://callback"
+            - "https://desktop-agent.example/oauth/callback"
           allowed_scopes: ["paladin.read", "paladin.write"]
           allowed_audiences: ["paladin-data"]
           public: true
@@ -133,7 +133,7 @@ config:
 
   # MCP server config. The oauth block here is the Resource-Server half
   # (ADR-0008) — the counterpart to config.auth.oauth (the AS, ADR-0009).
-  # Enable BOTH for the end-to-end Claude Desktop / Cursor flow: the RS
+  # Enable BOTH for the end-to-end desktop-client flow: the RS
   # advertises where to authenticate + challenges unauthenticated /mcp, the
   # AS mints the bearer the RS then validates. (upstreams/http/profiles are
   # inherited from values.yaml.)

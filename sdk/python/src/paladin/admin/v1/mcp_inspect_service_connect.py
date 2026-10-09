@@ -38,7 +38,7 @@ class MCPInspectService(Protocol):
     """
     MCPInspectService — read-only operator visibility into the MCP
     (Model Context Protocol) bridge. The MCP plane sits between agentic
-    runtimes (Claude Desktop, Cursor, Hatchet workers) and the Paladin
+    runtimes (desktop agents, IDE plugins, Hatchet workers) and the Paladin
     Connect API; what tools agents see, which are denied, and which
     upstreams the bridge dispatches to is config + built-in defaults
     merged at boot. This service flattens that resolution so an admin
@@ -147,7 +147,7 @@ class MCPInspectServiceClient(ConnectClient):
     """
     MCPInspectService — read-only operator visibility into the MCP
     (Model Context Protocol) bridge. The MCP plane sits between agentic
-    runtimes (Claude Desktop, Cursor, Hatchet workers) and the Paladin
+    runtimes (desktop agents, IDE plugins, Hatchet workers) and the Paladin
     Connect API; what tools agents see, which are denied, and which
     upstreams the bridge dispatches to is config + built-in defaults
     merged at boot. This service flattens that resolution so an admin
@@ -280,7 +280,7 @@ class MCPInspectServiceSync(Protocol):
     """
     MCPInspectService — read-only operator visibility into the MCP
     (Model Context Protocol) bridge. The MCP plane sits between agentic
-    runtimes (Claude Desktop, Cursor, Hatchet workers) and the Paladin
+    runtimes (desktop agents, IDE plugins, Hatchet workers) and the Paladin
     Connect API; what tools agents see, which are denied, and which
     upstreams the bridge dispatches to is config + built-in defaults
     merged at boot. This service flattens that resolution so an admin
@@ -387,7 +387,7 @@ class MCPInspectServiceClientSync(ConnectClientSync):
     """
     MCPInspectService — read-only operator visibility into the MCP
     (Model Context Protocol) bridge. The MCP plane sits between agentic
-    runtimes (Claude Desktop, Cursor, Hatchet workers) and the Paladin
+    runtimes (desktop agents, IDE plugins, Hatchet workers) and the Paladin
     Connect API; what tools agents see, which are denied, and which
     upstreams the bridge dispatches to is config + built-in defaults
     merged at boot. This service flattens that resolution so an admin
