@@ -12,7 +12,7 @@
 # shows.
 # GitHub's generated notes list every pull request between two tags, most of
 # them the product's; these list only what the stream released. The stream,
-# its tag format and its paths come from release.config.cjs, the file the
+# its tag format and its paths come from .github/release/release.config.cjs, the file the
 # release workflow cuts the tag with.
 
 set -euo pipefail
@@ -35,7 +35,7 @@ readonly UPGRADING=docs/upgrading.md
 # "<stream> <title> <tag prefix> <path>…" for the stream whose tag this is.
 # shellcheck disable=SC2016 # JavaScript, with its own ${version}
 meta=$(node -e '
-  const { streams } = require(process.argv[1] + "/release.config.cjs");
+  const { streams } = require(process.argv[1] + "/.github/release/release.config.cjs");
   const titles = { sdk: "SDK", capability: "Capability" };
   for (const [name, s] of Object.entries(streams)) {
     const prefix = s.tagFormat.replace("${version}", "");

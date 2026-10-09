@@ -24,14 +24,14 @@ cd "$root"
 
 readonly ROOT_TASKFILE=Taskfile.yaml
 readonly WORKFLOW=.github/workflows/release.yaml
-readonly RELEASE_CONFIG=release.config.cjs
+readonly RELEASE_CONFIG=.github/release/release.config.cjs
 readonly CHART_DIR=deploy/chart
 # Any valid SemVer; it only has to come back out of the render unchanged.
 readonly PROBE_VERSION=0.0.0-probe
 # The inputs a chart cannot default, added to every render.
 readonly REQUIRED_VALUES=ci/required-values.yaml
 # What the workflow's IMAGE_NAMESPACE must be: the repository owner, which is
-# only known to Actions, so it is compared against the owner release.config.cjs
+# only known to Actions, so it is compared against the owner .github/release/release.config.cjs
 # names instead.
 readonly OWNER_EXPRESSION='${{ github.repository_owner }}'
 

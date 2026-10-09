@@ -108,7 +108,9 @@ lefthook-local.yml
 .rtk/
 **/skills-lock.json
 
-# ── Release tooling (root package.json: semantic-release only) ──────────────
+# ── Release tooling (.github/release: semantic-release only) ────────────────
+/.github/release/node_modules/
+# Where it lived before; a checkout from then still has one.
 /node_modules/
 
 **/CLAUDE.md
