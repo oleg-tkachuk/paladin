@@ -6,51 +6,51 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 // Money crosses the API as google.type.Money and is counted as
-// capability.Nanos; these helpers are the only place the two meet, and
+// limes.Nanos; these helpers are the only place the two meet, and
 // neither goes through a float64.
 
 // MoneyOf is n of unit as a google.type.Money; unit "" is
-// capability.DefaultUnitCode, as everywhere a unit is left out.
-func MoneyOf(unit string, n capability.Nanos) *money.Money {
+// limes.DefaultUnitCode, as everywhere a unit is left out.
+func MoneyOf(unit string, n limes.Nanos) *money.Money {
 	if unit == "" {
-		unit = capability.DefaultUnitCode
+		unit = limes.DefaultUnitCode
 	}
 	return &money.Money{
 		CurrencyCode: unit,
-		Units:        int64(n / capability.NanosPerUnit),
-		Nanos:        int32(n % capability.NanosPerUnit),
+		Units:        int64(n / limes.NanosPerUnit),
+		Nanos:        int32(n % limes.NanosPerUnit),
 	}
 }
 
 // NanosOf resolves a request's Money field to its amount and its unit, a
-// code capability.NormaliseUnitCode accepts. An absent field is zero with an
+// code limes.NormaliseUnitCode accepts. An absent field is zero with an
 // empty unit, so the caller decides what absent means. A negative amount,
-// nanos outside 0..999999999, one past capability.MaxNanos or an unknown
+// nanos outside 0..999999999, one past limes.MaxNanos or an unknown
 // currency is InvalidArgument naming field.
-func NanosOf(field string, m *money.Money) (capability.Nanos, string, error) {
+func NanosOf(field string, m *money.Money) (limes.Nanos, string, error) {
 	if m == nil {
 		return 0, "", nil
 	}
-	invalid := func(format string, args ...any) (capability.Nanos, string, error) {
+	invalid := func(format string, args ...any) (limes.Nanos, string, error) {
 		return 0, "", connect.Errorf(connect.CodeInvalidArgument, "%s: "+format, append([]any{field}, args...)...)
 	}
-	unit, err := capability.NormaliseUnitCode(m.GetCurrencyCode())
+	unit, err := limes.NormaliseUnitCode(m.GetCurrencyCode())
 	if err != nil {
 		return invalid("%w", err)
 	}
 	units, nanos := m.GetUnits(), int64(m.GetNanos())
-	if units < 0 || nanos < 0 || nanos >= capability.NanosPerUnit {
+	if units < 0 || nanos < 0 || nanos >= limes.NanosPerUnit {
 		return invalid("units %d and nanos %d are not a non-negative amount", units, nanos)
 	}
-	if units > int64(capability.MaxNanos/capability.NanosPerUnit) {
-		return invalid("%d units exceed %s", units, capability.MaxNanos)
+	if units > int64(limes.MaxNanos/limes.NanosPerUnit) {
+		return invalid("%d units exceed %s", units, limes.MaxNanos)
 	}
-	n := capability.Nanos(units*capability.NanosPerUnit + nanos)
-	if err := capability.ValidateAmount(n); err != nil {
+	n := limes.Nanos(units*limes.NanosPerUnit + nanos)
+	if err := limes.ValidateAmount(n); err != nil {
 		return invalid("%w", err)
 	}
 	return n, unit, nil

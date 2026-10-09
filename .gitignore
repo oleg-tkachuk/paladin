@@ -47,8 +47,7 @@ coverage/
 *.out
 
 # ── Go workspace files ──────────────────────────────────────────────────────
-# Three modules live here — backend/, capability/ and the root's own tooling —
-# which is exactly the shape that invites a `go work init` to bridge them. A
+# Two Go modules live here — backend/ and sdk/go/ — which is exactly the shape that invites a `go work init` to bridge them. A
 # committed go.work silently overrides every module's own dependency
 # resolution, so CI would stop building what a release builds.
 go.work

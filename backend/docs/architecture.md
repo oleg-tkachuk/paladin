@@ -176,8 +176,8 @@ See [configuration.md](configuration.md) for the field reference.
   and SQS drivers, parse, dedup, promote to `AVAILABLE`.
 - `internal/policy/cedar/` — Cedar engine, policy cache, LISTEN/NOTIFY
   invalidation.
-- `internal/capability/postgres/` — The Postgres store behind the standalone
-  `capability/` module: records, revocations, usage counters, reservations,
+- `internal/capability/postgres/` — The Postgres store behind
+  [limes](https://github.com/oleg-tkachuk/limes)'s contracts: records, revocations, usage counters, reservations,
   Biscuit copies.
 - `internal/auth/` — The authentication interceptors (JWT, API token,
   capability), audiences, and the principal they establish.

@@ -22,8 +22,8 @@ vars:
   # from the entry point (orbstack by default), the command line or the
   # environment; deploy requires the first two, the cluster tasks the third
   # (scripts/taskfile-forwarded-vars.test.sh).
-  # Only v* tags version this image. The others — api/*, sdk/go/*,
-  # capability/* — carry a `/` that is invalid in a Docker tag, and one of them
+  # Only v* tags version this image. The others — api/*, sdk/go/* and the
+  # retired capability/* — carry a `/` that is invalid in a Docker tag, and one of them
   # landing on a release commit must not restamp the release.
   VERSION_TAG_EXCLUDE: '*/*'
   # The shared buildx builder this repo builds through; its cache is separate

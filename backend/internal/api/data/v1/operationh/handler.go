@@ -15,12 +15,12 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // State mirrors the operation_state SQL enum.
@@ -120,7 +120,7 @@ func (h *Handler) GetOperation(ctx context.Context, opID uuid.UUID) (*Operation,
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpGet, ""); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpGet, ""); err != nil {
 		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionReadOperation, tenantID); err != nil {
@@ -138,7 +138,7 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpManage, ""); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpManage, ""); err != nil {
 		return err
 	}
 	if err := h.authorize(ctx, cedar.ActionCancelOperation, tenantID); err != nil {
@@ -159,7 +159,7 @@ func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpList, ""); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpList, ""); err != nil {
 		return nil, "", err
 	}
 	if err := h.authorize(ctx, cedar.ActionReadOperation, tenantID); err != nil {

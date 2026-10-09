@@ -10,10 +10,10 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/type/money"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // eventDispatcher is the producer-side seam the cross-cutting emitters
@@ -74,7 +74,7 @@ func (e *chargeEmitter) EmitChargedTx(
 	ctx context.Context,
 	tx pgx.Tx,
 	tenantID, capabilityID, op, actor string,
-	amount capability.Nanos,
+	amount limes.Nanos,
 	unitCode string,
 ) error {
 	if tenantID == "" || tenantID == uuid.Nil.String() {

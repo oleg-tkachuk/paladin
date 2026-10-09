@@ -21,18 +21,18 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // ErrNotFound re-exports the core sentinel so existing call sites keep
-// compiling. The value is deliberately capability.ErrNotFound, not a distinct
+// compiling. The value is deliberately limes.ErrNotFound, not a distinct
 // error: the Store contract is owned by the core package (FR-004), and a
 // second sentinel here would mean a third-party Store implementation and this
 // one disagree about what "not found" is.
-var ErrNotFound = capability.ErrNotFound
+var ErrNotFound = limes.ErrNotFound
 
-// Store implements capability.Store against the capability tables in
+// Store implements limes.Store against the capability tables in
 // `001_initial_schema.sql`.
 type Store struct {
 	pool *pgxpool.Pool
@@ -63,16 +63,16 @@ func lockLiveTenant(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error {
 	err := tx.QueryRow(ctx, `SELECT deleted_at FROM tenants WHERE id = $1 FOR SHARE`, tenantID).Scan(&deletedAt)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return fmt.Errorf("%w: %s", capability.ErrUnknownTenant, tenantID)
+		return fmt.Errorf("%w: %s", limes.ErrUnknownTenant, tenantID)
 	case err != nil:
 		return fmt.Errorf("capability/postgres: lock tenant: %w", err)
 	case deletedAt != nil:
-		return fmt.Errorf("%w: %s", capability.ErrTenantDeleted, tenantID)
+		return fmt.Errorf("%w: %s", limes.ErrTenantDeleted, tenantID)
 	}
 	return nil
 }
 
-// Insert implements capability.Store.
+// Insert implements limes.Store.
 //
 // RLS handling: the RLS baseline (002_roles_and_rls.sql) enables row-level security on
 // capability_records keyed on the session GUC `paladin.tenant_id`. The
@@ -91,7 +91,7 @@ func lockLiveTenant(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error {
 // The SET LOCAL scope dies with the transaction, so the connection's
 // pool-level GUC (set by PrepareConn) is restored automatically on
 // release without an explicit reset.
-func (s *Store) Insert(ctx context.Context, c capability.Capability, issuedBy capability.Principal) error {
+func (s *Store) Insert(ctx context.Context, c limes.Capability, issuedBy limes.Principal) error {
 	principalPayload, err := json.Marshal(c.Subject)
 	if err != nil {
 		return fmt.Errorf("capability/postgres: marshal principal: %w", err)
@@ -172,10 +172,10 @@ INSERT INTO capability_records (
 		// something that ignores it; the constraint is the last word either
 		// way, and says nothing about the request.
 		if pgerr.Is(err, pgerr.ForeignKeyViolation) && pgerr.Constraint(err) == tenantForeignKey {
-			return fmt.Errorf("%w: %s", capability.ErrUnknownTenant, c.Subject.TenantID)
+			return fmt.Errorf("%w: %s", limes.ErrUnknownTenant, c.Subject.TenantID)
 		}
 		if pgerr.Is(err, pgerr.UniqueViolation) && pgerr.Constraint(err) == recordsPrimaryKey {
-			return fmt.Errorf("%w: %s", capability.ErrAlreadyExists, c.ID)
+			return fmt.Errorf("%w: %s", limes.ErrAlreadyExists, c.ID)
 		}
 		return fmt.Errorf("capability/postgres: insert: %w", err)
 	}
@@ -185,8 +185,8 @@ INSERT INTO capability_records (
 	return nil
 }
 
-// Get implements capability.Store.
-func (s *Store) Get(ctx context.Context, id uuid.UUID) (capability.Capability, error) {
+// Get implements limes.Store.
+func (s *Store) Get(ctx context.Context, id uuid.UUID) (limes.Capability, error) {
 	const stmt = `
 SELECT id, tenant_id, issuer, principal_kind, principal_subject,
        principal_payload, audience, caveats, parent_id, generation,
@@ -196,7 +196,7 @@ WHERE  id = $1;
 `
 	c, err := scanRow(s.pool.QueryRow(ctx, stmt, id))
 	if err != nil {
-		return capability.Capability{}, err
+		return limes.Capability{}, err
 	}
 	return *c, nil
 }
@@ -224,8 +224,8 @@ type trailingScanner struct {
 
 func (t trailingScanner) Scan(dest ...any) error { return t.row.Scan(append(dest, t.extra...)...) }
 
-// GetRecord implements capability.Store.
-func (s *Store) GetRecord(ctx context.Context, id uuid.UUID) (capability.Record, error) {
+// GetRecord implements limes.Store.
+func (s *Store) GetRecord(ctx context.Context, id uuid.UUID) (limes.Record, error) {
 	var (
 		createdBy     string
 		issuedByRaw   []byte
@@ -238,21 +238,21 @@ func (s *Store) GetRecord(ctx context.Context, id uuid.UUID) (capability.Record,
 		extra: []any{&createdBy, &issuedByRaw, &revokedAt, &reason, &actor, &cascade},
 	})
 	if err != nil {
-		return capability.Record{}, err
+		return limes.Record{}, err
 	}
-	rec := capability.Record{Capability: *c, IssuedBy: capability.Principal{Subject: createdBy}}
+	rec := limes.Record{Capability: *c, IssuedBy: limes.Principal{Subject: createdBy}}
 	if issuedByRaw != nil {
 		if err := json.Unmarshal(issuedByRaw, &rec.IssuedBy); err != nil {
-			return capability.Record{}, fmt.Errorf("capability/postgres: parse issuing principal: %w", err)
+			return limes.Record{}, fmt.Errorf("capability/postgres: parse issuing principal: %w", err)
 		}
 	}
 	if revokedAt != nil {
-		rec.Revocation = &capability.Revocation{RevokedAt: revokedAt.UTC(), Reason: reason, Actor: actor, Cascade: cascade}
+		rec.Revocation = &limes.Revocation{RevokedAt: revokedAt.UTC(), Reason: reason, Actor: actor, Cascade: cascade}
 	}
 	return rec, nil
 }
 
-// IsRevoked implements capability.Store: true when the capability or any
+// IsRevoked implements limes.Store: true when the capability or any
 // ancestor still on record is revoked. One round trip — a recursive walk up
 // parent_id joined against the revocation list — and verifiers wrap it in an
 // in-memory TTL cache so the per-request cost stays flat.
@@ -296,7 +296,7 @@ SELECT EXISTS (
 	return revoked, nil
 }
 
-// Revoke implements capability.Store. Descendants stop verifying either way,
+// Revoke implements limes.Store. Descendants stop verifying either way,
 // because IsRevoked walks the chain; CascadeChildren additionally walks the
 // delegation tree via a recursive CTE and inserts a revocation row for every
 // descendant in one transaction, so the audit trail names each of them.
@@ -317,7 +317,7 @@ SELECT EXISTS (
 // records are a forest (parent_id is nullable, no cycles by construction
 // because the FK is set NULL on parent delete), but a depth limit is
 // kept as a defensive guard against pathological dataset corruption.
-func (s *Store) Revoke(ctx context.Context, args capability.RevokeRequest) error {
+func (s *Store) Revoke(ctx context.Context, args limes.RevokeRequest) error {
 	if args.ID == uuid.Nil {
 		return ErrNotFound // no capability has the nil id
 	}
@@ -381,7 +381,7 @@ SELECT count(*) FROM target;
 	return nil
 }
 
-// PurgeExpired implements capability.Store. Drops revocation rows — of
+// PurgeExpired implements limes.Store. Drops revocation rows — of
 // capabilities and of Biscuit copies — whose underlying capability has been
 // expired for at least the supplied grace; keeps the denylists bounded over
 // time. Returns the rows dropped from both.
@@ -415,19 +415,19 @@ WHERE capability_id IN (
 	return tag.RowsAffected() + copyTag.RowsAffected(), nil
 }
 
-// ListByPrincipal implements capability.Store. Cursor is the last seen
+// ListByPrincipal implements limes.Store. Cursor is the last seen
 // id encoded as a hex string; a follow-up page seeks past it. Page size
 // is bounded by Limit (default 50, max 500).
-func (s *Store) ListByPrincipal(ctx context.Context, args capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
+func (s *Store) ListByPrincipal(ctx context.Context, args limes.ListByPrincipalRequest) ([]limes.Capability, string, error) {
 	if err := args.Validate(); err != nil {
 		return nil, "", err
 	}
 	if args.Cursor != "" {
 		if _, err := uuid.Parse(args.Cursor); err != nil {
-			return nil, "", fmt.Errorf("%w: capability/postgres: cursor %q", capability.ErrInvalidRequest, args.Cursor)
+			return nil, "", fmt.Errorf("%w: capability/postgres: cursor %q", limes.ErrInvalidRequest, args.Cursor)
 		}
 	}
-	limit := capability.PageLimit(args.Limit)
+	limit := limes.PageLimit(args.Limit)
 
 	// Build clauses incrementally so the query plan stays readable.
 	whereExtra := ""
@@ -462,7 +462,7 @@ LIMIT  $%d;
 	}
 	defer rows.Close()
 
-	out := make([]capability.Capability, 0, limit)
+	out := make([]limes.Capability, 0, limit)
 	for rows.Next() {
 		c, err := scanRow(rows)
 		if err != nil {
@@ -491,7 +491,7 @@ type scanner interface {
 	Scan(dest ...any) error
 }
 
-func scanRow(r scanner) (*capability.Capability, error) {
+func scanRow(r scanner) (*limes.Capability, error) {
 	var (
 		id, tenantID          uuid.UUID
 		issuer, kind, subject string
@@ -516,7 +516,7 @@ func scanRow(r scanner) (*capability.Capability, error) {
 		return nil, fmt.Errorf("capability/postgres: scan: %w", err)
 	}
 
-	var principal capability.Principal
+	var principal limes.Principal
 	if err := json.Unmarshal(principalRaw, &principal); err != nil {
 		return nil, fmt.Errorf("capability/postgres: parse principal: %w", err)
 	}
@@ -526,18 +526,18 @@ func scanRow(r scanner) (*capability.Capability, error) {
 		principal.TenantID = tenantID
 	}
 	if principal.Type == "" {
-		principal.Type = capability.PrincipalType(kind)
+		principal.Type = limes.PrincipalType(kind)
 	}
 	if principal.Subject == "" {
 		principal.Subject = subject
 	}
 
-	var cav capability.Caveats
+	var cav limes.Caveats
 	if err := json.Unmarshal(caveats, &cav); err != nil {
 		return nil, fmt.Errorf("capability/postgres: parse caveats: %w", err)
 	}
 
-	out := &capability.Capability{
+	out := &limes.Capability{
 		ID:              id,
 		Issuer:          issuer,
 		Subject:         principal,
@@ -561,4 +561,4 @@ func scanRow(r scanner) (*capability.Capability, error) {
 // not part of the module's contract (FR-015) — so drift between it and the
 // published interface must fail the build here rather than surface as a
 // runtime error on an admin RPC.
-var _ capability.Store = (*Store)(nil)
+var _ limes.Store = (*Store)(nil)

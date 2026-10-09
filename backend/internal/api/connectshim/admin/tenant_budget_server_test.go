@@ -13,40 +13,40 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
-	"github.com/oleg-tkachuk/paladin/capability"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
-// fakeUsageStore is a minimal in-memory capability.TenantBudgets — the
+// fakeUsageStore is a minimal in-memory limes.TenantBudgets — the
 // only part of the usage store TenantBudgetServer depends on.
 type fakeUsageStore struct {
-	budgets map[uuid.UUID]capability.TenantBudget
+	budgets map[uuid.UUID]limes.TenantBudget
 	getErr  error
 	// lastSet is the last SetTenantBudget's arguments.
-	lastSet capability.SetTenantBudgetRequest
+	lastSet limes.SetTenantBudgetRequest
 	// lastList is the last ListTenantBudgets' arguments; listNext and
 	// listErr are what it answers.
-	lastList capability.ListTenantBudgetsRequest
+	lastList limes.ListTenantBudgetsRequest
 	listNext string
 	listErr  error
 }
 
-func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (capability.TenantBudget, error) {
+func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (limes.TenantBudget, error) {
 	if f.getErr != nil {
-		return capability.TenantBudget{}, f.getErr
+		return limes.TenantBudget{}, f.getErr
 	}
 	tb, ok := f.budgets[id]
 	if !ok {
-		return capability.TenantBudget{}, capability.ErrTenantBudgetNotFound
+		return limes.TenantBudget{}, limes.ErrTenantBudgetNotFound
 	}
 	return tb, nil
 }
 
-func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetTenantBudgetRequest) (capability.TenantBudget, error) {
+func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args limes.SetTenantBudgetRequest) (limes.TenantBudget, error) {
 	f.lastSet = args
 	if f.budgets == nil {
-		f.budgets = map[uuid.UUID]capability.TenantBudget{}
+		f.budgets = map[uuid.UUID]limes.TenantBudget{}
 	}
 	// Mirror the store's OCC contract, or the handler test would pass against
 	// a fake that accepts writes production refuses.
@@ -56,16 +56,16 @@ func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetT
 		want = prev.ResourceVersion
 	}
 	if args.ExpectedVersion != want {
-		return capability.TenantBudget{}, capability.ErrTenantBudgetVersionMismatch
+		return limes.TenantBudget{}, limes.ErrTenantBudgetVersionMismatch
 	}
 	unit := args.UnitCode
 	if unit == "" {
 		unit = f.budgets[args.TenantID].UnitCode
 	}
 	if unit == "" {
-		unit = capability.DefaultUnitCode
+		unit = limes.DefaultUnitCode
 	}
-	tb := capability.TenantBudget{
+	tb := limes.TenantBudget{
 		TenantID:        args.TenantID,
 		MaxBudgetAmount: args.MaxBudgetAmount,
 		UnitCode:        unit,
@@ -81,7 +81,7 @@ func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args capability.SetT
 	return tb, nil
 }
 
-func (f *fakeUsageStore) ListTenantBudgets(_ context.Context, req capability.ListTenantBudgetsRequest) ([]capability.TenantBudgetSummary, string, error) {
+func (f *fakeUsageStore) ListTenantBudgets(_ context.Context, req limes.ListTenantBudgetsRequest) ([]limes.TenantBudgetSummary, string, error) {
 	f.lastList = req
 	return nil, f.listNext, f.listErr
 }
@@ -105,7 +105,7 @@ func TestTenantBudgetServer_Summarize_Pages(t *testing.T) {
 
 // A page token the store cannot read is the caller's to fix.
 func TestTenantBudgetServer_Summarize_BadPageToken(t *testing.T) {
-	store := &fakeUsageStore{listErr: fmt.Errorf("%w: cursor", capability.ErrInvalidRequest)}
+	store := &fakeUsageStore{listErr: fmt.Errorf("%w: cursor", limes.ErrInvalidRequest)}
 	_, err := NewTenantBudgetServer(store).Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{
 		PageToken: "garbage",
 	})
@@ -142,7 +142,7 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got, want := setRes.GetBudget().GetMaxBudget(), (&money.Money{CurrencyCode: capability.DefaultUnitCode, Units: 100}); !proto.Equal(got, want) {
+	if got, want := setRes.GetBudget().GetMaxBudget(), (&money.Money{CurrencyCode: limes.DefaultUnitCode, Units: 100}); !proto.Equal(got, want) {
 		t.Errorf("max_budget: got %v, want %v", got, want)
 	}
 

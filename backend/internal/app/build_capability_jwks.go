@@ -4,7 +4,7 @@ import (
 	"crypto/ed25519"
 	"net/http"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 // JWKSHandler returns an http.Handler that serves the supplied public
@@ -25,7 +25,7 @@ func JWKSHandler(publicKeys map[string]ed25519.PublicKey) http.Handler {
 	// Marshal once at construction time. Rotation pushes a new map
 	// pointer to a fresh handler so we never lock per-request — when
 	// rotation lands it'll wrap this in an atomic.Value swap.
-	body, err := capability.MarshalJWKS(publicKeys)
+	body, err := limes.MarshalJWKS(publicKeys)
 	if err != nil {
 		// At construction this only fails if the map holds a non-Ed25519
 		// key (which the bundle constructor never produces). Panicking

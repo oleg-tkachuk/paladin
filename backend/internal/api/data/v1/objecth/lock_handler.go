@@ -9,11 +9,11 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // Object Lock (ADR-0013): write-once-read-many retention on an object
@@ -242,7 +242,7 @@ func (h *LockHandler) resolve(ctx context.Context, collection, objectID string, 
 	if err != nil {
 		return out, MapResolveErr(err)
 	}
-	if err := auth.AssertCapabilityOp(ctx, capability.OpManage, ""); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpManage, ""); err != nil {
 		return out, err
 	}
 	if err := h.authorizeLock(ctx, principal, tenantID, obj, meta, action); err != nil {

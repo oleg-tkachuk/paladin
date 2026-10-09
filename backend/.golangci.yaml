@@ -83,10 +83,9 @@ linters:
         - fmt.Fprint
         - (io.Closer).Close
     gomoddirectives:
-      # The capability module is a NESTED module in THIS repository (repo-root
-      # capability/), consumed via a relative replace. It is a permanent
-      # internal library — not headed for a separate repo (settled: it stays
-      # in-tree) — so the replace is permanent too, not a stopgap until a tag.
+      # The Go SDK is a NESTED module in THIS repository (repo-root sdk/go/),
+      # consumed via a relative replace so the server and its SDK move in one
+      # commit; the replace is permanent, not a stopgap until a tag.
       #
       # The rule exists to stop a developer's machine-local replace reaching
       # main — a path outside the repo that breaks every other checkout. This

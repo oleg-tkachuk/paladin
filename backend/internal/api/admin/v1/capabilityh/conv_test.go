@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
@@ -23,14 +23,14 @@ var convTenant = uuid.MustParse("11111111-1111-1111-1111-111111111111")
 // ─── protoToPrincipalKind ──────────────────────────────────────────────────
 
 func TestProtoToPrincipalKind(t *testing.T) {
-	cases := map[adminv1.PrincipalKind]capability.PrincipalType{
-		adminv1.PrincipalKind_PRINCIPAL_KIND_USER:    capability.PrincipalUser,
-		adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT:   capability.PrincipalAgent,
-		adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE: capability.PrincipalService,
+	cases := map[adminv1.PrincipalKind]limes.PrincipalType{
+		adminv1.PrincipalKind_PRINCIPAL_KIND_USER:    limes.PrincipalUser,
+		adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT:   limes.PrincipalAgent,
+		adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE: limes.PrincipalService,
 		// Unknown must map to the empty type so downstream validation rejects
 		// it, rather than silently defaulting to a real principal kind.
-		adminv1.PrincipalKind_PRINCIPAL_KIND_UNSPECIFIED: capability.PrincipalType(""),
-		adminv1.PrincipalKind(99):                        capability.PrincipalType(""),
+		adminv1.PrincipalKind_PRINCIPAL_KIND_UNSPECIFIED: limes.PrincipalType(""),
+		adminv1.PrincipalKind(99):                        limes.PrincipalType(""),
 	}
 	for in, want := range cases {
 		if got := protoToPrincipalKind(in); got != want {
@@ -56,7 +56,7 @@ func TestProtoToPrincipalUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("protoToPrincipal: %v", err)
 	}
-	if got.Type != capability.PrincipalUser || got.TenantID != convTenant || got.Subject != "alice" {
+	if got.Type != limes.PrincipalUser || got.TenantID != convTenant || got.Subject != "alice" {
 		t.Errorf("principal = %+v", got)
 	}
 	// Agent detail must stay nil for a non-agent principal.
@@ -174,8 +174,8 @@ func TestProtoToCaveatsNil(t *testing.T) {
 // default rather than minting a capability with a blank currency.
 func TestProtoToCaveatsDefaultsUnitCode(t *testing.T) {
 	got := mustCaveats(t, &adminv1.CapabilityCaveats{})
-	if got.UnitCode != capability.DefaultUnitCode {
-		t.Errorf("UnitCode = %q, want the %q default", got.UnitCode, capability.DefaultUnitCode)
+	if got.UnitCode != limes.DefaultUnitCode {
+		t.Errorf("UnitCode = %q, want the %q default", got.UnitCode, limes.DefaultUnitCode)
 	}
 }
 
@@ -204,7 +204,7 @@ func TestProtoToCaveatsProjectsEveryField(t *testing.T) {
 	if len(got.ResourceURIs) != 1 || got.ResourceURIs[0] != "paladin://x" {
 		t.Errorf("ResourceURIs = %v", got.ResourceURIs)
 	}
-	if got.MaxRequests != 10 || got.MaxBudgetAmount != 250*capability.NanosPerUnit || got.UnitCode != "UAH" {
+	if got.MaxRequests != 10 || got.MaxBudgetAmount != 250*limes.NanosPerUnit || got.UnitCode != "UAH" {
 		t.Errorf("limits = %d / %v %s", got.MaxRequests, got.MaxBudgetAmount, got.UnitCode)
 	}
 	// These three are the security-relevant caveats; a dropped flag widens the
@@ -215,12 +215,12 @@ func TestProtoToCaveatsProjectsEveryField(t *testing.T) {
 	if len(got.SourceIPCIDR) != 1 || got.SourceIPCIDR[0] != "10.0.0.0/8" {
 		t.Errorf("SourceIPCIDR = %v", got.SourceIPCIDR)
 	}
-	if len(got.Ops) != 2 || got.Ops[0] != capability.Op("read") || got.Ops[1] != capability.Op("write") {
+	if len(got.Ops) != 2 || got.Ops[0] != limes.Op("read") || got.Ops[1] != limes.Op("write") {
 		t.Errorf("Ops = %v", got.Ops)
 	}
 }
 
-func mustCaveats(t *testing.T, c *adminv1.CapabilityCaveats) capability.Caveats {
+func mustCaveats(t *testing.T, c *adminv1.CapabilityCaveats) limes.Caveats {
 	t.Helper()
 	got, err := protoToCaveats(c)
 	if err != nil {
@@ -232,7 +232,7 @@ func mustCaveats(t *testing.T, c *adminv1.CapabilityCaveats) capability.Caveats 
 // The budget arrives as Money, exact to the nano; absent is no budget.
 func TestProtoToCaveatsBudgetMoney(t *testing.T) {
 	got := mustCaveats(t, &adminv1.CapabilityCaveats{MaxBudget: &money.Money{CurrencyCode: "USD", Units: 19, Nanos: 990_000_000}})
-	if got.MaxBudgetAmount != capability.MustParseAmount("19.99") {
+	if got.MaxBudgetAmount != limes.MustParseAmount("19.99") {
 		t.Errorf("budget = %v, want 19.99", got.MaxBudgetAmount)
 	}
 	if got := mustCaveats(t, &adminv1.CapabilityCaveats{}); got.MaxBudgetAmount != 0 {
@@ -264,7 +264,7 @@ func TestProtoToCaveatsRefusesTheRemovedDouble(t *testing.T) {
 }
 
 func TestCaveatsToProtoBudgetMoney(t *testing.T) {
-	out := caveatsToProto(capability.Caveats{MaxBudgetAmount: capability.MustParseAmount("0.3"), UnitCode: "EUR"})
+	out := caveatsToProto(limes.Caveats{MaxBudgetAmount: limes.MustParseAmount("0.3"), UnitCode: "EUR"})
 	if want := (&money.Money{CurrencyCode: "EUR", Nanos: 300_000_000}); !proto.Equal(out.GetMaxBudget(), want) {
 		t.Errorf("budget = %v, want %v", out.GetMaxBudget(), want)
 	}
@@ -280,12 +280,12 @@ func TestProtoToCaveatsNoOps(t *testing.T) {
 // ─── reverse converters ────────────────────────────────────────────────────
 
 func TestPrincipalKindToProto(t *testing.T) {
-	cases := map[capability.PrincipalType]adminv1.PrincipalKind{
-		capability.PrincipalUser:          adminv1.PrincipalKind_PRINCIPAL_KIND_USER,
-		capability.PrincipalAgent:         adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT,
-		capability.PrincipalService:       adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE,
-		capability.PrincipalType(""):      adminv1.PrincipalKind_PRINCIPAL_KIND_UNSPECIFIED,
-		capability.PrincipalType("weird"): adminv1.PrincipalKind_PRINCIPAL_KIND_UNSPECIFIED,
+	cases := map[limes.PrincipalType]adminv1.PrincipalKind{
+		limes.PrincipalUser:          adminv1.PrincipalKind_PRINCIPAL_KIND_USER,
+		limes.PrincipalAgent:         adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT,
+		limes.PrincipalService:       adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE,
+		limes.PrincipalType(""):      adminv1.PrincipalKind_PRINCIPAL_KIND_UNSPECIFIED,
+		limes.PrincipalType("weird"): adminv1.PrincipalKind_PRINCIPAL_KIND_UNSPECIFIED,
 	}
 	for in, want := range cases {
 		if got := principalKindToProto(in); got != want {
@@ -297,8 +297,8 @@ func TestPrincipalKindToProto(t *testing.T) {
 // The kind mapping is used in both directions on the issue/list path, so a
 // round trip must be lossless for every real kind.
 func TestPrincipalKindRoundTrip(t *testing.T) {
-	for _, k := range []capability.PrincipalType{
-		capability.PrincipalUser, capability.PrincipalAgent, capability.PrincipalService,
+	for _, k := range []limes.PrincipalType{
+		limes.PrincipalUser, limes.PrincipalAgent, limes.PrincipalService,
 	} {
 		if got := protoToPrincipalKind(principalKindToProto(k)); got != k {
 			t.Errorf("round trip of %q gave %q", k, got)
@@ -307,8 +307,8 @@ func TestPrincipalKindRoundTrip(t *testing.T) {
 }
 
 func TestPrincipalToProtoUser(t *testing.T) {
-	got := principalToProto(capability.Principal{
-		Type: capability.PrincipalUser, TenantID: convTenant, Subject: "alice",
+	got := principalToProto(limes.Principal{
+		Type: limes.PrincipalUser, TenantID: convTenant, Subject: "alice",
 	})
 	if got.GetKind() != adminv1.PrincipalKind_PRINCIPAL_KIND_USER {
 		t.Errorf("Kind = %v", got.GetKind())
@@ -324,9 +324,9 @@ func TestPrincipalToProtoUser(t *testing.T) {
 
 func TestPrincipalToProtoAgent(t *testing.T) {
 	runID, parentID := uuid.New(), uuid.New()
-	got := principalToProto(capability.Principal{
-		Type: capability.PrincipalAgent, TenantID: convTenant, Subject: "agent-1",
-		Agent: &capability.AgentPrincipal{
+	got := principalToProto(limes.Principal{
+		Type: limes.PrincipalAgent, TenantID: convTenant, Subject: "agent-1",
+		Agent: &limes.AgentPrincipal{
 			AgentType: "claude-code", AgentVersion: "1.2.3", Model: "opus", MCPClient: "cli",
 			RunID: runID, ParentAgentID: parentID,
 		},
@@ -343,9 +343,9 @@ func TestPrincipalToProtoAgent(t *testing.T) {
 // A zero lineage id must be omitted rather than serialised as the all-zero
 // UUID, which a client would read as a real parent.
 func TestPrincipalToProtoOmitsZeroLineage(t *testing.T) {
-	got := principalToProto(capability.Principal{
-		Type:  capability.PrincipalAgent,
-		Agent: &capability.AgentPrincipal{AgentType: "x"},
+	got := principalToProto(limes.Principal{
+		Type:  limes.PrincipalAgent,
+		Agent: &limes.AgentPrincipal{AgentType: "x"},
 	})
 	if got.GetRunId() != "" || got.GetParentAgentId() != "" {
 		t.Errorf("zero lineage must be omitted, got %q / %q", got.GetRunId(), got.GetParentAgentId())
@@ -355,9 +355,9 @@ func TestPrincipalToProtoOmitsZeroLineage(t *testing.T) {
 // A full round trip through both directions must preserve the agent identity.
 func TestPrincipalRoundTrip(t *testing.T) {
 	runID := uuid.New()
-	in := capability.Principal{
-		Type: capability.PrincipalAgent, TenantID: convTenant, Subject: "agent-1",
-		Agent: &capability.AgentPrincipal{AgentType: "claude-code", RunID: runID},
+	in := limes.Principal{
+		Type: limes.PrincipalAgent, TenantID: convTenant, Subject: "agent-1",
+		Agent: &limes.AgentPrincipal{AgentType: "claude-code", RunID: runID},
 	}
 
 	got, err := protoToPrincipal(principalToProto(in))

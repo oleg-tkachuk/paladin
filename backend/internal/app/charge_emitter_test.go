@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // fakeEventDispatcher records every Dispatch/DispatchTx call so the
@@ -56,7 +56,7 @@ func TestChargeEmitter_EmitsChargedEvent(t *testing.T) {
 
 	tenant := uuid.New().String()
 	cap := uuid.New().String()
-	if err := e.EmitChargedTx(context.Background(), nil, tenant, cap, "get", "agent-1", capability.MustParseAmount("1.5"), "USD"); err != nil {
+	if err := e.EmitChargedTx(context.Background(), nil, tenant, cap, "get", "agent-1", limes.MustParseAmount("1.5"), "USD"); err != nil {
 		t.Fatalf("EmitChargedTx: %v", err)
 	}
 
@@ -106,7 +106,7 @@ func TestChargeEmitter_DropsTenantless(t *testing.T) {
 	for _, tenant := range []string{"", uuid.Nil.String()} {
 		fake := &fakeEventDispatcher{}
 		e := &chargeEmitter{dispatcher: fake, log: zap.NewNop()}
-		if err := e.EmitChargedTx(context.Background(), nil, tenant, uuid.New().String(), "get", "a", capability.NanosPerUnit, "USD"); err != nil {
+		if err := e.EmitChargedTx(context.Background(), nil, tenant, uuid.New().String(), "get", "a", limes.NanosPerUnit, "USD"); err != nil {
 			t.Fatalf("tenant %q: EmitChargedTx: %v", tenant, err)
 		}
 		if len(fake.calls) != 0 {
@@ -121,7 +121,7 @@ func TestChargeEmitter_DropsTenantless(t *testing.T) {
 func TestChargeEmitter_PropagatesDispatchError(t *testing.T) {
 	fake := &fakeEventDispatcher{err: errors.New("outbox down")}
 	e := &chargeEmitter{dispatcher: fake, log: zap.NewNop()}
-	err := e.EmitChargedTx(context.Background(), nil, uuid.New().String(), uuid.New().String(), "get", "a", capability.NanosPerUnit, "USD")
+	err := e.EmitChargedTx(context.Background(), nil, uuid.New().String(), uuid.New().String(), "get", "a", limes.NanosPerUnit, "USD")
 	if err == nil {
 		t.Fatal("EmitChargedTx returned nil, want the dispatch error to propagate")
 	}

@@ -7,7 +7,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 // The auto-charge amount reads exactly: 0.35 is 350 000 000 nanos, with no
@@ -28,7 +28,7 @@ func TestChargePerRequestAmountIsExact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := cfg.Capability.ChargePerRequestAmount, capability.MustParseAmount("0.35"); got != want {
+	if got, want := cfg.Capability.ChargePerRequestAmount, limes.MustParseAmount("0.35"); got != want {
 		t.Errorf("charge_per_request_amount = %s, want %s", got, want)
 	}
 	if _, err := load("-1"); err == nil {

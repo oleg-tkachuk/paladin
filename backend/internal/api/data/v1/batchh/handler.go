@@ -14,13 +14,13 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 type BatchDeleteArgs struct {
@@ -113,7 +113,7 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
 			"batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize)
 	}
-	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, capability.OpDelete); err != nil {
+	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, limes.OpDelete); err != nil {
 		return uuid.Nil, err
 	}
 	// Collection-level authorization, and the ONLY authorization this batch
@@ -178,7 +178,7 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
 			"batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize)
 	}
-	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, capability.OpTag); err != nil {
+	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, limes.OpTag); err != nil {
 		return uuid.Nil, err
 	}
 	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionUpdateObject); err != nil {
@@ -207,7 +207,7 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 	}
 	// Restoring a soft-deleted object is a write to the lifecycle —
 	// the operator authority required mirrors the put path.
-	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, capability.OpPut); err != nil {
+	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, limes.OpPut); err != nil {
 		return uuid.Nil, err
 	}
 	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionRestoreObject); err != nil {
@@ -242,14 +242,14 @@ func (h *Handler) batchObjects(ctx context.Context, tenantID uuid.UUID, collecti
 // the capability is refused as it would be any unbound operation. Missing ids
 // are otherwise the worker's to report, per object.
 func errNothingInScope(collection string) error {
-	return rpcerr.New(connect.CodePermissionDenied, fmt.Errorf("%w: none of object_ids is an object of collection %q", capability.ErrResourceNotAllowed, collection))
+	return rpcerr.New(connect.CodePermissionDenied, fmt.Errorf("%w: none of object_ids is an object of collection %q", limes.ErrResourceNotAllowed, collection))
 }
 
 // assertOnObjects checks the capability on ctx, if any, for op over a batch.
 // A capability that is not resource-restricted needs only the op, and nothing
 // is read. A restricted one is checked against each object the batch will act
 // on; the batch names them by id, so they are read to learn their URIs.
-func (h *Handler) assertOnObjects(ctx context.Context, tenantID uuid.UUID, collection string, ids []uuid.UUID, op capability.Op) error {
+func (h *Handler) assertOnObjects(ctx context.Context, tenantID uuid.UUID, collection string, ids []uuid.UUID, op limes.Op) error {
 	cap, ok := auth.CapabilityFromContext(ctx)
 	if !ok || !cap.Caveats.RestrictsResources() {
 		return auth.AssertCapabilityOp(ctx, op, "")
@@ -287,14 +287,14 @@ func (h *Handler) assertCopy(ctx context.Context, tenantID uuid.UUID, args Batch
 		if cap.Caveats.RestrictsResources() {
 			return errNothingInScope(args.SrcCollection)
 		}
-		if err := auth.AssertCapabilityOp(ctx, capability.OpGet, ""); err != nil {
+		if err := auth.AssertCapabilityOp(ctx, limes.OpGet, ""); err != nil {
 			return err
 		}
-		return auth.AssertCapabilityOp(ctx, capability.OpPut, "")
+		return auth.AssertCapabilityOp(ctx, limes.OpPut, "")
 	}
 	for _, o := range objs {
 		src := objecth.CapabilityObjectURI(tenantID, o.Collection, o.Key)
-		if err := auth.AssertCapabilityOpOnObject(ctx, capability.OpGet, src, len(o.Taint) > 0); err != nil {
+		if err := auth.AssertCapabilityOpOnObject(ctx, limes.OpGet, src, len(o.Taint) > 0); err != nil {
 			return err
 		}
 	}
@@ -302,7 +302,7 @@ func (h *Handler) assertCopy(ctx context.Context, tenantID uuid.UUID, args Batch
 	for _, o := range objs {
 		// The worker writes each copy at KeyPrefix + the source key.
 		dst := objecth.CapabilityObjectURI(tenantID, args.DstCollection, args.KeyPrefix+o.Key)
-		if err := auth.AssertCapabilityOpOnObject(ctx, capability.OpPut, dst, false); err != nil {
+		if err := auth.AssertCapabilityOpOnObject(ctx, limes.OpPut, dst, false); err != nil {
 			return err
 		}
 	}

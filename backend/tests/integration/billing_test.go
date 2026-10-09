@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	connectshim "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
@@ -34,7 +35,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
-	"github.com/oleg-tkachuk/paladin/capability"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
@@ -104,13 +104,13 @@ func (f *billingFixture) seedCapability(t *testing.T, tenant uuid.UUID, subject 
 // already have created the accumulator row, in which case this is an update
 // and 0 would be refused. GetTenantBudget on a missing row yields the zero
 // value, whose version is 0 — the create case, which is what we want.
-func (f *billingFixture) seedBudget(t *testing.T, tenant uuid.UUID, max capability.Nanos, unit string) {
+func (f *billingFixture) seedBudget(t *testing.T, tenant uuid.UUID, max limes.Nanos, unit string) {
 	t.Helper()
 	cur, err := f.store.GetTenantBudget(context.Background(), tenant)
-	if err != nil && !errors.Is(err, capability.ErrTenantBudgetNotFound) {
+	if err != nil && !errors.Is(err, limes.ErrTenantBudgetNotFound) {
 		t.Fatalf("read budget: %v", err)
 	}
-	if _, err := f.store.SetTenantBudget(context.Background(), capability.SetTenantBudgetRequest{
+	if _, err := f.store.SetTenantBudget(context.Background(), limes.SetTenantBudgetRequest{
 		TenantID:        tenant,
 		MaxBudgetAmount: max,
 		UnitCode:        unit,
@@ -122,9 +122,9 @@ func (f *billingFixture) seedBudget(t *testing.T, tenant uuid.UUID, max capabili
 }
 
 // charge runs UsageStore.Charge (the production write path).
-func (f *billingFixture) charge(t *testing.T, capID uuid.UUID, amount capability.Nanos, unit, op, actor string, tenant uuid.UUID) {
+func (f *billingFixture) charge(t *testing.T, capID uuid.UUID, amount limes.Nanos, unit, op, actor string, tenant uuid.UUID) {
 	t.Helper()
-	if _, err := f.store.Charge(context.Background(), capability.ChargeRequest{CapabilityID: capID, TenantID: tenant, Amount: amount, MaxBudget: 0, UnitCode: unit, Op: op, Actor: actor}, nil); err != nil {
+	if _, err := f.store.Charge(context.Background(), limes.ChargeRequest{CapabilityID: capID, TenantID: tenant, Amount: amount, MaxBudget: 0, UnitCode: unit, Op: op, Actor: actor}, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 }
@@ -135,7 +135,7 @@ func (f *billingFixture) charge(t *testing.T, capID uuid.UUID, amount capability
 // tenant_budgets counters — tests that mix this with summary asserts
 // should be reading totals from the charges ledger only (which the
 // summary handler does).
-func (f *billingFixture) chargeAt(t *testing.T, capID uuid.UUID, tenant uuid.UUID, when time.Time, amount capability.Nanos, unit, op, actor string) {
+func (f *billingFixture) chargeAt(t *testing.T, capID uuid.UUID, tenant uuid.UUID, when time.Time, amount limes.Nanos, unit, op, actor string) {
 	t.Helper()
 	if _, err := f.h.PoolMigrate.Exec(context.Background(),
 		`INSERT INTO charges (id, tenant_id, tenant_slug, capability_id,
@@ -175,16 +175,16 @@ func TestBilling_ChargeWritesLedgerRow(t *testing.T) {
 	f := setupBilling(t)
 
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "bil-write")
-	f.seedBudget(t, tenant, capability.MustParseAmount("100"), "USD")
+	f.seedBudget(t, tenant, limes.MustParseAmount("100"), "USD")
 	capID := f.seedCapability(t, tenant, "agent-1")
-	f.charge(t, capID, capability.MustParseAmount("2.50"), "USD", "presign.put", "agent-1", tenant)
+	f.charge(t, capID, limes.MustParseAmount("2.50"), "USD", "presign.put", "agent-1", tenant)
 
 	// capability_usage running total
 	usage, err := f.store.GetUsage(context.Background(), capID)
 	if err != nil {
 		t.Fatalf("get usage: %v", err)
 	}
-	if usage.SpentAmount != capability.MustParseAmount("2.50") {
+	if usage.SpentAmount != limes.MustParseAmount("2.50") {
 		t.Errorf("cap spent = %v, want 2.50", usage.SpentAmount)
 	}
 	if usage.UnitCode != "USD" {
@@ -196,7 +196,7 @@ func TestBilling_ChargeWritesLedgerRow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get tenant: %v", err)
 	}
-	if tb.SpentAmount != capability.MustParseAmount("2.50") {
+	if tb.SpentAmount != limes.MustParseAmount("2.50") {
 		t.Errorf("tenant spent = %v, want 2.50", tb.SpentAmount)
 	}
 
@@ -220,7 +220,7 @@ func TestBilling_ChargeWritesLedgerRow(t *testing.T) {
 	if count != 1 {
 		t.Errorf("ledger rows = %d, want 1", count)
 	}
-	if got, err := pgmoney.NanosFromNumeric(amount); err != nil || got != capability.MustParseAmount("2.50") {
+	if got, err := pgmoney.NanosFromNumeric(amount); err != nil || got != limes.MustParseAmount("2.50") {
 		t.Errorf("ledger amount = %v (%v), want 2.50", got, err)
 	}
 	if unitCode != "USD" || op != "presign.put" || actor != "agent-1" {
@@ -235,26 +235,26 @@ func TestBilling_GetTenantSummary_AggregatesCorrectly(t *testing.T) {
 	f := setupBilling(t)
 
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "bil-agg")
-	f.seedBudget(t, tenant, capability.MustParseAmount("500"), "USD")
+	f.seedBudget(t, tenant, limes.MustParseAmount("500"), "USD")
 	capA := f.seedCapability(t, tenant, "agent-A")
 	capB := f.seedCapability(t, tenant, "agent-B")
 	capC := f.seedCapability(t, tenant, "agent-C")
 
 	for i := 0; i < 10; i++ {
-		f.charge(t, capA, capability.MustParseAmount("1.0"), "USD", "get", "agent-A", tenant)
+		f.charge(t, capA, limes.MustParseAmount("1.0"), "USD", "get", "agent-A", tenant)
 	}
 	for i := 0; i < 4; i++ {
-		f.charge(t, capB, capability.MustParseAmount("0.5"), "USD", "put", "agent-B", tenant)
+		f.charge(t, capB, limes.MustParseAmount("0.5"), "USD", "put", "agent-B", tenant)
 	}
 	for i := 0; i < 8; i++ {
-		f.charge(t, capC, capability.MustParseAmount("0.25"), "USD", "get", "agent-C", tenant)
+		f.charge(t, capC, limes.MustParseAmount("0.25"), "USD", "get", "agent-C", tenant)
 	}
 
 	end := time.Now().UTC().Add(time.Hour)
 	start := end.Add(-30 * 24 * time.Hour)
 	s := f.summary(t, tenant, start, end)
 
-	if got, want := s.TotalAmount, capability.MustParseAmount("14.0"); got != want {
+	if got, want := s.TotalAmount, limes.MustParseAmount("14.0"); got != want {
 		t.Errorf("total = %v, want 14.0", got)
 	}
 	if s.ChargeCount != 22 {
@@ -263,7 +263,7 @@ func TestBilling_GetTenantSummary_AggregatesCorrectly(t *testing.T) {
 	if s.UnitCode != "USD" {
 		t.Errorf("unit = %q, want USD", s.UnitCode)
 	}
-	if got, want := s.MaxBudgetAmount, capability.MustParseAmount("500"); got != want {
+	if got, want := s.MaxBudgetAmount, limes.MustParseAmount("500"); got != want {
 		t.Errorf("max budget = %v, want 500", got)
 	}
 
@@ -274,18 +274,18 @@ func TestBilling_GetTenantSummary_AggregatesCorrectly(t *testing.T) {
 	if s.TopCapabilities[0].Label != capA.String() {
 		t.Errorf("top cap[0] = %q, want %q", s.TopCapabilities[0].Label, capA)
 	}
-	if got := s.TopCapabilities[0].Amount; got != capability.MustParseAmount("10.0") {
+	if got := s.TopCapabilities[0].Amount; got != limes.MustParseAmount("10.0") {
 		t.Errorf("top cap[0] amount = %v, want 10.0", got)
 	}
 	// caps[1] and caps[2] are B/C in either order; just check both appear.
-	tail := map[string]capability.Nanos{
+	tail := map[string]limes.Nanos{
 		s.TopCapabilities[1].Label: s.TopCapabilities[1].Amount,
 		s.TopCapabilities[2].Label: s.TopCapabilities[2].Amount,
 	}
-	if v, ok := tail[capB.String()]; !ok || v != capability.MustParseAmount("2.0") {
+	if v, ok := tail[capB.String()]; !ok || v != limes.MustParseAmount("2.0") {
 		t.Errorf("cap B missing or wrong amount in tail: %v", tail)
 	}
-	if v, ok := tail[capC.String()]; !ok || v != capability.MustParseAmount("2.0") {
+	if v, ok := tail[capC.String()]; !ok || v != limes.MustParseAmount("2.0") {
 		t.Errorf("cap C missing or wrong amount in tail: %v", tail)
 	}
 
@@ -304,13 +304,13 @@ func TestBilling_GetTenantSummary_AggregatesCorrectly(t *testing.T) {
 	if s.TopOps[0].Label != "get" || s.TopOps[0].ChargeCount != 18 {
 		t.Errorf("top op[0] = %+v, want {get, 18}", s.TopOps[0])
 	}
-	if got := s.TopOps[0].Amount; got != capability.MustParseAmount("12") {
+	if got := s.TopOps[0].Amount; got != limes.MustParseAmount("12") {
 		t.Errorf("top op[0] amount = %v, want 12", got)
 	}
 	if s.TopOps[1].Label != "put" || s.TopOps[1].ChargeCount != 4 {
 		t.Errorf("top op[1] = %+v, want {put, 4}", s.TopOps[1])
 	}
-	if got := s.TopOps[1].Amount; got != capability.MustParseAmount("2") {
+	if got := s.TopOps[1].Amount; got != limes.MustParseAmount("2") {
 		t.Errorf("top op[1] amount = %v, want 2", got)
 	}
 }
@@ -329,10 +329,10 @@ func TestBilling_GetTenantTimeSeries_BucketsByDay(t *testing.T) {
 	day1 := time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC)
 	day2 := time.Date(2026, 1, 6, 12, 0, 0, 0, time.UTC)
 	day3 := time.Date(2026, 1, 7, 12, 0, 0, 0, time.UTC)
-	f.chargeAt(t, cap, tenant, day1, capability.MustParseAmount("1.0"), "USD", "get", "agent")
-	f.chargeAt(t, cap, tenant, day1, capability.MustParseAmount("2.0"), "USD", "get", "agent") // day1 = 3.0
-	f.chargeAt(t, cap, tenant, day2, capability.MustParseAmount("5.0"), "USD", "put", "agent") // day2 = 5.0
-	f.chargeAt(t, cap, tenant, day3, capability.MustParseAmount("7.0"), "USD", "get", "agent") // day3 = 7.0
+	f.chargeAt(t, cap, tenant, day1, limes.MustParseAmount("1.0"), "USD", "get", "agent")
+	f.chargeAt(t, cap, tenant, day1, limes.MustParseAmount("2.0"), "USD", "get", "agent") // day1 = 3.0
+	f.chargeAt(t, cap, tenant, day2, limes.MustParseAmount("5.0"), "USD", "put", "agent") // day2 = 5.0
+	f.chargeAt(t, cap, tenant, day3, limes.MustParseAmount("7.0"), "USD", "get", "agent") // day3 = 7.0
 
 	start := day1.Add(-time.Hour)
 	end := day3.Add(2 * time.Hour)
@@ -343,12 +343,12 @@ func TestBilling_GetTenantTimeSeries_BucketsByDay(t *testing.T) {
 	}
 	wants := []struct {
 		start  time.Time
-		amount capability.Nanos
+		amount limes.Nanos
 		count  int64
 	}{
-		{time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), capability.MustParseAmount("3.0"), 2},
-		{time.Date(2026, 1, 6, 0, 0, 0, 0, time.UTC), capability.MustParseAmount("5.0"), 1},
-		{time.Date(2026, 1, 7, 0, 0, 0, 0, time.UTC), capability.MustParseAmount("7.0"), 1},
+		{time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), limes.MustParseAmount("3.0"), 2},
+		{time.Date(2026, 1, 6, 0, 0, 0, 0, time.UTC), limes.MustParseAmount("5.0"), 1},
+		{time.Date(2026, 1, 7, 0, 0, 0, 0, time.UTC), limes.MustParseAmount("7.0"), 1},
 	}
 	for i, w := range wants {
 		got := ts.Buckets[i]
@@ -391,13 +391,13 @@ func TestBilling_TenantIsolation(t *testing.T) {
 	tenantB := mustCreateTenant(t, f.h.PoolMigrate, "bil-iso-b")
 	capA := f.seedCapability(t, tenantA, "agent-a")
 	capB := f.seedCapability(t, tenantB, "agent-b")
-	f.charge(t, capA, capability.MustParseAmount("5.0"), "USD", "get", "agent-a", tenantA)
-	f.charge(t, capB, capability.MustParseAmount("99.0"), "USD", "put", "agent-b", tenantB)
+	f.charge(t, capA, limes.MustParseAmount("5.0"), "USD", "get", "agent-a", tenantA)
+	f.charge(t, capB, limes.MustParseAmount("99.0"), "USD", "put", "agent-b", tenantB)
 
 	end := time.Now().UTC().Add(time.Hour)
 	start := end.Add(-24 * time.Hour)
 	a := f.summary(t, tenantA, start, end)
-	if a.TotalAmount != capability.MustParseAmount("5.0") {
+	if a.TotalAmount != limes.MustParseAmount("5.0") {
 		t.Errorf("tenant A total = %v, want 5.0", a.TotalAmount)
 	}
 	if a.ChargeCount != 1 {
@@ -411,7 +411,7 @@ func TestBilling_EmptyPeriod_ReturnsZeros(t *testing.T) {
 	t.Parallel()
 	f := setupBilling(t)
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "bil-empty")
-	f.seedBudget(t, tenant, capability.MustParseAmount("50"), "USD")
+	f.seedBudget(t, tenant, limes.MustParseAmount("50"), "USD")
 
 	end := time.Now().UTC().Add(time.Hour)
 	start := end.Add(-24 * time.Hour)
@@ -426,7 +426,7 @@ func TestBilling_EmptyPeriod_ReturnsZeros(t *testing.T) {
 	if s.UnitCode != "USD" {
 		t.Errorf("unit = %q, want USD (from budget fallback)", s.UnitCode)
 	}
-	if got, want := s.MaxBudgetAmount, capability.MustParseAmount("50"); got != want {
+	if got, want := s.MaxBudgetAmount, limes.MustParseAmount("50"); got != want {
 		t.Errorf("max budget = %v, want 50", got)
 	}
 	if len(s.TopCapabilities) != 0 || len(s.TopActors) != 0 || len(s.TopOps) != 0 {
@@ -450,10 +450,10 @@ func TestBilling_MixedCurrencyTenant_DominantUnitWins(t *testing.T) {
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "bil-mixed")
 	cap := f.seedCapability(t, tenant, "agent")
 	for i := 0; i < 5; i++ {
-		f.chargeAt(t, cap, tenant, time.Now().UTC().Add(-time.Hour), capability.MustParseAmount("1.0"), "USD", "get", "agent")
+		f.chargeAt(t, cap, tenant, time.Now().UTC().Add(-time.Hour), limes.MustParseAmount("1.0"), "USD", "get", "agent")
 	}
 	for i := 0; i < 3; i++ {
-		f.chargeAt(t, cap, tenant, time.Now().UTC().Add(-time.Hour), capability.MustParseAmount("1.0"), "EUR", "get", "agent")
+		f.chargeAt(t, cap, tenant, time.Now().UTC().Add(-time.Hour), limes.MustParseAmount("1.0"), "EUR", "get", "agent")
 	}
 	end := time.Now().UTC().Add(time.Hour)
 	start := end.Add(-24 * time.Hour)
@@ -478,18 +478,18 @@ func TestBilling_PeriodFiltering_ExcludesOutsideRange(t *testing.T) {
 	periodEnd := time.Date(2026, 3, 31, 23, 59, 59, 0, time.UTC)
 
 	// inside (2)
-	f.chargeAt(t, cap, tenant, time.Date(2026, 3, 5, 12, 0, 0, 0, time.UTC), capability.MustParseAmount("7.0"), "USD", "get", "agent")
-	f.chargeAt(t, cap, tenant, time.Date(2026, 3, 20, 12, 0, 0, 0, time.UTC), capability.MustParseAmount("3.0"), "USD", "get", "agent")
+	f.chargeAt(t, cap, tenant, time.Date(2026, 3, 5, 12, 0, 0, 0, time.UTC), limes.MustParseAmount("7.0"), "USD", "get", "agent")
+	f.chargeAt(t, cap, tenant, time.Date(2026, 3, 20, 12, 0, 0, 0, time.UTC), limes.MustParseAmount("3.0"), "USD", "get", "agent")
 	// outside (3)
-	f.chargeAt(t, cap, tenant, time.Date(2026, 2, 28, 12, 0, 0, 0, time.UTC), capability.MustParseAmount("100.0"), "USD", "get", "agent")
-	f.chargeAt(t, cap, tenant, time.Date(2026, 4, 1, 0, 0, 1, 0, time.UTC), capability.MustParseAmount("100.0"), "USD", "get", "agent")
-	f.chargeAt(t, cap, tenant, time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC), capability.MustParseAmount("100.0"), "USD", "get", "agent")
+	f.chargeAt(t, cap, tenant, time.Date(2026, 2, 28, 12, 0, 0, 0, time.UTC), limes.MustParseAmount("100.0"), "USD", "get", "agent")
+	f.chargeAt(t, cap, tenant, time.Date(2026, 4, 1, 0, 0, 1, 0, time.UTC), limes.MustParseAmount("100.0"), "USD", "get", "agent")
+	f.chargeAt(t, cap, tenant, time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC), limes.MustParseAmount("100.0"), "USD", "get", "agent")
 
 	s := f.summary(t, tenant, periodStart, periodEnd)
 	if s.ChargeCount != 2 {
 		t.Errorf("count = %d, want 2", s.ChargeCount)
 	}
-	if got, want := s.TotalAmount, capability.MustParseAmount("10.0"); got != want {
+	if got, want := s.TotalAmount, limes.MustParseAmount("10.0"); got != want {
 		t.Errorf("total = %v, want 10.0", got)
 	}
 }
@@ -502,12 +502,12 @@ func TestBilling_MoneyIsExact(t *testing.T) {
 	t.Parallel()
 	f := setupBilling(t)
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "bil-money")
-	f.seedBudget(t, tenant, capability.MustParseAmount("19.99"), "USD")
+	f.seedBudget(t, tenant, limes.MustParseAmount("19.99"), "USD")
 	capID := f.seedCapability(t, tenant, "agent-M")
 	for range 3 {
-		f.charge(t, capID, capability.MustParseAmount("0.1"), "USD", "get", "agent-M", tenant)
+		f.charge(t, capID, limes.MustParseAmount("0.1"), "USD", "get", "agent-M", tenant)
 	}
-	f.charge(t, capID, capability.MustParseAmount("0.2"), "USD", "put", "agent-M", tenant)
+	f.charge(t, capID, limes.MustParseAmount("0.2"), "USD", "put", "agent-M", tenant)
 
 	srv := connectshim.NewBillingServer(f.handler)
 	end := time.Now().UTC().Add(time.Hour)
@@ -525,7 +525,7 @@ func TestBilling_MoneyIsExact(t *testing.T) {
 	if got, want := resp.GetMaxBudget(), (&money.Money{CurrencyCode: "USD", Units: 19, Nanos: 990_000_000}); !proto.Equal(got, want) {
 		t.Errorf("max_budget = %v, want %v", got, want)
 	}
-	var top capability.Nanos
+	var top limes.Nanos
 	for _, e := range resp.GetTopOps() {
 		n, _, err := apiutil.NanosOf("spent", e.GetSpent())
 		if err != nil {
@@ -533,7 +533,7 @@ func TestBilling_MoneyIsExact(t *testing.T) {
 		}
 		top += n
 	}
-	if want := capability.MustParseAmount("0.5"); top != want {
+	if want := limes.MustParseAmount("0.5"); top != want {
 		t.Errorf("top ops sum to %v, want %v", top, want)
 	}
 }
@@ -551,8 +551,8 @@ func TestBilling_AdminReadsAnotherTenantUnderRLS(t *testing.T) {
 	home := mustCreateTenant(t, f.h.PoolMigrate, "bil-rls-home")
 	other := mustCreateTenant(t, f.h.PoolMigrate, "bil-rls-other")
 	capOther := f.seedCapability(t, other, "agent-other")
-	f.seedBudget(t, other, capability.MustParseAmount("12.000000001"), "USD")
-	f.charge(t, capOther, capability.MustParseAmount("0.3"), "USD", "get", "agent-other", other)
+	f.seedBudget(t, other, limes.MustParseAmount("12.000000001"), "USD")
+	f.charge(t, capOther, limes.MustParseAmount("0.3"), "USD", "get", "agent-other", other)
 
 	end := time.Now().UTC().Add(time.Hour)
 	start := end.Add(-24 * time.Hour)
@@ -561,21 +561,21 @@ func TestBilling_AdminReadsAnotherTenantUnderRLS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("summary: %v", err)
 	}
-	if sum.TotalAmount != capability.MustParseAmount("0.3") || sum.ChargeCount != 1 {
+	if sum.TotalAmount != limes.MustParseAmount("0.3") || sum.ChargeCount != 1 {
 		t.Errorf("summary of another tenant = %s over %d charges, want 0.3 over 1", sum.TotalAmount, sum.ChargeCount)
 	}
-	if sum.MaxBudgetAmount != capability.MustParseAmount("12.000000001") {
+	if sum.MaxBudgetAmount != limes.MustParseAmount("12.000000001") {
 		t.Errorf("summary budget = %s, want 12.000000001", sum.MaxBudgetAmount)
 	}
 	ts, err := handler.GetTenantTimeSeries(ctx, other, start, end, "day")
 	if err != nil {
 		t.Fatalf("time series: %v", err)
 	}
-	var total capability.Nanos
+	var total limes.Nanos
 	for _, b := range ts.Buckets {
 		total += b.Amount
 	}
-	if total != capability.MustParseAmount("0.3") {
+	if total != limes.MustParseAmount("0.3") {
 		t.Errorf("time series of another tenant sums to %s, want 0.3", total)
 	}
 }

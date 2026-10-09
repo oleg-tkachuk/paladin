@@ -11,21 +11,21 @@ import (
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // fakeCopyUsage serves fixed counters and records what it was asked.
 type fakeCopyUsage struct {
-	out []capability.CopyUsage
+	out []limes.CopyUsage
 	err error
 	ids [][]byte
 	ctx context.Context
 }
 
-func (f *fakeCopyUsage) CopyUsage(ctx context.Context, ids [][]byte) ([]capability.CopyUsage, error) {
+func (f *fakeCopyUsage) CopyUsage(ctx context.Context, ids [][]byte) ([]limes.CopyUsage, error) {
 	f.ids, f.ctx = ids, ctx
 	return f.out, f.err
 }
@@ -38,16 +38,16 @@ func biscuitUsageReq() *adminv1.CapabilityServiceGetBiscuitUsageRequest {
 // limit never used reports zero; the unit is the capability's.
 func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 	owner := uuid.New()
-	target := mkParent(owner, capability.OpGet)
+	target := mkParent(owner, limes.OpGet)
 	target.Caveats.UnitCode = "EUR"
 	store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
-	limits := []capability.CopyCeiling{
+	limits := []limes.CopyCeiling{
 		{RevocationID: []byte("inner"), MaxRequests: 10},
-		{RevocationID: []byte("outer"), MaxBudget: 2 * capability.NanosPerUnit},
+		{RevocationID: []byte("outer"), MaxBudget: 2 * limes.NanosPerUnit},
 	}
-	copier := &fakeCopier{copy: capability.BiscuitCopy{CapabilityID: target.ID, RevocationID: []byte("inner"), Limits: limits}}
-	reader := &fakeCopyUsage{out: []capability.CopyUsage{
-		{RevocationID: []byte("outer"), CapabilityID: target.ID, RequestCount: 7, SpentAmount: capability.MustParseAmount("1.25"), ReservedAmount: capability.MustParseAmount("0.5")},
+	copier := &fakeCopier{copy: limes.BiscuitCopy{CapabilityID: target.ID, RevocationID: []byte("inner"), Limits: limits}}
+	reader := &fakeCopyUsage{out: []limes.CopyUsage{
+		{RevocationID: []byte("outer"), CapabilityID: target.ID, RequestCount: 7, SpentAmount: limes.MustParseAmount("1.25"), ReservedAmount: limes.MustParseAmount("0.5")},
 	}}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{}).
 		WithBiscuitCopies(copier, &copyStore{}).WithCopyUsage(reader)
@@ -82,18 +82,18 @@ func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 }
 
 func TestGetBiscuitUsageRefusals(t *testing.T) {
-	visible := mkParent(uuid.New(), capability.OpGet)
-	good := capability.BiscuitCopy{CapabilityID: visible.ID, RevocationID: []byte("x")}
+	visible := mkParent(uuid.New(), limes.OpGet)
+	good := limes.BiscuitCopy{CapabilityID: visible.ID, RevocationID: []byte("x")}
 	cases := map[string]struct {
 		authz  cedar.Authorizer
 		copier BiscuitCopier
 		reader *fakeCopyUsage
-		record *capability.Capability
+		record *limes.Capability
 		want   connect.Code
 	}{
 		"Cedar denies":           {&denyAuthorizer{}, &fakeCopier{copy: good}, &fakeCopyUsage{}, &visible, connect.CodePermissionDenied},
 		"not wired":              {&allowAuthorizer{}, &fakeCopier{copy: good}, nil, &visible, connect.CodeUnavailable},
-		"not a genuine Biscuit":  {&allowAuthorizer{}, &fakeCopier{err: capability.ErrInvalidSignature}, &fakeCopyUsage{}, &visible, connect.CodeInvalidArgument},
+		"not a genuine Biscuit":  {&allowAuthorizer{}, &fakeCopier{err: limes.ErrInvalidSignature}, &fakeCopyUsage{}, &visible, connect.CodeInvalidArgument},
 		"capability not visible": {&allowAuthorizer{}, &fakeCopier{copy: good}, &fakeCopyUsage{}, nil, connect.CodeNotFound},
 		"reader fails":           {&allowAuthorizer{}, &fakeCopier{copy: good}, &fakeCopyUsage{err: errors.New("db down")}, &visible, connect.CodeInternal},
 	}

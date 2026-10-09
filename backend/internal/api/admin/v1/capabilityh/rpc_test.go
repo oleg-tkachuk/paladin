@@ -13,9 +13,9 @@ import (
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
-	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
@@ -35,22 +35,22 @@ func codeOf(err error) connect.Code { return connect.CodeOf(err) }
 // configurable failures for the paths the existing tests do not drive.
 type recordingStore struct {
 	fakeStore
-	revokeArgs *capability.RevokeRequest
+	revokeArgs *limes.RevokeRequest
 	revokeErr  error
 	revokeCtx  context.Context
-	listArgs   *capability.ListByPrincipalRequest
-	listOut    []capability.Capability
+	listArgs   *limes.ListByPrincipalRequest
+	listOut    []limes.Capability
 	listNext   string
 	listErr    error
 }
 
-func (s *recordingStore) Revoke(ctx context.Context, args capability.RevokeRequest) error {
+func (s *recordingStore) Revoke(ctx context.Context, args limes.RevokeRequest) error {
 	s.revokeArgs = &args
 	s.revokeCtx = ctx
 	return s.revokeErr
 }
 
-func (s *recordingStore) ListByPrincipal(_ context.Context, args capability.ListByPrincipalRequest) ([]capability.Capability, string, error) {
+func (s *recordingStore) ListByPrincipal(_ context.Context, args limes.ListByPrincipalRequest) ([]limes.Capability, string, error) {
 	s.listArgs = &args
 	return s.listOut, s.listNext, s.listErr
 }
@@ -59,14 +59,14 @@ func (s *recordingStore) ListByPrincipal(_ context.Context, args capability.List
 // method the handler might start calling panics loudly instead of silently
 // returning a zero value.
 type fakeUsage struct {
-	capability.UsageStore[pgx.Tx]
-	out capability.Usage
+	limes.UsageStore[pgx.Tx]
+	out limes.Usage
 	err error
 	got uuid.UUID
 	ctx context.Context
 }
 
-func (u *fakeUsage) GetUsage(ctx context.Context, id uuid.UUID) (capability.Usage, error) {
+func (u *fakeUsage) GetUsage(ctx context.Context, id uuid.UUID) (limes.Usage, error) {
 	u.got = id
 	u.ctx = ctx
 	return u.out, u.err
@@ -119,7 +119,7 @@ func TestIssueMintsAToken(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
+		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
 	})
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
@@ -131,9 +131,9 @@ func TestIssueMintsAToken(t *testing.T) {
 		t.Error("want the capability echoed back")
 	}
 	// The same capability as a Biscuit, which its holder can attenuate.
-	if b := resp.GetBiscuit(); !capability.IsBiscuit(b) {
+	if b := resp.GetBiscuit(); !limes.IsBiscuit(b) {
 		t.Errorf("want a Biscuit beside the token, got %q", b)
-	} else if _, err := capability.Attenuate(b, capability.Attenuation{Ops: []capability.Op{capability.OpGet}}); err != nil {
+	} else if _, err := limes.Attenuate(b, limes.Attenuation{Ops: []limes.Op{limes.OpGet}}); err != nil {
 		t.Errorf("the returned Biscuit does not attenuate: %v", err)
 	}
 }
@@ -258,7 +258,7 @@ func TestListForwardsFiltersAndPaging(t *testing.T) {
 		t.Fatal("store.ListByPrincipal was not called")
 	}
 	a := store.listArgs
-	if a.TenantID != tenant || a.Subject != "agent-1" || a.PrincipalType != capability.PrincipalAgent {
+	if a.TenantID != tenant || a.Subject != "agent-1" || a.PrincipalType != limes.PrincipalAgent {
 		t.Errorf("filters = %+v", a)
 	}
 	// Include flags widen the result set; dropping one silently hides revoked
@@ -325,7 +325,7 @@ func TestListStoreErrorIsInternal(t *testing.T) {
 
 // A page token the store cannot read is a bad request, not a server fault.
 func TestListBadPageTokenIsInvalidArgument(t *testing.T) {
-	store := &recordingStore{listErr: fmt.Errorf("%w: cursor", capability.ErrInvalidRequest)}
+	store := &recordingStore{listErr: fmt.Errorf("%w: cursor", limes.ErrInvalidRequest)}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 
 	_, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{
@@ -355,8 +355,8 @@ func TestGetUsageUnwiredIsUnavailable(t *testing.T) {
 func TestGetUsageReturnsCounters(t *testing.T) {
 	id := uuid.New()
 	store := &fakeStore{}
-	usage := &fakeUsage{out: capability.Usage{
-		CapabilityID: id, RequestCount: 7, SpentAmount: capability.MustParseAmount("42"), UnitCode: "EUR",
+	usage := &fakeUsage{out: limes.Usage{
+		CapabilityID: id, RequestCount: 7, SpentAmount: limes.MustParseAmount("42"), UnitCode: "EUR",
 	}}
 	h := NewHandler(mkIssuer(t, store), store, usage, &allowAuthorizer{})
 
@@ -378,7 +378,7 @@ func TestGetUsageReturnsCounters(t *testing.T) {
 // still name one so clients never render a bare number.
 func TestGetUsageDefaultsUnitCode(t *testing.T) {
 	store := &fakeStore{}
-	usage := &fakeUsage{out: capability.Usage{CapabilityID: uuid.New()}}
+	usage := &fakeUsage{out: limes.Usage{CapabilityID: uuid.New()}}
 	h := NewHandler(mkIssuer(t, store), store, usage, &allowAuthorizer{})
 
 	resp, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{
@@ -387,14 +387,14 @@ func TestGetUsageDefaultsUnitCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUsage: %v", err)
 	}
-	if got := resp.GetSpent().GetCurrencyCode(); got != capability.DefaultUnitCode {
-		t.Errorf("unit = %q, want the %q default", got, capability.DefaultUnitCode)
+	if got := resp.GetSpent().GetCurrencyCode(); got != limes.DefaultUnitCode {
+		t.Errorf("unit = %q, want the %q default", got, limes.DefaultUnitCode)
 	}
 }
 
 func TestGetUsageNotFound(t *testing.T) {
 	store := &fakeStore{}
-	usage := &fakeUsage{err: capability.ErrUsageNotFound}
+	usage := &fakeUsage{err: limes.ErrUsageNotFound}
 	h := NewHandler(mkIssuer(t, store), store, usage, &allowAuthorizer{})
 
 	_, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{
@@ -465,7 +465,7 @@ func TestIssue_NonPlatformAdminCannotIssueForAnotherTenant(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
+		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
 	})
 
 	if codeOf(err) != connect.CodePermissionDenied {
@@ -485,7 +485,7 @@ func TestIssue_TenantAdminMayIssueForItsOwnTenant(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
+		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
 	})
 	if err != nil {
 		t.Fatalf("Issue for own tenant: %v", err)
@@ -505,7 +505,7 @@ func TestIssue_PlatformAdminMayIssueForAnotherTenant(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
+		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
 	})
 	if err != nil {
 		t.Fatalf("Issue as platform admin: %v", err)
@@ -537,7 +537,7 @@ func TestIssue_CapabilityIssuerMayIssueForAnotherTenant(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(capability.OpGet)}},
+		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
 	})
 	if err != nil {
 		t.Fatalf("Issue as capability-issuer: %v", err)
@@ -552,7 +552,7 @@ type lookupStore struct {
 	getCtx context.Context
 }
 
-func (s *lookupStore) Get(ctx context.Context, id uuid.UUID) (capability.Capability, error) {
+func (s *lookupStore) Get(ctx context.Context, id uuid.UUID) (limes.Capability, error) {
 	s.getCtx = ctx
 	return s.recordingStore.Get(ctx, id)
 }
@@ -569,7 +569,7 @@ func callerCtx(tenant uuid.UUID, roles ...string) context.Context {
 // capability the admin had just issued to a tenant.
 func TestRevokeAndGetUsageActOnTheCapabilitysTenant(t *testing.T) {
 	owner := uuid.New()
-	target := mkParent(owner, capability.OpGet)
+	target := mkParent(owner, limes.OpGet)
 
 	// The roles are admitted by the built-in policy alone; the tenant-confined
 	// caller holds no role, so its own tenant's policy has to grant it.
@@ -586,7 +586,7 @@ func TestRevokeAndGetUsageActOnTheCapabilitysTenant(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
-			usage := &fakeUsage{out: capability.Usage{CapabilityID: target.ID}}
+			usage := &fakeUsage{out: limes.Usage{CapabilityID: target.ID}}
 			h := NewHandler(mkIssuer(t, &store.fakeStore), store, usage, cedartest.Engine(tc.tenantPolicy))
 
 			if _, err := h.Revoke(tc.ctx, &adminv1.CapabilityServiceRevokeRequest{
@@ -623,7 +623,7 @@ func TestRevokeAndGetUsageActOnTheCapabilitysTenant(t *testing.T) {
 // An id that matches no capability stays NotFound for an admin too, rather
 // than turning into Internal on the owner lookup.
 func TestRevokeUnknownIDIsNotFoundForAnAdmin(t *testing.T) {
-	store := &recordingStore{revokeErr: capability.ErrNotFound}
+	store := &recordingStore{revokeErr: limes.ErrNotFound}
 	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
 
 	_, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{

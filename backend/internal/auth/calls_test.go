@@ -5,8 +5,8 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // Shared mechanics for driving this package's interceptors the way a server
@@ -17,8 +17,8 @@ import (
 // Plane labels the API-token and capability interceptors are mounted with.
 // API tokens and capabilities name planes by the same short labels.
 const (
-	planeData  = capability.AudiencePlaneData
-	planeAdmin = capability.AudiencePlaneAdmin
+	planeData  = limes.AudiencePlaneData
+	planeAdmin = limes.AudiencePlaneAdmin
 )
 
 // bearerPrefix is the Authorization scheme an API token or a JWT rides in.

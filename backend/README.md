@@ -40,7 +40,7 @@ backend/
 │   ├── policy/       Cedar engine (policy/cedar)
 │   ├── filter/       CEL list filters and their SQL pushdown (filter/cel)
 │   ├── platformstats/ the cross-tenant census behind SystemService's stats RPCs
-│   ├── capability/   the Paladin-side adapter over the standalone capability module
+│   ├── capability/   the Paladin-side adapter over limes, the capability primitive
 │   ├── store/        sqlc-generated queries + hand-written SQL mapping
 │   ├── storage/      S3 backend routing, presign, multipart, migration
 │   ├── worker/       background jobs and their leases
@@ -133,17 +133,15 @@ the schema, so keys with underscores of their own work too:
 Committed credentials are development defaults and are rejected outside
 an allow-listed disposable `app.env`; see `internal/config/weak_secrets.go`.
 
-## The capability module
+## The capability primitive
 
-[`capability/`](../capability/) is a separate Go module, consumed here
-through a `replace` directive. It has no database driver and no storage
-SDK in its dependency graph — the resolved graph, not `go.mod`: a
-transitive pull disqualifies it just as much as a direct one. The
-module's `isolation_test.go` asserts this, and runs in
-`task -t Taskfile.dev.yaml verify-capability`, part of `verify-all`.
-
-If you are adding code that needs Postgres or S3, it belongs in
-`internal/`, not in the module.
+The capability primitive is [limes](https://github.com/oleg-tkachuk/limes),
+required in `go.mod` like any dependency. It has no database driver and no
+storage SDK in its dependency graph; its contracts are backed here by
+`internal/capability/postgres/`, whose integration tests run limes's
+`storetest` and `metertest`. `internal/auth/biscuit_crosslang_test.go` keeps
+`sdk/testdata/`'s Biscuit fixtures equal to limes's and verifies the token the
+Python SDK attenuated.
 
 ## Documents
 

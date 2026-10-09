@@ -6,7 +6,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 // TestExtractCapabilityToken covers the header parsing branches:
@@ -72,9 +72,9 @@ func TestWithCapabilityPrincipal_EstablishesTheCapabilitysTenant(t *testing.T) {
 	capID := uuid.New()
 	i := &capabilityInterceptor{audience: "paladin-data", establishPrincipal: true}
 
-	ctx, err := i.withCapabilityPrincipal(context.Background(), &capability.Capability{
+	ctx, err := i.withCapabilityPrincipal(context.Background(), &limes.Capability{
 		ID:      capID,
-		Subject: capability.Principal{TenantID: tenant, Subject: "svc"},
+		Subject: limes.Principal{TenantID: tenant, Subject: "svc"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -106,7 +106,7 @@ func TestWithCapabilityPrincipal_ExistingPrincipalWins(t *testing.T) {
 	i := &capabilityInterceptor{audience: "paladin-data", establishPrincipal: true}
 
 	ctx, err := i.withCapabilityPrincipal(WithPrincipal(context.Background(), original),
-		&capability.Capability{ID: uuid.New(), Subject: capability.Principal{TenantID: uuid.New()}})
+		&limes.Capability{ID: uuid.New(), Subject: limes.Principal{TenantID: uuid.New()}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestWithCapabilityPrincipal_RefusesATenantlessCapability(t *testing.T) {
 	i := &capabilityInterceptor{audience: "paladin-data", establishPrincipal: true}
 
 	_, err := i.withCapabilityPrincipal(context.Background(),
-		&capability.Capability{ID: uuid.New(), Subject: capability.Principal{}})
+		&limes.Capability{ID: uuid.New(), Subject: limes.Principal{}})
 
 	if err == nil {
 		t.Fatal("want an error for a capability with no tenant")
@@ -137,7 +137,7 @@ func TestWithCapabilityPrincipal_NoopWhenNotEstablishing(t *testing.T) {
 	i := &capabilityInterceptor{audience: "paladin-data"}
 
 	ctx, err := i.withCapabilityPrincipal(context.Background(),
-		&capability.Capability{ID: uuid.New(), Subject: capability.Principal{TenantID: uuid.New()}})
+		&limes.Capability{ID: uuid.New(), Subject: limes.Principal{TenantID: uuid.New()}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -151,8 +151,8 @@ func TestWithCapabilityPrincipal_NoopWhenNotEstablishing(t *testing.T) {
 func TestWithCapabilityPrincipal_MapsThePlaneAudience(t *testing.T) {
 	i := &capabilityInterceptor{audience: "data", establishPrincipal: true}
 
-	ctx, err := i.withCapabilityPrincipal(context.Background(), &capability.Capability{
-		ID: uuid.New(), Subject: capability.Principal{TenantID: uuid.New()},
+	ctx, err := i.withCapabilityPrincipal(context.Background(), &limes.Capability{
+		ID: uuid.New(), Subject: limes.Principal{TenantID: uuid.New()},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

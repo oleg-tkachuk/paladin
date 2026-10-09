@@ -25,17 +25,17 @@ from typing import Any
 
 # The attenuation vocabulary; tests/test_biscuit.py checks each name against
 # the shared spec the server's tests read too.
-FACT_CAPABILITY = "paladin_capability"
-FACT_OP = "paladin_op"
-FACT_RESOURCE_PREFIX = "paladin_resource_prefix"
-FACT_RESOURCE_URI = "paladin_resource_uri"
-FACT_PLANE = "paladin_plane"
-FACT_EXPIRES = "paladin_expires"
-FACT_BIND = "paladin_bind"
-FACT_MAX_REQUESTS = "paladin_max_requests"
-FACT_MAX_BUDGET_NANOS = "paladin_max_budget_nanos"
+FACT_CAPABILITY = "limes_capability"
+FACT_OP = "limes_op"
+FACT_RESOURCE_PREFIX = "limes_resource_prefix"
+FACT_RESOURCE_URI = "limes_resource_uri"
+FACT_PLANE = "limes_plane"
+FACT_EXPIRES = "limes_expires"
+FACT_BIND = "limes_bind"
+FACT_MAX_REQUESTS = "limes_max_requests"
+FACT_MAX_BUDGET_NANOS = "limes_max_budget_nanos"
 # The sealed JWT's claim holding the public key that roots the Biscuit.
-ROOT_CLAIM = "paladin_bsk"
+ROOT_CLAIM = "limes_bsk"
 # A JWK thumbprint is a base64url SHA-256 digest.
 THUMBPRINT_BYTES = 32
 

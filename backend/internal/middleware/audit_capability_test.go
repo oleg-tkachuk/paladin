@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // TestCapabilityID_Absent confirms ctx without a capability returns
@@ -26,13 +26,13 @@ func TestCapabilityID_Absent(t *testing.T) {
 func TestCapabilityID_Present(t *testing.T) {
 	t.Parallel()
 	want := uuid.New()
-	cap := &capability.Capability{
+	cap := &limes.Capability{
 		ID: want,
-		Subject: capability.Principal{
-			Type:     capability.PrincipalAgent,
+		Subject: limes.Principal{
+			Type:     limes.PrincipalAgent,
 			TenantID: uuid.New(),
 		},
-		Caveats: capability.Caveats{Ops: []capability.Op{capability.OpGet}},
+		Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet}},
 	}
 	ctx := auth.WithCapability(context.Background(), cap)
 	got := capabilityID(ctx)

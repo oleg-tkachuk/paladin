@@ -4,8 +4,8 @@
 # Usage: new-release-tag.sh <file listing the tags on HEAD before semantic-release> [streams]
 #
 # Prints the v* tag on HEAD that is not in that list, or nothing. With
-# `streams`, prints instead every new SDK and capability tag (sdk/go/v*,
-# capability/v*), one per line — the module streams cut in the same run. "A v* tag on
+# `streams`, prints instead every new SDK tag (sdk/go/v*), one per line — the
+# module stream cut in the same run. "A v* tag on
 # HEAD" alone is not the same question: release.yaml is dispatched once per CI
 # run on main and always checks out the branch head, so two dispatches can land
 # on one commit. The second found the first run's tag on HEAD, took it for its
@@ -24,7 +24,7 @@
 set -euo pipefail
 
 readonly RELEASE_TAG='^v[0-9]'
-readonly STREAM_TAG='^(sdk/go|capability)/v[0-9]'
+readonly STREAM_TAG='^sdk/go/v[0-9]'
 readonly STREAMS_MODE=streams
 
 before="${1:?usage: new-release-tag.sh <tags-before-file> [streams]}"

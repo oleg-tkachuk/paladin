@@ -9,9 +9,9 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 type taintRepoStub struct {
@@ -70,8 +70,8 @@ func TestSetTaintRefusals(t *testing.T) {
 	}
 
 	// A capability needs OpManage on the object to change its flags.
-	reader := &capability.Capability{ID: uuid.New(), Caveats: capability.Caveats{Ops: []capability.Op{capability.OpGet}}}
-	if _, err := h.SetTaint(auth.WithCapability(lockCtx(tenantID), reader), "docs", uuid.NewString(), nil); !errors.Is(err, capability.ErrOpNotAllowed) {
+	reader := &limes.Capability{ID: uuid.New(), Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet}}}
+	if _, err := h.SetTaint(auth.WithCapability(lockCtx(tenantID), reader), "docs", uuid.NewString(), nil); !errors.Is(err, limes.ErrOpNotAllowed) {
 		t.Errorf("capability without OpManage: err = %v, want ErrOpNotAllowed", err)
 	}
 	if repo.setCalls != 0 {
