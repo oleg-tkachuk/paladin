@@ -9,7 +9,7 @@ import {
   TooltipRoot,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import { formatTimestampUTC, NO_TIMESTAMP } from "@/lib/format/timestamp";
+import { formatTimestamp, NO_TIMESTAMP } from "@/lib/format/timestamp";
 import {
   formatBuildLabel,
   isBuildSkew,
@@ -41,7 +41,7 @@ export function BuildVersion({ fallback }: BuildVersionProps) {
   const ui = uiBuildInfo();
   const label = formatBuildLabel(backend.version, backend.commit);
   const skew = isBuildSkew(backend.commit, ui.commit);
-  const builtAt = formatTimestampUTC(backend.buildTime);
+  const builtAt = formatTimestamp(backend.buildTime);
 
   return (
     <TooltipRoot>

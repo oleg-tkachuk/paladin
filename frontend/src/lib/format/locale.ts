@@ -29,6 +29,17 @@ function dateTimeFormats(timeZone: string | undefined) {
       timeStyle: "medium",
       timeZone,
     }),
+    instant: new Intl.DateTimeFormat(DISPLAY_LOCALE, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+      timeZoneName: "longOffset",
+      timeZone,
+    }),
   };
 }
 
@@ -67,6 +78,26 @@ export function formatDateTime(d: Date): string {
 /** A time of day, to the second: 16:18:33. */
 export function formatTime(d: Date): string {
   return dates.time.format(d);
+}
+
+// What longOffset names the zone by: "GMT+03:00", or "GMT" alone at a zero
+// offset in some engines.
+const OFFSET_PREFIX = "GMT";
+const ZERO_OFFSET = "+00:00";
+
+/**
+ * A point in time as an operator compares it: 2026-10-01 07:21:15 +03:00.
+ * Sortable, with the offset written out, so a time read in one zone can be
+ * matched against another viewer's or the server's UTC logs.
+ */
+export function formatInstant(d: Date): string {
+  const part: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
+  for (const { type, value } of dates.instant.formatToParts(d)) {
+    part[type] = value;
+  }
+  const offset =
+    (part.timeZoneName ?? "").replace(OFFSET_PREFIX, "") || ZERO_OFFSET;
+  return `${part.year}-${part.month}-${part.day} ${part.hour}:${part.minute}:${part.second} ${offset}`;
 }
 
 // Above this, a KPI tile writes 12.3k rather than 12,345, which would push the

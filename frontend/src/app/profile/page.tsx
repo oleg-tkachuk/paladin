@@ -39,7 +39,7 @@ import { T } from "@/lib/ui/typography";
 import { useAuth } from "@/context/AuthContext";
 import { userSettingsClient } from "@/lib/connect/client";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
-import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { Timestamp } from "@/components/Timestamp";
 import { SETTINGS_APPLIED_NOTE } from "./_constants";
 import {
   fetchMySettings,
@@ -393,7 +393,7 @@ export default function ProfilePage() {
                   {settings?.updatedAt ? (
                     <>
                       <CheckCircleIcon className="mr-1 inline-block size-3.5 align-text-bottom text-success" />
-                      Last synced {formatTimestampUTC(settings.updatedAt)}
+                      Last synced <Timestamp ts={settings.updatedAt} />
                       {" · resourceVersion "}
                       <span className="font-mono">
                         {settings.resourceVersion || "—"}

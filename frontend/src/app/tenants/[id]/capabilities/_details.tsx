@@ -10,7 +10,7 @@ import { T } from "@/lib/ui/typography";
 import type { Money } from "@/gen/google/type/money_pb";
 import { formatMoney, moneyIsPositive, unitOf } from "@/lib/format/money";
 import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS, isExpired } from "./_constants";
-import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { Timestamp } from "@/components/Timestamp";
 
 type UsageEntry =
   { requestCount: bigint; spent: Money | undefined } | "never" | undefined;
@@ -238,17 +238,17 @@ export function DetailsBody({
         />
         <DetailRow
           label="Issued"
-          value={formatTimestampUTC(cap.issuedAt)}
+          value={<Timestamp ts={cap.issuedAt} />}
           mono
         />
         <DetailRow
           label="Not before"
-          value={formatTimestampUTC(cap.notBefore)}
+          value={<Timestamp ts={cap.notBefore} />}
           mono
         />
         <DetailRow
           label="Expires"
-          value={formatTimestampUTC(cap.expiresAt)}
+          value={<Timestamp ts={cap.expiresAt} />}
           mono
         />
       </DetailsSection>
@@ -291,7 +291,7 @@ function IssuanceRows({ record }: { record: RecordEntry }) {
         <>
           <DetailRow
             label="Revoked"
-            value={formatTimestampUTC(rev.revokedAt)}
+            value={<Timestamp ts={rev.revokedAt} />}
             mono
           />
           <DetailRow
