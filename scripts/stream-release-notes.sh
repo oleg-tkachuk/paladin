@@ -28,8 +28,8 @@ readonly FEATURES='^feat(\([^)]*\))?!?: '
 readonly FIXES='^(fix|perf|security|revert)(\([^)]*\))?!?: '
 readonly BANG='^[a-z]+(\([^)]*\))?!: '
 readonly FOOTER='^BREAKING[ -]CHANGE: '
-# The upgrade guide, whose "## v<version> — …" section a breaking release
-# links to.
+# The upgrade guide, whose "## <tags> — …" section naming this tag a breaking
+# release links to. The full tag, because a product version is "v…" too.
 readonly UPGRADING=docs/upgrading.md
 
 # "<stream> <title> <tag prefix> <path>…" for the stream whose tag this is.
@@ -84,7 +84,7 @@ anchor() { LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C sed -e 's/[^a-z0-9 _-]
 if [[ -n "$breaking" ]]; then
     printf '\n## Behaviour changes\n\n'
     bullets "$breaking"
-    heading=$(grep -m1 -E "^## v${version//./\\.}( |$)" "$UPGRADING" 2>/dev/null || true)
+    heading=$(grep -m1 -E "^## (.*[ ,])?${tag//./\\.}([ ,]|$)" "$UPGRADING" 2>/dev/null || true)
     if [[ -n "$heading" ]]; then
         printf '\nMigrating: [%s](https://github.com/%s/blob/%s/%s#%s)\n' \
             "${heading#\#\# }" "$repo" "$tag" "$UPGRADING" "$(anchor <<<"${heading#\#\# }")"
