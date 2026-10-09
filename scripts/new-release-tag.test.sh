@@ -31,6 +31,10 @@ git -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m on
 before="$work/before"
 
 failures=0
+# run is the script's output, followed by its exit status when that is not 0:
+# release.yaml assigns the output under `set -e`, so a failing exit fails the
+# release even when the output is right.
+run() { "$script" "$@" || echo "exit $?"; }
 check() { # name, want, got
     if [ "$2" != "$3" ]; then
         printf 'FAIL %s: want %q, got %q\n' "$1" "$2" "$3"
@@ -39,38 +43,38 @@ check() { # name, want, got
 }
 
 : >"$before"
-check "no tag on HEAD" "" "$("$script" "$before")"
+check "no tag on HEAD" "" "$(run "$before")"
 
 git tag api/v3.0.0
-check "a proto baseline is not a release" "" "$("$script" "$before")"
+check "a proto baseline is not a release" "" "$(run "$before")"
 
 git tag v4.2.0
-check "the tag this run pushed" "v4.2.0" "$("$script" "$before")"
+check "the tag this run pushed" "v4.2.0" "$(run "$before")"
 
 git tag --points-at HEAD >"$before"
-check "a tag an earlier run pushed and never published" "v4.2.0" "$("$script" "$before")"
+check "a tag an earlier run pushed and never published" "v4.2.0" "$(run "$before")"
 
 echo v4.2.0 >>"$RELEASED"
-check "a tag an earlier run pushed and published" "" "$("$script" "$before")"
+check "a tag an earlier run pushed and published" "" "$(run "$before")"
 
 git tag v4.2.1
-check "a new tag beside an old one" "v4.2.1" "$("$script" "$before")"
+check "a new tag beside an old one" "v4.2.1" "$(run "$before")"
 echo v4.2.1 >>"$RELEASED"
 
 git tag sdk/go/v0.3.0
 git tag capability/v0.2.0
-check "a module tag is not the product's" "v4.2.1" "$("$script" "$before")"
-check "every new module tag" "$(printf 'capability/v0.2.0\nsdk/go/v0.3.0')" "$("$script" "$before" streams)"
-check "the product is no module" "" "$("$script" "$before" streams | grep -E '^v' || true)"
+check "a module tag is not the product's" "v4.2.1" "$(run "$before")"
+check "every new module tag" "$(printf 'capability/v0.2.0\nsdk/go/v0.3.0')" "$(run "$before" streams)"
+check "the product is no module" "" "$(run "$before" streams | grep -E '^v' || true)"
 
 git tag --points-at HEAD >"$before"
-check "module tags an earlier run pushed and never published" "$(printf 'capability/v0.2.0\nsdk/go/v0.3.0')" "$("$script" "$before" streams)"
+check "module tags an earlier run pushed and never published" "$(printf 'capability/v0.2.0\nsdk/go/v0.3.0')" "$(run "$before" streams)"
 
 echo capability/v0.2.0 >>"$RELEASED"
-check "only the module tag left unpublished" "sdk/go/v0.3.0" "$("$script" "$before" streams)"
+check "only the module tag left unpublished" "sdk/go/v0.3.0" "$(run "$before" streams)"
 
 echo sdk/go/v0.3.0 >>"$RELEASED"
-check "module tags an earlier run pushed and published" "" "$("$script" "$before" streams)"
+check "module tags an earlier run pushed and published" "" "$(run "$before" streams)"
 
 if [ "$failures" -gt 0 ]; then
     exit 1

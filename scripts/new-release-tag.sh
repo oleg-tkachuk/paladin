@@ -32,9 +32,11 @@ before="${1:?usage: new-release-tag.sh <tags-before-file> [streams]}"
 new() { git tag --points-at HEAD | grep -E "$1" | grep -vxF -f "$before" || true; }
 
 # unpublished prints the tags on HEAD matching $1 that have no GitHub release.
+# No such tag on HEAD is the usual run, not an error: grep's status would fail
+# the pipeline under pipefail, and the caller with it.
 unpublished() {
     local tag
-    git tag --points-at HEAD | grep -E "$1" | while read -r tag; do
+    { git tag --points-at HEAD | grep -E "$1" || true; } | while read -r tag; do
         gh release view "$tag" >/dev/null 2>&1 || echo "$tag"
     done
 }
