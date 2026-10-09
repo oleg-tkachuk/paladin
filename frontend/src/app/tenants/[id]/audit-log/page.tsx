@@ -39,7 +39,7 @@ import { T } from "@/lib/ui/typography";
 import { useTenant } from "../tenant-context";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { AuditActionCell } from "@/components/features/audit/AuditActionCell";
-import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { Timestamp } from "@/components/Timestamp";
 
 /** Entries per page of the tenant's trail. */
 const TENANT_AUDIT_PAGE_SIZE = 100;
@@ -175,7 +175,7 @@ export default function TenantAuditLogPage() {
                         "whitespace-normal text-muted-foreground @md:whitespace-nowrap",
                       )}
                     >
-                      {formatTimestampUTC(e.at)}
+                      <Timestamp ts={e.at} />
                     </TableCell>
                     {/* Actor and resource are long unbroken identifiers
                         (`apikey:<uuid>`, resource names): they wrap, or one
