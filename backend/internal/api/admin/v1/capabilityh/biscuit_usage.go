@@ -9,15 +9,15 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // WithCopyUsage wires GetBiscuitUsage, beside WithBiscuitCopies. Without it
 // the RPC answers Unavailable.
-func (h *Handler) WithCopyUsage(reader capability.CopyUsageReader) *Handler {
+func (h *Handler) WithCopyUsage(reader limes.CopyUsageReader) *Handler {
 	h.copyUsage = reader
 	return h
 }
@@ -46,7 +46,7 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 	// check and the unit the copies' budgets are in.
 	record, err := h.store.Get(ctx, c.CapabilityID)
 	if err != nil {
-		if errors.Is(err, capability.ErrNotFound) {
+		if errors.Is(err, limes.ErrNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -60,7 +60,7 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	byID := make(map[string]capability.CopyUsage, len(counted))
+	byID := make(map[string]limes.CopyUsage, len(counted))
 	for _, u := range counted {
 		byID[string(u.RevocationID)] = u
 	}

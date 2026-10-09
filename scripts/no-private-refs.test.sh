@@ -42,7 +42,8 @@ readonly OWNER="oleg-tkachuk"
 #   paladin-console            its frontend container image
 #   charts                     its Helm charts, oci://ghcr.io/OWNER/charts/…
 #   taskfiles                 the shared Task library, a remote include
-readonly ALLOWED_REPOS=(paladin paladin-core paladin-console charts taskfiles)
+#   limes                     the capability primitive, a Go dependency
+readonly ALLOWED_REPOS=(paladin paladin-core paladin-console charts taskfiles limes)
 
 # Lockfiles carry base64 integrity hashes and vendored dependency graphs; the
 # owner names in them are npm's and Go's business, not a reference this tree

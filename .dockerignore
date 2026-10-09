@@ -1,9 +1,9 @@
 # Build context for backend/deploy/Dockerfile.
 #
 # The backend image builds from the REPOSITORY ROOT, not from backend/,
-# because the binary depends on the sibling modules capability/ and sdk/go/,
-# which a backend-only context cannot reach (`go mod download` fails
-# resolving the relative replaces in backend/go.mod).
+# because the binary depends on the sibling module sdk/go/, which a
+# backend-only context cannot reach (`go mod download` fails resolving the
+# relative replace in backend/go.mod).
 #
 # Widening the context from one component to the whole repo means everything
 # not excluded here is streamed to the Docker daemon on every uncached build.
@@ -36,7 +36,6 @@ renovate.json
 
 # ── Repo-root docs ──────────────────────────────────────────────────────
 *.md
-!capability/README.md
 
 # ── Build artifacts (Go output anywhere in the tree) ────────────────────
 bin/

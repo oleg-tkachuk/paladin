@@ -33,7 +33,7 @@ env:
   # renovate: datasource=github-releases depName=go-task/task
   TASK_VERSION: "3.53.1"
   # Must be BUILT with a Go no older than the `go` directive in backend/go.mod
-  # and capability/go.mod, or it refuses to load the config. Bumping go.mod
+  # and sdk/go/go.mod, or it refuses to load the config. Bumping go.mod
   # means checking this.
   # renovate: datasource=github-releases depName=golangci/golangci-lint
   GOLANGCI_LINT_VERSION: "v2.14.0"
@@ -180,7 +180,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        if: matrix.group == 'backend' || matrix.group == 'capability' || matrix.group == 'sdk' || matrix.group == 'repo'
+        if: matrix.group == 'backend' || matrix.group == 'sdk' || matrix.group == 'repo'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: backend/go.mod
@@ -195,16 +195,16 @@ jobs:
       # writes, so a pull request cannot seed what main builds from.
       - name: Restore the Go caches
         id: go-cache
-        if: matrix.group == 'backend' || matrix.group == 'capability' || matrix.group == 'sdk' || matrix.group == 'repo'
+        if: matrix.group == 'backend' || matrix.group == 'sdk' || matrix.group == 'repo'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
             ~/.cache/golangci-lint
-          key: go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'capability/go.sum', 'sdk/go/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'capability/go.sum', 'sdk/go/go.sum') }}-
+            go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum') }}-
             go-${{ runner.os }}-verify-${{ matrix.group }}-
 
       - name: Set up goimports
@@ -214,7 +214,7 @@ jobs:
           go install "golang.org/x/tools/cmd/goimports@${GOIMPORTS_VERSION}"
           printf '%s\n' "$(go env GOPATH)/bin" >>"$GITHUB_PATH"
       - name: Set up golangci-lint
-        if: matrix.group == 'backend' || matrix.group == 'capability' || matrix.group == 'sdk'
+        if: matrix.group == 'backend' || matrix.group == 'sdk'
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
@@ -342,7 +342,7 @@ jobs:
       - name: Save the Go caches
         if: >-
           success() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-          (matrix.group == 'backend' || matrix.group == 'capability' || matrix.group == 'sdk' || matrix.group == 'repo')
+          (matrix.group == 'backend' || matrix.group == 'sdk' || matrix.group == 'repo')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -649,9 +649,9 @@ jobs:
             ~/.cache/go-build
             ~/go/pkg/mod
             ~/.cache/golangci-lint
-          key: go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'capability/go.sum', 'sdk/go/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'capability/go.sum', 'sdk/go/go.sum') }}-
+            go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum') }}-
             go-${{ runner.os }}-deep-${{ matrix.half }}-
 
       - name: Set up Task

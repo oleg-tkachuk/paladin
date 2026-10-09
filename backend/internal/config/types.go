@@ -5,7 +5,7 @@ import (
 	"time"
 
 	yaml "github.com/oasdiff/yaml3"
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 type Config struct {
@@ -587,7 +587,7 @@ type Dispatcher struct {
 	DefaultMaxAttempts int           `yaml:"default_max_attempts" json:"default_max_attempts"`
 
 	// ChargeEventsEnabled fans out one paladin.capability.charged event
-	// per successful capability.UsageStore[pgx.Tx].Charge. Default OFF —
+	// per successful limes.UsageStore[pgx.Tx].Charge. Default OFF —
 	// every chargeable RPC fires, so the cardinality multiplies the
 	// outbox volume by the per-tenant request rate. Subscribers MUST
 	// set a CEL filter pinning `type == "paladin.capability.charged"`
@@ -1148,7 +1148,7 @@ type Capability struct {
 	//
 	// Renamed from ChargePerRequest — same semantic, just no longer
 	// USD-pinned in name.
-	ChargePerRequestAmount capability.Nanos `yaml:"charge_per_request_amount" json:"charge_per_request_amount"`
+	ChargePerRequestAmount limes.Nanos `yaml:"charge_per_request_amount" json:"charge_per_request_amount"`
 
 	// ChargePerRequestUnit pins the currency / unit for the auto-
 	// charge amount. Empty falls back to the capability's own

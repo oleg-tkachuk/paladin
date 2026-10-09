@@ -9,12 +9,12 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // Lifetimes the tests sign under: distinct per operation, so a handler that
@@ -164,9 +164,9 @@ func authedCtx(tid uuid.UUID) context.Context {
 
 // authedCtxWithCap authorises exactly `ops`; a missing op drives the
 // PermissionDenied branch of auth.AssertCapabilityOp.
-func authedCtxWithCap(tid uuid.UUID, ops ...capability.Op) context.Context {
-	return auth.WithCapability(authedCtx(tid), &capability.Capability{
-		Caveats: capability.Caveats{Ops: ops},
+func authedCtxWithCap(tid uuid.UUID, ops ...limes.Op) context.Context {
+	return auth.WithCapability(authedCtx(tid), &limes.Capability{
+		Caveats: limes.Caveats{Ops: ops},
 	})
 }
 
@@ -229,14 +229,14 @@ func TestPresignGet(t *testing.T) {
 
 	t.Run("capability lacks presign op → permission denied", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
-		ctx := authedCtxWithCap(tid, capability.OpGet) // has OpGet, missing OpPresign
+		ctx := authedCtxWithCap(tid, limes.OpGet) // has OpGet, missing OpPresign
 		_, _, _, err := h.PresignGet(ctx, "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("capability has presign but lacks get op → permission denied", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
-		ctx := authedCtxWithCap(tid, capability.OpPresign) // missing OpGet
+		ctx := authedCtxWithCap(tid, limes.OpPresign) // missing OpGet
 		_, _, _, err := h.PresignGet(ctx, "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
@@ -394,7 +394,7 @@ func TestRegenerateUploadURL(t *testing.T) {
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
 		h := NewHandler(pendingRepo(), &fakeStorage{}, allowPolicy(), cfg)
-		ctx := authedCtxWithCap(tid, capability.OpPresign) // missing OpPut
+		ctx := authedCtxWithCap(tid, limes.OpPresign) // missing OpPut
 		_, err := h.RegenerateUploadURL(ctx, "obj", validObjectID, 0)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})

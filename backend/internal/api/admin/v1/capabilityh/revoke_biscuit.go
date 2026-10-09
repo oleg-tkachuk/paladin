@@ -7,21 +7,21 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
-	"github.com/oleg-tkachuk/paladin/capability"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // BiscuitCopier names which copy of which capability a Biscuit is, after
-// checking that it is genuine. capability.StandardVerifier implements it.
+// checking that it is genuine. limes.StandardVerifier implements it.
 type BiscuitCopier interface {
-	BiscuitCopy(ctx context.Context, token string) (capability.BiscuitCopy, error)
+	BiscuitCopy(ctx context.Context, token string) (limes.BiscuitCopy, error)
 }
 
 // WithBiscuitCopies wires RevokeBiscuit. Without it the RPC answers
 // Unavailable, as GetUsage does without a usage store.
-func (h *Handler) WithBiscuitCopies(copier BiscuitCopier, copies capability.BiscuitRevocationStore) *Handler {
+func (h *Handler) WithBiscuitCopies(copier BiscuitCopier, copies limes.BiscuitRevocationStore) *Handler {
 	h.copier, h.copies = copier, copies
 	return h
 }
@@ -47,7 +47,7 @@ func (h *Handler) RevokeBiscuit(ctx context.Context, req *adminv1.CapabilityServ
 	if err != nil {
 		return nil, err
 	}
-	if err := h.copies.RevokeBiscuit(ctx, capability.RevokeBiscuitRequest{
+	if err := h.copies.RevokeBiscuit(ctx, limes.RevokeBiscuitRequest{
 		CapabilityID: c.CapabilityID,
 		RevocationID: c.RevocationID,
 		Reason:       req.GetReason(),
@@ -55,7 +55,7 @@ func (h *Handler) RevokeBiscuit(ctx context.Context, req *adminv1.CapabilityServ
 	}); err != nil {
 		// As in Revoke: no such capability and another tenant's are one
 		// answer, so the endpoint is no oracle.
-		if errors.Is(err, capability.ErrNotFound) {
+		if errors.Is(err, limes.ErrNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)

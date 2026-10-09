@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# stream-release-notes.sh — release notes for an SDK or capability tag.
+# stream-release-notes.sh — release notes for an SDK tag.
 #
 # Usage: stream-release-notes.sh <tag>      e.g. sdk/go/v0.12.0
 #
@@ -36,7 +36,7 @@ readonly UPGRADING=docs/upgrading.md
 # shellcheck disable=SC2016 # JavaScript, with its own ${version}
 meta=$(node -e '
   const { streams } = require(process.argv[1] + "/.github/release/release.config.cjs");
-  const titles = { sdk: "SDK", capability: "Capability" };
+  const titles = { sdk: "SDK" };
   for (const [name, s] of Object.entries(streams)) {
     const prefix = s.tagFormat.replace("${version}", "");
     if (name in titles && process.argv[2].startsWith(prefix)) {
@@ -46,7 +46,7 @@ meta=$(node -e '
   }
   process.exit(1);
 ' "$root" "$tag") || {
-    echo "!!! $tag is not an SDK or capability tag" >&2
+    echo "!!! $tag is not an SDK tag" >&2
     exit 1
 }
 read -r _ title prefix paths <<<"$meta"

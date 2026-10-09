@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 // tenantRecordingUsage records the tenant each store call would bind to
@@ -31,17 +31,17 @@ func (u *tenantRecordingUsage) record(ctx context.Context, call string) {
 	u.seen[call] = tid
 }
 
-func (u *tenantRecordingUsage) Bump(ctx context.Context, req capability.BumpRequest) (int64, error) {
+func (u *tenantRecordingUsage) Bump(ctx context.Context, req limes.BumpRequest) (int64, error) {
 	u.record(ctx, "Bump")
 	return u.fakeUsage.Bump(ctx, req)
 }
 
-func (u *tenantRecordingUsage) Charge(ctx context.Context, req capability.ChargeRequest, onCharged func(context.Context, pgx.Tx) error) (capability.ChargeReceipt, error) {
+func (u *tenantRecordingUsage) Charge(ctx context.Context, req limes.ChargeRequest, onCharged func(context.Context, pgx.Tx) error) (limes.ChargeReceipt, error) {
 	u.record(ctx, "Charge")
 	return u.fakeUsage.Charge(ctx, req, onCharged)
 }
 
-func (u *tenantRecordingUsage) Refund(ctx context.Context, req capability.RefundRequest) (capability.Nanos, error) {
+func (u *tenantRecordingUsage) Refund(ctx context.Context, req limes.RefundRequest) (limes.Nanos, error) {
 	u.record(ctx, "Refund")
 	return u.fakeUsage.Refund(ctx, req)
 }
@@ -53,9 +53,9 @@ func (u *tenantRecordingUsage) Refund(ctx context.Context, req capability.Refund
 // the wrong tenant, with the same result.
 func TestCapabilityLedgerWritesRunOnTheCapabilitysTenant(t *testing.T) {
 	const (
-		chargeAmount capability.Nanos = capability.NanosPerUnit / 2
-		maxRequests                   = 5
-		maxBudget    capability.Nanos = 10 * capability.NanosPerUnit
+		chargeAmount limes.Nanos = limes.NanosPerUnit / 2
+		maxRequests              = 5
+		maxBudget    limes.Nanos = 10 * limes.NanosPerUnit
 	)
 	capTenant := uuid.New()
 	cases := map[string]context.Context{
@@ -66,8 +66,8 @@ func TestCapabilityLedgerWritesRunOnTheCapabilitysTenant(t *testing.T) {
 	for name, base := range cases {
 		t.Run(name, func(t *testing.T) {
 			usage := newTenantRecordingUsage()
-			c := capWithCaveats(capability.Caveats{MaxRequests: maxRequests, MaxBudgetAmount: maxBudget})
-			c.Subject = capability.Principal{TenantID: capTenant, Subject: "agent:a"}
+			c := capWithCaveats(limes.Caveats{MaxRequests: maxRequests, MaxBudgetAmount: maxBudget})
+			c.Subject = limes.Principal{TenantID: capTenant, Subject: "agent:a"}
 			i := &capabilityInterceptor{usage: usage}
 
 			if err := i.enforceCaveats(base, c); err != nil {

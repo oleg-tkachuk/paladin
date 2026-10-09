@@ -9,20 +9,20 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 func TestMoneyRoundTripIsExact(t *testing.T) {
-	for _, n := range []capability.Nanos{0, 1, 350_000_000, capability.NanosPerUnit, 25*capability.NanosPerUnit + 1, capability.MaxNanos} {
+	for _, n := range []limes.Nanos{0, 1, 350_000_000, limes.NanosPerUnit, 25*limes.NanosPerUnit + 1, limes.MaxNanos} {
 		m := MoneyOf("EUR", n)
 		got, unit, err := NanosOf("max_budget", m)
 		if err != nil || got != n || unit != "EUR" {
 			t.Errorf("%s → %v → %s %s, %v", n, m, got, unit, err)
 		}
 	}
-	if m := MoneyOf("", capability.NanosPerUnit); m.GetCurrencyCode() != capability.DefaultUnitCode {
-		t.Errorf("MoneyOf with no unit = %v, want %s", m, capability.DefaultUnitCode)
+	if m := MoneyOf("", limes.NanosPerUnit); m.GetCurrencyCode() != limes.DefaultUnitCode {
+		t.Errorf("MoneyOf with no unit = %v, want %s", m, limes.DefaultUnitCode)
 	}
 	if n, unit, err := NanosOf("max_budget", nil); err != nil || n != 0 || unit != "" {
 		t.Errorf("an absent field = %s %q, %v; want zero and no unit", n, unit, err)
@@ -30,11 +30,11 @@ func TestMoneyRoundTripIsExact(t *testing.T) {
 }
 
 func TestNanosOfRefusesWhatIsNotAnAmount(t *testing.T) {
-	maxUnits := int64(capability.MaxNanos / capability.NanosPerUnit)
+	maxUnits := int64(limes.MaxNanos / limes.NanosPerUnit)
 	for name, m := range map[string]*money.Money{
 		"negative units":    {CurrencyCode: "USD", Units: -1},
 		"negative nanos":    {CurrencyCode: "USD", Nanos: -1},
-		"nanos past a unit": {CurrencyCode: "USD", Nanos: capability.NanosPerUnit},
+		"nanos past a unit": {CurrencyCode: "USD", Nanos: limes.NanosPerUnit},
 		"past MaxNanos":     {CurrencyCode: "USD", Units: maxUnits + 1},
 		"unknown currency":  {CurrencyCode: "BTC", Units: 1},
 		"the old UNIT":      {CurrencyCode: "UNIT", Units: 1},

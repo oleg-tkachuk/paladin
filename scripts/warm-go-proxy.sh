@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # warm-go-proxy.sh — tell the Go module proxy about a module tag just pushed.
 #
-# Usage: warm-go-proxy.sh <tag>        e.g. sdk/go/v0.16.0, capability/v0.3.0
+# Usage: warm-go-proxy.sh <tag>        e.g. sdk/go/v0.16.0
 #
 # proxy.golang.org learns of a version when someone asks for it, and until
 # then its @latest — which `go get` and the README's SDK badge read — keeps

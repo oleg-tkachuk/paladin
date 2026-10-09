@@ -19,12 +19,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // insertOutboxOnTx is a stand-in fan-out hook: it writes one
@@ -95,11 +95,11 @@ func TestCharge_FanoutCommitsOnSameTx(t *testing.T) {
 	capID := uuid.New()
 	seedCapRecord(t, h, capID, tenantID)
 
-	spent, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: capability.MustParseAmount("2.5"), MaxBudget: capability.MustParseAmount("10.0"), UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID)))
+	spent, err := store.Charge(ctx, limes.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: limes.MustParseAmount("2.5"), MaxBudget: limes.MustParseAmount("10.0"), UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID)))
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
-	if spent.Spent != capability.MustParseAmount("2.5") {
+	if spent.Spent != limes.MustParseAmount("2.5") {
 		t.Errorf("spent = %v, want 2.50", spent.Spent)
 	}
 
@@ -108,7 +108,7 @@ func TestCharge_FanoutCommitsOnSameTx(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get usage: %v", err)
 	}
-	if usage.SpentAmount != capability.MustParseAmount("2.5") {
+	if usage.SpentAmount != limes.MustParseAmount("2.5") {
 		t.Errorf("cap spent = %v, want 2.50", usage.SpentAmount)
 	}
 	// Ledger row committed.
@@ -135,13 +135,13 @@ func TestCharge_FanoutErrorRollsBackEverything(t *testing.T) {
 	seedCapRecord(t, h, capID, tenantID)
 
 	boom := errors.New("fan-out down")
-	_, err := store.Charge(ctx, capability.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: capability.MustParseAmount("2.5"), MaxBudget: capability.MustParseAmount("10.0"), UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, func(context.Context, pgx.Tx) error { return boom })
+	_, err := store.Charge(ctx, limes.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: limes.MustParseAmount("2.5"), MaxBudget: limes.MustParseAmount("10.0"), UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, func(context.Context, pgx.Tx) error { return boom })
 	if !errors.Is(err, boom) {
 		t.Fatalf("charge err = %v, want it to wrap the fan-out error", err)
 	}
 
 	// Counter never committed → no usage row at all.
-	if _, err := store.GetUsage(ctx, capID); !errors.Is(err, capability.ErrUsageNotFound) {
+	if _, err := store.GetUsage(ctx, capID); !errors.Is(err, limes.ErrUsageNotFound) {
 		t.Errorf("usage after rollback: err = %v, want ErrUsageNotFound (counter must not have committed)", err)
 	}
 	// Ledger row rolled back.

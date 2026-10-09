@@ -10,14 +10,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 // ReplayPurgeBatch bounds how many expired proof ids one purge statement
 // deletes, so a backlog drains in short statements rather than one long one.
 const ReplayPurgeBatch = 10_000
 
-// ReplayCache is a capability.ReplayCache shared by every replica through
+// ReplayCache is a limes.ReplayCache shared by every replica through
 // the dpop_seen_jti table (migration 037): a proof accepted on one replica is
 // refused on all the others for as long as it could be accepted at all.
 //
@@ -29,7 +29,7 @@ type ReplayCache struct {
 	log  *zap.Logger
 }
 
-var _ capability.ReplayCache = (*ReplayCache)(nil)
+var _ limes.ReplayCache = (*ReplayCache)(nil)
 
 // NewReplayCache builds a ReplayCache over pool. Caller owns the pool.
 func NewReplayCache(pool *pgxpool.Pool, log *zap.Logger) (*ReplayCache, error) {
@@ -42,7 +42,7 @@ func NewReplayCache(pool *pgxpool.Pool, log *zap.Logger) (*ReplayCache, error) {
 	return &ReplayCache{pool: pool, log: log}, nil
 }
 
-// Seen implements capability.ReplayCache. It records jti until expires and
+// Seen implements limes.ReplayCache. It records jti until expires and
 // reports whether a live record of it already existed. A record that has
 // expired but not yet been purged does not count: it is overwritten, as the
 // in-process cache forgets an expired id.

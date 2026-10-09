@@ -37,7 +37,7 @@
 frontend/src/gen/** linguist-generated=true
 
 # ─── Generated: the module checksum files ────────────────────────────────
-# 52 KB over backend/go.sum and capability/go.sum, reviewed as "the lock
+# Tens of KB over backend/go.sum and sdk/go/go.sum, reviewed as "the lock
 # moved" and never line by line.
 #
 # Not redundant: generated.rb knows the JavaScript and Python lockfiles —

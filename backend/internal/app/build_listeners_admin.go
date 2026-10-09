@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/apitokenh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/capabilityh"
@@ -28,7 +29,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/wire"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
-	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
 
@@ -135,7 +135,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		}
 		capAdmin = auth.CapabilityInterceptorWithEvents(
 			deps.Capability.Verifier,
-			capability.AudiencePlaneAdmin,
+			limes.AudiencePlaneAdmin,
 			deps.Capability.Usage,
 			cfg.Capability.ChargePerRequestAmount,
 			cfg.Capability.ChargePerRequestUnit,
@@ -282,7 +282,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	paladinadminv1connect.RegisterQuotaServiceHandler(adminServer, admin.NewQuotaServer(quotaH))
 
 	{
-		var usageStore capability.UsageStore[pgx.Tx]
+		var usageStore limes.UsageStore[pgx.Tx]
 		if deps.Capability != nil {
 			usageStore = deps.Capability.Usage
 		}

@@ -61,14 +61,13 @@ WORKDIR /app
 
 # Module files first — best cache hit on dependency-only changes.
 # Build context is the REPOSITORY ROOT, not backend/ — the binary depends on
-# the nested capability module at repo-root capability/, which a backend-only
-# context cannot reach (`go mod download` fails resolving the relative
-# replace). Every path below is therefore repo-relative.
+# the Go SDK at repo-root sdk/go/, which a backend-only context cannot reach
+# (`go mod download` fails resolving the relative replace). Every path below
+# is therefore repo-relative.
 COPY --link backend/go.mod backend/go.sum ./
-# The sibling modules must land BEFORE `go mod download`, because the replace
-# directives in backend/go.mod resolve against them. sdk/go carries the
+# The sibling module must land BEFORE `go mod download`, because the replace
+# directive in backend/go.mod resolves against it. sdk/go carries the
 # committed protobuf and Connect stubs; they are not regenerated here.
-COPY --link capability/ /capability/
 COPY --link sdk/go/ /sdk/go/
 RUN --mount=type=cache,target=/go_workspace/pkg/mod,sharing=locked \
     go mod download -x

@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/limes"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 const (
@@ -43,27 +43,27 @@ func TestDPoPProofSeenOnOneReplicaIsRefusedOnAnother(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jkt, err := capability.KeyThumbprint(key.Public())
+	jkt, err := limes.KeyThumbprint(key.Public())
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := &capability.Capability{ID: uuid.New(), ConfirmationJKT: jkt}
-	proof, err := capability.NewDPoPProof(key, "POST", dpopReplayURL, dpopReplayToken, time.Now())
+	c := &limes.Capability{ID: uuid.New(), ConfirmationJKT: jkt}
+	proof, err := limes.NewDPoPProof(key, "POST", dpopReplayURL, dpopReplayToken, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := capability.DPoPRequest{Proof: proof, Method: "POST", URL: dpopReplayURL, Token: dpopReplayToken}
+	req := limes.DPoPRequest{Proof: proof, Method: "POST", URL: dpopReplayURL, Token: dpopReplayToken}
 
-	first := &capability.DPoPVerifier{Replay: newReplayCache(t, rlsPool(t, ctx, admin))}
-	second := &capability.DPoPVerifier{Replay: newReplayCache(t, rlsPool(t, ctx, admin))}
+	first := &limes.DPoPVerifier{Replay: newReplayCache(t, rlsPool(t, ctx, admin))}
+	second := &limes.DPoPVerifier{Replay: newReplayCache(t, rlsPool(t, ctx, admin))}
 
 	if err := first.Check(ctx, *c, req); err != nil {
 		t.Fatalf("first use of the proof: %v", err)
 	}
-	if err := second.Check(ctx, *c, req); !errors.Is(err, capability.ErrDPoPReplayed) {
+	if err := second.Check(ctx, *c, req); !errors.Is(err, limes.ErrDPoPReplayed) {
 		t.Fatalf("the proof replayed on another replica: err = %v, want ErrDPoPReplayed", err)
 	}
-	if err := first.Check(ctx, *c, req); !errors.Is(err, capability.ErrDPoPReplayed) {
+	if err := first.Check(ctx, *c, req); !errors.Is(err, limes.ErrDPoPReplayed) {
 		t.Fatalf("the proof replayed on the same replica: err = %v, want ErrDPoPReplayed", err)
 	}
 }

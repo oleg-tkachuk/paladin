@@ -21,13 +21,13 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // BucketEnsurer idempotently ensures the physical Paladin bucket exists, reusing
@@ -102,7 +102,7 @@ func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket str
 	// tenant satisfies. Provisioning buckets and collections is tenant
 	// administration, so it takes manage; no resource URI bounds it, so a
 	// resource-restricted capability is refused.
-	if err := auth.AssertCapabilityOp(ctx, capability.OpManage, ""); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, limes.OpManage, ""); err != nil {
 		return nil, err
 	}
 	// Authorize the whole self-provision bundle against the caller's own tenant

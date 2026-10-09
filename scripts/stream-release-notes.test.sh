@@ -31,7 +31,7 @@ commit proto/api.proto "feat(events): a new RPC"
 commit backend/main.go "feat(api): a server feature"
 commit sdk/python/client.py "fix(sdk): a python fix"
 commit sdk/go/README.md "docs(sdk): explain it"
-commit capability/mint.go "fix(capability): a module fix"
+commit backend/go.mod "fix(auth): take a limes fix"
 git -C "$work" tag sdk/go/v0.2.0
 git -C "$work" tag v1.0.0
 
@@ -45,7 +45,7 @@ for want in "SDK 0.2.0" "feat(sdk): a second helper" "feat(events): a new RPC" "
     "compare/sdk/go/v0.1.0...sdk/go/v0.2.0"; do
     [[ "$second" == *"$want"* ]] || fail "the SDK notes lack: $want"
 done
-for unwanted in "a server feature" "explain it" "a module fix" "the first helper"; do
+for unwanted in "a server feature" "explain it" "a limes fix" "the first helper"; do
     [[ "$second" != *"$unwanted"* ]] || fail "the SDK notes list: $unwanted"
 done
 

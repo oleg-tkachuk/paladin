@@ -1,4 +1,4 @@
-// Package pgmoney carries an amount between capability.Nanos and a Postgres
+// Package pgmoney carries an amount between limes.Nanos and a Postgres
 // numeric exactly, with no float64 in between: every money column and every
 // sum of one goes through it.
 package pgmoney
@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/oleg-tkachuk/paladin/capability"
+	"github.com/oleg-tkachuk/limes"
 )
 
 // nanosExp is the exponent of a nano: an amount is its count of nanos
@@ -21,7 +21,7 @@ const decimalBase = 10
 
 // NumericFromNanos is n as a numeric of nine decimals: exact, with no
 // float64 in between.
-func NumericFromNanos(n capability.Nanos) pgtype.Numeric {
+func NumericFromNanos(n limes.Nanos) pgtype.Numeric {
 	return pgtype.Numeric{Int: big.NewInt(int64(n)), Exp: nanosExp, Valid: true}
 }
 
@@ -29,7 +29,7 @@ func NumericFromNanos(n capability.Nanos) pgtype.Numeric {
 // zero, as a counter with no row does. A value finer than a nano, beyond
 // int64, NaN or infinite is an error: the columns' CHECKs keep all of them
 // out, so one here is corruption, not rounding to do.
-func NanosFromNumeric(v pgtype.Numeric) (capability.Nanos, error) {
+func NanosFromNumeric(v pgtype.Numeric) (limes.Nanos, error) {
 	if !v.Valid {
 		return 0, nil
 	}
@@ -49,5 +49,5 @@ func NanosFromNumeric(v pgtype.Numeric) (capability.Nanos, error) {
 	if !n.IsInt64() {
 		return 0, fmt.Errorf("pgmoney: amount beyond int64 nanos")
 	}
-	return capability.Nanos(n.Int64()), nil
+	return limes.Nanos(n.Int64()), nil
 }

@@ -11,10 +11,10 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // fakeSubmitter is an in-memory Submitter. It records what the handler
@@ -132,9 +132,9 @@ func authedCtx(tid uuid.UUID) context.Context {
 
 // authedCtxWithCap authorises exactly `ops`; a missing op drives the
 // PermissionDenied branch of auth.AssertCapabilityOp.
-func authedCtxWithCap(tid uuid.UUID, ops ...capability.Op) context.Context {
-	return auth.WithCapability(authedCtx(tid), &capability.Capability{
-		Caveats: capability.Caveats{Ops: ops},
+func authedCtxWithCap(tid uuid.UUID, ops ...limes.Op) context.Context {
+	return auth.WithCapability(authedCtx(tid), &limes.Capability{
+		Caveats: limes.Caveats{Ops: ops},
 	})
 }
 
@@ -189,7 +189,7 @@ func TestBatchDelete(t *testing.T) {
 	})
 
 	t.Run("capability lacks delete op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, capability.OpGet) // no OpDelete
+		ctx := authedCtxWithCap(tid, limes.OpGet) // no OpDelete
 		h := newHandler(&fakeSubmitter{}, allowAll())
 		_, err := h.BatchDelete(ctx, BatchDeleteArgs{ObjectIDs: ids(1)})
 		wantCode(t, err, connect.CodePermissionDenied)
@@ -249,7 +249,7 @@ func TestBatchDelete(t *testing.T) {
 	})
 
 	t.Run("capability with delete op is allowed", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, capability.OpDelete)
+		ctx := authedCtxWithCap(tid, limes.OpDelete)
 		sub := &fakeSubmitter{id: uuid.New()}
 		_, err := newHandler(sub, allowAll()).BatchDelete(ctx, BatchDeleteArgs{ObjectIDs: ids(1)})
 		if err != nil {
@@ -283,7 +283,7 @@ func TestBatchCopy(t *testing.T) {
 	})
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, capability.OpGet) // no OpPut
+		ctx := authedCtxWithCap(tid, limes.OpGet) // no OpPut
 		h := newHandler(&fakeSubmitter{}, allowAll())
 		_, err := h.BatchCopy(ctx, BatchCopyArgs{ObjectIDs: ids(1)})
 		wantCode(t, err, connect.CodePermissionDenied)
@@ -363,7 +363,7 @@ func TestBatchUpdateTags(t *testing.T) {
 	})
 
 	t.Run("capability lacks tag op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, capability.OpGet) // no OpTag
+		ctx := authedCtxWithCap(tid, limes.OpGet) // no OpTag
 		h := newHandler(&fakeSubmitter{}, allowAll())
 		_, err := h.BatchUpdateTags(ctx, BatchUpdateTagsArgs{ObjectIDs: ids(1)})
 		wantCode(t, err, connect.CodePermissionDenied)
@@ -446,7 +446,7 @@ func TestBatchRestoreObjects(t *testing.T) {
 	})
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, capability.OpGet) // restore requires OpPut
+		ctx := authedCtxWithCap(tid, limes.OpGet) // restore requires OpPut
 		h := newHandler(&fakeSubmitter{}, allowAll())
 		_, err := h.BatchRestoreObjects(ctx, BatchRestoreObjectsArgs{ObjectIDs: ids(1)})
 		wantCode(t, err, connect.CodePermissionDenied)
@@ -582,8 +582,8 @@ const (
 
 // restrictedCtx carries a capability confined to inScopeDir of
 // scopedCollection, with ops.
-func restrictedCtx(tid uuid.UUID, ops ...capability.Op) context.Context {
-	return auth.WithCapability(authedCtx(tid), &capability.Capability{Caveats: capability.Caveats{
+func restrictedCtx(tid uuid.UUID, ops ...limes.Op) context.Context {
+	return auth.WithCapability(authedCtx(tid), &limes.Capability{Caveats: limes.Caveats{
 		Ops:              ops,
 		ResourcePrefixes: []string{objecth.CapabilityObjectURI(tid, scopedCollection, inScopeDir)},
 	}})
@@ -610,18 +610,18 @@ func TestBatchOverOneCollectionChecksEachObject(t *testing.T) {
 	elsewhere := object("other", inScopeDir+"c.txt")
 
 	batches := map[string]struct {
-		op     capability.Op
+		op     limes.Op
 		submit func(*Handler, context.Context, []uuid.UUID) error
 	}{
-		"BatchDelete": {capability.OpDelete, func(h *Handler, ctx context.Context, ids []uuid.UUID) error {
+		"BatchDelete": {limes.OpDelete, func(h *Handler, ctx context.Context, ids []uuid.UUID) error {
 			_, err := h.BatchDelete(ctx, BatchDeleteArgs{Collection: scopedCollection, ObjectIDs: ids})
 			return err
 		}},
-		"BatchUpdateTags": {capability.OpTag, func(h *Handler, ctx context.Context, ids []uuid.UUID) error {
+		"BatchUpdateTags": {limes.OpTag, func(h *Handler, ctx context.Context, ids []uuid.UUID) error {
 			_, err := h.BatchUpdateTags(ctx, BatchUpdateTagsArgs{Collection: scopedCollection, ObjectIDs: ids})
 			return err
 		}},
-		"BatchRestoreObjects": {capability.OpPut, func(h *Handler, ctx context.Context, ids []uuid.UUID) error {
+		"BatchRestoreObjects": {limes.OpPut, func(h *Handler, ctx context.Context, ids []uuid.UUID) error {
 			_, err := h.BatchRestoreObjects(ctx, BatchRestoreObjectsArgs{Collection: scopedCollection, ObjectIDs: ids})
 			return err
 		}},
@@ -663,7 +663,7 @@ func TestBatchOverOneCollectionChecksEachObject(t *testing.T) {
 func TestBatchReadsObjectsOnlyForARestrictedCapability(t *testing.T) {
 	tid := uuid.New()
 	for name, ctx := range map[string]context.Context{
-		"unrestricted capability": authedCtxWithCap(tid, capability.OpDelete),
+		"unrestricted capability": authedCtxWithCap(tid, limes.OpDelete),
 		"no capability":           authedCtx(tid),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -684,7 +684,7 @@ func TestBatchObjectLookupFailureRefuses(t *testing.T) {
 	tid := uuid.New()
 	sub := &fakeSubmitter{}
 	_, err := NewHandler(sub, allowAll(), fakeBuckets{}, &fakeObjects{err: errors.New("db down")}).
-		BatchDelete(restrictedCtx(tid, capability.OpDelete), BatchDeleteArgs{Collection: scopedCollection, ObjectIDs: ids(1)})
+		BatchDelete(restrictedCtx(tid, limes.OpDelete), BatchDeleteArgs{Collection: scopedCollection, ObjectIDs: ids(1)})
 	if err == nil || sub.called {
 		t.Fatalf("err = %v, submitted = %v; want refused", err, sub.called)
 	}
@@ -697,7 +697,7 @@ func TestBatchCopyChecksSourcesAndDestinations(t *testing.T) {
 	src := object(scopedCollection, inScopeDir+"a.txt")
 	tainted := object(scopedCollection, inScopeDir+"t.txt")
 	tainted.Taint = []string{"pii"}
-	readWrite := []capability.Op{capability.OpGet, capability.OpPut}
+	readWrite := []limes.Op{limes.OpGet, limes.OpPut}
 
 	cases := map[string]struct {
 		ctx       context.Context
@@ -718,13 +718,13 @@ func TestBatchCopyChecksSourcesAndDestinations(t *testing.T) {
 			code: connect.CodePermissionDenied,
 		},
 		"unrestricted without get": {
-			ctx: authedCtxWithCap(tid, capability.OpPut), dst: "dst", ids: idsOf(src), code: connect.CodePermissionDenied,
+			ctx: authedCtxWithCap(tid, limes.OpPut), dst: "dst", ids: idsOf(src), code: connect.CodePermissionDenied,
 		},
 		"unrestricted, a tainted source": {
 			ctx: authedCtxWithCap(tid, readWrite...), dst: "dst", ids: idsOf(tainted), code: connect.CodePermissionDenied,
 		},
 		"unrestricted, allowed tainted reads": {
-			ctx: auth.WithCapability(authedCtx(tid), &capability.Capability{Caveats: capability.Caveats{
+			ctx: auth.WithCapability(authedCtx(tid), &limes.Capability{Caveats: limes.Caveats{
 				Ops: readWrite, AllowTaintedRead: true,
 			}}),
 			dst: "dst", ids: idsOf(tainted),

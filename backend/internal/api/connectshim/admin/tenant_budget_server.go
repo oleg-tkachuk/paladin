@@ -11,10 +11,10 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	"github.com/oleg-tkachuk/paladin/capability"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -24,7 +24,7 @@ import (
 // `tenants/{tenant}/budget`, as its quota is `tenants/{tenant}/quota`.
 const budgetSegment = "/budget"
 
-// TenantBudgetServer is the Connect adapter for capability.TenantBudgets —
+// TenantBudgetServer is the Connect adapter for limes.TenantBudgets —
 // the tenant-ceiling half of the usage store. It depends on nothing that
 // meters, so it cannot charge or refund. A thin pass-through that does shape
 // conversion + error mapping.
@@ -35,14 +35,14 @@ const budgetSegment = "/budget"
 // platform.admin (cross-tenant) and tenant.admin (own-tenant only).
 type TenantBudgetServer struct {
 	paladinadminv1connect.UnimplementedTenantBudgetServiceHandler
-	Usage capability.TenantBudgets
+	Usage limes.TenantBudgets
 }
 
 // NewTenantBudgetServer wires the handler. usage may be nil — the
 // capability subsystem is opt-in (cfg.Capability.Enabled). When nil,
 // every RPC returns CodeUnavailable so the operator notices the
 // misconfig immediately rather than getting silent NULL responses.
-func NewTenantBudgetServer(usage capability.TenantBudgets) *TenantBudgetServer {
+func NewTenantBudgetServer(usage limes.TenantBudgets) *TenantBudgetServer {
 	return &TenantBudgetServer{Usage: usage}
 }
 
@@ -63,7 +63,7 @@ func (s *TenantBudgetServer) Get(
 	// as the tenant is what makes the read see it.
 	tb, err := s.Usage.GetTenantBudget(auth.WithActingTenant(ctx, tenantID), tenantID)
 	if err != nil {
-		if errors.Is(err, capability.ErrTenantBudgetNotFound) {
+		if errors.Is(err, limes.ErrTenantBudgetNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -101,7 +101,7 @@ func (s *TenantBudgetServer) Set(
 	if err != nil {
 		return nil, err
 	}
-	args := capability.SetTenantBudgetRequest{
+	args := limes.SetTenantBudgetRequest{
 		TenantID:        tenantID,
 		MaxBudgetAmount: budget,
 		UnitCode:        unit,
@@ -123,7 +123,7 @@ func (s *TenantBudgetServer) Set(
 	if err != nil {
 		// A version mismatch is the caller's to resolve — re-read and retry —
 		// not a server fault, so it must not read as Internal.
-		if errors.Is(err, capability.ErrTenantBudgetVersionMismatch) {
+		if errors.Is(err, limes.ErrTenantBudgetVersionMismatch) {
 			return nil, connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -149,7 +149,7 @@ func (s *TenantBudgetServer) Summarize(
 	if m.GetUnlimitedOnly() && m.GetThresholdPct() > 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "unlimited_only is mutually exclusive with a non-zero threshold_pct")
 	}
-	rows, next, err := s.Usage.ListTenantBudgets(ctx, capability.ListTenantBudgetsRequest{
+	rows, next, err := s.Usage.ListTenantBudgets(ctx, limes.ListTenantBudgetsRequest{
 		ThresholdPct:    m.GetThresholdPct(),
 		UnlimitedOnly:   m.GetUnlimitedOnly(),
 		ExcludeInactive: m.GetExcludeInactive(),
@@ -157,7 +157,7 @@ func (s *TenantBudgetServer) Summarize(
 		Cursor:          m.GetPageToken(),
 	})
 	if err != nil {
-		if errors.Is(err, capability.ErrInvalidRequest) { // a page token the store cannot read
+		if errors.Is(err, limes.ErrInvalidRequest) { // a page token the store cannot read
 			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -183,7 +183,7 @@ var _ paladinadminv1connect.TenantBudgetServiceHandler = (*TenantBudgetServer)(n
 // tenantBudgetToProto converts the internal snapshot to the wire shape.
 // Times that are zero come back as nil so the wire payload is tighter
 // (Connect-JSON doesn't need to ship the epoch timestamp).
-func tenantBudgetToProto(tb capability.TenantBudget) *pb.TenantBudget {
+func tenantBudgetToProto(tb limes.TenantBudget) *pb.TenantBudget {
 	out := &pb.TenantBudget{
 		TenantId:        tb.TenantID.String(),
 		MaxBudget:       apiutil.MoneyOf(tb.UnitCode, tb.MaxBudgetAmount),

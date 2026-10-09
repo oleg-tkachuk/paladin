@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
@@ -22,7 +23,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/capability"
 )
 
 // BuildHTTPServer wraps a mux into an h2c-enabled http.Server with
@@ -183,7 +183,7 @@ func capabilityComponent(deps *SharedDeps) health.Check {
 		Switch:   health.Fixed(health.ByConfig(on, config.KeyCapabilityEnabled)),
 		Func: func(ctx context.Context) error {
 			_, err := deps.Capability.Store.Get(ctx, uuid.New())
-			return storeAnswers(err, capability.ErrNotFound)
+			return storeAnswers(err, limes.ErrNotFound)
 		},
 	}
 }
