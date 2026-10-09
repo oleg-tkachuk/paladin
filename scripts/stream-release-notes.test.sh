@@ -52,7 +52,7 @@ done
 # A breaking release: one `!` commit, one with the footer, and a guide
 # section for the version.
 mkdir -p "$work/docs"
-printf '# Upgrading\n\n## v0.3.0 — the SDK'"'"'s calls change\n\nText.\n' >"$work/docs/upgrading.md"
+printf '# Upgrading\n\n## v0.3.0 — a product release\n\nText.\n\n## v1.0.0, sdk/go/v0.3.0 — the SDK'"'"'s calls change\n\nText.\n' >"$work/docs/upgrading.md"
 commit sdk/go/client.go "feat(sdk)!: rename a helper"
 mkdir -p "$work/sdk/go"
 echo x >>"$work/sdk/go/other.go"
@@ -63,7 +63,7 @@ git -C "$work" tag sdk/go/v0.3.0
 third=$(notes sdk/go/v0.3.0)
 behaviour=${third%%"## Features"*}
 for want in "## Behaviour changes" "feat(sdk)!: rename a helper" "fix(sdk): stop retrying a call" \
-    "upgrading.md#v030--the-sdks-calls-change"; do
+    "upgrading.md#v100-sdkgov030--the-sdks-calls-change"; do
     [[ "$behaviour" == *"$want"* ]] || fail "the breaking notes lack, before the features: $want"
 done
 features=${third#*"## Features"}

@@ -24,7 +24,6 @@ import { useAuditLogs } from "@/hooks/useAuditLogs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -39,22 +38,8 @@ import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../tenant-context";
 import { ActorName } from "@/components/features/audit/ActorName";
+import { AuditActionCell } from "@/components/features/audit/AuditActionCell";
 import { Timestamp } from "@/components/Timestamp";
-
-function actionPalette(
-  action: string,
-  hasError: boolean,
-): "destructive" | "warning" | "info" | "success" | "outline" {
-  if (hasError) return "destructive";
-  const a = action.toLowerCase();
-  if (a.includes("delete") || a.includes("revoke")) return "destructive";
-  if (a.includes("update") || a.includes("rotate") || a.includes("set"))
-    return "warning";
-  if (a.includes("create") || a.includes("login")) return "success";
-  if (a.includes("get") || a.includes("list") || a.includes("read"))
-    return "info";
-  return "outline";
-}
 
 /** Entries per page of the tenant's trail. */
 const TENANT_AUDIT_PAGE_SIZE = 100;
@@ -192,30 +177,14 @@ export default function TenantAuditLogPage() {
                     >
                       <Timestamp ts={e.at} />
                     </TableCell>
-                    {/* Action, actor and resource are long unbroken
-                        identifiers (RPC paths, `apikey:<uuid>`, resource
-                        names): they wrap, or one row widens the table past
-                        its card. */}
+                    {/* Actor and resource are long unbroken identifiers
+                        (`apikey:<uuid>`, resource names): they wrap, or one
+                        row widens the table past its card. */}
                     <TableCell className="max-w-80 whitespace-normal">
-                      <div className="space-y-1">
-                        <Badge
-                          variant={actionPalette(e.action, hasError)}
-                          className={cn(
-                            T.code,
-                            "h-auto max-w-full whitespace-normal break-all",
-                          )}
-                        >
-                          {e.action || "(unknown)"}
-                        </Badge>
-                        {hasError && (
-                          <div className="flex items-start gap-1.5 text-xs text-destructive">
-                            <ExclamationTriangleIcon className="mt-0.5 size-3 shrink-0" />
-                            <span className="line-clamp-2">
-                              {e.errorMessage}
-                            </span>
-                          </div>
-                        )}
-                      </div>
+                      <AuditActionCell
+                        action={e.action}
+                        errorMessage={e.errorMessage}
+                      />
                     </TableCell>
                     <TableCell className="whitespace-normal break-all">
                       <div className="space-y-0.5">
