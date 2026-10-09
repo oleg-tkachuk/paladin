@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
 
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
 
-T = TypeVar("T")
 
-
-def ensure(get: Callable[[], T], create: Callable[[], T]) -> tuple[T, bool]:
+def ensure[T](get: Callable[[], T], create: Callable[[], T]) -> tuple[T, bool]:
     """Call ``get``; when it raises NotFound, ``create``; when the create
     raises AlreadyExists — another process got there first — ``get`` again.
     Returns the resource and whether this call created it. Any other error
@@ -33,7 +30,7 @@ def ensure(get: Callable[[], T], create: Callable[[], T]) -> tuple[T, bool]:
     return get(), False
 
 
-async def aensure(
+async def aensure[T](
     get: Callable[[], Awaitable[T]], create: Callable[[], Awaitable[T]]
 ) -> tuple[T, bool]:
     """``ensure`` for the async clients."""

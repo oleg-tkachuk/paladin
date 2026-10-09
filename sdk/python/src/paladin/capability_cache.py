@@ -17,7 +17,7 @@ import asyncio
 import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 CAPABILITY_REFRESH_MARGIN = timedelta(seconds=30)
 """How long before its expiry a cached capability is replaced, so a call does
@@ -30,7 +30,7 @@ AsyncMint = Callable[[str], Awaitable[tuple[str, datetime]]]
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class NoCapabilityKeyError(ValueError):

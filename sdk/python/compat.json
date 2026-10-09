@@ -1,8 +1,8 @@
 {
-  "python": ["3.10", "3.11", "3.12", "3.13", "3.14"],
+  "python": ["3.13", "3.14"],
   "with": ["protobuf==6.33.5", "protobuf==7.36.2"],
   "include": [
-    { "python": "3.10", "with": "hatchet-sdk==1.41.1" },
+    { "python": "3.13", "with": "hatchet-sdk==1.41.1" },
     { "python": "3.14", "with": "hatchet-sdk==1.41.1" },
     { "python": "3.14", "with": "protobuf==7.36.2", "without_tls": true }
   ]

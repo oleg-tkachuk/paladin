@@ -3,7 +3,7 @@
 # beside the given requirements, and run its tests there.
 #
 #   scripts/py-sdk-compat.sh [--without-tls] <python> [requirement...]
-#   scripts/py-sdk-compat.sh 3.10 protobuf==6.33.5
+#   scripts/py-sdk-compat.sh 3.13 protobuf==6.33.5
 #   scripts/py-sdk-compat.sh 3.14 hatchet-sdk==1.41.1
 #   scripts/py-sdk-compat.sh --matrix     every cell of sdk/python/compat.json
 #   scripts/py-sdk-compat.sh --list       those cells, one per line

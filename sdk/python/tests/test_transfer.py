@@ -7,7 +7,7 @@ import base64
 import hashlib
 import io
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
 import pytest
@@ -377,8 +377,8 @@ def test_crc32c_is_not_verified_without_the_extra(
 @pytest.mark.parametrize(
     ("raw", "want"),
     [
-        ("2026-10-06T12:00:00Z", datetime(2026, 10, 6, 12, tzinfo=timezone.utc)),
-        ("2026-10-06T15:00:00+03:00", datetime(2026, 10, 6, 12, tzinfo=timezone.utc)),
+        ("2026-10-06T12:00:00Z", datetime(2026, 10, 6, 12, tzinfo=UTC)),
+        ("2026-10-06T15:00:00+03:00", datetime(2026, 10, 6, 12, tzinfo=UTC)),
         ("", None),
         ("tomorrow", None),
     ],
