@@ -6,7 +6,7 @@ dynamic = ["version"]
 description = "Python client for the Paladin API: generated Connect stubs, sessions, and workflows."
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     # Pre-1.0: a minor may change the API the generated clients call, so the
     # range stops at the next one. CI tests the floor. connect-python's
@@ -17,7 +17,7 @@ dependencies = [
     # relay transports, which this package builds directly — not only through
     # connectrpc, whose own floor (0.5.1) predates what is used here.
     # Pre-1.0: the range stops at the next minor.
-    "pyqwest>=0.11.0,<0.12",
+    "pyqwest>=0.12,<0.13",
     # Both majors: workers that share an image with protobuf-6 libraries
     # (grpcio-tools, hatchet-sdk) can install the SDK. The floor is the gencode
     # version of the protoc in grpcio-tools below, and the one

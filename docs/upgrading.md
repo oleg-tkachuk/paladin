@@ -44,6 +44,13 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the Python SDK requires Python 3.13
+
+- **Breaking, Python SDK.** `requires-python` is `>=3.13`; 3.10, 3.11 and
+  3.12 are no longer installable or tested. `pyqwest` 0.12, which the SDK now
+  requires, dropped 3.10 itself. A worker on an older Python stays on the last
+  SDK release that supported it, or moves to 3.13 or 3.14.
+
 ## Unreleased — the capability primitive is limes
 
 The capability module moved out of this repository to
