@@ -197,7 +197,7 @@ services:
         condition: service_started
 
   postgres:
-    image: postgres:18.6
+    image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
     environment:
       POSTGRES_DB: paladin
       POSTGRES_USER: paladin
@@ -250,7 +250,7 @@ services:
   # no RLS policy at all, and why an RLS migration could pass the whole suite
   # and then refuse every login on the cluster.
   promote-app-role:
-    image: postgres:18.6
+    image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
     restart: "no"
     environment:
       PGPASSWORD: paladin
