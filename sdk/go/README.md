@@ -86,7 +86,7 @@ up to `MaxRequestBytes` (4 MiB), the limits the server keeps.
 | --- | --- |
 | `WithBearerToken(token)` | Sends `Authorization: Bearer <token>`. An API token (`paladin_pat_…`) and an OIDC JWT are both accepted there. |
 | `WithAPIToken(token)` | Sends an API token in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. |
-| `WithCapability(token)` | Sends a capability token in `X-Paladin-Capability`: the JWT or its Biscuit form, narrowed offline with `capability.Attenuate` or not. Can be combined with a bearer token. |
+| `WithCapability(token)` | Sends a capability token in `X-Paladin-Capability`: the JWT or its Biscuit form, narrowed offline with `limes.Attenuate` or not. Can be combined with a bearer token. |
 | `WithCapabilitySource(source)` | Sends the capability `source(ctx)` returns for each call, for a client acting for many callers; an empty one leaves `WithCapability`'s. DPoP proofs sign over it. |
 | `WithDPoP(key)` | Proves possession of `key` — any `crypto.Signer` with an Ed25519 or P-256 public key, a KMS-held one included — on every call that sends a capability: each request, each retry included, carries a fresh RFC 9449 proof in `DPoP`. A capability issued with `confirmation_jkt = DPoPThumbprint(key.Public())` is refused without one. Proofs are signed for `POST`, so do not combine it with `connecthttp.WithHTTPGet`. |
 | `WithHeader(name, value)` | Sends a header on every call, replacing what the SDK would send there — `User-Agent` included, which is `paladin-sdk-go/<module version>` by default. |
@@ -130,21 +130,22 @@ and `Issue*` calls and answers a repeated key with the first response.
 `CapabilityService.Issue` and `Delegate` return `biscuit` beside `token`: the
 same capability as a Biscuit v3 token, which whoever holds it can narrow with
 no key and no call to the server. This SDK has no helper of its own: import
-the capability module, whose `Attenuate` is the code the server's verifier is
-tested against, so there is no second implementation of the vocabulary to
-drift from it.
+[limes](https://github.com/oleg-tkachuk/limes), the capability primitive the
+server runs, whose `Attenuate` is the code the server's verifier is tested
+against, so there is no second implementation of the vocabulary to drift from
+it.
 
 ```bash
-go get github.com/oleg-tkachuk/paladin/capability
+go get github.com/oleg-tkachuk/limes
 ```
 
 ```go
-import "github.com/oleg-tkachuk/paladin/capability"
+import "github.com/oleg-tkachuk/limes"
 
-narrowed, err := capability.Attenuate(issued.GetBiscuit(), capability.Attenuation{
-    Ops:              []capability.Op{capability.OpGet},
+narrowed, err := limes.Attenuate(issued.GetBiscuit(), limes.Attenuation{
+    Ops:              []limes.Op{limes.OpGet},
     ResourcePrefixes: []string{"corpus/public/"},
-    Planes:           []string{capability.AudiencePlaneData},
+    Planes:           []string{limes.AudiencePlaneData},
     ExpiresAt:        time.Now().Add(10 * time.Minute),
 })
 client, err := paladin.New(dataURL, paladin.WithCapability(narrowed))
@@ -154,7 +155,7 @@ A field left empty leaves that dimension as it is; a set one replaces it and
 must be within what the token allows, or the server refuses the whole token.
 Setting `ResourcePrefixes` or `ResourceURIs` replaces both. `ConfirmationJKT`
 (`DPoPThumbprint(key.Public())`) binds the token to a key, and only an unbound
-token can be bound. `MaxRequests` and `MaxBudget` (`capability.Nanos`, billionths of the
+token can be bound. `MaxRequests` and `MaxBudget` (`limes.Nanos`, billionths of the
 capability's unit) give the copy limits of its own, counted apart from other copies and within every limit already in
 force; spending past them answers `ResourceExhausted`.
 `CapabilityService.GetBiscuitUsage` takes a copy and reports each limit in
@@ -511,7 +512,7 @@ tests hold its parsers to as well. Where they differ, it is on purpose:
 | Minimum TLS version | `TLS.MinVersion`, 1.2 by default | `TLS(min_version=…)`, `ssl.TLSVersion.TLSv1_2` by default | |
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
 | Webhook signatures | `VerifyWebhook`, options for the window and clock | `verify_webhook`, keyword arguments | Each language's idiom; both run the vectors in `sdk/testdata/webhook_signatures.json`. |
-| Biscuit attenuation | `capability.Attenuate`, from the capability module | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
+| Biscuit attenuation | `limes.Attenuate`, from [limes](https://github.com/oleg-tkachuk/limes) | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0. |
 | Bulk transfers | `DownloadMany`, a callback per reader; `UploadMany`, objects in input order and failures by index | `download_many` / `adownload_many` and `upload_many` / `aupload_many`, iterators of results as each finishes | Each language's idiom. |
 | asyncio | — | An `a…` form of every workflow | Go has goroutines. |

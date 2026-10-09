@@ -1,6 +1,7 @@
-"""paladin.attenuate, against sdk/testdata/biscuit_vocabulary.json — the names
-capability/'s tests read too — and the cross-language case in
-sdk/testdata/biscuit/, whose Python-made token capability/ verifies.
+"""paladin.attenuate, against sdk/testdata/biscuit_vocabulary.json — a copy of
+the vocabulary limes (github.com/oleg-tkachuk/limes) defines — and the
+cross-language case in sdk/testdata/biscuit/, whose Python-made token the
+backend verifies with limes (backend/internal/auth/biscuit_crosslang_test.go).
 
     PALADIN_WRITE_BISCUIT_FIXTURE=1 uv run pytest tests/test_biscuit.py
 
@@ -104,7 +105,7 @@ def test_attenuate_appends_one_block_of_the_shared_case() -> None:
 
 @needs_biscuit
 def test_checked_in_fixture_is_the_shared_case() -> None:
-    """python.biscuit — what capability/ verifies — carries the case's block."""
+    """python.biscuit — what the backend verifies — carries the case's block."""
     if os.environ.get(WRITE_FIXTURE):
         PYTHON.write_text(paladin.attenuate(_seed(), **_case()) + "\n")
     token = PYTHON.read_text().strip()
