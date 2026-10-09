@@ -13,6 +13,8 @@ module github.com/oleg-tkachuk/paladin/capability
 
 go 1.27.0
 
+toolchain go1.27.2
+
 require (
 	github.com/biscuit-auth/biscuit-go/v2 v2.2.0
 	github.com/google/uuid v1.6.0
