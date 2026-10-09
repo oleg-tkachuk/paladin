@@ -5,7 +5,7 @@
   implemented 2026-06-27.
 - **Context:** The streamable-HTTP MCP server authenticated requests with a
   non-standard `X-Paladin-Token` header — a bearer the operator pasted into the
-  agent host's config. Standard MCP clients (Claude Desktop, Cursor)
+  agent host's config. Standard MCP clients (desktop agents, IDE plugins)
   implement the MCP Authorization spec (OAuth 2.1): they send
   `Authorization: Bearer`, and on a 401 they expect a `WWW-Authenticate`
   challenge that points at OAuth metadata so they can *discover* where to

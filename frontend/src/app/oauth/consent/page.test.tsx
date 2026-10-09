@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 const baseParams =
-  "client_id=claude-desktop&scope=paladin.read paladin.write&redirect_uri=claude-desktop%3A%2F%2Fcb&state=st&code_challenge=abc&code_challenge_method=S256";
+  "client_id=desktop-agent&scope=paladin.read paladin.write&redirect_uri=desktop-agent%3A%2F%2Fcb&state=st&code_challenge=abc&code_challenge_method=S256";
 
 let searchString = baseParams;
 
@@ -19,7 +19,7 @@ beforeEach(() => {
 describe("OAuth ConsentPage", () => {
   it("shows the requesting client and the requested scopes", () => {
     render(<ConsentPage />);
-    expect(screen.getByText("claude-desktop")).toBeInTheDocument();
+    expect(screen.getByText("desktop-agent")).toBeInTheDocument();
     expect(screen.getByText("paladin.read")).toBeInTheDocument();
     expect(screen.getByText("paladin.write")).toBeInTheDocument();
   });
@@ -33,8 +33,8 @@ describe("OAuth ConsentPage", () => {
     // OAuth request params are round-tripped as hidden fields.
     const hidden = (name: string) =>
       form.querySelector<HTMLInputElement>(`input[name="${name}"]`)?.value;
-    expect(hidden("client_id")).toBe("claude-desktop");
-    expect(hidden("redirect_uri")).toBe("claude-desktop://cb");
+    expect(hidden("client_id")).toBe("desktop-agent");
+    expect(hidden("redirect_uri")).toBe("desktop-agent://cb");
     expect(hidden("code_challenge")).toBe("abc");
     expect(hidden("code_challenge_method")).toBe("S256");
     expect(hidden("state")).toBe("st");
