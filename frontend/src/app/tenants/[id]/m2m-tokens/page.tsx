@@ -34,7 +34,7 @@ import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { isRevoked, isExpired } from "./_constants";
 import { CreateTokenDialog } from "./CreateTokenDialog";
 import { RevokeTokenDialog } from "./RevokeTokenDialog";
-import { formatTimestampUTC } from "@/lib/format/timestamp";
+import { Timestamp } from "@/components/Timestamp";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 
 // Optional columns appear by the width of the table's card (see Table):
@@ -389,9 +389,7 @@ export default function M2MTokensPage() {
                         "text-muted-foreground",
                       )}
                     >
-                      {t.lastUsedAt
-                        ? formatTimestampUTC(t.lastUsedAt)
-                        : "never"}
+                      {t.lastUsedAt ? <Timestamp ts={t.lastUsedAt} /> : "never"}
                     </TableCell>
                     <TableCell
                       className={cn(
@@ -400,7 +398,7 @@ export default function M2MTokensPage() {
                         "text-muted-foreground",
                       )}
                     >
-                      {t.expiresAt ? formatTimestampUTC(t.expiresAt) : "never"}
+                      {t.expiresAt ? <Timestamp ts={t.expiresAt} /> : "never"}
                     </TableCell>
                     <TableCell>
                       {revoked ? (
