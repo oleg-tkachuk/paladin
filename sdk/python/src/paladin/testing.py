@@ -39,7 +39,7 @@ import threading
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from socketserver import ThreadingMixIn
 from types import TracebackType
@@ -88,7 +88,7 @@ from paladin.names import API_TOKEN_PREFIX, CollectionName, InvalidNameError, Ob
 from paladin.transfer import CHECKSUM_SHA256
 
 if TYPE_CHECKING:  # annotations only: typing.Self is 3.11+
-    from typing_extensions import Self
+    from typing import Self
 
 DEFAULT_COLLECTION = "default"
 DEFAULT_PUBLIC_COLLECTION = "public"
@@ -1073,7 +1073,7 @@ class FakePaladin(
             if request.content_disposition:
                 path += "?" + urlencode({_DISPOSITION_QUERY: request.content_disposition})
             url = self._signed(path, _GET)
-            url.expires_at_rfc3339 = (datetime.now(timezone.utc) + ttl).strftime(_RFC3339_UTC)
+            url.expires_at_rfc3339 = (datetime.now(UTC) + ttl).strftime(_RFC3339_UTC)
             if request.require_etag_match:
                 url.required_headers[_IF_MATCH] = f'"{o.msg.etag}"'
             return presign_service_pb2.PresignDownloadResponse(download_url=url)

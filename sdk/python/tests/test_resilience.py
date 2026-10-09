@@ -376,7 +376,7 @@ def test_now_matches_its_rfc3339_form() -> None:
     """The constants above describe one instant."""
     from datetime import datetime
 
-    assert datetime.fromisoformat(NOW_RFC3339.replace("Z", "+00:00")).timestamp() == NOW
+    assert datetime.fromisoformat(NOW_RFC3339).timestamp() == NOW
 
 
 def test_backoff_doubles_up_to_its_cap() -> None:

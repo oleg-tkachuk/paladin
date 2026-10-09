@@ -29,7 +29,7 @@ from paladin.observe import Hooks, TransferEvent, report_transfer
 from paladin.tls import TLS, TLSAndHTTPError
 
 if TYPE_CHECKING:  # annotations only: typing.Self is 3.11+
-    from typing_extensions import Self
+    from typing import Self
 
 DEFAULT_TRANSFER_CONNECT_TIMEOUT = 10.0
 """Seconds to open a connection to storage."""

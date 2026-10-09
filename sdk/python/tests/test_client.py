@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 
 import pytest
@@ -255,7 +255,7 @@ def test_retry_honours_a_retry_after_date(server) -> None:  # type: ignore[no-un
     server.recorder.failures = 1
     server.recorder.fail_code = Code.RESOURCE_EXHAUSTED
     server.recorder.retry_after = format_datetime(
-        datetime.now(timezone.utc) + timedelta(hours=1), usegmt=True
+        datetime.now(UTC) + timedelta(hours=1), usegmt=True
     )
     health = HealthServiceClientSync(
         server.url,
@@ -268,7 +268,7 @@ def test_retry_honours_a_retry_after_date(server) -> None:  # type: ignore[no-un
     assert server.recorder.calls == 1, "the Retry-After date was ignored"
 
 
-_NOW = datetime(2026, 10, 2, 12, 0, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 10, 2, 12, 0, 0, tzinfo=UTC)
 
 
 @pytest.mark.parametrize(
