@@ -282,7 +282,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # verify:release-rules runs the pinned commit analyzer against
-      # release.config.cjs. Node 24, as release.yaml runs it.
+      # .github/release/release.config.cjs. Node 24, as release.yaml runs it.
       - name: Set up Node for the release tooling
         if: matrix.group == 'repo'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -292,6 +292,7 @@ jobs:
 
       - name: Install the release tooling
         if: matrix.group == 'repo'
+        working-directory: .github/release
         run: npm ci
 
       # --yes accepts the first-fetch trust prompt for the shared task library

@@ -73,7 +73,6 @@ yarn-error.log*
 
 # ── Repo-tooling configs not needed at build time ───────────────────
 lefthook.yml
-release.config.cjs
 README.md
 CHANGELOG.md
 CLAUDE.md

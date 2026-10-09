@@ -9,7 +9,7 @@
 //   capability  capability/v<version> the capability module
 //
 // Each releases from the commits that touch its own files, read by
-// scripts/release/paths-analyzer.mjs: the SDK for a change under sdk/ or
+// paths-analyzer.mjs: the SDK for a change under sdk/ or
 // proto/, the capability module for one under capability/, the product for
 // any commit that changes what its images are built from — which is all of
 // it but the Python SDK: the backend compiles capability/ and sdk/go/ through
@@ -26,9 +26,9 @@
 // `security` is a patch on every stream: the preset knows no such type, so a
 // security fix released nothing. The SDK and the capability module are pre-1.0,
 // where a breaking change is a minor; their streams say so until they reach
-// 1.0. scripts/release-rules.test.mjs pins all of it.
+// 1.0. release-rules.test.mjs pins all of it.
 
-const ANALYZER = "./scripts/release/paths-analyzer.mjs";
+const ANALYZER = "./paths-analyzer.mjs";
 const PRESET = "conventionalcommits";
 const SECURITY_IS_A_PATCH = { type: "security", release: "patch" };
 const BREAKING_IS_A_MINOR_BEFORE_1_0 = { breaking: true, release: "minor" };
@@ -86,7 +86,7 @@ module.exports = {
   tagFormat: streams[stream].tagFormat,
   repositoryUrl: "https://github.com/oleg-tkachuk/paladin.git",
   plugins: [[ANALYZER, analyzerFor(stream)]],
-  // Read by scripts/release-rules.test.mjs; semantic-release ignores them.
+  // Read by release-rules.test.mjs; semantic-release ignores them.
   streams,
   analyzerFor,
 };
