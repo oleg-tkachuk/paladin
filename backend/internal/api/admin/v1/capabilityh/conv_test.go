@@ -20,6 +20,14 @@ import (
 
 var convTenant = uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
+// The agent metadata the principal conversions carry through unchanged.
+const (
+	convAgentType    = "coding-agent"
+	convAgentVersion = "1.2.3"
+	convModel        = "model-a"
+	convMCPClient    = "cli"
+)
+
 // ─── protoToPrincipalKind ──────────────────────────────────────────────────
 
 func TestProtoToPrincipalKind(t *testing.T) {
@@ -84,10 +92,10 @@ func TestProtoToPrincipalAgent(t *testing.T) {
 		Kind:          adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT,
 		TenantId:      convTenant.String(),
 		Subject:       "agent-1",
-		AgentType:     "claude-code",
-		AgentVersion:  "1.2.3",
-		Model:         "opus",
-		McpClient:     "cli",
+		AgentType:     convAgentType,
+		AgentVersion:  convAgentVersion,
+		Model:         convModel,
+		McpClient:     convMCPClient,
 		RunId:         runID.String(),
 		ParentAgentId: parentID.String(),
 	})
@@ -97,8 +105,8 @@ func TestProtoToPrincipalAgent(t *testing.T) {
 	if got.Agent == nil {
 		t.Fatal("an agent principal must carry agent metadata")
 	}
-	if got.Agent.AgentType != "claude-code" || got.Agent.AgentVersion != "1.2.3" ||
-		got.Agent.Model != "opus" || got.Agent.MCPClient != "cli" {
+	if got.Agent.AgentType != convAgentType || got.Agent.AgentVersion != convAgentVersion ||
+		got.Agent.Model != convModel || got.Agent.MCPClient != convMCPClient {
 		t.Errorf("agent metadata = %+v", got.Agent)
 	}
 	// The run/parent lineage is what makes delegated agent calls attributable.
@@ -327,12 +335,12 @@ func TestPrincipalToProtoAgent(t *testing.T) {
 	got := principalToProto(limes.Principal{
 		Type: limes.PrincipalAgent, TenantID: convTenant, Subject: "agent-1",
 		Agent: &limes.AgentPrincipal{
-			AgentType: "claude-code", AgentVersion: "1.2.3", Model: "opus", MCPClient: "cli",
+			AgentType: convAgentType, AgentVersion: convAgentVersion, Model: convModel, MCPClient: convMCPClient,
 			RunID: runID, ParentAgentID: parentID,
 		},
 	})
-	if got.GetAgentType() != "claude-code" || got.GetAgentVersion() != "1.2.3" ||
-		got.GetModel() != "opus" || got.GetMcpClient() != "cli" {
+	if got.GetAgentType() != convAgentType || got.GetAgentVersion() != convAgentVersion ||
+		got.GetModel() != convModel || got.GetMcpClient() != convMCPClient {
 		t.Errorf("agent metadata = %+v", got)
 	}
 	if got.GetRunId() != runID.String() || got.GetParentAgentId() != parentID.String() {
@@ -357,7 +365,7 @@ func TestPrincipalRoundTrip(t *testing.T) {
 	runID := uuid.New()
 	in := limes.Principal{
 		Type: limes.PrincipalAgent, TenantID: convTenant, Subject: "agent-1",
-		Agent: &limes.AgentPrincipal{AgentType: "claude-code", RunID: runID},
+		Agent: &limes.AgentPrincipal{AgentType: convAgentType, RunID: runID},
 	}
 
 	got, err := protoToPrincipal(principalToProto(in))
@@ -367,7 +375,7 @@ func TestPrincipalRoundTrip(t *testing.T) {
 	if got.Type != in.Type || got.TenantID != in.TenantID || got.Subject != in.Subject {
 		t.Errorf("principal = %+v, want %+v", got, in)
 	}
-	if got.Agent == nil || got.Agent.AgentType != "claude-code" || got.Agent.RunID != runID {
+	if got.Agent == nil || got.Agent.AgentType != convAgentType || got.Agent.RunID != runID {
 		t.Errorf("agent = %+v", got.Agent)
 	}
 }
