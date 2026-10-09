@@ -31,7 +31,7 @@ ARG PNPM_VERSION=12.8.2
 # re-fetch the pnpm content-addressable store per arch (the resulting
 # node_modules are pure JS).
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS deps
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS deps
 ARG PNPM_VERSION
 
 # `node:${VERSION}-alpine` ships npm but NOT corepack since upstream removed
@@ -54,7 +54,7 @@ RUN pnpm install --frozen-lockfile
 # Stage 2 — builder. Runs `next build` with build-time metadata baked in
 # via NEXT_PUBLIC_-prefixed env vars (Next inlines them into the bundle).
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS builder
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS builder
 ARG PNPM_VERSION
 
 WORKDIR /app
@@ -79,7 +79,7 @@ RUN pnpm run build
 # Stage 3 — runtime. Minimal layout: only what the standalone bundle
 # needs, dropped to a non-root UID above 10000.
 # -----------------------------------------------------------------------------
-FROM node:${NODE_VERSION}-alpine@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS runtime
+FROM node:${NODE_VERSION}-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS runtime
 
 # ARGs do not cross stage boundaries — the builder's copies above are out of
 # scope here and have to be redeclared. Same block as backend/deploy/Dockerfile.
