@@ -14,7 +14,7 @@ set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
-readonly RELEASE_CONFIG=release.config.cjs
+readonly RELEASE_CONFIG=.github/release/release.config.cjs
 
 repo=$(sed -n 's|.*repositoryUrl: *"https://\(github.com/[^"]*\)\.git".*|\1|p' "$RELEASE_CONFIG")
 [[ -n "$repo" ]] || { echo "!!! no repositoryUrl in $RELEASE_CONFIG" >&2; exit 1; }

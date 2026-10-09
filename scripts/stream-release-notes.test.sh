@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # stream-release-notes.test.sh — the notes list what the stream released and
 # nothing else, in a throwaway repository with this repository's
-# release.config.cjs.
+# .github/release/release.config.cjs.
 
 set -euo pipefail
 
@@ -15,7 +15,8 @@ fail() { printf 'FAIL %s\n' "$1"; failed=1; }
 git -C "$work" init -q
 git -C "$work" config user.email test@example.invalid
 git -C "$work" config user.name test
-cp "$root/release.config.cjs" "$work/"
+mkdir -p "$work/.github/release"
+cp "$root/.github/release/release.config.cjs" "$work/.github/release/"
 commit() { # commit <path> <message>
     mkdir -p "$work/$(dirname "$1")"
     echo "$2" >>"$work/$1"

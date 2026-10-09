@@ -7,13 +7,13 @@
 // commit that touched only the SDK republished the product. Each case below
 // pins one.
 //
-// Runs from `task -t Taskfile.dev.yaml verify-repo` after `npm ci`.
+// Runs from `task -t Taskfile.dev.yaml verify-repo` after `npm ci` here.
 
 import { createRequire } from "node:module";
-import { analyzeWith, belongs, deciding, within } from "./release/paths-analyzer.mjs";
+import { analyzeWith, belongs, deciding, within } from "./paths-analyzer.mjs";
 
 const require = createRequire(import.meta.url);
-const { streams, analyzerFor } = require("../release.config.cjs");
+const { streams, analyzerFor } = require("./release.config.cjs");
 
 const BACKEND = ["backend/internal/api/handler.go"];
 const SDK = ["sdk/go/paladin/client.go"];
@@ -117,8 +117,8 @@ for (const name of Object.keys(streams)) {
 const NPM_PLUGIN = "@semantic-release/npm";
 for (const name of Object.keys(streams)) {
   process.env.RELEASE_STREAM = name;
-  delete require.cache[require.resolve("../release.config.cjs")];
-  const { plugins } = require("../release.config.cjs");
+  delete require.cache[require.resolve("./release.config.cjs")];
+  const { plugins } = require("./release.config.cjs");
   const names = (plugins ?? []).map((p) => (Array.isArray(p) ? p[0] : p));
   if (!plugins || names.length === 0) {
     console.log(`FAIL [${name}] names no plugins, so semantic-release would load its defaults`);
