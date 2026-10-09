@@ -38,7 +38,7 @@ require (
 	github.com/oasdiff/yaml3 v0.0.14
 	// limes is the capability primitive the auth planes run on.
 	github.com/oleg-tkachuk/limes v0.2.0
-	github.com/oleg-tkachuk/paladin/sdk/go v0.57.0
+	github.com/oleg-tkachuk/paladin/sdk/go v0.58.0
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/rabbitmq/amqp091-go v1.15.0
@@ -63,7 +63,7 @@ require (
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/zap v1.28.0
-	golang.org/x/crypto v0.57.0
+	golang.org/x/crypto v0.58.0
 	golang.org/x/sync v0.24.0
 	google.golang.org/genproto v0.0.0-20261005182115-fad411399dd8
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8
@@ -238,9 +238,9 @@ require (
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/term v0.46.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/term v0.47.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20261005182115-fad411399dd8 // indirect
