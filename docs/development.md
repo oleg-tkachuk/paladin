@@ -11,7 +11,7 @@ problem, read [SECURITY.md](../.github/SECURITY.md) instead.
 
 | Tool | Version | Why |
 | --- | --- | --- |
-| Go | 1.27+ | the `go` directive in `backend/go.mod` and `capability/go.mod`; the toolchain auto-downloads |
+| Go | 1.27+ | the `go` and `toolchain` directives in `backend/go.mod` and `sdk/go/go.mod`; the toolchain auto-downloads |
 | Node | 26 | matches `frontend/deploy/Dockerfile`; CI runs the same |
 | pnpm | 12.8.2 | pinned by `packageManager` in `frontend/package.json`; Node 26 ships no corepack, so `npm install -g pnpm@12.8.2` |
 | Docker | recent | compose stacks, testcontainers-backed integration tests |
@@ -65,14 +65,12 @@ Four tiers, and they run in different places for a reason:
 | Unit | `task backend:test` / `cd frontend && pnpm test` | nothing |
 | Integration | `task backend:test:integration` | Docker (testcontainers spins a real Postgres) |
 | E2E | `task -t Taskfile.dev.yaml verify-e2e` | Docker (rebuilds both images, then Playwright boots the compose stack) |
-| Capability module | `task -t Taskfile.dev.yaml verify-capability` (part of `verify-all`) | nothing, deliberately |
 
-The capability module must resolve **no** database driver and **no**
-object-storage SDK in its dependency graph, so that a third party can use it
-without either. `isolation_test.go` in the module asserts this against the
-resolved graph, so `verify-capability` — and with it `verify-all` and CI
-— fails if your change pulls either in. The right fix is almost always to
-move the code into `backend/` instead.
+The capability primitive is [limes](https://github.com/oleg-tkachuk/limes), a
+library in its own repository that pulls in no database driver and no storage
+SDK; Paladin's PostgreSQL stores for its contracts live in
+`backend/internal/capability/postgres/` and run limes's `storetest` and
+`metertest` from their integration tests.
 
 New behaviour needs a test, in the same commit. The middleware and store
 layers especially: that is where three-valued logic bugs hide, and there is a
@@ -165,7 +163,7 @@ correction or a small feature needs none of this.
 - Explain *why* in the description. The what is in the diff.
 
 Contributions are accepted under the licence of the directory they touch:
-AGPL-3.0-only, or Apache-2.0 under `proto/`, `sdk/` and `capability/` (see
+AGPL-3.0-only, or Apache-2.0 under `proto/` and `sdk/` (see
 [NOTICE](../NOTICE) and [ADR-0030](adr/0030-agpl-with-apache-client-surface.md)).
 There is no CLA.
 

@@ -93,7 +93,7 @@ component at a time.
 |------|-----|
 | [Docker](https://docs.docker.com/get-started/get-docker/) | testcontainers, `verify-deep` and `verify-e2e` |
 | Task 3.53+ | every gate is a task |
-| [Go](https://go.dev/dl/) 1.27+ | `backend/` and `capability/`, per their `go.mod`; the toolchain auto-downloads |
+| [Go](https://go.dev/dl/) 1.27+ | `backend/` and `sdk/go/`, per their `go.mod`; the toolchain auto-downloads |
 | [Node](https://nodejs.org) 26 | the console; the version its image ships and CI verifies with |
 | [pnpm](https://pnpm.io) 12.8 | pinned by `packageManager` in `frontend/package.json`; Node 26 has no corepack, so `npm install -g pnpm@12.8.2` |
 

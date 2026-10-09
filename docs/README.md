@@ -14,8 +14,7 @@ and where its boundaries are. This directory holds the detail.
 - [how-changes-land.md](how-changes-land.md) — trunk, Conventional Commits,
   what CI checks and what a green push to `main` releases.
 - [releasing.md](releasing.md) — what each tag family publishes, who
-  cuts it, and why the product, the SDKs and `capability/` are versioned
-  apart.
+  cuts it, and why the product and the SDKs are versioned apart.
 - [configuration.md](configuration.md) — every configuration surface:
   files, overlays, environment overrides, secrets, and the validation
   that runs at load.
@@ -24,9 +23,9 @@ and where its boundaries are. This directory holds the detail.
 - [`../backend/README.md`](../backend/README.md) — roles, ports, package
   layout, wire contracts, database.
 - [`../frontend/README.md`](../frontend/README.md) — console and BFF.
-- [`../capability/README.md`](../capability/README.md) — the standalone
-  authorisation primitive, usable without the rest of Paladin; its diagrams
-  are in [`../capability/docs/diagrams.md`](../capability/docs/diagrams.md).
+- [limes](https://github.com/oleg-tkachuk/limes) — the capability
+  primitive, a library of its own, usable without the rest of Paladin; its
+  diagrams are in its `docs/diagrams.md`.
 
 ## Subsystems
 

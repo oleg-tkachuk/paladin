@@ -1,6 +1,6 @@
 # Releasing
 
-Three release streams and one baseline. Each stream tracks what its
+Two release streams and one baseline. Each stream tracks what its
 consumers actually depend on, and each is cut automatically from the commits
 that touch it ([`release.config.cjs`](../.github/release/release.config.cjs)).
 
@@ -8,21 +8,19 @@ that touch it ([`release.config.cjs`](../.github/release/release.config.cjs)).
 | --- | --- | --- | --- |
 | `vX.Y.Z` | semantic-release, after a green push to `main` | both images and both Helm charts, plus the GitHub release | the commits that change what the images are built from — everything but `sdk/python/` |
 | `sdk/go/vX.Y.Z` | semantic-release, in the same run | the tag, which the Go proxy and pip resolve, and a GitHub release | the commits that touch `sdk/` or `proto/` |
-| `capability/vX.Y.Z` | semantic-release, in the same run | the tag, for `go get`, and a GitHub release | the commits that touch `capability/` |
 | `api/vX.Y.Z` | a maintainer, by hand | nothing; the baseline `buf breaking` compares against | the API contract |
 
-The module releases' notes list only their own `feat`, `fix`, `perf`,
+The SDK release's notes list only their own `feat`, `fix`, `perf`,
 `security` and `revert` commits (`scripts/stream-release-notes.sh`), and
 none is marked latest: that stays the product's release.
 
 A commit counts for every stream whose files it touches, and its type
-decides the bump on each. The backend compiles `capability/` and `sdk/go/`
-through `replace` and its image copies both, so a change there releases the
-product as well as its own module — `feat` a minor, `fix`/`perf`/`revert`/`security` a patch.
-The SDK and the capability module are pre-1.0, so a breaking change is a
-minor on their streams until they reach 1.0. A breaking change confined to
-`sdk/go/` or `capability/` breaks that module's API, not the product's, so it
-releases the product as a minor too; one that also touches the server is the
+decides the bump on each. The backend compiles `sdk/go/` through `replace`
+and its image copies it, so a change there releases the product as well as
+the SDK — `feat` a minor, `fix`/`perf`/`revert`/`security` a patch. The SDK is
+pre-1.0, so a breaking change is a minor on its stream until it reaches 1.0.
+A breaking change confined to `sdk/go/` breaks the SDK's API, not the
+product's, so it releases the product as a minor too; one that also touches the server is the
 product's major. Documentation does not decide where a commit belongs:
 a breaking SDK commit that also writes its section of upgrading.md is still
 the SDK's alone.
@@ -142,10 +140,10 @@ line.
 compares against, cut by hand when a deliberate contract change has landed —
 see [upgrading.md](upgrading.md#changing-the-api-contract).
 
-## The capability module: `capability/vX.Y.Z`
+## The capability primitive: limes
 
-`capability/` is its own Go module with its own stream, cut from the commits
-that touch it. Paladin still uses it through a `replace` directive, so its
-releases do not wait on these tags; they are for `go get` from outside. The
-wire-format promise, and why the product's tag cannot be mirrored, are in
-[capability/README.md](../capability/README.md#versioning).
+The capability primitive was `capability/` here, released as
+`capability/vX.Y.Z` (the last is `capability/v0.17.1`). It is now
+[limes](https://github.com/oleg-tkachuk/limes), released from its own
+repository; `backend/go.mod` requires a limes tag like any dependency, and
+Renovate proposes new ones.

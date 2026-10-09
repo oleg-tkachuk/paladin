@@ -15,7 +15,6 @@ client can embed them without becoming subject to the AGPL:
   - proto/       the API contract
   - sdk/go/      the Go SDK
   - sdk/python/  the Python SDK
-  - capability/  the capability module
 
 --------------------------------------------------------------------------
 Third-party components
@@ -24,7 +23,7 @@ Third-party components
 This distribution bundles no third-party source. Dependencies are resolved
 at build time and retain their own licenses:
 
-  - Go module dependencies: see backend/go.sum and capability/go.sum;
+  - Go module dependencies: see backend/go.sum and sdk/go/go.sum;
     resolve with `go mod download` and inspect with
     `go list -m -json all`.
   - Node dependencies: see frontend/pnpm-lock.yaml.
