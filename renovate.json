@@ -6,8 +6,10 @@
     "Container base images: the Dockerfiles pin FROM tags by @sha256 for bit-reproducible builds, and a digest pin without automation rots — Renovate keeps tag and digest in lockstep.",
     "Go and npm: enabled for minor/patch only, grouped into one PR per half per month. Majors stay manual, matching `task deps:update` (minor/patch, no majors, cross a major deliberately per CHANGELOG). Grouping rather than disabling: a public repository needs the security half of dependency automation to work, and a manager that is switched off raises no PR when an advisory lands.",
     "Vulnerability remediation is ungrouped and unscheduled — it should not wait for the monthly window.",
-    "Code generators are versioned with the stubs they write, and Renovate cannot regenerate those stubs: a generator bump leaves them stale and the stale-stub gates fail. So generators move in their own PR, finished by running `task gen`, or not at all."
+    "Code generators are versioned with the stubs they write, and Renovate cannot regenerate those stubs: a generator bump leaves them stale and the stale-stub gates fail. So generators move in their own PR, finished by running `task gen`, or not at all.",
+    "ignorePaths is config:recommended's list without `**/tests/**`: the end-to-end compose stack lives under frontend/tests/e2e and must move with the backend's stack, which `task verify:compose-images` enforces."
   ],
+  "ignorePaths": ["**/node_modules/**", "**/bower_components/**", "**/vendor/**", "**/examples/**", "**/__tests__/**", "**/test/**", "**/__fixtures__/**"],
   "enabledManagers": ["dockerfile", "docker-compose", "github-actions", "gomod", "npm", "pep621", "custom.regex"],
   "customManagers": [
     {
