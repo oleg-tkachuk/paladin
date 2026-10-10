@@ -28,6 +28,13 @@ describe("CreateTokenDialog", () => {
     h.showNotification.mockReset();
   });
 
+  it("does not offer the admin plane, which a roleless token cannot reach", () => {
+    open();
+    const planes = screen.getByRole("group", { name: "Planes" });
+    expect(planes).toHaveTextContent("data");
+    expect(planes).not.toHaveTextContent("admin");
+  });
+
   it("says what the held submit is waiting for", () => {
     open();
     expect(screen.getByText("Enter a name to continue.")).toBeInTheDocument();
