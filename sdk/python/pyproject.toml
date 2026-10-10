@@ -70,7 +70,7 @@ dev = [
     "grpcio-tools==1.81.1",
     "protoc-gen-connectrpc==0.12.1",
     "pytest==9.1.1",
-    "ruff==0.16.10",
+    "ruff==0.17.0",
 ]
 
 [build-system]
