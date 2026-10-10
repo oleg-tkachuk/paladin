@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — an API token for the admin plane needs roles
+## v26.1.3 — an API token for the admin plane needs roles
 
 **Behaviour, admin API.** `APITokenService.Create` refuses a token whose
 audience names `admin` and that carries no roles, with `INVALID_ARGUMENT`. The
