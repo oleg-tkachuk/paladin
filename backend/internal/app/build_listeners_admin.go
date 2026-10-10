@@ -151,7 +151,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// the tenants it serves without a human session. A roleless service
 		// token still falls through to JWT, as before — it would gain nothing
 		// here and would newly reach any RPC gated on tenant alone.
-		apiTokAdmin = auth.APITokenRoleAuthInterceptor(deps.APIToken.Verifier, deps.APIToken.Limiter, "admin")
+		apiTokAdmin = auth.APITokenRoleAuthInterceptor(deps.APIToken.Verifier, deps.APIToken.Limiter, auth.TokenPlaneAdmin)
 	} else {
 		apiTokAdmin = auth.APITokenInterceptor(nil, "")
 	}

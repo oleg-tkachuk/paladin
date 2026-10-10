@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -31,7 +32,18 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
+
+// ErrAdminAudienceNeedsRoles refuses a token for the admin plane that carries
+// no roles: that plane would never admit it.
+var ErrAdminAudienceNeedsRoles = errors.New(
+	"an api_token for the admin plane needs roles; without them the admin plane never admits it")
+
+func init() {
+	apiutil.RegisterError(ErrAdminAudienceNeedsRoles, connect.CodeInvalidArgument,
+		commonv1.ErrorReason_ERROR_REASON_INVALID_ARGUMENT)
+}
 
 // tokenIssuer is the narrow slice of *api_token.Issuer the Create RPC needs.
 // Declared as an interface so the handler is unit-testable with a stub; the
@@ -140,6 +152,13 @@ func (h *Handler) Create(ctx context.Context, req *adminv1.APITokenServiceCreate
 	if len(req.GetRoles()) > 0 && !caller.HasRole(apiutil.RolePlatformAdmin) {
 		return nil, connect.NewError(connect.CodePermissionDenied,
 			"granting roles to an api_token requires platform.admin")
+	}
+
+	// The admin plane admits an API token only when it carries roles (see
+	// auth.APITokenRoleAuthInterceptor), so a roleless token for that plane
+	// could never authenticate there — not even to read itself.
+	if len(req.GetRoles()) == 0 && slices.Contains(req.GetAudience(), auth.TokenPlaneAdmin) {
+		return nil, apiutil.MapError(ErrAdminAudienceNeedsRoles)
 	}
 
 	ttl := time.Duration(req.GetTtlSeconds()) * time.Second

@@ -13,7 +13,10 @@ export const TTL_OPTIONS: {
   { label: "Server default", value: "default", seconds: null },
 ];
 
-export const AUDIENCE_CHOICES = ["data", "admin", "iam", "mcp"];
+// The planes a token minted here may name. Not "admin": that plane admits an
+// API token only when it carries roles, which this dialog cannot grant, and
+// the server refuses a roleless token naming it.
+export const AUDIENCE_CHOICES = ["data", "iam", "mcp"];
 
 // Resource-scope wire forms accepted by APITokenService.Create. A token
 // with NO scopes has full tenant access (unchanged); adding scopes
