@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — the Python SDK requires Python 3.13
+## sdk/go/v0.58.0 — the Python SDK requires Python 3.13
 
 - **Breaking, Python SDK.** `requires-python` is `>=3.13`; 3.10, 3.11 and
   3.12 are no longer installable or tested. `pyqwest` 0.12, which the SDK now

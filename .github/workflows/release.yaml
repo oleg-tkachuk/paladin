@@ -147,6 +147,30 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_STREAM: sdk
 
+      # The upgrade guide's Unreleased sections this run shipped, named with
+      # its tags (.github/release/name-upgrade-sections.mjs). Before the SDK's
+      # notes, which link a section by its tag; the rename reaches main as a
+      # pull request at the end of the job.
+      - name: Name the upgrade sections this release shipped
+        id: sections
+        if: steps.head.outputs.release == 'true'
+        env:
+          # new-release-tag.sh asks GitHub which tags on HEAD are published.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tags="$({
+            ./scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before"
+            ./scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before" streams
+          } | xargs)"
+          if [ -z "$tags" ]; then
+            echo "no tag from this run"
+            exit 0
+          fi
+          # shellcheck disable=SC2086 # one argument per tag
+          node .github/release/name-upgrade-sections.mjs $tags
+          printf 'tags=%s\n' "$tags" >>"$GITHUB_OUTPUT"
+
       # A GitHub release beside the SDK tag this run cut, if any, with notes of
       # the stream's own commits (scripts/stream-release-notes.sh), and the Go
       # proxy told of the tag. Never the latest release: that stays the
@@ -191,6 +215,17 @@ jobs:
             exit 0
           fi
           printf 'tag=%s\n' "$tag" >>"$GITHUB_OUTPUT"
+
+      # main is protected, so the named sections go in as a pull request,
+      # opened with AUTOMERGE_TOKEN: one GITHUB_TOKEN opens starts no CI and
+      # would never merge. See scripts/propose-upgrade-sections.sh.
+      - name: Propose the named upgrade sections
+        if: steps.sections.outputs.tags != ''
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          TAGS: ${{ steps.sections.outputs.tags }}
+          REPO: ${{ github.repository }}
+        run: ./scripts/propose-upgrade-sections.sh
 
   # One job per component. The chart is gated and pushed through the same task
   # library `task -t Taskfile.local.yaml deploy` uses; the image is built here
