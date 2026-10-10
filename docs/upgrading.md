@@ -44,6 +44,15 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — an API token for the admin plane needs roles
+
+**Behaviour, admin API.** `APITokenService.Create` refuses a token whose
+audience names `admin` and that carries no roles, with `INVALID_ARGUMENT`. The
+admin plane admits an API token only when it carries roles, so such a token
+could never authenticate there. Tokens minted before keep working wherever they
+already did; the console no longer offers `admin` as a plane, since it cannot
+grant roles.
+
 ## sdk/go/v0.58.0 — the Python SDK requires Python 3.13
 
 - **Breaking, Python SDK.** `requires-python` is `>=3.13`; 3.10, 3.11 and

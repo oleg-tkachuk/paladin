@@ -180,11 +180,11 @@ func principalFromAPIToken(t *api_token.Token, audienceLabel string) (*Principal
 // through unchanged (RequireAudience then rejects, which is the safe default).
 func principalAudienceFor(label string) string {
 	switch label {
-	case "data":
+	case TokenPlaneData:
 		return AudienceData
-	case "admin":
+	case TokenPlaneAdmin:
 		return AudienceAdmin
-	case "iam":
+	case TokenPlaneIAM:
 		return AudienceIAM
 	default:
 		return label
@@ -214,9 +214,9 @@ func (i *apiTokenInterceptor) withTokenIdentity(ctx context.Context, t *api_toke
 // continue, or a connect.Error to short-circuit. Skipped entirely
 // when the limiter is unconfigured or the token has no per-token cap.
 //
-// On deny the Retry-After header is attached to the connect.Error's
-// Meta — connect-go propagates that to the response so well-behaved
-// clients back off the right amount. Failing the limiter call itself
+// On deny the Retry-After header is set on the call's response header,
+// which carries it to the client with the error, so well-behaved clients
+// back off the right amount. Failing the limiter call itself
 // fails open: a rate-limit infra outage shouldn't deny otherwise-
 // valid requests; the token already passed signature / time / audience.
 func (i *apiTokenInterceptor) rateLimitGate(ctx context.Context, tok *api_token.Token) error {
