@@ -63,7 +63,7 @@ git -C "$work" tag sdk/go/v0.3.0
 third=$(notes sdk/go/v0.3.0)
 behaviour=${third%%"## Features"*}
 for want in "## Behaviour changes" "feat(sdk)!: rename a helper" "fix(sdk): stop retrying a call" \
-    "upgrading.md#v100-sdkgov030--the-sdks-calls-change"; do
+    "blob/main/docs/upgrading.md#v100-sdkgov030--the-sdks-calls-change"; do
     [[ "$behaviour" == *"$want"* ]] || fail "the breaking notes lack, before the features: $want"
 done
 features=${third#*"## Features"}
