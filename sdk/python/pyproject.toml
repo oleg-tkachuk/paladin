@@ -109,5 +109,12 @@ extend-exclude = [
     "src/paladin/facade.py",
 ]
 
+[tool.ruff.lint]
+# On top of ruff's defaults: naive datetimes (DTZ), since expiries and
+# timestamps cross the wire, and blind excepts (BLE). The code's noqa comments
+# name these rules; left unselected, the suppressions are dead and ruff
+# reports them as unused (RUF100).
+extend-select = ["DTZ", "BLE"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
