@@ -13,7 +13,7 @@ problem, read [SECURITY.md](../.github/SECURITY.md) instead.
 | --- | --- | --- |
 | Go | 1.27+ | the `go` and `toolchain` directives in `backend/go.mod` and `sdk/go/go.mod`; the toolchain auto-downloads |
 | Node | 26 | matches `frontend/deploy/Dockerfile`; CI runs the same |
-| pnpm | 12.8.2 | pinned by `packageManager` in `frontend/package.json`; Node 26 ships no corepack, so `npm install -g pnpm@12.8.2` |
+| pnpm | 12.10.1 | pinned by `packageManager` in `frontend/package.json`; Node 26 ships no corepack, so `npm install -g pnpm@12.10.1` |
 | Docker | recent | compose stacks, testcontainers-backed integration tests |
 | [Task](https://taskfile.dev) | 3.53+ | every entry point is a task target; CI pins 3.53.1 |
 
