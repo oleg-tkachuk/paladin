@@ -180,11 +180,11 @@ func principalFromAPIToken(t *api_token.Token, audienceLabel string) (*Principal
 // through unchanged (RequireAudience then rejects, which is the safe default).
 func principalAudienceFor(label string) string {
 	switch label {
-	case "data":
+	case TokenPlaneData:
 		return AudienceData
-	case "admin":
+	case TokenPlaneAdmin:
 		return AudienceAdmin
-	case "iam":
+	case TokenPlaneIAM:
 		return AudienceIAM
 	default:
 		return label

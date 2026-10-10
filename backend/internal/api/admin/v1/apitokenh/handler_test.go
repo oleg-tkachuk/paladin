@@ -426,3 +426,42 @@ func TestCreate_NoRolesNeedsNoPlatformAdmin(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// The admin plane admits an API token only when it carries roles, so a
+// roleless token naming that plane was minted dead: it could not even read
+// itself there. Found on the live cluster.
+func TestCreate_RefusesARolelessTokenForTheAdminPlane(t *testing.T) {
+	own := uuid.New()
+	cases := map[string]struct {
+		audience []string
+		roles    []string
+		refused  bool
+	}{
+		"admin alone":        {audience: []string{auth.TokenPlaneAdmin}, refused: true},
+		"admin among others": {audience: []string{auth.TokenPlaneData, auth.TokenPlaneAdmin}, refused: true},
+		"admin with a role":  {audience: []string{auth.TokenPlaneAdmin}, roles: []string{"platform.capability-issuer"}},
+		"data alone":         {audience: []string{auth.TokenPlaneData}},
+		"iam alone":          {audience: []string{auth.TokenPlaneIAM}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			iss := &stubIssuer{}
+			h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
+			_, err := h.Create(ctxAsTenant(own, "platform.admin"), &adminv1.APITokenServiceCreateRequest{
+				Parent: "tenants/" + own.String(), DisplayName: "t", Audience: tc.audience, Roles: tc.roles,
+			})
+			if !tc.refused {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if connect.CodeOf(err) != connect.CodeInvalidArgument {
+				t.Fatalf("err = %v, want InvalidArgument", err)
+			}
+			if iss.req.Name != "" {
+				t.Errorf("issuer was reached with %+v; the mint must not happen", iss.req)
+			}
+		})
+	}
+}
