@@ -31,6 +31,7 @@ readonly FOOTER='^BREAKING[ -]CHANGE: '
 # The upgrade guide, whose "## <tags> — …" section naming this tag a breaking
 # release links to. The full tag, because a product version is "v…" too.
 readonly UPGRADING=docs/upgrading.md
+readonly DEFAULT_BRANCH=main
 
 # "<stream> <title> <tag prefix> <path>…" for the stream whose tag this is.
 # shellcheck disable=SC2016 # JavaScript, with its own ${version}
@@ -86,8 +87,11 @@ if [[ -n "$breaking" ]]; then
     bullets "$breaking"
     heading=$(grep -m1 -E "^## (.*[ ,])?${tag//./\\.}([ ,]|$)" "$UPGRADING" 2>/dev/null || true)
     if [[ -n "$heading" ]]; then
+        # main, not the tag: the heading is named after the tag is cut
+        # (.github/release/name-upgrade-sections.mjs), so the tag's own copy
+        # still says Unreleased and has no such anchor.
         printf '\nMigrating: [%s](https://github.com/%s/blob/%s/%s#%s)\n' \
-            "${heading#\#\# }" "$repo" "$tag" "$UPGRADING" "$(anchor <<<"${heading#\#\# }")"
+            "${heading#\#\# }" "$repo" "$DEFAULT_BRANCH" "$UPGRADING" "$(anchor <<<"${heading#\#\# }")"
     else
         printf '\nMigrating: [%s](https://github.com/%s/blob/%s/%s)\n' "$UPGRADING" "$repo" "$tag" "$UPGRADING"
     fi
