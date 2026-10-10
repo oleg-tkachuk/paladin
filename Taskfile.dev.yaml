@@ -247,6 +247,7 @@ tasks:
       - task: verify:publish-target
       - task: verify:new-release-tag
       - task: verify:stream-release-notes
+      - task: verify:propose-upgrade-sections
       - task: verify:badge-versions
       - task: verify:postgres-version
       - task: verify:release-age
@@ -501,9 +502,10 @@ tasks:
       - ./scripts/image-uid.test.sh
 
   verify:release-rules:
-    desc: "Fail when a commit type cuts a different release than it should"
+    desc: "Fail when a commit cuts, or an upgrade section is named for, a different release than it should"
     cmds:
       - node .github/release/release-rules.test.mjs
+      - node .github/release/name-upgrade-sections.test.mjs
 
   verify:image-sources:
     desc: "Fail when the backend image does not copy a directory the server imports"
@@ -567,6 +569,11 @@ tasks:
     desc: "Fail when Renovate would propose an npm release pnpm refuses to install"
     cmds:
       - ./scripts/release-age.test.sh
+
+  verify:propose-upgrade-sections:
+    desc: "Fail when release.yaml would push the renamed upgrade sections wrongly, or twice"
+    cmds:
+      - ./scripts/propose-upgrade-sections.test.sh
 
   verify:stream-release-notes:
     desc: "Fail when an SDK release lists commits that are not its own"
