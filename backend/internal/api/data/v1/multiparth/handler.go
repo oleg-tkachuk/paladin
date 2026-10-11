@@ -568,7 +568,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 // the store would accept it, and only the size check at promotion would
 // notice.
 func (s Session) checkParts(parts []PartETag) error {
-	if int32(len(parts)) != s.TotalParts {
+	if len(parts) != int(s.TotalParts) {
 		return fmt.Errorf("%d parts listed, the upload has %d", len(parts), s.TotalParts)
 	}
 	seen := make(map[int32]bool, len(parts))
