@@ -1419,6 +1419,43 @@ share one message with that mutation hazard ruled out, and this entry goes.
   not.
 - **Blockers:** none.
 
+### Verify and enforce a capability's caveats in one limes call
+
+- **Status:** Deferred
+- **Reason:** limes v0.4.0's `StandardVerifier.Authorize` checks the token and
+  every stateless caveat at once, but it needs the operation and resource at
+  verify time. Paladin learns them in the handler (`AssertCapabilityOp`), after
+  the interceptor has verified the token, so it still calls `Verify` and
+  checks the caveats itself.
+- **Definition of Done:** the capability interceptor resolves each RPC's
+  operation and resource before verifying, calls `Authorize`, and the
+  handler-side caveat check is gone.
+- **Blockers:** a per-RPC operation and resource known to the interceptor.
+
+### DPoP as RFC 9449 spells it: the scheme, server nonces, `Ed25519`
+
+- **Status:** Deferred
+- **Reason:** limes v0.4.0 can hold a key-bound token to the `DPoP`
+  Authorization scheme, ask for server nonces (`DPoPVerifier.Nonces`,
+  `DPoP-Nonce`) and names Ed25519 `Ed25519` (RFC 9864). Paladin carries a
+  capability in `X-Paladin-Capability` or `Authorization: Capability`, so it
+  passes no scheme; neither SDK answers a nonce challenge; both SDKs still
+  sign proofs `EdDSA`, which limes reads but no longer advertises.
+- **Definition of Done:** a key-bound capability accepted under `DPoP` with
+  the scheme checked, nonces enabled on the planes and answered by both SDKs,
+  and SDK proofs signed `Ed25519`.
+- **Blockers:** none.
+
+### Capability units: the store takes any ISO 4217 code, the config and console five
+
+- **Status:** Deferred
+- **Reason:** limes v0.4.0 accepts any ISO 4217 code, and the usage store
+  follows it, while `charge_per_request_unit` in `schema.cue` and the
+  console's `ALLOWED_UNIT_CODES` still allow USD, EUR, UAH, GBP and XXX.
+- **Definition of Done:** one list, or none: either the config and console
+  accept what the store does, or the store refuses what they do not offer.
+- **Blockers:** a product decision on which currencies Paladin bills in.
+
 ### The MCP bridge cannot forward a key-bound capability
 
 - **Status:** Deferred — follows from DPoP binding.
