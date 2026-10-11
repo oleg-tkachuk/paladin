@@ -104,6 +104,10 @@ includes:
       # credentials. Excluding it drops 141 of 188 findings, all of them noise,
       # and leaves the ones in code somebody wrote.
       GOSEC_FLAGS: -exclude-dir=sqlc -exclude-dir=mocks -exclude-generated
+      # gosec runs from a module's `tool` directive when it has one. backend
+      # declares it; sdk/go does not, because a published module's requirements
+      # become its consumers' and gosec would add some thirty to them, so
+      # sdk/go uses the gosec on PATH (see the Brewfile for how to install it).
       GO_MODULES: ["backend", "sdk/go"]
   # Policy scanning over the YAML a cluster applies — the charts, the
   # Dockerfiles and these workflows. Separate from `sec:` because it asks a
