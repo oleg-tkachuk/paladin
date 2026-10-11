@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,6 +38,9 @@ const otherProcedure = "/auth.dpop.v1.Svc/Other"
 
 type dpopFixture struct {
 	issuer *limes.Issuer
+	// keys and store are what the verifiers check tokens against.
+	keys  limes.KeyResolver
+	store *memstore.Store[any]
 	// verifier checks proofs the way the planes do; bare has no DPoP
 	// configured, as a plane wired without one.
 	verifier *limes.StandardVerifier
@@ -60,8 +64,9 @@ func newDPoPFixture(t *testing.T) *dpopFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	keys := limes.NewStaticKeyResolver(map[string]ed25519.PublicKey{"k1": pub})
 	config := limes.VerifierConfig{
-		Keys:           limes.NewStaticKeyResolver(map[string]ed25519.PublicKey{"k1": pub}),
+		Keys:           keys,
 		Revocations:    store,
 		TrustedIssuers: []string{"paladin-test"},
 	}
@@ -82,7 +87,7 @@ func newDPoPFixture(t *testing.T) *dpopFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &dpopFixture{issuer: issuer, verifier: verifier, bare: bare, key: agentKey, jkt: jkt}
+	return &dpopFixture{issuer: issuer, keys: keys, store: store, verifier: verifier, bare: bare, key: agentKey, jkt: jkt}
 }
 
 func (f *dpopFixture) mint(t *testing.T, jkt string) string {
@@ -277,5 +282,54 @@ func TestCapabilityDPoP_GoSDKInteroperates(t *testing.T) {
 	client = paladiniamv1connect.NewHealthServiceClient(bare.Connect())
 	if _, err := client.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("bound capability without WithDPoP: err = %v, want PermissionDenied", err)
+	}
+}
+
+// countingNonces counts the proofs refused for their nonce.
+type countingNonces struct {
+	limes.DPoPNonces
+	refused atomic.Int64
+}
+
+func (c *countingNonces) Valid(ctx context.Context, nonce string) bool {
+	ok := c.DPoPNonces.Valid(ctx, nonce)
+	if !ok {
+		c.refused.Add(1)
+	}
+	return ok
+}
+
+// A server that asks for nonces challenges the SDK's first proof once; the
+// SDK resends it with the nonce, keeps the one each response brings, and its
+// next call goes through without a challenge.
+func TestCapabilityDPoP_GoSDKAnswersANonceChallenge(t *testing.T) {
+	f := newDPoPFixture(t)
+	hmac, err := limes.NewHMACNonces(time.Minute, []byte(strings.Repeat("n", limes.HMACNonceKeyBytes)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonces := &countingNonces{DPoPNonces: hmac}
+	verifier, err := limes.NewStandardVerifier(limes.VerifierConfig{
+		Keys:           f.keys,
+		Revocations:    f.store,
+		TrustedIssuers: []string{"paladin-test"},
+		DPoP:           &limes.DPoPVerifier{Replay: limes.NewMemoryReplayCache(0), MatchPathOnly: true, Nonces: nonces},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, base := serve(t, CapabilityInterceptor(verifier, TokenPlaneData, nil, 0, ""))
+	sdk, err := paladin.New(base+"/", paladin.WithCapability(f.mint(t, f.jkt)), paladin.WithDPoP(f.key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := paladiniamv1connect.NewHealthServiceClient(sdk.Connect())
+	for range 2 {
+		if _, err := client.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
+			t.Fatalf("a call under nonces refused: %v", err)
+		}
+	}
+	if got := nonces.refused.Load(); got != 1 {
+		t.Errorf("%d proofs refused for their nonce, want 1: the first", got)
 	}
 }
