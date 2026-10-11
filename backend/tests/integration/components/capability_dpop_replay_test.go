@@ -75,7 +75,7 @@ func TestDPoPProofSeenOnOneReplicaIsRefusedOnAnother(t *testing.T) {
 	}
 	_, token, err := issuer.Issue(ctx, limes.IssueRequest{
 		IssuedBy:        limes.Principal{Subject: "op"},
-		Subject:         limes.Principal{TenantID: uuid.New(), Subject: "agent"},
+		Subject:         limes.Principal{Type: limes.PrincipalAgent, TenantID: uuid.New(), Subject: "agent"},
 		Audience:        []string{auth.TokenPlaneData},
 		Caveats:         limes.Caveats{Ops: []limes.Op{limes.OpGet}},
 		TTL:             time.Hour,
