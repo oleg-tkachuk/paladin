@@ -1419,19 +1419,18 @@ share one message with that mutation hazard ruled out, and this entry goes.
   not.
 - **Blockers:** none.
 
-### DPoP as RFC 9449 spells it: the scheme, server nonces, `Ed25519`
+### DPoP server nonces
 
-- **Status:** Deferred
-- **Reason:** limes v0.4.0 can hold a key-bound token to the `DPoP`
-  Authorization scheme, ask for server nonces (`DPoPVerifier.Nonces`,
-  `DPoP-Nonce`) and names Ed25519 `Ed25519` (RFC 9864). Paladin carries a
-  capability in `X-Paladin-Capability` or `Authorization: Capability`, so it
-  passes no scheme; neither SDK answers a nonce challenge; both SDKs still
-  sign proofs `EdDSA`, which limes reads but no longer advertises.
-- **Definition of Done:** a key-bound capability accepted under `DPoP` with
-  the scheme checked, nonces enabled on the planes and answered by both SDKs,
-  and SDK proofs signed `Ed25519`.
-- **Blockers:** none.
+- **Status:** In-Progress.
+- **Reason:** limes v0.4.0 can ask for server nonces
+  (`DPoPVerifier.Nonces`, `DPoP-Nonce`, RFC 9449 §8), which bound how long a
+  captured proof stays usable to the nonce's lifetime. The planes ask for
+  none, and neither SDK answers a nonce challenge.
+- **Definition of Done:** nonces enabled on the planes from a key every
+  replica shares, the current nonce sent with every key-bound response, and
+  both SDKs keeping it and retrying once on `use_dpop_nonce`.
+- **Blockers:** limes's reasons named a nonce challenge a permanent refusal
+  (fixed in limes#26).
 
 ### Capability units: the store takes any ISO 4217 code, the config and console five
 
