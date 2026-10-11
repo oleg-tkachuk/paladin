@@ -44,6 +44,26 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — capabilities run on limes v0.4.0
+
+- **Breaking, capability tokens.** Capabilities are JWTs with
+  `typ: limes-cap-v3+jwt` and `alg: Ed25519`; every capability issued before
+  the upgrade is refused, Biscuit copies included. Issue new ones. A
+  key-bound capability is refused without a valid DPoP proof by the verifier
+  itself; the SDKs' proofs keep working.
+- **Behaviour, metering.** A counter keeps one unit: a charge or hold in
+  another currency, and re-denominating a tenant that still counts spend or
+  holds, answer `ErrUnitCodeMismatch`. The same `external_ref` for a different
+  amount is `ErrExternalRefConflict`, not a replay. Refunding a charge from a
+  tenant period since reset leaves the new period's spend alone. Deleting a
+  capability releases its holds. A tenant budget the runtime created is at
+  version 0 until a ceiling is set.
+- **Migrations 057–059.** Capability ceilings move into columns of
+  `capability_records`, and the stored caveats and principals are rewritten
+  into limes v0.4.0's JSON, which an old row no longer decodes as. A signing
+  key read without a configured `kid` is published under its RFC 7638
+  thumbprint.
+
 ## v26.1.3 — an API token for the admin plane needs roles
 
 **Behaviour, admin API.** `APITokenService.Create` refuses a token whose
