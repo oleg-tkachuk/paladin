@@ -22,6 +22,10 @@ from connectrpc.request import RequestContext
 
 HEADER_DPOP = "DPoP"
 _JTI_BYTES = 16
+# The proof algorithms, as RFC 9864 names them: Ed25519 is the fully specified
+# name for what the deprecated "EdDSA" covered with this key type.
+ALG_ED25519 = "Ed25519"
+ALG_ES256 = "ES256"
 
 
 def _b64(raw: bytes) -> str:
@@ -71,7 +75,7 @@ def dpop_proof(key: Any, method: str, url: str, token: str, now: float | None = 
     presenting capability ``token``."""
     hashes, _, ec, ed25519, utils = _crypto()
     jwk = _jwk(key.public_key())
-    alg = "EdDSA" if jwk["kty"] == "OKP" else "ES256"
+    alg = ALG_ED25519 if jwk["kty"] == "OKP" else ALG_ES256
     header = {"typ": "dpop+jwt", "alg": alg, "jwk": jwk}
     claims = {
         "jti": _b64(secrets.token_bytes(_JTI_BYTES)),
