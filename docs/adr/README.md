@@ -40,6 +40,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0028](0028-bucket-ownership.md) | A bucket row is a claim — Paladin registers only what it means to manage | Accepted |
 | [0029](0029-capability-outside-the-request-path.md) | Capabilities for work the verifier does not see | Accepted |
 | [0030](0030-agpl-with-apache-client-surface.md) | AGPL for the service, Apache-2.0 for what clients embed | Accepted |
+| [0031](0031-capability-verify-then-handler.md) | A capability is verified in the interceptor and checked in the handler | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
