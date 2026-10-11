@@ -1419,19 +1419,6 @@ share one message with that mutation hazard ruled out, and this entry goes.
   not.
 - **Blockers:** none.
 
-### Verify and enforce a capability's caveats in one limes call
-
-- **Status:** Deferred
-- **Reason:** limes v0.4.0's `StandardVerifier.Authorize` checks the token and
-  every stateless caveat at once, but it needs the operation and resource at
-  verify time. Paladin learns them in the handler (`AssertCapabilityOp`), after
-  the interceptor has verified the token, so it still calls `Verify` and
-  checks the caveats itself.
-- **Definition of Done:** the capability interceptor resolves each RPC's
-  operation and resource before verifying, calls `Authorize`, and the
-  handler-side caveat check is gone.
-- **Blockers:** a per-RPC operation and resource known to the interceptor.
-
 ### DPoP as RFC 9449 spells it: the scheme, server nonces, `Ed25519`
 
 - **Status:** Deferred
