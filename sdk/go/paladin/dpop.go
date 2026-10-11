@@ -76,6 +76,13 @@ func dpopPublicJWK(pub crypto.PublicKey) (dpopJWK, error) {
 	return dpopJWK{}, fmt.Errorf("paladin: unsupported DPoP key type %T", pub)
 }
 
+// The proof algorithms, as RFC 9864 names them: Ed25519 is the fully
+// specified name for what the deprecated "EdDSA" covered with this key type.
+const (
+	dpopAlgEd25519 = "Ed25519"
+	dpopAlgES256   = "ES256"
+)
+
 // dpopProof signs one proof. The server compares htu by path, so the base
 // URL's scheme and host need not be the ones it sees behind a proxy.
 func dpopProof(key crypto.Signer, method, htu, token string, now time.Time) (string, error) {
@@ -83,9 +90,9 @@ func dpopProof(key crypto.Signer, method, htu, token string, now time.Time) (str
 	if err != nil {
 		return "", err
 	}
-	alg := "EdDSA"
+	alg := dpopAlgEd25519
 	if jwk.Kty == "EC" {
-		alg = "ES256"
+		alg = dpopAlgES256
 	}
 	jti := make([]byte, 16)
 	if _, err := rand.Read(jti); err != nil {

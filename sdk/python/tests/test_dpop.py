@@ -56,7 +56,7 @@ def test_proof_is_signed_by_the_key_over_the_request(make) -> None:  # type: ign
     assert header["jwk"]["kty"] in ("OKP", "EC")
     pub = key.public_key()
     if isinstance(key, ed25519.Ed25519PrivateKey):
-        assert header["alg"] == "EdDSA"
+        assert header["alg"] == "Ed25519"
         pub.verify(sig, signed)
     else:
         assert header["alg"] == "ES256"
