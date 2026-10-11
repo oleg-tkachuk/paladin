@@ -31,7 +31,7 @@ concurrency:
 # with no commit of ours in between.
 env:
   # renovate: datasource=github-releases depName=go-task/task
-  TASK_VERSION: "3.53.1"
+  TASK_VERSION: "3.54.0"
   # Must be BUILT with a Go no older than the `go` directive in backend/go.mod
   # and sdk/go/go.mod, or it refuses to load the config. Bumping go.mod
   # means checking this.

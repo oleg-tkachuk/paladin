@@ -31,7 +31,7 @@ permissions: {}
 # Pinned tools, the same versions ci.yaml pins.
 env:
   # renovate: datasource=github-releases depName=go-task/task
-  TASK_VERSION: "3.53.1"
+  TASK_VERSION: "3.54.0"
   # renovate: datasource=github-releases depName=helm/helm
   HELM_VERSION: "v4.3.0"
   # renovate: datasource=github-releases depName=mikefarah/yq
