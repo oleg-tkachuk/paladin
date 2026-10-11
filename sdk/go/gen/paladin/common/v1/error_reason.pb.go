@@ -115,6 +115,9 @@ const (
 	ErrorReason_ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED ErrorReason = 48
 	// Not permanent: an operator may raise the tenant's ceiling.
 	ErrorReason_ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED ErrorReason = 49
+	// The Authorization header carrying the capability is not one the scheme
+	// reads: no credential, or not a token68.
+	ErrorReason_ERROR_REASON_CAPABILITY_MALFORMED_AUTHORIZATION ErrorReason = 50
 )
 
 // Enum value maps for ErrorReason.
@@ -170,6 +173,7 @@ var (
 		47: "ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED",
 		48: "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED",
 		49: "ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED",
+		50: "ERROR_REASON_CAPABILITY_MALFORMED_AUTHORIZATION",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                         0,
@@ -222,6 +226,7 @@ var (
 		"ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED":   47,
 		"ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED":          48,
 		"ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED":   49,
+		"ERROR_REASON_CAPABILITY_MALFORMED_AUTHORIZATION":  50,
 	}
 )
 
@@ -256,7 +261,7 @@ var File_paladin_common_v1_error_reason_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\xe6\x0f\n" +
+	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\x9b\x10\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ERROR_REASON_NOT_FOUND\x10\x01\x12!\n" +
@@ -308,7 +313,8 @@ const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"0ERROR_REASON_CAPABILITY_TAINTED_READ_NOT_ALLOWED\x10.\x122\n" +
 	".ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED\x10/\x12+\n" +
 	"'ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED\x100\x122\n" +
-	".ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED\x101BNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
+	".ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED\x101\x123\n" +
+	"/ERROR_REASON_CAPABILITY_MALFORMED_AUTHORIZATION\x102BNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_error_reason_proto_rawDescOnce sync.Once
