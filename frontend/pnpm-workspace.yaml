@@ -20,10 +20,13 @@ allowBuilds:
 #   - sharp    < 0.35.0: GHSA-f88m-g3jw-g9cj (inherited libvips CVEs).
 #   - brace-expansion 5.0.x < 5.0.8: CVE-2026-14257 (ReDoS). Scoped to the 5.x
 #     line with `@5` so the already-patched 1.x consumers stay on 1.x.
+#   - sharp    < 0.35.5: GHSA-wq5f-xc86-pv6w.
+#   - source-map-js < 1.2.2: CVE-2026-93749.
 overrides:
   postcss: ^8.5.23
-  sharp: ^0.35.0
+  sharp: ^0.35.5
   brace-expansion@5: ^5.0.8
+  source-map-js: ^1.2.2
 # pnpm 11 holds back any release younger than `minimumReleaseAge` as a
 # supply-chain cooling window, and `pnpm install --frozen-lockfile` refuses a
 # lockfile naming one. Set here rather than left to pnpm's default so
@@ -37,26 +40,15 @@ overrides:
 #
 # Entries are transient by design: once a version clears 24h the exclude
 # is dead weight — prune it on the next dep bump.
-#
-#   - prettier 3.9.8: formatting only, and `pnpm install` during the bump
-#     would otherwise resolve back to 3.9.6 and undo it.
 # Minutes: 24h.
 minimumReleaseAge: 1440
-minimumReleaseAgeExclude:
-  - prettier@3.9.8
-  - lucide-react@1.49.0
-  - '@pnpm/exe.android-arm64@12.11.2'
-  - '@pnpm/exe.android-x64@12.11.2'
-  - '@pnpm/exe.darwin-arm64@12.11.2'
-  - '@pnpm/exe.darwin-x64@12.11.2'
-  - '@pnpm/exe.freebsd-x64@12.11.2'
-  - '@pnpm/exe.linux-arm64-musl@12.11.2'
-  - '@pnpm/exe.linux-arm64@12.11.2'
-  - '@pnpm/exe.linux-ppc64@12.11.2'
-  - '@pnpm/exe.linux-riscv64@12.11.2'
-  - '@pnpm/exe.linux-s390x@12.11.2'
-  - '@pnpm/exe.linux-x64-musl@12.11.2'
-  - '@pnpm/exe.linux-x64@12.11.2'
-  - '@pnpm/exe.win32-arm64@12.11.2'
-  - '@pnpm/exe.win32-x64@12.11.2'
-  - pnpm@12.11.2
+minimumReleaseAgeExclude: []
+# eslint-config-next 16.4 pulls eslint-plugin-react 7.37, eslint-plugin-import
+# 2.32 and eslint-plugin-jsx-a11y 6.10, whose latest releases still declare
+# eslint up to ^9. The console lints clean under eslint 10 with their rules
+# active. Drop these once the plugins declare 10.
+peerDependencyRules:
+  allowedVersions:
+    eslint-plugin-react>eslint: "10"
+    eslint-plugin-import>eslint: "10"
+    eslint-plugin-jsx-a11y>eslint: "10"

@@ -33,7 +33,7 @@ package paladintest
 import (
 	"bytes"
 	"context"
-	"crypto/md5" //nolint:gosec // S3's ETag, which the fake reproduces
+	"crypto/md5" // #nosec G501 -- S3's ETag, which the fake reproduces
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -84,8 +84,6 @@ const (
 	// dispositionQuery carries a download's Content-Disposition, as S3's
 	// presigned GET does.
 	dispositionQuery = "response-content-disposition"
-	// maxParts is the most parts a multipart upload has, as in S3.
-	maxParts = 10000
 )
 
 // Presigned-URL lifetimes, the server's defaults (limits.presign).
@@ -453,6 +451,7 @@ type object struct {
 type multipart struct {
 	name     string
 	size     int64
+	total    int32
 	algo     string
 	parts    map[int32][]byte
 	bindings map[int32]binding
@@ -724,7 +723,7 @@ func compositeChecksum(algo string, parts []string) string {
 }
 
 func etagOf(body []byte) string {
-	sum := md5.Sum(body) //nolint:gosec // S3's ETag
+	sum := md5.Sum(body) // #nosec G401 -- S3's ETag, which the fake reproduces
 	return hex.EncodeToString(sum[:])
 }
 
@@ -984,18 +983,22 @@ func (s *Server) InitiateMultipartUpload(_ context.Context, req *datav1.Initiate
 	if req.GetSizeBytes() <= 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "size_bytes must be positive")
 	}
+	total := (req.GetSizeBytes() + PartSize - 1) / PartSize
+	if total < 1 || total > paladin.MaxParts {
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"size %d needs %d parts of %d bytes, over the limit of %d", req.GetSizeBytes(), total, PartSize, paladin.MaxParts)
+	}
 	o, err := s.claim(req.GetParent(), req.GetKey(), req.GetContentType(), req.GetMetadata(), req.GetTags())
 	if err != nil {
 		return nil, err
 	}
 	id := uuid.NewString()
 	s.uploads[id] = &multipart{
-		name: o.msg.GetName(), size: req.GetSizeBytes(), algo: algorithmName(req.GetChecksumAlgorithm()),
+		name: o.msg.GetName(), size: req.GetSizeBytes(), total: int32(total), algo: algorithmName(req.GetChecksumAlgorithm()),
 		parts: map[int32][]byte{}, bindings: map[int32]binding{},
 	}
-	total := (req.GetSizeBytes() + PartSize - 1) / PartSize
 	return &datav1.InitiateMultipartUploadResponse{
-		Object: o.msg, UploadId: id, RecommendedPartSize: PartSize, TotalParts: int32(total), //nolint:gosec // bounded by the size
+		Object: o.msg, UploadId: id, RecommendedPartSize: PartSize, TotalParts: int32(total),
 	}, nil
 }
 
@@ -1010,7 +1013,7 @@ func (s *Server) PresignPart(_ context.Context, req *datav1.PresignPartRequest) 
 		return nil, err
 	}
 	n := req.GetPartNumber()
-	total := int32((up.size + PartSize - 1) / PartSize) //nolint:gosec // bounded by the size
+	total := up.total
 	if n < 1 || n > total {
 		return nil, connect.Errorf(connect.CodeInvalidArgument, "part %d out of range 1..%d", n, total)
 	}
@@ -1035,7 +1038,7 @@ func (s *Server) CompleteMultipartUpload(_ context.Context, req *datav1.Complete
 	var body []byte
 	for i, p := range req.GetParts() {
 		data, ok := up.parts[p.GetPartNumber()]
-		if !ok || p.GetPartNumber() != int32(i+1) || p.GetEtag() != etagOf(data) || //nolint:gosec // parts ≤ 10000
+		if !ok || int(p.GetPartNumber()) != i+1 || p.GetEtag() != etagOf(data) ||
 			p.GetChecksumValue() != up.bindings[p.GetPartNumber()].checksum {
 			return nil, connect.Errorf(connect.CodeFailedPrecondition, "part %d is not the uploaded one", p.GetPartNumber())
 		}
@@ -1142,7 +1145,7 @@ func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 		if part := r.URL.Query().Get(partQuery); part != "" {
 			up, ok := s.uploads[id]
 			n, err := strconv.ParseInt(part, 10, 32)
-			if !ok || err != nil || n < 1 || n > maxParts {
+			if !ok || err != nil || n < 1 || n > paladin.MaxParts {
 				http.NotFound(w, r)
 				return
 			}

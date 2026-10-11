@@ -333,6 +333,7 @@ func (p Policy) PlanMultipart(u Upload) (PartPlan, error) {
 		return PartPlan{}, invalid("size %d needs %d parts of at most %d bytes, over the limit of %d parts",
 			u.SizeBytes, n, maxPart, maxParts)
 	}
+	// #nosec G115 -- n <= maxParts <= S3MaxParts (10000), checked above
 	return PartPlan{PartSize: partSize, TotalParts: int32(n)}, nil
 }
 
