@@ -43,3 +43,12 @@ overrides:
 # Minutes: 24h.
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude: []
+# eslint-config-next 16.4 pulls eslint-plugin-react 7.37, eslint-plugin-import
+# 2.32 and eslint-plugin-jsx-a11y 6.10, whose latest releases still declare
+# eslint up to ^9. The console lints clean under eslint 10 with their rules
+# active. Drop these once the plugins declare 10.
+peerDependencyRules:
+  allowedVersions:
+    eslint-plugin-react>eslint: "10"
+    eslint-plugin-import>eslint: "10"
+    eslint-plugin-jsx-a11y>eslint: "10"
