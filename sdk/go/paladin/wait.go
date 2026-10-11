@@ -33,11 +33,18 @@ type OperationError struct {
 
 func (e *OperationError) Error() string {
 	return fmt.Sprintf("paladin: operation %s failed: %s: %s",
-		e.Name, connect.Code(e.Status.GetCode()), e.Status.GetMessage())
+		e.Name, e.Code(), e.Status.GetMessage())
 }
 
-// Code is the operation's error as a Connect code.
-func (e *OperationError) Code() connect.Code { return connect.Code(e.Status.GetCode()) }
+// Code is the operation's error as a Connect code. A negative code, which no
+// Connect or gRPC code is, reads as CodeUnknown.
+func (e *OperationError) Code() connect.Code {
+	c := e.Status.GetCode()
+	if c < 0 {
+		return connect.CodeUnknown
+	}
+	return connect.Code(c)
+}
 
 // Wait polls get until the operation is done and returns it. An operation
 // that finished with an error returns it as well, with an *OperationError.
