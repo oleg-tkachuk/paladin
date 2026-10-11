@@ -240,6 +240,7 @@ tasks:
       - task: verify:stack-ports
       - task: verify:stack-disk
       - task: verify:portable-shell
+      - task: verify:lefthook-single-thread
       - task: verify:task-offline
       - task: verify:chart-values
       - task: verify:chart-reads
@@ -414,6 +415,11 @@ tasks:
     desc: "The tracked shell scripts use no form only BSD or only GNU accepts"
     cmds:
       - ./scripts/portable-shell.test.sh
+
+  verify:lefthook-single-thread:
+    desc: "The git hooks run their jobs one at a time, the Go ones on one thread"
+    cmds:
+      - ./scripts/lefthook-single-thread.test.sh
 
   verify:task-offline:
     desc: "The git hooks run Task offline, without the hook's git state"
