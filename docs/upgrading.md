@@ -44,7 +44,14 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — capabilities run on limes v0.7.0
+## Unreleased — a capability's unit is any ISO 4217 code
+
+**Behaviour, configuration and console.** `capability.charge_per_request_unit`
+takes any ISO 4217 code, as tenant budgets and capabilities already did; a
+code ISO 4217 does not define is refused at load. The console's unit pickers
+offer every currency, then `XXX` for metering that is not money.
+
+## v27.0.0 — capabilities run on limes v0.7.0
 
 - **Breaking, capability tokens.** Capabilities are JWTs with
   `typ: limes-cap-v3+jwt` and `alg: Ed25519`; every capability issued before

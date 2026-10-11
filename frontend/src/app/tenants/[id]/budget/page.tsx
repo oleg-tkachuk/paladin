@@ -43,7 +43,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import {
   ABSTRACT_UNIT_CODE,
-  ALLOWED_UNIT_CODES,
+  UNIT_CODES,
   formatMoney,
   moneyFromDecimal,
   moneyIsPositive,
@@ -403,7 +403,7 @@ export default function TenantBudgetPage() {
                 <Label htmlFor="unit-code">Currency / Unit</Label>
                 <Select
                   id="unit-code"
-                  options={ALLOWED_UNIT_CODES.map((u) => ({
+                  options={UNIT_CODES.map((u) => ({
                     value: u,
                     label: u,
                   }))}
