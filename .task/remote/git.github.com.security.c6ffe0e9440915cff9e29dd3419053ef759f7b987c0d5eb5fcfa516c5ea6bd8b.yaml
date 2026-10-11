@@ -56,6 +56,8 @@ vars:
   # Branch the breaking-change and new-issue gates compare against.
   _SEC_BASE: '{{.BASE | default "main"}}'
   _SEC_GOSEC_FLAGS: '{{.GOSEC_FLAGS | default ""}}'
+  # The package a module's `tool` directive names to pin gosec.
+  _SEC_GOSEC_TOOL: github.com/securego/gosec/v2/cmd/gosec
   _SEC_VULN_FLAGS: '{{.GOVULNCHECK_FLAGS | default ""}}'
   _SEC_LINT_FLAGS: '{{.GOLANGCI_FLAGS | default ""}}'
   _SEC_GL_FLAGS: '{{.GITLEAKS_FLAGS | default ""}}'
@@ -257,10 +259,20 @@ tasks:
 
   gosec:
     desc: "gosec — insecure patterns the compiler is happy with"
-    preconditions:
-      - sh: 'has=0; {{range $d := ._SEC_MODULES}}[ -f {{$d | q}}/go.mod ] && has=1; {{end}}[ "$has" = 0 ] || command -v gosec >/dev/null'
-        msg: "gosec is not installed — go install github.com/securego/gosec/v2/cmd/gosec@latest"
+    # gosec reads export data through golang.org/x/tools, and a release binary
+    # or an `@latest` install carries the x/tools gosec's own go.mod names —
+    # which can be too old to decode what the module's Go writes. A `tool`
+    # directive builds it inside the module, so MVS gives it the module's
+    # x/tools; that is preferred, per module, and a gosec on PATH is the
+    # fallback for a module that does not declare one.
     cmds:
       - for: { var: _SEC_MODULES }
         task: _in-module
-        vars: { MODULE: "{{.ITEM}}", CMD: "gosec {{._SEC_GOSEC_FLAGS}} ./...", LABEL: "gosec" }
+        vars:
+          MODULE: "{{.ITEM}}"
+          LABEL: "gosec"
+          CMD: >-
+            if go tool -n gosec >/dev/null 2>&1; then set -- go tool gosec;
+            elif command -v gosec >/dev/null; then set -- gosec;
+            else printf '%s\n' "{{._SEC_ERR}} sec · gosec is not installed — go get -tool {{._SEC_GOSEC_TOOL}}" >&2; exit 1; fi;
+            "$@" {{._SEC_GOSEC_FLAGS}} ./...
