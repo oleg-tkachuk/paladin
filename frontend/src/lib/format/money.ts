@@ -5,10 +5,10 @@
 // exact — parsing, comparing and summing in bigint nanos — and convert to a
 // JavaScript number only at the display edge (ratios, chart points).
 //
-// Mirrors limes.AllowedUnitCodes, the set the backend accepts
-// (github.com/oleg-tkachuk/limes, types.go): four ISO 4217 fiat codes plus XXX, ISO 4217's code
-// for "no currency", for metering that is not money. The backend validates
-// writes; the frontend mirrors the list to populate the unit pickers.
+// A unit is any ISO 4217 code, as the backend accepts (limes.IsUnitCode),
+// including XXX, ISO 4217's code for "no currency", for metering that is not
+// money. The backend validates writes; the pickers offer the currencies the
+// runtime's Intl knows, and XXX.
 import { create } from "@bufbuild/protobuf";
 
 import { MoneySchema, type Money } from "@/gen/google/type/money_pb";
@@ -19,20 +19,24 @@ import { DISPLAY_LOCALE } from "./locale";
 // amount arrives without a unit.
 export const ABSTRACT_UNIT_CODE = "XXX";
 
-export const ALLOWED_UNIT_CODES = [
-  "USD",
-  "EUR",
-  "UAH",
-  "GBP",
+// CURRENCIES are the ISO 4217 currencies the runtime can format: Intl's list,
+// which leaves out XXX and the other codes that name no currency.
+const CURRENCIES: ReadonlySet<string> = new Set(
+  Intl.supportedValuesOf("currency"),
+);
+
+// UNIT_CODES are the units the pickers offer: every currency, then XXX.
+export const UNIT_CODES: readonly string[] = [
+  ...CURRENCIES,
   ABSTRACT_UNIT_CODE,
-] as const;
+];
 
 // isISOCurrency returns true when the code is a currency the console renders
 // with a currency symbol. XXX is a valid ISO 4217 code, but Intl renders it
 // with the generic "¤" sign; it and unknown codes return false so the caller
 // renders a plain "X.XX <unit>" instead.
 export function isISOCurrency(code: string): boolean {
-  return code === "USD" || code === "EUR" || code === "UAH" || code === "GBP";
+  return CURRENCIES.has(code);
 }
 
 // NANOS_PER_UNIT is how many nanos make one unit, mirroring
