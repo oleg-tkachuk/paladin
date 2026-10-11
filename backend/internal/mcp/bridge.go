@@ -158,6 +158,7 @@ func NewServer(name, version string, c *Clients, filter *ToolFilter) *mcpsdk.Ser
 	})
 	registerReadTools(srv, c, filter)
 	registerWriteTools(srv, c, filter)
+	registerLifecycleTools(srv, c, filter)
 	registerResources(srv, c, filter)
 	registerPrompts(srv, filter)
 	return srv

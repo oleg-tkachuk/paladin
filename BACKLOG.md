@@ -78,41 +78,31 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
-### Tool-coverage gaps vs the Paladin RPC surface
+### Admin RPCs the MCP bridge leaves off on purpose
 
-- **Status:** Deferred (partial — the data-plane cluster + admin read gaps
-  landed 2026-06-26, budget / billing / platform-operation reads 2026-10-01).
-  The remaining item below needs a product call.
-- **Reason:** The MCP bridge (`internal/mcp/bridge.go`) exposes a curated
-  subset of the ~110 Paladin RPCs. `DefaultCatalog` in
-  `internal/mcp/profile.go` is the ground-truth list and is pinned to the
-  real registrations by `TestServerRegistersDefaultCatalog`. Now wired:
-  `UpdateObject`, `DeleteObjectTags`, `ListDistinctTags`, `BatchUpdateTags`,
-  `RegenerateUploadUrl`, the 5 `MultipartUploadService` RPCs, data
-  `CancelOperation`, admin `ResetUsage` / `GetAuditLogEntry` / `GetConfig`
-  (`SystemService` client added). The budget, billing and platform-operation
-  reads are wired too: `paladin_get_tenant_budget` and the platform-operation
-  reads match `agent_safe`'s `get_*` / `list_*`, while the cross-tenant
-  `paladin_budget_summary` and both billing tools are named outside those
-  patterns so only the admin profile sees them. Budget `Set` and platform
-  `CancelOperation` stay off the bridge: changing a tenant's spend cap or
-  stopping a migration is an operator's call. The agent-usable upload/tag
-  mutations are in `agent_safe`; `ResetUsage` / `system_config` / batch tools
-  stay admin-only. UserSettingsService is not bridged on purpose — it holds a
-  console user's display preferences, which mean nothing to an agent. What is
-  still **not** reachable from an MCP agent, pending a product decision:
-  - **Lifecycle writes** on Backend / Bucket / Collection / Tenant
-    (create/update/delete) — Tenant lifecycle is intentionally human-only
-    (denylist); the others are gaps if agent-driven provisioning is wanted.
-  - **`RedriveFailedDeliveries`** — re-sends a subscription's failed events;
-    an operator's call like the other subscription writes.
-- **Definition of Done:** For each capability decided in-scope, add the tool
-  in `registerReadTools`/`registerWriteTools`, append a `DefaultCatalog` row
-  (the invariant test enforces this), and gate it into the right
-  `DefaultProfiles` entry (destructive ops stay out of `agent_safe`). Wire any
-  missing Connect client into `Clients`.
-- **Blockers:** none technical. Needs a product call on whether an agent
-  should drive provisioning (lifecycle writes) or leave it human-operated.
+- **Status:** Won't-do (by design) unless the decision below is revisited.
+- **Reason:** `DefaultCatalog` in `internal/mcp/profile.go` covers the
+  backend, bucket and collection lifecycle and the subscription redrive;
+  the writes are named outside `read_only`/`agent_safe` patterns, so only
+  the admin profile offers them. These stay off the bridge:
+  - `CreateBackend`, `UpdateBackend`, `RotateCredentials` — they point the
+    platform at a storage endpoint and a secret reference, which an
+    operator provisions.
+  - `SetBucketPolicy`, `SetCollectionPolicy` and a `cedar_policy` on the
+    bucket and collection writes — Cedar rewriting, refused for the same
+    reason as `paladin_set_policy`; both tool names are in
+    `DefaultAlwaysDeny`. (`paladin_create_collection` still takes one.)
+  - Bucket `owner_tenant_id` changes and `public_read` — moving a bucket to
+    another tenant or publishing it is a human call.
+  - `SetObjectLock` (every version written under a COMPLIANCE default keeps
+    a retention the database refuses to shorten) and
+    `SetReplication` (no replicator applies it yet, see Replication below).
+  - Tenant lifecycle and budget `Set`, as before; UserSettingsService, which
+    holds console display preferences.
+- **Definition of Done (only if revisited):** a tool per RPC in
+  `internal/mcp/lifecycle_tools.go`, its `DefaultCatalog` row, and the name
+  dropped from `DefaultAlwaysDeny` where it is listed there.
+- **Blockers:** a product call per item; no current ask.
 
 ### Capability / API-token issuance via MCP — intentionally excluded
 

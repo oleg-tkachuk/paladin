@@ -45,6 +45,14 @@ func TestToolFilter_BuiltinProfiles(t *testing.T) {
 		{"admin", "paladin_create_collection", true},
 		{"admin", "paladin_set_quota", true},
 		{"admin", "paladin_set_lifecycle_rules", true},
+
+		// Backend / bucket / collection lifecycle: the reads reach agents by
+		// their read-pattern names, every write stays with the admin profile.
+		{"agent_safe", "paladin_get_backend", true},
+		{"agent_safe", "paladin_list_accessible_buckets", true},
+		{"read_only", "paladin_get_backend", true},
+		{"agent_safe", "paladin_test_backend", false},
+		{"admin", "paladin_test_backend", true},
 	}
 	cfg := config.MCP{} // empty → DefaultProfiles + DefaultAlwaysDeny
 	for _, c := range cases {
@@ -69,6 +77,8 @@ func TestToolFilter_AlwaysDeny_BeatsAdmin(t *testing.T) {
 		"paladin_create_user",
 		"paladin_grant_user_scopes",
 		"paladin_set_policy",
+		"paladin_set_bucket_policy",
+		"paladin_set_collection_policy",
 		"paladin_delete_policy",
 		"paladin_login",
 		"paladin_create_tenant",
@@ -133,3 +143,28 @@ func TestMatchPattern(t *testing.T) {
 		}
 	}
 }
+
+// Every lifecycle write is admin-only: none may match a pattern of the
+// profiles an agent runs under.
+func TestLifecycleWritesStayAdminOnly(t *testing.T) {
+	cfg := config.MCP{}
+	for _, m := range DefaultCatalog {
+		if !m.Mutates {
+			continue
+		}
+		for _, profile := range []string{"read_only", "agent_safe"} {
+			if NewToolFilter(cfg, profile).Allow(m.Name) && !agentSafeWrites[m.Name] {
+				t.Errorf("%s offers the write %s", profile, m.Name)
+			}
+		}
+	}
+}
+
+// agentSafeWrites are the writes agent_safe lists by name.
+var agentSafeWrites = func() map[string]bool {
+	m := map[string]bool{}
+	for _, p := range DefaultProfiles["agent_safe"] {
+		m[p] = true
+	}
+	return m
+}()
