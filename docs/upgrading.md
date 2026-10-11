@@ -44,6 +44,15 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — DPoP under its own scheme, signed Ed25519
+
+- **Behaviour, capabilities.** A key-bound capability may be sent as
+  `Authorization: DPoP <token>`, RFC 9449's scheme; under it, a capability
+  that is not key-bound is refused. `X-Paladin-Capability` and
+  `Authorization: Capability` work as before.
+- **SDKs.** Both sign DPoP proofs `Ed25519`, the name RFC 9864 gives the
+  algorithm. The server still reads `EdDSA` from older SDKs.
+
 ## Unreleased — capabilities run on limes v0.7.0
 
 - **Breaking, capability tokens.** Capabilities are JWTs with

@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -34,6 +35,12 @@ func TestInterceptorSkipTokensAndCapabilities_DefersACapability(t *testing.T) {
 	h2.Set(paladin.HeaderAuthorization, capabilityScheme+sampleCapability)
 	if !a.hasCapability(h2) {
 		t.Error("Authorization: Capability must be recognised")
+	}
+
+	h3 := &connect.Header{}
+	h3.Set(paladin.HeaderAuthorization, string(limes.AuthSchemeDPoP)+" "+sampleCapability)
+	if !a.hasCapability(h3) {
+		t.Error("Authorization: DPoP must be recognised")
 	}
 
 	if a.hasCapability(&connect.Header{}) {

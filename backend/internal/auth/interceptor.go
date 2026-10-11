@@ -62,7 +62,7 @@ func (a *authInterceptor) isAPIToken(h *connect.Header) bool {
 // accepted form, so this gate can step aside for it.
 func (a *authInterceptor) hasCapability(h *connect.Header) bool {
 	return a.skipCapabilities &&
-		extractCapabilityToken(h.Get(HeaderCapability), h.Get("Authorization")) != ""
+		capabilityPresented(h)
 }
 
 // intercept authenticates every call, unary or streaming, from its headers.
@@ -116,4 +116,11 @@ func principalFromHeaders(ctx context.Context, v TokenVerifier, authz string) (*
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	return p, nil
+}
+
+// capabilityPresented reports whether the request carries a capability, in
+// either header and under either scheme.
+func capabilityPresented(h *connect.Header) bool {
+	token, _ := extractCapabilityToken(h.Get(HeaderCapability), h.Get("Authorization"))
+	return token != ""
 }
