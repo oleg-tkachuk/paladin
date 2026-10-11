@@ -18,6 +18,8 @@ import (
 	"github.com/knadh/koanf/v2"
 	"go.uber.org/zap"
 	goyaml "gopkg.in/yaml.v3"
+
+	"github.com/oleg-tkachuk/limes"
 )
 
 //go:embed schema.cue
@@ -225,6 +227,10 @@ func (c *Config) Validate() error {
 
 	if err := c.MCP.Upstreams.Validate(); err != nil {
 		return err
+	}
+
+	if u := c.Capability.ChargePerRequestUnit; u != "" && !limes.IsUnitCode(u) {
+		return fmt.Errorf("capability: charge_per_request_unit %q is not an ISO 4217 code", u)
 	}
 
 	if err := c.Limits.Presign.Validate(); err != nil {

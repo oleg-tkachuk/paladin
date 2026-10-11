@@ -33,7 +33,7 @@ import { copyToClipboard, cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import {
   ABSTRACT_UNIT_CODE,
-  ALLOWED_UNIT_CODES,
+  UNIT_CODES,
   NANOS_DECIMALS,
   moneyFromDecimal,
   moneyIsPositive,
@@ -455,7 +455,7 @@ export function IssueCapabilityDialog({
             {(control) => (
               <Select
                 id={control.id}
-                options={ALLOWED_UNIT_CODES.map((u) => ({
+                options={UNIT_CODES.map((u) => ({
                   value: u,
                   label: u,
                 }))}
