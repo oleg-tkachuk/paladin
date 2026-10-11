@@ -289,13 +289,10 @@ func (s *UsageStore) Settle(
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Settled already, or never settleable. A second settle waited on
 		// the first's row lock, so a charge the first made is visible now.
-		var (
-			chargeID, capID uuid.UUID
-			overrun         bool
-		)
-		lErr := tx.QueryRow(ctx, chargeByReservationQuery, req.ReservationID).Scan(&chargeID, &capID, &overrun)
+		var chargeID uuid.UUID
+		lErr := tx.QueryRow(ctx, chargeByReservationQuery, req.ReservationID).Scan(&chargeID)
 		if lErr == nil {
-			return replay(ctx, tx, chargeID, capID, overrun)
+			return replay(ctx, tx, chargeID)
 		}
 		if errors.Is(lErr, pgx.ErrNoRows) {
 			return limes.ChargeReceipt{}, limes.ErrReservationNotFound

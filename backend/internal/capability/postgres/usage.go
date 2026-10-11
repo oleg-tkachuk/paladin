@@ -92,18 +92,28 @@ RETURNING spent_usd;
 `
 
 // chargeByRefQuery finds the charge a capability already took under an
-// external ref.
-const chargeByRefQuery = `SELECT id, overrun FROM charges WHERE capability_id = $1 AND external_ref = $2`
+// external ref, with what it charged: the same ref for another cost is a
+// conflict, not a replay.
+const chargeByRefQuery = `SELECT id, amount, unit_code FROM charges WHERE capability_id = $1 AND external_ref = $2`
 
 // chargeByReservationQuery finds the charge that settled a reservation.
-const chargeByReservationQuery = `SELECT id, capability_id, overrun FROM charges WHERE reservation_id = $1`
+const chargeByReservationQuery = `SELECT id FROM charges WHERE reservation_id = $1`
+
+// chargeReplayQuery reads what a replayed receipt reports of a charge.
+const chargeReplayQuery = `SELECT capability_id, tenant_id, unit_code, overrun FROM charges WHERE id = $1`
 
 // spentQuery reads a capability's spend for a replayed receipt.
 const spentQuery = `SELECT COALESCE((SELECT spent_usd FROM capability_usage WHERE capability_id = $1), 0)`
 
 // replay is the receipt for a charge already in the ledger, returned when the
 // same charge arrives again: nothing moves, and Spent is read as it is now.
-func replay(ctx context.Context, tx pgx.Tx, chargeID, capID uuid.UUID, overrun bool) (limes.ChargeReceipt, error) {
+func replay(ctx context.Context, tx pgx.Tx, chargeID uuid.UUID) (limes.ChargeReceipt, error) {
+	receipt := limes.ChargeReceipt{ChargeID: chargeID, Replayed: true}
+	var capID uuid.UUID
+	if err := tx.QueryRow(ctx, chargeReplayQuery, chargeID).
+		Scan(&capID, &receipt.TenantID, &receipt.UnitCode, &receipt.Overrun); err != nil {
+		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: replay read charge: %w", err)
+	}
 	var spent pgtype.Numeric
 	if err := tx.QueryRow(ctx, spentQuery, capID).Scan(&spent); err != nil {
 		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: replay read spend: %w", err)
@@ -112,7 +122,8 @@ func replay(ctx context.Context, tx pgx.Tx, chargeID, capID uuid.UUID, overrun b
 	if err != nil {
 		return limes.ChargeReceipt{}, err
 	}
-	return limes.ChargeReceipt{ChargeID: chargeID, Spent: spentNanos, Replayed: true, Overrun: overrun}, nil
+	receipt.Spent = spentNanos
+	return receipt, nil
 }
 
 // ancestor is one link of a capability's delegation chain, with the ceilings
@@ -266,11 +277,20 @@ func (s *UsageStore) Charge(
 		}
 		var (
 			chargeID uuid.UUID
-			overrun  bool
+			charged  pgtype.Numeric
+			unit     string
 		)
-		err := tx.QueryRow(ctx, chargeByRefQuery, req.CapabilityID, req.ExternalRef).Scan(&chargeID, &overrun)
+		err := tx.QueryRow(ctx, chargeByRefQuery, req.CapabilityID, req.ExternalRef).Scan(&chargeID, &charged, &unit)
 		if err == nil {
-			return replay(ctx, tx, chargeID, req.CapabilityID, overrun)
+			chargedNanos, err := pgmoney.NanosFromNumeric(charged)
+			if err != nil {
+				return limes.ChargeReceipt{}, err
+			}
+			if chargedNanos != req.Amount || unit != resolvedUnit {
+				return limes.ChargeReceipt{}, fmt.Errorf("%w: %q took %v %s as charge %s",
+					limes.ErrExternalRefConflict, req.ExternalRef, chargedNanos, unit, chargeID)
+			}
+			return replay(ctx, tx, chargeID)
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge read ref: %w", err)
@@ -412,7 +432,10 @@ func (s *UsageStore) chargeInTx(
 	if err != nil {
 		return limes.ChargeReceipt{}, err
 	}
-	return limes.ChargeReceipt{ChargeID: ledgerID, Spent: spentNanos, Overrun: overrun}, nil
+	return limes.ChargeReceipt{
+		ChargeID: ledgerID, Spent: spentNanos, Overrun: overrun,
+		TenantID: req.TenantID, UnitCode: resolvedUnit,
+	}, nil
 }
 
 // nullableUUID is id for a uuid column, with uuid.Nil as NULL.
