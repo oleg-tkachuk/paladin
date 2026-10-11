@@ -1,17 +1,27 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
 
 import pytest
+from connectrpc.code import Code
+from connectrpc.errors import ConnectError
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519, utils
 
 from paladin import HEADER_CAPABILITY, Client, Retry
-from paladin.dpop import HEADER_DPOP, dpop_proof, dpop_thumbprint
+from paladin.dpop import (
+    HEADER_DPOP,
+    HEADER_DPOP_NONCE,
+    HEADER_WWW_AUTHENTICATE,
+    NONCE_CHALLENGE,
+    dpop_proof,
+    dpop_thumbprint,
+)
 from paladin.iam.v1 import health_service_pb2
-from paladin.iam.v1.health_service_connect import HealthServiceClientSync
+from paladin.iam.v1.health_service_connect import HealthServiceClient, HealthServiceClientSync
 
 FAST = Retry(attempts=3, base_delay=0.001, max_delay=0.001)
 GET_VERSION = "/paladin.iam.v1.HealthService/GetVersion"
@@ -95,3 +105,67 @@ def test_no_proof_without_a_capability(server) -> None:  # type: ignore[no-untyp
         client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
     ).get_version(health_service_pb2.GetVersionRequest())
     assert HEADER_DPOP.lower() not in server.recorder.last
+
+
+def _health(client: Client) -> HealthServiceClientSync:
+    return HealthServiceClientSync(
+        client.base_url, interceptors=client.interceptors(), http_client=client.http_client()
+    )
+
+
+def test_a_nonce_challenge_is_answered_once(server) -> None:  # type: ignore[no-untyped-def]
+    """A proof refused for want of the server's nonce is resent once with it,
+    and the nonce each response brings signs the next call's proof."""
+    challenged, current = "nonce-1", "nonce-2"
+    server.recorder.failures = 1
+    server.recorder.fail_code = Code.UNAUTHENTICATED
+    server.recorder.fail_headers = {
+        HEADER_WWW_AUTHENTICATE: f'DPoP error="{NONCE_CHALLENGE}"',
+        HEADER_DPOP_NONCE: challenged,
+    }
+    key = ed25519.Ed25519PrivateKey.generate()
+    health = _health(Client(server.url, capability="cap-token", dpop_key=key))
+
+    health.get_version(health_service_pb2.GetVersionRequest())
+    first, resent = (h[HEADER_DPOP.lower()] for h in server.recorder.headers)
+    assert "nonce" not in _decode(first)[1]
+    assert _decode(resent)[1]["nonce"] == challenged
+
+    server.recorder.response_headers = {HEADER_DPOP_NONCE: current}
+    health.get_version(health_service_pb2.GetVersionRequest())
+    health.get_version(health_service_pb2.GetVersionRequest())
+    assert server.recorder.calls == 4, "a call carrying a current nonce was challenged"
+    assert _decode(server.recorder.last[HEADER_DPOP.lower()])[1]["nonce"] == current
+
+
+def test_an_unauthenticated_call_without_a_nonce_challenge_is_not_resent(server) -> None:  # type: ignore[no-untyped-def]
+    server.recorder.failures = 1
+    server.recorder.fail_code = Code.UNAUTHENTICATED
+    key = ed25519.Ed25519PrivateKey.generate()
+    health = _health(Client(server.url, capability="cap-token", dpop_key=key))
+    with pytest.raises(ConnectError):
+        health.get_version(health_service_pb2.GetVersionRequest())
+    assert server.recorder.calls == 1
+
+
+def test_the_async_client_answers_a_nonce_challenge(server) -> None:  # type: ignore[no-untyped-def]
+    challenged = "nonce-1"
+    server.recorder.failures = 1
+    server.recorder.fail_code = Code.UNAUTHENTICATED
+    server.recorder.fail_headers = {
+        HEADER_WWW_AUTHENTICATE: f'DPoP error="{NONCE_CHALLENGE}"',
+        HEADER_DPOP_NONCE: challenged,
+    }
+    client = Client(server.url, capability="cap-token", dpop_key=ed25519.Ed25519PrivateKey.generate())
+
+    async def call() -> None:
+        async with HealthServiceClient(
+            client.base_url,
+            interceptors=client.async_interceptors(),
+            http_client=client.async_http_client(),
+        ) as health:
+            await health.get_version(health_service_pb2.GetVersionRequest())
+
+    asyncio.run(call())
+    assert server.recorder.calls == 2
+    assert _decode(server.recorder.last[HEADER_DPOP.lower()])[1]["nonce"] == challenged
