@@ -64,3 +64,25 @@ func TestWaitPassesThePollError(t *testing.T) {
 		t.Fatalf("err = %v, want the poll's error", err)
 	}
 }
+
+// A negative status code is no Connect code; converting it to the unsigned
+// connect.Code made it a large unknown number rather than CodeUnknown.
+func TestOperationErrorCode(t *testing.T) {
+	cases := []struct {
+		name string
+		code int32
+		want connect.Code
+	}{
+		{"a Connect code", int32(connect.CodeNotFound), connect.CodeNotFound},
+		{"OK", 0, 0},
+		{"negative", -1, connect.CodeUnknown},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := &OperationError{Name: "op", Status: &status.Status{Code: c.code}}
+			if got := e.Code(); got != c.want {
+				t.Fatalf("Code() = %v, want %v", got, c.want)
+			}
+		})
+	}
+}

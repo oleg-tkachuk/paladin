@@ -3,7 +3,7 @@ package paladin
 import (
 	"bytes"
 	"context"
-	"crypto/md5" //nolint:gosec // verifies a digest storage recorded; not a security boundary
+	"crypto/md5" // #nosec G501 -- verifies a digest storage recorded; not a security boundary
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"

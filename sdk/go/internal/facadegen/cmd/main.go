@@ -21,6 +21,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	// #nosec G703 -- the path is go generate's argument, written by the developer running it
 	if err := os.WriteFile(os.Args[1], src, outputMode); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
