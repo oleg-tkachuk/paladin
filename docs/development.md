@@ -15,7 +15,7 @@ problem, read [SECURITY.md](../.github/SECURITY.md) instead.
 | Node | 26 | matches `frontend/deploy/Dockerfile`; CI runs the same |
 | pnpm | 12.10.1 | pinned by `packageManager` in `frontend/package.json`; Node 26 ships no corepack, so `npm install -g pnpm@12.10.1` |
 | Docker | recent | compose stacks, testcontainers-backed integration tests |
-| [Task](https://taskfile.dev) | 3.53+ | every entry point is a task target; CI pins 3.53.1 |
+| [Task](https://taskfile.dev) | 3.54+ | every entry point is a task target; CI pins 3.54.0 |
 
 Optional but recommended — the git hooks call these and **silently skip
 when they are missing**, so a fresh clone can commit, but you lose the
