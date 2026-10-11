@@ -29,6 +29,6 @@ func TestWithDPoPRefusesAnUnsupportedKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := paladin.New("https://data.example.com", paladin.WithDPoP(p384)); err == nil {
-		t.Fatal("a P-384 key was accepted; DPoP proofs here are EdDSA or ES256")
+		t.Fatal("a P-384 key was accepted; DPoP proofs here are Ed25519 or ES256")
 	}
 }
