@@ -44,6 +44,19 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — DPoP server nonces
+
+- **Configuration.** `capability.dpop_nonce` (off by default) makes a
+  key-bound capability's proof carry a nonce the server issued (RFC 9449 §8),
+  so a captured proof is usable for `lifetime` at most. Every replica must
+  share the key: give it as `key_secret` and add the Secret's name to
+  `rbac.secretReader.secretNames`; outside `local`, `dev`, `test` and `ci` a
+  missing key refuses to start.
+- **Clients.** The Go and Python SDKs keep the nonce each response brings and
+  answer a `use_dpop_nonce` challenge by resending the call once. Turn nonces
+  on only once every client holding a key-bound capability runs an SDK of this
+  release: an older one is refused.
+
 ## Unreleased — DPoP under its own scheme, signed Ed25519
 
 - **Behaviour, capabilities.** A key-bound capability may be sent as

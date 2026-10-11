@@ -88,7 +88,7 @@ up to `MaxRequestBytes` (4 MiB), the limits the server keeps.
 | `WithAPIToken(token)` | Sends an API token in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. |
 | `WithCapability(token)` | Sends a capability token in `X-Paladin-Capability`: the JWT or its Biscuit form, narrowed offline with `limes.Attenuate` or not. Can be combined with a bearer token. |
 | `WithCapabilitySource(source)` | Sends the capability `source(ctx)` returns for each call, for a client acting for many callers; an empty one leaves `WithCapability`'s. DPoP proofs sign over it. |
-| `WithDPoP(key)` | Proves possession of `key` — any `crypto.Signer` with an Ed25519 or P-256 public key, a KMS-held one included — on every call that sends a capability: each request, each retry included, carries a fresh RFC 9449 proof in `DPoP`. A capability issued with `confirmation_jkt = DPoPThumbprint(key.Public())` is refused without one. Proofs are signed for `POST`, so do not combine it with `connecthttp.WithHTTPGet`. |
+| `WithDPoP(key)` | Proves possession of `key` — any `crypto.Signer` with an Ed25519 or P-256 public key, a KMS-held one included — on every call that sends a capability: each request, each retry included, carries a fresh RFC 9449 proof in `DPoP`. A capability issued with `confirmation_jkt = DPoPThumbprint(key.Public())` is refused without one. A server that asks for nonces sends one with each response; the client keeps the latest and signs it into the next proof, and a unary call refused with `use_dpop_nonce` is sent once more with the nonce it carried. A stream signs the latest nonce held and is not resent. Proofs are signed `Ed25519` or `ES256`, for `POST`, so do not combine it with `connecthttp.WithHTTPGet`. |
 | `WithHeader(name, value)` | Sends a header on every call, replacing what the SDK would send there — `User-Agent` included, which is `paladin-sdk-go/<module version>` by default. |
 | `WithRetries(attempts, baseDelay)` | Retries a unary call on `Unavailable` or `ResourceExhausted`, up to `attempts` calls in total. The wait is drawn at random up to a ceiling that doubles from `baseDelay` (zero means `DefaultRetryBaseDelay`, 100ms) to `DefaultRetryMaxDelay` (5s), and is never shorter than the server's `Retry-After`, given in seconds or as an HTTP date. A retry that could not start before the context's deadline is not made, and the server's error is returned. Only calls safe to repeat are retried: RPCs the contract declares side-effect free or idempotent, and calls that carry an idempotency key — which every other call does, see below. Streams are never retried. |
 | `WithHTTPClient(c)` | Replaces `http.DefaultClient` — for timeouts, proxies, custom TLS. |
@@ -536,8 +536,9 @@ Runnable examples, in [`paladin/example_cookbook_test.go`](paladin/example_cookb
 ### Header names
 
 `HeaderAuthorization`, `HeaderAPIToken`, `HeaderCapability`, `HeaderDPoP` and
-`HeaderIdempotencyKey` are the names the server reads; `HeaderUserAgent` and
-`HeaderRetryAfter` are the two the SDK sends and reads besides. The server imports
+`HeaderIdempotencyKey` are the names the server reads; `HeaderUserAgent`,
+`HeaderRetryAfter`, `HeaderDPoPNonce` and `HeaderWWWAuthenticate` are the ones
+the SDK sends and reads besides. The server imports
 them from here, so the two cannot drift.
 
 ## Services and methods
