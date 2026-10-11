@@ -86,6 +86,24 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_list_platform_operations", Audience: "admin", Description: "List platform-wide long-running operations."},
 	{Name: "paladin_get_platform_operation", Audience: "admin", Description: "Read one platform-wide long-running operation."},
 
+	// ── admin plane: backend / bucket / collection lifecycle ─────
+	// Only the reads match agent_safe's patterns; the writes are admin-only.
+	{Name: "paladin_get_backend", Audience: "admin", Description: "Read one storage backend's settings and health."},
+	{Name: "paladin_test_backend", Audience: "admin", Description: "Probe a storage backend's reachability and features (non-mutating)."},
+	{Name: "paladin_set_backend_enabled", Audience: "admin", Description: "Enable or disable a storage backend.", Mutates: true},
+	{Name: "paladin_set_backend_read_only", Audience: "admin", Description: "Put a storage backend in or out of read-only mode.", Mutates: true},
+	{Name: "paladin_set_backend_maintenance", Audience: "admin", Description: "Put a storage backend in or out of maintenance.", Mutates: true},
+	{Name: "paladin_delete_backend", Audience: "admin", Description: "Deregister a storage backend with no buckets.", Mutates: true},
+	{Name: "paladin_list_accessible_buckets", Audience: "admin", Description: "List the buckets a tenant owns or shares."},
+	{Name: "paladin_create_bucket", Audience: "admin", Description: "Register a bucket on a backend.", Mutates: true},
+	{Name: "paladin_update_bucket", Audience: "admin", Description: "Change a bucket's display name or labels.", Mutates: true},
+	{Name: "paladin_delete_bucket", Audience: "admin", Description: "Deregister a bucket.", Mutates: true},
+	{Name: "paladin_set_bucket_versioning", Audience: "admin", Description: "Turn object versioning on or off for a bucket.", Mutates: true},
+	{Name: "paladin_update_collection", Audience: "admin", Description: "Change a collection's display name.", Mutates: true},
+	{Name: "paladin_bind_collection_to_bucket", Audience: "admin", Description: "Move a collection's binding to another bucket.", Mutates: true},
+	{Name: "paladin_delete_collection", Audience: "admin", Description: "Delete an empty collection.", Mutates: true},
+	{Name: "paladin_redrive_failed_deliveries", Audience: "admin", Description: "Re-queue a subscription's failed deliveries.", Mutates: true},
+
 	// ── data plane: object operations ────────────────────────────
 	{Name: "paladin_query_objects", Audience: "data", Description: "List objects under a collection with CEL filter.", CapabilityOp: "list"},
 	{Name: "paladin_get_object", Audience: "data", Description: "Read object metadata.", CapabilityOp: "get"},
@@ -181,7 +199,9 @@ var DefaultProfiles = map[string][]string{
 //   - paladin_grant_user_*  — role escalation surface.
 //   - paladin_revoke_*      — agent revoking auth primitives is destructive.
 //   - paladin_set_policy /
-//     paladin_delete_policy — agent rewriting Cedar = privilege re-grant.
+//     paladin_delete_policy /
+//     paladin_set_*_policy  — agent rewriting Cedar = privilege re-grant,
+//     on a bucket or a collection as much as through PolicyService.
 //   - paladin_login         — credentials never via agent context.
 //   - paladin_create_tenant /
 //     paladin_delete_tenant — tenant lifecycle is human-only.
@@ -192,6 +212,8 @@ var DefaultAlwaysDeny = []string{
 	"paladin_grant_user_*",
 	"paladin_revoke_*",
 	"paladin_set_policy",
+	"paladin_set_bucket_policy",
+	"paladin_set_collection_policy",
 	"paladin_delete_policy",
 	"paladin_login",
 	"paladin_create_tenant",
