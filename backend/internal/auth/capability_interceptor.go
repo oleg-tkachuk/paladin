@@ -253,6 +253,9 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 	if token == "" {
 		return ctx, nil
 	}
+	// Verify, not Authorize: the operation, the resource and the taint flag
+	// are known only to the handler, which checks them (ADR-0031).
+	//
 	// The verifier checks a key-bound capability's DPoP proof itself, with
 	// the proof checker it was built with; one it has none for is refused.
 	// The URL is the procedure path: behind a proxy the server cannot know
