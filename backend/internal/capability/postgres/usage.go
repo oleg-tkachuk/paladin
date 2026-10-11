@@ -341,7 +341,8 @@ func (s *UsageStore) Charge(
 
 	receipt, err := s.chargeInTx(ctx, tx, req, uuid.Nil, resolvedUnit, amountNumeric, maxBudgetNumeric, onCharged)
 	if err != nil {
-		return limes.ChargeReceipt{}, err
+		// A refusal still names whose charge it refused, and in what unit.
+		return limes.ChargeReceipt{TenantID: req.TenantID, UnitCode: resolvedUnit}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge commit: %w", err)

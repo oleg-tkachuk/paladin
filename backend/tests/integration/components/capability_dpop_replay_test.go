@@ -20,6 +20,12 @@ import (
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
+// replayKey and otherKey are the thumbprints the cache tests record proofs of.
+const (
+	replayKey = "key-a"
+	otherKey  = "key-b"
+)
+
 const (
 	dpopReplayURL    = "https://paladin.example/paladin.v1.ObjectService/GetObject"
 	dpopReplayIssuer = "paladin-replay-test"
@@ -122,17 +128,17 @@ func TestDPoPReplayCacheForgetsExpiredIDs(t *testing.T) {
 	cache := newReplayCache(t, rlsPool(t, ctx, admin))
 	past, future := time.Now().Add(-time.Minute), time.Now().Add(time.Hour)
 
-	if cache.Seen(ctx, "expired", past) {
+	if cache.Seen(ctx, replayKey, "expired", past) {
 		t.Fatal("a new id reported seen")
 	}
-	if cache.Seen(ctx, "expired", future) {
+	if cache.Seen(ctx, replayKey, "expired", future) {
 		t.Fatal("an id whose record expired, not yet purged, reported seen")
 	}
-	if !cache.Seen(ctx, "expired", future) {
+	if !cache.Seen(ctx, replayKey, "expired", future) {
 		t.Fatal("the overwritten record does not hold")
 	}
 
-	if cache.Seen(ctx, "stale", past) || cache.Seen(ctx, "live", future) {
+	if cache.Seen(ctx, replayKey, "stale", past) || cache.Seen(ctx, replayKey, "live", future) {
 		t.Fatal("a new id reported seen")
 	}
 	n, err := cache.PurgeExpired(ctx)
@@ -143,7 +149,7 @@ func TestDPoPReplayCacheForgetsExpiredIDs(t *testing.T) {
 		t.Fatalf("purged %d ids, want 1 (only the expired one)", n)
 	}
 	var left []string
-	rows, err := admin.Query(ctx, `SELECT jti FROM dpop_seen_jti ORDER BY jti`)
+	rows, err := admin.Query(ctx, `SELECT jti FROM dpop_seen_proofs ORDER BY jti`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,6 +168,32 @@ func TestDPoPReplayCacheForgetsExpiredIDs(t *testing.T) {
 	}
 }
 
+// One key past its share of the store has its new proofs refused, and only
+// it: another key's proofs, and a proof id the full key shares with it, are
+// recorded as before.
+func TestDPoPReplayCacheBoundsEachKey(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	admin := startPostgres(t)
+	cache := newReplayCache(t, rlsPool(t, ctx, admin))
+	future := time.Now().Add(time.Hour)
+	if _, err := admin.Exec(ctx, `
+INSERT INTO dpop_seen_proofs (jkt, jti, expires_at)
+SELECT $1, 'filled-' || n, $2 FROM generate_series(1, $3) AS n`,
+		replayKey, future, limes.DefaultReplayEntriesPerKey); err != nil {
+		t.Fatal(err)
+	}
+	if !cache.Seen(ctx, replayKey, "one-more", future) {
+		t.Error("a key past its share recorded a new proof id")
+	}
+	if cache.Seen(ctx, otherKey, "one-more", future) {
+		t.Error("another key's new proof id was refused")
+	}
+	if cache.Seen(ctx, otherKey, "filled-1", future) {
+		t.Error("a proof id is shared across keys")
+	}
+}
+
 // A check the database cannot answer refuses the proof.
 func TestDPoPReplayCacheFailsClosed(t *testing.T) {
 	t.Parallel()
@@ -170,7 +202,7 @@ func TestDPoPReplayCacheFailsClosed(t *testing.T) {
 	cache := newReplayCache(t, pool)
 	pool.Close()
 
-	if !cache.Seen(ctx, "unrecordable", time.Now().Add(time.Minute)) {
+	if !cache.Seen(ctx, replayKey, "unrecordable", time.Now().Add(time.Minute)) {
 		t.Fatal("a proof id that could not be recorded was accepted")
 	}
 }

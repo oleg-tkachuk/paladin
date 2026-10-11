@@ -333,8 +333,8 @@ github.com/ncruces/julianday v1.0.0 h1:fH0OKwa7NWvniGQtxdJRxAgkBMolni2BjDHaWTxqt
 github.com/ncruces/julianday v1.0.0/go.mod h1:Dusn2KvZrrovOMJuOt0TNXL6tB7U2E8kvza5fFc9G7g=
 github.com/oasdiff/yaml3 v0.0.14 h1:aLJee3hxBK2H5wdXd9iPcIXb93Nty1Ge0pT171eHtkw=
 github.com/oasdiff/yaml3 v0.0.14/go.mod h1:csto2xfDjYccdUn/yw/bPjj/cYTdp6HtFA0J4TWG+gg=
-github.com/oleg-tkachuk/limes v0.4.0 h1:4N13C6z4TSOJ2NWjc3ZojDv2NZ8E6wIpnhu67hBR8R0=
-github.com/oleg-tkachuk/limes v0.4.0/go.mod h1:B2vsLiU8tEO90ywUaFG5tlCTPw+0JGwkY0PcC6wT14o=
+github.com/oleg-tkachuk/limes v0.6.0 h1:LNj4KLWLQZJ5ibnHEUJIed+QEhU9uUFhmGDVcdUEEb4=
+github.com/oleg-tkachuk/limes v0.6.0/go.mod h1:lcxTdeUx7Qgm03S8bvj3dMUBIqhV5vbo2P9EAvrCjFo=
 github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=

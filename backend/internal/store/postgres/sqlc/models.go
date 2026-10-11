@@ -493,7 +493,8 @@ type Collection struct {
 	CacheControl    string             `json:"cache_control"`
 }
 
-type DpopSeenJti struct {
+type DpopSeenProof struct {
+	Jkt       string             `json:"jkt"`
 	Jti       string             `json:"jti"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }

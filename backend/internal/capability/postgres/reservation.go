@@ -324,7 +324,7 @@ func (s *UsageStore) Settle(
 		Overrun:      req.Overrun,
 	}, req.ReservationID, r.unit, amount, maxBudget, onCharged)
 	if err != nil {
-		return limes.ChargeReceipt{}, err
+		return limes.ChargeReceipt{TenantID: r.tenantID, UnitCode: r.unit}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: settle commit: %w", err)
