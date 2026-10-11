@@ -17,7 +17,10 @@
 #                         version would report drift nobody introduced.
 # not-brew: mockery     — same, backend/tools.go.
 # not-brew: goimports   — go install golang.org/x/tools/cmd/goimports@latest
-# not-brew: gosec       — go install github.com/securego/gosec/v2/cmd/gosec@latest
+# not-brew: gosec       — `tool` directive in backend/go.mod, run as `go tool gosec`.
+#                         A release or @latest build cannot read Go 1.27.2 export
+#                         data; for sdk/go, `cd backend && go install
+#                         github.com/securego/gosec/v2/cmd/gosec` installs the pin.
 # not-brew: govulncheck — go install golang.org/x/vuln/cmd/govulncheck@latest
 # not-brew: node        — nvm locally; the console image pins ARG NODE_VERSION.
 # A formula whose binary is named differently says so as `# bin: <name>`;
