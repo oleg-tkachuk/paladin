@@ -26,9 +26,10 @@ quiet.
 | `charged` | — | — |
 | `capability_exhausted` | the capability's budget, or a delegating ancestor's | `ResourceExhausted` |
 | `tenant_exhausted` | the tenant's budget | `ResourceExhausted` |
+| `unit_mismatch` | a counter that holds another currency | `FailedPrecondition` |
 | `error` | the charge itself failed | `Unavailable` |
 
-The rule counts the two `*_exhausted` outcomes, which are
+The rule counts the two `*_exhausted` outcomes and `unit_mismatch`, which are
 `metrics.alerts.rules.capabilityChargesRefused.refusedOutcomes`. `error`
 only adds to the total. A capability over its `max_requests` caveat is
 refused before any charge and does not appear here.
@@ -47,7 +48,14 @@ refused before any charge and does not appear here.
    `TenantBudgetService.Get` / `Summarize`: `max_budget_usd` against
    `spent_usd` and `reserved_usd`.
 
-3. **`capability_exhausted`: a capability's budget is spent.** Find which
+3. **`unit_mismatch`: the charge is in another currency.** A capability's
+   counter, an ancestor's or the tenant's budget already counts in one unit,
+   and the charge — `capability.charge_per_request_unit`, or the capability's
+   own unit — names another. Every retry fails the same way. Align the unit,
+   or reset the tenant budget's spend with `TenantBudgetService.Set` before
+   moving it to the new one.
+
+4. **`capability_exhausted`: a capability's budget is spent.** Find which
    one in the console (*Tenants → \<tenant\> → Capabilities*) or with
    `CapabilityService.List` and `GetUsage`. For a delegated capability the
    refusing budget may be an ancestor's; `GetUsage` on each in the chain

@@ -577,6 +577,7 @@ metrics:
         refusedOutcomes:
           - capability_exhausted
           - tenant_exhausted
+          - unit_mismatch
         # Floor under the charge rate, so a tenant with no charges divides
         # by it instead of by zero.
         minRate: 0.001
