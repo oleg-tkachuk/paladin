@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import yaml from "js-yaml";
+import { load } from "js-yaml";
 import { z } from "zod";
 
 // Resolve UI metadata with robust fallbacks
@@ -101,7 +101,7 @@ export const loadConfig = () => {
       console.log(`[Config] Loading from: ${path}`);
       try {
         const fileContents = fs.readFileSync(path, "utf8");
-        const parsed = yaml.load(fileContents) as Record<string, unknown>;
+        const parsed = load(fileContents) as Record<string, unknown>;
 
         // Inject configPath for verification
         if (parsed && typeof parsed === "object" && "runtimeConfig" in parsed) {
