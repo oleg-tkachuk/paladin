@@ -71,14 +71,17 @@ func (s *UsageStore) Reserve(ctx context.Context, req limes.ReserveRequest) (lim
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	ancestors, err := ancestorsOf(ctx, tx, req.CapabilityID)
+	if err != nil {
+		return limes.Reservation{}, err
+	}
+	if err := checkUnits(ctx, tx, req.CapabilityID, ancestors, req.TenantID, unit); err != nil {
+		return limes.Reservation{}, err
+	}
 	if err := addCopySpend(ctx, tx, req.CapabilityID, req.Copies, amount, copyReserved); err != nil {
 		return limes.Reservation{}, err
 	}
 	if err := holdCapability(ctx, tx, req.CapabilityID, amount, unit, maxBudget); err != nil {
-		return limes.Reservation{}, err
-	}
-	ancestors, err := ancestorsOf(ctx, tx, req.CapabilityID)
-	if err != nil {
 		return limes.Reservation{}, err
 	}
 	for _, a := range ancestors {
@@ -289,13 +292,10 @@ func (s *UsageStore) Settle(
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Settled already, or never settleable. A second settle waited on
 		// the first's row lock, so a charge the first made is visible now.
-		var (
-			chargeID, capID uuid.UUID
-			overrun         bool
-		)
-		lErr := tx.QueryRow(ctx, chargeByReservationQuery, req.ReservationID).Scan(&chargeID, &capID, &overrun)
+		var chargeID uuid.UUID
+		lErr := tx.QueryRow(ctx, chargeByReservationQuery, req.ReservationID).Scan(&chargeID)
 		if lErr == nil {
-			return replay(ctx, tx, chargeID, capID, overrun)
+			return replay(ctx, tx, chargeID)
 		}
 		if errors.Is(lErr, pgx.ErrNoRows) {
 			return limes.ChargeReceipt{}, limes.ErrReservationNotFound
@@ -324,7 +324,7 @@ func (s *UsageStore) Settle(
 		Overrun:      req.Overrun,
 	}, req.ReservationID, r.unit, amount, maxBudget, onCharged)
 	if err != nil {
-		return limes.ChargeReceipt{}, err
+		return limes.ChargeReceipt{TenantID: r.tenantID, UnitCode: r.unit}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: settle commit: %w", err)

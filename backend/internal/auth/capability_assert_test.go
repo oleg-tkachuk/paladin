@@ -30,7 +30,7 @@ func TestAssertCapabilityOp_AllowedOp(t *testing.T) {
 	cap := &limes.Capability{
 		ID:       uuid.New(),
 		Subject:  limes.Principal{TenantID: uuid.New(), Type: limes.PrincipalAgent},
-		Audience: []string{limes.AudiencePlaneData},
+		Audience: []string{TokenPlaneData},
 		Caveats: limes.Caveats{
 			Ops:              []limes.Op{limes.OpGet, limes.OpList},
 			ResourcePrefixes: []string{"object://acme/"},

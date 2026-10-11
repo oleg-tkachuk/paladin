@@ -35,6 +35,14 @@ func TestMeterContract(t *testing.T) {
 			Ctx:    auth.WithActingTenant(ctx, tenant),
 			Usage:  capstore.NewUsageStore(sqlc.New(pool), pool, zap.NewNop()),
 			Tenant: tenant,
+			// Each tenant's rows are written as that tenant, and the list
+			// across tenants is a platform-wide read, as the admin plane does.
+			NewTenant: func() (uuid.UUID, error) {
+				id, _ := mkTenant(t, ctx, admin, "shared")
+				return id, nil
+			},
+			TenantCtx: func(tenant uuid.UUID) context.Context { return auth.WithActingTenant(ctx, tenant) },
+			ListCtx:   auth.WithCrossTenantRead(ctx),
 			NewCapability: func(parent uuid.UUID, maxBudget limes.Nanos) (uuid.UUID, error) {
 				c := mkCap(tenant, "agent:"+uuid.NewString()[:8], time.Now().Add(contractTTL))
 				c.ParentID = parent

@@ -30,10 +30,6 @@ type CapabilityBundle struct {
 	Verifier  *limes.StandardVerifier
 	Keys      *limes.StaticKeyResolver
 
-	// DPoP checks the RFC 9449 proof a key-bound capability must arrive
-	// with, against Replay.
-	DPoP *limes.DPoPVerifier
-
 	// Replay records the DPoP proof ids every replica has accepted, so a
 	// proof replayed against any of them is refused. The capability
 	// purger drops the ids that have expired.
@@ -78,11 +74,11 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, errors.New("app: capability.issuer_name required when enabled")
 	}
 
-	kid, pub, priv, generated, err := limes.MustLoadOrGenerate(cfg.SigningKeyPath, cfg.SigningKeyKID)
+	key, err := limes.LoadOrGenerateKey(cfg.SigningKeyPath, cfg.SigningKeyKID)
 	if err != nil {
 		return nil, fmt.Errorf("app: capability key: %w", err)
 	}
-	if generated {
+	if key.Generated {
 		// An ephemeral key means every pod restart silently invalidates every
 		// capability agents are still holding. That is fine for a laptop and
 		// catastrophic anywhere else, and a startup warning is the wrong
@@ -101,12 +97,12 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		}
 		deps.Logger.Warn(
 			"capability: ephemeral signing key (no signing_key_path); restarts WILL invalidate every issued token",
-			zap.String("kid", kid),
+			zap.String("kid", key.KeyID),
 			zap.String("env", deps.Cfg.App.Env),
 		)
 	}
 
-	signer, err := limes.NewEd25519Signer(kid, priv)
+	signer, err := limes.NewEd25519Signer(key.KeyID, key.Private)
 	if err != nil {
 		return nil, fmt.Errorf("app: capability signer: %w", err)
 	}
@@ -126,7 +122,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability issuer: %w", err)
 	}
 
-	keys := limes.NewStaticKeyResolver(map[string]ed25519.PublicKey{kid: pub})
+	keys := limes.NewStaticKeyResolver(map[string]ed25519.PublicKey{key.KeyID: key.Public})
 
 	trusted := cfg.TrustedIssuers
 	if len(trusted) == 0 {
@@ -148,6 +144,11 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability revocation watch: %w", err)
 	}
 	deps.RegisterWatcherStop(stopWatch)
+	replay, err := capabilitypg.NewReplayCache(deps.Pool, deps.Logger.Named("dpop-replay"))
+	if err != nil {
+		return nil, fmt.Errorf("app: DPoP replay cache: %w", err)
+	}
+
 	verifier, err := limes.NewStandardVerifier(limes.VerifierConfig{
 		Keys:           keys,
 		Revocations:    cache,
@@ -160,6 +161,10 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		// The capability interceptor passes a copy's own limits to the usage
 		// store, which counts them (capability_copy_usage).
 		MeterCopies: true,
+		// A key-bound capability must arrive with an RFC 9449 proof from its
+		// key. The planes compare the procedure path only: behind a proxy
+		// they cannot know the scheme and host clients address them by.
+		DPoP: &limes.DPoPVerifier{Replay: replay, MatchPathOnly: true},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability verifier: %w", err)
@@ -169,15 +174,16 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// metrics for the runtime counters. Pure pass-through on cold
 	// MeterProvider so test paths and sidecar tools don't pay for
 	// instrument lookups.
-	usage := limes.WithMetering[pgx.Tx](capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage")))
+	// Labelled by tenant, as every Paladin meter of tenant activity is.
+	usage, err := limes.WithMetering[pgx.Tx](
+		capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage")),
+		limes.WithTenantAttribute())
+	if err != nil {
+		return nil, fmt.Errorf("app: capability metering: %w", err)
+	}
 	copyUsage, ok := usage.(limes.CopyUsageReader)
 	if !ok {
 		return nil, errors.New("app: the capability usage store reads no Biscuit copy counters")
-	}
-
-	replay, err := capabilitypg.NewReplayCache(deps.Pool, deps.Logger.Named("dpop-replay"))
-	if err != nil {
-		return nil, fmt.Errorf("app: DPoP replay cache: %w", err)
 	}
 
 	return &CapabilityBundle{
@@ -188,10 +194,9 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Issuer:       issuer,
 		Verifier:     verifier,
 		Keys:         keys,
-		DPoP:         &limes.DPoPVerifier{Replay: replay},
 		Replay:       replay,
-		PublicKeys:   map[string]ed25519.PublicKey{kid: pub},
+		PublicKeys:   map[string]ed25519.PublicKey{key.KeyID: key.Public},
 		IssuerName:   cfg.IssuerName,
-		EphemeralKey: generated,
+		EphemeralKey: key.Generated,
 	}, nil
 }

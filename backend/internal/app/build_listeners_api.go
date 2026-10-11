@@ -15,7 +15,6 @@ import (
 	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/limes"
 	connectdata "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/data"
 	connectiam "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/iam"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
@@ -168,14 +167,13 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// token stays additive — the existing principal wins.
 		// The taint lookup is what gives AllowTaintedRead something to act
 		// on: a capability without it is refused reads of flagged objects.
-		// DPoP binds a capability to the key that presents it.
-		capOpts := []auth.CapabilityOption{auth.WithDPoP(deps.Capability.DPoP)}
+		var capOpts []auth.CapabilityOption
 		if taintH != nil {
 			capOpts = append(capOpts, auth.WithTaintLookup(taintH.Tainted))
 		}
 		capData = auth.CapabilityEstablishingInterceptor(
 			deps.Capability.Verifier,
-			limes.AudiencePlaneData,
+			auth.TokenPlaneData,
 			deps.Capability.Usage,
 			cfg.Capability.ChargePerRequestAmount,
 			cfg.Capability.ChargePerRequestUnit,

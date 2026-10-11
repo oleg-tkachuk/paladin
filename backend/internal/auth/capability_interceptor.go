@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -106,14 +105,6 @@ func CapabilityInterceptor(
 
 // CapabilityOption configures a capability interceptor.
 type CapabilityOption func(*capabilityInterceptor)
-
-// WithDPoP checks proof of possession for key-bound capabilities. Without
-// it, a key-bound capability is refused outright on this plane: there is
-// nothing to check its proof with, and accepting it as a bearer token would
-// throw the binding away.
-func WithDPoP(v *limes.DPoPVerifier) CapabilityOption {
-	return func(i *capabilityInterceptor) { i.dpop = v }
-}
 
 // CapabilityInterceptorWithEvents is the events-aware variant. The
 // emitter is stamped on every authenticated request's context so
@@ -224,7 +215,6 @@ type capabilityInterceptor struct {
 	chargePerRequestAmount limes.Nanos
 	chargePerRequestUnit   string
 	emitter                ChargeEventEmitter
-	dpop                   *limes.DPoPVerifier
 	taintLookup            TaintLookup
 }
 
@@ -263,7 +253,20 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 	if token == "" {
 		return ctx, nil
 	}
-	verified, err := i.verifier.Verify(ctx, token, i.audience)
+	// The verifier checks a key-bound capability's DPoP proof itself, with
+	// the proof checker it was built with; one it has none for is refused.
+	// The URL is the procedure path: behind a proxy the server cannot know
+	// the scheme and host its clients address it by, and the paths of
+	// different services never coincide.
+	verified, err := i.verifier.Verify(ctx, limes.VerifyRequest{
+		Token:    token,
+		Audience: i.audience,
+		DPoP: limes.DPoPProof{
+			Proof:  header.Get(paladin.HeaderDPoP),
+			Method: httpMethod(ctx),
+			URL:    spec.Procedure,
+		},
+	})
 	if err != nil {
 		// Token was supplied AND failed verification. We surface
 		// this as PermissionDenied — the caller chose to present
@@ -272,10 +275,6 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 		return ctx, capabilityError(connect.CodePermissionDenied, err)
 	}
 	cap := &verified // the request's context holds it by reference
-	if err := i.checkPossession(ctx, cap, token, header.Get(paladin.HeaderDPoP),
-		httpMethod(ctx), spec.Procedure); err != nil {
-		return ctx, capabilityError(connect.CodePermissionDenied, err)
-	}
 	if err := i.enforceCaveats(ctx, cap); err != nil {
 		return ctx, err
 	}
@@ -296,33 +295,10 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 // httpMethod is the method the call came in with: POST, or GET for a
 // Connect GET of a side-effect-free call.
 func httpMethod(ctx context.Context) string {
-	if info, ok := connecthttp.ServerInfoForContext(ctx); ok {
+	if info, ok := connecthttp.ServerInfoForContext(ctx); ok && info.HTTPMethod() != "" {
 		return info.HTTPMethod()
 	}
 	return http.MethodPost
-}
-
-// checkPossession enforces a key-bound capability's DPoP proof. An unbound
-// capability passes. The URL compared is the procedure path: behind a proxy
-// the server cannot know the scheme and host its clients address it by, and
-// the paths of different services never coincide.
-func (i *capabilityInterceptor) checkPossession(ctx context.Context, cap *limes.Capability, token, proof, method, procedure string) error {
-	if cap.ConfirmationJKT == "" {
-		return nil
-	}
-	if i.dpop == nil {
-		return fmt.Errorf("%w: this plane cannot check proof of possession", limes.ErrDPoPRequired)
-	}
-	if method == "" {
-		method = http.MethodPost
-	}
-	return i.dpop.Check(ctx, *cap, limes.DPoPRequest{
-		Proof:         proof,
-		Method:        method,
-		URL:           procedure,
-		MatchPathOnly: true,
-		Token:         token,
-	})
 }
 
 // withCapabilityPrincipal derives a Principal from a verified capability and
