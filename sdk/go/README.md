@@ -145,7 +145,7 @@ import "github.com/oleg-tkachuk/limes"
 narrowed, err := limes.Attenuate(issued.GetBiscuit(), limes.Attenuation{
     Ops:              []limes.Op{limes.OpGet},
     ResourcePrefixes: []string{"corpus/public/"},
-    Planes:           []string{limes.AudiencePlaneData},
+    Planes:           []string{"data"}, // the data plane
     ExpiresAt:        time.Now().Add(10 * time.Minute),
 })
 client, err := paladin.New(dataURL, paladin.WithCapability(narrowed))

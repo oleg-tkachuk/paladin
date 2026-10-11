@@ -416,6 +416,8 @@ type CapabilityRecord struct {
 	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
 	ConfirmationJkt  *string            `json:"confirmation_jkt"`
 	IssuedBy         []byte             `json:"issued_by"`
+	MaxBudget        pgtype.Numeric     `json:"max_budget"`
+	MaxRequests      *int64             `json:"max_requests"`
 }
 
 type CapabilityReservation struct {
@@ -491,7 +493,8 @@ type Collection struct {
 	CacheControl    string             `json:"cache_control"`
 }
 
-type DpopSeenJti struct {
+type DpopSeenProof struct {
+	Jkt       string             `json:"jkt"`
 	Jti       string             `json:"jti"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }

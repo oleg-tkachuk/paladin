@@ -135,12 +135,11 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		}
 		capAdmin = auth.CapabilityInterceptorWithEvents(
 			deps.Capability.Verifier,
-			limes.AudiencePlaneAdmin,
+			auth.TokenPlaneAdmin,
 			deps.Capability.Usage,
 			cfg.Capability.ChargePerRequestAmount,
 			cfg.Capability.ChargePerRequestUnit,
 			chargeEm,
-			auth.WithDPoP(deps.Capability.DPoP),
 		)
 	} else {
 		capAdmin = auth.CapabilityInterceptor(nil, "", nil, 0, "")

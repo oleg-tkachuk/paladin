@@ -40,7 +40,7 @@ func issueRequest(tenant uuid.UUID) *adminv1.CapabilityServiceIssueRequest {
 		Subject: &adminv1.CapabilityPrincipal{
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE, TenantId: tenant.String(), Subject: "svc",
 		},
-		Audience:   []string{limes.AudiencePlaneData},
+		Audience:   []string{auth.TokenPlaneData},
 		TtlSeconds: 300,
 		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
 	}
