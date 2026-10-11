@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -123,6 +124,35 @@ func serve(t *testing.T, i connect.ServerInterceptor) (paladiniamv1connect.Healt
 	t.Cleanup(srv.Close)
 	return paladiniamv1connect.NewHealthServiceClient(
 		connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL))), srv.URL
+}
+
+// callUnder sends the capability as Authorization under scheme, with proof.
+func callUnder(c paladiniamv1connect.HealthServiceClient, scheme limes.AuthScheme, token, proof string) error {
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set(paladin.HeaderAuthorization, string(scheme)+" "+token)
+	if proof != "" {
+		info.RequestHeader().Set(limes.DPoPHeader, proof)
+	}
+	_, err := c.GetVersion(ctx, &iamv1.GetVersionRequest{})
+	return err
+}
+
+// RFC 9449's own scheme: a key-bound capability under DPoP is accepted with
+// its proof, and a bearer one under DPoP is refused, its binding being the
+// one the scheme claims.
+func TestCapabilityDPoP_TheDPoPScheme(t *testing.T) {
+	f := newDPoPFixture(t)
+	client, base := serve(t, CapabilityInterceptor(f.verifier, TokenPlaneData, nil, 0, ""))
+	bound := f.mint(t, f.jkt)
+	if err := callUnder(client, limes.AuthSchemeDPoP, bound, f.proof(t, base+dpopProcedure, bound)); err != nil {
+		t.Fatalf("a bound capability under DPoP refused: %v", err)
+	}
+	bearer := f.mint(t, "")
+	err := callUnder(client, limes.AuthSchemeDPoP, bearer, f.proof(t, base+dpopProcedure, bearer))
+	// Over HTTP the cause stays on the server; the message carries it.
+	if connect.CodeOf(err) != connect.CodePermissionDenied || !strings.Contains(err.Error(), limes.ErrAuthSchemeMismatch.Error()) {
+		t.Fatalf("a bearer capability under DPoP: err = %v, want PermissionDenied for %v", err, limes.ErrAuthSchemeMismatch)
+	}
 }
 
 func call(c paladiniamv1connect.HealthServiceClient, token, proof string) error {

@@ -20,10 +20,13 @@ func TestExtractCapabilityToken(t *testing.T) {
 		xlegate string
 		authz   string
 		want    string
+		scheme  limes.AuthScheme
 	}{
 		"x-paladin wins":       {xlegate: "tok-a", authz: "Capability tok-b", want: "tok-a"},
 		"authz capability":     {xlegate: "", authz: "Capability tok-b", want: "tok-b"},
 		"authz lowercase":      {xlegate: "", authz: "capability tok-b", want: "tok-b"},
+		"authz dpop":           {xlegate: "", authz: "DPoP tok-b", want: "tok-b", scheme: limes.AuthSchemeDPoP},
+		"authz dpop lowercase": {xlegate: "", authz: "dpop tok-b", want: "tok-b", scheme: limes.AuthSchemeDPoP},
 		"authz bearer ignored": {xlegate: "", authz: "Bearer tok-b", want: ""},
 		"authz malformed":      {xlegate: "", authz: "Capability", want: ""},
 		"authz empty":          {xlegate: "", authz: "", want: ""},
@@ -32,9 +35,9 @@ func TestExtractCapabilityToken(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := extractCapabilityToken(tc.xlegate, tc.authz)
-			if got != tc.want {
-				t.Errorf("got %q, want %q", got, tc.want)
+			got, scheme := extractCapabilityToken(tc.xlegate, tc.authz)
+			if got != tc.want || scheme != tc.scheme {
+				t.Errorf("got %q under %q, want %q under %q", got, scheme, tc.want, tc.scheme)
 			}
 		})
 	}

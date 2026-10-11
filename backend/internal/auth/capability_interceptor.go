@@ -249,7 +249,7 @@ func (i *capabilityInterceptor) interceptor() connect.ServerInterceptor {
 // establish verifies the call's capability, if it carries one, and returns
 // the context the call runs under.
 func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec, header *connect.Header, hasKey bool) (context.Context, error) {
-	token := extractCapabilityToken(header.Get(HeaderCapability), header.Get("Authorization"))
+	token, scheme := extractCapabilityToken(header.Get(HeaderCapability), header.Get("Authorization"))
 	if token == "" {
 		return ctx, nil
 	}
@@ -264,6 +264,7 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 	verified, err := i.verifier.Verify(ctx, limes.VerifyRequest{
 		Token:    token,
 		Audience: i.audience,
+		Scheme:   scheme,
 		DPoP: limes.DPoPProof{
 			Proof:  header.Get(paladin.HeaderDPoP),
 			Method: httpMethod(ctx),
@@ -415,23 +416,30 @@ func ledgerContext(ctx context.Context, cap *limes.Capability) context.Context {
 }
 
 // extractCapabilityToken reads the token from either of the supported
-// headers. X-Paladin-Capability wins over Authorization scheme=capability
-// when both are present (explicit > overloaded).
-func extractCapabilityToken(xlegate, authz string) string {
+// headers, and the Authorization scheme it came under. X-Paladin-Capability
+// wins over Authorization when both are present (explicit > overloaded).
+// Paladin's own "capability" scheme and the header name no RFC scheme, so the
+// verifier checks none for them; "DPoP" is RFC 9449's.
+func extractCapabilityToken(xlegate, authz string) (string, limes.AuthScheme) {
 	if t := strings.TrimSpace(xlegate); t != "" {
-		return t
+		return t, limes.AuthSchemeUnspecified
 	}
 	if authz == "" {
-		return ""
+		return "", limes.AuthSchemeUnspecified
 	}
 	parts := strings.SplitN(strings.TrimSpace(authz), " ", 2)
 	if len(parts) != 2 {
-		return ""
+		return "", limes.AuthSchemeUnspecified
 	}
-	if !strings.EqualFold(parts[0], AuthorizationCapScheme) {
-		return ""
+	switch {
+	case strings.EqualFold(parts[0], AuthorizationCapScheme):
+		return strings.TrimSpace(parts[1]), limes.AuthSchemeUnspecified
+	// RFC 9449's own scheme, for a key-bound capability: the verifier then
+	// holds the token to its binding — a bearer one under DPoP is refused.
+	case strings.EqualFold(parts[0], string(limes.AuthSchemeDPoP)):
+		return strings.TrimSpace(parts[1]), limes.AuthSchemeDPoP
 	}
-	return strings.TrimSpace(parts[1])
+	return "", limes.AuthSchemeUnspecified
 }
 
 // chargeKey context value carries the UsageStore the handler should
