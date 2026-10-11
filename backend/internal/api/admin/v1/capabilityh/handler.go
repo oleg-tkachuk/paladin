@@ -205,7 +205,7 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 	}
 
 	apiutil.StashResource(ctx, capabilityResourceName(cap.Subject.TenantID, cap.ID))
-	return h.issued(cap, token)
+	return h.issued(ctx, cap, token)
 }
 
 // Delegate narrows a parent capability. Two authentication paths are
@@ -318,7 +318,7 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		return nil, apiutil.MapError(err)
 	}
 	apiutil.StashResource(ctx, capabilityResourceName(cap.Subject.TenantID, cap.ID))
-	return h.issued(cap, token)
+	return h.issued(ctx, cap, token)
 }
 
 // Revoke adds the capability ID to the revocation list. Idempotent for a
@@ -553,8 +553,8 @@ func stashCapabilityInScope(ctx context.Context, id uuid.UUID) {
 	}
 }
 
-func (h *Handler) issued(cap limes.Capability, token string) (*adminv1.CapabilityServiceIssueResponse, error) {
-	bisc, err := h.issuer.Biscuit(cap)
+func (h *Handler) issued(ctx context.Context, cap limes.Capability, token string) (*adminv1.CapabilityServiceIssueResponse, error) {
+	bisc, err := h.issuer.Biscuit(ctx, cap)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -583,7 +583,7 @@ func protoToCaveats(c *adminv1.CapabilityCaveats) (limes.Caveats, error) {
 	out := limes.Caveats{
 		ResourcePrefixes:       c.GetResourcePrefixes(),
 		ResourceURIs:           c.GetResourceUris(),
-		MaxRequests:            int(c.GetMaxRequests()),
+		MaxRequests:            int64(c.GetMaxRequests()),
 		MaxBudgetAmount:        budget,
 		UnitCode:               unit,
 		AllowTaintedRead:       c.GetAllowTaintedRead(),
@@ -634,7 +634,7 @@ func caveatsToProto(c limes.Caveats) *adminv1.CapabilityCaveats {
 	out := &adminv1.CapabilityCaveats{
 		ResourcePrefixes:       c.ResourcePrefixes,
 		ResourceUris:           c.ResourceURIs,
-		MaxRequests:            safecast.Int32(c.MaxRequests),
+		MaxRequests:            safecast.Int32From64(c.MaxRequests),
 		MaxBudget:              apiutil.MoneyOf(c.UnitCode, c.MaxBudgetAmount),
 		AllowTaintedRead:       c.AllowTaintedRead,
 		IdempotencyKeyRequired: c.IdempotencyKeyRequired,

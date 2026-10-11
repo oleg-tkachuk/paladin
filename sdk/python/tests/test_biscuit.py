@@ -38,9 +38,15 @@ def _seed() -> str:
     return SEED.read_text().strip()
 
 
+# The case's seed of the key the copy is bound to: the backend signs the DPoP
+# proof with it, and it is no argument of attenuate.
+BIND_KEY_SEED = "bind_key_seed"
+
+
 def _case() -> dict[str, Any]:
     case = json.loads(CASE.read_text())
     args = dict(case["attenuate"])
+    args.pop(BIND_KEY_SEED)
     args["expires_at"] = datetime.fromisoformat(args["expires_at"])
     return args
 

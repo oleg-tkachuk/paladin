@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -55,6 +57,8 @@ var crossLangSeed = [ed25519.SeedSize]byte{
 const (
 	crossLangKID    = "golden-kid"
 	crossLangIssuer = "limes-golden"
+	// crossLangProofURL is the request the bound copy's proof is made for.
+	crossLangProofURL = "https://paladin.example/paladin.data.v1.ObjectService/GetObject"
 )
 
 func crossLangClock() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
@@ -102,6 +106,11 @@ func (noBiscuitRevocations) IsBiscuitRevoked(context.Context, [][]byte) (bool, e
 }
 
 type crossLangCase struct {
+	Attenuate struct {
+		// BindKeySeed is the hex seed of the Ed25519 key the copy is bound
+		// to, so the proof of possession can be signed.
+		BindKeySeed string `json:"bind_key_seed"`
+	} `json:"attenuate"`
 	Expect struct {
 		Ops              []limes.Op `json:"ops"`
 		ResourcePrefixes []string   `json:"resource_prefixes"`
@@ -138,18 +147,34 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 		Now:                crossLangClock,
 		AcceptBiscuit:      true,
 		MeterCopies:        true,
+		DPoP:               &limes.DPoPVerifier{Replay: limes.NewMemoryReplayCache(0)},
 	})
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
+	bindSeed, err := hex.DecodeString(c.Attenuate.BindKeySeed)
+	if err != nil || len(bindSeed) != ed25519.SeedSize {
+		t.Fatalf("bind_key_seed %q is not %d hex bytes: %v", c.Attenuate.BindKeySeed, ed25519.SeedSize, err)
+	}
+	bindKey := ed25519.NewKeyFromSeed(bindSeed)
 	ctx := context.Background()
 
-	seed, err := v.Verify(ctx, readShared(t, biscuitSeed), limes.AudiencePlaneMCP)
+	seed, err := v.Verify(ctx, limes.VerifyRequest{Token: readShared(t, biscuitSeed), Audience: TokenPlaneMCP})
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	token := readShared(t, pythonBiscuit)
-	got, err := v.Verify(ctx, token, limes.AudiencePlaneData)
+	// The copy is bound, so it is accepted only with a proof from its key.
+	proof, err := limes.NewDPoPProof(bindKey, limes.DPoPProofRequest{
+		Method: http.MethodPost, URL: crossLangProofURL, Token: token, Now: crossLangClock(),
+	})
+	if err != nil {
+		t.Fatalf("proof: %v", err)
+	}
+	got, err := v.Verify(ctx, limes.VerifyRequest{
+		Token: token, Audience: TokenPlaneData,
+		DPoP: limes.DPoPProof{Proof: proof, Method: http.MethodPost, URL: crossLangProofURL},
+	})
 	if err != nil {
 		t.Fatalf("the Python-attenuated token is refused: %v", err)
 	}
@@ -177,7 +202,7 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 		got.Copies[0].MaxBudget != limes.Nanos(want.CopyMaxBudget) {
 		t.Errorf("Copies = %+v, want one with %d requests and %d nanos", got.Copies, want.CopyMaxRequests, want.CopyMaxBudget)
 	}
-	if _, err := v.Verify(ctx, token, limes.AudiencePlaneMCP); err == nil {
+	if _, err := v.Verify(ctx, limes.VerifyRequest{Token: token, Audience: TokenPlaneMCP}); err == nil {
 		t.Error("the plane the attenuation dropped is still accepted")
 	}
 }

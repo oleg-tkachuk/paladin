@@ -41,7 +41,7 @@ func newLineageFixture(t *testing.T) (context.Context, lineageFixture) {
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
 	records := newCapStore(t, pool)
 
-	insert := func(parent uuid.UUID, budget string, requests int) uuid.UUID {
+	insert := func(parent uuid.UUID, budget string, requests int64) uuid.UUID {
 		c := mkCap(tenant, "agent:"+uuid.NewString()[:8], time.Now().Add(time.Hour))
 		c.ParentID = parent
 		c.Caveats.MaxBudgetAmount = limes.MustParseAmount(budget)
@@ -184,7 +184,7 @@ func TestLineageHoldsUnderRowLevelSecurity(t *testing.T) {
 		t.Fatalf("sibling past the parent's ceiling under RLS: err = %v, want ErrBudgetExceeded", err)
 	}
 
-	if got, err := usage.Refund(ledgerCtx, limes.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("5")}); err != nil || got != limes.MustParseAmount("5") {
+	if got, err := usage.Refund(ledgerCtx, limes.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("5")}); err != nil || got.Refunded != limes.MustParseAmount("5") {
 		t.Fatalf("refund under RLS = %v, %v; want 5", got, err)
 	}
 	if got := f.spent(t, ctx, f.root); got != limes.MustParseAmount("15") {

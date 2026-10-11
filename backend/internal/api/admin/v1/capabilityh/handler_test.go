@@ -102,7 +102,7 @@ func mkParent(tenantID uuid.UUID, ops ...limes.Op) limes.Capability {
 			TenantID: tenantID,
 			Subject:  "agent-42",
 		},
-		Audience:   []string{limes.AudiencePlaneData},
+		Audience:   []string{auth.TokenPlaneData},
 		IssuedAt:   now,
 		ExpiresAt:  now.Add(time.Hour),
 		Generation: 1,

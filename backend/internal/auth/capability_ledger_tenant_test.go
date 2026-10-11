@@ -41,7 +41,7 @@ func (u *tenantRecordingUsage) Charge(ctx context.Context, req limes.ChargeReque
 	return u.fakeUsage.Charge(ctx, req, onCharged)
 }
 
-func (u *tenantRecordingUsage) Refund(ctx context.Context, req limes.RefundRequest) (limes.Nanos, error) {
+func (u *tenantRecordingUsage) Refund(ctx context.Context, req limes.RefundRequest) (limes.RefundReceipt, error) {
 	u.record(ctx, "Refund")
 	return u.fakeUsage.Refund(ctx, req)
 }
