@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — capabilities run on limes v0.6.0
+## Unreleased — capabilities run on limes v0.7.0
 
 - **Breaking, capability tokens.** Capabilities are JWTs with
   `typ: limes-cap-v3+jwt` and `alg: Ed25519`; every capability issued before
