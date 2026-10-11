@@ -416,6 +416,8 @@ type CapabilityRecord struct {
 	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
 	ConfirmationJkt  *string            `json:"confirmation_jkt"`
 	IssuedBy         []byte             `json:"issued_by"`
+	MaxBudget        pgtype.Numeric     `json:"max_budget"`
+	MaxRequests      *int64             `json:"max_requests"`
 }
 
 type CapabilityReservation struct {
