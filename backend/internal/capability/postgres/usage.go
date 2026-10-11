@@ -853,11 +853,44 @@ func (s *UsageStore) GetUsage(ctx context.Context, capID uuid.UUID) (limes.Usage
 
 // Delete implements limes.UsageStore[pgx.Tx].
 func (s *UsageStore) Delete(ctx context.Context, capID uuid.UUID) error {
-	if _, err := s.q.DeleteCapabilityUsage(ctx, pgtype.UUID{Bytes: capID, Valid: true}); err != nil {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("capability/postgres: delete begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Nothing can settle or release a hold of a capability that is gone, so
+	// its holds are released here: left behind, they would count against its
+	// ancestors and its tenant for good.
+	rows, err := tx.Query(ctx, capabilityReservationsQuery, capID)
+	if err != nil {
+		return fmt.Errorf("capability/postgres: delete read holds: %w", err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return fmt.Errorf("capability/postgres: delete read holds: %w", err)
+	}
+	for _, id := range ids {
+		r, err := takeReservation(ctx, tx, id, false)
+		if err != nil {
+			return fmt.Errorf("capability/postgres: delete take hold: %w", err)
+		}
+		if err := s.releaseHold(ctx, tx, r); err != nil {
+			return err
+		}
+	}
+	if _, err := s.q.WithTx(tx).DeleteCapabilityUsage(ctx, pgtype.UUID{Bytes: capID, Valid: true}); err != nil {
 		return fmt.Errorf("capability/postgres: delete usage: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("capability/postgres: delete commit: %w", err)
 	}
 	return nil
 }
+
+// capabilityReservationsQuery lists a capability's open holds, locked so a
+// concurrent settle or release waits for the delete.
+const capabilityReservationsQuery = `SELECT id FROM capability_reservations WHERE capability_id = $1 FOR UPDATE`
 
 // PurgeOrphans implements limes.UsageStore[pgx.Tx].
 func (s *UsageStore) PurgeOrphans(ctx context.Context) (int64, error) {
