@@ -18,6 +18,9 @@ import (
 	"github.com/oleg-tkachuk/limes/memstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // replayKey and otherKey are the thumbprints the cache tests record proofs of.
@@ -175,7 +178,11 @@ func TestDPoPReplayCacheBoundsEachKey(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
-	cache := newReplayCache(t, rlsPool(t, ctx, admin))
+	core, logs := observer.New(zapcore.WarnLevel)
+	cache, err := capstore.NewReplayCache(rlsPool(t, ctx, admin), zap.New(core))
+	if err != nil {
+		t.Fatal(err)
+	}
 	future := time.Now().Add(time.Hour)
 	if _, err := admin.Exec(ctx, `
 INSERT INTO dpop_seen_proofs (jkt, jti, expires_at)
@@ -185,6 +192,15 @@ SELECT $1, 'filled-' || n, $2 FROM generate_series(1, $3) AS n`,
 	}
 	if !cache.Seen(ctx, replayKey, "one-more", future) {
 		t.Error("a key past its share recorded a new proof id")
+	}
+	if n := logs.FilterMessageSnippet("past its share").FilterField(zap.String("jkt", replayKey)).Len(); n != 1 {
+		t.Errorf("%d warnings name the full key, want 1", n)
+	}
+	if !cache.Seen(ctx, replayKey, "filled-1", future) {
+		t.Error("a replayed proof id was recorded again")
+	}
+	if n := logs.Len(); n != 1 {
+		t.Errorf("%d warnings, want 1: a replay is not a key past its share", n)
 	}
 	if cache.Seen(ctx, otherKey, "one-more", future) {
 		t.Error("another key's new proof id was refused")

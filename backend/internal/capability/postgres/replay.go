@@ -64,11 +64,28 @@ RETURNING jti
 	case err == nil:
 		return false
 	case errors.Is(err, pgx.ErrNoRows):
+		c.logIfOverShare(ctx, jkt, jti)
 		return true
 	default:
 		c.log.Warn("DPoP replay check failed; refusing the proof", zap.Error(err))
 		return true
 	}
+}
+
+// logIfOverShare tells a key refused for being past its share from a proof
+// replayed: both are refused alike, but only the first says that a key is
+// spending proofs faster than they expire — a client looping, or one key
+// trying to crowd the store. The extra read runs on the refusal path only.
+func (c *ReplayCache) logIfOverShare(ctx context.Context, jkt, jti string) {
+	const stmt = `
+SELECT EXISTS (SELECT 1 FROM dpop_seen_proofs WHERE jkt = $1 AND jti = $2 AND expires_at > now())
+`
+	var replayed bool
+	if err := c.pool.QueryRow(ctx, stmt, jkt, jti).Scan(&replayed); err != nil || replayed {
+		return
+	}
+	c.log.Warn("DPoP proof refused: the key is past its share of the replay store",
+		zap.String("jkt", jkt), zap.Int("share", limes.DefaultReplayEntriesPerKey))
 }
 
 // PurgeExpired deletes up to ReplayPurgeBatch proof ids whose proofs can no
