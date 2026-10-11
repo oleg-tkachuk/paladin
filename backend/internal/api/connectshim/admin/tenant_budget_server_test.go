@@ -30,6 +30,8 @@ type fakeUsageStore struct {
 	lastList limes.ListTenantBudgetsRequest
 	listNext string
 	listErr  error
+	// setErr, when set, is what SetTenantBudget answers.
+	setErr error
 }
 
 func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (limes.TenantBudget, error) {
@@ -45,6 +47,9 @@ func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (limes
 
 func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args limes.SetTenantBudgetRequest) (limes.TenantBudget, error) {
 	f.lastSet = args
+	if f.setErr != nil {
+		return limes.TenantBudget{}, f.setErr
+	}
 	if f.budgets == nil {
 		f.budgets = map[uuid.UUID]limes.TenantBudget{}
 	}
@@ -309,5 +314,26 @@ func TestTenantBudgetServer_Set_BadVersionIsInvalidArgument(t *testing.T) {
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
 		t.Fatalf("err = %v, want CodeInvalidArgument", err)
+	}
+}
+
+// Set answers each refusal of the store with the status the caller can act
+// on; only a failure that refuses nothing is Internal.
+func TestTenantBudgetServer_Set_MapsTheStoresRefusals(t *testing.T) {
+	cases := map[error]connect.Code{
+		limes.ErrTenantBudgetVersionMismatch: connect.CodeAborted,
+		limes.ErrUnitCodeMismatch:            connect.CodeFailedPrecondition,
+		limes.ErrInvalidAmount:               connect.CodeInvalidArgument,
+		errors.New("store down"):             connect.CodeInternal,
+	}
+	for storeErr, want := range cases {
+		srv := NewTenantBudgetServer(&fakeUsageStore{setErr: storeErr})
+		_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
+			TenantId:  uuid.New().String(),
+			MaxBudget: &money.Money{CurrencyCode: "EUR", Units: 1},
+		})
+		if got := connect.CodeOf(err); got != want {
+			t.Errorf("store answered %v: code = %v, want %v", storeErr, got, want)
+		}
 	}
 }

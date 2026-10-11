@@ -268,11 +268,9 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 		},
 	})
 	if err != nil {
-		// Token was supplied AND failed verification. We surface
-		// this as PermissionDenied — the caller chose to present
-		// a capability and it didn't pass; falling through to JWT
+		// Token was supplied and not accepted. Falling through to JWT
 		// silently would mask the misconfiguration.
-		return ctx, capabilityError(connect.CodePermissionDenied, err)
+		return ctx, verifyError(ctx, err)
 	}
 	cap := &verified // the request's context holds it by reference
 	if err := i.enforceCaveats(ctx, cap); err != nil {
@@ -679,16 +677,17 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos, unit string) erro
 		// indistinguishable, and both look like "the API is rejecting us".
 		switch {
 		case errors.Is(err, limes.ErrBudgetExceeded):
-			metrics.RecordCapabilityCharge(ctx, tenantID.String(), "capability_exhausted", 0)
-			return capabilityError(connect.CodeResourceExhausted, err)
+			metrics.RecordCapabilityCharge(ctx, tenantID.String(), metrics.ChargeCapabilityExhausted, 0)
 		case errors.Is(err, limes.ErrTenantBudgetExceeded):
-			metrics.RecordCapabilityCharge(ctx, tenantID.String(), "tenant_exhausted", 0)
-			return capabilityError(connect.CodeResourceExhausted, err)
+			metrics.RecordCapabilityCharge(ctx, tenantID.String(), metrics.ChargeTenantExhausted, 0)
+		case errors.Is(err, limes.ErrUnitCodeMismatch):
+			metrics.RecordCapabilityCharge(ctx, tenantID.String(), metrics.ChargeUnitMismatch, 0)
+		default:
+			metrics.RecordCapabilityCharge(ctx, tenantID.String(), metrics.ChargeError, 0)
 		}
-		metrics.RecordCapabilityCharge(ctx, tenantID.String(), "error", 0)
-		return capabilityError(connect.CodeUnavailable, err)
+		return chargeError(err)
 	}
-	metrics.RecordCapabilityCharge(ctx, tenantID.String(), "charged", amount.Float64())
+	metrics.RecordCapabilityCharge(ctx, tenantID.String(), metrics.ChargeCharged, amount.Float64())
 	stampLastCharge(ctx, receipt.ChargeID)
 	return nil
 }
@@ -835,13 +834,16 @@ func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 
 // chargeError maps a metering rejection to its transport status: both
 // exhaustion sentinels are ResourceExhausted, an invalid amount is the
-// caller's mistake, anything else is the store being unavailable.
+// caller's mistake, a unit other than the counters' is a precondition no
+// retry meets, and anything else is the store being unavailable.
 func chargeError(err error) error {
 	switch {
 	case errors.Is(err, limes.ErrBudgetExceeded), errors.Is(err, limes.ErrTenantBudgetExceeded):
 		return capabilityError(connect.CodeResourceExhausted, err)
 	case errors.Is(err, limes.ErrInvalidAmount):
 		return capabilityError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, limes.ErrUnitCodeMismatch):
+		return capabilityError(connect.CodeFailedPrecondition, err)
 	}
 	return capabilityError(connect.CodeUnavailable, err)
 }

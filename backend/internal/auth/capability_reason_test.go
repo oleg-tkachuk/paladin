@@ -11,9 +11,15 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
+	"strings"
+
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // wireReason is the ErrorInfo reason err carries in Paladin's domain, or ""
@@ -80,5 +86,64 @@ func TestCapabilityRefusalsCarryTheirReason(t *testing.T) {
 	err = ChargeCapability(ctx, 2*limes.NanosPerUnit, "")
 	if got := wireReason(t, err); got != "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED" {
 		t.Errorf("budget refusal reason = %q", got)
+	}
+}
+
+// A failed verification is the caller's only when it refuses the capability.
+// Keys the verifier cannot fetch, and a failure that refuses nothing, are the
+// server's: Unavailable, so the caller retries, with the cause logged and
+// kept from the caller.
+func TestVerifyErrorTellsARefusalFromAnOutage(t *testing.T) {
+	const internals = "dial tcp 10.0.0.7:5432: connection refused"
+	cases := map[string]struct {
+		err      error
+		code     connect.Code
+		logged   bool
+		withheld bool
+	}{
+		"a revoked capability": {err: limes.ErrRevoked, code: connect.CodePermissionDenied},
+		"a bad proof":          {err: limes.ErrDPoPReplayed, code: connect.CodePermissionDenied},
+		"keys not fetched":     {err: fmt.Errorf("%w: %s", limes.ErrJWKSUnavailable, internals), code: connect.CodeUnavailable, logged: true},
+		"a revocation store down": {
+			err: fmt.Errorf("limes: revocation lookup: %s", internals), code: connect.CodeUnavailable, logged: true, withheld: true,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			core, logs := observer.New(zapcore.InfoLevel)
+			ctx := logger.WithContext(context.Background(), zap.New(core))
+			err := verifyError(ctx, tc.err)
+			if connect.CodeOf(err) != tc.code {
+				t.Fatalf("code = %v, want %v", connect.CodeOf(err), tc.code)
+			}
+			if !errors.Is(err, tc.err) {
+				t.Error("the cause is not kept")
+			}
+			var ce *connect.Error
+			if errors.As(err, &ce) && tc.withheld && strings.Contains(ce.Message(), internals) {
+				t.Errorf("the caller is told the server's internals: %q", ce.Message())
+			}
+			got := logs.FilterLevelExact(zapcore.ErrorLevel).Len()
+			if tc.logged && got != 1 || !tc.logged && got != 0 {
+				t.Errorf("%d error lines logged, want logged = %v", got, tc.logged)
+			}
+		})
+	}
+}
+
+// A charge in a unit the counters do not hold fails the same way every time,
+// so the caller is told so rather than to retry.
+func TestChargeErrorRefusesAUnitMismatchAsAPrecondition(t *testing.T) {
+	cases := map[error]connect.Code{
+		limes.ErrBudgetExceeded:       connect.CodeResourceExhausted,
+		limes.ErrTenantBudgetExceeded: connect.CodeResourceExhausted,
+		limes.ErrInvalidAmount:        connect.CodeInvalidArgument,
+		limes.ErrUnitCodeMismatch:     connect.CodeFailedPrecondition,
+		errors.New("store down"):      connect.CodeUnavailable,
+	}
+	for err, want := range cases {
+		if got := connect.CodeOf(chargeError(err)); got != want {
+			t.Errorf("chargeError(%v) = %v, want %v", err, got, want)
+		}
 	}
 }
