@@ -43,17 +43,17 @@ env:
   # PATH, and the committed stubs are normalised. Without it the check
   # regenerates with the plugin's own grouping and reports every file stale.
   # renovate: datasource=go depName=golang.org/x/tools
-  GOIMPORTS_VERSION: "v0.50.0"
+  GOIMPORTS_VERSION: "v0.52.0"
   # renovate: datasource=github-releases depName=helm/helm
   HELM_VERSION: "v4.3.0"
   # renovate: datasource=github-releases depName=aquasecurity/trivy
-  TRIVY_VERSION: "v0.74.0"
+  TRIVY_VERSION: "v0.75.0"
   # renovate: datasource=github-releases depName=hadolint/hadolint
   HADOLINT_VERSION: "v2.15.1"
   # renovate: datasource=github-releases depName=prometheus/prometheus
   PROMETHEUS_VERSION: "v3.15.0"
   # renovate: datasource=github-releases depName=mikefarah/yq
-  YQ_VERSION: "v4.53.6"
+  YQ_VERSION: "v4.54.1"
   # The Python the sdk group's own tests run on, rather than whatever the
   # runner ships (3.14 on ubuntu-26.04). The newest one biscuit-python has a
   # wheel for, so the attenuation tests run here instead of skipping; the
@@ -66,7 +66,7 @@ env:
   # renovate: datasource=go depName=github.com/rhysd/actionlint
   ACTIONLINT_VERSION: "v1.7.12"
   # renovate: datasource=github-releases depName=astral-sh/uv
-  UV_VERSION: "0.12.21"
+  UV_VERSION: "0.13.0"
   # renovate: datasource=pypi depName=zizmor
   ZIZMOR_VERSION: "1.30.1"
   # The stack gate mints its dev token with `step` (task backend:auth:mint-token).
