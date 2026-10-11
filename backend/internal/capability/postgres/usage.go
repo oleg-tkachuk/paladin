@@ -541,8 +541,12 @@ SELECT ch.capability_id,
        ch.copy_ids,
        ch.unit_code,
        r.refund,
-       r.refund > r.remaining AS exceeds
+       r.refund > r.remaining AS exceeds,
+       -- Counted in the tenant's current period: charged since its start.
+       -- A charge of a period since closed is not in today's spend.
+       tb.period_start IS NULL OR ch.occurred_at >= tb.period_start AS in_period
 FROM   charges ch
+LEFT   JOIN tenant_budgets tb ON tb.tenant_id = ch.tenant_id
 CROSS  JOIN LATERAL (
     SELECT rem.remaining,
            CASE WHEN $2::numeric = 0 THEN rem.remaining ELSE $2::numeric END AS refund
@@ -586,9 +590,10 @@ func (s *UsageStore) Refund(ctx context.Context, req limes.RefundRequest) (limes
 		unitCode        string
 		refund          pgtype.Numeric
 		exceeds         bool
+		inPeriod        bool
 	)
 	if err := tx.QueryRow(ctx, refundableQuery, req.ChargeID, amountNumeric).
-		Scan(&capID, &tenantID, &copies, &unitCode, &refund, &exceeds); err != nil {
+		Scan(&capID, &tenantID, &copies, &unitCode, &refund, &exceeds, &inPeriod); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return limes.RefundReceipt{}, limes.ErrChargeNotFound
 		}
@@ -628,8 +633,10 @@ func (s *UsageStore) Refund(ctx context.Context, req limes.RefundRequest) (limes
 			return limes.RefundReceipt{}, fmt.Errorf("capability/postgres: refund capability: %w", err)
 		}
 	}
-	if err := qtx.RefundTenantBudget(ctx, pgtype.UUID{Bytes: tenantID, Valid: true}, refund); err != nil {
-		return limes.RefundReceipt{}, fmt.Errorf("capability/postgres: refund tenant: %w", err)
+	if inPeriod {
+		if err := qtx.RefundTenantBudget(ctx, pgtype.UUID{Bytes: tenantID, Valid: true}, refund); err != nil {
+			return limes.RefundReceipt{}, fmt.Errorf("capability/postgres: refund tenant: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
