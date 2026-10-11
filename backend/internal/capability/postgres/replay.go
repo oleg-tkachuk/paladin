@@ -18,8 +18,10 @@ import (
 const ReplayPurgeBatch = 10_000
 
 // ReplayCache is a limes.ReplayCache shared by every replica through
-// the dpop_seen_jti table (migration 037): a proof accepted on one replica is
-// refused on all the others for as long as it could be accepted at all.
+// the dpop_seen_proofs table (migration 060): a proof accepted on one replica
+// is refused on all the others for as long as it could be accepted at all.
+// Each key holds at most limes.DefaultReplayEntriesPerKey live proof ids, so
+// one key cannot fill the store and have every other key's proofs refused.
 //
 // It fails closed. A proof whose id cannot be recorded is refused, because
 // accepting it unrecorded would let it be replayed anywhere; the error is
@@ -42,20 +44,22 @@ func NewReplayCache(pool *pgxpool.Pool, log *zap.Logger) (*ReplayCache, error) {
 	return &ReplayCache{pool: pool, log: log}, nil
 }
 
-// Seen implements limes.ReplayCache. It records jti until expires and
-// reports whether a live record of it already existed. A record that has
-// expired but not yet been purged does not count: it is overwritten, as the
-// in-process cache forgets an expired id.
-func (c *ReplayCache) Seen(ctx context.Context, jti string, expires time.Time) bool {
+// Seen implements limes.ReplayCache. It records the proof id jti of the key
+// with thumbprint jkt until expires, and reports whether a live record of it
+// already existed. A record that has expired but not yet been purged does not
+// count: it is overwritten, as the in-process cache forgets an expired id. A
+// key past its share records nothing and is answered as a replay.
+func (c *ReplayCache) Seen(ctx context.Context, jkt, jti string, expires time.Time) bool {
 	const stmt = `
-INSERT INTO dpop_seen_jti (jti, expires_at)
-VALUES ($1, $2)
-ON CONFLICT (jti) DO UPDATE SET expires_at = EXCLUDED.expires_at
-    WHERE dpop_seen_jti.expires_at <= now()
+INSERT INTO dpop_seen_proofs (jkt, jti, expires_at)
+SELECT $1, $2, $3
+WHERE (SELECT count(*) FROM dpop_seen_proofs WHERE jkt = $1 AND expires_at > now()) < $4
+ON CONFLICT (jkt, jti) DO UPDATE SET expires_at = EXCLUDED.expires_at
+    WHERE dpop_seen_proofs.expires_at <= now()
 RETURNING jti
 `
 	var recorded string
-	err := c.pool.QueryRow(ctx, stmt, jti, expires).Scan(&recorded)
+	err := c.pool.QueryRow(ctx, stmt, jkt, jti, expires, limes.DefaultReplayEntriesPerKey).Scan(&recorded)
 	switch {
 	case err == nil:
 		return false
@@ -72,9 +76,9 @@ RETURNING jti
 // returns 0.
 func (c *ReplayCache) PurgeExpired(ctx context.Context) (int64, error) {
 	const stmt = `
-DELETE FROM dpop_seen_jti
-WHERE jti IN (
-    SELECT jti FROM dpop_seen_jti
+DELETE FROM dpop_seen_proofs
+WHERE (jkt, jti) IN (
+    SELECT jkt, jti FROM dpop_seen_proofs
     WHERE  expires_at <= now()
     LIMIT  $1
 )

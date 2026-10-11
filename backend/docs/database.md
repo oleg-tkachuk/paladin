@@ -56,7 +56,7 @@ Migrations run under [Goose](https://github.com/pressly/goose) as
 | `034` | `capability_reservations` and the `reserved_usd` counters |
 | `035` | `objects.taint` |
 | `036` | `capability_records.confirmation_jkt` — the DPoP key binding |
-| `037` | `dpop_seen_jti`, accepted DPoP proof ids shared across replicas |
+| `037` | DPoP proof ids shared across replicas (replaced by `060`) |
 | `038` | `capability_biscuit_revocations` |
 | `039` | `capability_copy_usage` and `charges.copy_ids` |
 | `040`–`042` | `audit_log.resource_tenant_id`, its backfill and index |
@@ -88,7 +88,7 @@ trail stays resolvable, and renames are recorded in `tenant_slug_history`.
 
 **Identity** — `users`, `user_settings`, `refresh_tokens`, `api_tokens`,
 `api_token_rate_buckets`, `oauth_clients`, `oauth_authorization_codes`,
-`dpop_seen_jti`.
+`dpop_seen_proofs`.
 
 **Storage topology** — `storage_backends`, `storage_backend_health`,
 `buckets`, `replication_state`. A bucket row can exist before the physical
@@ -191,7 +191,7 @@ invisible, which `tests/integration/components/acting_tenant_test.go` pins.
 
 `tenants`, `storage_backends` and `buckets` stay uncovered for a different
 reason: they are platform-level resources with no single owning tenant, so
-there is no tenant to scope a connection to. `dpop_seen_jti` has no policy
+there is no tenant to scope a connection to. `dpop_seen_proofs` has no policy
 either: a proof id belongs to no tenant and its uniqueness must hold across
 all of them.
 

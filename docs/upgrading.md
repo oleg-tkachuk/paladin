@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — capabilities run on limes v0.4.0
+## Unreleased — capabilities run on limes v0.6.0
 
 - **Breaking, capability tokens.** Capabilities are JWTs with
   `typ: limes-cap-v3+jwt` and `alg: Ed25519`; every capability issued before
@@ -58,11 +58,15 @@ tree with itself and passes without checking anything.
   tenant period since reset leaves the new period's spend alone. Deleting a
   capability releases its holds. A tenant budget the runtime created is at
   version 0 until a ceiling is set.
-- **Migrations 057–059.** Capability ceilings move into columns of
+- **Behaviour, DPoP.** A proof's method is compared exactly, and each key
+  holds at most 1 000 live proof ids: past that, its new proofs are refused as
+  replays, and only its.
+- **Migrations 057–060.** Capability ceilings move into columns of
   `capability_records`, and the stored caveats and principals are rewritten
   into limes v0.4.0's JSON, which an old row no longer decodes as. A signing
   key read without a configured `kid` is published under its RFC 7638
-  thumbprint.
+  thumbprint. DPoP proof ids move to `dpop_seen_proofs`, keyed by the proof
+  key's thumbprint.
 
 ## v26.1.3 — an API token for the admin plane needs roles
 
