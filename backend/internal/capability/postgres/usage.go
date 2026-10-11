@@ -127,20 +127,20 @@ type ancestor struct {
 // ancestorsQuery walks parent_id upwards from a capability, nearest first. It
 // runs on the charging transaction, whose connection is scoped to the
 // capability's tenant; delegation never crosses tenants, so the whole chain is
-// visible under that scope. Caveats are stored as the Go struct's JSON, hence
-// the field names.
+// visible under that scope. The ceilings come from their own columns, never
+// from the caveats JSON, whose keys are limes's to rename.
 const ancestorsQuery = `
-WITH RECURSIVE chain(id, parent_id, caveats, depth) AS (
-    SELECT id, parent_id, caveats, 0 FROM capability_records WHERE id = $1
+WITH RECURSIVE chain(id, parent_id, max_budget, max_requests, depth) AS (
+    SELECT id, parent_id, max_budget, max_requests, 0 FROM capability_records WHERE id = $1
     UNION ALL
-    SELECT r.id, r.parent_id, r.caveats, c.depth + 1
+    SELECT r.id, r.parent_id, r.max_budget, r.max_requests, c.depth + 1
     FROM   capability_records r
     JOIN   chain c ON r.id = c.parent_id
     WHERE  c.depth < $2
 )
 SELECT id,
-       COALESCE((caveats->>'MaxBudgetAmount')::numeric, 0),
-       COALESCE((caveats->>'MaxRequests')::bigint, 0)
+       COALESCE(max_budget, 0),
+       COALESCE(max_requests, 0)
 FROM   chain
 WHERE  depth > 0
 ORDER  BY depth;

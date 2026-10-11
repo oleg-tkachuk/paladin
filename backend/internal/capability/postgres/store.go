@@ -23,6 +23,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
 )
 
 // ErrNotFound re-exports the core sentinel so existing call sites keep
@@ -110,12 +111,12 @@ INSERT INTO capability_records (
     id, tenant_id, issuer, principal_kind, principal_subject,
     principal_payload, audience, caveats, parent_id, generation,
     issued_at, not_before, expires_at, created_by, confirmation_jkt,
-    issued_by
+    issued_by, max_budget, max_requests
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6::jsonb, $7, $8::jsonb, $9, $10,
     $11, $12, $13, $14, NULLIF($15, ''),
-    $16::jsonb
+    $16::jsonb, $17::numeric, $18
 );
 `
 	var parent *uuid.UUID
@@ -167,6 +168,10 @@ INSERT INTO capability_records (
 		issuedBy.Subject,
 		c.ConfirmationJKT,
 		issuedByPayload,
+		// The ceilings again, in columns: the charge path reads an
+		// ancestor's from here, not from the caveats JSON.
+		pgmoney.NumericFromNanos(c.Caveats.MaxBudgetAmount),
+		c.Caveats.MaxRequests,
 	); err != nil {
 		// The lock above makes this unreachable short of a tenant removed by
 		// something that ignores it; the constraint is the last word either
