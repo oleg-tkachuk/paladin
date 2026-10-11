@@ -116,6 +116,14 @@ capability
 capability.charge_per_request_amount
 capability.charge_per_request_unit
 capability.default_ttl
+capability.dpop_nonce
+capability.dpop_nonce.enabled
+capability.dpop_nonce.key
+capability.dpop_nonce.key_secret
+capability.dpop_nonce.key_secret.key
+capability.dpop_nonce.key_secret.name
+capability.dpop_nonce.key_secret.namespace
+capability.dpop_nonce.lifetime
 capability.enabled
 capability.issuer_name
 capability.revocation_cache_ttl

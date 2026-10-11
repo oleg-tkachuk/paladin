@@ -1419,18 +1419,6 @@ share one message with that mutation hazard ruled out, and this entry goes.
   not.
 - **Blockers:** none.
 
-### DPoP server nonces
-
-- **Status:** In-Progress.
-- **Reason:** limes v0.4.0 can ask for server nonces
-  (`DPoPVerifier.Nonces`, `DPoP-Nonce`, RFC 9449 §8), which bound how long a
-  captured proof stays usable to the nonce's lifetime. The planes ask for
-  none, and neither SDK answers a nonce challenge.
-- **Definition of Done:** nonces enabled on the planes from a key every
-  replica shares, the current nonce sent with every key-bound response, and
-  both SDKs keeping it and retrying once on `use_dpop_nonce`.
-- **Blockers:** limes's reasons named a nonce challenge a permanent refusal
-  (fixed in limes#26).
 
 ### The MCP bridge cannot forward a key-bound capability
 

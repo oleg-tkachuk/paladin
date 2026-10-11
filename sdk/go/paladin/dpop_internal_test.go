@@ -25,7 +25,7 @@ func TestDPoPProofNamesItsAlgorithm(t *testing.T) {
 		t.Fatal(err)
 	}
 	for want, key := range map[string]crypto.Signer{dpopAlgEd25519: ed, dpopAlgES256: ec} {
-		proof, err := dpopProof(key, "POST", "https://data.example.com/svc/M", "token", time.Now())
+		proof, err := dpopProof(key, "POST", "https://data.example.com/svc/M", "token", "", time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -41,6 +41,32 @@ func TestDPoPProofNamesItsAlgorithm(t *testing.T) {
 		}
 		if header.Alg != want {
 			t.Errorf("alg = %q, want %q", header.Alg, want)
+		}
+	}
+}
+
+// The server's nonce is signed into the proof's claims, and absent without one.
+func TestDPoPProofCarriesTheNonce(t *testing.T) {
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, nonce := range []string{"", "server-nonce"} {
+		proof, err := dpopProof(key, "POST", "https://data.example.com/svc/M", "token", nonce, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := base64.RawURLEncoding.DecodeString(strings.Split(proof, ".")[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var claims map[string]any
+		if err := json.Unmarshal(raw, &claims); err != nil {
+			t.Fatal(err)
+		}
+		got, has := claims["nonce"]
+		if nonce == "" && has || nonce != "" && got != nonce {
+			t.Errorf("nonce claim = %v (present %v), want %q", got, has, nonce)
 		}
 	}
 }
