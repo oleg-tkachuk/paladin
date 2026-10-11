@@ -4,7 +4,7 @@ import { create } from "@bufbuild/protobuf";
 import { MoneySchema, type Money } from "@/gen/google/type/money_pb";
 import {
   ABSTRACT_UNIT_CODE,
-  ALLOWED_UNIT_CODES,
+  UNIT_CODES,
   formatMoney,
   isISOCurrency,
   moneyFromDecimal,
@@ -21,14 +21,19 @@ const money = (currencyCode: string, units: bigint, nanos: number): Money =>
   create(MoneySchema, { currencyCode, units, nanos });
 
 describe("unit codes", () => {
-  it("mirrors the backend's allowed set, with XXX for no currency", () => {
-    expect(ALLOWED_UNIT_CODES).toEqual(["USD", "EUR", "UAH", "GBP", "XXX"]);
+  it("offers every ISO 4217 currency the runtime knows, then XXX", () => {
+    for (const code of ["USD", "EUR", "UAH", "GBP", "JPY", "CHF"]) {
+      expect(UNIT_CODES).toContain(code);
+    }
+    expect(UNIT_CODES.at(-1)).toBe("XXX");
+    expect(UNIT_CODES).not.toContain("XYZ");
     expect(ABSTRACT_UNIT_CODE).toBe("XXX");
   });
 
   it("renders only fiat codes as currencies", () => {
     expect(isISOCurrency("USD")).toBe(true);
     expect(isISOCurrency("UAH")).toBe(true);
+    expect(isISOCurrency("JPY")).toBe(true);
     // A valid ISO code, but not a currency to render with a sign.
     expect(isISOCurrency("XXX")).toBe(false);
     expect(isISOCurrency("UNIT")).toBe(false);
