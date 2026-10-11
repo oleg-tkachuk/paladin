@@ -232,6 +232,17 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.APIToken.HMACKeySecret = nil
 	}
 
+	// DPoP nonce key — shared by every replica, so a nonce one issues the
+	// next can check. Validate() rejects setting both key and key_secret.
+	if cfg.Capability.DPoPNonce.KeySecret != nil {
+		key, err := r.resolveSecret(ctx, cfg.Capability.DPoPNonce.KeySecret)
+		if err != nil {
+			return fmt.Errorf("capability.dpop_nonce.key_secret: %w", err)
+		}
+		cfg.Capability.DPoPNonce.Key = key
+		cfg.Capability.DPoPNonce.KeySecret = nil
+	}
+
 	// Health snapshot token — gates /system/health.json. From a SecretRef so
 	// a production token stays out of the config ConfigMap; Validate()
 	// rejects setting both runtime.health_snapshot_token and the reference.

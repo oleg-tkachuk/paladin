@@ -1102,6 +1102,18 @@ config:
     charge_per_request_amount: 0        # amount auto-charged on billable handler calls, exact to nine decimals; 0 = no auto-charge
     charge_per_request_unit: ""         # ISO 4217 unit code (USD/EUR/UAH/GBP, or XXX for no currency); empty = use capability's own unit
     revocation_cache_ttl: 2s            # IsRevoked cache TTL; <0 disables (every check hits DB)
+    # DPoP server nonces (RFC 9449 §8): a key-bound capability's proof must
+    # carry a nonce the server issued, so a captured proof is usable for
+    # `lifetime` at most. Every replica shares the key — give it as
+    # key_secret (and add its name to rbac.secretReader.secretNames); an
+    # inline key is for dev. Enable only once clients answer use_dpop_nonce:
+    # the Go and Python SDKs do from the release that adds this.
+    dpop_nonce:
+      enabled: false
+      lifetime: 5m
+      # key_secret:
+      #   name: paladin-dpop-nonce-key
+      #   key: key
 
   # ─── API tokens (hashed-bearer M2M, long-lived) ──────────────────────
   #

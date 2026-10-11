@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"fmt"
 
@@ -149,6 +150,11 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: DPoP replay cache: %w", err)
 	}
 
+	nonces, err := dpopNonces(cfg.DPoPNonce, deps.Cfg.App.Env, deps.Logger)
+	if err != nil {
+		return nil, err
+	}
+
 	verifier, err := limes.NewStandardVerifier(limes.VerifierConfig{
 		Keys:           keys,
 		Revocations:    cache,
@@ -164,7 +170,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		// A key-bound capability must arrive with an RFC 9449 proof from its
 		// key. The planes compare the procedure path only: behind a proxy
 		// they cannot know the scheme and host clients address them by.
-		DPoP: &limes.DPoPVerifier{Replay: replay, MatchPathOnly: true},
+		DPoP: &limes.DPoPVerifier{Replay: replay, MatchPathOnly: true, Nonces: nonces},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability verifier: %w", err)
@@ -199,4 +205,32 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		IssuerName:   cfg.IssuerName,
 		EphemeralKey: key.Generated,
 	}, nil
+}
+
+// dpopNonces builds the nonces a key-bound capability's proof must carry, or
+// none when they are off. Every replica must sign with the same key, or a
+// nonce one issues is refused by the next; so a missing key refuses to start,
+// except where an ephemeral key is acceptable, as for the signing key.
+func dpopNonces(cfg config.DPoPNonce, env string, log *zap.Logger) (limes.DPoPNonces, error) {
+	if !cfg.Enabled {
+		return nil, nil
+	}
+	key := []byte(cfg.Key)
+	if len(key) == 0 {
+		if !ephemeralKeyEnvs[env] {
+			return nil, fmt.Errorf("app: capability.dpop_nonce.enabled with no key in env %q — "+
+				"replicas with keys of their own refuse each other's nonces; set key_secret", env)
+		}
+		key = make([]byte, limes.HMACNonceKeyBytes)
+		if _, err := rand.Read(key); err != nil {
+			return nil, fmt.Errorf("app: DPoP nonce key: %w", err)
+		}
+		log.Warn("capability: ephemeral DPoP nonce key (no dpop_nonce.key); only one replica can check its nonces",
+			zap.String("env", env))
+	}
+	nonces, err := limes.NewHMACNonces(cfg.Lifetime, key)
+	if err != nil {
+		return nil, fmt.Errorf("app: DPoP nonces: %w", err)
+	}
+	return nonces, nil
 }

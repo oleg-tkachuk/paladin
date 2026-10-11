@@ -453,6 +453,10 @@ capability:
   charge_per_request_amount: 0       # amount auto-charged on billable handler calls; 0 = no auto-charge
   charge_per_request_unit: ""        # ISO 4217 unit code (USD/EUR/UAH/GBP, or XXX for no currency); empty = use capability's own unit
   revocation_cache_ttl: 2s           # IsRevoked cache TTL; <0 disables (every check hits DB)
+  dpop_nonce:                        # DPoP server nonces (RFC 9449 §8)
+    enabled: false
+    lifetime: 5m                     # how long a nonce is accepted
+    key: ""                          # ≥32 bytes, shared by every replica; key_secret in real deployments
 
 # ── API tokens (hashed-bearer M2M, long-lived) ─────────────────────────────
 # Service-to-service credentials following the GitHub-PAT / Stripe /

@@ -627,6 +627,14 @@ capability: {
   default_ttl:              =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
   verifier_leeway:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
   revocation_cache_ttl:     =~"^-?[0-9]+(ns|us|ms|s|m|h)$" | *"2s"
+  // DPoP server nonces (RFC 9449 §8). The key is shared by every replica;
+  // inline for dev, key_secret otherwise.
+  dpop_nonce: {
+    enabled:     bool | *false
+    lifetime:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5m"
+    key:         string | *""
+    key_secret?: #SecretRef
+  }
   // Auto-charge knob: amount + unit consumed by the capability
   // interceptor on each billable handler call. The amount is a decimal
   // read exactly, to the nano (nine decimals). Unit values are ISO 4217
