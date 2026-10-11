@@ -107,7 +107,7 @@ func init() {
 		"paladin_capability_charges_total",
 		metric.WithDescription(
 			"Capability charge attempts by outcome (charged|capability_exhausted|"+
-				"tenant_exhausted|error). A tenant whose charges are all rejected "+
+				"tenant_exhausted|unit_mismatch|error). A tenant whose charges are all rejected "+
 				"cannot work, and looks identical to an idle one without this."),
 	); err != nil {
 		otel.Handle(err)
@@ -210,6 +210,17 @@ func RecordPresign(ctx context.Context, op, outcome string, seconds float64) {
 	}
 }
 
+// The outcomes of a capability charge attempt.
+const (
+	ChargeCharged             = "charged"
+	ChargeCapabilityExhausted = "capability_exhausted"
+	ChargeTenantExhausted     = "tenant_exhausted"
+	// ChargeUnitMismatch is a charge in a unit other than the one a counter
+	// already holds: refused, and refused again on every retry.
+	ChargeUnitMismatch = "unit_mismatch"
+	ChargeError        = "error"
+)
+
 // RecordCapabilityCharge counts a charge attempt. Amount is recorded only for
 // a successful one — a rejected charge has no amount, and folding zeros into
 // the histogram would drag the distribution toward a number nobody spent.
@@ -222,7 +233,7 @@ func RecordCapabilityCharge(ctx context.Context, tenantID, outcome string, amoun
 		attrs = append(attrs, attribute.String("tenant_id", tenantID))
 	}
 	capabilityCharges.Add(ctx, 1, metric.WithAttributes(attrs...))
-	if outcome == "charged" && capabilityAmount != nil {
+	if outcome == ChargeCharged && capabilityAmount != nil {
 		capabilityAmount.Record(ctx, amount, metric.WithAttributes(attrs...))
 	}
 }

@@ -324,10 +324,13 @@ tests:
         alertname: PaladinRateLimitFailingOpen
         exp_alerts: []
 
-  # t1: every charge refused → fires. t2: charges succeed → silent.
+  # t1: every charge refused → fires. t3: every charge in another unit →
+  # fires. t2: charges succeed → silent.
   - interval: 1m
     input_series:
       - series: 'paladin_capability_charges_total{tenant_id="t1", outcome="tenant_exhausted"}'
+        values: "0+10x60"
+      - series: 'paladin_capability_charges_total{tenant_id="t3", outcome="unit_mismatch"}'
         values: "0+10x60"
       - series: 'paladin_capability_charges_total{tenant_id="t2", outcome="charged"}'
         values: "0+10x60"
@@ -342,6 +345,15 @@ tests:
               tenant_id: t1
             exp_annotations:
               summary: "Tenant t1 has nearly every capability charge refused"
+              description: >-
+                Over 90% of charge attempts were refused for 15m. Check the
+                tenant's budget and the issuing capability's budget.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/capability-charges-refused.md"
+          - exp_labels:
+              severity: warning
+              tenant_id: t3
+            exp_annotations:
+              summary: "Tenant t3 has nearly every capability charge refused"
               description: >-
                 Over 90% of charge attempts were refused for 15m. Check the
                 tenant's budget and the issuing capability's budget.
