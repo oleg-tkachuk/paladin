@@ -48,7 +48,7 @@ func TestCapabilityBiscuit_OfflineAttenuationIsEnforced(t *testing.T) {
 	}
 	cap, _, err := issuer.Issue(context.Background(), limes.IssueRequest{
 		IssuedBy: limes.Principal{Subject: "op"},
-		Subject:  limes.Principal{TenantID: uuid.New(), Subject: "agent"},
+		Subject:  limes.Principal{Type: limes.PrincipalAgent, TenantID: uuid.New(), Subject: "agent"},
 		Audience: []string{TokenPlaneData},
 		Caveats:  limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpDelete}, ResourcePrefixes: []string{"corpus/"}},
 		TTL:      time.Hour,

@@ -98,4 +98,7 @@ enum ErrorReason {
   ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED = 48;
   // Not permanent: an operator may raise the tenant's ceiling.
   ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED = 49;
+  // The Authorization header carrying the capability is not one the scheme
+  // reads: no credential, or not a token68.
+  ERROR_REASON_CAPABILITY_MALFORMED_AUTHORIZATION = 50;
 }

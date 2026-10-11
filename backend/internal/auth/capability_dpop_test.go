@@ -94,7 +94,7 @@ func (f *dpopFixture) mint(t *testing.T, jkt string) string {
 	t.Helper()
 	_, tok, err := f.issuer.Issue(context.Background(), limes.IssueRequest{
 		IssuedBy:        limes.Principal{Subject: "op"},
-		Subject:         limes.Principal{TenantID: uuid.New(), Subject: "agent"},
+		Subject:         limes.Principal{Type: limes.PrincipalAgent, TenantID: uuid.New(), Subject: "agent"},
 		Audience:        []string{TokenPlaneData},
 		Caveats:         limes.Caveats{Ops: []limes.Op{limes.OpGet}},
 		TTL:             time.Hour,

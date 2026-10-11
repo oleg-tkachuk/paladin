@@ -25,7 +25,7 @@ concurrency:
 
 env:
   # renovate: datasource=github-releases depName=mikefarah/yq
-  YQ_VERSION: "v4.53.6"
+  YQ_VERSION: "v4.54.1"
   BADGES_BRANCH: badges
   VERSIONS_FILE: versions.json
 

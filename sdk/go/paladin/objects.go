@@ -3,11 +3,12 @@ package paladin
 import (
 	"bytes"
 	"context"
-	"crypto/md5" //nolint:gosec // S3's part ETag, compared on resume
+	"crypto/md5" // #nosec G501 -- S3's part ETag, compared on resume; not a security primitive
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -25,6 +26,10 @@ const (
 	DefaultPartConcurrency    = 3
 )
 
+// MaxParts is the most parts a multipart upload has: S3's limit, and the
+// contract's bound on a part number.
+const MaxParts = 10000
+
 // Presigned-URL request details.
 const (
 	headerContentType = "Content-Type"
@@ -34,10 +39,11 @@ const (
 
 // Errors from Upload.
 var (
-	ErrNoUploadURL = errors.New("paladin: the server returned no upload URL")
-	ErrNoETag      = errors.New("paladin: storage returned no ETag for a part; it must expose the ETag header")
-	ErrUploadSize  = errors.New("paladin: upload size must not be negative")
-	ErrUploadBody  = errors.New("paladin: an upload needs exactly one of Body and Stream")
+	ErrNoUploadURL  = errors.New("paladin: the server returned no upload URL")
+	ErrNoETag       = errors.New("paladin: storage returned no ETag for a part; it must expose the ETag header")
+	ErrUploadSize   = errors.New("paladin: upload size must not be negative")
+	ErrUploadBody   = errors.New("paladin: an upload needs exactly one of Body and Stream")
+	ErrTooManyParts = errors.New("paladin: the upload does not fit the parts a multipart upload holds")
 )
 
 // UploadInput describes one object to upload, from exactly one of Body and
@@ -217,14 +223,14 @@ func uploadMultipart(ctx context.Context, data *DataPlane, in UploadInput, opts 
 	}()
 
 	partSize := session.PartSize
-	parts := int(session.TotalParts)
+	parts := session.TotalParts
 	sent, err := sendParts(ctx, data, in, opts, session, stored, partSize, parts)
 	if err != nil {
 		return nil, err
 	}
 	completed := make([]*datav1.CompletedPart, parts)
-	for i, p := range sent {
-		completed[i] = &datav1.CompletedPart{PartNumber: int32(i + 1), Etag: p.etag, ChecksumValue: p.checksum} //nolint:gosec // parts ≤ 10000 by the contract
+	for i := range parts {
+		completed[i] = &datav1.CompletedPart{PartNumber: i + 1, Etag: sent[i].etag, ChecksumValue: sent[i].checksum}
 	}
 	return CompleteMultipart(ctx, data, session, completed)
 }
@@ -258,12 +264,27 @@ func openSession(ctx context.Context, data *DataPlane, in UploadInput, opts Uplo
 		session.PartSize = DefaultMultipartThreshold
 	}
 	if session.TotalParts <= 0 {
-		session.TotalParts = int32((in.Size + session.PartSize - 1) / session.PartSize) //nolint:gosec // parts ≤ 10000 by the contract
+		parts, err := partCount(in.Size, session.PartSize)
+		if err != nil {
+			return UploadSession{}, nil, err
+		}
+		session.TotalParts = parts
 	}
 	if opts.OnSession != nil {
 		opts.OnSession(session)
 	}
 	return session, nil, nil
+}
+
+// partCount is how many parts of partSize hold size bytes, refused above
+// MaxParts. A server that names no part count leaves the split to the client.
+func partCount(size, partSize int64) (int32, error) {
+	parts := (size + partSize - 1) / partSize
+	if parts < 1 || parts > MaxParts {
+		return 0, fmt.Errorf("%w: %d bytes in parts of %d is %d parts, the limit is %d",
+			ErrTooManyParts, size, partSize, parts, MaxParts)
+	}
+	return int32(parts), nil
 }
 
 // storedParts lists every part storage holds for the session, all pages.
@@ -298,7 +319,7 @@ func holds(stored *datav1.PartInfo, body source, length int64) (bool, error) {
 	if stored == nil || stored.GetSizeBytes() != length || len(stored.GetEtag()) != partETagLen {
 		return false, nil
 	}
-	sum := md5.New() //nolint:gosec // comparing with S3's MD5 ETag, not a security primitive
+	sum := md5.New() // #nosec G401 -- comparing with S3's MD5 ETag, not a security primitive
 	if _, err := io.Copy(sum, body()); err != nil {
 		return false, err
 	}
@@ -307,7 +328,7 @@ func holds(stored *datav1.PartInfo, body source, length int64) (bool, error) {
 
 // part is one part to send: its index, and its bytes.
 type part struct {
-	index  int
+	index  int32
 	body   source
 	length int64
 }
@@ -321,7 +342,7 @@ type sentPart struct {
 // sendParts presigns and PUTs every part, PartConcurrency at a time, and
 // returns them in part order. The first failure stops the rest.
 func sendParts(ctx context.Context, data *DataPlane, in UploadInput, opts UploadOptions,
-	session UploadSession, stored map[int32]*datav1.PartInfo, partSize int64, parts int,
+	session UploadSession, stored map[int32]*datav1.PartInfo, partSize int64, parts int32,
 ) ([]sentPart, error) {
 	workers := opts.PartConcurrency
 	if workers <= 0 {
@@ -340,10 +361,10 @@ func sendParts(ctx context.Context, data *DataPlane, in UploadInput, opts Upload
 	fail := func(err error) {
 		once.Do(func() { firstErr = err; cancel() })
 	}
-	for range min(workers, parts) {
+	for range min(workers, int(parts)) {
 		wg.Go(func() {
 			for p := range next {
-				done, err := sendPart(ctx, data, session, stored[int32(p.index+1)], p) //nolint:gosec // parts ≤ 10000 by the contract
+				done, err := sendPart(ctx, data, session, stored[p.index+1], p)
 				if err != nil {
 					fail(err)
 					continue
@@ -396,7 +417,7 @@ func sendPart(ctx context.Context, data *DataPlane, session UploadSession, store
 		return sentPart{etag: stored.GetEtag(), checksum: sum}, nil
 	}
 	presign := func(ctx context.Context) (*commonv1.PresignedUrl, error) {
-		return PresignPart(ctx, data, session, int32(p.index+1), sum) //nolint:gosec // parts ≤ 10000 by the contract
+		return PresignPart(ctx, data, session, p.index+1, sum)
 	}
 	transfer := data.Transfer()
 	var etag string

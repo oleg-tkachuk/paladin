@@ -89,7 +89,7 @@ includes:
     taskfile: '{{printf .TASKLIB "security"}}'
     dir: .
     vars:
-      # trivy 0.74 does not pick .trivyignore.yaml up on its own.
+      # trivy 0.75 does not pick .trivyignore.yaml up on its own.
       # frontend/.next is build output, rewritten by every `frontend:build`:
       # a scan that overlaps one dies on a file deleted mid-walk.
       TRIVY_FLAGS: --ignorefile .trivyignore.yaml --skip-dirs frontend/.next
@@ -213,6 +213,7 @@ tasks:
       - task: backend:lint
       - task: verify:sqlc-pin
       - task: verify:image-build-meta
+      - task: verify:security-scans
 
   verify-frontend:
     desc: "The console: tests, lint, generated stubs, build"
@@ -239,6 +240,7 @@ tasks:
       - task: verify:stack-ports
       - task: verify:stack-disk
       - task: verify:portable-shell
+      - task: verify:lefthook-single-thread
       - task: verify:task-offline
       - task: verify:chart-values
       - task: verify:chart-reads
@@ -414,6 +416,11 @@ tasks:
     cmds:
       - ./scripts/portable-shell.test.sh
 
+  verify:lefthook-single-thread:
+    desc: "The git hooks run their jobs one at a time, the Go ones on one thread"
+    cmds:
+      - ./scripts/lefthook-single-thread.test.sh
+
   verify:task-offline:
     desc: "The git hooks run Task offline, without the hook's git state"
     cmds:
@@ -583,6 +590,13 @@ tasks:
     desc: "Fail when an SDK release lists commits that are not its own"
     cmds:
       - ./scripts/stream-release-notes.test.sh
+
+  verify:security-scans:
+    desc: "The backend's security scan scripts fail when their scanner did not run"
+    # Each ended its scanner with `|| true`, and reported a scan that never ran
+    # as complete.
+    cmds:
+      - ./scripts/security-scans.test.sh
 
   verify:release-head:
     desc: "Fail when release.yaml would tag a main head newer than the commit CI passed"

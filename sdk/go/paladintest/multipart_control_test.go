@@ -8,6 +8,8 @@ import (
 	"io"
 	"testing"
 
+	"connectrpc.com/connect/v2"
+
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladintest"
@@ -93,5 +95,19 @@ func TestAbortMultipartIsSafeToRepeat(t *testing.T) {
 	}
 	if _, err := paladin.PresignPart(ctx, p.Data, session, 1, "x"); err == nil {
 		t.Error("a part of an aborted upload was presigned")
+	}
+}
+
+// The fake refuses an upload that needs more than paladin.MaxParts parts, as
+// the server does; it used to answer with a part count narrowed to int32.
+func TestMultipartRefusesMoreThanMaxParts(t *testing.T) {
+	srv := paladintest.New(t)
+	p := srv.Connect()
+	_, err := paladin.BeginMultipart(context.Background(), p.Data, paladin.MultipartInput{
+		Parent: srv.Collection().String(), Key: "huge.bin", ContentType: "application/octet-stream",
+		Size: paladin.MaxParts*paladintest.PartSize + 1,
+	})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("BeginMultipart = %v, want InvalidArgument", err)
 	}
 }

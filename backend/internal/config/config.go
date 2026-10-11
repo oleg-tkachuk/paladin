@@ -13,7 +13,7 @@ import (
 
 	"cuelang.org/go/cue/cuecontext"
 	"github.com/knadh/koanf/parsers/yaml"
-	"github.com/knadh/koanf/providers/env"
+	"github.com/knadh/koanf/providers/env/v2"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 	"go.uber.org/zap"
@@ -79,9 +79,12 @@ func Load(paths []string, log *zap.Logger) (Config, error) {
 	// whose own name contains an underscore.
 	envKeys := EnvKeyMapper(KnownConfigPaths())
 	envVals := EnvValueParser(KnownConfigKinds())
-	if err := k.Load(env.ProviderWithValue(EnvPrefix, ".", func(key, val string) (string, any) {
-		path := envKeys(key)
-		return path, envVals(path, val)
+	if err := k.Load(env.Provider(".", env.Opt{
+		Prefix: EnvPrefix,
+		TransformFunc: func(key, val string) (string, any) {
+			path := envKeys(key)
+			return path, envVals(path, val)
+		},
 	}), nil); err != nil {
 		return Config{}, fmt.Errorf("failed to load env vars: %w", err)
 	}
