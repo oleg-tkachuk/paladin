@@ -157,6 +157,48 @@ WHERE  depth > 0
 ORDER  BY depth;
 `
 
+// unitConflictQuery finds a counter a charge or hold in unit $2 would move
+// that counts in another unit: a capability's ($1) that already holds spend
+// or a hold, or the tenant's ($3) once it has a row. Summing the two would
+// add two currencies as one.
+const unitConflictQuery = `
+SELECT 'capability ' || capability_id::text, unit_code
+FROM   capability_usage
+WHERE  capability_id = ANY($1::uuid[]) AND unit_code <> $2 AND (spent_usd <> 0 OR reserved_usd <> 0)
+UNION ALL
+SELECT 'tenant ' || tenant_id::text, unit_code
+FROM   tenant_budgets
+WHERE  tenant_id = $3 AND unit_code <> $2
+LIMIT  1;
+`
+
+// claimUnitQuery moves the capability counters that hold nothing yet to the
+// unit of their first charge or hold; unitConflictQuery has ruled out any
+// that hold something in another.
+const claimUnitQuery = `UPDATE capability_usage SET unit_code = $2 WHERE capability_id = ANY($1::uuid[]) AND unit_code <> $2`
+
+// checkUnits refuses a charge or hold in unit on a counter that counts in
+// another, and gives the empty counters of the chain that unit.
+func checkUnits(ctx context.Context, tx pgx.Tx, capID uuid.UUID, ancestors []ancestor, tenantID uuid.UUID, unit string) error {
+	ids := make([]uuid.UUID, 0, len(ancestors)+1)
+	ids = append(ids, capID)
+	for _, a := range ancestors {
+		ids = append(ids, a.id)
+	}
+	var counter, have string
+	err := tx.QueryRow(ctx, unitConflictQuery, ids, unit, tenantID).Scan(&counter, &have)
+	if err == nil {
+		return fmt.Errorf("%w: %s counts in %s, not %s", limes.ErrUnitCodeMismatch, counter, have, unit)
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("capability/postgres: unit check: %w", err)
+	}
+	if _, err := tx.Exec(ctx, claimUnitQuery, ids, unit); err != nil {
+		return fmt.Errorf("capability/postgres: unit claim: %w", err)
+	}
+	return nil
+}
+
 func ancestorsOf(ctx context.Context, tx pgx.Tx, capID uuid.UUID) ([]ancestor, error) {
 	rows, err := tx.Query(ctx, ancestorsQuery, capID, maxLineageDepth)
 	if err != nil {
@@ -328,6 +370,13 @@ func (s *UsageStore) chargeInTx(
 	qtx := s.q.WithTx(tx)
 	record := req.Overrun == limes.OverrunRecord
 
+	ancestors, err := ancestorsOf(ctx, tx, req.CapabilityID)
+	if err != nil {
+		return limes.ChargeReceipt{}, err
+	}
+	if err := checkUnits(ctx, tx, req.CapabilityID, ancestors, req.TenantID, resolvedUnit); err != nil {
+		return limes.ChargeReceipt{}, err
+	}
 	overrun, err := addCopySpendPast(ctx, tx, req.CapabilityID, req.Copies, amountNumeric, copySpent, req.Overrun)
 	if err != nil {
 		return limes.ChargeReceipt{}, err
@@ -346,10 +395,6 @@ func (s *UsageStore) chargeInTx(
 		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: charge: %w", err)
 	}
 
-	ancestors, err := ancestorsOf(ctx, tx, req.CapabilityID)
-	if err != nil {
-		return limes.ChargeReceipt{}, err
-	}
 	for _, a := range ancestors {
 		_, err := qtx.ChargeCapability(ctx, pgtype.UUID{Bytes: a.id, Valid: true},
 			amountNumeric, resolvedUnit, a.maxBudget)
@@ -594,6 +639,28 @@ func (s *UsageStore) Refund(ctx context.Context, req limes.RefundRequest) (limes
 	return receipt, nil
 }
 
+// checkTenantUnit refuses to re-denominate a tenant that still counts
+// something in its unit: holds, always, and spend unless the call resets it.
+// The version guard on the write catches a change in between.
+func (s *UsageStore) checkTenantUnit(ctx context.Context, args limes.SetTenantBudgetRequest, unit string) error {
+	if unit == "" {
+		return nil // keeps the row's unit
+	}
+	current, err := s.GetTenantBudget(ctx, args.TenantID)
+	if errors.Is(err, limes.ErrTenantBudgetNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if current.UnitCode != unit &&
+		(current.ReservedAmount > 0 || (current.SpentAmount > 0 && !args.ResetSpend)) {
+		return fmt.Errorf("%w: tenant %s has %v counted in %s",
+			limes.ErrUnitCodeMismatch, args.TenantID, current.SpentAmount+current.ReservedAmount, current.UnitCode)
+	}
+	return nil
+}
+
 // GetTenantBudget implements limes.UsageStore[pgx.Tx].
 func (s *UsageStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (limes.TenantBudget, error) {
 	row, err := s.q.GetTenantBudget(ctx, pgtype.UUID{Bytes: tenantID, Valid: true})
@@ -621,6 +688,9 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args limes.SetTenantBu
 		if !limes.IsUnitCode(unit) {
 			return limes.TenantBudget{}, fmt.Errorf("capability/postgres: SetTenantBudget: invalid unit_code %q", unit)
 		}
+	}
+	if err := s.checkTenantUnit(ctx, args, unit); err != nil {
+		return limes.TenantBudget{}, err
 	}
 	var periodEnd pgtype.Timestamptz
 	if args.PeriodEnd != nil {

@@ -71,14 +71,17 @@ func (s *UsageStore) Reserve(ctx context.Context, req limes.ReserveRequest) (lim
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	ancestors, err := ancestorsOf(ctx, tx, req.CapabilityID)
+	if err != nil {
+		return limes.Reservation{}, err
+	}
+	if err := checkUnits(ctx, tx, req.CapabilityID, ancestors, req.TenantID, unit); err != nil {
+		return limes.Reservation{}, err
+	}
 	if err := addCopySpend(ctx, tx, req.CapabilityID, req.Copies, amount, copyReserved); err != nil {
 		return limes.Reservation{}, err
 	}
 	if err := holdCapability(ctx, tx, req.CapabilityID, amount, unit, maxBudget); err != nil {
-		return limes.Reservation{}, err
-	}
-	ancestors, err := ancestorsOf(ctx, tx, req.CapabilityID)
-	if err != nil {
 		return limes.Reservation{}, err
 	}
 	for _, a := range ancestors {
