@@ -37,7 +37,7 @@ func lockKey(tenantID uuid.UUID, collection, path string) int64 {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(tenantID.String() + keySeparator + collection + keySeparator + path))
 	// A lock key: wrapping into the signed range is intended.
-	return int64(h.Sum64())
+	return int64(h.Sum64()) // #nosec G115 -- a hash reinterpreted as a lock key; every bit pattern is a valid key
 }
 
 // Lock waits for the path's lock on q's transaction. Object inserts take it,
