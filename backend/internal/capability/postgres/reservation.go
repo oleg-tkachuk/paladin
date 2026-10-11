@@ -61,7 +61,10 @@ func (s *UsageStore) Reserve(ctx context.Context, req limes.ReserveRequest) (lim
 	amount := pgmoney.NumericFromNanos(req.Amount)
 	maxBudget := pgmoney.NumericFromNanos(req.MaxBudget)
 	ttl := req.TTL
-	if ttl <= 0 {
+	if ttl < 0 {
+		return limes.Reservation{}, fmt.Errorf("%w: capability/postgres: reservation TTL %s is negative", limes.ErrInvalidRequest, ttl)
+	}
+	if ttl == 0 {
 		ttl = limes.DefaultReservationTTL
 	}
 
