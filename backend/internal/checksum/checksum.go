@@ -8,7 +8,7 @@
 package checksum
 
 import (
-	"crypto/md5" //nolint:gosec // S3's Content-MD5, an integrity check, not a security one
+	"crypto/md5" // #nosec G501 -- S3's Content-MD5, an integrity check, not a security one
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"

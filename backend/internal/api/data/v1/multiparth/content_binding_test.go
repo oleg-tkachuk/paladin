@@ -105,6 +105,7 @@ func TestCompleteRefusesAnIncompletePartList(t *testing.T) {
 	tid := uuid.New()
 	cases := map[string]func([]PartETag) []PartETag{
 		"a missing part":          func(p []PartETag) []PartETag { return p[:len(p)-1] },
+		"an extra part":           func(p []PartETag) []PartETag { return append(p, p[len(p)-1]) },
 		"a part listed twice":     func(p []PartETag) []PartETag { p[1].PartNumber = 1; return p },
 		"a part out of range":     func(p []PartETag) []PartETag { p[0].PartNumber = testTotalParts + 1; return p },
 		"a part with no checksum": func(p []PartETag) []PartETag { p[2].ChecksumValue = ""; return p },
