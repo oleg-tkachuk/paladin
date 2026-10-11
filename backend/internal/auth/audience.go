@@ -18,13 +18,14 @@ const (
 	AudienceIAM   = paladin.AudienceIAM
 )
 
-// The short plane labels an API token's audience lists, as
-// APITokenService.Create takes them; principalAudienceFor maps each to the
-// audience above.
+// The short plane labels a token's audience lists: an API token's, as
+// APITokenService.Create takes them, and a capability's. principalAudienceFor
+// maps each to the audience above.
 const (
 	TokenPlaneData  = "data"
 	TokenPlaneAdmin = "admin"
 	TokenPlaneIAM   = "iam"
+	TokenPlaneMCP   = "mcp"
 )
 
 // RequireAudience is a Connect interceptor that asserts the principal in the

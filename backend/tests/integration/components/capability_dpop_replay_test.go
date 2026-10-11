@@ -7,6 +7,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 
@@ -14,12 +15,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/memstore"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
 const (
-	dpopReplayURL   = "https://paladin.example/paladin.v1.ObjectService/GetObject"
-	dpopReplayToken = "capability-token"
+	dpopReplayURL    = "https://paladin.example/paladin.v1.ObjectService/GetObject"
+	dpopReplayIssuer = "paladin-replay-test"
+	dpopReplayKID    = "k1"
 )
 
 func newReplayCache(t *testing.T, pool *pgxpool.Pool) *capstore.ReplayCache {
@@ -39,6 +43,19 @@ func TestDPoPProofSeenOnOneReplicaIsRefusedOnAnother(t *testing.T) {
 	ctx := context.Background()
 	admin := startPostgres(t)
 
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := limes.NewEd25519Signer(dpopReplayKID, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := memstore.New[any]()
+	issuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: dpopReplayIssuer})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -47,23 +64,50 @@ func TestDPoPProofSeenOnOneReplicaIsRefusedOnAnother(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := &limes.Capability{ID: uuid.New(), ConfirmationJKT: jkt}
-	proof, err := limes.NewDPoPProof(key, "POST", dpopReplayURL, dpopReplayToken, time.Now())
+	_, token, err := issuer.Issue(ctx, limes.IssueRequest{
+		IssuedBy:        limes.Principal{Subject: "op"},
+		Subject:         limes.Principal{TenantID: uuid.New(), Subject: "agent"},
+		Audience:        []string{auth.TokenPlaneData},
+		Caveats:         limes.Caveats{Ops: []limes.Op{limes.OpGet}},
+		TTL:             time.Hour,
+		ConfirmationJKT: jkt,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := limes.DPoPRequest{Proof: proof, Method: "POST", URL: dpopReplayURL, Token: dpopReplayToken}
+	replica := func() *limes.StandardVerifier {
+		v, err := limes.NewStandardVerifier(limes.VerifierConfig{
+			Keys:           limes.NewStaticKeyResolver(map[string]ed25519.PublicKey{dpopReplayKID: pub}),
+			Revocations:    store,
+			TrustedIssuers: []string{dpopReplayIssuer},
+			DPoP:           &limes.DPoPVerifier{Replay: newReplayCache(t, rlsPool(t, ctx, admin))},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	first, second := replica(), replica()
 
-	first := &limes.DPoPVerifier{Replay: newReplayCache(t, rlsPool(t, ctx, admin))}
-	second := &limes.DPoPVerifier{Replay: newReplayCache(t, rlsPool(t, ctx, admin))}
+	proof, err := limes.NewDPoPProof(key, limes.DPoPProofRequest{
+		Method: http.MethodPost, URL: dpopReplayURL, Token: token, Now: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := limes.VerifyRequest{
+		Token:    token,
+		Audience: auth.TokenPlaneData,
+		DPoP:     limes.DPoPProof{Proof: proof, Method: http.MethodPost, URL: dpopReplayURL},
+	}
 
-	if err := first.Check(ctx, *c, req); err != nil {
+	if _, err := first.Verify(ctx, req); err != nil {
 		t.Fatalf("first use of the proof: %v", err)
 	}
-	if err := second.Check(ctx, *c, req); !errors.Is(err, limes.ErrDPoPReplayed) {
+	if _, err := second.Verify(ctx, req); !errors.Is(err, limes.ErrDPoPReplayed) {
 		t.Fatalf("the proof replayed on another replica: err = %v, want ErrDPoPReplayed", err)
 	}
-	if err := first.Check(ctx, *c, req); !errors.Is(err, limes.ErrDPoPReplayed) {
+	if _, err := first.Verify(ctx, req); !errors.Is(err, limes.ErrDPoPReplayed) {
 		t.Fatalf("the proof replayed on the same replica: err = %v, want ErrDPoPReplayed", err)
 	}
 }

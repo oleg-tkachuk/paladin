@@ -49,14 +49,14 @@ func TestCapabilityBiscuit_OfflineAttenuationIsEnforced(t *testing.T) {
 	cap, _, err := issuer.Issue(context.Background(), limes.IssueRequest{
 		IssuedBy: limes.Principal{Subject: "op"},
 		Subject:  limes.Principal{TenantID: uuid.New(), Subject: "agent"},
-		Audience: []string{limes.AudiencePlaneData},
+		Audience: []string{TokenPlaneData},
 		Caveats:  limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpDelete}, ResourcePrefixes: []string{"corpus/"}},
 		TTL:      time.Hour,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	full, err := issuer.Biscuit(cap)
+	full, err := issuer.Biscuit(context.Background(), cap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestCapabilityBiscuit_OfflineAttenuationIsEnforced(t *testing.T) {
 		return AssertCapabilityOp(ctx, limes.Op(h.Get(headerTestOp)), h.Get(headerTestResource))
 	}}
 	interceptors := []connect.ServerInterceptor{
-		CapabilityEstablishingInterceptor(verifier, limes.AudiencePlaneData, nil, 0, "", nil),
+		CapabilityEstablishingInterceptor(verifier, TokenPlaneData, nil, 0, "", nil),
 	}
 	call := func(token string, op limes.Op, resource string) error {
 		_, err := unarytest.CallProbe(context.Background(), probe, interceptors,

@@ -357,7 +357,7 @@ func TestRefundIsBoundToItsCharge(t *testing.T) {
 		t.Fatalf("charge: %v", err)
 	}
 
-	if got, err := f.usage.Refund(ctx, limes.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("2")}); err != nil || got != limes.MustParseAmount("2") {
+	if got, err := f.usage.Refund(ctx, limes.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("2")}); err != nil || got.Refunded != limes.MustParseAmount("2") {
 		t.Fatalf("partial refund = %v, %v; want 2", got, err)
 	}
 	if got := f.spentOn(t, ctx); got != limes.MustParseAmount("3") {
@@ -370,10 +370,10 @@ func TestRefundIsBoundToItsCharge(t *testing.T) {
 	if _, err := f.usage.Refund(ctx, limes.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("99")}); !errors.Is(err, limes.ErrRefundExceedsCharge) {
 		t.Fatalf("over-refund err = %v, want ErrRefundExceedsCharge", err)
 	}
-	if got, err := f.usage.Refund(ctx, limes.RefundRequest{ChargeID: receipt.ChargeID}); err != nil || got != limes.MustParseAmount("3") {
+	if got, err := f.usage.Refund(ctx, limes.RefundRequest{ChargeID: receipt.ChargeID}); err != nil || got.Refunded != limes.MustParseAmount("3") {
 		t.Fatalf("refund of the rest = %v, %v; want 3", got, err)
 	}
-	if got, err := f.usage.Refund(ctx, limes.RefundRequest{ChargeID: receipt.ChargeID}); err != nil || got != 0 {
+	if got, err := f.usage.Refund(ctx, limes.RefundRequest{ChargeID: receipt.ChargeID}); err != nil || got.Refunded != 0 {
 		t.Fatalf("repeated full refund = %v, %v; want 0, nil", got, err)
 	}
 	if got := f.spentOn(t, ctx); got != 0 {

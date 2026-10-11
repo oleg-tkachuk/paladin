@@ -60,22 +60,22 @@ func (f *fakeUsage) Charge(_ context.Context, req limes.ChargeRequest, _ func(co
 	return limes.ChargeReceipt{ChargeID: id, Spent: next}, nil
 }
 
-func (f *fakeUsage) Refund(_ context.Context, req limes.RefundRequest) (limes.Nanos, error) {
+func (f *fakeUsage) Refund(_ context.Context, req limes.RefundRequest) (limes.RefundReceipt, error) {
 	c, ok := f.charges[req.ChargeID]
 	if !ok {
-		return 0, limes.ErrChargeNotFound
+		return limes.RefundReceipt{}, limes.ErrChargeNotFound
 	}
 	amount := req.Amount
 	if amount == 0 {
 		amount = c.amount - c.refunded
 	}
 	if amount > c.amount-c.refunded {
-		return 0, limes.ErrRefundExceedsCharge
+		return limes.RefundReceipt{}, limes.ErrRefundExceedsCharge
 	}
 	c.refunded += amount
 	f.charges[req.ChargeID] = c
 	f.spent[c.capID] = max(0, f.spent[c.capID]-amount)
-	return amount, nil
+	return limes.RefundReceipt{ChargeID: req.ChargeID, Refunded: amount, UnitCode: limes.DefaultUnitCode}, nil
 }
 
 func (f *fakeUsage) GetUsage(_ context.Context, id uuid.UUID) (limes.Usage, error) {

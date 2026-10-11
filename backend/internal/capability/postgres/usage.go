@@ -471,6 +471,7 @@ const refundableQuery = `
 SELECT ch.capability_id,
        ch.tenant_id,
        ch.copy_ids,
+       ch.unit_code,
        r.refund,
        r.refund > r.remaining AS exceeds
 FROM   charges ch
@@ -493,78 +494,81 @@ WHERE  ch.id = $1;
 // row lock (SELECT ... FOR UPDATE, which needs an UPDATE policy) is not
 // available, and without serialisation two refunds could each see the full
 // remainder.
-func (s *UsageStore) Refund(ctx context.Context, req limes.RefundRequest) (limes.Nanos, error) {
+func (s *UsageStore) Refund(ctx context.Context, req limes.RefundRequest) (limes.RefundReceipt, error) {
 	if err := limes.ValidateAmount(req.Amount); err != nil {
-		return 0, err
+		return limes.RefundReceipt{}, err
 	}
 	amountNumeric := pgmoney.NumericFromNanos(req.Amount)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("capability/postgres: refund begin: %w", err)
+		return limes.RefundReceipt{}, fmt.Errorf("capability/postgres: refund begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := s.q.WithTx(tx)
 
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`,
 		req.ChargeID.String()); err != nil {
-		return 0, fmt.Errorf("capability/postgres: refund lock: %w", err)
+		return limes.RefundReceipt{}, fmt.Errorf("capability/postgres: refund lock: %w", err)
 	}
 
 	var (
 		capID, tenantID uuid.UUID
 		copies          [][]byte
+		unitCode        string
 		refund          pgtype.Numeric
 		exceeds         bool
 	)
 	if err := tx.QueryRow(ctx, refundableQuery, req.ChargeID, amountNumeric).
-		Scan(&capID, &tenantID, &copies, &refund, &exceeds); err != nil {
+		Scan(&capID, &tenantID, &copies, &unitCode, &refund, &exceeds); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, limes.ErrChargeNotFound
+			return limes.RefundReceipt{}, limes.ErrChargeNotFound
 		}
-		return 0, fmt.Errorf("capability/postgres: refund read: %w", err)
+		return limes.RefundReceipt{}, fmt.Errorf("capability/postgres: refund read: %w", err)
 	}
 	if exceeds {
-		return 0, fmt.Errorf("%w: charge %s", limes.ErrRefundExceedsCharge, req.ChargeID)
+		return limes.RefundReceipt{}, fmt.Errorf("%w: charge %s", limes.ErrRefundExceedsCharge, req.ChargeID)
 	}
 	refunded, err := pgmoney.NanosFromNumeric(refund)
 	if err != nil {
-		return 0, err
+		return limes.RefundReceipt{}, err
 	}
+	receipt := limes.RefundReceipt{ChargeID: req.ChargeID, TenantID: tenantID, UnitCode: unitCode}
 	if refunded == 0 {
-		return 0, nil // nothing left: a repeated full refund is a no-op
+		return receipt, nil // nothing left: a repeated full refund is a no-op
 	}
 
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO charge_refunds (charge_id, tenant_id, amount) VALUES ($1, $2, $3::numeric)`,
 		req.ChargeID, tenantID, refund); err != nil {
-		return 0, fmt.Errorf("capability/postgres: refund record: %w", err)
+		return limes.RefundReceipt{}, fmt.Errorf("capability/postgres: refund record: %w", err)
 	}
 
 	if err := subtractCopySpend(ctx, tx, copies, refund, copySpent); err != nil {
-		return 0, err
+		return limes.RefundReceipt{}, err
 	}
 	ids := []uuid.UUID{capID}
 	ancestors, err := ancestorsOf(ctx, tx, capID)
 	if err != nil {
-		return 0, err
+		return limes.RefundReceipt{}, err
 	}
 	for _, a := range ancestors {
 		ids = append(ids, a.id)
 	}
 	for _, id := range ids {
 		if err := qtx.RefundCapabilityUsage(ctx, pgtype.UUID{Bytes: id, Valid: true}, refund); err != nil {
-			return 0, fmt.Errorf("capability/postgres: refund capability: %w", err)
+			return limes.RefundReceipt{}, fmt.Errorf("capability/postgres: refund capability: %w", err)
 		}
 	}
 	if err := qtx.RefundTenantBudget(ctx, pgtype.UUID{Bytes: tenantID, Valid: true}, refund); err != nil {
-		return 0, fmt.Errorf("capability/postgres: refund tenant: %w", err)
+		return limes.RefundReceipt{}, fmt.Errorf("capability/postgres: refund tenant: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("capability/postgres: refund commit: %w", err)
+		return limes.RefundReceipt{}, fmt.Errorf("capability/postgres: refund commit: %w", err)
 	}
-	return refunded, nil
+	receipt.Refunded = refunded
+	return receipt, nil
 }
 
 // GetTenantBudget implements limes.UsageStore[pgx.Tx].
@@ -591,7 +595,7 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args limes.SetTenantBu
 	// inserts 'USD' on first row). A non-empty value is validated.
 	unit := args.UnitCode
 	if unit != "" {
-		if !limes.IsAllowedUnitCode(unit) {
+		if !limes.IsUnitCode(unit) {
 			return limes.TenantBudget{}, fmt.Errorf("capability/postgres: SetTenantBudget: invalid unit_code %q", unit)
 		}
 	}
