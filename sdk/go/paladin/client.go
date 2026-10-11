@@ -46,6 +46,11 @@ const (
 	// HeaderDPoP carries the RFC 9449 proof that the caller holds the key a
 	// capability is bound to; see WithDPoP.
 	HeaderDPoP = "DPoP"
+	// HeaderDPoPNonce carries the nonce the server wants in the next DPoP
+	// proof (RFC 9449 §8).
+	HeaderDPoPNonce = "DPoP-Nonce"
+	// HeaderWWWAuthenticate carries the challenge of a refused credential.
+	HeaderWWWAuthenticate = "WWW-Authenticate"
 	// HeaderIdempotencyKey makes a mutating call safe to repeat: the server
 	// replays the first response for a key it has already seen.
 	HeaderIdempotencyKey = "Idempotency-Key"
