@@ -15,14 +15,16 @@
 -- arg keeps the existing currency unchanged — operators editing
 -- the cap shouldn't accidentally reinterpret an EUR budget as USD).
 --
--- OCC on update, no guard on insert. The DO UPDATE's WHERE is the
--- concurrency check: it fires only when the stored resource_version
--- matches what the caller read. A mismatch — including a caller that
--- passed 0 believing no row existed — updates nothing and returns no
--- row, which the adapter maps to a version conflict. Without it two
--- operators editing the same cap silently overwrote each other.
-INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at)
-VALUES ($1, sqlc.arg('max_budget_usd')::numeric, 0, COALESCE(NULLIF(sqlc.arg('unit_code')::text, ''), 'USD'), now(), sqlc.narg('period_end')::timestamptz, now())
+-- OCC on update, no guard on insert. Version 0 means no ceiling has been
+-- set: the runtime created the row by counting a charge or a hold, and the
+-- first set moves it to 1, as creating the row does. The DO UPDATE's WHERE is
+-- the concurrency check: it fires only when the stored resource_version
+-- matches what the caller read. A mismatch — including a caller that passed 0
+-- for a ceiling another set — updates nothing and returns no row, which the
+-- adapter maps to a version conflict. Without it two operators editing the
+-- same cap silently overwrote each other.
+INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version)
+VALUES ($1, sqlc.arg('max_budget_usd')::numeric, 0, COALESCE(NULLIF(sqlc.arg('unit_code')::text, ''), 'USD'), now(), sqlc.narg('period_end')::timestamptz, now(), 1)
 ON CONFLICT (tenant_id) DO UPDATE
 SET max_budget_usd = EXCLUDED.max_budget_usd,
     spent_usd      = CASE WHEN sqlc.arg('reset_spend')::boolean THEN 0 ELSE tenant_budgets.spent_usd END,

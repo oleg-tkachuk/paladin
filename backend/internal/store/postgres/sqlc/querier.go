@@ -801,12 +801,14 @@ type Querier interface {
 	// arg keeps the existing currency unchanged — operators editing
 	// the cap shouldn't accidentally reinterpret an EUR budget as USD).
 	//
-	// OCC on update, no guard on insert. The DO UPDATE's WHERE is the
-	// concurrency check: it fires only when the stored resource_version
-	// matches what the caller read. A mismatch — including a caller that
-	// passed 0 believing no row existed — updates nothing and returns no
-	// row, which the adapter maps to a version conflict. Without it two
-	// operators editing the same cap silently overwrote each other.
+	// OCC on update, no guard on insert. Version 0 means no ceiling has been
+	// set: the runtime created the row by counting a charge or a hold, and the
+	// first set moves it to 1, as creating the row does. The DO UPDATE's WHERE is
+	// the concurrency check: it fires only when the stored resource_version
+	// matches what the caller read. A mismatch — including a caller that passed 0
+	// for a ceiling another set — updates nothing and returns no row, which the
+	// adapter maps to a version conflict. Without it two operators editing the
+	// same cap silently overwrote each other.
 	SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, periodEnd pgtype.Timestamptz, resetSpend bool, expectedVersion int64) (SetTenantBudgetRow, error)
 	// Tenant default-binding queries.
 	//
