@@ -203,7 +203,7 @@ func (r *retryPolicy) unary(next unaryFunc) unaryFunc {
 // ceiling, so clients that failed together do not retry together, and never
 // less than the server's Retry-After.
 func (r *retryPolicy) wait(ceiling time.Duration, info *connect.CallInfo) time.Duration {
-	wait := time.Duration(mathrand.Int64N(int64(ceiling) + 1)) //nolint:gosec // jitter, not a secret
+	wait := time.Duration(mathrand.Int64N(int64(ceiling) + 1)) // #nosec G404 -- retry jitter, not a secret
 	if after, ok := retryAfter(info); ok && after > wait {
 		wait = after
 	}
