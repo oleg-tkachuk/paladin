@@ -17,8 +17,8 @@ everything it reaches.
 | `task -t Taskfile.local.yaml` | publishing to a host-only registry and syncing a local ArgoCD |
 | `task -t Taskfile.dev.yaml` | the gates, codegen and dependency bumps |
 
-Every flow needs [Task](https://taskfile.dev/installation/) 3.53+. CI pins
-3.53.1. The shared [task library](https://github.com/oleg-tkachuk/taskfiles)
+Every flow needs [Task](https://taskfile.dev/installation/) 3.54+. CI pins
+3.54.0. The shared [task library](https://github.com/oleg-tkachuk/taskfiles)
 is a remote include, cached under `.task/remote/`, so a clone runs without
 network access to it.
 
@@ -29,7 +29,7 @@ network access to it.
 | Tool | Why |
 |------|-----|
 | [Docker](https://docs.docker.com/get-started/get-docker/) with Compose v2 | every plane, Postgres, SeaweedFS and the console run as containers |
-| Task 3.53+ | the entry point |
+| Task 3.54+ | the entry point |
 
 That is all. The stack needs no cluster, no credentials and no toolchain. If
 `task stack:up` asks you for any of them, that is a bug.
@@ -92,7 +92,7 @@ component at a time.
 | Tool | Why |
 |------|-----|
 | [Docker](https://docs.docker.com/get-started/get-docker/) | testcontainers, `verify-deep` and `verify-e2e` |
-| Task 3.53+ | every gate is a task |
+| Task 3.54+ | every gate is a task |
 | [Go](https://go.dev/dl/) 1.27+ | `backend/` and `sdk/go/`, per their `go.mod`; the toolchain auto-downloads |
 | [Node](https://nodejs.org) 26 | the console; the version its image ships and CI verifies with |
 | [pnpm](https://pnpm.io) 12.10 | pinned by `packageManager` in `frontend/package.json`; Node 26 has no corepack, so `npm install -g pnpm@12.10.1` |

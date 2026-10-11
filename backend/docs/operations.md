@@ -7,7 +7,7 @@ on Kubernetes is in [docs/install.md](../../docs/install.md).
 ## Prerequisites
 
 - Go at the version of the `go` directive in `go.mod`
-- Task 3.53+
+- Task 3.54+
 - Docker with Compose v2 — the compose stack and the integration tests
   (testcontainers) both need it
 
