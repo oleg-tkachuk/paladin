@@ -629,12 +629,12 @@ capability: {
   revocation_cache_ttl:     =~"^-?[0-9]+(ns|us|ms|s|m|h)$" | *"2s"
   // Auto-charge knob: amount + unit consumed by the capability
   // interceptor on each billable handler call. The amount is a decimal
-  // read exactly, to the nano (nine decimals). Unit values are ISO 4217
-  // codes: USD/EUR/UAH/GBP, or XXX ("no currency") for metering that is
-  // not money; empty defers to the capability's own declared unit (which
-  // defaults to USD).
+  // read exactly, to the nano (nine decimals). The unit is an ISO 4217
+  // code — XXX ("no currency") for metering that is not money; empty
+  // defers to the capability's own declared unit (which defaults to USD).
+  // CUE checks the shape; Config.Validate checks the code is ISO 4217's.
   charge_per_request_amount: number & >=0 | *0
-  charge_per_request_unit:   "USD" | "EUR" | "UAH" | "GBP" | "XXX" | *""
+  charge_per_request_unit:   =~"^[A-Z]{3}$" | *""
 }
 
 api_token: {
