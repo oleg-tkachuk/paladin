@@ -123,8 +123,15 @@ func (s *TenantBudgetServer) Set(
 	if err != nil {
 		// A version mismatch is the caller's to resolve — re-read and retry —
 		// not a server fault, so it must not read as Internal.
-		if errors.Is(err, limes.ErrTenantBudgetVersionMismatch) {
+		switch {
+		case errors.Is(err, limes.ErrTenantBudgetVersionMismatch):
 			return nil, connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
+		// Re-denominating a tenant that still counts spend or holds in its
+		// unit: no retry meets it until they are reset or released.
+		case errors.Is(err, limes.ErrUnitCodeMismatch):
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
+		case errors.Is(err, limes.ErrInvalidAmount):
+			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}

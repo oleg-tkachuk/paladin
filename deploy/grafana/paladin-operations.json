@@ -332,7 +332,7 @@
     {
       "type": "timeseries",
       "title": "Capability charges by outcome",
-      "description": "Charge attempts made under a capability. outcome is charged, capability_exhausted, tenant_exhausted or error.",
+      "description": "Charge attempts made under a capability. outcome is charged, capability_exhausted, tenant_exhausted, unit_mismatch or error.",
       "datasource": "${datasource}",
       "gridPos": {
         "h": 8,
