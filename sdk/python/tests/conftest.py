@@ -39,15 +39,22 @@ class Recorder:
     fail_code: Code = Code.UNAVAILABLE
     # Sent as Retry-After with each injected failure, when set.
     retry_after: str | None = None
+    # Sent with each injected failure, and with every response.
+    fail_headers: dict[str, str] = field(default_factory=dict)
+    response_headers: dict[str, str] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def record(self, ctx: RequestContext) -> None:
         with self.lock:
             self.headers.append({k.lower(): v for k, v in ctx.request_headers.items()})
+            for name, value in self.response_headers.items():
+                ctx.response_headers[name] = value
             if self.failures > 0:
                 self.failures -= 1
                 if self.retry_after is not None:
                     ctx.response_headers["Retry-After"] = self.retry_after
+                for name, value in self.fail_headers.items():
+                    ctx.response_headers[name] = value
                 raise ConnectError(self.fail_code, "injected")
 
     @property
