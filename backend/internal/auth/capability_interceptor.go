@@ -14,10 +14,12 @@ import (
 	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 )
 
@@ -274,9 +276,15 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 	if err != nil {
 		// Token was supplied and not accepted. Falling through to JWT
 		// silently would mask the misconfiguration.
+		if errors.Is(err, limes.ErrDPoPNonceRequired) {
+			return ctx, i.nonceChallenge(ctx, err, scheme)
+		}
 		return ctx, verifyError(ctx, err)
 	}
 	cap := &verified // the request's context holds it by reference
+	if cap.ConfirmationJKT != "" {
+		i.sendNonce(ctx)
+	}
 	if err := i.enforceCaveats(ctx, cap); err != nil {
 		return ctx, err
 	}
@@ -292,6 +300,37 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 	ctx = withIdempotencyKeyPresent(ctx, hasKey)
 	ctx = withTaintLookup(ctx, i.taintLookup)
 	return ctx, nil
+}
+
+// nonceChallenge answers a proof without the nonce the server asks for as
+// RFC 9449 §8 does: Unauthenticated, a DPoP challenge naming use_dpop_nonce,
+// and the nonce to sign the next proof with. limes spells the challenge; the
+// refusal's reason says the proof can be signed afresh.
+func (i *capabilityInterceptor) nonceChallenge(ctx context.Context, err error, scheme limes.AuthScheme) error {
+	resp := i.verifier.ErrorResponse(ctx, err, scheme)
+	header := unary.Info(ctx).ResponseHeader()
+	for _, challenge := range resp.Challenges {
+		header.Add(limes.WWWAuthenticateHeader, challenge)
+	}
+	if resp.DPoPNonce != "" {
+		header.Set(limes.DPoPNonceHeader, resp.DPoPNonce)
+	}
+	return capabilityError(connect.CodeUnauthenticated, err)
+}
+
+// sendNonce hands a key-bound capability's holder the nonce for its next
+// proof with every response, so a client that keeps it is challenged only
+// when a nonce lapses. Without nonces configured there is none to send; a
+// nonce that cannot be made is left out, and the next proof is challenged.
+func (i *capabilityInterceptor) sendNonce(ctx context.Context) {
+	nonce, err := i.verifier.DPoPNonce(ctx)
+	if err != nil {
+		logger.FromContext(ctx).Warn("capability: DPoP nonce not issued", zap.Error(err))
+		return
+	}
+	if nonce != "" {
+		unary.Info(ctx).ResponseHeader().Set(limes.DPoPNonceHeader, nonce)
+	}
 }
 
 // httpMethod is the method the call came in with: POST, or GET for a

@@ -37,7 +37,7 @@ from connectrpc.method import IdempotencyLevel
 from connectrpc.request import RequestContext
 
 from paladin._http_settings import call_deadline
-from paladin.dpop import DPoPAsync, DPoPSync
+from paladin.dpop import DPoPAsync, DPoPNonceAsync, DPoPNonceSync, DPoPSync, NonceState
 from paladin.errors import convert
 from paladin.observe import Hooks, RetryEvent, report_retry
 from paladin.relay import Captured, RelaySyncTransport, RelayTransport, captured
@@ -299,11 +299,14 @@ class Client:
         self._hooks = hooks
         self._extra = list(interceptors)
         self._dpop: tuple[DPoPSync, DPoPAsync] | None = None
+        self._dpop_nonces: tuple[DPoPNonceSync, DPoPNonceAsync] | None = None
         if dpop_key is not None:
+            nonces = NonceState()  # one per client, shared by its sync and async calls
             self._dpop = (
-                DPoPSync(dpop_key, self._base_url, HEADER_CAPABILITY),
-                DPoPAsync(dpop_key, self._base_url, HEADER_CAPABILITY),
+                DPoPSync(dpop_key, self._base_url, HEADER_CAPABILITY, nonces),
+                DPoPAsync(dpop_key, self._base_url, HEADER_CAPABILITY, nonces),
             )
+            self._dpop_nonces = (DPoPNonceSync(nonces), DPoPNonceAsync(nonces))
 
     @property
     def base_url(self) -> str:
@@ -336,7 +339,9 @@ class Client:
             result.append(_TokensSync(self._token_source, self._audience))
         if self._retry is not None:
             result.append(_RetrySync(self._retry, self._hooks))
-        if self._dpop is not None:
+        if self._dpop is not None and self._dpop_nonces is not None:
+            # Outside the signer, so a call resent for a nonce is signed afresh.
+            result.append(self._dpop_nonces[0])
             result.append(self._dpop[0])
         # Innermost, so each attempt of a retried call gets its own.
         result.append(_DeadlineSync())
@@ -356,7 +361,8 @@ class Client:
             result.append(_TokensAsync(self._token_source, self._audience))
         if self._retry is not None:
             result.append(_RetryAsync(self._retry, self._hooks))
-        if self._dpop is not None:
+        if self._dpop is not None and self._dpop_nonces is not None:
+            result.append(self._dpop_nonces[1])
             result.append(self._dpop[1])
         return result
 

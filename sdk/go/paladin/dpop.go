@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -30,6 +32,11 @@ import (
 // key is Ed25519 or ECDSA P-256. A retried call signs a new proof per
 // attempt, since the server refuses a proof it has seen. Proofs are signed
 // for POST, so do not combine WithDPoP with connect.WithHTTPGet.
+//
+// A server that asks for nonces (RFC 9449 §8) sends one with each response;
+// the client keeps the latest and signs it into the next proof. A unary call
+// refused for want of a fresh one is sent once more with it. A stream signs
+// the latest nonce the client holds and is not resent.
 func WithDPoP(key crypto.Signer) Option {
 	return func(cfg *config) { cfg.dpopKey = key }
 }
@@ -83,9 +90,14 @@ const (
 	dpopAlgES256   = "ES256"
 )
 
-// dpopProof signs one proof. The server compares htu by path, so the base
-// URL's scheme and host need not be the ones it sees behind a proxy.
-func dpopProof(key crypto.Signer, method, htu, token string, now time.Time) (string, error) {
+// dpopNonceChallenge is the error a DPoP challenge names when the proof
+// lacked the nonce the server asks for (RFC 9449 §8).
+const dpopNonceChallenge = "use_dpop_nonce"
+
+// dpopProof signs one proof, with the server's nonce when there is one. The
+// server compares htu by path, so the base URL's scheme and host need not be
+// the ones it sees behind a proxy.
+func dpopProof(key crypto.Signer, method, htu, token, nonce string, now time.Time) (string, error) {
 	jwk, err := dpopPublicJWK(key.Public())
 	if err != nil {
 		return "", err
@@ -108,12 +120,13 @@ func dpopProof(key crypto.Signer, method, htu, token string, now time.Time) (str
 		return "", err
 	}
 	claims, err := json.Marshal(struct {
-		JTI string `json:"jti"`
-		HTM string `json:"htm"`
-		HTU string `json:"htu"`
-		IAT int64  `json:"iat"`
-		ATH string `json:"ath"`
-	}{b64url(jti), method, htu, now.Unix(), b64url(ath[:])})
+		JTI   string `json:"jti"`
+		HTM   string `json:"htm"`
+		HTU   string `json:"htu"`
+		IAT   int64  `json:"iat"`
+		ATH   string `json:"ath"`
+		Nonce string `json:"nonce,omitempty"`
+	}{b64url(jti), method, htu, now.Unix(), b64url(ath[:]), nonce})
 	if err != nil {
 		return "", err
 	}
@@ -154,6 +167,9 @@ type dpopAuth struct {
 	key     crypto.Signer
 	baseURL string
 	now     func() time.Time
+	// nonce is the latest nonce the server sent, shared by every call of
+	// the client.
+	nonce atomic.Pointer[string]
 }
 
 func (a *dpopAuth) set(h *connect.Header, procedure string) error {
@@ -161,7 +177,11 @@ func (a *dpopAuth) set(h *connect.Header, procedure string) error {
 	if token == "" {
 		return nil
 	}
-	proof, err := dpopProof(a.key, http.MethodPost, a.baseURL+procedure, token, a.now())
+	nonce := ""
+	if n := a.nonce.Load(); n != nil {
+		nonce = *n
+	}
+	proof, err := dpopProof(a.key, http.MethodPost, a.baseURL+procedure, token, nonce, a.now())
 	if err != nil {
 		return err
 	}
@@ -174,14 +194,48 @@ func (a *dpopAuth) interceptor() connect.ClientInterceptor {
 }
 
 // unary signs each attempt afresh: innermost, inside the retry interceptor,
-// so a retried call never repeats a proof the server has seen.
+// so a retried call never repeats a proof the server has seen. A call
+// refused for want of a fresh nonce is sent once more, with the nonce the
+// refusal carried.
 func (a *dpopAuth) unary(next unaryFunc) unaryFunc {
 	return func(ctx context.Context, spec connect.Spec, req, res any) error {
-		if err := a.set(callInfo(ctx).RequestHeader(), spec.Procedure); err != nil {
-			return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		err := a.attempt(ctx, spec, req, res, next)
+		if info := callInfo(ctx); nonceChallenged(info, err) {
+			clearResponse(info)
+			err = a.attempt(ctx, spec, req, res, next)
 		}
-		return next(ctx, spec, req, res)
+		return err
 	}
+}
+
+// attempt signs a proof, runs the call, and keeps the nonce the server sent
+// back, refused or not.
+func (a *dpopAuth) attempt(ctx context.Context, spec connect.Spec, req, res any, next unaryFunc) error {
+	info := callInfo(ctx)
+	if err := a.set(info.RequestHeader(), spec.Procedure); err != nil {
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	err := next(ctx, spec, req, res)
+	if nonce := responseMeta(info, HeaderDPoPNonce); nonce != "" {
+		a.nonce.Store(&nonce)
+	}
+	return err
+}
+
+// nonceChallenged reports whether err refused the proof for want of the
+// server's nonce, and the response carries one to retry with.
+func nonceChallenged(info *connect.CallInfo, err error) bool {
+	if connect.CodeOf(err) != connect.CodeUnauthenticated || responseMeta(info, HeaderDPoPNonce) == "" {
+		return false
+	}
+	for _, h := range []*connect.Header{info.ResponseHeader(), info.ResponseTrailer()} {
+		for _, challenge := range h.Values(HeaderWWWAuthenticate) {
+			if strings.Contains(challenge, dpopNonceChallenge) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (a *dpopAuth) stream(next connect.ClientFunc) connect.ClientFunc {

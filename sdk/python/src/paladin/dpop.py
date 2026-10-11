@@ -7,6 +7,11 @@ copy of the token is useless to anyone without the key. Pass the key as
 
 Keys are ``cryptography``'s Ed25519 or ECDSA P-256 private keys; install the
 ``dpop`` extra (``pip install paladin-sdk[dpop]``).
+
+A server that asks for nonces (RFC 9449 §8) sends one with each response; the
+client keeps the latest and signs it into the next proof. A unary call refused
+for want of a fresh one is sent once more with it. A stream signs the latest
+nonce the client holds and is not resent.
 """
 
 from __future__ import annotations
@@ -15,12 +20,27 @@ import base64
 import hashlib
 import json
 import secrets
+import threading
 import time
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar
 
+from connectrpc.code import Code
+from connectrpc.errors import ConnectError
 from connectrpc.request import RequestContext
 
+from paladin.relay import Captured, captured
+
+REQ = TypeVar("REQ")
+RES = TypeVar("RES")
+
 HEADER_DPOP = "DPoP"
+# The nonce the server wants in the next proof, and the challenge of a refused
+# credential (RFC 9449 §8).
+HEADER_DPOP_NONCE = "DPoP-Nonce"
+HEADER_WWW_AUTHENTICATE = "WWW-Authenticate"
+# The error a DPoP challenge names when the proof lacked the server's nonce.
+NONCE_CHALLENGE = "use_dpop_nonce"
 _JTI_BYTES = 16
 # The proof algorithms, as RFC 9864 names them: Ed25519 is the fully specified
 # name for what the deprecated "EdDSA" covered with this key type.
@@ -70,9 +90,11 @@ def dpop_thumbprint(public_key: Any) -> str:
     return _b64(hashlib.sha256(canonical.encode()).digest())
 
 
-def dpop_proof(key: Any, method: str, url: str, token: str, now: float | None = None) -> str:
+def dpop_proof(
+    key: Any, method: str, url: str, token: str, now: float | None = None, nonce: str = ""
+) -> str:
     """A proof that the caller holds ``key``, for one ``method`` ``url`` request
-    presenting capability ``token``."""
+    presenting capability ``token``, carrying the server's ``nonce`` if any."""
     hashes, _, ec, ed25519, utils = _crypto()
     jwk = _jwk(key.public_key())
     alg = ALG_ED25519 if jwk["kty"] == "OKP" else ALG_ES256
@@ -84,6 +106,8 @@ def dpop_proof(key: Any, method: str, url: str, token: str, now: float | None = 
         "iat": int(time.time() if now is None else now),
         "ath": _b64(hashlib.sha256(token.encode()).digest()),
     }
+    if nonce:
+        claims["nonce"] = nonce
     signing_input = f"{_b64(json.dumps(header).encode())}.{_b64(json.dumps(claims).encode())}"
     if isinstance(key, ed25519.Ed25519PrivateKey):
         sig = key.sign(signing_input.encode())
@@ -95,26 +119,113 @@ def dpop_proof(key: Any, method: str, url: str, token: str, now: float | None = 
     return f"{signing_input}.{_b64(sig)}"
 
 
-def _stamp(key: Any, base_url: str, header_capability: str, ctx: RequestContext) -> None:
+class NonceState:
+    """The latest nonce the server sent, shared by every call of a client."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._nonce = ""
+
+    def get(self) -> str:
+        with self._lock:
+            return self._nonce
+
+    def adopt(self, meta: Captured) -> None:
+        nonce = meta.get(HEADER_DPOP_NONCE)
+        if nonce:
+            with self._lock:
+                self._nonce = nonce
+
+
+def _challenged(err: ConnectError, meta: Captured) -> bool:
+    """Whether ``err`` refused the proof for want of the server's nonce, and
+    the response carries one to retry with."""
+    challenge = meta.get(HEADER_WWW_AUTHENTICATE) or ""
+    return (
+        err.code == Code.UNAUTHENTICATED
+        and bool(meta.get(HEADER_DPOP_NONCE))
+        and NONCE_CHALLENGE in challenge
+    )
+
+
+def _stamp(
+    key: Any, base_url: str, header_capability: str, nonces: NonceState, ctx: RequestContext
+) -> None:
     headers = ctx.request_headers
     token = headers.get(header_capability)
     if not token:
         return
     method = ctx.method
     url = f"{base_url}/{method.service_name}/{method.name}"
-    headers[HEADER_DPOP] = dpop_proof(key, "POST", url, token)
+    headers[HEADER_DPOP] = dpop_proof(key, "POST", url, token, nonce=nonces.get())
+
+
+class DPoPNonceSync:
+    """Keeps the nonce each response brings, and sends a unary call refused
+    for want of a fresh one once more; the proof signer inside it signs the
+    second attempt with the new nonce."""
+
+    def __init__(self, nonces: NonceState) -> None:
+        self._nonces = nonces
+
+    def intercept_unary_sync(
+        self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
+    ) -> RES:
+        with captured() as meta:
+            try:
+                return call_next(request, ctx)
+            except ConnectError as err:
+                if not _challenged(err, meta):
+                    raise
+            finally:
+                self._nonces.adopt(meta)
+        with captured() as meta:
+            try:
+                return call_next(request, ctx)
+            finally:
+                self._nonces.adopt(meta)
+
+
+class DPoPNonceAsync:
+    """The async ``DPoPNonceSync``."""
+
+    def __init__(self, nonces: NonceState) -> None:
+        self._nonces = nonces
+
+    async def intercept_unary(
+        self,
+        call_next: Callable[[REQ, RequestContext], Awaitable[RES]],
+        request: REQ,
+        ctx: RequestContext,
+    ) -> RES:
+        with captured() as meta:
+            try:
+                return await call_next(request, ctx)
+            except ConnectError as err:
+                if not _challenged(err, meta):
+                    raise
+            finally:
+                self._nonces.adopt(meta)
+        with captured() as meta:
+            try:
+                return await call_next(request, ctx)
+            finally:
+                self._nonces.adopt(meta)
 
 
 class DPoPSync:
     """Signs a proof for each call, each attempt of a retried one included —
     the server refuses a proof it has already seen."""
 
-    def __init__(self, key: Any, base_url: str, header_capability: str) -> None:
+    def __init__(
+        self, key: Any, base_url: str, header_capability: str, nonces: NonceState
+    ) -> None:
         _jwk(key.public_key())  # refuse an unsupported key up front
         self._key, self._base_url, self._header = key, base_url, header_capability
+        self._nonces = nonces
 
     def on_start_sync(self, ctx: RequestContext) -> None:
-        _stamp(self._key, self._base_url, self._header, ctx)
+        _stamp(self._key, self._base_url, self._header, self._nonces, ctx)
 
     def on_end_sync(self, token: None, ctx: RequestContext, error: Exception | None) -> None:
         return None
@@ -123,12 +234,15 @@ class DPoPSync:
 class DPoPAsync:
     """The async ``DPoPSync``."""
 
-    def __init__(self, key: Any, base_url: str, header_capability: str) -> None:
+    def __init__(
+        self, key: Any, base_url: str, header_capability: str, nonces: NonceState
+    ) -> None:
         _jwk(key.public_key())
         self._key, self._base_url, self._header = key, base_url, header_capability
+        self._nonces = nonces
 
     async def on_start(self, ctx: RequestContext) -> None:
-        _stamp(self._key, self._base_url, self._header, ctx)
+        _stamp(self._key, self._base_url, self._header, self._nonces, ctx)
 
     async def on_end(self, token: None, ctx: RequestContext, error: Exception | None) -> None:
         return None

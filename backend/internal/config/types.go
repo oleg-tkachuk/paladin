@@ -658,6 +658,19 @@ type CapabilityWorker struct {
 	ExpiredFor time.Duration `yaml:"expired_for" json:"expired_for"`
 }
 
+// DPoPNonce configures DPoP server nonces. Every replica must share Key: a
+// nonce one replica issues is checked by whichever serves the next request.
+type DPoPNonce struct {
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Lifetime is how long a nonce is accepted.
+	Lifetime time.Duration `yaml:"lifetime" json:"lifetime"`
+	// Key signs and checks nonces; at least limes.HMACNonceKeyBytes long.
+	// Inline for dev only; KeySecret in real deployments.
+	Key string `yaml:"key" json:"key"`
+	// KeySecret resolves Key from a Kubernetes Secret at boot.
+	KeySecret *SecretRef `yaml:"key_secret" json:"key_secret"`
+}
+
 // APITokenWorker drops api_tokens rows whose expires_at is past
 // expired_for. Bounded table over time; verifier correctness is
 // unchanged (an expired token can never satisfy the time gate).
@@ -1158,6 +1171,10 @@ type Capability struct {
 	// EUR-denominated metering on a tenant whose capabilities are
 	// minted with the empty default.
 	ChargePerRequestUnit string `yaml:"charge_per_request_unit" json:"charge_per_request_unit"`
+
+	// DPoPNonce makes a key-bound capability's proof carry a nonce the server
+	// issued (RFC 9449 §8), bounding how long a captured proof stays usable.
+	DPoPNonce DPoPNonce `yaml:"dpop_nonce" json:"dpop_nonce"`
 
 	// RevocationCacheTTL is how long the verifier caches IsRevoked
 	// answers. Revocations normally clear every replica's cache at once
