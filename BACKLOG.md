@@ -805,24 +805,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   because of an implementation detail of one storage engine, and the shape the
   object and audit paths established is narrow-only for exactly that reason.
 
-### Hard-delete lock guards see only the current version's lock
-
-- **Status:** Deferred
-- **Reason:** `HardDeleteObject`, `ListHardDeletable`,
-  `HardDeleteObjectIfStillDeleted` and `PermanentDelete`'s pre-check look at
-  the lock on `objects.current_version_id` only. A legal hold or retention
-  window on an older version is still enforced — the cascade from `objects`
-  reaches the `object_locks` row and `object_locks_enforce_retention` refuses
-  (`TestLockOnANonCurrentVersionStillBlocks`) — but as a raw check_violation:
-  `PermanentDelete` answers Internal instead of FailedPrecondition, and the
-  lifecycle hard-deleter lists the object again on every sweep and logs a
-  failed delete each time.
-- **Definition of Done:** the guards consider every version's lock, so such an
-  object is refused with FailedPrecondition and skipped by
-  `ListHardDeletable`, with a test for each.
-- **Blockers:** none. Nothing is lost meanwhile; the cost is a wrong error
-  code and log noise.
-
 ## Configuration
 
 ### MCP `allow_write` was a dead knob that read as a security control

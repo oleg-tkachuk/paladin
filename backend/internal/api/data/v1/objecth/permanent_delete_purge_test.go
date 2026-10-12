@@ -32,9 +32,12 @@ import (
 type purgeRepo struct {
 	fakeObjectRepo
 	obj Object
+	// locks is what VersionLocks reports: one entry per locked version.
+	locks []ObjectLock
 
-	enqueued []PurgeDebt
-	settled  []uuid.UUID
+	hardDeletes int
+	enqueued    []PurgeDebt
+	settled     []uuid.UUID
 }
 
 func (r *purgeRepo) FindByName(context.Context, uuid.UUID, string, string) (Object, error) {
@@ -49,7 +52,17 @@ func (r *purgeRepo) ObjectLock(context.Context, uuid.UUID, uuid.UUID) (ObjectLoc
 	return ObjectLock{}, nil
 }
 
+func (r *purgeRepo) VersionLocks(context.Context, uuid.UUID, uuid.UUID) ([]ObjectLock, error) {
+	return r.locks, nil
+}
+
 func (r *purgeRepo) HardDeleteTx(context.Context, pgx.Tx, uuid.UUID, uuid.UUID, int64) error {
+	r.hardDeletes++
+	return nil
+}
+
+func (r *purgeRepo) HardDeleteWithBypassTx(context.Context, pgx.Tx, uuid.UUID, uuid.UUID, int64) error {
+	r.hardDeletes++
 	return nil
 }
 

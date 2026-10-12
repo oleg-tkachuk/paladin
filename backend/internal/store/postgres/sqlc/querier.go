@@ -403,11 +403,12 @@ type Querier interface {
 	// The collection's NAME comes back for the same reason: it is a segment of the
 	// object's storage path (<tenant>/<collection>/<path>), not a lookup key.
 	//
-	// Locks live on object_locks keyed by the object's CURRENT version, so the
-	// guard is a LEFT JOIN. legal_hold and any active retention window block the
-	// purge; the worker has no governance bypass, so GOVERNANCE is honoured here
-	// exactly like COMPLIANCE. Locked rows are skipped until the lock lapses.
-	// COALESCE on legal_hold because most objects have no lock row at all.
+	// Locks live on object_locks keyed by version, and purging the object takes
+	// every version with it, so a lock on ANY version skips the row — otherwise
+	// an older version's lock would refuse the delete on every sweep. legal_hold
+	// and any active retention window block the purge; the worker has no
+	// governance bypass, so GOVERNANCE is honoured here exactly like COMPLIANCE.
+	// Locked rows are skipped until the lock lapses.
 	ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, batchSize int32) ([]ListHardDeletableRow, error)
 	// Every tenant this subject belongs to, for the tenant switcher. Ordered by
 	// creation so the list is stable across calls rather than whatever the
@@ -419,6 +420,13 @@ type Querier interface {
 	// account, not a display trim. Pass after_created_at='-infinity' for the
 	// first page.
 	ListMembershipsBySubject(ctx context.Context, subject string, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]User, error)
+	// Every lock row on any version of one object, for the permanent-delete
+	// pre-check. Deleting the object removes all its versions, so a lock on an
+	// older version blocks the delete as surely as one on the current version;
+	// the caller decides which rows are still active (legal hold, retention
+	// window, governance bypass). GetObjectLockState stays the current version's
+	// lock — that is what GetObject describes.
+	ListObjectVersionLocks(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) ([]ListObjectVersionLocksRow, error)
 	// Newest first. Cursor: (created_at, id).
 	ListObjectVersions(ctx context.Context, objectID pgtype.UUID, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListObjectVersionsRow, error)
 	// The full CEL filter is still applied by the caller post-load; the
