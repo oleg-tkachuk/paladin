@@ -33,8 +33,8 @@ readonly TLS_EXTRA=tls
 # What the tests themselves import, at the versions the SDK's lock holds.
 # Not the whole dev group: its generator pins protobuf, and its optional
 # google-crc32c would hide the path where that extra is absent. biscuit-python
-# is installed only where it has a wheel (before 3.14); the 3.14 cells run the
-# path where the biscuit extra is absent.
+# is installed only where it has a wheel (before 3.14); the 3.14 and 3.15 cells
+# run the path where the biscuit extra is absent.
 readonly TEST_DEPS='^(pytest|cryptography|biscuit-python|protovalidate|protobuf-py|protobuf-py-ext)=='
 
 usage() {
