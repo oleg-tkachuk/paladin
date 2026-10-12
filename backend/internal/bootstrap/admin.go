@@ -181,6 +181,39 @@ func validateConfig(cfg config.BootstrapAdmin) error {
 	return nil
 }
 
+// Per-mode minimum password lengths when bootstrap.admin.min_password_length
+// is unset: production-style in release, lax in debug and test so dev
+// fixtures don't trip the gate.
+const (
+	// releaseMode is the runtime mode with production-style defaults; an
+	// empty mode means the same.
+	releaseMode = "release"
+
+	releaseMinPasswordLength = 16
+	devMinPasswordLength     = 8
+)
+
+// ErrPasswordTooShort is returned when the bootstrap password is shorter than
+// the minimum in force.
+var ErrPasswordTooShort = fmt.Errorf(
+	"bootstrap.admin: password is shorter than bootstrap.admin.min_password_length "+
+		"(%d in release mode and %d otherwise when unset)",
+	releaseMinPasswordLength, devMinPasswordLength,
+)
+
+// minPasswordLength is the configured minimum, or the mode's default when the
+// configuration leaves it unset.
+func minPasswordLength(configured int, mode string) int {
+	switch {
+	case configured != 0:
+		return configured
+	case mode == "" || mode == releaseMode:
+		return releaseMinPasswordLength
+	default:
+		return devMinPasswordLength
+	}
+}
+
 // readPassword pulls the password out of cfg.Password — populated either
 // inline (debug) or by the K8sSecretResolver from cfg.PasswordSecret. The
 // caller has already cleared PasswordSecret by the time this runs. The
@@ -194,19 +227,10 @@ func readPassword(cfg config.BootstrapAdmin, mode string) (string, error) {
 				"bootstrap.admin.password inline)",
 		)
 	}
-	min := cfg.MinPasswordLength
-	if min == 0 {
-		// Per-mode defaults: production-style length in release, lax in
-		// debug/test so dev fixtures don't trip the gate.
-		if mode == "" || mode == "release" {
-			min = 16
-		} else {
-			min = 8
-		}
-	}
-	if len(pw) < min {
-		return "", fmt.Errorf("bootstrap.admin: password is shorter than %d characters (mode=%s)",
-			min, mode)
+	if len(pw) < minPasswordLength(cfg.MinPasswordLength, mode) {
+		// The configured minimum stays out of the message: it is read from
+		// the password settings, and the error reaches the log.
+		return "", ErrPasswordTooShort
 	}
 	return pw, nil
 }
