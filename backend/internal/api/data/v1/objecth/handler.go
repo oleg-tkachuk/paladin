@@ -76,7 +76,8 @@ type Storage interface {
 	PresignPost(ctx context.Context, args PresignPostArgs) (action string, fields map[string]string, expiresAt time.Time, err error)
 	PresignGet(ctx context.Context, args PresignGetArgs) (url string, headers map[string]string, expiresAt time.Time, err error)
 	// Head reports the stored object; checksum is its checksum under
-	// checksumAlgo, "" when the store keeps none for that algorithm.
+	// checksumAlgo, "" when the store keeps none for that algorithm. An
+	// object the backend answered is absent is ErrStoredObjectNotFound.
 	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, checksumAlgo string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
 	CopyObject(ctx context.Context, src, dst Location) error
 	// PublicURL is where an object in a public collection is read unsigned
@@ -86,6 +87,15 @@ type Storage interface {
 	// DeleteObject is optional — for permanent deletes only.
 	DeleteObject(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) error
 }
+
+// ErrStoredObjectNotFound is Storage.Head's answer when the backend was
+// reached and holds nothing at the key. An unreachable or refusing backend is
+// a different error: only this one may decide anything terminal.
+var ErrStoredObjectNotFound = errors.New("storage: object not found")
+
+// ErrObjectBytesMissing refuses to restore an object whose bytes are gone
+// from its bucket: restored, it would be listed and fail every download.
+var ErrObjectBytesMissing = errors.New("the object's bytes are gone from its bucket; put them back at its key, or delete it permanently")
 
 // BucketMeta is the minimal projection of bucket metadata the object
 // handler needs at promote / delete time. Returned by LookupBucketMeta.
@@ -1817,6 +1827,9 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	// AND the most recent version is a delete-marker, drop that pointer back
 	// to the previous non-marker version. This makes RestoreObject a single
 	// "make visible again" affordance whether or not versioning is on.
+	if err := h.assertBytesPresent(ctx, tenantID, obj); err != nil {
+		return nil, err
+	}
 	if err := h.versions.UnsetDeleteMarkerCurrent(ctx, obj); err != nil {
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("restore version pointer: %w", err))
 	}
@@ -2085,6 +2098,26 @@ func mapCreateErr(err error) error {
 	return apiutil.MapError(err)
 }
 
+// assertBytesPresent HEADs a trashed object before it is restored. Its bytes
+// may have been deleted straight from the bucket, which moves it to the trash
+// through a storage event; a HEAD that cannot reach the backend is
+// unavailable, not a refusal.
+func (h *Handler) assertBytesPresent(ctx context.Context, tenantID uuid.UUID, obj Object) error {
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false) // restore is a row flip: a read-only backend allows it
+	if err != nil {
+		return MapResolveErr(err)
+	}
+	_, _, _, _, err = h.storage.Head(ctx, backendID, bucket, tenantID, obj.Collection, obj.Key, obj.ChecksumAlgo)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, ErrStoredObjectNotFound):
+		return apiutil.MapError(ErrObjectBytesMissing)
+	default:
+		return rpcerr.New(connect.CodeUnavailable, fmt.Errorf("check the object's bytes: %w", err))
+	}
+}
+
 // ErrVersionMismatch is returned by Repository implementations when an
 // optimistic-concurrency update fails (resource_version did not match).
 var ErrVersionMismatch = errors.New("resource_version mismatch")
@@ -2098,4 +2131,5 @@ func init() {
 	apiutil.RegisterError(ErrBackendDisabled, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_BACKEND_DISABLED)
 	apiutil.RegisterError(ErrBackendReadOnly, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_BACKEND_READ_ONLY)
 	apiutil.RegisterError(ErrVersionNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_OBJECT_VERSION_NOT_FOUND)
+	apiutil.RegisterError(ErrObjectBytesMissing, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_OBJECT_BYTES_MISSING)
 }

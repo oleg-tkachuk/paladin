@@ -6,6 +6,8 @@ import (
 
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 )
 
 // This file holds the adapter's exported error contract.
@@ -34,7 +36,10 @@ import (
 // stay a plain error and be retried. See notFound for the classification, and
 // Client.Head for the bucket-reachability check that qualifies its one
 // undecidable case before this sentinel is returned.
-var ErrObjectNotFound = errors.New("s3adapter: object not found")
+//
+// It is objecth.ErrStoredObjectNotFound, the answer the data plane's Storage
+// seam promises, so a caller on either side of the seam matches it.
+var ErrObjectNotFound = objecth.ErrStoredObjectNotFound
 
 // codeNoSuchBucket is the S3 error code for a bucket the backend does not have.
 const codeNoSuchBucket = "NoSuchBucket"

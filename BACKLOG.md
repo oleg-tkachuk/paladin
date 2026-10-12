@@ -498,19 +498,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
     SeaweedFS instances for exactly this.
 - **Blockers:** scope decision — same-cloud only vs. cross-cloud.
 
-### Storage-ingest delete events are only logged
-
-- **Status:** Deferred
-- **Reason:** [internal/eventingest/handler.go](backend/internal/eventingest/handler.go)
-  promotes on an upload event but logs a delete event and returns; an object
-  deleted straight from the bucket keeps its AVAILABLE row until the
-  reconciler finds the bytes missing.
-- **Definition of Done:** a delete event soft-deletes the matching object row
-  through the state machine (idempotent on redelivery), with handler and
-  integration tests.
-- **Blockers:** none; needs the delete-cascade semantics in
-  [docs/deletion-semantics.md](docs/deletion-semantics.md) applied to this path.
-
 ### `Object.placement` is never populated
 
 - **Status:** Deferred

@@ -81,6 +81,10 @@ const (
 	ErrorReason_ERROR_REASON_BUCKET_NOT_ON_BACKEND ErrorReason = 30
 	// A delete on the backend of a bucket Paladin did not create there.
 	ErrorReason_ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN ErrorReason = 31
+	// RestoreObject on an object whose bytes are gone from the storage backend:
+	// deleted straight from the bucket. Putting them back at the object's key
+	// lets the restore succeed; otherwise delete it permanently.
+	ErrorReason_ERROR_REASON_OBJECT_BYTES_MISSING ErrorReason = 51
 	// A presented capability was refused. Each names the capability module's
 	// reason of the same spelling. The capability's own refusals are permanent:
 	// the same request with the same capability is refused for as long as the
@@ -155,6 +159,7 @@ var (
 		29: "ERROR_REASON_BUCKET_RESERVED",
 		30: "ERROR_REASON_BUCKET_NOT_ON_BACKEND",
 		31: "ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN",
+		51: "ERROR_REASON_OBJECT_BYTES_MISSING",
 		32: "ERROR_REASON_CAPABILITY_INVALID_SIGNATURE",
 		33: "ERROR_REASON_CAPABILITY_KEYS_UNAVAILABLE",
 		34: "ERROR_REASON_CAPABILITY_EXPIRED",
@@ -208,6 +213,7 @@ var (
 		"ERROR_REASON_BUCKET_RESERVED":                     29,
 		"ERROR_REASON_BUCKET_NOT_ON_BACKEND":               30,
 		"ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN":       31,
+		"ERROR_REASON_OBJECT_BYTES_MISSING":                51,
 		"ERROR_REASON_CAPABILITY_INVALID_SIGNATURE":        32,
 		"ERROR_REASON_CAPABILITY_KEYS_UNAVAILABLE":         33,
 		"ERROR_REASON_CAPABILITY_EXPIRED":                  34,
@@ -261,7 +267,7 @@ var File_paladin_common_v1_error_reason_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\x9b\x10\n" +
+	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\xc2\x10\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ERROR_REASON_NOT_FOUND\x10\x01\x12!\n" +
@@ -295,7 +301,8 @@ const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"%ERROR_REASON_BUCKET_EXISTS_ON_BACKEND\x10\x1c\x12 \n" +
 	"\x1cERROR_REASON_BUCKET_RESERVED\x10\x1d\x12&\n" +
 	"\"ERROR_REASON_BUCKET_NOT_ON_BACKEND\x10\x1e\x12.\n" +
-	"*ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN\x10\x1f\x12-\n" +
+	"*ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN\x10\x1f\x12%\n" +
+	"!ERROR_REASON_OBJECT_BYTES_MISSING\x103\x12-\n" +
 	")ERROR_REASON_CAPABILITY_INVALID_SIGNATURE\x10 \x12,\n" +
 	"(ERROR_REASON_CAPABILITY_KEYS_UNAVAILABLE\x10!\x12#\n" +
 	"\x1fERROR_REASON_CAPABILITY_EXPIRED\x10\"\x12)\n" +

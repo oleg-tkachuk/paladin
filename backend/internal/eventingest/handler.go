@@ -73,11 +73,26 @@ type Promoter interface {
 	PromoteToAvailableInTx(ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source, onPromoted func(ctx context.Context, tx pgx.Tx) error) (bool, error)
 }
 
+// StorageProbe HEADs an object's bytes where its row places them now.
+// Satisfied by *adapters.ReconcilerProbe.
+type StorageProbe interface {
+	HeadByObjectID(ctx context.Context, objectID uuid.UUID) (etag string, sizeBytes int64, checksum, sequencer string, found bool, err error)
+}
+
+// SoftDeleter is the slice of *statemachine.Transitioner a delete event uses.
+type SoftDeleter interface {
+	SoftDeleteInTx(ctx context.Context, objectID uuid.UUID, resourceVersion int64, onDeleted func(ctx context.Context, tx pgx.Tx) error) error
+}
+
 type PromoteHandler struct {
 	Lookup       ObjectLookup
 	Transitioner Promoter
 	Events       EventProducer
 	Logger       *zap.Logger
+	// Probe and Deleter settle delete events. Without both, a delete event
+	// is logged and left alone.
+	Probe   StorageProbe
+	Deleter SoftDeleter
 	// Tenants, when set, skips the events of a tenant in the trash: it is
 	// frozen, and the reconciler settles its pending uploads on restore.
 	Tenants auth.TenantStateReader
@@ -211,18 +226,89 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		return nil
 
 	case EventTypeDeleted:
-		// Logged only: the row is not soft-deleted here, so the
-		// reconciler settles it once the bytes are gone (BACKLOG:
-		// storage-ingest delete events).
-		logger.Info("delete event noted; soft-delete wiring deferred",
-			zap.String("object_id", objectID.String()),
-		)
-		return nil
+		return h.settleDeleted(ctx, logger, ev, row.Object, collection, key)
 
 	default:
 		logger.Debug("unknown event type; nothing to do")
 		return nil
 	}
+}
+
+// eventSourceStorage marks an event Paladin emits because the storage
+// backend reported a change, rather than because a client called the API.
+const eventSourceStorage = "storage_event"
+
+// settleDeleted moves an object whose bytes were deleted straight from the
+// bucket to the trash. The event is a hint, not proof: the physical key
+// carries no object id, so the key may belong to a newer row (a re-upload),
+// to a row whose bytes have moved (a storage migration deleting its source
+// copy), or to a row Paladin itself is deleting. Only an AVAILABLE row whose
+// bytes a HEAD at its current placement cannot find is changed.
+//
+// It goes to the trash rather than away, so the audit trail keeps it and a
+// restore succeeds if the bytes are put back; RestoreObject refuses while
+// they are missing. A public object goes to the trash too: the rule against
+// trashing one exists because a soft delete leaves its bytes served, and
+// these are gone. No delete marker is written in a versioned bucket: the
+// versions share the physical key, so the store's delete took them all.
+func (h *PromoteHandler) settleDeleted(ctx context.Context, logger *zap.Logger, ev CloudEvent, obj sqlc.Object, collection, key string) error {
+	objectID := uuid.UUID(obj.ID.Bytes)
+	logger = logger.With(zap.String("object_id", objectID.String()))
+	if h.Probe == nil || h.Deleter == nil {
+		logger.Info("delete event noted; no storage probe wired")
+		return nil
+	}
+	if obj.State != sqlc.ObjectStateAVAILABLE {
+		// A PENDING or FAILED row's bytes are Paladin's own to discard (the
+		// reconciler, a refused multipart), and its delete is no news.
+		logger.Debug("delete event for an object that is not available; skipping", zap.String("state", string(obj.State)))
+		return nil
+	}
+	_, _, _, _, found, err := h.Probe.HeadByObjectID(ctx, objectID)
+	if err != nil {
+		// The store could not be asked; a guess either way is wrong.
+		return fmt.Errorf("head object: %w", err)
+	}
+	if found {
+		logger.Debug("delete event, but the object's bytes are where its row places them; skipping")
+		return nil
+	}
+	resourceName := h.objectResourceName(ctx, ev.SubjectFields.TenantID, collection, key)
+	err = h.Deleter.SoftDeleteInTx(ctx, objectID, obj.ResourceVersion, func(ctx context.Context, tx pgx.Tx) error {
+		return h.emitDeleted(ctx, tx, ev, resourceName, collection, key, objectID)
+	})
+	if err != nil {
+		// ErrConflict included: the row changed since it was read, and the
+		// next attempt reads it again.
+		return fmt.Errorf("soft delete object: %w", err)
+	}
+	logger.Info("object's bytes are gone from the store; moved to the trash")
+	return nil
+}
+
+// emitDeleted enqueues paladin.object.deleted on the soft-delete tx, with the
+// payload the data-plane DeleteObject sends for a soft delete plus the source
+// that tells the two apart. nil-safe like emitUploaded.
+func (h *PromoteHandler) emitDeleted(ctx context.Context, tx pgx.Tx, ev CloudEvent, resourceName, collection, key string, objectID uuid.UUID) error {
+	if h.Events == nil {
+		return nil
+	}
+	_, err := h.Events.DispatchTx(ctx, tx, ev.SubjectFields.TenantID, worker.Event{
+		Type:         string(EventTypeDeleted),
+		At:           time.Now().UTC(),
+		TenantID:     ev.SubjectFields.TenantID,
+		ResourceName: resourceName,
+		Payload: map[string]any{
+			"tenant_id":    ev.SubjectFields.TenantID,
+			"collection":   collection,
+			"key":          key,
+			"object_id":    objectID.String(),
+			"mode":         "soft",
+			"source":       eventSourceStorage,
+			"event_source": ev.Source,
+		},
+	})
+	return err
 }
 
 // emitUploaded enqueues the paladin.object.uploaded outbox rows on the promote
@@ -249,7 +335,7 @@ func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEv
 			"object_id":    objectID.String(),
 			"size_bytes":   ev.SubjectFields.SizeBytes,
 			"etag":         ev.SubjectFields.Etag,
-			"source":       "storage_event",
+			"source":       eventSourceStorage,
 			"event_source": ev.Source,
 		},
 	})

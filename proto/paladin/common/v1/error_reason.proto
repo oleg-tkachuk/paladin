@@ -63,6 +63,10 @@ enum ErrorReason {
   ERROR_REASON_BUCKET_NOT_ON_BACKEND = 30;
   // A delete on the backend of a bucket Paladin did not create there.
   ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN = 31;
+  // RestoreObject on an object whose bytes are gone from the storage backend:
+  // deleted straight from the bucket. Putting them back at the object's key
+  // lets the restore succeed; otherwise delete it permanently.
+  ERROR_REASON_OBJECT_BYTES_MISSING = 51;
 
   // A presented capability was refused. Each names the capability module's
   // reason of the same spelling. The capability's own refusals are permanent:
