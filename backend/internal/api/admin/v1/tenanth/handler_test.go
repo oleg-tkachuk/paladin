@@ -948,6 +948,24 @@ func TestMigrateTenantStorageLayout(t *testing.T) {
 		wantCode(t, err, connect.CodeFailedPrecondition)
 	})
 
+	// Only public collections: they stay in their bucket, so nothing moves and
+	// nothing starts.
+	t.Run("no private collections → failed precondition, nothing started", func(t *testing.T) {
+		fr := &fakeRepo{
+			getFn:          sharedTenant,
+			sourceBucketFn: func(context.Context, uuid.UUID) (string, string, error) { return "", "", ErrNoCollectionsToMigrate },
+			startMigrationFn: func(context.Context, StartStorageMigrationArgs) (StorageMigration, error) {
+				t.Error("a migration was started for a tenant with nothing to migrate")
+				return StorageMigration{}, nil
+			},
+		}
+		_, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "", 0)
+		wantCode(t, err, connect.CodeFailedPrecondition)
+		if !errors.Is(err, ErrNoCollectionsToMigrate) {
+			t.Errorf("err = %v, want it to carry ErrNoCollectionsToMigrate", err)
+		}
+	})
+
 	t.Run("migration already exists → failed precondition", func(t *testing.T) {
 		fr := &fakeRepo{
 			getFn:          sharedTenant,

@@ -1265,17 +1265,34 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   destination's multipart writer) for a 12 MiB object, asserting size + a
   byte-for-byte sha256 match on the destination and that the source is retained.
   This closes the "cross-backend proven end-to-end" gap the unit tests couldn't.
+- **Shipped — public collections stay put:** the job skips public collections
+  (ADR-0027) in every phase — the source-bucket lookup, the object count and
+  list behind copy / verify / cleanup, and the rebind all leave them out — so
+  they keep their public bucket and their URLs while the tenant's private
+  collections move and the layout flips to `dedicated`, the same state a
+  tenant created `dedicated` is in once it publishes. A tenant with only
+  public collections is refused up front (`FailedPrecondition`, nothing to
+  migrate). Before, such a tenant's job copied its public objects into the
+  private bucket and then retried a rebind the schema refuses
+  (`collections_public_bucket_fixed`) every tick, and a public collection
+  created mid-migration stalled the copy on objects absent from the source
+  bucket. A rebind the schema still refuses now fails the migration instead
+  of retrying forever. Integration-tested
+  (`tests/integration/components/storage_migration_public_test.go`).
 - **Definition of Done (remaining — Phase 3 hardening):**
   - Live cross-backend run on the dev cluster (infra-dependent — needs the
     `secondary`/SeaweedFS backend back online; the integration test above is the
     code-side proof).
-  - Public collections stay where they are: the schema refuses to rebind
-    one (`collections_public_bucket_fixed`, ADR-0027), since its objects'
-    URLs name the bucket. The job skips them, or refuses a tenant that has
-    any before it starts, rather than failing halfway through the rebind.
 - **Deferred (smaller follow-ups):** per-tenant backend selection at
   CreateTenant (currently the config default backend); org-prefix in the
-  derived bucket name for cross-account global uniqueness.
+  derived bucket name for cross-account global uniqueness; a `failed`
+  migration cannot be retried — its `tenant_storage_migrations` row stays, so
+  `MigrateTenantStorageLayout` answers "already exists", and nothing deletes
+  the row. Clearing it by hand does not help either: `StartStorageMigration`
+  claims to tolerate the dedicated bucket already existing, but the
+  unique-violation from `CreateBucketV2` aborts its transaction, so the
+  following insert fails with 25P02 (needs a savepoint or
+  `ON CONFLICT DO NOTHING`, plus a retry/reset path for a failed row).
 - **Note — dev cluster object store is Garage (switched off SeaweedFS):**
   the `primary` backend now points at **Garage** (`garage-s3.storage:3900`,
   bucket `paladin-primary`, presigned via the `s3-garage.paladin.local` Traefik
