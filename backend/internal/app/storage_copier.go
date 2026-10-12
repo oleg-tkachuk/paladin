@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
@@ -24,9 +26,15 @@ func (c storageCopier) DeleteObject(ctx context.Context, loc worker.CopyLocation
 }
 
 // HeadObject returns the physical size of one object — used by the verify phase
-// to confirm each copy landed in the target bucket.
+// to confirm each copy landed in the target bucket, and by the rollback to tell
+// whether the target holds an object. A confirmed miss (the backend's 404 with
+// the bucket there) is reported as worker.ErrObjectMissing, which the rollback
+// acts on; anything else stays an error it retries.
 func (c storageCopier) HeadObject(ctx context.Context, loc worker.CopyLocation) (int64, error) {
 	_, size, _, _, err := c.s.Head(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.Collection, loc.Key, "")
+	if errors.Is(err, objecth.ErrStoredObjectNotFound) {
+		return size, fmt.Errorf("%w: %w", worker.ErrObjectMissing, err)
+	}
 	return size, err
 }
 

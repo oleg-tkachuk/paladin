@@ -39,6 +39,34 @@ func (q *Queries) AdvanceStorageMigrationCopy(ctx context.Context, objectsCopied
 	return result.RowsAffected(), nil
 }
 
+const advanceStorageMigrationRollback = `-- name: AdvanceStorageMigrationRollback :execrows
+UPDATE tenant_storage_migrations
+SET rollback_cursor_at = $1,
+    rollback_cursor_id = $2,
+    updated_at         = now()
+WHERE tenant_id = $3 AND state = $4
+  AND attempts = $5
+  AND (rollback_cursor_at IS NULL
+       OR ROW(rollback_cursor_at, rollback_cursor_id)
+          <= ROW($1::timestamptz, $2::uuid))
+`
+
+// Records the rollback's resume cursor after a batch. It only moves forward:
+// a stale batch reporting an earlier cursor changes nothing.
+func (q *Queries) AdvanceStorageMigrationRollback(ctx context.Context, cursorAt pgtype.Timestamptz, cursorID pgtype.UUID, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceStorageMigrationRollback,
+		cursorAt,
+		cursorID,
+		tenantID,
+		fromState,
+		attempts,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const completeStorageMigration = `-- name: CompleteStorageMigration :execrows
 UPDATE tenant_storage_migrations
 SET state = $1, error = '', completed_at = now(),
@@ -76,7 +104,7 @@ CROSS JOIN buckets tb
 JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE ssb.name = $2 AND sb.name = $3
   AND tsb.name = $4 AND tb.name = $5
-RETURNING id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at
+RETURNING id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at, rebound_at, rollback_cursor_at, rollback_cursor_id
 `
 
 // ADR-0015 Phase 3: shared->dedicated storage migration copy job.
@@ -108,6 +136,9 @@ func (q *Queries) CreateStorageMigration(ctx context.Context, tenantID pgtype.UU
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.ReboundAt,
+		&i.RollbackCursorAt,
+		&i.RollbackCursorID,
 	)
 	return i, err
 }
@@ -152,8 +183,31 @@ func (q *Queries) FailStorageMigration(ctx context.Context, toState string, erro
 	return result.RowsAffected(), nil
 }
 
+const finishStorageMigrationRollback = `-- name: FinishStorageMigrationRollback :execrows
+UPDATE tenant_storage_migrations
+SET state = $1, updated_at = now()
+WHERE tenant_id = $2 AND state = $3
+  AND attempts = $4
+`
+
+// rolling_back -> failed, in the transaction that rebinds the tenant back.
+// The verify error stays, and attempts too: the failure was counted when the
+// rollback started.
+func (q *Queries) FinishStorageMigrationRollback(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	result, err := q.db.Exec(ctx, finishStorageMigrationRollback,
+		toState,
+		tenantID,
+		fromState,
+		attempts,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getStorageMigration = `-- name: GetStorageMigration :one
-SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at,
+SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id,
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
        tsb.name AS target_backend_name, tb.name AS target_bucket_name
 FROM tenant_storage_migrations m
@@ -197,6 +251,9 @@ func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID)
 		&i.TenantStorageMigration.CreatedAt,
 		&i.TenantStorageMigration.UpdatedAt,
 		&i.TenantStorageMigration.CompletedAt,
+		&i.TenantStorageMigration.ReboundAt,
+		&i.TenantStorageMigration.RollbackCursorAt,
+		&i.TenantStorageMigration.RollbackCursorID,
 		&i.SourceBackendName,
 		&i.SourceBucketName,
 		&i.TargetBackendName,
@@ -225,7 +282,7 @@ func (q *Queries) LatestStorageMigration(ctx context.Context, tenantID pgtype.UU
 }
 
 const listActiveStorageMigrations = `-- name: ListActiveStorageMigrations :many
-SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at,
+SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id,
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
        tsb.name AS target_backend_name, tb.name AS target_bucket_name
 FROM tenant_storage_migrations m
@@ -249,7 +306,8 @@ type ListActiveStorageMigrationsRow struct {
 }
 
 // Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
-// still active — the worker must run retention-gated cleanup on it.
+// still active — the worker must run retention-gated cleanup on it — and so
+// is 'rolling_back', which the worker must finish rolling back.
 func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]ListActiveStorageMigrationsRow, error) {
 	rows, err := q.db.Query(ctx, listActiveStorageMigrations, limitCount)
 	if err != nil {
@@ -277,6 +335,9 @@ func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount in
 			&i.TenantStorageMigration.CreatedAt,
 			&i.TenantStorageMigration.UpdatedAt,
 			&i.TenantStorageMigration.CompletedAt,
+			&i.TenantStorageMigration.ReboundAt,
+			&i.TenantStorageMigration.RollbackCursorAt,
+			&i.TenantStorageMigration.RollbackCursorID,
 			&i.SourceBackendName,
 			&i.SourceBucketName,
 			&i.TargetBackendName,
@@ -352,6 +413,30 @@ func (q *Queries) MarkStorageMigrationCleaned(ctx context.Context, toState strin
 	return result.RowsAffected(), nil
 }
 
+const markStorageMigrationRebound = `-- name: MarkStorageMigrationRebound :execrows
+
+UPDATE tenant_storage_migrations
+SET rebound_at = now(), updated_at = now()
+WHERE tenant_id = $1 AND state = $2
+  AND attempts = $3
+`
+
+// Rolling a migration back (ADR-0015): a physical verify that fails after the
+// rebind moves the migration to 'rolling_back'; the worker copies the objects
+// written since the rebind back to the source bucket, then rebinds the tenant
+// to it and leaves the migration 'failed', retryable like any other failure.
+// Run in the rebind transaction: rebound_at is that transaction's now(), its
+// START time, so it is no later than any moment a writer could have seen the
+// tenant rebound. Every object written into the dedicated bucket has an
+// updated_at at or after it.
+func (q *Queries) MarkStorageMigrationRebound(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	result, err := q.db.Exec(ctx, markStorageMigrationRebound, tenantID, fromState, attempts)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const migrationCountTenantObjects = `-- name: MigrationCountTenantObjects :one
 SELECT count(*)
 FROM objects o
@@ -365,6 +450,67 @@ func (q *Queries) MigrationCountTenantObjects(ctx context.Context, tenantID pgty
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const migrationListObjectsWrittenSince = `-- name: MigrationListObjectsWrittenSince :many
+SELECT o.id, o.updated_at, c.name AS collection_name, o.path,
+       COALESCE(o.size_bytes, 0)::bigint AS size_bytes
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1
+  AND o.state = 'AVAILABLE'
+  AND NOT c.public_read
+  AND ROW(o.updated_at, o.id) > ROW($2::timestamptz,
+                                    $3::uuid)
+ORDER BY o.updated_at, o.id
+LIMIT $4::int
+`
+
+type MigrationListObjectsWrittenSinceRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	CollectionName string             `json:"collection_name"`
+	Path           string             `json:"path"`
+	SizeBytes      int64              `json:"size_bytes"`
+}
+
+// The objects the rollback copies back: AVAILABLE, in a private collection
+// (public ones never moved, ADR-0027), and written at or after the cursor —
+// keyset on (updated_at, id), which the worker starts at (rebound_at, the
+// nil uuid). updated_at, not created_at: the bump_resource_version trigger
+// sets it on every UPDATE and the insert defaults it, so it covers a new
+// object, a promote, a storage-event overwrite and a restore alike. An object
+// written again after the cursor passed it moves back ahead of the cursor
+// and is copied again.
+func (q *Queries) MigrationListObjectsWrittenSince(ctx context.Context, tenantID pgtype.UUID, afterAt pgtype.Timestamptz, afterID pgtype.UUID, limitCount int32) ([]MigrationListObjectsWrittenSinceRow, error) {
+	rows, err := q.db.Query(ctx, migrationListObjectsWrittenSince,
+		tenantID,
+		afterAt,
+		afterID,
+		limitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MigrationListObjectsWrittenSinceRow
+	for rows.Next() {
+		var i MigrationListObjectsWrittenSinceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UpdatedAt,
+			&i.CollectionName,
+			&i.Path,
+			&i.SizeBytes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const migrationListTenantCollections = `-- name: MigrationListTenantCollections :many
@@ -442,6 +588,30 @@ func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtyp
 	return items, nil
 }
 
+const migrationObjectsWrittenSinceExist = `-- name: MigrationObjectsWrittenSinceExist :one
+SELECT EXISTS (
+    SELECT 1
+    FROM objects o
+    JOIN collections c ON c.id = o.collection_id
+    WHERE o.tenant_id = $1
+      AND o.state = 'AVAILABLE'
+      AND NOT c.public_read
+      AND ROW(o.updated_at, o.id) > ROW($2::timestamptz,
+                                        $3::uuid)
+)::bool
+`
+
+// Whether any object MigrationListObjectsWrittenSince would still return past
+// the cursor. The rebind back asks it under its lock: an object written since
+// the worker's last batch is still only in the dedicated bucket, and
+// rebinding before it is copied would lose it.
+func (q *Queries) MigrationObjectsWrittenSinceExist(ctx context.Context, tenantID pgtype.UUID, afterAt pgtype.Timestamptz, afterID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, migrationObjectsWrittenSinceExist, tenantID, afterAt, afterID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const resetFailedTargetBucketProvision = `-- name: ResetFailedTargetBucketProvision :exec
 UPDATE buckets
 SET provision_state = 'pending', provision_error = '', provision_attempts = 0,
@@ -470,6 +640,9 @@ SET source_bucket_id          = sb.id,
     cleanup_after             = NULL,
     completed_at              = NULL,
     cleaned_at                = NULL,
+    rebound_at                = NULL,
+    rollback_cursor_at        = NULL,
+    rollback_cursor_id        = NULL,
     updated_at                = now()
 FROM buckets sb
 JOIN storage_backends ssb ON ssb.id = sb.backend_id
@@ -478,7 +651,7 @@ JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE m.id = $2 AND m.state = 'failed'
   AND ssb.name = $3 AND sb.name = $4
   AND tsb.name = $5 AND tb.name = $6
-RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at
+RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id
 `
 
 // Starts a failed migration over from the beginning, in place: the row is the
@@ -514,6 +687,60 @@ func (q *Queries) RetryFailedStorageMigration(ctx context.Context, cleanupRetent
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
+		&i.ReboundAt,
+		&i.RollbackCursorAt,
+		&i.RollbackCursorID,
+	)
+	return i, err
+}
+
+const rollBackStuckStorageMigration = `-- name: RollBackStuckStorageMigration :one
+UPDATE tenant_storage_migrations m
+SET state              = 'rolling_back',
+    rebound_at         = COALESCE(m.rebound_at,
+                                  CASE WHEN d.set_by = 'storage-migration' THEN d.set_at
+                                       ELSE m.created_at END),
+    rollback_cursor_at = NULL,
+    rollback_cursor_id = NULL,
+    updated_at         = now()
+FROM tenant_default_bindings d
+WHERE m.id = $1 AND m.state = 'failed'
+  AND d.tenant_id = m.tenant_id AND d.bucket_id = m.target_bucket_id
+RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id
+`
+
+// A migration that failed its verify before rollbacks existed: 'failed', with
+// the tenant still on the dedicated bucket. Moves it to 'rolling_back' for
+// the worker, only while it is still 'failed' and the tenant's default
+// binding still names its target bucket — the tenant serves from where this
+// migration put it. Such a row has no rebound_at: the default binding's
+// set_at is the rebind transaction's now() when the migration set it (which
+// set_by records), and the migration's own creation is the fallback, earlier
+// than any rebind of it.
+func (q *Queries) RollBackStuckStorageMigration(ctx context.Context, id pgtype.UUID) (TenantStorageMigration, error) {
+	row := q.db.QueryRow(ctx, rollBackStuckStorageMigration, id)
+	var i TenantStorageMigration
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.SourceBucketID,
+		&i.TargetBucketID,
+		&i.State,
+		&i.ObjectsTotal,
+		&i.ObjectsCopied,
+		&i.CursorCollection,
+		&i.CursorPath,
+		&i.Error,
+		&i.Attempts,
+		&i.CleanupRetentionSeconds,
+		&i.CleanupAfter,
+		&i.CleanedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.ReboundAt,
+		&i.RollbackCursorAt,
+		&i.RollbackCursorID,
 	)
 	return i, err
 }
@@ -579,6 +806,31 @@ WHERE id = $1
 
 func (q *Queries) SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, storageLayout TenantStorageLayout) (int64, error) {
 	result, err := q.db.Exec(ctx, setTenantStorageLayout, iD, storageLayout)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const startStorageMigrationRollback = `-- name: StartStorageMigrationRollback :execrows
+UPDATE tenant_storage_migrations
+SET state = $1, error = $2, attempts = attempts + 1,
+    rollback_cursor_at = NULL, rollback_cursor_id = NULL, updated_at = now()
+WHERE tenant_id = $3 AND state = $4
+  AND attempts = $5
+`
+
+// verifying -> rolling_back. The verify failure is recorded and counted here,
+// where it happened; the rollback that follows keeps both. The cursor starts
+// empty: the worker begins at rebound_at.
+func (q *Queries) StartStorageMigrationRollback(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	result, err := q.db.Exec(ctx, startStorageMigrationRollback,
+		toState,
+		error,
+		tenantID,
+		fromState,
+		attempts,
+	)
 	if err != nil {
 		return 0, err
 	}

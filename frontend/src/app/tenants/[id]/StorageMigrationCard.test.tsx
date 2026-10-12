@@ -69,6 +69,28 @@ describe("StorageMigrationCard", () => {
     );
   });
 
+  it("shows a rollback after a failed verify as in progress, with its error", async () => {
+    h.getMig.mockResolvedValue({
+      $typeName: "paladin.admin.v1.StorageMigrationStatus",
+      state: "rolling_back",
+      objectsTotal: 2n,
+      objectsCopied: 2n,
+      sourceBucket: "storageBackends/primary/buckets/shared",
+      targetBucket: "storageBackends/primary/buckets/paladin-t-1",
+      error: "physical verify: docs/a size mismatch",
+    });
+
+    render(<StorageMigrationCard tenantId="t-1" storageLayout="dedicated" />);
+
+    expect(await screen.findByText("rolling_back")).toBeInTheDocument();
+    expect(
+      screen.getByText(/being moved back to its source bucket/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("physical verify: docs/a size mismatch"),
+    ).toBeInTheDocument();
+  });
+
   it("renders no migrate trigger for a dedicated tenant with no migration", async () => {
     h.getMig.mockResolvedValue(null);
     render(<StorageMigrationCard tenantId="t-1" storageLayout="dedicated" />);

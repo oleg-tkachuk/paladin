@@ -188,3 +188,51 @@ func (r *TenantRepo) GetStorageMigration(ctx context.Context, tenantID uuid.UUID
 	}
 	return storageMigrationToDomain(m.TenantStorageMigration, m.SourceBackendName, m.SourceBucketName, m.TargetBackendName, m.TargetBucketName), nil
 }
+
+// RollBackStuckStorageMigration hands a failed migration's dedicated leftover
+// to the worker's rollback (tenanth.Handler.rollBackStuck says which tenants
+// those are, and why). Under the tenant lock StartStorageMigration takes, so
+// it cannot interleave with a start or retry: the tenant must still be
+// 'dedicated' and its latest migration 'failed', and the update itself
+// requires the default binding to still name the migration's target bucket.
+// The update also gives the row the rebound_at it predates (the query says
+// how), from which the worker copies back.
+func (r *TenantRepo) RollBackStuckStorageMigration(ctx context.Context, tenantID uuid.UUID) (tenanth.StorageMigration, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return tenanth.StorageMigration{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := r.q.WithTx(tx)
+	tenant := pgUUID(tenantID)
+
+	layout, err := qtx.LockTenantForStorageMigration(ctx, tenant)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return tenanth.StorageMigration{}, tenanth.ErrStorageMigrationNotRollbackable
+	} else if err != nil {
+		return tenanth.StorageMigration{}, fmt.Errorf("lock tenant: %w", err)
+	}
+	if layout != sqlc.TenantStorageLayoutDedicated {
+		return tenanth.StorageMigration{}, tenanth.ErrStorageMigrationNotRollbackable
+	}
+	prev, err := qtx.LatestStorageMigration(ctx, tenant)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return tenanth.StorageMigration{}, tenanth.ErrStorageMigrationNotRollbackable
+	} else if err != nil {
+		return tenanth.StorageMigration{}, fmt.Errorf("read storage migration: %w", err)
+	}
+	if prev.State != tenanth.StorageMigrationFailed {
+		return tenanth.StorageMigration{}, tenanth.ErrStorageMigrationNotRollbackable
+	}
+	if _, err := qtx.RollBackStuckStorageMigration(ctx, prev.ID); errors.Is(err, pgx.ErrNoRows) {
+		// The default binding no longer names the target bucket.
+		return tenanth.StorageMigration{}, tenanth.ErrStorageMigrationNotRollbackable
+	} else if err != nil {
+		return tenanth.StorageMigration{}, fmt.Errorf("start rollback: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return tenanth.StorageMigration{}, err
+	}
+	// Read back with the bucket names the response carries.
+	return r.GetStorageMigration(ctx, tenantID)
+}
