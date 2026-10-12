@@ -20,15 +20,23 @@ import (
 // fail-closed (denied) on its own bucket — the bug this guards against.
 
 // recordingAuthorizer captures the last Resource/action handed to the engine.
+// The ReadObjectPlacement enrichment check that follows a read is recorded
+// apart (placementChecks), so lastAction/lastResource keep naming the check
+// that gates the operation itself.
 type recordingAuthorizer struct {
-	lastResource *cedar.Resource
-	lastAction   cedar.Action
+	lastResource    *cedar.Resource
+	lastAction      cedar.Action
+	placementChecks []cedar.Resource
 }
 
 func (a *recordingAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, action cedar.Action, r *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
-	a.lastAction = action
 	// Copy: the handler may reuse/mutate the pointer after the call returns.
 	cp := *r
+	if action == cedar.ActionReadObjectPlacement {
+		a.placementChecks = append(a.placementChecks, cp)
+		return cedar.DecisionAllow, nil
+	}
+	a.lastAction = action
 	a.lastResource = &cp
 	return cedar.DecisionAllow, nil
 }
