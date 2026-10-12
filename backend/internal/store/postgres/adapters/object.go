@@ -144,6 +144,22 @@ func (r *ObjectRepo) ObjectLock(ctx context.Context, tenantID, objectID uuid.UUI
 	}, nil
 }
 
+func (r *ObjectRepo) VersionLocks(ctx context.Context, tenantID, objectID uuid.UUID) ([]objecth.ObjectLock, error) {
+	rows, err := r.q.ListObjectVersionLocks(ctx, pgUUID(tenantID), pgUUID(objectID))
+	if err != nil {
+		return nil, fmt.Errorf("list object version locks: %w", err)
+	}
+	out := make([]objecth.ObjectLock, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, objecth.ObjectLock{
+			Mode:        lockModeFromSQL(row.LockMode),
+			RetainUntil: timePtr(row.LockRetainUntil),
+			LegalHold:   row.LegalHold,
+		})
+	}
+	return out, nil
+}
+
 func (r *ObjectRepo) FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) ([]objecth.Object, error) {
 	if len(ids) == 0 {
 		return nil, nil

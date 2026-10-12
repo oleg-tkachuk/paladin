@@ -55,6 +55,10 @@ func (*fakeObjectRepo) ObjectLock(context.Context, uuid.UUID, uuid.UUID) (Object
 	return ObjectLock{}, nil
 }
 
+func (*fakeObjectRepo) VersionLocks(context.Context, uuid.UUID, uuid.UUID) ([]ObjectLock, error) {
+	return nil, nil
+}
+
 // LookupBucket reports no binding, as for an unbound collection: the version
 // RPCs' authorisation resolves it best-effort.
 func (*fakeObjectRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
