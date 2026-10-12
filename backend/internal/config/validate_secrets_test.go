@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // Each test below builds the smallest Config that passes the
@@ -19,6 +20,7 @@ func minimalValidConfig() Config {
 			Postgres: Postgres{DSN: "postgres://x@y/z"},
 		},
 		Limits: validLimits(),
+		Admin:  Admin{Tenants: AdminTenants{TrashRetention: 720 * time.Hour}},
 		Storage: Storage{
 			Backends: map[string]StorageBackend{
 				"primary": {

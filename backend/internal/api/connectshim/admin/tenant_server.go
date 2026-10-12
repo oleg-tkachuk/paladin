@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
@@ -23,9 +24,15 @@ import (
 type TenantServer struct {
 	paladinadminv1connect.UnimplementedTenantServiceHandler
 	H tenantHandler
+	// TrashRetention is admin.tenants.trash_retention: how long a trashed
+	// tenant waits before it is surfaced for purge (Tenant.purge_eligible_at).
+	// Zero leaves purge_eligible_at unset.
+	TrashRetention time.Duration
 }
 
-func NewTenantServer(h *tenanth.Handler) *TenantServer { return &TenantServer{H: h} }
+func NewTenantServer(h *tenanth.Handler, trashRetention time.Duration) *TenantServer {
+	return &TenantServer{H: h, TrashRetention: trashRetention}
+}
 
 func (s *TenantServer) CreateTenant(ctx context.Context, req *pb.CreateTenantRequest) (*pb.Tenant, error) {
 	if err := requireCompilablePolicy(req.GetTenant().GetInheritedCedarPolicy()); err != nil {
@@ -39,7 +46,7 @@ func (s *TenantServer) CreateTenant(ctx context.Context, req *pb.CreateTenantReq
 	if err != nil {
 		return nil, err
 	}
-	return tenantDomainToProto(t), nil
+	return tenantDomainToProto(t, s.TrashRetention), nil
 }
 
 // parseCreateTenantArgs is the pure proto→domain translator. Extracted
@@ -95,7 +102,7 @@ func (s *TenantServer) GetTenant(ctx context.Context, req *pb.GetTenantRequest) 
 	if err != nil {
 		return nil, err
 	}
-	return tenantDomainToProto(t), nil
+	return tenantDomainToProto(t, s.TrashRetention), nil
 }
 
 func storageMigrationToProto(m *tenanth.StorageMigration) *pb.StorageMigrationStatus {
@@ -186,7 +193,7 @@ func (s *TenantServer) UpdateTenant(ctx context.Context, req *pb.UpdateTenantReq
 	if err != nil {
 		return nil, err
 	}
-	return tenantDomainToProto(t), nil
+	return tenantDomainToProto(t, s.TrashRetention), nil
 }
 
 func (s *TenantServer) DeleteTenant(ctx context.Context, req *pb.DeleteTenantRequest) (*pb.DeleteTenantResponse, error) {
@@ -226,7 +233,7 @@ func (s *TenantServer) RestoreTenant(ctx context.Context, req *pb.RestoreTenantR
 	if err != nil {
 		return nil, err
 	}
-	return tenantDomainToProto(t), nil
+	return tenantDomainToProto(t, s.TrashRetention), nil
 }
 
 // PurgeTenant — hard-delete on a trashed row. Refuses to operate on
@@ -256,7 +263,7 @@ func (s *TenantServer) ListTenants(ctx context.Context, req *pb.ListTenantsReque
 	}
 	out := &pb.ListTenantsResponse{Page: convx.PageResponseProto(next)}
 	for i := range list {
-		out.Tenants = append(out.Tenants, tenantDomainToProto(&list[i]))
+		out.Tenants = append(out.Tenants, tenantDomainToProto(&list[i], s.TrashRetention))
 	}
 	return out, nil
 }
@@ -283,7 +290,7 @@ func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *pb.SetInheri
 	if err != nil {
 		return nil, err
 	}
-	return tenantDomainToProto(t), nil
+	return tenantDomainToProto(t, s.TrashRetention), nil
 }
 
 // RenameTenantSlug rotates the tenant's slug and rewrites every
@@ -306,7 +313,7 @@ func (s *TenantServer) RenameTenantSlug(ctx context.Context, req *pb.RenameTenan
 	if err != nil {
 		return nil, err
 	}
-	return tenantDomainToProto(t), nil
+	return tenantDomainToProto(t, s.TrashRetention), nil
 }
 
 func (s *TenantServer) ResolveRenamedSlug(ctx context.Context, req *pb.ResolveRenamedSlugRequest) (*pb.ResolveRenamedSlugResponse, error) {
@@ -322,7 +329,10 @@ func (s *TenantServer) ResolveRenamedSlug(ctx context.Context, req *pb.ResolveRe
 
 var _ paladinadminv1connect.TenantServiceHandler = (*TenantServer)(nil)
 
-func tenantDomainToProto(t *tenanth.Tenant) *pb.Tenant {
+// tenantDomainToProto maps a domain tenant onto the wire. trashRetention is
+// admin.tenants.trash_retention, the one input the domain row does not carry:
+// it turns deleted_at into purge_eligible_at. Zero leaves that field unset.
+func tenantDomainToProto(t *tenanth.Tenant, trashRetention time.Duration) *pb.Tenant {
 	if t == nil {
 		return nil
 	}
@@ -346,6 +356,9 @@ func tenantDomainToProto(t *tenanth.Tenant) *pb.Tenant {
 	}
 	if !t.DeletedAt.IsZero() {
 		out.DeletedAt = convx.TsProto(t.DeletedAt)
+	}
+	if at := t.RetentionLapsesAt(trashRetention); !at.IsZero() {
+		out.PurgeEligibleAt = convx.TsProto(at)
 	}
 	if len(t.Labels) > 0 {
 		var m map[string]string

@@ -327,7 +327,7 @@ class BucketReplication(_message.Message):
     def __init__(self, enabled: _Optional[bool] = ..., destination_bucket: _Optional[str] = ..., filter: _Optional[str] = ...) -> None: ...
 
 class Tenant(_message.Message):
-    __slots__ = ("name", "tenant_id", "display_name", "labels", "inherited_cedar_policy", "resource_version", "created_at", "updated_at", "slug", "deleted_at", "default_bucket", "storage_layout")
+    __slots__ = ("name", "tenant_id", "display_name", "labels", "inherited_cedar_policy", "resource_version", "created_at", "updated_at", "slug", "deleted_at", "default_bucket", "storage_layout", "purge_eligible_at")
     class LabelsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -347,6 +347,7 @@ class Tenant(_message.Message):
     DELETED_AT_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_BUCKET_FIELD_NUMBER: _ClassVar[int]
     STORAGE_LAYOUT_FIELD_NUMBER: _ClassVar[int]
+    PURGE_ELIGIBLE_AT_FIELD_NUMBER: _ClassVar[int]
     name: str
     tenant_id: str
     display_name: str
@@ -359,7 +360,8 @@ class Tenant(_message.Message):
     deleted_at: _timestamp_pb2.Timestamp
     default_bucket: str
     storage_layout: str
-    def __init__(self, name: _Optional[str] = ..., tenant_id: _Optional[str] = ..., display_name: _Optional[str] = ..., labels: _Optional[_Mapping[str, str]] = ..., inherited_cedar_policy: _Optional[str] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., slug: _Optional[str] = ..., deleted_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., default_bucket: _Optional[str] = ..., storage_layout: _Optional[str] = ...) -> None: ...
+    purge_eligible_at: _timestamp_pb2.Timestamp
+    def __init__(self, name: _Optional[str] = ..., tenant_id: _Optional[str] = ..., display_name: _Optional[str] = ..., labels: _Optional[_Mapping[str, str]] = ..., inherited_cedar_policy: _Optional[str] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., slug: _Optional[str] = ..., deleted_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., default_bucket: _Optional[str] = ..., storage_layout: _Optional[str] = ..., purge_eligible_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class Collection(_message.Message):
     __slots__ = ("name", "tenant_id", "collection", "display_name", "bucket", "completion_mode", "cedar_policy", "constraints", "resource_version", "created_at", "updated_at", "access", "cache_control")

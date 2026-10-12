@@ -278,8 +278,8 @@ func TestDomainConvertersTolerateNil(t *testing.T) {
 	if got := collectionDomainToProto(nil); got != nil {
 		t.Errorf("collectionDomainToProto(nil) = %v, want nil", got)
 	}
-	if got := tenantDomainToProto(nil); got != nil {
-		t.Errorf("tenantDomainToProto(nil) = %v, want nil", got)
+	if got := tenantDomainToProto(nil, 0); got != nil {
+		t.Errorf("tenantDomainToProto(nil, 0) = %v, want nil", got)
 	}
 }
 
