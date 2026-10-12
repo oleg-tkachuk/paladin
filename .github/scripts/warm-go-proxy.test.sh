@@ -21,7 +21,7 @@ python3 -m http.server "$port" --bind 127.0.0.1 --directory "$work" >/dev/null 2
 pid=$!
 for _ in $(seq 50); do curl -fs "http://127.0.0.1:$port/" >/dev/null 2>&1 && break; sleep 0.1; done
 
-warm() { GITHUB_REPOSITORY=o/r GOPROXY_URL="http://127.0.0.1:$port" "$root/scripts/warm-go-proxy.sh" "$1"; }
+warm() { GITHUB_REPOSITORY=o/r GOPROXY_URL="http://127.0.0.1:$port" "$root/.github/scripts/warm-go-proxy.sh" "$1"; }
 
 [[ "$(warm sdk/go/v0.16.0)" == *'"v0.16.0"'* ]] || fail "the SDK tag asked for the wrong path"
 [[ "$(warm mod/v0.3.0)" == *'"v0.3.0"'* ]] || fail "a one-segment module's tag asked for the wrong path"

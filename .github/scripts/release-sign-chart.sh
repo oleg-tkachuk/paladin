@@ -2,7 +2,7 @@
 # release-sign-chart.sh — sign a Helm chart pushed to an OCI registry, and
 # verify the signature before the release goes out.
 #
-#   scripts/release-sign-chart.sh <chart-reference>    e.g. ghcr.io/o/charts/c:1.2.3
+#   .github/scripts/release-sign-chart.sh <chart-reference>    e.g. ghcr.io/o/charts/c:1.2.3
 #
 # The chart is signed by digest, as the images are, and with the same identity:
 # a tag can be moved after it is signed, a digest cannot. The digest comes from

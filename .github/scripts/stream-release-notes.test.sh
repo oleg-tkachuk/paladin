@@ -35,7 +35,7 @@ commit backend/go.mod "fix(auth): take a limes fix"
 git -C "$work" tag sdk/go/v0.2.0
 git -C "$work" tag v1.0.0
 
-notes() { RELEASE_ROOT="$work" GITHUB_REPOSITORY=o/r "$root/scripts/stream-release-notes.sh" "$1"; }
+notes() { RELEASE_ROOT="$work" GITHUB_REPOSITORY=o/r "$root/.github/scripts/stream-release-notes.sh" "$1"; }
 
 first=$(notes sdk/go/v0.1.0)
 [[ "$first" == "SDK 0.1.0"* && "$first" == *"first release"* ]] || fail "the first tag: $first"

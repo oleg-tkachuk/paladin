@@ -2,7 +2,7 @@
 # release-sign.sh — sign a published image, attest an SBOM for each of its
 # platforms, and verify both before the release goes out.
 #
-#   scripts/release-sign.sh <image> <index-digest> <sbom-dir>
+#   .github/scripts/release-sign.sh <image> <index-digest> <sbom-dir>
 #
 # The image is addressed by digest throughout: a tag can be moved after it is
 # signed, a digest cannot.

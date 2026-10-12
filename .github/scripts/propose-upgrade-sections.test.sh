@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-script="$(git rev-parse --show-toplevel)/scripts/propose-upgrade-sections.sh"
+script="$(git rev-parse --show-toplevel)/.github/scripts/propose-upgrade-sections.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 

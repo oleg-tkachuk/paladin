@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# release-sign.test.sh — scripts/release-sign.sh against a throwaway registry.
+# release-sign.test.sh — .github/scripts/release-sign.sh against a throwaway registry.
 #
 # Copies a published multi-arch Paladin image — with BuildKit's attestation
 # manifests in its index, like every image release.yaml pushes — into a local
@@ -20,8 +20,8 @@
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
-script="$root/scripts/release-sign.sh"
-chart_script="$root/scripts/release-sign-chart.sh"
+script="$root/.github/scripts/release-sign.sh"
+chart_script="$root/.github/scripts/release-sign-chart.sh"
 
 # A released image: multi-arch, with attestation manifests. Pinned by tag; the
 # test reads its structure, not its contents.

@@ -96,12 +96,12 @@ jobs:
 
       # The checkout above is main's head, which can be newer than the commit
       # whose CI dispatched this run. Only that commit is released; a newer
-      # head is released by its own CI run. See scripts/release-head-check.sh.
+      # head is released by its own CI run. See .github/scripts/release-head-check.sh.
       - name: Release only the commit CI passed
         id: head
         env:
           SHA: ${{ github.event.client_payload.sha }}
-        run: ./scripts/release-head-check.sh "$SHA" >>"$GITHUB_OUTPUT"
+        run: ./.github/scripts/release-head-check.sh "$SHA" >>"$GITHUB_OUTPUT"
 
       - name: Set up Node
         if: steps.head.outputs.release == 'true'
@@ -160,8 +160,8 @@ jobs:
         run: |
           set -euo pipefail
           tags="$({
-            ./scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before"
-            ./scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before" streams
+            ./.github/scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before"
+            ./.github/scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before" streams
           } | xargs)"
           if [ -z "$tags" ]; then
             echo "no tag from this run"
@@ -172,7 +172,7 @@ jobs:
           printf 'tags=%s\n' "$tags" >>"$GITHUB_OUTPUT"
 
       # A GitHub release beside the SDK tag this run cut, if any, with notes of
-      # the stream's own commits (scripts/stream-release-notes.sh), and the Go
+      # the stream's own commits (.github/scripts/stream-release-notes.sh), and the Go
       # proxy told of the tag. Never the latest release: that stays the
       # product's.
       - name: Publish the SDK release
@@ -181,14 +181,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          for tag in $(./scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before" streams); do
-            notes="$(./scripts/stream-release-notes.sh "$tag")"
+          for tag in $(./.github/scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before" streams); do
+            notes="$(./.github/scripts/stream-release-notes.sh "$tag")"
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag --latest=false \
               --title "$(head -1 <<<"$notes")" --notes "$(tail -n +2 <<<"$notes")"
             # So `go get …@latest`, and the README's SDK badge, see it now
             # rather than whenever the proxy next refreshes. The release
             # stands without it.
-            ./scripts/warm-go-proxy.sh "$tag" ||
+            ./.github/scripts/warm-go-proxy.sh "$tag" ||
               echo "::warning::the Go proxy did not take $tag yet; it will on its own"
           done
 
@@ -197,7 +197,7 @@ jobs:
       # due and there is nothing to publish — unless HEAD carries a tag with no
       # release, left by a run that failed after pushing it, which a re-run
       # publishes. "New" is against the list taken above — see
-      # scripts/new-release-tag.sh for why a tag on HEAD is not enough.
+      # .github/scripts/new-release-tag.sh for why a tag on HEAD is not enough.
       - name: Read the tag it just pushed
         id: tag
         if: steps.head.outputs.release == 'true'
@@ -208,7 +208,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          tag="$(./scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before")"
+          tag="$(./.github/scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before")"
 
           if [ -z "$tag" ]; then
             printf '%s\n' "no new tag from this run — no release was due"
@@ -218,14 +218,14 @@ jobs:
 
       # main is protected, so the named sections go in as a pull request,
       # opened with AUTOMERGE_TOKEN: one GITHUB_TOKEN opens starts no CI and
-      # would never merge. See scripts/propose-upgrade-sections.sh.
+      # would never merge. See .github/scripts/propose-upgrade-sections.sh.
       - name: Propose the named upgrade sections
         if: steps.sections.outputs.tags != ''
         env:
           GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
           TAGS: ${{ steps.sections.outputs.tags }}
           REPO: ${{ github.repository }}
-        run: ./scripts/propose-upgrade-sections.sh
+        run: ./.github/scripts/propose-upgrade-sections.sh
 
   # One job per component. The chart is gated and pushed through the same task
   # library `task -t Taskfile.local.yaml deploy` uses; the image is built here
@@ -374,7 +374,7 @@ jobs:
           set -euo pipefail
           PATH="$(dirname "$SYFT"):$PATH"
           export CERT_IDENTITY="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/release.yaml@${GITHUB_REF}"
-          ./scripts/release-sign.sh "$IMAGE" "$DIGEST" "${RUNNER_TEMP}/sbom"
+          ./.github/scripts/release-sign.sh "$IMAGE" "$DIGEST" "${RUNNER_TEMP}/sbom"
 
       # crane reads a pushed chart's digest; `helm push` reports it only as a
       # line of text.
@@ -420,7 +420,7 @@ jobs:
         run: |
           set -euo pipefail
           export CERT_IDENTITY="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/release.yaml@${GITHUB_REF}"
-          ./scripts/release-sign-chart.sh "${CHART}:${VERSION}"
+          ./.github/scripts/release-sign-chart.sh "${CHART}:${VERSION}"
 
   # The GitHub release, once every component's image and chart is in GHCR.
   # `needs` alone would skip this when publish fails; the explicit result

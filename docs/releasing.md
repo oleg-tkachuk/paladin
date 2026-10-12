@@ -11,7 +11,7 @@ that touch it ([`release.config.cjs`](../.github/release/release.config.cjs)).
 | `api/vX.Y.Z` | a maintainer, by hand | nothing; the baseline `buf breaking` compares against | the API contract |
 
 The SDK release's notes list only their own `feat`, `fix`, `perf`,
-`security` and `revert` commits (`scripts/stream-release-notes.sh`), and
+`security` and `revert` commits (`.github/scripts/stream-release-notes.sh`), and
 none is marked latest: that stays the product's release.
 
 A commit counts for every stream whose files it touches, and its type
@@ -70,8 +70,8 @@ repository's release workflow and know what is inside it.
 - **Charts too.** Each chart is signed by digest with the same identity, and
   verified in the same job.
 
-The logic is [`scripts/release-sign.sh`](../scripts/release-sign.sh) and
-[`scripts/release-sign-chart.sh`](../scripts/release-sign-chart.sh);
+The logic is [`.github/scripts/release-sign.sh`](../scripts/release-sign.sh) and
+[`.github/scripts/release-sign-chart.sh`](../scripts/release-sign-chart.sh);
 `task -t Taskfile.dev.yaml verify:release-signing` runs both with a throwaway
 key against a local registry.
 
@@ -111,7 +111,7 @@ scope. One version covers both languages: the Go module resolves
 through hatch-vcs, so neither carries a version to edit. A release is the
 tag; nothing else is published, and the Python package is not on PyPI yet.
 The release workflow asks the Go module proxy for each new module tag
-([`scripts/warm-go-proxy.sh`](../scripts/warm-go-proxy.sh)), so `go get
+([`.github/scripts/warm-go-proxy.sh`](../scripts/warm-go-proxy.sh)), so `go get
 …@latest` and the README's SDK badge see it at once rather than when the
 proxy next refreshes.
 
@@ -123,7 +123,7 @@ commit carries `!` or a `BREAKING CHANGE:` footer, and it gets a section in
 [upgrading.md](upgrading.md) headed `## vX.Y.Z — …` for the release that
 ships it. Pre-1.0 such a release is only a minor, so its notes list these
 commits first, under *Behaviour changes*, with a link to that section
-([`scripts/stream-release-notes.sh`](../scripts/stream-release-notes.sh)).
+([`.github/scripts/stream-release-notes.sh`](../scripts/stream-release-notes.sh)).
 
 ### Which servers an SDK release works with
 
