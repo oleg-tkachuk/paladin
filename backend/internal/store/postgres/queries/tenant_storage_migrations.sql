@@ -22,7 +22,11 @@ JOIN buckets sb           ON sb.id = m.source_bucket_id
 JOIN storage_backends ssb ON ssb.id = sb.backend_id
 JOIN buckets tb           ON tb.id = m.target_bucket_id
 JOIN storage_backends tsb ON tsb.id = tb.backend_id
-WHERE m.tenant_id = $1;
+WHERE m.tenant_id = $1
+-- The latest, as StartStorageMigration reads it: a start used to be able to
+-- leave a tenant with two rows (see LockTenantForStorageMigration).
+ORDER BY m.created_at DESC
+LIMIT 1;
 
 -- name: ListActiveStorageMigrations :many
 -- Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
@@ -134,3 +138,87 @@ FROM collections c
 JOIN buckets b           ON b.id = c.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE c.tenant_id = $1 AND NOT c.public_read;
+
+-- Starting (or retrying) a migration: StartStorageMigration runs these in one
+-- transaction, in this order, and says why each step is there.
+
+-- name: LockTenantForStorageMigration :one
+-- Serialises starts for one tenant. tenant_storage_migrations has no unique
+-- key on tenant_id, so this lock is what keeps two concurrent starts (or
+-- retries) from both going through. NO KEY UPDATE, not UPDATE: it does not
+-- conflict with the KEY SHARE lock every insert of a row referencing the
+-- tenant takes, so uploads are not held up behind it.
+SELECT storage_layout FROM tenants
+WHERE id = $1 AND deleted_at IS NULL
+FOR NO KEY UPDATE;
+
+-- name: LatestStorageMigration :one
+SELECT id, state FROM tenant_storage_migrations
+WHERE tenant_id = $1
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: EnsureStorageMigrationTargetBucket :exec
+-- The tenant's dedicated bucket: pending, tenant-owned, private, created on
+-- the backend by the reconciler. An existing row with that (backend, name) is
+-- left as it is — ON CONFLICT DO NOTHING rather than catching the unique
+-- violation, which aborts the transaction (25P02). Whether an existing row
+-- may be used is StorageMigrationTargetBucket's question.
+INSERT INTO buckets (backend_id, name, owner_tenant_id, provision_state,
+                     public_read, created_on_backend)
+SELECT sb.id, sqlc.arg('bucket_name'), sqlc.arg('owner_tenant_id'), 'pending', false, true
+FROM storage_backends sb
+WHERE sb.name = sqlc.arg('backend_name')
+ON CONFLICT (backend_id, name) DO NOTHING;
+
+-- name: StorageMigrationTargetBucket :one
+-- What a start must know before it uses the target bucket: its owner, whether
+-- it is public, its provisioning state, and whether any OTHER tenant reaches
+-- it through a collection or a default binding. Run with the cross-tenant
+-- read on, or RLS would hide exactly the rows being looked for.
+SELECT b.id, b.owner_tenant_id, b.public_read, b.provision_state,
+       (EXISTS (SELECT 1 FROM collections c
+                 WHERE c.bucket_id = b.id AND c.tenant_id <> sqlc.arg('tenant_id'))
+        OR EXISTS (SELECT 1 FROM tenant_default_bindings d
+                    WHERE d.bucket_id = b.id AND d.tenant_id <> sqlc.arg('tenant_id')))::bool
+       AS used_by_other_tenant
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = sqlc.arg('backend_name') AND b.name = sqlc.arg('bucket_name');
+
+-- name: ResetFailedTargetBucketProvision :exec
+-- A target bucket whose provisioning failed gets a fresh attempt budget, so a
+-- retried migration does not wait on a reconciler that has given up on it.
+UPDATE buckets
+SET provision_state = 'pending', provision_error = '', provision_attempts = 0,
+    updated_at = now()
+WHERE id = $1 AND provision_state = 'failed';
+
+-- name: RetryFailedStorageMigration :one
+-- Starts a failed migration over from the beginning, in place: the row is the
+-- tenant's migration history (attempts keeps counting failures), so it is
+-- reset rather than deleted and re-inserted. Applies only while the row is
+-- still 'failed' — the compare-and-set that, behind the tenant lock, lets
+-- exactly one of two concurrent retries through.
+UPDATE tenant_storage_migrations m
+SET source_bucket_id          = sb.id,
+    target_bucket_id          = tb.id,
+    cleanup_retention_seconds = sqlc.arg('cleanup_retention_seconds'),
+    state                     = 'provisioning',
+    objects_total             = 0,
+    objects_copied            = 0,
+    cursor_collection         = '',
+    cursor_path               = '',
+    error                     = '',
+    cleanup_after             = NULL,
+    completed_at              = NULL,
+    cleaned_at                = NULL,
+    updated_at                = now()
+FROM buckets sb
+JOIN storage_backends ssb ON ssb.id = sb.backend_id
+CROSS JOIN buckets tb
+JOIN storage_backends tsb ON tsb.id = tb.backend_id
+WHERE m.id = sqlc.arg('id') AND m.state = 'failed'
+  AND ssb.name = sqlc.arg('source_backend_name') AND sb.name = sqlc.arg('source_bucket_name')
+  AND tsb.name = sqlc.arg('target_backend_name') AND tb.name = sqlc.arg('target_bucket_name')
+RETURNING m.*;
