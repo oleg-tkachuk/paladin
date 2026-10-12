@@ -277,9 +277,9 @@ the same commit. Treat this file like a runtime invariant.
   - Independent JWKS rotation runbook.
   - api / admin verify tokens against the auth-server's JWKS — the same
     JWKS-verify path the planes already use.
-- **Trigger to do:** when OAuth lands (separate BACKLOG entry) and
-  becomes the primary auth path for at least one customer. Until
-  then, fold OAuth endpoints into the existing iam plane.
+- **Trigger to do:** when OAuth becomes the primary auth path for at
+  least one customer. Until then, the OAuth endpoints stay in the
+  existing iam plane.
 
 ### Role split: `realtime` (SSE / WebSocket subscriptions)
 
@@ -378,9 +378,8 @@ open deliberately — each notes why._
 
 - **Status:** Open, and not actionable — recorded so it is not re-discovered.
 - **Reason:** `govulncheck` reports GO-2026-5932 against
-`golang.org/x/crypto@v0.57.0` with **Fixed in: N/A**. Unlike the grpc one
-above, no release resolves this: bumping the dependency cannot help until
-upstream ships something.
+`golang.org/x/crypto@v0.57.0` with **Fixed in: N/A**. No release resolves
+this: bumping the dependency cannot help until upstream ships something.
 Unreachable from our code today, so `sec:vuln` stays green.
 - **Definition of Done:** upstream publishes a fixed version, we take it, and
 this entry goes. If the advisory is instead withdrawn or re-scored, delete it
@@ -548,32 +547,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
       plane policy handler is read-only; Cedar policy
       mutations go through parent `*.updated` events.
 - **What's left:**
-  - ~~Integration tests for bucket / object_key / quota / object lifecycle
-    handlers.~~ **DONE (2026-06-29):**
-    `tests/integration/lifecycle_events_test.go` pins all four seams
-    end-to-end (handler write → outbox row → dispatcher tick → CloudEvents
-    envelope on NATS): bucket→`paladin.bucket.updated`,
-    object_key→`paladin.object_key.updated`, quota→`paladin.quota.set`,
-    object→`paladin.object.updated`. Writing the quota test surfaced + fixed a
-    real bug — the tenant/bucket-scoped quota upserts used `ON CONFLICT
-    (col)` against a **partial** unique index, so every `SetQuota` failed
-    with 42P10; added the `WHERE … IS NOT NULL` index predicate to
-    `queries/quotas.sql` (+ sqlc regen). Also un-bit-rotted the
-    `tests/integration` package (stale `NewBackendRepoV2` / `NewBucketRepoV2`
-    call sites — the suite is `//go:build integration`, outside the default
-    gate, so it had drifted and stopped compiling).
-  - ~~Tests for the cross-cutting emitter classes (capability charge +
-    audit-log mirror).~~ **DONE (2026-06-30):** introduced a small
-    `eventDispatcher` interface seam in `internal/app` (both emitters now
-    depend on it instead of the concrete `*worker.Dispatcher`) and added
-    `charge_emitter_test.go` + `audit_mirror_test.go`. They pin the producer
-    contract with a fake dispatcher — event Type/ResourceName/Payload mapping
-    (`paladin.capability.charged`, `paladin.audit.<action>`), the tenant-less drop
-    guards, best-effort error swallowing, the `auditEventType` action→class
-    derivation (incl. degenerate inputs), and the nil/`optionalAuditMirror`
-    toggle gating. The dispatcher → outbox → NATS transport itself stays
-    covered by `lifecycle_events_test.go`, so this is the right granularity —
-    no redundant integration spin-up.
   - **Adoption check** — once a real subscriber needs charge
     or audit events, flip `cfg.Dispatcher.ChargeEventsEnabled`
     / `audit_mirror_enabled` per overlay and verify the
@@ -1116,9 +1089,9 @@ measures a chain that is about to change. Owner decision 2026-10-12.
 
 ### API-test fixture for UI/UX with real-shape data
 
-- **Status:** Mostly done — demo + load + stress flavours ship; only the
-  `/billing` 24h time-series spread (API-infeasible) + a `task seed:up`
-  port-forward wrapper remain.
+- **Status:** Mostly done — demo + load + stress flavours ship, and
+  `task seed:up` / `seed:down` port-forward the planes themselves; only the
+  `/billing` 24h time-series spread (API-infeasible) remains.
 - **Reason:** Most admin pages render gracefully when empty —
   `/events`, `/billing`, `/policies`, `/buckets`, `/objects`,
   `/audit`, `/capabilities` — but designing the populated state
@@ -1159,21 +1132,8 @@ measures a chain that is about to change. Owner decision 2026-10-12.
     API (it stamps `created_at = now()`; no backdating). Needs a server
     test-hook or a direct-SQL seeder — a separate concern from the API-driven
     fixture, deliberately out of scope here.
-  - ~~First-run UX: a `task seed:up` port-forward wrapper.~~ **DONE
-    (2026-07-02):** `task seed:up` / `seed:down` now port-forward the
-    admin + api Services themselves, point the CLI at localhost with the
-    new `--insecure-tls` flag (the planes present the cluster cert for a
-    Service DNS name), and tear the forwards down on exit. Fixing this
-    also surfaced + fixed a real CLI break: the idempotency middleware
-    (RequireOnCreate) rejected every seed Create* — the CLI now stamps an
-    Idempotency-Key per request like the frontend transport. Verified
-    live: up seeds 4 subscriptions, down removes them, no leftover
-    forwards.
-- **Trigger to do load / stress:** the next time UI / UX work
-  blocks on "I need to see this with real data" beyond what
-  the 4 demo subscriptions cover — most likely `/billing`
-  time-series, `/events` pagination + Last-test column,
-  `/objects` listings.
+- **Trigger to do:** the next time UI / UX work on `/billing` blocks on
+  a populated 24h time series.
 
 ---
 
@@ -1298,9 +1258,7 @@ measures a chain that is about to change. Owner decision 2026-10-12.
     any before it starts, rather than failing halfway through the rebind.
 - **Deferred (smaller follow-ups):** per-tenant backend selection at
   CreateTenant (currently the config default backend); org-prefix in the
-  derived bucket name for cross-account global uniqueness; bucket tagging
-  (`tenant_id`) at provision time for native cost attribution; frontend
-  proto regen to surface `storage_layout` in the console.
+  derived bucket name for cross-account global uniqueness.
 - **Note — dev cluster object store is Garage (switched off SeaweedFS):**
   the `primary` backend now points at **Garage** (`garage-s3.storage:3900`,
   bucket `paladin-primary`, presigned via the `s3-garage.paladin.local` Traefik
