@@ -85,6 +85,7 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_billing_timeseries", Audience: "admin", Description: "A tenant's charges over a period, bucketed in time (admin profile only)."},
 	{Name: "paladin_list_platform_operations", Audience: "admin", Description: "List platform-wide long-running operations."},
 	{Name: "paladin_get_platform_operation", Audience: "admin", Description: "Read one platform-wide long-running operation."},
+	{Name: "paladin_get_bridge_key", Audience: "admin", Description: "The bridge's DPoP key thumbprint, to delegate a key-bound capability to."},
 
 	// ── admin plane: backend / bucket / collection lifecycle ─────
 	// Only the reads match agent_safe's patterns; the writes are admin-only.
