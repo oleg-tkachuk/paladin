@@ -85,6 +85,12 @@ admin:
   server:
     <<: *http_defaults
     addr: "0.0.0.0:8090"
+  tenants:
+    # How long a trashed tenant waits before it is surfaced for purge: the
+    # admin API reports deleted_at + this as Tenant.purge_eligible_at and the
+    # console marks the tenant "Past retention". Surfaced only — nothing
+    # purges a tenant on its own. Must be positive.
+    trash_retention: 720h               # 30 days
 
 # ─── Datastores ─────────────────────────────────────────────────────────────
 datastores:

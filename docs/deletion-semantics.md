@@ -59,6 +59,17 @@ all pass a trashed tenant by, and pick up where they were on restore. What
 still runs is cleanup of work already done — the debt of committed deletes,
 aborting abandoned multipart uploads — and recomputing quota usage.
 
+**The trash has a retention, and it only surfaces.** `admin.tenants.trash_retention`
+(default `720h`, 30 days; must be positive) is how long a tenant sits in the
+trash before it is due for review. Every read of a trashed tenant carries
+`purge_eligible_at` = `deleted_at` + that retention, computed from the current
+configuration — so changing it moves the date for tenants already in the
+trash. The console's Trash page shows each tenant's age ("In trash 12 days")
+and marks it **Past retention** from that moment on. Nothing purges a tenant
+when its retention lapses: purge is irreversible and `PurgeTenant` refuses
+while the tenant still owns collections or locked objects, so it stays an
+operator's call.
+
 There is no one-shot hard delete. There used to be — `DeleteTenant(force=true)`
 — and it is gone: landing the tenant in a different state is a different
 transition, not a modifier on this one.

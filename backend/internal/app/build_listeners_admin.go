@@ -269,7 +269,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	mountGRPCStandards(mux, healthH.GRPCChecker(adminServices...), adminServices)
 	paladinadminv1connect.RegisterBackendServiceHandler(adminServer, admin.NewBackendServer(backendH))
 	paladinadminv1connect.RegisterBucketServiceHandler(adminServer, admin.NewBucketServer(bucketV2H, tenantH))
-	paladinadminv1connect.RegisterTenantServiceHandler(adminServer, admin.NewTenantServer(tenantH))
+	paladinadminv1connect.RegisterTenantServiceHandler(adminServer, admin.NewTenantServer(tenantH, cfg.Admin.Tenants.TrashRetention))
 	paladinadminv1connect.RegisterCollectionServiceHandler(adminServer, admin.NewCollectionServer(collectionH, repos.Tenant, tenantH))
 	paladinadminv1connect.RegisterPolicyServiceHandler(adminServer, admin.NewPolicyServer(policyH))
 	// CELService — stateless validator for CEL filter / match expressions

@@ -120,7 +120,7 @@ comment. What each top-level block owns:
 | `otel` | traces and metrics export (ADR-0001); disabled costs nothing |
 | `runtime` | process-wide HTTP flags, shutdown timeout, `health_snapshot_token` |
 | `api` | the data and iam (`:8085`) listeners; data is `:8080` in the chart and compose, `:8083` by default on the host (`#LocalDataPort` in `schema.cue`) |
-| `admin` | the admin listener (`:8090`) |
+| `admin` | the admin listener (`:8090`), and `tenants.trash_retention` — how long a trashed tenant waits before it is surfaced for purge ([deletion-semantics.md](deletion-semantics.md#tenant)) |
 | `datastores` | Postgres DSN, the separate migrate / reaper credentials, the opt-in read replica |
 | `limits` | object and multipart size ceilings, part sizes, content types, presign lifetimes |
 | `auth` | JWT signing, token TTLs, login rate limiting |

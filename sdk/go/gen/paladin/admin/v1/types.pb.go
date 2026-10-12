@@ -1732,8 +1732,17 @@ type Tenant struct {
 	// tenant gets its own physical bucket (owner_tenant_id = the tenant),
 	// provisioned at CreateTenant time. Settable only at create; read-only after.
 	StorageLayout string `protobuf:"bytes,12,opt,name=storage_layout,json=storageLayout,proto3" json:"storage_layout,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// purge_eligible_at — when a trashed tenant's retention lapses:
+	// deleted_at + the server's admin.tenants.trash_retention (default 30
+	// days). Unset for active tenants. Past this moment the tenant is
+	// surfaced for purge — the console marks it — but nothing purges it:
+	// PurgeTenant stays an explicit call, and still refuses while the tenant
+	// owns collections or locked objects. Computed on read from the current
+	// configuration, so changing the retention moves it for every tenant
+	// already in the trash.
+	PurgeEligibleAt *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=purge_eligible_at,json=purgeEligibleAt,proto3" json:"purge_eligible_at,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Tenant) Reset() {
@@ -1848,6 +1857,13 @@ func (x *Tenant) GetStorageLayout() string {
 		return x.StorageLayout
 	}
 	return ""
+}
+
+func (x *Tenant) GetPurgeEligibleAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PurgeEligibleAt
+	}
+	return nil
 }
 
 // ─── Collection ──────────────────────────────────────────────────────────────
@@ -3170,7 +3186,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\x11BucketReplication\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12-\n" +
 	"\x12destination_bucket\x18\x02 \x01(\tR\x11destinationBucket\x12\x16\n" +
-	"\x06filter\x18\x03 \x01(\tR\x06filter\"\xf6\x04\n" +
+	"\x06filter\x18\x03 \x01(\tR\x06filter\"\xc3\x05\n" +
 	"\x06Tenant\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12 \n" +
 	"\ttenant_id\x18\x02 \x01(\tB\x03\xe0A\x05R\btenantId\x12!\n" +
@@ -3187,7 +3203,8 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"deleted_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tdeletedAt\x12*\n" +
 	"\x0edefault_bucket\x18\v \x01(\tB\x03\xe0A\x03R\rdefaultBucket\x12*\n" +
-	"\x0estorage_layout\x18\f \x01(\tB\x03\xe0A\x05R\rstorageLayout\x1a9\n" +
+	"\x0estorage_layout\x18\f \x01(\tB\x03\xe0A\x05R\rstorageLayout\x12K\n" +
+	"\x11purge_eligible_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x0fpurgeEligibleAt\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf8\x04\n" +
@@ -3433,28 +3450,29 @@ var file_paladin_admin_v1_types_proto_depIdxs = []int32{
 	34, // 33: paladin.admin.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
 	34, // 34: paladin.admin.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
 	34, // 35: paladin.admin.v1.Tenant.deleted_at:type_name -> google.protobuf.Timestamp
-	37, // 36: paladin.admin.v1.Collection.completion_mode:type_name -> paladin.common.v1.CompletionMode
-	13, // 37: paladin.admin.v1.Collection.constraints:type_name -> paladin.admin.v1.BucketConstraints
-	34, // 38: paladin.admin.v1.Collection.created_at:type_name -> google.protobuf.Timestamp
-	34, // 39: paladin.admin.v1.Collection.updated_at:type_name -> google.protobuf.Timestamp
-	7,  // 40: paladin.admin.v1.Collection.access:type_name -> paladin.admin.v1.CollectionAccess
-	23, // 41: paladin.admin.v1.Quota.usage:type_name -> paladin.admin.v1.QuotaUsage
-	34, // 42: paladin.admin.v1.Quota.updated_at:type_name -> google.protobuf.Timestamp
-	34, // 43: paladin.admin.v1.QuotaUsage.last_reset_at:type_name -> google.protobuf.Timestamp
-	34, // 44: paladin.admin.v1.AuditLogEntry.at:type_name -> google.protobuf.Timestamp
-	26, // 45: paladin.admin.v1.EventSubscription.sink:type_name -> paladin.admin.v1.EventSink
-	34, // 46: paladin.admin.v1.EventSubscription.created_at:type_name -> google.protobuf.Timestamp
-	34, // 47: paladin.admin.v1.EventSubscription.updated_at:type_name -> google.protobuf.Timestamp
-	27, // 48: paladin.admin.v1.EventSink.http:type_name -> paladin.admin.v1.HttpSink
-	28, // 49: paladin.admin.v1.EventSink.kafka:type_name -> paladin.admin.v1.KafkaSink
-	29, // 50: paladin.admin.v1.EventSink.sqs:type_name -> paladin.admin.v1.SqsSink
-	31, // 51: paladin.admin.v1.EventSink.nats:type_name -> paladin.admin.v1.NatsSink
-	30, // 52: paladin.admin.v1.EventSink.rabbitmq:type_name -> paladin.admin.v1.RabbitMqSink
-	53, // [53:53] is the sub-list for method output_type
-	53, // [53:53] is the sub-list for method input_type
-	53, // [53:53] is the sub-list for extension type_name
-	53, // [53:53] is the sub-list for extension extendee
-	0,  // [0:53] is the sub-list for field type_name
+	34, // 36: paladin.admin.v1.Tenant.purge_eligible_at:type_name -> google.protobuf.Timestamp
+	37, // 37: paladin.admin.v1.Collection.completion_mode:type_name -> paladin.common.v1.CompletionMode
+	13, // 38: paladin.admin.v1.Collection.constraints:type_name -> paladin.admin.v1.BucketConstraints
+	34, // 39: paladin.admin.v1.Collection.created_at:type_name -> google.protobuf.Timestamp
+	34, // 40: paladin.admin.v1.Collection.updated_at:type_name -> google.protobuf.Timestamp
+	7,  // 41: paladin.admin.v1.Collection.access:type_name -> paladin.admin.v1.CollectionAccess
+	23, // 42: paladin.admin.v1.Quota.usage:type_name -> paladin.admin.v1.QuotaUsage
+	34, // 43: paladin.admin.v1.Quota.updated_at:type_name -> google.protobuf.Timestamp
+	34, // 44: paladin.admin.v1.QuotaUsage.last_reset_at:type_name -> google.protobuf.Timestamp
+	34, // 45: paladin.admin.v1.AuditLogEntry.at:type_name -> google.protobuf.Timestamp
+	26, // 46: paladin.admin.v1.EventSubscription.sink:type_name -> paladin.admin.v1.EventSink
+	34, // 47: paladin.admin.v1.EventSubscription.created_at:type_name -> google.protobuf.Timestamp
+	34, // 48: paladin.admin.v1.EventSubscription.updated_at:type_name -> google.protobuf.Timestamp
+	27, // 49: paladin.admin.v1.EventSink.http:type_name -> paladin.admin.v1.HttpSink
+	28, // 50: paladin.admin.v1.EventSink.kafka:type_name -> paladin.admin.v1.KafkaSink
+	29, // 51: paladin.admin.v1.EventSink.sqs:type_name -> paladin.admin.v1.SqsSink
+	31, // 52: paladin.admin.v1.EventSink.nats:type_name -> paladin.admin.v1.NatsSink
+	30, // 53: paladin.admin.v1.EventSink.rabbitmq:type_name -> paladin.admin.v1.RabbitMqSink
+	54, // [54:54] is the sub-list for method output_type
+	54, // [54:54] is the sub-list for method input_type
+	54, // [54:54] is the sub-list for extension type_name
+	54, // [54:54] is the sub-list for extension extendee
+	0,  // [0:54] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_types_proto_init() }

@@ -19,6 +19,8 @@ admin.server.tls.key_path
 admin.server.tls.server_name
 admin.server.trusted_proxies
 admin.server.write_timeout
+admin.tenants
+admin.tenants.trash_retention
 api
 api.server
 api.server.data

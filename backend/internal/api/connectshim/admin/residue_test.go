@@ -78,13 +78,13 @@ func TestResourceNameHelpers(t *testing.T) {
 }
 
 func TestTenantLabels(t *testing.T) {
-	got := tenantDomainToProto(&tenanth.Tenant{Labels: []byte(`{"team":"a"}`)}).GetLabels()
+	got := tenantDomainToProto(&tenanth.Tenant{Labels: []byte(`{"team":"a"}`)}, 0).GetLabels()
 	if got["team"] != "a" {
 		t.Errorf("labels = %v", got)
 	}
 	// An unreadable blob is dropped, not half-applied. `len(Labels) > 0`
 	// against `>= 0` is equivalent: Unmarshal of nothing fails the same way.
-	if got := tenantDomainToProto(&tenanth.Tenant{Labels: []byte(`{`)}).GetLabels(); got != nil {
+	if got := tenantDomainToProto(&tenanth.Tenant{Labels: []byte(`{`)}, 0).GetLabels(); got != nil {
 		t.Errorf("unreadable labels = %v", got)
 	}
 }
