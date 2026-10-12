@@ -22,8 +22,9 @@ import (
 const probeDeadline = time.Minute
 
 // s3IdentitiesWithAnonymous adds SeaweedFS' "anonymous" identity, which
-// grants its actions to every unsigned request — the configuration the
-// compose stack runs with.
+// grants its actions to every unsigned request. No stack of ours runs with
+// it: backend/deploy/seaweedfs-s3.json declares a named identity only, so
+// anonymous reads there are governed by bucket policy alone.
 const s3IdentitiesWithAnonymous = `{
   "identities": [
     {
