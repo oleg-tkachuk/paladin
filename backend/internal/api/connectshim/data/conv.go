@@ -236,8 +236,17 @@ func objectToProto(o *objecth.Object) *pb.Object {
 		}
 	}
 	out.Taint = taintToProto(o.Taint)
-	// Placement stays unset: it is for privileged callers only, and the data
-	// plane has no role check for that yet (BACKLOG).
+	// Placement is set only where the handler attached it: a read whose caller
+	// Cedar allows ReadObjectPlacement (objecth/placement.go). Built from
+	// o.Placement alone — never o.BackendID / o.Bucket, which a JOIN may fill
+	// for anyone.
+	if p := o.Placement; p != nil {
+		out.Placement = &pb.PhysicalPlacement{
+			BackendId:   p.BackendID,
+			BucketId:    p.Bucket,
+			StoragePath: p.StoragePath,
+		}
+	}
 	return out
 }
 

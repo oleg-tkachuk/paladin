@@ -421,6 +421,14 @@ type Object struct {
 	// PublicURL is where anyone may read the object unsigned, for an object
 	// in a public collection (ADR-0027); "" otherwise.
 	PublicURL string
+
+	// Placement is where the object's bytes physically live. Set only by the
+	// read paths (GetObject, LookupObject, ListObjects), and only when Cedar
+	// allows the caller ReadObjectPlacement on the object (placement.go);
+	// nil everywhere else. The response projection reads this field alone —
+	// never BackendID/Bucket above — so an unauthorised caller cannot be
+	// shown placement by a path that happened to JOIN the bucket.
+	Placement *Placement
 }
 
 type CreateObjectArgs struct {
@@ -1076,15 +1084,16 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	// Pagination is unaffected: `next` keys on the last FETCHED row (repo), not
 	// the surviving rows — exactly like the CEL filter above — so dropping rows
 	// post-fetch keeps the cursor stable and never skips or repeats an object.
+	perRow := false
 	if pe, ok := h.policy.(cedar.PerObjectEvaluator); ok {
-		perRow, err := pe.NeedsPerObjectEval(ctx, tenantID, in.Collection)
+		perRow, err = pe.NeedsPerObjectEval(ctx, tenantID, in.Collection)
 		if err != nil {
 			return nil, "", apiutil.MapError(fmt.Errorf("authz: %w", err))
 		}
 		if perRow {
 			kept := objs[:0]
 			for _, o := range objs {
-				authErr := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+				rowRes := &cedar.Resource{
 					TenantID:    tenantID,
 					Collection:  in.Collection,
 					Key:         o.Key,
@@ -1095,20 +1104,46 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 					SizeBytes:   o.SizeBytes,
 					ContentType: o.ContentType,
 					Tags:        o.Tags,
-				}, cedar.ActionGetObject, o.SizeBytes, o.ContentType)
+				}
+				authErr := h.authorize(ctx, principal, tenantID, rowRes, cedar.ActionGetObject, o.SizeBytes, o.ContentType)
 				if authErr != nil {
 					if connect.CodeOf(authErr) == connect.CodePermissionDenied {
 						continue // policy declines this specific object
 					}
 					return nil, "", authErr // engine fault, not a denial
 				}
+				// The policies decide per object, so placement does too.
+				h.attachPlacement(ctx, principal, rowRes, &o)
 				kept = append(kept, o)
 			}
 			objs = kept
 		}
 	}
+	if !perRow {
+		h.attachListPlacement(ctx, principal, tenantID, in.Collection, listBackendID, listBucket, objs)
+	}
 
 	return objs, next, nil
+}
+
+// attachListPlacement sets Placement on every row of a page with ONE
+// collection-scoped ReadObjectPlacement check, the same shape as the page's
+// GetObject check above. Sound only when the applicable policies are constant
+// across the collection (NeedsPerObjectEval false); otherwise the per-row loop
+// decides placement per object instead.
+func (h *Handler) attachListPlacement(ctx context.Context, principal *auth.Principal, tenantID uuid.UUID, collection, backendID, bucket string, objs []Object) {
+	if len(objs) == 0 || backendID == "" || bucket == "" {
+		return
+	}
+	if !h.mayReadPlacement(ctx, principal, &cedar.Resource{
+		TenantID: tenantID, Collection: collection,
+		BackendID: backendID, BucketName: bucket,
+	}, 0, "") {
+		return
+	}
+	for i := range objs {
+		objs[i].Placement = placementFor(tenantID, backendID, bucket, &objs[i])
+	}
 }
 
 // ─── CountObjects ───────────────────────────────────────────────────────────
@@ -1252,14 +1287,16 @@ func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (*
 	// query does not JOIN collections) so bucket:/collection: PAT scopes
 	// enforce on read; best-effort + read-only (see ListObjects).
 	getBackendID, getBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false) // get (read)
-	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+	getRes := &cedar.Resource{
 		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: getBackendID, BucketName: getBucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
-	}, cedar.ActionGetObject, obj.SizeBytes, obj.ContentType); err != nil {
+	}
+	if err := h.authorize(ctx, principal, tenantID, getRes, cedar.ActionGetObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
 	}
 	h.attachLock(ctx, tenantID, &obj)
+	h.attachPlacement(ctx, principal, getRes, &obj)
 	return &obj, nil
 }
 
@@ -1300,14 +1337,16 @@ func (h *Handler) LookupObject(ctx context.Context, collection, key string) (*Ob
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on lookup; best-effort + read-only (see ListObjects).
 	lkBackendID, lkBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false) // lookup (read)
-	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+	lkRes := &cedar.Resource{
 		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: lkBackendID, BucketName: lkBucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
-	}, cedar.ActionGetObject, obj.SizeBytes, obj.ContentType); err != nil {
+	}
+	if err := h.authorize(ctx, principal, tenantID, lkRes, cedar.ActionGetObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
 	}
 	h.attachLock(ctx, tenantID, &obj)
+	h.attachPlacement(ctx, principal, lkRes, &obj)
 	return &obj, nil
 }
 

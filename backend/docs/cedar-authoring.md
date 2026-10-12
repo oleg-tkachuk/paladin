@@ -101,6 +101,7 @@ is checked against the most specific one the request names — for example,
 | Actions | Resource |
 |---------|----------|
 | `PutObject` `GetObject` `DeleteObject` `RestoreObject` `UpdateObject` `CopyObject` | `Object`, `Collection` |
+| `ReadObjectPlacement` | `Object`, `Collection` |
 | `PresignPut` `PresignGet` `HeadObject` | `Object` |
 | `SetObjectRetention` `SetObjectLegalHold` `ReadObjectLock` `SetObjectTaint` | `Object` |
 | `ManageCollection` | `Collection`, `Tenant` |
@@ -122,6 +123,18 @@ destination collection), listing, counting. `ConfigureLock` (the bucket's defaul
 from `SetObjectRetention` (one object's lock), so each can be granted alone.
 `SetObjectTaint` (setting or clearing an object's taint signals) is separate
 from `UpdateObject`, because clearing a signal re-opens the content.
+`ReadObjectPlacement` reveals an object's physical placement — its storage
+backend, bucket and key inside the bucket — in the `placement` field of
+`GetObject`, `LookupObject` and `ListObjects`. It is checked after the read is
+allowed, on the same resource (on the `Collection` for a listing, unless a
+policy decides per object), and a denial only leaves the field unset. No
+default policy grants it, so only `platform.admin` sees placement until a
+policy permits it, for example:
+
+```cedar
+permit (principal, action == Action::"ReadObjectPlacement", resource)
+when { principal.roles.contains("storage.operator") };
+```
 
 ## 5. Attributes
 
