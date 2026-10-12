@@ -14,6 +14,9 @@
 // written to the DB — they live in env vars / Secrets, where the S3
 // adapter picks them up at construction time. Only operational metadata
 // (kind, endpoint, region, sse type, events target) is mirrored.
+//
+// A mirrored backend that has never been probed is then probed for its S3
+// features (ADR-0026), with the credentials the process loaded from config.
 
 package bootstrap
 
@@ -27,6 +30,7 @@ import (
 	"go.uber.org/zap"
 
 	v1admindomain "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/backendh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
@@ -36,6 +40,9 @@ import (
 type BackendStore interface {
 	Upsert(ctx context.Context, b v1admindomain.StorageBackend) error
 	Get(ctx context.Context, backendID string) (v1admindomain.StorageBackend, error)
+	// The probe's recording (SetHealth, SetFeatures) — the same writes
+	// TestBackend makes.
+	backendh.ProbeRecorder
 }
 
 // BackendDeps groups what EnsureBackends needs from the surrounding
@@ -44,6 +51,9 @@ type BackendDeps struct {
 	Backends BackendStore
 	Audit    AuditWriter
 	Logger   *zap.Logger
+	// Prober, when set, probes each configured backend that has never been
+	// probed (ADR-0026). nil skips the probe.
+	Prober backendh.BackendProber
 }
 
 const (
@@ -96,6 +106,7 @@ func EnsureBackends(ctx context.Context, cfg config.Storage, deps BackendDeps) e
 				log.Debug("backend already converged, skipping",
 					zap.String("backend_id", id))
 				writeBackendAudit(ctx, deps, auditActionBackendNoop, id)
+				probeIfNeverProbed(ctx, deps, log, existing)
 				continue
 			}
 		}
@@ -108,8 +119,36 @@ func EnsureBackends(ctx context.Context, cfg config.Storage, deps BackendDeps) e
 			zap.String("kind", desired.Kind),
 			zap.String("endpoint", desired.Endpoint))
 		writeBackendAudit(ctx, deps, auditActionBackendUpsert, id)
+		// A new backend has no results; an existing one keeps the ones it
+		// had (the upsert does not touch them).
+		desired.Features = existing.Features
+		probeIfNeverProbed(ctx, deps, log, desired)
 	}
 	return nil
+}
+
+// probeIfNeverProbed runs the feature probe (ADR-0026) on a backend that has
+// no recorded results, so a backend declared in config does not wait for an
+// operator's TestBackend. One that was probed is left alone: re-probing on
+// every boot would be the periodic re-probe the ADR rejects, and an operator
+// who changed the store runs TestBackend. Synchronous, inside TestBackend's
+// timeouts — the bootstrap is a one-shot Job, so there is no later moment to
+// finish a background probe in. A system step: it writes only the advisory
+// health and feature tables, so no audit row; and it never fails the
+// bootstrap — an unreachable backend stays registered with its features
+// unknown and is probed again on the next boot.
+func probeIfNeverProbed(ctx context.Context, deps BackendDeps, log *zap.Logger, b v1admindomain.StorageBackend) {
+	if deps.Prober == nil || len(b.Features) > 0 {
+		return
+	}
+	out := backendh.ProbeAndRecord(ctx, deps.Prober, deps.Backends, b)
+	if !out.Reachable {
+		log.Warn("backend unreachable, features stay unknown until it is probed",
+			zap.String("backend_id", b.BackendID), zap.String("error", out.ErrorMessage))
+		return
+	}
+	log.Info("probed backend features",
+		zap.String("backend_id", b.BackendID), zap.Int("features", len(out.Features)))
 }
 
 // domainBackendFromYAML translates the yaml-config representation of a

@@ -464,20 +464,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   otherwise delete this entry with that decision recorded.
 - **Blockers:** whether per-tenant egress is ever billed.
 
-### A storage backend is not probed until someone runs TestBackend
-
-- **Status:** Deferred
-- **Reason:** the feature probe ([ADR-0026](docs/adr/0026-storage-backend-features-are-probed.md))
-  runs only on `TestBackend`, so a newly registered backend shows every
-  feature unknown — and refuses a public bucket — until an operator probes it.
-  Re-probing on a schedule was considered and rejected: a store's behaviour
-  changes when someone upgrades or reconfigures it, and that someone can run
-  `TestBackend`.
-- **Definition of Done:** a backend is probed once, automatically, when it is
-  registered (`CreateBackend`, or the config bootstrap) and whenever it has
-  never been probed; a test covers both paths.
-- **Blockers:** none.
-
 ### Replication: real `StorageReplicator` implementation
 
 - **Status:** Aspirational
