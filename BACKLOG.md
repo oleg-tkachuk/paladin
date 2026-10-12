@@ -1618,6 +1618,28 @@ The contract-side half of ADR-0018. The client-side layers are in both SDKs.
 - **Blockers:** a reproducing run — from the consumer, with the process's
   native libraries listed, or from the lifecycle job.
 
+### The Python SDK is written for Python 3.13, not 3.15
+
+- **Status:** Deferred.
+- **Reason:** `requires-python` is `>=3.13`, and 3.15's additions are syntax or
+  builtins 3.13 cannot load: `lazy import`, unpacking in comprehensions,
+  `frozendict`, `sentinel`. Moving the floor to 3.15 drops two supported
+  Pythons and the only one with a `biscuit-python` wheel (3.13), where the
+  attenuation tests run. The one form older Pythons ignore,
+  `__lazy_modules__`, was measured on 3.15.0 on 2026-10-12 and gains
+  nothing: deferring the SDK's standard-library and third-party imports left
+  `import paladin` at about 140 ms, since the generated stubs and connectrpc
+  load the same modules. Deferring the SDK's own submodules breaks
+  `paladin.connect`, `paladin.delete` and `paladin.ensure`: importing the
+  submodule of the same name first rebinds each to that module.
+- **Definition of Done:** the floor is 3.15, the module-level lookup tables
+  (`errors._KINDS`, `transfer._DIGESTS`, `workflows._RPC_SPELLINGS`) are
+  `frozendict`s, and the imports the SDK defers by hand inside functions
+  (`_tls_http`, `cryptography`, `google_crc32c`) are reviewed for `lazy
+  import`.
+- **Blockers:** 3.13 and 3.14 leaving the supported range, and a
+  `biscuit-python` wheel for 3.15.
+
 ## Tooling and observability
 
 ### `container_*` metrics do not exist on this cluster, and the scrape says otherwise
