@@ -10,10 +10,17 @@
  * backend-disabled.spec.ts covers what a DISABLED backend does to the rest of
  * the console. This covers the transitions themselves.
  */
+import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
 import { backendState } from "./fixtures/seed";
+
+// Every per-backend state change sits in the row's menu.
+async function rowAction(page: Page, backendId: string, item: RegExp) {
+  await page.getByRole("button", { name: `Actions for ${backendId}` }).click();
+  await page.getByRole("menuitem", { name: item }).click();
+}
 
 test.describe("Storage backend — drain and maintenance", () => {
   test("draining a backend makes it read-only and advances the version", async ({
@@ -29,7 +36,7 @@ test.describe("Storage backend — drain and maintenance", () => {
     const row = page.getByRole("row", { name: new RegExp(be.backendId) });
     await expect(row).toBeVisible({ timeout: 15_000 });
 
-    await row.getByRole("button", { name: /^Drain$/ }).click();
+    await rowAction(page, be.backendId, /^Drain$/);
 
     await expect
       .poll(async () => (await backendState(be.backendId)).readOnly, {
@@ -52,16 +59,16 @@ test.describe("Storage backend — drain and maintenance", () => {
     const row = page.getByRole("row", { name: new RegExp(be.backendId) });
     await expect(row).toBeVisible({ timeout: 15_000 });
 
-    await row.getByRole("button", { name: /^Drain$/ }).click();
+    await rowAction(page, be.backendId, /^Drain$/);
     await expect
       .poll(async () => (await backendState(be.backendId)).readOnly, {
         timeout: 15_000,
       })
       .toBe(true);
 
-    // The button is the same control; its label follows the state, which is
-    // what makes this a round trip rather than two unrelated clicks.
-    await row.getByRole("button", { name: /^Undrain$/ }).click();
+    // The menu item is the same control; its label follows the state, which
+    // is what makes this a round trip rather than two unrelated clicks.
+    await rowAction(page, be.backendId, /^Undrain$/);
     await expect
       .poll(async () => (await backendState(be.backendId)).readOnly, {
         timeout: 15_000,
@@ -80,9 +87,8 @@ test.describe("Storage backend — drain and maintenance", () => {
     const row = page.getByRole("row", { name: new RegExp(be.backendId) });
     await expect(row).toBeVisible({ timeout: 15_000 });
 
-    // Maintenance has no per-row button — it is a bulk action, so the row is
-    // selected first. That is a UI shape, not a different RPC: the bulk path
-    // fans out over the same OCC-guarded SetBackendMaintenance.
+    // Through the bulk bar rather than the row menu: the bulk path fans out
+    // over the same OCC-guarded SetBackendMaintenance, so this covers it too.
     await page
       .getByRole("checkbox", { name: `Select ${be.backendId}` })
       .click();

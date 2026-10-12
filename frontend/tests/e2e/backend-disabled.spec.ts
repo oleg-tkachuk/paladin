@@ -28,7 +28,10 @@ test.describe("US3 — disabled backends in the UI", () => {
     await expect(row.getByText(/^Disabled$/)).toBeVisible();
 
     // Toggling flips it to Enabled within a couple of seconds (SC-007).
-    await row.getByRole("button", { name: /^Enable$/ }).click();
+    await row
+      .getByRole("button", { name: `Actions for ${be.backendId}` })
+      .click();
+    await page.getByRole("menuitem", { name: /^Enable$/ }).click();
     await expect(row.getByText(/^Enabled$/)).toBeVisible({ timeout: 2000 });
   });
 
