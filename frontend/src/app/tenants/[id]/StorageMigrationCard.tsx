@@ -11,11 +11,14 @@ import { Input } from "@/components/ui/input";
 import { useTenants } from "@/hooks/useTenants";
 import type { StorageMigrationStatus } from "@/gen/paladin/admin/v1/tenant_service_pb";
 
-// Terminal states — the copy job is done, so we stop polling.
+// Terminal states — the copy job is done, so we stop polling. `rolling_back`
+// is not: the worker is still moving the tenant back to its source bucket
+// after a failed verify, and ends it `failed`.
 const TERMINAL = new Set(["completed", "cleaned", "failed"]);
 
 const STATE_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   failed: "destructive",
+  rolling_back: "destructive",
   completed: "default",
   cleaned: "default",
 };
@@ -186,6 +189,12 @@ export function StorageMigrationCard({
             <div className="text-xs text-muted-foreground">
               {copied} / {total} objects copied
             </div>
+          </div>
+        )}
+        {mig.state === "rolling_back" && (
+          <div className="text-xs text-muted-foreground">
+            The copy failed verification. The tenant is being moved back to its
+            source bucket; the migration can be retried once it has failed.
           </div>
         )}
         {mig.error && (

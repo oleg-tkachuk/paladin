@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -17,6 +18,12 @@ type fakeMigRepo struct {
 	bucketState string // provision_state the worker sees for the target bucket
 	rebound     bool
 	rebindErr   error // what RebindTenant returns; nil rebinds
+	// written is what ListWrittenSince walks: every object with the time it
+	// was last written, in (UpdatedAt, ID) order.
+	written     []WrittenObject
+	reboundBack bool   // RebindBack ran: the tenant is on its source again
+	reason      string // the error StartRollback or Fail recorded
+	reboundAt   time.Time
 }
 
 func (f *fakeMigRepo) ListActive(context.Context, int) ([]StorageMigration, error) {
@@ -98,6 +105,60 @@ func (f *fakeMigRepo) RebindTenant(_ context.Context, at MigrationRead, _, _ str
 		return f.rebindErr
 	}
 	f.rebound = true
+	f.mig.ReboundAt = f.reboundAt
+	return nil
+}
+
+func (f *fakeMigRepo) StartRollback(_ context.Context, at MigrationRead, reason string) error {
+	if err := f.moveFrom(at, MigStateRollingBack); err != nil {
+		return err
+	}
+	f.mig.Attempts++
+	f.reason = reason
+	f.mig.RollbackCursorAt, f.mig.RollbackCursorID = time.Time{}, uuid.Nil
+	return nil
+}
+
+// after is the SQL's ROW(updated_at, id) > ROW(at, id).
+func after(o WrittenObject, at time.Time, id uuid.UUID) bool {
+	return o.UpdatedAt.After(at) || (o.UpdatedAt.Equal(at) && bytes.Compare(o.ID[:], id[:]) > 0)
+}
+
+func (f *fakeMigRepo) ListWrittenSince(_ context.Context, _ uuid.UUID, afterAt time.Time, afterID uuid.UUID, limit int) ([]WrittenObject, error) {
+	out := []WrittenObject{}
+	for _, o := range f.written {
+		if after(o, afterAt, afterID) {
+			out = append(out, o)
+			if len(out) == limit {
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeMigRepo) AdvanceRollback(_ context.Context, at MigrationRead, cursorAt time.Time, cursorID uuid.UUID) error {
+	if !f.holds(at) {
+		return ErrMigrationMoved
+	}
+	if !f.mig.RollbackCursorAt.IsZero() && after(WrittenObject{UpdatedAt: f.mig.RollbackCursorAt, ID: f.mig.RollbackCursorID}, cursorAt, cursorID) {
+		return ErrMigrationMoved // backwards
+	}
+	f.mig.RollbackCursorAt, f.mig.RollbackCursorID = cursorAt, cursorID
+	return nil
+}
+
+func (f *fakeMigRepo) RebindBack(_ context.Context, at MigrationRead, cursorAt time.Time, cursorID uuid.UUID, _, _ string) error {
+	if !f.holds(at) {
+		return ErrMigrationMoved
+	}
+	for _, o := range f.written {
+		if after(o, cursorAt, cursorID) {
+			return ErrRollbackBehind
+		}
+	}
+	f.reboundBack = true
+	f.mig.State = MigStateFailed // the error stays, attempts too
 	return nil
 }
 
@@ -105,11 +166,12 @@ func (f *fakeMigRepo) Complete(_ context.Context, at MigrationRead) error {
 	return f.moveFrom(at, MigStateCompleted)
 }
 
-func (f *fakeMigRepo) Fail(_ context.Context, at MigrationRead, _ string) error {
+func (f *fakeMigRepo) Fail(_ context.Context, at MigrationRead, reason string) error {
 	if err := f.moveFrom(at, MigStateFailed); err != nil {
 		return err
 	}
 	f.mig.Attempts++
+	f.reason = reason
 	return nil
 }
 
@@ -286,7 +348,7 @@ func (h *fakeHeader) HeadObject(_ context.Context, loc CopyLocation) (int64, err
 	if s, ok := h.sizes[loc.Collection+"/"+loc.Key]; ok {
 		return s, nil
 	}
-	return -1, errors.New("not found")
+	return -1, fmt.Errorf("head: %w", ErrObjectMissing)
 }
 
 func TestStorageMigration_PhysicalVerifyPass(t *testing.T) {
@@ -308,20 +370,175 @@ func TestStorageMigration_PhysicalVerifyPass(t *testing.T) {
 	}
 }
 
-func TestStorageMigration_PhysicalVerifyFailsOnMismatch(t *testing.T) {
+// rollbackFixture is a migration that copied docs/a.txt broken (50 bytes of
+// 100) and rebound the tenant at reboundAt. After the rebind the tenant wrote:
+// new.txt (in the target, as recorded), a.txt's tags (its row moved, its
+// broken target copy did not), late.txt (an upload that resolved its bucket
+// before the rebind, so not in the target) — and five more, to need batches.
+func rollbackFixture(state string) (*fakeMigRepo, *fakeHeader) {
 	tid := uuid.New()
+	reboundAt := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	written := func(key string, sec int, size int64) WrittenObject {
+		return WrittenObject{
+			ObjectRef: ObjectRef{Collection: "docs", Key: key, SizeBytes: size},
+			ID:        uuid.New(), UpdatedAt: reboundAt.Add(time.Duration(sec) * time.Second),
+		}
+	}
 	repo := &fakeMigRepo{
 		mig: StorageMigration{
-			TenantID: tid, State: MigStateVerifying, ObjectsTotal: 1, ObjectsCopied: 1,
+			TenantID: tid, State: state, ObjectsTotal: 2, ObjectsCopied: 2,
+			SourceBackendID: "primary", SourceBucketName: "paladin-shared",
 			TargetBackendID: "primary", TargetBucketName: "paladin-" + tid.String(),
+			ReboundAt: reboundAt, Attempts: 3,
 		},
-		objects: []ObjectRef{{Collection: "docs", Key: "a.txt", SizeBytes: 100}},
+		objects: []ObjectRef{{Collection: "docs", Key: "a.txt", SizeBytes: 100}, {Collection: "docs", Key: "b.txt", SizeBytes: 7}},
+		rebound: true,
+		written: []WrittenObject{
+			written("new.txt", 0, 9), // at the rebind instant: included
+			written("a.txt", 1, 100),
+			written("late.txt", 2, 4),
+			written("w1", 3, 1), written("w2", 4, 1), written("w3", 5, 1), written("w4", 6, 1), written("w5", 7, 1),
+		},
 	}
-	hdr := &fakeHeader{sizes: map[string]int64{"docs/a.txt": 50}} // wrong size in target
-	w := &StorageMigrationWorker{Repo: repo, Copier: &fakeCopier{}, Header: hdr, CopyBatch: 2, Now: time.Now}
+	hdr := &fakeHeader{sizes: map[string]int64{
+		"docs/a.txt": 50, "docs/b.txt": 7, "docs/new.txt": 9,
+		"docs/w1": 1, "docs/w2": 1, "docs/w3": 1, "docs/w4": 1, "docs/w5": 1,
+	}}
+	return repo, hdr
+}
+
+// A verify that fails after the rebind used to fail the migration in place:
+// the tenant stayed dedicated on a bucket missing objects, with no way back.
+// It now rolls back: what the tenant wrote to the target since the rebind is
+// copied back to the source, the tenant is rebound to it, and the migration
+// ends 'failed' with the verify error — retryable.
+func TestStorageMigration_VerifyFailureRollsBack(t *testing.T) {
+	repo, hdr := rollbackFixture(MigStateVerifying)
+	cop := &fakeCopier{}
+	del := &fakeDeleter{}
+	w := &StorageMigrationWorker{Repo: repo, Copier: cop, Deleter: del, Header: hdr, CopyBatch: 2,
+		Now: func() time.Time { return time.Now().Add(24 * time.Hour) }}
+
 	w.tick(context.Background())
-	if repo.mig.State != MigStateFailed {
-		t.Fatalf("state = %q, want failed (target size mismatch)", repo.mig.State)
+	if repo.mig.State != MigStateRollingBack {
+		t.Fatalf("state = %q after the failed verify, want %q", repo.mig.State, MigStateRollingBack)
+	}
+	if repo.mig.Attempts != 4 {
+		t.Errorf("attempts = %d, want the verify failure counted (4)", repo.mig.Attempts)
+	}
+	runToTerminal(t, w, repo)
+
+	if repo.mig.State != MigStateFailed || !repo.reboundBack {
+		t.Fatalf("state = %q, rebound back = %v; want failed on the source bucket", repo.mig.State, repo.reboundBack)
+	}
+	if !contains(repo.reason, "physical verify") || !contains(repo.reason, "a.txt size mismatch") {
+		t.Errorf("error = %q, want the verify failure kept", repo.reason)
+	}
+	if repo.mig.Attempts != 4 {
+		t.Errorf("attempts = %d after the rollback, want 4 (the failure counted once)", repo.mig.Attempts)
+	}
+	want := map[string]bool{}
+	for _, k := range []string{"new.txt", "w1", "w2", "w3", "w4", "w5"} {
+		want["docs/"+k+" : "+repo.mig.TargetBucketName+"->paladin-shared"] = true
+	}
+	for _, c := range cop.copies {
+		if !want[c] {
+			t.Errorf("unexpected copy %q (a.txt's broken copy and late.txt, absent from the target, must not be copied)", c)
+		}
+		delete(want, c)
+	}
+	for c := range want {
+		t.Errorf("missing copy %q", c)
+	}
+	if len(del.deleted) != 0 {
+		t.Errorf("a rolled-back migration deleted source objects: %v", del.deleted)
+	}
+}
+
+// A reverse copy that keeps failing leaves the migration rolling back — the
+// tenant on the target, whole — and the next ticks retry it from the cursor.
+func TestStorageMigration_RollbackCopyFailureRetries(t *testing.T) {
+	repo, hdr := rollbackFixture(MigStateRollingBack)
+	cop := &fakeCopier{failOn: "w2"}
+	w := &StorageMigrationWorker{Repo: repo, Copier: cop, Header: hdr, CopyBatch: 2, Now: time.Now}
+	for range 5 {
+		w.tick(context.Background())
+	}
+	if repo.mig.State != MigStateRollingBack || repo.reboundBack {
+		t.Fatalf("state = %q, rebound back = %v; want still rolling back on the target", repo.mig.State, repo.reboundBack)
+	}
+	if got := repo.mig.RollbackCursorAt; !got.Equal(repo.written[3].UpdatedAt) {
+		t.Errorf("cursor at %v, want it kept at w1 (%v), the last object copied", got, repo.written[3].UpdatedAt)
+	}
+
+	cop.failOn = ""
+	runToTerminal(t, w, repo)
+	if repo.mig.State != MigStateFailed || !repo.reboundBack {
+		t.Fatalf("state = %q, rebound back = %v; want failed on the source bucket", repo.mig.State, repo.reboundBack)
+	}
+	if !contains(fmt.Sprint(cop.copies), "docs/w2") {
+		t.Errorf("w2 never copied back: %v", cop.copies)
+	}
+}
+
+// An object written past the cursor after the last batch is still only in
+// the target: the rebind back refuses, and the next tick copies it first.
+func TestStorageMigration_RollbackCatchesUpBeforeRebindingBack(t *testing.T) {
+	repo, hdr := rollbackFixture(MigStateRollingBack)
+	repo.written = repo.written[:1]
+	cop := &fakeCopier{}
+	w := &StorageMigrationWorker{Repo: repo, Copier: cop, Header: hdr, CopyBatch: 2, Now: time.Now}
+	w.tick(context.Background()) // copies new.txt
+	// Written now, after the batch: the RebindBack below must not go ahead.
+	repo.written = append(repo.written, WrittenObject{
+		ObjectRef: ObjectRef{Collection: "docs", Key: "w1", SizeBytes: 1},
+		ID:        uuid.New(), UpdatedAt: repo.mig.ReboundAt.Add(time.Minute),
+	})
+	if err := w.Repo.RebindBack(context.Background(), repo.mig.Read(), repo.mig.RollbackCursorAt,
+		repo.mig.RollbackCursorID, "primary", "paladin-shared"); !errors.Is(err, ErrRollbackBehind) {
+		t.Fatalf("RebindBack = %v, want ErrRollbackBehind", err)
+	}
+	runToTerminal(t, w, repo)
+	if !contains(fmt.Sprint(cop.copies), "docs/w1") || !repo.reboundBack {
+		t.Errorf("copies %v, rebound back %v; want w1 copied before rebinding back", cop.copies, repo.reboundBack)
+	}
+}
+
+// A rollback step read by a worker that then paused changes nothing once the
+// migration moved on — another attempt, or another state: no copy over what
+// the source holds now, no cursor, no rebind.
+func TestStorageMigration_StaleRollbackChangesNothing(t *testing.T) {
+	for name, move := range map[string]func(m *StorageMigration){
+		"another attempt": func(m *StorageMigration) { m.Attempts++ },
+		// Rolled back, retried and copying again: the tenant is shared and
+		// writing to the source.
+		"another state": func(m *StorageMigration) { m.State = MigStateCopying; m.Attempts++ },
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo, hdr := rollbackFixture(MigStateRollingBack)
+			stale := repo.mig
+			move(&repo.mig)
+			current := repo.mig
+			cop := &fakeCopier{}
+			w := &StorageMigrationWorker{Repo: repo, Copier: cop, Header: hdr, CopyBatch: 2, Now: time.Now}
+
+			if err := w.advance(context.Background(), stale); !errors.Is(err, ErrMigrationMoved) {
+				t.Fatalf("stale step returned %v, want ErrMigrationMoved", err)
+			}
+			if repo.mig != current || repo.reboundBack || len(cop.copies) != 0 {
+				t.Errorf("stale step changed things: %+v (want %+v), rebound back %v, copies %v",
+					repo.mig, current, repo.reboundBack, cop.copies)
+			}
+			// Nor, with the batch done, its rebind back.
+			stale.RollbackCursorAt = repo.written[len(repo.written)-1].UpdatedAt
+			stale.RollbackCursorID = repo.written[len(repo.written)-1].ID
+			if err := w.advance(context.Background(), stale); !errors.Is(err, ErrMigrationMoved) {
+				t.Fatalf("stale rebind back returned %v, want ErrMigrationMoved", err)
+			}
+			if repo.reboundBack || repo.mig != current {
+				t.Error("a stale rebind back went through")
+			}
+		})
 	}
 }
 

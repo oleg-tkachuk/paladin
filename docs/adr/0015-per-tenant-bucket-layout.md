@@ -126,6 +126,27 @@ Everything else — `owner_tenant_id`, `provision_state`, `region`,
   window). Default policy is **new tenants may be dedicated, legacy stays shared
   forever** (zero migration); the copy job is an explicit per-tenant admin
   action, not automatic.
+  - **A failed verify rolls back** (amended 2026-10). The verify runs after
+    the rebind, so a failure finds the tenant already serving from a
+    dedicated bucket that is missing objects. Failing in place left it there
+    with no repair path and no retry (a retry needs a `shared` tenant).
+    Instead the migration moves `verifying → rolling_back`, recording the
+    verify error: the worker copies back to the source (same-key
+    `CopyObject`, cursor-resumable) every AVAILABLE private object written at
+    or after `rebound_at` — the rebind transaction's start, recorded by it —
+    measured by `objects.updated_at`, which every byte-changing write to an
+    object row moves; then, in ONE transaction under the migration row's lock
+    and the state + attempt guard, and only if nothing was written past the
+    cursor meanwhile, it rebinds the private collections and the default
+    binding to the source bucket, flips the layout back to `shared` and sets
+    `failed` with the verify error kept. The tenant is then retried like any
+    other failure. Older objects are not copied (their source copy is the
+    original; the target copy may be the broken one), nor are rows deleted
+    after the rebind (visibility is the row's state, not the bucket's
+    contents). The rollback never runs cleanup: the source copies are the
+    live data again, and cleanup runs only from `completed`. A migration
+    that failed this way before rollbacks existed is rolled back by calling
+    `MigrateTenantStorageLayout` on its tenant.
 
 ### Lifecycle answers (the BACKLOG DoD questions)
 
@@ -197,7 +218,11 @@ Component-level design for the Phase 2 machinery:
   hard ceiling that mandates the hybrid tier and, at scale, multi-account
   sharding.
 - **Rollback.** Phase 1/2 are additive and flag-free; a dedicated tenant can be
-  migrated back to shared by the inverse of the Phase 3 copy job. The
+  migrated back to shared by the inverse of the Phase 3 copy job. Within a
+  migration, the window in which that is automatic is between the rebind and
+  a failed verify: the job rolls the tenant back to its source bucket itself
+  (Phase 3 above). After `completed` the source copies are kept until
+  `cleanup_after`; there is no automatic way back once they are cleaned. The
   `storage_layout` column is reversible (Down drops it; enforcement never
   depended on it). No authz-visible change to roll back — the isolation gate
   (`owner_tenant_id` trigger) is unchanged.

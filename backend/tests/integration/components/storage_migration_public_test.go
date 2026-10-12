@@ -63,7 +63,7 @@ func (s *fakeObjectStore) HeadObject(_ context.Context, l worker.CopyLocation) (
 	defer s.mu.Unlock()
 	size, ok := s.objects[storeKey(l)]
 	if !ok {
-		return -1, fmt.Errorf("NotFound: %s", storeKey(l))
+		return -1, fmt.Errorf("NotFound: %s: %w", storeKey(l), worker.ErrObjectMissing)
 	}
 	return size, nil
 }
@@ -161,11 +161,20 @@ func (f publicMigrationFixture) start(t *testing.T, ctx context.Context) error {
 // state it was left in with its recorded error.
 func (f publicMigrationFixture) drive(t *testing.T, ctx context.Context) (string, string) {
 	t.Helper()
+	return f.driveWith(t, ctx, f.store, f.store)
+}
+
+// driveWith is drive with the worker's copier and header swapped for ones a
+// test steers.
+func (f publicMigrationFixture) driveWith(t *testing.T, ctx context.Context,
+	copier worker.ObjectCopier, header worker.ObjectHeader,
+) (string, string) {
+	t.Helper()
 	w := &worker.StorageMigrationWorker{
 		Repo:     adapters.NewStorageMigrationRepo(sqlc.New(f.pool), f.pool),
-		Copier:   f.store,
+		Copier:   copier,
 		Deleter:  f.store,
-		Header:   f.store,
+		Header:   header,
 		Interval: 10 * time.Millisecond,
 		// Past the retention window, so a completed migration cleans up too.
 		Now: func() time.Time { return time.Now().Add(time.Hour) },

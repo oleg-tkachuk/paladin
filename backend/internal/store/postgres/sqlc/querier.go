@@ -14,6 +14,9 @@ type Querier interface {
 	// Records copy progress + the resume cursor after a batch. Progress only moves
 	// forward: a stale batch reporting less than is recorded changes nothing.
 	AdvanceStorageMigrationCopy(ctx context.Context, objectsCopied int64, cursorCollection string, cursorPath string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
+	// Records the rollback's resume cursor after a batch. It only moves forward:
+	// a stale batch reporting an earlier cursor changes nothing.
+	AdvanceStorageMigrationRollback(ctx context.Context, cursorAt pgtype.Timestamptz, cursorID pgtype.UUID, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Puts a freshly promoted version under the parent bucket's default retention
 	// (ADR-0013). Skipped entirely when the bucket has no default, and never
 	// overwrites an existing row — an explicit SetObjectRetention that arrived
@@ -222,6 +225,10 @@ type Querier interface {
 	// and the tenant switcher silently hid every membership past the fifth. Same
 	// cap, same class of bug, twice.
 	FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
+	// rolling_back -> failed, in the transaction that rebinds the tenant back.
+	// The verify error stays, and attempts too: the failure was counted when the
+	// rollback started.
+	FinishStorageMigrationRollback(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error)
 	GetBucket(ctx context.Context, name string, name_2 string) (GetBucketRow, error)
 	GetBucketQuota(ctx context.Context, backend string, bucket string) (GetBucketQuotaRow, error)
@@ -345,7 +352,8 @@ type Querier interface {
 	// Returns shared buckets (owner IS NULL) plus buckets owned by the tenant.
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
 	// Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
-	// still active — the worker must run retention-gated cleanup on it.
+	// still active — the worker must run retention-gated cleanup on it — and so
+	// is 'rolling_back', which the worker must finish rolling back.
 	ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]ListActiveStorageMigrationsRow, error)
 	// Cursor: (at, id) tuple. Optional predicates use the canonical
 	// sqlc OR-NULL idiom — caller passes NULL to opt out, Postgres
@@ -583,8 +591,26 @@ type Querier interface {
 	// successor its parent's holder may recover.
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) error
 	MarkStorageMigrationCleaned(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
+	// Rolling a migration back (ADR-0015): a physical verify that fails after the
+	// rebind moves the migration to 'rolling_back'; the worker copies the objects
+	// written since the rebind back to the source bucket, then rebinds the tenant
+	// to it and leaves the migration 'failed', retryable like any other failure.
+	// Run in the rebind transaction: rebound_at is that transaction's now(), its
+	// START time, so it is no later than any moment a writer could have seen the
+	// tenant rebound. Every object written into the dedicated bucket has an
+	// updated_at at or after it.
+	MarkStorageMigrationRebound(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// The objects MigrationListTenantObjects walks: public collections' excluded.
 	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	// The objects the rollback copies back: AVAILABLE, in a private collection
+	// (public ones never moved, ADR-0027), and written at or after the cursor —
+	// keyset on (updated_at, id), which the worker starts at (rebound_at, the
+	// nil uuid). updated_at, not created_at: the bump_resource_version trigger
+	// sets it on every UPDATE and the insert defaults it, so it covers a new
+	// object, a promote, a storage-event overwrite and a restore alike. An object
+	// written again after the cursor passed it moves back ahead of the cursor
+	// and is copied again.
+	MigrationListObjectsWrittenSince(ctx context.Context, tenantID pgtype.UUID, afterAt pgtype.Timestamptz, afterID pgtype.UUID, limitCount int32) ([]MigrationListObjectsWrittenSinceRow, error)
 	// The collections the transactional rebind moves: all but the public ones,
 	// which never rebind (collections_public_bucket_fixed, ADR-0027).
 	MigrationListTenantCollections(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
@@ -594,6 +620,11 @@ type Querier interface {
 	// collection's objects stay in their bucket (ADR-0027), so the copy, verify
 	// and cleanup never see them.
 	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
+	// Whether any object MigrationListObjectsWrittenSince would still return past
+	// the cursor. The rebind back asks it under its lock: an object written since
+	// the worker's last batch is still only in the dedicated bucket, and
+	// rebinding before it is copied would lose it.
+	MigrationObjectsWrittenSinceExist(ctx context.Context, tenantID pgtype.UUID, afterAt pgtype.Timestamptz, afterID pgtype.UUID) (bool, error)
 	// The state of the row that owns a storage path now, if any.
 	ObjectStateAtPath(ctx context.Context, tenantID pgtype.UUID, name string, path string) (ObjectState, error)
 	// The taint of the live object at a path, for the capability read gate. No
@@ -753,6 +784,15 @@ type Querier interface {
 	// rather than sessions ended.
 	RevokeRefreshTokenFamily(ctx context.Context, id pgtype.UUID) (int64, error)
 	RevokeRefreshTokensForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// A migration that failed its verify before rollbacks existed: 'failed', with
+	// the tenant still on the dedicated bucket. Moves it to 'rolling_back' for
+	// the worker, only while it is still 'failed' and the tenant's default
+	// binding still names its target bucket — the tenant serves from where this
+	// migration put it. Such a row has no rebound_at: the default binding's
+	// set_at is the rebind transaction's now() when the migration set it (which
+	// set_by records), and the migration's own creation is the fallback, earlier
+	// than any rebind of it.
+	RollBackStuckStorageMigration(ctx context.Context, id pgtype.UUID) (TenantStorageMigration, error)
 	// Dual-write rotation: stash the current ref as the previous one with a
 	// validity horizon of now()+grace, then swap in the new ref. $3 is the grace
 	// window in seconds; 0 clears the previous window (instant rotation).
@@ -869,6 +909,10 @@ type Querier interface {
 	// the match. Updates resource_version + updated_at so audit reflects
 	// the soft-delete time independently of any subsequent restore.
 	SoftDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	// verifying -> rolling_back. The verify failure is recorded and counted here,
+	// where it happened; the rollback that follows keeps both. The cursor starts
+	// empty: the worker begins at rebound_at.
+	StartStorageMigrationRollback(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// What a start must know before it uses the target bucket: its owner, whether
 	// it is public, its provisioning state, and whether any OTHER tenant reaches
 	// it through a collection or a default binding. Run with the cross-tenant

@@ -181,6 +181,14 @@ type Repository interface {
 	// bucket's name is taken by a bucket it may not use. Returns the started
 	// migration.
 	StartStorageMigration(ctx context.Context, args StartStorageMigrationArgs) (StorageMigration, error)
+	// RollBackStuckStorageMigration moves the tenant's 'failed' migration to
+	// 'rolling_back' for the worker to roll back — only while, under the same
+	// tenant lock StartStorageMigration takes, the tenant is still
+	// 'dedicated', its latest migration still 'failed' and its default
+	// binding still that migration's target bucket; otherwise
+	// ErrStorageMigrationNotRollbackable and nothing changes. Returns the
+	// migration as moved.
+	RollBackStuckStorageMigration(ctx context.Context, tenantID uuid.UUID) (StorageMigration, error)
 	// GetStorageMigration returns the tenant's migration status. ErrNotFound
 	// when none was ever started.
 	GetStorageMigration(ctx context.Context, tenantID uuid.UUID) (StorageMigration, error)
@@ -241,6 +249,12 @@ var ErrTargetBucketUnusable = errors.New("the dedicated bucket's name is taken b
 // migration the worker gave up on — the one state MigrateTenantStorageLayout
 // retries from. Mirrors worker.MigStateFailed, which writes it.
 const StorageMigrationFailed = "failed"
+
+// ErrStorageMigrationNotRollbackable is returned by
+// RollBackStuckStorageMigration when the tenant is not a migration's stuck
+// leftover: not dedicated, its latest migration not failed, or its default
+// binding not that migration's target bucket.
+var ErrStorageMigrationNotRollbackable = errors.New("tenant is not a failed migration's leftover on its target bucket")
 
 // ErrSourceBucketAmbiguous is returned by TenantSourceBucket when the tenant's
 // collections span more than one (backend, bucket) — slice 1 migrates from a
@@ -698,6 +712,15 @@ func (h *Handler) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, er
 //     and partly filled is the one finished, not left behind.
 //   - Exactly one retry wins: the repository takes a lock on the tenant and
 //     resets the row only while it is still 'failed'.
+//
+// A verify failure no longer leaves a dedicated tenant behind: the worker
+// rolls the tenant back to its source bucket (state 'rolling_back') and only
+// then fails the migration, so it is shared again and retried as above. A
+// tenant failed after its rebind BEFORE rollbacks existed is still
+// 'dedicated' on a target bucket missing objects; calling this on it starts
+// that rollback instead of refusing (rollBackStuck), and the operator retries
+// once it is 'failed' and shared. targetBackendID and the retention do not
+// apply to a rollback and are ignored.
 func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.UUID, targetBackendID string, cleanupRetentionSeconds int64) (*StorageMigration, error) {
 	if err := requirePlatformAdmin(ctx); err != nil {
 		return nil, err
@@ -711,6 +734,9 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	if t.StorageLayout != "shared" {
+		if m, ok, err := h.rollBackStuck(ctx, tenantID, t.StorageLayout); ok || err != nil {
+			return m, err
+		}
 		return nil, connect.Errorf(connect.CodeFailedPrecondition,
 			"tenant is %q, not 'shared'; only shared tenants can migrate to dedicated", t.StorageLayout)
 	}
@@ -772,6 +798,46 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &m, nil
+}
+
+// rollBackStuck is MigrateTenantStorageLayout's way out for a tenant whose
+// migration failed its verify before the worker rolled such failures back:
+// 'dedicated', serving from a target bucket that is missing objects, with
+// its latest migration 'failed' — which the retry refuses (the tenant is not
+// shared) and nothing else ever touches. Rolling it back is the same thing
+// the worker now does on a verify failure, so this hands it to the worker:
+// the migration moves to 'rolling_back', the worker copies back what was
+// written since the rebind, rebinds the tenant to its source bucket and
+// fails the migration again, now retryable.
+//
+// Only that exact leftover qualifies — latest migration 'failed' and the
+// tenant's default binding its target bucket, i.e. still where that
+// migration put it. Any other dedicated tenant (created dedicated, or moved
+// since) has no source bucket to go back to, or one an operator chose to
+// leave, and is refused as before (ok false, no error). The repository
+// re-checks under the tenant lock, which decides a race.
+func (h *Handler) rollBackStuck(ctx context.Context, tenantID uuid.UUID, layout string) (*StorageMigration, bool, error) {
+	if layout != "dedicated" {
+		return nil, false, nil
+	}
+	prev, err := h.repo.GetStorageMigration(ctx, tenantID)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return nil, false, nil
+	case err != nil:
+		return nil, false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	case prev.State != StorageMigrationFailed:
+		return nil, false, nil
+	}
+	// The migration row and the default binding are tenant-scoped (RLS): act
+	// as the tenant authorised above, as SetTenantDefaultBinding does.
+	m, err := h.repo.RollBackStuckStorageMigration(auth.WithActingTenant(ctx, tenantID), tenantID)
+	if errors.Is(err, ErrStorageMigrationNotRollbackable) {
+		return nil, false, nil
+	} else if err != nil {
+		return nil, false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	return &m, true, nil
 }
 
 // GetTenantStorageMigration returns a tenant's migration status.
