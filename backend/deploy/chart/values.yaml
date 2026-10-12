@@ -777,6 +777,11 @@ config:
     server:
       <<: *http_defaults
       addr: "0.0.0.0:8090"
+    tenants:
+      # How long a trashed tenant waits before the console marks it "Past
+      # retention" (Tenant.purge_eligible_at). Surfaced only — nothing purges
+      # a tenant on its own. Must be positive.
+      trash_retention: 720h
 
   datastores:
     postgres:

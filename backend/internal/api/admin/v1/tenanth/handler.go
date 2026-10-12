@@ -294,6 +294,19 @@ const (
 	TenantStateTrashed TenantState = "trashed"
 )
 
+// RetentionLapsesAt is when a trashed tenant's retention lapses: DeletedAt +
+// retention. From that moment on the tenant is surfaced for purge — and only
+// surfaced: nothing purges it, PurgeTenant stays an operator call. Zero for
+// an active tenant, and for a non-positive retention (config validation
+// refuses one; zero here keeps a misconfigured caller from marking every
+// trashed tenant as due).
+func (t Tenant) RetentionLapsesAt(retention time.Duration) time.Time {
+	if t.DeletedAt.IsZero() || retention <= 0 {
+		return time.Time{}
+	}
+	return t.DeletedAt.Add(retention)
+}
+
 type Handler struct {
 	repo   Repository
 	policy cedar.Authorizer

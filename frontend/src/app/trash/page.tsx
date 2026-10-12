@@ -16,8 +16,10 @@
 //   - hard-deletes the trashed row (FAILED_PRECONDITION if active)
 //   - irreversible — confirmed via AlertDialog
 //
-// The retention TTL reaper for unattended purge lives in worker/
-// housekeeping.go and is BACKLOG'd separately.
+// Retention: the server reports purge_eligible_at = deleted_at +
+// admin.tenants.trash_retention (default 30 days). Each row shows how long
+// the tenant has been in the trash and is marked "Past retention" once that
+// moment passes. Marked, never purged — there is no unattended purge.
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -53,7 +55,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useNotification } from "@/components/ui/Notification";
-import { RelativeTime } from "@/components/RelativeTime";
+import { TrashAge } from "@/components/features/tenants/TrashAge";
 import { IdentityField } from "@/components/IdentityField";
 import { T } from "@/lib/ui/typography";
 import { errorMessage } from "@/hooks/errorContract";
@@ -137,7 +139,7 @@ export default function TrashPage() {
     <div className="space-y-6">
       <PageHeader
         title="Trash"
-        description="Soft-deleted tenants — recoverable until purged."
+        description="Soft-deleted tenants — recoverable until purged. Past retention marks a tenant for review; nothing is purged automatically."
         showDefaultActions={false}
       />
 
@@ -176,7 +178,7 @@ export default function TrashPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Tenant</TableHead>
-                <TableHead className="hidden @md:table-cell">Trashed</TableHead>
+                <TableHead>In trash</TableHead>
                 <TableHead className="text-right @md:w-50">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -197,8 +199,11 @@ export default function TrashPage() {
                         />
                       </div>
                     </TableCell>
-                    <TableCell className="hidden @md:table-cell">
-                      <RelativeTime ts={t.deletedAt || t.updatedAt} />
+                    <TableCell>
+                      <TrashAge
+                        deletedAt={t.deletedAt}
+                        purgeEligibleAt={t.purgeEligibleAt}
+                      />
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1.5">

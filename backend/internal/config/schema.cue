@@ -85,6 +85,12 @@ api: {
 // Admin role — `serve admin`. Single listener.
 admin: {
   server: #HTTPServer & {addr: string | *"0.0.0.0:8090"}
+  tenants: {
+    // How long a trashed tenant waits before the admin API surfaces it for
+    // purge (Tenant.purge_eligible_at). Surfaced only — nothing purges on
+    // its own. Must be positive (checked in Validate).
+    trash_retention: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"720h"
+  }
 }
 
 #HTTPServer: {
