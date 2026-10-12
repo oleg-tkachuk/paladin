@@ -250,7 +250,8 @@ tasks:
       # overrides it for a layout the templates do not express.
       _CG_PROTO_OUT:
         sh: |-
-          if [ -n '{{._CG_PROTO_SPEC}}' ]; then printf '%s' '{{._CG_PROTO_SPEC}}'; exit 0; fi
+          spec={{._CG_PROTO_SPEC | q}}
+          if [ -n "$spec" ]; then printf '%s' "$spec"; exit 0; fi
           awk 'BEGIN { q = "\047" }
                /^[ \t]*out:[ \t]*/ {
                  v = $0
@@ -267,15 +268,19 @@ tasks:
       - task: proto
       - cmd: |-
           set -eu
+          # Both come from files the gate reads, so they enter the shell once,
+          # quoted, and are only ever expanded as variables after that.
+          out={{._CG_PROTO_OUT | q}}
+          templates={{._CG_BUF_TPL | join ", " | q}}
           # Nothing parsed means the templates are a shape this does not
           # understand. A gate that cannot name what it watches must refuse:
           # passing here would report a clean tree it never looked at.
-          if [ -z "{{._CG_PROTO_OUT}}" ]; then
-            printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · no out: path in {{._CG_BUF_TPL | join ", "}} — set PROTO_PATHSPEC" >&2
+          if [ -z "$out" ]; then
+            printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · no out: path in $templates — set PROTO_PATHSPEC" >&2
             exit 1
           fi
           watched=''
-          for d in {{._CG_PROTO_OUT}}; do
+          for d in {{range (splitList " " ._CG_PROTO_OUT | compact)}}{{q .}} {{end}}; do
             # `out: .` is a real template shape, not a mistake: a plugin that
             # carries the subdirectory in `module=` writes from the component
             # root. Watching the root would call every unrelated change a stale
@@ -283,7 +288,7 @@ tasks:
             # to be told which directory holds the output.
             case "$d" in
               . | ./)
-                printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · {{._CG_BUF_TPL | join ", "}} writes to the component root — set PROTO_PATHSPEC to the directory that holds the stubs" >&2
+                printf '%s\n' "{{._CG_ERR}} {{._CG_NAME}} · gen · $templates writes to the component root — set PROTO_PATHSPEC to the directory that holds the stubs" >&2
                 exit 1
                 ;;
             esac
@@ -316,12 +321,17 @@ tasks:
   _cg_snapshot:
     internal: true
     requires: { vars: [PATHS, OUT] }
+    vars:
+      # Each pathspec quoted on its own: PATHS can hold several, and one may
+      # carry pathspec magic such as `:(glob)internal/**/mocks/**`, whose
+      # parenthesis the shell would otherwise read as syntax.
+      _CG_PATHS_Q: '{{range (splitList " " .PATHS | compact)}}{{q .}} {{end}}'
     cmds:
       - cmd: |-
           set -eu
           mkdir -p "$(dirname {{.OUT | q}})"
           files={{.OUT | q}}.files
-          git ls-files -co --exclude-standard -- {{.PATHS}} | LC_ALL=C sort -u >"$files"
+          git ls-files -co --exclude-standard -- {{._CG_PATHS_Q}} | LC_ALL=C sort -u >"$files"
           : >{{.OUT | q}}
           while IFS= read -r f; do
             if [ -e "$f" ]; then
