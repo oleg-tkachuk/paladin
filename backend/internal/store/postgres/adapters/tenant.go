@@ -394,6 +394,14 @@ func (r *TenantRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, expectedVersion int64) error {
 	rows, err := q.HardDeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
 	if err != nil {
+		// A legal hold or an unexpired retention window refuses the purge
+		// before any foreign key is consulted (061). The retention trigger on
+		// object_locks raises the same refusal if a cascade reaches a lock row
+		// first. Either way it is a precondition the operator can act on, not
+		// an Internal error carrying raw SQL.
+		if msg, ok := lockRefusal(err); ok {
+			return fmt.Errorf("%w: %s", tenanth.ErrTenantHoldsLockedObjects, msg)
+		}
 		// FK RESTRICT from collections/users/objects → the tenant still owns
 		// data. Map to a typed sentinel so the handler returns a clear
 		// FailedPrecondition instead of a generic Internal error.
