@@ -67,6 +67,25 @@ type Clients struct {
 
 	Auth  iamv1connect.AuthServiceClient
 	Users iamv1connect.UserServiceClient
+
+	// BridgeKey signs a DPoP proof for every call that forwards a
+	// capability. Nil: the bridge forwards unbound capabilities only.
+	BridgeKey *BridgeKey
+}
+
+// ClientOption configures NewClientsWithCapability.
+type ClientOption func(*clientOptions)
+
+type clientOptions struct {
+	bridgeKey *BridgeKey
+}
+
+// WithBridgeKey has the bridge prove possession of key on every call that
+// forwards a capability, so one delegated to key.JKT is accepted. An
+// unbound capability is unaffected: the planes check a proof only for a
+// key-bound one.
+func WithBridgeKey(key *BridgeKey) ClientOption {
+	return func(o *clientOptions) { o.bridgeKey = key }
 }
 
 // NewClients constructs a Clients bundle. Bearer is the access token the MCP
@@ -93,18 +112,28 @@ func NewClients(httpc *http.Client, adminURL, dataURL, iamURL, bearer string) (*
 //
 // MCP HTTP transport forwards the capability via the same X-Paladin-Capability
 // header the streamable-HTTP getServer hook reads — see cmd/server/serve_mcp.go.
-func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bearer, capabilityToken string) (*Clients, error) {
+func NewClientsWithCapability(
+	httpc *http.Client, adminURL, dataURL, iamURL, bearer, capabilityToken string, opts ...ClientOption,
+) (*Clients, error) {
 	if httpc == nil {
 		httpc = http.DefaultClient
 	}
+	var o clientOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
 	defaults := Credentials{Bearer: bearer, Capability: capabilityToken}
-	p, err := paladin.Connect(paladin.Endpoints{Admin: adminURL, Data: dataURL, IAM: iamURL},
+	sdkOpts := []paladin.Option{
 		paladin.WithHTTPClient(httpc),
 		paladin.WithTokens(requestTokens{defaults: defaults}),
 		paladin.WithCapabilitySource(func(ctx context.Context) string {
 			return credentialsFrom(ctx, defaults).Capability
 		}),
-	)
+	}
+	if o.bridgeKey != nil {
+		sdkOpts = append(sdkOpts, paladin.WithDPoP(o.bridgeKey.Signer))
+	}
+	p, err := paladin.Connect(paladin.Endpoints{Admin: adminURL, Data: dataURL, IAM: iamURL}, sdkOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("mcp: upstream clients: %w", err)
 	}
@@ -114,6 +143,7 @@ func NewClientsWithCapability(httpc *http.Client, adminURL, dataURL, iamURL, bea
 		DataURL:     dataURL,
 		IAMURL:      iamURL,
 		BearerToken: bearer,
+		BridgeKey:   o.bridgeKey,
 	}
 	if a := p.Admin; a != nil {
 		c.Backend, c.Bucket, c.Tenant, c.OKey = a.Backend, a.Bucket, a.Tenant, a.Collection
@@ -158,6 +188,7 @@ func NewServer(name, version string, c *Clients, filter *ToolFilter) *mcpsdk.Ser
 	})
 	registerReadTools(srv, c, filter)
 	registerWriteTools(srv, c, filter)
+	registerBridgeKeyTool(srv, c, filter)
 	registerLifecycleTools(srv, c, filter)
 	registerResources(srv, c, filter)
 	registerPrompts(srv, filter)

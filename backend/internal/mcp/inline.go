@@ -108,7 +108,7 @@ func NewInlineClients(h InlineHandlers, bearer string) (*Clients, error) {
 // capabilityToken (when non-empty) is forwarded as `X-Paladin-Capability`
 // to the in-process plane handler so the data plane's interceptor sees
 // it identically to the network path.
-func NewInlineClientsWithCapability(h InlineHandlers, bearer, capabilityToken string) (*Clients, error) {
+func NewInlineClientsWithCapability(h InlineHandlers, bearer, capabilityToken string, opts ...ClientOption) (*Clients, error) {
 	httpc := &http.Client{Transport: NewInlineTransport(h)}
-	return NewClientsWithCapability(httpc, InlineAdminURL, InlineDataURL, InlineIAMURL, bearer, capabilityToken)
+	return NewClientsWithCapability(httpc, InlineAdminURL, InlineDataURL, InlineIAMURL, bearer, capabilityToken, opts...)
 }
