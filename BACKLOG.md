@@ -460,17 +460,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   entry.
 - **Blockers:** none.
 
-### Anonymous reads of public objects are not counted
-
-- **Status:** Deferred
-- **Reason:** a public object is read straight from the store or a CDN, so no
-  Paladin process sees the read: egress is attributed to no tenant and appears
-  in no Paladin metric ([ADR-0027](docs/adr/0027-public-collections.md)).
-- **Definition of Done:** if egress per tenant matters, ingest the store's or
-  the CDN's access logs and attribute them by the tenant segment of the path;
-  otherwise delete this entry with that decision recorded.
-- **Blockers:** whether per-tenant egress is ever billed.
-
 ### Replication: real `StorageReplicator` implementation
 
 - **Status:** Aspirational
@@ -813,27 +802,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   object and audit paths established is narrow-only for exactly that reason.
 
 ## Configuration
-
-### MCP `allow_write` was a dead knob that read as a security control
-
-- **Status:** Deferred (schema entry removed; the question it raises is open).
-- **Reason:** `schema.cue` declared `mcp.stdio.allow_write` and
-  `mcp.http.allow_write`, both defaulting to `false`. Neither had a Go field
-  or a single consumer — the value was computed by CUE and dropped on decode.
-  An operator reading the schema would reasonably conclude the MCP bridge was
-  read-only by default and that flipping the knob was what enabled writes.
-  Neither is true. Worse, the strict loader rejects unknown keys, so actually
-  setting it in a config file crashes the pod. The schema entries are gone;
-  what is NOT resolved is whether the bridge should have such a gate.
-- **Definition of Done:**
-  - A decision, written down: either the MCP bridge grows a real read-only
-    mode (field + enforcement in internal/mcp/bridge.go + tests), or
-    docs/security.md states plainly that MCP write access is governed only by
-    the caller's token scopes and Cedar policy.
-  - If it becomes real, the config knob comes back — with the enforcement,
-    not before it.
-- **Blockers:** needs a product/security call on whether a transport-level
-  write gate adds anything over the existing per-call authorization.
 
 ### `llm:` and `vector:` schema blocks removed — features never landed
 
