@@ -429,19 +429,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
 
 ## Features
 
-### Public collections: the console cannot create or show them
-
-- **Status:** Deferred
-- **Reason:** public buckets and collections ([ADR-0027](docs/adr/0027-public-collections.md))
-  are created through the admin API only; the console neither offers the
-  settings nor marks a bucket or collection as public.
-- **Definition of Done:** the bucket and collection create dialogs offer
-  public read (the bucket's only on a backend whose probe found
-  `ANONYMOUS_READ_POLICY` supported, saying why otherwise), and the lists and
-  detail pages mark what is public and show `public_base_url`; covered by
-  component tests.
-- **Blockers:** none.
-
 ### Public collections on a store without bucket policies
 
 - **Status:** Aspirational
