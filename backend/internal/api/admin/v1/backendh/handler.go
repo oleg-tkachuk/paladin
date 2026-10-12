@@ -63,8 +63,9 @@ type BackendProber interface {
 }
 
 const (
-	// reachabilityProbeTimeout bounds TestBackend's reachability check, so a
-	// wedged endpoint cannot hang the RPC.
+	// reachabilityProbeTimeout bounds the reachability check (TestBackend's
+	// and the probe on registration's), so a wedged endpoint cannot hang the
+	// RPC.
 	reachabilityProbeTimeout = 5 * time.Second
 	// featureProbeTimeout bounds the feature probe that follows it. The two
 	// together stay inside the admin listener's default 30s write timeout; a
@@ -131,9 +132,10 @@ func (r declaringRepo) List(ctx context.Context, pageSize int32, afterID, filter
 	return out, next, err
 }
 
-// SetProber wires the TestBackend connectivity prober. Opt-in: an unset
-// prober makes TestBackend return reachable=false with a clear note rather
-// than panicking, so unit tests and probe-less deployments still work.
+// SetProber wires the prober TestBackend and CreateBackend run. Opt-in: an
+// unset prober makes TestBackend return reachable=false with a clear note
+// rather than panicking, and CreateBackend skip the probe, so unit tests and
+// probe-less deployments still work.
 func (h *Handler) SetProber(p BackendProber) { h.prober = p }
 
 // SetEventProducer attaches the optional outbox producer. nil is silent (same
@@ -236,6 +238,23 @@ func (h *Handler) CreateBackend(ctx context.Context, b admindomain.StorageBacken
 	got, err := h.repo.Get(ctx, b.BackendID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	// Probe the new backend once (ADR-0026), so it does not show every
+	// feature unknown — and refuse a public bucket — until an operator runs
+	// TestBackend. Synchronous, within TestBackend's own timeouts: they were
+	// sized to fit the admin listener's write timeout, an unreachable backend
+	// costs only the 5s reachability check, and the response then carries
+	// what the probe found — where a background probe would leave the caller
+	// reading an unprobed backend. It is a system step of the registration,
+	// not the caller's TestBackend: no further authorization and no audit row
+	// of its own (it writes only the advisory health and feature tables), and
+	// its outcome never fails the create — an unreachable backend registers
+	// with its features unknown.
+	if h.prober != nil {
+		ProbeAndRecord(ctx, h.prober, h.repo, got)
+		if probed, err := h.repo.Get(ctx, b.BackendID); err == nil {
+			got = probed
+		}
 	}
 	return &got, nil
 }
@@ -507,11 +526,29 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 			ErrorMessage: "connectivity probe not wired in this deployment",
 		}, nil
 	}
+	return ProbeAndRecord(ctx, h.prober, h.repo, got), nil
+}
+
+// ProbeRecorder is where a probe's outcome goes: the backend's derived health
+// and its feature results, both advisory (no OCC, no resource_version
+// change). The backend repository satisfies it.
+type ProbeRecorder interface {
+	SetHealth(ctx context.Context, backendID, status, message string, checkedAt time.Time) error
+	SetFeatures(ctx context.Context, backendID string, results []features.Result) error
+}
+
+// ProbeAndRecord is TestBackend's probe without its authorization: the
+// reachability check and, when the backend answers, the feature probe, each
+// recorded. The automatic probe on registration (CreateBackend and the config
+// bootstrap) runs it too, so every path records a probe the same way. It never
+// fails: what went wrong is in the output and the log.
+func ProbeAndRecord(ctx context.Context, prober BackendProber, rec ProbeRecorder, b admindomain.StorageBackend) *TestBackendOutput {
+	backendID := b.BackendID
 	// Bound the probe so a wedged endpoint can't hang the RPC.
 	pctx, cancel := context.WithTimeout(ctx, reachabilityProbeTimeout)
 	defer cancel()
 	start := time.Now()
-	perr := h.prober.Probe(pctx, got)
+	perr := prober.Probe(pctx, b)
 	out := &TestBackendOutput{LatencyMs: safecast.Int32From64(time.Since(start).Milliseconds())}
 	status := "ok"
 	if perr != nil {
@@ -526,23 +563,23 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 	// fail the probe response, and it uses a fresh (non-probe-timeout) context
 	// so a slow probe doesn't also lose the recording. Writes a separate table
 	// — no resource_version churn, so TestBackend stays read-only w.r.t. config.
-	if err := h.repo.SetHealth(ctx, backendID, status, out.ErrorMessage, time.Now().UTC()); err != nil {
+	if err := rec.SetHealth(ctx, backendID, status, out.ErrorMessage, time.Now().UTC()); err != nil {
 		logger.FromContext(ctx).Warn("failed to record backend health probe outcome",
 			zap.String("backend_id", backendID), zap.String("status", status), zap.Error(err))
 	}
 	if out.Reachable {
-		out.Features = h.probeFeatures(ctx, got)
+		out.Features = probeFeatures(ctx, prober, rec, b)
 	}
-	return out, nil
+	return out
 }
 
 // probeFeatures runs the feature probe and records what it found (ADR-0026).
 // Recording is best-effort like the health write: the caller still gets the
 // results.
-func (h *Handler) probeFeatures(ctx context.Context, b admindomain.StorageBackend) []features.Result {
+func probeFeatures(ctx context.Context, prober BackendProber, rec ProbeRecorder, b admindomain.StorageBackend) []features.Result {
 	fctx, cancel := context.WithTimeout(ctx, featureProbeTimeout)
 	defer cancel()
-	results, err := h.prober.ProbeFeatures(fctx, b)
+	results, err := prober.ProbeFeatures(fctx, b)
 	if err != nil {
 		now := time.Now().UTC()
 		results = features.EveryFeature(nil)
@@ -551,7 +588,7 @@ func (h *Handler) probeFeatures(ctx context.Context, b admindomain.StorageBacken
 			results[i].CheckedAt = now
 		}
 	}
-	if err := h.repo.SetFeatures(ctx, b.BackendID, results); err != nil {
+	if err := rec.SetFeatures(ctx, b.BackendID, results); err != nil {
 		logger.FromContext(ctx).Warn("failed to record backend feature probe outcome",
 			zap.String("backend_id", b.BackendID), zap.Error(err))
 	}

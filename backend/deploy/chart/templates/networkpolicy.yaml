@@ -356,9 +356,11 @@ spec:
   pod that needs it. `before-hook-creation` matches what 0c511f8b set across
   the SAs, the RBAC and both Jobs.
 
-  Egress only — nothing connects TO a Job — and `$common` is the whole of it:
-  DNS, the Kubernetes API the secret resolver reads at boot, Postgres, and the
-  OTLP collector.
+  Egress only — nothing connects TO a Job. `$common` is the whole of it for
+  migrate: DNS, the Kubernetes API the secret resolver reads at boot, Postgres,
+  and the OTLP collector. Bootstrap also reaches the object stores, because it
+  probes each configured backend that was never probed (ADR-0026); without the
+  allow that probe times out and records a working backend as unreachable.
 */}}
 {{- range $jobName, $jobSpec := .Values.jobs }}
 {{- if $jobSpec.enabled }}
@@ -382,6 +384,9 @@ spec:
   egress:
     {{- range $r := $common }}
     - {{ $r | toJson }}
+    {{- end }}
+    {{- if eq $jobName "bootstrap" }}
+    - {{ $storageEgress | toJson }}
     {{- end }}
 {{- end }}
 {{- end }}

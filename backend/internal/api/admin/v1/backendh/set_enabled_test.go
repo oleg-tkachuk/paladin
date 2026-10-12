@@ -98,7 +98,7 @@ func (r *stateBackendRepo) Get(_ context.Context, _ string) (admindomain.Storage
 	return admindomain.StorageBackend{
 		BackendID: "primary", Kind: "s3-compatible",
 		Enabled: r.enabled, ReadOnly: r.readOnly, Maintenance: r.maintenance,
-		ResourceVersion: r.rv,
+		ResourceVersion: r.rv, Features: r.features,
 	}, nil
 }
 
