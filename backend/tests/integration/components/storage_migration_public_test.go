@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
@@ -294,9 +295,18 @@ func TestStorageMigrationLeavesPublicCollectionsInPlace(t *testing.T) {
 		t.Parallel()
 		f := seedPublicMigrationFixture(t, ctx)
 		f.addCollection(t, ctx, "docs", f.private, false)
-		repo := adapters.NewStorageMigrationRepo(sqlc.New(f.pool), f.pool)
+		q := sqlc.New(f.pool)
+		repo := adapters.NewStorageMigrationRepo(q, f.pool)
+		// The rebind acts only on a migration in rebinding.
+		if _, err := q.CreateStorageMigration(ctx, pgtype.UUID{Bytes: f.tenant, Valid: true},
+			f.backend, f.private, f.backend, f.public, 0); err != nil {
+			t.Fatalf("create migration: %v", err)
+		}
+		mustExec(t, ctx, f.pool,
+			`UPDATE tenant_storage_migrations SET state = 'rebinding' WHERE tenant_id = $1`, f.tenant)
 		// A private collection may not bind to a public bucket.
-		err := repo.RebindTenant(ctx, f.tenant, f.backend, f.public)
+		err := repo.RebindTenant(ctx,
+			worker.MigrationRead{TenantID: f.tenant, State: worker.MigStateRebinding}, f.backend, f.public)
 		if !errors.Is(err, worker.ErrRebindRefused) {
 			t.Fatalf("RebindTenant = %v, want ErrRebindRefused", err)
 		}

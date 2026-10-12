@@ -13,7 +13,7 @@ import (
 type Querier interface {
 	// Records copy progress + the resume cursor after a batch. Progress only moves
 	// forward: a stale batch reporting less than is recorded changes nothing.
-	AdvanceStorageMigrationCopy(ctx context.Context, objectsCopied int64, cursorCollection string, cursorPath string, tenantID pgtype.UUID, fromState string) (int64, error)
+	AdvanceStorageMigrationCopy(ctx context.Context, objectsCopied int64, cursorCollection string, cursorPath string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Puts a freshly promoted version under the parent bucket's default retention
 	// (ADR-0013). Skipped entirely when the bucket has no default, and never
 	// overwrites an existing row — an explicit SetObjectRetention that arrived
@@ -90,7 +90,7 @@ type Querier interface {
 	// Rebind verified: serve from the dedicated bucket. The old copies are kept
 	// until cleanup_after (now + the row's retention) so a bad migration is still
 	// rollback-able within the window.
-	CompleteStorageMigration(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error)
+	CompleteStorageMigration(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	//
 	// Every relation that holds a bucket under ON DELETE RESTRICT, counted in one
 	// round trip. The list is not a guess: it is the RESTRICT set as the schema
@@ -187,7 +187,7 @@ type Querier interface {
 	// a valid URL. GREATEST, so a shorter regenerated URL never pulls the
 	// deadline in under an earlier one that is still live.
 	ExtendPendingPresign(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expiresAt pgtype.Timestamptz) (int64, error)
-	FailStorageMigration(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string) (int64, error)
+	FailStorageMigration(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Cross-tenant subject lookup for AuthService.Login when the caller supplied
 	// no tenant hint. The handler checks the password against every row this
 	// returns, so the cap is not just a scan guard: it is the set of memberships
@@ -542,6 +542,11 @@ type Querier interface {
 	// Waits for the object-path lock (see package objectpath); held until the
 	// transaction ends.
 	LockObjectPath(ctx context.Context, lockKey int64) error
+	// Holds the migration row for the rebind transaction, and only while it is
+	// still in the state and attempt the worker read: a stale worker must not
+	// repoint the tenant's collections at a bucket a newer attempt is still
+	// filling.
+	LockStorageMigrationForRebind(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Starting (or retrying) a migration: StartStorageMigration runs these in one
 	// transaction, in this order, and says why each step is there.
 	// Serialises starts for one tenant. tenant_storage_migrations has no unique
@@ -577,7 +582,7 @@ type Querier interface {
 	// Record the first presentation. Once set, this token is no longer a lost
 	// successor its parent's holder may recover.
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) error
-	MarkStorageMigrationCleaned(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error)
+	MarkStorageMigrationCleaned(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// The objects MigrationListTenantObjects walks: public collections' excluded.
 	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// The collections the transactional rebind moves: all but the public ones,
@@ -815,9 +820,13 @@ type Querier interface {
 	// Every transition names the state the worker read the migration in
 	// (from_state) and applies only while it still holds: a worker resumed after a
 	// pause past its lease must not drag a migration its successor moved on.
-	SetStorageMigrationState(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error)
+	// Every transition below applies only to the migration as the worker read
+	// it: the same state AND the same attempts. attempts grows on every failure
+	// and a retry keeps it, so a worker that read an earlier attempt and resumed
+	// after it failed and was retried matches nothing (ABA on state alone).
+	SetStorageMigrationState(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Records the object count and moves provisioning -> copying.
-	SetStorageMigrationTotal(ctx context.Context, objectsTotal int64, toState string, tenantID pgtype.UUID, fromState string) (int64, error)
+	SetStorageMigrationTotal(ctx context.Context, objectsTotal int64, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Tenant aggregate budget queries.
 	//
 	// Naming dichotomy: SQL columns retain `_usd` suffixes for historical

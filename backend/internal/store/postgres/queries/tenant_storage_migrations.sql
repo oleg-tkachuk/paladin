@@ -49,16 +49,23 @@ LIMIT sqlc.arg('limit_count')::int;
 -- (from_state) and applies only while it still holds: a worker resumed after a
 -- pause past its lease must not drag a migration its successor moved on.
 
+-- Every transition below applies only to the migration as the worker read
+-- it: the same state AND the same attempts. attempts grows on every failure
+-- and a retry keeps it, so a worker that read an earlier attempt and resumed
+-- after it failed and was retried matches nothing (ABA on state alone).
+
 -- name: SetStorageMigrationState :execrows
 UPDATE tenant_storage_migrations
 SET state = sqlc.arg('to_state'), error = '', updated_at = now()
-WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state');
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts');
 
 -- name: SetStorageMigrationTotal :execrows
 -- Records the object count and moves provisioning -> copying.
 UPDATE tenant_storage_migrations
 SET objects_total = sqlc.arg('objects_total'), state = sqlc.arg('to_state'), updated_at = now()
-WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state');
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts');
 
 -- name: AdvanceStorageMigrationCopy :execrows
 -- Records copy progress + the resume cursor after a batch. Progress only moves
@@ -69,6 +76,7 @@ SET objects_copied    = sqlc.arg('objects_copied'),
     cursor_path       = sqlc.arg('cursor_path'),
     updated_at        = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts')
   AND objects_copied <= sqlc.arg('objects_copied');
 
 -- name: CompleteStorageMigration :execrows
@@ -79,17 +87,30 @@ UPDATE tenant_storage_migrations
 SET state = sqlc.arg('to_state'), error = '', completed_at = now(),
     cleanup_after = now() + make_interval(secs => cleanup_retention_seconds),
     updated_at = now()
-WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state');
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts');
 
 -- name: MarkStorageMigrationCleaned :execrows
 UPDATE tenant_storage_migrations
 SET state = sqlc.arg('to_state'), cleaned_at = now(), updated_at = now()
-WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state');
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts');
 
 -- name: FailStorageMigration :execrows
 UPDATE tenant_storage_migrations
 SET state = sqlc.arg('to_state'), error = sqlc.arg('error'), attempts = attempts + 1, updated_at = now()
-WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state');
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts');
+
+-- name: LockStorageMigrationForRebind :execrows
+-- Holds the migration row for the rebind transaction, and only while it is
+-- still in the state and attempt the worker read: a stale worker must not
+-- repoint the tenant's collections at a bucket a newer attempt is still
+-- filling.
+SELECT 1 FROM tenant_storage_migrations
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts')
+FOR UPDATE;
 
 -- name: MigrationListTenantObjects :many
 -- Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
