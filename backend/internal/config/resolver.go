@@ -243,6 +243,17 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Capability.DPoPNonce.KeySecret = nil
 	}
 
+	// MCP bridge DPoP key — shared by every bridge replica, so a capability
+	// delegated to its thumbprint works through any of them.
+	if cfg.MCP.DPoPKeySecret != nil {
+		key, err := r.resolveSecret(ctx, cfg.MCP.DPoPKeySecret)
+		if err != nil {
+			return fmt.Errorf("mcp.dpop_key_secret: %w", err)
+		}
+		cfg.MCP.DPoPKey = key
+		cfg.MCP.DPoPKeySecret = nil
+	}
+
 	// Health snapshot token — gates /system/health.json. From a SecretRef so
 	// a production token stays out of the config ConfigMap; Validate()
 	// rejects setting both runtime.health_snapshot_token and the reference.
@@ -424,6 +435,12 @@ func (c *Config) Obfuscated() Config {
 	// it anyone can mint nonces every replica accepts.
 	if cc.Capability.DPoPNonce.Key != "" {
 		cc.Capability.DPoPNonce.Key = Redacted
+	}
+
+	// MCP bridge DPoP key (resolved from mcp.dpop_key_secret): a private key
+	// that every capability delegated to the bridge is bound to.
+	if cc.MCP.DPoPKey != "" {
+		cc.MCP.DPoPKey = Redacted
 	}
 
 	// Ingest webhook HMAC (resolved from ingest.webhook.shared_secret_ref).

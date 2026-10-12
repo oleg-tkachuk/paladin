@@ -437,6 +437,8 @@ mcp:
   # explicitly = no global denial (override for built-in defaults).
   # Leave commented to keep the built-in DefaultAlwaysDeny.
   # always_deny: []
+  dpop_key: ""                       # bridge DPoP key, PEM PKCS#8 Ed25519/P-256; "" → unbound capabilities only
+  # dpop_key_secret: { name: paladin-mcp-dpop-key, key: key.pem }
 
 # ── Capability tokens (Ed25519 JWT, agent-runtime) ─────────────────────────
 # Short-lived, caveat-bearing JWTs minted by the admin plane and verified
