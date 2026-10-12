@@ -616,6 +616,10 @@ mcp: {
       jwks_uri:               string | *""
     }
   }
+  // The bridge's DPoP key (PEM PKCS#8, Ed25519 or P-256), for capabilities
+  // delegated to it. Inline for dev, dpop_key_secret otherwise.
+  dpop_key:         string | *""
+  dpop_key_secret?: #SecretRef
 }
 
 capability: {

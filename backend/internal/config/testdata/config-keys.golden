@@ -297,6 +297,11 @@ logger.sampling.initial
 logger.sampling.thereafter
 mcp
 mcp.always_deny
+mcp.dpop_key
+mcp.dpop_key_secret
+mcp.dpop_key_secret.key
+mcp.dpop_key_secret.name
+mcp.dpop_key_secret.namespace
 mcp.http
 mcp.http.addr
 mcp.http.enabled

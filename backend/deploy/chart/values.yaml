@@ -1083,6 +1083,14 @@ config:
     # operator override seam. Leave empty to use the defaults.
     profiles: {}
     # always_deny: []
+    # The bridge's own DPoP key (PEM PKCS#8, Ed25519 or P-256). A key-bound
+    # capability delegated to its thumbprint (the paladin_get_bridge_key
+    # tool) can then be forwarded; every bridge replica must hold the same
+    # key. Give it as dpop_key_secret and add its name to
+    # rbac.secretReader.secretNames; unset, only unbound capabilities pass.
+    # dpop_key_secret:
+    #   name: paladin-mcp-dpop-key
+    #   key: key.pem
 
   # ─── Capability tokens (Ed25519 JWT, agent-runtime) ──────────────────
   #
