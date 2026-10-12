@@ -63,6 +63,7 @@ type fakeRepo struct {
 	restoreTxFn      func(context.Context, pgx.Tx, uuid.UUID) (Tenant, error)
 	startMigrationFn func(context.Context, StartStorageMigrationArgs) (StorageMigration, error)
 	getMigrationFn   func(context.Context, uuid.UUID) (StorageMigration, error)
+	rollBackStuckFn  func(context.Context, uuid.UUID) (StorageMigration, error)
 	sourceBucketFn   func(context.Context, uuid.UUID) (string, string, error)
 
 	// recorded args for forwarding assertions
@@ -219,6 +220,13 @@ func (f *fakeRepo) StartStorageMigration(ctx context.Context, a StartStorageMigr
 		return f.startMigrationFn(ctx, a)
 	}
 	return StorageMigration{}, nil
+}
+
+func (f *fakeRepo) RollBackStuckStorageMigration(ctx context.Context, id uuid.UUID) (StorageMigration, error) {
+	if f.rollBackStuckFn != nil {
+		return f.rollBackStuckFn(ctx, id)
+	}
+	return StorageMigration{}, ErrStorageMigrationNotRollbackable
 }
 
 func (f *fakeRepo) GetStorageMigration(ctx context.Context, id uuid.UUID) (StorageMigration, error) {
@@ -940,6 +948,61 @@ func TestMigrateTenantStorageLayout(t *testing.T) {
 		_, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "", 0)
 		wantCode(t, err, connect.CodeFailedPrecondition)
 	})
+
+	// A tenant left dedicated by a migration that failed its verify before
+	// rollbacks existed: the call rolls it back instead of refusing it.
+	dedicatedTenant := func(_ context.Context, id uuid.UUID) (Tenant, error) {
+		return Tenant{TenantID: id, StorageLayout: "dedicated"}, nil
+	}
+	t.Run("dedicated after a failed migration → rolled back", func(t *testing.T) {
+		rolled := false
+		fr := &fakeRepo{
+			getFn: dedicatedTenant,
+			getMigrationFn: func(_ context.Context, id uuid.UUID) (StorageMigration, error) {
+				return StorageMigration{TenantID: id, State: StorageMigrationFailed}, nil
+			},
+			rollBackStuckFn: func(_ context.Context, id uuid.UUID) (StorageMigration, error) {
+				rolled = true
+				return StorageMigration{TenantID: id, State: "rolling_back"}, nil
+			},
+			startMigrationFn: func(context.Context, StartStorageMigrationArgs) (StorageMigration, error) {
+				t.Error("a migration was started for a dedicated tenant")
+				return StorageMigration{}, nil
+			},
+		}
+		got, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "", 0)
+		if err != nil {
+			t.Fatalf("rollback: %v", err)
+		}
+		if !rolled || got.State != "rolling_back" {
+			t.Errorf("rolled back = %v, state %q; want a rollback started", rolled, got.State)
+		}
+	})
+	for name, fr := range map[string]*fakeRepo{
+		// The repository's own answer under its lock: not the leftover (the
+		// fake's default is ErrStorageMigrationNotRollbackable).
+		"dedicated, failed, but not on the target bucket": {
+			getFn: dedicatedTenant,
+			getMigrationFn: func(_ context.Context, id uuid.UUID) (StorageMigration, error) {
+				return StorageMigration{TenantID: id, State: StorageMigrationFailed}, nil
+			},
+		},
+		"dedicated with a completed migration": {
+			getFn: dedicatedTenant,
+			getMigrationFn: func(_ context.Context, id uuid.UUID) (StorageMigration, error) {
+				return StorageMigration{TenantID: id, State: "completed"}, nil
+			},
+			rollBackStuckFn: func(context.Context, uuid.UUID) (StorageMigration, error) {
+				t.Error("a completed migration was rolled back")
+				return StorageMigration{}, nil
+			},
+		},
+	} {
+		t.Run(name+" → failed precondition", func(t *testing.T) {
+			_, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "", 0)
+			wantCode(t, err, connect.CodeFailedPrecondition)
+		})
+	}
 
 	t.Run("source bucket undeterminable → failed precondition", func(t *testing.T) {
 		fr := &fakeRepo{

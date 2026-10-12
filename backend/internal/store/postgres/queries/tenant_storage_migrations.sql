@@ -30,7 +30,8 @@ LIMIT 1;
 
 -- name: ListActiveStorageMigrations :many
 -- Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
--- still active — the worker must run retention-gated cleanup on it.
+-- still active — the worker must run retention-gated cleanup on it — and so
+-- is 'rolling_back', which the worker must finish rolling back.
 SELECT sqlc.embed(m),
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
        tsb.name AS target_backend_name, tb.name AS target_bucket_name
@@ -234,6 +235,9 @@ SET source_bucket_id          = sb.id,
     cleanup_after             = NULL,
     completed_at              = NULL,
     cleaned_at                = NULL,
+    rebound_at                = NULL,
+    rollback_cursor_at        = NULL,
+    rollback_cursor_id        = NULL,
     updated_at                = now()
 FROM buckets sb
 JOIN storage_backends ssb ON ssb.id = sb.backend_id
@@ -242,4 +246,110 @@ JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE m.id = sqlc.arg('id') AND m.state = 'failed'
   AND ssb.name = sqlc.arg('source_backend_name') AND sb.name = sqlc.arg('source_bucket_name')
   AND tsb.name = sqlc.arg('target_backend_name') AND tb.name = sqlc.arg('target_bucket_name')
+RETURNING m.*;
+
+-- Rolling a migration back (ADR-0015): a physical verify that fails after the
+-- rebind moves the migration to 'rolling_back'; the worker copies the objects
+-- written since the rebind back to the source bucket, then rebinds the tenant
+-- to it and leaves the migration 'failed', retryable like any other failure.
+
+-- name: MarkStorageMigrationRebound :execrows
+-- Run in the rebind transaction: rebound_at is that transaction's now(), its
+-- START time, so it is no later than any moment a writer could have seen the
+-- tenant rebound. Every object written into the dedicated bucket has an
+-- updated_at at or after it.
+UPDATE tenant_storage_migrations
+SET rebound_at = now(), updated_at = now()
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts');
+
+-- name: StartStorageMigrationRollback :execrows
+-- verifying -> rolling_back. The verify failure is recorded and counted here,
+-- where it happened; the rollback that follows keeps both. The cursor starts
+-- empty: the worker begins at rebound_at.
+UPDATE tenant_storage_migrations
+SET state = sqlc.arg('to_state'), error = sqlc.arg('error'), attempts = attempts + 1,
+    rollback_cursor_at = NULL, rollback_cursor_id = NULL, updated_at = now()
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts');
+
+-- name: MigrationListObjectsWrittenSince :many
+-- The objects the rollback copies back: AVAILABLE, in a private collection
+-- (public ones never moved, ADR-0027), and written at or after the cursor —
+-- keyset on (updated_at, id), which the worker starts at (rebound_at, the
+-- nil uuid). updated_at, not created_at: the bump_resource_version trigger
+-- sets it on every UPDATE and the insert defaults it, so it covers a new
+-- object, a promote, a storage-event overwrite and a restore alike. An object
+-- written again after the cursor passed it moves back ahead of the cursor
+-- and is copied again.
+SELECT o.id, o.updated_at, c.name AS collection_name, o.path,
+       COALESCE(o.size_bytes, 0)::bigint AS size_bytes
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = sqlc.arg('tenant_id')
+  AND o.state = 'AVAILABLE'
+  AND NOT c.public_read
+  AND ROW(o.updated_at, o.id) > ROW(sqlc.arg('after_at')::timestamptz,
+                                    sqlc.arg('after_id')::uuid)
+ORDER BY o.updated_at, o.id
+LIMIT sqlc.arg('limit_count')::int;
+
+-- name: MigrationObjectsWrittenSinceExist :one
+-- Whether any object MigrationListObjectsWrittenSince would still return past
+-- the cursor. The rebind back asks it under its lock: an object written since
+-- the worker's last batch is still only in the dedicated bucket, and
+-- rebinding before it is copied would lose it.
+SELECT EXISTS (
+    SELECT 1
+    FROM objects o
+    JOIN collections c ON c.id = o.collection_id
+    WHERE o.tenant_id = sqlc.arg('tenant_id')
+      AND o.state = 'AVAILABLE'
+      AND NOT c.public_read
+      AND ROW(o.updated_at, o.id) > ROW(sqlc.arg('after_at')::timestamptz,
+                                        sqlc.arg('after_id')::uuid)
+)::bool;
+
+-- name: AdvanceStorageMigrationRollback :execrows
+-- Records the rollback's resume cursor after a batch. It only moves forward:
+-- a stale batch reporting an earlier cursor changes nothing.
+UPDATE tenant_storage_migrations
+SET rollback_cursor_at = sqlc.arg('cursor_at'),
+    rollback_cursor_id = sqlc.arg('cursor_id'),
+    updated_at         = now()
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts')
+  AND (rollback_cursor_at IS NULL
+       OR ROW(rollback_cursor_at, rollback_cursor_id)
+          <= ROW(sqlc.arg('cursor_at')::timestamptz, sqlc.arg('cursor_id')::uuid));
+
+-- name: FinishStorageMigrationRollback :execrows
+-- rolling_back -> failed, in the transaction that rebinds the tenant back.
+-- The verify error stays, and attempts too: the failure was counted when the
+-- rollback started.
+UPDATE tenant_storage_migrations
+SET state = sqlc.arg('to_state'), updated_at = now()
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts');
+
+-- name: RollBackStuckStorageMigration :one
+-- A migration that failed its verify before rollbacks existed: 'failed', with
+-- the tenant still on the dedicated bucket. Moves it to 'rolling_back' for
+-- the worker, only while it is still 'failed' and the tenant's default
+-- binding still names its target bucket — the tenant serves from where this
+-- migration put it. Such a row has no rebound_at: the default binding's
+-- set_at is the rebind transaction's now() when the migration set it (which
+-- set_by records), and the migration's own creation is the fallback, earlier
+-- than any rebind of it.
+UPDATE tenant_storage_migrations m
+SET state              = 'rolling_back',
+    rebound_at         = COALESCE(m.rebound_at,
+                                  CASE WHEN d.set_by = 'storage-migration' THEN d.set_at
+                                       ELSE m.created_at END),
+    rollback_cursor_at = NULL,
+    rollback_cursor_id = NULL,
+    updated_at         = now()
+FROM tenant_default_bindings d
+WHERE m.id = sqlc.arg('id') AND m.state = 'failed'
+  AND d.tenant_id = m.tenant_id AND d.bucket_id = m.target_bucket_id
 RETURNING m.*;
