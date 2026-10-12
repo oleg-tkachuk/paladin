@@ -104,6 +104,25 @@ func (q *Queries) CreateStorageMigration(ctx context.Context, tenantID pgtype.UU
 	return i, err
 }
 
+const ensureStorageMigrationTargetBucket = `-- name: EnsureStorageMigrationTargetBucket :exec
+INSERT INTO buckets (backend_id, name, owner_tenant_id, provision_state,
+                     public_read, created_on_backend)
+SELECT sb.id, $1, $2, 'pending', false, true
+FROM storage_backends sb
+WHERE sb.name = $3
+ON CONFLICT (backend_id, name) DO NOTHING
+`
+
+// The tenant's dedicated bucket: pending, tenant-owned, private, created on
+// the backend by the reconciler. An existing row with that (backend, name) is
+// left as it is — ON CONFLICT DO NOTHING rather than catching the unique
+// violation, which aborts the transaction (25P02). Whether an existing row
+// may be used is StorageMigrationTargetBucket's question.
+func (q *Queries) EnsureStorageMigrationTargetBucket(ctx context.Context, bucketName string, ownerTenantID pgtype.UUID, backendName string) error {
+	_, err := q.db.Exec(ctx, ensureStorageMigrationTargetBucket, bucketName, ownerTenantID, backendName)
+	return err
+}
+
 const failStorageMigration = `-- name: FailStorageMigration :execrows
 UPDATE tenant_storage_migrations
 SET state = $1, error = $2, attempts = attempts + 1, updated_at = now()
@@ -133,6 +152,8 @@ JOIN storage_backends ssb ON ssb.id = sb.backend_id
 JOIN buckets tb           ON tb.id = m.target_bucket_id
 JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE m.tenant_id = $1
+ORDER BY m.created_at DESC
+LIMIT 1
 `
 
 type GetStorageMigrationRow struct {
@@ -143,6 +164,8 @@ type GetStorageMigrationRow struct {
 	TargetBucketName       string                 `json:"target_bucket_name"`
 }
 
+// The latest, as StartStorageMigration reads it: a start used to be able to
+// leave a tenant with two rows (see LockTenantForStorageMigration).
 func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (GetStorageMigrationRow, error) {
 	row := q.db.QueryRow(ctx, getStorageMigration, tenantID)
 	var i GetStorageMigrationRow
@@ -169,6 +192,25 @@ func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID)
 		&i.TargetBackendName,
 		&i.TargetBucketName,
 	)
+	return i, err
+}
+
+const latestStorageMigration = `-- name: LatestStorageMigration :one
+SELECT id, state FROM tenant_storage_migrations
+WHERE tenant_id = $1
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type LatestStorageMigrationRow struct {
+	ID    pgtype.UUID `json:"id"`
+	State string      `json:"state"`
+}
+
+func (q *Queries) LatestStorageMigration(ctx context.Context, tenantID pgtype.UUID) (LatestStorageMigrationRow, error) {
+	row := q.db.QueryRow(ctx, latestStorageMigration, tenantID)
+	var i LatestStorageMigrationRow
+	err := row.Scan(&i.ID, &i.State)
 	return i, err
 }
 
@@ -238,6 +280,27 @@ func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount in
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockTenantForStorageMigration = `-- name: LockTenantForStorageMigration :one
+
+SELECT storage_layout FROM tenants
+WHERE id = $1 AND deleted_at IS NULL
+FOR NO KEY UPDATE
+`
+
+// Starting (or retrying) a migration: StartStorageMigration runs these in one
+// transaction, in this order, and says why each step is there.
+// Serialises starts for one tenant. tenant_storage_migrations has no unique
+// key on tenant_id, so this lock is what keeps two concurrent starts (or
+// retries) from both going through. NO KEY UPDATE, not UPDATE: it does not
+// conflict with the KEY SHARE lock every insert of a row referencing the
+// tenant takes, so uploads are not held up behind it.
+func (q *Queries) LockTenantForStorageMigration(ctx context.Context, id pgtype.UUID) (TenantStorageLayout, error) {
+	row := q.db.QueryRow(ctx, lockTenantForStorageMigration, id)
+	var storage_layout TenantStorageLayout
+	err := row.Scan(&storage_layout)
+	return storage_layout, err
 }
 
 const markStorageMigrationCleaned = `-- name: MarkStorageMigrationCleaned :execrows
@@ -344,6 +407,82 @@ func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtyp
 	return items, nil
 }
 
+const resetFailedTargetBucketProvision = `-- name: ResetFailedTargetBucketProvision :exec
+UPDATE buckets
+SET provision_state = 'pending', provision_error = '', provision_attempts = 0,
+    updated_at = now()
+WHERE id = $1 AND provision_state = 'failed'
+`
+
+// A target bucket whose provisioning failed gets a fresh attempt budget, so a
+// retried migration does not wait on a reconciler that has given up on it.
+func (q *Queries) ResetFailedTargetBucketProvision(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, resetFailedTargetBucketProvision, id)
+	return err
+}
+
+const retryFailedStorageMigration = `-- name: RetryFailedStorageMigration :one
+UPDATE tenant_storage_migrations m
+SET source_bucket_id          = sb.id,
+    target_bucket_id          = tb.id,
+    cleanup_retention_seconds = $1,
+    state                     = 'provisioning',
+    objects_total             = 0,
+    objects_copied            = 0,
+    cursor_collection         = '',
+    cursor_path               = '',
+    error                     = '',
+    cleanup_after             = NULL,
+    completed_at              = NULL,
+    cleaned_at                = NULL,
+    updated_at                = now()
+FROM buckets sb
+JOIN storage_backends ssb ON ssb.id = sb.backend_id
+CROSS JOIN buckets tb
+JOIN storage_backends tsb ON tsb.id = tb.backend_id
+WHERE m.id = $2 AND m.state = 'failed'
+  AND ssb.name = $3 AND sb.name = $4
+  AND tsb.name = $5 AND tb.name = $6
+RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at
+`
+
+// Starts a failed migration over from the beginning, in place: the row is the
+// tenant's migration history (attempts keeps counting failures), so it is
+// reset rather than deleted and re-inserted. Applies only while the row is
+// still 'failed' — the compare-and-set that, behind the tenant lock, lets
+// exactly one of two concurrent retries through.
+func (q *Queries) RetryFailedStorageMigration(ctx context.Context, cleanupRetentionSeconds int64, iD pgtype.UUID, sourceBackendName string, sourceBucketName string, targetBackendName string, targetBucketName string) (TenantStorageMigration, error) {
+	row := q.db.QueryRow(ctx, retryFailedStorageMigration,
+		cleanupRetentionSeconds,
+		iD,
+		sourceBackendName,
+		sourceBucketName,
+		targetBackendName,
+		targetBucketName,
+	)
+	var i TenantStorageMigration
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.SourceBucketID,
+		&i.TargetBucketID,
+		&i.State,
+		&i.ObjectsTotal,
+		&i.ObjectsCopied,
+		&i.CursorCollection,
+		&i.CursorPath,
+		&i.Error,
+		&i.Attempts,
+		&i.CleanupRetentionSeconds,
+		&i.CleanupAfter,
+		&i.CleanedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
 const setStorageMigrationState = `-- name: SetStorageMigrationState :execrows
 
 UPDATE tenant_storage_migrations
@@ -396,6 +535,43 @@ func (q *Queries) SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, st
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const storageMigrationTargetBucket = `-- name: StorageMigrationTargetBucket :one
+SELECT b.id, b.owner_tenant_id, b.public_read, b.provision_state,
+       (EXISTS (SELECT 1 FROM collections c
+                 WHERE c.bucket_id = b.id AND c.tenant_id <> $1)
+        OR EXISTS (SELECT 1 FROM tenant_default_bindings d
+                    WHERE d.bucket_id = b.id AND d.tenant_id <> $1))::bool
+       AS used_by_other_tenant
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = $2 AND b.name = $3
+`
+
+type StorageMigrationTargetBucketRow struct {
+	ID                pgtype.UUID `json:"id"`
+	OwnerTenantID     pgtype.UUID `json:"owner_tenant_id"`
+	PublicRead        bool        `json:"public_read"`
+	ProvisionState    string      `json:"provision_state"`
+	UsedByOtherTenant bool        `json:"used_by_other_tenant"`
+}
+
+// What a start must know before it uses the target bucket: its owner, whether
+// it is public, its provisioning state, and whether any OTHER tenant reaches
+// it through a collection or a default binding. Run with the cross-tenant
+// read on, or RLS would hide exactly the rows being looked for.
+func (q *Queries) StorageMigrationTargetBucket(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (StorageMigrationTargetBucketRow, error) {
+	row := q.db.QueryRow(ctx, storageMigrationTargetBucket, tenantID, backendName, bucketName)
+	var i StorageMigrationTargetBucketRow
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerTenantID,
+		&i.PublicRead,
+		&i.ProvisionState,
+		&i.UsedByOtherTenant,
+	)
+	return i, err
 }
 
 const tenantCollectionBuckets = `-- name: TenantCollectionBuckets :many

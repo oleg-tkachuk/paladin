@@ -176,6 +176,12 @@ type Querier interface {
 	DeleteStorageBackendFeatures(ctx context.Context, backendName string) error
 	DeleteUser(ctx context.Context, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	DeleteUserSettings(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// The tenant's dedicated bucket: pending, tenant-owned, private, created on
+	// the backend by the reconciler. An existing row with that (backend, name) is
+	// left as it is — ON CONFLICT DO NOTHING rather than catching the unique
+	// violation, which aborts the transaction (25P02). Whether an existing row
+	// may be used is StorageMigrationTargetBucket's question.
+	EnsureStorageMigrationTargetBucket(ctx context.Context, bucketName string, ownerTenantID pgtype.UUID, backendName string) error
 	// RegenerateUploadUrl hands a PENDING object a new PUT URL; the reaper's
 	// deadline moves with it, or the row is failed under a client still holding
 	// a valid URL. GREATEST, so a shorter regenerated URL never pulls the
@@ -261,6 +267,8 @@ type Querier interface {
 	GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshToken, error)
 	GetReplicationWatermark(ctx context.Context, name string, name_2 string) (pgtype.Timestamptz, error)
 	GetStorageBackendV2(ctx context.Context, name string) (GetStorageBackendV2Row, error)
+	// The latest, as StartStorageMigration reads it: a start used to be able to
+	// leave a tenant with two rows (see LockTenantForStorageMigration).
 	GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (GetStorageMigrationRow, error)
 	// LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its unique key),
 	// so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
@@ -333,6 +341,7 @@ type Querier interface {
 	// Every column cel.ObjectVars projects, so a rule's match sees what a
 	// ListObjects filter sees.
 	IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, name string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error)
+	LatestStorageMigration(ctx context.Context, tenantID pgtype.UUID) (LatestStorageMigrationRow, error)
 	// Returns shared buckets (owner IS NULL) plus buckets owned by the tenant.
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
 	// Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
@@ -533,6 +542,14 @@ type Querier interface {
 	// Waits for the object-path lock (see package objectpath); held until the
 	// transaction ends.
 	LockObjectPath(ctx context.Context, lockKey int64) error
+	// Starting (or retrying) a migration: StartStorageMigration runs these in one
+	// transaction, in this order, and says why each step is there.
+	// Serialises starts for one tenant. tenant_storage_migrations has no unique
+	// key on tenant_id, so this lock is what keeps two concurrent starts (or
+	// retries) from both going through. NO KEY UPDATE, not UPDATE: it does not
+	// conflict with the KEY SHARE lock every insert of a row referencing the
+	// tenant takes, so uploads are not held up behind it.
+	LockTenantForStorageMigration(ctx context.Context, id pgtype.UUID) (TenantStorageLayout, error)
 	// Reads an object by id alone. Used by background workers (reconciler,
 	// replicator) that don't carry a tenant context. Joins collections to
 	// materialize the bucket binding so the caller can call S3 in one trip.
@@ -675,6 +692,9 @@ type Querier interface {
 	// count.
 	ReschedulePendingPurge(ctx context.Context, iD pgtype.UUID, lastError *string, column3 pgtype.Interval) error
 	ResetBucketQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) (int64, error)
+	// A target bucket whose provisioning failed gets a fresh attempt budget, so a
+	// retried migration does not wait on a reconciler that has given up on it.
+	ResetFailedTargetBucketProvision(ctx context.Context, id pgtype.UUID) error
 	// Rows, not exec: under RLS a row outside the session's tenant is filtered
 	// out rather than refused, so zero rows is the only sign the reset missed.
 	ResetQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) (int64, error)
@@ -695,6 +715,12 @@ type Querier interface {
 	// Clears deleted_at on a trashed row. Bumps resource_version +
 	// updated_at.
 	RestoreTenant(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Starts a failed migration over from the beginning, in place: the row is the
+	// tenant's migration history (attempts keeps counting failures), so it is
+	// reset rather than deleted and re-inserted. Applies only while the row is
+	// still 'failed' — the compare-and-set that, behind the tenant lock, lets
+	// exactly one of two concurrent retries through.
+	RetryFailedStorageMigration(ctx context.Context, cleanupRetentionSeconds int64, iD pgtype.UUID, sourceBackendName string, sourceBucketName string, targetBackendName string, targetBucketName string) (TenantStorageMigration, error)
 	// Revocation FOR CAUSE — logout. Leaves superseded_at NULL, so this token is
 	// never mistaken for one that was merely rotated.
 	RevokeRefreshToken(ctx context.Context, id pgtype.UUID) error
@@ -834,6 +860,11 @@ type Querier interface {
 	// the match. Updates resource_version + updated_at so audit reflects
 	// the soft-delete time independently of any subsequent restore.
 	SoftDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
+	// What a start must know before it uses the target bucket: its owner, whether
+	// it is public, its provisioning state, and whether any OTHER tenant reaches
+	// it through a collection or a default binding. Run with the cross-tenant
+	// read on, or RLS would hide exactly the rows being looked for.
+	StorageMigrationTargetBucket(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (StorageMigrationTargetBucketRow, error)
 	// Rotation: the holder traded this token for a successor. Distinct from
 	// RevokeRefreshToken so a superseded token can be tolerated briefly (the
 	// holder is racing its own rotation) while a revoked one never is.
