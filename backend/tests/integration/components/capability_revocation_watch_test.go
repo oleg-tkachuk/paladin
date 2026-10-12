@@ -21,7 +21,10 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 
 	// The "other replica": its own pool, its own cache, its own watcher.
 	replica := newCapStore(t, rlsPool(t, ctx, f.pool))
-	cache := limes.NewCachedRevocationChecker(replica, time.Hour)
+	cache, err := limes.NewCachedRevocationChecker(limes.RevocationCacheConfig{Upstream: replica, TTL: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
 	watchCtx, stop := context.WithCancel(ctx)
 	t.Cleanup(stop)
 	watcher := capstore.NewRevocationWatcher(f.pool, cache.Clear)
@@ -35,7 +38,7 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 
 	// Revoked through the first pool — a different connection, as another
 	// replica would.
-	if err := f.records.Revoke(ctx, limes.RevokeRequest{ID: f.root, Reason: "test", Actor: "user:ops"}); err != nil {
+	if err := f.records.Revoke(ctx, limes.RevokeRequest{CapabilityID: f.root, Note: "test", Actor: "user:ops"}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 

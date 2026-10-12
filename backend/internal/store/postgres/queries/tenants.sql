@@ -131,3 +131,10 @@ UPDATE tenants
        resource_version = resource_version + 1
  WHERE id = $1
    AND deleted_at IS NOT NULL;
+
+-- name: GetTenantNames :many
+-- The names of the tenants named, live or in the trash, for a listing that
+-- joins its own rows to them by id (the tenant budget summary).
+SELECT id, slug, display_name, deleted_at
+FROM tenants
+WHERE id = ANY(sqlc.arg('ids')::uuid[]);

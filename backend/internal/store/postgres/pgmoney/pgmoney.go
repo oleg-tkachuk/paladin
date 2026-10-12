@@ -51,3 +51,26 @@ func NanosFromNumeric(v pgtype.Numeric) (limes.Nanos, error) {
 	}
 	return limes.Nanos(n.Int64()), nil
 }
+
+// NumericFromCeiling is a budget ceiling as a ceiling column holds it: its
+// Max, or NULL when it is Unlimited. A ceiling of 0 is a 0, which allows
+// nothing, never the NULL that lifts the ceiling.
+func NumericFromCeiling(c limes.BudgetCeiling) pgtype.Numeric {
+	if c.Unlimited {
+		return pgtype.Numeric{}
+	}
+	return NumericFromNanos(c.Max)
+}
+
+// CeilingFromNumeric reads a ceiling column back: NULL is Unlimited, any
+// amount the bound it is, 0 included.
+func CeilingFromNumeric(v pgtype.Numeric) (limes.BudgetCeiling, error) {
+	if !v.Valid {
+		return limes.BudgetCeiling{Unlimited: true}, nil
+	}
+	n, err := NanosFromNumeric(v)
+	if err != nil {
+		return limes.BudgetCeiling{}, err
+	}
+	return limes.BudgetCeiling{Max: n}, nil
+}

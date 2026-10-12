@@ -191,7 +191,7 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 	// out.MaxBudgetAmount stays 0 which the frontend renders as
 	// "no cap configured".
 	if tb, ok := h.tenantBudget(ctx, tenantID); ok {
-		out.MaxBudgetAmount = tb.MaxBudgetAmount
+		out.MaxBudgetAmount = apiutil.BudgetCeilingAmount(tb.Ceiling)
 		if out.UnitCode == "" {
 			out.UnitCode = tb.UnitCode
 		}

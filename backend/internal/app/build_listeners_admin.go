@@ -138,11 +138,10 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			auth.TokenPlaneAdmin,
 			deps.Capability.Usage,
 			cfg.Capability.ChargePerRequestAmount,
-			cfg.Capability.ChargePerRequestUnit,
 			chargeEm,
 		)
 	} else {
-		capAdmin = auth.CapabilityInterceptor(nil, "", nil, 0, "")
+		capAdmin = auth.CapabilityInterceptor(nil, "", nil, 0)
 	}
 	if deps.APIToken != nil {
 		// Admin plane: a token carrying ROLES establishes the principal, so a
@@ -285,7 +284,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		if deps.Capability != nil {
 			usageStore = deps.Capability.Usage
 		}
-		paladinadminv1connect.RegisterTenantBudgetServiceHandler(adminServer, admin.NewTenantBudgetServer(usageStore))
+		paladinadminv1connect.RegisterTenantBudgetServiceHandler(adminServer,
+			admin.NewTenantBudgetServer(usageStore, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool)))
 
 		// BillingService — read-only aggregation over the charges
 		// ledger (the schema baseline (001_initial_schema.sql)). Only mounted with a real handler
@@ -333,7 +333,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// CapabilityService — Issue / Delegate / Revoke / List. The
 		// admin interceptor stack already enforces audience + JWT
 		// authentication; the handler does its own Cedar gate per RPC.
-		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Store, deps.Capability.Usage, polEngine).
+		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Verifier, deps.Capability.Store,
+			deps.Capability.Usage, polEngine).
 			WithBiscuitCopies(deps.Capability.Verifier, deps.Capability.Copies).
 			WithCopyUsage(deps.Capability.CopyUsage)
 		paladinadminv1connect.RegisterCapabilityServiceHandler(adminServer, capH)

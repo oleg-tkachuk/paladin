@@ -6,13 +6,12 @@
 //
 // Connection ownership: Store does not Close the pool — the caller
 // (cmd/server boot path) owns the *pgxpool.Pool lifecycle. The hot-path
-// methods (IsRevoked, Get) issue exactly one round-trip; admin methods
+// methods (IsRevoked, GetRecord) issue exactly one round-trip; admin methods
 // (Revoke with cascade) issue one transaction.
 package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -37,14 +36,33 @@ var ErrNotFound = limes.ErrNotFound
 // `001_initial_schema.sql`.
 type Store struct {
 	pool *pgxpool.Pool
+	// now is the clock expiry is measured by: when a capability stops
+	// listing, when it is due for Purge, and when a revocation was written.
+	now func() time.Time
+}
+
+// Option configures a Store.
+type Option func(*Store)
+
+// WithClock measures expiry by now instead of the wall clock. For tests that
+// move time; the server runs on the wall clock.
+func WithClock(now func() time.Time) Option {
+	return func(s *Store) { s.now = now }
 }
 
 // New constructs a Store. Caller owns pool lifecycle.
-func New(pool *pgxpool.Pool) (*Store, error) {
+func New(pool *pgxpool.Pool, opts ...Option) (*Store, error) {
 	if pool == nil {
 		return nil, errors.New("capability/postgres: pool required")
 	}
-	return &Store{pool: pool}, nil
+	s := &Store{pool: pool, now: time.Now}
+	for _, o := range opts {
+		o(s)
+	}
+	if s.now == nil {
+		return nil, errors.New("capability/postgres: clock required")
+	}
+	return s, nil
 }
 
 // tenantForeignKey is capability_records' reference to its tenant, as
@@ -92,18 +110,22 @@ func lockLiveTenant(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error {
 // The SET LOCAL scope dies with the transaction, so the connection's
 // pool-level GUC (set by PrepareConn) is restored automatically on
 // release without an explicit reset.
-func (s *Store) Insert(ctx context.Context, c limes.Capability, issuedBy limes.Principal) error {
-	principalPayload, err := json.Marshal(c.Subject)
-	if err != nil {
-		return fmt.Errorf("capability/postgres: marshal principal: %w", err)
+func (s *Store) Insert(ctx context.Context, req limes.InsertRequest) error {
+	if err := req.Validate(); err != nil {
+		return err
 	}
-	issuedByPayload, err := json.Marshal(issuedBy)
+	c, issuedBy := req.Capability, req.IssuedBy
+	principalPayload, err := marshalPrincipal(c.Subject)
 	if err != nil {
-		return fmt.Errorf("capability/postgres: marshal issuing principal: %w", err)
+		return err
 	}
-	caveats, err := json.Marshal(c.Caveats)
+	issuedByPayload, err := marshalPrincipal(issuedBy)
 	if err != nil {
-		return fmt.Errorf("capability/postgres: marshal caveats: %w", err)
+		return err
+	}
+	caveats, err := marshalCaveats(c.Caveats)
+	if err != nil {
+		return err
 	}
 
 	const stmt = `
@@ -147,6 +169,9 @@ INSERT INTO capability_records (
 	if err := lockLiveTenant(ctx, tx, c.Subject.TenantID); err != nil {
 		return err
 	}
+	if err := checkLineage(ctx, tx, c); err != nil {
+		return err
+	}
 
 	if _, err := tx.Exec(ctx, stmt,
 		c.ID,
@@ -169,9 +194,9 @@ INSERT INTO capability_records (
 		c.ConfirmationJKT,
 		issuedByPayload,
 		// The ceilings again, in columns: the charge path reads an
-		// ancestor's from here, not from the caveats JSON.
-		pgmoney.NumericFromNanos(c.Caveats.MaxBudgetAmount),
-		c.Caveats.MaxRequests,
+		// ancestor's from here, not from the caveats JSON. NULL lifts one.
+		pgmoney.NumericFromCeiling(c.Caveats.Budget),
+		requestCeilingColumn(c.Caveats.Requests),
 	); err != nil {
 		// The lock above makes this unreachable short of a tenant removed by
 		// something that ignores it; the constraint is the last word either
@@ -190,25 +215,41 @@ INSERT INTO capability_records (
 	return nil
 }
 
-// Get implements limes.Store.
-func (s *Store) Get(ctx context.Context, id uuid.UUID) (limes.Capability, error) {
-	const stmt = `
-SELECT id, tenant_id, issuer, principal_kind, principal_subject,
-       principal_payload, audience, caveats, parent_id, generation,
-       issued_at, not_before, expires_at, COALESCE(confirmation_jkt, '')
-FROM   capability_records
-WHERE  id = $1;
-`
-	c, err := scanRow(s.pool.QueryRow(ctx, stmt, id))
-	if err != nil {
-		return limes.Capability{}, err
+// checkLineage refuses a child whose parent is not on record, and one that
+// would outlive its parent: Purge takes the deepest records first and the
+// IsRevoked walk stops at the first ancestor gone, which both hold only for a
+// lineage that is whole and expires from the leaves up. The parent is read on
+// the insert's transaction, scoped to the child's tenant; delegation never
+// crosses tenants, so a parent of another tenant is not on record here.
+func checkLineage(ctx context.Context, tx pgx.Tx, c limes.Capability) error {
+	if c.ParentID == uuid.Nil {
+		return nil
 	}
-	return *c, nil
+	var parentExpires time.Time
+	err := tx.QueryRow(ctx, `SELECT expires_at FROM capability_records WHERE id = $1`, c.ParentID).Scan(&parentExpires)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("%w: capability/postgres: parent %s is not on record", limes.ErrInvalidRequest, c.ParentID)
+	case err != nil:
+		return fmt.Errorf("capability/postgres: read parent: %w", err)
+	case c.ExpiresAt.After(parentExpires):
+		return fmt.Errorf("%w: expires %s, after its parent %s", limes.ErrDelegationTooWide, c.ExpiresAt, parentExpires)
+	}
+	return nil
 }
 
-// getRecordQuery is Get's columns, then who issued the capability and its
+// requestCeilingColumn is a request ceiling as max_requests holds it: its
+// Max, or NULL when it is Unlimited.
+func requestCeilingColumn(c limes.RequestCeiling) *int64 {
+	if c.Unlimited {
+		return nil
+	}
+	return &c.Max
+}
+
+// getRecordQuery is scanRow's columns, then who issued the capability and its
 // own revocation entry, if any. capability_revocations is visible through
-// the capability it names (004), so the join sees what Get sees.
+// the capability it names (004), so the join sees what the record read sees.
 const getRecordQuery = `
 SELECT cr.id, cr.tenant_id, cr.issuer, cr.principal_kind, cr.principal_subject,
        cr.principal_payload, cr.audience, cr.caveats, cr.parent_id, cr.generation,
@@ -221,7 +262,7 @@ WHERE  cr.id = $1;
 `
 
 // trailingScanner scans a row into scanRow's destinations, then into extra:
-// a query that selects Get's columns first and more after them.
+// a query that selects scanRow's columns first and more after them.
 type trailingScanner struct {
 	row   scanner
 	extra []any
@@ -232,27 +273,27 @@ func (t trailingScanner) Scan(dest ...any) error { return t.row.Scan(append(dest
 // GetRecord implements limes.Store.
 func (s *Store) GetRecord(ctx context.Context, id uuid.UUID) (limes.Record, error) {
 	var (
-		createdBy     string
-		issuedByRaw   []byte
-		revokedAt     *time.Time
-		reason, actor string
-		cascade       bool
+		createdBy   string
+		issuedByRaw []byte
+		revokedAt   *time.Time
+		note, actor string
+		cascaded    bool
 	)
 	c, err := scanRow(trailingScanner{
 		row:   s.pool.QueryRow(ctx, getRecordQuery, id),
-		extra: []any{&createdBy, &issuedByRaw, &revokedAt, &reason, &actor, &cascade},
+		extra: []any{&createdBy, &issuedByRaw, &revokedAt, &note, &actor, &cascaded},
 	})
 	if err != nil {
 		return limes.Record{}, err
 	}
 	rec := limes.Record{Capability: *c, IssuedBy: limes.Principal{Subject: createdBy}}
 	if issuedByRaw != nil {
-		if err := json.Unmarshal(issuedByRaw, &rec.IssuedBy); err != nil {
-			return limes.Record{}, fmt.Errorf("capability/postgres: parse issuing principal: %w", err)
+		if rec.IssuedBy, err = unmarshalPrincipal(issuedByRaw); err != nil {
+			return limes.Record{}, err
 		}
 	}
 	if revokedAt != nil {
-		rec.Revocation = &limes.Revocation{RevokedAt: revokedAt.UTC(), Reason: reason, Actor: actor, Cascade: cascade}
+		rec.Revocation = &limes.Revocation{RevokedAt: revokedAt.UTC(), Note: note, Actor: actor, Cascaded: cascaded}
 	}
 	return rec, nil
 }
@@ -280,6 +321,9 @@ func (s *Store) IsRevoked(ctx context.Context, id uuid.UUID) (bool, error) {
 	if _, err := tx.Exec(ctx, `SELECT set_config('paladin.cross_tenant', 'on', true)`); err != nil {
 		return false, fmt.Errorf("capability/postgres: is_revoked set cross-tenant: %w", err)
 	}
+	// The walk goes one ancestor past MaxDelegationDepth: an ancestor on
+	// record that far up means a chain deeper than the contract answers for,
+	// and a walk stopped short of it must not report "not revoked".
 	const stmt = `
 WITH RECURSIVE chain(id, parent_id, depth) AS (
     SELECT id, parent_id, 0 FROM capability_records WHERE id = $1
@@ -287,16 +331,20 @@ WITH RECURSIVE chain(id, parent_id, depth) AS (
     SELECT r.id, r.parent_id, c.depth + 1
     FROM   capability_records r
     JOIN   chain c ON r.id = c.parent_id
-    WHERE  c.depth < 64
+    WHERE  c.depth <= $2
 )
 SELECT EXISTS (
-    SELECT 1 FROM capability_revocations v
-    WHERE  v.id = $1 OR v.id IN (SELECT id FROM chain)
-);
+           SELECT 1 FROM capability_revocations v
+           WHERE  v.id = $1 OR v.id IN (SELECT id FROM chain WHERE depth <= $2)
+       ),
+       EXISTS (SELECT 1 FROM chain WHERE depth > $2);
 `
-	var revoked bool
-	if err := tx.QueryRow(ctx, stmt, id).Scan(&revoked); err != nil {
+	var revoked, tooDeep bool
+	if err := tx.QueryRow(ctx, stmt, id, limes.MaxDelegationDepth).Scan(&revoked, &tooDeep); err != nil {
 		return false, fmt.Errorf("capability/postgres: is_revoked: %w", err)
+	}
+	if tooDeep {
+		return false, fmt.Errorf("%w: %s has more than %d ancestors", limes.ErrDelegationTooDeep, id, limes.MaxDelegationDepth)
 	}
 	return revoked, nil
 }
@@ -318,14 +366,15 @@ SELECT EXISTS (
 // Revoking an already-revoked capability stays a no-op, because the row's
 // visibility, not the INSERT's row count, is what the result is read from.
 //
-// The recursive CTE bounds depth via WHERE NOT in the cycle — capability
-// records are a forest (parent_id is nullable, no cycles by construction
-// because the FK is set NULL on parent delete), but a depth limit is
-// kept as a defensive guard against pathological dataset corruption.
+// The cascade walks down to MaxDelegationDepth, as far as IsRevoked walks
+// up: capability records are a forest (parent_id is nullable, no cycles by
+// construction because the FK is set NULL on parent delete), and the bound
+// also guards against pathological dataset corruption.
 func (s *Store) Revoke(ctx context.Context, args limes.RevokeRequest) error {
-	if args.ID == uuid.Nil {
+	if args.CapabilityID == uuid.Nil {
 		return ErrNotFound // no capability has the nil id
 	}
+	revokedAt := s.now()
 
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -341,18 +390,19 @@ WITH RECURSIVE descendants(id, depth) AS (
     SELECT r.id, d.depth + 1
     FROM   capability_records r
     JOIN   descendants d ON r.parent_id = d.id
-    WHERE  d.depth < 64
+    WHERE  d.depth < $5
 ),
 inserted AS (
-    INSERT INTO capability_revocations (id, reason, actor, cascade)
-    SELECT id, $2, $3, true FROM descendants
+    INSERT INTO capability_revocations (id, revoked_at, reason, actor, cascade)
+    SELECT id, $4, $2, $3, true FROM descendants
     ON CONFLICT (id) DO NOTHING
     RETURNING 1
 )
 SELECT count(*) FROM descendants;
 `
 		var visible int64
-		if err := tx.QueryRow(ctx, cascade, args.ID, args.Reason, args.Actor).Scan(&visible); err != nil {
+		if err := tx.QueryRow(ctx, cascade, args.CapabilityID, args.Note, args.Actor, revokedAt,
+			limes.MaxDelegationDepth).Scan(&visible); err != nil {
 			return fmt.Errorf("capability/postgres: revoke cascade: %w", err)
 		}
 		if visible == 0 {
@@ -364,15 +414,15 @@ WITH target AS (
     SELECT id FROM capability_records WHERE id = $1
 ),
 inserted AS (
-    INSERT INTO capability_revocations (id, reason, actor, cascade)
-    SELECT id, $2, $3, false FROM target
+    INSERT INTO capability_revocations (id, revoked_at, reason, actor, cascade)
+    SELECT id, $4, $2, $3, false FROM target
     ON CONFLICT (id) DO NOTHING
     RETURNING 1
 )
 SELECT count(*) FROM target;
 `
 		var visible int64
-		if err := tx.QueryRow(ctx, single, args.ID, args.Reason, args.Actor).Scan(&visible); err != nil {
+		if err := tx.QueryRow(ctx, single, args.CapabilityID, args.Note, args.Actor, revokedAt).Scan(&visible); err != nil {
 			return fmt.Errorf("capability/postgres: revoke: %w", err)
 		}
 		if visible == 0 {
@@ -386,50 +436,80 @@ SELECT count(*) FROM target;
 	return nil
 }
 
-// PurgeExpired implements limes.Store. Drops revocation rows — of
-// capabilities and of Biscuit copies — whose underlying capability has been
-// expired for at least the supplied grace; keeps the denylists bounded over
-// time. Returns the rows dropped from both.
-func (s *Store) PurgeExpired(ctx context.Context, expiredFor time.Duration) (int64, error) {
-	const stmt = `
-DELETE FROM capability_revocations
-WHERE id IN (
-    SELECT r.id
-    FROM   capability_revocations r
-    JOIN   capability_records cr ON cr.id = r.id
-    WHERE  cr.expires_at < NOW() - ($1::bigint || ' microseconds')::interval
-);
+// purgeQuery removes, at most $3 of them, the capability records expired
+// before $1 - $2: oldest expiry first and, among records expiring together,
+// the deepest first — depth being how many ancestors are still on record —
+// so a batch cut at its limit takes a child before its parent. Insert refuses
+// a child that outlives its parent, so a child is due no later than its
+// parent and the IsRevoked walk never loses an ancestor a live record still
+// has. The revocation entries of the record and of its Biscuit copies go with
+// it, by their CASCADE; what the meter holds for it stays until
+// UsageHousekeeping.PurgeOrphans (067).
+const purgeQuery = `
+WITH RECURSIVE due AS (
+    SELECT id, parent_id, expires_at
+    FROM   capability_records
+    WHERE  expires_at < $1::timestamptz - ($2::bigint * interval '1 microsecond')
+),
+up(id, ancestor, depth) AS (
+    SELECT id, parent_id, 0 FROM due
+    UNION ALL
+    SELECT u.id, r.parent_id, u.depth + 1
+    FROM   up u
+    JOIN   capability_records r ON r.id = u.ancestor
+    WHERE  u.depth <= $4
+),
+picked AS (
+    SELECT d.id
+    FROM   due d
+    JOIN   (SELECT id, max(depth) AS depth FROM up GROUP BY id) depths USING (id)
+    ORDER  BY d.expires_at, depths.depth DESC, d.id
+    LIMIT  $3
+)
+DELETE FROM capability_records WHERE id IN (SELECT id FROM picked);
 `
-	tag, err := s.pool.Exec(ctx, stmt, expiredFor.Microseconds())
-	if err != nil {
-		return 0, fmt.Errorf("capability/postgres: purge: %w", err)
+
+// Purge implements limes.Store: one batch of purgeQuery.
+func (s *Store) Purge(ctx context.Context, req limes.PurgeRequest) (limes.PurgeResult, error) {
+	if err := req.Validate(); err != nil {
+		return limes.PurgeResult{}, err
 	}
-	// Revoked Biscuit copies go on the same grace: no copy outlives its
-	// capability's expiry.
-	const copies = `
-DELETE FROM capability_biscuit_revocations
-WHERE capability_id IN (
-    SELECT id FROM capability_records
-    WHERE  expires_at < NOW() - ($1::bigint || ' microseconds')::interval
-);
-`
-	copyTag, err := s.pool.Exec(ctx, copies, expiredFor.Microseconds())
-	if err != nil {
-		return 0, fmt.Errorf("capability/postgres: purge biscuit copies: %w", err)
+	limit := req.Limit
+	if limit == 0 {
+		limit = limes.DefaultHousekeepingLimit
 	}
-	return tag.RowsAffected() + copyTag.RowsAffected(), nil
+	// Housekeeping is platform-wide: the batch reads and removes every
+	// tenant's records, whatever tenant the caller's connection is scoped
+	// to. The policies admit the flag in USING only, which is all a delete
+	// needs; it cannot let anything write.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return limes.PurgeResult{}, fmt.Errorf("capability/postgres: purge begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SELECT set_config('paladin.cross_tenant', 'on', true)`); err != nil {
+		return limes.PurgeResult{}, fmt.Errorf("capability/postgres: purge scope: %w", err)
+	}
+	tag, err := tx.Exec(ctx, purgeQuery, s.now(), req.Retention().Microseconds(), limit, limes.MaxDelegationDepth)
+	if err != nil {
+		return limes.PurgeResult{}, fmt.Errorf("capability/postgres: purge: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return limes.PurgeResult{}, fmt.Errorf("capability/postgres: purge commit: %w", err)
+	}
+	return limes.PurgeResult{Purged: tag.RowsAffected()}, nil
 }
 
 // ListByPrincipal implements limes.Store. Cursor is the last seen
 // id encoded as a hex string; a follow-up page seeks past it. Page size
 // is bounded by Limit (default 50, max 500).
-func (s *Store) ListByPrincipal(ctx context.Context, args limes.ListByPrincipalRequest) ([]limes.Capability, string, error) {
+func (s *Store) ListByPrincipal(ctx context.Context, args limes.ListByPrincipalRequest) (limes.Page[limes.Capability], error) {
 	if err := args.Validate(); err != nil {
-		return nil, "", err
+		return limes.Page[limes.Capability]{}, err
 	}
 	if args.Cursor != "" {
 		if _, err := uuid.Parse(args.Cursor); err != nil {
-			return nil, "", fmt.Errorf("%w: capability/postgres: cursor %q", limes.ErrInvalidRequest, args.Cursor)
+			return limes.Page[limes.Capability]{}, fmt.Errorf("%w: capability/postgres: cursor %q", limes.ErrInvalidRequest, args.Cursor)
 		}
 	}
 	limit := limes.PageLimit(args.Limit)
@@ -438,7 +518,8 @@ func (s *Store) ListByPrincipal(ctx context.Context, args limes.ListByPrincipalR
 	whereExtra := ""
 	bindArgs := []any{args.TenantID, string(args.PrincipalType), args.Subject}
 	if !args.IncludeExpired {
-		whereExtra += " AND cr.expires_at > NOW()"
+		bindArgs = append(bindArgs, s.now())
+		whereExtra += fmt.Sprintf(" AND cr.expires_at > $%d::timestamptz", len(bindArgs))
 	}
 	if !args.IncludeRevoked {
 		whereExtra += " AND NOT EXISTS (SELECT 1 FROM capability_revocations rv WHERE rv.id = cr.id)"
@@ -463,7 +544,7 @@ LIMIT  $%d;
 
 	rows, err := s.pool.Query(ctx, stmt, bindArgs...)
 	if err != nil {
-		return nil, "", fmt.Errorf("capability/postgres: list: %w", err)
+		return limes.Page[limes.Capability]{}, fmt.Errorf("capability/postgres: list: %w", err)
 	}
 	defer rows.Close()
 
@@ -471,26 +552,26 @@ LIMIT  $%d;
 	for rows.Next() {
 		c, err := scanRow(rows)
 		if err != nil {
-			return nil, "", err
+			return limes.Page[limes.Capability]{}, err
 		}
 		out = append(out, *c)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, "", fmt.Errorf("capability/postgres: list scan: %w", err)
+		return limes.Page[limes.Capability]{}, fmt.Errorf("capability/postgres: list scan: %w", err)
 	}
 
-	nextCursor := ""
-	if len(out) > int(limit) {
-		out = out[:limit]
+	page := limes.Page[limes.Capability]{Items: out}
+	if len(out) > limit {
+		page.Items = out[:limit]
 		// Seek past the last row RETURNED, not past the overflow row we
 		// fetched to detect the next page — the overflow row belongs to
 		// the next page and seeking past it drops it entirely.
-		nextCursor = out[len(out)-1].ID.String()
+		page.Next = page.Items[limit-1].ID.String()
 	}
-	return out, nextCursor, nil
+	return page, nil
 }
 
-// scanRow is the shared row decoder for Get / ListByPrincipal. Accepts
+// scanRow is the shared row decoder for GetRecord / ListByPrincipal. Accepts
 // any pgx Scanner so it works against single-row and multi-row results.
 type scanner interface {
 	Scan(dest ...any) error
@@ -521,9 +602,9 @@ func scanRow(r scanner) (*limes.Capability, error) {
 		return nil, fmt.Errorf("capability/postgres: scan: %w", err)
 	}
 
-	var principal limes.Principal
-	if err := json.Unmarshal(principalRaw, &principal); err != nil {
-		return nil, fmt.Errorf("capability/postgres: parse principal: %w", err)
+	principal, err := unmarshalPrincipal(principalRaw)
+	if err != nil {
+		return nil, err
 	}
 	// Defensive: principal payload sometimes lacks tenant_id when it was
 	// written by a buggy issuer. Fall back to the column we indexed on.
@@ -537,9 +618,9 @@ func scanRow(r scanner) (*limes.Capability, error) {
 		principal.Subject = subject
 	}
 
-	var cav limes.Caveats
-	if err := json.Unmarshal(caveats, &cav); err != nil {
-		return nil, fmt.Errorf("capability/postgres: parse caveats: %w", err)
+	cav, err := unmarshalCaveats(caveats)
+	if err != nil {
+		return nil, err
 	}
 
 	out := &limes.Capability{

@@ -50,7 +50,7 @@ func TestExtractCapabilityToken(t *testing.T) {
 func TestCapabilityInterceptor_NilVerifier(t *testing.T) {
 	t.Parallel()
 	const unverifiable = "eyJ0eXAiOiJKV1QifQ.e30.sig"
-	i := CapabilityInterceptor(nil, planeData, nil, 0, "")
+	i := CapabilityInterceptor(nil, planeData, nil, 0)
 	if i == nil {
 		t.Fatalf("nil interceptor returned")
 	}

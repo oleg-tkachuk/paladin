@@ -2,78 +2,75 @@ package migrations
 
 import (
 	"encoding/json"
-	"maps"
-	"slices"
+	"os"
 	"strings"
 	"testing"
-
-	"github.com/google/uuid"
-
-	"github.com/oleg-tkachuk/limes"
 )
 
-// capabilityJSONMigration rewrites stored caveats and principals into the
-// JSON limes writes; this test holds its spelling to limes's.
-const capabilityJSONMigration = "058_capability_json_v4.sql"
+// capabilityJSONMigration rewrote stored caveats and principals into the
+// stored spelling; explicitCeilingsMigration added the unlimited flags to the
+// caveats whose ceilings read 0 as "no ceiling".
+const (
+	capabilityJSONMigration   = "058_capability_json_v4.sql"
+	explicitCeilingsMigration = "066_explicit_ceilings.sql"
+)
 
-// jsonKeys is the set of keys v marshals to, every field set so none is
-// omitted, and the keys of the objects nested in it.
-func jsonKeys(t *testing.T, v any) []string {
-	t.Helper()
-	raw, err := json.Marshal(v)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
-		t.Fatal(err)
-	}
-	keys := map[string]bool{}
-	var walk func(map[string]any)
-	walk = func(m map[string]any) {
-		for k, v := range m {
-			keys[k] = true
-			if nested, ok := v.(map[string]any); ok {
-				walk(nested)
-			}
-		}
-	}
-	walk(m)
-	return slices.Sorted(maps.Keys(keys))
+// storedJSONKeysPath lists the keys the capability store writes for a row's
+// caveats, principal and agent; its own tests hold the stored structs to it.
+const storedJSONKeysPath = "../internal/capability/postgres/testdata/stored-json-keys.json"
+
+// storedJSONKeys is the shape of storedJSONKeysPath.
+type storedJSONKeys struct {
+	Caveats   []string `json:"caveats"`
+	Principal []string `json:"principal"`
+	Agent     []string `json:"agent"`
 }
 
-// Every key limes writes for caveats and principals is one the migration
-// writes: a key it spells otherwise decodes to a zero value, silently.
-func TestCapabilityJSONMigrationSpellsLimesKeys(t *testing.T) {
-	raw, err := FS.ReadFile(capabilityJSONMigration)
+func readMigration(t *testing.T, name string) string {
+	t.Helper()
+	raw, err := FS.ReadFile(name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sql := string(raw)
-	caveats := limes.Caveats{
-		Ops:                    []limes.Op{limes.OpGet},
-		ResourcePrefixes:       []string{"p/"},
-		ResourceURIs:           []string{"u"},
-		MaxRequests:            1,
-		MaxBudgetAmount:        limes.NanosPerUnit,
-		UnitCode:               limes.DefaultUnitCode,
-		AllowTaintedRead:       true,
-		IdempotencyKeyRequired: true,
-		SourceIPCIDR:           []string{"10.0.0.0/8"},
+	return string(raw)
+}
+
+// builtKey reports whether sql writes key as jsonb_build_object takes it: the
+// key, then its value.
+func builtKey(sql, key string) bool { return strings.Contains(sql, "'"+key+"',") }
+
+// literalKey reports whether sql writes key inside a JSON literal.
+func literalKey(sql, key string) bool { return strings.Contains(sql, `"`+key+`"`) }
+
+// Every key the store reads for caveats and principals is one a migration
+// writes: a key spelled otherwise decodes to a zero value, silently — and
+// for a ceiling, a zero value now allows nothing.
+func TestCapabilityJSONMigrationsSpellStoredKeys(t *testing.T) {
+	raw, err := os.ReadFile(storedJSONKeysPath)
+	if err != nil {
+		t.Fatal(err)
 	}
-	principal := limes.Principal{
-		Type: limes.PrincipalType("agent"), TenantID: uuid.New(), Subject: "s",
-		Agent: &limes.AgentPrincipal{
-			AgentType: "a", AgentVersion: "v", RunID: uuid.New(), ParentAgentID: uuid.New(),
-			Model: "m", MCPClient: "c",
-		},
+	var keys storedJSONKeys
+	if err := json.Unmarshal(raw, &keys); err != nil {
+		t.Fatal(err)
 	}
-	for name, v := range map[string]any{"caveats": caveats, "principal": principal} {
-		for _, key := range jsonKeys(t, v) {
-			// As jsonb_build_object takes it: the key, then its value.
-			if !strings.Contains(sql, "'"+key+"',") {
-				t.Errorf("%s key %q is not written by %s", name, key, capabilityJSONMigration)
-			}
+	if len(keys.Caveats) == 0 || len(keys.Principal) == 0 || len(keys.Agent) == 0 {
+		t.Fatalf("%s lists no keys for a stored object: %+v", storedJSONKeysPath, keys)
+	}
+	v4, ceilings := readMigration(t, capabilityJSONMigration), readMigration(t, explicitCeilingsMigration)
+
+	// 058 rewrote every principal and agent key.
+	for _, key := range append(append([]string{}, keys.Principal...), keys.Agent...) {
+		if !builtKey(v4, key) {
+			t.Errorf("principal key %q is not written by %s", key, capabilityJSONMigration)
+		}
+	}
+	// 058 rewrote the caveats; 066 added the unlimited flags it had no
+	// spelling for.
+	for _, key := range keys.Caveats {
+		if !builtKey(v4, key) && !literalKey(ceilings, key) {
+			t.Errorf("caveats key %q is written by neither %s nor %s",
+				key, capabilityJSONMigration, explicitCeilingsMigration)
 		}
 	}
 }

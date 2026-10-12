@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -68,20 +69,60 @@ func countCharges(t *testing.T, h *pgharness.Harness, tenantID uuid.UUID) int64 
 	return n
 }
 
-func seedCapRecord(t *testing.T, h *pgharness.Harness, capID, tenantID uuid.UUID) {
+// seedUnitCode is the unit every seeded capability, charge and tenant budget
+// in this package counts in.
+const seedUnitCode = limes.DefaultUnitCode
+
+// seedCapLifetime is how long a seeded capability stays live: past any test.
+const seedCapLifetime = time.Hour
+
+// seedTestCapability puts capID on record for tenantID through the capability
+// store, so its ceilings land in the columns the meter reads, and returns the
+// subject the meter counts it as. The meter refuses a capability not on
+// record, so every charge needs one.
+func seedTestCapability(t *testing.T, h *pgharness.Harness, capID, tenantID uuid.UUID, subject string, budget limes.BudgetCeiling) limes.MeterSubject {
 	t.Helper()
-	if _, err := h.PoolMigrate.Exec(context.Background(),
-		`INSERT INTO capability_records
-		   (id, tenant_id, issuer, principal_kind, principal_subject,
-		    audience, caveats, created_by, expires_at)
-		 VALUES ($1, $2, 'test-issuer', 'agent', 'agent-1',
-		         '{admin}', '{}'::jsonb, 'test-issuer',
-		         now() + interval '1 hour')`,
-		capID, tenantID,
-	); err != nil {
-		t.Fatalf("seed capability_records: %v", err)
+	ctx := context.Background()
+	records, err := capabilitypg.New(h.PoolMigrate)
+	if err != nil {
+		t.Fatalf("capability store: %v", err)
 	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	c := limes.Capability{
+		ID:       capID,
+		Issuer:   "test-issuer",
+		Subject:  limes.Principal{Type: limes.PrincipalAgent, TenantID: tenantID, Subject: subject},
+		Audience: []string{"admin"},
+		Caveats: limes.Caveats{
+			Ops:      []limes.Op{limes.OpGet},
+			Requests: limes.RequestCeiling{Unlimited: true},
+			Budget:   budget,
+			UnitCode: seedUnitCode,
+		},
+		IssuedAt:  now,
+		ExpiresAt: now.Add(seedCapLifetime),
+	}
+	issuer := limes.Principal{Type: limes.PrincipalService, Subject: "test-issuer"}
+	if err := records.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: issuer}); err != nil {
+		t.Fatalf("seed capability record: %v", err)
+	}
+	s, err := limes.StoredMeterSubject(ctx, records, capID)
+	if err != nil {
+		t.Fatalf("meter subject: %v", err)
+	}
+	return s
 }
+
+// seedCapRecord puts capID on record for tenantID with the given budget
+// ceiling and returns its meter subject.
+func seedCapRecord(t *testing.T, h *pgharness.Harness, capID, tenantID uuid.UUID, budget limes.BudgetCeiling) limes.MeterSubject {
+	t.Helper()
+	return seedTestCapability(t, h, capID, tenantID, "agent-1", budget)
+}
+
+// outboxCapBudget bounds the capability the outbox tests charge; the charge
+// fits under it.
+var outboxCapBudget = limes.BudgetCeiling{Max: limes.MustParseAmount("10.0")}
 
 // TestCharge_FanoutCommitsOnSameTx: a successful Charge with a fan-out
 // hook lands ALL of it atomically — the running-total counters, the
@@ -93,14 +134,14 @@ func TestCharge_FanoutCommitsOnSameTx(t *testing.T) {
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-outbox-ok")
 	capID := uuid.New()
-	seedCapRecord(t, h, capID, tenantID)
+	subject := seedCapRecord(t, h, capID, tenantID, outboxCapBudget)
 
-	spent, err := store.Charge(ctx, limes.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: limes.MustParseAmount("2.5"), MaxBudget: limes.MustParseAmount("10.0"), UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID)))
+	spent, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID)))
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
-	if spent.Spent != limes.MustParseAmount("2.5") {
-		t.Errorf("spent = %v, want 2.50", spent.Spent)
+	if spent.SpentAmount != limes.MustParseAmount("2.5") {
+		t.Errorf("spent = %v, want 2.50", spent.SpentAmount)
 	}
 
 	// Counter committed.
@@ -132,10 +173,10 @@ func TestCharge_FanoutErrorRollsBackEverything(t *testing.T) {
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-outbox-fail")
 	capID := uuid.New()
-	seedCapRecord(t, h, capID, tenantID)
+	subject := seedCapRecord(t, h, capID, tenantID, outboxCapBudget)
 
 	boom := errors.New("fan-out down")
-	_, err := store.Charge(ctx, limes.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: limes.MustParseAmount("2.5"), MaxBudget: limes.MustParseAmount("10.0"), UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, func(context.Context, pgx.Tx) error { return boom })
+	_, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, func(context.Context, pgx.Tx) error { return boom })
 	if !errors.Is(err, boom) {
 		t.Fatalf("charge err = %v, want it to wrap the fan-out error", err)
 	}

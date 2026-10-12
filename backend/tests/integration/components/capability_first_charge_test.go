@@ -14,9 +14,9 @@ import (
 // it was charged — and so did an ancestor whose usage row did not exist yet.
 func TestFirstChargeRespectsTheCeiling(t *testing.T) {
 	t.Parallel()
-	ctx, f := newUsageFixture(t)
+	ctx, f := newUsageFixtureWith(t, func(c *limes.Caveats) { c.Budget = limes.BudgetCeiling{Max: limes.MustParseAmount("10")} })
 	if _, err := f.usage.Charge(ctx, limes.ChargeRequest{
-		CapabilityID: f.capID, TenantID: f.tenant, Amount: limes.MustParseAmount("50"), MaxBudget: limes.MustParseAmount("10"), UnitCode: "USD",
+		Subject: f.subject, Amount: limes.MustParseAmount("50"),
 	}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
 		t.Fatalf("first charge above the cap: err = %v, want ErrBudgetExceeded", err)
 	}
@@ -31,10 +31,12 @@ func TestFirstChargeRespectsTheCeiling(t *testing.T) {
 func TestFirstChargeOfAnAncestorRespectsItsCeiling(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
-	// The child's own ceiling is 20; the parent's 25. The parent has never
-	// been charged, so its usage row does not exist yet. 30 fits neither.
+	// A child of the root with no budget of its own, so only the root's 25
+	// can refuse. The root has never been charged, so its usage row does not
+	// exist yet. 30 does not fit it.
+	child := f.insert(t, ctx, f.root, limes.BudgetCeiling{Unlimited: true}, limes.RequestCeiling{Unlimited: true})
 	if _, err := f.usage.Charge(ctx, limes.ChargeRequest{
-		CapabilityID: f.child, TenantID: f.tenant, Amount: limes.MustParseAmount("30"), MaxBudget: 0, UnitCode: "USD",
+		Subject: f.subject(t, ctx, child), Amount: limes.MustParseAmount("30"),
 	}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
 		t.Fatalf("first charge above the parent's ceiling: err = %v, want ErrBudgetExceeded", err)
 	}

@@ -43,31 +43,30 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-charge")
 	capID := uuid.New()
-	seedCapRecord(t, h, capID, tenantID)
+	subject := seedCapRecord(t, h, capID, tenantID, limes.BudgetCeiling{Max: limes.MustParseAmount("10.0")})
 
 	// First charge: 4. Cap allows 10, tenant allows 5. Both fit.
-	spent, err := store.Charge(ctx, limes.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: limes.MustParseAmount("4.0"), MaxBudget: limes.MustParseAmount("10.0"), UnitCode: "USD", Op: "", Actor: ""}, nil)
+	spent, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("4.0")}, nil)
 	if err != nil {
 		t.Fatalf("first charge: %v", err)
 	}
-	if spent.Spent != limes.MustParseAmount("4") {
-		t.Errorf("spent after first charge = %v, want 4.00", spent.Spent)
+	if spent.SpentAmount != limes.MustParseAmount("4") {
+		t.Errorf("spent after first charge = %v, want 4.00", spent.SpentAmount)
 	}
 
-	// Configure a tenant cap of 5 (default = 0 = unlimited; we want
-	// the rejection path).
+	// Configure a tenant cap of 5 (a ceiling never set is unlimited; we
+	// want the rejection path).
 	//
-	// The charge above already created the accumulator row, so this is an
-	// update and carries that row's version — the same read-then-write an
-	// operator does from the console. Passing 0 here would (correctly) be
-	// refused as "I believe no row exists".
+	// The charge above already created the accumulator row; it holds only
+	// counted spend, so its version is still 0 — the read-then-write an
+	// operator does from the console carries exactly that.
 	cur, err := store.GetTenantBudget(ctx, tenantID)
 	if err != nil {
 		t.Fatalf("read tenant budget: %v", err)
 	}
 	if _, err := store.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
 		TenantID:        tenantID,
-		MaxBudgetAmount: limes.MustParseAmount("5.0"),
+		Ceiling:         limes.BudgetCeiling{Max: limes.MustParseAmount("5.0")},
 		ResetSpend:      false, // keep the 4 we already charged
 		ExpectedVersion: cur.ResourceVersion,
 	}); err != nil {
@@ -76,7 +75,7 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 
 	// Second charge: 4. Cap accepts (8 ≤ 10). Tenant rejects (8 > 5).
 	// Inner store should compensate the per-cap counter.
-	_, err = store.Charge(ctx, limes.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: limes.MustParseAmount("4.0"), MaxBudget: limes.MustParseAmount("10.0"), UnitCode: "USD", Op: "", Actor: ""}, nil)
+	_, err = store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("4.0")}, nil)
 	if !errors.Is(err, limes.ErrTenantBudgetExceeded) {
 		t.Fatalf("second charge: want ErrTenantBudgetExceeded, got %v", err)
 	}
@@ -117,9 +116,9 @@ func TestCharge_RefundReturnsExactlyTheCharge(t *testing.T) {
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-refund")
 	capID := uuid.New()
-	seedCapRecord(t, h, capID, tenantID)
+	subject := seedCapRecord(t, h, capID, tenantID, limes.BudgetCeiling{Unlimited: true})
 
-	receipt, err := store.Charge(ctx, limes.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: limes.MustParseAmount("1.0"), MaxBudget: 0, UnitCode: "USD", Op: "", Actor: ""}, nil)
+	receipt, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("1.0")}, nil)
 	if err != nil {
 		t.Fatalf("seed charge: %v", err)
 	}
@@ -128,7 +127,7 @@ func TestCharge_RefundReturnsExactlyTheCharge(t *testing.T) {
 		t.Fatalf("over-refund err = %v, want ErrRefundExceedsCharge", err)
 	}
 	// Refund the whole charge — both counters back to 0.
-	if _, err := store.Refund(ctx, limes.RefundRequest{ChargeID: receipt.ChargeID}); err != nil {
+	if _, err := store.Refund(ctx, limes.RefundRequest{ChargeID: receipt.ChargeID, Remaining: true}); err != nil {
 		t.Fatalf("refund: %v", err)
 	}
 
@@ -165,16 +164,16 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 
 	// Initial cap 10, charge 7 against an unrelated capability.
 	initial, err := store.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
-		TenantID:        tenantID,
-		MaxBudgetAmount: limes.MustParseAmount("10.0"),
-		ResetSpend:      true,
+		TenantID:   tenantID,
+		Ceiling:    limes.BudgetCeiling{Max: limes.MustParseAmount("10.0")},
+		ResetSpend: true,
 	})
 	if err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	capID := uuid.New()
-	seedCapRecord(t, h, capID, tenantID)
-	if _, err := store.Charge(ctx, limes.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: limes.MustParseAmount("7.0"), MaxBudget: 0, UnitCode: "USD", Op: "", Actor: ""}, nil); err != nil {
+	subject := seedCapRecord(t, h, capID, tenantID, limes.BudgetCeiling{Unlimited: true})
+	if _, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("7.0")}, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 
@@ -188,7 +187,7 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	// read is still current.
 	if _, err := store.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
 		TenantID:        tenantID,
-		MaxBudgetAmount: limes.MustParseAmount("10.0"),
+		Ceiling:         limes.BudgetCeiling{Max: limes.MustParseAmount("10.0")},
 		ResetSpend:      true,
 		ExpectedVersion: initial.ResourceVersion,
 	}); err != nil {
@@ -214,20 +213,10 @@ func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-ledger")
 	capID := uuid.New()
 
-	// Seed capability_records so the charges FK to it resolves.
-	if _, err := h.PoolMigrate.Exec(ctx,
-		`INSERT INTO capability_records
-		 (id, tenant_id, issuer, principal_kind, principal_subject,
-		  audience, caveats, created_by, expires_at)
-		 VALUES ($1, $2, 'test-issuer', 'agent', 'agent-1',
-		         '{admin}', '{}'::jsonb, 'test-issuer',
-		         now() + interval '1 hour')`,
-		capID, tenantID,
-	); err != nil {
-		t.Fatalf("seed capability_records: %v", err)
-	}
+	// The meter refuses a capability not on record.
+	subject := seedCapRecord(t, h, capID, tenantID, limes.BudgetCeiling{Max: limes.MustParseAmount("10.0")})
 
-	if _, err := store.Charge(ctx, limes.ChargeRequest{CapabilityID: capID, TenantID: tenantID, Amount: limes.MustParseAmount("2.5"), MaxBudget: limes.MustParseAmount("10.0"), UnitCode: "USD", Op: "presign.put", Actor: "agent-1"}, nil); err != nil {
+	if _, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 
@@ -256,5 +245,39 @@ func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {
 	if unitCode != "USD" || op != "presign.put" || actor != "agent-1" {
 		t.Errorf("ledger metadata = (%q, %q, %q), want (USD, presign.put, agent-1)",
 			unitCode, op, actor)
+	}
+}
+
+// TestCharge_RefusesCapabilityNoLongerOnRecord: a subject read while its
+// capability was on record is refused once the record is gone, and nothing is
+// counted — metering it alone would let it spend past every ancestor's
+// ceiling. The ledger rows it already wrote outlive the record.
+func TestCharge_RefusesCapabilityNoLongerOnRecord(t *testing.T) {
+	h := pgharness.Setup(t)
+	ctx := context.Background()
+	store := capabilitypg.NewUsageStore(sqlc.New(h.PoolMigrate), h.PoolMigrate, nil)
+
+	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-gone")
+	capID := uuid.New()
+	subject := seedCapRecord(t, h, capID, tenantID, limes.BudgetCeiling{Unlimited: true})
+	if _, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("1.0")}, nil); err != nil {
+		t.Fatalf("charge on record: %v", err)
+	}
+	if _, err := h.PoolMigrate.Exec(ctx, `DELETE FROM capability_records WHERE id = $1`, capID); err != nil {
+		t.Fatalf("drop record: %v", err)
+	}
+
+	if _, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("1.0")}, nil); !errors.Is(err, limes.ErrNotFound) {
+		t.Fatalf("charge off record: err = %v, want ErrNotFound", err)
+	}
+	if got := countCharges(t, h, tenantID); got != 1 {
+		t.Errorf("charges rows = %d, want 1 (the first charge's row outlives its record; the refused one wrote none)", got)
+	}
+	tb, err := store.GetTenantBudget(ctx, tenantID)
+	if err != nil {
+		t.Fatalf("get tenant budget: %v", err)
+	}
+	if tb.SpentAmount != limes.MustParseAmount("1.0") {
+		t.Errorf("tenant spent = %v, want 1.00 (the refused charge must not count)", tb.SpentAmount)
 	}
 }

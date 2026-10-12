@@ -6,29 +6,30 @@ import (
 	"testing"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 )
 
 const taintedURI = "object://t/c/flagged.txt"
 
-func taintCtx(cap *limes.Capability, lookup TaintLookup, calls *int) context.Context {
+func taintCtx(t *testing.T, cap limes.Capability, lookup TaintLookup, calls *int) context.Context {
+	t.Helper()
 	counting := func(ctx context.Context, uri string) (bool, error) {
 		*calls++
 		return lookup(ctx, uri)
 	}
-	return withTaintLookup(WithCapability(context.Background(), cap), counting)
+	return withTaintLookup(WithCapability(context.Background(), captest.Verified(t, cap)), counting)
 }
 
 func flaggedOnly(_ context.Context, uri string) (bool, error) { return uri == taintedURI, nil }
 
 func TestAssertCapabilityOpRefusesTaintedReads(t *testing.T) {
-	cap := &limes.Capability{ID: uuid.New(), Caveats: limes.Caveats{
+	cap := limes.Capability{Caveats: limes.Caveats{
 		Ops: []limes.Op{limes.OpGet, limes.OpPut},
 	}}
 	calls := 0
-	ctx := taintCtx(cap, flaggedOnly, &calls)
+	ctx := taintCtx(t, cap, flaggedOnly, &calls)
 
 	err := AssertCapabilityOp(ctx, limes.OpGet, taintedURI)
 	if connect.CodeOf(err) != connect.CodePermissionDenied || !errors.Is(err, limes.ErrTaintedReadNotAllowed) {
@@ -48,11 +49,11 @@ func TestAssertCapabilityOpRefusesTaintedReads(t *testing.T) {
 }
 
 func TestAssertCapabilityOpAllowTaintedReadSkipsTheLookup(t *testing.T) {
-	cap := &limes.Capability{ID: uuid.New(), Caveats: limes.Caveats{
+	cap := limes.Capability{Caveats: limes.Caveats{
 		Ops: []limes.Op{limes.OpGet}, AllowTaintedRead: true,
 	}}
 	calls := 0
-	if err := AssertCapabilityOp(taintCtx(cap, flaggedOnly, &calls), limes.OpGet, taintedURI); err != nil {
+	if err := AssertCapabilityOp(taintCtx(t, cap, flaggedOnly, &calls), limes.OpGet, taintedURI); err != nil {
 		t.Fatalf("tainted read with AllowTaintedRead: %v", err)
 	}
 	if calls != 0 {
@@ -62,10 +63,10 @@ func TestAssertCapabilityOpAllowTaintedReadSkipsTheLookup(t *testing.T) {
 
 // "Could not tell" is not "clean".
 func TestAssertCapabilityOpFailsClosedWhenTheLookupFails(t *testing.T) {
-	cap := &limes.Capability{ID: uuid.New(), Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet}}}
+	cap := limes.Capability{Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet}}}
 	broken := func(context.Context, string) (bool, error) { return false, errors.New("db down") }
 	calls := 0
-	err := AssertCapabilityOp(taintCtx(cap, broken, &calls), limes.OpGet, taintedURI)
+	err := AssertCapabilityOp(taintCtx(t, cap, broken, &calls), limes.OpGet, taintedURI)
 	if connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("lookup failure: err = %v, want Unavailable", err)
 	}
@@ -74,9 +75,9 @@ func TestAssertCapabilityOpFailsClosedWhenTheLookupFails(t *testing.T) {
 // The lookup costs a query, so a request the other caveats already refuse
 // never reaches it.
 func TestAssertCapabilityOpChecksCheapCaveatsFirst(t *testing.T) {
-	cap := &limes.Capability{ID: uuid.New(), Caveats: limes.Caveats{Ops: []limes.Op{limes.OpList}}}
+	cap := limes.Capability{Caveats: limes.Caveats{Ops: []limes.Op{limes.OpList}}}
 	calls := 0
-	if err := AssertCapabilityOp(taintCtx(cap, flaggedOnly, &calls), limes.OpGet, taintedURI); !errors.Is(err, limes.ErrOpNotAllowed) {
+	if err := AssertCapabilityOp(taintCtx(t, cap, flaggedOnly, &calls), limes.OpGet, taintedURI); !errors.Is(err, limes.ErrOpNotAllowed) {
 		t.Fatalf("err = %v, want ErrOpNotAllowed", err)
 	}
 	if calls != 0 {
@@ -87,11 +88,11 @@ func TestAssertCapabilityOpChecksCheapCaveatsFirst(t *testing.T) {
 // A handler that has read the object passes its taint instead of the lookup
 // running again; the refusal is the same.
 func TestAssertCapabilityOpOnObjectUsesTheTaintGiven(t *testing.T) {
-	cap := &limes.Capability{ID: uuid.New(), Caveats: limes.Caveats{
+	cap := limes.Capability{Caveats: limes.Caveats{
 		Ops: []limes.Op{limes.OpGet, limes.OpPut},
 	}}
 	calls := 0
-	ctx := taintCtx(cap, flaggedOnly, &calls)
+	ctx := taintCtx(t, cap, flaggedOnly, &calls)
 
 	err := AssertCapabilityOpOnObject(ctx, limes.OpGet, "object://t/c/clean.txt", true)
 	if connect.CodeOf(err) != connect.CodePermissionDenied || !errors.Is(err, limes.ErrTaintedReadNotAllowed) {

@@ -6,26 +6,25 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
 )
 
 // holdCapabilityQuery adds a hold to one capability's counter, refusing it
-// when spend plus holds would pass the ceiling ($4; 0 = unlimited). Both the
-// insert and the update path check the ceiling, as ChargeCapability does.
+// when spend plus holds would pass the ceiling ($4; NULL = unlimited). Both
+// the insert and the update path check the ceiling, as ChargeCapability does.
 const holdCapabilityQuery = `
 INSERT INTO capability_usage (capability_id, request_count, spent_usd, reserved_usd, unit_code, updated_at)
 SELECT $1, 0, 0, $2::numeric, $3, now()
-WHERE $4::numeric = 0 OR $2::numeric <= $4::numeric
+WHERE $4::numeric IS NULL OR $2::numeric <= $4::numeric
 ON CONFLICT (capability_id) DO UPDATE
 SET reserved_usd = capability_usage.reserved_usd + $2::numeric,
     updated_at   = now()
-WHERE $4::numeric = 0
+WHERE $4::numeric IS NULL
    OR capability_usage.spent_usd + capability_usage.reserved_usd + $2::numeric <= $4::numeric
 RETURNING reserved_usd;
 `
@@ -34,32 +33,30 @@ RETURNING reserved_usd;
 // the tenant's own row; a tenant with no row has no ceiling.
 const holdTenantQuery = `
 INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, reserved_usd, unit_code, period_start, updated_at)
-VALUES ($1, 0, 0, $2::numeric, COALESCE(NULLIF($3::text, ''), 'USD'), now(), now())
+VALUES ($1, NULL, 0, $2::numeric, COALESCE(NULLIF($3::text, ''), 'USD'), $4::timestamptz, now())
 ON CONFLICT (tenant_id) DO UPDATE
 SET reserved_usd = tenant_budgets.reserved_usd + $2::numeric,
     updated_at   = now()
-WHERE tenant_budgets.max_budget_usd = 0
+WHERE tenant_budgets.max_budget_usd IS NULL
    OR tenant_budgets.spent_usd + tenant_budgets.reserved_usd + $2::numeric <= tenant_budgets.max_budget_usd
 RETURNING reserved_usd;
 `
 
-// Reserve implements limes.Meter. The capability, each ancestor and
-// the tenant take the hold in one transaction, in the same leaf-to-root
+// Reserve implements limes.Meter. The copies, the capability, each ancestor
+// and the tenant take the hold in one transaction, in the same leaf-to-root
 // order as Charge, so concurrent charges and reservations on one chain lock
 // it in one order.
 func (s *UsageStore) Reserve(ctx context.Context, req limes.ReserveRequest) (limes.Reservation, error) {
-	if err := limes.ValidateAmount(req.Amount); err != nil {
+	if err := req.Amount.Validate(); err != nil {
 		return limes.Reservation{}, err
 	}
-	if req.TenantID == uuid.Nil {
-		return limes.Reservation{}, errors.New("capability/postgres: reserve requires a tenant")
+	if err := checkSubject(req.Subject); err != nil {
+		return limes.Reservation{}, err
 	}
-	unit, err := limes.NormaliseUnitCode(req.UnitCode)
+	unit, err := limes.NormalizeUnitCode(req.Subject.UnitCode())
 	if err != nil {
-		return limes.Reservation{}, fmt.Errorf("capability/postgres: reserve: %w", err)
+		return limes.Reservation{}, err
 	}
-	amount := pgmoney.NumericFromNanos(req.Amount)
-	maxBudget := pgmoney.NumericFromNanos(req.MaxBudget)
 	ttl := req.TTL
 	if ttl < 0 {
 		return limes.Reservation{}, fmt.Errorf("%w: capability/postgres: reservation TTL %s is negative", limes.ErrInvalidRequest, ttl)
@@ -67,6 +64,9 @@ func (s *UsageStore) Reserve(ctx context.Context, req limes.ReserveRequest) (lim
 	if ttl == 0 {
 		ttl = limes.DefaultReservationTTL
 	}
+	capID, tenantID := req.Subject.CapabilityID(), req.Subject.TenantID()
+	copies := req.Subject.Copies()
+	amount := pgmoney.NumericFromNanos(req.Amount)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -74,17 +74,23 @@ func (s *UsageStore) Reserve(ctx context.Context, req limes.ReserveRequest) (lim
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	ancestors, err := ancestorsOf(ctx, tx, req.CapabilityID)
+	ancestors, err := lineage(ctx, tx, capID)
 	if err != nil {
 		return limes.Reservation{}, err
 	}
-	if err := checkUnits(ctx, tx, req.CapabilityID, ancestors, req.TenantID, unit); err != nil {
+	if err := checkUnits(ctx, tx, capID, ancestors, tenantID, unit); err != nil {
 		return limes.Reservation{}, err
 	}
-	if err := addCopySpend(ctx, tx, req.CapabilityID, req.Copies, amount, copyReserved); err != nil {
+	if err := checkRange(ctx, tx, append([]uuid.UUID{capID}, ancestorIDs(ancestors)...),
+		copyIDs(copies), tenantID, amount); err != nil {
 		return limes.Reservation{}, err
 	}
-	if err := holdCapability(ctx, tx, req.CapabilityID, amount, unit, maxBudget); err != nil {
+	if _, err := addCopySpend(ctx, tx, copySpendArgs{
+		capID: capID, copies: copies, amount: amount, counter: copyReserved, overrun: limes.OverrunReject,
+	}); err != nil {
+		return limes.Reservation{}, err
+	}
+	if err := holdCapability(ctx, tx, capID, amount, unit, pgmoney.NumericFromCeiling(req.Subject.Budget())); err != nil {
 		return limes.Reservation{}, err
 	}
 	for _, a := range ancestors {
@@ -96,22 +102,22 @@ func (s *UsageStore) Reserve(ctx context.Context, req limes.ReserveRequest) (lim
 		}
 	}
 	var held pgtype.Numeric
-	if err := tx.QueryRow(ctx, holdTenantQuery, req.TenantID, amount, unit).Scan(&held); err != nil {
+	if err := tx.QueryRow(ctx, holdTenantQuery, tenantID, amount, unit, s.now()).Scan(&held); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return limes.Reservation{}, limes.ErrTenantBudgetExceeded
 		}
-		return limes.Reservation{}, fmt.Errorf("capability/postgres: reserve tenant: %w", err)
+		return limes.Reservation{}, counterError("reserve tenant", err)
 	}
 
 	id := uuid.New()
 	var expires time.Time
 	if err := tx.QueryRow(ctx, `
 INSERT INTO capability_reservations (id, tenant_id, capability_id, amount, unit_code, op, actor_subject, expires_at,
-                                     copy_ids, copy_max_budget_nanos)
-VALUES ($1, $2, $3, $4::numeric, $5, $6, $7, now() + ($8::bigint * interval '1 microsecond'), $9::bytea[], $10::bigint[])
+                                     copy_ids, copy_max_budget_nanos, ancestor_ids)
+VALUES ($1, $2, $3, $4::numeric, $5, $6, $7, $8, $9::bytea[], $10::bigint[], $11::uuid[])
 RETURNING expires_at`,
-		id, req.TenantID, req.CapabilityID, amount, unit, req.Op, req.Actor, ttl.Microseconds(),
-		copyIDs(req.Copies), copyBudgets(req.Copies),
+		id, tenantID, capID, amount, unit, req.Op, req.Actor, s.now().Add(ttl),
+		copyIDs(copies), copyBudgets(copies), ancestorIDs(ancestors),
 	).Scan(&expires); err != nil {
 		return limes.Reservation{}, fmt.Errorf("capability/postgres: reserve record: %w", err)
 	}
@@ -119,20 +125,14 @@ RETURNING expires_at`,
 	if err := tx.Commit(ctx); err != nil {
 		return limes.Reservation{}, fmt.Errorf("capability/postgres: reserve commit: %w", err)
 	}
-	return limes.Reservation{
-		ID: id, CapabilityID: req.CapabilityID, TenantID: req.TenantID, Amount: req.Amount,
-		UnitCode: unit, Op: req.Op, Actor: req.Actor, Copies: budgetCeilings(req.Copies), ExpiresAt: expires.UTC(),
-	}, nil
-}
-
-// budgetCeilings is copies with their budgets alone, as a reservation row
-// keeps them.
-func budgetCeilings(copies []limes.CopyCeiling) []limes.CopyCeiling {
-	out := make([]limes.CopyCeiling, 0, len(copies))
-	for _, c := range copies {
-		out = append(out, limes.CopyCeiling{RevocationID: c.RevocationID, MaxBudget: c.MaxBudget})
+	heldCopies, err := heldCopiesOf(copyIDs(copies), copyBudgets(copies))
+	if err != nil {
+		return limes.Reservation{}, err
 	}
-	return out
+	return limes.Reservation{
+		ID: id, CapabilityID: capID, TenantID: tenantID, Amount: req.Amount,
+		UnitCode: unit, Op: req.Op, Actor: req.Actor, Copies: heldCopies, ExpiresAt: expires.UTC(),
+	}, nil
 }
 
 // reservationSelect reads reservation rows as the Meter contract reads one
@@ -149,13 +149,13 @@ func scanReservation(row pgx.Row) (limes.Reservation, error) {
 		r       limes.Reservation
 		amount  pgtype.Numeric
 		ids     [][]byte
-		budgets []int64
+		budgets []*int64
 	)
 	if err := row.Scan(&r.ID, &r.CapabilityID, &r.TenantID, &amount, &r.UnitCode, &r.Op, &r.Actor,
 		&ids, &budgets, &r.ExpiresAt); err != nil {
 		return limes.Reservation{}, err
 	}
-	copies, err := ceilingsOf(ids, budgets)
+	copies, err := heldCopiesOf(ids, budgets)
 	if err != nil {
 		return limes.Reservation{}, err
 	}
@@ -166,7 +166,7 @@ func scanReservation(row pgx.Row) (limes.Reservation, error) {
 	return r, nil
 }
 
-// GetReservation implements limes.Meter.
+// GetReservation implements limes.MeterReader.
 func (s *UsageStore) GetReservation(ctx context.Context, reservationID uuid.UUID) (limes.Reservation, error) {
 	r, err := scanReservation(s.pool.QueryRow(ctx, reservationSelect+`WHERE id = $1`, reservationID))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -178,25 +178,53 @@ func (s *UsageStore) GetReservation(ctx context.Context, reservationID uuid.UUID
 	return r, nil
 }
 
-// ListReservations implements limes.Meter.
-func (s *UsageStore) ListReservations(ctx context.Context, capID uuid.UUID) ([]limes.Reservation, error) {
-	rows, err := s.pool.Query(ctx, reservationSelect+`WHERE capability_id = $1 ORDER BY expires_at, id`, capID)
+// ListReservations implements limes.MeterReader: soonest to expire first,
+// ties by id — uuid compares bytewise in Postgres, as the contract orders —
+// a page at a time, resuming after the cursor's place.
+func (s *UsageStore) ListReservations(ctx context.Context, req limes.ListReservationsRequest) (limes.Page[limes.Reservation], error) {
+	if err := req.Validate(); err != nil {
+		return limes.Page[limes.Reservation]{}, err
+	}
+	limit := limes.PageLimit(req.Limit)
+	var (
+		afterExpires pgtype.Timestamptz
+		afterID      pgtype.UUID
+	)
+	if req.Cursor != "" {
+		p, err := parseReservationPlace(req.Cursor)
+		if err != nil {
+			return limes.Page[limes.Reservation]{}, err
+		}
+		afterExpires = pgtype.Timestamptz{Time: p.expires, Valid: true}
+		afterID = pgtype.UUID{Bytes: p.id, Valid: true}
+	}
+	rows, err := s.pool.Query(ctx, reservationSelect+`
+WHERE capability_id = $1
+  AND ($2::timestamptz IS NULL OR (expires_at, id) > ($2::timestamptz, $3::uuid))
+ORDER BY expires_at, id
+LIMIT $4`, req.CapabilityID, afterExpires, afterID, limit+1)
 	if err != nil {
-		return nil, fmt.Errorf("capability/postgres: list reservations: %w", err)
+		return limes.Page[limes.Reservation]{}, fmt.Errorf("capability/postgres: list reservations: %w", err)
 	}
 	defer rows.Close()
 	out := []limes.Reservation{}
 	for rows.Next() {
 		r, err := scanReservation(rows)
 		if err != nil {
-			return nil, fmt.Errorf("capability/postgres: list reservations: %w", err)
+			return limes.Page[limes.Reservation]{}, fmt.Errorf("capability/postgres: list reservations: %w", err)
 		}
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("capability/postgres: list reservations: %w", err)
+		return limes.Page[limes.Reservation]{}, fmt.Errorf("capability/postgres: list reservations: %w", err)
 	}
-	return out, nil
+	page := limes.Page[limes.Reservation]{Items: out}
+	if len(out) > limit {
+		page.Items = out[:limit]
+		last := page.Items[limit-1]
+		page.Next = reservationPlace{expires: last.ExpiresAt, id: last.ID}.String()
+	}
+	return page, nil
 }
 
 func holdCapability(ctx context.Context, tx pgx.Tx, capID uuid.UUID, amount pgtype.Numeric, unit string, maxBudget pgtype.Numeric) error {
@@ -205,7 +233,7 @@ func holdCapability(ctx context.Context, tx pgx.Tx, capID uuid.UUID, amount pgty
 		if errors.Is(err, pgx.ErrNoRows) {
 			return limes.ErrBudgetExceeded
 		}
-		return fmt.Errorf("capability/postgres: reserve capability: %w", err)
+		return counterError("reserve capability", err)
 	}
 	return nil
 }
@@ -214,46 +242,84 @@ func holdCapability(ctx context.Context, tx pgx.Tx, capID uuid.UUID, amount pgty
 type openReservation struct {
 	capID, tenantID uuid.UUID
 	amount          pgtype.Numeric
+	amountNanos     limes.Nanos
 	unit, op, actor string
 	// copyIDs and copyBudgets are the Biscuit copies the hold is on, and
-	// their budget limits in micros.
+	// their own budgets in nanos.
 	copyIDs     [][]byte
-	copyBudgets []int64
+	copyBudgets []*int64
+	// ancestorIDs are the ancestors the hold was taken on, nearest first;
+	// nil for a hold made before 067, whose ancestors are read from the
+	// records when it is released.
+	ancestorIDs []uuid.UUID
 }
 
-// takeReservation deletes a reservation and returns it. live restricts it to
-// one that has not expired. pgx.ErrNoRows when there is none.
-func takeReservation(ctx context.Context, tx pgx.Tx, id uuid.UUID, live bool) (openReservation, error) {
-	stmt := `DELETE FROM capability_reservations WHERE id = $1`
-	if live {
-		stmt += ` AND expires_at > now()`
-	}
-	stmt += ` RETURNING capability_id, tenant_id, amount, unit_code, op, actor_subject,
-	                    copy_ids, copy_max_budget_nanos`
-	var r openReservation
-	err := tx.QueryRow(ctx, stmt, id).Scan(&r.capID, &r.tenantID, &r.amount, &r.unit, &r.op, &r.actor,
-		&r.copyIDs, &r.copyBudgets)
-	return r, err
+// takeReservationQuery deletes one reservation and returns it. $2, when set,
+// restricts it to one that has not expired by then; $3, when set, to one of
+// that capability made under exactly the copies $4 — NULL for none.
+const takeReservationQuery = `
+DELETE FROM capability_reservations
+WHERE id = $1
+  AND ($2::timestamptz IS NULL OR expires_at > $2::timestamptz)
+  AND ($3::uuid IS NULL OR (capability_id = $3::uuid AND copy_ids IS NOT DISTINCT FROM $4::bytea[]))
+RETURNING capability_id, tenant_id, amount, unit_code, op, actor_subject,
+          copy_ids, copy_max_budget_nanos, ancestor_ids
+`
+
+// takeFilter restricts takeReservation to a live reservation of one subject.
+type takeFilter struct {
+	// liveAt, when set, takes only a reservation not expired by then.
+	liveAt pgtype.Timestamptz
+	// subject, when it names a capability, takes only a reservation of it
+	// made under exactly its copies.
+	subject limes.MeterSubject
 }
+
+// takeReservation deletes a reservation and returns it. pgx.ErrNoRows when
+// there is none the filter admits.
+func takeReservation(ctx context.Context, tx pgx.Tx, id uuid.UUID, f takeFilter) (openReservation, error) {
+	var (
+		r   openReservation
+		cap pgtype.UUID
+	)
+	if f.subject.CapabilityID() != uuid.Nil {
+		cap = pgtype.UUID{Bytes: f.subject.CapabilityID(), Valid: true}
+	}
+	err := tx.QueryRow(ctx, takeReservationQuery, id, f.liveAt, cap, copyIDs(f.subject.Copies())).
+		Scan(&r.capID, &r.tenantID, &r.amount, &r.unit, &r.op, &r.actor, &r.copyIDs, &r.copyBudgets, &r.ancestorIDs)
+	if err != nil {
+		return openReservation{}, err
+	}
+	if r.amountNanos, err = pgmoney.NanosFromNumeric(r.amount); err != nil {
+		return openReservation{}, err
+	}
+	return r, nil
+}
+
+// releaseCapabilityHoldsQuery takes a released hold off the counters of the
+// capabilities named that are still on record, never below zero. One no
+// longer on record keeps its row only until PurgeOrphans drops it.
+const releaseCapabilityHoldsQuery = `
+UPDATE capability_usage
+SET    reserved_usd = GREATEST(0, reserved_usd - $2::numeric), updated_at = now()
+WHERE  capability_id = ANY($1::uuid[])
+  AND  capability_id IN (SELECT id FROM capability_records WHERE id = ANY($1::uuid[]))
+`
 
 // releaseHold subtracts a reservation's amount from every counter it was
 // added to: each copy's, the capability's, each ancestor's and the tenant's.
-func (s *UsageStore) releaseHold(ctx context.Context, tx pgx.Tx, r openReservation) error {
+func releaseHold(ctx context.Context, tx pgx.Tx, r openReservation) error {
 	if err := subtractCopySpend(ctx, tx, r.copyIDs, r.amount, copyReserved); err != nil {
 		return err
 	}
-	ids := []uuid.UUID{r.capID}
-	ancestors, err := ancestorsOf(ctx, tx, r.capID)
-	if err != nil {
-		return err
+	holders := r.ancestorIDs
+	if holders == nil {
+		var err error
+		if holders, err = recordedAncestors(ctx, tx, r.capID); err != nil {
+			return err
+		}
 	}
-	for _, a := range ancestors {
-		ids = append(ids, a.id)
-	}
-	if _, err := tx.Exec(ctx, `
-UPDATE capability_usage
-SET reserved_usd = GREATEST(0, reserved_usd - $2::numeric), updated_at = now()
-WHERE capability_id = ANY($1)`, ids, r.amount); err != nil {
+	if _, err := tx.Exec(ctx, releaseCapabilityHoldsQuery, append([]uuid.UUID{r.capID}, holders...), r.amount); err != nil {
 		return fmt.Errorf("capability/postgres: release capability holds: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `
@@ -271,19 +337,30 @@ WHERE tenant_id = $1`, r.tenantID, r.amount); err != nil {
 // settled lower or released. Deleting the row is what serialises two
 // settles of one reservation: the second waits on the row lock, then finds
 // nothing, and returns the first's charge as a replay.
+//
+// Only the subject that made the hold settles it: a reservation of another
+// capability, or one made under other Biscuit copies, is
+// ErrReservationNotFound, so a copy cannot settle a sibling's hold past its
+// own limits — and its receipt is not the subject's to read back either.
 func (s *UsageStore) Settle(
 	ctx context.Context,
 	req limes.SettleRequest,
 	onCharged func(ctx context.Context, tx pgx.Tx) error,
 ) (limes.ChargeReceipt, error) {
-	if err := limes.ValidateAmount(req.Amount); err != nil {
+	if err := checkSubject(req.Subject); err != nil {
+		return limes.ChargeReceipt{}, err
+	}
+	if err := req.Amount.Validate(); err != nil {
 		return limes.ChargeReceipt{}, err
 	}
 	if err := req.Overrun.Validate(); err != nil {
 		return limes.ChargeReceipt{}, err
 	}
-	amount := pgmoney.NumericFromNanos(req.Amount)
-	maxBudget := pgmoney.NumericFromNanos(req.MaxBudget)
+	// A direct charge is filed under no reservation, so the zero id must not
+	// reach the replay lookup below.
+	if req.ReservationID == uuid.Nil {
+		return limes.ChargeReceipt{}, limes.ErrReservationNotFound
+	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -291,41 +368,32 @@ func (s *UsageStore) Settle(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	r, err := takeReservation(ctx, tx, req.ReservationID, true)
+	r, err := takeReservation(ctx, tx, req.ReservationID, takeFilter{
+		liveAt: pgtype.Timestamptz{Time: s.now(), Valid: true}, subject: req.Subject,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Settled already, or never settleable. A second settle waited on
-		// the first's row lock, so a charge the first made is visible now.
-		var chargeID uuid.UUID
-		lErr := tx.QueryRow(ctx, chargeByReservationQuery, req.ReservationID).Scan(&chargeID)
-		if lErr == nil {
-			return replay(ctx, tx, chargeID)
-		}
-		if errors.Is(lErr, pgx.ErrNoRows) {
-			return limes.ChargeReceipt{}, limes.ErrReservationNotFound
-		}
-		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: settle read charge: %w", lErr)
+		return s.settledBefore(ctx, tx, req)
 	}
 	if err != nil {
 		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: settle read: %w", err)
 	}
-	if err := s.releaseHold(ctx, tx, r); err != nil {
-		return limes.ChargeReceipt{}, err
-	}
-	copies, err := ceilingsOf(r.copyIDs, r.copyBudgets)
+	ancestors, err := lineage(ctx, tx, r.capID)
 	if err != nil {
 		return limes.ChargeReceipt{}, err
 	}
-	receipt, err := s.chargeInTx(ctx, tx, limes.ChargeRequest{
-		CapabilityID: r.capID,
-		TenantID:     r.tenantID,
-		Amount:       req.Amount,
-		MaxBudget:    req.MaxBudget,
-		UnitCode:     r.unit,
-		Op:           r.op,
-		Actor:        r.actor,
-		Copies:       copies,
-		Overrun:      req.Overrun,
-	}, req.ReservationID, r.unit, amount, maxBudget, onCharged)
+	if err := releaseHold(ctx, tx, r); err != nil {
+		return limes.ChargeReceipt{}, err
+	}
+	if r.ancestorIDs == nil {
+		r.ancestorIDs = ancestorIDs(ancestors)
+	}
+	// The charge is the reservation's: its tenant, unit and the copies it was
+	// made under — the subject's, which takeReservation matched — against
+	// the subject's own ceiling.
+	receipt, err := s.chargeInTx(ctx, tx, chargeArgs{
+		subject: req.Subject, unit: r.unit, amount: req.Amount, op: limes.Op(r.op), actor: r.actor,
+		overrun: req.Overrun, ancestors: ancestors, settling: &r, reservationID: req.ReservationID,
+	}, onCharged)
 	if err != nil {
 		return limes.ChargeReceipt{TenantID: r.tenantID, UnitCode: r.unit}, err
 	}
@@ -335,23 +403,59 @@ func (s *UsageStore) Settle(
 	return receipt, nil
 }
 
+// settledBefore answers a settle that found no live reservation of its
+// subject: the replay of the charge that settled it, when this subject did —
+// a second settle waited on the first's row lock, so that charge is visible
+// now — and ErrReservationNotFound otherwise.
+func (s *UsageStore) settledBefore(ctx context.Context, tx pgx.Tx, req limes.SettleRequest) (limes.ChargeReceipt, error) {
+	var (
+		chargeID, capID uuid.UUID
+		copies          [][]byte
+	)
+	err := tx.QueryRow(ctx, chargeByReservationQuery, req.ReservationID).Scan(&chargeID, &capID, &copies)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return limes.ChargeReceipt{}, limes.ErrReservationNotFound
+	}
+	if err != nil {
+		return limes.ChargeReceipt{}, fmt.Errorf("capability/postgres: settle read charge: %w", err)
+	}
+	if capID != req.Subject.CapabilityID() || !sameCopyIDs(copies, copyIDs(req.Subject.Copies())) {
+		return limes.ChargeReceipt{}, limes.ErrReservationNotFound
+	}
+	return replay(ctx, tx, chargeID)
+}
+
+// sameCopyIDs reports whether two lists of revocation ids are the same, in
+// order.
+func sameCopyIDs(a, b [][]byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if string(a[i]) != string(b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // Release implements limes.Meter. A reservation that is gone —
 // settled, released, or released by the expiry sweep — is a no-op.
-func (s *UsageStore) Release(ctx context.Context, reservationID uuid.UUID) error {
+func (s *UsageStore) Release(ctx context.Context, req limes.ReleaseRequest) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("capability/postgres: release begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	r, err := takeReservation(ctx, tx, reservationID, false)
+	r, err := takeReservation(ctx, tx, req.ReservationID, takeFilter{})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("capability/postgres: release read: %w", err)
 	}
-	if err := s.releaseHold(ctx, tx, r); err != nil {
+	if err := releaseHold(ctx, tx, r); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -360,74 +464,107 @@ func (s *UsageStore) Release(ctx context.Context, reservationID uuid.UUID) error
 	return nil
 }
 
-// releaseExpiredBatch bounds one sweep, so a backlog drains over several
-// calls instead of pinning one long statement.
-const releaseExpiredBatch = 500
-
-// ReleaseExpired implements limes.Meter. The sweep runs without a
+// ReleaseExpired implements limes.UsageHousekeeping. The sweep runs without a
 // request tenant, so it lists expired reservations under the cross-tenant
-// read flag the caller sets, then releases each on its own transaction
-// scoped to that reservation's tenant — the counter rows are RLS-isolated,
-// and the cross-tenant flag widens reads only, never writes.
-func (s *UsageStore) ReleaseExpired(ctx context.Context) (int64, error) {
-	rows, err := s.pool.Query(ctx, `
-SELECT id, tenant_id FROM capability_reservations
-WHERE expires_at <= now()
-ORDER BY expires_at
-LIMIT $1`, releaseExpiredBatch)
+// read flag, then releases each on its own transaction scoped to that
+// reservation's tenant — the counter rows are RLS-isolated, and the
+// cross-tenant flag widens reads only, never writes.
+func (s *UsageStore) ReleaseExpired(ctx context.Context, req limes.ReleaseExpiredRequest) (limes.ReleaseExpiredResult, error) {
+	limit, err := housekeepingLimit(req.Limit)
 	if err != nil {
-		return 0, fmt.Errorf("capability/postgres: list expired reservations: %w", err)
+		return limes.ReleaseExpiredResult{}, err
 	}
-	type expired struct{ id, tenantID uuid.UUID }
-	var due []expired
-	for rows.Next() {
-		var e expired
-		if err := rows.Scan(&e.id, &e.tenantID); err != nil {
-			rows.Close()
-			return 0, fmt.Errorf("capability/postgres: scan expired reservation: %w", err)
-		}
-		due = append(due, e)
+	due, err := s.listAcrossTenants(ctx, `
+SELECT id, tenant_id FROM capability_reservations
+WHERE expires_at <= $1
+ORDER BY expires_at, id
+LIMIT $2`, s.now(), limit)
+	if err != nil {
+		return limes.ReleaseExpiredResult{}, fmt.Errorf("capability/postgres: list expired reservations: %w", err)
 	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return 0, fmt.Errorf("capability/postgres: list expired reservations: %w", err)
-	}
-
 	var released int64
 	for _, e := range due {
-		ok, err := s.releaseExpiredOne(ctx, e.id, e.tenantID)
+		ok, err := s.releaseAsTenant(ctx, e.id, e.tenantID)
 		if err != nil {
-			return released, err
+			return limes.ReleaseExpiredResult{Released: released}, err
 		}
 		if ok {
 			released++
 		}
 	}
-	return released, nil
+	return limes.ReleaseExpiredResult{Released: released}, nil
 }
 
-func (s *UsageStore) releaseExpiredOne(ctx context.Context, id, tenantID uuid.UUID) (bool, error) {
+// tenantRow is a row id and the tenant it belongs to.
+type tenantRow struct{ id, tenantID uuid.UUID }
+
+// listAcrossTenants runs a read of (id, tenant_id) rows under the
+// cross-tenant read flag, SET LOCAL to its own read-only transaction:
+// housekeeping reads every tenant's rows, whatever tenant the caller's
+// connection is scoped to.
+func (s *UsageStore) listAcrossTenants(ctx context.Context, query string, args ...any) ([]tenantRow, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // read-only: nothing to commit
+	if _, err := tx.Exec(ctx, setCrossTenantQuery); err != nil {
+		return nil, err
+	}
+	rows, err := tx.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (tenantRow, error) {
+		var r tenantRow
+		err := row.Scan(&r.id, &r.tenantID)
+		return r, err
+	})
+}
+
+// setCrossTenantQuery widens the reads of the current transaction to every
+// tenant. The policies admit the flag in USING only, so it cannot let
+// anything write into another tenant.
+const setCrossTenantQuery = `SELECT set_config('paladin.cross_tenant', 'on', true)`
+
+// setTenantQuery scopes the current transaction to one tenant.
+const setTenantQuery = `SELECT set_config('paladin.tenant_id', $1, true)`
+
+// releaseAsTenant releases one reservation on a transaction scoped to its
+// tenant, and reports whether it was still there to release.
+func (s *UsageStore) releaseAsTenant(ctx context.Context, id, tenantID uuid.UUID) (bool, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return false, fmt.Errorf("capability/postgres: release expired begin: %w", err)
+		return false, fmt.Errorf("capability/postgres: release begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if _, err := tx.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, true)`, tenantID.String()); err != nil {
-		return false, fmt.Errorf("capability/postgres: release expired scope: %w", err)
+	if _, err := tx.Exec(ctx, setTenantQuery, tenantID.String()); err != nil {
+		return false, fmt.Errorf("capability/postgres: release scope: %w", err)
 	}
-	r, err := takeReservation(ctx, tx, id, false)
+	r, err := takeReservation(ctx, tx, id, takeFilter{})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil // settled or released since it was listed
 	}
 	if err != nil {
-		return false, fmt.Errorf("capability/postgres: release expired read: %w", err)
+		return false, fmt.Errorf("capability/postgres: release read: %w", err)
 	}
-	if err := s.releaseHold(ctx, tx, r); err != nil {
+	if err := releaseHold(ctx, tx, r); err != nil {
 		return false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("capability/postgres: release expired commit: %w", err)
+		return false, fmt.Errorf("capability/postgres: release commit: %w", err)
 	}
 	return true, nil
+}
+
+// housekeepingLimit resolves a batch limit, refusing a negative one.
+func housekeepingLimit(limit int) (int, error) {
+	if limit < 0 {
+		return 0, fmt.Errorf("%w: capability/postgres: housekeeping limit %d is negative", limes.ErrInvalidRequest, limit)
+	}
+	if limit == 0 {
+		return limes.DefaultHousekeepingLimit, nil
+	}
+	return limit, nil
 }

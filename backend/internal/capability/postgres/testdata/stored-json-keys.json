@@ -1,0 +1,29 @@
+{
+  "caveats": [
+    "allow_tainted_read",
+    "idempotency_key_required",
+    "max_budget",
+    "max_requests",
+    "ops",
+    "resource_prefixes",
+    "resource_uris",
+    "source_ip_cidr",
+    "unit_code",
+    "unlimited_budget",
+    "unlimited_requests"
+  ],
+  "principal": [
+    "agent",
+    "subject",
+    "tenant_id",
+    "type"
+  ],
+  "agent": [
+    "agent_type",
+    "agent_version",
+    "mcp_client",
+    "model",
+    "parent_agent_id",
+    "run_id"
+  ]
+}

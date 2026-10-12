@@ -116,7 +116,6 @@ bootstrap.admin.tenant_display_name
 bootstrap.admin.tenant_slug
 capability
 capability.charge_per_request_amount
-capability.charge_per_request_unit
 capability.default_ttl
 capability.dpop_nonce
 capability.dpop_nonce.enabled

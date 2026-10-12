@@ -33,37 +33,44 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 	f.usage = rlsUsage(t, ctx, f)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 
-	reserve := func(id uuid.UUID, amount string) (limes.Reservation, error) {
+	child, sibling := f.subject(t, ctx, f.child), f.subject(t, ctx, f.sibling)
+	reserve := func(s limes.MeterSubject, amount string) (limes.Reservation, error) {
 		return f.usage.Reserve(ledgerCtx, limes.ReserveRequest{
-			CapabilityID: id, TenantID: f.tenant, Amount: limes.MustParseAmount(amount), MaxBudget: limes.MustParseAmount("20"), UnitCode: "USD", Op: "llm", Actor: "agent",
+			Subject: s, Amount: limes.MustParseAmount(amount), Op: "llm", Actor: "agent",
 		})
 	}
 
 	// The child holds 15 of its parent's 25; the sibling cannot hold 15 more.
-	r, err := reserve(f.child, "15")
+	r, err := reserve(child, "15")
 	if err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
-	if _, err := reserve(f.sibling, "15"); !errors.Is(err, limes.ErrBudgetExceeded) {
+	if _, err := reserve(sibling, "15"); !errors.Is(err, limes.ErrBudgetExceeded) {
 		t.Fatalf("sibling hold past the parent: err = %v, want ErrBudgetExceeded", err)
 	}
 	// Nor can it charge into the held room.
 	if _, err := f.usage.Charge(ledgerCtx, limes.ChargeRequest{
-		CapabilityID: f.sibling, TenantID: f.tenant, Amount: limes.MustParseAmount("15"), MaxBudget: limes.MustParseAmount("20"), UnitCode: "USD",
+		Subject: sibling, Amount: limes.MustParseAmount("15"),
 	}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
 		t.Fatalf("sibling charge into held room: err = %v, want ErrBudgetExceeded", err)
 	}
 
+	// Only the capability that made the hold settles it: another one's
+	// subject finds no reservation, and the hold survives it.
+	if _, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: sibling, ReservationID: r.ID, Amount: limes.MustParseAmount("4")}, nil); !errors.Is(err, limes.ErrReservationNotFound) {
+		t.Fatalf("settle by another capability: err = %v, want ErrReservationNotFound", err)
+	}
+
 	// Settling above what the child's own ceiling allows is refused, and the
 	// hold survives it.
-	if _, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{ReservationID: r.ID, Amount: limes.MustParseAmount("21"), MaxBudget: limes.MustParseAmount("20")}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
+	if _, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("21")}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
 		t.Fatalf("settle past the ceiling: err = %v, want ErrBudgetExceeded", err)
 	}
 	if u, _ := f.usage.GetUsage(ledgerCtx, f.root); u.ReservedAmount != limes.MustParseAmount("15") {
 		t.Fatalf("parent hold after a refused settle = %v, want 15", u.ReservedAmount)
 	}
 
-	receipt, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{ReservationID: r.ID, Amount: limes.MustParseAmount("4"), MaxBudget: limes.MustParseAmount("20")}, nil)
+	receipt, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("4")}, nil)
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
@@ -78,18 +85,18 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 	if op != "llm" || actor != "agent" {
 		t.Errorf("ledger row op=%q actor=%q, want the reservation's", op, actor)
 	}
-	again, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{ReservationID: r.ID, Amount: limes.MustParseAmount("1"), MaxBudget: limes.MustParseAmount("20")}, nil)
-	if err != nil || !again.Replayed || again.ChargeID != receipt.ChargeID || again.Spent != limes.MustParseAmount("4") {
+	again, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("1")}, nil)
+	if err != nil || !again.Replayed || again.ChargeID != receipt.ChargeID || again.SpentAmount != limes.MustParseAmount("4") {
 		t.Errorf("second settle = %+v, %v; want a replay of %s at spend 4", again, err, receipt.ChargeID)
 	}
 
 	// Release is idempotent and frees the room.
-	r2, err := reserve(f.sibling, "10")
+	r2, err := reserve(sibling, "10")
 	if err != nil {
 		t.Fatalf("reserve after settle: %v", err)
 	}
 	for range 2 {
-		if err := f.usage.Release(ledgerCtx, r2.ID); err != nil {
+		if err := f.usage.Release(ledgerCtx, limes.ReleaseRequest{ReservationID: r2.ID}); err != nil {
 			t.Fatalf("release: %v", err)
 		}
 	}
@@ -106,20 +113,21 @@ func TestExpiredReservationsAreReleased(t *testing.T) {
 	f.usage = rlsUsage(t, ctx, f)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 
+	child := f.subject(t, ctx, f.child)
 	r, err := f.usage.Reserve(ledgerCtx, limes.ReserveRequest{
-		CapabilityID: f.child, TenantID: f.tenant, Amount: limes.MustParseAmount("20"), MaxBudget: limes.MustParseAmount("20"), UnitCode: "USD", TTL: time.Millisecond,
+		Subject: child, Amount: limes.MustParseAmount("20"), TTL: time.Millisecond,
 	})
 	if err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
 	time.Sleep(20 * time.Millisecond)
 
-	if _, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{ReservationID: r.ID, Amount: limes.MustParseAmount("1"), MaxBudget: limes.MustParseAmount("20")}, nil); !errors.Is(err, limes.ErrReservationNotFound) {
+	if _, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("1")}, nil); !errors.Is(err, limes.ErrReservationNotFound) {
 		t.Fatalf("settle after expiry: err = %v, want ErrReservationNotFound", err)
 	}
-	n, err := f.usage.ReleaseExpired(auth.WithCrossTenantRead(ctx))
-	if err != nil || n != 1 {
-		t.Fatalf("ReleaseExpired = %d, %v; want 1", n, err)
+	res, err := f.usage.ReleaseExpired(auth.WithCrossTenantRead(ctx), limes.ReleaseExpiredRequest{})
+	if err != nil || res.Released != 1 {
+		t.Fatalf("ReleaseExpired = %d, %v; want 1", res.Released, err)
 	}
 	for _, id := range []uuid.UUID{f.child, f.root} {
 		if u, _ := f.usage.GetUsage(ledgerCtx, id); u.ReservedAmount != 0 {
@@ -134,6 +142,7 @@ func TestConcurrentReservationsNeverOvercommit(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
+	child := f.subject(t, ctx, f.child)
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -143,7 +152,7 @@ func TestConcurrentReservationsNeverOvercommit(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, err := f.usage.Reserve(ledgerCtx, limes.ReserveRequest{
-				CapabilityID: f.child, TenantID: f.tenant, Amount: limes.MustParseAmount("3"), MaxBudget: limes.MustParseAmount("20"), UnitCode: "USD",
+				Subject: child, Amount: limes.MustParseAmount("3"),
 			})
 			if err == nil {
 				mu.Lock()

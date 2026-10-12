@@ -14,12 +14,13 @@ import (
 const bumpCapabilityRequestCount = `-- name: BumpCapabilityRequestCount :one
 
 INSERT INTO capability_usage (capability_id, request_count, spent_usd, unit_code, updated_at)
-VALUES ($1, 1, 0, 'USD', now())
+SELECT $1, 1, 0, 'USD', now()
+WHERE $2::bigint IS NULL OR 1 <= $2::bigint
 ON CONFLICT (capability_id) DO UPDATE
 SET request_count = capability_usage.request_count + 1,
     updated_at    = now()
 WHERE
-    $2::bigint = 0
+    $2::bigint IS NULL
     OR capability_usage.request_count + 1 <= $2::bigint
 RETURNING request_count
 `
@@ -32,8 +33,9 @@ RETURNING request_count
 // unit_code column added in the schema baseline (001_initial_schema.sql) is the source of truth for
 // currency interpretation; the Go domain types use Amount + UnitCode.
 // Increments request_count by 1 and rejects when over the supplied cap.
-// max=0 means unlimited; we still write the row for spend tracking + UI.
-func (q *Queries) BumpCapabilityRequestCount(ctx context.Context, capabilityID pgtype.UUID, maxRequests int64) (int64, error) {
+// A NULL max_requests is unlimited; 0 allows no request at all, so the
+// insert path checks the cap too.
+func (q *Queries) BumpCapabilityRequestCount(ctx context.Context, capabilityID pgtype.UUID, maxRequests *int64) (int64, error) {
 	row := q.db.QueryRow(ctx, bumpCapabilityRequestCount, capabilityID, maxRequests)
 	var request_count int64
 	err := row.Scan(&request_count)
@@ -43,21 +45,21 @@ func (q *Queries) BumpCapabilityRequestCount(ctx context.Context, capabilityID p
 const chargeCapability = `-- name: ChargeCapability :one
 INSERT INTO capability_usage (capability_id, request_count, spent_usd, unit_code, updated_at)
 SELECT $1, 0, $2::numeric, $3::text, now()
-WHERE $4::numeric = 0
+WHERE $4::numeric IS NULL
    OR $2::numeric <= $4::numeric
 ON CONFLICT (capability_id) DO UPDATE
 SET spent_usd  = capability_usage.spent_usd + $2::numeric,
     updated_at = now()
 WHERE
-    $4::numeric = 0
+    $4::numeric IS NULL
     OR capability_usage.spent_usd + capability_usage.reserved_usd + $2::numeric
        <= $4::numeric
 RETURNING spent_usd
 `
 
 // Adds amount to spent_usd and rejects when spend plus open holds
-// (reserved_usd) would pass the supplied cap. max_budget=0 means
-// unlimited. unit_code is set on insert and preserved on conflict (an
+// (reserved_usd) would pass the supplied cap. A NULL max_budget is
+// unlimited; 0 allows no spend. unit_code is set on insert and preserved on conflict (an
 // existing row owns its currency).
 //
 // The ceiling is checked on BOTH paths. The INSERT is a SELECT filtered by
@@ -116,25 +118,4 @@ func (q *Queries) GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UU
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const purgeCapabilityUsageOrphans = `-- name: PurgeCapabilityUsageOrphans :execrows
-DELETE FROM capability_usage
-WHERE capability_id IN (
-    SELECT u.capability_id FROM capability_usage AS u
-    LEFT JOIN capability_records AS c ON c.id = u.capability_id
-    WHERE c.id IS NULL
-    LIMIT 10000
-)
-`
-
-// Drops usage rows whose capability_id is no longer in capability_records.
-// Runs alongside CapabilityPurger so orphans don't accumulate when caps
-// are revoked/expired without going through DeleteCapabilityUsage.
-func (q *Queries) PurgeCapabilityUsageOrphans(ctx context.Context) (int64, error) {
-	result, err := q.db.Exec(ctx, purgeCapabilityUsageOrphans)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }

@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/dpop"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
@@ -19,7 +19,7 @@ const nonceLifetime = 5 * time.Minute
 // shares, and only an environment that may run on an ephemeral key goes
 // without one.
 func TestDPoPNoncesFollowTheConfig(t *testing.T) {
-	sharedKey := strings.Repeat("k", limes.HMACNonceKeyBytes)
+	sharedKey := strings.Repeat("k", dpop.HMACNonceKeyBytes)
 	cases := map[string]struct {
 		cfg     config.DPoPNonce
 		env     string
@@ -51,8 +51,11 @@ func TestDPoPNoncesFollowTheConfig(t *testing.T) {
 				return
 			}
 			n, err := nonces.Nonce(context.Background())
-			if err != nil || !nonces.Valid(context.Background(), n) {
-				t.Errorf("a nonce issued is refused: %q, %v", n, err)
+			if err != nil {
+				t.Fatalf("Nonce: %v", err)
+			}
+			if ok, err := nonces.Valid(context.Background(), n); err != nil || !ok {
+				t.Errorf("a nonce issued is refused: %q, valid %v, %v", n, ok, err)
 			}
 		})
 	}

@@ -14,7 +14,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
@@ -182,8 +181,10 @@ func capabilityComponent(deps *SharedDeps) health.Check {
 		Critical: true,
 		Switch:   health.Fixed(health.ByConfig(on, config.KeyCapabilityEnabled)),
 		Func: func(ctx context.Context) error {
-			_, err := deps.Capability.Store.Get(ctx, uuid.New())
-			return storeAnswers(err, limes.ErrNotFound)
+			// An id not on record is simply not revoked: any error is the
+			// store failing to answer.
+			_, err := deps.Capability.Store.IsRevoked(ctx, uuid.New())
+			return err
 		},
 	}
 }

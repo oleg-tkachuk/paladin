@@ -11,6 +11,7 @@ import (
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
@@ -24,7 +25,7 @@ func withSlot(ctx context.Context) context.Context { return apiutil.WithResource
 
 func TestIssueNamesTheCapabilityUnderItsTenant(t *testing.T) {
 	store := &fakeStore{}
-	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
+	h := mkHandler(t, store, nil, &allowAuthorizer{})
 	tenant := uuid.New()
 
 	ctx := withSlot(callerCtx(uuid.New(), "platform.admin"))
@@ -46,16 +47,13 @@ func TestIssueNamesTheCapabilityUnderItsTenant(t *testing.T) {
 }
 
 func TestDelegateNamesTheChildUnderItsTenant(t *testing.T) {
-	tenant := uuid.New()
-	parent := mkParent(tenant, limes.OpGet, limes.OpShare)
-	store := &fakeStore{cap: &parent}
-	h := NewHandler(mkIssuer(t, store), store, nil, &denyAuthorizer{})
+	m := captest.NewMinter(t)
+	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
+	tenant := parent.Capability().Subject.TenantID
+	h := delegateHandler(m, &denyAuthorizer{})
 
-	ctx := withSlot(auth.WithCapability(context.Background(), &parent))
-	resp, err := h.Delegate(ctx, &adminv1.CapabilityServiceDelegateRequest{
-		ParentId:   parent.ID.String(),
-		TtlSeconds: 60,
-	})
+	ctx := withSlot(auth.WithCapability(context.Background(), parent))
+	resp, err := h.Delegate(ctx, delegateReq(parent))
 	if err != nil {
 		t.Fatalf("Delegate: %v", err)
 	}
@@ -77,7 +75,7 @@ func TestRevokeNamesTheCapabilityUnderItsTenant(t *testing.T) {
 	for name, caller := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
-			h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
+			h := mkHandler(t, store, nil, &allowAuthorizer{})
 			ctx := withSlot(caller)
 			if _, err := h.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{
 				Id: target.ID.String(),
@@ -96,7 +94,7 @@ func TestRevokeNamesTheCapabilityUnderItsTenant(t *testing.T) {
 // handler does not know.
 func TestRevokeRefusedNamesNothing(t *testing.T) {
 	store := &recordingStore{revokeErr: limes.ErrNotFound}
-	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
+	h := mkHandler(t, store, nil, &allowAuthorizer{})
 	ctx := withSlot(callerCtx(uuid.New()))
 	_, err := h.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: uuid.NewString()})
 	if connect.CodeOf(err) != connect.CodeNotFound {
@@ -109,10 +107,10 @@ func TestRevokeRefusedNamesNothing(t *testing.T) {
 
 func TestRevokeBiscuitNamesTheCapabilityUnderItsTenant(t *testing.T) {
 	owner := uuid.New()
-	target := mkParent(owner, limes.OpGet)
+	target, copied := mintCopy(t, owner, limes.Capability{})
 	store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
-	copier := &fakeCopier{copy: limes.BiscuitCopy{CapabilityID: target.ID, RevocationID: []byte("last-block")}}
-	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{}).WithBiscuitCopies(copier, &copyStore{})
+	copier := &fakeCopier{copy: copied}
+	h := mkHandler(t, store, nil, &allowAuthorizer{}).WithBiscuitCopies(copier, &copyStore{})
 
 	ctx := withSlot(callerCtx(uuid.New(), "platform.admin"))
 	if _, err := h.RevokeBiscuit(ctx, revokeBiscuitReq()); err != nil {
@@ -123,7 +121,7 @@ func TestRevokeBiscuitNamesTheCapabilityUnderItsTenant(t *testing.T) {
 	}
 
 	refused := withSlot(callerCtx(uuid.New(), "platform.admin"))
-	h = NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{}).
+	h = mkHandler(t, store, nil, &allowAuthorizer{}).
 		WithBiscuitCopies(copier, &copyStore{err: errors.New("down")})
 	if _, err := h.RevokeBiscuit(refused, revokeBiscuitReq()); err == nil {
 		t.Fatal("RevokeBiscuit succeeded against a failing store")

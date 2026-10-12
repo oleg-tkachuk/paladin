@@ -8,11 +8,11 @@
 //   - Issue / Revoke / List / GetUsage are gated by Cedar (IssueCapability,
 //     RevokeCapability, ReadCapability). The built-in policy grants them to
 //     platform.admin and platform.capability-issuer.
-//   - Delegate accepts EITHER a Cedar DelegateCapability grant OR a capability-
-//     authenticated caller whose own capability includes OpShare AND
-//     whose ID matches the requested parent_id. The latter is the
-//     MCP `share`-tool path — agents minting sub-capabilities for
-//     downstream callers without going through an admin.
+//   - Delegate narrows the capability the caller presents, whose own
+//     caveats include OpShare and whose ID matches the requested
+//     parent_id — the MCP `share`-tool path, agents minting
+//     sub-capabilities for downstream callers without going through an
+//     admin. Only a presented, verified capability can be delegated from.
 package capabilityh
 
 import (
@@ -38,12 +38,20 @@ import (
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
+// TokenVerifier verifies a capability token, as limes.Verifier does. The
+// handler verifies what it has just minted to seal it as a Biscuit:
+// Issuer.Biscuit takes only a capability a verifier accepted.
+type TokenVerifier interface {
+	Verify(ctx context.Context, req limes.VerifyRequest) (limes.VerifiedCapability, error)
+}
+
 // Handler wires the dependencies the four RPCs need.
 type Handler struct {
-	issuer *limes.Issuer
-	store  limes.Store
-	usage  limes.UsageStore[pgx.Tx]
-	policy cedar.Authorizer
+	issuer   *limes.Issuer
+	verifier TokenVerifier
+	store    limes.Store
+	usage    limes.UsageStore[pgx.Tx]
+	policy   cedar.Authorizer
 
 	// copier and copies serve RevokeBiscuit; see WithBiscuitCopies.
 	copier BiscuitCopier
@@ -52,20 +60,21 @@ type Handler struct {
 	copyUsage limes.CopyUsageReader
 }
 
-// NewHandler builds the Handler. issuer / store / policy are required;
-// passing nil panics — wiring bugs should fail loud at boot. usage may
-// be nil when the operator hasn't wired the runtime-counter store —
+// NewHandler builds the Handler. issuer / verifier / store / policy are
+// required; passing nil panics — wiring bugs should fail loud at boot. usage
+// may be nil when the operator hasn't wired the runtime-counter store —
 // GetUsage then returns CodeUnavailable so the misconfig is visible.
 func NewHandler(
 	issuer *limes.Issuer,
+	verifier TokenVerifier,
 	store limes.Store,
 	usage limes.UsageStore[pgx.Tx],
 	policy cedar.Authorizer,
 ) *Handler {
-	if issuer == nil || store == nil || policy == nil {
-		panic("capabilityh: issuer / store / policy are required")
+	if issuer == nil || verifier == nil || store == nil || policy == nil {
+		panic("capabilityh: issuer / verifier / store / policy are required")
 	}
-	return &Handler{issuer: issuer, store: store, usage: usage, policy: policy}
+	return &Handler{issuer: issuer, verifier: verifier, store: store, usage: usage, policy: policy}
 }
 
 // hasOp reports whether the caveat op-set includes the requested op.
@@ -126,14 +135,14 @@ func (h *Handler) actOnCapabilitysTenant(ctx context.Context, caller *auth.Princ
 	if !spansTenants(caller) {
 		return ctx, nil
 	}
-	c, err := h.store.Get(auth.WithCrossTenantRead(ctx), id)
+	rec, err := h.store.GetRecord(auth.WithCrossTenantRead(ctx), id)
 	switch {
 	case errors.Is(err, limes.ErrNotFound):
 		return ctx, nil
 	case err != nil:
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return auth.WithActingTenant(ctx, c.Subject.TenantID), nil
+	return auth.WithActingTenant(ctx, rec.Capability.Subject.TenantID), nil
 }
 
 // Issue mints a top-level capability. Gated by IssueCapability; issuing for
@@ -181,7 +190,7 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 	// The row lands under the subject's tenant, so the connection has to be
 	// scoped there — the cross-tenant gate above is what makes this safe.
 	ctx = auth.WithActingTenant(ctx, subj.TenantID)
-	cap, token, err := h.issuer.Issue(ctx, limes.IssueRequest{
+	res, err := h.issuer.Issue(ctx, limes.IssueRequest{
 		Subject: subj,
 		// Who ASKED for this capability, as opposed to who it authorises.
 		// Taken from the authorized caller so it cannot be spoofed by the
@@ -204,23 +213,18 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 		return nil, apiutil.MapError(err)
 	}
 
-	apiutil.StashResource(ctx, capabilityResourceName(cap.Subject.TenantID, cap.ID))
-	return h.issued(ctx, cap, token)
+	apiutil.StashResource(ctx, capabilityResourceName(res.Capability.Subject.TenantID, res.Capability.ID))
+	return h.issued(ctx, res)
 }
 
-// Delegate narrows a parent capability. Two authentication paths are
-// accepted:
-//
-//  1. Admin (JWT or role-bearing API token) — Cedar action
-//     DelegateCapability gates the call. The parent is read under the
-//     caller's own tenant, so only that tenant's capabilities are reachable.
-//
-//  2. Capability-bearing caller (the agent share-tool path) — caller
-//     must present a verified capability via the X-Paladin-Capability
-//     header. The caller's capability MUST include `OpShare` in its
-//     allowed ops, AND `parent_id` MUST equal the caller's own
-//     capability ID. This prevents an agent from delegating off some
-//     other principal's capability.
+// Delegate narrows the capability the caller presents. Only a presented
+// capability can be delegated from: Issuer.Delegate takes the parent as the
+// verifier accepted it, never as a record reads, so the token that grants
+// what is narrowed is the one checked — signature, expiry, revocation and
+// the attenuation of a Biscuit copy. The caller presents it via the
+// X-Paladin-Capability header, alone or beside a JWT. Its caveats MUST
+// include `OpShare`, AND `parent_id` MUST equal its own ID, so an agent
+// cannot delegate off some other principal's capability.
 //
 // Caveat narrowing is enforced downstream by Issuer.Delegate
 // (ErrDelegationTooWide); this handler only gates *who* may delegate.
@@ -230,40 +234,27 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("parent_id: %w", err))
 	}
 
-	var parent limes.Capability
-	// Path 2: capability-authenticated caller. Gated entirely by the
-	// caller's own caveats — no Cedar admin check.
-	if callerCap, ok := auth.CapabilityFromContext(ctx); ok {
-		if !hasOp(callerCap.Caveats.Ops, limes.OpShare) {
-			return nil, connect.NewError(connect.CodePermissionDenied, "capability: caller lacks OpShare")
-		}
-		if callerCap.ID != parentID {
-			return nil, connect.NewError(connect.CodePermissionDenied, "capability: parent_id must equal caller's own capability id")
-		}
-		// A child's requests and spend reach its ancestors' counters, not a
-		// Biscuit copy's own, so a copy with limits of its own would shed them
-		// by delegating. Its holder narrows offline instead. Issuer.Delegate
-		// refuses it too, as ErrDelegationTooWide; asking first answers with
-		// a precondition the caller can act on, not a permission denial.
-		if len(callerCap.Copies) > 0 {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, "capability: a Biscuit copy with limits of its own cannot delegate; attenuate it instead")
-		}
-		// Narrow from the capability as presented: a Biscuit copy's
-		// attenuation is not in the stored record, and narrowing from the
-		// record would hand the child what the copy gave up.
-		parent = *callerCap
-	} else {
-		// Path 1: admin. Re-use the existing Cedar gate.
-		if _, err := h.authorize(ctx, cedar.ActionDelegateCapability); err != nil {
-			return nil, err
-		}
-		if parent, err = h.store.Get(ctx, parentID); err != nil {
-			if errors.Is(err, limes.ErrNotFound) {
-				return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-			}
-			// The store failing is not the parent being absent.
-			return nil, apiutil.MapError(err)
-		}
+	// Gated entirely by the presented capability's own caveats — no Cedar
+	// admin check: the capability is the grant.
+	verified, ok := auth.VerifiedCapabilityFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			"capability: delegation narrows a presented capability; send it in the "+auth.HeaderCapability+" header")
+	}
+	parent := verified.Capability()
+	if !hasOp(parent.Caveats.Ops, limes.OpShare) {
+		return nil, connect.NewError(connect.CodePermissionDenied, "capability: caller lacks OpShare")
+	}
+	if parent.ID != parentID {
+		return nil, connect.NewError(connect.CodePermissionDenied, "capability: parent_id must equal caller's own capability id")
+	}
+	// A Biscuit copy's attenuation, and any limits of its own, are not in a
+	// token the issuer can extend: a child would shed them. Its holder
+	// narrows offline instead. Issuer.Delegate refuses it too, as
+	// ErrDelegationTooWide; asking first answers with a precondition the
+	// caller can act on, not a permission denial.
+	if verified.FromBiscuit() {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, "capability: a Biscuit copy cannot delegate; attenuate it instead")
 	}
 
 	// No caveats in the request means "the parent's, unchanged" — asked for
@@ -274,6 +265,10 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		if caveats, err = protoToCaveats(req.GetCaveats()); err != nil {
 			return nil, err
 		}
+		// A ceiling left at 0 keeps the parent's: the child of a bounded
+		// parent cannot be unlimited, and the API's 0 sets none.
+		caveats.Requests = apiutil.DelegatedRequests(int64(req.GetCaveats().GetMaxRequests()), parent.Caveats.Requests)
+		caveats.Budget = apiutil.DelegatedBudget(apiutil.BudgetCeilingAmount(caveats.Budget), parent.Caveats.Budget)
 	}
 	audience := parent.Audience
 	if a := req.GetAudience(); len(a) > 0 {
@@ -295,8 +290,8 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		delegSubj = s
 	}
 
-	cap, token, err := h.issuer.Delegate(ctx, limes.DelegateRequest{
-		Parent:          parent,
+	res, err := h.issuer.Delegate(ctx, limes.DelegateRequest{
+		Parent:          verified,
 		Subject:         delegSubj,
 		Audience:        audience,
 		Caveats:         caveats,
@@ -308,7 +303,8 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 	if err != nil {
 		switch {
 		case errors.Is(err, limes.ErrDelegationTooWide),
-			errors.Is(err, limes.ErrUnitCodeMismatch):
+			errors.Is(err, limes.ErrUnitCodeMismatch),
+			errors.Is(err, limes.ErrOpNotAllowed):
 			return nil, connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
 		case errors.Is(err, limes.ErrRevoked), errors.Is(err, limes.ErrExpired):
 			// The parent can no longer delegate; that is a state the caller
@@ -317,8 +313,8 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		}
 		return nil, apiutil.MapError(err)
 	}
-	apiutil.StashResource(ctx, capabilityResourceName(cap.Subject.TenantID, cap.ID))
-	return h.issued(ctx, cap, token)
+	apiutil.StashResource(ctx, capabilityResourceName(res.Capability.Subject.TenantID, res.Capability.ID))
+	return h.issued(ctx, res)
 }
 
 // Revoke adds the capability ID to the revocation list. Idempotent for a
@@ -338,8 +334,8 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevo
 		return nil, err
 	}
 	if err := h.store.Revoke(ctx, limes.RevokeRequest{
-		ID:              id,
-		Reason:          req.GetReason(),
+		CapabilityID:    id,
+		Note:            req.GetReason(),
 		Actor:           caller.Subject,
 		CascadeChildren: req.GetCascadeChildren(),
 	}); err != nil {
@@ -377,14 +373,14 @@ func (h *Handler) List(ctx context.Context, req *adminv1.CapabilityServiceListRe
 	// needs the connection scoped to that tenant. Without this the admin
 	// console renders an empty list instead of an error — RLS filters.
 	ctx = auth.WithActingTenant(ctx, tenantID)
-	caps, next, err := h.store.ListByPrincipal(ctx, limes.ListByPrincipalRequest{
+	page, err := h.store.ListByPrincipal(ctx, limes.ListByPrincipalRequest{
 		TenantID:       tenantID,
 		PrincipalType:  protoToPrincipalKind(req.GetPrincipalKind()),
 		Subject:        req.GetSubject(),
 		IncludeExpired: req.GetIncludeExpired(),
 		IncludeRevoked: req.GetIncludeRevoked(),
 		Cursor:         req.GetPageToken(),
-		Limit:          req.GetPageSize(),
+		Limit:          int(req.GetPageSize()),
 	})
 	if err != nil {
 		// A page token the store cannot read is the caller's to fix
@@ -392,25 +388,16 @@ func (h *Handler) List(ctx context.Context, req *adminv1.CapabilityServiceListRe
 		return nil, apiutil.MapError(err)
 	}
 
-	out := make([]*adminv1.Capability, 0, len(caps))
-	for i := range caps {
-		out = append(out, capabilityToProto(&caps[i]))
+	out := make([]*adminv1.Capability, 0, len(page.Items))
+	for i := range page.Items {
+		out = append(out, capabilityToProto(&page.Items[i]))
 	}
 	return &adminv1.CapabilityServiceListResponse{
 		Capabilities:  out,
-		NextPageToken: next,
+		NextPageToken: page.Next,
 	}, nil
 }
 
-// GetUsage returns the runtime counters (request_count, spent_usd)
-// for a capability. NOT_FOUND when the cap has never been used —
-// distinct from "exists but unused" (the caller's List having
-// returned the cap proves it exists; an absent usage row just
-// means no Charge / no BumpRequest has fired yet).
-//
-// Authorization: same Cedar action as List (read-side admin), so
-// the operator who can List a tenant's caps can also see their
-// usage.
 // Get returns one capability as it is on record. Gated as List and GetUsage
 // are, and scoped to the capability's tenant the way GetUsage is.
 func (h *Handler) Get(ctx context.Context, req *adminv1.CapabilityServiceGetRequest) (*adminv1.CapabilityServiceGetResponse, error) {
@@ -439,12 +426,21 @@ func (h *Handler) Get(ctx context.Context, req *adminv1.CapabilityServiceGetRequ
 	}
 	if r := rec.Revocation; r != nil {
 		out.Revocation = &adminv1.CapabilityRevocation{
-			RevokedAt: timestamppb.New(r.RevokedAt), Reason: r.Reason, Actor: r.Actor, Cascade: r.Cascade,
+			RevokedAt: timestamppb.New(r.RevokedAt), Reason: r.Note, Actor: r.Actor, Cascade: r.Cascaded,
 		}
 	}
 	return out, nil
 }
 
+// GetUsage returns the runtime counters (request_count, spent_usd)
+// for a capability. NOT_FOUND when the cap has never been used —
+// distinct from "exists but unused" (the caller's List having
+// returned the cap proves it exists; an absent usage row just
+// means no Charge / no BumpRequest has fired yet).
+//
+// Authorization: same Cedar action as List (read-side admin), so
+// the operator who can List a tenant's caps can also see their
+// usage.
 func (h *Handler) GetUsage(ctx context.Context, req *adminv1.CapabilityServiceGetUsageRequest) (*adminv1.CapabilityServiceGetUsageResponse, error) {
 	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
 	if err != nil {
@@ -531,8 +527,6 @@ func protoToPrincipalKind(k adminv1.PrincipalKind) limes.PrincipalType {
 	}
 }
 
-// issued answers Issue and Delegate: the capability, its JWT, and the same
-// capability as a Biscuit its holder can narrow offline.
 // capabilitiesSegment names a tenant's capabilities in a resource name.
 const capabilitiesSegment = "/capabilities/"
 
@@ -553,16 +547,44 @@ func stashCapabilityInScope(ctx context.Context, id uuid.UUID) {
 	}
 }
 
-func (h *Handler) issued(ctx context.Context, cap limes.Capability, token string) (*adminv1.CapabilityServiceIssueResponse, error) {
-	bisc, err := h.issuer.Biscuit(ctx, cap)
+// issued answers Issue and Delegate: the capability, its JWT, and the same
+// capability as a Biscuit its holder can narrow offline.
+func (h *Handler) issued(ctx context.Context, res limes.IssueResult) (*adminv1.CapabilityServiceIssueResponse, error) {
+	bisc, err := h.seal(ctx, res)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &adminv1.CapabilityServiceIssueResponse{
-		Capability: capabilityToProto(&cap),
-		Token:      token,
+		Capability: capabilityToProto(&res.Capability),
+		Token:      res.Token,
 		Biscuit:    bisc,
 	}, nil
+}
+
+// seal is the capability just minted as a Biscuit its holder can narrow
+// offline, or "" for a key-bound one or one not valid yet. Issuer.Biscuit seals only a capability
+// a verifier accepted, so the token is verified first, for an audience it
+// names; a key-bound capability verifies only with a proof of its holder's
+// key, which the server does not have — its holder presents the JWT.
+func (h *Handler) seal(ctx context.Context, res limes.IssueResult) (string, error) {
+	c := res.Capability
+	if c.ConfirmationJKT != "" || len(c.Audience) == 0 {
+		return "", nil
+	}
+	verified, err := h.verifier.Verify(ctx, limes.VerifyRequest{Token: res.Token, Audience: c.Audience[0]})
+	if errors.Is(err, limes.ErrNotYetValid) {
+		// A capability valid only from a later not-before verifies only
+		// then; its holder presents the JWT, as for a key-bound one.
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("capabilityh: verify the minted capability: %w", err)
+	}
+	b, err := h.issuer.Biscuit(ctx, limes.BiscuitRequest{Capability: verified})
+	if err != nil {
+		return "", err
+	}
+	return b.Token, nil
 }
 
 func protoToCaveats(c *adminv1.CapabilityCaveats) (limes.Caveats, error) {
@@ -583,8 +605,8 @@ func protoToCaveats(c *adminv1.CapabilityCaveats) (limes.Caveats, error) {
 	out := limes.Caveats{
 		ResourcePrefixes:       c.GetResourcePrefixes(),
 		ResourceURIs:           c.GetResourceUris(),
-		MaxRequests:            int64(c.GetMaxRequests()),
-		MaxBudgetAmount:        budget,
+		Requests:               apiutil.RequestCeilingOf(int64(c.GetMaxRequests())),
+		Budget:                 apiutil.BudgetCeilingOf(budget),
 		UnitCode:               unit,
 		AllowTaintedRead:       c.GetAllowTaintedRead(),
 		IdempotencyKeyRequired: c.GetIdempotencyKeyRequired(),
@@ -634,8 +656,8 @@ func caveatsToProto(c limes.Caveats) *adminv1.CapabilityCaveats {
 	out := &adminv1.CapabilityCaveats{
 		ResourcePrefixes:       c.ResourcePrefixes,
 		ResourceUris:           c.ResourceURIs,
-		MaxRequests:            safecast.Int32From64(c.MaxRequests),
-		MaxBudget:              apiutil.MoneyOf(c.UnitCode, c.MaxBudgetAmount),
+		MaxRequests:            safecast.Int32From64(apiutil.RequestCeilingNumber(c.Requests)),
+		MaxBudget:              apiutil.MoneyOf(c.UnitCode, apiutil.BudgetCeilingAmount(c.Budget)),
 		AllowTaintedRead:       c.AllowTaintedRead,
 		IdempotencyKeyRequired: c.IdempotencyKeyRequired,
 		SourceIpCidr:           c.SourceIPCIDR,

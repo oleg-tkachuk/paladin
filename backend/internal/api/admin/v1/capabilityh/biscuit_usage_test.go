@@ -25,10 +25,21 @@ type fakeCopyUsage struct {
 	ctx context.Context
 }
 
-func (f *fakeCopyUsage) CopyUsage(ctx context.Context, ids [][]byte) ([]limes.CopyUsage, error) {
-	f.ids, f.ctx = ids, ctx
-	return f.out, f.err
+func (f *fakeCopyUsage) CopyUsage(ctx context.Context, req limes.CopyUsageRequest) (limes.CopyUsageResult, error) {
+	f.ids, f.ctx = req.RevocationIDs, ctx
+	return limes.CopyUsageResult{Copies: f.out}, f.err
 }
+
+// The limits two attenuations set on a copy, the outer first, and the
+// counters the outer one has.
+const (
+	copyUnit            = "EUR"
+	innerMaxRequests    = 10
+	outerBudgetUnits    = 2
+	outerRequestCount   = 7
+	outerSpentAmount    = "1.25"
+	outerReservedAmount = "0.5"
+)
 
 func biscuitUsageReq() *adminv1.CapabilityServiceGetBiscuitUsageRequest {
 	return &adminv1.CapabilityServiceGetBiscuitUsageRequest{Token: "biscuit"}
@@ -38,18 +49,22 @@ func biscuitUsageReq() *adminv1.CapabilityServiceGetBiscuitUsageRequest {
 // limit never used reports zero; the unit is the capability's.
 func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 	owner := uuid.New()
-	target := mkParent(owner, limes.OpGet)
-	target.Caveats.UnitCode = "EUR"
-	store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
-	limits := []limes.CopyCeiling{
-		{RevocationID: []byte("inner"), MaxRequests: 10},
-		{RevocationID: []byte("outer"), MaxBudget: 2 * limes.NanosPerUnit},
+	outerBudget := limes.BudgetCeiling{Max: outerBudgetUnits * limes.NanosPerUnit}
+	innerRequests := limes.RequestCeiling{Max: innerMaxRequests}
+	target, copied := mintCopy(t, owner, limes.Capability{Caveats: limes.Caveats{UnitCode: copyUnit}},
+		limes.Attenuation{Budget: &outerBudget}, limes.Attenuation{Requests: &innerRequests})
+	limits := copied.Copies()
+	if len(limits) != 2 {
+		t.Fatalf("copy limits = %v, want the two attenuations'", limits)
 	}
-	copier := &fakeCopier{copy: limes.BiscuitCopy{CapabilityID: target.ID, RevocationID: []byte("inner"), Limits: limits}}
-	reader := &fakeCopyUsage{out: []limes.CopyUsage{
-		{RevocationID: []byte("outer"), CapabilityID: target.ID, RequestCount: 7, SpentAmount: limes.MustParseAmount("1.25"), ReservedAmount: limes.MustParseAmount("0.5")},
-	}}
-	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{}).
+	inner, outer := limits[0].RevocationID, limits[1].RevocationID
+	store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
+	copier := &fakeCopier{copy: copied}
+	reader := &fakeCopyUsage{out: []limes.CopyUsage{{
+		RevocationID: outer, CapabilityID: target.ID, RequestCount: outerRequestCount,
+		SpentAmount: limes.MustParseAmount(outerSpentAmount), ReservedAmount: limes.MustParseAmount(outerReservedAmount),
+	}}}
+	h := mkHandler(t, store, nil, &allowAuthorizer{}).
 		WithBiscuitCopies(copier, &copyStore{}).WithCopyUsage(reader)
 
 	resp, err := h.GetBiscuitUsage(callerCtx(uuid.New(), "platform.admin"), biscuitUsageReq())
@@ -64,13 +79,13 @@ func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 		t.Fatalf("copies = %v", got)
 	}
 	in, out := got[0], got[1]
-	if !bytes.Equal(in.GetRevocationId(), []byte("inner")) || in.GetMaxRequests() != 10 || in.GetRequestCount() != 0 {
+	if !bytes.Equal(in.GetRevocationId(), inner) || in.GetMaxRequests() != innerMaxRequests || in.GetRequestCount() != 0 {
 		t.Errorf("innermost = %v", in)
 	}
-	if !bytes.Equal(out.GetRevocationId(), []byte("outer")) || out.GetRequestCount() != 7 ||
-		!proto.Equal(out.GetMaxBudget(), &money.Money{CurrencyCode: "EUR", Units: 2}) ||
-		!proto.Equal(out.GetSpent(), &money.Money{CurrencyCode: "EUR", Units: 1, Nanos: 250_000_000}) ||
-		!proto.Equal(out.GetReserved(), &money.Money{CurrencyCode: "EUR", Nanos: 500_000_000}) {
+	if !bytes.Equal(out.GetRevocationId(), outer) || out.GetRequestCount() != outerRequestCount ||
+		!proto.Equal(out.GetMaxBudget(), &money.Money{CurrencyCode: copyUnit, Units: outerBudgetUnits}) ||
+		!proto.Equal(out.GetSpent(), &money.Money{CurrencyCode: copyUnit, Units: 1, Nanos: 250_000_000}) ||
+		!proto.Equal(out.GetReserved(), &money.Money{CurrencyCode: copyUnit, Nanos: 500_000_000}) {
 		t.Errorf("outermost = %v", out)
 	}
 	if len(reader.ids) != 2 {
@@ -82,8 +97,9 @@ func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 }
 
 func TestGetBiscuitUsageRefusals(t *testing.T) {
-	visible := mkParent(uuid.New(), limes.OpGet)
-	good := limes.BiscuitCopy{CapabilityID: visible.ID, RevocationID: []byte("x")}
+	// A copy with a limit of its own, so the reader is asked about it.
+	limit := limes.RequestCeiling{Max: innerMaxRequests}
+	visible, good := mintCopy(t, uuid.New(), limes.Capability{}, limes.Attenuation{Requests: &limit})
 	cases := map[string]struct {
 		authz  cedar.Authorizer
 		copier BiscuitCopier
@@ -93,14 +109,14 @@ func TestGetBiscuitUsageRefusals(t *testing.T) {
 	}{
 		"Cedar denies":           {&denyAuthorizer{}, &fakeCopier{copy: good}, &fakeCopyUsage{}, &visible, connect.CodePermissionDenied},
 		"not wired":              {&allowAuthorizer{}, &fakeCopier{copy: good}, nil, &visible, connect.CodeUnavailable},
-		"not a genuine Biscuit":  {&allowAuthorizer{}, &fakeCopier{err: limes.ErrInvalidSignature}, &fakeCopyUsage{}, &visible, connect.CodeInvalidArgument},
+		"not a genuine Biscuit":  {&allowAuthorizer{}, &fakeCopier{err: limes.ErrInvalidToken}, &fakeCopyUsage{}, &visible, connect.CodeInvalidArgument},
 		"capability not visible": {&allowAuthorizer{}, &fakeCopier{copy: good}, &fakeCopyUsage{}, nil, connect.CodeNotFound},
 		"reader fails":           {&allowAuthorizer{}, &fakeCopier{copy: good}, &fakeCopyUsage{err: errors.New("db down")}, &visible, connect.CodeInternal},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &recordingStore{fakeStore: fakeStore{cap: tc.record}}
-			h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, tc.authz).WithBiscuitCopies(tc.copier, &copyStore{})
+			h := mkHandler(t, store, nil, tc.authz).WithBiscuitCopies(tc.copier, &copyStore{})
 			if tc.reader != nil {
 				h.WithCopyUsage(tc.reader)
 			}

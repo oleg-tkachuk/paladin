@@ -6,61 +6,74 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/limes"
 )
 
-// copiesUsage records the Copies each metering call was handed.
+// copiesUsage records the copies each metering call was handed.
 type copiesUsage struct {
-	*fakeUsage
+	*usageStore
 	bumped, charged, reserved []limes.CopyCeiling
 	bumps                     int
 }
 
-func (u *copiesUsage) Bump(ctx context.Context, req limes.BumpRequest) (int64, error) {
+func (u *copiesUsage) Bump(ctx context.Context, req limes.BumpRequest) (limes.BumpReceipt, error) {
 	u.bumps++
-	u.bumped = req.Copies
-	return u.fakeUsage.Bump(ctx, req)
+	u.bumped = req.Subject.Copies()
+	return u.usageStore.Bump(ctx, req)
 }
 
 func (u *copiesUsage) Charge(ctx context.Context, req limes.ChargeRequest, on func(context.Context, pgx.Tx) error) (limes.ChargeReceipt, error) {
-	u.charged = req.Copies
-	return u.fakeUsage.Charge(ctx, req, on)
+	u.charged = req.Subject.Copies()
+	return u.usageStore.Charge(ctx, req, on)
 }
 
 func (u *copiesUsage) Reserve(ctx context.Context, req limes.ReserveRequest) (limes.Reservation, error) {
-	u.reserved = req.Copies
-	return u.fakeUsage.Reserve(ctx, req)
+	u.reserved = req.Subject.Copies()
+	return u.usageStore.Reserve(ctx, req)
 }
 
 // A Biscuit copy's own limits reach the usage store on every metering call,
 // and a copy with limits is counted even when its capability sets none.
 func TestCopiesReachTheMeter(t *testing.T) {
-	copies := []limes.CopyCeiling{
-		{RevocationID: []byte("inner"), MaxRequests: 2},
-		{RevocationID: []byte("outer"), MaxBudget: limes.NanosPerUnit},
+	const (
+		copyRequests       = 2
+		copyBudget         = limes.NanosPerUnit
+		holdTTL            = time.Minute
+		wantCopies         = 2
+		chargeAndHoldNanos = limes.NanosPerUnit / 4
+	)
+	m, store := newMeteredMinter(t)
+	root, _ := m.Mint(t, limes.Capability{})
+	_, inner := m.Attenuated(t, root, limes.Attenuation{Requests: &limes.RequestCeiling{Max: copyRequests}})
+	outer, err := limes.Attenuate(inner, limes.Attenuation{Budget: &limes.BudgetCeiling{Max: copyBudget}})
+	if err != nil {
+		t.Fatalf("attenuate: %v", err)
 	}
-	cap := &limes.Capability{ID: uuid.New(), Subject: limes.Principal{TenantID: uuid.New()}, Copies: copies}
-	usage := &copiesUsage{fakeUsage: newFakeUsage()}
+	v := m.Verify(t, outer, root.Capability().Audience[0])
+	copies := v.Capability().Copies
+	if len(copies) != wantCopies {
+		t.Fatalf("the verified copy carries %d limits, want %d", len(copies), wantCopies)
+	}
+	usage := &copiesUsage{usageStore: store}
 
 	i := &capabilityInterceptor{usage: usage}
-	if err := i.enforceCaveats(context.Background(), cap); err != nil {
+	if err := i.enforceCaveats(context.Background(), v); err != nil {
 		t.Fatalf("enforceCaveats: %v", err)
 	}
 	if usage.bumps != 1 || !reflect.DeepEqual(usage.bumped, copies) {
 		t.Errorf("bump: %d calls with %+v, want one with the copies", usage.bumps, usage.bumped)
 	}
 
-	ctx := withLastOpHolder(WithChargeStore(WithCapability(context.Background(), cap), usage))
-	if err := ChargeCapability(ctx, limes.MustParseAmount("0.25"), ""); err != nil {
+	ctx := withLastOpHolder(WithChargeStore(WithCapability(context.Background(), v), usage))
+	if err := ChargeCapability(ctx, chargeAndHoldNanos); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 	if !reflect.DeepEqual(usage.charged, copies) {
 		t.Errorf("charge copies = %+v", usage.charged)
 	}
-	if _, err := ReserveCapability(ctx, limes.MustParseAmount("0.25"), time.Minute); err != nil {
+	if _, err := ReserveCapability(ctx, chargeAndHoldNanos, holdTTL); err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
 	if !reflect.DeepEqual(usage.reserved, copies) {

@@ -13,15 +13,46 @@ import (
 	"github.com/oleg-tkachuk/limes"
 )
 
-// purgeOnlyStore answers PurgeExpired; any other Store method panics through
-// the nil embedded interface, which the purger must never call.
-type purgeOnlyStore struct {
-	limes.Store
-	err error
+// fullBatch is a housekeeping batch that filled the limit, which tells the
+// purger more rows may be waiting.
+const fullBatch = int64(limes.DefaultHousekeepingLimit)
+
+// shortBatch is a housekeeping batch short of the limit: the last one.
+const shortBatch int64 = 2
+
+// batches hands out the sizes in turn, then 0; err fails every call.
+type batches struct {
+	sizes []int64
+	err   error
+	calls int
 }
 
-func (s purgeOnlyStore) PurgeExpired(context.Context, time.Duration) (int64, error) {
-	return 0, s.err
+func (b *batches) next() (int64, error) {
+	b.calls++
+	if b.err != nil {
+		return 0, b.err
+	}
+	if len(b.sizes) == 0 {
+		return 0, nil
+	}
+	n := b.sizes[0]
+	b.sizes = b.sizes[1:]
+	return n, nil
+}
+
+// purgingStore answers Purge from purged and records each request; any other
+// Store method panics through the nil embedded interface, which the purger
+// must never call.
+type purgingStore struct {
+	limes.Store
+	purged   batches
+	requests []limes.PurgeRequest
+}
+
+func (s *purgingStore) Purge(_ context.Context, req limes.PurgeRequest) (limes.PurgeResult, error) {
+	s.requests = append(s.requests, req)
+	n, err := s.purged.next()
+	return limes.PurgeResult{Purged: n}, err
 }
 
 // fakeReplayPurger hands out the batch sizes in batches, then 0.
@@ -46,7 +77,7 @@ func (f *fakeReplayPurger) PurgeExpired(context.Context) (int64, error) {
 
 func TestCapabilityPurgerDrainsExpiredDPoPProofIDs(t *testing.T) {
 	replay := &fakeReplayPurger{batches: []int64{10, 3}}
-	p := &CapabilityPurger{Store: purgeOnlyStore{}, Replay: replay}
+	p := &CapabilityPurger{Store: &purgingStore{}, Replay: replay}
 	if err := p.tick(context.Background()); err != nil {
 		t.Fatalf("tick: %v", err)
 	}
@@ -58,7 +89,7 @@ func TestCapabilityPurgerDrainsExpiredDPoPProofIDs(t *testing.T) {
 func TestCapabilityPurgerReportsAFailedDPoPPurge(t *testing.T) {
 	failure := errors.New("database unreachable")
 	replay := &fakeReplayPurger{err: failure}
-	p := &CapabilityPurger{Store: purgeOnlyStore{}, Replay: replay}
+	p := &CapabilityPurger{Store: &purgingStore{}, Replay: replay}
 	if err := p.tick(context.Background()); !errors.Is(err, failure) {
 		t.Fatalf("tick: err = %v, want %v", err, failure)
 	}
@@ -68,30 +99,61 @@ func TestCapabilityPurgerReportsAFailedDPoPPurge(t *testing.T) {
 }
 
 func TestCapabilityPurgerWithoutReplayCache(t *testing.T) {
-	p := &CapabilityPurger{Store: purgeOnlyStore{}}
+	p := &CapabilityPurger{Store: &purgingStore{}}
 	if err := p.tick(context.Background()); err != nil {
 		t.Fatalf("tick: %v", err)
 	}
 }
 
-// batches hands out the sizes in turn, then 0; err fails every call.
-type batches struct {
-	sizes []int64
-	err   error
-	calls int
+// The record purge carries the configured retention and loops while a batch
+// fills the limit; the first short batch is the last.
+func TestCapabilityPurgerPurgesRecordsInBatches(t *testing.T) {
+	const retention = 48 * time.Hour
+	cases := map[string]struct {
+		sizes     []int64
+		wantCalls int
+	}{
+		"nothing to purge":            {nil, 1},
+		"one short batch":             {[]int64{shortBatch}, 1},
+		"full then short":             {[]int64{fullBatch, shortBatch}, 2},
+		"two full then the empty one": {[]int64{fullBatch, fullBatch}, 3},
+		"one under the limit is last": {[]int64{fullBatch - 1, fullBatch}, 1},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			store := &purgingStore{purged: batches{sizes: tc.sizes}}
+			p := &CapabilityPurger{Store: store, ExpiredFor: retention}
+			if err := p.tick(context.Background()); err != nil {
+				t.Fatalf("tick: %v", err)
+			}
+			if store.purged.calls != tc.wantCalls {
+				t.Fatalf("Purge called %d times, want %d", store.purged.calls, tc.wantCalls)
+			}
+			for i, req := range store.requests {
+				if req.ExpiredFor != retention {
+					t.Errorf("request %d: ExpiredFor = %v, want %v", i, req.ExpiredFor, retention)
+				}
+			}
+		})
+	}
 }
 
-func (b *batches) next() (int64, error) {
-	b.calls++
-	if b.err != nil {
-		return 0, b.err
+// A failed record purge stops the tick before the usage sweeps: a store that
+// cannot purge is unlikely to sweep, and the error is reported.
+func TestCapabilityPurgerReportsAFailedRecordPurge(t *testing.T) {
+	failure := errors.New("database unreachable")
+	store := &purgingStore{purged: batches{err: failure}}
+	usage := &sweepingUsage{}
+	p := &CapabilityPurger{Store: store, Usage: usage}
+	if err := p.tick(context.Background()); !errors.Is(err, failure) {
+		t.Fatalf("tick: err = %v, want %v", err, failure)
 	}
-	if len(b.sizes) == 0 {
-		return 0, nil
+	if store.purged.calls != 1 {
+		t.Errorf("Purge called %d times after a failure, want 1", store.purged.calls)
 	}
-	n := b.sizes[0]
-	b.sizes = b.sizes[1:]
-	return n, nil
+	if usage.release.calls != 0 || usage.orphans.calls != 0 {
+		t.Errorf("usage swept after a failed purge: %d / %d calls", usage.release.calls, usage.orphans.calls)
+	}
 }
 
 // sweepingUsage answers the two sweeps the purger makes; any other method
@@ -101,21 +163,29 @@ type sweepingUsage struct {
 	release, orphans batches
 }
 
-func (u *sweepingUsage) ReleaseExpired(context.Context) (int64, error) { return u.release.next() }
-func (u *sweepingUsage) PurgeOrphans(context.Context) (int64, error)   { return u.orphans.next() }
+func (u *sweepingUsage) ReleaseExpired(context.Context, limes.ReleaseExpiredRequest) (limes.ReleaseExpiredResult, error) {
+	n, err := u.release.next()
+	return limes.ReleaseExpiredResult{Released: n}, err
+}
 
-// Both usage sweeps drain in batches until one comes back empty.
+func (u *sweepingUsage) PurgeOrphans(context.Context, limes.PurgeOrphansRequest) (limes.PurgeOrphansResult, error) {
+	n, err := u.orphans.next()
+	return limes.PurgeOrphansResult{Purged: n}, err
+}
+
+// Both usage sweeps loop while a batch fills the limit and stop on the first
+// short one, without asking again for the empty batch.
 func TestCapabilityPurgerDrainsBothUsageSweeps(t *testing.T) {
 	usage := &sweepingUsage{
-		release: batches{sizes: []int64{5, 2}},
-		orphans: batches{sizes: []int64{7}},
+		release: batches{sizes: []int64{fullBatch, shortBatch}},
+		orphans: batches{sizes: []int64{shortBatch}},
 	}
-	p := &CapabilityPurger{Store: purgeOnlyStore{}, Usage: usage}
+	p := &CapabilityPurger{Store: &purgingStore{}, Usage: usage}
 	if err := p.tick(context.Background()); err != nil {
 		t.Fatalf("tick: %v", err)
 	}
-	if usage.release.calls != 3 || usage.orphans.calls != 2 {
-		t.Errorf("release calls = %d (want 3), orphan calls = %d (want 2)", usage.release.calls, usage.orphans.calls)
+	if usage.release.calls != 2 || usage.orphans.calls != 1 {
+		t.Errorf("release calls = %d (want 2), orphan calls = %d (want 1)", usage.release.calls, usage.orphans.calls)
 	}
 }
 
@@ -124,10 +194,10 @@ func TestCapabilityPurgerDrainsBothUsageSweeps(t *testing.T) {
 func TestCapabilityPurgerReportsAFailedUsageSweep(t *testing.T) {
 	failure := errors.New("database unreachable")
 	for name, usage := range map[string]*sweepingUsage{
-		"release": {release: batches{err: failure}, orphans: batches{sizes: []int64{1}}},
-		"orphans": {release: batches{sizes: []int64{1}}, orphans: batches{err: failure}},
+		"release": {release: batches{err: failure}, orphans: batches{sizes: []int64{fullBatch}}},
+		"orphans": {release: batches{sizes: []int64{fullBatch}}, orphans: batches{err: failure}},
 	} {
-		p := &CapabilityPurger{Store: purgeOnlyStore{}, Usage: usage}
+		p := &CapabilityPurger{Store: &purgingStore{}, Usage: usage}
 		if err := p.tick(context.Background()); !errors.Is(err, failure) {
 			t.Errorf("%s: err = %v, want the sweep's", name, err)
 		}
@@ -140,20 +210,13 @@ func TestCapabilityPurgerReportsAFailedUsageSweep(t *testing.T) {
 	}
 }
 
-// countingStore reports n purged revocations.
-type countingStore struct {
-	limes.Store
-	n int64
-}
-
-func (s countingStore) PurgeExpired(context.Context, time.Duration) (int64, error) { return s.n, nil }
-
 // A pass that purged nothing logs nothing; one that purged rows says how many.
 func TestCapabilityPurgerLogsOnlyWhatItPurged(t *testing.T) {
-	const purgedLog = "purged expired capability revocations"
-	for n, want := range map[int64]int{0: 0, 3: 1} {
+	const purgedLog = "purged expired capabilities"
+	for n, want := range map[int64]int{0: 0, shortBatch: 1} {
 		core, logs := observer.New(zap.InfoLevel)
-		p := &CapabilityPurger{Store: countingStore{n: n}, Logger: zap.New(core)}
+		store := &purgingStore{purged: batches{sizes: []int64{n}}}
+		p := &CapabilityPurger{Store: store, Logger: zap.New(core)}
 		if err := p.tick(context.Background()); err != nil {
 			t.Fatal(err)
 		}
@@ -169,7 +232,7 @@ func TestCapabilityPurgerLogsOnlyWhatItPurged(t *testing.T) {
 func TestCapabilityPurgerDefaultsItsRetention(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	p := &CapabilityPurger{Store: purgeOnlyStore{}, Interval: time.Hour}
+	p := &CapabilityPurger{Store: &purgingStore{}, Interval: time.Hour}
 	_ = p.Run(ctx)
 	if p.ExpiredFor != DefaultCapabilityExpiredFor {
 		t.Errorf("ExpiredFor = %v, want %v", p.ExpiredFor, DefaultCapabilityExpiredFor)

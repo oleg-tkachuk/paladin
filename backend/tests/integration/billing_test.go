@@ -79,22 +79,12 @@ func ctxAdmin(t *testing.T, tenantID uuid.UUID) context.Context {
 	})
 }
 
-// seedCapability creates a capability_records row so charges can
-// FK-reference it.
+// seedCapability puts a capability on record — the meter refuses one that
+// is not — with no budget ceiling of its own, so only the tenant's bounds it.
 func (f *billingFixture) seedCapability(t *testing.T, tenant uuid.UUID, subject string) uuid.UUID {
 	t.Helper()
 	id := uuid.New()
-	if _, err := f.h.PoolMigrate.Exec(context.Background(),
-		`INSERT INTO capability_records
-		   (id, tenant_id, issuer, principal_kind, principal_subject,
-		    audience, caveats, created_by, expires_at)
-		 VALUES ($1, $2, 'test-issuer', 'agent', $3,
-		         '{admin}', '{}'::jsonb, 'test-issuer',
-		         now() + interval '1 hour')`,
-		id, tenant, subject,
-	); err != nil {
-		t.Fatalf("seed capability: %v", err)
-	}
+	seedTestCapability(t, f.h, id, tenant, subject, limes.BudgetCeiling{Unlimited: true})
 	return id
 }
 
@@ -112,7 +102,7 @@ func (f *billingFixture) seedBudget(t *testing.T, tenant uuid.UUID, max limes.Na
 	}
 	if _, err := f.store.SetTenantBudget(context.Background(), limes.SetTenantBudgetRequest{
 		TenantID:        tenant,
-		MaxBudgetAmount: max,
+		Ceiling:         limes.BudgetCeiling{Max: max},
 		UnitCode:        unit,
 		ResetSpend:      true,
 		ExpectedVersion: cur.ResourceVersion,
@@ -121,10 +111,24 @@ func (f *billingFixture) seedBudget(t *testing.T, tenant uuid.UUID, max limes.Na
 	}
 }
 
-// charge runs UsageStore.Charge (the production write path).
+// charge runs UsageStore.Charge (the production write path) against the
+// capability as it is on record. The charge is in the capability's own unit;
+// unit and tenant are what the caller expects it to be.
 func (f *billingFixture) charge(t *testing.T, capID uuid.UUID, amount limes.Nanos, unit, op, actor string, tenant uuid.UUID) {
 	t.Helper()
-	if _, err := f.store.Charge(context.Background(), limes.ChargeRequest{CapabilityID: capID, TenantID: tenant, Amount: amount, MaxBudget: 0, UnitCode: unit, Op: op, Actor: actor}, nil); err != nil {
+	ctx := context.Background()
+	records, err := capabilitypg.New(f.h.PoolMigrate)
+	if err != nil {
+		t.Fatalf("capability store: %v", err)
+	}
+	subject, err := limes.StoredMeterSubject(ctx, records, capID)
+	if err != nil {
+		t.Fatalf("meter subject: %v", err)
+	}
+	if subject.UnitCode() != unit || subject.TenantID() != tenant {
+		t.Fatalf("capability %s counts in (%s, %s), want (%s, %s)", capID, subject.UnitCode(), subject.TenantID(), unit, tenant)
+	}
+	if _, err := f.store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: amount, Op: limes.Op(op), Actor: actor}, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/memstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
@@ -338,22 +339,32 @@ func TestCopyObjectReportsBothFailuresWhenCompensationAlsoFails(t *testing.T) {
 // meaning "how much this principal may store" the moment one way of storing
 // is exempt.
 
-func budgetedCtx(t *testing.T, tenantID uuid.UUID, maxBudget limes.Nanos) (context.Context, *limes.Capability, *memstore.UsageStore[pgx.Tx]) {
+// chargePerRequest is the default amount each request spends, and
+// roomyBudget a budget with room for several such requests.
+const (
+	chargePerRequest = limes.NanosPerUnit
+	roomyBudget      = 10 * chargePerRequest
+)
+
+func budgetedCtx(t *testing.T, tenantID uuid.UUID, maxBudget limes.Nanos) (context.Context, uuid.UUID, *memstore.UsageStore[pgx.Tx]) {
 	t.Helper()
-	cap := &limes.Capability{
-		ID:      uuid.New(),
-		Subject: limes.Principal{TenantID: tenantID, Subject: "agent:a"},
+	m := captest.NewMinter(t)
+	verified, _ := m.Mint(t, limes.Capability{
+		Subject: limes.Principal{TenantID: tenantID, Type: limes.PrincipalAgent, Subject: "agent:a"},
 		// Ops must name put or the gate refuses before the charge is
 		// reached; no prefixes means every URI is in scope.
 		Caveats: limes.Caveats{
-			Ops:             []limes.Op{limes.OpPut},
-			MaxBudgetAmount: maxBudget,
+			Ops:    []limes.Op{limes.OpPut},
+			Budget: limes.BudgetCeiling{Max: maxBudget},
 		},
+	})
+	usage, err := memstore.NewUsageStore(memstore.UsageStoreConfig[pgx.Tx]{Records: m.Store})
+	if err != nil {
+		t.Fatal(err)
 	}
-	usage := memstore.NewUsage[pgx.Tx](nil)
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
-	ctx = auth.WithChargeAmount(auth.WithChargeStore(auth.WithCapability(ctx, cap), usage), limes.NanosPerUnit, "")
-	return ctx, cap, usage
+	ctx = auth.WithChargeAmount(auth.WithChargeStore(auth.WithCapability(ctx, verified), usage), chargePerRequest)
+	return ctx, verified.Capability().ID, usage
 }
 
 func TestCopyObjectChargesTheCapabilityBudget(t *testing.T) {
@@ -361,18 +372,18 @@ func TestCopyObjectChargesTheCapabilityBudget(t *testing.T) {
 	repo := &completeRepo{}
 	h, _, _, _, _, tenantID := tailHandler(t, repo, noopStorage{}, sm)
 	repo.obj = copySource(tenantID)
-	ctx, cap, usage := budgetedCtx(t, tenantID, 10*limes.NanosPerUnit)
+	ctx, capID, usage := budgetedCtx(t, tenantID, roomyBudget)
 
 	if _, err := h.CopyObject(ctx, CopyObjectInput{
 		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
 	}); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
-	u, err := usage.GetUsage(ctx, cap.ID)
+	u, err := usage.GetUsage(ctx, capID)
 	if err != nil {
 		t.Fatalf("no usage recorded — the copy was free: %v", err)
 	}
-	if u.SpentAmount != limes.NanosPerUnit {
+	if u.SpentAmount != chargePerRequest {
 		t.Errorf("spent = %v, want 1", u.SpentAmount)
 	}
 }
@@ -382,7 +393,7 @@ func TestCopyObjectRefusesWhenTheBudgetIsSpent(t *testing.T) {
 	repo := &completeRepo{}
 	h, _, _, _, _, tenantID := tailHandler(t, repo, noopStorage{}, sm)
 	repo.obj = copySource(tenantID)
-	ctx, _, _ := budgetedCtx(t, tenantID, limes.NanosPerUnit)
+	ctx, _, _ := budgetedCtx(t, tenantID, chargePerRequest)
 
 	in := CopyObjectInput{SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst"}
 	if _, err := h.CopyObject(ctx, in); err != nil {
@@ -398,14 +409,14 @@ func TestCopyObjectDoesNotChargeARetryThatChangedNothing(t *testing.T) {
 	repo := &completeRepo{}
 	h, _, _, _, _, tenantID := tailHandler(t, repo, noopStorage{}, sm)
 	repo.obj = copySource(tenantID)
-	ctx, cap, usage := budgetedCtx(t, tenantID, 10*limes.NanosPerUnit)
+	ctx, capID, usage := budgetedCtx(t, tenantID, roomyBudget)
 
 	if _, err := h.CopyObject(ctx, CopyObjectInput{
 		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
 	}); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
-	if _, err := usage.GetUsage(ctx, cap.ID); err == nil {
+	if _, err := usage.GetUsage(ctx, capID); err == nil {
 		t.Error("charged a promote that changed nothing — an at-least-once retry would bill twice")
 	}
 }

@@ -3,8 +3,9 @@ package app
 import (
 	"crypto/ed25519"
 	"net/http"
+	"time"
 
-	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/jwks"
 )
 
 // JWKSHandler returns an http.Handler that serves the supplied public
@@ -13,7 +14,7 @@ import (
 // `/.well-known/jwks.json` so verifiers in other planes / pods fetch
 // and cache locally without an RPC.
 //
-// Cache-Control: max-age 300 means each verifier refreshes every 5
+// Cache-Control: max-age jwksMaxAge means each verifier refreshes every 5
 // minutes — fast enough for rotation to propagate in a release window,
 // slow enough that a thundering herd at deploy time doesn't stampede
 // the admin pod.
@@ -22,21 +23,18 @@ import (
 // secrets, and federated IdP integrators expect the URL to be
 // reachable without bootstrap credentials.
 func JWKSHandler(publicKeys map[string]ed25519.PublicKey) http.Handler {
-	// Marshal once at construction time. Rotation pushes a new map
-	// pointer to a fresh handler so we never lock per-request — when
-	// rotation lands it'll wrap this in an atomic.Value swap.
-	body, err := limes.MarshalJWKS(publicKeys)
+	h, err := jwks.NewHandler(jwks.HandlerConfig{
+		Keys:   func() map[string]ed25519.PublicKey { return publicKeys },
+		MaxAge: jwksMaxAge,
+	})
 	if err != nil {
-		// At construction this only fails if the map holds a non-Ed25519
-		// key (which the bundle constructor never produces). Panicking
-		// is correct here: it's a programming error, not a runtime path.
+		// Only a nil key source or a negative max-age fails, neither of
+		// which this constructor passes: a programming error, not a runtime
+		// path.
 		panic(err)
 	}
-
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/jwk-set+json")
-		w.Header().Set("Cache-Control", "public, max-age=300")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(body)
-	})
+	return h
 }
+
+// jwksMaxAge is how long a verifier keeps the published key set.
+const jwksMaxAge = 5 * time.Minute

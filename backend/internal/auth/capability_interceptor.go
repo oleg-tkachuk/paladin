@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/dpop"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
@@ -39,26 +40,45 @@ const (
 	AuthorizationCapScheme = "capability"
 )
 
-// capabilityKey is the context value the interceptor stashes the
-// verified *limes.Capability under. Read via CapabilityFromContext.
+// capabilityKey is the context value the interceptor stashes the verified
+// capability under. Read via CapabilityFromContext and
+// VerifiedCapabilityFromContext.
 type capabilityKey struct{}
+
+// verifiedEntry is what capabilityKey holds: the capability as the verifier
+// accepted it — the only source of what the Meter counts against — and the
+// capability it grants, read out once.
+type verifiedEntry struct {
+	verified limes.VerifiedCapability
+	cap      *limes.Capability
+}
 
 // CapabilityFromContext returns the verified capability for the request,
 // or nil when none was supplied / verified. Handlers gate on caveats
 // (op set, resource prefix, budget) by calling this and switching on
 // the result.
 func CapabilityFromContext(ctx context.Context) (*limes.Capability, bool) {
-	c, ok := ctx.Value(capabilityKey{}).(*limes.Capability)
-	return c, ok && c != nil
+	e, ok := ctx.Value(capabilityKey{}).(verifiedEntry)
+	return e.cap, ok && e.cap != nil
+}
+
+// VerifiedCapabilityFromContext returns the capability as the verifier
+// accepted it: what metering counts against, and what delegation and a
+// Biscuit are minted from.
+func VerifiedCapabilityFromContext(ctx context.Context) (limes.VerifiedCapability, bool) {
+	e, ok := ctx.Value(capabilityKey{}).(verifiedEntry)
+	return e.verified, ok && e.cap != nil
 }
 
 // WithCapability stamps a verified capability onto a context. Public so
-// tests can prepare contexts without going through the interceptor.
-func WithCapability(ctx context.Context, c *limes.Capability) context.Context {
-	if c == nil {
-		return ctx
+// tests can prepare contexts without going through the interceptor; only a
+// limes.Verifier makes a VerifiedCapability, so a test verifies a token too.
+func WithCapability(ctx context.Context, v limes.VerifiedCapability) context.Context {
+	c := v.Capability()
+	if c.ID == uuid.Nil {
+		return ctx // the zero VerifiedCapability names no capability
 	}
-	return context.WithValue(ctx, capabilityKey{}, c)
+	return context.WithValue(ctx, capabilityKey{}, verifiedEntry{verified: v, cap: &c})
 }
 
 // CapabilityInterceptor is an *additive* Connect interceptor — it
@@ -80,29 +100,26 @@ func WithCapability(ctx context.Context, c *limes.Capability) context.Context {
 // interceptor is a pass-through that never touches the context.
 //
 // usage is the runtime-counter store. When non-nil and the capability
-// carries Caveats.MaxRequests > 0, every request bumps the counter
-// and rejects when over. When nil, MaxRequests is silently un-enforced
-// — the operator opted out by not wiring the store.
+// carries a request ceiling, every request bumps the counter and rejects
+// when over. When nil, the ceiling is silently un-enforced — the operator
+// opted out by not wiring the store.
 //
 // SourceIPCIDR is checked against the client address the listener resolved
 // from its trusted proxies (clientip.Middleware), never against a forwarding
 // header directly: the leftmost entry of one is whatever the caller wrote.
 //
-// chargePerRequestAmount + chargePerRequestUnit form the auto-charge
-// stamped onto the context. The amount is denominated in the unit;
-// at handler time, ChargeRequest passes both into UsageStore.Charge.
-// Falling back to the capability's own UnitCode happens inside
-// ChargeCapability when the stamp's unit is empty.
+// chargePerRequestAmount is the auto-charge stamped onto the context. It is
+// denominated in each capability's own unit, which its token pins: at
+// handler time, ChargeRequest passes it into UsageStore.Charge.
 func CapabilityInterceptor(
-	verifier *limes.StandardVerifier,
+	verifier *limes.Verifier,
 	audience string,
 	usage limes.UsageStore[pgx.Tx],
 	chargePerRequestAmount limes.Nanos,
-	chargePerRequestUnit string,
 	opts ...CapabilityOption,
 ) connect.ServerInterceptor {
 	return CapabilityInterceptorWithEvents(verifier, audience, usage,
-		chargePerRequestAmount, chargePerRequestUnit, nil, opts...)
+		chargePerRequestAmount, nil, opts...)
 }
 
 // CapabilityOption configures a capability interceptor.
@@ -114,15 +131,14 @@ type CapabilityOption func(*capabilityInterceptor)
 // the running totals commit. nil emitter = no events (the default —
 // gated on cfg.Dispatcher.ChargeEventsEnabled at the wiring layer).
 func CapabilityInterceptorWithEvents(
-	verifier *limes.StandardVerifier,
+	verifier *limes.Verifier,
 	audience string,
 	usage limes.UsageStore[pgx.Tx],
 	chargePerRequestAmount limes.Nanos,
-	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
 ) connect.ServerInterceptor {
-	ci := newCapabilityInterceptor(verifier, audience, usage, chargePerRequestAmount, chargePerRequestUnit, emitter, opts...)
+	ci := newCapabilityInterceptor(verifier, audience, usage, chargePerRequestAmount, emitter, opts...)
 	if ci == nil {
 		return passthrough
 	}
@@ -132,11 +148,10 @@ func CapabilityInterceptorWithEvents(
 // newCapabilityInterceptor is nil when there is no verifier: the capability
 // subsystem is off.
 func newCapabilityInterceptor(
-	verifier *limes.StandardVerifier,
+	verifier *limes.Verifier,
 	audience string,
 	usage limes.UsageStore[pgx.Tx],
 	chargePerRequestAmount limes.Nanos,
-	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
 ) *capabilityInterceptor {
@@ -148,7 +163,6 @@ func newCapabilityInterceptor(
 		audience:               audience,
 		usage:                  usage,
 		chargePerRequestAmount: chargePerRequestAmount,
-		chargePerRequestUnit:   chargePerRequestUnit,
 		emitter:                emitter,
 	}
 	for _, o := range opts {
@@ -168,15 +182,14 @@ func newCapabilityInterceptor(
 // establish identity there would produce a caller with no roles for RPCs whose
 // policies are role-gated — refused, but for a confusing reason.
 func CapabilityEstablishingInterceptor(
-	verifier *limes.StandardVerifier,
+	verifier *limes.Verifier,
 	audience string,
 	usage limes.UsageStore[pgx.Tx],
 	chargePerRequestAmount limes.Nanos,
-	chargePerRequestUnit string,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
 ) connect.ServerInterceptor {
-	ci := newCapabilityInterceptor(verifier, audience, usage, chargePerRequestAmount, chargePerRequestUnit, emitter, opts...)
+	ci := newCapabilityInterceptor(verifier, audience, usage, chargePerRequestAmount, emitter, opts...)
 	if ci == nil {
 		return passthrough
 	}
@@ -197,7 +210,7 @@ func WithTaintLookup(lookup TaintLookup) CapabilityOption {
 }
 
 type capabilityInterceptor struct {
-	verifier *limes.StandardVerifier
+	verifier *limes.Verifier
 	audience string
 	// establishPrincipal makes a verified capability an IDENTITY rather than
 	// only an extra restriction. On the data plane a capability is the whole
@@ -215,7 +228,6 @@ type capabilityInterceptor struct {
 	establishPrincipal     bool
 	usage                  limes.UsageStore[pgx.Tx]
 	chargePerRequestAmount limes.Nanos
-	chargePerRequestUnit   string
 	emitter                ChargeEventEmitter
 	taintLookup            TaintLookup
 }
@@ -267,8 +279,8 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 		Token:    token,
 		Audience: i.audience,
 		Scheme:   scheme,
-		DPoP: limes.DPoPProof{
-			Proof:  header.Get(paladin.HeaderDPoP),
+		DPoP: dpop.Proof{
+			JWT:    header.Get(paladin.HeaderDPoP),
 			Method: httpMethod(ctx),
 			URL:    spec.Procedure,
 		},
@@ -276,25 +288,25 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 	if err != nil {
 		// Token was supplied and not accepted. Falling through to JWT
 		// silently would mask the misconfiguration.
-		if errors.Is(err, limes.ErrDPoPNonceRequired) {
+		if errors.Is(err, dpop.ErrNonceRequired) {
 			return ctx, i.nonceChallenge(ctx, err, scheme)
 		}
 		return ctx, verifyError(ctx, err)
 	}
-	cap := &verified // the request's context holds it by reference
+	ctx = WithCapability(ctx, verified)
+	cap, _ := CapabilityFromContext(ctx)
 	if cap.ConfirmationJKT != "" {
 		i.sendNonce(ctx)
 	}
-	if err := i.enforceCaveats(ctx, cap); err != nil {
+	if err := i.enforceCaveats(ctx, verified); err != nil {
 		return ctx, err
 	}
-	ctx = WithCapability(ctx, cap)
 	ctx, err = i.withCapabilityPrincipal(ctx, cap)
 	if err != nil {
 		return ctx, capabilityError(connect.CodePermissionDenied, err)
 	}
 	ctx = WithChargeStore(ctx, i.usage)
-	ctx = WithChargeAmount(ctx, i.chargePerRequestAmount, i.chargePerRequestUnit)
+	ctx = WithChargeAmount(ctx, i.chargePerRequestAmount)
 	ctx = WithChargeEventEmitter(ctx, i.emitter)
 	ctx = withLastOpHolder(ctx)
 	ctx = withIdempotencyKeyPresent(ctx, hasKey)
@@ -310,10 +322,10 @@ func (i *capabilityInterceptor) nonceChallenge(ctx context.Context, err error, s
 	resp := i.verifier.ErrorResponse(ctx, err, scheme)
 	header := unary.Info(ctx).ResponseHeader()
 	for _, challenge := range resp.Challenges {
-		header.Add(limes.WWWAuthenticateHeader, challenge)
+		header.Add(paladin.HeaderWWWAuthenticate, challenge)
 	}
 	if resp.DPoPNonce != "" {
-		header.Set(limes.DPoPNonceHeader, resp.DPoPNonce)
+		header.Set(dpop.NonceHeader, resp.DPoPNonce)
 	}
 	return capabilityError(connect.CodeUnauthenticated, err)
 }
@@ -329,7 +341,7 @@ func (i *capabilityInterceptor) sendNonce(ctx context.Context) {
 		return
 	}
 	if nonce != "" {
-		unary.Info(ctx).ResponseHeader().Set(limes.DPoPNonceHeader, nonce)
+		unary.Info(ctx).ResponseHeader().Set(dpop.NonceHeader, nonce)
 	}
 }
 
@@ -394,8 +406,8 @@ func (i *capabilityInterceptor) withCapabilityPrincipal(
 //     before we hit the DB.
 //  2. Request-count bump for the capability and its ancestors (one
 //     transaction; concurrency-safe via UPSERT-and-check). When the
-//     usage store is nil, MaxRequests is a no-op even if the caveat is
-//     set — the operator opted out.
+//     usage store is nil, the request ceiling is a no-op even if the
+//     caveat sets one — the operator opted out.
 //
 // Per-operation caveats (op, resource, idempotency key) are checked by
 // AssertCapabilityOp, where the handler names the operation.
@@ -405,8 +417,9 @@ func (i *capabilityInterceptor) withCapabilityPrincipal(
 // auth.ChargeCapability for handlers to invoke.
 func (i *capabilityInterceptor) enforceCaveats(
 	ctx context.Context,
-	cap *limes.Capability,
+	verified limes.VerifiedCapability,
 ) error {
+	cap := verified.Capability()
 	if len(cap.Caveats.SourceIPCIDR) > 0 {
 		// An address the listener could not resolve is the zero netip.Addr,
 		// which CheckSource refuses: "unknown" is not "inside the range".
@@ -417,21 +430,17 @@ func (i *capabilityInterceptor) enforceCaveats(
 	}
 
 	// Bumped whenever a delegated capability is presented too, not only when
-	// it carries its own MaxRequests: an ancestor's ceiling bounds the whole
-	// subtree, and the store reads it from the ancestor's record. A Biscuit
-	// copy with limits of its own is counted the same way.
-	if i.usage != nil && (cap.Caveats.MaxRequests > 0 || cap.ParentID != uuid.Nil || len(cap.Copies) > 0) {
-		if _, err := i.usage.Bump(ledgerContext(ctx, cap), limes.BumpRequest{
-			CapabilityID: cap.ID,
-			TenantID:     cap.Subject.TenantID,
-			MaxRequests:  int64(cap.Caveats.MaxRequests),
-			Copies:       cap.Copies,
-		}); err != nil {
+	// it carries a request ceiling of its own: an ancestor's ceiling bounds
+	// the whole subtree, and the store reads it from the ancestor's record.
+	// A Biscuit copy with limits of its own is counted the same way.
+	subject := verified.MeterSubject()
+	if i.usage != nil && (!subject.Requests().Unlimited || cap.ParentID != uuid.Nil || len(subject.Copies()) > 0) {
+		if _, err := i.usage.Bump(ledgerContext(ctx, &cap), limes.BumpRequest{Subject: subject}); err != nil {
 			if errors.Is(err, limes.ErrRequestLimitExceeded) {
 				return capabilityError(connect.CodeResourceExhausted, err)
 			}
 			// DB-side error: fail closed. A capability with a
-			// MaxRequests cap that can't be incremented atomically
+			// request ceiling that can't be incremented atomically
 			// is safer to reject than to allow unbounded use.
 			return capabilityError(connect.CodeUnavailable, err)
 		}
@@ -521,18 +530,17 @@ func stampLastOp(ctx context.Context, op limes.Op) {
 // readLastOp returns the most-recently-asserted op for this request,
 // or "" if AssertCapabilityOp hasn't been called yet (or the holder
 // isn't installed).
-func readLastOp(ctx context.Context) string {
+func readLastOp(ctx context.Context) limes.Op {
 	if holder, ok := ctx.Value(lastOpKey{}).(*string); ok && holder != nil {
-		return *holder
+		return limes.Op(*holder)
 	}
 	return ""
 }
 
-// chargeAmountKey carries the per-request default charge amount +
-// unit code (cfg.Capability.ChargePerRequestAmount /
-// ChargePerRequestUnit) so handlers don't need to read config —
-// they call auth.ChargeRequest(ctx) and the interceptor's stamp
-// determines the amount and currency.
+// chargeAmountKey carries the per-request default charge amount
+// (cfg.Capability.ChargePerRequestAmount) so handlers don't need to read
+// config — they call auth.ChargeRequest(ctx) and the interceptor's stamp
+// determines the amount, in the capability's own unit.
 type chargeAmountKey struct{}
 
 // chargeEventsKey carries an optional ChargeEventEmitter that
@@ -580,12 +588,9 @@ func chargeEventEmitterFromContext(ctx context.Context) ChargeEventEmitter {
 	return e
 }
 
-// chargeAmount is the typed value behind chargeAmountKey. Bundling
-// amount + unit avoids two context lookups per charge (the unit is
-// always read alongside the amount).
+// chargeAmount is the typed value behind chargeAmountKey.
 type chargeAmount struct {
 	Amount limes.Nanos
-	Unit   string
 }
 
 // WithChargeStore stamps the UsageStore onto a context. Wired by the
@@ -598,81 +603,45 @@ func WithChargeStore(ctx context.Context, s limes.UsageStore[pgx.Tx]) context.Co
 	return context.WithValue(ctx, chargeKey{}, s)
 }
 
-// WithChargeAmount stamps the per-request default charge amount and
-// unit code. Independent of WithChargeStore so a test can wire one
-// without the other (e.g. verify the no-store path is a no-op).
-//
-// An empty unit string means "use the capability's own UnitCode at
-// charge time"; the resolution happens in ChargeCapability so
-// callers don't have to reach across config + capability state.
-func WithChargeAmount(ctx context.Context, amount limes.Nanos, unit string) context.Context {
+// WithChargeAmount stamps the per-request default charge amount, in the
+// capability's own unit. Independent of WithChargeStore so a test can wire
+// one without the other (e.g. verify the no-store path is a no-op).
+func WithChargeAmount(ctx context.Context, amount limes.Nanos) context.Context {
 	if amount <= 0 {
 		return ctx
 	}
-	return context.WithValue(ctx, chargeAmountKey{}, chargeAmount{Amount: amount, Unit: unit})
+	return context.WithValue(ctx, chargeAmountKey{}, chargeAmount{Amount: amount})
 }
 
 // ChargeCapability is the handler-side spend hook. Handlers that emit
 // cost (e.g. presign issuance, batch op kickoff, future LLM calls)
 // call this once the work is committed:
 //
-//	if err := auth.ChargeCapability(ctx, limes.MustParseAmount("0.0001"), "USD"); err != nil {
+//	if err := auth.ChargeCapability(ctx, limes.MustParseAmount("0.0001")); err != nil {
 //	    return nil, err
 //	}
+//
+// The amount is in the capability's own unit, which its token pins: the
+// Meter counts a capability in no other.
 //
 // Behaviour:
 //
 //   - No capability on context (JWT auth) → no-op, returns nil.
-//   - Capability without MaxBudgetUSD AND tenant without aggregate
+//   - Capability with an unlimited budget AND tenant without aggregate
 //     cap → records spend on both counters but never rejects
-//     (operator audits via limes.UsageStore[pgx.Tx].Get / GetTenantBudget).
-//   - Capability cap set and the new charge would exceed it →
-//     CodeResourceExhausted; per-capability row NOT mutated so the
-//     handler can decide to refund / log / retry. Tenant counter
-//     also untouched.
-//   - Tenant aggregate cap set and the new charge would exceed it
-//     after the per-capability charge already committed → the
-//     UsageStore compensates the capability counter, returns
-//     CodeResourceExhausted with ErrTenantBudgetExceeded.
-//   - UsageStore not wired → no-op (operator opted out).
-//
-
-// ChargeCapability is the handler-side spend hook. Handlers that emit
-// cost (e.g. presign issuance, batch op kickoff, future LLM calls)
-// call this once the work is committed:
-//
-//	if err := auth.ChargeCapability(ctx, limes.MustParseAmount("0.0001"), "USD"); err != nil {
-//	    return nil, err
-//	}
-//
-// unit may be empty — in that case the capability's own UnitCode is
-// used (defaulting to limes.DefaultUnitCode when even that is
-// blank). This keeps existing callers — which only knew about USD —
-// working without a per-call unit-string thread-through.
-//
-// Behaviour:
-//
-//   - No capability on context (JWT auth) → no-op, returns nil.
-//   - Capability without MaxBudgetAmount AND tenant without aggregate
-//     cap → records spend on both counters but never rejects
-//     (operator audits via limes.UsageStore[pgx.Tx].Get / GetTenantBudget).
-//   - Capability cap set and the new charge would exceed it →
-//     CodeResourceExhausted; per-capability row NOT mutated so the
-//     handler can decide to refund / log / retry. Tenant counter
-//     also untouched.
-//   - Tenant aggregate cap set and the new charge would exceed it
-//     after the per-capability charge already committed → the
-//     UsageStore compensates the capability counter, returns
-//     CodeResourceExhausted with ErrTenantBudgetExceeded.
+//     (operator audits via limes.UsageStore[pgx.Tx].GetUsage / GetTenantBudget).
+//   - Capability, ancestor or tenant ceiling crossed → CodeResourceExhausted;
+//     nothing is mutated, so the handler can decide to refund / log / retry.
 //   - UsageStore not wired → no-op (operator opted out).
 //
 // Refunds are exposed via auth.RefundLastCharge for handlers that
 // detect a partial failure after the charge.
-func ChargeCapability(ctx context.Context, amount limes.Nanos, unit string) error {
-	cap, ok := CapabilityFromContext(ctx)
+func ChargeCapability(ctx context.Context, amount limes.Nanos) error {
+	verified, ok := VerifiedCapabilityFromContext(ctx)
 	if !ok {
 		return nil
 	}
+	cap, _ := CapabilityFromContext(ctx)
 	store, ok := ctx.Value(chargeKey{}).(limes.UsageStore[pgx.Tx])
 	if !ok || store == nil {
 		return nil
@@ -680,14 +649,8 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos, unit string) erro
 	if amount <= 0 {
 		return nil
 	}
-	resolvedUnit := unit
-	if resolvedUnit == "" {
-		resolvedUnit = cap.Caveats.UnitCode
-	}
-	if resolvedUnit == "" {
-		resolvedUnit = limes.DefaultUnitCode
-	}
-	tenantID := cap.Subject.TenantID // zero ⇒ tenant-budget path skipped
+	subject := verified.MeterSubject()
+	tenantID := subject.TenantID()
 	// op + actor populate the charges ledger row (the schema baseline (001_initial_schema.sql)).
 	// op is read from the per-request holder that AssertCapabilityOp
 	// writes into. If the handler hasn't called AssertCapabilityOp
@@ -698,27 +661,22 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos, unit string) erro
 	op := readLastOp(ctx)
 	actor := cap.Subject.Subject
 	// Optional transactional fan-out — only wired when the operator
-	// enabled charge events (cfg.Dispatcher.ChargeEventsEnabled) AND
-	// there's a tenant to attribute the event to. onCharged runs
-	// INSIDE the charge transaction (dispatcher.DispatchTx on the same
-	// tx), so the event outbox rows are atomic with the spend — no
-	// dual-write window. nil ⇒ the store commits counters + ledger
+	// enabled charge events (cfg.Dispatcher.ChargeEventsEnabled).
+	// onCharged runs INSIDE the charge transaction (dispatcher.DispatchTx
+	// on the same tx), so the event outbox rows are atomic with the spend —
+	// no dual-write window. nil ⇒ the store commits counters + ledger
 	// with no fan-out.
 	var onCharged func(ctx context.Context, tx pgx.Tx) error
-	if emitter := chargeEventEmitterFromContext(ctx); emitter != nil && tenantID != uuid.Nil {
+	if emitter := chargeEventEmitterFromContext(ctx); emitter != nil {
 		onCharged = func(ctx context.Context, tx pgx.Tx) error {
-			return emitter.EmitChargedTx(ctx, tx, tenantID.String(), cap.ID.String(), op, actor, amount, resolvedUnit)
+			return emitter.EmitChargedTx(ctx, tx, tenantID.String(), cap.ID.String(), string(op), actor, amount, subject.UnitCode())
 		}
 	}
 	receipt, err := store.Charge(ledgerContext(ctx, cap), limes.ChargeRequest{
-		CapabilityID: cap.ID,
-		TenantID:     tenantID,
-		Amount:       amount,
-		MaxBudget:    cap.Caveats.MaxBudgetAmount,
-		UnitCode:     resolvedUnit,
-		Op:           op,
-		Actor:        actor,
-		Copies:       cap.Copies,
+		Subject: subject,
+		Amount:  amount,
+		Op:      op,
+		Actor:   actor,
 	}, onCharged)
 	if err != nil {
 		// The two exhaustion cases are separated because they need different
@@ -744,9 +702,9 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos, unit string) erro
 
 // ChargeRequest is the canonical post-work hook handlers call to
 // burn the cfg-driven per-request budget against the active
-// capability. Equivalent to ChargeCapability(ctx, amount, unit)
-// where amount + unit come from cfg.Capability.ChargePerRequest*
-// stamped onto the context by the interceptor.
+// capability. Equivalent to ChargeCapability(ctx, amount) where amount
+// comes from cfg.Capability.ChargePerRequestAmount stamped onto the
+// context by the interceptor.
 //
 // Behaviour mirrors ChargeCapability:
 //
@@ -754,7 +712,7 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos, unit string) erro
 //   - No charge amount on context (cfg.ChargePerRequestAmount = 0)
 //     → no-op.
 //   - Otherwise: forwards to ChargeCapability with the stamped
-//     amount + unit.
+//     amount.
 //
 // Charging AFTER successful work avoids burning budget on requests
 // that never produced a billable artifact (denied, panicked,
@@ -764,7 +722,7 @@ func ChargeRequest(ctx context.Context) error {
 	if !ok || amt.Amount <= 0 {
 		return nil
 	}
-	return ChargeCapability(ctx, amt.Amount, amt.Unit)
+	return ChargeCapability(ctx, amt.Amount)
 }
 
 // RefundLastCharge returns spend from the most recent charge this request
@@ -774,10 +732,11 @@ func ChargeRequest(ctx context.Context) error {
 // (storage write failed after presign was issued, agent cancelled
 // mid-flow), or to settle an estimate once the real cost is known.
 //
-// amount = 0 refunds whatever the charge has left, which makes a retried
-// full refund a no-op rather than a second credit. A partial refund larger
-// than what is left is refused. No-op when no capability is on context, no
-// store is wired, or this request has made no charge.
+// amount = 0 refunds whatever the charge has left (RefundRequest.Remaining),
+// which makes a retried full refund a no-op rather than a second credit. A
+// partial refund larger than what is left is refused. No-op when no
+// capability is on context, no store is wired, or this request has made no
+// charge.
 func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
@@ -791,8 +750,12 @@ func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 	if chargeID == uuid.Nil {
 		return nil
 	}
-	if _, err := store.Refund(ledgerContext(ctx, cap), limes.RefundRequest{ChargeID: chargeID, Amount: amount}); err != nil {
-		if errors.Is(err, limes.ErrRefundExceedsCharge) || errors.Is(err, limes.ErrInvalidAmount) {
+	req := limes.RefundRequest{ChargeID: chargeID, Amount: amount}
+	if amount == 0 {
+		req = limes.RefundRequest{ChargeID: chargeID, Remaining: true}
+	}
+	if _, err := store.Refund(ledgerContext(ctx, cap), req); err != nil {
+		if errors.Is(err, limes.ErrRefundExceedsCharge) || errors.Is(err, limes.ErrInvalidRequest) {
 			return capabilityError(connect.CodeInvalidArgument, err)
 		}
 		return capabilityError(connect.CodeUnavailable, err)
@@ -809,28 +772,21 @@ func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 // Returns uuid.Nil and no error when there is nothing to hold against: no
 // capability on the context, or no store wired.
 func ReserveCapability(ctx context.Context, amount limes.Nanos, ttl time.Duration) (uuid.UUID, error) {
-	cap, ok := CapabilityFromContext(ctx)
+	verified, ok := VerifiedCapabilityFromContext(ctx)
 	if !ok {
 		return uuid.Nil, nil
 	}
+	cap, _ := CapabilityFromContext(ctx)
 	store, ok := ctx.Value(chargeKey{}).(limes.UsageStore[pgx.Tx])
 	if !ok || store == nil {
 		return uuid.Nil, nil
 	}
-	unit := cap.Caveats.UnitCode
-	if unit == "" {
-		unit = limes.DefaultUnitCode
-	}
 	r, err := store.Reserve(ledgerContext(ctx, cap), limes.ReserveRequest{
-		CapabilityID: cap.ID,
-		TenantID:     cap.Subject.TenantID,
-		Amount:       amount,
-		MaxBudget:    cap.Caveats.MaxBudgetAmount,
-		UnitCode:     unit,
-		TTL:          ttl,
-		Op:           readLastOp(ctx),
-		Actor:        cap.Subject.Subject,
-		Copies:       cap.Copies,
+		Subject: verified.MeterSubject(),
+		Amount:  amount,
+		TTL:     ttl,
+		Op:      readLastOp(ctx),
+		Actor:   cap.Subject.Subject,
 	})
 	if err != nil {
 		return uuid.Nil, chargeError(err)
@@ -842,18 +798,19 @@ func ReserveCapability(ctx context.Context, amount limes.Nanos, ttl time.Duratio
 // ReserveCapability. A cost above the hold must fit the ceilings; if it
 // does not, the hold stays and the call returns ResourceExhausted.
 func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount limes.Nanos) error {
-	cap, ok := CapabilityFromContext(ctx)
+	verified, ok := VerifiedCapabilityFromContext(ctx)
 	if !ok || reservationID == uuid.Nil {
 		return nil
 	}
+	cap, _ := CapabilityFromContext(ctx)
 	store, ok := ctx.Value(chargeKey{}).(limes.UsageStore[pgx.Tx])
 	if !ok || store == nil {
 		return nil
 	}
 	receipt, err := store.Settle(ledgerContext(ctx, cap), limes.SettleRequest{
+		Subject:       verified.MeterSubject(),
 		ReservationID: reservationID,
 		Amount:        amount,
-		MaxBudget:     cap.Caveats.MaxBudgetAmount,
 	}, nil)
 	if err != nil {
 		if errors.Is(err, limes.ErrReservationNotFound) {
@@ -876,7 +833,7 @@ func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 	if !ok || store == nil {
 		return nil
 	}
-	if err := store.Release(ledgerContext(ctx, cap), reservationID); err != nil {
+	if err := store.Release(ledgerContext(ctx, cap), limes.ReleaseRequest{ReservationID: reservationID}); err != nil {
 		return capabilityError(connect.CodeUnavailable, err)
 	}
 	return nil
@@ -884,15 +841,19 @@ func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 
 // chargeError maps a metering rejection to its transport status: both
 // exhaustion sentinels are ResourceExhausted, an invalid amount is the
-// caller's mistake, a unit other than the counters' is a precondition no
-// retry meets, and anything else is the store being unavailable.
+// caller's mistake, a unit other than the counters', a counter with no room
+// and a capability no longer on record are preconditions no retry meets, and
+// anything else is the store being unavailable.
 func chargeError(err error) error {
 	switch {
 	case errors.Is(err, limes.ErrBudgetExceeded), errors.Is(err, limes.ErrTenantBudgetExceeded):
 		return capabilityError(connect.CodeResourceExhausted, err)
-	case errors.Is(err, limes.ErrInvalidAmount):
+	case errors.Is(err, limes.ErrInvalidRequest):
 		return capabilityError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, limes.ErrUnitCodeMismatch):
+	case errors.Is(err, limes.ErrUnitCodeMismatch), errors.Is(err, limes.ErrCounterOverflow):
+		return capabilityError(connect.CodeFailedPrecondition, err)
+	case errors.Is(err, limes.ErrNotFound):
+		// The capability is no longer on record: purged after expiry.
 		return capabilityError(connect.CodeFailedPrecondition, err)
 	}
 	return capabilityError(connect.CodeUnavailable, err)

@@ -432,6 +432,7 @@ type CapabilityReservation struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	CopyIds            [][]byte           `json:"copy_ids"`
 	CopyMaxBudgetNanos []int64            `json:"copy_max_budget_nanos"`
+	AncestorIds        []pgtype.UUID      `json:"ancestor_ids"`
 }
 
 type CapabilityRevocation struct {
@@ -466,6 +467,8 @@ type Charge struct {
 	ExternalRef   *string            `json:"external_ref"`
 	ReservationID pgtype.UUID        `json:"reservation_id"`
 	Overrun       bool               `json:"overrun"`
+	AncestorIds   []pgtype.UUID      `json:"ancestor_ids"`
+	TenantPeriod  *int64             `json:"tenant_period"`
 }
 
 type ChargeRefund struct {
@@ -496,6 +499,7 @@ type Collection struct {
 type DpopSeenProof struct {
 	Jkt       string             `json:"jkt"`
 	Jti       string             `json:"jti"`
+	Holder    string             `json:"holder"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
@@ -822,6 +826,7 @@ type TenantBudget struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	ResourceVersion int64              `json:"resource_version"`
 	ReservedUsd     pgtype.Numeric     `json:"reserved_usd"`
+	Period          int64              `json:"period"`
 }
 
 type TenantDefaultBinding struct {

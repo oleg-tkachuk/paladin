@@ -13,24 +13,29 @@ import (
 
 const chargeTenantBudget = `-- name: ChargeTenantBudget :one
 INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, updated_at)
-VALUES ($1, 0, $2::numeric, COALESCE(NULLIF($3::text, ''), 'USD'), now(), now())
+VALUES ($1, NULL, $2::numeric, COALESCE(NULLIF($3::text, ''), 'USD'), $4::timestamptz, now())
 ON CONFLICT (tenant_id) DO UPDATE
 SET spent_usd  = tenant_budgets.spent_usd + $2::numeric,
     updated_at = now()
 WHERE
-    tenant_budgets.max_budget_usd = 0
+    tenant_budgets.max_budget_usd IS NULL
     OR tenant_budgets.spent_usd + tenant_budgets.reserved_usd + $2::numeric
        <= tenant_budgets.max_budget_usd
 RETURNING spent_usd
 `
 
 // Atomic UPSERT-and-check, same shape as ChargeCapability. When the
-// row is missing, treats max as 0 (no cap enforced) and inserts a
-// fresh accumulator row with the supplied unit_code (defaults to
-// 'USD' when empty). Returns the new spent_usd; pgx.ErrNoRows
-// means "would exceed cap" — caller maps to ErrTenantBudgetExceeded.
-func (q *Queries) ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string) (pgtype.Numeric, error) {
-	row := q.db.QueryRow(ctx, chargeTenantBudget, tenantID, amountUsd, unitCode)
+// row is missing, inserts a fresh accumulator row with no ceiling (NULL,
+// unlimited) and the supplied unit_code (defaults to 'USD' when empty).
+// Returns the new spent_usd; pgx.ErrNoRows means "would exceed cap" —
+// caller maps to ErrTenantBudgetExceeded.
+func (q *Queries) ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string, now pgtype.Timestamptz) (pgtype.Numeric, error) {
+	row := q.db.QueryRow(ctx, chargeTenantBudget,
+		tenantID,
+		amountUsd,
+		unitCode,
+		now,
+	)
 	var spent_usd pgtype.Numeric
 	err := row.Scan(&spent_usd)
 	return spent_usd, err
@@ -71,87 +76,81 @@ func (q *Queries) GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (Ge
 	return i, err
 }
 
-const listTenantBudgetSummaries = `-- name: ListTenantBudgetSummaries :many
+const listTenantBudgets = `-- name: ListTenantBudgets :many
 SELECT
     tb.tenant_id,
-    t.slug,
-    t.display_name,
     tb.max_budget_usd,
     tb.spent_usd,
+    tb.reserved_usd,
     tb.unit_code,
     tb.period_start,
     tb.period_end,
     tb.updated_at,
-    tb.reserved_usd,
     tb.resource_version,
-    (CASE
-      WHEN tb.max_budget_usd = 0 THEN 0::numeric
-      ELSE LEAST(100::numeric, (tb.spent_usd / tb.max_budget_usd) * 100)
-    END)::numeric AS utilisation_pct,
-    r.raw_pct::text AS raw_pct
+    r.ceiling_class::int AS ceiling_class,
+    r.rank_key::text AS rank_key
   FROM tenant_budgets AS tb
-  JOIN tenants AS t ON t.id = tb.tenant_id
   CROSS JOIN LATERAL (
-    SELECT CASE WHEN tb.max_budget_usd > 0
-                THEN (tb.spent_usd / tb.max_budget_usd) * 100
+    SELECT CASE WHEN tb.max_budget_usd IS NULL THEN 2
+                WHEN tb.max_budget_usd = 0 THEN 0
+                ELSE 1
+           END AS ceiling_class,
+           CASE WHEN tb.max_budget_usd > 0
+                THEN trunc(tb.spent_usd * 1e40 / tb.max_budget_usd)
                 ELSE 0::numeric
-           END AS raw_pct
+           END AS rank_key
   ) AS r
- WHERE (NOT $1::bool OR t.deleted_at IS NULL)
-   AND (
-     ($2::bool AND tb.max_budget_usd = 0)
-     OR (NOT $2::bool
-         AND (
-           $3::numeric = 0
-           OR (tb.max_budget_usd > 0
-               AND (tb.spent_usd / tb.max_budget_usd) * 100 >= $3::numeric)
-         ))
-   )
-   AND ($4::numeric IS NULL
-        OR r.raw_pct < $4::numeric
-        OR (r.raw_pct = $4::numeric AND tb.tenant_id > $5::uuid))
- ORDER BY r.raw_pct DESC, tb.tenant_id ASC
- LIMIT $6::int
+ WHERE (NOT $1::bool
+        OR r.ceiling_class = 0
+        OR (r.ceiling_class = 1
+            AND tb.spent_usd * 100 >= $2::numeric * tb.max_budget_usd))
+   AND (NOT $3::bool OR r.ceiling_class = 2)
+   AND ($4::int IS NULL
+        OR r.ceiling_class > $4::int
+        OR (r.ceiling_class = $4::int
+            AND (r.rank_key < $5::numeric
+                 OR (r.rank_key = $5::numeric
+                     AND tb.tenant_id > $6::uuid))))
+ ORDER BY r.ceiling_class, r.rank_key DESC, tb.tenant_id
+ LIMIT $7::int
 `
 
-type ListTenantBudgetSummariesRow struct {
+type ListTenantBudgetsRow struct {
 	TenantID        pgtype.UUID        `json:"tenant_id"`
-	Slug            string             `json:"slug"`
-	DisplayName     string             `json:"display_name"`
 	MaxBudgetUsd    pgtype.Numeric     `json:"max_budget_usd"`
 	SpentUsd        pgtype.Numeric     `json:"spent_usd"`
+	ReservedUsd     pgtype.Numeric     `json:"reserved_usd"`
 	UnitCode        string             `json:"unit_code"`
 	PeriodStart     pgtype.Timestamptz `json:"period_start"`
 	PeriodEnd       pgtype.Timestamptz `json:"period_end"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	ReservedUsd     pgtype.Numeric     `json:"reserved_usd"`
 	ResourceVersion int64              `json:"resource_version"`
-	UtilisationPct  pgtype.Numeric     `json:"utilisation_pct"`
-	RawPct          string             `json:"raw_pct"`
+	CeilingClass    int32              `json:"ceiling_class"`
+	RankKey         string             `json:"rank_key"`
 }
 
-// Cross-tenant join of tenant_budgets ⨝ tenants. Returns slug +
-// display_name so the dashboard's BudgetAlerts widget doesn't need a
-// follow-up read.
+// Tenant budget rows, most at risk first (limes.TenantBudgets.ListTenantBudgets).
 //
-// Predicate semantics:
+// ceiling_class ranks the kind of ceiling: 0 for a ceiling of 0, which
+// allows nothing and leads; 1 for a bounded one; 2 for unlimited (NULL),
+// which has no utilization and trails. Bounded rows rank by spent / max,
+// unclamped, descending. The quotient is compared as
+// trunc(spent * 10^40 / max): spent and max carry nine decimals below
+// 10^9, so two different fractions differ by more than 10^-36 and their
+// keys by more than 10^4 — the order is the fractions' own, and equal
+// fractions get equal keys. Ties go by tenant id.
 //
-//	unlimited_only=true  → return only rows with max_budget_usd = 0
-//	unlimited_only=false → return rows whose utilisation ≥
-//	                       threshold_pct (threshold_pct = 0 includes
-//	                       everything).
-//	exclude_inactive=true → join filters tenants.deleted_at IS NULL.
-//
-// Ordered most at risk first: by raw utilisation (unclamped, so the
-// tenant furthest past its ceiling leads), then tenant_id. after_pct and
-// after_tenant, both set or both NULL, resume after a row of that order
-// (capability.ListTenantBudgets' cursor); raw_pct is returned to build it.
-func (q *Queries) ListTenantBudgetSummaries(ctx context.Context, excludeInactive bool, unlimitedOnly bool, thresholdPct pgtype.Numeric, afterPct pgtype.Numeric, afterTenant pgtype.UUID, rowLimit int32) ([]ListTenantBudgetSummariesRow, error) {
-	rows, err := q.db.Query(ctx, listTenantBudgetSummaries,
-		excludeInactive,
-		unlimitedOnly,
+// at_or_past keeps rows with a ceiling of 0, and bounded rows where
+// spent * 100 >= threshold_pct * max, exactly; unlimited_only keeps rows
+// with no ceiling. Both false lists every row. after_class, after_key and
+// after_tenant, all set or all NULL, resume after a row of this order.
+func (q *Queries) ListTenantBudgets(ctx context.Context, atOrPast bool, thresholdPct pgtype.Numeric, unlimitedOnly bool, afterClass *int32, afterKey pgtype.Numeric, afterTenant pgtype.UUID, rowLimit int32) ([]ListTenantBudgetsRow, error) {
+	rows, err := q.db.Query(ctx, listTenantBudgets,
+		atOrPast,
 		thresholdPct,
-		afterPct,
+		unlimitedOnly,
+		afterClass,
+		afterKey,
 		afterTenant,
 		rowLimit,
 	)
@@ -159,23 +158,21 @@ func (q *Queries) ListTenantBudgetSummaries(ctx context.Context, excludeInactive
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListTenantBudgetSummariesRow
+	var items []ListTenantBudgetsRow
 	for rows.Next() {
-		var i ListTenantBudgetSummariesRow
+		var i ListTenantBudgetsRow
 		if err := rows.Scan(
 			&i.TenantID,
-			&i.Slug,
-			&i.DisplayName,
 			&i.MaxBudgetUsd,
 			&i.SpentUsd,
+			&i.ReservedUsd,
 			&i.UnitCode,
 			&i.PeriodStart,
 			&i.PeriodEnd,
 			&i.UpdatedAt,
-			&i.ReservedUsd,
 			&i.ResourceVersion,
-			&i.UtilisationPct,
-			&i.RawPct,
+			&i.CeilingClass,
+			&i.RankKey,
 		); err != nil {
 			return nil, err
 		}
@@ -218,15 +215,18 @@ func (q *Queries) RefundTenantBudget(ctx context.Context, tenantID pgtype.UUID, 
 const setTenantBudget = `-- name: SetTenantBudget :one
 
 INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version)
-VALUES ($1, $2::numeric, 0, COALESCE(NULLIF($3::text, ''), 'USD'), now(), $4::timestamptz, now(), 1)
+SELECT $1, $2::numeric, 0, COALESCE(NULLIF($3::text, ''), 'USD'), $4::timestamptz, $5::timestamptz, $4::timestamptz, 1
+WHERE $6::bigint = 0
+   OR EXISTS (SELECT 1 FROM tenant_budgets WHERE tenant_id = $1)
 ON CONFLICT (tenant_id) DO UPDATE
 SET max_budget_usd = EXCLUDED.max_budget_usd,
-    spent_usd      = CASE WHEN $5::boolean THEN 0 ELSE tenant_budgets.spent_usd END,
-    period_start   = CASE WHEN $5::boolean THEN now() ELSE tenant_budgets.period_start END,
-    period_end     = COALESCE($4::timestamptz, tenant_budgets.period_end),
+    spent_usd      = CASE WHEN $7::boolean THEN 0 ELSE tenant_budgets.spent_usd END,
+    period_start   = CASE WHEN $7::boolean THEN $4::timestamptz ELSE tenant_budgets.period_start END,
+    period         = CASE WHEN $7::boolean THEN tenant_budgets.period + 1 ELSE tenant_budgets.period END,
+    period_end     = EXCLUDED.period_end,
     unit_code      = COALESCE(NULLIF($3::text, ''), tenant_budgets.unit_code),
     resource_version = tenant_budgets.resource_version + 1,
-    updated_at     = now()
+    updated_at     = $4::timestamptz
 WHERE tenant_budgets.resource_version = $6::bigint
 RETURNING tenant_id, max_budget_usd, spent_usd, reserved_usd, unit_code, period_start, period_end, updated_at, resource_version
 `
@@ -253,6 +253,10 @@ type SetTenantBudgetRow struct {
 // when reset_spend = true (idiomatic monthly close), preserved
 // otherwise (mid-cycle adjustment that just changes the cap).
 //
+// A NULL max_budget_usd is unlimited; 0 freezes the tenant's spend.
+// period_end is written as given: NULL leaves the window open-ended. now is
+// the store's clock, which a period starts by.
+//
 // unit_code is written verbatim on insert; on conflict, it's
 // updated only when the caller passes a non-empty value (an empty
 // arg keeps the existing currency unchanged — operators editing
@@ -266,14 +270,17 @@ type SetTenantBudgetRow struct {
 // for a ceiling another set — updates nothing and returns no row, which the
 // adapter maps to a version conflict. Without it two operators editing the
 // same cap silently overwrote each other.
-func (q *Queries) SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, periodEnd pgtype.Timestamptz, resetSpend bool, expectedVersion int64) (SetTenantBudgetRow, error) {
+// A missing row is version 0: the insert fires only for a caller that read
+// none. An existing row always reaches the DO UPDATE, whose guard decides.
+func (q *Queries) SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, now pgtype.Timestamptz, periodEnd pgtype.Timestamptz, expectedVersion int64, resetSpend bool) (SetTenantBudgetRow, error) {
 	row := q.db.QueryRow(ctx, setTenantBudget,
 		tenantID,
 		maxBudgetUsd,
 		unitCode,
+		now,
 		periodEnd,
-		resetSpend,
 		expectedVersion,
+		resetSpend,
 	)
 	var i SetTenantBudgetRow
 	err := row.Scan(

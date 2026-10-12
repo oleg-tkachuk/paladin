@@ -114,6 +114,46 @@ func (q *Queries) GetTenantBySlug(ctx context.Context, slug string) (GetTenantBy
 	return i, err
 }
 
+const getTenantNames = `-- name: GetTenantNames :many
+SELECT id, slug, display_name, deleted_at
+FROM tenants
+WHERE id = ANY($1::uuid[])
+`
+
+type GetTenantNamesRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	Slug        string             `json:"slug"`
+	DisplayName string             `json:"display_name"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+}
+
+// The names of the tenants named, live or in the trash, for a listing that
+// joins its own rows to them by id (the tenant budget summary).
+func (q *Queries) GetTenantNames(ctx context.Context, ids []pgtype.UUID) ([]GetTenantNamesRow, error) {
+	rows, err := q.db.Query(ctx, getTenantNames, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTenantNamesRow
+	for rows.Next() {
+		var i GetTenantNamesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.DisplayName,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const hardDeleteTenant = `-- name: HardDeleteTenant :execrows
 DELETE FROM tenants
 WHERE id = $1

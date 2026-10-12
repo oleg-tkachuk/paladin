@@ -8,12 +8,13 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectproto"
-	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"strings"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/dpop"
+	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -74,16 +75,17 @@ func TestCapabilityErrorCarriesTheReason(t *testing.T) {
 
 // The reason reaches the wire from the paths a handler takes.
 func TestCapabilityRefusalsCarryTheirReason(t *testing.T) {
-	cap := &limes.Capability{ID: uuid.New(), Caveats: limes.Caveats{
-		Ops: []limes.Op{limes.OpGet}, MaxBudgetAmount: limes.MustParseAmount("1"),
-	}}
-	ctx := WithChargeStore(WithCapability(context.Background(), cap), newFakeUsage())
+	m, usage := newMeteredMinter(t)
+	v, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{
+		Ops: []limes.Op{limes.OpGet}, Budget: limes.BudgetCeiling{Max: limes.NanosPerUnit},
+	}})
+	ctx := WithChargeStore(WithCapability(context.Background(), v), usage)
 
 	err := AssertCapabilityOp(ctx, limes.OpPut, "object://acme/foo")
 	if got := wireReason(t, err); got != "ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED" {
 		t.Errorf("op refusal reason = %q", got)
 	}
-	err = ChargeCapability(ctx, 2*limes.NanosPerUnit, "")
+	err = ChargeCapability(ctx, 2*limes.NanosPerUnit)
 	if got := wireReason(t, err); got != "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED" {
 		t.Errorf("budget refusal reason = %q", got)
 	}
@@ -102,8 +104,8 @@ func TestVerifyErrorTellsARefusalFromAnOutage(t *testing.T) {
 		withheld bool
 	}{
 		"a revoked capability": {err: limes.ErrRevoked, code: connect.CodePermissionDenied},
-		"a bad proof":          {err: limes.ErrDPoPReplayed, code: connect.CodePermissionDenied},
-		"keys not fetched":     {err: fmt.Errorf("%w: %s", limes.ErrJWKSUnavailable, internals), code: connect.CodeUnavailable, logged: true},
+		"a bad proof":          {err: dpop.ErrReplayed, code: connect.CodePermissionDenied},
+		"keys not fetched":     {err: fmt.Errorf("%w: %s", jwks.ErrUnavailable, internals), code: connect.CodeUnavailable, logged: true},
 		"a revocation store down": {
 			err: fmt.Errorf("limes: revocation lookup: %s", internals), code: connect.CodeUnavailable, logged: true, withheld: true,
 		},

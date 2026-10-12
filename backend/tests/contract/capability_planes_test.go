@@ -83,8 +83,11 @@ const (
 	// name, or as the data plane's variable reused.
 	capabilityWordStem = "capabilit"
 	capDataVar         = "capdata"
-	// capabilityFromContext is how a handler reads a capability off the context.
-	capabilityFromContext = "CapabilityFromContext"
+	// capabilityFromContext and verifiedCapabilityFromContext are how a
+	// handler reads a capability off the context: as granted, and as the
+	// verifier accepted it.
+	capabilityFromContext         = "CapabilityFromContext"
+	verifiedCapabilityFromContext = "VerifiedCapabilityFromContext"
 )
 
 // capabilityReaders lists functions outside the data plane that read a
@@ -150,7 +153,7 @@ func capabilityReadersOutsideDataPlane(t *testing.T) []string {
 		}
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil || !callsSelector(fn.Body, authPackage, capabilityFromContext) {
+			if !ok || fn.Body == nil || !readsCapability(fn.Body) {
 				continue
 			}
 			name := fn.Name.Name
@@ -165,6 +168,13 @@ func capabilityReadersOutsideDataPlane(t *testing.T) []string {
 		t.Fatalf("walk internal/api: %v", err)
 	}
 	return out
+}
+
+// readsCapability reports whether body reads a capability off the context,
+// in either form.
+func readsCapability(body *ast.BlockStmt) bool {
+	return callsSelector(body, authPackage, capabilityFromContext) ||
+		callsSelector(body, authPackage, verifiedCapabilityFromContext)
 }
 
 func callsSelector(body *ast.BlockStmt, pkg, fn string) bool {

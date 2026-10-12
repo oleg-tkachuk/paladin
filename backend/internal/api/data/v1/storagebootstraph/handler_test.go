@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
 
@@ -255,7 +256,9 @@ func TestEnsureTenantStorage_CapabilityOp(t *testing.T) {
 			buckets := &fakeBuckets{}
 			authz := &recordingAuthorizer{allow: true}
 			h := newHandler(authz, backends, buckets, &fakeCollections{})
-			ctx := auth.WithCapability(ctxWithPAT(caller), &limes.Capability{Caveats: tc.caveats})
+			ctx := auth.WithCapability(ctxWithPAT(caller), captest.Verified(t, limes.Capability{
+				Subject: limes.Principal{TenantID: caller}, Caveats: tc.caveats,
+			}))
 
 			_, err := h.EnsureTenantStorage(ctx, backendID, bucket, []string{"docs"})
 			if tc.want == 0 {
