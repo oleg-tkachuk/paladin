@@ -416,7 +416,7 @@ finding moving from "packages you import" to "your code is affected".
 
 ### One copy of the request per unary interceptor
 
-- **Status:** Deferred.
+- **Status:** Blocked.
 - **Reason:** connect-go v2 hands a server interceptor a stream, so
 `internal/api/unary.Interceptor` receives the request itself and hands the
 next layer a copy (`proto.Merge`). The data plane runs five such interceptors
@@ -429,7 +429,9 @@ copies prevent.
 - **Definition of Done:** allocation and latency of a maximum-size batch
 request measured through the data-plane chain; if the copies show, layers
 share one message with that mutation hazard ruled out, and this entry goes.
-- **Blockers:** none.
+- **Blockers:** the migration to the next limes version, which reshapes the
+capability interceptor at the head of the chain; a benchmark taken before it
+measures a chain that is about to change. Owner decision 2026-10-12.
 
 ### Per-table autovacuum tuning
 
