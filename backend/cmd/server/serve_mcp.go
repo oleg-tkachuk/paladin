@@ -132,6 +132,10 @@ func provideMCPBridgeRunner(cfg config.Config, l *zap.Logger) mcpRunner {
 		// at construction instead.
 		l.Fatal("mcp bridge: build upstream client", zap.Error(err))
 	}
+	keyOpts, err := bridgeKeyOptions(cfg.MCP, l)
+	if err != nil {
+		l.Fatal("mcp bridge: DPoP key", zap.Error(err))
+	}
 	makeClients := func(bearer, capToken string) (*mcp.Clients, error) {
 		return mcp.NewClientsWithCapability(
 			httpc,
@@ -140,6 +144,7 @@ func provideMCPBridgeRunner(cfg config.Config, l *zap.Logger) mcpRunner {
 			cfg.MCP.Upstreams.IAMURL,
 			bearer,
 			capToken,
+			keyOpts...,
 		)
 	}
 	return mcpRunner{
@@ -178,8 +183,12 @@ func provideMCPEmbeddedRunner(
 		Admin: muxes.Admin,
 		IAM:   muxes.IAM,
 	}
+	keyOpts, err := bridgeKeyOptions(cfg.MCP, l)
+	if err != nil {
+		return mcpRunner{}, err
+	}
 	makeInlineClients := func(bearer, capToken string) (*mcp.Clients, error) {
-		return mcp.NewInlineClientsWithCapability(inlineHandlers, bearer, capToken)
+		return mcp.NewInlineClientsWithCapability(inlineHandlers, bearer, capToken, keyOpts...)
 	}
 	return mcpRunner{
 		cfg:       cfg,
@@ -199,6 +208,22 @@ func provideMCPEmbeddedRunner(
 			db.Close()
 		},
 	}, nil
+}
+
+// bridgeKeyOptions parses mcp.dpop_key at boot, so a key the bridge cannot
+// sign with stops it here rather than failing every forwarded call. No key:
+// no options, and only unbound capabilities pass.
+func bridgeKeyOptions(cfg config.MCP, l *zap.Logger) ([]mcp.ClientOption, error) {
+	if cfg.DPoPKey == "" {
+		return nil, nil
+	}
+	key, err := mcp.ParseBridgeKey(cfg.DPoPKey)
+	if err != nil {
+		return nil, err
+	}
+	l.Info("mcp bridge: DPoP key loaded; delegate key-bound capabilities to its thumbprint",
+		zap.String("confirmation_jkt", key.JKT))
+	return []mcp.ClientOption{mcp.WithBridgeKey(key)}, nil
 }
 
 // runMCPServer is the mcp role's fx lifecycle, shared by both modes. OnStart

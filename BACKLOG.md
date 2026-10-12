@@ -104,6 +104,22 @@ the same commit. Treat this file like a runtime invariant.
   dropped from `DefaultAlwaysDeny` where it is listed there.
 - **Blockers:** a product call per item; no current ask.
 
+### One bridge key bounds key-bound traffic through MCP
+
+- **Status:** Deferred.
+- **Reason:** the bridge signs every forwarded call with one key, and
+  `capability/postgres.ReplayCache` keeps at most
+  `limes.DefaultReplayEntriesPerKey` (1000) live proofs per key, each live for
+  `limes.DefaultDPoPWindow` (one minute). Past that the store refuses the
+  proof, so key-bound calls through the bridge stop at roughly 1000 a minute
+  across all its replicas. Unbound capabilities are not counted. No
+  deployment is near it today.
+- **Definition of Done:** the limit is lifted for the bridge without lifting
+  it for every key — a larger share for the bridge's thumbprint, or a key
+  per replica each published by `paladin_get_bridge_key` — with a test at
+  the boundary.
+- **Blockers:** none; wait for traffic that reaches it.
+
 ### Capability / API-token issuance via MCP — intentionally excluded
 
 - **Status:** Won't-do (by design) unless a human-gated profile is added.
@@ -1409,19 +1425,6 @@ share one message with that mutation hazard ruled out, and this entry goes.
   not.
 - **Blockers:** none.
 
-
-### The MCP bridge cannot forward a key-bound capability
-
-- **Status:** Deferred — follows from DPoP binding.
-- **Reason:** the bridge forwards the capability it was handed to the plane
-  behind it. A key-bound capability also needs a proof signed by the agent's
-  key for *that* request, and the agent signs for the MCP request, not for the
-  Connect call the bridge makes, so the plane refuses it. That fails closed;
-  agents behind MCP use unbound capabilities until it is solved.
-- **Definition of Done:** either the bridge verifies the agent's proof on the
-  MCP request and the plane trusts a bridge attestation in its place, or the
-  bridge holds its own key and receives capabilities delegated to it.
-- **Blockers:** choosing between the two.
 
 ### Offline attenuation covers a fixed vocabulary, not arbitrary Datalog
 

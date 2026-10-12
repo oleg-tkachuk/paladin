@@ -990,6 +990,16 @@ type MCP struct {
 	// unauthenticated requests with 401 + WWW-Authenticate. Disabled by
 	// default — the legacy X-Paladin-Token header keeps working untouched.
 	OAuth MCPOAuth `yaml:"oauth" json:"oauth"`
+
+	// DPoPKey is the bridge's own proof-of-possession key, a PEM PKCS#8
+	// Ed25519 or P-256 private key. A capability delegated to its
+	// thumbprint can be forwarded through the bridge, which signs the DPoP
+	// proof for each call. Every replica must hold the same key. Inline for
+	// dev only; DPoPKeySecret in real deployments. Neither: the bridge
+	// forwards unbound capabilities only.
+	DPoPKey string `yaml:"dpop_key" json:"dpop_key"`
+	// DPoPKeySecret resolves DPoPKey from a Kubernetes Secret at boot.
+	DPoPKeySecret *SecretRef `yaml:"dpop_key_secret" json:"dpop_key_secret"`
 }
 
 // MCPOAuth configures the MCP server's OAuth 2.1 Resource-Server posture
