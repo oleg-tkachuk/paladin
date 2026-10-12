@@ -38,7 +38,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
-	objecttag "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecttagh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/presignh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
@@ -69,7 +68,6 @@ type Repos struct {
 	Object     objecth.Repository
 	Collection objectkey.Repository
 	Tenant     tenanth.Repository
-	ObjectTag  objecttag.Repository
 	Presign    presignh.Repository
 	Multipart  multiparth.Repository
 	Operation  operationh.Repository

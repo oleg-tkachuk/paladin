@@ -11,20 +11,19 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
-	objecttag "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecttagh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 // Creating something that already exists is an ordinary answer to an ordinary
-// request. Both of these used to reach the caller as CodeInternal carrying the
-// raw constraint text — verified against the compose stack for collections:
+// request. A duplicate collection used to reach the caller as CodeInternal
+// carrying the raw constraint text — verified against the compose stack:
 //
 //	internal: create collection: create collection: ERROR: duplicate key value
 //	violates unique constraint "collections_tenant_id_name_key" (SQLSTATE 23505)
 //
 // which is a 500 for the database working exactly as designed, and a doubled
-// prefix on top. Their sibling adapters (buckets, users, tenants, storage
+// prefix on top. Its sibling adapters (buckets, users, tenants, storage
 // migrations) have classified unique violations since they were written.
 
 func TestCreateCollectionTwiceIsAlreadyExists(t *testing.T) {
@@ -86,24 +85,6 @@ func TestCreateCollectionOnUnknownBucketIsNotFound(t *testing.T) {
 	})
 	if !errors.Is(err, objectkey.ErrBucketNotFound) {
 		t.Fatalf("create on an unknown bucket = %v, want ErrBucketNotFound", err)
-	}
-}
-
-func TestCreateObjectTagTwiceIsAlreadyExists(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	pool := startPostgres(t)
-	q := sqlc.New(pool)
-	repo := adapters.NewObjectTagRepo(q)
-
-	tenant, _ := mkTenant(t, ctx, pool, "shared")
-	args := objecttag.CreateArgs{TenantID: tenant, Slug: "review"}
-	if _, err := repo.Create(ctx, args); err != nil {
-		t.Fatalf("first create: %v", err)
-	}
-	_, err := repo.Create(ctx, args)
-	if !errors.Is(err, objecttag.ErrObjectTagExists) {
-		t.Fatalf("second create = %v, want ErrObjectTagExists", err)
 	}
 }
 

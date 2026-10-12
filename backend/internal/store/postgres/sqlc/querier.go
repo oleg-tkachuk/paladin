@@ -132,8 +132,6 @@ type Querier interface {
 	// Object queries.
 	// collection_id is resolved by the caller via ResolveCollectionID.
 	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz, publicUrl string) error
-	// Object tag queries. Tenant-scoped; addressed by (tenant_id, slug).
-	CreateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description string, labels []byte) error
 	// Long-running operation queries.
 	CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
 	// v2 storage_backends queries — full CRUD over the now-first-class entity.
@@ -171,8 +169,6 @@ type Querier interface {
 	// doubt" the right failure policy.
 	DeleteMultipartAbortDebt(ctx context.Context, id pgtype.UUID) error
 	DeleteMultipartUpload(ctx context.Context, id pgtype.UUID) error
-	// Same OCC convention as UpdateObjectTag: 0 = force, non-zero = guarded.
-	DeleteObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, expectedVersion int64) (int64, error)
 	DeletePendingPurge(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteStorageBackend(ctx context.Context, name string, expectedVersion int64) (int64, error)
 	// First half of recording a probe (ADR-0026): the probe's rows replace every
@@ -253,7 +249,6 @@ type Querier interface {
 	// object's current version. LEFT JOIN plus COALESCE: an object with no lock
 	// row is the common case and must answer "not locked", not "no row".
 	GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectLockStateRow, error)
-	GetObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string) (GetObjectTagRow, error)
 	GetObjectVersion(ctx context.Context, id pgtype.UUID) (GetObjectVersionRow, error)
 	// Batch lookup for batch-operation executors: one round-trip for the
 	// whole id list instead of one GetObject per id (a 1000-object batch
@@ -424,7 +419,6 @@ type Querier interface {
 	// account, not a display trim. Pass after_created_at='-infinity' for the
 	// first page.
 	ListMembershipsBySubject(ctx context.Context, subject string, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]User, error)
-	ListObjectTags(ctx context.Context, tenantID pgtype.UUID, afterSlug *string, pageSize int32) ([]ListObjectTagsRow, error)
 	// Newest first. Cursor: (created_at, id).
 	ListObjectVersions(ctx context.Context, objectID pgtype.UUID, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListObjectVersionsRow, error)
 	// The full CEL filter is still applied by the caller post-load; the
@@ -868,10 +862,6 @@ type Querier interface {
 	UpdateCollection(ctx context.Context, tenantID pgtype.UUID, name string, displayName *string, policy *string, policyHash []byte, lifecycleRules []byte, expectedVersion int64) (int64, error)
 	UpdateEventSubscription(ctx context.Context, celFilter *string, sinkKind *EventSinkKind, sinkConfig []byte, disabled *bool, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	UpdateObjectMetadata(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, metadata []byte, tags []byte, externalRef *string, expectedVersion int64) (int64, error)
-	// expected_version=0 disables the OCC guard (force update). Non-zero
-	// enforces optimistic concurrency: a stale resource_version aborts the
-	// update with 0 rows affected and the handler returns CodeAborted.
-	UpdateObjectTag(ctx context.Context, tenantID pgtype.UUID, slug string, displayName *string, description *string, labels []byte, expectedVersion int64) (int64, error)
 	// Both uses of $state are cast explicitly. Without them Postgres deduces the
 	// parameter's type twice — operation_state from the SET, text from the IN
 	// comparison — and refuses the statement with 42P08 "inconsistent types
