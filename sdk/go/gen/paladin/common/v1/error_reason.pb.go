@@ -93,6 +93,9 @@ const (
 	// an operation, resource or source address outside its caveats, and its
 	// request limit reached. The rest can be lifted by something else, and are
 	// marked below.
+	// Superseded by ERROR_REASON_CAPABILITY_INVALID_TOKEN; no longer sent.
+	//
+	// Deprecated: Marked as deprecated in paladin/common/v1/error_reason.proto.
 	ErrorReason_ERROR_REASON_CAPABILITY_INVALID_SIGNATURE ErrorReason = 32
 	// The verifier could not fetch the issuer's keys. Not permanent.
 	ErrorReason_ERROR_REASON_CAPABILITY_KEYS_UNAVAILABLE ErrorReason = 33
@@ -101,7 +104,10 @@ const (
 	ErrorReason_ERROR_REASON_CAPABILITY_NOT_YET_VALID     ErrorReason = 35
 	ErrorReason_ERROR_REASON_CAPABILITY_REVOKED           ErrorReason = 36
 	ErrorReason_ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH ErrorReason = 37
-	ErrorReason_ERROR_REASON_CAPABILITY_INVALID_BISCUIT   ErrorReason = 38
+	// Superseded by ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION; no longer sent.
+	//
+	// Deprecated: Marked as deprecated in paladin/common/v1/error_reason.proto.
+	ErrorReason_ERROR_REASON_CAPABILITY_INVALID_BISCUIT ErrorReason = 38
 	// The capability is key-bound and the request carried no DPoP proof, an
 	// invalid one, or one already used. Not permanent: sign a fresh proof.
 	ErrorReason_ERROR_REASON_CAPABILITY_PROOF_REQUIRED       ErrorReason = 39
@@ -109,7 +115,10 @@ const (
 	ErrorReason_ERROR_REASON_CAPABILITY_PROOF_REPLAYED       ErrorReason = 41
 	ErrorReason_ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED       ErrorReason = 42
 	ErrorReason_ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED ErrorReason = 43
-	ErrorReason_ERROR_REASON_CAPABILITY_SOURCE_NOT_ALLOWED   ErrorReason = 44
+	// Superseded by ERROR_REASON_CAPABILITY_SOURCE_IP_NOT_ALLOWED; no longer sent.
+	//
+	// Deprecated: Marked as deprecated in paladin/common/v1/error_reason.proto.
+	ErrorReason_ERROR_REASON_CAPABILITY_SOURCE_NOT_ALLOWED ErrorReason = 44
 	// Not permanent: send the request again with an Idempotency-Key.
 	ErrorReason_ERROR_REASON_CAPABILITY_IDEMPOTENCY_KEY_REQUIRED ErrorReason = 45
 	// Not permanent: an operator may clear the object's taint.
@@ -122,6 +131,23 @@ const (
 	// The Authorization header carrying the capability is not one the scheme
 	// reads: no credential, or not a token68.
 	ErrorReason_ERROR_REASON_CAPABILITY_MALFORMED_AUTHORIZATION ErrorReason = 50
+	// The token is not one the verifier accepts: forged, malformed, of a type
+	// or issuer it does not take, or with caveats outside the rules.
+	ErrorReason_ERROR_REASON_CAPABILITY_INVALID_TOKEN ErrorReason = 52
+	// A Biscuit's attenuation blocks are not ones the verifier reads, or widen
+	// what the capability grants.
+	ErrorReason_ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION ErrorReason = 53
+	// The client's address is outside the capability's source CIDRs.
+	ErrorReason_ERROR_REASON_CAPABILITY_SOURCE_IP_NOT_ALLOWED ErrorReason = 54
+	// The request carried no capability under a scheme the server reads. Not
+	// permanent: send one.
+	ErrorReason_ERROR_REASON_CAPABILITY_NO_CREDENTIALS ErrorReason = 55
+	// The DPoP proof did not carry the nonce the server issued. Not permanent:
+	// sign a fresh proof with the nonce in the response's DPoP-Nonce header.
+	ErrorReason_ERROR_REASON_CAPABILITY_NONCE_REQUIRED ErrorReason = 56
+	// The capability came under a scheme its binding does not take: a
+	// key-bound one not under DPoP, or a bearer one under it.
+	ErrorReason_ERROR_REASON_CAPABILITY_AUTH_SCHEME_MISMATCH ErrorReason = 57
 )
 
 // Enum value maps for ErrorReason.
@@ -179,6 +205,12 @@ var (
 		48: "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED",
 		49: "ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED",
 		50: "ERROR_REASON_CAPABILITY_MALFORMED_AUTHORIZATION",
+		52: "ERROR_REASON_CAPABILITY_INVALID_TOKEN",
+		53: "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION",
+		54: "ERROR_REASON_CAPABILITY_SOURCE_IP_NOT_ALLOWED",
+		55: "ERROR_REASON_CAPABILITY_NO_CREDENTIALS",
+		56: "ERROR_REASON_CAPABILITY_NONCE_REQUIRED",
+		57: "ERROR_REASON_CAPABILITY_AUTH_SCHEME_MISMATCH",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                         0,
@@ -233,6 +265,12 @@ var (
 		"ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED":          48,
 		"ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED":   49,
 		"ERROR_REASON_CAPABILITY_MALFORMED_AUTHORIZATION":  50,
+		"ERROR_REASON_CAPABILITY_INVALID_TOKEN":            52,
+		"ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION":      53,
+		"ERROR_REASON_CAPABILITY_SOURCE_IP_NOT_ALLOWED":    54,
+		"ERROR_REASON_CAPABILITY_NO_CREDENTIALS":           55,
+		"ERROR_REASON_CAPABILITY_NONCE_REQUIRED":           56,
+		"ERROR_REASON_CAPABILITY_AUTH_SCHEME_MISMATCH":     57,
 	}
 )
 
@@ -267,7 +305,7 @@ var File_paladin_common_v1_error_reason_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\xc2\x10\n" +
+	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\xe7\x12\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ERROR_REASON_NOT_FOUND\x10\x01\x12!\n" +
@@ -302,26 +340,32 @@ const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"\x1cERROR_REASON_BUCKET_RESERVED\x10\x1d\x12&\n" +
 	"\"ERROR_REASON_BUCKET_NOT_ON_BACKEND\x10\x1e\x12.\n" +
 	"*ERROR_REASON_BUCKET_NOT_CREATED_BY_PALADIN\x10\x1f\x12%\n" +
-	"!ERROR_REASON_OBJECT_BYTES_MISSING\x103\x12-\n" +
-	")ERROR_REASON_CAPABILITY_INVALID_SIGNATURE\x10 \x12,\n" +
+	"!ERROR_REASON_OBJECT_BYTES_MISSING\x103\x121\n" +
+	")ERROR_REASON_CAPABILITY_INVALID_SIGNATURE\x10 \x1a\x02\b\x01\x12,\n" +
 	"(ERROR_REASON_CAPABILITY_KEYS_UNAVAILABLE\x10!\x12#\n" +
 	"\x1fERROR_REASON_CAPABILITY_EXPIRED\x10\"\x12)\n" +
 	"%ERROR_REASON_CAPABILITY_NOT_YET_VALID\x10#\x12#\n" +
 	"\x1fERROR_REASON_CAPABILITY_REVOKED\x10$\x12-\n" +
-	")ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH\x10%\x12+\n" +
-	"'ERROR_REASON_CAPABILITY_INVALID_BISCUIT\x10&\x12*\n" +
+	")ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH\x10%\x12/\n" +
+	"'ERROR_REASON_CAPABILITY_INVALID_BISCUIT\x10&\x1a\x02\b\x01\x12*\n" +
 	"&ERROR_REASON_CAPABILITY_PROOF_REQUIRED\x10'\x12)\n" +
 	"%ERROR_REASON_CAPABILITY_PROOF_INVALID\x10(\x12*\n" +
 	"&ERROR_REASON_CAPABILITY_PROOF_REPLAYED\x10)\x12*\n" +
 	"&ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED\x10*\x120\n" +
-	",ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED\x10+\x12.\n" +
-	"*ERROR_REASON_CAPABILITY_SOURCE_NOT_ALLOWED\x10,\x124\n" +
+	",ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED\x10+\x122\n" +
+	"*ERROR_REASON_CAPABILITY_SOURCE_NOT_ALLOWED\x10,\x1a\x02\b\x01\x124\n" +
 	"0ERROR_REASON_CAPABILITY_IDEMPOTENCY_KEY_REQUIRED\x10-\x124\n" +
 	"0ERROR_REASON_CAPABILITY_TAINTED_READ_NOT_ALLOWED\x10.\x122\n" +
 	".ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED\x10/\x12+\n" +
 	"'ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED\x100\x122\n" +
 	".ERROR_REASON_CAPABILITY_TENANT_BUDGET_EXCEEDED\x101\x123\n" +
-	"/ERROR_REASON_CAPABILITY_MALFORMED_AUTHORIZATION\x102BNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
+	"/ERROR_REASON_CAPABILITY_MALFORMED_AUTHORIZATION\x102\x12)\n" +
+	"%ERROR_REASON_CAPABILITY_INVALID_TOKEN\x104\x12/\n" +
+	"+ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION\x105\x121\n" +
+	"-ERROR_REASON_CAPABILITY_SOURCE_IP_NOT_ALLOWED\x106\x12*\n" +
+	"&ERROR_REASON_CAPABILITY_NO_CREDENTIALS\x107\x12*\n" +
+	"&ERROR_REASON_CAPABILITY_NONCE_REQUIRED\x108\x120\n" +
+	",ERROR_REASON_CAPABILITY_AUTH_SCHEME_MISMATCH\x109BNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_error_reason_proto_rawDescOnce sync.Once

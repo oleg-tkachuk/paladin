@@ -76,7 +76,8 @@ enum ErrorReason {
   // an operation, resource or source address outside its caveats, and its
   // request limit reached. The rest can be lifted by something else, and are
   // marked below.
-  ERROR_REASON_CAPABILITY_INVALID_SIGNATURE = 32;
+  // Superseded by ERROR_REASON_CAPABILITY_INVALID_TOKEN; no longer sent.
+  ERROR_REASON_CAPABILITY_INVALID_SIGNATURE = 32 [deprecated = true];
   // The verifier could not fetch the issuer's keys. Not permanent.
   ERROR_REASON_CAPABILITY_KEYS_UNAVAILABLE = 33;
   ERROR_REASON_CAPABILITY_EXPIRED = 34;
@@ -84,7 +85,8 @@ enum ErrorReason {
   ERROR_REASON_CAPABILITY_NOT_YET_VALID = 35;
   ERROR_REASON_CAPABILITY_REVOKED = 36;
   ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH = 37;
-  ERROR_REASON_CAPABILITY_INVALID_BISCUIT = 38;
+  // Superseded by ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION; no longer sent.
+  ERROR_REASON_CAPABILITY_INVALID_BISCUIT = 38 [deprecated = true];
   // The capability is key-bound and the request carried no DPoP proof, an
   // invalid one, or one already used. Not permanent: sign a fresh proof.
   ERROR_REASON_CAPABILITY_PROOF_REQUIRED = 39;
@@ -92,7 +94,8 @@ enum ErrorReason {
   ERROR_REASON_CAPABILITY_PROOF_REPLAYED = 41;
   ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED = 42;
   ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED = 43;
-  ERROR_REASON_CAPABILITY_SOURCE_NOT_ALLOWED = 44;
+  // Superseded by ERROR_REASON_CAPABILITY_SOURCE_IP_NOT_ALLOWED; no longer sent.
+  ERROR_REASON_CAPABILITY_SOURCE_NOT_ALLOWED = 44 [deprecated = true];
   // Not permanent: send the request again with an Idempotency-Key.
   ERROR_REASON_CAPABILITY_IDEMPOTENCY_KEY_REQUIRED = 45;
   // Not permanent: an operator may clear the object's taint.
@@ -105,4 +108,21 @@ enum ErrorReason {
   // The Authorization header carrying the capability is not one the scheme
   // reads: no credential, or not a token68.
   ERROR_REASON_CAPABILITY_MALFORMED_AUTHORIZATION = 50;
+  // The token is not one the verifier accepts: forged, malformed, of a type
+  // or issuer it does not take, or with caveats outside the rules.
+  ERROR_REASON_CAPABILITY_INVALID_TOKEN = 52;
+  // A Biscuit's attenuation blocks are not ones the verifier reads, or widen
+  // what the capability grants.
+  ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION = 53;
+  // The client's address is outside the capability's source CIDRs.
+  ERROR_REASON_CAPABILITY_SOURCE_IP_NOT_ALLOWED = 54;
+  // The request carried no capability under a scheme the server reads. Not
+  // permanent: send one.
+  ERROR_REASON_CAPABILITY_NO_CREDENTIALS = 55;
+  // The DPoP proof did not carry the nonce the server issued. Not permanent:
+  // sign a fresh proof with the nonce in the response's DPoP-Nonce header.
+  ERROR_REASON_CAPABILITY_NONCE_REQUIRED = 56;
+  // The capability came under a scheme its binding does not take: a
+  // key-bound one not under DPoP, or a bearer one under it.
+  ERROR_REASON_CAPABILITY_AUTH_SCHEME_MISMATCH = 57;
 }
