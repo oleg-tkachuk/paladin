@@ -78,10 +78,12 @@ services:
       server -ip.bind=0.0.0.0 -dir=/data -s3 -s3.port=8333
       -s3.config=/etc/seaweedfs/s3.json
       -filer.notification=/etc/seaweedfs/notification.toml
+    # The filer (8888) stays unpublished: S3 identities do not apply to it, so
+    # on the host it would be an unauthenticated route to every object. The
+    # stack reaches it on the compose network; nothing on the host needs it.
     ports:
       - "9333:9333"
       - "8081:8080"
-      - "8888:8888"
       - "8333:8333"
     volumes:
       - paladin_seaweed_data:/data
