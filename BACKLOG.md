@@ -1274,14 +1274,28 @@ measures a chain that is about to change. Owner decision 2026-10-12.
     code-side proof).
 - **Deferred (smaller follow-ups):** per-tenant backend selection at
   CreateTenant (currently the config default backend); org-prefix in the
-  derived bucket name for cross-account global uniqueness; a `failed`
-  migration cannot be retried — its `tenant_storage_migrations` row stays, so
-  `MigrateTenantStorageLayout` answers "already exists", and nothing deletes
-  the row. Clearing it by hand does not help either: `StartStorageMigration`
-  claims to tolerate the dedicated bucket already existing, but the
-  unique-violation from `CreateBucketV2` aborts its transaction, so the
-  following insert fails with 25P02 (needs a savepoint or
-  `ON CONFLICT DO NOTHING`, plus a retry/reset path for a failed row).
+  derived bucket name for cross-account global uniqueness.
+- **Deferred — failed-migration follow-ups** (a `failed` migration is now
+  retried by calling `MigrateTenantStorageLayout` again, which resets the row
+  to `provisioning` under a tenant lock):
+  - A migration that fails its physical verify has already rebound the tenant
+    (layout `dedicated`), so it is not retryable and has no repair path: the
+    tenant serves from a target that is missing objects while the source
+    copies are still retained (cleanup only runs from `completed`). Done when
+    an operator can re-copy into the target from the source, or roll the
+    tenant back to its source bucket, through the API.
+  - `tenant_storage_migrations.tenant_id` has no unique key; one migration per
+    tenant is enforced by the start's `FOR NO KEY UPDATE` on the tenant row.
+    Before that, a second start naming another target backend inserted a
+    second row, so a database may hold duplicates (readers take the latest).
+    Done when duplicates are resolved and a unique index on `tenant_id` is
+    built (`CONCURRENTLY`, own migration file).
+  - The worker's transitions compare-and-set on `state` alone, so a worker
+    resumed after a pause spanning a failure *and* a retry could apply a
+    stale `AdvanceCopy` from the earlier attempt to the new one (ABA). The
+    physical verify would still catch a missing object, after the rebind.
+    Done when transitions also match an attempt generation (e.g. `attempts`,
+    which every failure bumps).
 - **Note — dev cluster object store is Garage (switched off SeaweedFS):**
   the `primary` backend now points at **Garage** (`garage-s3.storage:3900`,
   bucket `paladin-primary`, presigned via the `s3-garage.paladin.local` Traefik

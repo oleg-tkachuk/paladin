@@ -225,7 +225,9 @@ func (f *fakeRepo) GetStorageMigration(ctx context.Context, id uuid.UUID) (Stora
 	if f.getMigrationFn != nil {
 		return f.getMigrationFn(ctx, id)
 	}
-	return StorageMigration{}, nil
+	// No migration yet: MigrateTenantStorageLayout reads this to tell a first
+	// start from a retry.
+	return StorageMigration{}, ErrNotFound
 }
 
 func (f *fakeRepo) TenantSourceBucket(ctx context.Context, id uuid.UUID) (string, string, error) {
@@ -1038,6 +1040,109 @@ func TestMigrateTenantStorageLayout(t *testing.T) {
 		if fr.lastStartArgs.CleanupRetentionSeconds != 3600 {
 			t.Errorf("explicit retention not used: %d", fr.lastStartArgs.CleanupRetentionSeconds)
 		}
+	})
+
+	// A failed migration is retried by calling the RPC again; any other state
+	// is refused before the repository is asked.
+	priorMigration := func(state string) func(context.Context, uuid.UUID) (StorageMigration, error) {
+		return func(_ context.Context, id uuid.UUID) (StorageMigration, error) {
+			return StorageMigration{TenantID: id, State: state, TargetBackendName: "dst-backend"}, nil
+		}
+	}
+	for _, state := range []string{"provisioning", "copying", "rebinding", "verifying", "completed", "cleaned"} {
+		t.Run("prior migration "+state+" → failed precondition, nothing started", func(t *testing.T) {
+			fr := &fakeRepo{
+				getFn:          sharedTenant,
+				getMigrationFn: priorMigration(state),
+				sourceBucketFn: func(context.Context, uuid.UUID) (string, string, error) { return "src-backend", "src-bucket", nil },
+				startMigrationFn: func(context.Context, StartStorageMigrationArgs) (StorageMigration, error) {
+					t.Errorf("a %s migration was started again", state)
+					return StorageMigration{}, nil
+				},
+			}
+			_, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "", 0)
+			wantCode(t, err, connect.CodeFailedPrecondition)
+			if !errors.Is(err, ErrStorageMigrationExists) {
+				t.Errorf("err = %v, want it to carry ErrStorageMigrationExists", err)
+			}
+		})
+	}
+
+	t.Run("failed migration retried on its own target backend", func(t *testing.T) {
+		fr := &fakeRepo{
+			getFn:          sharedTenant,
+			getMigrationFn: priorMigration(StorageMigrationFailed),
+			sourceBucketFn: func(context.Context, uuid.UUID) (string, string, error) { return "src-backend", "src-bucket", nil },
+			startMigrationFn: func(_ context.Context, a StartStorageMigrationArgs) (StorageMigration, error) {
+				return StorageMigration{TenantID: a.TenantID, State: "provisioning"}, nil
+			},
+		}
+		got, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "", 0)
+		if err != nil {
+			t.Fatalf("retry: %v", err)
+		}
+		// Not the source backend, which a first start would default to.
+		if fr.lastStartArgs.TargetBackendName != "dst-backend" {
+			t.Errorf("retry targeted %q, want the failed attempt's dst-backend", fr.lastStartArgs.TargetBackendName)
+		}
+		if fr.lastStartArgs.TargetBucketName != "paladin-"+tid.String() {
+			t.Errorf("retry target bucket %q", fr.lastStartArgs.TargetBucketName)
+		}
+		if got.State != "provisioning" {
+			t.Errorf("returned state %q", got.State)
+		}
+	})
+
+	t.Run("failed migration retried naming its target backend", func(t *testing.T) {
+		fr := &fakeRepo{
+			getFn:          sharedTenant,
+			getMigrationFn: priorMigration(StorageMigrationFailed),
+			sourceBucketFn: func(context.Context, uuid.UUID) (string, string, error) { return "src-backend", "src-bucket", nil },
+		}
+		if _, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "dst-backend", 0); err != nil {
+			t.Fatalf("retry: %v", err)
+		}
+	})
+
+	t.Run("failed migration retried onto another backend → failed precondition", func(t *testing.T) {
+		fr := &fakeRepo{
+			getFn:          sharedTenant,
+			getMigrationFn: priorMigration(StorageMigrationFailed),
+			sourceBucketFn: func(context.Context, uuid.UUID) (string, string, error) { return "src-backend", "src-bucket", nil },
+			startMigrationFn: func(context.Context, StartStorageMigrationArgs) (StorageMigration, error) {
+				t.Error("a retry was started on a backend other than the failed attempt's")
+				return StorageMigration{}, nil
+			},
+		}
+		_, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "other-backend", 0)
+		wantCode(t, err, connect.CodeFailedPrecondition)
+	})
+
+	// The repository's answers under its lock, which decide a race the
+	// handler's own read cannot.
+	for _, repoErr := range []error{ErrStorageMigrationExists, ErrTenantNotShared, ErrTargetBucketUnusable} {
+		t.Run("start refused: "+repoErr.Error()+" → failed precondition", func(t *testing.T) {
+			fr := &fakeRepo{
+				getFn:          sharedTenant,
+				sourceBucketFn: func(context.Context, uuid.UUID) (string, string, error) { return "b1", "bk1", nil },
+				startMigrationFn: func(context.Context, StartStorageMigrationArgs) (StorageMigration, error) {
+					return StorageMigration{}, fmt.Errorf("wrapped: %w", repoErr)
+				},
+			}
+			_, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "", 0)
+			wantCode(t, err, connect.CodeFailedPrecondition)
+		})
+	}
+
+	t.Run("reading the prior migration fails → internal", func(t *testing.T) {
+		fr := &fakeRepo{
+			getFn: sharedTenant,
+			getMigrationFn: func(context.Context, uuid.UUID) (StorageMigration, error) {
+				return StorageMigration{}, errors.New("boom")
+			},
+		}
+		_, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "", 0)
+		wantCode(t, err, connect.CodeInternal)
 	})
 }
 
