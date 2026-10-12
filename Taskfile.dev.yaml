@@ -380,7 +380,7 @@ tasks:
   verify:ci-groups:
     desc: "CI runs every Verify group a change can reach, and no fewer"
     cmds:
-      - ./scripts/ci-groups.test.sh
+      - ./.github/scripts/ci-groups.test.sh
 
   verify:workflows:
     desc: "actionlint and zizmor over the workflows, at the versions CI pins"
@@ -395,7 +395,7 @@ tasks:
     # to ghcr.io. Keyless signing needs a CI OIDC token, so release.yaml's own
     # verify step covers that path; this covers the rest of the same script.
     cmds:
-      - ./scripts/release-sign.test.sh
+      - ./.github/scripts/release-sign.test.sh
 
   verify:live:
     desc: "Check the deployed release's contracts end to end against the cluster (KUBE_CONTEXT, NAMESPACE)"
@@ -554,17 +554,17 @@ tasks:
     # Two dispatches to one commit made the second publish a release that
     # already existed, and fail.
     cmds:
-      - ./scripts/new-release-tag.test.sh
+      - ./.github/scripts/new-release-tag.test.sh
 
   verify:warm-go-proxy:
     desc: "Fail when a module tag would ask the Go proxy for another module or version"
     cmds:
-      - ./scripts/warm-go-proxy.test.sh
+      - ./.github/scripts/warm-go-proxy.test.sh
 
   verify:badge-versions:
     desc: "Fail when the README's stack badges would read a version from the wrong place"
     cmds:
-      - ./scripts/badge-versions.test.sh
+      - ./.github/scripts/badge-versions.test.sh
 
   verify:postgres-version:
     desc: "Fail when the compose stacks and the Go test suites run different Postgres versions"
@@ -584,12 +584,12 @@ tasks:
   verify:propose-upgrade-sections:
     desc: "Fail when release.yaml would push the renamed upgrade sections wrongly, or twice"
     cmds:
-      - ./scripts/propose-upgrade-sections.test.sh
+      - ./.github/scripts/propose-upgrade-sections.test.sh
 
   verify:stream-release-notes:
     desc: "Fail when an SDK release lists commits that are not its own"
     cmds:
-      - ./scripts/stream-release-notes.test.sh
+      - ./.github/scripts/stream-release-notes.test.sh
 
   verify:security-scans:
     desc: "The backend's security scan scripts fail when their scanner did not run"
@@ -602,7 +602,7 @@ tasks:
     desc: "Fail when release.yaml would tag a main head newer than the commit CI passed"
     # v4.12.0 was tagged on a merge whose own CI was still running.
     cmds:
-      - ./scripts/release-head-check.test.sh
+      - ./.github/scripts/release-head-check.test.sh
 
   verify:publish-target:
     desc: "Fail when release.yaml, Taskfile.yaml and the charts name different image paths"
