@@ -339,11 +339,13 @@ func TestStorageMigrationRefusesATargetBucketItMayNotUse(t *testing.T) {
 		setup func(t *testing.T, f publicMigrationFixture)
 	}{
 		{"owned by another tenant", func(t *testing.T, f publicMigrationFixture) {
+			t.Helper()
 			other := f.otherTenant(t, ctx)
 			mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
 				SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, f.backend, f.dedicated, other)
 		}},
 		{"shared", func(t *testing.T, f publicMigrationFixture) {
+			t.Helper()
 			mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name)
 				SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, f.backend, f.dedicated)
 		}},
@@ -351,6 +353,7 @@ func TestStorageMigrationRefusesATargetBucketItMayNotUse(t *testing.T) {
 		// collection to it: the tenancy trigger checks bindings, not later
 		// changes of owner.
 		{"handed to this tenant while another one uses it", func(t *testing.T, f publicMigrationFixture) {
+			t.Helper()
 			other := f.otherTenant(t, ctx)
 			mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name)
 				SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, f.backend, f.dedicated)
@@ -359,6 +362,7 @@ func TestStorageMigrationRefusesATargetBucketItMayNotUse(t *testing.T) {
 			mustExec(t, ctx, f.pool, `UPDATE buckets SET owner_tenant_id = $2 WHERE name = $1`, f.dedicated, f.tenant)
 		}},
 		{"another tenant's default binding", func(t *testing.T, f publicMigrationFixture) {
+			t.Helper()
 			other := f.otherTenant(t, ctx)
 			mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
 				SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, f.backend, f.dedicated, f.tenant)
@@ -366,10 +370,12 @@ func TestStorageMigrationRefusesATargetBucketItMayNotUse(t *testing.T) {
 				SELECT $1, b.id, 'test' FROM buckets b WHERE b.name = $2`, other, f.dedicated)
 		}},
 		{"public", func(t *testing.T, f publicMigrationFixture) {
+			t.Helper()
 			mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id, public_read)
 				SELECT sb.id, $2, $3, true FROM storage_backends sb WHERE sb.name = $1`, f.backend, f.dedicated, f.tenant)
 		}},
 		{"being deleted", func(t *testing.T, f publicMigrationFixture) {
+			t.Helper()
 			mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id, provision_state)
 				SELECT sb.id, $2, $3, 'deleting' FROM storage_backends sb WHERE sb.name = $1`, f.backend, f.dedicated, f.tenant)
 		}},
