@@ -1235,8 +1235,10 @@ measures a chain that is about to change. Owner decision 2026-10-12.
 - **Shipped — physical verify:** the verify phase now HEADs every object in the
   TARGET bucket and checks its size against the source's recorded `size_bytes`
   (size, not ETag — ETags differ between a server-side copy and a stream-through
-  multipart upload); a miss / mismatch fails the migration instead of completing
-  on a broken copy. Unit-tested (pass + size-mismatch fail).
+  multipart upload); a miss / mismatch rolls the tenant back to its source
+  bucket (copying back what it wrote since the rebind) and then fails the
+  migration, retryable, instead of completing on a broken copy. Unit- and
+  integration-tested (`storage_migration_rollback_test.go`).
 - **Shipped — cost-attribution tagging:** the bucket reconciler now tags a
   dedicated (owned) bucket with `tenant_id=<uuid>` via `PutBucketTagging` right
   after `CreateBucket` (owner threaded through `ListPendingBucketProvisions` →
@@ -1277,13 +1279,41 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   derived bucket name for cross-account global uniqueness.
 - **Deferred — failed-migration follow-ups** (a `failed` migration is now
   retried by calling `MigrateTenantStorageLayout` again, which resets the row
-  to `provisioning` under a tenant lock):
-  - A migration that fails its physical verify has already rebound the tenant
-    (layout `dedicated`), so it is not retryable and has no repair path: the
-    tenant serves from a target that is missing objects while the source
-    copies are still retained (cleanup only runs from `completed`). Done when
-    an operator can re-copy into the target from the source, or roll the
-    tenant back to its source bucket, through the API.
+  to `provisioning` under a tenant lock; a failed physical verify rolls the
+  tenant back to its source bucket first — `rolling_back`, ADR-0015 Phase 3 —
+  and a tenant left dedicated by such a failure before that is rolled back by
+  the same RPC):
+  - Writes in flight across the rollback's rebind back are not fenced. The
+    rebind back refuses while an object row was written past the rollback
+    cursor, but an upload whose presigned PUT was issued for the dedicated
+    bucket and completes after the rebind back, or a write whose transaction
+    began before the final check and commits after it, leaves its bytes in
+    the dedicated bucket only; the forward rebind has the same window (there
+    the physical verify catches it). Done when both rebinds fence the
+    tenant's writes (or drain presigned uploads) across the switch, or a
+    sweep after the rebind back copies rows missing from the source.
+  - Soft-deleted objects are never copied — not by the migration, not by the
+    rollback (both walk AVAILABLE rows) — so restoring one after a migration
+    or a rollback finds no bytes where its collection now points. Done when
+    the copy and the rollback carry the bytes of restorable DELETED rows, or
+    restore copies them on demand.
+  - A rollback leaves bytes behind: the source keeps the pre-rebind bytes of
+    objects hard-deleted between the rebind and the rollback (no row lists
+    them, so nothing ever deletes them), and the dedicated bucket keeps its
+    copies until a retry reuses it (never, if nobody retries). Done when the
+    rollback deletes the source bytes of rows gone since `rebound_at` and an
+    abandoned dedicated bucket is emptied and deprovisioned.
+  - The rollback's scan (`MigrationListObjectsWrittenSince`, keyset on
+    `objects.(updated_at, id)`) has no index behind it, so each batch reads
+    the tenant's AVAILABLE rows. Acceptable for a rare path; done when a
+    measured rollback of a large tenant needs a `(tenant_id, updated_at, id)`
+    index (`CONCURRENTLY`, own migration file).
+  - The console's `StorageMigrationCard` shows a failed migration but offers
+    no retry (the trigger only renders with no migration), and the
+    `StorageMigrationStatus` proto comments still list the states without
+    `rolling_back` and say `error` is set only when `failed`. Done when the
+    card offers the retry and the comments are corrected with the next proto
+    change.
   - `tenant_storage_migrations.tenant_id` has no unique key; one migration per
     tenant is enforced by the start's `FOR NO KEY UPDATE` on the tenant row.
     Before that, a second start naming another target backend inserted a
