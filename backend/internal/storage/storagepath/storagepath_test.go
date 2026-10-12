@@ -1,4 +1,4 @@
-package s3adapter
+package storagepath
 
 import (
 	"testing"
@@ -25,11 +25,11 @@ func TestSanitizeSegment(t *testing.T) {
 	}
 }
 
-func TestComposeKeyCannotEscapeTenantPrefix(t *testing.T) {
+func TestComposeCannotEscapeTenantPrefix(t *testing.T) {
 	tid := uuid.MustParse("00000000-0000-0000-0000-0000000000aa")
-	got := composeKey(tid, "../other", "../../x")
+	got := Compose(tid, "../other", "../../x")
 	want := tid.String() + "/other/x"
 	if got != want {
-		t.Errorf("composeKey traversal: got %q, want %q", got, want)
+		t.Errorf("Compose traversal: got %q, want %q", got, want)
 	}
 }
