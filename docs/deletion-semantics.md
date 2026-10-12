@@ -118,6 +118,23 @@ Object lock outranks all of it:
   server sets `paladin.bypass_governance_retention` for that transaction and a
   trigger on `object_locks` reads it before allowing the row to go.
 
+### Deleted from the bucket, not through Paladin
+
+When the ingest plane receives a delete event from the storage backend, it
+does not take the event's word for it. The physical key carries no object
+id, so the same key can belong to a newer object or to one whose bytes have
+moved to another bucket. The ingest plane HEADs the object where its row
+places it now, and only an AVAILABLE object whose bytes are not there moves
+to the trash, with a `paladin.object.deleted` event (`mode: soft`, `source:
+storage_event`).
+
+This applies to public objects too: the trash is refused for them only
+because a soft delete leaves their bytes served, and these bytes are already
+gone. No delete marker is written in a versioned bucket, because all of an
+object's versions share its physical key and the backend's delete removed
+them all. `RestoreObject` refuses to restore an object whose bytes are
+missing.
+
 ### In a public collection
 
 A public collection ([ADR-0027](adr/0027-public-collections.md)) has no trash.

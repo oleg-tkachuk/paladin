@@ -11,8 +11,9 @@
     worker     ← monitoring / admin / UI (ops)     → common + storage
     dispatcher ← monitoring / admin / UI (ops)     → OPEN egress (customer
                                                      sinks live anywhere)
-    ingest     ← storage ns (webhook) / monitoring → common + NATS
-                 / UI (health)
+    ingest     ← storage ns (webhook) / monitoring → common + storage + NATS
+                 / UI (health)                       (a delete event is checked
+                                                     with a HEAD)
     mcp        ← ingress-controller / monitoring   → common + api/admin pods
                  / admin (sessions) / UI (health)
 
@@ -284,6 +285,7 @@ spec:
     {{- range $r := $common }}
     - {{ $r | toJson }}
     {{- end }}
+    - {{ $storageEgress | toJson }}
     - {{ $natsEgress | toJson }}
 {{- end }}
 {{- if .Values.deployments.mcp.enabled }}

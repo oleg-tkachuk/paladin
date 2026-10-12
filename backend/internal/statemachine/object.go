@@ -5,6 +5,7 @@
 //	PENDING ─(event|rpc|reconciler)→ AVAILABLE
 //	PENDING ─(presign expired + no upload)→ FAILED
 //	AVAILABLE ─(DeleteObject soft)→ DELETED
+//	AVAILABLE ─(storage delete event, bytes gone)→ DELETED
 //	AVAILABLE ─(DeleteObject permanent)→ ∅ (row removed)
 //	DELETED ─(RestoreObject)→ AVAILABLE
 //
