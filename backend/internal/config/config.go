@@ -219,6 +219,9 @@ func (c *Config) Validate() error {
 	if c.Capability.DPoPNonce.Key != "" && c.Capability.DPoPNonce.KeySecret != nil {
 		return fmt.Errorf("capability.dpop_nonce: cannot specify both key and key_secret")
 	}
+	if c.MCP.DPoPKey != "" && c.MCP.DPoPKeySecret != nil {
+		return fmt.Errorf("mcp: cannot specify both dpop_key and dpop_key_secret")
+	}
 	if c.APIToken.HMACKey != "" && c.APIToken.HMACKeySecret != nil {
 		return fmt.Errorf("api_token: cannot specify both hmac_key and hmac_key_secret")
 	}

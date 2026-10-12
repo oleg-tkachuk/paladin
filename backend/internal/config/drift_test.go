@@ -345,6 +345,8 @@ var unsetKnobAllowlist = map[string]string{
 	"api_token.hmac_key":                          "secret; per-deploy",
 	"capability.dpop_nonce.key":                   "secret; per-deploy",
 	"capability.dpop_nonce.key_secret":            "secret ref; per-deploy",
+	"mcp.dpop_key":                                "secret; per-deploy",
+	"mcp.dpop_key_secret":                         "secret ref; per-deploy",
 	"api_token.hmac_key_secret":                   "secret ref; per-deploy",
 	"runtime.health_snapshot_token_secret":        "secret ref; per-deploy",
 	"bootstrap.admin.password":                    "secret; per-deploy",
