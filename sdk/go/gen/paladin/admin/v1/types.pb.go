@@ -995,7 +995,7 @@ type Bucket struct {
 	CedarPolicy string `protobuf:"bytes,7,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
 	// Per-bucket constraints — overrides config.policy globals when set.
 	Constraints *BucketConstraints `protobuf:"bytes,8,opt,name=constraints,proto3" json:"constraints,omitempty"`
-	// Lifecycle rules (transition / expire) executed by the lifecycle worker.
+	// Lifecycle rules executed by the lifecycle worker: expirations only.
 	LifecycleRules []*LifecycleRule `protobuf:"bytes,9,rep,name=lifecycle_rules,json=lifecycleRules,proto3" json:"lifecycle_rules,omitempty"`
 	// Object lock configuration (WORM). Optional.
 	ObjectLock *ObjectLockConfig `protobuf:"bytes,10,opt,name=object_lock,json=objectLock,proto3" json:"object_lock,omitempty"`
@@ -1423,6 +1423,9 @@ func (*LifecycleRule_Transition) isLifecycleRule_Action() {}
 
 func (*LifecycleRule_Expiration) isLifecycleRule_Action() {}
 
+// Refused by SetLifecycleRules (INVALID_ARGUMENT): no supported storage
+// backend has storage classes to transition to, so the rule would never be
+// applied. Kept in the contract for the backend that brings them.
 type LifecycleTransition struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	After         *durationpb.Duration   `protobuf:"bytes,1,opt,name=after,proto3" json:"after,omitempty"`
