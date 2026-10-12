@@ -59,6 +59,20 @@ closed with a pointer here.
   `AlreadyExists` rather than replayed. Broker URLs are logged with their
   password masked. A credential that still reaches storage or a log is in
   scope.
+- **MCP write access.** The MCP bridge has no transport-level read-only
+  switch, and none is planned. What an agent can change through it is
+  decided where every other caller's writes are: the token it presents (its
+  scopes and roles), the Cedar policy, and any capability caveats, all
+  enforced by the plane the bridge forwards to. On top of that the bridge
+  narrows its tool catalogue — a profile per transport, then
+  `DefaultAlwaysDeny`, which wins over every profile — but that is catalogue
+  hygiene, not authorisation (`backend/internal/mcp/profile.go`). The
+  `read_only` profile offers no write tool and `agent_safe` only the object
+  writes it names, which `TestLifecycleWritesStayAdminOnly` holds; capability
+  and API-token issuance, user management and policy rewrites are always
+  denied. A tool appearing in a profile is therefore not a finding when the
+  caller's own policy permits the RPC; a write that lands without that
+  permission is.
 - **Policy layers.** Built-in, tenant, bucket and collection policies are
   joined in that order; a `forbid` in any layer wins. A layer that does not
   parse freezes its scope except for its own repair. See
