@@ -21,6 +21,20 @@ For MCP clients, the api role serves an OAuth 2.1 authorization server under
 the mcp role validates its tokens as a resource server
 ([ADR-0008](../../docs/adr/0008-mcp-oauth-resource-server.md)).
 
+**Key-bound capabilities through MCP.** The bridge cannot sign a proof with
+the agent's key, so it forwards an agent's key-bound capability only once the
+agent has delegated it to the bridge. With `mcp.dpop_key` set the bridge holds
+a key of its own, `paladin_get_bridge_key` returns its thumbprint, and the
+agent calls `CapabilityService.Delegate` itself, with its own proof and the
+share op, naming that thumbprint as `confirmation_jkt`. The child goes to the
+bridge in `X-Paladin-Capability`, and the bridge proves possession on every
+call it forwards. The bridge is then the child's holder: a copy of the child
+works through the bridge and nowhere else. One key signs all of the bridge's
+traffic, and the replay store keeps at most
+`limes.DefaultReplayEntriesPerKey` (1000) live proofs per key, each live for
+`limes.DefaultDPoPWindow` (one minute), so key-bound calls through the bridge
+are refused past roughly 1000 a minute.
+
 **Refresh-token rotation.** Every rotation supersedes the presented token and
 mints a successor in the same family. Presenting a superseded token is:
 
