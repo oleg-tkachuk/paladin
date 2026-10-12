@@ -420,6 +420,12 @@ func (c *Config) Obfuscated() Config {
 		cc.APIToken.HMACKey = Redacted
 	}
 
+	// DPoP nonce key (resolved from capability.dpop_nonce.key_secret): with
+	// it anyone can mint nonces every replica accepts.
+	if cc.Capability.DPoPNonce.Key != "" {
+		cc.Capability.DPoPNonce.Key = Redacted
+	}
+
 	// Ingest webhook HMAC (resolved from ingest.webhook.shared_secret_ref).
 	if cc.Ingest.Webhook.SharedSecret != "" {
 		cc.Ingest.Webhook.SharedSecret = Redacted

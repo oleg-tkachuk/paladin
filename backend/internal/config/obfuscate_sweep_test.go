@@ -8,12 +8,17 @@ import (
 )
 
 // secretFieldName matches the yaml names that hold a credential once the
-// resolver has run. Obfuscated() is a hand-kept list, and it has missed a new
+// resolver has run; a bare "key" too, which capability.dpop_nonce.key is. Obfuscated() is a hand-kept list, and it has missed a new
 // one more than once; this sweep finds the next before a boot log prints it.
-var secretFieldName = regexp.MustCompile(`(password|secret|token|_key)$`)
+var secretFieldName = regexp.MustCompile(`(password|secret|token|_key|^key)$`)
 
 // notSecret lists yaml paths the pattern matches that hold no credential.
-var notSecret = map[string]bool{}
+var notSecret = map[string]bool{
+	// The name of the entry inside a Secret, not its value.
+	"ingest.webhook.shared_secret_ref.key": true,
+	"ingest.nats.token_ref.key":            true,
+	"ingest.rabbitmq.url_ref.key":          true,
+}
 
 const plantedPrefix = "planted-secret:"
 
