@@ -44,6 +44,16 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — objects deleted from the bucket go to the trash
+
+- **Ingest.** A delete event from the storage backend moves the object to
+  the trash once a HEAD where its row places it finds nothing; it used to be
+  logged and ignored. The ingest role now HEADs the backends, so its
+  NetworkPolicy gains egress to `networkPolicies.storage.namespace`.
+- **API, additive.** `RestoreObject` refuses an object whose bytes are gone
+  with `FAILED_PRECONDITION` and the new reason `OBJECT_BYTES_MISSING`, and
+  answers `UNAVAILABLE` when the backend cannot be reached.
+
 ## Unreleased — the Python SDK supports Python 3.15
 
 - **Python SDK.** CPython 3.15 is tested beside 3.13 and 3.14;
