@@ -87,7 +87,9 @@
   10. **Unchanged:** quotas, audit and events for writes, as in any
       collection. Anonymous reads reach no Paladin process, so they are not
       attributed to a tenant or counted; the store's or the CDN's access logs
-      are the only record. Moving a tenant to the trash does not touch its
+      are the only record. That is the decision, not a gap (2026-10-12):
+      public egress is not billed, and ingesting those logs to attribute it
+      by the path's tenant segment waits for a reason to bill it. Moving a tenant to the trash does not touch its
       bytes, so its public objects stay readable until they are deleted —
       `PurgeTenant` refuses while the tenant has objects.
 
