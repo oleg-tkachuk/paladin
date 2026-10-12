@@ -419,7 +419,7 @@ export type Bucket = Message<"paladin.admin.v1.Bucket"> & {
   constraints?: BucketConstraints | undefined;
 
   /**
-   * Lifecycle rules (transition / expire) executed by the lifecycle worker.
+   * Lifecycle rules executed by the lifecycle worker: expirations only.
    *
    * @generated from field: repeated paladin.admin.v1.LifecycleRule lifecycle_rules = 9;
    */
@@ -640,6 +640,10 @@ export const LifecycleRuleSchema: GenMessage<LifecycleRule> =
   messageDesc(file_paladin_admin_v1_types, 6);
 
 /**
+ * Refused by SetLifecycleRules (INVALID_ARGUMENT): no supported storage
+ * backend has storage classes to transition to, so the rule would never be
+ * applied. Kept in the contract for the backend that brings them.
+ *
  * @generated from message paladin.admin.v1.LifecycleTransition
  */
 export type LifecycleTransition =

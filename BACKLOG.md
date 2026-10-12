@@ -498,18 +498,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
     SeaweedFS instances for exactly this.
 - **Blockers:** scope decision — same-cloud only vs. cross-cloud.
 
-### Lifecycle transition rules are not applied
-
-- **Status:** Deferred
-- **Reason:** [internal/worker/lifecycle.go](backend/internal/worker/lifecycle.go)
-  applies `Expiration` only; a rule's transition (storage-class change) is
-  accepted and stored but has no effect until it maps onto the backend's own
-  S3 lifecycle configuration.
-- **Definition of Done:** transitions either drive the backend's lifecycle
-  configuration or are refused at write time, with tests for both the rule
-  validation and the worker.
-- **Blockers:** which backends expose storage classes worth transitioning to.
-
 ### `Object.placement` is never populated
 
 - **Status:** Deferred

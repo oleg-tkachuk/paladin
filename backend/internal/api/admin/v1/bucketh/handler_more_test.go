@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
@@ -309,6 +310,23 @@ func TestSetLifecycleRules_ValidRulesForwarded(t *testing.T) {
 	}
 	if len(repo.gotLifecycleArg) != 2 || repo.gotLifecycleArg[0].ID != "expire-30d" {
 		t.Errorf("forwarded rules = %+v, want the 2 input rules", repo.gotLifecycleArg)
+	}
+}
+
+// A transition is refused rather than stored: nothing would ever apply it.
+func TestSetLifecycleRules_TransitionRefused(t *testing.T) {
+	repo := &fakeRepo{}
+	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
+	rules := []admindomain.LifecycleRule{
+		{ID: "expire-30d", Expiration: &admindomain.LifecycleExpiration{After: 30 * 24 * time.Hour}},
+		{ID: "archive", Transition: &admindomain.LifecycleTransition{After: time.Hour, StorageClass: "GLACIER"}},
+	}
+	_, err := h.SetLifecycleRules(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", rules, 1)
+	if code(err) != connect.CodeInvalidArgument || !errors.Is(err, ErrLifecycleTransition) {
+		t.Fatalf("err = %v, want InvalidArgument wrapping ErrLifecycleTransition", err)
+	}
+	if repo.gotLifecycleArg != nil {
+		t.Error("a transition rule reached the repository")
 	}
 }
 

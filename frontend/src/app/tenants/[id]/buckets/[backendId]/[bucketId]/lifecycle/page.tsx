@@ -73,7 +73,6 @@ import { bucketClient } from "@/lib/connect/client";
 import {
   type LifecycleRule,
   LifecycleRuleSchema,
-  LifecycleTransitionSchema,
   LifecycleExpirationSchema,
 } from "@/gen/paladin/admin/v1/types_pb";
 import { T } from "@/lib/ui/typography";
@@ -139,26 +138,24 @@ const UNIT_LABEL: Record<DurationUnit, string> = {
 
 // ─── form types ──────────────────────────────────────────────────────────────
 
-type ActionKind = "transition" | "expiration";
-
+// A rule's action is an expiration. The server refuses transitions: no
+// supported backend has storage classes to move objects to, so one was
+// stored and never applied (BACKLOG). A bucket may still hold one from
+// before, which the page shows as not applied and lets the operator delete.
 interface RuleFormState {
   id: string;
   enabled: boolean;
   match: string;
-  action: ActionKind;
   afterAmount: string;
   afterUnit: DurationUnit;
-  storageClass: string;
 }
 
 const DEFAULT_FORM: RuleFormState = {
   id: "",
   enabled: true,
   match: "",
-  action: "expiration",
   afterAmount: "30",
   afterUnit: "d",
-  storageClass: "",
 };
 
 const RULE_ID_REGEX = /^[a-z][a-z0-9-]{0,62}$/;
@@ -167,7 +164,6 @@ interface FormErrors {
   id?: string;
   match?: string;
   after?: string;
-  storageClass?: string;
 }
 
 function validateForm(form: RuleFormState): FormErrors {
@@ -185,62 +181,43 @@ function validateForm(form: RuleFormState): FormErrors {
   if (!Number.isFinite(amount) || amount <= 0) {
     errors.after = "Must be a positive integer.";
   }
-  if (form.action === "transition" && !form.storageClass.trim()) {
-    errors.storageClass = "Storage class is required for transitions.";
-  }
   return errors;
 }
 
+/** A stored transition: never applied, and refused by the server. */
+function isTransition(rule: LifecycleRule): boolean {
+  return rule.action.case === "transition";
+}
+
 function ruleToForm(rule: LifecycleRule): RuleFormState {
-  if (rule.action.case === "transition") {
-    const t = rule.action.value;
-    const { amount, unit } = decomposeDuration(t.after);
-    return {
-      id: rule.id,
-      enabled: rule.enabled,
-      match: rule.match,
-      action: "transition",
-      afterAmount: String(amount),
-      afterUnit: unit,
-      storageClass: t.storageClass,
-    };
-  }
   if (rule.action.case === "expiration") {
-    const e = rule.action.value;
-    const { amount, unit } = decomposeDuration(e.after);
+    const { amount, unit } = decomposeDuration(rule.action.value.after);
     return {
       id: rule.id,
       enabled: rule.enabled,
       match: rule.match,
-      action: "expiration",
       afterAmount: String(amount),
       afterUnit: unit,
-      storageClass: "",
     };
   }
-  return { ...DEFAULT_FORM, id: rule.id, enabled: rule.enabled };
+  return {
+    ...DEFAULT_FORM,
+    id: rule.id,
+    enabled: rule.enabled,
+    match: rule.match,
+  };
 }
 
 function formToRule(form: RuleFormState): LifecycleRule {
   const after = buildDuration(Number(form.afterAmount), form.afterUnit);
-  const action: LifecycleRule["action"] =
-    form.action === "transition"
-      ? {
-          case: "transition",
-          value: create(LifecycleTransitionSchema, {
-            after,
-            storageClass: form.storageClass.trim(),
-          }),
-        }
-      : {
-          case: "expiration",
-          value: create(LifecycleExpirationSchema, { after }),
-        };
   return create(LifecycleRuleSchema, {
     id: form.id.trim(),
     enabled: form.enabled,
     match: form.match.trim(),
-    action,
+    action: {
+      case: "expiration",
+      value: create(LifecycleExpirationSchema, { after }),
+    },
   });
 }
 
@@ -261,6 +238,7 @@ export default function BucketLifecyclePage() {
   const [deleteTarget, setDeleteTarget] = useState<LifecycleRule | null>(null);
 
   const rules = bucket.lifecycleRules ?? [];
+  const hasTransitions = rules.some(isTransition);
 
   const persistRules = useCallback(
     async (
@@ -305,6 +283,7 @@ export default function BucketLifecyclePage() {
   };
 
   const openEdit = (rule: LifecycleRule) => {
+    if (isTransition(rule)) return;
     setEditorMode("edit");
     setForm(ruleToForm(rule));
     setErrors({});
@@ -360,8 +339,7 @@ export default function BucketLifecyclePage() {
         <div>
           <h2 className="text-lg font-semibold">Lifecycle rules</h2>
           <p className={cn(T.helper, "max-w-prose")}>
-            Automate transitions and expirations of objects based on age and a
-            CEL filter.
+            Expire objects by age and a CEL filter.
           </p>
         </div>
         <Button
@@ -380,9 +358,8 @@ export default function BucketLifecyclePage() {
           <ClockIcon className="size-10 text-muted-foreground" />
           <h2 className={T.cardTitleProse}>No lifecycle rules</h2>
           <p className={cn(T.helper, "max-w-md")}>
-            Lifecycle rules automate transitions and expirations of objects
-            based on age and a CEL filter. Background workers evaluate rules on
-            the configured cadence.
+            Lifecycle rules expire objects by age and a CEL filter. Background
+            workers evaluate rules on the configured cadence.
           </p>
           <Button
             size="sm"
@@ -396,6 +373,16 @@ export default function BucketLifecyclePage() {
         </Card>
       ) : (
         <div className="space-y-3">
+          {hasTransitions && (
+            <div
+              role="alert"
+              className="rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm"
+            >
+              This bucket holds transition rules. They were never applied, and
+              no change to its lifecycle rules saves while one is stored: delete
+              them first.
+            </div>
+          )}
           {rules.map((rule) => (
             <RuleCard
               key={rule.id}
@@ -468,7 +455,7 @@ function mergeRule(
 
 function describeAction(rule: LifecycleRule): string {
   if (rule.action.case === "transition") {
-    return `transition to ${rule.action.value.storageClass || "?"} after ${formatDuration(rule.action.value.after)}`;
+    return `transition to ${rule.action.value.storageClass || "?"} after ${formatDuration(rule.action.value.after)} — not applied`;
   }
   if (rule.action.case === "expiration") {
     return `expire after ${formatDuration(rule.action.value.after)}`;
@@ -487,6 +474,9 @@ interface RuleCardProps {
 }
 
 function RuleCard({ rule, busy, onEdit, onToggle, onDelete }: RuleCardProps) {
+  // A transition can only be deleted: editing or enabling it saves a rule
+  // the server refuses.
+  const deleteOnly = isTransition(rule);
   return (
     <Card
       className="cursor-pointer p-4 transition-colors hover:border-foreground/20"
@@ -513,12 +503,18 @@ function RuleCard({ rule, busy, onEdit, onToggle, onDelete }: RuleCardProps) {
             <span className="font-mono text-sm font-medium text-foreground">
               {rule.id}
             </span>
-            <Badge
-              variant={rule.enabled ? "success" : "outline"}
-              className={T.labelTight}
-            >
-              {rule.enabled ? "enabled" : "disabled"}
-            </Badge>
+            {deleteOnly ? (
+              <Badge variant="warning" className={T.labelTight}>
+                not applied
+              </Badge>
+            ) : (
+              <Badge
+                variant={rule.enabled ? "success" : "outline"}
+                className={T.labelTight}
+              >
+                {rule.enabled ? "enabled" : "disabled"}
+              </Badge>
+            )}
           </div>
           <div className={cn(T.hint, "flex flex-wrap items-baseline gap-x-2")}>
             <span className="text-muted-foreground">match:</span>
@@ -544,11 +540,14 @@ function RuleCard({ rule, busy, onEdit, onToggle, onDelete }: RuleCardProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={onEdit} disabled={busy}>
+              <DropdownMenuItem onSelect={onEdit} disabled={busy || deleteOnly}>
                 <PencilIcon className="size-4" />
                 Edit
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onToggle} disabled={busy}>
+              <DropdownMenuItem
+                onSelect={onToggle}
+                disabled={busy || deleteOnly}
+              >
                 {rule.enabled ? "Disable" : "Enable"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -615,8 +614,8 @@ function RuleEditor({
             </DialogTitle>
             <DialogDescription>
               {mode === "create"
-                ? "Filter objects with a CEL expression and choose either a storage-class transition or an expiration."
-                : "Tune the match expression or action. The rule ID cannot be changed."}
+                ? "Filter objects with a CEL expression and choose how long after creation they expire."
+                : "Tune the match expression or the age. The rule ID cannot be changed."}
             </DialogDescription>
           </DialogHeader>
 
@@ -677,24 +676,6 @@ function RuleEditor({
             </div>
 
             <div className="space-y-1.5">
-              <Label>Action</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <ActionToggle
-                  active={form.action === "expiration"}
-                  onClick={() => update("action", "expiration")}
-                  title="Expiration"
-                  description="Delete the object."
-                />
-                <ActionToggle
-                  active={form.action === "transition"}
-                  onClick={() => update("action", "transition")}
-                  title="Transition"
-                  description="Move to a different storage class."
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
               <Label htmlFor="rule-after">After</Label>
               <div className="flex gap-2">
                 <Input
@@ -727,32 +708,9 @@ function RuleEditor({
               </div>
               <p className={cn(T.hint, errors.after && "text-destructive")}>
                 {errors.after ??
-                  "Time since the object's creation timestamp before the action fires."}
+                  "Time since the object's creation timestamp before it expires."}
               </p>
             </div>
-
-            {form.action === "transition" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="rule-storage-class">Storage class</Label>
-                <Input
-                  id="rule-storage-class"
-                  className="font-mono text-xs"
-                  placeholder="GLACIER"
-                  value={form.storageClass}
-                  onChange={(e) => update("storageClass", e.target.value)}
-                  aria-invalid={!!errors.storageClass || undefined}
-                />
-                <p
-                  className={cn(
-                    T.hint,
-                    errors.storageClass && "text-destructive",
-                  )}
-                >
-                  {errors.storageClass ??
-                    "Backend-defined identifier. Free-text — backends validate at apply time."}
-                </p>
-              </div>
-            )}
           </div>
 
           <DialogFooter>
@@ -770,34 +728,5 @@ function RuleEditor({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ActionToggle({
-  active,
-  onClick,
-  title,
-  description,
-}: {
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  description: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "rounded-md border p-3 text-left transition-colors",
-        active
-          ? "border-primary bg-primary/5 ring-1 ring-primary"
-          : "border-border hover:border-foreground/30",
-      )}
-    >
-      <div className="text-sm font-medium text-foreground">{title}</div>
-      <div className={T.hint}>{description}</div>
-    </button>
   );
 }
