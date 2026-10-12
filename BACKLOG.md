@@ -440,18 +440,24 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   for it and an integration test against Garage.
 - **Blockers:** whether any deployment publishes from Garage.
 
-### The compose stack's SeaweedFS serves every request unsigned
+### The compose stack's named SeaweedFS identity is unconfirmed end to end
 
 - **Status:** Deferred
-- **Reason:** `backend/deploy/seaweedfs-s3.json` gives Paladin's credentials to
-  SeaweedFS' `anonymous` identity, which grants its actions to unsigned
-  requests too. Nothing in the stack is private at the store, and the feature
-  probe reports `ANONYMOUS_READ_POLICY` unsupported there, so public
-  collections cannot be tried on it.
-- **Definition of Done:** the compose stack uses a named identity, as the
-  integration suites and the e2e stack do, and its e2e run still passes.
-- **Blockers:** none; check that nothing in the dev stack reads storage
-  unsigned.
+- **Reason:** `backend/deploy/seaweedfs-s3.json` now declares a named identity
+  (`paladin-dev`, the same `dummy` keys `configs/compose.yaml` and
+  `configs/local.yaml` sign with) and no `anonymous` one, so unsigned requests
+  are refused unless a bucket policy opens them. Against that file on
+  SeaweedFS 4.47 the feature probe reports every feature supported, including
+  `ANONYMOUS_READ_POLICY`; with the old file it reported that one unsupported.
+  Nothing in the dev stack reads the store unsigned: Paladin, the console,
+  `frontend/scripts/dev-bootstrap.sh` and `scripts/live-smoke.sh` all go
+  through signed or presigned requests. What has not run is the whole stack
+  (`task stack:up`) on the pinned 4.48 image, as Docker Hub refused the pulls.
+- **Definition of Done:** `task stack:up` comes up on this file, an upload and
+  a download through the console or `scripts/live-smoke.sh` succeed, and the
+  backend's probe reports `ANONYMOUS_READ_POLICY` supported; then delete this
+  entry.
+- **Blockers:** none.
 
 ### Anonymous reads of public objects are not counted
 
