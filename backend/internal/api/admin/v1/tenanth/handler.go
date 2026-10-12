@@ -728,6 +728,10 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
 		return nil, err
 	}
+	// The tenant's collections, migration row and default binding are
+	// tenant-scoped (RLS), and a platform admin is bound to its own tenant:
+	// act as the tenant authorised above, as SetTenantDefaultBinding does.
+	ctx = auth.WithActingTenant(ctx, tenantID)
 
 	t, err := h.repo.Get(ctx, tenantID)
 	if err != nil {
@@ -815,7 +819,8 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 // migration put it. Any other dedicated tenant (created dedicated, or moved
 // since) has no source bucket to go back to, or one an operator chose to
 // leave, and is refused as before (ok false, no error). The repository
-// re-checks under the tenant lock, which decides a race.
+// re-checks under the tenant lock, which decides a race. ctx already acts as
+// tenantID (MigrateTenantStorageLayout set it after authorising).
 func (h *Handler) rollBackStuck(ctx context.Context, tenantID uuid.UUID, layout string) (*StorageMigration, bool, error) {
 	if layout != "dedicated" {
 		return nil, false, nil
@@ -829,9 +834,7 @@ func (h *Handler) rollBackStuck(ctx context.Context, tenantID uuid.UUID, layout 
 	case prev.State != StorageMigrationFailed:
 		return nil, false, nil
 	}
-	// The migration row and the default binding are tenant-scoped (RLS): act
-	// as the tenant authorised above, as SetTenantDefaultBinding does.
-	m, err := h.repo.RollBackStuckStorageMigration(auth.WithActingTenant(ctx, tenantID), tenantID)
+	m, err := h.repo.RollBackStuckStorageMigration(ctx, tenantID)
 	if errors.Is(err, ErrStorageMigrationNotRollbackable) {
 		return nil, false, nil
 	} else if err != nil {
@@ -848,7 +851,9 @@ func (h *Handler) GetTenantStorageMigration(ctx context.Context, tenantID uuid.U
 	if err := h.authorize(ctx, cedar.ActionReadTenant, tenantID); err != nil {
 		return nil, err
 	}
-	m, err := h.repo.GetStorageMigration(ctx, tenantID)
+	// The migration row is tenant-scoped (RLS): act as the tenant authorised
+	// above, or a platform admin reads its own tenant's (none).
+	m, err := h.repo.GetStorageMigration(auth.WithActingTenant(ctx, tenantID), tenantID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
