@@ -224,8 +224,8 @@ the same commit. Treat this file like a runtime invariant.
 ### Role split: `indexer` / `embedder` (semantic search)
 
 - **Status:** Aspirational
-- **Reason:** No semantic-search feature today. When it lands
-  (BACKLOG-aspirational), the embedder is fundamentally different
+- **Reason:** No semantic-search feature today. When it lands, the
+  embedder is fundamentally different
   from any existing role: heavy CPU/memory profile (LLM client
   calls + vector math), batched throughput pattern, separate
   egress to embedding API providers (Voyage / OpenAI / Cohere) or
@@ -243,22 +243,23 @@ the same commit. Treat this file like a runtime invariant.
 ### Role split: `billing-aggregator`
 
 - **Status:** Aspirational
-- **Reason:** When per-tenant billing dashboard (BACKLOG step 5)
-  lands, real-time aggregation queries (group by day × op × tenant
-  across audit_log + capability_usage) become expensive on large
-  tenants. A dedicated job that pre-computes daily snapshots into
-  a `billing_snapshots` table makes the dashboard render fast and
-  isolates analytical-query load from OLTP.
+- **Reason:** The per-tenant billing dashboard has shipped: the console's
+  `/billing` page reads `BillingService.GetTenantSummary` and
+  `GetTenantTimeSeries` (`internal/api/admin/v1/billingh`), which aggregate
+  the `charges` table on every request. That stays cheap until a tenant's
+  charges per period grow large; then a dedicated job that pre-computes
+  daily snapshots into a `billing_snapshots` table makes the dashboard
+  render fast and isolates analytical-query load from OLTP.
 - **Definition of Done:**
   - New `serve billing` role (or fold into `worker` as one more job
     if scheduler split happens first): periodic aggregation pass
-    over `audit_log` + `capability_usage` → daily snapshot rows.
+    over `charges` → daily snapshot rows.
   - `BillingService.GetTenantSnapshot(tenant, period)` → fast read
     of pre-computed totals.
   - Snapshot retention policy + reaper.
-- **Trigger to do:** when the billing dashboard is built and a
-  real tenant exceeds ~1M audit log rows per period, making
-  on-the-fly aggregation slower than the SLA.
+- **Trigger to do:** when a real tenant's charges per period grow large
+  enough (rule of thumb: ~1M rows) that the on-the-fly aggregation is
+  slower than the SLA.
 
 ### Role split: `auth-server` (OAuth AS isolation)
 
