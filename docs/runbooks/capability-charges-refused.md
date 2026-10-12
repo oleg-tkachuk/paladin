@@ -50,8 +50,8 @@ refused before any charge and does not appear here.
 
 3. **`unit_mismatch`: the charge is in another currency.** A capability's
    counter, an ancestor's or the tenant's budget already counts in one unit,
-   and the charge — `capability.charge_per_request_unit`, or the capability's
-   own unit — names another. Every retry fails the same way. Align the unit,
+   and the charge — always in the capability's own unit — names another.
+   Every retry fails the same way. Issue the capability in the tenant's unit,
    or reset the tenant budget's spend with `TenantBudgetService.Set` before
    moving it to the new one.
 
