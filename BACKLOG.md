@@ -1290,12 +1290,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
     second row, so a database may hold duplicates (readers take the latest).
     Done when duplicates are resolved and a unique index on `tenant_id` is
     built (`CONCURRENTLY`, own migration file).
-  - The worker's transitions compare-and-set on `state` alone, so a worker
-    resumed after a pause spanning a failure *and* a retry could apply a
-    stale `AdvanceCopy` from the earlier attempt to the new one (ABA). The
-    physical verify would still catch a missing object, after the rebind.
-    Done when transitions also match an attempt generation (e.g. `attempts`,
-    which every failure bumps).
 - **Note — dev cluster object store is Garage (switched off SeaweedFS):**
   the `primary` backend now points at **Garage** (`garage-s3.storage:3900`,
   bucket `paladin-primary`, presigned via the `s3-garage.paladin.local` Traefik
