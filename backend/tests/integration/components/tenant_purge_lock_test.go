@@ -153,8 +153,8 @@ func TestTrashedTenantWithLockedObjectCannotBePurged(t *testing.T) {
 				// objects/object_versions/object_locks are under FORCE RLS. As
 				// the runtime role scoped to some other tenant, a guard that
 				// read them with the caller's visibility would see nothing and
-				// fall through to the foreign keys. The trigger widens its own
-				// reads, so the refusal is still the lock.
+				// fall through to the foreign keys. The trigger reads as its
+				// owner, which bypasses RLS, so the refusal is still the lock.
 				err := inTx(t, ctx, f, false, func(tx pgx.Tx) error {
 					if _, e := tx.Exec(ctx, `SET LOCAL ROLE paladin_app`); e != nil {
 						t.Fatalf("set role: %v", e)
