@@ -7,18 +7,24 @@
 // anything, so this is the first thing an operator hits on a fresh
 // install.
 //
-// Scope: list + create. Edit / delete / RotateCredentials / TestBackend
-// live behind a row dropdown when needed; the create form is the
-// 80% case for this page.
+// One row per backend, one line per row: who it is, where it lives, the
+// state it is in, what the last probe found. Every state change sits behind
+// the row's menu or the bulk bar, and disabling asks first.
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowPathIcon,
+  ArrowTopRightOnSquareIcon,
   CloudIcon,
+  EllipsisHorizontalIcon,
   MagnifyingGlassIcon,
+  NoSymbolIcon,
+  PauseCircleIcon,
+  PlayCircleIcon,
   PlusIcon,
   ServerStackIcon,
+  WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -27,12 +33,27 @@ import { BackendRegisterDialog } from "./BackendRegisterDialog";
 import { STORAGE_KIND_LABELS } from "@/lib/storageKind";
 import { useNotification } from "@/components/ui/Notification";
 import { ListLoadError } from "@/components/ui/ListLoadError";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  SelectContent,
+  SelectItem,
+  SelectRoot,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import {
   Table,
   TableBody,
@@ -46,8 +67,109 @@ import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { providerLabel } from "@/lib/storageProvider";
 import { compatibilityBadge, featureWarnings } from "@/lib/storageFeatures";
-import { T } from "@/lib/ui/typography";
 import { errorMessage } from "@/hooks/errorContract";
+import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
+import {
+  STATE_FILTERS,
+  STATE_FILTER_LABELS,
+  allOf,
+  healthView,
+  lifecycleState,
+  stateFilter,
+  type HealthTone,
+  type StateFilter,
+} from "./backendView";
+
+// Checkbox, backend, storage, region, state, health, menu.
+const COLUMN_COUNT = 7;
+const SKELETON_ROWS = 3;
+// Trails the search box so a refetch does not fire per keystroke.
+const SEARCH_DEBOUNCE_MS = 300;
+
+const HEALTH_DOT: Record<HealthTone, string> = {
+  ok: "bg-chart-2",
+  error: "bg-destructive",
+  unknown: "bg-muted-foreground/50",
+};
+
+type Action =
+  "enable" | "disable" | "drain" | "undrain" | "maintenance" | "unmaintenance";
+
+// What each action is called, and the toast that reports it.
+const ACTION_TEXT: Record<
+  Action,
+  { bulkLabel: string; button: string; done: string; failed: string }
+> = {
+  enable: {
+    bulkLabel: "Bulk enable",
+    button: "Enable",
+    done: "Backend enabled",
+    failed: "Could not change backend state",
+  },
+  disable: {
+    bulkLabel: "Bulk disable",
+    button: "Disable",
+    done: "Backend disabled",
+    failed: "Could not change backend state",
+  },
+  drain: {
+    bulkLabel: "Bulk drain",
+    button: "Drain",
+    done: "Backend draining (read-only)",
+    failed: "Could not change drain state",
+  },
+  undrain: {
+    bulkLabel: "Bulk undrain",
+    button: "Undrain",
+    done: "Backend writable",
+    failed: "Could not change drain state",
+  },
+  maintenance: {
+    bulkLabel: "Bulk maintenance",
+    button: "Maintenance",
+    done: "Backend flagged for maintenance",
+    failed: "Could not change maintenance flag",
+  },
+  unmaintenance: {
+    bulkLabel: "Bulk clear maintenance",
+    button: "Clear maintenance",
+    done: "Maintenance flag cleared",
+    failed: "Could not change maintenance flag",
+  },
+};
+
+// The bulk bar's pairs: each pair sets one flag on and off.
+const BULK_GROUPS: readonly (readonly [Action, Action])[] = [
+  ["enable", "disable"],
+  ["drain", "undrain"],
+  ["maintenance", "unmaintenance"],
+];
+
+// applies reports whether an action changes a given backend's state, so a
+// no-op is skipped rather than firing a pointless RPC. Drain and undrain only
+// apply to an ENABLED backend: a disabled one already rejects everything.
+// Maintenance is advisory and orthogonal, settable in any state.
+function applies(b: StorageBackend, action: Action): boolean {
+  switch (action) {
+    case "enable":
+      return !b.enabled;
+    case "disable":
+      return b.enabled;
+    case "drain":
+      return b.enabled && !b.readOnly;
+    case "undrain":
+      return b.enabled && b.readOnly;
+    case "maintenance":
+      return !b.maintenance;
+    case "unmaintenance":
+      return b.maintenance;
+  }
+}
+
+// The disable confirmation: what stops, so the click is not a surprise.
+const DISABLE_CONSEQUENCE =
+  "Buckets on it stop serving reads and writes until it is enabled again. " +
+  "The configured default backend cannot be disabled.";
 
 export default function StorageBackendsPage() {
   const {
@@ -62,115 +184,81 @@ export default function StorageBackendsPage() {
   } = useBackends();
   const { showNotification } = useNotification();
 
-  // Server-side, like /buckets: the page used to fetch every backend and
-  // narrow the array in the browser. The derived `search` field joins the same
-  // four columns this box used to match — id, display name, region, endpoint —
-  // so nothing it used to find has stopped being findable.
+  // Server-side, like /buckets: the derived `search` field joins id, display
+  // name, region and endpoint, and the state choice is a conjunct beside it.
   const [search, setSearch] = useState("");
-  // Trails `search` by 300ms so a refetch does not fire per keystroke.
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [drainingId, setDrainingId] = useState<string | null>(null);
-  const [maintainingId, setMaintainingId] = useState<string | null>(null);
+  const [state, setState] = useState<StateFilter>("all");
+  // The backend a row action is running on; its menu stays disabled meanwhile.
+  const [busyId, setBusyId] = useState<string | null>(null);
   // Multi-select for bulk actions (client-side fan-out over the per-backend
   // OCC-guarded RPCs — each backend carries its own resource_version).
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Disabling asks first: one backend from a row menu, or the selection.
+  const [confirmDisable, setConfirmDisable] = useState<
+    StorageBackend | "selection" | null
+  >(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
-  // handleToggle flips a backend's enabled state. The server refuses to
-  // disable the configured default backend (FailedPrecondition) and a
-  // stale resource_version (Aborted) — both surface as a clear toast
-  // rather than a raw error.
-  const handleToggle = async (
-    backendId: string,
-    nextEnabled: boolean,
-    resourceVersion: string,
-  ) => {
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // One place that knows how to ask, so Refresh, the error retry and the
+  // post-action reload cannot drift into fetching something else.
+  const refetch = useCallback(
+    () =>
+      fetchBackends(allOf(searchFilter(debouncedSearch), stateFilter(state))),
+    [fetchBackends, debouncedSearch, state],
+  );
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  const call = (b: StorageBackend, action: Action) => {
+    switch (action) {
+      case "enable":
+        return setBackendEnabled(b.backendId, true, b.resourceVersion);
+      case "disable":
+        return setBackendEnabled(b.backendId, false, b.resourceVersion);
+      case "drain":
+        return setBackendReadOnly(b.backendId, true, b.resourceVersion);
+      case "undrain":
+        return setBackendReadOnly(b.backendId, false, b.resourceVersion);
+      case "maintenance":
+        return setBackendMaintenance(b.backendId, true, b.resourceVersion);
+      case "unmaintenance":
+        return setBackendMaintenance(b.backendId, false, b.resourceVersion);
+    }
+  };
+
+  // The server refuses to disable the configured default backend
+  // (FailedPrecondition) and a stale resource_version (Aborted); both reach
+  // the operator as a toast rather than a raw error.
+  const runRow = async (b: StorageBackend, action: Action) => {
+    setBusyId(b.backendId);
     try {
-      setTogglingId(backendId);
-      await setBackendEnabled(backendId, nextEnabled, resourceVersion);
+      await call(b, action);
       showNotification({
         type: "success",
-        title: nextEnabled ? "Backend enabled" : "Backend disabled",
-        message: backendId,
+        title: ACTION_TEXT[action].done,
+        message: b.backendId,
       });
     } catch (err) {
       showNotification({
         type: "error",
-        title: "Could not change backend state",
+        title: ACTION_TEXT[action].failed,
         message: errorMessage(err),
       });
     } finally {
-      setTogglingId(null);
+      setBusyId(null);
     }
   };
 
-  // handleDrain flips a backend's read-only "drain" state
-  // (`001_initial_schema.sql`).
-  // Draining keeps reads working while refusing mutations, so an operator can
-  // migrate data off before disabling. OCC-guarded like enable/disable.
-  const handleDrain = async (
-    backendId: string,
-    nextReadOnly: boolean,
-    resourceVersion: string,
-  ) => {
-    try {
-      setDrainingId(backendId);
-      await setBackendReadOnly(backendId, nextReadOnly, resourceVersion);
-      showNotification({
-        type: "success",
-        title: nextReadOnly
-          ? "Backend draining (read-only)"
-          : "Backend writable",
-        message: backendId,
-      });
-    } catch (err) {
-      showNotification({
-        type: "error",
-        title: "Could not change drain state",
-        message: errorMessage(err),
-      });
-    } finally {
-      setDrainingId(null);
-    }
-  };
-
-  // handleMaintenance raises/clears the operator-set maintenance flag
-  // (`001_initial_schema.sql`) — an advisory label, OCC-guarded like enable/drain.
-  const handleMaintenance = async (
-    backendId: string,
-    nextMaintenance: boolean,
-    resourceVersion: string,
-  ) => {
-    try {
-      setMaintainingId(backendId);
-      await setBackendMaintenance(backendId, nextMaintenance, resourceVersion);
-      showNotification({
-        type: "success",
-        title: nextMaintenance
-          ? "Backend flagged for maintenance"
-          : "Maintenance flag cleared",
-        message: backendId,
-      });
-    } catch (err) {
-      showNotification({
-        type: "error",
-        title: "Could not change maintenance flag",
-        message: errorMessage(err),
-      });
-    } finally {
-      setMaintainingId(null);
-    }
-  };
-
-  // ── bulk actions (multi-select → client-side fan-out) ────────────────────
-  type BulkAction =
-    | "enable"
-    | "disable"
-    | "drain"
-    | "undrain"
-    | "maintenance"
-    | "unmaintenance";
+  const clearSelection = () => setSelected(new Set());
 
   const toggleSelect = (id: string, on: boolean) =>
     setSelected((prev) => {
@@ -180,33 +268,7 @@ export default function StorageBackendsPage() {
       return next;
     });
 
-  const clearSelection = () => setSelected(new Set());
-
-  // applies reports whether an action changes a given backend's state (so a
-  // no-op is skipped rather than firing a pointless RPC). Enable/disable gate
-  // on `enabled`; drain/undrain only apply to an ENABLED backend (a disabled
-  // one already rejects everything, so draining it is meaningless).
-  const applies = (
-    b: (typeof backends)[number],
-    action: BulkAction,
-  ): boolean => {
-    switch (action) {
-      case "enable":
-        return !b.enabled;
-      case "disable":
-        return b.enabled;
-      case "drain":
-        return b.enabled && !b.readOnly;
-      case "undrain":
-        return b.enabled && b.readOnly;
-      case "maintenance":
-        return !b.maintenance;
-      case "unmaintenance":
-        return b.maintenance;
-    }
-  };
-
-  const runBulk = async (action: BulkAction) => {
+  const runBulk = async (action: Action) => {
     const targets = backends.filter((b) => selected.has(b.backendId));
     const applicable = targets.filter((b) => applies(b, action));
     if (applicable.length === 0) {
@@ -218,26 +280,10 @@ export default function StorageBackendsPage() {
       return;
     }
     setBulkBusy(true);
-    // Fan out over the existing OCC-guarded per-backend RPCs. allSettled so one
-    // rejection (e.g. disabling the default backend → FailedPrecondition)
-    // doesn't abort the rest; failures are reported per backend.
+    // allSettled so one rejection (disabling the default backend, say) does
+    // not abort the rest; failures are reported per backend.
     const results = await Promise.allSettled(
-      applicable.map((b) => {
-        switch (action) {
-          case "enable":
-            return setBackendEnabled(b.backendId, true, b.resourceVersion);
-          case "disable":
-            return setBackendEnabled(b.backendId, false, b.resourceVersion);
-          case "drain":
-            return setBackendReadOnly(b.backendId, true, b.resourceVersion);
-          case "undrain":
-            return setBackendReadOnly(b.backendId, false, b.resourceVersion);
-          case "maintenance":
-            return setBackendMaintenance(b.backendId, true, b.resourceVersion);
-          case "unmaintenance":
-            return setBackendMaintenance(b.backendId, false, b.resourceVersion);
-        }
-      }),
+      applicable.map((b) => call(b, action)),
     );
     const failedIds = applicable
       .filter((_, i) => results[i].status === "rejected")
@@ -247,7 +293,7 @@ export default function StorageBackendsPage() {
     showNotification({
       type: failedIds.length > 0 ? "error" : "success",
       title:
-        `Bulk ${action}: ${ok} ok` +
+        `${ACTION_TEXT[action].button}: ${ok} ok` +
         (failedIds.length ? `, ${failedIds.length} failed` : "") +
         (skipped ? `, ${skipped} skipped` : ""),
       message: failedIds.length ? failedIds.join(", ") : undefined,
@@ -257,34 +303,26 @@ export default function StorageBackendsPage() {
     void refetch();
   };
 
-  const [createOpen, setCreateOpen] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(t);
-  }, [search]);
+  const startBulk = (action: Action) => {
+    if (action === "disable") setConfirmDisable("selection");
+    else void runBulk(action);
+  };
 
-  // One place that knows how to ask, so the Refresh button and the post-bulk
-  // reload cannot drift into fetching something other than what is on screen.
-  const refetch = useCallback(
-    () => fetchBackends(searchFilter(debouncedSearch)),
-    [fetchBackends, debouncedSearch],
-  );
+  const confirmDisableNow = async () => {
+    const target = confirmDisable;
+    setConfirmDisable(null);
+    if (target === "selection") await runBulk("disable");
+    else if (target) await runRow(target, "disable");
+  };
 
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  // No client-side narrowing left. Re-adding it would be dead code that
-  // quietly disagreed with the API the day the two definitions of "matches"
-  // drifted apart.
-  const filtered = backends;
-
-  const hasSearch = search.trim() !== "";
+  const hasFilters = search.trim() !== "" || state !== "all";
   // The debounce has not fired yet, or its refetch is still running.
   const searchPending = search.trim() !== debouncedSearch.trim() || loading;
+  const allSelected =
+    backends.length > 0 && backends.every((b) => selected.has(b.backendId));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Storage Backends"
         description="Physical S3-compatible targets. Buckets and tenants bind here."
@@ -308,6 +346,21 @@ export default function StorageBackendsPage() {
             className="pl-9"
           />
         </div>
+        <SelectRoot
+          value={state}
+          onValueChange={(v) => setState(v as StateFilter)}
+        >
+          <SelectTrigger aria-label="Filter by state" className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATE_FILTERS.map((s) => (
+              <SelectItem key={s} value={s}>
+                {STATE_FILTER_LABELS[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </SelectRoot>
         <Button
           variant="outline"
           size="icon"
@@ -318,75 +371,40 @@ export default function StorageBackendsPage() {
         </Button>
       </div>
 
-      {/* Bulk-action bar — shown once ≥1 backend is selected. Each action
-          fans out over the selection via the per-backend OCC-guarded RPCs and
-          skips no-ops (see runBulk). */}
       {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
           <span className="font-medium">{selected.size} selected</span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Button
-              size="sm"
-              variant="outline"
-              aria-label="Bulk enable"
-              disabled={bulkBusy}
-              onClick={() => void runBulk("enable")}
+          {BULK_GROUPS.map((group) => (
+            <div
+              key={group[0]}
+              className="flex items-center overflow-hidden rounded-md border border-border bg-background"
             >
-              Enable
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              aria-label="Bulk disable"
-              disabled={bulkBusy}
-              onClick={() => void runBulk("disable")}
-            >
-              Disable
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              aria-label="Bulk drain"
-              disabled={bulkBusy}
-              onClick={() => void runBulk("drain")}
-            >
-              Drain
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              aria-label="Bulk undrain"
-              disabled={bulkBusy}
-              onClick={() => void runBulk("undrain")}
-            >
-              Undrain
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              aria-label="Bulk maintenance"
-              disabled={bulkBusy}
-              onClick={() => void runBulk("maintenance")}
-            >
-              Maintenance
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              aria-label="Bulk clear maintenance"
-              disabled={bulkBusy}
-              onClick={() => void runBulk("unmaintenance")}
-            >
-              Clear maint.
-            </Button>
-          </div>
+              {group.map((action, i) => (
+                <Button
+                  key={action}
+                  size="sm"
+                  variant="ghost"
+                  className={cn(
+                    "rounded-none",
+                    i > 0 && "border-l border-border",
+                  )}
+                  aria-label={ACTION_TEXT[action].bulkLabel}
+                  disabled={bulkBusy}
+                  onClick={() => startBulk(action)}
+                >
+                  {ACTION_TEXT[action].button}
+                </Button>
+              ))}
+            </div>
+          ))}
           <Button
             size="sm"
             variant="ghost"
+            className="ml-auto"
             disabled={bulkBusy}
             onClick={clearSelection}
           >
-            Clear
+            Clear selection
           </Button>
         </div>
       )}
@@ -398,48 +416,40 @@ export default function StorageBackendsPage() {
               <TableHead className="w-10">
                 <Checkbox
                   aria-label="Select all backends"
-                  checked={
-                    filtered.length > 0 &&
-                    filtered.every((b) => selected.has(b.backendId))
-                  }
+                  checked={allSelected}
                   onCheckedChange={(v) =>
                     setSelected(
                       v === true
-                        ? new Set(filtered.map((b) => b.backendId))
+                        ? new Set(backends.map((b) => b.backendId))
                         : new Set(),
                     )
                   }
                 />
               </TableHead>
-              <TableHead className="@md:w-55">Backend ID</TableHead>
-              <TableHead className="hidden @md:table-cell">
-                Display name
+              <TableHead>Backend</TableHead>
+              <TableHead className="hidden @2xl:table-cell">Storage</TableHead>
+              <TableHead className="hidden @4xl:table-cell">Region</TableHead>
+              <TableHead>State</TableHead>
+              <TableHead className="hidden @lg:table-cell">Health</TableHead>
+              <TableHead className="w-12">
+                <span className="sr-only">Actions</span>
               </TableHead>
-              <TableHead className="hidden @3xl:table-cell">Kind</TableHead>
-              <TableHead className="hidden @4xl:table-cell">Type</TableHead>
-              <TableHead className="hidden @5xl:table-cell">Region</TableHead>
-              <TableHead className="hidden @6xl:table-cell">Endpoint</TableHead>
-              <TableHead className="@md:w-40 text-right">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading && backends.length === 0 ? (
-              [0, 1, 2].map((i) => (
+              Array.from({ length: SKELETON_ROWS }, (_, i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={8} className="py-3">
+                  <TableCell colSpan={COLUMN_COUNT} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : listError ? (
-              // "No storage backends registered yet" for a list that FAILED is
-              // the same lie /buckets already refuses to tell, with a worse
-              // ending: it invites the operator to register a backend that
-              // exists, and a second registration points a second row at the
-              // same store. The hook exposed `error` all along; this page took
-              // every other field from it.
+              // A list that FAILED is not an empty one: "none registered yet"
+              // would invite registering a second row for the same store.
               <TableRow>
-                <TableCell colSpan={8} className="h-48 text-center">
+                <TableCell colSpan={COLUMN_COUNT} className="h-48 text-center">
                   <ListLoadError
                     what="Storage backends"
                     reason={listError}
@@ -447,9 +457,9 @@ export default function StorageBackendsPage() {
                   />
                 </TableCell>
               </TableRow>
-            ) : filtered.length === 0 ? (
+            ) : backends.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-48 text-center">
+                <TableCell colSpan={COLUMN_COUNT} className="h-48 text-center">
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <CloudIcon className="size-10 opacity-40" />
                     <p className="text-sm">
@@ -461,11 +471,11 @@ export default function StorageBackendsPage() {
                       */}
                       {searchPending
                         ? "Searching…"
-                        : hasSearch
-                          ? "No backends match your search."
+                        : hasFilters
+                          ? "No backends match your filters."
                           : "No storage backends registered yet."}
                     </p>
-                    {!searchPending && !hasSearch && (
+                    {!searchPending && !hasFilters && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -479,219 +489,38 @@ export default function StorageBackendsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((b) => {
-                const detailHref = `/storage-backends/${encodeURIComponent(b.backendId)}`;
-                return (
-                  <TableRow key={b.backendId} className="group">
-                    <TableCell className="w-10">
-                      <Checkbox
-                        aria-label={`Select ${b.backendId}`}
-                        checked={selected.has(b.backendId)}
-                        onCheckedChange={(v) =>
-                          toggleSelect(b.backendId, v === true)
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        href={detailHref}
-                        className="flex items-center gap-3 hover:text-primary"
-                      >
-                        <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
-                          <ServerStackIcon className="size-4" />
-                        </div>
-                        <span className="font-medium break-all whitespace-normal group-hover:underline">
-                          {b.backendId}
-                        </span>
-                      </Link>
-                    </TableCell>
-                    <TableCell className="hidden @md:table-cell">
-                      <Link href={detailHref} className="hover:text-primary">
-                        {b.displayName || (
-                          <span className="text-muted-foreground italic">
-                            (unnamed)
-                          </span>
-                        )}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="hidden @3xl:table-cell">
-                      <Badge variant="outline" className={T.labelTight}>
-                        {STORAGE_KIND_LABELS[b.kind] || "—"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="hidden @4xl:table-cell">
-                      {(() => {
-                        const p = providerLabel(b);
-                        if (p.label === "—")
-                          return (
-                            <span className="text-muted-foreground">—</span>
-                          );
-                        return (
-                          <Badge
-                            variant="secondary"
-                            className={T.labelTight}
-                            title={
-                              p.derived
-                                ? "Inferred from the endpoint (no provider set)"
-                                : undefined
-                            }
-                          >
-                            {p.label}
-                            {p.derived && (
-                              <span className="ml-1 opacity-60">?</span>
-                            )}
-                          </Badge>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell className="hidden @5xl:table-cell">
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {b.region || "—"}
-                      </span>
-                    </TableCell>
-                    <TableCell className="hidden @6xl:table-cell">
-                      <span
-                        className="font-mono text-sm text-muted-foreground truncate"
-                        title={b.endpoint}
-                      >
-                        {b.endpoint || "—"}
-                      </span>
-                    </TableCell>
-                    {/* Up to five badges and three buttons: they wrap onto
-                        a second line rather than widening the table. */}
-                    <TableCell className="text-right">
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        <Badge
-                          variant={b.enabled ? "outline" : "destructive"}
-                          className={T.labelTight}
-                        >
-                          {b.enabled ? "Enabled" : "Disabled"}
-                        </Badge>
-                        {b.enabled && b.readOnly && (
-                          <Badge variant="secondary" className={T.labelTight}>
-                            Draining
-                          </Badge>
-                        )}
-                        {b.maintenance && (
-                          <Badge variant="secondary" className={T.labelTight}>
-                            Maintenance
-                          </Badge>
-                        )}
-                        {/* Derived health from the last TestBackend probe
-                            (001_initial_schema.sql). Advisory — does not gate ops. */}
-                        {b.healthStatus === "error" ? (
-                          <Badge
-                            variant="destructive"
-                            className={T.labelTight}
-                            title={b.healthMessage || "Last probe failed"}
-                          >
-                            Probe failed
-                          </Badge>
-                        ) : b.healthStatus === "ok" ? (
-                          <Badge variant="outline" className={T.labelTight}>
-                            Healthy
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="secondary"
-                            className={T.labelTight}
-                            title="Run Test to probe connectivity"
-                          >
-                            Untested
-                          </Badge>
-                        )}
-                        {/* What the last probe found for the S3 features
-                            Paladin uses (ADR-0026); the detail page lists
-                            them. */}
-                        {(() => {
-                          const c = compatibilityBadge(b);
-                          const why = featureWarnings(b)
-                            .map((w) => w.text)
-                            .join("\n");
-                          return (
-                            <Badge
-                              variant={c.variant}
-                              className={T.labelTight}
-                              title={why || undefined}
-                            >
-                              {c.label}
-                            </Badge>
-                          );
-                        })()}
-                        {/* Drain toggle — only meaningful on an enabled
-                            backend (a disabled one already rejects all ops). */}
-                        {b.enabled && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={drainingId === b.backendId}
-                            onClick={() =>
-                              void handleDrain(
-                                b.backendId,
-                                !b.readOnly,
-                                b.resourceVersion,
-                              )
-                            }
-                          >
-                            {drainingId === b.backendId
-                              ? "…"
-                              : b.readOnly
-                                ? "Undrain"
-                                : "Drain"}
-                          </Button>
-                        )}
-                        {/* Maintenance is advisory + orthogonal — settable on
-                            any backend regardless of enabled/drain state. */}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          aria-label={
-                            b.maintenance
-                              ? `Clear maintenance on ${b.backendId}`
-                              : `Flag ${b.backendId} for maintenance`
-                          }
-                          disabled={maintainingId === b.backendId}
-                          onClick={() =>
-                            void handleMaintenance(
-                              b.backendId,
-                              !b.maintenance,
-                              b.resourceVersion,
-                            )
-                          }
-                        >
-                          {maintainingId === b.backendId
-                            ? "…"
-                            : b.maintenance
-                              ? "Clear maint."
-                              : "Maintain"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={togglingId === b.backendId}
-                          onClick={() =>
-                            void handleToggle(
-                              b.backendId,
-                              !b.enabled,
-                              b.resourceVersion,
-                            )
-                          }
-                        >
-                          {togglingId === b.backendId
-                            ? "…"
-                            : b.enabled
-                              ? "Disable"
-                              : "Enable"}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
+              backends.map((b) => (
+                <BackendRow
+                  key={b.backendId}
+                  backend={b}
+                  selected={selected.has(b.backendId)}
+                  busy={busyId === b.backendId}
+                  onSelect={(on) => toggleSelect(b.backendId, on)}
+                  onAction={(action) =>
+                    action === "disable"
+                      ? setConfirmDisable(b)
+                      : void runRow(b, action)
+                  }
+                />
+              ))
             )}
           </TableBody>
         </Table>
       </Card>
+
+      <ConfirmModal
+        isOpen={confirmDisable !== null}
+        onClose={() => setConfirmDisable(null)}
+        onConfirm={confirmDisableNow}
+        type="warning"
+        title={
+          confirmDisable === "selection"
+            ? `Disable ${selected.size} selected backends?`
+            : `Disable ${confirmDisable?.backendId ?? ""}?`
+        }
+        message={DISABLE_CONSEQUENCE}
+        confirmText="Disable"
+      />
 
       <BackendRegisterDialog
         open={createOpen}
@@ -699,5 +528,185 @@ export default function StorageBackendsPage() {
         createBackend={createBackend}
       />
     </div>
+  );
+}
+
+function BackendRow({
+  backend: b,
+  selected,
+  busy,
+  onSelect,
+  onAction,
+}: {
+  backend: StorageBackend;
+  selected: boolean;
+  busy: boolean;
+  onSelect: (on: boolean) => void;
+  onAction: (action: Action) => void;
+}) {
+  const detailHref = `/storage-backends/${encodeURIComponent(b.backendId)}`;
+  const provider = providerLabel(b);
+  const kind = STORAGE_KIND_LABELS[b.kind] || "—";
+  const state = lifecycleState(b);
+  const health = healthView(b);
+  const compat = compatibilityBadge(b);
+  const compatWhy = featureWarnings(b)
+    .map((w) => w.text)
+    .join("\n");
+
+  return (
+    <TableRow className="group" data-state={selected ? "selected" : undefined}>
+      <TableCell className="w-10">
+        <Checkbox
+          aria-label={`Select ${b.backendId}`}
+          checked={selected}
+          onCheckedChange={(v) => onSelect(v === true)}
+        />
+      </TableCell>
+
+      <TableCell>
+        <Link href={detailHref} className="flex items-center gap-3 min-w-0">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
+            <ServerStackIcon className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="font-medium break-all group-hover:underline">
+              {b.backendId}
+            </div>
+            <div className="truncate text-xs text-muted-foreground">
+              {b.displayName || <span className="italic">unnamed</span>}
+            </div>
+          </div>
+        </Link>
+      </TableCell>
+
+      <TableCell className="hidden @2xl:table-cell">
+        <div className="text-sm">
+          {provider.label === "—" ? (
+            <span className="text-muted-foreground">{kind}</span>
+          ) : (
+            <span
+              title={
+                provider.derived
+                  ? "Inferred from the endpoint (no provider set)"
+                  : undefined
+              }
+            >
+              {provider.label}
+              {provider.derived && (
+                <span className="ml-0.5 text-muted-foreground">?</span>
+              )}
+              <span className="text-muted-foreground"> · {kind}</span>
+            </span>
+          )}
+        </div>
+        <div
+          className="max-w-72 truncate font-mono text-xs text-muted-foreground"
+          title={b.endpoint}
+        >
+          {b.endpoint || "—"}
+        </div>
+      </TableCell>
+
+      <TableCell className="hidden @4xl:table-cell font-mono text-xs text-muted-foreground">
+        {b.region || "—"}
+      </TableCell>
+
+      <TableCell>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant={state.variant}>{state.label}</Badge>
+          {b.maintenance && (
+            <Badge variant="warning">
+              <WrenchScrewdriverIcon />
+              Maintenance
+            </Badge>
+          )}
+        </div>
+      </TableCell>
+
+      {/* What the last probes found: connectivity (advisory, does not gate
+          ops) and the S3 features Paladin uses (ADR-0026). */}
+      <TableCell className="hidden @lg:table-cell">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span
+            className="inline-flex items-center gap-1.5 text-sm"
+            title={health.title}
+          >
+            <span
+              aria-hidden
+              className={cn("size-2 rounded-full", HEALTH_DOT[health.tone])}
+            />
+            {health.label}
+          </span>
+          <Badge variant={compat.variant} title={compatWhy || undefined}>
+            {compat.label}
+          </Badge>
+        </div>
+      </TableCell>
+
+      <TableCell className="text-right">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              disabled={busy}
+              aria-label={`Actions for ${b.backendId}`}
+            >
+              {busy ? (
+                <ArrowPathIcon className="size-4 animate-spin" />
+              ) : (
+                <EllipsisHorizontalIcon className="size-4" />
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              <Link href={detailHref}>
+                <ArrowTopRightOnSquareIcon className="size-4" />
+                Open details
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {b.enabled && (
+              <DropdownMenuItem
+                onSelect={() => onAction(b.readOnly ? "undrain" : "drain")}
+              >
+                {b.readOnly ? (
+                  <PlayCircleIcon className="size-4" />
+                ) : (
+                  <PauseCircleIcon className="size-4" />
+                )}
+                {b.readOnly ? "Undrain" : "Drain"}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              onSelect={() =>
+                onAction(b.maintenance ? "unmaintenance" : "maintenance")
+              }
+            >
+              <WrenchScrewdriverIcon className="size-4" />
+              {b.maintenance ? "Clear maintenance" : "Flag for maintenance"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {b.enabled ? (
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() => onAction("disable")}
+              >
+                <NoSymbolIcon className="size-4" />
+                Disable…
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onSelect={() => onAction("enable")}>
+                <PlayCircleIcon className="size-4" />
+                Enable
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableCell>
+    </TableRow>
   );
 }

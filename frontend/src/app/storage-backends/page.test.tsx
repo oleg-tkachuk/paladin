@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -89,6 +90,12 @@ const makeBackend = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+// Every state change sits behind the row's menu.
+const openRowMenu = (backendId: string) =>
+  userEvent.click(
+    screen.getByRole("button", { name: `Actions for ${backendId}` }),
+  );
+
 // One probed feature entry, as the server sends it.
 const feature = (
   f: StorageFeature,
@@ -124,34 +131,105 @@ describe("StorageBackendsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("drains an enabled backend via setBackendReadOnly (001_initial_schema.sql)", async () => {
+  it("drains an enabled backend from its row menu (001_initial_schema.sql)", async () => {
     h.backends = [makeBackend({ enabled: true, readOnly: false })];
     render(<StorageBackendsPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Drain" }));
+    await openRowMenu("primary");
+    await userEvent.click(screen.getByRole("menuitem", { name: "Drain" }));
     expect(h.setBackendReadOnly).toHaveBeenCalledWith("primary", true, "7");
   });
 
-  it("shows a Draining badge + Undrain for a read-only backend", () => {
+  it("leads a read-only backend's row with Draining and offers Undrain", async () => {
     h.backends = [makeBackend({ enabled: true, readOnly: true })];
     render(<StorageBackendsPage />);
     expect(screen.getByText("Draining")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Undrain" })).toBeInTheDocument();
+    expect(screen.queryByText("Enabled")).toBeNull();
+    await openRowMenu("primary");
+    expect(
+      screen.getByRole("menuitem", { name: "Undrain" }),
+    ).toBeInTheDocument();
   });
 
-  it("hides the drain control for a disabled backend", () => {
-    h.backends = [makeBackend({ enabled: false, readOnly: false })];
+  it("shows a disabled backend as Disabled, with no drain item", async () => {
+    h.backends = [makeBackend({ enabled: false, readOnly: true })];
     render(<StorageBackendsPage />);
-    expect(screen.queryByRole("button", { name: "Drain" })).toBeNull();
+    // Disabled outranks draining: a disabled backend refuses everything.
+    expect(screen.getByText("Disabled")).toBeInTheDocument();
+    expect(screen.queryByText("Draining")).toBeNull();
+    await openRowMenu("primary");
+    expect(screen.queryByRole("menuitem", { name: /drain/i })).toBeNull();
   });
 
-  // Health badges (`001_initial_schema.sql`) — derived from the last TestBackend probe.
-  it("shows a Healthy badge when the last probe succeeded", () => {
+  it("enables a disabled backend without asking", async () => {
+    h.backends = [makeBackend({ enabled: false, resourceVersion: "4" })];
+    render(<StorageBackendsPage />);
+    await openRowMenu("primary");
+    await userEvent.click(screen.getByRole("menuitem", { name: "Enable" }));
+    expect(h.setBackendEnabled).toHaveBeenCalledWith("primary", true, "4");
+  });
+
+  it("disables a backend only once the operator confirms", async () => {
+    h.backends = [makeBackend({ enabled: true, resourceVersion: "7" })];
+    render(<StorageBackendsPage />);
+    await openRowMenu("primary");
+    await userEvent.click(screen.getByRole("menuitem", { name: /Disable/ }));
+
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Disable primary?");
+    expect(h.setBackendEnabled).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Disable" }),
+    );
+    await waitFor(() =>
+      expect(h.setBackendEnabled).toHaveBeenCalledWith("primary", false, "7"),
+    );
+  });
+
+  it("leaves the backend enabled when the disable is cancelled", async () => {
+    h.backends = [makeBackend({ enabled: true })];
+    render(<StorageBackendsPage />);
+    await openRowMenu("primary");
+    await userEvent.click(screen.getByRole("menuitem", { name: /Disable/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(h.setBackendEnabled).not.toHaveBeenCalled();
+  });
+
+  it("reports a refused state change as a toast", async () => {
+    h.setBackendReadOnly.mockRejectedValueOnce(new Error("stale version"));
+    h.backends = [makeBackend()];
+    render(<StorageBackendsPage />);
+    await openRowMenu("primary");
+    await userEvent.click(screen.getByRole("menuitem", { name: "Drain" }));
+    await waitFor(() =>
+      expect(h.showNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "error",
+          title: "Could not change drain state",
+        }),
+      ),
+    );
+  });
+
+  it("shows the display name under the id, and marks an unnamed backend", () => {
+    h.backends = [
+      makeBackend({ backendId: "a", displayName: "Archive" }),
+      makeBackend({ backendId: "b", displayName: "" }),
+    ];
+    render(<StorageBackendsPage />);
+    expect(screen.getByText("Archive")).toBeInTheDocument();
+    expect(screen.getByText("unnamed")).toBeInTheDocument();
+  });
+
+  // Health (`001_initial_schema.sql`) — derived from the last TestBackend probe.
+  it("shows Healthy when the last probe succeeded", () => {
     h.backends = [makeBackend({ healthStatus: "ok" })];
     render(<StorageBackendsPage />);
     expect(screen.getByText("Healthy")).toBeInTheDocument();
   });
 
-  it("shows a Probe-failed badge (with the error) when the last probe failed", () => {
+  it("shows Probe failed (with the error) when the last probe failed", () => {
     h.backends = [
       makeBackend({
         healthStatus: "error",
@@ -159,12 +237,11 @@ describe("StorageBackendsPage", () => {
       }),
     ];
     render(<StorageBackendsPage />);
-    const badge = screen.getByText("Probe failed");
-    expect(badge).toBeInTheDocument();
-    expect(badge).toHaveAttribute("title", "connection refused");
+    const health = screen.getByText("Probe failed");
+    expect(health).toHaveAttribute("title", "connection refused");
   });
 
-  it("shows an Untested badge when the backend has never been probed", () => {
+  it("shows Untested when the backend has never been probed", () => {
     h.backends = [makeBackend({ healthStatus: "unknown" })];
     render(<StorageBackendsPage />);
     expect(screen.getByText("Untested")).toBeInTheDocument();
@@ -219,7 +296,7 @@ describe("StorageBackendsPage", () => {
   });
 
   // Bulk actions — multi-select + client-side fan-out over the per-backend RPCs.
-  it("bulk-disables the selected backends, each with its own resource_version", async () => {
+  it("bulk-disables the selection after one confirmation, each with its own resource_version", async () => {
     h.backends = [
       makeBackend({ backendId: "a", enabled: true, resourceVersion: "1" }),
       makeBackend({ backendId: "b", enabled: true, resourceVersion: "2" }),
@@ -229,9 +306,29 @@ describe("StorageBackendsPage", () => {
     await userEvent.click(screen.getByLabelText("Select b"));
     await userEvent.click(screen.getByRole("button", { name: "Bulk disable" }));
 
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Disable 2 selected backends?");
+    expect(h.setBackendEnabled).not.toHaveBeenCalled();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Disable" }),
+    );
+
     await waitFor(() => expect(h.setBackendEnabled).toHaveBeenCalledTimes(2));
     expect(h.setBackendEnabled).toHaveBeenCalledWith("a", false, "1");
     expect(h.setBackendEnabled).toHaveBeenCalledWith("b", false, "2");
+  });
+
+  it("bulk-enables without asking", async () => {
+    h.backends = [
+      makeBackend({ backendId: "a", enabled: false, resourceVersion: "1" }),
+    ];
+    render(<StorageBackendsPage />);
+    await userEvent.click(screen.getByLabelText("Select a"));
+    await userEvent.click(screen.getByRole("button", { name: "Bulk enable" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    await waitFor(() =>
+      expect(h.setBackendEnabled).toHaveBeenCalledWith("a", true, "1"),
+    );
   });
 
   it("select-all then bulk-drain fans out to enabled backends only (skips no-ops)", async () => {
@@ -263,16 +360,19 @@ describe("StorageBackendsPage", () => {
 
     await waitFor(() => expect(h.setBackendReadOnly).toHaveBeenCalledTimes(1));
     expect(h.setBackendReadOnly).toHaveBeenCalledWith("a", true, "1");
+    expect(h.showNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Drain: 1 ok, 2 skipped" }),
+    );
   });
 
   it("bulk action with no applicable backend is a no-op (no RPC)", async () => {
-    // A single disabled backend: 'Bulk disable' has nothing to change.
+    // A single disabled backend: 'Bulk undrain' has nothing to change.
     h.backends = [makeBackend({ backendId: "a", enabled: false })];
     render(<StorageBackendsPage />);
     await userEvent.click(screen.getByLabelText("Select a"));
-    await userEvent.click(screen.getByRole("button", { name: "Bulk disable" }));
+    await userEvent.click(screen.getByRole("button", { name: "Bulk undrain" }));
 
-    expect(h.setBackendEnabled).not.toHaveBeenCalled();
+    expect(h.setBackendReadOnly).not.toHaveBeenCalled();
     expect(h.showNotification).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Nothing to do" }),
     );
@@ -285,32 +385,35 @@ describe("StorageBackendsPage", () => {
   });
 
   // Operator-set maintenance flag (`001_initial_schema.sql`) — advisory, orthogonal.
-  it("flags a backend for maintenance via setBackendMaintenance", async () => {
+  it("flags a backend for maintenance from its row menu", async () => {
     h.backends = [makeBackend({ maintenance: false, resourceVersion: "7" })];
     render(<StorageBackendsPage />);
+    await openRowMenu("primary");
     await userEvent.click(
-      screen.getByRole("button", { name: "Flag primary for maintenance" }),
+      screen.getByRole("menuitem", { name: "Flag for maintenance" }),
     );
     expect(h.setBackendMaintenance).toHaveBeenCalledWith("primary", true, "7");
   });
 
-  it("shows a Maintenance badge and a Clear control when flagged", () => {
-    h.backends = [makeBackend({ maintenance: true })];
+  it("shows a Maintenance badge and a Clear item when flagged", async () => {
+    h.backends = [makeBackend({ maintenance: true, resourceVersion: "7" })];
     render(<StorageBackendsPage />);
     expect(screen.getByText("Maintenance")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Clear maintenance on primary" }),
-    ).toBeInTheDocument();
+    await openRowMenu("primary");
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: "Clear maintenance" }),
+    );
+    expect(h.setBackendMaintenance).toHaveBeenCalledWith("primary", false, "7");
   });
 
   it("maintenance is settable on a DISABLED backend (advisory, orthogonal)", async () => {
-    // Unlike drain, the maintenance control is not gated on enabled.
     h.backends = [
       makeBackend({ backendId: "a", enabled: false, resourceVersion: "3" }),
     ];
     render(<StorageBackendsPage />);
+    await openRowMenu("a");
     await userEvent.click(
-      screen.getByRole("button", { name: "Flag a for maintenance" }),
+      screen.getByRole("menuitem", { name: "Flag for maintenance" }),
     );
     expect(h.setBackendMaintenance).toHaveBeenCalledWith("a", true, "3");
   });
@@ -383,6 +486,39 @@ describe("StorageBackendsPage search", () => {
       vi.advanceTimersByTime(400);
     });
     expect(h.fetchBackends.mock.calls.filter((c) => c[0])).toHaveLength(1);
+  });
+});
+
+// The state picker narrows on the server too, as a conjunct beside the search.
+describe("StorageBackendsPage state filter", () => {
+  it("sends the chosen state as a CEL conjunct", async () => {
+    render(<StorageBackendsPage />);
+    h.fetchBackends.mockClear();
+
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Filter by state" }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: "Draining" }));
+
+    await waitFor(() =>
+      expect(h.fetchBackends).toHaveBeenLastCalledWith(
+        "enabled == true && read_only == true",
+      ),
+    );
+  });
+
+  it("says nothing matches, rather than none registered, when a state is chosen", async () => {
+    render(<StorageBackendsPage />);
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Filter by state" }),
+    );
+    await userEvent.click(screen.getByRole("option", { name: "Disabled" }));
+    expect(
+      await screen.findByText("No backends match your filters."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Register the first backend/ }),
+    ).toBeNull();
   });
 });
 
