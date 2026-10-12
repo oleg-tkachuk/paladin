@@ -1,7 +1,8 @@
 # ADR-0026: A storage backend's S3 features are probed, recorded and shown
 
 - **Status:** Accepted — implemented 2026-10-07 (`048_storage_backend_features.sql`,
-  `internal/storage/features`, `s3adapter.ProbeFeatures`, `TestBackend`).
+  `internal/storage/features`, `s3adapter.ProbeFeatures`, `TestBackend`);
+  the probe on registration added 2026-10-12 (`backendh.ProbeAndRecord`).
 - **Related:** [ADR-0015](0015-per-tenant-bucket-layout.md) (backends and
   buckets), [ADR-0027](0027-public-collections.md) (the first operation gated
   on a feature), the S3 conformance suite
@@ -44,6 +45,11 @@
      answer is wrong), or `UNKNOWN` (the probe could not tell: no scratch
      bucket, a timeout, a denied permission). A declaration in config would be
      the operator's belief about the store; the probe is the store's answer.
+     The same probe also runs once, unasked, when a backend is registered:
+     `CreateBackend` probes the new backend before it answers, and the config
+     bootstrap probes each declared backend that has no recorded results. It
+     is a system step of the registration — it never fails it, and an
+     unreachable backend registers with every feature `UNKNOWN`.
   3. **Where the probe writes.** A scratch bucket `paladin-probe-<random>`,
      removed afterwards, so the probe never touches a bucket's policy or
      events. When the store refuses to create one, the object probes run under
@@ -66,15 +72,21 @@
      error the console shows, not a condition every upload should re-check.
 
 - **Consequences.**
-  - Until someone runs `TestBackend`, every feature is `UNKNOWN` and any
-    gated operation refuses. That is deliberate: an unprobed store has not
-    shown it can do the thing.
+  - Until a backend is probed — on registration, or by `TestBackend` when it
+    was unreachable then — every feature is `UNKNOWN` and any gated operation
+    refuses. That is deliberate: an unprobed store has not shown it can do the
+    thing. A declared backend unreachable at bootstrap is probed again on the
+    next one; one created through the API is probed again only by
+    `TestBackend`.
   - The probe needs permission to create and delete a bucket, set and delete
     a bucket policy, and write and delete objects. Credentials scoped tighter
     get `UNKNOWN` for what they cannot try, which the console says.
   - A probe result goes stale when the store is upgraded or reconfigured. It
-    carries `checked_at`; re-probing is the operator's step, and periodic
-    re-probing is in BACKLOG.
+    carries `checked_at`; re-probing is the operator's step. Periodic
+    re-probing was considered and rejected: a store's behaviour changes when
+    someone upgrades or reconfigures it, and that someone can run
+    `TestBackend`. For the same reason the bootstrap does not re-probe a
+    backend that already has results.
   - With S3 event notifications on, the probe's writes reach the ingest
     pipeline, which drops them: their key does not start with a tenant UUID.
 
