@@ -50,6 +50,54 @@ func TestBlockingRelation(t *testing.T) {
 	}
 }
 
+// lockRefusal is how a purge refused by Object Lock reaches the caller as a
+// precondition instead of an Internal error with raw SQL in it. Both lock
+// triggers raise check_violation, and so does every ordinary CHECK, so the
+// message is what tells them apart — a CHECK failing for another reason must
+// not be reported as a legal hold.
+func TestLockRefusal(t *testing.T) {
+	cases := map[string]struct {
+		err  error
+		want bool
+	}{
+		"tenant purge guard (061)": {
+			err:  &pgconn.PgError{Code: "23514", Message: "tenant t holds object version v under legal hold or retention"},
+			want: true,
+		},
+		"retention trigger, legal hold": {
+			err:  &pgconn.PgError{Code: "23514", Message: "object version v is under legal hold"},
+			want: true,
+		},
+		"retention trigger, COMPLIANCE": {
+			err:  &pgconn.PgError{Code: "23514", Message: "object version v is retained under COMPLIANCE until 2027-01-01"},
+			want: true,
+		},
+		"wrapped still resolves": {
+			err:  fmt.Errorf("hard-delete tenant: %w", &pgconn.PgError{Code: "23514", Message: "object version v is under legal hold"}),
+			want: true,
+		},
+		"an ordinary CHECK is not a lock": {
+			err:  &pgconn.PgError{Code: "23514", Message: `new row violates check constraint "tenants_slug_format"`},
+			want: false,
+		},
+		"the right words under another code are not a lock": {
+			err:  &pgconn.PgError{Code: "23503", Message: "under legal hold"},
+			want: false,
+		},
+		"not a postgres error": {
+			err:  errors.New("under legal hold"),
+			want: false,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, got := lockRefusal(tc.err); got != tc.want {
+				t.Errorf("lockRefusal = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // The quota upsert RETURNINGs no row when the version guard fails, so
 // ErrNoRows here is a concurrent writer rather than a missing row — reporting
 // it as anything else would tell the caller to retry a request that will keep

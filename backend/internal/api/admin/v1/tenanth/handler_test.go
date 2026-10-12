@@ -3,6 +3,7 @@ package tenanth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -785,6 +786,29 @@ func TestPurgeTenant(t *testing.T) {
 		}
 		if fr.lastHardDelete.tenantID != tid || fr.lastHardDelete.version != 0 {
 			t.Fatalf("purge hard-delete forwarded %+v", fr.lastHardDelete)
+		}
+	})
+
+	// The database refuses a purge that would reach a locked object (061).
+	// That refusal is a precondition the operator acts on — lift the hold,
+	// wait out the window — not an Internal error; and it is its own
+	// sentinel, so the message names the lock rather than a child table.
+	t.Run("locked object → failed precondition naming the lock", func(t *testing.T) {
+		fr := &fakeRepo{
+			getFn: func(_ context.Context, id uuid.UUID) (Tenant, error) {
+				return Tenant{TenantID: id, DeletedAt: time.Now()}, nil
+			},
+			hardDeleteTxFn: func(context.Context, pgx.Tx, uuid.UUID, int64) error {
+				return fmt.Errorf("%w: object version x is under legal hold", ErrTenantHoldsLockedObjects)
+			},
+		}
+		err := NewHandler(fr, allow()).PurgeTenant(adminCtx(tid), tid)
+		wantCode(t, err, connect.CodeFailedPrecondition)
+		if !errors.Is(err, ErrTenantHoldsLockedObjects) {
+			t.Errorf("the refusal lost its sentinel: %v", err)
+		}
+		if !strings.Contains(err.Error(), "legal hold") {
+			t.Errorf("the message must say what is holding the tenant.\ngot: %v", err)
 		}
 	})
 }

@@ -1069,6 +1069,15 @@ var ErrDefaultBindingBucketMissing = errors.New(
 var ErrTenantHasChildren = errors.New(
 	"tenant still has rows referencing it; remove them before hard-deleting the tenant")
 
+// ErrTenantHoldsLockedObjects — Repository.HardDelete returns this when an
+// object the tenant owns is under a legal hold or an unexpired retention
+// window. The database refuses it (061's tenants_purge_lock_guard), before
+// any foreign key is consulted, so the refusal names the lock rather than
+// whichever child table happened to be checked first. Surfaced as
+// FAILED_PRECONDITION: the hold has to be lifted, or the window has to end.
+var ErrTenantHoldsLockedObjects = errors.New(
+	"tenant holds objects under legal hold or retention; it cannot be purged until they are released")
+
 // Register this package's sentinels with the central error→Connect-code
 // mapper (ADR-0002). Each maps consistently to one code across every RPC,
 // so the per-handler if/else ladders collapse to apiutil.MapError(err).
@@ -1082,4 +1091,6 @@ func init() {
 	apiutil.RegisterError(ErrNotTrashed, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_NOT_TRASHED)
 	apiutil.RegisterError(ErrDefaultBindingBucketMissing, connect.CodeInvalidArgument, commonv1.ErrorReason_ERROR_REASON_DEFAULT_BINDING_BUCKET_MISSING)
 	apiutil.RegisterError(ErrTenantHasChildren, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_HAS_CHILDREN)
+	// A locked object is a child the tenant still has; the reason is the same.
+	apiutil.RegisterError(ErrTenantHoldsLockedObjects, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_HAS_CHILDREN)
 }
