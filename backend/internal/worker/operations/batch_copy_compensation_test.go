@@ -34,6 +34,9 @@ func (*copyFakeRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]objec
 func (*copyFakeRepo) ObjectLock(context.Context, uuid.UUID, uuid.UUID) (objecth.ObjectLock, error) {
 	panic("unused")
 }
+func (*copyFakeRepo) VersionLocks(context.Context, uuid.UUID, uuid.UUID) ([]objecth.ObjectLock, error) {
+	panic("unused")
+}
 func (*copyFakeRepo) FindByPath(context.Context, uuid.UUID, string, string) (objecth.Object, error) {
 	panic("unused")
 }

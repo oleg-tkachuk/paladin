@@ -150,6 +150,16 @@ func (l ObjectLock) Active(now time.Time, governanceBypass bool) bool {
 	return false
 }
 
+// activeLock returns the first of locks that is Active, if any.
+func activeLock(locks []ObjectLock, now time.Time, governanceBypass bool) (ObjectLock, bool) {
+	for _, l := range locks {
+		if l.Active(now, governanceBypass) {
+			return l, true
+		}
+	}
+	return ObjectLock{}, false
+}
+
 // Reason renders a human error fragment for an active lock.
 func (l ObjectLock) Reason() string {
 	if l.LegalHold {
@@ -321,6 +331,10 @@ type Repository interface {
 	// ObjectLock returns the object row's lock state so the delete path
 	// can refuse (and report) a locked object before touching storage.
 	ObjectLock(ctx context.Context, tenantID, objectID uuid.UUID) (ObjectLock, error)
+	// VersionLocks returns the lock on every version of the object. A
+	// permanent delete removes them all, so the delete pre-check reads these
+	// rather than the current version's ObjectLock.
+	VersionLocks(ctx context.Context, tenantID, objectID uuid.UUID) ([]ObjectLock, error)
 	// HardDeleteTx / HardDeleteWithBypassTx run the permanent delete on the
 	// caller's tx so the handler can enqueue paladin.object.deleted atomically
 	// with the row removal (ADR-0003). The bypass variant sets the governance
@@ -1623,8 +1637,9 @@ func (h *Handler) PermanentDelete(
 	// Lock pre-check for a clear error. The HardDelete SQL is the
 	// non-bypassable safety net (it refuses locked rows even if this
 	// check is wrong); this just turns a would-be 0-row "version
-	// mismatch" into an accurate FailedPrecondition.
-	if lock, lerr := h.repo.ObjectLock(ctx, tenantID, objectID); lerr != nil {
+	// mismatch" into an accurate FailedPrecondition. Every version's lock
+	// counts, since the delete removes every version.
+	if locks, lerr := h.repo.VersionLocks(ctx, tenantID, objectID); lerr != nil {
 		// FindByName already resolved this object, so a lock-state read
 		// error is a genuine DB fault, not a missing row. Log it rather
 		// than silently swallow — the HardDelete SQL guard still enforces
@@ -1633,7 +1648,7 @@ func (h *Handler) PermanentDelete(
 		// lock reason, which the log explains.
 		logger.FromContext(ctx).Warn("object lock pre-check failed; relying on SQL guard",
 			zap.String("object_id", objectID.String()), zap.Error(lerr))
-	} else if lock.Active(time.Now(), bypassGovernance) {
+	} else if lock, ok := activeLock(locks, time.Now(), bypassGovernance); ok {
 		return connect.Errorf(connect.CodeFailedPrecondition,
 			"cannot delete: %s", lock.Reason())
 	}
