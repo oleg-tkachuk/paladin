@@ -72,9 +72,10 @@ func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenanth.Sta
 }
 
 // TenantSourceBucket returns the single (backend, bucket) the tenant's
-// collections currently bind to. Shared tenants normally have exactly one;
-// zero means no collections (nothing to migrate from), more than one means the
-// tenant spans buckets (unsupported in slice 1).
+// private collections currently bind to. Shared tenants normally have exactly
+// one; zero means no private collections (nothing to migrate from), more than
+// one means the tenant spans buckets (unsupported in slice 1). Public
+// collections are not counted: the migration leaves them in place.
 func (r *TenantRepo) TenantSourceBucket(ctx context.Context, tenantID uuid.UUID) (string, string, error) {
 	rows, err := r.q.TenantCollectionBuckets(ctx, pgUUID(tenantID))
 	if err != nil {
@@ -82,7 +83,7 @@ func (r *TenantRepo) TenantSourceBucket(ctx context.Context, tenantID uuid.UUID)
 	}
 	switch len(rows) {
 	case 0:
-		return "", "", tenanth.ErrNotFound
+		return "", "", tenanth.ErrNoCollectionsToMigrate
 	case 1:
 		return rows[0].BackendName, rows[0].BucketName, nil
 	default:

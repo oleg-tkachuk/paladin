@@ -90,19 +90,26 @@ WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state');
 -- name: MigrationListTenantObjects :many
 -- Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
 -- worker restart resumes mid-prefix instead of rescanning from the top.
--- size_bytes feeds the physical (HEAD size) verify after copy.
+-- size_bytes feeds the physical (HEAD size) verify after copy. A public
+-- collection's objects stay in their bucket (ADR-0027), so the copy, verify
+-- and cleanup never see them.
 SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
   AND o.state = 'AVAILABLE'
+  AND NOT c.public_read
   AND ROW(c.name, o.path) > ROW(sqlc.arg('after_collection')::text,
                                 sqlc.arg('after_path')::text)
 ORDER BY c.name, o.path
 LIMIT sqlc.arg('limit_count')::int;
 
 -- name: MigrationCountTenantObjects :one
-SELECT count(*) FROM objects WHERE tenant_id = $1 AND state = 'AVAILABLE';
+-- The objects MigrationListTenantObjects walks: public collections' excluded.
+SELECT count(*)
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1 AND o.state = 'AVAILABLE' AND NOT c.public_read;
 
 -- name: SetTenantStorageLayout :execrows
 UPDATE tenants
@@ -112,15 +119,18 @@ SET storage_layout   = $2,
 WHERE id = $1;
 
 -- name: MigrationListTenantCollections :many
--- All collections of a tenant, for the transactional rebind.
-SELECT name FROM collections WHERE tenant_id = $1 ORDER BY name;
+-- The collections the transactional rebind moves: all but the public ones,
+-- which never rebind (collections_public_bucket_fixed, ADR-0027).
+SELECT name FROM collections WHERE tenant_id = $1 AND NOT public_read ORDER BY name;
 
 -- name: TenantCollectionBuckets :many
 -- Distinct buckets the tenant's collections currently bind to. The migration
 -- copies FROM this — a shared tenant's collections normally share one bucket;
 -- more than one row means the tenant spans buckets (not supported in slice 1).
+-- Public collections are left out: they bind to a public bucket of their own
+-- and the migration leaves them there (ADR-0027).
 SELECT DISTINCT sb.name AS backend_name, b.name AS bucket_name
 FROM collections c
 JOIN buckets b           ON b.id = c.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
-WHERE c.tenant_id = $1;
+WHERE c.tenant_id = $1 AND NOT c.public_read;
