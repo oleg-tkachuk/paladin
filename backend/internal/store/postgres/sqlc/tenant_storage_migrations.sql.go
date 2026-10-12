@@ -18,18 +18,20 @@ SET objects_copied    = $1,
     cursor_path       = $3,
     updated_at        = now()
 WHERE tenant_id = $4 AND state = $5
+  AND attempts = $6
   AND objects_copied <= $1
 `
 
 // Records copy progress + the resume cursor after a batch. Progress only moves
 // forward: a stale batch reporting less than is recorded changes nothing.
-func (q *Queries) AdvanceStorageMigrationCopy(ctx context.Context, objectsCopied int64, cursorCollection string, cursorPath string, tenantID pgtype.UUID, fromState string) (int64, error) {
+func (q *Queries) AdvanceStorageMigrationCopy(ctx context.Context, objectsCopied int64, cursorCollection string, cursorPath string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
 	result, err := q.db.Exec(ctx, advanceStorageMigrationCopy,
 		objectsCopied,
 		cursorCollection,
 		cursorPath,
 		tenantID,
 		fromState,
+		attempts,
 	)
 	if err != nil {
 		return 0, err
@@ -43,13 +45,19 @@ SET state = $1, error = '', completed_at = now(),
     cleanup_after = now() + make_interval(secs => cleanup_retention_seconds),
     updated_at = now()
 WHERE tenant_id = $2 AND state = $3
+  AND attempts = $4
 `
 
 // Rebind verified: serve from the dedicated bucket. The old copies are kept
 // until cleanup_after (now + the row's retention) so a bad migration is still
 // rollback-able within the window.
-func (q *Queries) CompleteStorageMigration(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error) {
-	result, err := q.db.Exec(ctx, completeStorageMigration, toState, tenantID, fromState)
+func (q *Queries) CompleteStorageMigration(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	result, err := q.db.Exec(ctx, completeStorageMigration,
+		toState,
+		tenantID,
+		fromState,
+		attempts,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -127,14 +135,16 @@ const failStorageMigration = `-- name: FailStorageMigration :execrows
 UPDATE tenant_storage_migrations
 SET state = $1, error = $2, attempts = attempts + 1, updated_at = now()
 WHERE tenant_id = $3 AND state = $4
+  AND attempts = $5
 `
 
-func (q *Queries) FailStorageMigration(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string) (int64, error) {
+func (q *Queries) FailStorageMigration(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
 	result, err := q.db.Exec(ctx, failStorageMigration,
 		toState,
 		error,
 		tenantID,
 		fromState,
+		attempts,
 	)
 	if err != nil {
 		return 0, err
@@ -282,6 +292,25 @@ func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount in
 	return items, nil
 }
 
+const lockStorageMigrationForRebind = `-- name: LockStorageMigrationForRebind :execrows
+SELECT 1 FROM tenant_storage_migrations
+WHERE tenant_id = $1 AND state = $2
+  AND attempts = $3
+FOR UPDATE
+`
+
+// Holds the migration row for the rebind transaction, and only while it is
+// still in the state and attempt the worker read: a stale worker must not
+// repoint the tenant's collections at a bucket a newer attempt is still
+// filling.
+func (q *Queries) LockStorageMigrationForRebind(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	result, err := q.db.Exec(ctx, lockStorageMigrationForRebind, tenantID, fromState, attempts)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const lockTenantForStorageMigration = `-- name: LockTenantForStorageMigration :one
 
 SELECT storage_layout FROM tenants
@@ -307,10 +336,16 @@ const markStorageMigrationCleaned = `-- name: MarkStorageMigrationCleaned :execr
 UPDATE tenant_storage_migrations
 SET state = $1, cleaned_at = now(), updated_at = now()
 WHERE tenant_id = $2 AND state = $3
+  AND attempts = $4
 `
 
-func (q *Queries) MarkStorageMigrationCleaned(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error) {
-	result, err := q.db.Exec(ctx, markStorageMigrationCleaned, toState, tenantID, fromState)
+func (q *Queries) MarkStorageMigrationCleaned(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	result, err := q.db.Exec(ctx, markStorageMigrationCleaned,
+		toState,
+		tenantID,
+		fromState,
+		attempts,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -485,16 +520,27 @@ func (q *Queries) RetryFailedStorageMigration(ctx context.Context, cleanupRetent
 
 const setStorageMigrationState = `-- name: SetStorageMigrationState :execrows
 
+
 UPDATE tenant_storage_migrations
 SET state = $1, error = '', updated_at = now()
 WHERE tenant_id = $2 AND state = $3
+  AND attempts = $4
 `
 
 // Every transition names the state the worker read the migration in
 // (from_state) and applies only while it still holds: a worker resumed after a
 // pause past its lease must not drag a migration its successor moved on.
-func (q *Queries) SetStorageMigrationState(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error) {
-	result, err := q.db.Exec(ctx, setStorageMigrationState, toState, tenantID, fromState)
+// Every transition below applies only to the migration as the worker read
+// it: the same state AND the same attempts. attempts grows on every failure
+// and a retry keeps it, so a worker that read an earlier attempt and resumed
+// after it failed and was retried matches nothing (ABA on state alone).
+func (q *Queries) SetStorageMigrationState(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	result, err := q.db.Exec(ctx, setStorageMigrationState,
+		toState,
+		tenantID,
+		fromState,
+		attempts,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -505,15 +551,17 @@ const setStorageMigrationTotal = `-- name: SetStorageMigrationTotal :execrows
 UPDATE tenant_storage_migrations
 SET objects_total = $1, state = $2, updated_at = now()
 WHERE tenant_id = $3 AND state = $4
+  AND attempts = $5
 `
 
 // Records the object count and moves provisioning -> copying.
-func (q *Queries) SetStorageMigrationTotal(ctx context.Context, objectsTotal int64, toState string, tenantID pgtype.UUID, fromState string) (int64, error) {
+func (q *Queries) SetStorageMigrationTotal(ctx context.Context, objectsTotal int64, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
 	result, err := q.db.Exec(ctx, setStorageMigrationTotal,
 		objectsTotal,
 		toState,
 		tenantID,
 		fromState,
+		attempts,
 	)
 	if err != nil {
 		return 0, err
