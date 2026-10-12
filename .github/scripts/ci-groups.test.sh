@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ci-groups.test.sh — the Verify groups a change reaches, per scripts/ci-groups.sh.
+# ci-groups.test.sh — the Verify groups a change reaches, per .github/scripts/ci-groups.sh.
 #
 # Too few groups and a change merges on checks that never ran against it; too
 # many and the split buys nothing. Both are silent in CI, so each case below
@@ -10,7 +10,7 @@
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
-script="$root/scripts/ci-groups.sh"
+script="$root/.github/scripts/ci-groups.sh"
 failed=0
 
 check() {
@@ -40,6 +40,7 @@ check "an unclassified path"      '["repo"]' deploy/grafana/dashboard.json
 check "a Taskfile"                "$all" Taskfile.dev.yaml
 check "a cached include"          "$all" .task/remote/git.github.com.codegen.yaml
 check "a contract script"         "$all" scripts/chart-values.test.sh
+check "a CI script"               "$all" .github/scripts/release-sign.sh
 check "this workflow"             "$all" .github/workflows/ci.yaml
 check "another workflow"          '["repo"]' .github/workflows/release.yaml
 got_all="$("$script" --all </dev/null)"

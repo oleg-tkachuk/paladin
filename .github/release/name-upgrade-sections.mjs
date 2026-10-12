@@ -7,7 +7,7 @@
 // the version is not known until the release cuts it. Here each such heading
 // becomes "## <tags> — <title>", naming every tag of this run whose stream the
 // section's change belongs to — product first, then the SDK, as in
-// "## v26.0.0, sdk/go/v0.57.0 — …". scripts/stream-release-notes.sh finds a
+// "## v26.0.0, sdk/go/v0.57.0 — …". .github/scripts/stream-release-notes.sh finds a
 // section by that tag, and links it from the release notes.
 //
 // The change is the commit that added the heading, and its stream is decided

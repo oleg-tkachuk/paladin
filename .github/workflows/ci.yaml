@@ -125,19 +125,19 @@ jobs:
           zero=0000000000000000000000000000000000000000
           if [ -z "$from" ] || [ "$from" = "$zero" ] || ! git cat-file -e "${from}^{commit}" 2>/dev/null; then
             printf '%s\n' "no usable base (${from:-none}) — running everything"
-            groups="$(./scripts/ci-groups.sh --all)"
+            groups="$(./.github/scripts/ci-groups.sh --all)"
           else
             changed="$(git diff --name-only "$from" "$to")"
             printf '%s\n' "$changed"
-            groups="$(printf '%s\n' "$changed" | ./scripts/ci-groups.sh)"
+            groups="$(printf '%s\n' "$changed" | ./.github/scripts/ci-groups.sh)"
           fi
 
           printf '%s\n' "groups: $groups"
           printf '%s\n' "groups=$groups" >>"$GITHUB_OUTPUT"
-          e2e="$(printf '%s' "$groups" | ./scripts/ci-groups.sh --needs-e2e)"
+          e2e="$(printf '%s' "$groups" | ./.github/scripts/ci-groups.sh --needs-e2e)"
           printf '%s\n' "end-to-end: $e2e"
           printf '%s\n' "e2e=$e2e" >>"$GITHUB_OUTPUT"
-          deep="$(printf '%s' "$groups" | ./scripts/ci-groups.sh --needs-deep)"
+          deep="$(printf '%s' "$groups" | ./.github/scripts/ci-groups.sh --needs-deep)"
           printf '%s\n' "deep: $deep"
           printf '%s\n' "deep=$deep" >>"$GITHUB_OUTPUT"
           if [ "$groups" = "[]" ]; then

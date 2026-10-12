@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-script="$(git rev-parse --show-toplevel)/scripts/badge-versions.sh"
+script="$(git rev-parse --show-toplevel)/.github/scripts/badge-versions.sh"
 work=$(mktemp -d "${TMPDIR:-/tmp}/badge-versions.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 

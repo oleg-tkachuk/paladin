@@ -18,7 +18,7 @@ set -euo pipefail
 
 readonly ALL='["backend","sdk","frontend","repo"]'
 readonly INERT='(^|/)[^/]*\.md$|^docs/|^LICENSE$|^NOTICE$|^\.gitignore$|\.(png|jpe?g|svg|gif)$'
-readonly SHARED='^(Taskfile[^/]*\.yaml$|\.task/|scripts/|\.github/workflows/ci\.yaml$)'
+readonly SHARED='^(Taskfile[^/]*\.yaml$|\.task/|scripts/|\.github/scripts/|\.github/workflows/ci\.yaml$)'
 
 # --all: every group, for a change CI cannot diff (a new branch, a base this
 # clone lacks, a run by hand).

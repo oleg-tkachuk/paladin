@@ -377,7 +377,7 @@ scheme decision.
 - **Version rules**: pre-1.0, a breaking change is a minor
   (`release.config.cjs`; `docs/releasing.md`). The migration guide exists
   (`docs/upgrading.md`).
-- **Release notes** (`scripts/stream-release-notes.sh`): grouped by type, with
+- **Release notes** (`.github/scripts/stream-release-notes.sh`): grouped by type, with
   no *Breaking* or *Behaviour changes* section and no link to the guide.
 - **Compatibility**: no statement of which server or API versions an SDK
   release supports.

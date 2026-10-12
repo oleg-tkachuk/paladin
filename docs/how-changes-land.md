@@ -13,7 +13,7 @@ Python SDK's wheel beside each protobuf major and Python it supports, every
 cell of [`sdk/python/compat.json`](../sdk/python/compat.json) side by side in
 one job (`verify-py-sdk-compat` locally), and runs the client lifecycle stress in
 `sdk/python/tests/test_lifecycle.py` at a count high enough to catch an
-intermittent abort at exit. [`scripts/ci-groups.sh`](../scripts/ci-groups.sh)
+intermittent abort at exit. [`.github/scripts/ci-groups.sh`](../scripts/ci-groups.sh)
 decides which groups a set of paths reaches; a console-only change does not
 run the backend's tests. Run by hand, it runs every group. A final `All checks
 passed` job is the one check branch protection requires, so a group that was
