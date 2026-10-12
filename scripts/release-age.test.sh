@@ -7,6 +7,13 @@
 # naming one. Renovate proposed updates the day they were published, so every
 # install in CI failed until the release aged past pnpm's window. Its own
 # minimumReleaseAge for npm (renovate.json) must be at least pnpm's.
+#
+# Waiting is not the same as holding back: with minimumReleaseAge alone,
+# Renovate still creates the branch (with a pending stability check) and its
+# lockfile update fails inside pnpm's window (#448). The same rule must set
+# internalChecksFilter=strict and prCreation=not-pending, and the repository
+# internalChecksAsSuccess=true, since CI runs only on pull_request and a bare
+# Renovate branch has no other check to turn green.
 
 set -euo pipefail
 
@@ -48,3 +55,18 @@ if ((renovate_minutes < pnpm_age)); then
     exit 1
 fi
 echo "ok   renovate waits $renovate_age for npm, pnpm $pnpm_age min"
+
+rule='[.packageRules[] | select(.matchManagers == ["npm"] and .minimumReleaseAge)] | first'
+for want in 'internalChecksFilter=strict' 'prCreation=not-pending'; do
+    key=${want%=*}
+    got=$(jq -r "$rule | .$key // \"unset\"" "$RENOVATE_CONFIG")
+    if [ "$got" != "${want#*=}" ]; then
+        echo "FAIL the npm minimumReleaseAge rule has $key=$got, want ${want#*=}: without it Renovate creates the branch before the release ages" >&2
+        exit 1
+    fi
+done
+if [ "$(jq -r '.internalChecksAsSuccess // false' "$RENOVATE_CONFIG")" != true ]; then
+    echo "FAIL internalChecksAsSuccess is not true: with prCreation=not-pending and no CI on bare branches, Renovate's PRs stall" >&2
+    exit 1
+fi
+echo "ok   renovate holds npm branches back until they age (strict, not-pending)"
