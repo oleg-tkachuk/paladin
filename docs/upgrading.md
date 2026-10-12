@@ -44,6 +44,14 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — lifecycle transitions are refused
+
+- **Breaking, admin API.** `SetLifecycleRules` refuses a rule whose action is
+  a transition with `INVALID_ARGUMENT`. Transitions were stored and never
+  applied: no supported backend has storage classes to move objects to. A
+  bucket that holds one keeps it, unapplied, until the rules are written
+  again without it; the console marks it and offers only its deletion.
+
 ## Unreleased — the Python SDK supports Python 3.15
 
 - **Python SDK.** CPython 3.15 is tested beside 3.13 and 3.14;

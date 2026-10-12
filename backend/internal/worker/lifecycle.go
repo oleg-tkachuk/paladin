@@ -1,8 +1,8 @@
-// Lifecycle worker — periodic CEL evaluator that soft-deletes (and
-// eventually transitions) objects per `bucket.lifecycle_rules`.
+// Lifecycle worker — periodic CEL evaluator that soft-deletes objects per
+// `bucket.lifecycle_rules`.
 //
-// Expiration only: transition rules are stored but not applied (BACKLOG:
-// lifecycle transition rules). Each tick:
+// Expiration only: SetLifecycleRules refuses transitions, and one stored
+// before it did is skipped here. Each tick:
 //
 //  1. ListBucketsWithLifecycle — only buckets with a non-empty rules array.
 //  2. For each bucket, walk its bound collections and stream objects.

@@ -520,6 +520,11 @@ func (h *Handler) SetPolicy(ctx context.Context, backendID, bucketName, policy s
 	return &got, nil
 }
 
+// ErrLifecycleTransition refuses a lifecycle rule that transitions objects
+// to another storage class: no backend Paladin supports has storage classes
+// to move them to, so the rule would be stored and never applied.
+var ErrLifecycleTransition = errors.New("lifecycle transitions are not supported: no storage backend offers storage classes to transition to; use an expiration")
+
 func (h *Handler) SetLifecycleRules(ctx context.Context, backendID, bucketName string, rules []admindomain.LifecycleRule, expectedVersion int64) (*admindomain.Bucket, error) {
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
@@ -533,6 +538,9 @@ func (h *Handler) SetLifecycleRules(ctx context.Context, backendID, bucketName s
 	for i, r := range rules {
 		if err := celpkg.Validate(celpkg.ObjectSchema, r.Match); err != nil {
 			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("rule[%d] (id=%q): %w", i, r.ID, err))
+		}
+		if r.Transition != nil {
+			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("rule[%d] (id=%q): %w", i, r.ID, ErrLifecycleTransition))
 		}
 	}
 	if err := h.refuseLifecycleOnPublic(ctx, backendID, bucketName, rules); err != nil {
