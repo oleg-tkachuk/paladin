@@ -780,6 +780,19 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   score from one pass.
 - **Blockers:** none. It is a tool, not scheduled work.
 
+### The `object_tags` table has no reader or writer
+
+- **Status:** Deferred.
+- **Reason:** the tag-definition handler (`objecttagh`), its repository and
+  its queries were removed: no RPC ever constructed the handler, so nothing
+  could write a row. The table, its RLS policy and its trigger stay in the
+  schema baseline. An object's own tags live in `objects.tags` and do not
+  touch it.
+- **Definition of Done:** a migration that drops `object_tags`, after a check
+  that the table is empty in every environment.
+- **Blockers:** none. Left out of the code removal because dropping a table
+  cannot be undone and wants its own migration review.
+
 ### Index-usage tests are pinned to measured table sizes
 
 - **Status:** Deferred (works today; a trap for later).
@@ -1506,20 +1519,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   writes, records which detector flagged what, and is tested against a corpus
   with known positives and negatives for each signal.
 - **Blockers:** choosing the detectors, and their cost per object.
-
-### The tag-definition handler is unreachable
-
-- **Status:** Deferred.
-- **Reason:** `backend/internal/api/data/v1/objecttagh` (create, get, update,
-  delete and list of tenant tag definitions) is built into the wiring's
-  repositories but no RPC constructs its `Handler`; the tag RPCs that exist
-  work on an object's own tags through `objecth`. Its capability checks pass
-  no resource, so if it is ever exposed a resource-restricted capability is
-  refused all of it.
-- **Definition of Done:** the package and its repository are removed, or an
-  RPC exposes it with a resource form for tag definitions that
-  `AssertCapabilityOp` can check.
-- **Blockers:** deciding whether tenants need tag definitions at all.
 
 ---
 

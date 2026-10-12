@@ -72,14 +72,6 @@ const (
 	BucketsPublicReadFixed = "buckets_public_read_fixed"
 )
 
-// object_tags table constraint names — see the schema baseline
-// (001_initial_schema.sql).
-const (
-	// ObjectTagsSlugUnique — UNIQUE (tenant_id, slug); what a duplicate
-	// CreateObjectTag trips.
-	ObjectTagsSlugUnique = "object_tags_tenant_id_slug_key"
-)
-
 // tenant_default_bindings constraint names — see the schema baseline (001_initial_schema.sql).
 const (
 	// TenantDefaultBindingsPK — PRIMARY KEY (tenant_id).
