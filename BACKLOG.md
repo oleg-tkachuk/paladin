@@ -1284,12 +1284,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
     copies are still retained (cleanup only runs from `completed`). Done when
     an operator can re-copy into the target from the source, or roll the
     tenant back to its source bucket, through the API.
-  - `tenant_storage_migrations.tenant_id` has no unique key; one migration per
-    tenant is enforced by the start's `FOR NO KEY UPDATE` on the tenant row.
-    Before that, a second start naming another target backend inserted a
-    second row, so a database may hold duplicates (readers take the latest).
-    Done when duplicates are resolved and a unique index on `tenant_id` is
-    built (`CONCURRENTLY`, own migration file).
 - **Note — dev cluster object store is Garage (switched off SeaweedFS):**
   the `primary` backend now points at **Garage** (`garage-s3.storage:3900`,
   bucket `paladin-primary`, presigned via the `s3-garage.paladin.local` Traefik
