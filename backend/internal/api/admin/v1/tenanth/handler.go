@@ -174,8 +174,12 @@ type Repository interface {
 	// StartStorageMigration provisions the tenant's dedicated bucket
 	// (provision_state='pending', owned by the tenant) and inserts the
 	// tenant_storage_migrations row (state='provisioning') in one transaction
-	// (ADR-0015 Phase 3). ErrStorageMigrationExists when a migration row is
-	// already present for the tenant. Returns the created migration.
+	// (ADR-0015 Phase 3). A tenant whose migration is 'failed' has that row
+	// reset to 'provisioning' instead — a retry. ErrStorageMigrationExists
+	// when the tenant's migration is in any other state, ErrTenantNotShared
+	// when it is no longer shared, ErrTargetBucketUnusable when the dedicated
+	// bucket's name is taken by a bucket it may not use. Returns the started
+	// migration.
 	StartStorageMigration(ctx context.Context, args StartStorageMigrationArgs) (StorageMigration, error)
 	// GetStorageMigration returns the tenant's migration status. ErrNotFound
 	// when none was ever started.
@@ -215,9 +219,28 @@ type StorageMigration struct {
 	Error             string
 }
 
-// ErrStorageMigrationExists is returned by StartStorageMigration when a
-// migration row already exists for the tenant.
+// ErrStorageMigrationExists is returned by StartStorageMigration when the
+// tenant already has a migration that is not 'failed' — in flight, completed
+// or cleaned — or when a concurrent retry of a failed one got there first.
 var ErrStorageMigrationExists = errors.New("storage migration already exists for tenant")
+
+// ErrTenantNotShared is returned by StartStorageMigration when, under its
+// lock, the tenant is no longer 'shared': a migration rebound it in the
+// meantime, or it was trashed.
+var ErrTenantNotShared = errors.New("tenant is not on the shared layout")
+
+// ErrTargetBucketUnusable is returned by StartStorageMigration when a bucket
+// with the dedicated bucket's name already exists and is not one the
+// migration may take: owned by another tenant or by none, public, reached by
+// another tenant's collection or default binding, or being deleted. Adopting
+// such a bucket would hand this tenant's data to — or another tenant's
+// storage to — someone it does not belong to.
+var ErrTargetBucketUnusable = errors.New("the dedicated bucket's name is taken by a bucket this tenant may not use")
+
+// StorageMigrationFailed is the tenant_storage_migrations state of a
+// migration the worker gave up on — the one state MigrateTenantStorageLayout
+// retries from. Mirrors worker.MigStateFailed, which writes it.
+const StorageMigrationFailed = "failed"
 
 // ErrSourceBucketAmbiguous is returned by TenantSourceBucket when the tenant's
 // collections span more than one (backend, bucket) — slice 1 migrates from a
@@ -638,6 +661,30 @@ func (h *Handler) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, er
 // tenant's dedicated bucket, and records the copy job. The async
 // StorageMigrationWorker does the actual object copy + rebind. Returns the
 // initial migration status.
+//
+// Calling it again on a tenant whose migration FAILED retries it: the same
+// row starts over from 'provisioning' with its progress and cursor cleared,
+// into the same target bucket. That is the whole of the retry design, and why:
+//
+//   - Only 'failed' is retryable. An in-flight migration is the worker's,
+//     and a completed or cleaned one has nothing left to do.
+//   - Only a failure from before the rebind is retried. The worker fails a
+//     migration while provisioning,
+//     copying, rebinding (the rebind transaction rolled back) or verifying —
+//     and verifying comes after the rebind, which flips the layout to
+//     'dedicated' in the same transaction. Such a tenant is refused by the
+//     'shared' check below: it already serves from its dedicated bucket, and
+//     running the copy again would copy from a bucket it no longer uses.
+//   - Starting over rather than resuming: the copy is a same-key CopyObject,
+//     so copying an object the failed attempt already copied overwrites it
+//     with the same bytes — redoing the work is safe — while the old cursor
+//     and count describe an object list that may have changed since, and are
+//     exactly what the "copy ended short" check failed on.
+//   - The same target: a retry defaults to the failed attempt's backend and
+//     refuses a different one, so the bucket the failed attempt provisioned
+//     and partly filled is the one finished, not left behind.
+//   - Exactly one retry wins: the repository takes a lock on the tenant and
+//     resets the row only while it is still 'failed'.
 func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.UUID, targetBackendID string, cleanupRetentionSeconds int64) (*StorageMigration, error) {
 	if err := requirePlatformAdmin(ctx); err != nil {
 		return nil, err
@@ -655,6 +702,26 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 			"tenant is %q, not 'shared'; only shared tenants can migrate to dedicated", t.StorageLayout)
 	}
 
+	// Answered here for a clear message; the repository checks again under
+	// its lock, which is what decides a race.
+	targetBackend := targetBackendID
+	prev, err := h.repo.GetStorageMigration(ctx, tenantID)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		// First migration.
+	case err != nil:
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	case prev.State != StorageMigrationFailed:
+		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf(
+			"%w (state %q); only a failed migration can be retried", ErrStorageMigrationExists, prev.State))
+	case targetBackend == "":
+		targetBackend = prev.TargetBackendName
+	case targetBackend != prev.TargetBackendName:
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"the failed migration targeted backend %q; a retry finishes it there, not on %q",
+			prev.TargetBackendName, targetBackend)
+	}
+
 	// Source is where the tenant's objects physically live today — the
 	// (backend, bucket) its collections bind to. (Not the default binding,
 	// which is only for the bare-name shape and is often unset on shared
@@ -667,7 +734,6 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("cannot determine source bucket to migrate from: %w", err))
 	}
 
-	targetBackend := targetBackendID
 	if targetBackend == "" {
 		targetBackend = srcBackend
 	}
@@ -686,7 +752,8 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	}
 	m, err := h.repo.StartStorageMigration(ctx, args)
 	if err != nil {
-		if errors.Is(err, ErrStorageMigrationExists) {
+		if errors.Is(err, ErrStorageMigrationExists) || errors.Is(err, ErrTenantNotShared) ||
+			errors.Is(err, ErrTargetBucketUnusable) {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
