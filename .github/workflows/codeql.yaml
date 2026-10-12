@@ -11,8 +11,8 @@ on:
   push:
     branches: [main]
     paths-ignore: &docs
-      # Documentation only. Mirrors INERT in scripts/ci-groups.sh;
-      # scripts/ci-groups.test.sh fails when the two disagree.
+      # Documentation only. Mirrors INERT in .github/scripts/ci-groups.sh;
+      # .github/scripts/ci-groups.test.sh fails when the two disagree.
       - "**/*.md"
       - "docs/**"
       - LICENSE
