@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ type fakeMigRepo struct {
 	objects     []ObjectRef
 	bucketState string // provision_state the worker sees for the target bucket
 	rebound     bool
+	rebindErr   error // what RebindTenant returns; nil rebinds
 }
 
 func (f *fakeMigRepo) ListActive(context.Context, int) ([]StorageMigration, error) {
@@ -83,6 +85,9 @@ func (f *fakeMigRepo) SetState(_ context.Context, _ uuid.UUID, from, to string) 
 }
 
 func (f *fakeMigRepo) RebindTenant(context.Context, uuid.UUID, string, string) error {
+	if f.rebindErr != nil {
+		return f.rebindErr
+	}
 	f.rebound = true
 	return nil
 }
@@ -226,6 +231,38 @@ func TestStorageMigration_IncompleteCopyDoesNotRebind(t *testing.T) {
 	}
 	if repo.rebound {
 		t.Fatal("SECURITY: rebound collections despite an incomplete copy — data would be orphaned")
+	}
+}
+
+// A rebind the schema refuses (a public collection it will not let move,
+// ADR-0027) fails the migration instead of being retried every tick forever.
+func TestStorageMigration_RefusedRebindFails(t *testing.T) {
+	repo := &fakeMigRepo{
+		mig: StorageMigration{TenantID: uuid.New(), State: MigStateRebinding},
+		rebindErr: fmt.Errorf("rebind %q: %w: %w", "photos", ErrRebindRefused,
+			errors.New("public collection photos may not move to another bucket")),
+	}
+	w := newWorker(repo, &fakeCopier{})
+	w.tick(context.Background())
+	if repo.mig.State != MigStateFailed {
+		t.Fatalf("state = %q, want failed", repo.mig.State)
+	}
+	if repo.rebound {
+		t.Fatal("rebound despite the refusal")
+	}
+}
+
+// Any other rebind error is transient: the migration stays put for the next
+// tick.
+func TestStorageMigration_TransientRebindErrorRetries(t *testing.T) {
+	repo := &fakeMigRepo{
+		mig:       StorageMigration{TenantID: uuid.New(), State: MigStateRebinding},
+		rebindErr: errors.New("connection reset"),
+	}
+	w := newWorker(repo, &fakeCopier{})
+	w.tick(context.Background())
+	if repo.mig.State != MigStateRebinding {
+		t.Fatalf("state = %q, want %q (retried next tick)", repo.mig.State, MigStateRebinding)
 	}
 }
 

@@ -255,9 +255,13 @@ func (q *Queries) MarkStorageMigrationCleaned(ctx context.Context, toState strin
 }
 
 const migrationCountTenantObjects = `-- name: MigrationCountTenantObjects :one
-SELECT count(*) FROM objects WHERE tenant_id = $1 AND state = 'AVAILABLE'
+SELECT count(*)
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1 AND o.state = 'AVAILABLE' AND NOT c.public_read
 `
 
+// The objects MigrationListTenantObjects walks: public collections' excluded.
 func (q *Queries) MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, migrationCountTenantObjects, tenantID)
 	var count int64
@@ -266,10 +270,11 @@ func (q *Queries) MigrationCountTenantObjects(ctx context.Context, tenantID pgty
 }
 
 const migrationListTenantCollections = `-- name: MigrationListTenantCollections :many
-SELECT name FROM collections WHERE tenant_id = $1 ORDER BY name
+SELECT name FROM collections WHERE tenant_id = $1 AND NOT public_read ORDER BY name
 `
 
-// All collections of a tenant, for the transactional rebind.
+// The collections the transactional rebind moves: all but the public ones,
+// which never rebind (collections_public_bucket_fixed, ADR-0027).
 func (q *Queries) MigrationListTenantCollections(ctx context.Context, tenantID pgtype.UUID) ([]string, error) {
 	rows, err := q.db.Query(ctx, migrationListTenantCollections, tenantID)
 	if err != nil {
@@ -296,6 +301,7 @@ FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
   AND o.state = 'AVAILABLE'
+  AND NOT c.public_read
   AND ROW(c.name, o.path) > ROW($2::text,
                                 $3::text)
 ORDER BY c.name, o.path
@@ -310,7 +316,9 @@ type MigrationListTenantObjectsRow struct {
 
 // Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
 // worker restart resumes mid-prefix instead of rescanning from the top.
-// size_bytes feeds the physical (HEAD size) verify after copy.
+// size_bytes feeds the physical (HEAD size) verify after copy. A public
+// collection's objects stay in their bucket (ADR-0027), so the copy, verify
+// and cleanup never see them.
 func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error) {
 	rows, err := q.db.Query(ctx, migrationListTenantObjects,
 		tenantID,
@@ -395,7 +403,7 @@ SELECT DISTINCT sb.name AS backend_name, b.name AS bucket_name
 FROM collections c
 JOIN buckets b           ON b.id = c.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
-WHERE c.tenant_id = $1
+WHERE c.tenant_id = $1 AND NOT c.public_read
 `
 
 type TenantCollectionBucketsRow struct {
@@ -406,6 +414,8 @@ type TenantCollectionBucketsRow struct {
 // Distinct buckets the tenant's collections currently bind to. The migration
 // copies FROM this — a shared tenant's collections normally share one bucket;
 // more than one row means the tenant spans buckets (not supported in slice 1).
+// Public collections are left out: they bind to a public bucket of their own
+// and the migration leaves them there (ADR-0027).
 func (q *Queries) TenantCollectionBuckets(ctx context.Context, tenantID pgtype.UUID) ([]TenantCollectionBucketsRow, error) {
 	rows, err := q.db.Query(ctx, tenantCollectionBuckets, tenantID)
 	if err != nil {

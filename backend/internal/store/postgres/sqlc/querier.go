@@ -561,12 +561,16 @@ type Querier interface {
 	// successor its parent's holder may recover.
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) error
 	MarkStorageMigrationCleaned(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string) (int64, error)
+	// The objects MigrationListTenantObjects walks: public collections' excluded.
 	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
-	// All collections of a tenant, for the transactional rebind.
+	// The collections the transactional rebind moves: all but the public ones,
+	// which never rebind (collections_public_bucket_fixed, ADR-0027).
 	MigrationListTenantCollections(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
 	// Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
 	// worker restart resumes mid-prefix instead of rescanning from the top.
-	// size_bytes feeds the physical (HEAD size) verify after copy.
+	// size_bytes feeds the physical (HEAD size) verify after copy. A public
+	// collection's objects stay in their bucket (ADR-0027), so the copy, verify
+	// and cleanup never see them.
 	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
 	// The state of the row that owns a storage path now, if any.
 	ObjectStateAtPath(ctx context.Context, tenantID pgtype.UUID, name string, path string) (ObjectState, error)
@@ -850,6 +854,8 @@ type Querier interface {
 	// Distinct buckets the tenant's collections currently bind to. The migration
 	// copies FROM this — a shared tenant's collections normally share one bucket;
 	// more than one row means the tenant spans buckets (not supported in slice 1).
+	// Public collections are left out: they bind to a public bucket of their own
+	// and the migration leaves them there (ADR-0027).
 	TenantCollectionBuckets(ctx context.Context, tenantID pgtype.UUID) ([]TenantCollectionBucketsRow, error)
 	// Heartbeat for a RUNNING operation. Bumps updated_at and nothing else — in
 	// particular it must not touch metadata, which carries the progress counters
