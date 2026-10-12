@@ -35,6 +35,21 @@ The one residual cost is that a slow migration holds its locks while the
 **old** pods are still serving (the pre-upgrade hook runs before the new
 ReplicaSet). That is the motivation for the lock rules below.
 
+## Privileges: the database owner, not a superuser
+
+Production applies migrations as `paladin_migrate`: the owner of the
+database, with `BYPASSRLS` and nothing more. The roles, the database and the
+extensions are created by the Postgres operator before any migration runs.
+So a migration cannot create roles or extensions, or set a custom parameter
+such as `paladin.cross_tenant` in a function definition (Postgres 15 and later
+require superuser for that). A function that must read across tenants runs as
+`SECURITY DEFINER` instead, with a pinned `search_path` and schema-qualified
+tables, and its `EXECUTE` revoked from `PUBLIC`.
+
+Every other harness migrates as a superuser, so only
+`TestMigrations_ApplyWithoutSuperuser` (`tests/integration/components`)
+catches a migration that breaks this.
+
 ## Lock rules for new DDL
 
 Avoid `ACCESS EXCLUSIVE` locks that block reads/writes on a populated table

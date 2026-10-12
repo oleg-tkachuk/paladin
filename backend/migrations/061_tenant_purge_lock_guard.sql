@@ -28,24 +28,28 @@
 --
 -- objects, object_versions and object_locks are under FORCE ROW LEVEL
 -- SECURITY. A session scoped to another tenant, or to none, would see no rows
--- and pass the check, so the function widens its own reads with
--- paladin.cross_tenant for its duration only. The flag widens SELECT and
--- nothing else, and the function SET clause restores it on exit.
+-- and pass the check, so the function runs as its owner, the migrate role,
+-- which holds BYPASSRLS (as search_object_ids in 029 does). It only reads,
+-- and the search_path is pinned with every table schema-qualified.
+--
+-- Not a SET paladin.cross_tenant clause: setting a custom parameter in a
+-- function definition needs superuser in Postgres 15 and later, and the
+-- migrate role is the database owner and nothing more.
 CREATE OR REPLACE FUNCTION enforce_tenant_purge_lock_guard() RETURNS trigger
     LANGUAGE plpgsql
-    SET search_path TO 'pg_catalog', 'public'
-    SET paladin.cross_tenant TO 'on'
+    SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
     AS $$
 DECLARE
     bypass boolean := current_setting('paladin.bypass_governance_retention', true) IS NOT DISTINCT FROM 'on';
     held   uuid;
 BEGIN
     SELECT l.version_id INTO held
-      FROM object_locks l
+      FROM public.object_locks l
      WHERE (l.tenant_id = OLD.id
             OR l.version_id IN (SELECT v.id
-                                  FROM objects o
-                                  JOIN object_versions v ON v.object_id = o.id
+                                  FROM public.objects o
+                                  JOIN public.object_versions v ON v.object_id = o.id
                                  WHERE o.tenant_id = OLD.id))
        AND (l.legal_hold
             OR (l.retain_until > now()
@@ -60,6 +64,11 @@ BEGIN
     RETURN OLD;
 END
 $$;
+
+-- A SECURITY DEFINER function is executable by PUBLIC unless revoked. The
+-- trigger needs no grant: Postgres checks EXECUTE when the trigger is created,
+-- not when it fires.
+REVOKE ALL ON FUNCTION enforce_tenant_purge_lock_guard() FROM PUBLIC;
 
 DROP TRIGGER IF EXISTS tenants_purge_lock_guard ON tenants;
 CREATE TRIGGER tenants_purge_lock_guard
