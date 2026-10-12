@@ -490,18 +490,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
     SeaweedFS instances for exactly this.
 - **Blockers:** scope decision — same-cloud only vs. cross-cloud.
 
-### `Object.placement` is never populated
-
-- **Status:** Deferred
-- **Reason:** `PhysicalPlacement` (backend, bucket, storage path) exists in
-  `proto/paladin/data/v1/types.proto`, but
-  [connectshim/data/conv.go](backend/internal/api/connectshim/data/conv.go)
-  leaves it unset: it should reach only privileged callers, and no role check
-  for that exists on the data plane.
-- **Definition of Done:** a role (or Cedar action) that gates placement, the
-  field set for callers holding it, and tests for both sides of the gate.
-- **Blockers:** deciding who counts as privileged on the data plane.
-
 ### `ResetPassword` — self-service email delivery
 
 - **Status:** Won't-do (2026-06-30) — out of scope by product direction.

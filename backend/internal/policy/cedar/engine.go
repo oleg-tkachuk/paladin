@@ -96,6 +96,16 @@ var (
 	// lacks AllowTaintedRead, which write access must not imply.
 	ActionSetObjectTaint = declare("SetObjectTaint")
 
+	// ReadObjectPlacement reveals where an object physically lives — its
+	// storage backend, bucket and key inside the bucket (Object.placement).
+	// Its own action because that is infrastructure detail, not object
+	// content: GetObject does not imply it. No default tenant policy grants
+	// it, so only platform.admin (the built-in permit) sees placement until a
+	// tenant policy permits it to someone. Evaluated after the read itself is
+	// authorised, on the same resource; a denial leaves the field unset and
+	// never fails the read.
+	ActionReadObjectPlacement = declare("ReadObjectPlacement")
+
 	// Collection-scoped actions (admin plane).
 	ActionManageCollection       = declare("ManageCollection")
 	ActionBindCollectionToBucket = declare("BindCollectionToBucket")

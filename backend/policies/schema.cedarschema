@@ -282,6 +282,17 @@ action "SetObjectTaint" appliesTo {
   context: RequestContext
 };
 
+// ReadObjectPlacement reveals an object's physical placement — storage
+// backend, bucket and key inside the bucket — on GetObject, LookupObject and
+// ListObjects. Infrastructure detail, so GetObject does not imply it: only
+// platform.admin holds it by default. Like GetObject it reaches Cedar on the
+// Collection when a listing has no key at authorization time.
+action "ReadObjectPlacement" appliesTo {
+  principal: [User],
+  resource: [Object, Collection],
+  context: RequestContext
+};
+
 // IAM — user management. Listing is checked against the Tenant.
 action "ManageUser", "ResetPassword", "GrantScopes" appliesTo {
   principal: [User],

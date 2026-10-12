@@ -57,9 +57,6 @@ import (
 // not "the converter forgot it".
 var responseSkipFields = map[string]map[string]string{
 	"Object": {
-		// objectToProto comment: surfaced only for privileged callers; the
-		// role check is deferred, so it is left unset for now.
-		"Placement": "physical placement is privileged-only; role-gated projection not yet wired",
 		// Object-lock state is enforced server-side (SQL triggers + HardDelete
 		// guard); it is not projected onto the read Object DTO here.
 		"Lock": "lock state enforced server-side; not projected onto the read Object DTO",

@@ -626,3 +626,24 @@ func TestNamesInOneRequestMustNameOneTenant(t *testing.T) {
 		}
 	}
 }
+
+// Placement is projected from Object.Placement alone, which the handler sets
+// only for a caller Cedar allows ReadObjectPlacement. BackendID and Bucket,
+// which a JOINed read fills for anyone, must not leak into it.
+func TestObjectToProtoPlacement(t *testing.T) {
+	joined := &objecth.Object{
+		ObjectID: objUUID, TenantID: tenantA, Collection: "docs", Key: "a.txt",
+		BackendID: "primary", Bucket: "bucket-1",
+	}
+	if p := objectToProto(joined).GetPlacement(); p != nil {
+		t.Fatalf("placement %v projected without the handler attaching it", p)
+	}
+
+	joined.Placement = &objecth.Placement{
+		BackendID: "primary", Bucket: "bucket-1", StoragePath: tenantA.String() + "/docs/a.txt",
+	}
+	p := objectToProto(joined).GetPlacement()
+	if p.GetBackendId() != "primary" || p.GetBucketId() != "bucket-1" || p.GetStoragePath() != tenantA.String()+"/docs/a.txt" {
+		t.Errorf("placement = %v, want the attached one", p)
+	}
+}
