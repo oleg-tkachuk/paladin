@@ -44,6 +44,15 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the MCP bridge forwards key-bound capabilities
+
+- **Configuration.** `mcp.dpop_key` / `mcp.dpop_key_secret` give the bridge a
+  DPoP key (PEM PKCS#8, Ed25519 or P-256). Every bridge replica must hold the
+  same one: give it as `dpop_key_secret` and add the Secret's name to
+  `rbac.secretReader.secretNames`. Unset, nothing changes.
+- **Agents.** To use a key-bound capability through MCP, delegate it to the
+  thumbprint `paladin_get_bridge_key` returns and pass the child to the bridge.
+
 ## Unreleased — DPoP server nonces
 
 - **Configuration.** `capability.dpop_nonce` (off by default) makes a
