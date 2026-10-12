@@ -44,6 +44,12 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the Python SDK supports Python 3.15
+
+- **Python SDK.** CPython 3.15 is tested beside 3.13 and 3.14;
+  `requires-python` stays `>=3.13`. `biscuit-python` has no 3.15 wheel, so
+  the `biscuit` extra builds from source there, as it does on 3.14.
+
 ## Unreleased — the MCP bridge forwards key-bound capabilities
 
 - **Configuration.** `mcp.dpop_key` / `mcp.dpop_key_secret` give the bridge a
