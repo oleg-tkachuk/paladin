@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
@@ -140,10 +141,13 @@ func migrationMoved(rows int64, err error) error {
 	return nil
 }
 
-// RebindTenant repoints every collection at the dedicated bucket and flips the
-// tenant's storage_layout to 'dedicated' in ONE transaction. The collections→
-// buckets FK is DEFERRABLE INITIALLY DEFERRED, and the target bucket already
-// exists (provision_state='ready'), so the tenancy trigger and FK both pass.
+// RebindTenant repoints every private collection at the dedicated bucket and
+// flips the tenant's storage_layout to 'dedicated' in ONE transaction. The
+// collections→buckets FK is DEFERRABLE INITIALLY DEFERRED, and the target
+// bucket already exists (provision_state='ready'), so the tenancy trigger and
+// FK both pass. Public collections are not listed, so not moved (ADR-0027);
+// should a bucket rule still refuse a collection, the check violation comes
+// back as worker.ErrRebindRefused, which no retry would change.
 func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, tenantID uuid.UUID, targetBackendID, targetBucketName string) error {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -164,6 +168,9 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, tenantID uuid.U
 		// expected_version 0 = skip optimistic-lock check; the migration owns
 		// the whole tenant's binding during rebind.
 		if _, err := qtx.BindCollectionToBucket(ctx, pgUUID(tenantID), ok, targetBackendID, targetBucketName, 0); err != nil {
+			if pgerr.Is(err, pgerr.CheckViolation) {
+				return fmt.Errorf("rebind %q: %w: %w", ok, worker.ErrRebindRefused, err)
+			}
 			return fmt.Errorf("rebind %q: %w", ok, err)
 		}
 	}

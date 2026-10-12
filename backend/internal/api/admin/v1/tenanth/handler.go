@@ -183,8 +183,9 @@ type Repository interface {
 	// TenantSourceBucket returns the (backend, bucket) the tenant's objects
 	// physically live in today — the DISTINCT binding across its collections.
 	// A shared tenant's keys normally share one bucket; ErrSourceBucketAmbiguous
-	// when they span more than one (unsupported in slice 1), ErrNotFound when
-	// the tenant has no collections.
+	// when they span more than one (unsupported in slice 1),
+	// ErrNoCollectionsToMigrate when the tenant has none. Public collections
+	// are not counted: the migration leaves them in their bucket (ADR-0027).
 	TenantSourceBucket(ctx context.Context, tenantID uuid.UUID) (backendID, bucketName string, err error)
 }
 
@@ -222,6 +223,11 @@ var ErrStorageMigrationExists = errors.New("storage migration already exists for
 // collections span more than one (backend, bucket) — slice 1 migrates from a
 // single source bucket.
 var ErrSourceBucketAmbiguous = errors.New("tenant collections span multiple buckets; single-source migration only")
+
+// ErrNoCollectionsToMigrate is returned by TenantSourceBucket when the tenant
+// has no private collection: none at all, or only public ones, which stay in
+// their bucket (ADR-0027) and leave the migration nothing to move.
+var ErrNoCollectionsToMigrate = errors.New("tenant has no private collections to migrate; public collections stay in their bucket")
 
 // RenameTenantSlugArgs is the input shape for Repository.Rename and
 // Handler.RenameTenantSlug.
@@ -652,7 +658,10 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	// Source is where the tenant's objects physically live today — the
 	// (backend, bucket) its collections bind to. (Not the default binding,
 	// which is only for the bare-name shape and is often unset on shared
-	// tenants whose keys carry explicit bindings.)
+	// tenants whose keys carry explicit bindings.) Public collections do not
+	// count: they live in a public bucket and the migration leaves them there
+	// (worker.StorageMigrationWorker says why), so a tenant with only public
+	// collections has nothing to migrate.
 	srcBackend, srcBucket, err := h.repo.TenantSourceBucket(ctx, tenantID)
 	if err != nil {
 		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("cannot determine source bucket to migrate from: %w", err))

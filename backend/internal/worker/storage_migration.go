@@ -19,9 +19,26 @@ import (
 //
 // State machine (driven here):
 //   provisioning -> copying -> rebinding -> verifying -> completed
-// Terminal failures (cross-backend, target-bucket provisioning failed) set
-// `failed`; transient errors (a DB blip, one failed CopyObject) are retried on
-// the next tick without abandoning the migration.
+// Terminal failures (target-bucket provisioning failed, a rebind the schema
+// refuses, a failed physical verify) set `failed`; transient errors (a DB
+// blip, one failed CopyObject) are retried on the next tick without abandoning
+// the migration.
+//
+// Public collections (ADR-0027) are skipped throughout — the repository's
+// object and collection lists leave them out, so they are never copied,
+// rebound, verified or cleaned up. They cannot move: a public collection only
+// binds to a public bucket, the tenant's dedicated bucket is private (a
+// migration target is never public), and the schema refuses to rebind one
+// (`collections_public_bucket_fixed`) because every URL a consumer stored for
+// its objects names the bucket. Skipping, rather than refusing a tenant that
+// has any, is what keeps the result consistent: a tenant created `dedicated`
+// keeps its public collections in a public bucket outside its own just the
+// same, so `dedicated` already means "private data in the tenant's bucket",
+// and a migrated tenant ends in exactly that state. Refusing instead would
+// bar any tenant that ever published from migrating for good, as a public
+// collection can only go away by deleting it, which breaks its URLs. Since
+// the lists are read on every step, a public collection created mid-migration
+// is skipped too.
 
 // Migration states. tenant_storage_migrations.state (`001_initial_schema.sql`)
 // is plain text with no CHECK, so this list is the only definition of the set.
@@ -107,9 +124,10 @@ type MigrationRepo interface {
 	// AdvanceCopy only moves progress forward.
 	AdvanceCopy(ctx context.Context, tenantID uuid.UUID, from string, copied int64, cursorCollection, cursorKey string) error
 	SetState(ctx context.Context, tenantID uuid.UUID, from, to string) error
-	// RebindTenant, in ONE transaction, rebinds every collection of the tenant
-	// to (targetBackendID, targetBucketName) and flips storage_layout to
-	// 'dedicated'. The FK is DEFERRABLE INITIALLY DEFERRED.
+	// RebindTenant, in ONE transaction, rebinds every private collection of
+	// the tenant to (targetBackendID, targetBucketName) and flips
+	// storage_layout to 'dedicated'. The FK is DEFERRABLE INITIALLY DEFERRED.
+	// A rebind the schema refuses is ErrRebindRefused.
 	RebindTenant(ctx context.Context, tenantID uuid.UUID, targetBackendID, targetBucketName string) error
 	Complete(ctx context.Context, tenantID uuid.UUID, from string) error
 	// MarkCleaned is the terminal transition after the old copies are deleted.
@@ -120,6 +138,11 @@ type MigrationRepo interface {
 // ErrMigrationMoved reports a transition that did not apply because the
 // migration is no longer in the state it was read in.
 var ErrMigrationMoved = errors.New("storage migration moved on since it was read")
+
+// ErrRebindRefused reports a rebind the schema refused (a collection the
+// bucket rules will not let move). Retrying cannot change the answer, so the
+// worker fails the migration rather than retrying it every tick.
+var ErrRebindRefused = errors.New("schema refused the rebind")
 
 // StorageMigrationWorker drives active migrations to completion.
 type StorageMigrationWorker struct {
@@ -266,7 +289,13 @@ func (w *StorageMigrationWorker) stepCopying(ctx context.Context, m StorageMigra
 // stepRebinding atomically repoints the tenant's collections at the dedicated
 // bucket and flips the layout. From here reads/writes resolve to the copy.
 func (w *StorageMigrationWorker) stepRebinding(ctx context.Context, m StorageMigration) error {
-	if err := w.Repo.RebindTenant(ctx, m.TenantID, m.TargetBackendID, m.TargetBucketName); err != nil {
+	if err := w.Repo.RebindTenant(ctx, m.TenantID, m.TargetBackendID, m.TargetBucketName); errors.Is(err, ErrRebindRefused) {
+		// The transaction rolled back: nothing rebound, the layout is still
+		// shared and the tenant is served from its source copies.
+		w.log().Error("rebind refused by the schema; failing the migration",
+			zap.String("tenant_id", m.TenantID.String()), zap.Error(err))
+		return w.Repo.Fail(ctx, m.TenantID, m.State, "rebind: "+err.Error())
+	} else if err != nil {
 		return fmt.Errorf("rebind collections: %w", err)
 	}
 	return w.Repo.SetState(ctx, m.TenantID, m.State, MigStateVerifying)
