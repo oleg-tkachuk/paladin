@@ -195,6 +195,12 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("app name is required")
 	}
 
+	// Surfaced-for-purge, never auto-purged: a zero or negative window would
+	// mark every trashed tenant as due the moment it was trashed.
+	if c.Admin.Tenants.TrashRetention <= 0 {
+		return fmt.Errorf("admin.tenants.trash_retention must be positive")
+	}
+
 	// ── Secret mutual-exclusivity sweep ─────────────────────────────
 	// For every field with a `<field>_secret` sibling, accepting both
 	// inline + SecretRef is ambiguous: which one wins? We reject at

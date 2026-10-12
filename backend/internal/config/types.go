@@ -478,7 +478,19 @@ type APIServer struct {
 // future admin-only knobs (audit-log rate limits, stricter timeouts,
 // dedicated trusted-proxy list) hang here without further nesting.
 type Admin struct {
-	Server HTTPServer `yaml:"server" json:"server"`
+	Server  HTTPServer   `yaml:"server" json:"server"`
+	Tenants AdminTenants `yaml:"tenants" json:"tenants"`
+}
+
+// AdminTenants holds the admin plane's tenant-lifecycle knobs.
+type AdminTenants struct {
+	// TrashRetention is how long a soft-deleted tenant sits in the trash
+	// before it is surfaced for purge: the admin API reports
+	// deleted_at + TrashRetention as the tenant's purge_eligible_at, and the
+	// console marks the tenant once that moment has passed. Nothing purges
+	// on its own — PurgeTenant stays an operator call. Must be positive;
+	// default 720h (30 days).
+	TrashRetention time.Duration `yaml:"trash_retention" json:"trash_retention"`
 }
 
 // Worker is the per-role config block for the worker binary. Carries
