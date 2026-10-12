@@ -27,18 +27,24 @@ func (f *fakeMigRepo) ListActive(context.Context, int) ([]StorageMigration, erro
 	return []StorageMigration{f.mig}, nil
 }
 
-// moveFrom applies a transition the way the SQL does: only from the state
-// the caller read.
-func (f *fakeMigRepo) moveFrom(from, to string) error {
-	if f.mig.State != from {
+// holds reports whether the migration is still as the caller read it: the
+// same state and the same attempt, as the SQL guard compares.
+func (f *fakeMigRepo) holds(at MigrationRead) bool {
+	return f.mig.State == at.State && f.mig.Attempts == at.Attempts
+}
+
+// moveFrom applies a transition the way the SQL does: only from the
+// migration as the caller read it.
+func (f *fakeMigRepo) moveFrom(at MigrationRead, to string) error {
+	if !f.holds(at) {
 		return ErrMigrationMoved
 	}
 	f.mig.State = to
 	return nil
 }
 
-func (f *fakeMigRepo) MarkCleaned(_ context.Context, _ uuid.UUID, from string) error {
-	return f.moveFrom(from, MigStateCleaned)
+func (f *fakeMigRepo) MarkCleaned(_ context.Context, at MigrationRead) error {
+	return f.moveFrom(at, MigStateCleaned)
 }
 
 func (f *fakeMigRepo) BucketProvisionState(context.Context, string, string) (string, error) {
@@ -49,8 +55,8 @@ func (f *fakeMigRepo) CountObjects(context.Context, uuid.UUID) (int64, error) {
 	return int64(len(f.objects)), nil
 }
 
-func (f *fakeMigRepo) SetCopying(_ context.Context, _ uuid.UUID, from string, total int64) error {
-	if err := f.moveFrom(from, MigStateCopying); err != nil {
+func (f *fakeMigRepo) SetCopying(_ context.Context, at MigrationRead, total int64) error {
+	if err := f.moveFrom(at, MigStateCopying); err != nil {
 		return err
 	}
 	f.mig.ObjectsTotal = total
@@ -70,8 +76,8 @@ func (f *fakeMigRepo) ListObjects(_ context.Context, _ uuid.UUID, afterCollectio
 	return out, nil
 }
 
-func (f *fakeMigRepo) AdvanceCopy(_ context.Context, _ uuid.UUID, from string, copied int64, cursorCollection, cursorKey string) error {
-	if f.mig.State != from || copied < f.mig.ObjectsCopied {
+func (f *fakeMigRepo) AdvanceCopy(_ context.Context, at MigrationRead, copied int64, cursorCollection, cursorKey string) error {
+	if !f.holds(at) || copied < f.mig.ObjectsCopied {
 		return ErrMigrationMoved
 	}
 	f.mig.ObjectsCopied = copied
@@ -80,11 +86,14 @@ func (f *fakeMigRepo) AdvanceCopy(_ context.Context, _ uuid.UUID, from string, c
 	return nil
 }
 
-func (f *fakeMigRepo) SetState(_ context.Context, _ uuid.UUID, from, to string) error {
-	return f.moveFrom(from, to)
+func (f *fakeMigRepo) SetState(_ context.Context, at MigrationRead, to string) error {
+	return f.moveFrom(at, to)
 }
 
-func (f *fakeMigRepo) RebindTenant(context.Context, uuid.UUID, string, string) error {
+func (f *fakeMigRepo) RebindTenant(_ context.Context, at MigrationRead, _, _ string) error {
+	if !f.holds(at) {
+		return ErrMigrationMoved
+	}
 	if f.rebindErr != nil {
 		return f.rebindErr
 	}
@@ -92,12 +101,16 @@ func (f *fakeMigRepo) RebindTenant(context.Context, uuid.UUID, string, string) e
 	return nil
 }
 
-func (f *fakeMigRepo) Complete(_ context.Context, _ uuid.UUID, from string) error {
-	return f.moveFrom(from, MigStateCompleted)
+func (f *fakeMigRepo) Complete(_ context.Context, at MigrationRead) error {
+	return f.moveFrom(at, MigStateCompleted)
 }
 
-func (f *fakeMigRepo) Fail(_ context.Context, _ uuid.UUID, from, _ string) error {
-	return f.moveFrom(from, MigStateFailed)
+func (f *fakeMigRepo) Fail(_ context.Context, at MigrationRead, _ string) error {
+	if err := f.moveFrom(at, MigStateFailed); err != nil {
+		return err
+	}
+	f.mig.Attempts++
+	return nil
 }
 
 // fakeCopier records every copy.
@@ -399,5 +412,44 @@ func TestStorageMigration_StaleStepDoesNotDragItBack(t *testing.T) {
 	w.tick(context.Background())
 	if repo.mig.State != MigStateCompleted {
 		t.Errorf("state = %s after the successor's tick, want %s", repo.mig.State, MigStateCompleted)
+	}
+}
+
+// The state alone repeats across attempts. A worker read a migration copying
+// on its first attempt and paused; meanwhile the attempt failed, an operator
+// retried it, and the retry is copying again from the start. The stale step
+// matches on state, so only the attempt keeps its count and cursor out of the
+// retry — and a stale rebind from pointing the tenant at a bucket the retry
+// has not filled.
+func TestStorageMigration_StaleStepFromAnEarlierAttemptChangesNothing(t *testing.T) {
+	objects := []ObjectRef{{Collection: "c", Key: "a"}, {Collection: "c", Key: "b"}, {Collection: "c", Key: "d"}}
+	read := StorageMigration{
+		TenantID: uuid.New(), State: MigStateCopying,
+		SourceBucketName: "shared", TargetBucketName: "dedicated",
+		ObjectsTotal: int64(len(objects)), ObjectsCopied: 1, CursorCollection: "c", CursorKey: "a",
+	}
+
+	for _, state := range []string{MigStateCopying, MigStateRebinding} {
+		t.Run(state, func(t *testing.T) {
+			stale := read
+			stale.State = state
+			// The retry: same state, progress reset, one failure further on.
+			retry := read
+			retry.State = state
+			retry.ObjectsCopied, retry.CursorCollection, retry.CursorKey = 0, "", ""
+			retry.Attempts = stale.Attempts + 1
+			repo := &fakeMigRepo{mig: retry, objects: objects}
+			w := newWorker(repo, &fakeCopier{})
+
+			if err := w.advance(context.Background(), stale); !errors.Is(err, ErrMigrationMoved) {
+				t.Fatalf("stale step returned %v, want ErrMigrationMoved", err)
+			}
+			if repo.mig != retry {
+				t.Errorf("stale step changed the retry: %+v, want %+v", repo.mig, retry)
+			}
+			if repo.rebound {
+				t.Error("a stale rebind repointed the tenant at the retry's unfilled bucket")
+			}
+		})
 	}
 }

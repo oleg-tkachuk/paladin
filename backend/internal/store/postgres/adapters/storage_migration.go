@@ -47,6 +47,7 @@ func migFromSQLC(m sqlc.TenantStorageMigration,
 		CursorCollection: m.CursorCollection,
 		CursorKey:        m.CursorPath,
 		CleanupAfter:     m.CleanupAfter.Time, // zero when NULL (CleanupAfter.Valid == false)
+		Attempts:         m.Attempts,
 	}
 }
 
@@ -101,8 +102,8 @@ func (r *StorageMigrationRepo) CountObjects(ctx context.Context, tenantID uuid.U
 	return n, err
 }
 
-func (r *StorageMigrationRepo) SetCopying(ctx context.Context, tenantID uuid.UUID, from string, total int64) error {
-	return migrationMoved(r.q.SetStorageMigrationTotal(ctx, total, worker.MigStateCopying, pgUUID(tenantID), from))
+func (r *StorageMigrationRepo) SetCopying(ctx context.Context, at worker.MigrationRead, total int64) error {
+	return migrationMoved(r.q.SetStorageMigrationTotal(ctx, total, worker.MigStateCopying, pgUUID(at.TenantID), at.State, at.Attempts))
 }
 
 func (r *StorageMigrationRepo) ListObjects(ctx context.Context, tenantID uuid.UUID, afterCollection, afterKey string, limit int) ([]worker.ObjectRef, error) {
@@ -121,12 +122,12 @@ func (r *StorageMigrationRepo) ListObjects(ctx context.Context, tenantID uuid.UU
 	return out, err
 }
 
-func (r *StorageMigrationRepo) AdvanceCopy(ctx context.Context, tenantID uuid.UUID, from string, copied int64, cursorCollection, cursorKey string) error {
-	return migrationMoved(r.q.AdvanceStorageMigrationCopy(ctx, copied, cursorCollection, cursorKey, pgUUID(tenantID), from))
+func (r *StorageMigrationRepo) AdvanceCopy(ctx context.Context, at worker.MigrationRead, copied int64, cursorCollection, cursorKey string) error {
+	return migrationMoved(r.q.AdvanceStorageMigrationCopy(ctx, copied, cursorCollection, cursorKey, pgUUID(at.TenantID), at.State, at.Attempts))
 }
 
-func (r *StorageMigrationRepo) SetState(ctx context.Context, tenantID uuid.UUID, from, to string) error {
-	return migrationMoved(r.q.SetStorageMigrationState(ctx, to, pgUUID(tenantID), from))
+func (r *StorageMigrationRepo) SetState(ctx context.Context, at worker.MigrationRead, to string) error {
+	return migrationMoved(r.q.SetStorageMigrationState(ctx, to, pgUUID(at.TenantID), at.State, at.Attempts))
 }
 
 // migrationMoved turns a transition that matched no row into
@@ -148,7 +149,13 @@ func migrationMoved(rows int64, err error) error {
 // FK both pass. Public collections are not listed, so not moved (ADR-0027);
 // should a bucket rule still refuse a collection, the check violation comes
 // back as worker.ErrRebindRefused, which no retry would change.
-func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, tenantID uuid.UUID, targetBackendID, targetBucketName string) error {
+//
+// The migration row is held for the transaction, and only while it is still
+// as the worker read it; otherwise nothing is rebound and the answer is
+// worker.ErrMigrationMoved. A stale worker must not point the tenant at a
+// bucket a newer attempt has not finished filling.
+func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, at worker.MigrationRead, targetBackendID, targetBucketName string) error {
+	tenantID := at.TenantID
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return err
@@ -160,6 +167,9 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, tenantID uuid.U
 	}
 	qtx := r.q.WithTx(tx)
 
+	if err := migrationMoved(qtx.LockStorageMigrationForRebind(ctx, pgUUID(tenantID), at.State, at.Attempts)); err != nil {
+		return err
+	}
 	keys, err := qtx.MigrationListTenantCollections(ctx, pgUUID(tenantID))
 	if err != nil {
 		return fmt.Errorf("list collections: %w", err)
@@ -192,14 +202,14 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, tenantID uuid.U
 	return tx.Commit(ctx)
 }
 
-func (r *StorageMigrationRepo) Complete(ctx context.Context, tenantID uuid.UUID, from string) error {
-	return migrationMoved(r.q.CompleteStorageMigration(ctx, worker.MigStateCompleted, pgUUID(tenantID), from))
+func (r *StorageMigrationRepo) Complete(ctx context.Context, at worker.MigrationRead) error {
+	return migrationMoved(r.q.CompleteStorageMigration(ctx, worker.MigStateCompleted, pgUUID(at.TenantID), at.State, at.Attempts))
 }
 
-func (r *StorageMigrationRepo) MarkCleaned(ctx context.Context, tenantID uuid.UUID, from string) error {
-	return migrationMoved(r.q.MarkStorageMigrationCleaned(ctx, worker.MigStateCleaned, pgUUID(tenantID), from))
+func (r *StorageMigrationRepo) MarkCleaned(ctx context.Context, at worker.MigrationRead) error {
+	return migrationMoved(r.q.MarkStorageMigrationCleaned(ctx, worker.MigStateCleaned, pgUUID(at.TenantID), at.State, at.Attempts))
 }
 
-func (r *StorageMigrationRepo) Fail(ctx context.Context, tenantID uuid.UUID, from, reason string) error {
-	return migrationMoved(r.q.FailStorageMigration(ctx, worker.MigStateFailed, &reason, pgUUID(tenantID), from))
+func (r *StorageMigrationRepo) Fail(ctx context.Context, at worker.MigrationRead, reason string) error {
+	return migrationMoved(r.q.FailStorageMigration(ctx, worker.MigStateFailed, &reason, pgUUID(at.TenantID), at.State, at.Attempts))
 }
