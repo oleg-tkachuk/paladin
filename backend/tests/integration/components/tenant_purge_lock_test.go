@@ -11,8 +11,8 @@
 //   - emptying the tenant first: deleting its collection, hard-deleting its
 //     object through the repository (PermanentDelete) and through the
 //     lifecycle hard-deleter's queries, and the raw DELETEs underneath them;
-//   - a lock that is not on the current version, which the hard-delete
-//     queries' own NOT EXISTS clause does not look at.
+//   - a lock that is not on the current version (hard_delete_version_lock_test.go
+//     covers how the hard-delete queries treat one).
 //
 // Until 061 the purge was stopped by collections_tenant_id_fkey — every
 // object needs a collection — so a locked object was protected as a side

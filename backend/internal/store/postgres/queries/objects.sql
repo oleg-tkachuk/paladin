@@ -79,6 +79,18 @@ FROM objects o
 LEFT JOIN object_locks l ON l.version_id = o.current_version_id
 WHERE o.tenant_id = $1 AND o.id = $2;
 
+-- name: ListObjectVersionLocks :many
+-- Every lock row on any version of one object, for the permanent-delete
+-- pre-check. Deleting the object removes all its versions, so a lock on an
+-- older version blocks the delete as surely as one on the current version;
+-- the caller decides which rows are still active (legal hold, retention
+-- window, governance bypass). GetObjectLockState stays the current version's
+-- lock — that is what GetObject describes.
+SELECT l.mode AS lock_mode, l.retain_until AS lock_retain_until, l.legal_hold
+FROM object_locks l
+JOIN object_versions v ON v.id = l.version_id
+WHERE v.tenant_id = $1 AND v.object_id = $2;
+
 -- name: HardDeleteObject :execrows
 -- Removes the row outright. Caller is responsible for first deleting the
 -- object from the storage backend (S3 DeleteObject). Allowed from any
@@ -95,12 +107,14 @@ DELETE FROM objects
 WHERE objects.tenant_id = $1 AND objects.id = $2
   AND (sqlc.arg('expected_version')::bigint = 0
        OR resource_version = sqlc.arg('expected_version')::bigint)
-  -- The lock lives on the object's current version now (ADR-0017). NOT EXISTS
-  -- rather than a join: an object with no lock row is the common case and must
-  -- remain deletable.
+  -- Locks live on versions (ADR-0017), and the delete takes every version of
+  -- the object with it, so any version's lock blocks it — not only the
+  -- current one's. NOT EXISTS rather than a join: an object with no lock row
+  -- is the common case and must remain deletable.
   AND NOT EXISTS (
       SELECT 1 FROM object_locks l
-       WHERE l.version_id = objects.current_version_id
+        JOIN object_versions v ON v.id = l.version_id
+       WHERE v.object_id = objects.id
          AND (l.legal_hold
               OR (l.mode = 'COMPLIANCE' AND l.retain_until > now())
               OR (l.mode = 'GOVERNANCE' AND l.retain_until > now()
@@ -118,11 +132,12 @@ WHERE objects.tenant_id = $1 AND objects.id = $2
 -- The collection's NAME comes back for the same reason: it is a segment of the
 -- object's storage path (<tenant>/<collection>/<path>), not a lookup key.
 --
--- Locks live on object_locks keyed by the object's CURRENT version, so the
--- guard is a LEFT JOIN. legal_hold and any active retention window block the
--- purge; the worker has no governance bypass, so GOVERNANCE is honoured here
--- exactly like COMPLIANCE. Locked rows are skipped until the lock lapses.
--- COALESCE on legal_hold because most objects have no lock row at all.
+-- Locks live on object_locks keyed by version, and purging the object takes
+-- every version with it, so a lock on ANY version skips the row — otherwise
+-- an older version's lock would refuse the delete on every sweep. legal_hold
+-- and any active retention window block the purge; the worker has no
+-- governance bypass, so GOVERNANCE is honoured here exactly like COMPLIANCE.
+-- Locked rows are skipped until the lock lapses.
 SELECT o.id, o.tenant_id, o.path, o.resource_version,
        sb.name AS backend_name,
        b.name  AS bucket_name,
@@ -131,12 +146,14 @@ FROM objects o
 JOIN collections k     ON k.id = o.collection_id
 JOIN buckets b         ON b.id = k.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
-LEFT JOIN object_locks l ON l.version_id = o.current_version_id
 WHERE o.state = 'DELETED'
   AND o.terminated_at IS NOT NULL
   AND o.terminated_at < $1
-  AND NOT COALESCE(l.legal_hold, false)
-  AND NOT (l.retain_until IS NOT NULL AND l.retain_until > now())
+  AND NOT EXISTS (
+      SELECT 1 FROM object_locks l
+        JOIN object_versions v ON v.id = l.version_id
+       WHERE v.object_id = o.id
+         AND (l.legal_hold OR l.retain_until > now()))
   -- A tenant in the trash is frozen: its trash is not emptied meanwhile.
   AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id = o.tenant_id AND t.deleted_at IS NOT NULL)
 ORDER BY o.terminated_at
@@ -158,7 +175,8 @@ WHERE objects.id = $1
   -- The worker has no governance bypass, so both modes block equally here.
   AND NOT EXISTS (
       SELECT 1 FROM object_locks l
-       WHERE l.version_id = objects.current_version_id
+        JOIN object_versions v ON v.id = l.version_id
+       WHERE v.object_id = objects.id
          AND (l.legal_hold OR l.retain_until > now()))
   -- The tenant may have gone to the trash since the row was listed.
   AND NOT EXISTS (
