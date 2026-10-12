@@ -73,9 +73,6 @@ test.describe("Bucket lifecycle rules", () => {
 
     await page.getByLabel("Rule ID").fill("e2e-expire-tmp");
     await page.getByLabel("Match (CEL)").fill("size_bytes > 1000");
-    // Action is a pair of toggles with neither preselected, so a rule saved
-    // without picking one has no action at all.
-    await page.getByRole("button", { name: /^Expiration/ }).click();
     await page.getByRole("spinbutton", { name: "After" }).fill("30");
     await page.getByRole("button", { name: /^Create rule$/ }).click();
 
@@ -110,7 +107,6 @@ test.describe("Bucket lifecycle rules", () => {
     // A field the Object schema does not declare. Accepting this would store
     // a rule whose match never evaluates the way its author expected.
     await page.getByLabel("Match (CEL)").fill('not_a_field == "x"');
-    await page.getByRole("button", { name: /^Expiration/ }).click();
     await page.getByRole("spinbutton", { name: "After" }).fill("30");
 
     // Either the editor blocks submission outright or the server refuses it —
@@ -153,7 +149,6 @@ test.describe("Bucket lifecycle rules", () => {
     await openRuleEditor(page);
     await page.getByLabel("Rule ID").fill("e2e-stale-write");
     await page.getByLabel("Match (CEL)").fill("size_bytes > 1000");
-    await page.getByRole("button", { name: /^Expiration/ }).click();
     await page.getByRole("spinbutton", { name: "After" }).fill("30");
 
     // The page read its version when it loaded; move it before saving.
@@ -198,7 +193,6 @@ test.describe("Bucket lifecycle rules", () => {
 
     await page.getByLabel("Rule ID").fill("e2e-placeholder");
     await match.fill(suggestion as string);
-    await page.getByRole("button", { name: /^Expiration/ }).click();
     await page.getByRole("spinbutton", { name: "After" }).fill("30");
     await page.getByRole("button", { name: /^Create rule$/ }).click();
 

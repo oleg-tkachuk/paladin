@@ -193,7 +193,7 @@ message Bucket {
   string cedar_policy = 7;
   // Per-bucket constraints — overrides config.policy globals when set.
   BucketConstraints constraints = 8;
-  // Lifecycle rules (transition / expire) executed by the lifecycle worker.
+  // Lifecycle rules executed by the lifecycle worker: expirations only.
   repeated LifecycleRule lifecycle_rules = 9;
   // Object lock configuration (WORM). Optional.
   ObjectLockConfig object_lock = 10;
@@ -264,6 +264,9 @@ message LifecycleRule {
   }
 }
 
+// Refused by SetLifecycleRules (INVALID_ARGUMENT): no supported storage
+// backend has storage classes to transition to, so the rule would never be
+// applied. Kept in the contract for the backend that brings them.
 message LifecycleTransition {
   google.protobuf.Duration after = 1;
   string storage_class = 2;
