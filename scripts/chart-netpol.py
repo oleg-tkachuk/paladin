@@ -172,6 +172,23 @@ def ports_admitting(doc: dict, role: str) -> set[int]:
     return ports
 
 
+# The roles that call a storage backend: the planes and workers move bytes,
+# and ingest HEADs an object before believing a delete event about it.
+STORAGE_ROLES = ("api", "admin", "worker", "ingest")
+STORAGE_NS = "storage"
+
+
+def egress_reaches_namespace(doc: dict, namespace: str) -> bool:
+    for rule in doc["spec"].get("egress") or []:
+        if not rule:  # `- {}` — open egress
+            return True
+        for to in rule.get("to") or []:
+            labels = (to.get("namespaceSelector") or {}).get("matchLabels") or {}
+            if labels.get("kubernetes.io/metadata.name") == namespace:
+                return True
+    return False
+
+
 def egress_reaches_role(doc: dict, role: str, ports: set[int]) -> bool:
     """Whether a policy lets its pods out to another role, on one of `ports`.
 
@@ -424,6 +441,8 @@ def main() -> int:
             continue
         if not egress_has_dns(p):
             problems.append(f"role {role!r} has no DNS egress — it cannot resolve any name")
+        if role in STORAGE_ROLES and not egress_reaches_namespace(p, STORAGE_NS):
+            problems.append(f"role {role!r} has no egress to the {STORAGE_NS!r} namespace — it cannot reach the storage backends")
 
     problems += observability_problems(root / "backend/deploy/chart")
     problems += kube_api_problems(root / "backend/deploy/chart")

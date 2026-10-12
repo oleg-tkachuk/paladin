@@ -144,3 +144,71 @@ func mustCountIngested(t *testing.T, pool *pgxpool.Pool) int {
 	}
 	return n
 }
+
+// bytesProbe answers a HEAD with a fixed presence.
+type bytesProbe struct{ found bool }
+
+func (p bytesProbe) HeadByObjectID(context.Context, uuid.UUID) (string, int64, string, string, bool, error) {
+	return "", 0, "", "", p.found, nil
+}
+
+// TestIngest_DeleteEventTrashesAnObjectWhoseBytesAreGone — a delete from the
+// bucket moves an available object to the trash once its bytes are missing,
+// leaves it alone while they are there, and a later delete event for the
+// same key finds nothing to settle.
+func TestIngest_DeleteEventTrashesAnObjectWhoseBytesAreGone(t *testing.T) {
+	h := pgharness.Setup(t)
+	ctx := context.Background()
+
+	tenantID := mustCreateTenant(t, h.PoolMigrate, "ingest-delete-tenant")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "docs")
+	objectID := mustInsertPendingObject(t, h.PoolMigrate, tenantID, "docs", "report.pdf")
+
+	q := sqlc.New(h.PoolMigrate)
+	sm := statemachine.New(h.PoolMigrate)
+	newWorker := func(found bool) *eventingest.Worker {
+		return &eventingest.Worker{
+			Handler: &eventingest.PromoteHandler{
+				Lookup: q, Transitioner: sm, Probe: bytesProbe{found: found}, Deleter: sm,
+			},
+			Dedup: &eventingest.PgxDedupStore{Q: q},
+		}
+	}
+	source := &eventingest.SeaweedFSSource{BucketName: "paladin-test", URI: "seaweedfs://primary"}
+	event := func(kind string) eventingest.CloudEvent {
+		payload, _ := json.Marshal(map[string]any{
+			"key":          fmt.Sprintf("/paladin-test/%s/docs/report.pdf", tenantID),
+			"event_type":   kind,
+			"timestamp_ns": time.Now().UnixNano(),
+			"etag":         "abc123",
+			"size":         1024,
+		})
+		ev, err := source.Parse(payload, "application/json")
+		if err != nil {
+			t.Fatalf("source parse: %v", err)
+		}
+		return ev
+	}
+
+	if err := newWorker(true).Deliver(ctx, event("create")); err != nil {
+		t.Fatalf("deliver create: %v", err)
+	}
+	if err := newWorker(true).Deliver(ctx, event("delete")); err != nil {
+		t.Fatalf("deliver delete, bytes present: %v", err)
+	}
+	if state := mustObjectState(t, h.PoolMigrate, objectID); state != "AVAILABLE" {
+		t.Fatalf("state = %s after a delete event with the bytes present, want AVAILABLE", state)
+	}
+	if err := newWorker(false).Deliver(ctx, event("delete")); err != nil {
+		t.Fatalf("deliver delete, bytes gone: %v", err)
+	}
+	if state := mustObjectState(t, h.PoolMigrate, objectID); state != "DELETED" {
+		t.Fatalf("state = %s after the bytes went, want DELETED", state)
+	}
+	if err := newWorker(false).Deliver(ctx, event("delete")); err != nil {
+		t.Fatalf("a delete event for a trashed object: %v", err)
+	}
+	if state := mustObjectState(t, h.PoolMigrate, objectID); state != "DELETED" {
+		t.Errorf("state = %s after a second delete event, want DELETED", state)
+	}
+}

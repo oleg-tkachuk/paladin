@@ -23,6 +23,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -148,6 +149,11 @@ func runIngest(
 		Events:       ingestDispatcher,
 		Logger:       l.Named("ingest.handler"),
 		Tenants:      tenantstate.NewReader(ingestPool),
+		// A delete event is believed only when a HEAD at the object's
+		// current placement finds nothing; the probe reads the placement
+		// through the same BYPASSRLS queries.
+		Probe:   adapters.NewReconcilerProbe(ingestQueries, s3adapter.NewObjectRouter(deps.Registry)),
+		Deleter: ingestSM,
 	}
 
 	// Build the configured driver.
