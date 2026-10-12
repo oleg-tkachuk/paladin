@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -190,7 +191,53 @@ func TestEnsureAdmin_ErrorsWhenPasswordTooShortInRelease(t *testing.T) {
 
 	err := EnsureAdmin(context.Background(), cfg, deps)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "shorter than")
+	require.ErrorIs(t, err, ErrPasswordTooShort)
+}
+
+// The error names the setting, never the configured value: it is logged,
+// and the value comes from the password settings.
+func TestEnsureAdmin_TooShortErrorOmitsTheConfiguredMinimum(t *testing.T) {
+	_, _, _, deps := newDeps()
+	cfg := defaultCfg()
+	cfg.MinPasswordLength = 977
+	cfg.Password = "longenough-bootstrap-pw"
+
+	err := EnsureAdmin(context.Background(), cfg, deps)
+	require.ErrorIs(t, err, ErrPasswordTooShort)
+	require.NotContains(t, err.Error(), "977")
+}
+
+func TestMinPasswordLength(t *testing.T) {
+	const configured = 24
+	for _, tc := range []struct {
+		name       string
+		configured int
+		mode       string
+		want       int
+	}{
+		{"configured wins in release", configured, releaseMode, configured},
+		{"configured wins in debug", configured, "debug", configured},
+		{"release default", 0, releaseMode, releaseMinPasswordLength},
+		{"empty mode is release", 0, "", releaseMinPasswordLength},
+		{"debug default", 0, "debug", devMinPasswordLength},
+		{"test default", 0, "test", devMinPasswordLength},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, minPasswordLength(tc.configured, tc.mode))
+		})
+	}
+}
+
+// The boundary is inclusive: a password exactly at the minimum is accepted.
+func TestReadPassword_MinimumIsInclusive(t *testing.T) {
+	cfg := defaultCfg()
+	cfg.Password = strings.Repeat("x", releaseMinPasswordLength)
+	_, err := readPassword(cfg, releaseMode)
+	require.NoError(t, err)
+
+	cfg.Password = strings.Repeat("x", releaseMinPasswordLength-1)
+	_, err = readPassword(cfg, releaseMode)
+	require.ErrorIs(t, err, ErrPasswordTooShort)
 }
 
 func TestEnsureAdmin_AcceptsShortPasswordInDebug(t *testing.T) {
