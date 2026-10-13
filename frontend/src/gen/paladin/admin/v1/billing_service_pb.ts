@@ -18,6 +18,8 @@ import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_api_field_behavior } from "../../../google/api/field_behavior_pb";
 import type { Money } from "../../../google/type/money_pb";
 import { file_google_type_money } from "../../../google/type/money_pb";
+import type { UnlimitedBudget } from "./types_pb";
+import { file_paladin_admin_v1_types } from "./types_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -26,12 +28,13 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_billing_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiZwYWxhZGluL2FkbWluL3YxL2JpbGxpbmdfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSKYAQoXR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIvkCChhHZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2USIQoFdG90YWwYCiABKAsyEi5nb29nbGUudHlwZS5Nb25leRImCgptYXhfYnVkZ2V0GAsgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXkSNAoQdG9wX2NhcGFiaWxpdGllcxgEIAMoCzIaLnBhbGFkaW4uYWRtaW4udjEuVG9wRW50cnkSLgoKdG9wX2FjdG9ycxgFIAMoCzIaLnBhbGFkaW4uYWRtaW4udjEuVG9wRW50cnkSKwoHdG9wX29wcxgGIAMoCzIaLnBhbGFkaW4uYWRtaW4udjEuVG9wRW50cnkSFAoMY2hhcmdlX2NvdW50GAcgASgDSgQIARACSgQIAhADSgQICBAJSgQIAxAESgQICRAKUgx0b3RhbF9hbW91bnRSDHRvdGFsX21pY3Jvc1IJdW5pdF9jb2RlUhFtYXhfYnVkZ2V0X2Ftb3VudFIRbWF4X2J1ZGdldF9taWNyb3MidQoIVG9wRW50cnkSDQoFbGFiZWwYASABKAkSFAoMY2hhcmdlX2NvdW50GAMgASgDEiEKBXNwZW50GAUgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlKBAgCEANKBAgEEAVSBmFtb3VudFINYW1vdW50X21pY3JvcyKwAQoaR2V0VGVuYW50VGltZVNlcmllc1JlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2dyYW51bGFyaXR5GAQgASgJIl0KG0dldFRlbmFudFRpbWVTZXJpZXNSZXNwb25zZRItCgdidWNrZXRzGAEgAygLMhwucGFsYWRpbi5hZG1pbi52MS5UaW1lQnVja2V0SgQIAhADUgl1bml0X2NvZGUimAEKClRpbWVCdWNrZXQSLgoFc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSFAoMY2hhcmdlX2NvdW50GAMgASgDEiEKBXNwZW50GAUgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlKBAgCEANKBAgEEAVSBmFtb3VudFINYW1vdW50X21pY3JvczL5AQoOQmlsbGluZ1NlcnZpY2USbgoQR2V0VGVuYW50U3VtbWFyeRIpLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QaKi5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFN1bW1hcnlSZXNwb25zZSIDkAIBEncKE0dldFRlbmFudFRpbWVTZXJpZXMSLC5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFRpbWVTZXJpZXNSZXF1ZXN0Gi0ucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRUaW1lU2VyaWVzUmVzcG9uc2UiA5ACAUJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
+    "CiZwYWxhZGluL2FkbWluL3YxL2JpbGxpbmdfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSKYAQoXR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIswDChhHZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2USIQoFdG90YWwYCiABKAsyEi5nb29nbGUudHlwZS5Nb25leRIoCgptYXhfYnVkZ2V0GAsgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlIABI9ChB1bmxpbWl0ZWRfYnVkZ2V0GAwgASgLMiEucGFsYWRpbi5hZG1pbi52MS5VbmxpbWl0ZWRCdWRnZXRIABI0ChB0b3BfY2FwYWJpbGl0aWVzGAQgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIuCgp0b3BfYWN0b3JzGAUgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIrCgd0b3Bfb3BzGAYgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIUCgxjaGFyZ2VfY291bnQYByABKANCEAoOYnVkZ2V0X2NlaWxpbmdKBAgBEAJKBAgCEANKBAgIEAlKBAgDEARKBAgJEApSDHRvdGFsX2Ftb3VudFIMdG90YWxfbWljcm9zUgl1bml0X2NvZGVSEW1heF9idWRnZXRfYW1vdW50UhFtYXhfYnVkZ2V0X21pY3JvcyJ1CghUb3BFbnRyeRINCgVsYWJlbBgBIAEoCRIUCgxjaGFyZ2VfY291bnQYAyABKAMSIQoFc3BlbnQYBSABKAsyEi5nb29nbGUudHlwZS5Nb25leUoECAIQA0oECAQQBVIGYW1vdW50Ug1hbW91bnRfbWljcm9zIrABChpHZXRUZW5hbnRUaW1lU2VyaWVzUmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEjAKDHBlcmlvZF9zdGFydBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcGVyaW9kX2VuZBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZ3JhbnVsYXJpdHkYBCABKAkiXQobR2V0VGVuYW50VGltZVNlcmllc1Jlc3BvbnNlEi0KB2J1Y2tldHMYASADKAsyHC5wYWxhZGluLmFkbWluLnYxLlRpbWVCdWNrZXRKBAgCEANSCXVuaXRfY29kZSKYAQoKVGltZUJ1Y2tldBIuCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIUCgxjaGFyZ2VfY291bnQYAyABKAMSIQoFc3BlbnQYBSABKAsyEi5nb29nbGUudHlwZS5Nb25leUoECAIQA0oECAQQBVIGYW1vdW50Ug1hbW91bnRfbWljcm9zMvkBCg5CaWxsaW5nU2VydmljZRJuChBHZXRUZW5hbnRTdW1tYXJ5EikucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRTdW1tYXJ5UmVxdWVzdBoqLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50U3VtbWFyeVJlc3BvbnNlIgOQAgESdwoTR2V0VGVuYW50VGltZVNlcmllcxIsLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50VGltZVNlcmllc1JlcXVlc3QaLS5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFRpbWVTZXJpZXNSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
     [
       file_buf_validate_validate,
       file_google_protobuf_timestamp,
       file_google_api_field_behavior,
       file_google_type_money,
+      file_paladin_admin_v1_types,
     ],
   );
 
@@ -80,12 +83,32 @@ export type GetTenantSummaryResponse =
     total?: Money | undefined;
 
     /**
-     * max_budget is the tenant_budgets cap, copied for UI convenience so the
-     * frontend doesn't need a second RPC.
+     * budget_ceiling is the tenant's budget cap, copied for UI convenience so
+     * the frontend doesn't need a second RPC. Neither arm is set for a tenant
+     * with no budget row.
      *
-     * @generated from field: google.type.Money max_budget = 11;
+     * @generated from oneof paladin.admin.v1.GetTenantSummaryResponse.budget_ceiling
      */
-    maxBudget?: Money | undefined;
+    budgetCeiling:
+      | {
+          /**
+           * max_budget is the cap; a zero amount allows no spend.
+           *
+           * @generated from field: google.type.Money max_budget = 11;
+           */
+          value: Money;
+          case: "maxBudget";
+        }
+      | {
+          /**
+           * unlimited_budget is no cap.
+           *
+           * @generated from field: paladin.admin.v1.UnlimitedBudget unlimited_budget = 12;
+           */
+          value: UnlimitedBudget;
+          case: "unlimitedBudget";
+        }
+      | { case: undefined; value?: undefined };
 
     /**
      * @generated from field: repeated paladin.admin.v1.TopEntry top_capabilities = 4;

@@ -27,7 +27,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_types: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "ChxwYWxhZGluL2FkbWluL3YxL3R5cGVzLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIr0HCg5TdG9yYWdlQmFja2VuZBIRCgRuYW1lGAEgASgJQgPgQQgSEgoKYmFja2VuZF9pZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSKwoEa2luZBgEIAEoDjIdLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZUtpbmQSEAoIZW5kcG9pbnQYBSABKAkSFwoPcHVibGljX2VuZHBvaW50GAYgASgJEg4KBnJlZ2lvbhgHIAEoCRIYChBmb3JjZV9wYXRoX3N0eWxlGAggASgIEh4KFmNyZWRlbnRpYWxzX3NlY3JldF9yZWYYCSABKAkSMwoDc3NlGAogASgLMiYucGFsYWRpbi5hZG1pbi52MS5TZXJ2ZXJTaWRlRW5jcnlwdGlvbhIzCgZldmVudHMYCyABKAsyIy5wYWxhZGluLmFkbWluLnYxLkV2ZW50U291cmNlQ29uZmlnEhQKDGNlZGFyX3BvbGljeRgMIAEoCRIdChByZXNvdXJjZV92ZXJzaW9uGA0gASgJQgPgQQMSMwoKY3JlYXRlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEg8KB2VuYWJsZWQYECABKAgSJwofcHJldmlvdXNfY3JlZGVudGlhbHNfc2VjcmV0X3JlZhgRIAEoCRJJCiBwcmV2aW91c19jcmVkZW50aWFsc192YWxpZF91bnRpbBgSIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIRCglyZWFkX29ubHkYEyABKAgSFQoNaGVhbHRoX3N0YXR1cxgUIAEoCRIWCg5oZWFsdGhfbWVzc2FnZRgVIAEoCRI6ChFoZWFsdGhfY2hlY2tlZF9hdBgWIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxITCgttYWludGVuYW5jZRgXIAEoCBIQCghwcm92aWRlchgYIAEoCRI+CghmZWF0dXJlcxgZIAMoCzInLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZUZlYXR1cmVTdXBwb3J0QgPgQQMSQgoNY29tcGF0aWJpbGl0eRgaIAEoDjImLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZUNvbXBhdGliaWxpdHlCA+BBAxIVCghkZWNsYXJlZBgbIAEoCEID4EEDIuEBChVTdG9yYWdlRmVhdHVyZVN1cHBvcnQSMQoHZmVhdHVyZRgBIAEoDjIgLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZUZlYXR1cmUSMQoHc3VwcG9ydBgCIAEoDjIgLnBhbGFkaW4uYWRtaW4udjEuRmVhdHVyZVN1cHBvcnQSEAoIcmVxdWlyZWQYAyABKAgSDwoHZW5hYmxlcxgEIAEoCRIPCgdtZXNzYWdlGAUgASgJEi4KCmNoZWNrZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIk8KFFNlcnZlclNpZGVFbmNyeXB0aW9uEicKBHR5cGUYASABKA4yGS5wYWxhZGluLmFkbWluLnYxLlNzZVR5cGUSDgoGa2V5X2lkGAIgASgJIpgBChFFdmVudFNvdXJjZUNvbmZpZxIPCgdlbmFibGVkGAEgASgIEi0KBnRhcmdldBgCIAEoDjIdLnBhbGFkaW4uYWRtaW4udjEuRXZlbnRUYXJnZXQSEQoJcXVldWVfdXJsGAMgASgJEjAKDXBvbGxfaW50ZXJ2YWwYBCABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24ioAYKBkJ1Y2tldBIRCgRuYW1lGAEgASgJQgPgQQgSFwoKYmFja2VuZF9pZBgCIAEoCUID4EEFEhYKCWJ1Y2tldF9pZBgDIAEoCUID4EEFEhQKDGRpc3BsYXlfbmFtZRgEIAEoCRIOCgZyZWdpb24YBSABKAkSFwoPb3duZXJfdGVuYW50X2lkGAYgASgJEhQKDGNlZGFyX3BvbGljeRgHIAEoCRI4Cgtjb25zdHJhaW50cxgIIAEoCzIjLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0Q29uc3RyYWludHMSOAoPbGlmZWN5Y2xlX3J1bGVzGAkgAygLMh8ucGFsYWRpbi5hZG1pbi52MS5MaWZlY3ljbGVSdWxlEjcKC29iamVjdF9sb2NrGAogASgLMiIucGFsYWRpbi5hZG1pbi52MS5PYmplY3RMb2NrQ29uZmlnEjYKCnZlcnNpb25pbmcYCyABKAsyIi5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldFZlcnNpb25pbmcSOAoLcmVwbGljYXRpb24YDCABKAsyIy5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldFJlcGxpY2F0aW9uEjQKBmxhYmVscxgNIAMoCzIkLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0LkxhYmVsc0VudHJ5Eh0KEHJlc291cmNlX3ZlcnNpb24YDiABKAlCA+BBAxIzCgpjcmVhdGVkX2F0GA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCnVwZGF0ZWRfYXQYECABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSFwoPcHJvdmlzaW9uX3N0YXRlGBEgASgJEhgKC3B1YmxpY19yZWFkGBIgASgIQgPgQQUSHAoPcHVibGljX2Jhc2VfdXJsGBMgASgJQgPgQQUSHwoSY3JlYXRlZF9vbl9iYWNrZW5kGBQgASgIQgPgQQMaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLZAgoRQnVja2V0Q29uc3RyYWludHMSHQoVbWF4X29iamVjdF9zaXplX2J5dGVzGAEgASgDEhsKE21pbl9wYXJ0X3NpemVfYnl0ZXMYAiABKAMSGwoTbWF4X3BhcnRfc2l6ZV9ieXRlcxgDIAEoAxIRCgltYXhfcGFydHMYBCABKAUSHQoVYWxsb3dlZF9jb250ZW50X3R5cGVzGAUgAygJEjYKE21heF9wcmVzaWduX3B1dF90dGwYBiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SNgoTbWF4X3ByZXNpZ25fZ2V0X3R0bBgHIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhJJChtyZXF1aXJlZF9jaGVja3N1bV9hbGdvcml0aG0YCCABKA4yJC5wYWxhZGluLmNvbW1vbi52MS5DaGVja3N1bUFsZ29yaXRobSK/AQoNTGlmZWN5Y2xlUnVsZRIKCgJpZBgBIAEoCRIPCgdlbmFibGVkGAIgASgIEg0KBW1hdGNoGAMgASgJEjsKCnRyYW5zaXRpb24YBCABKAsyJS5wYWxhZGluLmFkbWluLnYxLkxpZmVjeWNsZVRyYW5zaXRpb25IABI7CgpleHBpcmF0aW9uGAUgASgLMiUucGFsYWRpbi5hZG1pbi52MS5MaWZlY3ljbGVFeHBpcmF0aW9uSABCCAoGYWN0aW9uIlYKE0xpZmVjeWNsZVRyYW5zaXRpb24SKAoFYWZ0ZXIYASABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SFQoNc3RvcmFnZV9jbGFzcxgCIAEoCSI/ChNMaWZlY3ljbGVFeHBpcmF0aW9uEigKBWFmdGVyGAEgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIpEBChBPYmplY3RMb2NrQ29uZmlnEg8KB2VuYWJsZWQYASABKAgSNgoMZGVmYXVsdF9tb2RlGAIgASgOMiAucGFsYWRpbi5hZG1pbi52MS5PYmplY3RMb2NrTW9kZRI0ChFkZWZhdWx0X3JldGVudGlvbhgDIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbiJBChBCdWNrZXRWZXJzaW9uaW5nEg8KB2VuYWJsZWQYASABKAgSHAoUa2VlcF9kZWxldGVzX2ZvcmV2ZXIYAiABKAgiUAoRQnVja2V0UmVwbGljYXRpb24SDwoHZW5hYmxlZBgBIAEoCBIaChJkZXN0aW5hdGlvbl9idWNrZXQYAiABKAkSDgoGZmlsdGVyGAMgASgJIpUECgZUZW5hbnQSEQoEbmFtZRgBIAEoCUID4EEIEhYKCXRlbmFudF9pZBgCIAEoCUID4EEFEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRI0CgZsYWJlbHMYBCADKAsyJC5wYWxhZGluLmFkbWluLnYxLlRlbmFudC5MYWJlbHNFbnRyeRIeChZpbmhlcml0ZWRfY2VkYXJfcG9saWN5GAUgASgJEh0KEHJlc291cmNlX3ZlcnNpb24YBiABKAlCA+BBAxIzCgpjcmVhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCnVwZGF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSEQoEc2x1ZxgJIAEoCUID4EEFEjMKCmRlbGV0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSGwoOZGVmYXVsdF9idWNrZXQYCyABKAlCA+BBAxIbCg5zdG9yYWdlX2xheW91dBgMIAEoCUID4EEFEjoKEXB1cmdlX2VsaWdpYmxlX2F0GA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDGi0KC0xhYmVsc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEi4AMKCkNvbGxlY3Rpb24SEQoEbmFtZRgBIAEoCUID4EEIEhYKCXRlbmFudF9pZBgCIAEoCUID4EEFEhcKCmNvbGxlY3Rpb24YAyABKAlCA+BBBRIUCgxkaXNwbGF5X25hbWUYBCABKAkSDgoGYnVja2V0GAUgASgJEjoKD2NvbXBsZXRpb25fbW9kZRgGIAEoDjIhLnBhbGFkaW4uY29tbW9uLnYxLkNvbXBsZXRpb25Nb2RlEhQKDGNlZGFyX3BvbGljeRgHIAEoCRI4Cgtjb25zdHJhaW50cxgIIAEoCzIjLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0Q29uc3RyYWludHMSHQoQcmVzb3VyY2VfdmVyc2lvbhgJIAEoCUID4EEDEjMKCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKdXBkYXRlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxI3CgZhY2Nlc3MYDCABKA4yIi5wYWxhZGluLmFkbWluLnYxLkNvbGxlY3Rpb25BY2Nlc3NCA+BBBRIaCg1jYWNoZV9jb250cm9sGA0gASgJQgPgQQUihgIKBVF1b3RhEhEKBG5hbWUYASABKAlCA+BBCBIXCg9tYXhfdG90YWxfYnl0ZXMYAiABKAMSGAoQbWF4X29iamVjdF9jb3VudBgDIAEoAxIZChFtYXhfYnl0ZXNfcGVyX2RheRgEIAEoAxIbChNtYXhfb2JqZWN0c19wZXJfZGF5GAUgASgDEisKBXVzYWdlGAYgASgLMhwucGFsYWRpbi5hZG1pbi52MS5RdW90YVVzYWdlEh0KEHJlc291cmNlX3ZlcnNpb24YByABKAlCA+BBAxIzCgp1cGRhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDIpsBCgpRdW90YVVzYWdlEhMKC3RvdGFsX2J5dGVzGAEgASgDEhQKDG9iamVjdF9jb3VudBgCIAEoAxITCgtieXRlc190b2RheRgDIAEoAxIVCg1vYmplY3RzX3RvZGF5GAQgASgDEjYKDWxhc3RfcmVzZXRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMiuwIKDUF1ZGl0TG9nRW50cnkSEAoIZW50cnlfaWQYASABKAkSKwoCYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSFQoNYWN0b3Jfc3ViamVjdBgDIAEoCRIXCg9hY3Rvcl90ZW5hbnRfaWQYBCABKAkSFgoOYWN0b3JfYXVkaWVuY2UYBSABKAkSDgoGYWN0aW9uGAYgASgJEhUKDXJlc291cmNlX25hbWUYByABKAkSEgoKcmVxdWVzdF9pZBgIIAEoCRIRCglzb3VyY2VfaXAYCSABKAkSEwoLYmVmb3JlX2pzb24YCiABKAwSEgoKYWZ0ZXJfanNvbhgLIAEoDBIVCg1lcnJvcl9tZXNzYWdlGAwgASgJEhUKDWNhcGFiaWxpdHlfaWQYDSABKAkijwIKEUV2ZW50U3Vic2NyaXB0aW9uEhEKBG5hbWUYASABKAlCA+BBCBIRCgl0ZW5hbnRfaWQYAiABKAkSDgoGZmlsdGVyGAMgASgJEikKBHNpbmsYBCABKAsyGy5wYWxhZGluLmFkbWluLnYxLkV2ZW50U2luaxIQCghkaXNhYmxlZBgFIAEoCBIdChByZXNvdXJjZV92ZXJzaW9uGAYgASgJQgPgQQMSMwoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDIvkBCglFdmVudFNpbmsSKgoEaHR0cBgBIAEoCzIaLnBhbGFkaW4uYWRtaW4udjEuSHR0cFNpbmtIABIsCgVrYWZrYRgCIAEoCzIbLnBhbGFkaW4uYWRtaW4udjEuS2Fma2FTaW5rSAASKAoDc3FzGAMgASgLMhkucGFsYWRpbi5hZG1pbi52MS5TcXNTaW5rSAASKgoEbmF0cxgEIAEoCzIaLnBhbGFkaW4uYWRtaW4udjEuTmF0c1NpbmtIABIyCghyYWJiaXRtcRgFIAEoCzIeLnBhbGFkaW4uYWRtaW4udjEuUmFiYml0TXFTaW5rSABCCAoGdGFyZ2V0IlkKCEh0dHBTaW5rEgsKA3VybBgBIAEoCRIaChJzaWduaW5nX3NlY3JldF9yZWYYAiABKAkSFAoMbWF4X2F0dGVtcHRzGAMgASgFEg4KBmZvcm1hdBgEIAEoCSLWAQoJS2Fma2FTaW5rEg8KB2Jyb2tlcnMYASABKAkSDQoFdG9waWMYAiABKAkSFgoOc2FzbF9tZWNoYW5pc20YAyABKAkSFQoNc2FzbF91c2VybmFtZRgEIAEoCRIaCg1zYXNsX3Bhc3N3b3JkGAUgASgJQgOAAQESEwoLdGxzX2VuYWJsZWQYBiABKAgSFwoPdGxzX2NsaWVudF9jZXJ0GAcgASgJEhsKDnRsc19jbGllbnRfa2V5GAggASgJQgOAAQESEwoLdGxzX2NhX2NlcnQYCSABKAkiPgoHU3FzU2luaxIRCglxdWV1ZV91cmwYASABKAkSDgoGcmVnaW9uGAIgASgJEhAKCHJvbGVfYXJuGAMgASgJIpIBCgxSYWJiaXRNcVNpbmsSEAoDdXJsGAEgASgJQgOAAQESEAoIZXhjaGFuZ2UYAiABKAkSEwoLcm91dGluZ19rZXkYAyABKAkSFwoPdGxzX2NsaWVudF9jZXJ0GAQgASgJEhsKDnRsc19jbGllbnRfa2V5GAUgASgJQgOAAQESEwoLdGxzX2NhX2NlcnQYBiABKAkiVAoITmF0c1NpbmsSCwoDdXJsGAEgASgJEg8KB3N1YmplY3QYAiABKAkSFwoPY3JlZGVudGlhbHNfcmVmGAMgASgJEhEKCWpldHN0cmVhbRgEIAEoCCq5AgoOU3RvcmFnZUZlYXR1cmUSHwobU1RPUkFHRV9GRUFUVVJFX1VOU1BFQ0lGSUVEEAASIwofU1RPUkFHRV9GRUFUVVJFX0NPTkRJVElPTkFMX1BVVBABEiMKH1NUT1JBR0VfRkVBVFVSRV9DSEVDS1NVTV9TSEEyNTYQAhIkCiBTVE9SQUdFX0ZFQVRVUkVfTVVMVElQQVJUX1VQTE9BRBADEiQKIFNUT1JBR0VfRkVBVFVSRV9TRVJWRVJfU0lERV9DT1BZEAQSIgoeU1RPUkFHRV9GRUFUVVJFX1BSRVNJR05FRF9QT1NUEAUSIQodU1RPUkFHRV9GRUFUVVJFX0JVQ0tFVF9DUkVBVEUQBhIpCiVTVE9SQUdFX0ZFQVRVUkVfQU5PTllNT1VTX1JFQURfUE9MSUNZEAcqjgEKDkZlYXR1cmVTdXBwb3J0Eh8KG0ZFQVRVUkVfU1VQUE9SVF9VTlNQRUNJRklFRBAAEh0KGUZFQVRVUkVfU1VQUE9SVF9TVVBQT1JURUQQARIfChtGRUFUVVJFX1NVUFBPUlRfVU5TVVBQT1JURUQQAhIbChdGRUFUVVJFX1NVUFBPUlRfVU5LTk9XThADKrEBChRTdG9yYWdlQ29tcGF0aWJpbGl0eRIlCiFTVE9SQUdFX0NPTVBBVElCSUxJVFlfVU5TUEVDSUZJRUQQABIkCiBTVE9SQUdFX0NPTVBBVElCSUxJVFlfVU5WRVJJRklFRBABEiQKIFNUT1JBR0VfQ09NUEFUSUJJTElUWV9DT01QQVRJQkxFEAISJgoiU1RPUkFHRV9DT01QQVRJQklMSVRZX0lOQ09NUEFUSUJMRRADKnoKC1N0b3JhZ2VLaW5kEhwKGFNUT1JBR0VfS0lORF9VTlNQRUNJRklFRBAAEhcKE1NUT1JBR0VfS0lORF9BV1NfUzMQARIeChpTVE9SQUdFX0tJTkRfUzNfQ09NUEFUSUJMRRACEhQKEFNUT1JBR0VfS0lORF9HQ1MQAypdCgdTc2VUeXBlEhgKFFNTRV9UWVBFX1VOU1BFQ0lGSUVEEAASEQoNU1NFX1RZUEVfTk9ORRABEhMKD1NTRV9UWVBFX0FFUzI1NhACEhAKDFNTRV9UWVBFX0tNUxADKnAKC0V2ZW50VGFyZ2V0EhwKGEVWRU5UX1RBUkdFVF9VTlNQRUNJRklFRBAAEhUKEUVWRU5UX1RBUkdFVF9OT05FEAESFAoQRVZFTlRfVEFSR0VUX1NRUxACEhYKEkVWRU5UX1RBUkdFVF9SRURJUxADKnQKDk9iamVjdExvY2tNb2RlEiAKHE9CSkVDVF9MT0NLX01PREVfVU5TUEVDSUZJRUQQABIfChtPQkpFQ1RfTE9DS19NT0RFX0dPVkVSTkFOQ0UQARIfChtPQkpFQ1RfTE9DS19NT0RFX0NPTVBMSUFOQ0UQAip3ChBDb2xsZWN0aW9uQWNjZXNzEiEKHUNPTExFQ1RJT05fQUNDRVNTX1VOU1BFQ0lGSUVEEAASHQoZQ09MTEVDVElPTl9BQ0NFU1NfUFJJVkFURRABEiEKHUNPTExFQ1RJT05fQUNDRVNTX1BVQkxJQ19SRUFEEAJCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
+    "ChxwYWxhZGluL2FkbWluL3YxL3R5cGVzLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIigKD1VubGltaXRlZEJ1ZGdldBIVCg1jdXJyZW5jeV9jb2RlGAEgASgJIr0HCg5TdG9yYWdlQmFja2VuZBIRCgRuYW1lGAEgASgJQgPgQQgSEgoKYmFja2VuZF9pZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSKwoEa2luZBgEIAEoDjIdLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZUtpbmQSEAoIZW5kcG9pbnQYBSABKAkSFwoPcHVibGljX2VuZHBvaW50GAYgASgJEg4KBnJlZ2lvbhgHIAEoCRIYChBmb3JjZV9wYXRoX3N0eWxlGAggASgIEh4KFmNyZWRlbnRpYWxzX3NlY3JldF9yZWYYCSABKAkSMwoDc3NlGAogASgLMiYucGFsYWRpbi5hZG1pbi52MS5TZXJ2ZXJTaWRlRW5jcnlwdGlvbhIzCgZldmVudHMYCyABKAsyIy5wYWxhZGluLmFkbWluLnYxLkV2ZW50U291cmNlQ29uZmlnEhQKDGNlZGFyX3BvbGljeRgMIAEoCRIdChByZXNvdXJjZV92ZXJzaW9uGA0gASgJQgPgQQMSMwoKY3JlYXRlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEg8KB2VuYWJsZWQYECABKAgSJwofcHJldmlvdXNfY3JlZGVudGlhbHNfc2VjcmV0X3JlZhgRIAEoCRJJCiBwcmV2aW91c19jcmVkZW50aWFsc192YWxpZF91bnRpbBgSIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIRCglyZWFkX29ubHkYEyABKAgSFQoNaGVhbHRoX3N0YXR1cxgUIAEoCRIWCg5oZWFsdGhfbWVzc2FnZRgVIAEoCRI6ChFoZWFsdGhfY2hlY2tlZF9hdBgWIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxITCgttYWludGVuYW5jZRgXIAEoCBIQCghwcm92aWRlchgYIAEoCRI+CghmZWF0dXJlcxgZIAMoCzInLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZUZlYXR1cmVTdXBwb3J0QgPgQQMSQgoNY29tcGF0aWJpbGl0eRgaIAEoDjImLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZUNvbXBhdGliaWxpdHlCA+BBAxIVCghkZWNsYXJlZBgbIAEoCEID4EEDIuEBChVTdG9yYWdlRmVhdHVyZVN1cHBvcnQSMQoHZmVhdHVyZRgBIAEoDjIgLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZUZlYXR1cmUSMQoHc3VwcG9ydBgCIAEoDjIgLnBhbGFkaW4uYWRtaW4udjEuRmVhdHVyZVN1cHBvcnQSEAoIcmVxdWlyZWQYAyABKAgSDwoHZW5hYmxlcxgEIAEoCRIPCgdtZXNzYWdlGAUgASgJEi4KCmNoZWNrZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIk8KFFNlcnZlclNpZGVFbmNyeXB0aW9uEicKBHR5cGUYASABKA4yGS5wYWxhZGluLmFkbWluLnYxLlNzZVR5cGUSDgoGa2V5X2lkGAIgASgJIpgBChFFdmVudFNvdXJjZUNvbmZpZxIPCgdlbmFibGVkGAEgASgIEi0KBnRhcmdldBgCIAEoDjIdLnBhbGFkaW4uYWRtaW4udjEuRXZlbnRUYXJnZXQSEQoJcXVldWVfdXJsGAMgASgJEjAKDXBvbGxfaW50ZXJ2YWwYBCABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24ioAYKBkJ1Y2tldBIRCgRuYW1lGAEgASgJQgPgQQgSFwoKYmFja2VuZF9pZBgCIAEoCUID4EEFEhYKCWJ1Y2tldF9pZBgDIAEoCUID4EEFEhQKDGRpc3BsYXlfbmFtZRgEIAEoCRIOCgZyZWdpb24YBSABKAkSFwoPb3duZXJfdGVuYW50X2lkGAYgASgJEhQKDGNlZGFyX3BvbGljeRgHIAEoCRI4Cgtjb25zdHJhaW50cxgIIAEoCzIjLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0Q29uc3RyYWludHMSOAoPbGlmZWN5Y2xlX3J1bGVzGAkgAygLMh8ucGFsYWRpbi5hZG1pbi52MS5MaWZlY3ljbGVSdWxlEjcKC29iamVjdF9sb2NrGAogASgLMiIucGFsYWRpbi5hZG1pbi52MS5PYmplY3RMb2NrQ29uZmlnEjYKCnZlcnNpb25pbmcYCyABKAsyIi5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldFZlcnNpb25pbmcSOAoLcmVwbGljYXRpb24YDCABKAsyIy5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldFJlcGxpY2F0aW9uEjQKBmxhYmVscxgNIAMoCzIkLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0LkxhYmVsc0VudHJ5Eh0KEHJlc291cmNlX3ZlcnNpb24YDiABKAlCA+BBAxIzCgpjcmVhdGVkX2F0GA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCnVwZGF0ZWRfYXQYECABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSFwoPcHJvdmlzaW9uX3N0YXRlGBEgASgJEhgKC3B1YmxpY19yZWFkGBIgASgIQgPgQQUSHAoPcHVibGljX2Jhc2VfdXJsGBMgASgJQgPgQQUSHwoSY3JlYXRlZF9vbl9iYWNrZW5kGBQgASgIQgPgQQMaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLZAgoRQnVja2V0Q29uc3RyYWludHMSHQoVbWF4X29iamVjdF9zaXplX2J5dGVzGAEgASgDEhsKE21pbl9wYXJ0X3NpemVfYnl0ZXMYAiABKAMSGwoTbWF4X3BhcnRfc2l6ZV9ieXRlcxgDIAEoAxIRCgltYXhfcGFydHMYBCABKAUSHQoVYWxsb3dlZF9jb250ZW50X3R5cGVzGAUgAygJEjYKE21heF9wcmVzaWduX3B1dF90dGwYBiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SNgoTbWF4X3ByZXNpZ25fZ2V0X3R0bBgHIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhJJChtyZXF1aXJlZF9jaGVja3N1bV9hbGdvcml0aG0YCCABKA4yJC5wYWxhZGluLmNvbW1vbi52MS5DaGVja3N1bUFsZ29yaXRobSK/AQoNTGlmZWN5Y2xlUnVsZRIKCgJpZBgBIAEoCRIPCgdlbmFibGVkGAIgASgIEg0KBW1hdGNoGAMgASgJEjsKCnRyYW5zaXRpb24YBCABKAsyJS5wYWxhZGluLmFkbWluLnYxLkxpZmVjeWNsZVRyYW5zaXRpb25IABI7CgpleHBpcmF0aW9uGAUgASgLMiUucGFsYWRpbi5hZG1pbi52MS5MaWZlY3ljbGVFeHBpcmF0aW9uSABCCAoGYWN0aW9uIlYKE0xpZmVjeWNsZVRyYW5zaXRpb24SKAoFYWZ0ZXIYASABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SFQoNc3RvcmFnZV9jbGFzcxgCIAEoCSI/ChNMaWZlY3ljbGVFeHBpcmF0aW9uEigKBWFmdGVyGAEgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIpEBChBPYmplY3RMb2NrQ29uZmlnEg8KB2VuYWJsZWQYASABKAgSNgoMZGVmYXVsdF9tb2RlGAIgASgOMiAucGFsYWRpbi5hZG1pbi52MS5PYmplY3RMb2NrTW9kZRI0ChFkZWZhdWx0X3JldGVudGlvbhgDIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbiJBChBCdWNrZXRWZXJzaW9uaW5nEg8KB2VuYWJsZWQYASABKAgSHAoUa2VlcF9kZWxldGVzX2ZvcmV2ZXIYAiABKAgiUAoRQnVja2V0UmVwbGljYXRpb24SDwoHZW5hYmxlZBgBIAEoCBIaChJkZXN0aW5hdGlvbl9idWNrZXQYAiABKAkSDgoGZmlsdGVyGAMgASgJIpUECgZUZW5hbnQSEQoEbmFtZRgBIAEoCUID4EEIEhYKCXRlbmFudF9pZBgCIAEoCUID4EEFEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRI0CgZsYWJlbHMYBCADKAsyJC5wYWxhZGluLmFkbWluLnYxLlRlbmFudC5MYWJlbHNFbnRyeRIeChZpbmhlcml0ZWRfY2VkYXJfcG9saWN5GAUgASgJEh0KEHJlc291cmNlX3ZlcnNpb24YBiABKAlCA+BBAxIzCgpjcmVhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCnVwZGF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSEQoEc2x1ZxgJIAEoCUID4EEFEjMKCmRlbGV0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSGwoOZGVmYXVsdF9idWNrZXQYCyABKAlCA+BBAxIbCg5zdG9yYWdlX2xheW91dBgMIAEoCUID4EEFEjoKEXB1cmdlX2VsaWdpYmxlX2F0GA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDGi0KC0xhYmVsc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEi4AMKCkNvbGxlY3Rpb24SEQoEbmFtZRgBIAEoCUID4EEIEhYKCXRlbmFudF9pZBgCIAEoCUID4EEFEhcKCmNvbGxlY3Rpb24YAyABKAlCA+BBBRIUCgxkaXNwbGF5X25hbWUYBCABKAkSDgoGYnVja2V0GAUgASgJEjoKD2NvbXBsZXRpb25fbW9kZRgGIAEoDjIhLnBhbGFkaW4uY29tbW9uLnYxLkNvbXBsZXRpb25Nb2RlEhQKDGNlZGFyX3BvbGljeRgHIAEoCRI4Cgtjb25zdHJhaW50cxgIIAEoCzIjLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0Q29uc3RyYWludHMSHQoQcmVzb3VyY2VfdmVyc2lvbhgJIAEoCUID4EEDEjMKCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKdXBkYXRlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxI3CgZhY2Nlc3MYDCABKA4yIi5wYWxhZGluLmFkbWluLnYxLkNvbGxlY3Rpb25BY2Nlc3NCA+BBBRIaCg1jYWNoZV9jb250cm9sGA0gASgJQgPgQQUihgIKBVF1b3RhEhEKBG5hbWUYASABKAlCA+BBCBIXCg9tYXhfdG90YWxfYnl0ZXMYAiABKAMSGAoQbWF4X29iamVjdF9jb3VudBgDIAEoAxIZChFtYXhfYnl0ZXNfcGVyX2RheRgEIAEoAxIbChNtYXhfb2JqZWN0c19wZXJfZGF5GAUgASgDEisKBXVzYWdlGAYgASgLMhwucGFsYWRpbi5hZG1pbi52MS5RdW90YVVzYWdlEh0KEHJlc291cmNlX3ZlcnNpb24YByABKAlCA+BBAxIzCgp1cGRhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDIpsBCgpRdW90YVVzYWdlEhMKC3RvdGFsX2J5dGVzGAEgASgDEhQKDG9iamVjdF9jb3VudBgCIAEoAxITCgtieXRlc190b2RheRgDIAEoAxIVCg1vYmplY3RzX3RvZGF5GAQgASgDEjYKDWxhc3RfcmVzZXRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMiuwIKDUF1ZGl0TG9nRW50cnkSEAoIZW50cnlfaWQYASABKAkSKwoCYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSFQoNYWN0b3Jfc3ViamVjdBgDIAEoCRIXCg9hY3Rvcl90ZW5hbnRfaWQYBCABKAkSFgoOYWN0b3JfYXVkaWVuY2UYBSABKAkSDgoGYWN0aW9uGAYgASgJEhUKDXJlc291cmNlX25hbWUYByABKAkSEgoKcmVxdWVzdF9pZBgIIAEoCRIRCglzb3VyY2VfaXAYCSABKAkSEwoLYmVmb3JlX2pzb24YCiABKAwSEgoKYWZ0ZXJfanNvbhgLIAEoDBIVCg1lcnJvcl9tZXNzYWdlGAwgASgJEhUKDWNhcGFiaWxpdHlfaWQYDSABKAkijwIKEUV2ZW50U3Vic2NyaXB0aW9uEhEKBG5hbWUYASABKAlCA+BBCBIRCgl0ZW5hbnRfaWQYAiABKAkSDgoGZmlsdGVyGAMgASgJEikKBHNpbmsYBCABKAsyGy5wYWxhZGluLmFkbWluLnYxLkV2ZW50U2luaxIQCghkaXNhYmxlZBgFIAEoCBIdChByZXNvdXJjZV92ZXJzaW9uGAYgASgJQgPgQQMSMwoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDIvkBCglFdmVudFNpbmsSKgoEaHR0cBgBIAEoCzIaLnBhbGFkaW4uYWRtaW4udjEuSHR0cFNpbmtIABIsCgVrYWZrYRgCIAEoCzIbLnBhbGFkaW4uYWRtaW4udjEuS2Fma2FTaW5rSAASKAoDc3FzGAMgASgLMhkucGFsYWRpbi5hZG1pbi52MS5TcXNTaW5rSAASKgoEbmF0cxgEIAEoCzIaLnBhbGFkaW4uYWRtaW4udjEuTmF0c1NpbmtIABIyCghyYWJiaXRtcRgFIAEoCzIeLnBhbGFkaW4uYWRtaW4udjEuUmFiYml0TXFTaW5rSABCCAoGdGFyZ2V0IlkKCEh0dHBTaW5rEgsKA3VybBgBIAEoCRIaChJzaWduaW5nX3NlY3JldF9yZWYYAiABKAkSFAoMbWF4X2F0dGVtcHRzGAMgASgFEg4KBmZvcm1hdBgEIAEoCSLWAQoJS2Fma2FTaW5rEg8KB2Jyb2tlcnMYASABKAkSDQoFdG9waWMYAiABKAkSFgoOc2FzbF9tZWNoYW5pc20YAyABKAkSFQoNc2FzbF91c2VybmFtZRgEIAEoCRIaCg1zYXNsX3Bhc3N3b3JkGAUgASgJQgOAAQESEwoLdGxzX2VuYWJsZWQYBiABKAgSFwoPdGxzX2NsaWVudF9jZXJ0GAcgASgJEhsKDnRsc19jbGllbnRfa2V5GAggASgJQgOAAQESEwoLdGxzX2NhX2NlcnQYCSABKAkiPgoHU3FzU2luaxIRCglxdWV1ZV91cmwYASABKAkSDgoGcmVnaW9uGAIgASgJEhAKCHJvbGVfYXJuGAMgASgJIpIBCgxSYWJiaXRNcVNpbmsSEAoDdXJsGAEgASgJQgOAAQESEAoIZXhjaGFuZ2UYAiABKAkSEwoLcm91dGluZ19rZXkYAyABKAkSFwoPdGxzX2NsaWVudF9jZXJ0GAQgASgJEhsKDnRsc19jbGllbnRfa2V5GAUgASgJQgOAAQESEwoLdGxzX2NhX2NlcnQYBiABKAkiVAoITmF0c1NpbmsSCwoDdXJsGAEgASgJEg8KB3N1YmplY3QYAiABKAkSFwoPY3JlZGVudGlhbHNfcmVmGAMgASgJEhEKCWpldHN0cmVhbRgEIAEoCCq5AgoOU3RvcmFnZUZlYXR1cmUSHwobU1RPUkFHRV9GRUFUVVJFX1VOU1BFQ0lGSUVEEAASIwofU1RPUkFHRV9GRUFUVVJFX0NPTkRJVElPTkFMX1BVVBABEiMKH1NUT1JBR0VfRkVBVFVSRV9DSEVDS1NVTV9TSEEyNTYQAhIkCiBTVE9SQUdFX0ZFQVRVUkVfTVVMVElQQVJUX1VQTE9BRBADEiQKIFNUT1JBR0VfRkVBVFVSRV9TRVJWRVJfU0lERV9DT1BZEAQSIgoeU1RPUkFHRV9GRUFUVVJFX1BSRVNJR05FRF9QT1NUEAUSIQodU1RPUkFHRV9GRUFUVVJFX0JVQ0tFVF9DUkVBVEUQBhIpCiVTVE9SQUdFX0ZFQVRVUkVfQU5PTllNT1VTX1JFQURfUE9MSUNZEAcqjgEKDkZlYXR1cmVTdXBwb3J0Eh8KG0ZFQVRVUkVfU1VQUE9SVF9VTlNQRUNJRklFRBAAEh0KGUZFQVRVUkVfU1VQUE9SVF9TVVBQT1JURUQQARIfChtGRUFUVVJFX1NVUFBPUlRfVU5TVVBQT1JURUQQAhIbChdGRUFUVVJFX1NVUFBPUlRfVU5LTk9XThADKrEBChRTdG9yYWdlQ29tcGF0aWJpbGl0eRIlCiFTVE9SQUdFX0NPTVBBVElCSUxJVFlfVU5TUEVDSUZJRUQQABIkCiBTVE9SQUdFX0NPTVBBVElCSUxJVFlfVU5WRVJJRklFRBABEiQKIFNUT1JBR0VfQ09NUEFUSUJJTElUWV9DT01QQVRJQkxFEAISJgoiU1RPUkFHRV9DT01QQVRJQklMSVRZX0lOQ09NUEFUSUJMRRADKnoKC1N0b3JhZ2VLaW5kEhwKGFNUT1JBR0VfS0lORF9VTlNQRUNJRklFRBAAEhcKE1NUT1JBR0VfS0lORF9BV1NfUzMQARIeChpTVE9SQUdFX0tJTkRfUzNfQ09NUEFUSUJMRRACEhQKEFNUT1JBR0VfS0lORF9HQ1MQAypdCgdTc2VUeXBlEhgKFFNTRV9UWVBFX1VOU1BFQ0lGSUVEEAASEQoNU1NFX1RZUEVfTk9ORRABEhMKD1NTRV9UWVBFX0FFUzI1NhACEhAKDFNTRV9UWVBFX0tNUxADKnAKC0V2ZW50VGFyZ2V0EhwKGEVWRU5UX1RBUkdFVF9VTlNQRUNJRklFRBAAEhUKEUVWRU5UX1RBUkdFVF9OT05FEAESFAoQRVZFTlRfVEFSR0VUX1NRUxACEhYKEkVWRU5UX1RBUkdFVF9SRURJUxADKnQKDk9iamVjdExvY2tNb2RlEiAKHE9CSkVDVF9MT0NLX01PREVfVU5TUEVDSUZJRUQQABIfChtPQkpFQ1RfTE9DS19NT0RFX0dPVkVSTkFOQ0UQARIfChtPQkpFQ1RfTE9DS19NT0RFX0NPTVBMSUFOQ0UQAip3ChBDb2xsZWN0aW9uQWNjZXNzEiEKHUNPTExFQ1RJT05fQUNDRVNTX1VOU1BFQ0lGSUVEEAASHQoZQ09MTEVDVElPTl9BQ0NFU1NfUFJJVkFURRABEiEKHUNPTExFQ1RJT05fQUNDRVNTX1BVQkxJQ19SRUFEEAJCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
     [
       file_google_protobuf_duration,
       file_google_protobuf_timestamp,
@@ -35,6 +35,33 @@ export const file_paladin_admin_v1_types: GenFile =
       file_google_api_field_behavior,
     ],
   );
+
+/**
+ * UnlimitedBudget is a budget ceiling with no limit, in a currency. It is
+ * the "no limit" arm of every budget_ceiling oneof, beside a google.type.Money
+ * limit where a zero amount allows no spend.
+ *
+ * @generated from message paladin.admin.v1.UnlimitedBudget
+ */
+export type UnlimitedBudget = Message<"paladin.admin.v1.UnlimitedBudget"> & {
+  /**
+   * currency_code is the unit charges are in: an ISO 4217 code the server
+   * accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no
+   * currency", for metering that is not money. What empty means is the
+   * field's to say.
+   *
+   * @generated from field: string currency_code = 1;
+   */
+  currencyCode: string;
+};
+
+/**
+ * Describes the message paladin.admin.v1.UnlimitedBudget.
+ * Use `create(UnlimitedBudgetSchema)` to create a new message.
+ */
+export const UnlimitedBudgetSchema: GenMessage<UnlimitedBudget> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_types, 0);
 
 /**
  * ─── Storage backend ────────────────────────────────────────────────────────
@@ -245,7 +272,7 @@ export type StorageBackend = Message<"paladin.admin.v1.StorageBackend"> & {
  */
 export const StorageBackendSchema: GenMessage<StorageBackend> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 0);
+  messageDesc(file_paladin_admin_v1_types, 1);
 
 /**
  * One feature's probe outcome.
@@ -301,7 +328,7 @@ export type StorageFeatureSupport =
  */
 export const StorageFeatureSupportSchema: GenMessage<StorageFeatureSupport> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 1);
+  messageDesc(file_paladin_admin_v1_types, 2);
 
 /**
  * @generated from message paladin.admin.v1.ServerSideEncryption
@@ -327,7 +354,7 @@ export type ServerSideEncryption =
  */
 export const ServerSideEncryptionSchema: GenMessage<ServerSideEncryption> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 2);
+  messageDesc(file_paladin_admin_v1_types, 3);
 
 /**
  * @generated from message paladin.admin.v1.EventSourceConfig
@@ -361,7 +388,7 @@ export type EventSourceConfig =
  */
 export const EventSourceConfigSchema: GenMessage<EventSourceConfig> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 3);
+  messageDesc(file_paladin_admin_v1_types, 4);
 
 /**
  * ─── Bucket ─────────────────────────────────────────────────────────────────
@@ -523,7 +550,7 @@ export type Bucket = Message<"paladin.admin.v1.Bucket"> & {
  */
 export const BucketSchema: GenMessage<Bucket> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 4);
+  messageDesc(file_paladin_admin_v1_types, 5);
 
 /**
  * @generated from message paladin.admin.v1.BucketConstraints
@@ -587,7 +614,7 @@ export type BucketConstraints =
  */
 export const BucketConstraintsSchema: GenMessage<BucketConstraints> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 5);
+  messageDesc(file_paladin_admin_v1_types, 6);
 
 /**
  * @generated from message paladin.admin.v1.LifecycleRule
@@ -637,7 +664,7 @@ export type LifecycleRule = Message<"paladin.admin.v1.LifecycleRule"> & {
  */
 export const LifecycleRuleSchema: GenMessage<LifecycleRule> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 6);
+  messageDesc(file_paladin_admin_v1_types, 7);
 
 /**
  * Refused by SetLifecycleRules (INVALID_ARGUMENT): no supported storage
@@ -665,7 +692,7 @@ export type LifecycleTransition =
  */
 export const LifecycleTransitionSchema: GenMessage<LifecycleTransition> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 7);
+  messageDesc(file_paladin_admin_v1_types, 8);
 
 /**
  * @generated from message paladin.admin.v1.LifecycleExpiration
@@ -684,7 +711,7 @@ export type LifecycleExpiration =
  */
 export const LifecycleExpirationSchema: GenMessage<LifecycleExpiration> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 8);
+  messageDesc(file_paladin_admin_v1_types, 9);
 
 /**
  * @generated from message paladin.admin.v1.ObjectLockConfig
@@ -712,7 +739,7 @@ export type ObjectLockConfig = Message<"paladin.admin.v1.ObjectLockConfig"> & {
  */
 export const ObjectLockConfigSchema: GenMessage<ObjectLockConfig> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 9);
+  messageDesc(file_paladin_admin_v1_types, 10);
 
 /**
  * @generated from message paladin.admin.v1.BucketVersioning
@@ -737,7 +764,7 @@ export type BucketVersioning = Message<"paladin.admin.v1.BucketVersioning"> & {
  */
 export const BucketVersioningSchema: GenMessage<BucketVersioning> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 10);
+  messageDesc(file_paladin_admin_v1_types, 11);
 
 /**
  * @generated from message paladin.admin.v1.BucketReplication
@@ -770,7 +797,7 @@ export type BucketReplication =
  */
 export const BucketReplicationSchema: GenMessage<BucketReplication> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 11);
+  messageDesc(file_paladin_admin_v1_types, 12);
 
 /**
  * ─── Tenant ─────────────────────────────────────────────────────────────────
@@ -885,7 +912,7 @@ export type Tenant = Message<"paladin.admin.v1.Tenant"> & {
  */
 export const TenantSchema: GenMessage<Tenant> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 12);
+  messageDesc(file_paladin_admin_v1_types, 13);
 
 /**
  * ─── Collection ──────────────────────────────────────────────────────────────
@@ -988,7 +1015,7 @@ export type Collection = Message<"paladin.admin.v1.Collection"> & {
  */
 export const CollectionSchema: GenMessage<Collection> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 13);
+  messageDesc(file_paladin_admin_v1_types, 14);
 
 /**
  * ─── Quota ──────────────────────────────────────────────────────────────────
@@ -1051,7 +1078,7 @@ export type Quota = Message<"paladin.admin.v1.Quota"> & {
  */
 export const QuotaSchema: GenMessage<Quota> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 14);
+  messageDesc(file_paladin_admin_v1_types, 15);
 
 /**
  * @generated from message paladin.admin.v1.QuotaUsage
@@ -1089,7 +1116,7 @@ export type QuotaUsage = Message<"paladin.admin.v1.QuotaUsage"> & {
  */
 export const QuotaUsageSchema: GenMessage<QuotaUsage> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 15);
+  messageDesc(file_paladin_admin_v1_types, 16);
 
 /**
  * ─── Audit ──────────────────────────────────────────────────────────────────
@@ -1184,7 +1211,7 @@ export type AuditLogEntry = Message<"paladin.admin.v1.AuditLogEntry"> & {
  */
 export const AuditLogEntrySchema: GenMessage<AuditLogEntry> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 16);
+  messageDesc(file_paladin_admin_v1_types, 17);
 
 /**
  * ─── Event subscription ─────────────────────────────────────────────────────
@@ -1244,7 +1271,7 @@ export type EventSubscription =
  */
 export const EventSubscriptionSchema: GenMessage<EventSubscription> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 17);
+  messageDesc(file_paladin_admin_v1_types, 18);
 
 /**
  * EventSink is a tagged union of the supported delivery targets. Sink
@@ -1316,7 +1343,7 @@ export type EventSink = Message<"paladin.admin.v1.EventSink"> & {
  */
 export const EventSinkSchema: GenMessage<EventSink> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 18);
+  messageDesc(file_paladin_admin_v1_types, 19);
 
 /**
  * @generated from message paladin.admin.v1.HttpSink
@@ -1363,7 +1390,7 @@ export type HttpSink = Message<"paladin.admin.v1.HttpSink"> & {
  */
 export const HttpSinkSchema: GenMessage<HttpSink> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 19);
+  messageDesc(file_paladin_admin_v1_types, 20);
 
 /**
  * @generated from message paladin.admin.v1.KafkaSink
@@ -1440,7 +1467,7 @@ export type KafkaSink = Message<"paladin.admin.v1.KafkaSink"> & {
  */
 export const KafkaSinkSchema: GenMessage<KafkaSink> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 20);
+  messageDesc(file_paladin_admin_v1_types, 21);
 
 /**
  * @generated from message paladin.admin.v1.SqsSink
@@ -1473,7 +1500,7 @@ export type SqsSink = Message<"paladin.admin.v1.SqsSink"> & {
  */
 export const SqsSinkSchema: GenMessage<SqsSink> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 21);
+  messageDesc(file_paladin_admin_v1_types, 22);
 
 /**
  * RabbitMqSink dispatches CloudEvents-formatted JSON payloads to a RabbitMQ
@@ -1534,7 +1561,7 @@ export type RabbitMqSink = Message<"paladin.admin.v1.RabbitMqSink"> & {
  */
 export const RabbitMqSinkSchema: GenMessage<RabbitMqSink> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 22);
+  messageDesc(file_paladin_admin_v1_types, 23);
 
 /**
  * NatsSink dispatches CloudEvents-formatted JSON payloads to a NATS
@@ -1604,7 +1631,7 @@ export type NatsSink = Message<"paladin.admin.v1.NatsSink"> & {
  */
 export const NatsSinkSchema: GenMessage<NatsSink> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_types, 23);
+  messageDesc(file_paladin_admin_v1_types, 24);
 
 /**
  * An S3 feature Paladin uses (ADR-0026). Mirrors the catalog in the backend's

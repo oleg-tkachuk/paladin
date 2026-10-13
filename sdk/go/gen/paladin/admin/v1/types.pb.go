@@ -471,6 +471,57 @@ func (CollectionAccess) EnumDescriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{7}
 }
 
+// UnlimitedBudget is a budget ceiling with no limit, in a currency. It is
+// the "no limit" arm of every budget_ceiling oneof, beside a google.type.Money
+// limit where a zero amount allows no spend.
+type UnlimitedBudget struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// currency_code is the unit charges are in: an ISO 4217 code the server
+	// accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no
+	// currency", for metering that is not money. What empty means is the
+	// field's to say.
+	CurrencyCode  string `protobuf:"bytes,1,opt,name=currency_code,json=currencyCode,proto3" json:"currency_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnlimitedBudget) Reset() {
+	*x = UnlimitedBudget{}
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnlimitedBudget) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnlimitedBudget) ProtoMessage() {}
+
+func (x *UnlimitedBudget) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnlimitedBudget.ProtoReflect.Descriptor instead.
+func (*UnlimitedBudget) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *UnlimitedBudget) GetCurrencyCode() string {
+	if x != nil {
+		return x.CurrencyCode
+	}
+	return ""
+}
+
 // ─── Storage backend ────────────────────────────────────────────────────────
 // StorageBackend is the physical S3-compatible target. Provisioned by
 // platform admins. Credentials are NEVER returned in responses — only
@@ -551,7 +602,7 @@ type StorageBackend struct {
 
 func (x *StorageBackend) Reset() {
 	*x = StorageBackend{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[0]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -563,7 +614,7 @@ func (x *StorageBackend) String() string {
 func (*StorageBackend) ProtoMessage() {}
 
 func (x *StorageBackend) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[0]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -576,7 +627,7 @@ func (x *StorageBackend) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StorageBackend.ProtoReflect.Descriptor instead.
 func (*StorageBackend) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{0}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *StorageBackend) GetName() string {
@@ -789,7 +840,7 @@ type StorageFeatureSupport struct {
 
 func (x *StorageFeatureSupport) Reset() {
 	*x = StorageFeatureSupport{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[1]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -801,7 +852,7 @@ func (x *StorageFeatureSupport) String() string {
 func (*StorageFeatureSupport) ProtoMessage() {}
 
 func (x *StorageFeatureSupport) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[1]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -814,7 +865,7 @@ func (x *StorageFeatureSupport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StorageFeatureSupport.ProtoReflect.Descriptor instead.
 func (*StorageFeatureSupport) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{1}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *StorageFeatureSupport) GetFeature() StorageFeature {
@@ -869,7 +920,7 @@ type ServerSideEncryption struct {
 
 func (x *ServerSideEncryption) Reset() {
 	*x = ServerSideEncryption{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[2]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -881,7 +932,7 @@ func (x *ServerSideEncryption) String() string {
 func (*ServerSideEncryption) ProtoMessage() {}
 
 func (x *ServerSideEncryption) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[2]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -894,7 +945,7 @@ func (x *ServerSideEncryption) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerSideEncryption.ProtoReflect.Descriptor instead.
 func (*ServerSideEncryption) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{2}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ServerSideEncryption) GetType() SseType {
@@ -923,7 +974,7 @@ type EventSourceConfig struct {
 
 func (x *EventSourceConfig) Reset() {
 	*x = EventSourceConfig{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[3]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -935,7 +986,7 @@ func (x *EventSourceConfig) String() string {
 func (*EventSourceConfig) ProtoMessage() {}
 
 func (x *EventSourceConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[3]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -948,7 +999,7 @@ func (x *EventSourceConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventSourceConfig.ProtoReflect.Descriptor instead.
 func (*EventSourceConfig) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{3}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *EventSourceConfig) GetEnabled() bool {
@@ -1043,7 +1094,7 @@ type Bucket struct {
 
 func (x *Bucket) Reset() {
 	*x = Bucket{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[4]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1055,7 +1106,7 @@ func (x *Bucket) String() string {
 func (*Bucket) ProtoMessage() {}
 
 func (x *Bucket) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[4]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1068,7 +1119,7 @@ func (x *Bucket) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Bucket.ProtoReflect.Descriptor instead.
 func (*Bucket) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{4}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Bucket) GetName() string {
@@ -1232,7 +1283,7 @@ type BucketConstraints struct {
 
 func (x *BucketConstraints) Reset() {
 	*x = BucketConstraints{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[5]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1244,7 +1295,7 @@ func (x *BucketConstraints) String() string {
 func (*BucketConstraints) ProtoMessage() {}
 
 func (x *BucketConstraints) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[5]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1257,7 +1308,7 @@ func (x *BucketConstraints) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BucketConstraints.ProtoReflect.Descriptor instead.
 func (*BucketConstraints) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{5}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *BucketConstraints) GetMaxObjectSizeBytes() int64 {
@@ -1333,7 +1384,7 @@ type LifecycleRule struct {
 
 func (x *LifecycleRule) Reset() {
 	*x = LifecycleRule{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[6]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1345,7 +1396,7 @@ func (x *LifecycleRule) String() string {
 func (*LifecycleRule) ProtoMessage() {}
 
 func (x *LifecycleRule) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[6]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1358,7 +1409,7 @@ func (x *LifecycleRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LifecycleRule.ProtoReflect.Descriptor instead.
 func (*LifecycleRule) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{6}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *LifecycleRule) GetId() string {
@@ -1436,7 +1487,7 @@ type LifecycleTransition struct {
 
 func (x *LifecycleTransition) Reset() {
 	*x = LifecycleTransition{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[7]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1448,7 +1499,7 @@ func (x *LifecycleTransition) String() string {
 func (*LifecycleTransition) ProtoMessage() {}
 
 func (x *LifecycleTransition) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[7]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1461,7 +1512,7 @@ func (x *LifecycleTransition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LifecycleTransition.ProtoReflect.Descriptor instead.
 func (*LifecycleTransition) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{7}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *LifecycleTransition) GetAfter() *durationpb.Duration {
@@ -1487,7 +1538,7 @@ type LifecycleExpiration struct {
 
 func (x *LifecycleExpiration) Reset() {
 	*x = LifecycleExpiration{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[8]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1499,7 +1550,7 @@ func (x *LifecycleExpiration) String() string {
 func (*LifecycleExpiration) ProtoMessage() {}
 
 func (x *LifecycleExpiration) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[8]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1512,7 +1563,7 @@ func (x *LifecycleExpiration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LifecycleExpiration.ProtoReflect.Descriptor instead.
 func (*LifecycleExpiration) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{8}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *LifecycleExpiration) GetAfter() *durationpb.Duration {
@@ -1533,7 +1584,7 @@ type ObjectLockConfig struct {
 
 func (x *ObjectLockConfig) Reset() {
 	*x = ObjectLockConfig{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[9]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1545,7 +1596,7 @@ func (x *ObjectLockConfig) String() string {
 func (*ObjectLockConfig) ProtoMessage() {}
 
 func (x *ObjectLockConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[9]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1558,7 +1609,7 @@ func (x *ObjectLockConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectLockConfig.ProtoReflect.Descriptor instead.
 func (*ObjectLockConfig) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{9}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ObjectLockConfig) GetEnabled() bool {
@@ -1593,7 +1644,7 @@ type BucketVersioning struct {
 
 func (x *BucketVersioning) Reset() {
 	*x = BucketVersioning{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[10]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1605,7 +1656,7 @@ func (x *BucketVersioning) String() string {
 func (*BucketVersioning) ProtoMessage() {}
 
 func (x *BucketVersioning) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[10]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1618,7 +1669,7 @@ func (x *BucketVersioning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BucketVersioning.ProtoReflect.Descriptor instead.
 func (*BucketVersioning) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{10}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *BucketVersioning) GetEnabled() bool {
@@ -1648,7 +1699,7 @@ type BucketReplication struct {
 
 func (x *BucketReplication) Reset() {
 	*x = BucketReplication{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[11]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1660,7 +1711,7 @@ func (x *BucketReplication) String() string {
 func (*BucketReplication) ProtoMessage() {}
 
 func (x *BucketReplication) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[11]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1673,7 +1724,7 @@ func (x *BucketReplication) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BucketReplication.ProtoReflect.Descriptor instead.
 func (*BucketReplication) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{11}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *BucketReplication) GetEnabled() bool {
@@ -1747,7 +1798,7 @@ type Tenant struct {
 
 func (x *Tenant) Reset() {
 	*x = Tenant{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[12]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1759,7 +1810,7 @@ func (x *Tenant) String() string {
 func (*Tenant) ProtoMessage() {}
 
 func (x *Tenant) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[12]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1772,7 +1823,7 @@ func (x *Tenant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Tenant.ProtoReflect.Descriptor instead.
 func (*Tenant) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{12}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Tenant) GetName() string {
@@ -1902,7 +1953,7 @@ type Collection struct {
 
 func (x *Collection) Reset() {
 	*x = Collection{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[13]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1914,7 +1965,7 @@ func (x *Collection) String() string {
 func (*Collection) ProtoMessage() {}
 
 func (x *Collection) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[13]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1927,7 +1978,7 @@ func (x *Collection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Collection.ProtoReflect.Descriptor instead.
 func (*Collection) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{13}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Collection) GetName() string {
@@ -2043,7 +2094,7 @@ type Quota struct {
 
 func (x *Quota) Reset() {
 	*x = Quota{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[14]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2055,7 +2106,7 @@ func (x *Quota) String() string {
 func (*Quota) ProtoMessage() {}
 
 func (x *Quota) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[14]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2068,7 +2119,7 @@ func (x *Quota) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Quota.ProtoReflect.Descriptor instead.
 func (*Quota) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{14}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Quota) GetName() string {
@@ -2140,7 +2191,7 @@ type QuotaUsage struct {
 
 func (x *QuotaUsage) Reset() {
 	*x = QuotaUsage{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[15]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2152,7 +2203,7 @@ func (x *QuotaUsage) String() string {
 func (*QuotaUsage) ProtoMessage() {}
 
 func (x *QuotaUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[15]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2165,7 +2216,7 @@ func (x *QuotaUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuotaUsage.ProtoReflect.Descriptor instead.
 func (*QuotaUsage) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{15}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *QuotaUsage) GetTotalBytes() int64 {
@@ -2233,7 +2284,7 @@ type AuditLogEntry struct {
 
 func (x *AuditLogEntry) Reset() {
 	*x = AuditLogEntry{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[16]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2245,7 +2296,7 @@ func (x *AuditLogEntry) String() string {
 func (*AuditLogEntry) ProtoMessage() {}
 
 func (x *AuditLogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[16]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2258,7 +2309,7 @@ func (x *AuditLogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuditLogEntry.ProtoReflect.Descriptor instead.
 func (*AuditLogEntry) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{16}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *AuditLogEntry) GetEntryId() string {
@@ -2372,7 +2423,7 @@ type EventSubscription struct {
 
 func (x *EventSubscription) Reset() {
 	*x = EventSubscription{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[17]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2384,7 +2435,7 @@ func (x *EventSubscription) String() string {
 func (*EventSubscription) ProtoMessage() {}
 
 func (x *EventSubscription) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[17]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2397,7 +2448,7 @@ func (x *EventSubscription) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventSubscription.ProtoReflect.Descriptor instead.
 func (*EventSubscription) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{17}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *EventSubscription) GetName() string {
@@ -2489,7 +2540,7 @@ type EventSink struct {
 
 func (x *EventSink) Reset() {
 	*x = EventSink{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[18]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2501,7 +2552,7 @@ func (x *EventSink) String() string {
 func (*EventSink) ProtoMessage() {}
 
 func (x *EventSink) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[18]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2514,7 +2565,7 @@ func (x *EventSink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventSink.ProtoReflect.Descriptor instead.
 func (*EventSink) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{18}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *EventSink) GetTarget() isEventSink_Target {
@@ -2626,7 +2677,7 @@ type HttpSink struct {
 
 func (x *HttpSink) Reset() {
 	*x = HttpSink{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[19]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2638,7 +2689,7 @@ func (x *HttpSink) String() string {
 func (*HttpSink) ProtoMessage() {}
 
 func (x *HttpSink) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[19]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2651,7 +2702,7 @@ func (x *HttpSink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HttpSink.ProtoReflect.Descriptor instead.
 func (*HttpSink) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{19}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *HttpSink) GetUrl() string {
@@ -2713,7 +2764,7 @@ type KafkaSink struct {
 
 func (x *KafkaSink) Reset() {
 	*x = KafkaSink{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[20]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2725,7 +2776,7 @@ func (x *KafkaSink) String() string {
 func (*KafkaSink) ProtoMessage() {}
 
 func (x *KafkaSink) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[20]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2738,7 +2789,7 @@ func (x *KafkaSink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KafkaSink.ProtoReflect.Descriptor instead.
 func (*KafkaSink) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{20}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *KafkaSink) GetBrokers() string {
@@ -2819,7 +2870,7 @@ type SqsSink struct {
 
 func (x *SqsSink) Reset() {
 	*x = SqsSink{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[21]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2831,7 +2882,7 @@ func (x *SqsSink) String() string {
 func (*SqsSink) ProtoMessage() {}
 
 func (x *SqsSink) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[21]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2844,7 +2895,7 @@ func (x *SqsSink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SqsSink.ProtoReflect.Descriptor instead.
 func (*SqsSink) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{21}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SqsSink) GetQueueUrl() string {
@@ -2895,7 +2946,7 @@ type RabbitMqSink struct {
 
 func (x *RabbitMqSink) Reset() {
 	*x = RabbitMqSink{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[22]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2907,7 +2958,7 @@ func (x *RabbitMqSink) String() string {
 func (*RabbitMqSink) ProtoMessage() {}
 
 func (x *RabbitMqSink) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[22]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2920,7 +2971,7 @@ func (x *RabbitMqSink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RabbitMqSink.ProtoReflect.Descriptor instead.
 func (*RabbitMqSink) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{22}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *RabbitMqSink) GetUrl() string {
@@ -3009,7 +3060,7 @@ type NatsSink struct {
 
 func (x *NatsSink) Reset() {
 	*x = NatsSink{}
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[23]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3021,7 +3072,7 @@ func (x *NatsSink) String() string {
 func (*NatsSink) ProtoMessage() {}
 
 func (x *NatsSink) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_types_proto_msgTypes[23]
+	mi := &file_paladin_admin_v1_types_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3034,7 +3085,7 @@ func (x *NatsSink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NatsSink.ProtoReflect.Descriptor instead.
 func (*NatsSink) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{23}
+	return file_paladin_admin_v1_types_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *NatsSink) GetUrl() string {
@@ -3069,7 +3120,9 @@ var File_paladin_admin_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x1cpaladin/admin/v1/types.proto\x12\x10paladin.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a paladin/common/v1/resource.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xa2\n" +
+	"\x1cpaladin/admin/v1/types.proto\x12\x10paladin.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a paladin/common/v1/resource.proto\x1a\x1fgoogle/api/field_behavior.proto\"6\n" +
+	"\x0fUnlimitedBudget\x12#\n" +
+	"\rcurrency_code\x18\x01 \x01(\tR\fcurrencyCode\"\xa2\n" +
 	"\n" +
 	"\x0eStorageBackend\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1d\n" +
@@ -3372,7 +3425,7 @@ func file_paladin_admin_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_paladin_admin_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_paladin_admin_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_paladin_admin_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_paladin_admin_v1_types_proto_goTypes = []any{
 	(StorageFeature)(0),           // 0: paladin.admin.v1.StorageFeature
 	(FeatureSupport)(0),           // 1: paladin.admin.v1.FeatureSupport
@@ -3382,92 +3435,93 @@ var file_paladin_admin_v1_types_proto_goTypes = []any{
 	(EventTarget)(0),              // 5: paladin.admin.v1.EventTarget
 	(ObjectLockMode)(0),           // 6: paladin.admin.v1.ObjectLockMode
 	(CollectionAccess)(0),         // 7: paladin.admin.v1.CollectionAccess
-	(*StorageBackend)(nil),        // 8: paladin.admin.v1.StorageBackend
-	(*StorageFeatureSupport)(nil), // 9: paladin.admin.v1.StorageFeatureSupport
-	(*ServerSideEncryption)(nil),  // 10: paladin.admin.v1.ServerSideEncryption
-	(*EventSourceConfig)(nil),     // 11: paladin.admin.v1.EventSourceConfig
-	(*Bucket)(nil),                // 12: paladin.admin.v1.Bucket
-	(*BucketConstraints)(nil),     // 13: paladin.admin.v1.BucketConstraints
-	(*LifecycleRule)(nil),         // 14: paladin.admin.v1.LifecycleRule
-	(*LifecycleTransition)(nil),   // 15: paladin.admin.v1.LifecycleTransition
-	(*LifecycleExpiration)(nil),   // 16: paladin.admin.v1.LifecycleExpiration
-	(*ObjectLockConfig)(nil),      // 17: paladin.admin.v1.ObjectLockConfig
-	(*BucketVersioning)(nil),      // 18: paladin.admin.v1.BucketVersioning
-	(*BucketReplication)(nil),     // 19: paladin.admin.v1.BucketReplication
-	(*Tenant)(nil),                // 20: paladin.admin.v1.Tenant
-	(*Collection)(nil),            // 21: paladin.admin.v1.Collection
-	(*Quota)(nil),                 // 22: paladin.admin.v1.Quota
-	(*QuotaUsage)(nil),            // 23: paladin.admin.v1.QuotaUsage
-	(*AuditLogEntry)(nil),         // 24: paladin.admin.v1.AuditLogEntry
-	(*EventSubscription)(nil),     // 25: paladin.admin.v1.EventSubscription
-	(*EventSink)(nil),             // 26: paladin.admin.v1.EventSink
-	(*HttpSink)(nil),              // 27: paladin.admin.v1.HttpSink
-	(*KafkaSink)(nil),             // 28: paladin.admin.v1.KafkaSink
-	(*SqsSink)(nil),               // 29: paladin.admin.v1.SqsSink
-	(*RabbitMqSink)(nil),          // 30: paladin.admin.v1.RabbitMqSink
-	(*NatsSink)(nil),              // 31: paladin.admin.v1.NatsSink
-	nil,                           // 32: paladin.admin.v1.Bucket.LabelsEntry
-	nil,                           // 33: paladin.admin.v1.Tenant.LabelsEntry
-	(*timestamppb.Timestamp)(nil), // 34: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 35: google.protobuf.Duration
-	(v1.ChecksumAlgorithm)(0),     // 36: paladin.common.v1.ChecksumAlgorithm
-	(v1.CompletionMode)(0),        // 37: paladin.common.v1.CompletionMode
+	(*UnlimitedBudget)(nil),       // 8: paladin.admin.v1.UnlimitedBudget
+	(*StorageBackend)(nil),        // 9: paladin.admin.v1.StorageBackend
+	(*StorageFeatureSupport)(nil), // 10: paladin.admin.v1.StorageFeatureSupport
+	(*ServerSideEncryption)(nil),  // 11: paladin.admin.v1.ServerSideEncryption
+	(*EventSourceConfig)(nil),     // 12: paladin.admin.v1.EventSourceConfig
+	(*Bucket)(nil),                // 13: paladin.admin.v1.Bucket
+	(*BucketConstraints)(nil),     // 14: paladin.admin.v1.BucketConstraints
+	(*LifecycleRule)(nil),         // 15: paladin.admin.v1.LifecycleRule
+	(*LifecycleTransition)(nil),   // 16: paladin.admin.v1.LifecycleTransition
+	(*LifecycleExpiration)(nil),   // 17: paladin.admin.v1.LifecycleExpiration
+	(*ObjectLockConfig)(nil),      // 18: paladin.admin.v1.ObjectLockConfig
+	(*BucketVersioning)(nil),      // 19: paladin.admin.v1.BucketVersioning
+	(*BucketReplication)(nil),     // 20: paladin.admin.v1.BucketReplication
+	(*Tenant)(nil),                // 21: paladin.admin.v1.Tenant
+	(*Collection)(nil),            // 22: paladin.admin.v1.Collection
+	(*Quota)(nil),                 // 23: paladin.admin.v1.Quota
+	(*QuotaUsage)(nil),            // 24: paladin.admin.v1.QuotaUsage
+	(*AuditLogEntry)(nil),         // 25: paladin.admin.v1.AuditLogEntry
+	(*EventSubscription)(nil),     // 26: paladin.admin.v1.EventSubscription
+	(*EventSink)(nil),             // 27: paladin.admin.v1.EventSink
+	(*HttpSink)(nil),              // 28: paladin.admin.v1.HttpSink
+	(*KafkaSink)(nil),             // 29: paladin.admin.v1.KafkaSink
+	(*SqsSink)(nil),               // 30: paladin.admin.v1.SqsSink
+	(*RabbitMqSink)(nil),          // 31: paladin.admin.v1.RabbitMqSink
+	(*NatsSink)(nil),              // 32: paladin.admin.v1.NatsSink
+	nil,                           // 33: paladin.admin.v1.Bucket.LabelsEntry
+	nil,                           // 34: paladin.admin.v1.Tenant.LabelsEntry
+	(*timestamppb.Timestamp)(nil), // 35: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 36: google.protobuf.Duration
+	(v1.ChecksumAlgorithm)(0),     // 37: paladin.common.v1.ChecksumAlgorithm
+	(v1.CompletionMode)(0),        // 38: paladin.common.v1.CompletionMode
 }
 var file_paladin_admin_v1_types_proto_depIdxs = []int32{
 	3,  // 0: paladin.admin.v1.StorageBackend.kind:type_name -> paladin.admin.v1.StorageKind
-	10, // 1: paladin.admin.v1.StorageBackend.sse:type_name -> paladin.admin.v1.ServerSideEncryption
-	11, // 2: paladin.admin.v1.StorageBackend.events:type_name -> paladin.admin.v1.EventSourceConfig
-	34, // 3: paladin.admin.v1.StorageBackend.created_at:type_name -> google.protobuf.Timestamp
-	34, // 4: paladin.admin.v1.StorageBackend.updated_at:type_name -> google.protobuf.Timestamp
-	34, // 5: paladin.admin.v1.StorageBackend.previous_credentials_valid_until:type_name -> google.protobuf.Timestamp
-	34, // 6: paladin.admin.v1.StorageBackend.health_checked_at:type_name -> google.protobuf.Timestamp
-	9,  // 7: paladin.admin.v1.StorageBackend.features:type_name -> paladin.admin.v1.StorageFeatureSupport
+	11, // 1: paladin.admin.v1.StorageBackend.sse:type_name -> paladin.admin.v1.ServerSideEncryption
+	12, // 2: paladin.admin.v1.StorageBackend.events:type_name -> paladin.admin.v1.EventSourceConfig
+	35, // 3: paladin.admin.v1.StorageBackend.created_at:type_name -> google.protobuf.Timestamp
+	35, // 4: paladin.admin.v1.StorageBackend.updated_at:type_name -> google.protobuf.Timestamp
+	35, // 5: paladin.admin.v1.StorageBackend.previous_credentials_valid_until:type_name -> google.protobuf.Timestamp
+	35, // 6: paladin.admin.v1.StorageBackend.health_checked_at:type_name -> google.protobuf.Timestamp
+	10, // 7: paladin.admin.v1.StorageBackend.features:type_name -> paladin.admin.v1.StorageFeatureSupport
 	2,  // 8: paladin.admin.v1.StorageBackend.compatibility:type_name -> paladin.admin.v1.StorageCompatibility
 	0,  // 9: paladin.admin.v1.StorageFeatureSupport.feature:type_name -> paladin.admin.v1.StorageFeature
 	1,  // 10: paladin.admin.v1.StorageFeatureSupport.support:type_name -> paladin.admin.v1.FeatureSupport
-	34, // 11: paladin.admin.v1.StorageFeatureSupport.checked_at:type_name -> google.protobuf.Timestamp
+	35, // 11: paladin.admin.v1.StorageFeatureSupport.checked_at:type_name -> google.protobuf.Timestamp
 	4,  // 12: paladin.admin.v1.ServerSideEncryption.type:type_name -> paladin.admin.v1.SseType
 	5,  // 13: paladin.admin.v1.EventSourceConfig.target:type_name -> paladin.admin.v1.EventTarget
-	35, // 14: paladin.admin.v1.EventSourceConfig.poll_interval:type_name -> google.protobuf.Duration
-	13, // 15: paladin.admin.v1.Bucket.constraints:type_name -> paladin.admin.v1.BucketConstraints
-	14, // 16: paladin.admin.v1.Bucket.lifecycle_rules:type_name -> paladin.admin.v1.LifecycleRule
-	17, // 17: paladin.admin.v1.Bucket.object_lock:type_name -> paladin.admin.v1.ObjectLockConfig
-	18, // 18: paladin.admin.v1.Bucket.versioning:type_name -> paladin.admin.v1.BucketVersioning
-	19, // 19: paladin.admin.v1.Bucket.replication:type_name -> paladin.admin.v1.BucketReplication
-	32, // 20: paladin.admin.v1.Bucket.labels:type_name -> paladin.admin.v1.Bucket.LabelsEntry
-	34, // 21: paladin.admin.v1.Bucket.created_at:type_name -> google.protobuf.Timestamp
-	34, // 22: paladin.admin.v1.Bucket.updated_at:type_name -> google.protobuf.Timestamp
-	35, // 23: paladin.admin.v1.BucketConstraints.max_presign_put_ttl:type_name -> google.protobuf.Duration
-	35, // 24: paladin.admin.v1.BucketConstraints.max_presign_get_ttl:type_name -> google.protobuf.Duration
-	36, // 25: paladin.admin.v1.BucketConstraints.required_checksum_algorithm:type_name -> paladin.common.v1.ChecksumAlgorithm
-	15, // 26: paladin.admin.v1.LifecycleRule.transition:type_name -> paladin.admin.v1.LifecycleTransition
-	16, // 27: paladin.admin.v1.LifecycleRule.expiration:type_name -> paladin.admin.v1.LifecycleExpiration
-	35, // 28: paladin.admin.v1.LifecycleTransition.after:type_name -> google.protobuf.Duration
-	35, // 29: paladin.admin.v1.LifecycleExpiration.after:type_name -> google.protobuf.Duration
+	36, // 14: paladin.admin.v1.EventSourceConfig.poll_interval:type_name -> google.protobuf.Duration
+	14, // 15: paladin.admin.v1.Bucket.constraints:type_name -> paladin.admin.v1.BucketConstraints
+	15, // 16: paladin.admin.v1.Bucket.lifecycle_rules:type_name -> paladin.admin.v1.LifecycleRule
+	18, // 17: paladin.admin.v1.Bucket.object_lock:type_name -> paladin.admin.v1.ObjectLockConfig
+	19, // 18: paladin.admin.v1.Bucket.versioning:type_name -> paladin.admin.v1.BucketVersioning
+	20, // 19: paladin.admin.v1.Bucket.replication:type_name -> paladin.admin.v1.BucketReplication
+	33, // 20: paladin.admin.v1.Bucket.labels:type_name -> paladin.admin.v1.Bucket.LabelsEntry
+	35, // 21: paladin.admin.v1.Bucket.created_at:type_name -> google.protobuf.Timestamp
+	35, // 22: paladin.admin.v1.Bucket.updated_at:type_name -> google.protobuf.Timestamp
+	36, // 23: paladin.admin.v1.BucketConstraints.max_presign_put_ttl:type_name -> google.protobuf.Duration
+	36, // 24: paladin.admin.v1.BucketConstraints.max_presign_get_ttl:type_name -> google.protobuf.Duration
+	37, // 25: paladin.admin.v1.BucketConstraints.required_checksum_algorithm:type_name -> paladin.common.v1.ChecksumAlgorithm
+	16, // 26: paladin.admin.v1.LifecycleRule.transition:type_name -> paladin.admin.v1.LifecycleTransition
+	17, // 27: paladin.admin.v1.LifecycleRule.expiration:type_name -> paladin.admin.v1.LifecycleExpiration
+	36, // 28: paladin.admin.v1.LifecycleTransition.after:type_name -> google.protobuf.Duration
+	36, // 29: paladin.admin.v1.LifecycleExpiration.after:type_name -> google.protobuf.Duration
 	6,  // 30: paladin.admin.v1.ObjectLockConfig.default_mode:type_name -> paladin.admin.v1.ObjectLockMode
-	35, // 31: paladin.admin.v1.ObjectLockConfig.default_retention:type_name -> google.protobuf.Duration
-	33, // 32: paladin.admin.v1.Tenant.labels:type_name -> paladin.admin.v1.Tenant.LabelsEntry
-	34, // 33: paladin.admin.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
-	34, // 34: paladin.admin.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
-	34, // 35: paladin.admin.v1.Tenant.deleted_at:type_name -> google.protobuf.Timestamp
-	34, // 36: paladin.admin.v1.Tenant.purge_eligible_at:type_name -> google.protobuf.Timestamp
-	37, // 37: paladin.admin.v1.Collection.completion_mode:type_name -> paladin.common.v1.CompletionMode
-	13, // 38: paladin.admin.v1.Collection.constraints:type_name -> paladin.admin.v1.BucketConstraints
-	34, // 39: paladin.admin.v1.Collection.created_at:type_name -> google.protobuf.Timestamp
-	34, // 40: paladin.admin.v1.Collection.updated_at:type_name -> google.protobuf.Timestamp
+	36, // 31: paladin.admin.v1.ObjectLockConfig.default_retention:type_name -> google.protobuf.Duration
+	34, // 32: paladin.admin.v1.Tenant.labels:type_name -> paladin.admin.v1.Tenant.LabelsEntry
+	35, // 33: paladin.admin.v1.Tenant.created_at:type_name -> google.protobuf.Timestamp
+	35, // 34: paladin.admin.v1.Tenant.updated_at:type_name -> google.protobuf.Timestamp
+	35, // 35: paladin.admin.v1.Tenant.deleted_at:type_name -> google.protobuf.Timestamp
+	35, // 36: paladin.admin.v1.Tenant.purge_eligible_at:type_name -> google.protobuf.Timestamp
+	38, // 37: paladin.admin.v1.Collection.completion_mode:type_name -> paladin.common.v1.CompletionMode
+	14, // 38: paladin.admin.v1.Collection.constraints:type_name -> paladin.admin.v1.BucketConstraints
+	35, // 39: paladin.admin.v1.Collection.created_at:type_name -> google.protobuf.Timestamp
+	35, // 40: paladin.admin.v1.Collection.updated_at:type_name -> google.protobuf.Timestamp
 	7,  // 41: paladin.admin.v1.Collection.access:type_name -> paladin.admin.v1.CollectionAccess
-	23, // 42: paladin.admin.v1.Quota.usage:type_name -> paladin.admin.v1.QuotaUsage
-	34, // 43: paladin.admin.v1.Quota.updated_at:type_name -> google.protobuf.Timestamp
-	34, // 44: paladin.admin.v1.QuotaUsage.last_reset_at:type_name -> google.protobuf.Timestamp
-	34, // 45: paladin.admin.v1.AuditLogEntry.at:type_name -> google.protobuf.Timestamp
-	26, // 46: paladin.admin.v1.EventSubscription.sink:type_name -> paladin.admin.v1.EventSink
-	34, // 47: paladin.admin.v1.EventSubscription.created_at:type_name -> google.protobuf.Timestamp
-	34, // 48: paladin.admin.v1.EventSubscription.updated_at:type_name -> google.protobuf.Timestamp
-	27, // 49: paladin.admin.v1.EventSink.http:type_name -> paladin.admin.v1.HttpSink
-	28, // 50: paladin.admin.v1.EventSink.kafka:type_name -> paladin.admin.v1.KafkaSink
-	29, // 51: paladin.admin.v1.EventSink.sqs:type_name -> paladin.admin.v1.SqsSink
-	31, // 52: paladin.admin.v1.EventSink.nats:type_name -> paladin.admin.v1.NatsSink
-	30, // 53: paladin.admin.v1.EventSink.rabbitmq:type_name -> paladin.admin.v1.RabbitMqSink
+	24, // 42: paladin.admin.v1.Quota.usage:type_name -> paladin.admin.v1.QuotaUsage
+	35, // 43: paladin.admin.v1.Quota.updated_at:type_name -> google.protobuf.Timestamp
+	35, // 44: paladin.admin.v1.QuotaUsage.last_reset_at:type_name -> google.protobuf.Timestamp
+	35, // 45: paladin.admin.v1.AuditLogEntry.at:type_name -> google.protobuf.Timestamp
+	27, // 46: paladin.admin.v1.EventSubscription.sink:type_name -> paladin.admin.v1.EventSink
+	35, // 47: paladin.admin.v1.EventSubscription.created_at:type_name -> google.protobuf.Timestamp
+	35, // 48: paladin.admin.v1.EventSubscription.updated_at:type_name -> google.protobuf.Timestamp
+	28, // 49: paladin.admin.v1.EventSink.http:type_name -> paladin.admin.v1.HttpSink
+	29, // 50: paladin.admin.v1.EventSink.kafka:type_name -> paladin.admin.v1.KafkaSink
+	30, // 51: paladin.admin.v1.EventSink.sqs:type_name -> paladin.admin.v1.SqsSink
+	32, // 52: paladin.admin.v1.EventSink.nats:type_name -> paladin.admin.v1.NatsSink
+	31, // 53: paladin.admin.v1.EventSink.rabbitmq:type_name -> paladin.admin.v1.RabbitMqSink
 	54, // [54:54] is the sub-list for method output_type
 	54, // [54:54] is the sub-list for method input_type
 	54, // [54:54] is the sub-list for extension type_name
@@ -3480,11 +3534,11 @@ func file_paladin_admin_v1_types_proto_init() {
 	if File_paladin_admin_v1_types_proto != nil {
 		return
 	}
-	file_paladin_admin_v1_types_proto_msgTypes[6].OneofWrappers = []any{
+	file_paladin_admin_v1_types_proto_msgTypes[7].OneofWrappers = []any{
 		(*LifecycleRule_Transition)(nil),
 		(*LifecycleRule_Expiration)(nil),
 	}
-	file_paladin_admin_v1_types_proto_msgTypes[18].OneofWrappers = []any{
+	file_paladin_admin_v1_types_proto_msgTypes[19].OneofWrappers = []any{
 		(*EventSink_Http)(nil),
 		(*EventSink_Kafka)(nil),
 		(*EventSink_Sqs)(nil),
@@ -3497,7 +3551,7 @@ func file_paladin_admin_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_types_proto_rawDesc), len(file_paladin_admin_v1_types_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   26,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

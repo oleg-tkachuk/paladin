@@ -27,12 +27,16 @@ import { cn } from "@/lib/utils";
 import {
   formatMoney,
   moneyFromNanos,
-  moneyIsPositive,
   moneyPercent,
   moneyToNanos,
   moneyToNumber,
   unitOf,
 } from "@/lib/format/money";
+import {
+  budgetLimit,
+  budgetUnit,
+  budgetUnlimited,
+} from "@/lib/format/budgetCeiling";
 import type {
   GetTenantSummaryResponse,
   GetTenantTimeSeriesResponse,
@@ -287,16 +291,24 @@ export default function BillingPage() {
   // doesn't carry a unit yet — operators using non-currency metering
   // or freshly-created tenants don't see a misleading dollar sign on
   // a zero total.
-  const unit = unitOf(total?.currencyCode ? total : summary?.maxBudget);
-  const max = summary?.maxBudget;
-  const capped = moneyIsPositive(max);
+  const unit =
+    total?.currencyCode ||
+    budgetUnit(summary?.budgetCeiling) ||
+    unitOf(undefined);
+  // Unset with no budget row; a cap of zero is a cap.
+  const max = budgetLimit(summary?.budgetCeiling);
+  const capped = max !== undefined;
+  const unlimitedBudget = budgetUnlimited(summary?.budgetCeiling);
   const chargeCount = summary?.chargeCount ? Number(summary.chargeCount) : 0;
   const remainingNanos = moneyToNanos(max) - moneyToNanos(total);
   const remaining = moneyFromNanos(
     remainingNanos > 0n ? remainingNanos : 0n,
     unit,
   );
-  const pctOfBudget = Math.min(100, moneyPercent(total, max) ?? 0);
+  // A cap of zero is reached before anything is spent.
+  const pctOfBudget = capped
+    ? Math.min(100, moneyPercent(total, max) ?? 100)
+    : 0;
 
   // Time-series derived values for the annotation under the chart.
   //
@@ -410,7 +422,9 @@ export default function BillingPage() {
                 helper={
                   capped
                     ? `${pctOfBudget.toFixed(1)}% of budget`
-                    : "no budget configured"
+                    : unlimitedBudget
+                      ? "unlimited budget"
+                      : "no budget configured"
                 }
               />
               <KPITile

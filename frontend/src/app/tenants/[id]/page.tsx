@@ -91,11 +91,11 @@ const QUICK_LINKS: Array<{
 // emits "0 units / 1,000 units" for that case.
 import {
   formatMoney,
-  moneyIsPositive,
   moneyPercent,
   moneyToNanos,
   unitOf,
 } from "@/lib/format/money";
+import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { formatCount } from "@/lib/format/locale";
 import { errorMessage } from "@/hooks/errorContract";
@@ -450,18 +450,16 @@ function BudgetTile({
   budget: TenantBudget | null;
   missing: boolean;
 }) {
-  const cap = budget?.maxBudget;
+  const cap = budgetLimit(budget?.budgetCeiling);
   const spent = budget?.spent;
-  // Default to XXX (no currency) when neither amount carries a unit —
-  // covers freshly-created budgets and tenants doing non-currency
-  // metering. Avoids a misleading "$0.00" label on a tenant that
-  // doesn't actually pay in USD.
-  const unit = unitOf(cap?.currencyCode ? cap : spent);
-  // A zero or absent cap means unlimited per the proto comment; pct
-  // only makes sense when there's a finite cap.
-  const capped = moneyIsPositive(cap);
-  const ratio = moneyPercent(spent, cap);
-  const pct = ratio === null ? null : Math.min(100, ratio);
+  // Default to XXX (no currency) when neither the budget nor its spend
+  // carries a unit — covers freshly-created budgets and tenants doing
+  // non-currency metering. Avoids a misleading "$0.00" label on a tenant
+  // that doesn't actually pay in USD.
+  const unit = budgetUnit(budget?.budgetCeiling) || unitOf(spent);
+  // pct only makes sense under a cap; a cap of zero is full from the start.
+  const capped = cap !== undefined;
+  const pct = capped ? Math.min(100, moneyPercent(spent, cap) ?? 100) : null;
   const overCap = capped && moneyToNanos(spent) > moneyToNanos(cap);
 
   return (

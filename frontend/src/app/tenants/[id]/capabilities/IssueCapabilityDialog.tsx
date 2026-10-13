@@ -44,8 +44,10 @@ import {
   type Capability,
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 
-import { ToggleRow, LimitInput } from "./_form-fields";
-import { budgetCeiling, requestCeiling } from "./_ceilings";
+import { ToggleRow } from "./_form-fields";
+import { LimitInput } from "@/components/ui/LimitInput";
+import { requestCeiling } from "./_ceilings";
+import { budgetCeiling } from "@/lib/format/budgetCeiling";
 import {
   TTL_OPTIONS,
   OP_CHOICES,

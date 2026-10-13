@@ -4,6 +4,7 @@ from buf.validate import validate_pb2 as _validate_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.api import field_behavior_pb2 as _field_behavior_pb2
 from google.type import money_pb2 as _money_pb2
+from paladin.admin.v1 import types_pb2 as _types_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -67,14 +68,8 @@ class CapabilityCaveats(_message.Message):
     max_requests: int
     unlimited_requests: bool
     max_budget: _money_pb2.Money
-    unlimited_budget: CapabilityUnlimitedBudget
-    def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., unlimited_requests: _Optional[bool] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[CapabilityUnlimitedBudget, _Mapping]] = ...) -> None: ...
-
-class CapabilityUnlimitedBudget(_message.Message):
-    __slots__ = ("currency_code",)
-    CURRENCY_CODE_FIELD_NUMBER: _ClassVar[int]
-    currency_code: str
-    def __init__(self, currency_code: _Optional[str] = ...) -> None: ...
+    unlimited_budget: _types_pb2.UnlimitedBudget
+    def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., unlimited_requests: _Optional[bool] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[_types_pb2.UnlimitedBudget, _Mapping]] = ...) -> None: ...
 
 class Capability(_message.Message):
     __slots__ = ("id", "issuer", "subject", "audience", "caveats", "issued_at", "not_before", "expires_at", "parent_id", "generation", "confirmation_jkt")

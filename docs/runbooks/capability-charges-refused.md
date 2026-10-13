@@ -45,8 +45,9 @@ refused before any charge and does not appear here.
 2. **`tenant_exhausted`: the tenant's budget is spent.** This is the tenant
    budget (`TenantBudgetService`), not storage quotas (`QuotaService`).
    Read it in the console (*Tenants → \<tenant\> → Budget*) or with
-   `TenantBudgetService.Get` / `Summarize`: `max_budget_usd` against
-   `spent_usd` and `reserved_usd`.
+   `TenantBudgetService.Get` / `Summarize`: `max_budget` against `spent`.
+   A `max_budget` of zero refuses every charge; `unlimited_budget` refuses
+   none.
 
 3. **`unit_mismatch`: the charge is in another currency.** A capability's
    counter, an ancestor's or the tenant's budget already counts in one unit,

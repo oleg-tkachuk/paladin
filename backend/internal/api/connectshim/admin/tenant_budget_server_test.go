@@ -172,9 +172,9 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 	tenantID := uuid.New()
 
 	setRes, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-		TenantId:   tenantID.String(),
-		MaxBudget:  &money.Money{CurrencyCode: "USD", Units: 100},
-		ResetSpend: true,
+		TenantId:      tenantID.String(),
+		BudgetCeiling: limitOf(&money.Money{CurrencyCode: "USD", Units: 100}),
+		ResetSpend:    true,
 	})
 	if err != nil {
 		t.Fatalf("Set: %v", err)
@@ -201,8 +201,8 @@ func TestTenantBudgetServer_Set_NamesTheBudgetForTheAuditLog(t *testing.T) {
 	tenantID := uuid.New()
 	ctx := apiutil.WithResourceSlot(context.Background())
 	if _, err := srv.Set(ctx, &pb.TenantBudgetServiceSetRequest{
-		TenantId:  tenantID.String(),
-		MaxBudget: &money.Money{CurrencyCode: "USD", Units: 100},
+		TenantId:      tenantID.String(),
+		BudgetCeiling: limitOf(&money.Money{CurrencyCode: "USD", Units: 100}),
 	}); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
@@ -256,9 +256,9 @@ func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
 	tenantID := uuid.New()
 
 	setRes, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-		TenantId:   tenantID.String(),
-		MaxBudget:  &money.Money{CurrencyCode: "EUR", Units: 250},
-		ResetSpend: true,
+		TenantId:      tenantID.String(),
+		BudgetCeiling: limitOf(&money.Money{CurrencyCode: "EUR", Units: 250}),
+		ResetSpend:    true,
 	})
 	if err != nil {
 		t.Fatalf("Set: %v", err)
@@ -273,8 +273,8 @@ func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
 func TestTenantBudgetServer_Set_BadUnit(t *testing.T) {
 	srv := newServer(&fakeUsageStore{})
 	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-		TenantId:  uuid.New().String(),
-		MaxBudget: &money.Money{CurrencyCode: "XYZ", Units: 1},
+		TenantId:      uuid.New().String(),
+		BudgetCeiling: limitOf(&money.Money{CurrencyCode: "XYZ", Units: 1}),
 	})
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeInvalidArgument {
@@ -298,8 +298,8 @@ func TestTenantBudgetServer_BadTenantID(t *testing.T) {
 func TestTenantBudgetServer_Set_ReturnsNewVersion(t *testing.T) {
 	srv := newServer(&fakeUsageStore{})
 	res, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-		TenantId:  uuid.New().String(),
-		MaxBudget: &money.Money{CurrencyCode: "USD", Units: 10},
+		TenantId:      uuid.New().String(),
+		BudgetCeiling: limitOf(&money.Money{CurrencyCode: "USD", Units: 10}),
 	})
 	if err != nil {
 		t.Fatalf("Set: %v", err)
@@ -318,15 +318,15 @@ func TestTenantBudgetServer_Set_StaleVersionIsAborted(t *testing.T) {
 	tenantID := uuid.New().String()
 
 	if _, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-		TenantId:  tenantID,
-		MaxBudget: &money.Money{CurrencyCode: "USD", Units: 10},
+		TenantId:      tenantID,
+		BudgetCeiling: limitOf(&money.Money{CurrencyCode: "USD", Units: 10}),
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID,
-		MaxBudget:       &money.Money{CurrencyCode: "USD", Units: 999},
+		BudgetCeiling:   limitOf(&money.Money{CurrencyCode: "USD", Units: 999}),
 		ResourceVersion: "1234",
 	})
 	var connErr *connect.Error
@@ -340,7 +340,7 @@ func TestTenantBudgetServer_Set_BadVersionIsInvalidArgument(t *testing.T) {
 	srv := newServer(&fakeUsageStore{})
 	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        uuid.New().String(),
-		MaxBudget:       &money.Money{CurrencyCode: "USD", Units: 1},
+		BudgetCeiling:   limitOf(&money.Money{CurrencyCode: "USD", Units: 1}),
 		ResourceVersion: "not-a-number",
 	})
 	var connErr *connect.Error
@@ -361,8 +361,8 @@ func TestTenantBudgetServer_Set_MapsTheStoresRefusals(t *testing.T) {
 	for storeErr, want := range cases {
 		srv := newServer(&fakeUsageStore{setErr: storeErr})
 		_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-			TenantId:  uuid.New().String(),
-			MaxBudget: &money.Money{CurrencyCode: "EUR", Units: 1},
+			TenantId:      uuid.New().String(),
+			BudgetCeiling: limitOf(&money.Money{CurrencyCode: "EUR", Units: 1}),
 		})
 		if got := connect.CodeOf(err); got != want {
 			t.Errorf("store answered %v: code = %v, want %v", storeErr, got, want)
@@ -508,34 +508,74 @@ func TestTenantBudgetServer_Summarize_NamesFailureIsInternal(t *testing.T) {
 	}
 }
 
-// The API's 0 sets no ceiling: an absent or zero max_budget lifts the cap
-// rather than freezing the tenant's spend, which is what limes reads a zero
-// ceiling as.
-func TestTenantBudgetServer_Set_ZeroBudgetIsUnlimited(t *testing.T) {
+// A zero limit allows no spend, and "no limit" is its own arm; a request that
+// sets neither is refused rather than read as either.
+func TestTenantBudgetServer_Set_Ceilings(t *testing.T) {
 	cases := map[string]struct {
-		budget *money.Money
-		want   limes.BudgetCeiling
+		ceiling *pb.TenantBudgetServiceSetRequest
+		want    limes.BudgetCeiling
 	}{
-		"absent":  {nil, limes.BudgetCeiling{Unlimited: true}},
-		"zero":    {&money.Money{CurrencyCode: limes.DefaultUnitCode}, limes.BudgetCeiling{Unlimited: true}},
-		"bounded": {&money.Money{CurrencyCode: limes.DefaultUnitCode, Units: boundedCeilingUnits}, limes.BudgetCeiling{Max: boundedCeilingUnits * limes.NanosPerUnit}},
+		"zero allows nothing": {&pb.TenantBudgetServiceSetRequest{BudgetCeiling: limitOf(&money.Money{CurrencyCode: limes.DefaultUnitCode})}, limes.BudgetCeiling{}},
+		"bounded": {
+			&pb.TenantBudgetServiceSetRequest{BudgetCeiling: limitOf(&money.Money{CurrencyCode: limes.DefaultUnitCode, Units: boundedCeilingUnits})},
+			limes.BudgetCeiling{Max: boundedCeilingUnits * limes.NanosPerUnit},
+		},
+		"unlimited": {&pb.TenantBudgetServiceSetRequest{BudgetCeiling: unlimitedIn("")}, limes.BudgetCeiling{Unlimited: true}},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &fakeUsageStore{}
-			res, err := newServer(store).Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-				TenantId: uuid.New().String(), MaxBudget: tc.budget,
-			})
+			req := tc.ceiling
+			req.TenantId = uuid.New().String()
+			res, err := newServer(store).Set(context.Background(), req)
 			if err != nil {
 				t.Fatalf("Set: %v", err)
 			}
 			if store.lastSet.Ceiling != tc.want {
 				t.Errorf("ceiling = %s, want %s", store.lastSet.Ceiling, tc.want)
 			}
-			// An unlimited ceiling reads back as the API's 0.
-			if tc.want.Unlimited && res.GetBudget().GetMaxBudget().GetUnits() != 0 {
-				t.Errorf("max_budget = %v, want 0", res.GetBudget().GetMaxBudget())
+			// The ceiling reads back on its own arm.
+			got := res.GetBudget()
+			if tc.want.Unlimited != (got.GetUnlimitedBudget() != nil) || tc.want.Unlimited == (got.GetMaxBudget() != nil) {
+				t.Errorf("budget ceiling = %v, want unlimited=%v", got.GetBudgetCeiling(), tc.want.Unlimited)
 			}
 		})
 	}
+}
+
+func TestTenantBudgetServer_Set_RefusesAnUnsetCeiling(t *testing.T) {
+	store := &fakeUsageStore{}
+	_, err := newServer(store).Set(context.Background(), &pb.TenantBudgetServiceSetRequest{TenantId: uuid.New().String()})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("err = %v, want InvalidArgument", err)
+	}
+	if store.lastSet.TenantID != uuid.Nil {
+		t.Errorf("the store was written: %+v", store.lastSet)
+	}
+}
+
+// An unlimited budget that names no unit keeps the tenant's; one that names a
+// unit sets it.
+func TestTenantBudgetServer_Set_UnlimitedUnit(t *testing.T) {
+	for unit, want := range map[string]string{"": "", "EUR": "EUR"} {
+		store := &fakeUsageStore{}
+		if _, err := newServer(store).Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
+			TenantId: uuid.New().String(), BudgetCeiling: unlimitedIn(unit),
+		}); err != nil {
+			t.Fatalf("%q: %v", unit, err)
+		}
+		if store.lastSet.UnitCode != want {
+			t.Errorf("%q: unit = %q, want %q", unit, store.lastSet.UnitCode, want)
+		}
+	}
+}
+
+// limitOf is a Set request's budget limit.
+func limitOf(m *money.Money) *pb.TenantBudgetServiceSetRequest_MaxBudget {
+	return &pb.TenantBudgetServiceSetRequest_MaxBudget{MaxBudget: m}
+}
+
+// unlimitedIn is a Set request's unlimited budget in unit.
+func unlimitedIn(unit string) *pb.TenantBudgetServiceSetRequest_UnlimitedBudget {
+	return &pb.TenantBudgetServiceSetRequest_UnlimitedBudget{UnlimitedBudget: &pb.UnlimitedBudget{CurrencyCode: unit}}
 }

@@ -44,6 +44,18 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a tenant budget of 0 is a cap
+
+- **Breaking, tenant budgets.** `TenantBudget`, `TenantBudgetServiceSetRequest`
+  and `GetTenantSummaryResponse` carry the cap as a `budget_ceiling` oneof:
+  `max_budget`, where a zero amount allows no spend, or `unlimited_budget`.
+  `Set` refuses a request that sets neither with `INVALID_ARGUMENT`; an
+  `unlimited_budget` with no `currency_code` keeps the tenant's unit. A
+  summary for a tenant with no budget row sets neither.
+- **Breaking, capabilities.** `CapabilityUnlimitedBudget` is now
+  `UnlimitedBudget`, shared by every budget ceiling. The wire and JSON forms
+  are unchanged.
+
 ## Unreleased — capabilities run on limes v0.53.2
 
 - **Breaking, capability tokens.** Capabilities are JWTs with

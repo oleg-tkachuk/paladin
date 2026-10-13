@@ -1350,20 +1350,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   iam are not gated — no capability carries a request there on its own —
   and `capability_planes_test.go` fails if that stops being true.
 
-### A tenant budget of 0 still means none
-
-- **Status:** Deferred — out of the capability change's scope.
-- **Reason:** capabilities spell "no limit" explicitly, but
-  `TenantBudgetService.Set` and the `max_budget` that `TenantBudget` and
-  `GetTenantSummaryResponse` report still read a zero amount as no budget,
-  through `apiutil.BudgetCeilingOf` / `BudgetCeilingAmount`. A tenant cannot
-  be given a budget of nothing, and a client cannot tell one from none.
-- **Definition of Done:** the tenant budget's ceiling explicit on the wire as
-  `CapabilityCaveats.budget_ceiling` is, with the console's budget, billing
-  and dashboard views and the Python SDK moved in the same change, and the
-  `apiutil` helpers gone.
-- **Blockers:** none.
-
 ### Capability counters other than requests and spend
 
 - **Status:** Deferred — needs the token format version.

@@ -105,6 +105,12 @@ COLLECTION_ACCESS_UNSPECIFIED: CollectionAccess
 COLLECTION_ACCESS_PRIVATE: CollectionAccess
 COLLECTION_ACCESS_PUBLIC_READ: CollectionAccess
 
+class UnlimitedBudget(_message.Message):
+    __slots__ = ("currency_code",)
+    CURRENCY_CODE_FIELD_NUMBER: _ClassVar[int]
+    currency_code: str
+    def __init__(self, currency_code: _Optional[str] = ...) -> None: ...
+
 class StorageBackend(_message.Message):
     __slots__ = ("name", "backend_id", "display_name", "kind", "endpoint", "public_endpoint", "region", "force_path_style", "credentials_secret_ref", "sse", "events", "cedar_policy", "resource_version", "created_at", "updated_at", "enabled", "previous_credentials_secret_ref", "previous_credentials_valid_until", "read_only", "health_status", "health_message", "health_checked_at", "maintenance", "provider", "features", "compatibility", "declared")
     NAME_FIELD_NUMBER: _ClassVar[int]

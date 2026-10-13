@@ -93,13 +93,19 @@ type GetTenantSummaryResponse struct {
 	// whichever unit dominates the row count — non-issue today (no FX).
 	// currency_code is ISO 4217, XXX for metering that is not money.
 	Total *money.Money `protobuf:"bytes,10,opt,name=total,proto3" json:"total,omitempty"`
-	// max_budget is the tenant_budgets cap, copied for UI convenience so the
-	// frontend doesn't need a second RPC.
-	MaxBudget       *money.Money `protobuf:"bytes,11,opt,name=max_budget,json=maxBudget,proto3" json:"max_budget,omitempty"`
-	TopCapabilities []*TopEntry  `protobuf:"bytes,4,rep,name=top_capabilities,json=topCapabilities,proto3" json:"top_capabilities,omitempty"`
-	TopActors       []*TopEntry  `protobuf:"bytes,5,rep,name=top_actors,json=topActors,proto3" json:"top_actors,omitempty"`
-	TopOps          []*TopEntry  `protobuf:"bytes,6,rep,name=top_ops,json=topOps,proto3" json:"top_ops,omitempty"`
-	ChargeCount     int64        `protobuf:"varint,7,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
+	// budget_ceiling is the tenant's budget cap, copied for UI convenience so
+	// the frontend doesn't need a second RPC. Neither arm is set for a tenant
+	// with no budget row.
+	//
+	// Types that are valid to be assigned to BudgetCeiling:
+	//
+	//	*GetTenantSummaryResponse_MaxBudget
+	//	*GetTenantSummaryResponse_UnlimitedBudget
+	BudgetCeiling   isGetTenantSummaryResponse_BudgetCeiling `protobuf_oneof:"budget_ceiling"`
+	TopCapabilities []*TopEntry                              `protobuf:"bytes,4,rep,name=top_capabilities,json=topCapabilities,proto3" json:"top_capabilities,omitempty"`
+	TopActors       []*TopEntry                              `protobuf:"bytes,5,rep,name=top_actors,json=topActors,proto3" json:"top_actors,omitempty"`
+	TopOps          []*TopEntry                              `protobuf:"bytes,6,rep,name=top_ops,json=topOps,proto3" json:"top_ops,omitempty"`
+	ChargeCount     int64                                    `protobuf:"varint,7,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -141,9 +147,27 @@ func (x *GetTenantSummaryResponse) GetTotal() *money.Money {
 	return nil
 }
 
+func (x *GetTenantSummaryResponse) GetBudgetCeiling() isGetTenantSummaryResponse_BudgetCeiling {
+	if x != nil {
+		return x.BudgetCeiling
+	}
+	return nil
+}
+
 func (x *GetTenantSummaryResponse) GetMaxBudget() *money.Money {
 	if x != nil {
-		return x.MaxBudget
+		if x, ok := x.BudgetCeiling.(*GetTenantSummaryResponse_MaxBudget); ok {
+			return x.MaxBudget
+		}
+	}
+	return nil
+}
+
+func (x *GetTenantSummaryResponse) GetUnlimitedBudget() *UnlimitedBudget {
+	if x != nil {
+		if x, ok := x.BudgetCeiling.(*GetTenantSummaryResponse_UnlimitedBudget); ok {
+			return x.UnlimitedBudget
+		}
 	}
 	return nil
 }
@@ -175,6 +199,24 @@ func (x *GetTenantSummaryResponse) GetChargeCount() int64 {
 	}
 	return 0
 }
+
+type isGetTenantSummaryResponse_BudgetCeiling interface {
+	isGetTenantSummaryResponse_BudgetCeiling()
+}
+
+type GetTenantSummaryResponse_MaxBudget struct {
+	// max_budget is the cap; a zero amount allows no spend.
+	MaxBudget *money.Money `protobuf:"bytes,11,opt,name=max_budget,json=maxBudget,proto3,oneof"`
+}
+
+type GetTenantSummaryResponse_UnlimitedBudget struct {
+	// unlimited_budget is no cap.
+	UnlimitedBudget *UnlimitedBudget `protobuf:"bytes,12,opt,name=unlimited_budget,json=unlimitedBudget,proto3,oneof"`
+}
+
+func (*GetTenantSummaryResponse_MaxBudget) isGetTenantSummaryResponse_BudgetCeiling() {}
+
+func (*GetTenantSummaryResponse_UnlimitedBudget) isGetTenantSummaryResponse_BudgetCeiling() {}
 
 type TopEntry struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -418,22 +460,24 @@ var File_paladin_admin_v1_billing_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"\n" +
-	"&paladin/admin/v1/billing_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x17google/type/money.proto\"\xba\x01\n" +
+	"&paladin/admin/v1/billing_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x17google/type/money.proto\x1a\x1cpaladin/admin/v1/types.proto\"\xba\x01\n" +
 	"\x17GetTenantSummaryRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12=\n" +
 	"\fperiod_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
 	"\n" +
-	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"\xbc\x03\n" +
+	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"\xa0\x04\n" +
 	"\x18GetTenantSummaryResponse\x12(\n" +
 	"\x05total\x18\n" +
-	" \x01(\v2\x12.google.type.MoneyR\x05total\x121\n" +
+	" \x01(\v2\x12.google.type.MoneyR\x05total\x123\n" +
 	"\n" +
-	"max_budget\x18\v \x01(\v2\x12.google.type.MoneyR\tmaxBudget\x12E\n" +
+	"max_budget\x18\v \x01(\v2\x12.google.type.MoneyH\x00R\tmaxBudget\x12N\n" +
+	"\x10unlimited_budget\x18\f \x01(\v2!.paladin.admin.v1.UnlimitedBudgetH\x00R\x0funlimitedBudget\x12E\n" +
 	"\x10top_capabilities\x18\x04 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\x0ftopCapabilities\x129\n" +
 	"\n" +
 	"top_actors\x18\x05 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\ttopActors\x123\n" +
 	"\atop_ops\x18\x06 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\x06topOps\x12!\n" +
-	"\fcharge_count\x18\a \x01(\x03R\vchargeCountJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\b\x10\tJ\x04\b\x03\x10\x04J\x04\b\t\x10\n" +
+	"\fcharge_count\x18\a \x01(\x03R\vchargeCountB\x10\n" +
+	"\x0ebudget_ceilingJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\b\x10\tJ\x04\b\x03\x10\x04J\x04\b\t\x10\n" +
 	"R\ftotal_amountR\ftotal_microsR\tunit_codeR\x11max_budget_amountR\x11max_budget_micros\"\x90\x01\n" +
 	"\bTopEntry\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12!\n" +
@@ -478,36 +522,43 @@ var file_paladin_admin_v1_billing_service_proto_goTypes = []any{
 	(*TimeBucket)(nil),                  // 5: paladin.admin.v1.TimeBucket
 	(*timestamppb.Timestamp)(nil),       // 6: google.protobuf.Timestamp
 	(*money.Money)(nil),                 // 7: google.type.Money
+	(*UnlimitedBudget)(nil),             // 8: paladin.admin.v1.UnlimitedBudget
 }
 var file_paladin_admin_v1_billing_service_proto_depIdxs = []int32{
 	6,  // 0: paladin.admin.v1.GetTenantSummaryRequest.period_start:type_name -> google.protobuf.Timestamp
 	6,  // 1: paladin.admin.v1.GetTenantSummaryRequest.period_end:type_name -> google.protobuf.Timestamp
 	7,  // 2: paladin.admin.v1.GetTenantSummaryResponse.total:type_name -> google.type.Money
 	7,  // 3: paladin.admin.v1.GetTenantSummaryResponse.max_budget:type_name -> google.type.Money
-	2,  // 4: paladin.admin.v1.GetTenantSummaryResponse.top_capabilities:type_name -> paladin.admin.v1.TopEntry
-	2,  // 5: paladin.admin.v1.GetTenantSummaryResponse.top_actors:type_name -> paladin.admin.v1.TopEntry
-	2,  // 6: paladin.admin.v1.GetTenantSummaryResponse.top_ops:type_name -> paladin.admin.v1.TopEntry
-	7,  // 7: paladin.admin.v1.TopEntry.spent:type_name -> google.type.Money
-	6,  // 8: paladin.admin.v1.GetTenantTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
-	6,  // 9: paladin.admin.v1.GetTenantTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
-	5,  // 10: paladin.admin.v1.GetTenantTimeSeriesResponse.buckets:type_name -> paladin.admin.v1.TimeBucket
-	6,  // 11: paladin.admin.v1.TimeBucket.start:type_name -> google.protobuf.Timestamp
-	7,  // 12: paladin.admin.v1.TimeBucket.spent:type_name -> google.type.Money
-	0,  // 13: paladin.admin.v1.BillingService.GetTenantSummary:input_type -> paladin.admin.v1.GetTenantSummaryRequest
-	3,  // 14: paladin.admin.v1.BillingService.GetTenantTimeSeries:input_type -> paladin.admin.v1.GetTenantTimeSeriesRequest
-	1,  // 15: paladin.admin.v1.BillingService.GetTenantSummary:output_type -> paladin.admin.v1.GetTenantSummaryResponse
-	4,  // 16: paladin.admin.v1.BillingService.GetTenantTimeSeries:output_type -> paladin.admin.v1.GetTenantTimeSeriesResponse
-	15, // [15:17] is the sub-list for method output_type
-	13, // [13:15] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	8,  // 4: paladin.admin.v1.GetTenantSummaryResponse.unlimited_budget:type_name -> paladin.admin.v1.UnlimitedBudget
+	2,  // 5: paladin.admin.v1.GetTenantSummaryResponse.top_capabilities:type_name -> paladin.admin.v1.TopEntry
+	2,  // 6: paladin.admin.v1.GetTenantSummaryResponse.top_actors:type_name -> paladin.admin.v1.TopEntry
+	2,  // 7: paladin.admin.v1.GetTenantSummaryResponse.top_ops:type_name -> paladin.admin.v1.TopEntry
+	7,  // 8: paladin.admin.v1.TopEntry.spent:type_name -> google.type.Money
+	6,  // 9: paladin.admin.v1.GetTenantTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
+	6,  // 10: paladin.admin.v1.GetTenantTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
+	5,  // 11: paladin.admin.v1.GetTenantTimeSeriesResponse.buckets:type_name -> paladin.admin.v1.TimeBucket
+	6,  // 12: paladin.admin.v1.TimeBucket.start:type_name -> google.protobuf.Timestamp
+	7,  // 13: paladin.admin.v1.TimeBucket.spent:type_name -> google.type.Money
+	0,  // 14: paladin.admin.v1.BillingService.GetTenantSummary:input_type -> paladin.admin.v1.GetTenantSummaryRequest
+	3,  // 15: paladin.admin.v1.BillingService.GetTenantTimeSeries:input_type -> paladin.admin.v1.GetTenantTimeSeriesRequest
+	1,  // 16: paladin.admin.v1.BillingService.GetTenantSummary:output_type -> paladin.admin.v1.GetTenantSummaryResponse
+	4,  // 17: paladin.admin.v1.BillingService.GetTenantTimeSeries:output_type -> paladin.admin.v1.GetTenantTimeSeriesResponse
+	16, // [16:18] is the sub-list for method output_type
+	14, // [14:16] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_billing_service_proto_init() }
 func file_paladin_admin_v1_billing_service_proto_init() {
 	if File_paladin_admin_v1_billing_service_proto != nil {
 		return
+	}
+	file_paladin_admin_v1_types_proto_init()
+	file_paladin_admin_v1_billing_service_proto_msgTypes[1].OneofWrappers = []any{
+		(*GetTenantSummaryResponse_MaxBudget)(nil),
+		(*GetTenantSummaryResponse_UnlimitedBudget)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

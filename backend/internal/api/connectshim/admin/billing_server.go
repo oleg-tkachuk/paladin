@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
@@ -59,14 +60,15 @@ func (s *BillingServer) GetTenantSummary(
 	if err != nil {
 		return nil, err
 	}
-	return &pb.GetTenantSummaryResponse{
+	out := &pb.GetTenantSummaryResponse{
 		Total:           apiutil.MoneyOf(sum.UnitCode, sum.TotalAmount),
-		MaxBudget:       apiutil.MoneyOf(sum.UnitCode, sum.MaxBudgetAmount),
 		ChargeCount:     sum.ChargeCount,
 		TopCapabilities: topEntriesToProto(sum.UnitCode, sum.TopCapabilities),
 		TopActors:       topEntriesToProto(sum.UnitCode, sum.TopActors),
 		TopOps:          topEntriesToProto(sum.UnitCode, sum.TopOps),
-	}, nil
+	}
+	setSummaryCeiling(out, sum.Ceiling, sum.CeilingUnit)
+	return out, nil
 }
 
 func (s *BillingServer) GetTenantTimeSeries(
@@ -122,4 +124,18 @@ func timeFromPB(t *timestamppb.Timestamp) time.Time {
 		return time.Time{}
 	}
 	return t.AsTime()
+}
+
+// setSummaryCeiling writes the tenant's budget ceiling, in unit, onto out;
+// a nil ceiling — a tenant with no budget row — leaves it unset.
+func setSummaryCeiling(out *pb.GetTenantSummaryResponse, ceiling *limes.BudgetCeiling, unit string) {
+	if ceiling == nil {
+		return
+	}
+	limit, unlimited := apiutil.BudgetCeilingArms(*ceiling, unit)
+	if unlimited != nil {
+		out.BudgetCeiling = &pb.GetTenantSummaryResponse_UnlimitedBudget{UnlimitedBudget: unlimited}
+		return
+	}
+	out.BudgetCeiling = &pb.GetTenantSummaryResponse_MaxBudget{MaxBudget: limit}
 }

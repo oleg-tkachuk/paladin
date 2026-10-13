@@ -100,16 +100,20 @@ func (s *TenantBudgetServer) Set(
 	if err := apiutil.RefuseRemovedFields(m); err != nil {
 		return nil, err
 	}
-	// An absent max_budget lifts the cap and leaves the unit to the
-	// existing row (or DEFAULT 'USD' on first insert): unit stays "". A
-	// zero amount lifts it too: the API's 0 sets none.
-	budget, unit, err := apiutil.NanosOf("max_budget", m.GetMaxBudget())
+	// An unlimited budget that names no unit leaves the unit to the existing
+	// row (or DEFAULT 'USD' on first insert): unit stays "". A zero limit
+	// allows no spend.
+	ceiling, unit, set, err := apiutil.BudgetCeilingOf(fieldBudgetCeiling, m.GetMaxBudget(), m.GetUnlimitedBudget())
 	if err != nil {
 		return nil, err
 	}
+	if !set {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fieldBudgetCeiling+": set max_budget, or unlimited_budget for no limit")
+	}
 	args := limes.SetTenantBudgetRequest{
 		TenantID:        tenantID,
-		Ceiling:         apiutil.BudgetCeilingOf(budget),
+		Ceiling:         ceiling,
 		UnitCode:        unit,
 		ResetSpend:      m.GetResetSpend(),
 		ExpectedVersion: expected,
@@ -217,15 +221,23 @@ func budgetListRequest(m *pb.TenantBudgetServiceSummarizeRequest) limes.ListTena
 
 var _ paladinadminv1connect.TenantBudgetServiceHandler = (*TenantBudgetServer)(nil)
 
+// fieldBudgetCeiling is the Set request's ceiling, named in its refusals.
+const fieldBudgetCeiling = "budget_ceiling"
+
 // tenantBudgetToProto converts the internal snapshot to the wire shape.
 // Times that are zero come back as nil so the wire payload is tighter
 // (Connect-JSON doesn't need to ship the epoch timestamp).
 func tenantBudgetToProto(tb limes.TenantBudget) *pb.TenantBudget {
 	out := &pb.TenantBudget{
 		TenantId:        tb.TenantID.String(),
-		MaxBudget:       apiutil.MoneyOf(tb.UnitCode, apiutil.BudgetCeilingAmount(tb.Ceiling)),
 		Spent:           apiutil.MoneyOf(tb.UnitCode, tb.SpentAmount),
 		ResourceVersion: convx.ResourceVersion(tb.ResourceVersion),
+	}
+	limit, unlimited := apiutil.BudgetCeilingArms(tb.Ceiling, tb.UnitCode)
+	if unlimited != nil {
+		out.BudgetCeiling = &pb.TenantBudget_UnlimitedBudget{UnlimitedBudget: unlimited}
+	} else {
+		out.BudgetCeiling = &pb.TenantBudget_MaxBudget{MaxBudget: limit}
 	}
 	if !tb.PeriodStart.IsZero() {
 		out.PeriodStart = timestamppb.New(tb.PeriodStart)

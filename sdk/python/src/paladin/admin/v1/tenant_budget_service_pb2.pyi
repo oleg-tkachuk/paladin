@@ -4,6 +4,7 @@ from buf.validate import validate_pb2 as _validate_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.api import field_behavior_pb2 as _field_behavior_pb2
 from google.type import money_pb2 as _money_pb2
+from paladin.admin.v1 import types_pb2 as _types_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -13,13 +14,14 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class TenantBudget(_message.Message):
-    __slots__ = ("tenant_id", "resource_version", "period_start", "period_end", "updated_at", "max_budget", "spent")
+    __slots__ = ("tenant_id", "resource_version", "period_start", "period_end", "updated_at", "max_budget", "unlimited_budget", "spent")
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_VERSION_FIELD_NUMBER: _ClassVar[int]
     PERIOD_START_FIELD_NUMBER: _ClassVar[int]
     PERIOD_END_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
     MAX_BUDGET_FIELD_NUMBER: _ClassVar[int]
+    UNLIMITED_BUDGET_FIELD_NUMBER: _ClassVar[int]
     SPENT_FIELD_NUMBER: _ClassVar[int]
     tenant_id: str
     resource_version: str
@@ -27,8 +29,9 @@ class TenantBudget(_message.Message):
     period_end: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
     max_budget: _money_pb2.Money
+    unlimited_budget: _types_pb2.UnlimitedBudget
     spent: _money_pb2.Money
-    def __init__(self, tenant_id: _Optional[str] = ..., resource_version: _Optional[str] = ..., period_start: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., period_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., spent: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...
+    def __init__(self, tenant_id: _Optional[str] = ..., resource_version: _Optional[str] = ..., period_start: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., period_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[_types_pb2.UnlimitedBudget, _Mapping]] = ..., spent: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...
 
 class TenantBudgetServiceGetRequest(_message.Message):
     __slots__ = ("tenant_id",)
@@ -43,18 +46,20 @@ class TenantBudgetServiceGetResponse(_message.Message):
     def __init__(self, budget: _Optional[_Union[TenantBudget, _Mapping]] = ...) -> None: ...
 
 class TenantBudgetServiceSetRequest(_message.Message):
-    __slots__ = ("tenant_id", "resource_version", "reset_spend", "period_end", "max_budget")
+    __slots__ = ("tenant_id", "resource_version", "reset_spend", "period_end", "max_budget", "unlimited_budget")
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_VERSION_FIELD_NUMBER: _ClassVar[int]
     RESET_SPEND_FIELD_NUMBER: _ClassVar[int]
     PERIOD_END_FIELD_NUMBER: _ClassVar[int]
     MAX_BUDGET_FIELD_NUMBER: _ClassVar[int]
+    UNLIMITED_BUDGET_FIELD_NUMBER: _ClassVar[int]
     tenant_id: str
     resource_version: str
     reset_spend: bool
     period_end: _timestamp_pb2.Timestamp
     max_budget: _money_pb2.Money
-    def __init__(self, tenant_id: _Optional[str] = ..., resource_version: _Optional[str] = ..., reset_spend: _Optional[bool] = ..., period_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...
+    unlimited_budget: _types_pb2.UnlimitedBudget
+    def __init__(self, tenant_id: _Optional[str] = ..., resource_version: _Optional[str] = ..., reset_spend: _Optional[bool] = ..., period_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[_types_pb2.UnlimitedBudget, _Mapping]] = ...) -> None: ...
 
 class TenantBudgetServiceSetResponse(_message.Message):
     __slots__ = ("budget",)
