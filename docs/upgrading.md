@@ -44,6 +44,20 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a quota cap of 0 is a cap
+
+- **Breaking, quotas.** `Quota.max_total_bytes`, `max_object_count`,
+  `max_bytes_per_day` and `max_objects_per_day` are `optional`: a cap that is
+  set is a limit, where 0 allows nothing, and an absent one is no cap.
+  `SetQuota` now honours `update_mask`: a named cap takes the request's value,
+  a named cap the request leaves absent is lifted, and an unnamed one keeps
+  its value. A mask that names nothing, or anything but a cap, is refused with
+  `INVALID_ARGUMENT`.
+- **MCP.** `paladin_set_quota` reads 0 as a cap of nothing and takes `lift`,
+  a list of the caps to remove.
+- **Migration 070.** Quota caps are nullable; every 0 stored under the old
+  reading becomes NULL.
+
 ## Unreleased — a tenant budget of 0 is a cap
 
 - **Breaking, tenant budgets.** `TenantBudget`, `TenantBudgetServiceSetRequest`

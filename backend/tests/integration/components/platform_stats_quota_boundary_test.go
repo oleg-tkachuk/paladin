@@ -18,18 +18,14 @@ import (
 // at-limit, near-limit and has-limits filters could be relaxed or tightened
 // without a single test noticing.
 //
-// The contract is stated twice in the source and enforced nowhere:
+// The contract (migrations/070): a NULL cap is no cap, and a cap of 0 allows
+// nothing. platformstats.go guards every term with IS NOT NULL.
 //
-//	migrations/001: "0 means 'no cap' — the convention the whole codebase
-//	reads these with (max_x > 0 AND usage_x >= max_x)"
-//
-//	platformstats.go: "A cap of 0 means 'no cap' throughout the schema,
-//	hence the `> 0` guard on every term"
-//
-// What that buys, concretely: relax one `> 0` to `>= 0` and an absent cap
-// becomes a cap of zero. Usage is never negative, so usage >= 0 always holds
-// and EVERY uncapped tenant is counted at its limit — the page reports a
-// fleet in breach that is not.
+// What that buys, concretely: drop one guard and the NULL comparison already
+// reads false, but read NULL as 0 (a COALESCE, say) and every uncapped tenant
+// is counted at its limit — usage is never negative — and the page reports a
+// fleet in breach that is not. A cap of 0, on the other hand, is a limit
+// reached from the start, and must count as one.
 //
 // Each row below sits exactly ON a boundary, because a row comfortably
 // inside one proves nothing about which way the comparison points.
@@ -45,7 +41,7 @@ func TestCollectQuotas_CountsExactlyOnEachBoundary(t *testing.T) {
 
 	// quotas carries a UNIQUE on tenant_id, so each row needs its own tenant.
 	// nearLimitRatio is 0.9, so "near" starts at exactly 90% of a cap.
-	quota := func(caps, usage [4]int64) {
+	quota := func(caps [4]*int64, usage [4]int64) {
 		t.Helper()
 		hex := uuid.NewString()[:8]
 		tenantID := uuid.New()
@@ -69,8 +65,9 @@ func TestCollectQuotas_CountsExactlyOnEachBoundary(t *testing.T) {
 	// A loop makes a missing term impossible rather than merely unlikely.
 	const cap0 = 1000
 	for i := range 4 {
-		var caps, atUsage, nearUsage [4]int64
-		caps[i] = cap0
+		var caps [4]*int64
+		var atUsage, nearUsage [4]int64
+		caps[i] = new(int64(cap0))
 		atUsage[i] = cap0            // exactly at the cap — the comparison is >=
 		nearUsage[i] = cap0 * 9 / 10 // exactly 90% — nearLimitRatio is 0.9
 		quota(caps, atUsage)
@@ -78,15 +75,18 @@ func TestCollectQuotas_CountsExactlyOnEachBoundary(t *testing.T) {
 	}
 
 	// No caps at all, but real usage: tracking only, nothing enforced. This
-	// is the row that fails if any `> 0` guard is relaxed to `>= 0`, because
-	// usage is never negative and every uncapped row would then read as at
-	// its limit.
-	quota([4]int64{0, 0, 0, 0}, [4]int64{100, 5, 100, 5})
+	// is the row that fails if a NULL cap is ever read as 0, because usage is
+	// never negative and every uncapped row would then read as at its limit.
+	quota([4]*int64{}, [4]int64{100, 5, 100, 5})
+
+	// A cap of 0 with no usage: nothing is allowed, so the row is at its
+	// limit before anything is stored, and it has a limit.
+	quota([4]*int64{nil, new(int64(0)), nil, nil}, [4]int64{})
 
 	// One below the near threshold — 899 of 1000 is 89.9%. Capped, but
 	// neither near nor at. Without it, "near" could start anywhere lower and
 	// nothing would object.
-	quota([4]int64{cap0, 0, 0, 0}, [4]int64{899, 0, 0, 0})
+	quota([4]*int64{new(int64(cap0))}, [4]int64{899, 0, 0, 0})
 
 	got, err := platformstats.CollectRLS(ctx, pool, platformstats.TenantPage{})
 	if err != nil {
@@ -94,16 +94,16 @@ func TestCollectQuotas_CountsExactlyOnEachBoundary(t *testing.T) {
 	}
 	q, bq := got.Quotas, base.Quotas
 
-	assertDelta(t, "quotas.total", bq.Total, q.Total, 10)
-	assertDelta(t, "quotas.tenant_scoped", bq.TenantScoped, q.TenantScoped, 10)
+	assertDelta(t, "quotas.total", bq.Total, q.Total, 11)
+	assertDelta(t, "quotas.tenant_scoped", bq.TenantScoped, q.TenantScoped, 11)
 	assertDelta(t, "quotas.bucket_scoped", bq.BucketScoped, q.BucketScoped, 0)
 
-	// A has every cap at zero and must not count as limited.
-	assertDelta(t, "quotas.with_limits", bq.WithLimits, q.WithLimits, 9)
+	// The uncapped row must not count as limited; the zero-cap row must.
+	assertDelta(t, "quotas.with_limits", bq.WithLimits, q.WithLimits, 10)
 
-	// B and D sit exactly on a cap; near-limit excludes at-limit, so C and E
-	// are the only near rows and A and F are neither.
-	assertDelta(t, "quotas.at_limit", bq.AtLimit, q.AtLimit, 4)
+	// The four rows exactly on a cap, and the zero-cap row; near-limit
+	// excludes at-limit, so the four 90% rows are the only near ones.
+	assertDelta(t, "quotas.at_limit", bq.AtLimit, q.AtLimit, 5)
 	assertDelta(t, "quotas.near_limit", bq.NearLimit, q.NearLimit, 4)
 
 	// The accounting sums cover tenant-scoped rows only. Bytes: the

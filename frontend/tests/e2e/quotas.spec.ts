@@ -20,6 +20,25 @@ function quotasURL(tenantId: string): string {
   return `/tenants/${tenantId}/quotas`;
 }
 
+/**
+ * Type a cap into the quota form. A cap with no limit is Unlimited, which
+ * disables its input; the toggle beside it turns that off first.
+ */
+async function enterCap(
+  page: import("@playwright/test").Page,
+  label: string,
+  cap: string,
+) {
+  const input = page.getByLabel(label);
+  const unlimited = input
+    .locator("xpath=..")
+    .getByRole("button", { name: "Unlimited" });
+  if ((await unlimited.getAttribute("aria-pressed")) === "true") {
+    await unlimited.click();
+  }
+  await input.fill(cap);
+}
+
 test.describe("Tenant quotas — OCC", () => {
   test("a tenant with no quota offers Create, and creating one succeeds", async ({
     page,
@@ -35,8 +54,8 @@ test.describe("Tenant quotas — OCC", () => {
     const submit = page.getByRole("button", { name: /Create quota/ });
     await expect(submit).toBeEnabled({ timeout: 15_000 });
 
-    await page.getByLabel("Max total bytes").fill("2048");
-    await page.getByLabel("Max object count").fill("10");
+    await enterCap(page, "Max total bytes", "2048");
+    await enterCap(page, "Max object count", "10");
     await submit.click();
 
     // The row exists now, so the form must have switched out of create mode.
@@ -60,7 +79,7 @@ test.describe("Tenant quotas — OCC", () => {
     const submit = page.getByRole("button", { name: /Apply changes/ });
     await expect(submit).toBeEnabled({ timeout: 15_000 });
 
-    await page.getByLabel("Max object count").fill("4242");
+    await enterCap(page, "Max object count", "4242");
     await submit.click();
 
     // Poll the version rather than the toast. A successful write must move
@@ -93,7 +112,7 @@ test.describe("Tenant quotas — OCC", () => {
     await seedQuota({ tenantId: tenant.tenantId, maxObjectCount: BigInt(777) });
     const beforeSubmit = await quotaVersion(tenant.tenantId);
 
-    await page.getByLabel("Max object count").fill("999");
+    await enterCap(page, "Max object count", "999");
     await submit.click();
 
     // The refusal has to be real: the concurrent writer's value stands and the

@@ -248,11 +248,12 @@ type Quota struct {
 	// OwnerTenantID is the tenant owning a bucket quota's bucket; uuid.Nil
 	// for a shared bucket and for every tenant quota. It is where the
 	// bucket quota's events go, not its scope.
-	OwnerTenantID     uuid.UUID
-	MaxTotalBytes     int64
-	MaxObjectCount    int64
-	MaxBytesPerDay    int64
-	MaxObjectsPerDay  int64
+	OwnerTenantID uuid.UUID
+	// The caps: nil is no cap, and a cap of 0 allows nothing.
+	MaxTotalBytes     *int64
+	MaxObjectCount    *int64
+	MaxBytesPerDay    *int64
+	MaxObjectsPerDay  *int64
 	UsageTotalBytes   int64
 	UsageObjectCount  int64
 	UsageBytesToday   int64

@@ -8,6 +8,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "paladin/common/v1/resource.proto";
 import "google/api/field_behavior.proto";
+import "buf/validate/validate.proto";
 
 // UnlimitedBudget is a budget ceiling with no limit, in a currency. It is
 // the "no limit" arm of every budget_ceiling oneof, beside a google.type.Money
@@ -404,11 +405,13 @@ message Quota {
   // Resource name: "tenants/{tenant_id_or_slug}/quota" or
   // "storageBackends/{backend_id}/buckets/{bucket_id}/quota".
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];
-  // Hard caps. 0 → no cap.
-  int64 max_total_bytes = 2;
-  int64 max_object_count = 3;
-  int64 max_bytes_per_day = 4;
-  int64 max_objects_per_day = 5;
+  // Hard caps. A cap that is set is a limit, where 0 allows nothing; one
+  // that is absent is no cap. SetQuota changes the caps its update_mask
+  // names: a named cap that is absent lifts it.
+  optional int64 max_total_bytes = 2 [(buf.validate.field).int64.gte = 0];
+  optional int64 max_object_count = 3 [(buf.validate.field).int64.gte = 0];
+  optional int64 max_bytes_per_day = 4 [(buf.validate.field).int64.gte = 0];
+  optional int64 max_objects_per_day = 5 [(buf.validate.field).int64.gte = 0];
   // Current usage (read-only; updated by accounting worker).
   QuotaUsage usage = 6;
   string resource_version = 7 [(google.api.field_behavior) = OUTPUT_ONLY];

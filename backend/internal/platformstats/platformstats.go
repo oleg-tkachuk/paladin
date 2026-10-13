@@ -394,23 +394,24 @@ type QuotaCensus struct {
 
 // quotaAtLimitSQL and quotaNearLimitSQL are a quota row's two warning states,
 // written once so the census FILTERs and the per-tenant drill-down
-// (CollectSignalTenants) count the same rows. A cap of 0 means "no cap"
-// throughout the schema, hence the `> 0` guard on every term.
+// (CollectSignalTenants) count the same rows. A NULL cap is no cap, hence
+// the IS NOT NULL guard on every term; a cap of 0 allows nothing, so a row
+// with one is at its limit from the start.
 const quotaAtLimitSQL = `(
-	 (max_total_bytes     > 0 AND usage_total_bytes    >= max_total_bytes)
-	OR (max_object_count    > 0 AND usage_object_count   >= max_object_count)
-	OR (max_bytes_per_day   > 0 AND usage_bytes_today    >= max_bytes_per_day)
-	OR (max_objects_per_day > 0 AND usage_objects_today  >= max_objects_per_day))`
+	 (max_total_bytes IS NOT NULL AND usage_total_bytes    >= max_total_bytes)
+	OR (max_object_count IS NOT NULL AND usage_object_count   >= max_object_count)
+	OR (max_bytes_per_day IS NOT NULL AND usage_bytes_today    >= max_bytes_per_day)
+	OR (max_objects_per_day IS NOT NULL AND usage_objects_today  >= max_objects_per_day))`
 
 // quotaNearLimitSQL takes nearLimitRatio as $1. The ::float8 casts are
 // load-bearing: without them Postgres infers $1 from the bigint operand,
 // rounds 0.9 to 1, and "near limit" silently becomes "at limit". A row at its
 // limit is near it too; "near limit" as reported excludes those.
 const quotaNearLimitSQL = `(
-	 (max_total_bytes     > 0 AND usage_total_bytes    >= max_total_bytes     * $1::float8)
-	OR (max_object_count    > 0 AND usage_object_count   >= max_object_count    * $1::float8)
-	OR (max_bytes_per_day   > 0 AND usage_bytes_today    >= max_bytes_per_day   * $1::float8)
-	OR (max_objects_per_day > 0 AND usage_objects_today  >= max_objects_per_day * $1::float8))`
+	 (max_total_bytes IS NOT NULL AND usage_total_bytes    >= max_total_bytes     * $1::float8)
+	OR (max_object_count IS NOT NULL AND usage_object_count   >= max_object_count    * $1::float8)
+	OR (max_bytes_per_day IS NOT NULL AND usage_bytes_today    >= max_bytes_per_day   * $1::float8)
+	OR (max_objects_per_day IS NOT NULL AND usage_objects_today  >= max_objects_per_day * $1::float8))`
 
 // Quota scopes as allQuotaRowsSQL labels them.
 const (
@@ -442,8 +443,8 @@ func collectQuotas(ctx context.Context, pool *pgxpool.Pool, out *QuotaCensus) er
 		SELECT count(*),
 		       count(*) FILTER (WHERE `+isTenant+`),
 		       count(*) FILTER (WHERE scope = '`+quotaScopeBucket+`'),
-		       count(*) FILTER (WHERE max_total_bytes > 0 OR max_object_count > 0
-		                           OR max_bytes_per_day > 0 OR max_objects_per_day > 0),
+		       count(*) FILTER (WHERE max_total_bytes IS NOT NULL OR max_object_count IS NOT NULL
+		                           OR max_bytes_per_day IS NOT NULL OR max_objects_per_day IS NOT NULL),
 		       count(*) FILTER (WHERE `+atLimit+`),
 		       count(*) FILTER (WHERE `+nearLimit+` AND NOT `+atLimit+`),
 		       COALESCE(sum(usage_object_count) FILTER (WHERE `+isTenant+`), 0),

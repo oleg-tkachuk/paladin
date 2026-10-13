@@ -114,7 +114,7 @@ func TestQuotaHandler_SetQuotaDispatches(t *testing.T) {
 
 	if _, err := handler.SetQuota(ctxAdmin(t, tenant), admindomain.Quota{
 		TenantID:      tenant,
-		MaxTotalBytes: 1 << 30,
+		MaxTotalBytes: new(int64(1 << 30)),
 	}, []string{"max_total_bytes"}); err != nil {
 		t.Fatalf("SetQuota: %v", err)
 	}

@@ -53,14 +53,15 @@ func (s *QuotaServer) SetQuota(ctx context.Context, req *pb.SetQuotaRequest) (*p
 	}
 	src := m.GetQuota()
 	q := admindomain.Quota{
-		ResourceVersion:  rv,
-		TenantID:         scope.tenantID,
-		BackendID:        scope.backendID,
-		BucketName:       scope.bucketName,
-		MaxTotalBytes:    src.GetMaxTotalBytes(),
-		MaxObjectCount:   src.GetMaxObjectCount(),
-		MaxBytesPerDay:   src.GetMaxBytesPerDay(),
-		MaxObjectsPerDay: src.GetMaxObjectsPerDay(),
+		ResourceVersion: rv,
+		TenantID:        scope.tenantID,
+		BackendID:       scope.backendID,
+		BucketName:      scope.bucketName,
+		// Presence carries the meaning: an absent cap is none.
+		MaxTotalBytes:    src.MaxTotalBytes,
+		MaxObjectCount:   src.MaxObjectCount,
+		MaxBytesPerDay:   src.MaxBytesPerDay,
+		MaxObjectsPerDay: src.MaxObjectsPerDay,
 	}
 	out, err := s.H.SetQuota(ctx, q, m.GetUpdateMask().GetPaths())
 	if err != nil {
