@@ -152,3 +152,29 @@ func TestIssueRefusesAnUnsetCeiling(t *testing.T) {
 		})
 	}
 }
+
+// The lineage refusals only a delegation meets: a chain past
+// MaxDelegationDepth is a parent that can no longer delegate, and a child
+// wider than its parent — another tenant among them — is a denial.
+func TestDelegateAnswersALineageRefusal(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		code connect.Code
+	}{
+		{"a chain too deep", fmt.Errorf("%w: %s", limes.ErrDelegationTooDeep, uuid.NewString()), connect.CodeFailedPrecondition},
+		{"a child in another tenant", fmt.Errorf("%w: tenant %s", limes.ErrDelegationTooWide, uuid.NewString()), connect.CodePermissionDenied},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &failingInsertStore{}
+			m := newMinter(t, store)
+			parent := mintParent(t, m, limes.OpGet, limes.OpShare)
+			store.err = tc.err
+			h := NewHandler(m.Issuer, m.Verifier, store, nil, &denyAuthorizer{})
+			_, err := h.Delegate(auth.WithCapability(context.Background(), parent), delegateReq(parent))
+			if got := connect.CodeOf(err); got != tc.code {
+				t.Fatalf("err = %v (%v), want %v", err, got, tc.code)
+			}
+		})
+	}
+}

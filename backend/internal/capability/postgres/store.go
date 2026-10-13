@@ -215,25 +215,62 @@ INSERT INTO capability_records (
 	return nil
 }
 
-// checkLineage refuses a child whose parent is not on record, and one that
-// would outlive its parent: Purge takes the deepest records first and the
-// IsRevoked walk stops at the first ancestor gone, which both hold only for a
-// lineage that is whole and expires from the leaves up. The parent is read on
-// the insert's transaction, scoped to the child's tenant; delegation never
-// crosses tenants, so a parent of another tenant is not on record here.
+// parentChainQuery walks from a parent up its chain, one ancestor past
+// MaxDelegationDepth ($2): the parent's tenant and expiry, and how many
+// capabilities the chain holds — the ancestors a child under it would have.
+const parentChainQuery = `
+WITH RECURSIVE chain(id, parent_id, depth) AS (
+    SELECT id, parent_id, 1 FROM capability_records WHERE id = $1
+    UNION ALL
+    SELECT r.id, r.parent_id, c.depth + 1
+    FROM   capability_records r
+    JOIN   chain c ON r.id = c.parent_id
+    WHERE  c.depth <= $2
+)
+SELECT p.tenant_id, p.expires_at, (SELECT count(*) FROM chain)
+FROM   capability_records p
+WHERE  p.id = $1;
+`
+
+// clearCrossTenantQuery narrows the reads of the current transaction back to
+// its own tenant after setCrossTenantQuery.
+const clearCrossTenantQuery = `SELECT set_config('paladin.cross_tenant', '', true)`
+
+// checkLineage refuses a child whose parent is not on record, one in another
+// tenant than its parent, one that would outlive its parent, and one with more
+// than MaxDelegationDepth ancestors: Purge takes the deepest records first and
+// the IsRevoked walk stops at the first ancestor gone, which both hold only
+// for a lineage that is whole, in one tenant, and expires from the leaves up.
+// The walk reads across tenants — a parent of another tenant must show as
+// one, not as missing — and the transaction is narrowed back to the child's
+// tenant before the insert.
 func checkLineage(ctx context.Context, tx pgx.Tx, c limes.Capability) error {
 	if c.ParentID == uuid.Nil {
 		return nil
 	}
-	var parentExpires time.Time
-	err := tx.QueryRow(ctx, `SELECT expires_at FROM capability_records WHERE id = $1`, c.ParentID).Scan(&parentExpires)
+	if _, err := tx.Exec(ctx, setCrossTenantQuery); err != nil {
+		return fmt.Errorf("capability/postgres: lineage set cross-tenant: %w", err)
+	}
+	var (
+		parentTenant  uuid.UUID
+		parentExpires time.Time
+		ancestors     int
+	)
+	err := tx.QueryRow(ctx, parentChainQuery, c.ParentID, limes.MaxDelegationDepth).Scan(&parentTenant, &parentExpires, &ancestors)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return fmt.Errorf("%w: capability/postgres: parent %s is not on record", limes.ErrInvalidRequest, c.ParentID)
 	case err != nil:
 		return fmt.Errorf("capability/postgres: read parent: %w", err)
+	case parentTenant != c.Subject.TenantID:
+		return fmt.Errorf("%w: tenant %s, under a parent of tenant %s", limes.ErrDelegationTooWide, c.Subject.TenantID, parentTenant)
 	case c.ExpiresAt.After(parentExpires):
 		return fmt.Errorf("%w: expires %s, after its parent %s", limes.ErrDelegationTooWide, c.ExpiresAt, parentExpires)
+	case ancestors > limes.MaxDelegationDepth:
+		return fmt.Errorf("%w: %s would have more than %d ancestors", limes.ErrDelegationTooDeep, c.ID, limes.MaxDelegationDepth)
+	}
+	if _, err := tx.Exec(ctx, clearCrossTenantQuery); err != nil {
+		return fmt.Errorf("capability/postgres: lineage clear cross-tenant: %w", err)
 	}
 	return nil
 }
