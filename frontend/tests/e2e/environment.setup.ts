@@ -19,7 +19,12 @@
  * decision about someone else's data, and a check that deletes is a check
  * nobody dares run against a shared stack.
  */
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
+
 import { test, expect } from "@playwright/test";
+
+import { LEAK_BASELINE_FILE, fixtureInventory } from "./fixtures/leaks";
 
 import { FIXTURE_SLUG_RE, uniqueSlug } from "./fixtures/unique";
 import {
@@ -87,4 +92,14 @@ test("the login subject has not accumulated memberships", async () => {
       `(\`docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml down -v\`), ` +
       `or by deleting the extra users through /users on a stack you cannot drop.`,
   ).toBeLessThanOrEqual(MAX_ADMIN_MEMBERSHIPS);
+});
+
+// What the leaks project compares the run's end against. Written into this
+// project's output directory, which Playwright clears at the start of every
+// run, so a baseline can never outlive the run that took it.
+test("record what exists before the run", async ({}, testInfo) => {
+  await writeFile(
+    path.join(testInfo.project.outputDir, LEAK_BASELINE_FILE),
+    JSON.stringify(await fixtureInventory()),
+  );
 });

@@ -22,6 +22,15 @@ import {
 } from "./seed";
 
 /**
+ * How long the cleanup fixture may take, apart from the test's own timeout.
+ * Teardown waits for the worker to remove each bucket from its backend
+ * (ASYNC_DELETE_TIMEOUT_MS in seed.ts, up to one reconciler tick and then
+ * some); under the test's 30s it was cut off partway, and every step after
+ * the cut — the backend, the tenant — was left behind.
+ */
+const CLEANUP_TIMEOUT_MS = 120_000;
+
+/**
  * The `test` that cleans up after itself.
  *
  * This replaces the per-resource fixture modules (tenants, backends). They
@@ -87,28 +96,32 @@ export const test = base.extend<{
   trackUser: (subject: string) => void;
   trackCollection: (item: SeededCollection) => void;
 }>({
-  cleanup: async ({}, use) => {
-    const reg: Registry = {
-      tenants: [],
-      backends: [],
-      buckets: [],
-      collections: [],
-      users: [],
-    };
-    await use(reg);
-    // Best-effort throughout: a teardown failure must not fail a test that
-    // passed. Each step reports what it could not remove.
-    if (reg.collections.length) {
-      await deleteCollections(reg.collections).catch(() => {});
-    }
-    if (reg.buckets.length) await deleteBuckets(reg.buckets).catch(() => {});
-    if (reg.backends.length) await deleteBackends(reg.backends).catch(() => {});
-    // Before the tenants: a user pinned to one of them would refuse the purge.
-    if (reg.users.length) {
-      await deleteUsersBySubject(reg.users).catch(() => {});
-    }
-    if (reg.tenants.length) await deleteTenants(reg.tenants).catch(() => {});
-  },
+  cleanup: [
+    async ({}, use) => {
+      const reg: Registry = {
+        tenants: [],
+        backends: [],
+        buckets: [],
+        collections: [],
+        users: [],
+      };
+      await use(reg);
+      // Best-effort throughout: a teardown failure must not fail a test that
+      // passed. Each step reports what it could not remove.
+      if (reg.collections.length) {
+        await deleteCollections(reg.collections).catch(() => {});
+      }
+      if (reg.buckets.length) await deleteBuckets(reg.buckets).catch(() => {});
+      if (reg.backends.length)
+        await deleteBackends(reg.backends).catch(() => {});
+      // Before the tenants: a user pinned to one of them would refuse the purge.
+      if (reg.users.length) {
+        await deleteUsersBySubject(reg.users).catch(() => {});
+      }
+      if (reg.tenants.length) await deleteTenants(reg.tenants).catch(() => {});
+    },
+    { timeout: CLEANUP_TIMEOUT_MS },
+  ],
 
   makeTenant: async ({ cleanup }, use) => {
     await use(async (opts) => {

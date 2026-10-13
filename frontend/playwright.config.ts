@@ -113,6 +113,13 @@ export default defineConfig({
     {
       name: "environment",
       testMatch: /environment\.setup\.ts$/,
+      // Runs once every test is done, against the inventory this project
+      // took at the start: the run fails if it left anything behind.
+      teardown: "leaks",
+    },
+    {
+      name: "leaks",
+      testMatch: /leaks\.teardown\.ts$/,
     },
     {
       name: "chromium",
@@ -120,7 +127,7 @@ export default defineConfig({
       // Without this the guard would also run again inside the browser
       // project, since a project with no testMatch takes every file in
       // testDir.
-      testIgnore: /environment\.setup\.ts$/,
+      testIgnore: [/environment\.setup\.ts$/, /leaks\.teardown\.ts$/],
       use: {
         ...devices["Desktop Chrome"],
         // Desktop Chrome defaults to 1280x720, and several console forms are
