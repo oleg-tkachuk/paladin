@@ -1,7 +1,7 @@
 "use client";
 
-// TrashAge — how long a tenant has sat in the trash, and whether its retention
-// has lapsed. The server owns the retention (admin.tenants.trash_retention)
+// TrashAge — how long a tenant has sat in the trash, and how much of its
+// retention window that has used. The server owns the retention (admin.tenants.trash_retention)
 // and reports its result as Tenant.purge_eligible_at = deleted_at +
 // retention, so nothing here knows the period: a tenant is past retention
 // from that instant on (inclusive). Past retention means surfaced for purge,
@@ -55,9 +55,10 @@ export function trashAge(
   return { deleted, days, eligibleAt, pastRetention, daysLeft };
 }
 
-export function trashAgeLabel(days: number): string {
-  if (days < 1) return "In trash less than a day";
-  return `In trash ${days} ${days === 1 ? "day" : "days"}`;
+/** How long ago the tenant was trashed, in whole days. */
+export function trashedAgo(days: number): string {
+  if (days < 1) return "today";
+  return `${days} ${days === 1 ? "day" : "days"} ago`;
 }
 
 export interface TrashAgeProps {
@@ -67,28 +68,74 @@ export interface TrashAgeProps {
   now?: Date;
 }
 
-export function TrashAge({ deletedAt, purgeEligibleAt, now }: TrashAgeProps) {
-  const info = trashAge(deletedAt, purgeEligibleAt, now ?? new Date());
-  if (!info) {
-    return <span title="No deletion time recorded">—</span>;
+/**
+ * How much of the retention window has passed, from 0 to 1; null when the
+ * server reported no purge-eligible time. Past retention is 1.
+ */
+export function retentionElapsed(info: TrashAgeInfo, now: Date): number | null {
+  if (!info.eligibleAt) return null;
+  const window = info.eligibleAt.getTime() - info.deleted.getTime();
+  if (window <= 0) return 1;
+  const elapsed = (now.getTime() - info.deleted.getTime()) / window;
+  return Math.min(1, Math.max(0, elapsed));
+}
+
+/** Whole days in the retention window; null when the server reported none. */
+export function retentionDays(info: TrashAgeInfo): number | null {
+  if (!info.eligibleAt) return null;
+  return Math.round(
+    (info.eligibleAt.getTime() - info.deleted.getTime()) / DAY_MS,
+  );
+}
+
+function daysWord(n: number): string {
+  return `${n} ${n === 1 ? "day" : "days"}`;
+}
+
+/**
+ * The retention window as a bar: how much of it the tenant has used, and what
+ * is left. Past retention reads as a warning badge — the tenant is due for a
+ * decision, never purged unattended.
+ */
+export function TrashRetention({
+  deletedAt,
+  purgeEligibleAt,
+  now,
+}: TrashAgeProps) {
+  const at = now ?? new Date();
+  const info = trashAge(deletedAt, purgeEligibleAt, at);
+  const elapsed = info ? retentionElapsed(info, at) : null;
+  if (!info || elapsed === null || !info.eligibleAt) {
+    return <span className={T.hint}>No retention reported</span>;
   }
-  const { deleted, days, eligibleAt, pastRetention, daysLeft } = info;
+  const eligible = formatDateTime(info.eligibleAt);
   return (
-    <div className="space-y-1">
-      <p title={`Trashed ${formatDateTime(deleted)}`}>{trashAgeLabel(days)}</p>
-      {pastRetention && eligibleAt && (
-        <Badge
-          variant="warning"
-          title={`Retention lapsed ${formatDateTime(eligibleAt)}. Nothing is purged automatically — restore or purge it.`}
-        >
-          Past retention
-        </Badge>
-      )}
-      {daysLeft !== null && (
-        <p className={T.helper}>
-          Purge-eligible in {daysLeft} {daysLeft === 1 ? "day" : "days"}
+    <div
+      className="w-full max-w-48 space-y-1.5"
+      title={`Purge-eligible ${eligible}`}
+    >
+      {info.pastRetention ? (
+        <Badge variant="warning">Past retention</Badge>
+      ) : (
+        <p className="text-sm tabular-nums">
+          {daysWord(info.daysLeft ?? 0)} left
         </p>
       )}
+      <div
+        role="progressbar"
+        aria-label="Retention used"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(elapsed * 100)}
+        className="h-1 w-full overflow-hidden rounded-full bg-muted"
+      >
+        <div
+          className={
+            info.pastRetention ? "h-full bg-chart-3" : "h-full bg-primary/70"
+          }
+          style={{ width: `${elapsed * 100}%` }}
+        />
+      </div>
     </div>
   );
 }
