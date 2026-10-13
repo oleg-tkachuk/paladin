@@ -48,9 +48,10 @@ func NewHandler(u authstore.UserRepository, policy cedar.Authorizer) *Handler {
 // after each read is what bounds it, and the write that follows is pinned to
 // the row's own tenant with WithActingTenant.
 //
-// This does not loosen anything: with no policy on `users` today the read is
-// already unrestricted. It keeps that behaviour while letting the writes be
-// pinned, which is the half a policy can actually enforce.
+// `users` has carried a tenant policy since 017_users_rls.sql, so this flag is
+// a real widening: the authorization gate after each load (and load's own
+// check that the user belongs to the tenant named) is what keeps a caller to
+// the users it may see.
 func readCtx(ctx context.Context) context.Context {
 	return auth.WithCrossTenantRead(ctx)
 }
