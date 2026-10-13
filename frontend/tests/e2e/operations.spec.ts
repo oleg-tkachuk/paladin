@@ -14,6 +14,11 @@
  * bug for so long.
  *
  * These drive the console, not the plane, because the plane was never wrong.
+ *
+ * The Any an operation carries comes from the worker — its progress in
+ * metadata, its result in response — so the first test needs a stack that
+ * runs one. Without a worker the bridge's re-encode is still covered by the
+ * BFF route's unit test, which hands it an Any-carrying response directly.
  */
 import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
@@ -22,6 +27,8 @@ import {
   seedPhysicalBucket,
   seedObject,
   seedBatchTagOperation,
+  STACK_RUNS_WORKER,
+  waitForOperationDone,
 } from "./fixtures/seed";
 
 test.describe("Background operations", () => {
@@ -29,9 +36,13 @@ test.describe("Background operations", () => {
     page,
     makeCollection,
   }) => {
+    test.skip(
+      !STACK_RUNS_WORKER,
+      "an operation carries an Any only once the worker has run it",
+    );
     await loginAsAdmin(page);
 
-    // An operation with a metadata payload is the precondition — the bug is
+    // An operation carrying an Any is the precondition — the bug is
     // invisible against an empty listing, which is exactly how it survived.
     const tenantId = await seedAdminTenantID();
     // The already-provisioned shared bucket: a freshly created one is still
@@ -43,11 +54,12 @@ test.describe("Background operations", () => {
       tenantId,
       collection: collection.collection,
     });
-    await seedBatchTagOperation({
+    const operation = await seedBatchTagOperation({
       tenantId,
       collection: collection.collection,
       objectName: obj.name,
     });
+    await waitForOperationDone(operation);
 
     const failures: string[] = [];
     page.on("response", (r) => {

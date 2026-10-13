@@ -32,7 +32,7 @@ func (r *recordingRepo) ClaimNext(context.Context) (operationh.Operation, error)
 	return op, nil
 }
 
-func (r *recordingRepo) UpdateState(ctx context.Context, _ uuid.UUID, st operationh.State, _, _ []byte, _, _ string) error {
+func (r *recordingRepo) UpdateState(ctx context.Context, _ uuid.UUID, st operationh.State, _ []byte, _, _ string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -52,7 +52,8 @@ func (r *recordingRepo) Touch(ctx context.Context, _ uuid.UUID) error {
 	return nil
 }
 
-func (r *recordingRepo) Create(context.Context, operationh.Operation) error { return nil }
+func (r *recordingRepo) ReportProgress(context.Context, uuid.UUID, []byte) error { return nil }
+func (r *recordingRepo) Create(context.Context, operationh.Operation) error      { return nil }
 func (r *recordingRepo) Get(context.Context, uuid.UUID, uuid.UUID) (operationh.Operation, error) {
 	return operationh.Operation{}, nil
 }

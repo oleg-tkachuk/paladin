@@ -57,6 +57,10 @@ export type Operation = Message<"paladin.data.v1.Operation"> & {
   type: string;
 
   /**
+   * Progress of the operation: a google.protobuf.Struct of the latest
+   * {processed, total} the worker reported, absent until its first report.
+   * processed is a lower bound — reports are throttled to about one a second.
+   *
    * @generated from field: google.protobuf.Any metadata = 3;
    */
   metadata?: Any | undefined;

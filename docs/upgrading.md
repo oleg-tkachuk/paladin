@@ -44,6 +44,19 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — an operation's metadata is its progress
+
+`Operation.metadata` now carries only the operation's progress: a `Struct` of
+the latest `{processed, total}` the worker reported, absent until its first
+report. Before its first report it used to carry the executor's arguments —
+the request as the worker received it — and the runner then overwrote them
+with progress, so what a client saw there depended on timing. The arguments
+are no longer returned; a client that read them should keep its own request.
+
+Migration 073 gives progress its own column, so the arguments survive the
+whole operation, a reclaim after a lost worker included. Rows whose stored
+metadata was already a progress snapshot have it moved to the new column.
+
 ## Unreleased — a reissued batch counts the work already done
 
 A batch operation whose worker died ends FAILED with `WORKER_LOST`, and the

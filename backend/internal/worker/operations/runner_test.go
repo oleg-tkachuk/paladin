@@ -45,17 +45,28 @@ func (m *memRepo) Get(_ context.Context, id uuid.UUID, _ uuid.UUID) (operationh.
 	}
 	return operationh.Operation{}, errors.New("not found")
 }
-func (m *memRepo) UpdateState(_ context.Context, id uuid.UUID, ns operationh.State, md, resp []byte, code, msg string) error {
+func (m *memRepo) UpdateState(_ context.Context, id uuid.UUID, ns operationh.State, resp []byte, code, msg string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	op, ok := m.final[id]
 	if !ok {
-		op = operationh.Operation{OperationID: id, Metadata: md}
+		op = operationh.Operation{OperationID: id}
 	}
 	op.State = ns
 	op.Response = resp
 	op.ErrorCode = code
 	op.ErrorMessage = msg
+	m.final[id] = op
+	return nil
+}
+func (m *memRepo) ReportProgress(_ context.Context, id uuid.UUID, progress []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	op, ok := m.final[id]
+	if !ok {
+		op = operationh.Operation{OperationID: id, State: operationh.StateRunning}
+	}
+	op.Progress = progress
 	m.final[id] = op
 	return nil
 }
@@ -193,5 +204,37 @@ func TestRunner_DrainBatch(t *testing.T) {
 	r.drain(context.Background())
 	if exec.calls != 10 {
 		t.Fatalf("expected 10 exec calls in one drain, got %d", exec.calls)
+	}
+}
+
+// progressExecutor reports one snapshot and finishes.
+type progressExecutor struct{ processed, total int }
+
+func (p progressExecutor) Execute(ctx context.Context, _ operationh.Operation) ([]byte, error) {
+	ReportProgress(ctx, p.processed, p.total)
+	return []byte(`{}`), nil
+}
+
+// Progress goes to its own column through ReportProgress. It used to be an
+// UpdateState that overwrote metadata — the executor's arguments — with the
+// snapshot.
+func TestRunner_ProgressIsReportedApartFromState(t *testing.T) {
+	t.Parallel()
+	repo := newMemRepo()
+	r := &Runner{
+		Repo:      repo,
+		Executors: map[string]Executor{"X": progressExecutor{processed: 2, total: 2}},
+		Interval:  time.Millisecond,
+	}
+	id := uuid.New()
+	repo.enqueue(operationh.Operation{OperationID: id, TenantID: uuid.New(), Type: "X"})
+	r.drain(context.Background())
+
+	got := repo.final[id]
+	if string(got.Progress) != `{"processed":2,"total":2}` {
+		t.Errorf("progress = %q, want the executor's snapshot", got.Progress)
+	}
+	if got.State != operationh.StateSucceeded {
+		t.Errorf("state = %s, want SUCCEEDED", got.State)
 	}
 }

@@ -35,11 +35,16 @@ const (
 )
 
 type Operation struct {
-	OperationID  uuid.UUID
-	TenantID     uuid.UUID
-	Type         string
-	State        State
-	Metadata     []byte
+	OperationID uuid.UUID
+	TenantID    uuid.UUID
+	Type        string
+	State       State
+	// Metadata is the executor's arguments, JSON, written once at creation.
+	Metadata []byte
+	// Progress is the latest {processed, total} snapshot the worker reported,
+	// JSON; nil until the first report. It is what the API calls metadata
+	// (AIP-151: an operation's metadata is its progress).
+	Progress     []byte
 	Response     []byte
 	ErrorCode    string
 	ErrorMessage string
@@ -51,7 +56,12 @@ type Operation struct {
 type Repository interface {
 	Create(ctx context.Context, op Operation) error
 	Get(ctx context.Context, opID, tenantID uuid.UUID) (Operation, error)
-	UpdateState(ctx context.Context, opID uuid.UUID, newState State, metadata, response []byte, errCode, errMsg string) error
+	// UpdateState moves a PENDING or RUNNING operation to newState. It never
+	// touches the arguments (Metadata) or Progress.
+	UpdateState(ctx context.Context, opID uuid.UUID, newState State, response []byte, errCode, errMsg string) error
+	// ReportProgress records a RUNNING operation's latest progress snapshot;
+	// ErrOperationFinished once it is no longer RUNNING.
+	ReportProgress(ctx context.Context, opID uuid.UUID, progress []byte) error
 	Cancel(ctx context.Context, opID, tenantID uuid.UUID) error
 	// filter is the caller's CEL expression. The repo pushes its
 	// SQL-expressible conjuncts into the query; ListOperations still

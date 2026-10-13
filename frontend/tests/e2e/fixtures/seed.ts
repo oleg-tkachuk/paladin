@@ -33,6 +33,7 @@ import { createConnectTransport } from "@connectrpc/connect-node";
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
 import { ObjectService } from "@/gen/paladin/data/v1/object_service_pb";
 import { BatchService } from "@/gen/paladin/data/v1/batch_service_pb";
+import { OperationService } from "@/gen/paladin/data/v1/operation_service_pb";
 import { MultipartUploadService } from "@/gen/paladin/data/v1/multipart_service_pb";
 import { ChecksumAlgorithm } from "@/gen/paladin/common/v1/resource_pb";
 import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
@@ -51,6 +52,7 @@ import {
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 
 import { moneyFromDecimal, moneyToNumber } from "@/lib/format/money";
+import { anyRegistry } from "@/lib/connect/any-registry";
 import { SEEDED_ADMIN } from "./credentials";
 import { uniqueSlug, uniqueDisplayName, FIXTURE_SLUG_RE } from "./unique";
 
@@ -165,12 +167,15 @@ async function getDataToken(): Promise<string> {
 }
 
 // dataTransport mirrors adminTransport for the data plane: same JSON codec,
-// same idempotency-key injection, different audience.
+// same idempotency-key injection, different audience. The registry is the
+// console's own: an operation carries an Any, which JSON cannot decode
+// without one.
 function dataTransport() {
   return createConnectTransport({
     baseUrl: DATA_URL,
     httpVersion: "1.1",
     useBinaryFormat: false,
+    jsonOptions: { registry: anyRegistry },
     interceptors: [
       (next) => async (req) => {
         req.header.set("Authorization", `Bearer ${await getDataToken()}`);
@@ -1190,6 +1195,32 @@ export async function seedBatchTagOperation(opts: {
   return res.name;
 }
 
+/**
+ * How long a test waits for the worker to finish an operation it seeded. The
+ * operations runner ticks every few seconds on the cluster
+ * (worker.jobs.operations.interval) and a one-object batch is done in one.
+ */
+const OPERATION_DONE_TIMEOUT_MS = 30_000;
+const OPERATION_DONE_POLL_MS = 1_000;
+
+/**
+ * Resolves once the worker has finished the operation; rejects after
+ * OPERATION_DONE_TIMEOUT_MS. Only a stack that runs the worker
+ * (STACK_RUNS_WORKER) ever finishes one.
+ */
+export async function waitForOperationDone(name: string): Promise<void> {
+  const client = createClient(OperationService, dataTransport());
+  const deadline = Date.now() + OPERATION_DONE_TIMEOUT_MS;
+  while (!(await client.getOperation({ name })).done) {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `${name} not done ${OPERATION_DONE_TIMEOUT_MS / 1000}s after it was seeded`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, OPERATION_DONE_POLL_MS));
+  }
+}
+
 /** Read a bucket's object-lock config alongside its version. */
 export async function bucketLockState(
   backendId: string,
@@ -1798,7 +1829,8 @@ export async function deleteBuckets(items: SeededBucket[]): Promise<void> {
  * after the API marks it deleting. scripts/e2e-cluster.sh says so for the
  * cluster; the compose stack runs no worker.
  */
-const STACK_RUNS_WORKER = process.env.PALADIN_E2E_STACK_RUNS_WORKER === "1";
+export const STACK_RUNS_WORKER =
+  process.env.PALADIN_E2E_STACK_RUNS_WORKER === "1";
 
 /**
  * How long teardown waits for a row the worker removes, and how often it

@@ -123,17 +123,27 @@ func (r *OperationRepo) Get(ctx context.Context, opID, tenantID uuid.UUID) (oper
 	return operationFromSQLC(row.Operation), nil
 }
 
-func (r *OperationRepo) UpdateState(ctx context.Context, opID uuid.UUID, newState operationh.State, metadata, response []byte, errCode, errMsg string) error {
+func (r *OperationRepo) UpdateState(ctx context.Context, opID uuid.UUID, newState operationh.State, response []byte, errCode, errMsg string) error {
 	rows, err := r.q.UpdateOperationState(ctx,
 		pgUUID(opID),
 		sqlc.OperationState(string(newState)),
-		metadata,
 		response,
 		strPtr(errCode),
 		strPtr(errMsg),
 	)
 	if err != nil {
 		return fmt.Errorf("update operation: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("operation %s: %w", opID, operationh.ErrOperationFinished)
+	}
+	return nil
+}
+
+func (r *OperationRepo) ReportProgress(ctx context.Context, opID uuid.UUID, progress []byte) error {
+	rows, err := r.q.ReportOperationProgress(ctx, pgUUID(opID), progress)
+	if err != nil {
+		return fmt.Errorf("report operation progress: %w", err)
 	}
 	if rows == 0 {
 		return fmt.Errorf("operation %s: %w", opID, operationh.ErrOperationFinished)
@@ -249,6 +259,7 @@ func operationFromSQLC(o sqlc.Operation) operationh.Operation {
 		Type:         o.Type,
 		State:        operationh.State(string(o.State)),
 		Metadata:     o.Metadata,
+		Progress:     o.Progress,
 		Response:     o.Response,
 		ErrorCode:    derefStr(o.ErrorCode),
 		ErrorMessage: derefStr(o.ErrorMessage),
