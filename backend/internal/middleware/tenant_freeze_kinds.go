@@ -94,6 +94,7 @@ var procedureKinds = map[string]Kind{
 	admin.BackendServiceSetBackendMaintenanceProcedure: Changes,
 
 	admin.BillingServiceGetTenantSummaryProcedure:    Reads,
+	admin.BillingServiceGetBillingSettingsProcedure:  Reads,
 	admin.BillingServiceGetTenantTimeSeriesProcedure: Reads,
 
 	admin.BucketServiceCreateBucketProcedure:          Changes,

@@ -13,6 +13,16 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class GetBillingSettingsRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class GetBillingSettingsResponse(_message.Message):
+    __slots__ = ("currency_code",)
+    CURRENCY_CODE_FIELD_NUMBER: _ClassVar[int]
+    currency_code: str
+    def __init__(self, currency_code: _Optional[str] = ...) -> None: ...
+
 class GetTenantSummaryRequest(_message.Message):
     __slots__ = ("tenant_id", "period_start", "period_end")
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]

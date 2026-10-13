@@ -8,6 +8,12 @@ import { Code, ConnectError } from "@connectrpc/connect";
 const h = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), notify: vi.fn() }));
 vi.mock("@/lib/connect/client", () => ({
   tenantBudgetClient: { get: h.get, set: h.set },
+  // The platform's currency (capability.currency) is EUR here, so a form
+  // that sent a currency of its own rather than leaving it to the server
+  // would show.
+  billingClient: {
+    getBillingSettings: () => Promise.resolve({ currencyCode: "EUR" }),
+  },
 }));
 vi.mock("../tenant-context", () => ({
   useTenantChangesBlocked: () => null,
@@ -146,7 +152,8 @@ describe("TenantBudgetPage OCC", () => {
     expect(h.set.mock.calls[0][0].resourceVersion).toBe("0");
   });
 
-  it("sends a new cap exactly to the nano, in XXX by default", async () => {
+  // Left alone, the unit is the server's to apply: the form sends none.
+  it("sends a new cap exactly to the nano, in the platform's currency by default", async () => {
     h.get.mockRejectedValue(new ConnectError("nope", Code.NotFound));
     render(<BudgetPage />);
 
@@ -161,14 +168,21 @@ describe("TenantBudgetPage OCC", () => {
     const ceiling = h.set.mock.calls[0][0].budgetCeiling;
     expect(ceiling.case).toBe("maxBudget");
     expect(ceiling.value).toMatchObject({
-      currencyCode: "XXX",
+      currencyCode: "",
       units: 0n,
       nanos: 300_000_001,
     });
   });
 
+  it("shows the platform's currency in the picker until one is chosen", async () => {
+    h.get.mockRejectedValue(new ConnectError("nope", Code.NotFound));
+    render(<BudgetPage />);
+    const picker = await screen.findByRole("combobox", { name: /currency/i });
+    await waitFor(() => expect(picker).toHaveTextContent("EUR"));
+  });
+
   // "No cap" is its own value, never a 0 the server reads as a cap of nothing.
-  it("creates an unlimited budget by default, in XXX", async () => {
+  it("creates an unlimited budget by default, in the platform's currency", async () => {
     h.get.mockRejectedValue(new ConnectError("nope", Code.NotFound));
     render(<BudgetPage />);
 
@@ -179,7 +193,7 @@ describe("TenantBudgetPage OCC", () => {
     await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
     const ceiling = h.set.mock.calls[0][0].budgetCeiling;
     expect(ceiling.case).toBe("unlimitedBudget");
-    expect(ceiling.value).toMatchObject({ currencyCode: "XXX" });
+    expect(ceiling.value).toMatchObject({ currencyCode: "" });
   });
 
   it("sends a typed zero as a cap that allows no spend", async () => {

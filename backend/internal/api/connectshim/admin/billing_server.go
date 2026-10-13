@@ -139,3 +139,17 @@ func setSummaryCeiling(out *pb.GetTenantSummaryResponse, ceiling *limes.BudgetCe
 	}
 	out.BudgetCeiling = &pb.GetTenantSummaryResponse_MaxBudget{MaxBudget: limit}
 }
+
+func (s *BillingServer) GetBillingSettings(
+	ctx context.Context,
+	_ *pb.GetBillingSettingsRequest,
+) (*pb.GetBillingSettingsResponse, error) {
+	if s.H == nil {
+		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
+	}
+	currency, err := s.H.Currency(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.GetBillingSettingsResponse{CurrencyCode: currency}, nil
+}

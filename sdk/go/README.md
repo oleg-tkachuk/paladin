@@ -559,7 +559,7 @@ what each field means, are documented in the `.proto` files under
 | `APITokenService` | `Create`, `Revoke`, `List`, `GetSelf`, `GetUsage` |
 | `AuditLogService` | `ListAuditLog`, `GetAuditLogEntry`, `ExportAuditLog` |
 | `BackendService` | `CreateBackend`, `GetBackend`, `UpdateBackend`, `DeleteBackend`, `ListBackends`, `RotateCredentials`, `TestBackend`, `SetBackendEnabled`, `SetBackendReadOnly`, `SetBackendMaintenance` |
-| `BillingService` | `GetTenantSummary`, `GetTenantTimeSeries` |
+| `BillingService` | `GetTenantSummary`, `GetTenantTimeSeries`, `GetBillingSettings` |
 | `BucketService` | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `ListAccessibleBuckets` |
 | `CapabilityService` | `Issue`, `Delegate`, `Revoke`, `RevokeBiscuit`, `GetBiscuitUsage`, `Get`, `List`, `GetUsage` |
 | `CELService` | `Validate` |

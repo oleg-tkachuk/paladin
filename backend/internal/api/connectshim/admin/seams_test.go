@@ -91,6 +91,9 @@ func (failingBilling) GetTenantSummary(context.Context, uuid.UUID, time.Time, ti
 func (failingBilling) GetTenantTimeSeries(context.Context, uuid.UUID, time.Time, time.Time, string) (*billingh.TimeSeries, error) {
 	return nil, errBoom
 }
+func (failingBilling) Currency(context.Context) (string, error) {
+	return "", errBoom
+}
 
 type failingBucket struct{}
 
@@ -417,6 +420,10 @@ func TestEveryAdminShimPropagatesHandlerErrors(t *testing.T) {
 			_, err := billingSrv.GetTenantTimeSeries(ctx, &pb.GetTenantTimeSeriesRequest{
 				TenantId: tenantID.String(),
 			})
+			return err
+		}},
+		{"Billing.GetBillingSettings", func() error {
+			_, err := billingSrv.GetBillingSettings(ctx, &pb.GetBillingSettingsRequest{})
 			return err
 		}},
 

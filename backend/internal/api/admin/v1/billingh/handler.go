@@ -404,3 +404,16 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 	}
 	return out, nil
 }
+
+// Currency is the platform's currency, capability.currency, for a caller that
+// may read its own tenant's billing: a client shows it and defaults to it.
+func (h *Handler) Currency(ctx context.Context) (string, error) {
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return "", connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
+	}
+	if _, err := h.authorize(ctx, p.TenantID); err != nil {
+		return "", err
+	}
+	return h.currency, nil
+}

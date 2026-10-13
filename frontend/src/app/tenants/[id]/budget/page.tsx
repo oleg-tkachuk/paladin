@@ -42,7 +42,6 @@ import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import {
-  ABSTRACT_UNIT_CODE,
   UNIT_CODES,
   formatMoney,
   moneyFromDecimal,
@@ -65,6 +64,7 @@ import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
 import { useTenant, useTenantChangesBlocked } from "../tenant-context";
 import { Timestamp } from "@/components/Timestamp";
+import { usePlatformCurrency } from "@/hooks/usePlatformCurrency";
 
 function progressColour(
   spent: Money | undefined,
@@ -123,11 +123,14 @@ export default function TenantBudgetPage() {
   // "No cap" is its own value on the wire, not a 0: a zero cap allows no
   // spend. A tenant with no budget yet starts unlimited.
   const [unlimited, setUnlimited] = useState<boolean>(true);
-  // Form picker default. Cold-start (no existing budget) starts on
-  // XXX — ISO 4217's "no currency" — so the page doesn't assume
-  // operators want USD. The hydration below replaces this with the
-  // budget's unit whenever a snapshot loads.
-  const [unitCode, setUnitCode] = useState<string>(ABSTRACT_UNIT_CODE);
+  // The unit the operator chose, or null for the platform's currency
+  // (capability.currency). A new budget starts on null and is sent with no
+  // unit, so the server applies its own setting; the hydration below replaces
+  // it with the budget's unit whenever a snapshot loads.
+  const [unitCode, setUnitCode] = useState<string | null>(null);
+  const platformCurrency = usePlatformCurrency();
+  // What the picker shows: the choice, else the platform's currency.
+  const shownUnit = unitCode ?? platformCurrency;
   const [resetSpend, setResetSpend] = useState<boolean>(false);
   // Period close date (YYYY-MM-DD, local). Blank leaves the server's window
   // untouched; a value pins when the billing period ends.
@@ -168,7 +171,7 @@ export default function TenantBudgetPage() {
     } else {
       setMaxBudget("");
       setUnlimited(true);
-      setUnitCode(ABSTRACT_UNIT_CODE);
+      setUnitCode(null);
       setPeriodEnd("");
     }
     setResetSpend(false);
@@ -178,9 +181,10 @@ export default function TenantBudgetPage() {
     e?.preventDefault();
     // Straight to Money, never through a float: "0.1" is exactly 100000000
     // nanos. Zero is a cap that allows no spend.
+    const unit = unitCode ?? "";
     const cap = unlimited
-      ? create(MoneySchema, { currencyCode: unitCode })
-      : moneyFromDecimal(maxBudget, unitCode);
+      ? create(MoneySchema, { currencyCode: unit })
+      : moneyFromDecimal(maxBudget, unit);
     if (cap === null) {
       showNotification({
         type: "error",
@@ -193,7 +197,7 @@ export default function TenantBudgetPage() {
     try {
       await tenantBudgetClient.set({
         tenantId,
-        budgetCeiling: budgetCeiling(unlimited, cap, unitCode),
+        budgetCeiling: budgetCeiling(unlimited, cap, unit),
         resetSpend,
         // OCC guard. "0" asserts no row exists yet — the create case — and is
         // itself rejected if someone created one in the meantime. Anything
@@ -212,7 +216,7 @@ export default function TenantBudgetPage() {
       showNotification({
         type: "success",
         title: "Budget updated",
-        message: `${unlimited ? `Cap lifted (${unitCode})` : `Cap set to ${formatMoney(cap)}`}${resetSpend ? " and period rolled" : ""}.`,
+        message: `${unlimited ? `Cap lifted (${shownUnit ?? "platform currency"})` : `Cap set to ${formatMoney(cap)}`}${resetSpend ? " and period rolled" : ""}.`,
       });
     } catch (err) {
       // Aborted is the OCC guard, not a fault: the row moved under us. Refetch
@@ -423,7 +427,8 @@ export default function TenantBudgetPage() {
                     value: u,
                     label: u,
                   }))}
-                  value={unitCode}
+                  value={shownUnit}
+                  placeholder="Platform currency"
                   onChange={(v) => {
                     setEdited(true);
                     setUnitCode(v);
@@ -431,7 +436,9 @@ export default function TenantBudgetPage() {
                   className="w-full"
                 />
                 <p className={T.hint}>
-                  ISO 4217 fiat, or XXX for metering that is not money.
+                  ISO 4217 fiat, or XXX for metering that is not money. Left
+                  alone, a new budget is in the platform&apos;s currency
+                  {platformCurrency ? ` (${platformCurrency})` : ""}.
                 </p>
               </div>
 
