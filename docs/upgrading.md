@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — capabilities run on limes v0.57.0
+## v33.3.0 — capabilities run on limes v0.57.0
 
 - **Behaviour, delegation.** `CapabilityService.Delegate` refuses a child
   that would have more than 64 ancestors with `FAILED_PRECONDITION`. The
@@ -52,7 +52,7 @@ tree with itself and passes without checking anything.
   never asks for one, since it narrows the presented capability in its own
   tenant.
 
-## Unreleased — the platform's currency is a setting
+## v33.2.0, sdk/go/v0.72.0 — the platform's currency is a setting
 
 A budget or a capability that named no currency used to be in USD: limes'
 DefaultUnitCode, which no deployment chose. `capability.currency` (ISO 4217)
