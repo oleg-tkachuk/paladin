@@ -36,6 +36,8 @@ const ALLOWED: Record<string, string> = {
     "the scope shows the tenant id it already has, and logs the failure",
   "hooks/useDistinctTags.ts#{data}":
     "tag filter options; the object list reports its own failed read",
+  "components/DashboardWidgets.tsx#{data}":
+    "the trash notice: a failed read shows no notice, and the Trash page reports it",
 };
 
 function sources(dir: string): string[] {

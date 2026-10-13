@@ -8,11 +8,13 @@ const h = vi.hoisted(() => ({
   audit: vi.fn(),
   ops: vi.fn(),
   budget: vi.fn(),
+  tenants: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
   auditClient: { listAuditLog: h.audit },
   adminOperationClient: { listOperations: h.ops },
   tenantBudgetClient: { summarize: h.budget },
+  tenantClient: { listTenants: h.tenants },
 }));
 
 import { DashboardWidgets } from "./DashboardWidgets";
@@ -28,6 +30,8 @@ describe("DashboardWidgets", () => {
     h.audit.mockReset();
     h.ops.mockReset();
     h.budget.mockReset();
+    h.tenants.mockReset();
+    h.tenants.mockResolvedValue({ tenants: [], page: {} });
   });
   afterEach(() => onlineManager.setOnline(true));
 
@@ -94,5 +98,60 @@ describe("DashboardWidgets", () => {
     expect(
       screen.getByRole("link", { name: "How to enable capabilities" }),
     ).toHaveAttribute("href", CAPABILITIES_DOCS_URL);
+  });
+
+  describe("trash past retention", () => {
+    beforeEach(() => {
+      h.audit.mockResolvedValue({ entries: [] });
+      h.ops.mockResolvedValue({ operations: [] });
+      h.budget.mockResolvedValue({ summaries: [] });
+    });
+
+    it("asks the server for trashed tenants past their retention", async () => {
+      render(<DashboardWidgets />);
+      await screen.findByText("No recent activity.");
+      expect(h.tenants).toHaveBeenCalledWith(
+        expect.objectContaining({
+          onlyTrashed: true,
+          filter: "purge_eligible",
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("says how many and links to the trash", async () => {
+      h.tenants.mockResolvedValue({
+        tenants: [{ tenantId: "a" }, { tenantId: "b" }],
+        page: {},
+      });
+      render(<DashboardWidgets />);
+      const notice = await screen.findByRole("status");
+      expect(notice).toHaveTextContent(
+        /2 tenants are in the trash past their retention/,
+      );
+      expect(notice).toHaveAttribute("href", "/trash");
+    });
+
+    it("says there are more when the page is full", async () => {
+      h.tenants.mockResolvedValue({
+        tenants: [{ tenantId: "a" }],
+        page: { nextPageToken: "next" },
+      });
+      render(<DashboardWidgets />);
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        /1\+ tenants are/,
+      );
+    });
+
+    it("shows nothing when there are none, or the read fails", async () => {
+      render(<DashboardWidgets />);
+      await screen.findByText("No recent activity.");
+      expect(screen.queryByRole("status")).toBeNull();
+
+      h.tenants.mockRejectedValue(new ConnectError("down", Code.Unavailable));
+      render(<DashboardWidgets />);
+      await screen.findAllByText("No recent activity.");
+      expect(screen.queryByRole("status")).toBeNull();
+    });
   });
 });

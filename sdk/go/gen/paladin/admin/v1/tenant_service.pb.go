@@ -312,6 +312,8 @@ type ListTenantsRequest struct {
 	// CEL filter, evaluated against the TenantSchema (see internal/filter/cel).
 	// Applied to each fetched page; the page cursor is unaffected, so a page
 	// whose rows all fail the predicate still returns next_page_token.
+	// `purge_eligible`, with only_trashed, lists the trashed tenants past
+	// admin.tenants.trash_retention — those with purge_eligible_at passed.
 	Filter string `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
 	// include_trashed — when true, return both active and soft-deleted
 	// rows; default (false) hides trashed tenants from the active list.

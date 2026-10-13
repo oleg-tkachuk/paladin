@@ -1312,22 +1312,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
 
 ## Capability module
 
-### A lapsed tenant-trash retention is visible only on the Trash page
-
-- **Status:** Deferred
-- **Reason:** `admin.tenants.trash_retention` surfaces a trashed tenant for
-  purge through `Tenant.purge_eligible_at` and the console's "Past retention"
-  mark, but nothing else carries it: `ListTenants` cannot filter on it (the
-  CEL tenant schema has neither `deleted_at` nor `purge_eligible_at`), and no
-  event or metric fires when a retention lapses, so an operator learns of it
-  only by opening the Trash page.
-- **Definition of Done:** a `ListTenants` filter for trashed-past-retention
-  (pushed down to SQL, consistent with the CEL projection), and a gauge or
-  event for the count of tenants past retention that an alert can watch.
-- **Blockers:** none; no automatic purge is implied — the owner decision is
-  surface-only.
-
-
 ### Offline attenuation covers a fixed vocabulary, not arbitrary Datalog
 
 - **Status:** Deferred — the vocabulary covers what Paladin enforces.

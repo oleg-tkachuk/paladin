@@ -97,6 +97,14 @@ WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenants.id > sqlc.narg('after_id')
        OR tenants.created_at >= sqlc.narg('created_at_gte')::timestamptz)
   AND (sqlc.narg('created_at_lte')::timestamptz IS NULL
        OR tenants.created_at <= sqlc.narg('created_at_lte')::timestamptz)
+  -- The derived `purge_eligible` field: trashed, and its trash retention
+  -- lapsed as of the request's own clock. The handler projects it from the
+  -- same retention and the same instant (tenanth.tenantRow), so the two
+  -- agree on every row, the boundary one included.
+  AND (sqlc.narg('purge_eligible')::bool IS NULL
+       OR (tenants.deleted_at IS NOT NULL
+           AND tenants.deleted_at + make_interval(secs => sqlc.narg('trash_retention_seconds')::float8)
+               <= sqlc.narg('as_of')::timestamptz) = sqlc.narg('purge_eligible')::bool)
 ORDER BY tenants.id
 LIMIT sqlc.arg('page_size');
 
@@ -138,3 +146,11 @@ UPDATE tenants
 SELECT id, slug, display_name, deleted_at
 FROM tenants
 WHERE id = ANY(sqlc.arg('ids')::uuid[]);
+
+-- name: CountTenantsPastTrashRetention :one
+-- Trashed tenants whose trash retention has lapsed as of as_of: the ones the
+-- console marks "Past retention" and an operator should decide on.
+SELECT count(*) FROM tenants
+WHERE deleted_at IS NOT NULL
+  AND deleted_at + make_interval(secs => sqlc.arg('trash_retention_seconds')::float8)
+      <= sqlc.arg('as_of')::timestamptz;

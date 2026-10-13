@@ -111,6 +111,11 @@ var TenantSchema = &Schema{
 		// page, so a tenant sorting past the page ceiling could not be found
 		// by typing its name.
 		"search": cel.StringType,
+		// Derived: trashed, and admin.tenants.trash_retention lapsed — the
+		// console's "Past retention". `purge_eligible` alone, with
+		// only_trashed or include_trashed, lists the tenants an operator
+		// should decide on.
+		"purge_eligible": cel.BoolType,
 	},
 }
 

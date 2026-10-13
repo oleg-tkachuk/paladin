@@ -296,6 +296,11 @@ type ListTenantsArgs struct {
 	// returned unchanged so paging continues past a page whose rows all
 	// failed the predicate.
 	Filter string
+	// TrashRetention and AsOf decide the derived purge_eligible field: the
+	// handler sets both, once per request, and projects each row with the
+	// same pair, so the repo's pushdown and the CEL pass agree.
+	TrashRetention time.Duration
+	AsOf           time.Time
 }
 
 // Tenant gains a single bit of derived state for callers that need
@@ -334,6 +339,23 @@ type Handler struct {
 	// constructed but before the listener starts serving).
 	events EventProducer
 	log    *zap.Logger // best-effort sink for fan-out failures
+
+	// trashRetention is admin.tenants.trash_retention, which the derived
+	// purge_eligible filter field reads; zero leaves every tenant ineligible.
+	trashRetention time.Duration
+	// now is the clock purge_eligible is judged by. Nil: time.Now.
+	now func() time.Time
+}
+
+// SetTrashRetention sets how long a trashed tenant waits before
+// purge_eligible holds for it.
+func (h *Handler) SetTrashRetention(d time.Duration) { h.trashRetention = d }
+
+func (h *Handler) clock() time.Time {
+	if h.now == nil {
+		return time.Now()
+	}
+	return h.now()
 }
 
 // NewHandler builds a tenant handler. policyEngine is required — production
@@ -1124,19 +1146,22 @@ func (h *Handler) ListTenants(ctx context.Context, args ListTenantsArgs, pageTok
 		}
 		args.AfterID = id
 	}
+	args.TrashRetention, args.AsOf = h.trashRetention, h.clock()
 	page, next, err := h.repo.List(ctx, args)
 	if err != nil {
 		return nil, "", err
 	}
-	page, err = celpkg.FilterPage(h.cel, celpkg.TenantSchema, args.Filter, page, tenantRow)
+	row := func(t Tenant) map[string]any { return tenantRow(t, args.TrashRetention, args.AsOf) }
+	page, err = celpkg.FilterPage(h.cel, celpkg.TenantSchema, args.Filter, page, row)
 	if err != nil {
 		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
 	return page, next, nil
 }
 
-// tenantRow projects a Tenant onto the variables TenantSchema declares.
-func tenantRow(t Tenant) map[string]any {
+// tenantRow projects a Tenant onto the variables TenantSchema declares, with
+// purge_eligible judged by trashRetention as of asOf.
+func tenantRow(t Tenant, trashRetention time.Duration, asOf time.Time) map[string]any {
 	labels := map[string]string{}
 	_ = json.Unmarshal(t.Labels, &labels)
 	return map[string]any{
@@ -1155,7 +1180,17 @@ func tenantRow(t Tenant) map[string]any {
 		// search to the server while dropping the case people actually use it
 		// for.
 		"search": celpkg.SearchText(t.TenantID.String(), t.Slug, t.DisplayName),
+		// Identical to ListTenants' `purge_eligible` clause: trashed, and the
+		// retention lapsed at or before asOf.
+		"purge_eligible": PurgeEligible(t, trashRetention, asOf),
 	}
+}
+
+// PurgeEligible reports whether t is trashed and its trash retention lapsed
+// at or before asOf — the console's "Past retention".
+func PurgeEligible(t Tenant, trashRetention time.Duration, asOf time.Time) bool {
+	lapses := t.RetentionLapsesAt(trashRetention)
+	return !lapses.IsZero() && !asOf.Before(lapses)
 }
 
 // requireProvisioningAuthority admits platform.admin or the narrow
