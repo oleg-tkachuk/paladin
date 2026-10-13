@@ -74,11 +74,11 @@ def _strings(name: str, values: Iterable[str] | None, *, non_empty: bool = False
     return out
 
 
-def _positive(name: str, value: int) -> int:
+def _non_negative(name: str, value: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{name} takes an int, got {type(value).__name__}")
-    if value <= 0:
-        raise ValueError(f"{name} must be positive")
+    if value < 0:
+        raise ValueError(f"{name} must not be negative")
     return value
 
 
@@ -142,7 +142,8 @@ def attenuate(
     ``max_requests`` and ``max_budget_nanos`` give the new copy limits of its
     own — requests made with it, and its spend in nanos, billionths of the
     capability's unit — counted apart from other copies and within every limit already in
-    force.
+    force. A limit of 0 freezes the copy: its first request and its first
+    charge are refused, while the token it came from keeps working.
 
     Raises ``ValueError`` for a token that is not a Paladin Biscuit, and
     ``TypeError``/``ValueError`` for malformed arguments.
@@ -168,9 +169,9 @@ def attenuate(
     if bind_jkt is not None:
         facts.append((FACT_BIND, _thumbprint(bind_jkt)))
     if max_requests is not None:
-        facts.append((FACT_MAX_REQUESTS, _positive("max_requests", max_requests)))
+        facts.append((FACT_MAX_REQUESTS, _non_negative("max_requests", max_requests)))
     if max_budget_nanos is not None:
-        facts.append((FACT_MAX_BUDGET_NANOS, _positive("max_budget_nanos", max_budget_nanos)))
+        facts.append((FACT_MAX_BUDGET_NANOS, _non_negative("max_budget_nanos", max_budget_nanos)))
 
     ba = _biscuit()
     root = _root_key(ba, token)

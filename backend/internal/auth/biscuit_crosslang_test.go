@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,6 +21,7 @@ import (
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/dpop"
 	"github.com/oleg-tkachuk/limes/jwks"
+	"github.com/oleg-tkachuk/limes/memstore"
 )
 
 // The cross-language Biscuit case. limes mints seed.biscuit from its golden
@@ -42,8 +44,10 @@ var (
 		filepath.Join("biscuit", "attenuation.json"),
 	}
 	pythonBiscuit = filepath.Join("biscuit", "python.biscuit")
-	biscuitCase   = filepath.Join("biscuit", "attenuation.json")
-	biscuitSeed   = filepath.Join("biscuit", "seed.biscuit")
+	// pythonFrozen is the seed the Python SDK attenuated to ceilings of 0.
+	pythonFrozen = filepath.Join("biscuit", "python_frozen.biscuit")
+	biscuitCase  = filepath.Join("biscuit", "attenuation.json")
+	biscuitSeed  = filepath.Join("biscuit", "seed.biscuit")
 )
 
 // The golden key, issuer and clock limes mints seed.biscuit with
@@ -133,13 +137,10 @@ func readShared(t *testing.T, name string) string {
 	return strings.TrimSpace(string(raw))
 }
 
-// The token the Python SDK attenuated verifies under limes, narrowed exactly
-// as the shared case says.
-func TestPythonAttenuationVerifies(t *testing.T) {
-	var c crossLangCase
-	if err := json.Unmarshal([]byte(readShared(t, biscuitCase)), &c); err != nil {
-		t.Fatalf("parse case: %v", err)
-	}
+// crossLangVerifier verifies what the golden key signed, as of the golden
+// clock, metering each Biscuit copy's own limits.
+func crossLangVerifier(t *testing.T) *limes.Verifier {
+	t.Helper()
 	pub := ed25519.NewKeyFromSeed(crossLangSeed[:]).Public().(ed25519.PublicKey)
 	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{crossLangKID: pub}})
 	if err != nil {
@@ -166,6 +167,17 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
 	}
+	return v
+}
+
+// The token the Python SDK attenuated verifies under limes, narrowed exactly
+// as the shared case says.
+func TestPythonAttenuationVerifies(t *testing.T) {
+	var c crossLangCase
+	if err := json.Unmarshal([]byte(readShared(t, biscuitCase)), &c); err != nil {
+		t.Fatalf("parse case: %v", err)
+	}
+	v := crossLangVerifier(t)
 	bindSeed, err := hex.DecodeString(c.Attenuate.BindKeySeed)
 	if err != nil || len(bindSeed) != ed25519.SeedSize {
 		t.Fatalf("bind_key_seed %q is not %d hex bytes: %v", c.Attenuate.BindKeySeed, ed25519.SeedSize, err)
@@ -221,5 +233,53 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 	}
 	if _, err := v.Verify(ctx, limes.VerifyRequest{Token: token, Audience: TokenPlaneMCP}); err == nil {
 		t.Error("the plane the attenuation dropped is still accepted")
+	}
+}
+
+// A copy the Python SDK froze — ceilings of 0 requests and 0 spend — verifies,
+// and its first request and its first charge are refused, while the seed it
+// came from is still metered as before.
+func TestPythonFrozenCopyIsRefused(t *testing.T) {
+	ctx := context.Background()
+	v := crossLangVerifier(t)
+	seed, err := v.Verify(ctx, limes.VerifyRequest{Token: readShared(t, biscuitSeed), Audience: TokenPlaneData})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	frozen, err := v.Verify(ctx, limes.VerifyRequest{Token: readShared(t, pythonFrozen), Audience: TokenPlaneData})
+	if err != nil {
+		t.Fatalf("the frozen copy is refused at verification: %v", err)
+	}
+	copies := frozen.Capability().Copies
+	if len(copies) != 1 || copies[0].Requests == nil || copies[0].Budget == nil ||
+		*copies[0].Requests != (limes.RequestCeiling{}) || *copies[0].Budget != (limes.BudgetCeiling{}) {
+		t.Fatalf("Copies = %+v, want one with ceilings of 0 requests and 0 nanos", copies)
+	}
+
+	records, err := memstore.NewStore(memstore.StoreConfig{Now: crossLangClock})
+	if err != nil {
+		t.Fatalf("records: %v", err)
+	}
+	if err := records.Insert(ctx, limes.InsertRequest{Capability: seed.Capability(), IssuedBy: seed.Capability().Subject}); err != nil {
+		t.Fatalf("record the seed: %v", err)
+	}
+	usage, err := memstore.NewUsageStore(memstore.UsageStoreConfig[struct{}]{Records: records, Now: crossLangClock})
+	if err != nil {
+		t.Fatalf("usage: %v", err)
+	}
+	// The smallest charge there is: a ceiling of 0 refuses even that.
+	const smallestCharge limes.Nanos = 1
+
+	if _, err := usage.Bump(ctx, limes.BumpRequest{Subject: frozen.MeterSubject()}); !errors.Is(err, limes.ErrRequestLimitExceeded) {
+		t.Errorf("first request on the frozen copy: err = %v, want ErrRequestLimitExceeded", err)
+	}
+	if _, err := usage.Charge(ctx, limes.ChargeRequest{Subject: frozen.MeterSubject(), Amount: smallestCharge}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
+		t.Errorf("first charge on the frozen copy: err = %v, want ErrBudgetExceeded", err)
+	}
+	if _, err := usage.Bump(ctx, limes.BumpRequest{Subject: seed.MeterSubject()}); err != nil {
+		t.Errorf("a request on the seed after its copy froze: %v", err)
+	}
+	if _, err := usage.Charge(ctx, limes.ChargeRequest{Subject: seed.MeterSubject(), Amount: smallestCharge}, nil); err != nil {
+		t.Errorf("a charge on the seed after its copy froze: %v", err)
 	}
 }

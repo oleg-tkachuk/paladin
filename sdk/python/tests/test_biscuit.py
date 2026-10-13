@@ -1,11 +1,11 @@
 """paladin.attenuate, against sdk/testdata/biscuit_vocabulary.json — a copy of
 the vocabulary limes (github.com/oleg-tkachuk/limes) defines — and the
-cross-language case in sdk/testdata/biscuit/, whose Python-made token the
+cross-language case in sdk/testdata/biscuit/, whose Python-made tokens the
 backend verifies with limes (backend/internal/auth/biscuit_crosslang_test.go).
 
     PALADIN_WRITE_BISCUIT_FIXTURE=1 uv run pytest tests/test_biscuit.py
 
-rewrites python.biscuit from seed.biscuit.
+rewrites python.biscuit and python_frozen.biscuit from seed.biscuit.
 """
 
 from __future__ import annotations
@@ -26,6 +26,10 @@ TESTDATA = Path(__file__).resolve().parents[2] / "testdata"
 VOCABULARY = TESTDATA / "biscuit_vocabulary.json"
 FIXTURES = TESTDATA / "biscuit"
 SEED, PYTHON, CASE = (FIXTURES / n for n in ("seed.biscuit", "python.biscuit", "attenuation.json"))
+# The seed attenuated to ceilings of nothing: the backend checks that its first
+# request and its first charge are refused.
+FROZEN = FIXTURES / "python_frozen.biscuit"
+FROZEN_ARGS: dict[str, Any] = {"max_requests": 0, "max_budget_nanos": 0}
 WRITE_FIXTURE = "PALADIN_WRITE_BISCUIT_FIXTURE"
 JKT = "nhJL-4fvkZxa3j-NAU29y8N1wqcS_E-ZMtKfgT23tV0"
 # A Biscuit appends each attenuation as one more block after the authority.
@@ -121,6 +125,28 @@ def test_checked_in_fixture_is_the_shared_case() -> None:
 
 
 @needs_biscuit
+def test_a_zero_ceiling_freezes_the_copy() -> None:
+    out = paladin.attenuate(_seed(), **FROZEN_ARGS)
+    assert _facts(out, AUTHORITY_BLOCKS) == {
+        f"{pb.FACT_MAX_REQUESTS}(0)",
+        f"{pb.FACT_MAX_BUDGET_NANOS}(0)",
+    }
+
+
+@needs_biscuit
+def test_checked_in_frozen_fixture_is_a_frozen_seed() -> None:
+    """python_frozen.biscuit — what the backend meters — is the seed frozen."""
+    if os.environ.get(WRITE_FIXTURE):
+        FROZEN.write_text(paladin.attenuate(_seed(), **FROZEN_ARGS) + "\n")
+    token = FROZEN.read_text().strip()
+    assert _blocks(token).block_source(0) == _blocks(_seed()).block_source(0)
+    assert _blocks(token).block_count() == AUTHORITY_BLOCKS + 1
+    assert _facts(token, AUTHORITY_BLOCKS) == _facts(
+        paladin.attenuate(_seed(), **FROZEN_ARGS), AUTHORITY_BLOCKS
+    )
+
+
+@needs_biscuit
 def test_attenuations_chain() -> None:
     once = paladin.attenuate(_seed(), ops=["get", "list"])
     twice = paladin.attenuate(once, resource_uris=["paladin://t/c/k"])
@@ -166,8 +192,8 @@ def test_refuses_a_token_whose_chain_is_broken() -> None:
         ({"expires_at": "2026-01-01"}, TypeError, "datetime"),
         ({"bind_jkt": "short"}, ValueError, "thumbprint"),
         ({"bind_jkt": JKT + "="}, ValueError, "thumbprint"),
-        ({"max_requests": 0}, ValueError, "positive"),
-        ({"max_budget_nanos": -1}, ValueError, "positive"),
+        ({"max_requests": -1}, ValueError, "negative"),
+        ({"max_budget_nanos": -1}, ValueError, "negative"),
         ({"max_requests": True}, TypeError, "int"),
         ({"max_budget_nanos": 1.5}, TypeError, "int"),
     ],
