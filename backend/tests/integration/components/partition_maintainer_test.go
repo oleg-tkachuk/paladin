@@ -67,6 +67,7 @@ func TestPartitionMaintainer_CreateAndDrop(t *testing.T) {
 		t.Fatalf("dialect: %v", err)
 	}
 	goose.SetBaseFS(migrations.FS)
+	migrateLimes(t, dsn)
 	if err := goose.Up(db, "."); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

@@ -24,12 +24,9 @@ const beforeOnePerTenant = 61
 func TestStorageMigrationsBecomeOnePerTenant(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	pool := startPostgres(t)
+	pool := startPostgresAt(t, beforeOnePerTenant)
 	db := stdlib.OpenDBFromPool(pool)
 	t.Cleanup(func() { _ = db.Close() })
-	if err := goose.DownTo(db, ".", beforeOnePerTenant); err != nil {
-		t.Fatalf("migrate down to %d: %v", beforeOnePerTenant, err)
-	}
 
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
 	single, _ := mkTenant(t, ctx, pool, "shared")

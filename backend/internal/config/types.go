@@ -505,7 +505,7 @@ type Worker struct {
 	// OpsURL is where OTHER pods reach that ops listener — the admin
 	// plane's SystemService.GetPlatformStats proxies
 	// <ops_url>/system/rls-census.json from it, because objects, quotas,
-	// capability_records, api_tokens and event_subscriptions are all RLS'd
+	// the capability records, api_tokens and event_subscriptions are all RLS'd
 	// and only the worker holds a BYPASSRLS pool. Cluster-internal Service
 	// URL (e.g. "http://paladin-core-worker:8099"); empty disables the proxy
 	// and the RPC reports rls.available=false. Same shape and contract as

@@ -31,6 +31,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
 
@@ -57,6 +58,11 @@ func startPostgres(tb testing.TB) *pgxpool.Pool {
 	cc, err := pgx.ParseConfig(dsn)
 	if err != nil {
 		tb.Fatalf("parse dsn: %v", err)
+	}
+	// The limes schema first, as the migrate step does: a goose migration
+	// grants and triggers on its tables.
+	if err := postgres.MigrateLimes(ctx, cc); err != nil {
+		tb.Fatalf("migrate limes: %v", err)
 	}
 	sqlDB := stdlib.OpenDB(*cc)
 	if err := goose.SetDialect("postgres"); err != nil {

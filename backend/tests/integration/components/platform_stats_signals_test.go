@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 )
 
@@ -73,25 +75,19 @@ func seedSignals(t *testing.T, ctx context.Context, pool *pgxpool.Pool) signalSe
 	bucketQuota(bucket("bkt-shr-a-"+hex, nil), atLimit)
 	bucketQuota(bucket("bkt-shr-h-"+hex, nil), healthy)
 
-	capability := func(tenant uuid.UUID, expiresIn string, revoked bool) {
+	now := time.Now()
+	capability := func(tenant uuid.UUID, expiresIn time.Duration, revoked bool) {
 		t.Helper()
-		id := uuid.New()
-		mustExec(t, ctx, pool,
-			`INSERT INTO capability_records
-			   (id, tenant_id, issuer, principal_kind, principal_subject,
-			    audience, caveats, created_by, expires_at)
-			 VALUES ($1, $2, 'paladin', 'service_account', 'sub', '{a}', '{}'::jsonb,
-			         'fixture-issuer', now() + $3::interval)`,
-			id, tenant, expiresIn)
+		id := seedCapability(t, ctx, pool, tenant, limes.PrincipalService, now.Add(expiresIn), uuid.Nil)
 		if revoked {
-			mustExec(t, ctx, pool, `INSERT INTO capability_revocations (id) VALUES ($1)`, id)
+			seedRevocation(t, ctx, pool, id)
 		}
 	}
-	capability(s.busy, "1 hour", false)
-	capability(s.busy, "2 hours", false)
-	capability(s.busy, "3 hours", true) // revoked: not expiring, gone
-	capability(s.busy, "48 hours", false)
-	capability(s.quiet, "1 hour", false)
+	capability(s.busy, time.Hour, false)
+	capability(s.busy, 2*time.Hour, false)
+	capability(s.busy, 3*time.Hour, true) // revoked: not expiring, gone
+	capability(s.busy, 48*time.Hour, false)
+	capability(s.quiet, time.Hour, false)
 
 	token := func(tenant uuid.UUID, expiresIn string) {
 		t.Helper()

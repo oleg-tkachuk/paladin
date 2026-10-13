@@ -389,15 +389,21 @@ erDiagram
     users ||--o{ refresh_tokens : holds
     users ||--o| user_settings : has
     tenants ||--o{ api_tokens : has
-    tenants ||--o{ capability_records : issues
-    capability_records ||--o| capability_revocations : revokes
-    capability_records ||--o{ capability_biscuit_revocations : "revokes a copy"
-    capability_records ||--o| capability_usage : counts
-    capability_records ||--o{ capability_copy_usage : "counts a copy"
-    capability_records ||--o{ capability_reservations : holds
-    capability_records ||--o{ charges : meters
-    charges ||--o{ charge_refunds : refunds
-    tenants ||--o| tenant_budgets : caps
+```
+
+Capabilities, in the `limes` schema limes/pgstore keeps. Every table carries
+its tenant's id but none refers to `tenants`, and the meter's tables refer to
+no record: the counters and the ledger outlive a purged capability.
+
+```mermaid
+erDiagram
+    capabilities ||--o| revocations : revokes
+    capabilities ||--o{ biscuit_revocations : "revokes a copy"
+    capabilities ||--o| usage : counts
+    capabilities ||--o{ copy_usage : "counts a copy"
+    capabilities ||--o{ reservations : holds
+    capabilities ||--o{ charges : meters
+    tenant_budgets ||--o{ charges : caps
 ```
 
 Storage:
@@ -426,8 +432,8 @@ erDiagram
     tenants ||--o{ quotas : limits
 ```
 
-`capability_records` also references itself: a delegated capability points
-at its parent. The two `copy` tables are keyed by a Biscuit block's revocation
+`capabilities` also references itself: a delegated capability points
+at its parent. The two copy tables are keyed by a Biscuit block's revocation
 id rather than a uuid: a copy exists only in its holder's hands, and the id is
 all the server ever sees of it (ADR-0021).
 

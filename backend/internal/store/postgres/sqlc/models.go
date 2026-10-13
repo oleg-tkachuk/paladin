@@ -382,103 +382,6 @@ type BucketQuota struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
-type CapabilityBiscuitRevocation struct {
-	RevocationID []byte             `json:"revocation_id"`
-	CapabilityID pgtype.UUID        `json:"capability_id"`
-	RevokedAt    pgtype.Timestamptz `json:"revoked_at"`
-	Reason       string             `json:"reason"`
-	Actor        string             `json:"actor"`
-}
-
-type CapabilityCopyUsage struct {
-	RevocationID []byte             `json:"revocation_id"`
-	CapabilityID pgtype.UUID        `json:"capability_id"`
-	RequestCount int64              `json:"request_count"`
-	Spent        pgtype.Numeric     `json:"spent"`
-	Reserved     pgtype.Numeric     `json:"reserved"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-}
-
-type CapabilityRecord struct {
-	ID               pgtype.UUID        `json:"id"`
-	TenantID         pgtype.UUID        `json:"tenant_id"`
-	ParentID         pgtype.UUID        `json:"parent_id"`
-	Issuer           string             `json:"issuer"`
-	PrincipalKind    string             `json:"principal_kind"`
-	PrincipalSubject string             `json:"principal_subject"`
-	PrincipalPayload []byte             `json:"principal_payload"`
-	Audience         []string           `json:"audience"`
-	Caveats          []byte             `json:"caveats"`
-	Generation       int64              `json:"generation"`
-	CreatedBy        string             `json:"created_by"`
-	IssuedAt         pgtype.Timestamptz `json:"issued_at"`
-	NotBefore        pgtype.Timestamptz `json:"not_before"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	ConfirmationJkt  *string            `json:"confirmation_jkt"`
-	IssuedBy         []byte             `json:"issued_by"`
-	MaxBudget        pgtype.Numeric     `json:"max_budget"`
-	MaxRequests      *int64             `json:"max_requests"`
-}
-
-type CapabilityReservation struct {
-	ID                 pgtype.UUID        `json:"id"`
-	TenantID           pgtype.UUID        `json:"tenant_id"`
-	CapabilityID       pgtype.UUID        `json:"capability_id"`
-	Amount             pgtype.Numeric     `json:"amount"`
-	UnitCode           string             `json:"unit_code"`
-	Op                 string             `json:"op"`
-	ActorSubject       string             `json:"actor_subject"`
-	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	CopyIds            [][]byte           `json:"copy_ids"`
-	CopyMaxBudgetNanos []int64            `json:"copy_max_budget_nanos"`
-	AncestorIds        []pgtype.UUID      `json:"ancestor_ids"`
-}
-
-type CapabilityRevocation struct {
-	ID        pgtype.UUID        `json:"id"`
-	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
-	Reason    string             `json:"reason"`
-	Actor     string             `json:"actor"`
-	Cascade   bool               `json:"cascade"`
-}
-
-type CapabilityUsage struct {
-	ID           pgtype.UUID        `json:"id"`
-	CapabilityID pgtype.UUID        `json:"capability_id"`
-	RequestCount int64              `json:"request_count"`
-	SpentUsd     pgtype.Numeric     `json:"spent_usd"`
-	UnitCode     string             `json:"unit_code"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	ReservedUsd  pgtype.Numeric     `json:"reserved_usd"`
-}
-
-type Charge struct {
-	ID            pgtype.UUID        `json:"id"`
-	TenantID      pgtype.UUID        `json:"tenant_id"`
-	TenantSlug    string             `json:"tenant_slug"`
-	CapabilityID  pgtype.UUID        `json:"capability_id"`
-	OccurredAt    pgtype.Timestamptz `json:"occurred_at"`
-	Amount        pgtype.Numeric     `json:"amount"`
-	UnitCode      string             `json:"unit_code"`
-	Op            string             `json:"op"`
-	ActorSubject  string             `json:"actor_subject"`
-	CopyIds       [][]byte           `json:"copy_ids"`
-	ExternalRef   *string            `json:"external_ref"`
-	ReservationID pgtype.UUID        `json:"reservation_id"`
-	Overrun       bool               `json:"overrun"`
-	AncestorIds   []pgtype.UUID      `json:"ancestor_ids"`
-	TenantPeriod  *int64             `json:"tenant_period"`
-}
-
-type ChargeRefund struct {
-	ID         pgtype.UUID        `json:"id"`
-	ChargeID   pgtype.UUID        `json:"charge_id"`
-	TenantID   pgtype.UUID        `json:"tenant_id"`
-	Amount     pgtype.Numeric     `json:"amount"`
-	RefundedAt pgtype.Timestamptz `json:"refunded_at"`
-}
-
 type Collection struct {
 	ID              pgtype.UUID        `json:"id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`
@@ -810,20 +713,6 @@ type Tenant struct {
 	CreatedAt            pgtype.Timestamptz  `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz  `json:"updated_at"`
 	DeletedAt            pgtype.Timestamptz  `json:"deleted_at"`
-}
-
-type TenantBudget struct {
-	ID              pgtype.UUID        `json:"id"`
-	TenantID        pgtype.UUID        `json:"tenant_id"`
-	MaxBudgetUsd    pgtype.Numeric     `json:"max_budget_usd"`
-	SpentUsd        pgtype.Numeric     `json:"spent_usd"`
-	UnitCode        string             `json:"unit_code"`
-	PeriodStart     pgtype.Timestamptz `json:"period_start"`
-	PeriodEnd       pgtype.Timestamptz `json:"period_end"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	ResourceVersion int64              `json:"resource_version"`
-	ReservedUsd     pgtype.Numeric     `json:"reserved_usd"`
-	Period          int64              `json:"period"`
 }
 
 type TenantDefaultBinding struct {

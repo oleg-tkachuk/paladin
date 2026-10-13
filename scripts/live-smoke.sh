@@ -8,10 +8,9 @@
 # that an event reaches the dispatcher and can be sent again.
 #
 # It creates its own tenant, bucket, collection, subscription and two
-# capabilities, and removes them on exit — except the tenant itself, which ends
-# in the trash: the capability calls are billed, and a tenant with charges is
-# kept for them (charges.tenant_id is ON DELETE RESTRICT). Endpoints and the admin credential
-# come from the cluster, the way scripts/e2e-cluster.sh finds them:
+# capabilities, and removes them on exit, the tenant purged with its charges.
+# Endpoints and the admin credential come from the cluster, the way
+# scripts/e2e-cluster.sh finds them:
 #
 #   KUBE_CONTEXT=orbstack ./scripts/live-smoke.sh
 #

@@ -44,6 +44,21 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — capabilities are stored by limes/pgstore
+
+- **Breaking, data.** Capabilities, their revocations and counters, budget
+  holds, the charges ledger and tenant budgets move to the `limes` schema,
+  kept by limes/pgstore. Migration `076` drops the old tables and carries
+  nothing over: every capability is refused after the upgrade, every tenant
+  budget is gone and billing starts empty. Issue capabilities again and set
+  tenant budgets again.
+- **Breaking, deploy.** The migrate step creates the `limes` schema before
+  Goose runs, so the migrate role must be allowed to create a schema in the
+  database (`CREATE` on it, as the database owner has).
+- **Behaviour, tenants.** `PurgeTenant` deletes the tenant's capabilities,
+  budget and charges with it; a tenant that has been charged no longer has
+  to keep its row for the ledger.
+
 ## v33.3.0 — capabilities run on limes v0.57.0
 
 - **Behaviour, delegation.** `CapabilityService.Delegate` refuses a child

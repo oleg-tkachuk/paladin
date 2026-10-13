@@ -20,7 +20,7 @@ their parent, and children that hold their parent hostage.
 
 | Parent | `ON DELETE CASCADE` — vanishes silently | `ON DELETE RESTRICT` — blocks the delete |
 | --- | --- | --- |
-| `tenants` | `quotas`, `tenant_budgets`, `api_tokens`, `refresh_tokens`, `oauth_authorization_codes`, `operations`, `event_subscriptions`, `event_deliveries`, `object_locks`, `object_tags`, `multipart_uploads`, `capability_records`, `capability_reservations`, `idempotency_keys` (every partition), `tenant_default_bindings`, `tenant_storage_migrations`, `tenant_slug_history`, `tenant_rate_buckets` | `users`, `user_settings`, `buckets.owner_tenant_id`, `collections`, `charges`, `charge_refunds` |
+| `tenants` | `quotas`, `api_tokens`, `refresh_tokens`, `oauth_authorization_codes`, `operations`, `event_subscriptions`, `event_deliveries`, `object_locks`, `object_tags`, `multipart_uploads`, `idempotency_keys` (every partition), `tenant_default_bindings`, `tenant_storage_migrations`, `tenant_slug_history`, `tenant_rate_buckets` | `users`, `user_settings`, `buckets.owner_tenant_id`, `collections` |
 | `storage_backends` | `storage_backend_health` | `buckets` |
 | `buckets` | `replication_state`, `bucket_quotas` | `collections`, `tenant_default_bindings`, `tenant_storage_migrations`, `multipart_uploads`, `pending_purges`, `pending_multipart_aborts` |
 | `collections` | — | `objects` |
@@ -32,9 +32,11 @@ Two things are worth reading off that table directly.
 and no flag changes that — the FK refuses. This is deliberate: the alternative
 is an operator erasing a tenant's storage with one call.
 
-**`charges` restricts on purpose.** The billing trail is not a child that
-follows its tenant into the void; a tenant with charges must have them dealt
-with explicitly.
+**Capabilities go with their tenant, charges included.** The `limes` schema
+keeps no foreign key to `tenants`, so no row of it appears in the table above:
+the purge deletes the tenant's capabilities, revocations, counters, holds,
+budget and charges itself, in the same transaction as the tenant row. Billing
+history does not outlive the tenant it belongs to.
 
 ## Tenant
 

@@ -312,10 +312,18 @@ func promoteAppRole(ctx context.Context, dsn string) error {
 	return err
 }
 
-// applyMigrations runs goose against the embedded migration FS. Uses
+// applyMigrations runs the limes schema's migrations, then goose against the
+// embedded migration FS. Uses
 // database/sql + the pgx stdlib driver because goose's API is sql.DB-
 // shaped. Closes its own connection.
 func applyMigrations(dsn string) error {
+	cc, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return err
+	}
+	if err := postgres.MigrateLimes(context.Background(), cc); err != nil {
+		return err
+	}
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return err

@@ -11,11 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
-	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 // smallPoolConns is a pool smaller than the burst of charges below.
@@ -54,7 +51,7 @@ func TestRefusedChargesDoNotDrainThePool(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	usage := capstore.NewUsageStore(sqlc.New(pool), pool, zap.NewNop())
+	usage := newUsageStore(t, pool)
 
 	burstCtx, cancel := context.WithTimeout(ctx, refusedBurstDeadline)
 	defer cancel()

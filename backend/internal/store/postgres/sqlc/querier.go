@@ -34,18 +34,6 @@ type Querier interface {
 	// declaratively now: objects carry a composite FK to (tenant_id, id), so a
 	// name cannot be moved under a bucket that would orphan them.
 	BindCollectionToBucket(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, name_3 string, expectedVersion int64) (int64, error)
-	// Per-capability runtime counters. Atomic UPSERT-and-check shape so
-	// the hot path is a single round-trip with concurrency-safe semantics.
-	//
-	// Naming dichotomy: the SQL columns retain their `_usd` suffixes for
-	// historical reasons (avoiding sqlc regen + every-query churn). The
-	// unit_code column added in the schema baseline (001_initial_schema.sql) is the source of truth for
-	// currency interpretation; the Go domain types use Amount + UnitCode.
-	// Increments request_count by 1 and rejects when over the supplied cap.
-	// A NULL max_requests is unlimited; 0 allows no request at all, so the
-	// insert path checks the cap too. A new row counts in the capability's own
-	// unit, so its usage reads in the currency it was issued in.
-	BumpCapabilityRequestCount(ctx context.Context, capabilityID pgtype.UUID, unitCode string, maxRequests *int64) (int64, error)
 	// Per-tenant request rate limiting (009_tenant_rate_buckets.sql).
 	//
 	// Shared across replicas: an in-memory bucket gave each pod its own ceiling,
@@ -63,22 +51,6 @@ type Querier interface {
 	// seconds until the bucket rolls, which becomes Retry-After.
 	BumpTenantRateBucket(ctx context.Context, tenantID pgtype.UUID) (BumpTenantRateBucketRow, error)
 	CancelOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (int64, error)
-	// Adds amount to spent_usd and rejects when spend plus open holds
-	// (reserved_usd) would pass the supplied cap. A NULL max_budget is
-	// unlimited; 0 allows no spend. unit_code is set on insert and preserved on conflict (an
-	// existing row owns its currency).
-	//
-	// The ceiling is checked on BOTH paths. The INSERT is a SELECT filtered by
-	// it, so a first charge above the cap inserts nothing, conflicts with
-	// nothing and returns no row; a VALUES insert used to accept any first
-	// charge, whatever the cap.
-	ChargeCapability(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string, maxBudgetUsd pgtype.Numeric) (pgtype.Numeric, error)
-	// Atomic UPSERT-and-check, same shape as ChargeCapability. When the
-	// row is missing, inserts a fresh accumulator row with no ceiling (NULL,
-	// unlimited) and the charge's unit_code, normalised by the caller.
-	// Returns the new spent_usd; pgx.ErrNoRows means "would exceed cap" —
-	// caller maps to ErrTenantBudgetExceeded.
-	ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string, now pgtype.Timestamptz) (pgtype.Numeric, error)
 	// True when a non-DELETED row already exists at (tenant, collection_id, path).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
 	CheckLiveCollision(ctx context.Context, tenantID pgtype.UUID, name string, path string) (bool, error)
@@ -174,7 +146,6 @@ type Querier interface {
 	// it flips state to 'deleting' via MarkBucketDeleting and lets the
 	// worker drive the physical delete.
 	DeleteBucketV2(ctx context.Context, name string, name_2 string, expectedVersion int64) (int64, error)
-	DeleteCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (int64, error)
 	DeleteCollection(ctx context.Context, tenantID pgtype.UUID, name string, expectedVersion int64) (int64, error)
 	DeleteEventSubscription(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	// The abort landed. S3 DELETE-style operations are idempotent, so a debt
@@ -245,7 +216,6 @@ type Querier interface {
 	GetBucketQuotaByID(ctx context.Context, id pgtype.UUID) (GetBucketQuotaByIDRow, error)
 	// v2 bucket queries — full surface for admin/v1.BucketService.
 	GetBucketV2(ctx context.Context, name string, name_2 string) (GetBucketV2Row, error)
-	GetCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID) (GetCapabilityUsageRow, error)
 	// Returns the backend and bucket by NAME alongside the row: callers build
 	// resource names from this, and a resource name made of uuids would not
 	// resolve back to anything a client can use.
@@ -290,7 +260,6 @@ type Querier interface {
 	// LEFT JOIN tenant_default_bindings: 0/1 row per tenant (tenant_id is its unique key),
 	// so the embed stays single-row. backend_id/bucket_name are NULL when unbound.
 	GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, error)
-	GetTenantBudget(ctx context.Context, tenantID pgtype.UUID) (GetTenantBudgetRow, error)
 	// A slug is unique among live tenants only (tenants_slug_live_key), so a
 	// trashed tenant's slug can be taken by a live one. The slug names the live
 	// tenant when there is one, else the most recently trashed: deterministic,
@@ -531,22 +500,6 @@ type Querier interface {
 	// (the same trap that bit ListUsersByTenant). Keep the
 	// `sqlc.narg(after_id) IS NULL OR …` shape on every cursor query here.
 	ListStorageBackends(ctx context.Context, afterID *string, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, providerIn []string, regionIn []string, enabled *bool, readOnly *bool, maintenance *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListStorageBackendsRow, error)
-	// Tenant budget rows, most at risk first (limes.TenantBudgets.ListTenantBudgets).
-	//
-	// ceiling_class ranks the kind of ceiling: 0 for a ceiling of 0, which
-	// allows nothing and leads; 1 for a bounded one; 2 for unlimited (NULL),
-	// which has no utilization and trails. Bounded rows rank by spent / max,
-	// unclamped, descending. The quotient is compared as
-	// trunc(spent * 10^40 / max): spent and max carry nine decimals below
-	// 10^9, so two different fractions differ by more than 10^-36 and their
-	// keys by more than 10^4 — the order is the fractions' own, and equal
-	// fractions get equal keys. Ties go by tenant id.
-	//
-	// at_or_past keeps rows with a ceiling of 0, and bounded rows where
-	// spent * 100 >= threshold_pct * max, exactly; unlimited_only keeps rows
-	// with no ceiling. Both false lists every row. after_class, after_key and
-	// after_tenant, all set or all NULL, resume after a row of this order.
-	ListTenantBudgets(ctx context.Context, atOrPast bool, thresholdPct pgtype.Numeric, unlimitedOnly bool, afterClass *int32, afterKey pgtype.Numeric, afterTenant pgtype.UUID, rowLimit int32) ([]ListTenantBudgetsRow, error)
 	// include_trashed = false → active rows only; true → both;
 	// only_trashed = true → trashed only (overrides include_trashed).
 	// The boolean gating is inline-CASE so sqlc emits a single prepared
@@ -738,12 +691,6 @@ type Querier interface {
 	// in place whichever promotes the object first: this upload's completion, or
 	// the storage event, which carries no checksum.
 	RecordCompositeChecksum(ctx context.Context, checksum *string, partSizeBytes *int64, objectID pgtype.UUID) (int64, error)
-	// Symmetric refund on the per-capability counter. Same floor rule.
-	RefundCapabilityUsage(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric) error
-	// Subtracts amount; floors at 0 so a refund larger than current
-	// spend doesn't go negative (which would silently grant the
-	// difference back as future budget).
-	RefundTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric) error
 	// Undoes a claim whose handling failed, so the broker's redelivery is
 	// handled rather than skipped as a duplicate.
 	ReleaseIngestedEvent(ctx context.Context, source string, eventID string) error
@@ -900,37 +847,6 @@ type Querier interface {
 	SetStorageMigrationState(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Records the object count and moves provisioning -> copying.
 	SetStorageMigrationTotal(ctx context.Context, objectsTotal int64, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// Tenant aggregate budget queries.
-	//
-	// Naming dichotomy: SQL columns retain `_usd` suffixes for historical
-	// reasons; unit_code (the schema baseline (001_initial_schema.sql)) is the source of truth for the
-	// currency interpretation. Go domain types use Amount + UnitCode.
-	// Upserts the cap and rolls the period. Operators call this from
-	// admin tooling on every billing cycle; spent_usd is reset to 0
-	// when reset_spend = true (idiomatic monthly close), preserved
-	// otherwise (mid-cycle adjustment that just changes the cap).
-	//
-	// A NULL max_budget_usd is unlimited; 0 freezes the tenant's spend.
-	// period_end is written as given: NULL leaves the window open-ended. now is
-	// the store's clock, which a period starts by.
-	//
-	// unit_code is written verbatim on insert — the platform's currency
-	// (default_unit_code) when the caller names none; on conflict, it's
-	// updated only when the caller passes a non-empty value (an empty
-	// arg keeps the existing currency unchanged — operators editing
-	// the cap shouldn't accidentally reinterpret an EUR budget as USD).
-	//
-	// OCC on update, no guard on insert. Version 0 means no ceiling has been
-	// set: the runtime created the row by counting a charge or a hold, and the
-	// first set moves it to 1, as creating the row does. The DO UPDATE's WHERE is
-	// the concurrency check: it fires only when the stored resource_version
-	// matches what the caller read. A mismatch — including a caller that passed 0
-	// for a ceiling another set — updates nothing and returns no row, which the
-	// adapter maps to a version conflict. Without it two operators editing the
-	// same cap silently overwrote each other.
-	// A missing row is version 0: the insert fires only for a caller that read
-	// none. An existing row always reaches the DO UPDATE, whose guard decides.
-	SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, defaultUnitCode string, now pgtype.Timestamptz, periodEnd pgtype.Timestamptz, expectedVersion int64, resetSpend bool) (SetTenantBudgetRow, error)
 	// Tenant default-binding queries.
 	//
 	// One row per tenant. Set at CreateTenant time; updated by future

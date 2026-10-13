@@ -2,20 +2,21 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/pressly/goose/v3"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
-// openMigrationDB returns the *sql.DB goose runs against. When
+// migrationConnConfig is the connection goose and pgstore migrate on. When
 // migrateCfg.MigrateDSN is non-empty, a fresh ConnConfig is parsed from
 // that DSN — production deploys point it at a DDL-capable role distinct
 // from the runtime `dsn` (`paladin_migrate` vs `paladin_app`). When MigrateDSN
@@ -25,8 +26,8 @@ import (
 // Either way the connection is tagged with `application_name=paladin-migrate`
 // so DBA dashboards can tell the migration session apart from runtime
 // traffic in pg_stat_activity.
-func openMigrationDB(runtimeCfg *pgx.ConnConfig, migrateCfg *config.Postgres) (*sql.DB, error) {
-	cc := runtimeCfg
+func migrationConnConfig(runtimeCfg *pgx.ConnConfig, migrateCfg *config.Postgres) (*pgx.ConnConfig, error) {
+	cc := runtimeCfg.Copy()
 	if migrateCfg != nil && migrateCfg.MigrateDSN != "" {
 		// IMPORTANT: parse `MigrateDSN`, NOT `DSN`. Reading `DSN` here
 		// would point goose at the runtime user (paladin_app) — which has
@@ -57,8 +58,34 @@ func openMigrationDB(runtimeCfg *pgx.ConnConfig, migrateCfg *config.Postgres) (*
 		cc.RuntimeParams = map[string]string{}
 	}
 	cc.RuntimeParams["application_name"] = "paladin-migrate"
-	return stdlib.OpenDB(*cc), nil
+	return cc, nil
 }
+
+// MigrateLimes brings the limes schema — capabilities, their meter and the
+// tenant budgets, which pgstore owns — up to the version this build queries.
+// It runs before goose: a goose migration grants the runtime roles pgstore's
+// tables and hangs Paladin's triggers on them, so they must exist first.
+func MigrateLimes(ctx context.Context, cc *pgx.ConnConfig) error {
+	pc, err := pgxpool.ParseConfig("")
+	if err != nil {
+		return fmt.Errorf("limes migrate: %w", err)
+	}
+	pc.ConnConfig = cc
+	pc.MaxConns = limesMigrateConns
+	pool, err := pgxpool.NewWithConfig(ctx, pc)
+	if err != nil {
+		return fmt.Errorf("limes migrate: %w", err)
+	}
+	defer pool.Close()
+	if err := pgstore.Migrate(ctx, pool); err != nil {
+		return fmt.Errorf("limes migrate: %w", err)
+	}
+	return nil
+}
+
+// limesMigrateConns is the connections pgstore.Migrate needs: it migrates on
+// one, under an advisory lock.
+const limesMigrateConns = 1
 
 // gooseLogger adapts goose's Printf to zap, parsing for specific messages
 type gooseLogger struct {
@@ -111,11 +138,15 @@ func (d *DB) RunMigrationsTo(ctx context.Context, fs embed.FS, target int64) err
 	return d.runMigrationsTo(ctx, fs, target, nil)
 }
 
-func (d *DB) runMigrationsTo(_ context.Context, fs embed.FS, target int64, migrateCfg *config.Postgres) error {
-	db, err := openMigrationDB(d.Pool.Config().ConnConfig, migrateCfg)
+func (d *DB) runMigrationsTo(ctx context.Context, fs embed.FS, target int64, migrateCfg *config.Postgres) error {
+	cc, err := migrationConnConfig(d.Pool.Config().ConnConfig, migrateCfg)
 	if err != nil {
 		return err
 	}
+	if err := MigrateLimes(ctx, cc); err != nil {
+		return err
+	}
+	db := stdlib.OpenDB(*cc)
 	defer func() {
 		if err := db.Close(); err != nil {
 			d.log.Error("failed to close db", zap.Error(err))
