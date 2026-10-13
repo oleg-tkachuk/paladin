@@ -300,6 +300,11 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		delegSubj = s
 	}
 
+	// The child is recorded in the parent's tenant, where the parent's own
+	// record is: the request's principal may be bound to another (an admin's
+	// to the platform tenant), and the store is scoped by the tenant the
+	// request acts on. The presented capability is the grant for acting there.
+	ctx = auth.WithActingTenant(ctx, parent.Subject.TenantID)
 	res, err := h.issuer.Delegate(ctx, limes.DelegateRequest{
 		Parent:          verified,
 		Subject:         delegSubj,

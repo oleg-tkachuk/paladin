@@ -181,6 +181,36 @@ func TestDelegate_CapabilityPath_AllowedWithOpShare(t *testing.T) {
 	}
 }
 
+// insertCtxStore records the context of the last Insert.
+type insertCtxStore struct {
+	fakeStore
+	insertCtx context.Context
+}
+
+func (s *insertCtxStore) Insert(ctx context.Context, _ limes.InsertRequest) error {
+	s.insertCtx = ctx
+	return nil
+}
+
+// The child is recorded acting on the parent's tenant, whatever tenant the
+// caller's principal is bound to: the store is scoped by it, and under any
+// other the parent's record is not there to delegate from.
+func TestDelegate_RecordsTheChildInTheParentsTenant(t *testing.T) {
+	store := &insertCtxStore{}
+	m := newMinter(t, store)
+	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
+	h := NewHandler(m.Issuer, m.Verifier, store, nil, &denyAuthorizer{})
+
+	ctx := auth.WithCapability(callerCtx(uuid.New(), "platform.admin"), parent)
+	if _, err := h.Delegate(ctx, delegateReq(parent)); err != nil {
+		t.Fatalf("delegate: %v", err)
+	}
+	want := parent.Capability().Subject.TenantID
+	if got, ok := auth.ActingTenant(store.insertCtx); !ok || got != want {
+		t.Errorf("child recorded acting on %v (set %t), want the parent's tenant %v", got, ok, want)
+	}
+}
+
 // TestDelegate_CapabilityPath_DeniedWithoutOpShare confirms a capability
 // without OpShare in its caveats cannot delegate, even if parent_id
 // matches.
