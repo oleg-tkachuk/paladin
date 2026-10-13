@@ -370,6 +370,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				// paladin.object.purged, and silence would be a regression
 				// against the RPC path.
 				Permanent: newPermanentDeleter(deps, reaperQ, reaperPool, smReaper, l),
+				Logger:    l.Named("batch-delete"),
 			},
 			"BatchCopy": &operations.BatchCopyExecutor{
 				Objects: deps.Repos.Object,
@@ -380,13 +381,16 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				Transitions: smReaper,
 				PendingTTL:  cfg.Limits.Presign.PutTTL,
 				Limits:      cfg.Limits.UploadLimits(),
+				Logger:      l.Named("batch-copy"),
 			},
 			"BatchUpdateTags": &operations.BatchUpdateTagsExecutor{
 				Objects: deps.Repos.Object,
+				Logger:  l.Named("batch-update-tags"),
 			},
 			"BatchRestoreObjects": &operations.BatchRestoreExecutor{
 				Objects:     deps.Repos.Object,
 				Transitions: smReaper,
+				Logger:      l.Named("batch-restore"),
 			},
 		}
 		out = append(out, &operations.Runner{

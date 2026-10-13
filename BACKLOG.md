@@ -592,24 +592,36 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   "stream the audit log", which is a general capability and a different item.
   It is not a special case of tenant events, and should not be built as one.
 
-### A reclaimed operation records a count, not which items landed
+### Two gaps left in reissuing a reclaimed batch
 
-- **Status:** Deferred (needs per-executor progress semantics).
-- **Reason:** `StaleOperationReclaimer` now copies the runner's last
-  `{processed, total}` snapshot into the failure payload as `last_progress`,
-  so a caller learns the batch reached at least item N. That is a count, not
-  an identity: the batch executors are not transactional across their items
-  and process them in argument order, so "7 of 9" only implies which items
-  landed as long as the executor never reorders. Nothing enforces that today,
-  and the snapshot is throttled to ~1/s, so the true figure is at least N.
-- **Definition of Done:** A reclaimed operation's response carries the
-  per-item outcomes the successful path already returns, so a caller can
-  reissue exactly the remainder rather than inferring it from a count.
-- **Blockers:** none technical. Still deferred because retrying the whole
-  batch is correct for the idempotent executors (tags, restore) and only
-  wasteful, and the two where it is not (copy, permanent delete) deserve a
-  design pass — most likely per-item rows the executor writes as it goes —
-  rather than a partial record bolted onto the reclaim.
+- **Status:** Deferred.
+- **Reason:** A batch failed with `WORKER_LOST` is recovered by reissuing it,
+  and the copy, soft-delete and restore executors count what the dead run
+  already applied as succeeded (`already_applied`); tags are simply written
+  again, which is the same result. Three things stay short of that:
+  - **Permanent delete.** An object the dead run erased no longer exists, so
+    the reissue reports it as `not found` — the same answer as an id that never
+    existed. Telling them apart needs a record of what the operation erased.
+  - **Progress overwrites the arguments.** The runner's progress report writes
+    `{processed, total}` into `operations.metadata` — the column that holds the
+    executor's arguments — so while a batch runs, and after it is reclaimed, the
+    row no longer says which objects it was for. The terminal write restores
+    them; a reclaim does not.
+  - **A copy cut off before its promote.** Its destination row is left
+    PENDING, and the reissue reports that key as "a write in progress" until
+    the row's presign deadline (`limits.presign.put_ttl`) passes and the reaper
+    clears it. The row is not adopted: `objects` does not record which
+    operation created it, so it cannot be told from a live upload to the same
+    key.
+- **Definition of Done:**
+  - A reissued permanent delete reports the objects its earlier run erased as
+    already applied.
+  - A reissued copy completes a destination its own earlier run left PENDING.
+  - Progress lives in its own column, and `metadata` keeps the arguments for
+    the operation's whole life, reclaim included.
+- **Blockers:** none technical. The first two need a decision on where an
+  operation records the objects it touched — per-item rows, or a column on the
+  object — which one design should answer for both.
 
 ---
 

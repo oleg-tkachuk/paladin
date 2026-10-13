@@ -44,6 +44,21 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a reissued batch counts the work already done
+
+A batch operation whose worker died ends FAILED with `WORKER_LOST`, and the
+recovery is to issue the same batch again. That second run used to report
+everything the first one had applied as a failure: `duplicate key` for a copy,
+a conflict for a soft delete, `not found` for a restore. Now the copy,
+soft-delete and restore executors count those items as succeeded, and the
+response says how many under a new `already_applied` field (included in
+`succeeded`, omitted when zero). A copy counts only when the destination holds
+the source's etag, size and checksum; any other object at that key is still a
+failure, named as such.
+
+A permanent delete is unchanged: what the first run erased comes back as
+`not found`.
+
 ## Unreleased — an API token rate limit of 0 is a cap
 
 - **Breaking, API tokens.** `APITokenServiceCreateRequest` and `APIToken`

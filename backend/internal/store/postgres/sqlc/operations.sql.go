@@ -301,8 +301,13 @@ WHERE state = 'RUNNING'
 // outcome is unknown, decide for yourself whether to reissue.
 // The response carries how far the executor got, when that is knowable.
 //
-// "The outcome is unknown" is honest but coarse: a caller reissuing a batch
-// has no way to tell which items already landed. The runner's progress
+// Reissuing the same batch is the recovery, and it is safe: each executor
+// counts an item the dead run already applied as succeeded (already_applied in
+// its response) rather than repeating or failing it. The one exception is a
+// permanent delete, whose finished items no longer exist and come back as
+// "not found".
+//
+// For a caller that wants to know before reissuing, the runner's progress
 // reporter writes {processed, total} into metadata while an operation runs, so
 // for anything that reported progress the last snapshot is right there — the
 // difference between "unknown" and "stopped after 7 of 9". It is a lower
