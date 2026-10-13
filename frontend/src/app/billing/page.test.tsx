@@ -54,7 +54,7 @@ describe("BillingPage", () => {
   it("shows the empty-period card when the period has no charges", async () => {
     h.summary.mockResolvedValue({
       total: usd(0n),
-      maxBudget: usd(0n),
+      budgetCeiling: { case: undefined },
       chargeCount: 0n,
       topCapabilities: [],
       topActors: [],
@@ -68,5 +68,31 @@ describe("BillingPage", () => {
       await screen.findByText("No charges in this period"),
     ).toBeInTheDocument();
     expect(screen.queryByText("Billing is unavailable")).toBeNull();
+  });
+
+  // No budget row, an unlimited budget and a cap of zero used to read as the
+  // same 0; each now says what it is.
+  it.each([
+    [{ case: undefined }, "no budget configured"],
+    [
+      { case: "unlimitedBudget", value: { currencyCode: "USD" } },
+      "unlimited budget",
+    ],
+    [{ case: "maxBudget", value: usd(0n) }, "100.0% of budget"],
+    [{ case: "maxBudget", value: usd(4_000_000_000n) }, "25.0% of budget"],
+  ])("describes the budget %o as %s", async (budgetCeiling, helper) => {
+    h.summary.mockResolvedValue({
+      total: usd(1_000_000_000n),
+      budgetCeiling,
+      chargeCount: 1n,
+      topCapabilities: [],
+      topActors: [],
+      topOps: [],
+    });
+    h.series.mockResolvedValue({ buckets: [] });
+
+    render(<BillingPage />);
+
+    expect(await screen.findByText(helper)).toBeInTheDocument();
   });
 });

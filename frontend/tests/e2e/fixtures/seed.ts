@@ -1281,7 +1281,8 @@ export async function seedSubscription(opts: {
 /** Read a tenant's budget cap and spend. Returns null when no budget row
  *  exists — the state the console renders as "Create budget". */
 export async function tenantBudget(tenantId: string): Promise<{
-  maxBudgetAmount: number;
+  /** The cap, or null when the budget is unlimited. */
+  maxBudgetAmount: number | null;
   spentAmount: number;
   unitCode: string;
   resourceVersion: string;
@@ -1289,10 +1290,12 @@ export async function tenantBudget(tenantId: string): Promise<{
   const client = createClient(TenantBudgetService, adminTransport());
   try {
     const res = await client.get({ tenantId });
+    const ceiling = res.budget?.budgetCeiling;
     return {
-      maxBudgetAmount: moneyToNumber(res.budget?.maxBudget),
+      maxBudgetAmount:
+        ceiling?.case === "maxBudget" ? moneyToNumber(ceiling.value) : null,
       spentAmount: moneyToNumber(res.budget?.spent),
-      unitCode: res.budget?.maxBudget?.currencyCode ?? "",
+      unitCode: ceiling?.value?.currencyCode ?? "",
       resourceVersion: res.budget?.resourceVersion ?? "",
     };
   } catch (err) {
@@ -1686,7 +1689,7 @@ export async function setTenantBudget(args: {
   const client = createClient(TenantBudgetService, adminTransport());
   const res = await client.set({
     tenantId: args.tenantId,
-    maxBudget,
+    budgetCeiling: { case: "maxBudget", value: maxBudget },
     resetSpend: args.resetSpend ?? false,
     resourceVersion: args.resourceVersion,
   });

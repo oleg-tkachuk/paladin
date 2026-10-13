@@ -267,8 +267,8 @@ func TestBilling_GetTenantSummary_AggregatesCorrectly(t *testing.T) {
 	if s.UnitCode != "USD" {
 		t.Errorf("unit = %q, want USD", s.UnitCode)
 	}
-	if got, want := s.MaxBudgetAmount, limes.MustParseAmount("500"); got != want {
-		t.Errorf("max budget = %v, want 500", got)
+	if want := (limes.BudgetCeiling{Max: limes.MustParseAmount("500")}); s.Ceiling == nil || *s.Ceiling != want {
+		t.Errorf("ceiling = %v, want %s", s.Ceiling, want)
 	}
 
 	// top_capabilities: A=10, then B and C tied at 2.0
@@ -430,8 +430,8 @@ func TestBilling_EmptyPeriod_ReturnsZeros(t *testing.T) {
 	if s.UnitCode != "USD" {
 		t.Errorf("unit = %q, want USD (from budget fallback)", s.UnitCode)
 	}
-	if got, want := s.MaxBudgetAmount, limes.MustParseAmount("50"); got != want {
-		t.Errorf("max budget = %v, want 50", got)
+	if want := (limes.BudgetCeiling{Max: limes.MustParseAmount("50")}); s.Ceiling == nil || *s.Ceiling != want {
+		t.Errorf("ceiling = %v, want %s", s.Ceiling, want)
 	}
 	if len(s.TopCapabilities) != 0 || len(s.TopActors) != 0 || len(s.TopOps) != 0 {
 		t.Errorf("top lists not empty: caps=%d actors=%d ops=%d",
@@ -529,6 +529,9 @@ func TestBilling_MoneyIsExact(t *testing.T) {
 	if got, want := resp.GetMaxBudget(), (&money.Money{CurrencyCode: "USD", Units: 19, Nanos: 990_000_000}); !proto.Equal(got, want) {
 		t.Errorf("max_budget = %v, want %v", got, want)
 	}
+	if resp.GetUnlimitedBudget() != nil {
+		t.Errorf("a capped tenant reads as unlimited: %v", resp.GetUnlimitedBudget())
+	}
 	var top limes.Nanos
 	for _, e := range resp.GetTopOps() {
 		n, _, err := apiutil.NanosOf("spent", e.GetSpent())
@@ -568,8 +571,8 @@ func TestBilling_AdminReadsAnotherTenantUnderRLS(t *testing.T) {
 	if sum.TotalAmount != limes.MustParseAmount("0.3") || sum.ChargeCount != 1 {
 		t.Errorf("summary of another tenant = %s over %d charges, want 0.3 over 1", sum.TotalAmount, sum.ChargeCount)
 	}
-	if sum.MaxBudgetAmount != limes.MustParseAmount("12.000000001") {
-		t.Errorf("summary budget = %s, want 12.000000001", sum.MaxBudgetAmount)
+	if want := (limes.BudgetCeiling{Max: limes.MustParseAmount("12.000000001")}); sum.Ceiling == nil || *sum.Ceiling != want {
+		t.Errorf("summary budget = %v, want %s", sum.Ceiling, want)
 	}
 	ts, err := handler.GetTenantTimeSeries(ctx, other, start, end, "day")
 	if err != nil {
@@ -581,5 +584,36 @@ func TestBilling_AdminReadsAnotherTenantUnderRLS(t *testing.T) {
 	}
 	if total != limes.MustParseAmount("0.3") {
 		t.Errorf("time series of another tenant sums to %s, want 0.3", total)
+	}
+}
+
+// The summary carries the budget on its own arm: unset with no budget row,
+// unlimited in the tenant's unit, never a 0 standing for either.
+func TestBilling_SummaryCeilingArms(t *testing.T) {
+	t.Parallel()
+	f := setupBilling(t)
+	srv := connectshim.NewBillingServer(f.handler)
+	summary := func(tenant uuid.UUID) *pb.GetTenantSummaryResponse {
+		t.Helper()
+		resp, err := srv.GetTenantSummary(ctxAdmin(t, tenant), &pb.GetTenantSummaryRequest{TenantId: tenant.String()})
+		if err != nil {
+			t.Fatalf("GetTenantSummary: %v", err)
+		}
+		return resp
+	}
+
+	none := mustCreateTenant(t, f.h.PoolMigrate, "bil-nobudget")
+	if c := summary(none).GetBudgetCeiling(); c != nil {
+		t.Errorf("no budget row: ceiling = %v, want unset", c)
+	}
+
+	open := mustCreateTenant(t, f.h.PoolMigrate, "bil-unlimited")
+	if _, err := f.store.SetTenantBudget(context.Background(), limes.SetTenantBudgetRequest{
+		TenantID: open, Ceiling: limes.BudgetCeiling{Unlimited: true}, UnitCode: "EUR",
+	}); err != nil {
+		t.Fatalf("seed budget: %v", err)
+	}
+	if got := summary(open).GetUnlimitedBudget().GetCurrencyCode(); got != "EUR" {
+		t.Errorf("unlimited: currency = %q, want EUR", got)
 	}
 }

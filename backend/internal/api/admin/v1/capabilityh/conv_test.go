@@ -502,5 +502,5 @@ func openCaveats(ops ...limes.Op) *adminv1.CapabilityCaveats {
 
 // unlimitedBudget is a budget with no limit, in currency.
 func unlimitedBudget(currency string) *adminv1.CapabilityCaveats_UnlimitedBudget {
-	return &adminv1.CapabilityCaveats_UnlimitedBudget{UnlimitedBudget: &adminv1.CapabilityUnlimitedBudget{CurrencyCode: currency}}
+	return &adminv1.CapabilityCaveats_UnlimitedBudget{UnlimitedBudget: &adminv1.UnlimitedBudget{CurrencyCode: currency}}
 }

@@ -8,6 +8,7 @@ import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "google/api/field_behavior.proto";
 import "google/type/money.proto";
+import "paladin/admin/v1/types.proto";
 
 // BillingService surfaces per-tenant capability spend over the
 // charges ledger (`001_initial_schema.sql`). Distinct from TenantBudgetService —
@@ -54,9 +55,15 @@ message GetTenantSummaryResponse {
   // max_budget_micros, replaced by max_budget.
   reserved 9;
   reserved "max_budget_micros";
-  // max_budget is the tenant_budgets cap, copied for UI convenience so the
-  // frontend doesn't need a second RPC.
-  google.type.Money max_budget = 11;
+  // budget_ceiling is the tenant's budget cap, copied for UI convenience so
+  // the frontend doesn't need a second RPC. Neither arm is set for a tenant
+  // with no budget row.
+  oneof budget_ceiling {
+    // max_budget is the cap; a zero amount allows no spend.
+    google.type.Money max_budget = 11;
+    // unlimited_budget is no cap.
+    UnlimitedBudget unlimited_budget = 12;
+  }
   repeated TopEntry top_capabilities = 4;
   repeated TopEntry top_actors = 5;
   repeated TopEntry top_ops = 6;

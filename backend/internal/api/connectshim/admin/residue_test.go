@@ -398,7 +398,7 @@ func TestTenantBudgetSetForwardsThePeriodEnd(t *testing.T) {
 	store := &fakeUsageStore{}
 	end := time.Unix(1_767_225_600, 0).UTC()
 	if _, err := newServer(store).Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-		TenantId: uuid.NewString(), PeriodEnd: timestamppb.New(end),
+		TenantId: uuid.NewString(), PeriodEnd: timestamppb.New(end), BudgetCeiling: unlimitedIn(""),
 	}); err != nil {
 		t.Fatal(err)
 	}

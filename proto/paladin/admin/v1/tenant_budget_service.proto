@@ -8,6 +8,7 @@ import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "google/api/field_behavior.proto";
 import "google/type/money.proto";
+import "paladin/admin/v1/types.proto";
 
 // TenantBudgetService manages the per-tenant aggregate USD spend cap
 // for the capability subsystem (cfg.Capability.* + `tenant_budgets` in
@@ -70,10 +71,16 @@ message TenantBudget {
   reserved 7, 9, 10;
   reserved "unit_code", "max_budget_micros", "spent_micros";
 
-  // max_budget is the cap, exact to the nano; a zero amount is unlimited
-  // (the counter still accumulates so admin tooling can show "current
-  // spend"). Its currency is the tenant's unit. currency_code is an ISO 4217 code the server accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no currency", for metering that is not money.
-  google.type.Money max_budget = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // budget_ceiling is the cap. Either arm's currency is the tenant's unit:
+  // an ISO 4217 code the server accepts — USD, EUR, UAH, GBP — or XXX, ISO
+  // 4217's code for "no currency", for metering that is not money. Spend
+  // accumulates under either, so admin tooling can show "current spend".
+  oneof budget_ceiling {
+    // max_budget is the cap, exact to the nano; a zero amount allows no spend.
+    google.type.Money max_budget = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+    // unlimited_budget is no cap.
+    UnlimitedBudget unlimited_budget = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
+  }
   // spent is the spend in the current period, in the tenant's currency.
   google.type.Money spent = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
@@ -113,15 +120,22 @@ message TenantBudgetServiceSetRequest {
   reserved 5, 7;
   reserved "unit_code", "max_budget_micros";
 
-  // max_budget is the new cap, exact to the nano, and its currency the
-  // tenant's unit; a zero amount is unlimited in that unit. Absent lifts the
-  // cap and keeps the unit the tenant has, or USD for a new row.
-  // currency_code is an ISO 4217 code the server accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no currency", for metering that is not money.
-  google.type.Money max_budget = 8 [(buf.validate.field).cel = {
-    id: "money.non_negative"
-    message: "an amount is not negative, and its nanos are 0 to 999999999"
-    expression: "this.units >= 0 && this.nanos >= 0 && this.nanos <= 999999999"
-  }];
+  // budget_ceiling is the new cap, and its currency the tenant's unit: an
+  // ISO 4217 code the server accepts — USD, EUR, UAH, GBP — or XXX, ISO
+  // 4217's code for "no currency", for metering that is not money. Required:
+  // a request that sets neither arm is refused.
+  oneof budget_ceiling {
+    // max_budget is the cap, exact to the nano; a zero amount allows no
+    // spend.
+    google.type.Money max_budget = 8 [(buf.validate.field).cel = {
+      id: "money.non_negative"
+      message: "an amount is not negative, and its nanos are 0 to 999999999"
+      expression: "this.units >= 0 && this.nanos >= 0 && this.nanos <= 999999999"
+    }];
+    // unlimited_budget lifts the cap. An empty currency_code keeps the unit
+    // the tenant has, or USD for a new row.
+    UnlimitedBudget unlimited_budget = 9;
+  }
 }
 
 message TenantBudgetServiceSetResponse {
@@ -137,7 +151,7 @@ message TenantBudgetSummary {
   string display_name  = 3;
   TenantBudget budget  = 4;
   // utilisation_pct = spent / max × 100, capped at 100 for display.
-  // 0 when max_budget is zero (unlimited / metering-only).
+  // 0 when the budget is unlimited; 100 under a cap of zero.
   double utilisation_pct = 5;
 }
 
@@ -146,8 +160,8 @@ message TenantBudgetServiceSummarizeRequest {
   // 0 = no threshold (return everything matching the other filters).
   double threshold_pct = 1 [(buf.validate.field).double = {gte: 0, lte: 100}];
 
-  // unlimited_only — when true, return only rows where
-  // max_budget is zero (cap-less metering). Mutually exclusive
+  // unlimited_only — when true, return only rows whose budget is
+  // unlimited (cap-less metering). Mutually exclusive
   // with a non-zero threshold_pct; the server enforces this.
   bool unlimited_only = 2;
 

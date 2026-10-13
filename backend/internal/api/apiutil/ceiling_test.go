@@ -3,31 +3,72 @@ package apiutil
 import (
 	"testing"
 
+	"connectrpc.com/connect/v2"
+	"google.golang.org/genproto/googleapis/type/money"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/oleg-tkachuk/limes"
+	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
-func TestTenantBudgetCeilingOfAPIAmounts(t *testing.T) {
-	for _, tc := range []struct {
-		n      limes.Nanos
-		budget limes.BudgetCeiling
+const ceilingField = "budget_ceiling"
+
+func TestBudgetCeilingOf(t *testing.T) {
+	for name, tc := range map[string]struct {
+		limit     *money.Money
+		unlimited *adminv1.UnlimitedBudget
+		ceiling   limes.BudgetCeiling
+		unit      string
+		set       bool
 	}{
-		{0, limes.BudgetCeiling{Unlimited: true}},
-		{1, limes.BudgetCeiling{Max: 1}},
-		{limes.MaxNanos, limes.BudgetCeiling{Max: limes.MaxNanos}},
+		"neither":             {},
+		"zero allows nothing": {limit: &money.Money{CurrencyCode: "EUR"}, unit: "EUR", set: true},
+		"a limit": {
+			limit:   &money.Money{CurrencyCode: "USD", Units: 2},
+			ceiling: limes.BudgetCeiling{Max: 2 * limes.NanosPerUnit}, unit: "USD", set: true,
+		},
+		"unlimited in a unit": {
+			unlimited: &adminv1.UnlimitedBudget{CurrencyCode: "UAH"},
+			ceiling:   limes.BudgetCeiling{Unlimited: true}, unit: "UAH", set: true,
+		},
+		"unlimited, no unit": {
+			unlimited: &adminv1.UnlimitedBudget{},
+			ceiling:   limes.BudgetCeiling{Unlimited: true}, set: true,
+		},
 	} {
-		if got := BudgetCeilingOf(tc.n); got != tc.budget {
-			t.Errorf("BudgetCeilingOf(%d) = %s, want %s", tc.n, got, tc.budget)
+		c, unit, set, err := BudgetCeilingOf(ceilingField, tc.limit, tc.unlimited)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
 		}
-		if got := BudgetCeilingAmount(tc.budget); got != tc.n {
-			t.Errorf("BudgetCeilingAmount(%s) = %s, want %d", tc.budget, got, tc.n)
+		if c != tc.ceiling || unit != tc.unit || set != tc.set {
+			t.Errorf("%s: = %s %q %v, want %s %q %v", name, c, unit, set, tc.ceiling, tc.unit, tc.set)
 		}
 	}
 }
 
-// A ceiling of nothing has no tenant-budget spelling; it reports as the 0
-// that means none rather than as a number a client could send back.
-func TestTenantBudgetOfNothingReportsAsZero(t *testing.T) {
-	if got := BudgetCeilingAmount(limes.BudgetCeiling{}); got != 0 {
-		t.Errorf("BudgetCeilingAmount(0) = %s", got)
+func TestBudgetCeilingOfRefusesMalformedArms(t *testing.T) {
+	for name, tc := range map[string]struct {
+		limit     *money.Money
+		unlimited *adminv1.UnlimitedBudget
+	}{
+		"a negative limit":      {limit: &money.Money{CurrencyCode: "USD", Units: -1}},
+		"an unknown limit unit": {limit: &money.Money{CurrencyCode: "XYZ", Units: 1}},
+		"an unknown open unit":  {unlimited: &adminv1.UnlimitedBudget{CurrencyCode: "XYZ"}},
+	} {
+		if _, _, _, err := BudgetCeilingOf(ceilingField, tc.limit, tc.unlimited); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%s: err = %v, want InvalidArgument", name, err)
+		}
+	}
+}
+
+// Each ceiling writes back on its own arm, the default unit filling a blank.
+func TestBudgetCeilingArms(t *testing.T) {
+	limit, open := BudgetCeilingArms(limes.BudgetCeiling{}, "EUR")
+	if open != nil || !proto.Equal(limit, &money.Money{CurrencyCode: "EUR"}) {
+		t.Errorf("zero: %v / %v, want a limit of 0 EUR", limit, open)
+	}
+	limit, open = BudgetCeilingArms(limes.BudgetCeiling{Unlimited: true}, "")
+	if limit != nil || open.GetCurrencyCode() != limes.DefaultUnitCode {
+		t.Errorf("unlimited: %v / %v, want unlimited in %s", limit, open, limes.DefaultUnitCode)
 	}
 }

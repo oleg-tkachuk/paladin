@@ -37,6 +37,21 @@ async function submitBudget(
   await btn.click({ force: true });
 }
 
+/**
+ * Type a cap into the budget form. A tenant with no budget starts Unlimited,
+ * which disables the input; the toggle beside it turns that off first.
+ */
+async function enterCap(page: import("@playwright/test").Page, cap: string) {
+  const unlimited = page
+    .locator("#max-budget")
+    .locator("xpath=..")
+    .getByRole("button", { name: "Unlimited" });
+  if ((await unlimited.getAttribute("aria-pressed")) === "true") {
+    await unlimited.click();
+  }
+  await page.locator("#max-budget").fill(cap);
+}
+
 test.describe("Tenant budget", () => {
   test("a tenant with no budget offers to create one", async ({
     page,
@@ -63,7 +78,7 @@ test.describe("Tenant budget", () => {
     const submit = page.getByRole("button", { name: /Create budget/ });
     await expect(submit).toBeVisible({ timeout: 15_000 });
 
-    await page.locator("#max-budget").fill("250");
+    await enterCap(page, "250");
     await submitBudget(page, /Create budget/);
 
     await expect
@@ -86,8 +101,43 @@ test.describe("Tenant budget", () => {
 
     // An empty cap is not "unlimited" — it is nothing to send. The form holds
     // rather than posting a value it would have to invent.
-    await page.locator("#max-budget").fill("");
+    await enterCap(page, "");
     await expect(submit).toBeDisabled();
+  });
+
+  // "No cap" is sent as such, not as a 0 the server would read as a cap of
+  // nothing.
+  test("a new budget is unlimited until a cap is entered", async ({
+    page,
+    makeTenant,
+  }) => {
+    await loginAsAdmin(page);
+    const tenant = await makeTenant();
+
+    await gotoSettled(page, budgetURL(tenant.tenantId));
+    await submitBudget(page, /Create budget/);
+
+    await expect
+      .poll(async () => await tenantBudget(tenant.tenantId), {
+        timeout: 15_000,
+      })
+      .toMatchObject({ maxBudgetAmount: null });
+  });
+
+  test("a cap of zero is a cap", async ({ page, makeTenant }) => {
+    await loginAsAdmin(page);
+    const tenant = await makeTenant();
+
+    await gotoSettled(page, budgetURL(tenant.tenantId));
+    await enterCap(page, "0");
+    await submitBudget(page, /Create budget/);
+
+    await expect
+      .poll(
+        async () => (await tenantBudget(tenant.tenantId))?.maxBudgetAmount,
+        { timeout: 15_000 },
+      )
+      .toBe(0);
   });
 
   test("editing an existing budget keeps the spend counter", async ({
@@ -102,7 +152,7 @@ test.describe("Tenant budget", () => {
     await expect(
       page.getByRole("button", { name: /Create budget/ }),
     ).toBeVisible({ timeout: 15_000 });
-    await page.locator("#max-budget").fill("100");
+    await enterCap(page, "100");
     await submitBudget(page, /Create budget/);
 
     await expect
@@ -121,7 +171,7 @@ test.describe("Tenant budget", () => {
     await page.reload();
     const apply = page.getByRole("button", { name: /Apply changes/ });
     await expect(apply).toBeVisible({ timeout: 15_000 });
-    await page.locator("#max-budget").fill("500");
+    await enterCap(page, "500");
     await submitBudget(page, /Apply changes/);
 
     await expect
@@ -168,7 +218,7 @@ test.describe("Tenant budget", () => {
     });
 
     // The open form now holds a stale version. Its write must not land.
-    await page.locator("#max-budget").fill("999");
+    await enterCap(page, "999");
     await submitBudget(page, /Apply changes/);
 
     await expect(page.getByText(/changed elsewhere/i)).toBeVisible({

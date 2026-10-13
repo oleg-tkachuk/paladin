@@ -8,6 +8,7 @@ import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "google/api/field_behavior.proto";
 import "google/type/money.proto";
+import "paladin/admin/v1/types.proto";
 
 // CapabilityService manages capability tokens — short-lived, signed,
 // delegable, individually revocable authorisation primitives for agent
@@ -158,15 +159,9 @@ message CapabilityCaveats {
       message: "an amount is not negative, and its nanos are 0 to 999999999"
       expression: "this.units >= 0 && this.nanos >= 0 && this.nanos <= 999999999"
     }];
-    // unlimited_budget sets no limit.
-    CapabilityUnlimitedBudget unlimited_budget = 14;
+    // unlimited_budget sets no limit; an empty currency_code is USD.
+    UnlimitedBudget unlimited_budget = 14;
   }
-}
-
-// CapabilityUnlimitedBudget is a budget with no limit, in a currency.
-message CapabilityUnlimitedBudget {
-  // currency_code is the unit charges are in; empty is USD.
-  string currency_code = 1;
 }
 
 // Capability is the typed metadata view of an issued or stored

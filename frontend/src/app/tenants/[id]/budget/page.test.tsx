@@ -18,13 +18,20 @@ vi.mock("@/components/ui/Notification", () => ({
 }));
 
 import BudgetPage from "./page";
+
+// The Unlimited toggle beside the Max budget input.
+const unlimitedToggle = () =>
+  screen
+    .getByLabelText(/max budget/i)
+    .parentElement!.querySelector("button[aria-pressed]") as HTMLElement;
 import { moneyFromDecimal } from "@/lib/format/money";
 
 const usd = (amount: string) => moneyFromDecimal(amount, "USD");
+const capOf = (amount: string) => ({ case: "maxBudget", value: usd(amount) });
 
 const budget = {
   $typeName: "paladin.admin.v1.TenantBudget",
-  maxBudget: usd("100"),
+  budgetCeiling: capOf("100"),
   spent: usd("0"),
   periodStart: undefined,
   periodEnd: undefined,
@@ -109,7 +116,7 @@ describe("TenantBudgetPage OCC", () => {
     h.get.mockResolvedValue({
       budget: {
         ...budget,
-        maxBudget: usd("300"),
+        budgetCeiling: capOf("300"),
         resourceVersion: "8",
       },
     });
@@ -121,7 +128,7 @@ describe("TenantBudgetPage OCC", () => {
     );
     await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
     expect(h.set.mock.calls[0][0].resourceVersion).toBe("7");
-    expect(h.set.mock.calls[0][0].maxBudget).toEqual(usd("999"));
+    expect(h.set.mock.calls[0][0].budgetCeiling).toEqual(capOf("999"));
   });
 
   it('sends "0" when no budget exists yet — the create case', async () => {
@@ -131,6 +138,7 @@ describe("TenantBudgetPage OCC", () => {
     const submit = await screen.findByRole("button", {
       name: /create budget/i,
     });
+    await userEvent.click(unlimitedToggle());
     await userEvent.type(screen.getByLabelText(/max budget/i), "50");
     await userEvent.click(submit);
 
@@ -145,15 +153,72 @@ describe("TenantBudgetPage OCC", () => {
     const submit = await screen.findByRole("button", {
       name: /create budget/i,
     });
+    await userEvent.click(unlimitedToggle());
     await userEvent.type(screen.getByLabelText(/max budget/i), "0.300000001");
     await userEvent.click(submit);
 
     await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
-    expect(h.set.mock.calls[0][0].maxBudget).toMatchObject({
+    const ceiling = h.set.mock.calls[0][0].budgetCeiling;
+    expect(ceiling.case).toBe("maxBudget");
+    expect(ceiling.value).toMatchObject({
       currencyCode: "XXX",
       units: 0n,
       nanos: 300_000_001,
     });
+  });
+
+  // "No cap" is its own value, never a 0 the server reads as a cap of nothing.
+  it("creates an unlimited budget by default, in XXX", async () => {
+    h.get.mockRejectedValue(new ConnectError("nope", Code.NotFound));
+    render(<BudgetPage />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /create budget/i }),
+    );
+
+    await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
+    const ceiling = h.set.mock.calls[0][0].budgetCeiling;
+    expect(ceiling.case).toBe("unlimitedBudget");
+    expect(ceiling.value).toMatchObject({ currencyCode: "XXX" });
+  });
+
+  it("sends a typed zero as a cap that allows no spend", async () => {
+    h.get.mockRejectedValue(new ConnectError("nope", Code.NotFound));
+    render(<BudgetPage />);
+
+    const submit = await screen.findByRole("button", {
+      name: /create budget/i,
+    });
+    await userEvent.click(unlimitedToggle());
+    await userEvent.type(screen.getByLabelText(/max budget/i), "0");
+    await userEvent.click(submit);
+
+    await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
+    const ceiling = h.set.mock.calls[0][0].budgetCeiling;
+    expect(ceiling.case).toBe("maxBudget");
+    expect(ceiling.value).toMatchObject({ units: 0n, nanos: 0 });
+  });
+
+  it("loads an unlimited budget as Unlimited, with its unit", async () => {
+    h.get.mockResolvedValue({
+      budget: {
+        ...budget,
+        budgetCeiling: {
+          case: "unlimitedBudget",
+          value: { currencyCode: "EUR" },
+        },
+      },
+    });
+    render(<BudgetPage />);
+
+    await screen.findByRole("button", { name: /apply changes/i });
+    await waitFor(() =>
+      expect(unlimitedToggle()).toHaveAttribute("aria-pressed", "true"),
+    );
+    expect(screen.getByLabelText(/max budget/i)).toBeDisabled();
+    expect(screen.getByText("∞ unlimited")).toBeInTheDocument();
+    // The snapshot's unit, and the form's, are the budget's own.
+    expect(screen.getAllByText("EUR").length).toBeGreaterThan(0);
   });
 
   it("holds submit until the first read resolves, so it cannot send a version it never read", async () => {
@@ -221,7 +286,7 @@ describe("TenantBudgetPage OCC", () => {
 
     await userEvent.click(submit);
     await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
-    expect(h.set.mock.calls[0][0].maxBudget).toEqual(usd(typed));
+    expect(h.set.mock.calls[0][0].budgetCeiling).toEqual(capOf(typed));
   });
 
   it("refetches and explains the conflict when the server aborts", async () => {

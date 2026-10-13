@@ -1,26 +1,56 @@
 package apiutil
 
-import "github.com/oleg-tkachuk/limes"
+import (
+	"fmt"
 
-// A tenant's budget is the one ceiling the API still spells as a number where
-// 0 sets none (TenantBudgetService, BillingService). limes spells "none" as
-// Unlimited and reads 0 as a ceiling of nothing. These helpers are the only
-// place the two meet, so a 0 from a client never freezes a tenant it meant
-// to leave open. A capability's ceilings are explicit on the wire instead.
+	"connectrpc.com/connect/v2"
+	"google.golang.org/genproto/googleapis/type/money"
 
-// BudgetCeilingOf is the tenant budget ceiling an API amount sets: 0 none.
-func BudgetCeilingOf(n limes.Nanos) limes.BudgetCeiling {
-	if n == 0 {
-		return limes.BudgetCeiling{Unlimited: true}
+	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+)
+
+// Every budget ceiling on the wire is a budget_ceiling oneof: a Money limit,
+// where a zero amount allows no spend, or an UnlimitedBudget. These helpers
+// read and write its two arms, so no RPC reads a 0 as "no limit" again.
+
+// BudgetCeilingOf reads a budget_ceiling oneof from its arms, of which a oneof
+// sets at most one; set is false when it sets neither. unit is the arm's
+// currency, normalized, and "" when an unlimited arm names none: what that
+// means is the caller's to decide. A malformed arm is InvalidArgument naming
+// field.
+func BudgetCeilingOf(field string, limit *money.Money, unlimited *adminv1.UnlimitedBudget) (ceiling limes.BudgetCeiling, unit string, set bool, err error) {
+	switch {
+	case limit != nil:
+		n, unit, err := NanosOf(field+".max_budget", limit)
+		if err != nil {
+			return limes.BudgetCeiling{}, "", false, err
+		}
+		return limes.BudgetCeiling{Max: n}, unit, true, nil
+	case unlimited != nil:
+		if code := unlimited.GetCurrencyCode(); code != "" {
+			normalized, err := limes.NormalizeUnitCode(code)
+			if err != nil {
+				return limes.BudgetCeiling{}, "", false,
+					rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("%s.unlimited_budget.currency_code: %w", field, err))
+			}
+			unit = normalized
+		}
+		return limes.BudgetCeiling{Unlimited: true}, unit, true, nil
+	default:
+		return limes.BudgetCeiling{}, "", false, nil
 	}
-	return limes.BudgetCeiling{Max: n}
 }
 
-// BudgetCeilingAmount is a tenant budget ceiling as the API reports it: 0 for
-// none. A ceiling of nothing, which the API cannot set, reads as 0 too.
-func BudgetCeilingAmount(c limes.BudgetCeiling) limes.Nanos {
-	if c.Unlimited {
-		return 0
+// BudgetCeilingArms is a ceiling in unit as a budget_ceiling oneof's arms:
+// exactly one is non-nil. An empty unit is limes.DefaultUnitCode.
+func BudgetCeilingArms(c limes.BudgetCeiling, unit string) (*money.Money, *adminv1.UnlimitedBudget) {
+	if unit == "" {
+		unit = limes.DefaultUnitCode
 	}
-	return c.Max
+	if c.Unlimited {
+		return nil, &adminv1.UnlimitedBudget{CurrencyCode: unit}
+	}
+	return MoneyOf(unit, c.Max), nil
 }

@@ -4,6 +4,7 @@ from buf.validate import validate_pb2 as _validate_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.api import field_behavior_pb2 as _field_behavior_pb2
 from google.type import money_pb2 as _money_pb2
+from paladin.admin.v1 import types_pb2 as _types_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -23,20 +24,22 @@ class GetTenantSummaryRequest(_message.Message):
     def __init__(self, tenant_id: _Optional[str] = ..., period_start: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., period_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class GetTenantSummaryResponse(_message.Message):
-    __slots__ = ("total", "max_budget", "top_capabilities", "top_actors", "top_ops", "charge_count")
+    __slots__ = ("total", "max_budget", "unlimited_budget", "top_capabilities", "top_actors", "top_ops", "charge_count")
     TOTAL_FIELD_NUMBER: _ClassVar[int]
     MAX_BUDGET_FIELD_NUMBER: _ClassVar[int]
+    UNLIMITED_BUDGET_FIELD_NUMBER: _ClassVar[int]
     TOP_CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
     TOP_ACTORS_FIELD_NUMBER: _ClassVar[int]
     TOP_OPS_FIELD_NUMBER: _ClassVar[int]
     CHARGE_COUNT_FIELD_NUMBER: _ClassVar[int]
     total: _money_pb2.Money
     max_budget: _money_pb2.Money
+    unlimited_budget: _types_pb2.UnlimitedBudget
     top_capabilities: _containers.RepeatedCompositeFieldContainer[TopEntry]
     top_actors: _containers.RepeatedCompositeFieldContainer[TopEntry]
     top_ops: _containers.RepeatedCompositeFieldContainer[TopEntry]
     charge_count: int
-    def __init__(self, total: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., top_capabilities: _Optional[_Iterable[_Union[TopEntry, _Mapping]]] = ..., top_actors: _Optional[_Iterable[_Union[TopEntry, _Mapping]]] = ..., top_ops: _Optional[_Iterable[_Union[TopEntry, _Mapping]]] = ..., charge_count: _Optional[int] = ...) -> None: ...
+    def __init__(self, total: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[_types_pb2.UnlimitedBudget, _Mapping]] = ..., top_capabilities: _Optional[_Iterable[_Union[TopEntry, _Mapping]]] = ..., top_actors: _Optional[_Iterable[_Union[TopEntry, _Mapping]]] = ..., top_ops: _Optional[_Iterable[_Union[TopEntry, _Mapping]]] = ..., charge_count: _Optional[int] = ...) -> None: ...
 
 class TopEntry(_message.Message):
     __slots__ = ("label", "charge_count", "spent")

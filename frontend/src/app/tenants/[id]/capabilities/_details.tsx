@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Money } from "@/gen/google/type/money_pb";
 import { ABSTRACT_UNIT_CODE, formatMoney } from "@/lib/format/money";
-import { budgetLimit, budgetUnit, requestLimit } from "./_ceilings";
+import { requestLimit } from "./_ceilings";
+import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
 import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS, isExpired } from "./_constants";
 import { Timestamp } from "@/components/Timestamp";
 
@@ -42,9 +43,9 @@ export function DetailsBody({
 }) {
   // Capability without a budget unit (metering-only) renders as XXX, not
   // USD — the bare "$" would imply currency where none is pinned.
-  const unit = budgetUnit(cap.caveats) ?? ABSTRACT_UNIT_CODE;
+  const unit = budgetUnit(cap.caveats?.budgetCeiling) ?? ABSTRACT_UNIT_CODE;
   const maxRequests = requestLimit(cap.caveats);
-  const maxBudget = budgetLimit(cap.caveats);
+  const maxBudget = budgetLimit(cap.caveats?.budgetCeiling);
   const principalKindLabel =
     PRINCIPAL_KIND_OPTIONS.find((o) => Number(o.value) === cap.subject?.kind)
       ?.label ?? `kind:${cap.subject?.kind}`;

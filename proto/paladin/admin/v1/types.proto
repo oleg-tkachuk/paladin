@@ -9,6 +9,17 @@ import "google/protobuf/timestamp.proto";
 import "paladin/common/v1/resource.proto";
 import "google/api/field_behavior.proto";
 
+// UnlimitedBudget is a budget ceiling with no limit, in a currency. It is
+// the "no limit" arm of every budget_ceiling oneof, beside a google.type.Money
+// limit where a zero amount allows no spend.
+message UnlimitedBudget {
+  // currency_code is the unit charges are in: an ISO 4217 code the server
+  // accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no
+  // currency", for metering that is not money. What empty means is the
+  // field's to say.
+  string currency_code = 1;
+}
+
 // ─── Storage backend ────────────────────────────────────────────────────────
 // StorageBackend is the physical S3-compatible target. Provisioned by
 // platform admins. Credentials are NEVER returned in responses — only

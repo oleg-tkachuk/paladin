@@ -46,14 +46,20 @@ import {
   UNIT_CODES,
   formatMoney,
   moneyFromDecimal,
-  moneyIsPositive,
   moneyPercent,
   moneyToDecimal,
   moneyToNanos,
   NANOS_DECIMALS,
   unitOf,
 } from "@/lib/format/money";
-import type { Money } from "@/gen/google/type/money_pb";
+import { MoneySchema, type Money } from "@/gen/google/type/money_pb";
+import { create } from "@bufbuild/protobuf";
+import {
+  budgetCeiling,
+  budgetLimit,
+  budgetUnit as ceilingUnit,
+} from "@/lib/format/budgetCeiling";
+import { LimitInput } from "@/components/ui/LimitInput";
 import { Select } from "@/components/ui/Select";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
@@ -114,6 +120,9 @@ export default function TenantBudgetPage() {
   const fetchBudget = () => budgetQuery.refetch();
 
   const [maxBudget, setMaxBudget] = useState<string>("");
+  // "No cap" is its own value on the wire, not a 0: a zero cap allows no
+  // spend. A tenant with no budget yet starts unlimited.
+  const [unlimited, setUnlimited] = useState<boolean>(true);
   // Form picker default. Cold-start (no existing budget) starts on
   // XXX — ISO 4217's "no currency" — so the page doesn't assume
   // operators want USD. The hydration below replaces this with the
@@ -143,9 +152,11 @@ export default function TenantBudgetPage() {
   if (budget !== seededFrom && !edited) {
     setSeededFrom(budget);
     if (budget) {
-      setMaxBudget(moneyToDecimal(budget.maxBudget));
+      const limit = budgetLimit(budget.budgetCeiling);
+      setUnlimited(limit === undefined);
+      setMaxBudget(limit === undefined ? "" : moneyToDecimal(limit));
       const stored =
-        budget.maxBudget?.currencyCode || budget.spent?.currencyCode;
+        ceilingUnit(budget.budgetCeiling) || budget.spent?.currencyCode;
       if (stored) setUnitCode(stored);
       setPeriodEnd(
         budget.periodEnd
@@ -156,6 +167,7 @@ export default function TenantBudgetPage() {
       );
     } else {
       setMaxBudget("");
+      setUnlimited(true);
       setUnitCode(ABSTRACT_UNIT_CODE);
       setPeriodEnd("");
     }
@@ -165,8 +177,10 @@ export default function TenantBudgetPage() {
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     // Straight to Money, never through a float: "0.1" is exactly 100000000
-    // nanos. Zero is sent too: it is unlimited in the chosen unit.
-    const cap = moneyFromDecimal(maxBudget || "0", unitCode);
+    // nanos. Zero is a cap that allows no spend.
+    const cap = unlimited
+      ? create(MoneySchema, { currencyCode: unitCode })
+      : moneyFromDecimal(maxBudget, unitCode);
     if (cap === null) {
       showNotification({
         type: "error",
@@ -179,7 +193,7 @@ export default function TenantBudgetPage() {
     try {
       await tenantBudgetClient.set({
         tenantId,
-        maxBudget: cap,
+        budgetCeiling: budgetCeiling(unlimited, cap, unitCode),
         resetSpend,
         // OCC guard. "0" asserts no row exists yet — the create case — and is
         // itself rejected if someone created one in the meantime. Anything
@@ -198,9 +212,7 @@ export default function TenantBudgetPage() {
       showNotification({
         type: "success",
         title: "Budget updated",
-        message: resetSpend
-          ? `Cap set to ${formatMoney(cap)} and period rolled.`
-          : `Cap set to ${formatMoney(cap)}.`,
+        message: `${unlimited ? `Cap lifted (${unitCode})` : `Cap set to ${formatMoney(cap)}`}${resetSpend ? " and period rolled" : ""}.`,
       });
     } catch (err) {
       // Aborted is the OCC guard, not a fault: the row moved under us. Refetch
@@ -228,13 +240,14 @@ export default function TenantBudgetPage() {
   };
 
   const spent = budget?.spent;
-  const cap = budget?.maxBudget;
+  const cap = budgetLimit(budget?.budgetCeiling);
   // Display fallback when an existing budget row carries no unit.
   // XXX is correct: rendering "$0.00" for what's actually metering
   // would lie about the configured currency.
-  const budgetUnit = unitOf(cap?.currencyCode ? cap : spent);
-  const capped = moneyIsPositive(cap);
-  const pct = Math.min(100, moneyPercent(spent, cap) ?? 0);
+  const budgetUnit = ceilingUnit(budget?.budgetCeiling) || unitOf(spent);
+  const capped = cap !== undefined;
+  // A cap of zero is reached before anything is spent.
+  const pct = capped ? Math.min(100, moneyPercent(spent, cap) ?? 100) : 0;
   const overCap = capped && moneyToNanos(spent) >= moneyToNanos(cap);
 
   return (
@@ -274,9 +287,8 @@ export default function TenantBudgetPage() {
             <div>
               <p className="font-medium">No budget configured.</p>
               <p className="text-muted-foreground">
-                Set a non-zero cap below to activate server-side enforcement.
-                While zero, capability charges still accumulate but never
-                reject.
+                Set a cap below to activate server-side enforcement. While
+                unlimited, capability charges still accumulate but never reject.
               </p>
             </div>
           </div>
@@ -380,22 +392,26 @@ export default function TenantBudgetPage() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <div className="space-y-1.5">
                 <Label htmlFor="max-budget">Max budget</Label>
-                <Input
+                <LimitInput
                   id="max-budget"
-                  type="number"
                   // Amounts are exact to the nano; a coarser step would have
                   // the browser refuse a finer one before handleSubmit sees it.
                   step="any"
-                  min={0}
-                  placeholder="0 = unlimited"
+                  placeholder="0 allows no spend"
                   value={maxBudget}
-                  onChange={(e) => {
+                  onChange={(v) => {
                     setEdited(true);
-                    setMaxBudget(e.target.value);
+                    setMaxBudget(v);
+                  }}
+                  unlimited={unlimited}
+                  onUnlimitedChange={(next) => {
+                    setEdited(true);
+                    setUnlimited(next);
                   }}
                 />
                 <p className={T.hint}>
-                  0 keeps the counter accumulating without rejecting.
+                  Unlimited keeps the counter accumulating without rejecting; 0
+                  rejects every charge.
                 </p>
               </div>
 
@@ -469,7 +485,7 @@ export default function TenantBudgetPage() {
                   submitting ||
                   initialising ||
                   budgetQuery.isError ||
-                  !maxBudget.trim()
+                  (!unlimited && !maxBudget.trim())
                 }
               >
                 {submitting ? (

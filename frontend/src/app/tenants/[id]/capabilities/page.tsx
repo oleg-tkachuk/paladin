@@ -39,7 +39,8 @@ import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
 import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
 import { BiscuitCopyUsageDialog } from "./BiscuitCopyUsageDialog";
 import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS, isExpired } from "./_constants";
-import { budgetLimit, budgetUnit, requestLimit } from "./_ceilings";
+import { requestLimit } from "./_ceilings";
+import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
 import { capabilityClient } from "@/lib/connect/client";
 import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { cn } from "@/lib/utils";
@@ -575,13 +576,13 @@ export default function CapabilitiesPage() {
                             </span>
                           );
                         const reqCap = requestLimit(c.caveats);
-                        const budgetCap = budgetLimit(c.caveats);
+                        const budgetCap = budgetLimit(c.caveats?.budgetCeiling);
                         // Usage row → caveats → XXX fallback. A "USD"
                         // default would lie about the actual unit when
                         // both are absent (metering-only capabilities).
                         const cellUnit =
                           u.spent?.currencyCode ||
-                          budgetUnit(c.caveats) ||
+                          budgetUnit(c.caveats?.budgetCeiling) ||
                           ABSTRACT_UNIT_CODE;
                         return (
                           <div className="space-y-0.5">

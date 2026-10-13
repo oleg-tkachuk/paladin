@@ -127,9 +127,12 @@ func resolvePeriod(start, end time.Time) (time.Time, time.Time, error) {
 
 // Summary is the in-memory shape returned by GetTenantSummary.
 type Summary struct {
-	TotalAmount     limes.Nanos
-	UnitCode        string
-	MaxBudgetAmount limes.Nanos
+	TotalAmount limes.Nanos
+	UnitCode    string
+	// Ceiling is the tenant's budget cap, in CeilingUnit; nil when the
+	// tenant has no budget row.
+	Ceiling         *limes.BudgetCeiling
+	CeilingUnit     string
 	ChargeCount     int64
 	TopCapabilities []TopEntry
 	TopActors       []TopEntry
@@ -187,11 +190,11 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: summary: %w", err))
 	}
 
-	// Tenant budget cap join — best-effort. Missing row ⇒ no cap;
-	// out.MaxBudgetAmount stays 0 which the frontend renders as
-	// "no cap configured".
+	// Tenant budget cap join — best-effort. Missing row ⇒ out.Ceiling stays
+	// nil, which the frontend renders as "no cap configured".
 	if tb, ok := h.tenantBudget(ctx, tenantID); ok {
-		out.MaxBudgetAmount = apiutil.BudgetCeilingAmount(tb.Ceiling)
+		ceiling := tb.Ceiling
+		out.Ceiling, out.CeilingUnit = &ceiling, tb.UnitCode
 		if out.UnitCode == "" {
 			out.UnitCode = tb.UnitCode
 		}

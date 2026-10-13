@@ -15,8 +15,8 @@
 //   - Quota name format: `tenants/{tenant_id_or_slug}/quota`. Bucket
 //     quotas live under storageBackends/.../buckets/.../quota and
 //     surface in the per-bucket Quota tab (BACKLOG; not in this slice).
-//   - 0 caps mean "unlimited" per proto contract — same convention as
-//     TenantBudget.maxBudget. UI renders `∞ unlimited`.
+//   - 0 caps mean "unlimited" per the quota contract. UI renders
+//     `∞ unlimited`.
 
 import { useTenantChangesBlocked } from "../tenant-context";
 import { useState } from "react";
