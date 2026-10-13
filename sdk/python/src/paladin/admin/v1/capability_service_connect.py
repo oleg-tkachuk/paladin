@@ -120,8 +120,8 @@ class CapabilityService(Protocol):
     async def get_usage(self, request: CapabilityServiceGetUsageRequest, ctx: RequestContext[CapabilityServiceGetUsageRequest, CapabilityServiceGetUsageResponse], /) -> CapabilityServiceGetUsageResponse:
         """
         GetUsage returns the runtime counters for a capability:
-        request_count (vs Caveats.max_requests) and spent_micros
-        (vs Caveats.max_budget_micros). Returns NOT_FOUND when the
+        request_count (vs Caveats.max_requests) and spent
+        (vs Caveats.max_budget). Returns NOT_FOUND when the
         capability has never been used (no requests, no charges).
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
@@ -475,8 +475,8 @@ class CapabilityServiceClient(ConnectClient):
     ) -> CapabilityServiceGetUsageResponse:
         """
         GetUsage returns the runtime counters for a capability:
-        request_count (vs Caveats.max_requests) and spent_micros
-        (vs Caveats.max_budget_micros). Returns NOT_FOUND when the
+        request_count (vs Caveats.max_requests) and spent
+        (vs Caveats.max_budget). Returns NOT_FOUND when the
         capability has never been used (no requests, no charges).
         """
         return await self.execute_unary(
@@ -579,8 +579,8 @@ class CapabilityServiceSync(Protocol):
     def get_usage(self, request: CapabilityServiceGetUsageRequest, ctx: RequestContext[CapabilityServiceGetUsageRequest, CapabilityServiceGetUsageResponse], /) -> CapabilityServiceGetUsageResponse:
         """
         GetUsage returns the runtime counters for a capability:
-        request_count (vs Caveats.max_requests) and spent_micros
-        (vs Caveats.max_budget_micros). Returns NOT_FOUND when the
+        request_count (vs Caveats.max_requests) and spent
+        (vs Caveats.max_budget). Returns NOT_FOUND when the
         capability has never been used (no requests, no charges).
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
@@ -925,8 +925,8 @@ class CapabilityServiceClientSync(ConnectClientSync):
     ) -> CapabilityServiceGetUsageResponse:
         """
         GetUsage returns the runtime counters for a capability:
-        request_count (vs Caveats.max_requests) and spent_micros
-        (vs Caveats.max_budget_micros). Returns NOT_FOUND when the
+        request_count (vs Caveats.max_requests) and spent
+        (vs Caveats.max_budget). Returns NOT_FOUND when the
         capability has never been used (no requests, no charges).
         """
         return self.execute_unary(

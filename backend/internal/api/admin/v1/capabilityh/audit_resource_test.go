@@ -35,7 +35,7 @@ func TestIssueNamesTheCapabilityUnderItsTenant(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
+		Caveats:    openCaveats(limes.OpGet),
 	})
 	if err != nil {
 		t.Fatalf("Issue: %v", err)

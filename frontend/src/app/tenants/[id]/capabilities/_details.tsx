@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Money } from "@/gen/google/type/money_pb";
-import { formatMoney, moneyIsPositive, unitOf } from "@/lib/format/money";
+import { ABSTRACT_UNIT_CODE, formatMoney } from "@/lib/format/money";
+import { budgetLimit, budgetUnit, requestLimit } from "./_ceilings";
 import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS, isExpired } from "./_constants";
 import { Timestamp } from "@/components/Timestamp";
 
@@ -41,7 +42,9 @@ export function DetailsBody({
 }) {
   // Capability without a budget unit (metering-only) renders as XXX, not
   // USD — the bare "$" would imply currency where none is pinned.
-  const unit = unitOf(cap.caveats?.maxBudget);
+  const unit = budgetUnit(cap.caveats) ?? ABSTRACT_UNIT_CODE;
+  const maxRequests = requestLimit(cap.caveats);
+  const maxBudget = budgetLimit(cap.caveats);
   const principalKindLabel =
     PRINCIPAL_KIND_OPTIONS.find((o) => Number(o.value) === cap.subject?.kind)
       ?.label ?? `kind:${cap.subject?.kind}`;
@@ -176,11 +179,7 @@ export function DetailsBody({
       <DetailsSection title="Limits & usage">
         <DetailRow
           label="Max requests"
-          value={
-            (cap.caveats?.maxRequests ?? 0) > 0
-              ? cap.caveats!.maxRequests.toString()
-              : "unlimited"
-          }
+          value={maxRequests === null ? "unlimited" : maxRequests.toString()}
           mono
         />
         <DetailRow
@@ -197,11 +196,7 @@ export function DetailsBody({
         <DetailRow label="Currency / Unit" value={unit} mono />
         <DetailRow
           label="Max budget"
-          value={
-            moneyIsPositive(cap.caveats?.maxBudget)
-              ? formatMoney(cap.caveats?.maxBudget)
-              : "unlimited"
-          }
+          value={maxBudget === undefined ? "unlimited" : formatMoney(maxBudget)}
           mono
         />
         <DetailRow

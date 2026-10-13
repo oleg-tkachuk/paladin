@@ -28,8 +28,8 @@ describe("IssueCapabilityDialog", () => {
     h.showNotification.mockReset();
   });
 
-  // A limit left empty with Unlimited off would have been sent as 0, which
-  // the protocol reads as "forbid"; it was caught only by a toast on submit.
+  // A limit left empty with Unlimited off is no limit anyone chose: the
+  // submit waits for a number rather than sending one.
   it("holds the submit while a limit is on but empty, and says so", () => {
     open();
     fireEvent.change(screen.getByLabelText(/Subject/), {
@@ -55,7 +55,7 @@ describe("IssueCapabilityDialog", () => {
       target: { value: "-3" },
     });
     expect(screen.getByLabelText("Max requests")).toHaveAccessibleDescription(
-      "A positive number, or Unlimited.",
+      "A whole number (0 allows none), or Unlimited.",
     );
   });
 });

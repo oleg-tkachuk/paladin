@@ -88,6 +88,10 @@ func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 		!proto.Equal(out.GetReserved(), &money.Money{CurrencyCode: copyUnit, Nanos: 500_000_000}) {
 		t.Errorf("outermost = %v", out)
 	}
+	// Each block set one axis; the other is absent, not a limit of 0.
+	if in.MaxBudget != nil || out.MaxRequests != nil {
+		t.Errorf("an axis a block left alone reads as a limit: inner budget %v, outer requests %v", in.GetMaxBudget(), out.MaxRequests)
+	}
 	if len(reader.ids) != 2 {
 		t.Errorf("reader asked for %q", reader.ids)
 	}
@@ -125,5 +129,26 @@ func TestGetBiscuitUsageRefusals(t *testing.T) {
 				t.Fatalf("code = %v, want %v (%v)", codeOf(err), tc.want, err)
 			}
 		})
+	}
+}
+
+// A copy frozen at 0 reports its limits as 0, distinct from a copy that set
+// none.
+func TestGetBiscuitUsageReportsAFrozenCopy(t *testing.T) {
+	zeroRequests, zeroBudget := limes.RequestCeiling{}, limes.BudgetCeiling{}
+	target, copied := mintCopy(t, uuid.New(), limes.Capability{Caveats: limes.Caveats{UnitCode: copyUnit}},
+		limes.Attenuation{Requests: &zeroRequests, Budget: &zeroBudget})
+	store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
+	h := mkHandler(t, store, nil, &allowAuthorizer{}).
+		WithBiscuitCopies(&fakeCopier{copy: copied}, &copyStore{}).WithCopyUsage(&fakeCopyUsage{})
+
+	resp, err := h.GetBiscuitUsage(callerCtx(uuid.New(), "platform.admin"), biscuitUsageReq())
+	if err != nil {
+		t.Fatalf("GetBiscuitUsage: %v", err)
+	}
+	got := resp.GetCopies()
+	if len(got) != 1 || got[0].MaxRequests == nil || got[0].GetMaxRequests() != 0 ||
+		!proto.Equal(got[0].GetMaxBudget(), &money.Money{CurrencyCode: copyUnit}) {
+		t.Errorf("copies = %v, want one frozen at 0 requests and 0 %s", got, copyUnit)
 	}
 }

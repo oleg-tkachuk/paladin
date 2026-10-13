@@ -60,7 +60,7 @@ func TestCapabilityActions_DeniedWithoutAGrant(t *testing.T) {
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: own.String(), Subject: "self",
 		},
 		Audience: []string{"paladin-data"}, TtlSeconds: 300,
-		Caveats: &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
+		Caveats: openCaveats(limes.OpGet),
 	})
 	_, revokeErr := h.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: uuid.New().String()})
 	_, listErr := h.List(ctx, &adminv1.CapabilityServiceListRequest{TenantId: own.String()})

@@ -42,7 +42,7 @@ func issueRequest(tenant uuid.UUID) *adminv1.CapabilityServiceIssueRequest {
 		},
 		Audience:   []string{auth.TokenPlaneData},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
+		Caveats:    openCaveats(limes.OpGet),
 	}
 }
 
@@ -131,4 +131,24 @@ func reasonOf(t *testing.T, err error) commonv1.ErrorReason {
 		}
 	}
 	return commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED
+}
+
+// A top-level capability has no parent whose ceilings an unset one could
+// keep; issuing it frozen, or unlimited, unasked would be the old 0 again.
+func TestIssueRefusesAnUnsetCeiling(t *testing.T) {
+	for name, clear := range map[string]func(*adminv1.CapabilityCaveats){
+		"requests": func(c *adminv1.CapabilityCaveats) { c.RequestCeiling = nil },
+		"budget":   func(c *adminv1.CapabilityCaveats) { c.BudgetCeiling = nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &failingInsertStore{err: errDriver}
+			h := mkHandler(t, store, nil, &allowAuthorizer{})
+			req := issueRequest(uuid.New())
+			clear(req.Caveats)
+			_, err := h.Issue(adminCtx(), req)
+			if connect.CodeOf(err) != connect.CodeInvalidArgument {
+				t.Errorf("err = %v, want InvalidArgument before the store is reached", err)
+			}
+		})
+	}
 }

@@ -47,24 +47,34 @@ class CapabilityPrincipal(_message.Message):
     def __init__(self, kind: _Optional[_Union[PrincipalKind, str]] = ..., tenant_id: _Optional[str] = ..., subject: _Optional[str] = ..., agent_type: _Optional[str] = ..., agent_version: _Optional[str] = ..., run_id: _Optional[str] = ..., parent_agent_id: _Optional[str] = ..., model: _Optional[str] = ..., mcp_client: _Optional[str] = ...) -> None: ...
 
 class CapabilityCaveats(_message.Message):
-    __slots__ = ("ops", "resource_prefixes", "resource_uris", "max_requests", "allow_tainted_read", "idempotency_key_required", "source_ip_cidr", "max_budget")
+    __slots__ = ("ops", "resource_prefixes", "resource_uris", "allow_tainted_read", "idempotency_key_required", "source_ip_cidr", "max_requests", "unlimited_requests", "max_budget", "unlimited_budget")
     OPS_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_PREFIXES_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_URIS_FIELD_NUMBER: _ClassVar[int]
-    MAX_REQUESTS_FIELD_NUMBER: _ClassVar[int]
     ALLOW_TAINTED_READ_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_REQUIRED_FIELD_NUMBER: _ClassVar[int]
     SOURCE_IP_CIDR_FIELD_NUMBER: _ClassVar[int]
+    MAX_REQUESTS_FIELD_NUMBER: _ClassVar[int]
+    UNLIMITED_REQUESTS_FIELD_NUMBER: _ClassVar[int]
     MAX_BUDGET_FIELD_NUMBER: _ClassVar[int]
+    UNLIMITED_BUDGET_FIELD_NUMBER: _ClassVar[int]
     ops: _containers.RepeatedScalarFieldContainer[str]
     resource_prefixes: _containers.RepeatedScalarFieldContainer[str]
     resource_uris: _containers.RepeatedScalarFieldContainer[str]
-    max_requests: int
     allow_tainted_read: bool
     idempotency_key_required: bool
     source_ip_cidr: _containers.RepeatedScalarFieldContainer[str]
+    max_requests: int
+    unlimited_requests: bool
     max_budget: _money_pb2.Money
-    def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...
+    unlimited_budget: CapabilityUnlimitedBudget
+    def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., unlimited_requests: _Optional[bool] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[CapabilityUnlimitedBudget, _Mapping]] = ...) -> None: ...
+
+class CapabilityUnlimitedBudget(_message.Message):
+    __slots__ = ("currency_code",)
+    CURRENCY_CODE_FIELD_NUMBER: _ClassVar[int]
+    currency_code: str
+    def __init__(self, currency_code: _Optional[str] = ...) -> None: ...
 
 class Capability(_message.Message):
     __slots__ = ("id", "issuer", "subject", "audience", "caveats", "issued_at", "not_before", "expires_at", "parent_id", "generation", "confirmation_jkt")

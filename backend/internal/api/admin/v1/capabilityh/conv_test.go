@@ -178,19 +178,30 @@ func TestProtoToCaveatsNil(t *testing.T) {
 	}
 }
 
-// A client that sets no max_budget names no unit; the server must fill the
-// default rather than minting a capability with a blank currency.
+// An unlimited budget that names no currency is in the default unit, not a
+// blank one.
 func TestProtoToCaveatsDefaultsUnitCode(t *testing.T) {
-	got := mustCaveats(t, &adminv1.CapabilityCaveats{})
+	got := mustCaveats(t, openCaveats())
 	if got.UnitCode != limes.DefaultUnitCode {
 		t.Errorf("UnitCode = %q, want the %q default", got.UnitCode, limes.DefaultUnitCode)
 	}
 }
 
 func TestProtoToCaveatsKeepsExplicitUnitCode(t *testing.T) {
-	got := mustCaveats(t, &adminv1.CapabilityCaveats{MaxBudget: &money.Money{CurrencyCode: "EUR"}})
-	if got.UnitCode != "EUR" {
-		t.Errorf("UnitCode = %q, want EUR", got.UnitCode)
+	for name, c := range map[string]*adminv1.CapabilityCaveats{
+		"a limit":   {BudgetCeiling: &adminv1.CapabilityCaveats_MaxBudget{MaxBudget: &money.Money{CurrencyCode: "EUR"}}},
+		"unlimited": {BudgetCeiling: unlimitedBudget("EUR")},
+	} {
+		if got := mustCaveats(t, c); got.UnitCode != "EUR" {
+			t.Errorf("%s: UnitCode = %q, want EUR", name, got.UnitCode)
+		}
+	}
+}
+
+func TestProtoToCaveatsRefusesAnUnknownUnlimitedCurrency(t *testing.T) {
+	_, err := protoToCaveats(&adminv1.CapabilityCaveats{BudgetCeiling: unlimitedBudget("XYZ")}, nil)
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("err = %v, want InvalidArgument", err)
 	}
 }
 
@@ -198,8 +209,8 @@ func TestProtoToCaveatsProjectsEveryField(t *testing.T) {
 	got := mustCaveats(t, &adminv1.CapabilityCaveats{
 		ResourcePrefixes:       []string{"tenants/a/"},
 		ResourceUris:           []string{"paladin://x"},
-		MaxRequests:            10,
-		MaxBudget:              &money.Money{CurrencyCode: "UAH", Units: 250},
+		RequestCeiling:         &adminv1.CapabilityCaveats_MaxRequests{MaxRequests: 10},
+		BudgetCeiling:          &adminv1.CapabilityCaveats_MaxBudget{MaxBudget: &money.Money{CurrencyCode: "UAH", Units: 250}},
 		AllowTaintedRead:       true,
 		IdempotencyKeyRequired: true,
 		SourceIpCidr:           []string{"10.0.0.0/8"},
@@ -230,23 +241,24 @@ func TestProtoToCaveatsProjectsEveryField(t *testing.T) {
 
 func mustCaveats(t *testing.T, c *adminv1.CapabilityCaveats) limes.Caveats {
 	t.Helper()
-	got, err := protoToCaveats(c)
+	got, err := protoToCaveats(c, nil)
 	if err != nil {
 		t.Fatalf("protoToCaveats: %v", err)
 	}
 	return got
 }
 
-// The budget arrives as Money, exact to the nano; absent is no budget.
+// The budget arrives as Money, exact to the nano.
 func TestProtoToCaveatsBudgetMoney(t *testing.T) {
-	got := mustCaveats(t, &adminv1.CapabilityCaveats{MaxBudget: &money.Money{CurrencyCode: "USD", Units: 19, Nanos: 990_000_000}})
+	got := mustCaveats(t, &adminv1.CapabilityCaveats{BudgetCeiling: &adminv1.CapabilityCaveats_MaxBudget{
+		MaxBudget: &money.Money{CurrencyCode: "USD", Units: 19, Nanos: 990_000_000},
+	}})
 	if want := (limes.BudgetCeiling{Max: limes.MustParseAmount("19.99")}); got.Budget != want {
 		t.Errorf("budget = %s, want %s", got.Budget, want)
 	}
-	if got := mustCaveats(t, &adminv1.CapabilityCaveats{}); !got.Budget.Unlimited {
-		t.Errorf("absent: budget = %s, want unlimited", got.Budget)
-	}
-	_, err := protoToCaveats(&adminv1.CapabilityCaveats{MaxBudget: &money.Money{CurrencyCode: "USD", Units: -1}})
+	_, err := protoToCaveats(&adminv1.CapabilityCaveats{BudgetCeiling: &adminv1.CapabilityCaveats_MaxBudget{
+		MaxBudget: &money.Money{CurrencyCode: "USD", Units: -1},
+	}}, nil)
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("negative: err = %v, want InvalidArgument", err)
 	}
@@ -266,33 +278,104 @@ func TestProtoToCaveatsRefusesTheRemovedDouble(t *testing.T) {
 	if err := proto.Unmarshal(raw, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := protoToCaveats(old); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := protoToCaveats(old, nil); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("err = %v, want InvalidArgument", err)
 	}
 }
 
-// The API's 0 sets no ceiling, and limes reads a zero ceiling as one that
-// allows nothing: an absent or zero max_requests / max_budget must become
-// Unlimited, or every capability issued without limits would be frozen.
-func TestProtoToCaveatsZeroCeilingIsUnlimited(t *testing.T) {
-	for name, c := range map[string]*adminv1.CapabilityCaveats{
-		"absent": {},
-		"zero":   {MaxRequests: 0, MaxBudget: &money.Money{CurrencyCode: "USD"}},
+// A ceiling of 0 allows nothing, as limes reads it; "no limit" is its own
+// arm. A 0 read as unlimited would make a frozen capability impossible to
+// issue.
+func TestProtoToCaveatsCeilings(t *testing.T) {
+	for name, tc := range map[string]struct {
+		c        *adminv1.CapabilityCaveats
+		requests limes.RequestCeiling
+		budget   limes.BudgetCeiling
+	}{
+		"zero allows nothing": {
+			c: &adminv1.CapabilityCaveats{
+				RequestCeiling: &adminv1.CapabilityCaveats_MaxRequests{MaxRequests: 0},
+				BudgetCeiling:  &adminv1.CapabilityCaveats_MaxBudget{MaxBudget: &money.Money{CurrencyCode: "USD"}},
+			},
+		},
+		"a limit": {
+			c: &adminv1.CapabilityCaveats{
+				RequestCeiling: &adminv1.CapabilityCaveats_MaxRequests{MaxRequests: 7},
+				BudgetCeiling:  &adminv1.CapabilityCaveats_MaxBudget{MaxBudget: &money.Money{CurrencyCode: "USD", Units: 2}},
+			},
+			requests: limes.RequestCeiling{Max: 7},
+			budget:   limes.BudgetCeiling{Max: 2 * limes.NanosPerUnit},
+		},
+		"unlimited": {
+			c:        openCaveats(),
+			requests: limes.RequestCeiling{Unlimited: true},
+			budget:   limes.BudgetCeiling{Unlimited: true},
+		},
 	} {
-		got := mustCaveats(t, c)
-		if !got.Requests.Unlimited || !got.Budget.Unlimited {
-			t.Errorf("%s: ceilings = %s / %s, want unlimited", name, got.Requests, got.Budget)
+		got := mustCaveats(t, tc.c)
+		if got.Requests != tc.requests || got.Budget != tc.budget {
+			t.Errorf("%s: ceilings = %s / %s, want %s / %s", name, got.Requests, got.Budget, tc.requests, tc.budget)
 		}
 	}
 }
 
-// An unlimited ceiling reads back as the API's 0.
-func TestCaveatsToProtoUnlimitedIsZero(t *testing.T) {
-	out := caveatsToProto(limes.Caveats{
+// An unset ceiling keeps the parent's, and the parent's unit with its budget;
+// a set one replaces it.
+func TestProtoToCaveatsInheritsUnsetCeilings(t *testing.T) {
+	parent := limes.Caveats{
+		Requests: limes.RequestCeiling{Max: 9},
+		Budget:   limes.BudgetCeiling{Max: limes.NanosPerUnit},
+		UnitCode: "EUR",
+	}
+	got, err := protoToCaveats(&adminv1.CapabilityCaveats{}, &parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Requests != parent.Requests || got.Budget != parent.Budget || got.UnitCode != parent.UnitCode {
+		t.Errorf("unset: %s / %s %s, want the parent's %s / %s %s",
+			got.Requests, got.Budget, got.UnitCode, parent.Requests, parent.Budget, parent.UnitCode)
+	}
+	got, err = protoToCaveats(&adminv1.CapabilityCaveats{
+		RequestCeiling: &adminv1.CapabilityCaveats_MaxRequests{MaxRequests: 0},
+	}, &parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Requests != (limes.RequestCeiling{}) || got.Budget != parent.Budget {
+		t.Errorf("requests set to 0: %s / %s, want 0 / the parent's %s", got.Requests, got.Budget, parent.Budget)
+	}
+}
+
+func TestRequireCeilings(t *testing.T) {
+	for name, c := range map[string]*adminv1.CapabilityCaveats{
+		"neither":     {},
+		"no requests": {BudgetCeiling: unlimitedBudget("")},
+		"no budget":   {RequestCeiling: &adminv1.CapabilityCaveats_UnlimitedRequests{UnlimitedRequests: true}},
+	} {
+		if err := requireCeilings(c); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%s: err = %v, want InvalidArgument", name, err)
+		}
+	}
+	if err := requireCeilings(openCaveats()); err != nil {
+		t.Errorf("both set: %v", err)
+	}
+}
+
+// Each ceiling reads back on its own arm, so a client can tell "no limit"
+// from "nothing allowed".
+func TestCaveatsToProtoCeilings(t *testing.T) {
+	open := caveatsToProto(limes.Caveats{
 		Requests: limes.RequestCeiling{Unlimited: true}, Budget: limes.BudgetCeiling{Unlimited: true}, UnitCode: "EUR",
 	})
-	if out.GetMaxRequests() != 0 || out.GetMaxBudget().GetUnits() != 0 || out.GetMaxBudget().GetNanos() != 0 {
-		t.Errorf("ceilings = %d / %v, want 0", out.GetMaxRequests(), out.GetMaxBudget())
+	if !open.GetUnlimitedRequests() || open.GetUnlimitedBudget().GetCurrencyCode() != "EUR" {
+		t.Errorf("unlimited: %v / %v", open.GetRequestCeiling(), open.GetBudgetCeiling())
+	}
+	frozen := caveatsToProto(limes.Caveats{UnitCode: "EUR"})
+	if _, ok := frozen.GetRequestCeiling().(*adminv1.CapabilityCaveats_MaxRequests); !ok || frozen.GetMaxRequests() != 0 {
+		t.Errorf("zero requests: %v", frozen.GetRequestCeiling())
+	}
+	if want := (&money.Money{CurrencyCode: "EUR"}); !proto.Equal(frozen.GetMaxBudget(), want) {
+		t.Errorf("zero budget: %v, want %v", frozen.GetBudgetCeiling(), want)
 	}
 }
 
@@ -304,7 +387,7 @@ func TestCaveatsToProtoBudgetMoney(t *testing.T) {
 }
 
 func TestProtoToCaveatsNoOps(t *testing.T) {
-	got := mustCaveats(t, &adminv1.CapabilityCaveats{})
+	got := mustCaveats(t, openCaveats())
 	if len(got.Ops) != 0 {
 		t.Errorf("Ops = %v, want none", got.Ops)
 	}
@@ -403,4 +486,21 @@ func TestPrincipalRoundTrip(t *testing.T) {
 	if got.Agent == nil || got.Agent.AgentType != convAgentType || got.Agent.RunID != runID {
 		t.Errorf("agent = %+v", got.Agent)
 	}
+}
+
+// openCaveats are caveats allowing ops, with no request or budget limit.
+func openCaveats(ops ...limes.Op) *adminv1.CapabilityCaveats {
+	c := &adminv1.CapabilityCaveats{
+		RequestCeiling: &adminv1.CapabilityCaveats_UnlimitedRequests{UnlimitedRequests: true},
+		BudgetCeiling:  unlimitedBudget(""),
+	}
+	for _, op := range ops {
+		c.Ops = append(c.Ops, string(op))
+	}
+	return c
+}
+
+// unlimitedBudget is a budget with no limit, in currency.
+func unlimitedBudget(currency string) *adminv1.CapabilityCaveats_UnlimitedBudget {
+	return &adminv1.CapabilityCaveats_UnlimitedBudget{UnlimitedBudget: &adminv1.CapabilityUnlimitedBudget{CurrencyCode: currency}}
 }

@@ -145,7 +145,7 @@ import "github.com/oleg-tkachuk/limes"
 narrowed, err := limes.Attenuate(issued.GetBiscuit(), limes.Attenuation{
     Ops:              []limes.Op{limes.OpGet},
     ResourcePrefixes: []string{"corpus/public/"},
-    Planes:           []string{"data"}, // the data plane
+    Audience:         []string{"data"}, // the data plane
     ExpiresAt:        time.Now().Add(10 * time.Minute),
 })
 client, err := paladin.New(dataURL, paladin.WithCapability(narrowed))
@@ -155,9 +155,12 @@ A field left empty leaves that dimension as it is; a set one replaces it and
 must be within what the token allows, or the server refuses the whole token.
 Setting `ResourcePrefixes` or `ResourceURIs` replaces both. `ConfirmationJKT`
 (`DPoPThumbprint(key.Public())`) binds the token to a key, and only an unbound
-token can be bound. `MaxRequests` and `MaxBudget` (`limes.Nanos`, billionths of the
-capability's unit) give the copy limits of its own, counted apart from other copies and within every limit already in
-force; spending past them answers `ResourceExhausted`.
+token can be bound. `Requests` (`&limes.RequestCeiling{Max: n}`) and `Budget`
+(`&limes.BudgetCeiling{Max: n}`, in `limes.Nanos`, billionths of the
+capability's unit) give the copy limits of its own, counted apart from other
+copies and within every limit already in force; spending past them answers
+`ResourceExhausted`. A limit of 0 freezes the copy without revoking it. A copy
+only narrows, so an unlimited ceiling is refused.
 `CapabilityService.GetBiscuitUsage` takes a copy and reports each limit in
 force on it with what has been counted against it. The facts it writes are listed in
 [`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json),

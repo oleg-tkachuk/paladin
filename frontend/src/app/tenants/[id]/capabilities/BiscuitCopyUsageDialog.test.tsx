@@ -50,14 +50,12 @@ describe("BiscuitCopyUsageDialog", () => {
         {
           revocationId: INNER,
           maxRequests: 10n,
-          maxBudget: xxx("0"),
           requestCount: 3n,
           spent: xxx("0"),
           reserved: xxx("0"),
         },
         {
           revocationId: OUTER,
-          maxRequests: 0n,
           maxBudget: xxx("2"),
           requestCount: 7n,
           spent: xxx("1.25"),
@@ -82,11 +80,39 @@ describe("BiscuitCopyUsageDialog", () => {
     const [inner, outer] = rows.map(cells);
     expect(inner[0]).toBe(`${shortRevocationId(INNER)}(innermost)`);
     expect(inner[1]).toBe("3 / 10");
+    expect(inner[2]).toBe("0.0000 units"); // no budget limit at this block
     expect(outer[0]).toBe(shortRevocationId(OUTER));
     expect(outer[1]).toBe("7"); // no request limit at this block
     // XXX reads as a number of units, never with the generic "¤" sign.
     expect(outer[2]).toBe("1.2500 units / 2.0000 units");
     expect(outer[3]).toBe("0.5000 units");
+  });
+
+  // A frozen copy's limits of 0 show, where a block that set none shows none.
+  it("shows a limit of zero on a frozen copy", async () => {
+    h.getBiscuitUsage.mockResolvedValue({
+      capabilityId: "cap-1",
+      copies: [
+        {
+          revocationId: INNER,
+          maxRequests: 0n,
+          maxBudget: xxx("0"),
+          requestCount: 0n,
+          spent: xxx("0"),
+          reserved: xxx("0"),
+        },
+      ],
+    });
+    open();
+    fireEvent.change(tokenBox(), { target: { value: BISCUIT } });
+    fireEvent.click(check());
+    const result = await screen.findByTestId("copy-usage-result");
+    const [row] = within(result).getAllByRole("row").slice(1);
+    const cells = within(row)
+      .getAllByRole("cell")
+      .map((c) => c.textContent?.trim());
+    expect(cells[1]).toBe("0 / 0");
+    expect(cells[2]).toBe("0.0000 units / 0.0000 units");
   });
 
   it("says when no limits were narrowed onto the copy", async () => {

@@ -216,7 +216,7 @@ expect "unknown update_mask path refused" "$r" test "$(code_of "$r")" = "$CODE_I
 issue() {
     admin_rpc CapabilityService/Issue "$(jq -cn --arg t "$tenant" --arg s "$1" --argjson ops "$2" \
         --argjson ttl "$CAPABILITY_TTL_SECONDS" --argjson max "$CAPABILITY_MAX_REQUESTS" \
-        '{subject:{kind:"PRINCIPAL_KIND_AGENT",tenantId:$t,subject:$s,agentType:"live-smoke"},audience:["data"],caveats:{ops:$ops,maxRequests:$max},ttlSeconds:$ttl}')"
+        '{subject:{kind:"PRINCIPAL_KIND_AGENT",tenantId:$t,subject:$s,agentType:"live-smoke"},audience:["data"],caveats:{ops:$ops,maxRequests:$max,unlimitedBudget:{}},ttlSeconds:$ttl}')"
 }
 r=$(issue live-smoke-writer '["put","get","list","presign","delete"]')
 writer=$(printf %s "$r" | jq -r '.token // empty')

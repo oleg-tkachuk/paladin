@@ -123,17 +123,38 @@ describe("CapabilitiesPage", () => {
     await waitFor(() => expect(h.issue).toHaveBeenCalled());
   });
 
-  it("sends an unlimited budget as a zero amount in XXX", async () => {
+  it("sends unlimited ceilings explicitly, the budget in XXX", async () => {
     h.issue.mockRejectedValue(new Error("boom"));
     render(<CapabilitiesPage />);
     await userEvent.click(issueButtons()[0]);
     await userEvent.type(dialogSubject(), "agent-x");
     fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
     await waitFor(() => expect(h.issue).toHaveBeenCalled());
-    expect(h.issue.mock.calls[0][0].caveats.maxBudget).toMatchObject({
-      currencyCode: "XXX",
-      units: 0n,
-      nanos: 0,
+    const caveats = h.issue.mock.calls[0][0].caveats;
+    expect(caveats.requestCeiling).toEqual({
+      case: "unlimitedRequests",
+      value: true,
+    });
+    expect(caveats.budgetCeiling.case).toBe("unlimitedBudget");
+    expect(caveats.budgetCeiling.value).toMatchObject({ currencyCode: "XXX" });
+  });
+
+  // 0 is a limit now, not "none": a capability can be issued frozen.
+  it("sends a typed zero as a limit that allows nothing", async () => {
+    h.issue.mockRejectedValue(new Error("boom"));
+    render(<CapabilitiesPage />);
+    await userEvent.click(issueButtons()[0]);
+    const dialog = within(screen.getByRole("dialog"));
+    await userEvent.type(dialogSubject(), "agent-x");
+    await userEvent.click(
+      dialog.getAllByRole("button", { name: /Unlimited/ })[0],
+    );
+    await userEvent.type(dialog.getByLabelText(/Max requests/), "0");
+    fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+    await waitFor(() => expect(h.issue).toHaveBeenCalled());
+    expect(h.issue.mock.calls[0][0].caveats.requestCeiling).toEqual({
+      case: "maxRequests",
+      value: 0n,
     });
   });
 
@@ -150,7 +171,9 @@ describe("CapabilitiesPage", () => {
     await userEvent.type(dialog.getByLabelText(/Max budget/), "0.300000001");
     fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
     await waitFor(() => expect(h.issue).toHaveBeenCalled());
-    expect(h.issue.mock.calls[0][0].caveats.maxBudget).toMatchObject({
+    const budget = h.issue.mock.calls[0][0].caveats.budgetCeiling;
+    expect(budget.case).toBe("maxBudget");
+    expect(budget.value).toMatchObject({
       currencyCode: "XXX",
       units: 0n,
       nanos: 300_000_001,
@@ -168,8 +191,11 @@ describe("CapabilitiesPage", () => {
           resourcePrefixes: [],
           resourceUris: [],
           sourceIpCidr: [],
-          maxRequests: 0n,
-          maxBudget: { currencyCode: "XXX", units: 0n, nanos: 0 },
+          requestCeiling: { case: "unlimitedRequests", value: true },
+          budgetCeiling: {
+            case: "unlimitedBudget",
+            value: { currencyCode: "XXX" },
+          },
           allowTaintedRead: false,
           idempotencyKeyRequired: false,
         },
@@ -208,8 +234,11 @@ describe("CapabilitiesPage", () => {
       resourcePrefixes: [],
       resourceUris: [],
       sourceIpCidr: [],
-      maxRequests: 0n,
-      maxBudget: { currencyCode: "XXX", units: 0n, nanos: 0 },
+      requestCeiling: { case: "unlimitedRequests", value: true },
+      budgetCeiling: {
+        case: "unlimitedBudget",
+        value: { currencyCode: "XXX" },
+      },
       allowTaintedRead: false,
       idempotencyKeyRequired: false,
     },
