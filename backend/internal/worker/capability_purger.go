@@ -1,8 +1,9 @@
-// CapabilityPurger drops rows from capability_revocations whose
-// underlying capability has been expired for at least ExpiredFor.
-// Bounds the denylist over time without affecting verifier
-// correctness — an expired token can never satisfy the time gate, so
-// removing its revocation row is safe.
+// CapabilityPurger drops the capability records — with their revocation
+// entries — that have been expired for at least ExpiredFor (limes
+// Store.Purge), then releases expired holds and drops the usage rows of the
+// capabilities purged. Bounds the records and the denylist over time without
+// affecting verifier correctness: the retention is never shorter than
+// limes.MinPurgeRetention, past which no verifier accepts the token.
 //
 // Lives next to the other housekeeping workers but in its own file
 // because it needs the limes.Store interface, which the
@@ -30,14 +31,16 @@ type ReplayPurger interface {
 	PurgeExpired(ctx context.Context) (int64, error)
 }
 
-// DefaultCapabilityExpiredFor is how long a revocation outlives its
-// capability's expiry before the purger drops it, when ExpiredFor is unset.
+// DefaultCapabilityExpiredFor is how long a capability stays on record past
+// its expiry before the purger drops it, when ExpiredFor is unset. A cost
+// reported later than that is charged to nothing: the meter refuses a
+// capability not on record.
 const DefaultCapabilityExpiredFor = 24 * time.Hour
 
-// CapabilityPurger periodically calls Store.PurgeExpired and, when
-// Usage is wired, sweeps orphan capability_usage rows whose parent
-// capability is gone; when Replay is wired, it drops expired DPoP proof
-// ids. Disabled when Interval <= 0.
+// CapabilityPurger periodically calls Store.Purge and, when Usage is wired,
+// releases expired holds and sweeps the usage rows of capabilities no longer
+// on record; when Replay is wired, it drops expired DPoP proof ids. Disabled
+// when Interval <= 0.
 type CapabilityPurger struct {
 	Store      limes.Store
 	Usage      limes.UsageStore[pgx.Tx]
@@ -72,45 +75,54 @@ func (p *CapabilityPurger) tick(ctx context.Context) error {
 	// cannot write into one.
 	ctx = auth.WithCrossTenantRead(ctx)
 
-	n, err := p.Store.PurgeExpired(ctx, p.ExpiredFor)
-	if err != nil {
-		p.log().Warn("failed to purge capability revocations", zap.Error(err))
-		return err
-	}
-	if n > 0 {
-		p.log().Info("purged expired capability revocations", zap.Int64("rows", n))
+	// Each housekeeping call handles at most one batch; a batch short of
+	// the limit is the last, and a backlog drains over several.
+	for {
+		res, err := p.Store.Purge(ctx, limes.PurgeRequest{ExpiredFor: p.ExpiredFor})
+		if err != nil {
+			p.log().Warn("failed to purge expired capabilities", zap.Error(err))
+			return err
+		}
+		if res.Purged > 0 {
+			p.log().Info("purged expired capabilities", zap.Int64("records", res.Purged))
+		}
+		if res.Purged < limes.DefaultHousekeepingLimit {
+			break
+		}
 	}
 	var tickErr error
 	if p.Usage != nil {
 		// Expired reservations first: their holds keep counting against
-		// every ceiling until released, and the orphan sweep below may
-		// drop the usage rows they would be released from.
+		// every ceiling until released.
 		for {
-			n, err := p.Usage.ReleaseExpired(ctx)
+			res, err := p.Usage.ReleaseExpired(ctx, limes.ReleaseExpiredRequest{})
 			if err != nil {
 				p.log().Warn("failed to release expired capability reservations", zap.Error(err))
 				tickErr = err
 				break
 			}
-			if n == 0 {
+			if res.Released > 0 {
+				p.log().Info("released expired capability reservations", zap.Int64("reservations", res.Released))
+			}
+			if res.Released < limes.DefaultHousekeepingLimit {
 				break
 			}
-			p.log().Info("released expired capability reservations", zap.Int64("reservations", n))
 		}
-		// Loop until 0 — bounded SQL keeps each statement
-		// short, but a backlog (operator just ran a mass
-		// revoke) needs more than one batch to drain.
+		// Then what the meter keeps for the capabilities just purged: their
+		// holds go back to their ancestors and tenants, their rows go.
 		for {
-			n, err := p.Usage.PurgeOrphans(ctx)
+			res, err := p.Usage.PurgeOrphans(ctx, limes.PurgeOrphansRequest{})
 			if err != nil {
 				p.log().Warn("failed to purge capability usage orphans", zap.Error(err))
 				tickErr = err
 				break
 			}
-			if n == 0 {
+			if res.Purged > 0 {
+				p.log().Info("purged capability usage orphans", zap.Int64("capabilities", res.Purged))
+			}
+			if res.Purged < limes.DefaultHousekeepingLimit {
 				break
 			}
-			p.log().Info("purged capability usage orphans", zap.Int64("rows", n))
 		}
 	}
 	if p.Replay != nil {

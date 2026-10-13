@@ -18,6 +18,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/dpop"
+	"github.com/oleg-tkachuk/limes/jwks"
 )
 
 // The cross-language Biscuit case. limes mints seed.biscuit from its golden
@@ -139,15 +141,27 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 		t.Fatalf("parse case: %v", err)
 	}
 	pub := ed25519.NewKeyFromSeed(crossLangSeed[:]).Public().(ed25519.PublicKey)
-	v, err := limes.NewStandardVerifier(limes.VerifierConfig{
-		Keys:               limes.NewStaticKeyResolver(map[string]ed25519.PublicKey{crossLangKID: pub}),
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{crossLangKID: pub}})
+	if err != nil {
+		t.Fatalf("keys: %v", err)
+	}
+	replay, err := dpop.NewMemoryReplayCache(dpop.MemoryReplayCacheConfig{})
+	if err != nil {
+		t.Fatalf("replay cache: %v", err)
+	}
+	proofs, err := dpop.NewVerifier(dpop.VerifierConfig{Replay: replay, Now: crossLangClock})
+	if err != nil {
+		t.Fatalf("proof verifier: %v", err)
+	}
+	v, err := limes.NewVerifier(limes.VerifierConfig{
+		Keys:               keys,
 		Revocations:        noBiscuitRevocations{},
 		BiscuitRevocations: noBiscuitRevocations{},
 		TrustedIssuers:     []string{crossLangIssuer},
 		Now:                crossLangClock,
 		AcceptBiscuit:      true,
 		MeterCopies:        true,
-		DPoP:               &limes.DPoPVerifier{Replay: limes.NewMemoryReplayCache(0)},
+		DPoP:               proofs,
 	})
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
@@ -159,25 +173,27 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 	bindKey := ed25519.NewKeyFromSeed(bindSeed)
 	ctx := context.Background()
 
-	seed, err := v.Verify(ctx, limes.VerifyRequest{Token: readShared(t, biscuitSeed), Audience: TokenPlaneMCP})
+	seedVerified, err := v.Verify(ctx, limes.VerifyRequest{Token: readShared(t, biscuitSeed), Audience: TokenPlaneMCP})
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
+	seed := seedVerified.Capability()
 	token := readShared(t, pythonBiscuit)
 	// The copy is bound, so it is accepted only with a proof from its key.
-	proof, err := limes.NewDPoPProof(bindKey, limes.DPoPProofRequest{
-		Method: http.MethodPost, URL: crossLangProofURL, Token: token, Now: crossLangClock(),
+	proof, err := dpop.Sign(ctx, bindKey, dpop.ProofRequest{
+		Method: http.MethodPost, URL: crossLangProofURL, Token: token, IssuedAt: crossLangClock(),
 	})
 	if err != nil {
 		t.Fatalf("proof: %v", err)
 	}
-	got, err := v.Verify(ctx, limes.VerifyRequest{
+	verified, err := v.Verify(ctx, limes.VerifyRequest{
 		Token: token, Audience: TokenPlaneData,
-		DPoP: limes.DPoPProof{Proof: proof, Method: http.MethodPost, URL: crossLangProofURL},
+		DPoP: dpop.Proof{JWT: proof, Method: http.MethodPost, URL: crossLangProofURL},
 	})
 	if err != nil {
 		t.Fatalf("the Python-attenuated token is refused: %v", err)
 	}
+	got := verified.Capability()
 
 	want := c.Expect
 	if got.ID != seed.ID {
@@ -198,8 +214,9 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 	if got.ConfirmationJKT != want.ConfirmationJKT {
 		t.Errorf("ConfirmationJKT = %q, want %q", got.ConfirmationJKT, want.ConfirmationJKT)
 	}
-	if len(got.Copies) != 1 || got.Copies[0].MaxRequests != want.CopyMaxRequests ||
-		got.Copies[0].MaxBudget != limes.Nanos(want.CopyMaxBudget) {
+	if len(got.Copies) != 1 || got.Copies[0].Requests == nil || got.Copies[0].Budget == nil ||
+		*got.Copies[0].Requests != (limes.RequestCeiling{Max: want.CopyMaxRequests}) ||
+		*got.Copies[0].Budget != (limes.BudgetCeiling{Max: limes.Nanos(want.CopyMaxBudget)}) {
 		t.Errorf("Copies = %+v, want one with %d requests and %d nanos", got.Copies, want.CopyMaxRequests, want.CopyMaxBudget)
 	}
 	if _, err := v.Verify(ctx, limes.VerifyRequest{Token: token, Audience: TokenPlaneMCP}); err == nil {

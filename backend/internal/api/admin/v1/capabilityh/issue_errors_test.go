@@ -27,7 +27,7 @@ type failingInsertStore struct {
 	err error
 }
 
-func (s *failingInsertStore) Insert(context.Context, limes.Capability, limes.Principal) error {
+func (s *failingInsertStore) Insert(context.Context, limes.InsertRequest) error {
 	return s.err
 }
 
@@ -65,7 +65,7 @@ func TestIssueAnswersAFailureByItsKind(t *testing.T) {
 	for _, tc := range issuanceCases {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &failingInsertStore{err: tc.err}
-			h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
+			h := mkHandler(t, store, nil, &allowAuthorizer{})
 			_, err := h.Issue(adminCtx(), issueRequest(uuid.New()))
 			assertKind(t, err, tc.code, tc.reason)
 		})
@@ -75,12 +75,13 @@ func TestIssueAnswersAFailureByItsKind(t *testing.T) {
 func TestDelegateAnswersAFailureByItsKind(t *testing.T) {
 	for _, tc := range issuanceCases {
 		t.Run(tc.name, func(t *testing.T) {
-			parent := mkParent(uuid.New(), limes.OpGet, limes.OpShare)
-			store := &failingInsertStore{fakeStore: fakeStore{cap: &parent}, err: tc.err}
-			h := NewHandler(mkIssuer(t, store), store, nil, &denyAuthorizer{})
-			_, err := h.Delegate(auth.WithCapability(context.Background(), &parent), &adminv1.CapabilityServiceDelegateRequest{
-				ParentId: parent.ID.String(), TtlSeconds: 60,
-			})
+			store := &failingInsertStore{}
+			m := newMinter(t, store)
+			// The parent is recorded; only the child's insert fails.
+			parent := mintParent(t, m, limes.OpGet, limes.OpShare)
+			store.err = tc.err
+			h := NewHandler(m.Issuer, m.Verifier, store, nil, &denyAuthorizer{})
+			_, err := h.Delegate(auth.WithCapability(context.Background(), parent), delegateReq(parent))
 			assertKind(t, err, tc.code, tc.reason)
 		})
 	}
@@ -90,7 +91,7 @@ func TestDelegateAnswersAFailureByItsKind(t *testing.T) {
 // are not the request's away from it, not the request's own.
 func TestIssueStillRefusesAMalformedRequest(t *testing.T) {
 	store := &fakeStore{}
-	h := NewHandler(mkIssuer(t, store), store, nil, &allowAuthorizer{})
+	h := mkHandler(t, store, nil, &allowAuthorizer{})
 	req := issueRequest(uuid.New())
 	req.Audience = []string{""}
 	_, err := h.Issue(adminCtx(), req)
@@ -130,33 +131,4 @@ func reasonOf(t *testing.T, err error) commonv1.ErrorReason {
 		}
 	}
 	return commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED
-}
-
-// failingGetStore fails the parent lookup as a store outage does.
-type failingGetStore struct{ fakeStore }
-
-func (*failingGetStore) Get(context.Context, uuid.UUID) (limes.Capability, error) {
-	return limes.Capability{}, errDriver
-}
-
-// The admin path answered NotFound for any failure to read the parent, an
-// outage included, so a caller dropped a parent that was there.
-func TestDelegateTellsAMissingParentFromAStoreFailure(t *testing.T) {
-	for name, tc := range map[string]struct {
-		store limes.Store
-		code  connect.Code
-	}{
-		"a missing parent": {&fakeStore{}, connect.CodeNotFound},
-		"a store failure":  {&failingGetStore{}, connect.CodeInternal},
-	} {
-		t.Run(name, func(t *testing.T) {
-			h := NewHandler(mkIssuer(t, tc.store), tc.store, nil, &allowAuthorizer{})
-			_, err := h.Delegate(adminCtx(), &adminv1.CapabilityServiceDelegateRequest{
-				ParentId: uuid.NewString(), TtlSeconds: 60,
-			})
-			if connect.CodeOf(err) != tc.code {
-				t.Errorf("err = %v, want %v", err, tc.code)
-			}
-		})
-	}
 }

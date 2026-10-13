@@ -231,7 +231,7 @@ func TestBuildBackgroundJobs_CapabilityPurgerReplayWiring(t *testing.T) {
 		t.Errorf("Replay = %#v with no replay cache in the bundle, want a nil interface", p.Replay)
 	}
 
-	replay, err := capabilitypg.NewReplayCache(&pgxpool.Pool{}, nil)
+	replay, err := capabilitypg.NewReplayCache(capabilitypg.ReplayCacheConfig{Pool: &pgxpool.Pool{}})
 	if err != nil {
 		t.Fatal(err)
 	}

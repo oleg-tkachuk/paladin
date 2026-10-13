@@ -1112,8 +1112,7 @@ config:
     signing_key_kid: ""                 # JWT header kid; "" → derived from public key bytes
     default_ttl: 15m                    # cap when Issue.TTL omitted
     verifier_leeway: 30s                # clock-skew window for nbf / exp
-    charge_per_request_amount: 0        # amount auto-charged on billable handler calls, exact to nine decimals; 0 = no auto-charge
-    charge_per_request_unit: ""         # ISO 4217 code (XXX for no currency); empty = use capability's own unit
+    charge_per_request_amount: 0        # amount auto-charged on billable handler calls, in the capability's own unit, exact to nine decimals; 0 = no auto-charge
     revocation_cache_ttl: 2s            # IsRevoked cache TTL; <0 disables (every check hits DB)
     # DPoP server nonces (RFC 9449 §8): a key-bound capability's proof must
     # carry a nonce the server issued, so a captured proof is usable for

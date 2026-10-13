@@ -46,9 +46,9 @@ func TestGetReturnsTheRecord(t *testing.T) {
 	issuer := limes.Principal{Type: limes.PrincipalUser, TenantID: owner, Subject: "operator"}
 	store := &recordStore{rec: limes.Record{
 		Capability: c, IssuedBy: issuer,
-		Revocation: &limes.Revocation{RevokedAt: revokedAt, Reason: "leak", Actor: "sec", Cascade: true},
+		Revocation: &limes.Revocation{RevokedAt: revokedAt, Note: "leak", Actor: "sec", Cascaded: true},
 	}}
-	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{})
+	h := mkHandler(t, store, nil, &allowAuthorizer{})
 
 	resp, err := h.Get(adminCtx(), getReq(c.ID.String()))
 	if err != nil {
@@ -87,7 +87,7 @@ func TestGetErrors(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewHandler(mkIssuer(t, &tc.store.fakeStore), tc.store, nil, tc.authz)
+			h := mkHandler(t, tc.store, nil, tc.authz)
 			_, err := h.Get(adminCtx(), getReq(tc.id))
 			if codeOf(err) != tc.want {
 				t.Fatalf("code = %v, want %v", codeOf(err), tc.want)
@@ -102,7 +102,7 @@ func TestGetActsOnTheCapabilitysTenant(t *testing.T) {
 	owner := uuid.New()
 	c := mkParent(owner, limes.OpGet)
 	store := &recordStore{fakeStore: fakeStore{cap: &c}, rec: limes.Record{Capability: c}}
-	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, cedartest.Engine(""))
+	h := mkHandler(t, store, nil, cedartest.Engine(""))
 
 	if _, err := h.Get(callerCtx(uuid.New(), "platform.admin"), getReq(c.ID.String())); err != nil {
 		t.Fatalf("Get: %v", err)

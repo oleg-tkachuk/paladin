@@ -22,7 +22,7 @@ import (
 const contractTTL = time.Hour
 
 // The module's Meter contract, on the app role under row-level security, as
-// the server runs the store.
+// the server runs the store, on a clock the suite moves.
 func TestMeterContract(t *testing.T) {
 	metertest.Run(t, func(t *testing.T) metertest.Env[pgx.Tx] {
 		t.Helper()
@@ -31,9 +31,13 @@ func TestMeterContract(t *testing.T) {
 		tenant, _ := mkTenant(t, ctx, admin, "shared")
 		records := newCapStore(t, admin)
 		pool := rlsPool(t, ctx, admin)
+		clock := newFakeClock()
+		// Every capability of one Env expires together, so a child never
+		// outlives its parent.
+		expires := clock.Now().Add(contractTTL)
 		return metertest.Env[pgx.Tx]{
 			Ctx:    auth.WithActingTenant(ctx, tenant),
-			Usage:  capstore.NewUsageStore(sqlc.New(pool), pool, zap.NewNop()),
+			Usage:  capstore.NewUsageStore(sqlc.New(pool), pool, zap.NewNop(), capstore.WithUsageClock(clock.Now)),
 			Tenant: tenant,
 			// Each tenant's rows are written as that tenant, and the list
 			// across tenants is a platform-wide read, as the admin plane does.
@@ -43,12 +47,23 @@ func TestMeterContract(t *testing.T) {
 			},
 			TenantCtx: func(tenant uuid.UUID) context.Context { return auth.WithActingTenant(ctx, tenant) },
 			ListCtx:   auth.WithCrossTenantRead(ctx),
-			NewCapability: func(parent uuid.UUID, maxBudget limes.Nanos) (uuid.UUID, error) {
-				c := mkCap(tenant, "agent:"+uuid.NewString()[:8], time.Now().Add(contractTTL))
-				c.ParentID = parent
-				c.Caveats.MaxBudgetAmount = maxBudget
-				c.Caveats.MaxRequests = 0
-				return c.ID, records.Insert(ctx, c, seedIssuer)
+			Advance:   clock.Advance,
+			NewCapability: func(spec metertest.CapabilitySpec) (uuid.UUID, error) {
+				owner := tenant
+				if spec.Tenant != uuid.Nil {
+					owner = spec.Tenant
+				}
+				c := mkCap(owner, "agent:"+uuid.NewString()[:8], expires)
+				c.ParentID = spec.Parent
+				c.Caveats.Requests = spec.Requests
+				c.Caveats.Budget = spec.Budget
+				return c.ID, records.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer})
+			},
+			// As Store.Purge removes an expired record: the meter's rows stay
+			// behind for PurgeOrphans.
+			DeleteCapability: func(id uuid.UUID) error {
+				_, err := admin.Exec(ctx, `DELETE FROM capability_records WHERE id = $1`, id)
+				return err
 			},
 		}
 	})

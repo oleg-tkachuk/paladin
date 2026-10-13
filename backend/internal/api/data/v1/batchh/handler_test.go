@@ -14,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
 
@@ -132,10 +133,12 @@ func authedCtx(tid uuid.UUID) context.Context {
 
 // authedCtxWithCap authorises exactly `ops`; a missing op drives the
 // PermissionDenied branch of auth.AssertCapabilityOp.
-func authedCtxWithCap(tid uuid.UUID, ops ...limes.Op) context.Context {
-	return auth.WithCapability(authedCtx(tid), &limes.Capability{
+func authedCtxWithCap(t *testing.T, tid uuid.UUID, ops ...limes.Op) context.Context {
+	t.Helper()
+	return auth.WithCapability(authedCtx(tid), captest.Verified(t, limes.Capability{
+		Subject: limes.Principal{TenantID: tid},
 		Caveats: limes.Caveats{Ops: ops},
-	})
+	}))
 }
 
 func wantCode(t *testing.T, err error, want connect.Code) {
@@ -189,7 +192,7 @@ func TestBatchDelete(t *testing.T) {
 	})
 
 	t.Run("capability lacks delete op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, limes.OpGet) // no OpDelete
+		ctx := authedCtxWithCap(t, tid, limes.OpGet) // no OpDelete
 		h := newHandler(&fakeSubmitter{}, allowAll())
 		_, err := h.BatchDelete(ctx, BatchDeleteArgs{ObjectIDs: ids(1)})
 		wantCode(t, err, connect.CodePermissionDenied)
@@ -249,7 +252,7 @@ func TestBatchDelete(t *testing.T) {
 	})
 
 	t.Run("capability with delete op is allowed", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, limes.OpDelete)
+		ctx := authedCtxWithCap(t, tid, limes.OpDelete)
 		sub := &fakeSubmitter{id: uuid.New()}
 		_, err := newHandler(sub, allowAll()).BatchDelete(ctx, BatchDeleteArgs{ObjectIDs: ids(1)})
 		if err != nil {
@@ -283,7 +286,7 @@ func TestBatchCopy(t *testing.T) {
 	})
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, limes.OpGet) // no OpPut
+		ctx := authedCtxWithCap(t, tid, limes.OpGet) // no OpPut
 		h := newHandler(&fakeSubmitter{}, allowAll())
 		_, err := h.BatchCopy(ctx, BatchCopyArgs{ObjectIDs: ids(1)})
 		wantCode(t, err, connect.CodePermissionDenied)
@@ -363,7 +366,7 @@ func TestBatchUpdateTags(t *testing.T) {
 	})
 
 	t.Run("capability lacks tag op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, limes.OpGet) // no OpTag
+		ctx := authedCtxWithCap(t, tid, limes.OpGet) // no OpTag
 		h := newHandler(&fakeSubmitter{}, allowAll())
 		_, err := h.BatchUpdateTags(ctx, BatchUpdateTagsArgs{ObjectIDs: ids(1)})
 		wantCode(t, err, connect.CodePermissionDenied)
@@ -446,7 +449,7 @@ func TestBatchRestoreObjects(t *testing.T) {
 	})
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(tid, limes.OpGet) // restore requires OpPut
+		ctx := authedCtxWithCap(t, tid, limes.OpGet) // restore requires OpPut
 		h := newHandler(&fakeSubmitter{}, allowAll())
 		_, err := h.BatchRestoreObjects(ctx, BatchRestoreObjectsArgs{ObjectIDs: ids(1)})
 		wantCode(t, err, connect.CodePermissionDenied)
@@ -582,11 +585,15 @@ const (
 
 // restrictedCtx carries a capability confined to inScopeDir of
 // scopedCollection, with ops.
-func restrictedCtx(tid uuid.UUID, ops ...limes.Op) context.Context {
-	return auth.WithCapability(authedCtx(tid), &limes.Capability{Caveats: limes.Caveats{
-		Ops:              ops,
-		ResourcePrefixes: []string{objecth.CapabilityObjectURI(tid, scopedCollection, inScopeDir)},
-	}})
+func restrictedCtx(t *testing.T, tid uuid.UUID, ops ...limes.Op) context.Context {
+	t.Helper()
+	return auth.WithCapability(authedCtx(tid), captest.Verified(t, limes.Capability{
+		Subject: limes.Principal{TenantID: tid},
+		Caveats: limes.Caveats{
+			Ops:              ops,
+			ResourcePrefixes: []string{objecth.CapabilityObjectURI(tid, scopedCollection, inScopeDir)},
+		},
+	}))
 }
 
 func object(collection, key string) objecth.Object {
@@ -642,7 +649,7 @@ func TestBatchOverOneCollectionChecksEachObject(t *testing.T) {
 			t.Run(name+"/"+cname, func(t *testing.T) {
 				sub := &fakeSubmitter{id: uuid.New()}
 				h := NewHandler(sub, allowAll(), fakeBuckets{}, &fakeObjects{objs: []objecth.Object{inside, outside, elsewhere}})
-				err := b.submit(h, restrictedCtx(tid, b.op), tc.ids)
+				err := b.submit(h, restrictedCtx(t, tid, b.op), tc.ids)
 				if tc.code == 0 {
 					if err != nil || !sub.called {
 						t.Fatalf("err = %v, submitted = %v; want submitted", err, sub.called)
@@ -663,7 +670,7 @@ func TestBatchOverOneCollectionChecksEachObject(t *testing.T) {
 func TestBatchReadsObjectsOnlyForARestrictedCapability(t *testing.T) {
 	tid := uuid.New()
 	for name, ctx := range map[string]context.Context{
-		"unrestricted capability": authedCtxWithCap(tid, limes.OpDelete),
+		"unrestricted capability": authedCtxWithCap(t, tid, limes.OpDelete),
 		"no capability":           authedCtx(tid),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -684,7 +691,7 @@ func TestBatchObjectLookupFailureRefuses(t *testing.T) {
 	tid := uuid.New()
 	sub := &fakeSubmitter{}
 	_, err := NewHandler(sub, allowAll(), fakeBuckets{}, &fakeObjects{err: errors.New("db down")}).
-		BatchDelete(restrictedCtx(tid, limes.OpDelete), BatchDeleteArgs{Collection: scopedCollection, ObjectIDs: ids(1)})
+		BatchDelete(restrictedCtx(t, tid, limes.OpDelete), BatchDeleteArgs{Collection: scopedCollection, ObjectIDs: ids(1)})
 	if err == nil || sub.called {
 		t.Fatalf("err = %v, submitted = %v; want refused", err, sub.called)
 	}
@@ -707,30 +714,31 @@ func TestBatchCopyChecksSourcesAndDestinations(t *testing.T) {
 		code      connect.Code
 	}{
 		"restricted, both ends in scope": {
-			ctx: restrictedCtx(tid, readWrite...), dst: scopedCollection, keyPrefix: inScopeDir + "copy/", ids: idsOf(src),
+			ctx: restrictedCtx(t, tid, readWrite...), dst: scopedCollection, keyPrefix: inScopeDir + "copy/", ids: idsOf(src),
 		},
 		"restricted, destination out of scope": {
-			ctx: restrictedCtx(tid, readWrite...), dst: scopedCollection, keyPrefix: "out/", ids: idsOf(src),
+			ctx: restrictedCtx(t, tid, readWrite...), dst: scopedCollection, keyPrefix: "out/", ids: idsOf(src),
 			code: connect.CodePermissionDenied,
 		},
 		"restricted, no source exists": {
-			ctx: restrictedCtx(tid, readWrite...), dst: scopedCollection, keyPrefix: inScopeDir, ids: ids(1),
+			ctx: restrictedCtx(t, tid, readWrite...), dst: scopedCollection, keyPrefix: inScopeDir, ids: ids(1),
 			code: connect.CodePermissionDenied,
 		},
 		"unrestricted without get": {
-			ctx: authedCtxWithCap(tid, limes.OpPut), dst: "dst", ids: idsOf(src), code: connect.CodePermissionDenied,
+			ctx: authedCtxWithCap(t, tid, limes.OpPut), dst: "dst", ids: idsOf(src), code: connect.CodePermissionDenied,
 		},
 		"unrestricted, a tainted source": {
-			ctx: authedCtxWithCap(tid, readWrite...), dst: "dst", ids: idsOf(tainted), code: connect.CodePermissionDenied,
+			ctx: authedCtxWithCap(t, tid, readWrite...), dst: "dst", ids: idsOf(tainted), code: connect.CodePermissionDenied,
 		},
 		"unrestricted, allowed tainted reads": {
-			ctx: auth.WithCapability(authedCtx(tid), &limes.Capability{Caveats: limes.Caveats{
-				Ops: readWrite, AllowTaintedRead: true,
-			}}),
+			ctx: auth.WithCapability(authedCtx(tid), captest.Verified(t, limes.Capability{
+				Subject: limes.Principal{TenantID: tid},
+				Caveats: limes.Caveats{Ops: readWrite, AllowTaintedRead: true},
+			})),
 			dst: "dst", ids: idsOf(tainted),
 		},
 		"unrestricted, no source exists": {
-			ctx: authedCtxWithCap(tid, readWrite...), dst: "dst", ids: ids(1),
+			ctx: authedCtxWithCap(t, tid, readWrite...), dst: "dst", ids: ids(1),
 		},
 	}
 	for name, tc := range cases {

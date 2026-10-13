@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -22,6 +23,8 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/dpop"
+	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/memstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -127,61 +130,109 @@ func (objectPlane) GetObject(context.Context, *datav1.GetObjectRequest) (*datav1
 	return &datav1.Object{Name: "tenants/acme/collections/docs/objects/o1"}, nil
 }
 
+// planeIssuer is the issuer the capability plane mints and trusts.
+const planeIssuer = "paladin-test"
+
+// delegateProofURL is the request a holder's proof of possession is signed
+// for when it presents its capability to delegate from it.
+const delegateProofURL = "https://plane.test/delegate"
+
 // capabilityPlane is a data plane behind the real capability interceptor,
 // with DPoP checked the way the planes check it.
 type capabilityPlane struct {
-	issuer *limes.Issuer
-	url    string
+	issuer   *limes.Issuer
+	verifier *limes.Verifier
+	url      string
 }
 
 func newCapabilityPlane(t *testing.T) *capabilityPlane {
 	t.Helper()
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	key, err := limes.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	signer, err := limes.NewEd25519Signer("k1", priv)
+	signer, err := limes.NewSigner(limes.SignerConfig{KeyID: key.KeyID, Key: key.Private})
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := memstore.New[any]()
-	issuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: "paladin-test"})
+	store, err := memstore.NewStore(memstore.StoreConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	verifier, err := limes.NewStandardVerifier(limes.VerifierConfig{
-		Keys:           limes.NewStaticKeyResolver(map[string]ed25519.PublicKey{"k1": pub}),
+	issuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: planeIssuer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := dpop.NewMemoryReplayCache(dpop.MemoryReplayCacheConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proofs, err := dpop.NewVerifier(dpop.VerifierConfig{Replay: replay, MatchPathOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := limes.NewVerifier(limes.VerifierConfig{
+		Keys:           keys,
 		Revocations:    store,
-		TrustedIssuers: []string{"paladin-test"},
-		DPoP:           &limes.DPoPVerifier{Replay: limes.NewMemoryReplayCache(0), MatchPathOnly: true},
+		TrustedIssuers: []string{planeIssuer},
+		DPoP:           proofs,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := connect.NewServer(auth.CapabilityInterceptor(verifier, auth.TokenPlaneData, nil, 0, ""))
+	server := connect.NewServer(auth.CapabilityInterceptor(verifier, auth.TokenPlaneData, nil, 0))
 	datav1connect.RegisterObjectServiceHandler(server, objectPlane{})
 	mux := http.NewServeMux()
 	connecthttp.Mount(mux, server)
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
-	return &capabilityPlane{issuer: issuer, url: ts.URL}
+	return &capabilityPlane{issuer: issuer, verifier: verifier, url: ts.URL}
 }
 
 // issue mints a capability bound to the agent key jkt, which may share it.
-func (p *capabilityPlane) issue(t *testing.T, jkt string) (limes.Capability, string) {
+func (p *capabilityPlane) issue(t *testing.T, jkt string) string {
 	t.Helper()
-	c, tok, err := p.issuer.Issue(context.Background(), limes.IssueRequest{
-		IssuedBy:        limes.Principal{Subject: "op"},
-		Subject:         limes.Principal{Type: limes.PrincipalAgent, TenantID: uuid.New(), Subject: "agent"},
-		Audience:        []string{auth.TokenPlaneData},
-		Caveats:         limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpShare}},
+	res, err := p.issuer.Issue(context.Background(), limes.IssueRequest{
+		IssuedBy: limes.Principal{Subject: "op"},
+		Subject:  limes.Principal{Type: limes.PrincipalAgent, TenantID: uuid.New(), Subject: "agent"},
+		Audience: []string{auth.TokenPlaneData},
+		Caveats: limes.Caveats{
+			Ops:      []limes.Op{limes.OpGet, limes.OpShare},
+			Requests: limes.RequestCeiling{Unlimited: true},
+			Budget:   limes.BudgetCeiling{Unlimited: true},
+		},
 		TTL:             time.Hour,
 		ConfirmationJKT: jkt,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return c, tok
+	return res.Token
+}
+
+// verifyHeld verifies token as its holder presents it: with a proof of
+// possession signed by holderKey, the key the token is bound to.
+func (p *capabilityPlane) verifyHeld(t *testing.T, token string, holderKey crypto.Signer) limes.VerifiedCapability {
+	t.Helper()
+	proof, err := dpop.Sign(context.Background(), holderKey, dpop.ProofRequest{
+		Method: http.MethodPost, URL: delegateProofURL, Token: token, IssuedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := p.verifier.Verify(context.Background(), limes.VerifyRequest{
+		Token:    token,
+		Audience: auth.TokenPlaneData,
+		DPoP:     dpop.Proof{JWT: proof, Method: http.MethodPost, URL: delegateProofURL},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
 }
 
 func (p *capabilityPlane) getObject(t *testing.T, capability string, opts ...ClientOption) *mcpsdk.CallToolResult {
@@ -210,16 +261,18 @@ func TestBridgeForwardsACapabilityDelegatedToIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	parent, parentToken := plane.issue(t, agentJKT)
-	_, child, err := plane.issuer.Delegate(context.Background(), limes.DelegateRequest{
+	parentToken := plane.issue(t, agentJKT)
+	parent := plane.verifyHeld(t, parentToken, agentKey)
+	delegated, err := plane.issuer.Delegate(context.Background(), limes.DelegateRequest{
 		Parent:          parent,
-		Subject:         parent.Subject,
+		Subject:         parent.Capability().Subject,
 		InheritCaveats:  true,
 		ConfirmationJKT: bridge.JKT,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	child := delegated.Token
 
 	for range 2 { // a fresh proof per call: the second is not a replay
 		if res := plane.getObject(t, child, WithBridgeKey(bridge)); res.IsError {
@@ -237,7 +290,7 @@ func TestBridgeForwardsACapabilityDelegatedToIt(t *testing.T) {
 // An unbound capability is unaffected by the bridge's key.
 func TestBridgeKeyLeavesUnboundCapabilitiesAlone(t *testing.T) {
 	plane := newCapabilityPlane(t)
-	_, unbound := plane.issue(t, "")
+	unbound := plane.issue(t, "")
 	if res := plane.getObject(t, unbound, WithBridgeKey(newBridgeKey(t))); res.IsError {
 		t.Fatalf("unbound capability refused: %s", toolText(res))
 	}

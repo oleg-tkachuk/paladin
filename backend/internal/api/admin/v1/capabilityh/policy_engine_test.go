@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -19,7 +20,7 @@ const roleCapabilityIssuer = "platform.capability-issuer"
 // A consumer reads back the capabilities it issued for the tenants it serves.
 func TestList_CapabilityIssuerMayListAnotherTenant(t *testing.T) {
 	store := &recordingStore{}
-	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, cedartest.Engine(""))
+	h := mkHandler(t, store, nil, cedartest.Engine(""))
 	other := uuid.New()
 
 	if _, err := h.List(callerCtx(uuid.New(), roleCapabilityIssuer), &adminv1.CapabilityServiceListRequest{
@@ -32,19 +33,17 @@ func TestList_CapabilityIssuerMayListAnotherTenant(t *testing.T) {
 	}
 }
 
-// Delegate is left out of the issuer's grant: the admin path reads the parent
-// under the caller's own tenant, so it could never reach what the issuer
-// minted for others. Cedar refuses before the store is asked.
+// Delegate is left out of the issuer's grant: delegation narrows only a
+// capability the caller presents, and the role presents none, so the
+// caller is told to present one whatever Cedar would say.
 func TestDelegate_CapabilityIssuerIsRefused(t *testing.T) {
-	parent := mkParent(uuid.New(), limes.OpGet)
-	store := &fakeStore{cap: &parent}
-	h := NewHandler(mkIssuer(t, store), store, nil, cedartest.Engine(""))
+	m := captest.NewMinter(t)
+	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
+	h := NewHandler(m.Issuer, m.Verifier, m.Store, nil, cedartest.Engine(""))
 
-	_, err := h.Delegate(callerCtx(uuid.New(), roleCapabilityIssuer), &adminv1.CapabilityServiceDelegateRequest{
-		ParentId: parent.ID.String(),
-	})
-	if codeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("code = %v, want PermissionDenied", codeOf(err))
+	_, err := h.Delegate(callerCtx(uuid.New(), roleCapabilityIssuer), delegateReq(parent))
+	if codeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v, want FailedPrecondition", codeOf(err))
 	}
 }
 
@@ -52,7 +51,7 @@ func TestDelegate_CapabilityIssuerIsRefused(t *testing.T) {
 // holds for every capability action.
 func TestCapabilityActions_DeniedWithoutAGrant(t *testing.T) {
 	store := &recordingStore{}
-	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, cedartest.Engine(""))
+	h := mkHandler(t, store, nil, cedartest.Engine(""))
 	own := uuid.New()
 	ctx := callerCtx(own)
 

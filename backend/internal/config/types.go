@@ -660,11 +660,12 @@ type OperationsWorker struct {
 	StaleAfter time.Duration `yaml:"stale_after" json:"stale_after"`
 }
 
-// CapabilityWorker drops capability_revocations and
-// capability_biscuit_revocations rows for tokens whose underlying capability
-// has been expired for at least `expired_for`. Keeps the denylists bounded; the verifier doesn't notice (an expired
-// row can never match a verifying token by definition). Disable by
-// setting interval to 0.
+// CapabilityWorker drops the capability records — with their revocation
+// entries and those of their Biscuit copies — that have been expired for at
+// least `expired_for`, then what the meter keeps for them. Keeps the records
+// and the denylists bounded; the verifier doesn't notice, as long as
+// `expired_for` is at least limes.MinPurgeRetention (Config.Validate holds it
+// there). Disable by setting interval to 0.
 type CapabilityWorker struct {
 	Interval   time.Duration `yaml:"interval" json:"interval"`
 	ExpiredFor time.Duration `yaml:"expired_for" json:"expired_for"`
@@ -1177,22 +1178,14 @@ type Capability struct {
 	//
 	// One uniform knob covers the typical "track per-call cost"
 	// model. Operators who want per-handler differentiation extend
-	// the call sites with explicit ChargeCapability(ctx, amt, unit)
+	// the call sites with explicit ChargeCapability(ctx, amt)
 	// invocations; this default is the "bare minimum so caveats
-	// matter".
+	// matter". The amount is in each capability's own unit, which its
+	// token pins.
 	//
 	// Renamed from ChargePerRequest — same semantic, just no longer
 	// USD-pinned in name.
 	ChargePerRequestAmount limes.Nanos `yaml:"charge_per_request_amount" json:"charge_per_request_amount"`
-
-	// ChargePerRequestUnit pins the currency / unit for the auto-
-	// charge amount. Empty falls back to the capability's own
-	// UnitCode (which itself defaults to "USD"). Set this when the
-	// platform wants every billable call denominated in a specific
-	// currency regardless of the capability's declared unit — e.g.
-	// EUR-denominated metering on a tenant whose capabilities are
-	// minted with the empty default.
-	ChargePerRequestUnit string `yaml:"charge_per_request_unit" json:"charge_per_request_unit"`
 
 	// DPoPNonce makes a key-bound capability's proof carry a nonce the server
 	// issued (RFC 9449 §8), bounding how long a captured proof stays usable.

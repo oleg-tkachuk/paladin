@@ -38,13 +38,13 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 	if err != nil {
 		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("token: %w", err))
 	}
-	ctx, err = h.actOnCapabilitysTenant(ctx, caller, c.CapabilityID)
+	ctx, err = h.actOnCapabilitysTenant(ctx, caller, c.CapabilityID())
 	if err != nil {
 		return nil, err
 	}
 	// The record, read under the caller's scoping, is both the visibility
 	// check and the unit the copies' budgets are in.
-	record, err := h.store.Get(ctx, c.CapabilityID)
+	record, err := h.store.GetRecord(ctx, c.CapabilityID())
 	if err != nil {
 		if errors.Is(err, limes.ErrNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
@@ -52,35 +52,56 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 
-	ids := make([][]byte, 0, len(c.Limits))
-	for _, l := range c.Limits {
-		ids = append(ids, l.RevocationID)
-	}
-	counted, err := h.copyUsage.CopyUsage(ctx, ids)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	byID := make(map[string]limes.CopyUsage, len(counted))
-	for _, u := range counted {
-		byID[string(u.RevocationID)] = u
+	copies := c.Copies()
+	byID := map[string]limes.CopyUsage{}
+	if len(copies) > 0 {
+		ids := make([][]byte, 0, len(copies))
+		for _, l := range copies {
+			ids = append(ids, l.RevocationID)
+		}
+		counted, err := h.copyUsage.CopyUsage(ctx, limes.CopyUsageRequest{RevocationIDs: ids})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		}
+		for _, u := range counted.Copies {
+			byID[string(u.RevocationID)] = u
+		}
 	}
 
 	// A copy's amounts are in its capability's unit.
-	unit := record.Caveats.UnitCode
-	out := make([]*adminv1.CapabilityBiscuitCopyUsage, 0, len(c.Limits))
-	for _, l := range c.Limits {
+	unit := record.Capability.Caveats.UnitCode
+	out := make([]*adminv1.CapabilityBiscuitCopyUsage, 0, len(copies))
+	for _, l := range copies {
 		u := byID[string(l.RevocationID)] // a copy never used counts zero
 		out = append(out, &adminv1.CapabilityBiscuitCopyUsage{
 			RevocationId: l.RevocationID,
-			MaxRequests:  l.MaxRequests,
-			MaxBudget:    apiutil.MoneyOf(unit, l.MaxBudget),
+			MaxRequests:  copyRequestLimit(l),
+			MaxBudget:    apiutil.MoneyOf(unit, copyBudgetLimit(l)),
 			RequestCount: u.RequestCount,
 			Spent:        apiutil.MoneyOf(unit, u.SpentAmount),
 			Reserved:     apiutil.MoneyOf(unit, u.ReservedAmount),
 		})
 	}
 	return &adminv1.CapabilityServiceGetBiscuitUsageResponse{
-		CapabilityId: c.CapabilityID.String(),
+		CapabilityId: c.CapabilityID().String(),
 		Copies:       out,
 	}, nil
+}
+
+// copyRequestLimit is a copy's own request limit as the API reports it: 0
+// when the copy set none.
+func copyRequestLimit(c limes.CopyCeiling) int64 {
+	if c.Requests == nil {
+		return 0
+	}
+	return apiutil.RequestCeilingNumber(*c.Requests)
+}
+
+// copyBudgetLimit is a copy's own budget as the API reports it: 0 when the
+// copy set none.
+func copyBudgetLimit(c limes.CopyCeiling) limes.Nanos {
+	if c.Budget == nil {
+		return 0
+	}
+	return apiutil.BudgetCeilingAmount(*c.Budget)
 }

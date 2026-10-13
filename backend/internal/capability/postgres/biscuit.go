@@ -49,7 +49,7 @@ FROM   capability_biscuit_revocations
 WHERE  revocation_id = $1;
 `
 	r := limes.BiscuitRevocation{RevocationID: slices.Clone(revocationID)}
-	err := s.pool.QueryRow(ctx, stmt, revocationID).Scan(&r.CapabilityID, &r.RevokedAt, &r.Reason, &r.Actor)
+	err := s.pool.QueryRow(ctx, stmt, revocationID).Scan(&r.CapabilityID, &r.RevokedAt, &r.Note, &r.Actor)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return limes.BiscuitRevocation{}, ErrNotFound
 	}
@@ -63,24 +63,27 @@ WHERE  revocation_id = $1;
 // RevokeBiscuit implements limes.BiscuitRevocationStore. As in Revoke,
 // the capability id is read from capability_records in the same statement, so
 // a caller that cannot see the capability gets ErrNotFound and writes nothing.
+// The pair comes from args.Copy, which only the verifier makes, so the
+// revocation id is always one of that capability's copies.
 func (s *Store) RevokeBiscuit(ctx context.Context, args limes.RevokeBiscuitRequest) error {
-	if len(args.RevocationID) == 0 {
-		return fmt.Errorf("%w: capability/postgres: revoke biscuit: revocation id required", limes.ErrInvalidRequest)
+	if err := args.Validate(); err != nil {
+		return err
 	}
 	const stmt = `
 WITH target AS (
     SELECT id FROM capability_records WHERE id = $1
 ),
 inserted AS (
-    INSERT INTO capability_biscuit_revocations (revocation_id, capability_id, reason, actor)
-    SELECT $2, id, $3, $4 FROM target
+    INSERT INTO capability_biscuit_revocations (revocation_id, capability_id, revoked_at, reason, actor)
+    SELECT $2, id, $5, $3, $4 FROM target
     ON CONFLICT (revocation_id) DO NOTHING
     RETURNING 1
 )
 SELECT count(*) FROM target;
 `
 	var visible int64
-	if err := s.pool.QueryRow(ctx, stmt, args.CapabilityID, args.RevocationID, args.Reason, args.Actor).Scan(&visible); err != nil {
+	if err := s.pool.QueryRow(ctx, stmt, args.Copy.CapabilityID(), args.Copy.RevocationID(), args.Note, args.Actor,
+		s.now()).Scan(&visible); err != nil {
 		return fmt.Errorf("capability/postgres: revoke biscuit: %w", err)
 	}
 	if visible == 0 {

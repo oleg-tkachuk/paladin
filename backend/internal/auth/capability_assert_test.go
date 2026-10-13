@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 )
 
 // TestAssertCapabilityOp_NoCapability covers the load-bearing
@@ -27,16 +27,15 @@ func TestAssertCapabilityOp_NoCapability(t *testing.T) {
 // proceeds.
 func TestAssertCapabilityOp_AllowedOp(t *testing.T) {
 	t.Parallel()
-	cap := &limes.Capability{
-		ID:       uuid.New(),
-		Subject:  limes.Principal{TenantID: uuid.New(), Type: limes.PrincipalAgent},
+	cap := limes.Capability{
+		Subject:  limes.Principal{Type: limes.PrincipalAgent},
 		Audience: []string{TokenPlaneData},
 		Caveats: limes.Caveats{
 			Ops:              []limes.Op{limes.OpGet, limes.OpList},
 			ResourcePrefixes: []string{"object://acme/"},
 		},
 	}
-	ctx := WithCapability(context.Background(), cap)
+	ctx := WithCapability(context.Background(), captest.Verified(t, cap))
 	if err := AssertCapabilityOp(ctx, limes.OpGet, "object://acme/foo"); err != nil {
 		t.Fatalf("expected nil for allowed op, got %v", err)
 	}
@@ -46,10 +45,10 @@ func TestAssertCapabilityOp_AllowedOp(t *testing.T) {
 // requesting an op not in Caveats.Ops fails with PermissionDenied.
 func TestAssertCapabilityOp_DeniedOp(t *testing.T) {
 	t.Parallel()
-	cap := &limes.Capability{
+	cap := limes.Capability{
 		Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet}},
 	}
-	ctx := WithCapability(context.Background(), cap)
+	ctx := WithCapability(context.Background(), captest.Verified(t, cap))
 	err := AssertCapabilityOp(ctx, limes.OpDelete, "")
 	if err == nil {
 		t.Fatal("expected error for denied op, got nil")
@@ -67,13 +66,13 @@ func TestAssertCapabilityOp_DeniedOp(t *testing.T) {
 // rejection: op is allowed but the URI escapes the configured prefix.
 func TestAssertCapabilityOp_DeniedResource(t *testing.T) {
 	t.Parallel()
-	cap := &limes.Capability{
+	cap := limes.Capability{
 		Caveats: limes.Caveats{
 			Ops:              []limes.Op{limes.OpGet},
 			ResourcePrefixes: []string{"object://acme/"},
 		},
 	}
-	ctx := WithCapability(context.Background(), cap)
+	ctx := WithCapability(context.Background(), captest.Verified(t, cap))
 	err := AssertCapabilityOp(ctx, limes.OpGet, "object://other-tenant/foo")
 	if err == nil {
 		t.Fatal("expected error for resource escape, got nil")
@@ -94,22 +93,22 @@ func TestAssertCapabilityOp_DeniedResource(t *testing.T) {
 // the handlers for those pass "" and the caveat never saw them.
 func TestAssertCapabilityOp_EmptyResourceURI(t *testing.T) {
 	t.Parallel()
-	restricted := &limes.Capability{
+	restricted := limes.Capability{
 		Caveats: limes.Caveats{
 			Ops:              []limes.Op{limes.OpManage},
 			ResourcePrefixes: []string{"object://acme/"},
 		},
 	}
-	err := AssertCapabilityOp(WithCapability(context.Background(), restricted), limes.OpManage, "")
+	err := AssertCapabilityOp(WithCapability(context.Background(), captest.Verified(t, restricted)), limes.OpManage, "")
 	if connect.CodeOf(err) != connect.CodePermissionDenied || !errors.Is(err, limes.ErrResourceNotAllowed) {
 		t.Fatalf("restricted capability, unscoped op: err = %v, want PermissionDenied wrapping ErrResourceNotAllowed", err)
 	}
 
 	// An unrestricted capability may still run unscoped operations.
-	unrestricted := &limes.Capability{
+	unrestricted := limes.Capability{
 		Caveats: limes.Caveats{Ops: []limes.Op{limes.OpManage}},
 	}
-	if err := AssertCapabilityOp(WithCapability(context.Background(), unrestricted), limes.OpManage, ""); err != nil {
+	if err := AssertCapabilityOp(WithCapability(context.Background(), captest.Verified(t, unrestricted)), limes.OpManage, ""); err != nil {
 		t.Fatalf("unrestricted capability, unscoped op: %v", err)
 	}
 }
@@ -119,10 +118,10 @@ func TestAssertCapabilityOp_EmptyResourceURI(t *testing.T) {
 // tenant scope, so any URI passes the caveat check.
 func TestAssertCapabilityOp_UnrestrictedPrefix(t *testing.T) {
 	t.Parallel()
-	cap := &limes.Capability{
+	cap := limes.Capability{
 		Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet}},
 	}
-	ctx := WithCapability(context.Background(), cap)
+	ctx := WithCapability(context.Background(), captest.Verified(t, cap))
 	if err := AssertCapabilityOp(ctx, limes.OpGet, "object://anything/anywhere"); err != nil {
 		t.Fatalf("expected nil for unrestricted, got %v", err)
 	}
@@ -132,13 +131,13 @@ func TestAssertCapabilityOp_UnrestrictedPrefix(t *testing.T) {
 // match) lets a hand-off flow pin specific artifacts.
 func TestAssertCapabilityOp_ExactURIMatch(t *testing.T) {
 	t.Parallel()
-	cap := &limes.Capability{
+	cap := limes.Capability{
 		Caveats: limes.Caveats{
 			Ops:          []limes.Op{limes.OpGet},
 			ResourceURIs: []string{"object://acme/dataset-42"},
 		},
 	}
-	ctx := WithCapability(context.Background(), cap)
+	ctx := WithCapability(context.Background(), captest.Verified(t, cap))
 	if err := AssertCapabilityOp(ctx, limes.OpGet, "object://acme/dataset-42"); err != nil {
 		t.Fatalf("expected nil for exact URI match, got %v", err)
 	}

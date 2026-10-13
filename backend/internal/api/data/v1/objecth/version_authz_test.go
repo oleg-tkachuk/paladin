@@ -11,6 +11,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
 
@@ -123,11 +124,10 @@ func TestVersionRPCsAskCedarForTheObjectActions(t *testing.T) {
 // principal everything: the capability narrows, it never widens.
 func TestReadOnlyCapabilityCannotRestoreAVersion(t *testing.T) {
 	f := newVersionFixture(t, allowAll{})
-	f.ctx = auth.WithCapability(f.ctx, &limes.Capability{
-		ID:      uuid.New(),
+	f.ctx = auth.WithCapability(f.ctx, captest.Verified(t, limes.Capability{
 		Subject: limes.Principal{TenantID: f.tenantID, Type: limes.PrincipalAgent},
 		Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpList}},
-	})
+	}))
 	if err := f.get(); err != nil {
 		t.Fatalf("GetVersion with a read capability: %v", err)
 	}

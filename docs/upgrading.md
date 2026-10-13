@@ -44,6 +44,42 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — capabilities run on limes v0.53.2
+
+- **Breaking, capability tokens.** Capabilities are JWTs with
+  `typ: limes-cap-v4+jwt`; every capability issued before the upgrade is
+  refused, Biscuit copies included. Issue new ones.
+- **Breaking, delegation.** `CapabilityService.Delegate` narrows only the
+  capability the caller presents in `X-Paladin-Capability`, and only one
+  issued with the `share` operation; delegating from a capability named by
+  id alone is refused with `FAILED_PRECONDITION`. Issue a capability that is
+  to be delegated with `share` in its ops.
+- **Behaviour, capabilities.** A key-bound capability, and one whose
+  `not_before` is still ahead, is issued without a Biscuit form: sealing one
+  needs a proof of its holder's key, or a capability already valid.
+- **API, additive.** `ErrorReason` gains `CAPABILITY_INVALID_TOKEN`,
+  `CAPABILITY_BISCUIT_ATTENUATION`, `CAPABILITY_SOURCE_IP_NOT_ALLOWED`,
+  `CAPABILITY_NO_CREDENTIALS`, `CAPABILITY_NONCE_REQUIRED` and
+  `CAPABILITY_AUTH_SCHEME_MISMATCH`. The first three replace
+  `CAPABILITY_INVALID_SIGNATURE`, `CAPABILITY_INVALID_BISCUIT` and
+  `CAPABILITY_SOURCE_NOT_ALLOWED`, which are no longer sent.
+- **Behaviour, ceilings.** A ceiling of 0 in the API still sets none. The
+  store now keeps "none" as `NULL` and 0 as a ceiling of nothing; migration
+  066 rewrites the rows written under the old reading.
+- **Breaking, configuration.** `capability.charge_per_request_unit` is gone:
+  every charge is in its capability's own unit. `capability.verifier_leeway`
+  above 5m and `worker.jobs.capability.expired_for` below 6m are refused at
+  load.
+- **Behaviour, housekeeping.** The capability purger removes expired
+  capability records, with their revocations, after `expired_for`; the
+  charges ledger keeps naming them. A cost reported for a capability purged
+  since is refused.
+- **Behaviour, DPoP.** Each capability, rather than each key, holds at most
+  1 000 live proof ids.
+- **Migrations 066–068.** Explicit ceilings; the meter's tables no longer
+  reference `capability_records`, and charges and holds keep their ancestors;
+  `dpop_seen_proofs` is recreated, keyed per holder.
+
 ## Unreleased — lifecycle transitions are refused
 
 - **Breaking, admin API.** `SetLifecycleRules` refuses a rule whose action is
@@ -101,9 +137,8 @@ tree with itself and passes without checking anything.
 
 ## Unreleased — a capability's unit is any ISO 4217 code
 
-**Behaviour, configuration and console.** `capability.charge_per_request_unit`
-takes any ISO 4217 code, as tenant budgets and capabilities already did; a
-code ISO 4217 does not define is refused at load. The console's unit pickers
+**Behaviour and console.** Tenant budgets and capabilities take any ISO 4217
+code; a code ISO 4217 does not define is refused. The console's unit pickers
 offer every currency, then `XXX` for metering that is not money.
 
 ## v27.0.0 — capabilities run on limes v0.7.0

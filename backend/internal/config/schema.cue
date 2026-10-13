@@ -346,10 +346,10 @@ worker: {
     interval:        =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5m"
     lookback_window: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
   }
-  // Capability: drop expired revocation rows so the denylist stays
-  // bounded. interval=0 disables; expired_for is the grace window
-  // beyond a capability's natural expiry before its revocation row
-  // can be dropped.
+  // Capability: drop expired capability records, with their revocation
+  // rows, so both stay bounded. interval=0 disables; expired_for is how
+  // long a record stays past its capability's expiry — at least 6m
+  // (limes.MinPurgeRetention, checked by Config.Validate).
   capability: {
     interval:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
     expired_for: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
@@ -647,12 +647,9 @@ capability: {
   }
   // Auto-charge knob: amount + unit consumed by the capability
   // interceptor on each billable handler call. The amount is a decimal
-  // read exactly, to the nano (nine decimals). The unit is an ISO 4217
-  // code — XXX ("no currency") for metering that is not money; empty
-  // defers to the capability's own declared unit (which defaults to USD).
-  // CUE checks the shape; Config.Validate checks the code is ISO 4217's.
+  // read exactly, to the nano (nine decimals), in each capability's own
+  // unit, which its token pins.
   charge_per_request_amount: number & >=0 | *0
-  charge_per_request_unit:   =~"^[A-Z]{3}$" | *""
 }
 
 api_token: {

@@ -244,8 +244,8 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	if u := c.Capability.ChargePerRequestUnit; u != "" && !limes.IsUnitCode(u) {
-		return fmt.Errorf("capability: charge_per_request_unit %q is not an ISO 4217 code", u)
+	if err := c.validateCapabilityBounds(); err != nil {
+		return err
 	}
 
 	if err := c.Limits.Presign.Validate(); err != nil {
@@ -301,6 +301,21 @@ func (c *Config) Validate() error {
 		return err
 	}
 
+	return nil
+}
+
+// validateCapabilityBounds holds the capability durations to the bounds limes
+// refuses outside of, so a misconfigured value stops the boot rather than
+// every verifier construction or every purge tick: a verifier leeway past
+// limes.MaxLeeway, and a purge retention shorter than limes.MinPurgeRetention,
+// which would drop a revocation while a verifier still honours its token.
+func (c *Config) validateCapabilityBounds() error {
+	if l := c.Capability.VerifierLeeway; l < 0 || l > limes.MaxLeeway {
+		return fmt.Errorf("capability: verifier_leeway %s is outside 0..%s", l, limes.MaxLeeway)
+	}
+	if r := c.Worker.Jobs.Capability.ExpiredFor; r != 0 && r < limes.MinPurgeRetention {
+		return fmt.Errorf("worker.jobs.capability: expired_for %s is shorter than %s", r, limes.MinPurgeRetention)
+	}
 	return nil
 }
 

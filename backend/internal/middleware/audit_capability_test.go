@@ -8,6 +8,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 )
 
 // TestCapabilityID_Absent confirms ctx without a capability returns
@@ -25,16 +26,12 @@ func TestCapabilityID_Absent(t *testing.T) {
 // ID — the audit row carries it, per-cap rollups work.
 func TestCapabilityID_Present(t *testing.T) {
 	t.Parallel()
-	want := uuid.New()
-	cap := &limes.Capability{
-		ID: want,
-		Subject: limes.Principal{
-			Type:     limes.PrincipalAgent,
-			TenantID: uuid.New(),
-		},
+	verified := captest.Verified(t, limes.Capability{
+		Subject: limes.Principal{Type: limes.PrincipalAgent},
 		Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet}},
-	}
-	ctx := auth.WithCapability(context.Background(), cap)
+	})
+	want := verified.Capability().ID
+	ctx := auth.WithCapability(context.Background(), verified)
 	got := capabilityID(ctx)
 	if got != want {
 		t.Errorf("got %s, want %s", got, want)

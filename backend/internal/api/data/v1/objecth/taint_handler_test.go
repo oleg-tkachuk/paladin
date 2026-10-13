@@ -11,6 +11,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
 
@@ -70,7 +71,10 @@ func TestSetTaintRefusals(t *testing.T) {
 	}
 
 	// A capability needs OpManage on the object to change its flags.
-	reader := &limes.Capability{ID: uuid.New(), Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet}}}
+	reader := captest.Verified(t, limes.Capability{
+		Subject: limes.Principal{TenantID: tenantID},
+		Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet}},
+	})
 	if _, err := h.SetTaint(auth.WithCapability(lockCtx(tenantID), reader), "docs", uuid.NewString(), nil); !errors.Is(err, limes.ErrOpNotAllowed) {
 		t.Errorf("capability without OpManage: err = %v, want ErrOpNotAllowed", err)
 	}

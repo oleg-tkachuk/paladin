@@ -14,7 +14,7 @@ import (
 )
 
 // BiscuitCopier names which copy of which capability a Biscuit is, after
-// checking that it is genuine. limes.StandardVerifier implements it.
+// checking that it is genuine. limes.Verifier implements it.
 type BiscuitCopier interface {
 	BiscuitCopy(ctx context.Context, token string) (limes.BiscuitCopy, error)
 }
@@ -43,15 +43,14 @@ func (h *Handler) RevokeBiscuit(ctx context.Context, req *adminv1.CapabilityServ
 	if err != nil {
 		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("token: %w", err))
 	}
-	ctx, err = h.actOnCapabilitysTenant(ctx, caller, c.CapabilityID)
+	ctx, err = h.actOnCapabilitysTenant(ctx, caller, c.CapabilityID())
 	if err != nil {
 		return nil, err
 	}
 	if err := h.copies.RevokeBiscuit(ctx, limes.RevokeBiscuitRequest{
-		CapabilityID: c.CapabilityID,
-		RevocationID: c.RevocationID,
-		Reason:       req.GetReason(),
-		Actor:        caller.Subject,
+		Copy:  c,
+		Note:  req.GetReason(),
+		Actor: caller.Subject,
 	}); err != nil {
 		// As in Revoke: no such capability and another tenant's are one
 		// answer, so the endpoint is no oracle.
@@ -60,8 +59,8 @@ func (h *Handler) RevokeBiscuit(ctx context.Context, req *adminv1.CapabilityServ
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	stashCapabilityInScope(ctx, c.CapabilityID)
+	stashCapabilityInScope(ctx, c.CapabilityID())
 	return &adminv1.CapabilityServiceRevokeBiscuitResponse{
-		CapabilityId: c.CapabilityID.String(),
+		CapabilityId: c.CapabilityID().String(),
 	}, nil
 }

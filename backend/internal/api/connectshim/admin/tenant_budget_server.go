@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -36,14 +37,18 @@ const budgetSegment = "/budget"
 type TenantBudgetServer struct {
 	paladinadminv1connect.UnimplementedTenantBudgetServiceHandler
 	Usage limes.TenantBudgets
+	// Tenants names the tenants a summary lists: the budget rows carry
+	// their ids alone.
+	Tenants tenanth.Names
 }
 
 // NewTenantBudgetServer wires the handler. usage may be nil — the
 // capability subsystem is opt-in (cfg.Capability.Enabled). When nil,
 // every RPC returns CodeUnavailable so the operator notices the
 // misconfig immediately rather than getting silent NULL responses.
-func NewTenantBudgetServer(usage limes.TenantBudgets) *TenantBudgetServer {
-	return &TenantBudgetServer{Usage: usage}
+// tenants is required with usage: Summarize names each row's tenant.
+func NewTenantBudgetServer(usage limes.TenantBudgets, tenants tenanth.Names) *TenantBudgetServer {
+	return &TenantBudgetServer{Usage: usage, Tenants: tenants}
 }
 
 func (s *TenantBudgetServer) Get(
@@ -96,21 +101,21 @@ func (s *TenantBudgetServer) Set(
 		return nil, err
 	}
 	// An absent max_budget lifts the cap and leaves the unit to the
-	// existing row (or DEFAULT 'USD' on first insert): unit stays "".
+	// existing row (or DEFAULT 'USD' on first insert): unit stays "". A
+	// zero amount lifts it too: the API's 0 sets none.
 	budget, unit, err := apiutil.NanosOf("max_budget", m.GetMaxBudget())
 	if err != nil {
 		return nil, err
 	}
 	args := limes.SetTenantBudgetRequest{
 		TenantID:        tenantID,
-		MaxBudgetAmount: budget,
+		Ceiling:         apiutil.BudgetCeilingOf(budget),
 		UnitCode:        unit,
 		ResetSpend:      m.GetResetSpend(),
 		ExpectedVersion: expected,
 	}
 	if pe := m.GetPeriodEnd(); pe != nil {
-		t := pe.AsTime()
-		args.PeriodEnd = &t
+		args.PeriodEnd = pe.AsTime()
 	}
 	// tenant_budgets carries the standard RLS policy, whose WITH CHECK pins
 	// writes to paladin_session_tenant_id(). A platform admin setting another
@@ -130,7 +135,7 @@ func (s *TenantBudgetServer) Set(
 		// unit: no retry meets it until they are reset or released.
 		case errors.Is(err, limes.ErrUnitCodeMismatch):
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-		case errors.Is(err, limes.ErrInvalidAmount):
+		case errors.Is(err, limes.ErrInvalidRequest):
 			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -145,6 +150,10 @@ func (s *TenantBudgetServer) Set(
 // the standard interceptor stack; this handler just translates
 // request → store args → proto. unlimited_only and threshold_pct
 // are mutually exclusive (server-enforced).
+//
+// exclude_inactive drops the rows of tenants in the trash from each page
+// after it is read, so such a page can come back shorter than limit with
+// more to follow; next_page_token says whether there are.
 func (s *TenantBudgetServer) Summarize(
 	ctx context.Context,
 	req *pb.TenantBudgetServiceSummarizeRequest,
@@ -156,33 +165,54 @@ func (s *TenantBudgetServer) Summarize(
 	if m.GetUnlimitedOnly() && m.GetThresholdPct() > 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "unlimited_only is mutually exclusive with a non-zero threshold_pct")
 	}
-	rows, next, err := s.Usage.ListTenantBudgets(ctx, limes.ListTenantBudgetsRequest{
-		ThresholdPct:    m.GetThresholdPct(),
-		UnlimitedOnly:   m.GetUnlimitedOnly(),
-		ExcludeInactive: m.GetExcludeInactive(),
-		Limit:           m.GetLimit(),
-		Cursor:          m.GetPageToken(),
-	})
+	page, err := s.Usage.ListTenantBudgets(ctx, budgetListRequest(m))
 	if err != nil {
 		if errors.Is(err, limes.ErrInvalidRequest) { // a page token the store cannot read
 			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	out := &pb.TenantBudgetServiceSummarizeResponse{
-		Summaries:     make([]*pb.TenantBudgetSummary, 0, len(rows)),
-		NextPageToken: next,
+	ids := make([]uuid.UUID, 0, len(page.Items))
+	for _, b := range page.Items {
+		ids = append(ids, b.TenantID)
 	}
-	for _, r := range rows {
+	names, err := s.Tenants.TenantNames(ctx, ids)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	out := &pb.TenantBudgetServiceSummarizeResponse{
+		Summaries:     make([]*pb.TenantBudgetSummary, 0, len(page.Items)),
+		NextPageToken: page.Next,
+	}
+	for _, b := range page.Items {
+		name, ok := names[b.TenantID]
+		if m.GetExcludeInactive() && (!ok || name.Deleted) {
+			continue
+		}
+		pct, _ := b.Utilization() // an unlimited tenant reports 0
 		out.Summaries = append(out.Summaries, &pb.TenantBudgetSummary{
-			TenantId:       r.TenantID.String(),
-			Slug:           r.Slug,
-			DisplayName:    r.DisplayName,
-			Budget:         tenantBudgetToProto(r.Budget),
-			UtilisationPct: r.UtilisationPct,
+			TenantId:       b.TenantID.String(),
+			Slug:           name.Slug,
+			DisplayName:    name.DisplayName,
+			Budget:         tenantBudgetToProto(b),
+			UtilisationPct: pct,
 		})
 	}
 	return out, nil
+}
+
+// budgetListRequest is the store's listing for a summary request: the
+// unlimited tenants, the tenants at or past a threshold, or all of them —
+// threshold_pct 0 lists every tenant, as it always has.
+func budgetListRequest(m *pb.TenantBudgetServiceSummarizeRequest) limes.ListTenantBudgetsRequest {
+	req := limes.ListTenantBudgetsRequest{Limit: int(m.GetLimit()), Cursor: m.GetPageToken()}
+	switch {
+	case m.GetUnlimitedOnly():
+		req.Filter = limes.TenantBudgetsUnlimited
+	case m.GetThresholdPct() > 0:
+		req.Filter, req.ThresholdPct = limes.TenantBudgetsAtOrPast, m.GetThresholdPct()
+	}
+	return req
 }
 
 var _ paladinadminv1connect.TenantBudgetServiceHandler = (*TenantBudgetServer)(nil)
@@ -193,15 +223,15 @@ var _ paladinadminv1connect.TenantBudgetServiceHandler = (*TenantBudgetServer)(n
 func tenantBudgetToProto(tb limes.TenantBudget) *pb.TenantBudget {
 	out := &pb.TenantBudget{
 		TenantId:        tb.TenantID.String(),
-		MaxBudget:       apiutil.MoneyOf(tb.UnitCode, tb.MaxBudgetAmount),
+		MaxBudget:       apiutil.MoneyOf(tb.UnitCode, apiutil.BudgetCeilingAmount(tb.Ceiling)),
 		Spent:           apiutil.MoneyOf(tb.UnitCode, tb.SpentAmount),
 		ResourceVersion: convx.ResourceVersion(tb.ResourceVersion),
 	}
 	if !tb.PeriodStart.IsZero() {
 		out.PeriodStart = timestamppb.New(tb.PeriodStart)
 	}
-	if tb.PeriodEnd != nil && !tb.PeriodEnd.IsZero() {
-		out.PeriodEnd = timestamppb.New(*tb.PeriodEnd)
+	if !tb.PeriodEnd.IsZero() {
+		out.PeriodEnd = timestamppb.New(tb.PeriodEnd)
 	}
 	if !tb.UpdatedAt.IsZero() {
 		out.UpdatedAt = timestamppb.New(tb.UpdatedAt)

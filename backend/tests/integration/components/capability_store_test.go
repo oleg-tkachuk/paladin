@@ -54,8 +54,8 @@ func mkCap(tenant uuid.UUID, subject string, expires time.Time) limes.Capability
 		Caveats: limes.Caveats{
 			Ops:                    []limes.Op{limes.OpGet, limes.OpList},
 			ResourceURIs:           []string{"paladin://docs/"},
-			MaxRequests:            42,
-			MaxBudgetAmount:        limes.MustParseAmount("12.5"),
+			Requests:               limes.RequestCeiling{Max: 42},
+			Budget:                 limes.BudgetCeiling{Max: limes.MustParseAmount("12.5")},
 			UnitCode:               "USD",
 			AllowTaintedRead:       true,
 			IdempotencyKeyRequired: true,
@@ -70,7 +70,16 @@ func mkCap(tenant uuid.UUID, subject string, expires time.Time) limes.Capability
 
 var seedIssuer = limes.Principal{Type: limes.PrincipalService, Subject: "svc:seed"}
 
-// TestCapabilityRoundTrip pins Insert → Get across every column, including
+// purgeRetention is how long past its expiry the purge tests keep a record.
+const purgeRetention = 24 * time.Hour
+
+// getCapability reads back the capability a record holds.
+func getCapability(ctx context.Context, s *capstore.Store, id uuid.UUID) (limes.Capability, error) {
+	rec, err := s.GetRecord(ctx, id)
+	return rec.Capability, err
+}
+
+// TestCapabilityRoundTrip pins Insert → GetRecord across every column, including
 // the two JSON-encoded ones the package chose hand-written SQL to handle.
 func TestCapabilityRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -80,11 +89,11 @@ func TestCapabilityRoundTrip(t *testing.T) {
 	store := newCapStore(t, admin)
 
 	want := mkCap(tenant, "user:alice", time.Now().Add(time.Hour))
-	if err := store.Insert(ctx, want, seedIssuer); err != nil {
+	if err := store.Insert(ctx, limes.InsertRequest{Capability: want, IssuedBy: seedIssuer}); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 
-	got, err := store.Get(ctx, want.ID)
+	got, err := getCapability(ctx, store, want.ID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -99,8 +108,8 @@ func TestCapabilityRoundTrip(t *testing.T) {
 	if len(got.Caveats.Ops) != 2 || got.Caveats.Ops[0] != limes.OpGet {
 		t.Errorf("caveats.ops: got %v", got.Caveats.Ops)
 	}
-	if got.Caveats.MaxRequests != want.Caveats.MaxRequests ||
-		got.Caveats.MaxBudgetAmount != want.Caveats.MaxBudgetAmount ||
+	if got.Caveats.Requests != want.Caveats.Requests ||
+		got.Caveats.Budget != want.Caveats.Budget ||
 		got.Caveats.UnitCode != want.Caveats.UnitCode {
 		t.Errorf("caveats budget: got %+v", got.Caveats)
 	}
@@ -120,10 +129,10 @@ func TestCapabilityRoundTrip(t *testing.T) {
 	// report it, and losing it would show a bound capability as a bearer one.
 	bound := mkCap(tenant, "user:alice", time.Now().Add(time.Hour))
 	bound.ConfirmationJKT = "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k"
-	if err := store.Insert(ctx, bound, seedIssuer); err != nil {
+	if err := store.Insert(ctx, limes.InsertRequest{Capability: bound, IssuedBy: seedIssuer}); err != nil {
 		t.Fatalf("insert bound: %v", err)
 	}
-	got, err = store.Get(ctx, bound.ID)
+	got, err = getCapability(ctx, store, bound.ID)
 	if err != nil {
 		t.Fatalf("get bound: %v", err)
 	}
@@ -131,7 +140,7 @@ func TestCapabilityRoundTrip(t *testing.T) {
 		t.Errorf("bound capability: jkt %q, want %q", got.ConfirmationJKT, bound.ConfirmationJKT)
 	}
 
-	if _, err := store.Get(ctx, uuid.New()); !errors.Is(err, limes.ErrNotFound) {
+	if _, err := getCapability(ctx, store, uuid.New()); !errors.Is(err, limes.ErrNotFound) {
 		t.Errorf("missing capability: want ErrNotFound, got %v", err)
 	}
 }
@@ -147,16 +156,18 @@ func TestCapabilityRevokeCascade(t *testing.T) {
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
 	store := newCapStore(t, admin)
 
-	// root → child → grandchild, plus an unrelated sibling tree.
-	root := mkCap(tenant, "user:root", time.Now().Add(time.Hour))
-	child := mkCap(tenant, "user:child", time.Now().Add(time.Hour))
+	// root → child → grandchild, plus an unrelated sibling tree. One expiry
+	// for all: a child may not outlive its parent.
+	expires := time.Now().Add(time.Hour)
+	root := mkCap(tenant, "user:root", expires)
+	child := mkCap(tenant, "user:child", expires)
 	child.ParentID = root.ID
-	grandchild := mkCap(tenant, "user:grandchild", time.Now().Add(time.Hour))
+	grandchild := mkCap(tenant, "user:grandchild", expires)
 	grandchild.ParentID = child.ID
-	unrelated := mkCap(tenant, "user:unrelated", time.Now().Add(time.Hour))
+	unrelated := mkCap(tenant, "user:unrelated", expires)
 
 	for _, c := range []limes.Capability{root, child, grandchild, unrelated} {
-		if err := store.Insert(ctx, c, seedIssuer); err != nil {
+		if err := store.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer}); err != nil {
 			t.Fatalf("insert %s: %v", c.Subject.Subject, err)
 		}
 	}
@@ -177,7 +188,7 @@ func TestCapabilityRevokeCascade(t *testing.T) {
 	}
 
 	if err := store.Revoke(ctx, limes.RevokeRequest{
-		ID: root.ID, Reason: "compromise", Actor: "user:ops", CascadeChildren: true,
+		CapabilityID: root.ID, Note: "compromise", Actor: "user:ops", CascadeChildren: true,
 	}); err != nil {
 		t.Fatalf("cascade revoke: %v", err)
 	}
@@ -193,7 +204,7 @@ func TestCapabilityRevokeCascade(t *testing.T) {
 
 	// Re-revoking is a no-op, not a primary-key violation: the purger and
 	// the admin RPC can both call it.
-	if err := store.Revoke(ctx, limes.RevokeRequest{ID: root.ID, Reason: "again", Actor: "user:ops"}); err != nil {
+	if err := store.Revoke(ctx, limes.RevokeRequest{CapabilityID: root.ID, Note: "again", Actor: "user:ops"}); err != nil {
 		t.Errorf("re-revoke should be idempotent: %v", err)
 	}
 
@@ -215,7 +226,7 @@ func TestCapabilityRevokeIsTenantScoped(t *testing.T) {
 	tenantB, _ := mkTenant(t, ctx, admin, "shared")
 
 	victim := mkCap(tenantB, "user:victim", time.Now().Add(time.Hour))
-	if err := newCapStore(t, admin).Insert(ctx, victim, seedIssuer); err != nil {
+	if err := newCapStore(t, admin).Insert(ctx, limes.InsertRequest{Capability: victim, IssuedBy: seedIssuer}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -224,14 +235,14 @@ func TestCapabilityRevokeIsTenantScoped(t *testing.T) {
 	ctxA := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenantA})
 
 	// A must not be able to read B's capability at all.
-	if _, err := scoped.Get(ctxA, victim.ID); !errors.Is(err, limes.ErrNotFound) {
+	if _, err := getCapability(ctxA, scoped, victim.ID); !errors.Is(err, limes.ErrNotFound) {
 		t.Errorf("tenant A read B's capability: %v", err)
 	}
 
 	// And must not be able to revoke it. Either an error or a silent no-op is
 	// an acceptable outcome; a recorded revocation is not.
 	revokeErr := scoped.Revoke(ctxA, limes.RevokeRequest{
-		ID: victim.ID, Reason: "hostile", Actor: "user:attacker",
+		CapabilityID: victim.ID, Note: "hostile", Actor: "user:attacker",
 	})
 
 	// Read the result back with the admin pool, which sees everything.
@@ -264,12 +275,12 @@ func TestCapabilityIsRevokedBeforeTheTenantIsKnown(t *testing.T) {
 	liveCap := mkCap(tenant, "agent:live", time.Now().Add(time.Hour))
 	seed := newCapStore(t, admin)
 	for _, c := range []limes.Capability{revokedCap, liveCap} {
-		if err := seed.Insert(ctx, c, seedIssuer); err != nil {
+		if err := seed.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer}); err != nil {
 			t.Fatalf("seed %s: %v", c.Subject.Subject, err)
 		}
 	}
 	if err := seed.Revoke(ctx, limes.RevokeRequest{
-		ID: revokedCap.ID, Reason: "compromise", Actor: "user:ops",
+		CapabilityID: revokedCap.ID, Note: "compromise", Actor: "user:ops",
 	}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
@@ -309,7 +320,7 @@ func TestCapabilityListByPrincipal(t *testing.T) {
 	active := make([]uuid.UUID, 0, 5)
 	for i := 0; i < 5; i++ {
 		c := mkCap(tenant, subject, time.Now().Add(time.Hour))
-		if err := store.Insert(ctx, c, seedIssuer); err != nil {
+		if err := store.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer}); err != nil {
 			t.Fatalf("insert active %d: %v", i, err)
 		}
 		active = append(active, c.ID)
@@ -319,11 +330,11 @@ func TestCapabilityListByPrincipal(t *testing.T) {
 	otherSubject := mkCap(tenant, "user:someone-else", time.Now().Add(time.Hour))
 	otherTenant := mkCap(other, subject, time.Now().Add(time.Hour))
 	for _, c := range []limes.Capability{expired, revoked, otherSubject, otherTenant} {
-		if err := store.Insert(ctx, c, seedIssuer); err != nil {
+		if err := store.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer}); err != nil {
 			t.Fatalf("insert %s: %v", c.ID, err)
 		}
 	}
-	if err := store.Revoke(ctx, limes.RevokeRequest{ID: revoked.ID, Reason: "r", Actor: "a"}); err != nil {
+	if err := store.Revoke(ctx, limes.RevokeRequest{CapabilityID: revoked.ID, Note: "r", Actor: "a"}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 
@@ -332,11 +343,11 @@ func TestCapabilityListByPrincipal(t *testing.T) {
 		args.TenantID = tenant
 		args.PrincipalType = limes.PrincipalUser
 		args.Subject = subject
-		got, next, err := store.ListByPrincipal(ctx, args)
+		page, err := store.ListByPrincipal(ctx, args)
 		if err != nil {
 			t.Fatalf("list: %v", err)
 		}
-		return got, next
+		return page.Items, page.Next
 	}
 
 	t.Run("defaults hide expired, revoked, other subjects and other tenants", func(t *testing.T) {
@@ -390,16 +401,17 @@ func TestCapabilityListByPrincipal(t *testing.T) {
 	})
 
 	t.Run("tenant_id is required", func(t *testing.T) {
-		if _, _, err := store.ListByPrincipal(ctx, limes.ListByPrincipalRequest{}); err == nil {
+		if _, err := store.ListByPrincipal(ctx, limes.ListByPrincipalRequest{}); err == nil {
 			t.Error("want error for nil tenant_id")
 		}
 	})
 }
 
-// TestCapabilityPurgeExpired pins the grace boundary on the denylist. Purging
-// too eagerly un-revokes a capability that has not yet expired, which is a
-// security regression rather than a cosmetic one.
-func TestCapabilityPurgeExpired(t *testing.T) {
+// TestCapabilityPurge pins the retention boundary. Purge removes a record,
+// and its revocation with it, once expired for longer than the retention;
+// purging too eagerly un-revokes a capability a verifier may still accept,
+// which is a security regression rather than a cosmetic one.
+func TestCapabilityPurge(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
@@ -410,28 +422,31 @@ func TestCapabilityPurgeExpired(t *testing.T) {
 	justExpired := mkCap(tenant, "user:just", time.Now().Add(-time.Minute))
 	live := mkCap(tenant, "user:live", time.Now().Add(time.Hour))
 	for _, c := range []limes.Capability{longExpired, justExpired, live} {
-		if err := store.Insert(ctx, c, seedIssuer); err != nil {
+		if err := store.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer}); err != nil {
 			t.Fatalf("insert: %v", err)
 		}
-		if err := store.Revoke(ctx, limes.RevokeRequest{ID: c.ID, Reason: "r", Actor: "a"}); err != nil {
+		if err := store.Revoke(ctx, limes.RevokeRequest{CapabilityID: c.ID, Note: "r", Actor: "a"}); err != nil {
 			t.Fatalf("revoke: %v", err)
 		}
 	}
 
-	n, err := store.PurgeExpired(ctx, 24*time.Hour)
+	res, err := store.Purge(ctx, limes.PurgeRequest{ExpiredFor: purgeRetention})
 	if err != nil {
 		t.Fatalf("purge: %v", err)
 	}
-	if n != 1 {
-		t.Fatalf("purged %d revocations, want 1", n)
+	if res.Purged != 1 {
+		t.Fatalf("purged %d records, want 1", res.Purged)
+	}
+	if _, err := store.GetRecord(ctx, longExpired.ID); !errors.Is(err, limes.ErrNotFound) {
+		t.Errorf("the purged record still reads back: %v", err)
 	}
 
 	for _, tc := range []struct {
 		cap  limes.Capability
 		want bool
 	}{
-		{longExpired, false}, // denylist entry dropped; the capability is expired anyway
-		{justExpired, true},  // inside grace — still denied
+		{longExpired, false}, // record and denylist entry dropped; the capability is expired anyway
+		{justExpired, true},  // inside the retention — still denied
 		{live, true},         // not expired — must still be denied
 	} {
 		got, err := store.IsRevoked(ctx, tc.cap.ID)
@@ -460,7 +475,7 @@ func TestCapabilityInsertCrossTenant(t *testing.T) {
 	ctxPlatform := auth.WithPrincipal(ctx, &auth.Principal{TenantID: platform})
 
 	c := mkCap(target, "user:target", time.Now().Add(time.Hour))
-	if err := store.Insert(ctxPlatform, c, seedIssuer); err != nil {
+	if err := store.Insert(ctxPlatform, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer}); err != nil {
 		t.Fatalf("platform admin could not issue for another tenant: %v", err)
 	}
 
@@ -476,7 +491,7 @@ func TestCapabilityInsertCrossTenant(t *testing.T) {
 
 	// The GUC swap must be transaction-local: the same pooled connection,
 	// used again, must be back on the platform tenant's scope.
-	if _, err := store.Get(ctxPlatform, c.ID); !errors.Is(err, limes.ErrNotFound) {
+	if _, err := getCapability(ctxPlatform, store, c.ID); !errors.Is(err, limes.ErrNotFound) {
 		t.Errorf("tenant GUC leaked past the insert transaction: %v", err)
 	}
 }
@@ -485,11 +500,12 @@ func TestCapabilityInsertCrossTenant(t *testing.T) {
 // jobs on an RLS-scoped pool keep rediscovering: the purger runs on a timer,
 // so there is no principal, so there is no session tenant, so every
 // tenant-scoped statement matches nothing and the job logs success forever
-// while the table grows.
+// while the table grows. Purge widens its own reads to every tenant, so it
+// works from a bare context.
 //
-// The assertion is on both halves — without the cross-tenant flag the purge is
-// inert, with it the purge works — because a test that only checked the second
-// would pass just as well if RLS were switched off entirely.
+// The assertion is on both halves — the record is invisible on that context,
+// and the purge removes it anyway — because a test that only checked the
+// second would pass just as well if RLS were switched off entirely.
 func TestPurgeRunsWithoutARequestPrincipal(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -498,30 +514,25 @@ func TestPurgeRunsWithoutARequestPrincipal(t *testing.T) {
 
 	seed := newCapStore(t, admin)
 	expired := mkCap(tenant, "user:expired", time.Now().Add(-48*time.Hour))
-	if err := seed.Insert(ctx, expired, seedIssuer); err != nil {
+	if err := seed.Insert(ctx, limes.InsertRequest{Capability: expired, IssuedBy: seedIssuer}); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
-	if err := seed.Revoke(ctx, limes.RevokeRequest{ID: expired.ID, Reason: "r", Actor: "a"}); err != nil {
+	if err := seed.Revoke(ctx, limes.RevokeRequest{CapabilityID: expired.ID, Note: "r", Actor: "a"}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 
 	purger := newCapStore(t, rlsPool(t, ctx, admin))
 
 	// A bare context is what a ticker hands its job.
-	n, err := purger.PurgeExpired(ctx, 24*time.Hour)
+	if _, err := purger.GetRecord(ctx, expired.ID); !errors.Is(err, limes.ErrNotFound) {
+		t.Fatalf("the record reads back with no session tenant (%v) — RLS is not engaging on this pool, so this test proves nothing", err)
+	}
+	res, err := purger.Purge(ctx, limes.PurgeRequest{ExpiredFor: purgeRetention})
 	if err != nil {
 		t.Fatalf("purge without principal: %v", err)
 	}
-	if n != 0 {
-		t.Fatalf("purged %d rows with no session tenant — RLS is not engaging on this pool, so this test proves nothing", n)
-	}
-
-	n, err = purger.PurgeExpired(auth.WithCrossTenantRead(ctx), 24*time.Hour)
-	if err != nil {
-		t.Fatalf("purge with cross-tenant read: %v", err)
-	}
-	if n != 1 {
-		t.Errorf("purged %d rows with the cross-tenant flag, want 1 — the background purger cannot do its job", n)
+	if res.Purged != 1 {
+		t.Errorf("purged %d records with no session tenant, want 1 — the background purger cannot do its job", res.Purged)
 	}
 }
 
@@ -549,7 +560,7 @@ func TestInsertRefusesATenantItCannotIssueFor(t *testing.T) {
 		"a tenant in trash": {trashed, limes.ErrTenantDeleted},
 	} {
 		t.Run(name, func(t *testing.T) {
-			err := store.Insert(ctx, mkCap(tc.tenant, "user:alice", time.Now().Add(time.Hour)), seedIssuer)
+			err := store.Insert(ctx, limes.InsertRequest{Capability: mkCap(tc.tenant, "user:alice", time.Now().Add(time.Hour)), IssuedBy: seedIssuer})
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("insert: %v, want %v", err, tc.want)
 			}

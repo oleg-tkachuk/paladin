@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
@@ -766,4 +767,28 @@ func splitBucketResourceName(name string) (backend, bucket string, err error) {
 		return "", "", tenanth.ErrDefaultBindingBucketMissing
 	}
 	return parts[1], parts[3], nil
+}
+
+var _ tenanth.Names = (*TenantRepo)(nil)
+
+// TenantNames implements tenanth.Names, live tenants and those in the trash.
+func (r *TenantRepo) TenantNames(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]tenanth.Name, error) {
+	if len(ids) == 0 {
+		return map[uuid.UUID]tenanth.Name{}, nil
+	}
+	keys := make([]pgtype.UUID, 0, len(ids))
+	for _, id := range ids {
+		keys = append(keys, pgtype.UUID{Bytes: id, Valid: true})
+	}
+	rows, err := r.q.GetTenantNames(ctx, keys)
+	if err != nil {
+		return nil, fmt.Errorf("tenant names: %w", err)
+	}
+	out := make(map[uuid.UUID]tenanth.Name, len(rows))
+	for _, row := range rows {
+		out[uuid.UUID(row.ID.Bytes)] = tenanth.Name{
+			Slug: row.Slug, DisplayName: row.DisplayName, Deleted: row.DeletedAt.Valid,
+		}
+	}
+	return out, nil
 }

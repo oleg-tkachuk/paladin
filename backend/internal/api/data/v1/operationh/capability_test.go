@@ -9,6 +9,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 )
 
 // TestOperationRPCsAssertCapabilityOp pins the op each RPC requires of a
@@ -67,7 +68,9 @@ func TestOperationRPCsAssertCapabilityOp(t *testing.T) {
 			t.Parallel()
 			fr := okRepo()
 			az := allowAuthorizer()
-			ctx := auth.WithCapability(authedCtx(tid), &limes.Capability{Caveats: tc.caveats})
+			ctx := auth.WithCapability(authedCtx(tid), captest.Verified(t, limes.Capability{
+				Subject: limes.Principal{TenantID: tid}, Caveats: tc.caveats,
+			}))
 			err := calls[tc.rpc](NewHandler(fr, az), ctx)
 			if tc.wantCode == 0 {
 				if err != nil {

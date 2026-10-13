@@ -8,21 +8,23 @@
 
 -- name: BumpCapabilityRequestCount :one
 -- Increments request_count by 1 and rejects when over the supplied cap.
--- max=0 means unlimited; we still write the row for spend tracking + UI.
+-- A NULL max_requests is unlimited; 0 allows no request at all, so the
+-- insert path checks the cap too.
 INSERT INTO capability_usage (capability_id, request_count, spent_usd, unit_code, updated_at)
-VALUES ($1, 1, 0, 'USD', now())
+SELECT $1, 1, 0, 'USD', now()
+WHERE sqlc.narg('max_requests')::bigint IS NULL OR 1 <= sqlc.narg('max_requests')::bigint
 ON CONFLICT (capability_id) DO UPDATE
 SET request_count = capability_usage.request_count + 1,
     updated_at    = now()
 WHERE
-    sqlc.arg('max_requests')::bigint = 0
-    OR capability_usage.request_count + 1 <= sqlc.arg('max_requests')::bigint
+    sqlc.narg('max_requests')::bigint IS NULL
+    OR capability_usage.request_count + 1 <= sqlc.narg('max_requests')::bigint
 RETURNING request_count;
 
 -- name: ChargeCapability :one
 -- Adds amount to spent_usd and rejects when spend plus open holds
--- (reserved_usd) would pass the supplied cap. max_budget=0 means
--- unlimited. unit_code is set on insert and preserved on conflict (an
+-- (reserved_usd) would pass the supplied cap. A NULL max_budget is
+-- unlimited; 0 allows no spend. unit_code is set on insert and preserved on conflict (an
 -- existing row owns its currency).
 --
 -- The ceiling is checked on BOTH paths. The INSERT is a SELECT filtered by
@@ -31,15 +33,15 @@ RETURNING request_count;
 -- charge, whatever the cap.
 INSERT INTO capability_usage (capability_id, request_count, spent_usd, unit_code, updated_at)
 SELECT $1, 0, sqlc.arg('amount_usd')::numeric, sqlc.arg('unit_code')::text, now()
-WHERE sqlc.arg('max_budget_usd')::numeric = 0
-   OR sqlc.arg('amount_usd')::numeric <= sqlc.arg('max_budget_usd')::numeric
+WHERE sqlc.narg('max_budget_usd')::numeric IS NULL
+   OR sqlc.arg('amount_usd')::numeric <= sqlc.narg('max_budget_usd')::numeric
 ON CONFLICT (capability_id) DO UPDATE
 SET spent_usd  = capability_usage.spent_usd + sqlc.arg('amount_usd')::numeric,
     updated_at = now()
 WHERE
-    sqlc.arg('max_budget_usd')::numeric = 0
+    sqlc.narg('max_budget_usd')::numeric IS NULL
     OR capability_usage.spent_usd + capability_usage.reserved_usd + sqlc.arg('amount_usd')::numeric
-       <= sqlc.arg('max_budget_usd')::numeric
+       <= sqlc.narg('max_budget_usd')::numeric
 RETURNING spent_usd;
 
 -- name: GetCapabilityUsage :one
@@ -51,14 +53,3 @@ WHERE capability_id = $1;
 DELETE FROM capability_usage
 WHERE capability_id = $1;
 
--- name: PurgeCapabilityUsageOrphans :execrows
--- Drops usage rows whose capability_id is no longer in capability_records.
--- Runs alongside CapabilityPurger so orphans don't accumulate when caps
--- are revoked/expired without going through DeleteCapabilityUsage.
-DELETE FROM capability_usage
-WHERE capability_id IN (
-    SELECT u.capability_id FROM capability_usage AS u
-    LEFT JOIN capability_records AS c ON c.id = u.capability_id
-    WHERE c.id IS NULL
-    LIMIT 10000
-);

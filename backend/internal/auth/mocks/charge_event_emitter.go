@@ -7,9 +7,8 @@ package auth
 import (
 	"context"
 
-	"github.com/oleg-tkachuk/limes"
-
 	"github.com/jackc/pgx/v5"
+	"github.com/oleg-tkachuk/limes"
 	mock "github.com/stretchr/testify/mock"
 )
 

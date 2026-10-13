@@ -15,12 +15,12 @@ import (
 // all RLS-isolated by the capability's tenant, so a call made on any other
 // tenant — or none — is refused by the database with 42501.
 type tenantRecordingUsage struct {
-	*fakeUsage
+	*usageStore
 	seen map[string]uuid.UUID
 }
 
-func newTenantRecordingUsage() *tenantRecordingUsage {
-	return &tenantRecordingUsage{fakeUsage: newFakeUsage(), seen: map[string]uuid.UUID{}}
+func newTenantRecordingUsage(usage *usageStore) *tenantRecordingUsage {
+	return &tenantRecordingUsage{usageStore: usage, seen: map[string]uuid.UUID{}}
 }
 
 func (u *tenantRecordingUsage) record(ctx context.Context, call string) {
@@ -31,19 +31,19 @@ func (u *tenantRecordingUsage) record(ctx context.Context, call string) {
 	u.seen[call] = tid
 }
 
-func (u *tenantRecordingUsage) Bump(ctx context.Context, req limes.BumpRequest) (int64, error) {
+func (u *tenantRecordingUsage) Bump(ctx context.Context, req limes.BumpRequest) (limes.BumpReceipt, error) {
 	u.record(ctx, "Bump")
-	return u.fakeUsage.Bump(ctx, req)
+	return u.usageStore.Bump(ctx, req)
 }
 
 func (u *tenantRecordingUsage) Charge(ctx context.Context, req limes.ChargeRequest, onCharged func(context.Context, pgx.Tx) error) (limes.ChargeReceipt, error) {
 	u.record(ctx, "Charge")
-	return u.fakeUsage.Charge(ctx, req, onCharged)
+	return u.usageStore.Charge(ctx, req, onCharged)
 }
 
 func (u *tenantRecordingUsage) Refund(ctx context.Context, req limes.RefundRequest) (limes.RefundReceipt, error) {
 	u.record(ctx, "Refund")
-	return u.fakeUsage.Refund(ctx, req)
+	return u.usageStore.Refund(ctx, req)
 }
 
 // Every write to a capability's ledger runs on that capability's tenant. The
@@ -65,16 +65,22 @@ func TestCapabilityLedgerWritesRunOnTheCapabilitysTenant(t *testing.T) {
 	}
 	for name, base := range cases {
 		t.Run(name, func(t *testing.T) {
-			usage := newTenantRecordingUsage()
-			c := capWithCaveats(limes.Caveats{MaxRequests: maxRequests, MaxBudgetAmount: maxBudget})
-			c.Subject = limes.Principal{TenantID: capTenant, Subject: "agent:a"}
+			m, store := newMeteredMinter(t)
+			usage := newTenantRecordingUsage(store)
+			c, _ := m.Mint(t, limes.Capability{
+				Subject: limes.Principal{TenantID: capTenant, Subject: "agent:a"},
+				Caveats: limes.Caveats{
+					Requests: limes.RequestCeiling{Max: maxRequests},
+					Budget:   limes.BudgetCeiling{Max: maxBudget},
+				},
+			})
 			i := &capabilityInterceptor{usage: usage}
 
 			if err := i.enforceCaveats(base, c); err != nil {
 				t.Fatalf("enforceCaveats: %v", err)
 			}
 			ctx := withLastOpHolder(WithChargeStore(WithCapability(base, c), usage))
-			if err := ChargeCapability(ctx, chargeAmount, ""); err != nil {
+			if err := ChargeCapability(ctx, chargeAmount); err != nil {
 				t.Fatalf("ChargeCapability: %v", err)
 			}
 			if err := RefundLastCharge(ctx, chargeAmount); err != nil {

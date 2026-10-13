@@ -11,6 +11,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -43,17 +44,44 @@ func (s *copyStore) RevokeBiscuit(ctx context.Context, args limes.RevokeBiscuitR
 	return s.err
 }
 
+// mintCopy mints a capability for owner shaped as template, seals it as a
+// Biscuit, narrows that by each attenuation in turn and returns the
+// capability with the copy the verifier names: only a verifier makes a
+// limes.BiscuitCopy.
+func mintCopy(t *testing.T, owner uuid.UUID, template limes.Capability, as ...limes.Attenuation) (limes.Capability, limes.BiscuitCopy) {
+	t.Helper()
+	ctx := context.Background()
+	m := captest.NewMinter(t)
+	template.Subject.TenantID = owner
+	v, _ := m.Mint(t, template)
+	b, err := m.Issuer.Biscuit(ctx, limes.BiscuitRequest{Capability: v})
+	if err != nil {
+		t.Fatalf("biscuit: %v", err)
+	}
+	token := b.Token
+	for _, a := range as {
+		if token, err = limes.Attenuate(token, a); err != nil {
+			t.Fatalf("attenuate: %v", err)
+		}
+	}
+	c, err := m.Verifier.BiscuitCopy(ctx, token)
+	if err != nil {
+		t.Fatalf("biscuit copy: %v", err)
+	}
+	return v.Capability(), c
+}
+
 func revokeBiscuitReq() *adminv1.CapabilityServiceRevokeBiscuitRequest {
 	return &adminv1.CapabilityServiceRevokeBiscuitRequest{Token: "biscuit", Reason: "leaked"}
 }
 
 func TestRevokeBiscuitListsTheCopy(t *testing.T) {
 	owner := uuid.New()
-	target := mkParent(owner, limes.OpGet)
+	target, copied := mintCopy(t, owner, limes.Capability{})
 	store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
-	copier := &fakeCopier{copy: limes.BiscuitCopy{CapabilityID: target.ID, RevocationID: []byte("last-block")}}
+	copier := &fakeCopier{copy: copied}
 	copies := &copyStore{}
-	h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, &allowAuthorizer{}).WithBiscuitCopies(copier, copies)
+	h := mkHandler(t, store, nil, &allowAuthorizer{}).WithBiscuitCopies(copier, copies)
 
 	resp, err := h.RevokeBiscuit(callerCtx(uuid.New(), "platform.admin"), revokeBiscuitReq())
 	if err != nil {
@@ -69,8 +97,8 @@ func TestRevokeBiscuitListsTheCopy(t *testing.T) {
 	if a == nil {
 		t.Fatal("store.RevokeBiscuit was not called")
 	}
-	if a.CapabilityID != target.ID || !bytes.Equal(a.RevocationID, []byte("last-block")) ||
-		a.Reason != "leaked" || a.Actor != "operator" {
+	if a.Copy.CapabilityID() != target.ID || !bytes.Equal(a.Copy.RevocationID(), copied.RevocationID()) ||
+		a.Note != "leaked" || a.Actor != "operator" {
 		t.Errorf("args = %+v", a)
 	}
 	// A platform admin acts on the capability's own tenant, or RLS hides it.
@@ -80,8 +108,7 @@ func TestRevokeBiscuitListsTheCopy(t *testing.T) {
 }
 
 func TestRevokeBiscuitRefusals(t *testing.T) {
-	id := uuid.New()
-	good := limes.BiscuitCopy{CapabilityID: id, RevocationID: []byte("x")}
+	_, good := mintCopy(t, uuid.New(), limes.Capability{})
 	cases := map[string]struct {
 		authz  cedar.Authorizer
 		copier BiscuitCopier
@@ -90,14 +117,14 @@ func TestRevokeBiscuitRefusals(t *testing.T) {
 	}{
 		"Cedar denies":           {&denyAuthorizer{}, &fakeCopier{copy: good}, &copyStore{}, connect.CodePermissionDenied},
 		"not wired":              {&allowAuthorizer{}, nil, nil, connect.CodeUnavailable},
-		"not a genuine Biscuit":  {&allowAuthorizer{}, &fakeCopier{err: limes.ErrInvalidSignature}, &copyStore{}, connect.CodeInvalidArgument},
+		"not a genuine Biscuit":  {&allowAuthorizer{}, &fakeCopier{err: limes.ErrInvalidToken}, &copyStore{}, connect.CodeInvalidArgument},
 		"capability not visible": {&allowAuthorizer{}, &fakeCopier{copy: good}, &copyStore{err: limes.ErrNotFound}, connect.CodeNotFound},
 		"store fails":            {&allowAuthorizer{}, &fakeCopier{copy: good}, &copyStore{err: errors.New("db down")}, connect.CodeInternal},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &recordingStore{}
-			h := NewHandler(mkIssuer(t, &store.fakeStore), store, nil, tc.authz)
+			h := mkHandler(t, store, nil, tc.authz)
 			if tc.copies != nil {
 				h.WithBiscuitCopies(tc.copier, tc.copies)
 			}

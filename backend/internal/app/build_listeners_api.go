@@ -176,12 +176,11 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			auth.TokenPlaneData,
 			deps.Capability.Usage,
 			cfg.Capability.ChargePerRequestAmount,
-			cfg.Capability.ChargePerRequestUnit,
 			chargeEm,
 			capOpts...,
 		)
 	} else {
-		capData = auth.CapabilityInterceptor(nil, "", nil, 0, "")
+		capData = auth.CapabilityInterceptor(nil, "", nil, 0)
 	}
 
 	// APIToken interceptor — additive, parallel to capability and JWT.

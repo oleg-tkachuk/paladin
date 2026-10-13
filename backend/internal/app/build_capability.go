@@ -12,6 +12,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/dpop"
+	"github.com/oleg-tkachuk/limes/jwks"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
@@ -28,8 +30,8 @@ type CapabilityBundle struct {
 	CopyUsage limes.CopyUsageReader
 	Usage     limes.UsageStore[pgx.Tx]
 	Issuer    *limes.Issuer
-	Verifier  *limes.StandardVerifier
-	Keys      *limes.StaticKeyResolver
+	Verifier  *limes.Verifier
+	Keys      *jwks.Static
 
 	// Replay records the DPoP proof ids every replica has accepted, so a
 	// proof replayed against any of them is refused. The capability
@@ -75,11 +77,11 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, errors.New("app: capability.issuer_name required when enabled")
 	}
 
-	key, err := limes.LoadOrGenerateKey(cfg.SigningKeyPath, cfg.SigningKeyKID)
+	key, generated, err := capabilityKey(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("app: capability key: %w", err)
 	}
-	if key.Generated {
+	if generated {
 		// An ephemeral key means every pod restart silently invalidates every
 		// capability agents are still holding. That is fine for a laptop and
 		// catastrophic anywhere else, and a startup warning is the wrong
@@ -103,7 +105,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		)
 	}
 
-	signer, err := limes.NewEd25519Signer(key.KeyID, key.Private)
+	signer, err := limes.NewSigner(limes.SignerConfig{KeyID: key.KeyID, Key: key.Private})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability signer: %w", err)
 	}
@@ -123,15 +125,26 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability issuer: %w", err)
 	}
 
-	keys := limes.NewStaticKeyResolver(map[string]ed25519.PublicKey{key.KeyID: key.Public})
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public}})
+	if err != nil {
+		return nil, fmt.Errorf("app: capability keys: %w", err)
+	}
 
 	trusted := cfg.TrustedIssuers
 	if len(trusted) == 0 {
 		trusted = []string{cfg.IssuerName}
 	}
 
-	cache := limes.NewCachedRevocationChecker(store, cfg.RevocationCacheTTL)
-	copies := limes.NewCachedBiscuitRevocationChecker(store, cfg.RevocationCacheTTL)
+	cache, err := limes.NewCachedRevocationChecker(limes.RevocationCacheConfig{Upstream: store, TTL: cfg.RevocationCacheTTL})
+	if err != nil {
+		return nil, fmt.Errorf("app: capability revocation cache: %w", err)
+	}
+	copies, err := limes.NewCachedBiscuitRevocationChecker(limes.BiscuitRevocationCacheConfig{
+		Upstream: store, TTL: cfg.RevocationCacheTTL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("app: capability Biscuit revocation cache: %w", err)
+	}
 
 	// Revocations made on any replica clear this one's cache at once; the
 	// TTL above is only the fallback for while the LISTEN connection is
@@ -145,7 +158,9 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability revocation watch: %w", err)
 	}
 	deps.RegisterWatcherStop(stopWatch)
-	replay, err := capabilitypg.NewReplayCache(deps.Pool, deps.Logger.Named("dpop-replay"))
+	replay, err := capabilitypg.NewReplayCache(capabilitypg.ReplayCacheConfig{
+		Pool: deps.Pool, Log: deps.Logger.Named("dpop-replay"),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("app: DPoP replay cache: %w", err)
 	}
@@ -155,7 +170,15 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, err
 	}
 
-	verifier, err := limes.NewStandardVerifier(limes.VerifierConfig{
+	// A key-bound capability must arrive with an RFC 9449 proof from its
+	// key. The planes compare the procedure path only: behind a proxy they
+	// cannot know the scheme and host clients address them by.
+	proofs, err := dpop.NewVerifier(dpop.VerifierConfig{Replay: replay, MatchPathOnly: true, Nonces: nonces})
+	if err != nil {
+		return nil, fmt.Errorf("app: DPoP verifier: %w", err)
+	}
+
+	verifier, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys:           keys,
 		Revocations:    cache,
 		TrustedIssuers: trusted,
@@ -167,10 +190,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		// The capability interceptor passes a copy's own limits to the usage
 		// store, which counts them (capability_copy_usage).
 		MeterCopies: true,
-		// A key-bound capability must arrive with an RFC 9449 proof from its
-		// key. The planes compare the procedure path only: behind a proxy
-		// they cannot know the scheme and host clients address them by.
-		DPoP: &limes.DPoPVerifier{Replay: replay, MatchPathOnly: true, Nonces: nonces},
+		DPoP:        proofs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability verifier: %w", err)
@@ -181,7 +201,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// MeterProvider so test paths and sidecar tools don't pay for
 	// instrument lookups.
 	// Labelled by tenant, as every Paladin meter of tenant activity is.
-	usage, err := limes.WithMetering[pgx.Tx](
+	usage, err := limes.Instrument[pgx.Tx](
 		capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage")),
 		limes.WithTenantAttribute())
 	if err != nil {
@@ -203,15 +223,34 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Replay:       replay,
 		PublicKeys:   map[string]ed25519.PublicKey{key.KeyID: key.Public},
 		IssuerName:   cfg.IssuerName,
-		EphemeralKey: key.Generated,
+		EphemeralKey: generated,
 	}, nil
+}
+
+// capabilityKey is the issuer's signing key: the one at signing_key_path,
+// published under signing_key_kid when it names one and under the kid
+// derived from the key otherwise; or, with no path, a key generated for this
+// process alone, reported as generated so the caller decides whether that is
+// acceptable here.
+func capabilityKey(cfg config.Capability) (key limes.SigningKey, generated bool, err error) {
+	if cfg.SigningKeyPath == "" {
+		key, err = limes.GenerateKey()
+		return key, true, err
+	}
+	if key, err = limes.LoadKey(cfg.SigningKeyPath); err != nil {
+		return limes.SigningKey{}, false, err
+	}
+	if cfg.SigningKeyKID != "" {
+		key.KeyID = cfg.SigningKeyKID
+	}
+	return key, false, nil
 }
 
 // dpopNonces builds the nonces a key-bound capability's proof must carry, or
 // none when they are off. Every replica must sign with the same key, or a
 // nonce one issues is refused by the next; so a missing key refuses to start,
 // except where an ephemeral key is acceptable, as for the signing key.
-func dpopNonces(cfg config.DPoPNonce, env string, log *zap.Logger) (limes.DPoPNonces, error) {
+func dpopNonces(cfg config.DPoPNonce, env string, log *zap.Logger) (dpop.Nonces, error) {
 	if !cfg.Enabled {
 		return nil, nil
 	}
@@ -221,14 +260,14 @@ func dpopNonces(cfg config.DPoPNonce, env string, log *zap.Logger) (limes.DPoPNo
 			return nil, fmt.Errorf("app: capability.dpop_nonce.enabled with no key in env %q — "+
 				"replicas with keys of their own refuse each other's nonces; set key_secret", env)
 		}
-		key = make([]byte, limes.HMACNonceKeyBytes)
+		key = make([]byte, dpop.HMACNonceKeyBytes)
 		if _, err := rand.Read(key); err != nil {
 			return nil, fmt.Errorf("app: DPoP nonce key: %w", err)
 		}
 		log.Warn("capability: ephemeral DPoP nonce key (no dpop_nonce.key); only one replica can check its nonces",
 			zap.String("env", env))
 	}
-	nonces, err := limes.NewHMACNonces(cfg.Lifetime, key)
+	nonces, err := dpop.NewHMACNonces(dpop.HMACNoncesConfig{Keys: [][]byte{key}, Lifetime: cfg.Lifetime})
 	if err != nil {
 		return nil, fmt.Errorf("app: DPoP nonces: %w", err)
 	}

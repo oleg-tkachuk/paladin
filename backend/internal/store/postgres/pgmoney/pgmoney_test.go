@@ -52,3 +52,29 @@ func TestNanosFromNumericRefusesWhatIsNotAnAmount(t *testing.T) {
 		}
 	}
 }
+
+// A ceiling round-trips through its column: unlimited as NULL, and a ceiling
+// of 0 as a 0, never as the NULL that would lift it.
+func TestCeilingNumericRoundTrip(t *testing.T) {
+	for _, c := range []limes.BudgetCeiling{
+		{Unlimited: true},
+		{Max: 0},
+		{Max: 1},
+		{Max: limes.MaxNanos},
+	} {
+		v := NumericFromCeiling(c)
+		if v.Valid == c.Unlimited {
+			t.Errorf("%s: column valid = %t", c, v.Valid)
+		}
+		got, err := CeilingFromNumeric(v)
+		if err != nil || got != c {
+			t.Errorf("%s → %s, %v", c, got, err)
+		}
+	}
+}
+
+func TestCeilingFromNumericRefusesWhatIsNotAnAmount(t *testing.T) {
+	if _, err := CeilingFromNumeric(pgtype.Numeric{NaN: true, Valid: true}); err == nil {
+		t.Error("NaN read as a ceiling")
+	}
+}

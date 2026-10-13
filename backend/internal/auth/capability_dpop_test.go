@@ -17,6 +17,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/dpop"
+	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/memstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
@@ -36,46 +38,71 @@ const dpopProcedure = unarytest.ProbeProcedure
 // otherProcedure is a path the proofs below were not made for.
 const otherProcedure = "/auth.dpop.v1.Svc/Other"
 
+// dpopIssuer is the issuer the fixture's capabilities name and its verifiers
+// trust.
+const dpopIssuer = "paladin-test"
+
 type dpopFixture struct {
 	issuer *limes.Issuer
 	// keys and store are what the verifiers check tokens against.
 	keys  limes.KeyResolver
-	store *memstore.Store[any]
+	store *memstore.Store
 	// verifier checks proofs the way the planes do; bare has no DPoP
 	// configured, as a plane wired without one.
-	verifier *limes.StandardVerifier
-	bare     *limes.StandardVerifier
+	verifier *limes.Verifier
+	bare     *limes.Verifier
 	key      ed25519.PrivateKey
 	jkt      string
 }
 
+// newProofVerifier is a DPoP verifier that matches the path only, as the
+// planes do; nonces may be nil.
+func newProofVerifier(t *testing.T, nonces dpop.Nonces) *dpop.Verifier {
+	t.Helper()
+	replay, err := dpop.NewMemoryReplayCache(dpop.MemoryReplayCacheConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := dpop.NewVerifier(dpop.VerifierConfig{Replay: replay, MatchPathOnly: true, Nonces: nonces})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
 func newDPoPFixture(t *testing.T) *dpopFixture {
 	t.Helper()
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	key, err := limes.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	signer, err := limes.NewEd25519Signer("k1", priv)
+	signer, err := limes.NewSigner(limes.SignerConfig{KeyID: key.KeyID, Key: key.Private})
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := memstore.New[any]()
-	issuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: "paladin-test"})
+	store, err := memstore.NewStore(memstore.StoreConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys := limes.NewStaticKeyResolver(map[string]ed25519.PublicKey{"k1": pub})
+	issuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: dpopIssuer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	config := limes.VerifierConfig{
 		Keys:           keys,
 		Revocations:    store,
-		TrustedIssuers: []string{"paladin-test"},
+		TrustedIssuers: []string{dpopIssuer},
 	}
-	bare, err := limes.NewStandardVerifier(config)
+	bare, err := limes.NewVerifier(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.DPoP = &limes.DPoPVerifier{Replay: limes.NewMemoryReplayCache(0), MatchPathOnly: true}
-	verifier, err := limes.NewStandardVerifier(config)
+	config.DPoP = newProofVerifier(t, nil)
+	verifier, err := limes.NewVerifier(config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,33 +110,41 @@ func newDPoPFixture(t *testing.T) *dpopFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jkt, err := limes.KeyThumbprint(agentKey.Public())
+	jkt, err := dpop.Thumbprint(agentKey.Public())
 	if err != nil {
 		t.Fatal(err)
 	}
 	return &dpopFixture{issuer: issuer, keys: keys, store: store, verifier: verifier, bare: bare, key: agentKey, jkt: jkt}
 }
 
+// mint issues a capability bound to jkt; unbound when jkt is empty. A
+// key-bound capability verifies only with a proof of its key, so it is minted
+// here rather than through captest.
 func (f *dpopFixture) mint(t *testing.T, jkt string) string {
 	t.Helper()
-	_, tok, err := f.issuer.Issue(context.Background(), limes.IssueRequest{
-		IssuedBy:        limes.Principal{Subject: "op"},
-		Subject:         limes.Principal{Type: limes.PrincipalAgent, TenantID: uuid.New(), Subject: "agent"},
-		Audience:        []string{TokenPlaneData},
-		Caveats:         limes.Caveats{Ops: []limes.Op{limes.OpGet}},
+	tenant := uuid.New()
+	res, err := f.issuer.Issue(context.Background(), limes.IssueRequest{
+		IssuedBy: limes.Principal{Type: limes.PrincipalUser, TenantID: tenant, Subject: "op"},
+		Subject:  limes.Principal{Type: limes.PrincipalAgent, TenantID: tenant, Subject: "agent"},
+		Audience: []string{TokenPlaneData},
+		Caveats: limes.Caveats{
+			Ops:      []limes.Op{limes.OpGet},
+			Requests: limes.RequestCeiling{Unlimited: true},
+			Budget:   limes.BudgetCeiling{Unlimited: true},
+		},
 		TTL:             time.Hour,
 		ConfirmationJKT: jkt,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return tok
+	return res.Token
 }
 
 func (f *dpopFixture) proof(t *testing.T, url, token string) string {
 	t.Helper()
-	p, err := limes.NewDPoPProof(f.key, limes.DPoPProofRequest{
-		Method: http.MethodPost, URL: url, Token: token, Now: time.Now(),
+	p, err := dpop.Sign(context.Background(), f.key, dpop.ProofRequest{
+		Method: http.MethodPost, URL: url, Token: token, IssuedAt: time.Now(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -136,7 +171,7 @@ func callUnder(c paladiniamv1connect.HealthServiceClient, scheme limes.AuthSchem
 	ctx, info := connect.NewClientContext(context.Background())
 	info.RequestHeader().Set(paladin.HeaderAuthorization, string(scheme)+" "+token)
 	if proof != "" {
-		info.RequestHeader().Set(limes.DPoPHeader, proof)
+		info.RequestHeader().Set(dpop.Header, proof)
 	}
 	_, err := c.GetVersion(ctx, &iamv1.GetVersionRequest{})
 	return err
@@ -147,7 +182,7 @@ func callUnder(c paladiniamv1connect.HealthServiceClient, scheme limes.AuthSchem
 // one the scheme claims.
 func TestCapabilityDPoP_TheDPoPScheme(t *testing.T) {
 	f := newDPoPFixture(t)
-	client, base := serve(t, CapabilityInterceptor(f.verifier, TokenPlaneData, nil, 0, ""))
+	client, base := serve(t, CapabilityInterceptor(f.verifier, TokenPlaneData, nil, 0))
 	bound := f.mint(t, f.jkt)
 	if err := callUnder(client, limes.AuthSchemeDPoP, bound, f.proof(t, base+dpopProcedure, bound)); err != nil {
 		t.Fatalf("a bound capability under DPoP refused: %v", err)
@@ -164,7 +199,7 @@ func call(c paladiniamv1connect.HealthServiceClient, token, proof string) error 
 	ctx, info := connect.NewClientContext(context.Background())
 	info.RequestHeader().Set(HeaderCapability, token)
 	if proof != "" {
-		info.RequestHeader().Set(limes.DPoPHeader, proof)
+		info.RequestHeader().Set(dpop.Header, proof)
 	}
 	_, err := c.GetVersion(ctx, &iamv1.GetVersionRequest{})
 	return err
@@ -172,7 +207,7 @@ func call(c paladiniamv1connect.HealthServiceClient, token, proof string) error 
 
 func TestCapabilityDPoP_Unary(t *testing.T) {
 	f := newDPoPFixture(t)
-	client, base := serve(t, CapabilityInterceptor(f.verifier, TokenPlaneData, nil, 0, ""))
+	client, base := serve(t, CapabilityInterceptor(f.verifier, TokenPlaneData, nil, 0))
 	bound := f.mint(t, f.jkt)
 
 	if err := call(client, bound, f.proof(t, base+dpopProcedure, bound)); err != nil {
@@ -209,14 +244,16 @@ func TestCapabilityDPoP_Unary(t *testing.T) {
 }
 
 // A plane wired without a DPoP verifier cannot check a binding, and must not
-// quietly treat a bound capability as a bearer token.
+// quietly treat a bound capability as a bearer token. limes counts that the
+// deployment's fault (ErrProofUnsupported), not a refusal of the capability:
+// FailedPrecondition, which no retry mends, rather than Unavailable.
 func TestCapabilityDPoP_BoundRefusedWithoutAVerifier(t *testing.T) {
 	f := newDPoPFixture(t)
-	client, base := serve(t, CapabilityInterceptor(f.bare, TokenPlaneData, nil, 0, ""))
+	client, base := serve(t, CapabilityInterceptor(f.bare, TokenPlaneData, nil, 0))
 	bound := f.mint(t, f.jkt)
 	err := call(client, bound, f.proof(t, base+dpopProcedure, bound))
-	if connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("err = %v, want PermissionDenied", err)
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), proofUnchecked) {
+		t.Fatalf("err = %v, want FailedPrecondition: %q", err, proofUnchecked)
 	}
 	if err := call(client, f.mint(t, ""), ""); err != nil {
 		t.Fatalf("unbound capability: %v", err)
@@ -229,14 +266,14 @@ func TestCapabilityDPoP_BoundRefusedWithoutAVerifier(t *testing.T) {
 // headers; with no HTTP transport the method is the POST Connect uses.
 func TestCapabilityDPoP_Streaming(t *testing.T) {
 	f := newDPoPFixture(t)
-	i := CapabilityInterceptor(f.verifier, TokenPlaneData, nil, 0, "")
+	i := CapabilityInterceptor(f.verifier, TokenPlaneData, nil, 0)
 	bound := f.mint(t, f.jkt)
 
 	run := func(proof string) (context.Context, error) {
 		h := &connect.Header{}
 		h.Set(HeaderCapability, bound)
 		if proof != "" {
-			h.Set(limes.DPoPHeader, proof)
+			h.Set(dpop.Header, proof)
 		}
 		return callStream(context.Background(), []connect.ServerInterceptor{i}, h)
 	}
@@ -248,8 +285,8 @@ func TestCapabilityDPoP_Streaming(t *testing.T) {
 		t.Error("the verified capability did not reach the stream handler")
 	}
 	_, err = run("")
-	if connect.CodeOf(err) != connect.CodePermissionDenied || !errors.Is(err, limes.ErrDPoPRequired) {
-		t.Fatalf("missing proof: err = %v, want PermissionDenied wrapping ErrDPoPRequired", err)
+	if connect.CodeOf(err) != connect.CodePermissionDenied || !errors.Is(err, dpop.ErrRequired) {
+		t.Fatalf("missing proof: err = %v, want PermissionDenied wrapping dpop.ErrRequired", err)
 	}
 }
 
@@ -261,7 +298,7 @@ func TestCapabilityDPoP_GoSDKInteroperates(t *testing.T) {
 	if err != nil || jkt != f.jkt {
 		t.Fatalf("SDK thumbprint = %q, %v; server computes %q", jkt, err, f.jkt)
 	}
-	_, base := serve(t, CapabilityInterceptor(f.verifier, TokenPlaneData, nil, 0, ""))
+	_, base := serve(t, CapabilityInterceptor(f.verifier, TokenPlaneData, nil, 0))
 
 	bound := f.mint(t, f.jkt)
 	sdk, err := paladin.New(base+"/", paladin.WithCapability(bound), paladin.WithDPoP(f.key))
@@ -287,16 +324,16 @@ func TestCapabilityDPoP_GoSDKInteroperates(t *testing.T) {
 
 // countingNonces counts the proofs refused for their nonce.
 type countingNonces struct {
-	limes.DPoPNonces
+	dpop.Nonces
 	refused atomic.Int64
 }
 
-func (c *countingNonces) Valid(ctx context.Context, nonce string) bool {
-	ok := c.DPoPNonces.Valid(ctx, nonce)
-	if !ok {
+func (c *countingNonces) Valid(ctx context.Context, nonce string) (bool, error) {
+	ok, err := c.Nonces.Valid(ctx, nonce)
+	if err == nil && !ok {
 		c.refused.Add(1)
 	}
-	return ok
+	return ok, err
 }
 
 // A server that asks for nonces challenges the SDK's first proof once; the
@@ -304,21 +341,25 @@ func (c *countingNonces) Valid(ctx context.Context, nonce string) bool {
 // next call goes through without a challenge.
 func TestCapabilityDPoP_GoSDKAnswersANonceChallenge(t *testing.T) {
 	f := newDPoPFixture(t)
-	hmac, err := limes.NewHMACNonces(time.Minute, []byte(strings.Repeat("n", limes.HMACNonceKeyBytes)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	nonces := &countingNonces{DPoPNonces: hmac}
-	verifier, err := limes.NewStandardVerifier(limes.VerifierConfig{
-		Keys:           f.keys,
-		Revocations:    f.store,
-		TrustedIssuers: []string{"paladin-test"},
-		DPoP:           &limes.DPoPVerifier{Replay: limes.NewMemoryReplayCache(0), MatchPathOnly: true, Nonces: nonces},
+	const nonceLifetime = time.Minute
+	hmac, err := dpop.NewHMACNonces(dpop.HMACNoncesConfig{
+		Keys:     [][]byte{[]byte(strings.Repeat("n", dpop.HMACNonceKeyBytes))},
+		Lifetime: nonceLifetime,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, base := serve(t, CapabilityInterceptor(verifier, TokenPlaneData, nil, 0, ""))
+	nonces := &countingNonces{Nonces: hmac}
+	verifier, err := limes.NewVerifier(limes.VerifierConfig{
+		Keys:           f.keys,
+		Revocations:    f.store,
+		TrustedIssuers: []string{dpopIssuer},
+		DPoP:           newProofVerifier(t, nonces),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, base := serve(t, CapabilityInterceptor(verifier, TokenPlaneData, nil, 0))
 	sdk, err := paladin.New(base+"/", paladin.WithCapability(f.mint(t, f.jkt)), paladin.WithDPoP(f.key))
 	if err != nil {
 		t.Fatal(err)

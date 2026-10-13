@@ -36,14 +36,14 @@ func TestReplicaCheckDisabledWithoutReplica(t *testing.T) {
 	}
 }
 
-// capStore answers Get with err; nothing else is called.
+// capStore answers IsRevoked with err; nothing else is called.
 type capStore struct {
 	limes.Store
 	err error
 }
 
-func (s capStore) Get(context.Context, uuid.UUID) (limes.Capability, error) {
-	return limes.Capability{}, s.err
+func (s capStore) IsRevoked(context.Context, uuid.UUID) (bool, error) {
+	return false, s.err
 }
 
 // tokenStore answers FindByDigest with err; nothing else is called.
@@ -67,7 +67,8 @@ func TestSubsystemComponentsCheckTheirStore(t *testing.T) {
 		want health.ComponentStatus
 	}{
 		{"capability off", &SharedDeps{}, config.KeyCapabilityEnabled, health.StatusDisabled},
-		{"capability store answers", &SharedDeps{Capability: &CapabilityBundle{Store: capStore{err: limes.ErrNotFound}}},
+		// IsRevoked answers an id not on record with false, not ErrNotFound.
+		{"capability store answers", &SharedDeps{Capability: &CapabilityBundle{Store: capStore{}}},
 			config.KeyCapabilityEnabled, health.StatusHealthy},
 		{"capability store fails", &SharedDeps{Capability: &CapabilityBundle{Store: capStore{err: denied}}},
 			config.KeyCapabilityEnabled, health.StatusUnhealthy},
