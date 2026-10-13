@@ -11,7 +11,9 @@ import (
 
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
+	"github.com/oleg-tkachuk/paladin/backend/internal/worker/operations"
 )
 
 // BuildBackgroundJobs turns config into a slice of goroutines, and the whole
@@ -394,6 +396,54 @@ func TestBuildBackgroundJobs_SubsystemPurgersNeedANonZeroInterval(t *testing.T) 
 			t.Error("CapabilityPurger built with a zero interval")
 		case *worker.APITokenPurger:
 			t.Error("APITokenPurger built with a zero interval")
+		}
+	}
+}
+
+// The reverse of the reapers: a batch executor acts for one tenant — the
+// runner scopes its context to the operation's — so its writes go through the
+// runtime pool, where row-level security binds them to that tenant. On the
+// reaper pool its transitions by object id alone were held to the tenant by
+// nothing but the lookup that produced the ids.
+func TestBuildBackgroundJobs_BatchExecutorsTransitionOnTheRuntimePool(t *testing.T) {
+	runtimePool := &pgxpool.Pool{}
+	cfg := config.Config{}
+	cfg.Worker.Jobs.Operations.Interval = time.Second
+	deps := &SharedDeps{
+		Cfg:        cfg,
+		Logger:     zap.NewNop(),
+		Pool:       runtimePool,
+		ReaperPool: &pgxpool.Pool{},
+		SM:         statemachine.New(runtimePool),
+	}
+
+	var runner *operations.Runner
+	for _, j := range BuildBackgroundJobs(deps) {
+		if r, ok := j.(*operations.Runner); ok {
+			runner = r
+		}
+	}
+	if runner == nil {
+		t.Fatal("no operations runner built")
+	}
+	transitions := map[string]operations.Transitioner{}
+	for name, e := range runner.Executors {
+		switch ex := e.(type) {
+		case *operations.BatchDeleteExecutor:
+			transitions[name] = ex.Transitions
+		case *operations.BatchCopyExecutor:
+			transitions[name] = ex.Transitions
+		case *operations.BatchRestoreExecutor:
+			transitions[name] = ex.Transitions
+		}
+	}
+	const executorsWithTransitions = 3
+	if len(transitions) != executorsWithTransitions {
+		t.Fatalf("found transitions on %d executors %v, want %d", len(transitions), transitions, executorsWithTransitions)
+	}
+	for name, tr := range transitions {
+		if tr != operations.Transitioner(deps.SM) {
+			t.Errorf("%s transitions through a state machine other than the runtime pool's", name)
 		}
 	}
 }
