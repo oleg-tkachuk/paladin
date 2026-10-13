@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — a reissued batch finishes its first run's work
+## v33.0.3 — a reissued batch finishes its first run's work
 
 A permanent delete now leaves a tombstone (`erased_objects`, migration 074):
 the object's id and collection, written by the statement that removes the
@@ -62,7 +62,7 @@ operation that created them (`objects.created_by_operation`, migration 075);
 a reissue adopts a PENDING row whose creator is no longer running and was made
 for an object of the same size and type, and copies into it.
 
-## Unreleased — an operation's metadata is its progress
+## v33.0.2, sdk/go/v0.71.1 — an operation's metadata is its progress
 
 `Operation.metadata` now carries only the operation's progress: a `Struct` of
 the latest `{processed, total}` the worker reported, absent until its first
@@ -75,7 +75,7 @@ Migration 073 gives progress its own column, so the arguments survive the
 whole operation, a reclaim after a lost worker included. Rows whose stored
 metadata was already a progress snapshot have it moved to the new column.
 
-## Unreleased — a reissued batch counts the work already done
+## v33.0.1 — a reissued batch counts the work already done
 
 A batch operation whose worker died ends FAILED with `WORKER_LOST`, and the
 recovery is to issue the same batch again. That second run used to report
@@ -87,7 +87,7 @@ response says how many under a new `already_applied` field (included in
 the source's etag, size and checksum; any other object at that key is still a
 failure, named as such.
 
-## Unreleased — an API token rate limit of 0 is a cap
+## v33.0.0, sdk/go/v0.71.0 — an API token rate limit of 0 is a cap
 
 - **Breaking, API tokens.** `APITokenServiceCreateRequest` and `APIToken`
   carry the rate limit as a `rate_limit` oneof: `rate_limit_rpm`, where 0
@@ -97,7 +97,7 @@ failure, named as such.
 - **Migration 072.** `api_tokens.rate_limit_rpm` is nullable; every 0 stored
   under the old reading becomes NULL.
 
-## Unreleased — tenants past their trash retention are surfaced
+## v33.0.0, sdk/go/v0.71.0 — tenants past their trash retention are surfaced
 
 - **API, additive.** The `ListTenants` filter gains `purge_eligible`: trashed,
   with `admin.tenants.trash_retention` lapsed. It is pushed down to SQL.
@@ -105,7 +105,7 @@ failure, named as such.
   sampled by the worker every housekeeping interval.
 - **Console.** The dashboard says when there are any, and links to Trash.
 
-## Unreleased — a quota cap of 0 is a cap
+## v32.0.0, sdk/go/v0.70.0 — a quota cap of 0 is a cap
 
 - **Breaking, quotas.** `Quota.max_total_bytes`, `max_object_count`,
   `max_bytes_per_day` and `max_objects_per_day` are `optional`: a cap that is
@@ -119,7 +119,7 @@ failure, named as such.
 - **Migration 070.** Quota caps are nullable; every 0 stored under the old
   reading becomes NULL.
 
-## Unreleased — a tenant budget of 0 is a cap
+## v31.0.0, sdk/go/v0.69.0 — a tenant budget of 0 is a cap
 
 - **Breaking, tenant budgets.** `TenantBudget`, `TenantBudgetServiceSetRequest`
   and `GetTenantSummaryResponse` carry the cap as a `budget_ceiling` oneof:
@@ -131,7 +131,7 @@ failure, named as such.
   `UnlimitedBudget`, shared by every budget ceiling. The wire and JSON forms
   are unchanged.
 
-## Unreleased — capabilities run on limes v0.53.2
+## v29.0.0 — capabilities run on limes v0.53.2
 
 - **Breaking, capability tokens.** Capabilities are JWTs with
   `typ: limes-cap-v4+jwt`; every capability issued before the upgrade is
@@ -175,7 +175,7 @@ failure, named as such.
   reference `capability_records`, and charges and holds keep their ancestors;
   `dpop_seen_proofs` is recreated, keyed per holder.
 
-## Unreleased — lifecycle transitions are refused
+## v28.0.0, sdk/go/v0.64.0 — lifecycle transitions are refused
 
 - **Breaking, admin API.** `SetLifecycleRules` refuses a rule whose action is
   a transition with `INVALID_ARGUMENT`. Transitions were stored and never
@@ -183,7 +183,7 @@ failure, named as such.
   bucket that holds one keeps it, unapplied, until the rules are written
   again without it; the console marks it and offers only its deletion.
 
-## Unreleased — objects deleted from the bucket go to the trash
+## v27.8.0, sdk/go/v0.63.0 — objects deleted from the bucket go to the trash
 
 - **Ingest.** A delete event from the storage backend moves the object to
   the trash once a HEAD where its row places it finds nothing; it used to be
@@ -193,13 +193,13 @@ failure, named as such.
   with `FAILED_PRECONDITION` and the new reason `OBJECT_BYTES_MISSING`, and
   answers `UNAVAILABLE` when the backend cannot be reached.
 
-## Unreleased — the Python SDK supports Python 3.15
+## v27.8.0, sdk/go/v0.63.0 — the Python SDK supports Python 3.15
 
 - **Python SDK.** CPython 3.15 is tested beside 3.13 and 3.14;
   `requires-python` stays `>=3.13`. `biscuit-python` has no 3.15 wheel, so
   the `biscuit` extra builds from source there, as it does on 3.14.
 
-## Unreleased — the MCP bridge forwards key-bound capabilities
+## v27.7.0 — the MCP bridge forwards key-bound capabilities
 
 - **Configuration.** `mcp.dpop_key` / `mcp.dpop_key_secret` give the bridge a
   DPoP key (PEM PKCS#8, Ed25519 or P-256). Every bridge replica must hold the
@@ -208,7 +208,7 @@ failure, named as such.
 - **Agents.** To use a key-bound capability through MCP, delegate it to the
   thumbprint `paladin_get_bridge_key` returns and pass the child to the bridge.
 
-## Unreleased — DPoP server nonces
+## v27.5.0, sdk/go/v0.62.0 — DPoP server nonces
 
 - **Configuration.** `capability.dpop_nonce` (off by default) makes a
   key-bound capability's proof carry a nonce the server issued (RFC 9449 §8),
@@ -221,7 +221,7 @@ failure, named as such.
   on only once every client holding a key-bound capability runs an SDK of this
   release: an older one is refused.
 
-## Unreleased — DPoP under its own scheme, signed Ed25519
+## v27.3.0 — DPoP under its own scheme, signed Ed25519
 
 - **Behaviour, capabilities.** A key-bound capability may be sent as
   `Authorization: DPoP <token>`, RFC 9449's scheme; under it, a capability
@@ -230,7 +230,7 @@ failure, named as such.
 - **SDKs.** Both sign DPoP proofs `Ed25519`, the name RFC 9864 gives the
   algorithm. The server still reads `EdDSA` from older SDKs.
 
-## Unreleased — a capability's unit is any ISO 4217 code
+## v27.2.0 — a capability's unit is any ISO 4217 code
 
 **Behaviour and console.** Tenant budgets and capabilities take any ISO 4217
 code; a code ISO 4217 does not define is refused. The console's unit pickers
