@@ -229,6 +229,7 @@ capability:
   # to [issuer_name].
   enabled: true
   issuer_name: paladin-e2e
+  currency: XXX
 api_token:
   enabled: false
 

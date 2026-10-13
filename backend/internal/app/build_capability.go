@@ -202,7 +202,8 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// instrument lookups.
 	// Labelled by tenant, as every Paladin meter of tenant activity is.
 	usage, err := limes.Instrument[pgx.Tx](
-		capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage")),
+		capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage"),
+			capabilitypg.WithDefaultUnit(cfg.Currency)),
 		limes.WithTenantAttribute())
 	if err != nil {
 		return nil, fmt.Errorf("app: capability metering: %w", err)

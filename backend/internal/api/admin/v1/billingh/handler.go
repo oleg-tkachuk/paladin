@@ -46,6 +46,16 @@ type Handler struct {
 	pool   *pgxpool.Pool
 	usage  limes.UsageStore[pgx.Tx]
 	policy cedar.Authorizer
+	// currency is the platform's (capability.currency): what a summary with
+	// no charge and no budget to take a unit from is in. See WithCurrency.
+	currency string
+}
+
+// WithCurrency sets the platform's currency, capability.currency. Without it
+// an empty summary is in limes.DefaultUnitCode.
+func (h *Handler) WithCurrency(unit string) *Handler {
+	h.currency = unit
+	return h
 }
 
 // NewHandler wires the dependencies. policy MUST be non-nil; pool may
@@ -56,7 +66,7 @@ func NewHandler(pool *pgxpool.Pool, usage limes.UsageStore[pgx.Tx], policy cedar
 	if policy == nil {
 		panic("billingh: policy authorizer is required")
 	}
-	return &Handler{pool: pool, usage: usage, policy: policy}
+	return &Handler{pool: pool, usage: usage, policy: policy, currency: limes.DefaultUnitCode}
 }
 
 // authorize gates the RPC against Cedar. Resource is the Tenant
@@ -200,7 +210,7 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 		}
 	}
 	if out.UnitCode == "" {
-		out.UnitCode = limes.DefaultUnitCode
+		out.UnitCode = h.currency
 	}
 
 	out.TopCapabilities, err = h.queryTopBy(ctx, tenantID, start, end, "capability_id::text")
@@ -373,7 +383,7 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 
 	// Unit_code derivation mirrors the summary path — take the
 	// dominant unit over the period, fall back to tenant_budget,
-	// then DefaultUnitCode.
+	// then the platform's currency.
 	if err := h.pool.QueryRow(ctx,
 		`SELECT COALESCE(
 		    (SELECT unit_code FROM charges
@@ -390,7 +400,7 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 		}
 	}
 	if out.UnitCode == "" {
-		out.UnitCode = limes.DefaultUnitCode
+		out.UnitCode = h.currency
 	}
 	return out, nil
 }

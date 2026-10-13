@@ -199,7 +199,7 @@ func TestProtoToCaveatsKeepsExplicitUnitCode(t *testing.T) {
 }
 
 func TestProtoToCaveatsRefusesAnUnknownUnlimitedCurrency(t *testing.T) {
-	_, err := protoToCaveats(&adminv1.CapabilityCaveats{BudgetCeiling: unlimitedBudget("XYZ")}, nil)
+	_, err := protoToCaveats(&adminv1.CapabilityCaveats{BudgetCeiling: unlimitedBudget("XYZ")}, nil, limes.DefaultUnitCode)
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("err = %v, want InvalidArgument", err)
 	}
@@ -241,7 +241,7 @@ func TestProtoToCaveatsProjectsEveryField(t *testing.T) {
 
 func mustCaveats(t *testing.T, c *adminv1.CapabilityCaveats) limes.Caveats {
 	t.Helper()
-	got, err := protoToCaveats(c, nil)
+	got, err := protoToCaveats(c, nil, limes.DefaultUnitCode)
 	if err != nil {
 		t.Fatalf("protoToCaveats: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestProtoToCaveatsBudgetMoney(t *testing.T) {
 	}
 	_, err := protoToCaveats(&adminv1.CapabilityCaveats{BudgetCeiling: &adminv1.CapabilityCaveats_MaxBudget{
 		MaxBudget: &money.Money{CurrencyCode: "USD", Units: -1},
-	}}, nil)
+	}}, nil, limes.DefaultUnitCode)
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("negative: err = %v, want InvalidArgument", err)
 	}
@@ -278,7 +278,7 @@ func TestProtoToCaveatsRefusesTheRemovedDouble(t *testing.T) {
 	if err := proto.Unmarshal(raw, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := protoToCaveats(old, nil); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := protoToCaveats(old, nil, limes.DefaultUnitCode); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("err = %v, want InvalidArgument", err)
 	}
 }
@@ -327,7 +327,7 @@ func TestProtoToCaveatsInheritsUnsetCeilings(t *testing.T) {
 		Budget:   limes.BudgetCeiling{Max: limes.NanosPerUnit},
 		UnitCode: "EUR",
 	}
-	got, err := protoToCaveats(&adminv1.CapabilityCaveats{}, &parent)
+	got, err := protoToCaveats(&adminv1.CapabilityCaveats{}, &parent, limes.DefaultUnitCode)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +337,7 @@ func TestProtoToCaveatsInheritsUnsetCeilings(t *testing.T) {
 	}
 	got, err = protoToCaveats(&adminv1.CapabilityCaveats{
 		RequestCeiling: &adminv1.CapabilityCaveats_MaxRequests{MaxRequests: 0},
-	}, &parent)
+	}, &parent, limes.DefaultUnitCode)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -503,4 +503,35 @@ func openCaveats(ops ...limes.Op) *adminv1.CapabilityCaveats {
 // unlimitedBudget is a budget with no limit, in currency.
 func unlimitedBudget(currency string) *adminv1.CapabilityCaveats_UnlimitedBudget {
 	return &adminv1.CapabilityCaveats_UnlimitedBudget{UnlimitedBudget: &adminv1.UnlimitedBudget{CurrencyCode: currency}}
+}
+
+// A budget that names no currency is the platform's at the root and the
+// parent's under one: a delegate counts in what it draws from.
+func TestProtoToCaveatsResolvesAnUnnamedUnit(t *testing.T) {
+	unnamed := &adminv1.CapabilityCaveats{BudgetCeiling: unlimitedBudget("")}
+
+	root, err := protoToCaveats(unnamed, nil, limes.AbstractUnitCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if root.UnitCode != limes.AbstractUnitCode {
+		t.Errorf("root unit = %q, want the platform's %q", root.UnitCode, limes.AbstractUnitCode)
+	}
+
+	parent := limes.Caveats{Budget: limes.BudgetCeiling{Unlimited: true}, UnitCode: "EUR"}
+	child, err := protoToCaveats(unnamed, &parent, limes.AbstractUnitCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child.UnitCode != "EUR" {
+		t.Errorf("delegate unit = %q, want the parent's EUR", child.UnitCode)
+	}
+
+	named, err := protoToCaveats(&adminv1.CapabilityCaveats{BudgetCeiling: unlimitedBudget("JPY")}, nil, limes.AbstractUnitCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if named.UnitCode != "JPY" {
+		t.Errorf("named unit = %q, want JPY", named.UnitCode)
+	}
 }

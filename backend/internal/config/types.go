@@ -1187,6 +1187,15 @@ type Capability struct {
 	// USD-pinned in name.
 	ChargePerRequestAmount limes.Nanos `yaml:"charge_per_request_amount" json:"charge_per_request_amount"`
 
+	// Currency is the platform's ISO 4217 unit: what a capability budget, a
+	// tenant budget and an empty billing summary are in when the request
+	// names no unit. Required, and set in every shipped config, because the
+	// fallback it replaces was limes.DefaultUnitCode — USD, chosen by nobody.
+	// XXX is "no currency": amounts are credits, written without a symbol.
+	// Records stored before a unit existed keep reading as USD, which is what
+	// they were written in.
+	Currency string `yaml:"currency" json:"currency"`
+
 	// DPoPNonce makes a key-bound capability's proof carry a nonce the server
 	// issued (RFC 9449 §8), bounding how long a captured proof stays usable.
 	DPoPNonce DPoPNonce `yaml:"dpop_nonce" json:"dpop_nonce"`

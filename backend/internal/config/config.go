@@ -222,6 +222,9 @@ func (c *Config) Validate() error {
 	if c.Auth.SigningKey != "" && c.Auth.SigningKeySecret != nil {
 		return fmt.Errorf("auth: cannot specify both signing_key and signing_key_secret")
 	}
+	if !limes.IsUnitCode(c.Capability.Currency) {
+		return fmt.Errorf("capability.currency: %q is not an ISO 4217 code in upper case", c.Capability.Currency)
+	}
 	if c.Capability.DPoPNonce.Key != "" && c.Capability.DPoPNonce.KeySecret != nil {
 		return fmt.Errorf("capability.dpop_nonce: cannot specify both key and key_secret")
 	}

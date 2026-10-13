@@ -40,14 +40,12 @@ func requestCeilingOf(c *adminv1.CapabilityCaveats) (limes.RequestCeiling, bool)
 }
 
 // budgetCeilingOf is the budget ceiling c sets, and false when it sets none.
-// A budget that names no currency is in limes.DefaultUnitCode.
+// A budget that names no currency comes back with an empty unit; the caller
+// decides what it means (protoToCaveats).
 func budgetCeilingOf(c *adminv1.CapabilityCaveats) (budgetCeiling, bool, error) {
 	ceiling, unit, set, err := apiutil.BudgetCeilingOf(fieldCaveats, c.GetMaxBudget(), c.GetUnlimitedBudget())
 	if err != nil || !set {
 		return budgetCeiling{}, false, err
-	}
-	if unit == "" {
-		unit = limes.DefaultUnitCode
 	}
 	return budgetCeiling{ceiling: ceiling, unit: unit}, true, nil
 }

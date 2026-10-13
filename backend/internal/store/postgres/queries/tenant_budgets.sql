@@ -14,7 +14,8 @@
 -- period_end is written as given: NULL leaves the window open-ended. now is
 -- the store's clock, which a period starts by.
 --
--- unit_code is written verbatim on insert; on conflict, it's
+-- unit_code is written verbatim on insert — the platform's currency
+-- (default_unit_code) when the caller names none; on conflict, it's
 -- updated only when the caller passes a non-empty value (an empty
 -- arg keeps the existing currency unchanged — operators editing
 -- the cap shouldn't accidentally reinterpret an EUR budget as USD).
@@ -28,7 +29,7 @@
 -- adapter maps to a version conflict. Without it two operators editing the
 -- same cap silently overwrote each other.
 INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version)
-SELECT $1, sqlc.narg('max_budget_usd')::numeric, 0, COALESCE(NULLIF(sqlc.arg('unit_code')::text, ''), 'USD'), sqlc.arg('now')::timestamptz, sqlc.narg('period_end')::timestamptz, sqlc.arg('now')::timestamptz, 1
+SELECT $1, sqlc.narg('max_budget_usd')::numeric, 0, COALESCE(NULLIF(sqlc.arg('unit_code')::text, ''), sqlc.arg('default_unit_code')::text), sqlc.arg('now')::timestamptz, sqlc.narg('period_end')::timestamptz, sqlc.arg('now')::timestamptz, 1
 -- A missing row is version 0: the insert fires only for a caller that read
 -- none. An existing row always reaches the DO UPDATE, whose guard decides.
 WHERE sqlc.arg('expected_version')::bigint = 0
@@ -53,11 +54,11 @@ WHERE tenant_id = $1;
 -- name: ChargeTenantBudget :one
 -- Atomic UPSERT-and-check, same shape as ChargeCapability. When the
 -- row is missing, inserts a fresh accumulator row with no ceiling (NULL,
--- unlimited) and the supplied unit_code (defaults to 'USD' when empty).
+-- unlimited) and the charge's unit_code, normalised by the caller.
 -- Returns the new spent_usd; pgx.ErrNoRows means "would exceed cap" —
 -- caller maps to ErrTenantBudgetExceeded.
 INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, updated_at)
-VALUES ($1, NULL, sqlc.arg('amount_usd')::numeric, COALESCE(NULLIF(sqlc.arg('unit_code')::text, ''), 'USD'), sqlc.arg('now')::timestamptz, now())
+VALUES ($1, NULL, sqlc.arg('amount_usd')::numeric, sqlc.arg('unit_code')::text, sqlc.arg('now')::timestamptz, now())
 ON CONFLICT (tenant_id) DO UPDATE
 SET spent_usd  = tenant_budgets.spent_usd + sqlc.arg('amount_usd')::numeric,
     updated_at = now()

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"github.com/oleg-tkachuk/limes"
+
 	"strings"
 	"testing"
 	"time"
@@ -19,8 +21,9 @@ func minimalValidConfig() Config {
 		Datastores: Datastores{
 			Postgres: Postgres{DSN: "postgres://x@y/z"},
 		},
-		Limits: validLimits(),
-		Admin:  Admin{Tenants: AdminTenants{TrashRetention: 720 * time.Hour}},
+		Limits:     validLimits(),
+		Admin:      Admin{Tenants: AdminTenants{TrashRetention: 720 * time.Hour}},
+		Capability: Capability{Currency: limes.AbstractUnitCode},
 		Storage: Storage{
 			Backends: map[string]StorageBackend{
 				"primary": {

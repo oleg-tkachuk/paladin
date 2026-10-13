@@ -292,7 +292,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// when the capability subsystem is wired (pool + usage).
 		var billingHandler *billingh.Handler
 		if deps.Capability != nil {
-			billingHandler = billingh.NewHandler(deps.Pool, usageStore, polEngine)
+			billingHandler = billingh.NewHandler(deps.Pool, usageStore, polEngine).
+				WithCurrency(deps.Cfg.Capability.Currency)
 		}
 		paladinadminv1connect.RegisterBillingServiceHandler(adminServer, admin.NewBillingServer(billingHandler))
 	}
@@ -336,7 +337,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Verifier, deps.Capability.Store,
 			deps.Capability.Usage, polEngine).
 			WithBiscuitCopies(deps.Capability.Verifier, deps.Capability.Copies).
-			WithCopyUsage(deps.Capability.CopyUsage)
+			WithCopyUsage(deps.Capability.CopyUsage).
+			WithCurrency(deps.Cfg.Capability.Currency)
 		paladinadminv1connect.RegisterCapabilityServiceHandler(adminServer, capH)
 	} else {
 		// Subsystem disabled — mount the disabled-subsystem stub so
