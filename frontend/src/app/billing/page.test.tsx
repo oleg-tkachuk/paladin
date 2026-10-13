@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { render, screen } from "@/test/utils";
+import { fireEvent, render, screen, within } from "@/test/utils";
 
 const h = vi.hoisted(() => ({
+  tenantsError: null as string | null,
   summary: vi.fn(),
   series: vi.fn(),
   showNotification: vi.fn(),
+  replace: vi.fn(),
+  search: "",
 }));
 vi.mock("@/lib/connect/client", () => ({
   billingClient: {
@@ -20,6 +23,33 @@ vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
 }));
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: h.replace }),
+  useSearchParams: () => new URLSearchParams(h.search),
+}));
+vi.mock("@/hooks/useTenants", () => ({
+  useTenants: () => ({
+    error: h.tenantsError,
+    // Answers as ListTenants does: trashed tenants only when asked for.
+    fetchTenants: (
+      _filter: string,
+      _page: string,
+      opts: { includeTrashed?: boolean } = {},
+    ) =>
+      Promise.resolve({
+        tenants: [
+          { tenantId: "t-1", slug: "platform", displayName: "Platform" },
+          { tenantId: "t-2", slug: "caryon", displayName: "Caryon" },
+          {
+            tenantId: "t-3",
+            slug: "smoke",
+            displayName: "Smoke",
+            deletedAt: { seconds: 1n, nanos: 0 },
+          },
+        ].filter((t) => opts.includeTrashed || !t.deletedAt),
+      }),
+  }),
+}));
 
 import BillingPage from "./page";
 import { moneyFromNanos } from "@/lib/format/money";
@@ -31,6 +61,111 @@ describe("BillingPage", () => {
     h.summary.mockReset();
     h.series.mockReset();
     h.showNotification.mockReset();
+    h.replace.mockReset();
+    h.search = "";
+    h.tenantsError = null;
+  });
+
+  const emptySummary = {
+    total: usd(0n),
+    budgetCeiling: { case: undefined },
+    chargeCount: 0n,
+    topCapabilities: [],
+    topActors: [],
+    topOps: [],
+  };
+
+  // The console's scope is usually the platform tenant, which is billed
+  // nothing; the page reads whichever tenant ?tenant= names.
+  it("reads the tenant the URL names, over the scope's", async () => {
+    h.search = "tenant=t-2";
+    h.summary.mockResolvedValue(emptySummary);
+    h.series.mockResolvedValue({ buckets: [] });
+
+    render(<BillingPage />);
+
+    await screen.findByText("No charges in this period");
+    expect(h.summary).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "t-2" }),
+    );
+    expect(h.series).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "t-2" }),
+    );
+    expect(
+      await screen.findByText(/Caryon was not billed/),
+    ).toBeInTheDocument();
+  });
+
+  // A picker whose options failed to load reads as "there is no one else".
+  it("says when the tenant list could not be loaded", async () => {
+    h.tenantsError = "permission denied";
+    h.summary.mockResolvedValue(emptySummary);
+    h.series.mockResolvedValue({ buckets: [] });
+    render(<BillingPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Tenants could not be loaded",
+    );
+  });
+
+  it("falls back to the scope's tenant with no ?tenant=", async () => {
+    h.summary.mockResolvedValue(emptySummary);
+    h.series.mockResolvedValue({ buckets: [] });
+    render(<BillingPage />);
+    await screen.findByText("No charges in this period");
+    expect(h.summary).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "t-1" }),
+    );
+  });
+
+  it("offers trashed tenants too, marked as such", async () => {
+    h.summary.mockResolvedValue(emptySummary);
+    h.series.mockResolvedValue({ buckets: [] });
+    render(<BillingPage />);
+    fireEvent.click(await screen.findByRole("combobox", { name: "Tenant" }));
+    expect(
+      await screen.findByRole("option", { name: "Smoke · in trash" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: "Caryon" }));
+    expect(h.replace).toHaveBeenCalledWith("?tenant=t-2");
+  });
+
+  it("draws every day of the period, the quiet ones at zero", async () => {
+    h.summary.mockResolvedValue({
+      ...emptySummary,
+      total: usd(2_000_000n),
+      chargeCount: 2n,
+    });
+    const day = (iso: string) => ({
+      seconds: BigInt(Date.parse(iso) / 1000),
+      nanos: 0,
+    });
+    const lastDay = new Date();
+    lastDay.setUTCHours(0, 0, 0, 0);
+    h.series.mockResolvedValue({
+      buckets: [
+        {
+          start: day(lastDay.toISOString()),
+          spent: usd(2_000_000n),
+          chargeCount: 2n,
+        },
+      ],
+    });
+    h.search = "tenant=t-2";
+
+    const { container } = render(<BillingPage />);
+
+    const table = await screen.findByRole("table", { name: "Spend per day" });
+    // A column per day of the 30-day period (31 when it spans a midnight).
+    expect(
+      container.querySelectorAll("svg rect").length,
+    ).toBeGreaterThanOrEqual(30);
+    // Only the billed day is a row of the accessible table; the chart's axis
+    // spans the whole 30-day period.
+    expect(within(table).getAllByRole("row")).toHaveLength(2);
+    // A sub-cent average reads in four places, not as US$0.00.
+    expect(
+      screen.getByText(/Average: US\$0\.0001 per day/),
+    ).toBeInTheDocument();
   });
 
   it("says billing is unavailable instead of reporting no charges", async () => {
