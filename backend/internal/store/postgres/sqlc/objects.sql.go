@@ -11,6 +11,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adoptPendingObject = `-- name: AdoptPendingObject :execrows
+UPDATE objects
+SET created_by_operation = $3,
+    presign_expires_at   = $4
+WHERE tenant_id = $1
+  AND id = $2
+  AND state = 'PENDING'
+  AND created_by_operation = $5
+`
+
+// Hands a PENDING row from the operation that created it to another, and
+// pushes its presign deadline out so the reaper does not clear it mid-copy.
+// Compare-and-set on the creator: of two reissues racing for one row, one
+// adopts it and the other matches nothing.
+func (q *Queries) AdoptPendingObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, adopter pgtype.UUID, presignExpiresAt pgtype.Timestamptz, creator pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, adoptPendingObject,
+		tenantID,
+		iD,
+		adopter,
+		presignExpiresAt,
+		creator,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const checkLiveCollision = `-- name: CheckLiveCollision :one
 SELECT EXISTS(
     SELECT 1 FROM objects o
@@ -53,17 +81,19 @@ const createObject = `-- name: CreateObject :exec
 INSERT INTO objects (
     id, tenant_id, collection_id, path, state,
     content_type, size_bytes, checksum_algorithm, checksum,
-    metadata, tags, external_ref, presign_expires_at, public_url
+    metadata, tags, external_ref, presign_expires_at, public_url,
+    created_by_operation
 ) VALUES (
     $1, $2, $3, $4, $5::object_state,
     $6, $7, $8, $9,
-    $10, $11, $12, $13, $14
+    $10, $11, $12, $13, $14,
+    $15
 )
 `
 
 // Object queries.
 // collection_id is resolved by the caller via ResolveCollectionID.
-func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz, publicUrl string) error {
+func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz, publicUrl string, createdByOperation pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, createObject,
 		iD,
 		tenantID,
@@ -79,6 +109,7 @@ func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgt
 		externalRef,
 		presignExpiresAt,
 		publicUrl,
+		createdByOperation,
 	)
 	return err
 }
@@ -103,7 +134,7 @@ func (q *Queries) ExtendPendingPresign(ctx context.Context, tenantID pgtype.UUID
 }
 
 const getObject = `-- name: GetObject :one
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, c.name AS collection_name
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 WHERE objects.tenant_id = $1 AND objects.id = $2
@@ -142,6 +173,7 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype
 		&i.Object.Taint,
 		&i.Object.ChecksumPartSizeBytes,
 		&i.Object.PublicUrl,
+		&i.Object.CreatedByOperation,
 		&i.CollectionName,
 	)
 	return i, err
@@ -176,7 +208,7 @@ func (q *Queries) GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, 
 }
 
 const getObjectsByIDs = `-- name: GetObjectsByIDs :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, c.name AS collection_name
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 WHERE objects.tenant_id = $1 AND objects.id = ANY($2::uuid[])
@@ -224,6 +256,7 @@ func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, col
 			&i.Object.Taint,
 			&i.Object.ChecksumPartSizeBytes,
 			&i.Object.PublicUrl,
+			&i.Object.CreatedByOperation,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err
@@ -237,6 +270,7 @@ func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, col
 }
 
 const hardDeleteObject = `-- name: HardDeleteObject :execrows
+WITH erased AS (
 DELETE FROM objects
 WHERE objects.tenant_id = $1 AND objects.id = $2
   AND ($3::bigint = 0
@@ -255,6 +289,10 @@ WHERE objects.tenant_id = $1 AND objects.id = $2
                   AND NOT COALESCE(
                       current_setting('paladin.bypass_governance_retention', true) = 'on',
                       false))))
+RETURNING objects.tenant_id, objects.id, objects.collection_id
+)
+INSERT INTO erased_objects (tenant_id, object_id, collection_id)
+SELECT tenant_id, id, collection_id FROM erased
 `
 
 // Removes the row outright. Caller is responsible for first deleting the
@@ -268,6 +306,12 @@ WHERE objects.tenant_id = $1 AND objects.id = $2
 // paladin.bypass_governance_retention='on' (HardDeleteWithBypassTx does, the plain RPC
 // path does not). A locked row matches 0 rows here, so the caller must
 // pre-check to distinguish "locked" from "version mismatch".
+//
+// The same statement records the erasure in erased_objects (migration 074),
+// so a tombstone exists exactly when the row went; the row count is the
+// tombstones written, one per deleted row. No ON CONFLICT: an id is erased
+// once, and a duplicate would turn a delete that happened into a count of 0 —
+// read as a version mismatch — where a unique violation says what it is.
 func (q *Queries) HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expectedVersion int64) (int64, error) {
 	result, err := q.db.Exec(ctx, hardDeleteObject, tenantID, iD, expectedVersion)
 	if err != nil {
@@ -425,7 +469,7 @@ func (q *Queries) ListObjectVersionLocks(ctx context.Context, tenantID pgtype.UU
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, $1::text AS collection_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, o.created_by_operation, $1::text AS collection_name
 FROM objects o
 WHERE o.id = ANY (ARRAY(
         SELECT search_object_ids(
@@ -518,6 +562,7 @@ func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID p
 			&i.Object.Taint,
 			&i.Object.ChecksumPartSizeBytes,
 			&i.Object.PublicUrl,
+			&i.Object.CreatedByOperation,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err
@@ -585,7 +630,7 @@ func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupO
 }
 
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, c.name AS collection_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, o.created_by_operation, c.name AS collection_name
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
@@ -628,6 +673,7 @@ func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, n
 		&i.Object.Taint,
 		&i.Object.ChecksumPartSizeBytes,
 		&i.Object.PublicUrl,
+		&i.Object.CreatedByOperation,
 		&i.CollectionName,
 	)
 	return i, err
@@ -698,7 +744,7 @@ func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, iD pg
 }
 
 const scanPendingExpired = `-- name: ScanPendingExpired :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, c.name AS collection_name
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 WHERE state = 'PENDING'
@@ -747,6 +793,7 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 			&i.Object.Taint,
 			&i.Object.ChecksumPartSizeBytes,
 			&i.Object.PublicUrl,
+			&i.Object.CreatedByOperation,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err

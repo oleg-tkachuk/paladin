@@ -154,6 +154,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	if cfg.Worker.Jobs.Housekeeping.OperationsTTL > 0 {
 		out = append(out, &worker.OperationsReaper{
 			Repo:     adapters.NewOperationRepo(reaperQ, reaperPool),
+			Erasures: adapters.NewObjectRepo(reaperQ, reaperPool),
 			TTL:      cfg.Worker.Jobs.Housekeeping.OperationsTTL,
 			Interval: cfg.Worker.Jobs.Housekeeping.Interval,
 			Logger:   l.Named("operations-reaper"),
@@ -370,7 +371,11 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				// paladin.object.purged, and silence would be a regression
 				// against the RPC path.
 				Permanent: newPermanentDeleter(deps, reaperQ, reaperPool, smReaper, l),
-				Logger:    l.Named("batch-delete"),
+				// The app pool, like deps.Repos.Object: the runner scopes the
+				// executor's context to the operation's tenant, and the
+				// tombstones are tenant-isolated.
+				Erasures: adapters.NewObjectRepo(sqlc.New(deps.Pool), deps.Pool),
+				Logger:   l.Named("batch-delete"),
 			},
 			"BatchCopy": &operations.BatchCopyExecutor{
 				Objects: deps.Repos.Object,
@@ -381,7 +386,12 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				Transitions: smReaper,
 				PendingTTL:  cfg.Limits.Presign.PutTTL,
 				Limits:      cfg.Limits.UploadLimits(),
-				Logger:      l.Named("batch-copy"),
+				// Adopting a dead run's PENDING destination: the app pool,
+				// scoped to the operation's tenant like Objects, and the
+				// runner's own operation store for the creator's state.
+				Pending:    adapters.NewObjectRepo(sqlc.New(deps.Pool), deps.Pool),
+				Operations: opRepo,
+				Logger:     l.Named("batch-copy"),
 			},
 			"BatchUpdateTags": &operations.BatchUpdateTagsExecutor{
 				Objects: deps.Repos.Object,

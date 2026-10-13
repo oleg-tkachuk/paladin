@@ -44,6 +44,24 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a reissued batch finishes its first run's work
+
+A permanent delete now leaves a tombstone (`erased_objects`, migration 074):
+the object's id and collection, written by the statement that removes the
+row. A batch permanent delete reissued after its worker died used to report
+everything its first run had erased as `not found` — the same answer as an id
+that never existed. It now counts those under `already_applied`. Tombstones
+are kept as long as terminal operations are
+(`worker.jobs.housekeeping.operations_ttl`) and purged by the same job.
+
+A reissued batch copy also finishes what its first run left half done. A copy
+cut off between creating its destination row and promoting it left that row
+PENDING, and the reissue reported the key as "a write in progress" until the
+row's presign deadline passed. Rows a batch copy creates now record the
+operation that created them (`objects.created_by_operation`, migration 075);
+a reissue adopts a PENDING row whose creator is no longer running and was made
+for an object of the same size and type, and copies into it.
+
 ## Unreleased — an operation's metadata is its progress
 
 `Operation.metadata` now carries only the operation's progress: a `Struct` of
@@ -68,9 +86,6 @@ response says how many under a new `already_applied` field (included in
 `succeeded`, omitted when zero). A copy counts only when the destination holds
 the source's etag, size and checksum; any other object at that key is still a
 failure, named as such.
-
-A permanent delete is unchanged: what the first run erased comes back as
-`not found`.
 
 ## Unreleased — an API token rate limit of 0 is a cap
 

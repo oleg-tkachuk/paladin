@@ -18,6 +18,7 @@ import (
 const (
 	reasonAlreadyCopied   = "destination already holds the source's content"
 	reasonAlreadyDeleted  = "object is already in the trash"
+	reasonAlreadyErased   = "object was already permanently deleted"
 	reasonAlreadyRestored = "object is already available"
 )
 
@@ -49,4 +50,15 @@ func logBatchOutcome(l *zap.Logger, op operationh.Operation, total, succeeded, a
 		zap.Int("succeeded", succeeded),
 		zap.Int("already_applied", alreadyApplied),
 		zap.Int("failed", failed))
+}
+
+// logAdopted records a destination row a batch copy took over from the dead
+// run that created it. Info: unlike an item found done, this one is written
+// now, and the row's history is otherwise lost.
+func logAdopted(l *zap.Logger, op operationh.Operation, srcID, dstID, creator uuid.UUID) {
+	batchLogger(l).Info("batch copy adopted a pending destination left by a stopped operation",
+		zap.String("operation_id", op.OperationID.String()),
+		zap.String("object_id", srcID.String()),
+		zap.String("destination_id", dstID.String()),
+		zap.String("creator_operation_id", creator.String()))
 }

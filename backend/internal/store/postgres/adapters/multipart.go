@@ -71,6 +71,7 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.Ini
 		strPtrOrNil(args.ExternalRef),
 		pgTS(time.Now().Add(multipartSessionTTL)),
 		args.PublicURL,
+		pgtype.UUID{}, // an upload session, not an operation, creates it
 	); err != nil {
 		return multiparth.Session{}, fmt.Errorf("create multipart object row: %w", err)
 	}

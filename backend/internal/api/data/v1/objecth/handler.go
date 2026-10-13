@@ -422,6 +422,10 @@ type Object struct {
 	// in a public collection (ADR-0027); "" otherwise.
 	PublicURL string
 
+	// CreatedByOperation is the operation that created the row (a batch
+	// copy), or uuid.Nil.
+	CreatedByOperation uuid.UUID
+
 	// Placement is where the object's bytes physically live. Set only by the
 	// read paths (GetObject, LookupObject, ListObjects), and only when Cedar
 	// allows the caller ReadObjectPlacement on the object (placement.go);
@@ -451,6 +455,10 @@ type CreateObjectArgs struct {
 	// PublicURL is the object's address in a public collection (ADR-0027),
 	// fixed for its life; "" elsewhere.
 	PublicURL string
+	// CreatedByOperation is the operation creating the row — a batch copy —
+	// or uuid.Nil. It is what lets a reissue adopt a row its dead run left
+	// PENDING.
+	CreatedByOperation uuid.UUID
 }
 
 type UpdateMetadataArgs struct {

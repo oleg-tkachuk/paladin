@@ -66,7 +66,12 @@ func (r *RefreshTokenPurger) log() *zap.Logger {
 // (cmd/server/root.go) — recommended 30 days so support has a window to
 // reconstruct what happened in the run-up to a failed batch.
 type OperationsReaper struct {
-	Repo     OperationsReaperRepo
+	Repo OperationsReaperRepo
+	// Erasures drops the tombstones permanent deletes leave (erased_objects)
+	// on the same cutoff: a tombstone exists so a reissued operation can tell
+	// its first run's erasures from ids that never existed, and is kept
+	// exactly as long as that operation is. Optional.
+	Erasures ErasuresReaperRepo
 	TTL      time.Duration
 	Interval time.Duration
 	Logger   *zap.Logger
@@ -79,6 +84,11 @@ type OperationsReaperRepo interface {
 	PurgeTerminalBefore(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
+// ErasuresReaperRepo is the seam onto the bounded tombstone purge.
+type ErasuresReaperRepo interface {
+	PurgeErasedBefore(ctx context.Context, cutoff time.Time) (int64, error)
+}
+
 func (r *OperationsReaper) Run(ctx context.Context) error {
 	if r.TTL <= 0 {
 		// Disabled — return without ticking. Caller treats nil error as
@@ -89,10 +99,17 @@ func (r *OperationsReaper) Run(ctx context.Context) error {
 		r.Interval = 6 * time.Hour
 	}
 	return RunTicker(ctx, "operations_purger", r.Interval, func(ctx context.Context) error {
-		cutoff := time.Now().UTC().Add(-r.TTL)
-		r.drain(ctx, cutoff)
+		r.sweep(ctx, time.Now().UTC().Add(-r.TTL))
 		return nil
 	})
+}
+
+// sweep is one tick: terminal operations, then the tombstones, on one cutoff.
+func (r *OperationsReaper) sweep(ctx context.Context, cutoff time.Time) {
+	r.drain(ctx, cutoff)
+	if r.Erasures != nil {
+		r.drainErasures(ctx, cutoff)
+	}
 }
 
 // drain calls the bounded purge in a loop until it returns 0 rows. Each
@@ -115,6 +132,30 @@ func (r *OperationsReaper) drain(ctx context.Context, cutoff time.Time) {
 			return
 		}
 		r.log().Info("purged terminal operations",
+			zap.Int64("rows", n),
+			zap.Time("older_than", cutoff))
+	}
+}
+
+// drainErasures is drain for the tombstones: the bounded purge until it
+// returns 0 rows, stopping on the first error.
+func (r *OperationsReaper) drainErasures(ctx context.Context, cutoff time.Time) {
+	for iter := 0; ; iter++ {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		n, err := r.Erasures.PurgeErasedBefore(ctx, cutoff)
+		if err != nil {
+			r.log().Warn("failed to purge erased-object tombstones",
+				zap.Int("iter", iter), zap.Error(err))
+			return
+		}
+		if n == 0 {
+			return
+		}
+		r.log().Info("purged erased-object tombstones",
 			zap.Int64("rows", n),
 			zap.Time("older_than", cutoff))
 	}

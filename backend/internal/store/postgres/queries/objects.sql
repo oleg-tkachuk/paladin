@@ -5,11 +5,13 @@
 INSERT INTO objects (
     id, tenant_id, collection_id, path, state,
     content_type, size_bytes, checksum_algorithm, checksum,
-    metadata, tags, external_ref, presign_expires_at, public_url
+    metadata, tags, external_ref, presign_expires_at, public_url,
+    created_by_operation
 ) VALUES (
     $1, $2, $3, $4, $5::object_state,
     $6, $7, $8, $9,
-    $10, $11, $12, $13, $14
+    $10, $11, $12, $13, $14,
+    sqlc.narg('created_by_operation')
 );
 
 -- name: ResolveCollectionID :one
@@ -103,6 +105,13 @@ WHERE v.tenant_id = $1 AND v.object_id = $2;
 -- paladin.bypass_governance_retention='on' (HardDeleteWithBypassTx does, the plain RPC
 -- path does not). A locked row matches 0 rows here, so the caller must
 -- pre-check to distinguish "locked" from "version mismatch".
+--
+-- The same statement records the erasure in erased_objects (migration 074),
+-- so a tombstone exists exactly when the row went; the row count is the
+-- tombstones written, one per deleted row. No ON CONFLICT: an id is erased
+-- once, and a duplicate would turn a delete that happened into a count of 0 —
+-- read as a version mismatch — where a unique violation says what it is.
+WITH erased AS (
 DELETE FROM objects
 WHERE objects.tenant_id = $1 AND objects.id = $2
   AND (sqlc.arg('expected_version')::bigint = 0
@@ -120,7 +129,11 @@ WHERE objects.tenant_id = $1 AND objects.id = $2
               OR (l.mode = 'GOVERNANCE' AND l.retain_until > now()
                   AND NOT COALESCE(
                       current_setting('paladin.bypass_governance_retention', true) = 'on',
-                      false))));
+                      false))))
+RETURNING objects.tenant_id, objects.id, objects.collection_id
+)
+INSERT INTO erased_objects (tenant_id, object_id, collection_id)
+SELECT tenant_id, id, collection_id FROM erased;
 
 -- name: ListHardDeletable :many
 -- Picks DELETED objects past the cooling-off window for the
@@ -311,3 +324,16 @@ UPDATE objects
 SET presign_expires_at = GREATEST(COALESCE(presign_expires_at, sqlc.arg('expires_at')), sqlc.arg('expires_at'))
 WHERE tenant_id = $1 AND id = $2
   AND state = 'PENDING';
+
+-- name: AdoptPendingObject :execrows
+-- Hands a PENDING row from the operation that created it to another, and
+-- pushes its presign deadline out so the reaper does not clear it mid-copy.
+-- Compare-and-set on the creator: of two reissues racing for one row, one
+-- adopts it and the other matches nothing.
+UPDATE objects
+SET created_by_operation = sqlc.arg('adopter'),
+    presign_expires_at   = sqlc.arg('presign_expires_at')
+WHERE tenant_id = $1
+  AND id = $2
+  AND state = 'PENDING'
+  AND created_by_operation = sqlc.arg('creator');

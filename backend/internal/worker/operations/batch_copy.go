@@ -69,9 +69,27 @@ type BatchCopyExecutor struct {
 	// destination's allowlist and size cap.
 	Limits uploadpolicy.Limits
 
-	// Logger records items found already copied and how the batch ended.
-	// Optional.
+	// Pending and Operations let a reissue finish a destination row its dead
+	// run left PENDING: Operations says whether the row's creator can still
+	// write it, Pending hands the row over. Required: without them a reissue
+	// waits out the row's presign deadline.
+	Pending    PendingAdopter
+	Operations OperationLiveness
+
+	// Logger records items found already copied, rows adopted, and how the
+	// batch ended. Optional.
 	Logger *zap.Logger
+}
+
+// PendingAdopter hands a PENDING object row from the operation that created
+// it to another (objects.created_by_operation).
+type PendingAdopter interface {
+	AdoptPending(ctx context.Context, tenantID, objectID, creator, adopter uuid.UUID, deadline time.Time) (bool, error)
+}
+
+// OperationLiveness says whether an operation is still PENDING or RUNNING.
+type OperationLiveness interface {
+	IsLive(ctx context.Context, opID uuid.UUID) (bool, error)
 }
 
 // BatchCopyResponse mirrors the BatchDelete shape.
@@ -96,8 +114,8 @@ type BatchCopyFailure struct {
 
 // Execute implements Executor.
 func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation) ([]byte, error) {
-	if e.Objects == nil || e.Storage == nil || e.Transitions == nil {
-		return nil, errors.New("BatchCopyExecutor: dependencies missing (Objects / Storage / Transitions)")
+	if e.Objects == nil || e.Storage == nil || e.Transitions == nil || e.Pending == nil || e.Operations == nil {
+		return nil, errors.New("BatchCopyExecutor: dependencies missing (Objects / Storage / Transitions / Pending / Operations)")
 	}
 	if e.PendingTTL <= 0 {
 		return nil, errors.New("BatchCopyExecutor: PendingTTL must be positive")
@@ -141,8 +159,6 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 
 	resp := BatchCopyResponse{Total: len(args.ObjectIDs)}
 
-	presignTTL := e.PendingTTL
-
 	// One batched read replaces a per-id FindByName round-trip inside
 	// copyOne; missing ids surface as per-row "not found" failures.
 	byID, err := findByIDs(ctx, e.Objects, args.TenantID, args.SrcCollection, args.ObjectIDs)
@@ -174,7 +190,12 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 			})
 			continue
 		}
-		err := e.copyOne(ctx, args, src, srcBackendID, srcBucket, dstBackendID, dstBucket, presignTTL)
+		dstKey := args.KeyPrefix + src.Key
+		err := e.copyOne(ctx, copyJob{
+			op: op, args: args, src: src, dstKey: dstKey,
+			from: objecth.Location{BackendID: srcBackendID, TenantID: args.TenantID, Bucket: srcBucket, Collection: args.SrcCollection, Key: src.Key},
+			to:   objecth.Location{BackendID: dstBackendID, TenantID: args.TenantID, Bucket: dstBucket, Collection: args.DstCollection, Key: dstKey},
+		})
 		if errors.Is(err, errAlreadyCopied) {
 			logAlreadyApplied(e.Logger, op, srcID, reasonAlreadyCopied)
 			resp.AlreadyApplied++
@@ -201,47 +222,54 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 	return body, nil
 }
 
+// copyJob is one item of a batch copy: the source, where its bytes are, and
+// where the copy goes.
+type copyJob struct {
+	op     operationh.Operation
+	args   batchh.BatchCopyArgs
+	src    objecth.Object
+	dstKey string
+	from   objecth.Location
+	to     objecth.Location
+}
+
 // copyOne does the per-object create + S3 copy + promote dance. Pulled
 // out of Execute so the loop body stays linear: create → copy →
 // promote (or compensate). Returns the first error encountered with
 // enough context for the caller's per-row failure entry.
-func (e *BatchCopyExecutor) copyOne(
-	ctx context.Context,
-	args batchh.BatchCopyArgs,
-	src objecth.Object,
-	srcBackendID, srcBucket, dstBackendID, dstBucket string,
-	presignTTL time.Duration,
-) error {
-	if src.State != statemachine.StateAvailable {
-		return fmt.Errorf("source state %s; cannot copy", src.State)
+func (e *BatchCopyExecutor) copyOne(ctx context.Context, job copyJob) error {
+	if job.src.State != statemachine.StateAvailable {
+		return fmt.Errorf("source state %s; cannot copy", job.src.State)
 	}
 
-	dstKey := args.KeyPrefix + src.Key
 	dst, err := e.Objects.CreateObject(ctx, objecth.CreateObjectArgs{
-		TenantID:         args.TenantID,
-		Collection:       args.DstCollection,
-		Key:              dstKey,
-		ContentType:      src.ContentType,
-		SizeBytes:        &src.SizeBytes,
-		Metadata:         copyMap(src.Metadata),
-		Tags:             copyMap(src.Tags),
-		ExternalRef:      src.ExternalRef,
-		PresignExpiresAt: time.Now().Add(presignTTL),
+		TenantID:           job.args.TenantID,
+		Collection:         job.args.DstCollection,
+		Key:                job.dstKey,
+		ContentType:        job.src.ContentType,
+		SizeBytes:          &job.src.SizeBytes,
+		Metadata:           copyMap(job.src.Metadata),
+		Tags:               copyMap(job.src.Tags),
+		ExternalRef:        job.src.ExternalRef,
+		PresignExpiresAt:   time.Now().Add(e.PendingTTL),
+		CreatedByOperation: job.op.OperationID,
 	})
 	if pgerr.Is(err, pgerr.UniqueViolation) {
-		return e.occupiedDestination(ctx, args, src, dstKey)
+		return e.occupiedDestination(ctx, job)
 	}
 	if err != nil {
 		return fmt.Errorf("create dst row: %w", err)
 	}
+	return e.fill(ctx, job, dst.ObjectID)
+}
 
-	if err := e.Storage.CopyObject(ctx,
-		objecth.Location{BackendID: srcBackendID, TenantID: args.TenantID, Bucket: srcBucket, Collection: args.SrcCollection, Key: src.Key},
-		objecth.Location{BackendID: dstBackendID, TenantID: args.TenantID, Bucket: dstBucket, Collection: args.DstCollection, Key: dstKey},
-	); err != nil {
+// fill copies the bytes into the PENDING destination row dstID and promotes
+// it, or marks it failed when the copy does not land.
+func (e *BatchCopyExecutor) fill(ctx context.Context, job copyJob, dstID uuid.UUID) error {
+	if err := e.Storage.CopyObject(ctx, job.from, job.to); err != nil {
 		// Compensate: dst row is PENDING. Without this it lingers
 		// until the reconciler hard-deletes it (`min_object_age`).
-		if mfErr := e.Transitions.MarkFailed(ctx, dst.ObjectID, "batch copy storage failed"); mfErr != nil {
+		if mfErr := e.Transitions.MarkFailed(ctx, dstID, "batch copy storage failed"); mfErr != nil {
 			return fmt.Errorf("storage copy: %w (compensation also failed: %w)", err, mfErr)
 		}
 		return fmt.Errorf("storage copy: %w", err)
@@ -249,10 +277,10 @@ func (e *BatchCopyExecutor) copyOne(
 
 	if _, err := e.Transitions.PromoteToAvailable(
 		ctx,
-		dst.ObjectID,
-		src.ETag,
-		src.SizeBytes,
-		src.Checksum,
+		dstID,
+		job.src.ETag,
+		job.src.SizeBytes,
+		job.src.Checksum,
 		"", // sequencer: copy doesn't carry one
 		statemachine.SourceRPC,
 	); err != nil {
@@ -269,32 +297,65 @@ func (e *BatchCopyExecutor) copyOne(
 // those — so a live destination matching all three is src's content and counts
 // as copied. Anything else is a real conflict, named in the caller's terms
 // rather than as the database's unique violation.
-func (e *BatchCopyExecutor) occupiedDestination(ctx context.Context, args batchh.BatchCopyArgs, src objecth.Object, dstKey string) error {
-	dst, err := e.Objects.FindByPath(ctx, args.TenantID, args.DstCollection, dstKey)
+func (e *BatchCopyExecutor) occupiedDestination(ctx context.Context, job copyJob) error {
+	dst, err := e.Objects.FindByPath(ctx, job.args.TenantID, job.args.DstCollection, job.dstKey)
 	// FindByPath hands back the query's own pgx.ErrNoRows, unmapped — unlike
 	// FindByName, which maps it to objecth.ErrObjectNotFound. Mapping one
 	// without the other moves this branch into the lookup error below.
 	if errors.Is(err, pgx.ErrNoRows) {
 		// FindByPath skips DELETED rows, and a trashed object still holds its
 		// key.
-		return fmt.Errorf("destination key %q is held by an object in the trash", dstKey)
+		return fmt.Errorf("destination key %q is held by an object in the trash", job.dstKey)
 	}
 	if err != nil {
-		return fmt.Errorf("look up destination key %q: %w", dstKey, err)
+		return fmt.Errorf("look up destination key %q: %w", job.dstKey, err)
 	}
 	switch dst.State {
 	case statemachine.StateAvailable:
-		if sameContent(src, dst) {
+		if sameContent(job.src, dst) {
 			return errAlreadyCopied
 		}
-		return fmt.Errorf("destination key %q already holds a different object", dstKey)
+		return fmt.Errorf("destination key %q already holds a different object", job.dstKey)
 	case statemachine.StatePending:
-		// Possibly this batch's own copy, cut off before its promote; the row
-		// expires with its presign deadline and the reaper clears it.
-		return fmt.Errorf("destination key %q has a write in progress; retry once it settles", dstKey)
+		return e.adoptPending(ctx, job, dst)
 	default:
-		return fmt.Errorf("destination key %q is held by a %s object", dstKey, dst.State)
+		return fmt.Errorf("destination key %q is held by a %s object", job.dstKey, dst.State)
 	}
+}
+
+// adoptPending finishes a destination row an earlier run of a batch copy left
+// PENDING — its worker died between creating the row and promoting it. The
+// row is adopted only when the operation that created it can no longer write
+// it, and only when it was made for an object of src's size and type; a
+// compare-and-set on the creator settles a race between two reissues. Any
+// other PENDING row is a write someone is still making.
+func (e *BatchCopyExecutor) adoptPending(ctx context.Context, job copyJob, dst objecth.Object) error {
+	inProgress := fmt.Errorf("destination key %q has a write in progress; retry once it settles", job.dstKey)
+	creator := dst.CreatedByOperation
+	if creator == uuid.Nil || creator == job.op.OperationID {
+		// Not a batch copy's row — an upload — or this very operation's.
+		return inProgress
+	}
+	if dst.SizeBytes != job.src.SizeBytes || dst.ContentType != job.src.ContentType {
+		return fmt.Errorf("destination key %q has a pending copy of a different object", job.dstKey)
+	}
+	live, err := e.Operations.IsLive(ctx, creator)
+	if err != nil {
+		return fmt.Errorf("destination key %q: %w", job.dstKey, err)
+	}
+	if live {
+		return inProgress
+	}
+	adopted, err := e.Pending.AdoptPending(ctx, job.args.TenantID, dst.ObjectID, creator, job.op.OperationID,
+		time.Now().Add(e.PendingTTL))
+	if err != nil {
+		return fmt.Errorf("destination key %q: %w", job.dstKey, err)
+	}
+	if !adopted {
+		return inProgress
+	}
+	logAdopted(e.Logger, job.op, job.src.ObjectID, dst.ObjectID, creator)
+	return e.fill(ctx, job, dst.ObjectID)
 }
 
 // sameContent reports whether dst is a copy of src's bytes.

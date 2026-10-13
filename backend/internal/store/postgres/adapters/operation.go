@@ -151,6 +151,16 @@ func (r *OperationRepo) ReportProgress(ctx context.Context, opID uuid.UUID, prog
 	return nil
 }
 
+// IsLive reports whether the operation is PENDING or RUNNING. A purged one is
+// not: only terminal operations are purged.
+func (r *OperationRepo) IsLive(ctx context.Context, opID uuid.UUID) (bool, error) {
+	live, err := r.q.OperationIsLive(ctx, pgUUID(opID))
+	if err != nil {
+		return false, fmt.Errorf("operation liveness: %w", err)
+	}
+	return live, nil
+}
+
 func (r *OperationRepo) Cancel(ctx context.Context, opID, tenantID uuid.UUID) error {
 	rows, err := r.q.CancelOperation(ctx, pgUUID(opID), pgUUID(tenantID))
 	if err != nil {

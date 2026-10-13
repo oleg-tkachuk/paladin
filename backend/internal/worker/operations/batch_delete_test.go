@@ -568,6 +568,27 @@ func TestBatchUpdateTagsValidatesMetadata(t *testing.T) {
 // tests pin is the routing and the failure contract — the ordering, the purge
 // debt and the lock rules are the shared method's own and are tested there.
 
+// fakeErasures answers ErasedIDs from a fixed set and records what it was
+// asked.
+type fakeErasures struct {
+	erased   map[uuid.UUID]bool
+	err      error
+	askedFor []uuid.UUID
+	asked    bool
+}
+
+func (f *fakeErasures) ErasedIDs(_ context.Context, _ uuid.UUID, _ string, ids []uuid.UUID) (map[uuid.UUID]bool, error) {
+	f.asked, f.askedFor = true, ids
+	return f.erased, f.err
+}
+
+// noErasures has no tombstones.
+type noErasures struct{}
+
+func (noErasures) ErasedIDs(context.Context, uuid.UUID, string, []uuid.UUID) (map[uuid.UUID]bool, error) {
+	return nil, nil
+}
+
 type fakePermanentDeleter struct {
 	calls  []uuid.UUID
 	rvs    map[uuid.UUID]int64
@@ -595,7 +616,7 @@ func TestBatchDeletePermanentHardDeletesEachObject(t *testing.T) {
 	}}
 	tr := newFakeTransitions()
 	pd := newFakePermanentDeleter()
-	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr, Permanent: pd}
+	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr, Permanent: pd, Erasures: noErasures{}}
 
 	body, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchDeleteArgs{
 		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{id1, id2}, Permanent: true,
@@ -635,7 +656,7 @@ func TestBatchDeletePermanentReportsALockedObjectAndKeepsGoing(t *testing.T) {
 	}}
 	pd := newFakePermanentDeleter()
 	pd.errs[locked] = errors.New("cannot delete: compliance retention until 2030-01-01")
-	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions(), Permanent: pd}
+	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions(), Permanent: pd, Erasures: noErasures{}}
 
 	body, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchDeleteArgs{
 		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{locked, free}, Permanent: true,
@@ -681,7 +702,7 @@ func TestBatchDeleteDefaultsToSoftWhenPermanentIsUnset(t *testing.T) {
 	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 2}}}
 	tr := newFakeTransitions()
 	pd := newFakePermanentDeleter()
-	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr, Permanent: pd}
+	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr, Permanent: pd, Erasures: noErasures{}}
 
 	if _, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchDeleteArgs{
 		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{id},
