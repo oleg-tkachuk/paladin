@@ -646,18 +646,6 @@ type ObjectLock struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
-type ObjectTag struct {
-	ID              pgtype.UUID        `json:"id"`
-	TenantID        pgtype.UUID        `json:"tenant_id"`
-	Slug            string             `json:"slug"`
-	DisplayName     *string            `json:"display_name"`
-	Description     string             `json:"description"`
-	Labels          []byte             `json:"labels"`
-	ResourceVersion int64              `json:"resource_version"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-}
-
 type ObjectVersion struct {
 	ID                    pgtype.UUID        `json:"id"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`

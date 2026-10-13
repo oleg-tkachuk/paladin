@@ -723,19 +723,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   score from one pass.
 - **Blockers:** none. It is a tool, not scheduled work.
 
-### The `object_tags` table has no reader or writer
-
-- **Status:** Deferred.
-- **Reason:** the tag-definition handler (`objecttagh`), its repository and
-  its queries were removed: no RPC ever constructed the handler, so nothing
-  could write a row. The table, its RLS policy and its trigger stay in the
-  schema baseline. An object's own tags live in `objects.tags` and do not
-  touch it.
-- **Definition of Done:** a migration that drops `object_tags`, after a check
-  that the table is empty in every environment.
-- **Blockers:** none. Left out of the code removal because dropping a table
-  cannot be undone and wants its own migration review.
-
 ### Index-usage tests are pinned to measured table sizes
 
 - **Status:** Deferred (works today; a trap for later).

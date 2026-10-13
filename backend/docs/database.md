@@ -99,7 +99,7 @@ exactly one bucket. Objects address their collection by id; the *name* is a
 segment of the storage path, which is why queries resolve names at the
 boundary and carry ids inside.
 
-**Objects** — `objects`, `object_versions`, `object_locks`, `object_tags`,
+**Objects** — `objects`, `object_versions`, `object_locks`,
 `multipart_uploads`, `pending_multipart_aborts`, `pending_purges`. State is the
 `object_state` enum: `PENDING` → `AVAILABLE` | `FAILED`, and `DELETED` for
 soft deletion. `objects.current_version_id` carries a deferred composite FK
