@@ -82,6 +82,18 @@ const seedCapLifetime = time.Hour
 // record, so every charge needs one.
 func seedTestCapability(t *testing.T, h *pgharness.Harness, capID, tenantID uuid.UUID, subject string, budget limes.BudgetCeiling) limes.MeterSubject {
 	t.Helper()
+	return seedCapability(t, h, capID, tenantID, subject, budget, seedUnitCode)
+}
+
+// seedCapabilityInUnit puts an unlimited capID on record for tenantID, counting
+// in unit, and returns its meter subject.
+func seedCapabilityInUnit(t *testing.T, h *pgharness.Harness, capID, tenantID uuid.UUID, unit string) limes.MeterSubject {
+	t.Helper()
+	return seedCapability(t, h, capID, tenantID, "unit-test-agent", limes.BudgetCeiling{Unlimited: true}, unit)
+}
+
+func seedCapability(t *testing.T, h *pgharness.Harness, capID, tenantID uuid.UUID, subject string, budget limes.BudgetCeiling, unit string) limes.MeterSubject {
+	t.Helper()
 	ctx := context.Background()
 	records, err := capabilitypg.New(h.PoolMigrate)
 	if err != nil {
@@ -97,7 +109,7 @@ func seedTestCapability(t *testing.T, h *pgharness.Harness, capID, tenantID uuid
 			Ops:      []limes.Op{limes.OpGet},
 			Requests: limes.RequestCeiling{Unlimited: true},
 			Budget:   budget,
-			UnitCode: seedUnitCode,
+			UnitCode: unit,
 		},
 		IssuedAt:  now,
 		ExpiresAt: now.Add(seedCapLifetime),

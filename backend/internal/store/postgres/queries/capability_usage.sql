@@ -9,9 +9,10 @@
 -- name: BumpCapabilityRequestCount :one
 -- Increments request_count by 1 and rejects when over the supplied cap.
 -- A NULL max_requests is unlimited; 0 allows no request at all, so the
--- insert path checks the cap too.
+-- insert path checks the cap too. A new row counts in the capability's own
+-- unit, so its usage reads in the currency it was issued in.
 INSERT INTO capability_usage (capability_id, request_count, spent_usd, unit_code, updated_at)
-SELECT $1, 1, 0, 'USD', now()
+SELECT $1, 1, 0, sqlc.arg('unit_code')::text, now()
 WHERE sqlc.narg('max_requests')::bigint IS NULL OR 1 <= sqlc.narg('max_requests')::bigint
 ON CONFLICT (capability_id) DO UPDATE
 SET request_count = capability_usage.request_count + 1,

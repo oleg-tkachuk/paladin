@@ -31,6 +31,9 @@ const (
 	// BillingServiceGetTenantTimeSeriesProcedure is the procedure name of the BillingService's
 	// GetTenantTimeSeries RPC.
 	BillingServiceGetTenantTimeSeriesProcedure = "/paladin.admin.v1.BillingService/GetTenantTimeSeries"
+	// BillingServiceGetBillingSettingsProcedure is the procedure name of the BillingService's
+	// GetBillingSettings RPC.
+	BillingServiceGetBillingSettingsProcedure = "/paladin.admin.v1.BillingService/GetBillingSettings"
 )
 
 var (
@@ -50,6 +53,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	billingServiceGetBillingSettingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_billing_service_proto.Services().ByName("BillingService").Methods().ByName("GetBillingSettings"),
+			Procedure:        BillingServiceGetBillingSettingsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // BillingServiceClient is a client for the paladin.admin.v1.BillingService service.
@@ -61,6 +72,10 @@ type BillingServiceClient interface {
 	// GetTenantTimeSeries returns time-bucketed spend for a chart.
 	// granularity ∈ {hour, day, week} — server validates.
 	GetTenantTimeSeries(context.Context, *v1.GetTenantTimeSeriesRequest) (*v1.GetTenantTimeSeriesResponse, error)
+	// GetBillingSettings returns the platform's billing settings, so a client
+	// can show and default to them: the currency an amount is in when it names
+	// none. Gated by ReadBilling on the caller's own tenant.
+	GetBillingSettings(context.Context, *v1.GetBillingSettingsRequest) (*v1.GetBillingSettingsResponse, error)
 }
 
 // NewBillingServiceClient constructs a client for the paladin.admin.v1.BillingService service.
@@ -78,6 +93,10 @@ type BillingServiceHandler interface {
 	// GetTenantTimeSeries returns time-bucketed spend for a chart.
 	// granularity ∈ {hour, day, week} — server validates.
 	GetTenantTimeSeries(context.Context, *v1.GetTenantTimeSeriesRequest) (*v1.GetTenantTimeSeriesResponse, error)
+	// GetBillingSettings returns the platform's billing settings, so a client
+	// can show and default to them: the currency an amount is in when it names
+	// none. Gated by ReadBilling on the caller's own tenant.
+	GetBillingSettings(context.Context, *v1.GetBillingSettingsRequest) (*v1.GetBillingSettingsResponse, error)
 }
 
 // RegisterBillingServiceHandler registers svc as the paladin.admin.v1.BillingService implementation
@@ -87,6 +106,7 @@ func RegisterBillingServiceHandler(server *connect.Server, svc BillingServiceHan
 	server.Register(
 		connect.Method{Spec: billingServiceGetTenantSummarySpec(), Handler: adapter.getTenantSummary},
 		connect.Method{Spec: billingServiceGetTenantTimeSeriesSpec(), Handler: adapter.getTenantTimeSeries},
+		connect.Method{Spec: billingServiceGetBillingSettingsSpec(), Handler: adapter.getBillingSettings},
 	)
 }
 
@@ -99,6 +119,10 @@ func (UnimplementedBillingServiceHandler) GetTenantSummary(context.Context, *v1.
 
 func (UnimplementedBillingServiceHandler) GetTenantTimeSeries(context.Context, *v1.GetTenantTimeSeriesRequest) (*v1.GetTenantTimeSeriesResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BillingService.GetTenantTimeSeries is not implemented")
+}
+
+func (UnimplementedBillingServiceHandler) GetBillingSettings(context.Context, *v1.GetBillingSettingsRequest) (*v1.GetBillingSettingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BillingService.GetBillingSettings is not implemented")
 }
 
 type billingServiceClient struct {
@@ -116,6 +140,14 @@ func (c *billingServiceClient) GetTenantSummary(ctx context.Context, req *v1.Get
 func (c *billingServiceClient) GetTenantTimeSeries(ctx context.Context, req *v1.GetTenantTimeSeriesRequest) (*v1.GetTenantTimeSeriesResponse, error) {
 	var res v1.GetTenantTimeSeriesResponse
 	if err := c.client.CallUnary(ctx, billingServiceGetTenantTimeSeriesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetBillingSettings(ctx context.Context, req *v1.GetBillingSettingsRequest) (*v1.GetBillingSettingsResponse, error) {
+	var res v1.GetBillingSettingsResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetBillingSettingsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -141,6 +173,18 @@ func (h billingServiceHandler) getTenantTimeSeries(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.GetTenantTimeSeries(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getBillingSettings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetBillingSettingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetBillingSettings(ctx, &req)
 	if err != nil {
 		return err
 	}

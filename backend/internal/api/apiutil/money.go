@@ -28,7 +28,9 @@ func MoneyOf(unit string, n limes.Nanos) *money.Money {
 
 // NanosOf resolves a request's Money field to its amount and its unit, a
 // code limes.NormalizeUnitCode accepts. An absent field is zero with an
-// empty unit, so the caller decides what absent means. A negative amount,
+// empty unit, and a field that names no currency keeps an empty unit too:
+// the caller decides what an unnamed unit means — the platform's currency,
+// or a parent's — rather than limes.DefaultUnitCode deciding it here. A negative amount,
 // nanos outside 0..999999999, one past limes.MaxNanos or an unknown
 // currency is InvalidArgument naming field.
 func NanosOf(field string, m *money.Money) (limes.Nanos, string, error) {
@@ -38,9 +40,13 @@ func NanosOf(field string, m *money.Money) (limes.Nanos, string, error) {
 	invalid := func(format string, args ...any) (limes.Nanos, string, error) {
 		return 0, "", connect.Errorf(connect.CodeInvalidArgument, "%s: "+format, append([]any{field}, args...)...)
 	}
-	unit, err := limes.NormalizeUnitCode(m.GetCurrencyCode())
-	if err != nil {
-		return invalid("%w", err)
+	unit := m.GetCurrencyCode()
+	if unit != "" {
+		normalized, err := limes.NormalizeUnitCode(unit)
+		if err != nil {
+			return invalid("%w", err)
+		}
+		unit = normalized
 	}
 	units, nanos := m.GetUnits(), int64(m.GetNanos())
 	if units < 0 || nanos < 0 || nanos >= limes.NanosPerUnit {

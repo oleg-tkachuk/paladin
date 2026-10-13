@@ -13,7 +13,7 @@ import (
 
 const chargeTenantBudget = `-- name: ChargeTenantBudget :one
 INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, updated_at)
-VALUES ($1, NULL, $2::numeric, COALESCE(NULLIF($3::text, ''), 'USD'), $4::timestamptz, now())
+VALUES ($1, NULL, $2::numeric, $3::text, $4::timestamptz, now())
 ON CONFLICT (tenant_id) DO UPDATE
 SET spent_usd  = tenant_budgets.spent_usd + $2::numeric,
     updated_at = now()
@@ -26,7 +26,7 @@ RETURNING spent_usd
 
 // Atomic UPSERT-and-check, same shape as ChargeCapability. When the
 // row is missing, inserts a fresh accumulator row with no ceiling (NULL,
-// unlimited) and the supplied unit_code (defaults to 'USD' when empty).
+// unlimited) and the charge's unit_code, normalised by the caller.
 // Returns the new spent_usd; pgx.ErrNoRows means "would exceed cap" —
 // caller maps to ErrTenantBudgetExceeded.
 func (q *Queries) ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string, now pgtype.Timestamptz) (pgtype.Numeric, error) {
@@ -215,19 +215,19 @@ func (q *Queries) RefundTenantBudget(ctx context.Context, tenantID pgtype.UUID, 
 const setTenantBudget = `-- name: SetTenantBudget :one
 
 INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, period_end, updated_at, resource_version)
-SELECT $1, $2::numeric, 0, COALESCE(NULLIF($3::text, ''), 'USD'), $4::timestamptz, $5::timestamptz, $4::timestamptz, 1
-WHERE $6::bigint = 0
+SELECT $1, $2::numeric, 0, COALESCE(NULLIF($3::text, ''), $4::text), $5::timestamptz, $6::timestamptz, $5::timestamptz, 1
+WHERE $7::bigint = 0
    OR EXISTS (SELECT 1 FROM tenant_budgets WHERE tenant_id = $1)
 ON CONFLICT (tenant_id) DO UPDATE
 SET max_budget_usd = EXCLUDED.max_budget_usd,
-    spent_usd      = CASE WHEN $7::boolean THEN 0 ELSE tenant_budgets.spent_usd END,
-    period_start   = CASE WHEN $7::boolean THEN $4::timestamptz ELSE tenant_budgets.period_start END,
-    period         = CASE WHEN $7::boolean THEN tenant_budgets.period + 1 ELSE tenant_budgets.period END,
+    spent_usd      = CASE WHEN $8::boolean THEN 0 ELSE tenant_budgets.spent_usd END,
+    period_start   = CASE WHEN $8::boolean THEN $5::timestamptz ELSE tenant_budgets.period_start END,
+    period         = CASE WHEN $8::boolean THEN tenant_budgets.period + 1 ELSE tenant_budgets.period END,
     period_end     = EXCLUDED.period_end,
     unit_code      = COALESCE(NULLIF($3::text, ''), tenant_budgets.unit_code),
     resource_version = tenant_budgets.resource_version + 1,
-    updated_at     = $4::timestamptz
-WHERE tenant_budgets.resource_version = $6::bigint
+    updated_at     = $5::timestamptz
+WHERE tenant_budgets.resource_version = $7::bigint
 RETURNING tenant_id, max_budget_usd, spent_usd, reserved_usd, unit_code, period_start, period_end, updated_at, resource_version
 `
 
@@ -257,7 +257,8 @@ type SetTenantBudgetRow struct {
 // period_end is written as given: NULL leaves the window open-ended. now is
 // the store's clock, which a period starts by.
 //
-// unit_code is written verbatim on insert; on conflict, it's
+// unit_code is written verbatim on insert — the platform's currency
+// (default_unit_code) when the caller names none; on conflict, it's
 // updated only when the caller passes a non-empty value (an empty
 // arg keeps the existing currency unchanged — operators editing
 // the cap shouldn't accidentally reinterpret an EUR budget as USD).
@@ -272,11 +273,12 @@ type SetTenantBudgetRow struct {
 // same cap silently overwrote each other.
 // A missing row is version 0: the insert fires only for a caller that read
 // none. An existing row always reaches the DO UPDATE, whose guard decides.
-func (q *Queries) SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, now pgtype.Timestamptz, periodEnd pgtype.Timestamptz, expectedVersion int64, resetSpend bool) (SetTenantBudgetRow, error) {
+func (q *Queries) SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, defaultUnitCode string, now pgtype.Timestamptz, periodEnd pgtype.Timestamptz, expectedVersion int64, resetSpend bool) (SetTenantBudgetRow, error) {
 	row := q.db.QueryRow(ctx, setTenantBudget,
 		tenantID,
 		maxBudgetUsd,
 		unitCode,
+		defaultUnitCode,
 		now,
 		periodEnd,
 		expectedVersion,

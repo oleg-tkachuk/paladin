@@ -1,5 +1,6 @@
 "use client";
 
+import { usePlatformCurrency } from "@/hooks/usePlatformCurrency";
 import React, { useCallback, useState } from "react";
 import {
   CheckCircleIcon,
@@ -32,7 +33,6 @@ import { capabilityClient } from "@/lib/connect/client";
 import { copyToClipboard, cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import {
-  ABSTRACT_UNIT_CODE,
   UNIT_CODES,
   NANOS_DECIMALS,
   moneyFromDecimal,
@@ -107,8 +107,11 @@ export function IssueCapabilityDialog({
     useState(true);
   const [issueMaxBudget, setIssueMaxBudget] = useState("");
   const [issueMaxBudgetUnlimited, setIssueMaxBudgetUnlimited] = useState(true);
-  const [issueUnitCode, setIssueUnitCode] =
-    useState<string>(ABSTRACT_UNIT_CODE);
+  // The unit the operator chose, or null for the platform's currency
+  // (capability.currency): sent as no unit, which the server resolves.
+  const [issueUnitCode, setIssueUnitCode] = useState<string | null>(null);
+  const platformCurrency = usePlatformCurrency();
+  const sentUnit = issueUnitCode ?? "";
   const [issueTtl, setIssueTtl] = useState("1h");
   const [issuing, setIssuing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -131,7 +134,7 @@ export function IssueCapabilityDialog({
     setIssueMaxRequestsUnlimited(true);
     setIssueMaxBudget("");
     setIssueMaxBudgetUnlimited(true);
-    setIssueUnitCode(ABSTRACT_UNIT_CODE);
+    setIssueUnitCode(null);
     setIssueTtl("1h");
     setReveal(null);
     setRevealAcknowledged(false);
@@ -157,7 +160,7 @@ export function IssueCapabilityDialog({
     : null;
   // Parsed straight to Money, never through a float: "0.1" is 100000000
   // nanos.
-  const maxBudget = moneyFromDecimal(issueMaxBudget, issueUnitCode);
+  const maxBudget = moneyFromDecimal(issueMaxBudget, sentUnit);
   const maxRequestsError =
     !issueMaxRequestsUnlimited &&
     issueMaxRequests !== "" &&
@@ -207,8 +210,8 @@ export function IssueCapabilityDialog({
           ),
           budgetCeiling: budgetCeiling(
             issueMaxBudgetUnlimited,
-            maxBudget ?? create(MoneySchema, { currencyCode: issueUnitCode }),
-            issueUnitCode,
+            maxBudget ?? create(MoneySchema, { currencyCode: sentUnit }),
+            sentUnit,
           ),
           allowTaintedRead: false,
           idempotencyKeyRequired: false,
@@ -456,7 +459,7 @@ export function IssueCapabilityDialog({
           </FormField>
           <FormField
             label="Currency / unit"
-            hint="XXX meters without a currency."
+            hint={`XXX meters without a currency. Left alone, the budget is in the platform's currency${platformCurrency ? ` (${platformCurrency})` : ""}.`}
           >
             {(control) => (
               <Select
@@ -465,7 +468,8 @@ export function IssueCapabilityDialog({
                   value: u,
                   label: u,
                 }))}
-                value={issueUnitCode}
+                value={issueUnitCode ?? platformCurrency}
+                placeholder="Platform currency"
                 onChange={setIssueUnitCode}
               />
             )}

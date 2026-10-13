@@ -29,6 +29,22 @@ service BillingService {
   rpc GetTenantTimeSeries(GetTenantTimeSeriesRequest) returns (GetTenantTimeSeriesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // GetBillingSettings returns the platform's billing settings, so a client
+  // can show and default to them: the currency an amount is in when it names
+  // none. Gated by ReadBilling on the caller's own tenant.
+  rpc GetBillingSettings(GetBillingSettingsRequest) returns (GetBillingSettingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+message GetBillingSettingsRequest {}
+
+message GetBillingSettingsResponse {
+  // The platform's ISO 4217 currency (capability.currency): what a budget or
+  // capability that names no currency is in. "XXX" is no currency — amounts
+  // are credits, written without a symbol.
+  string currency_code = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message GetTenantSummaryRequest {

@@ -74,3 +74,19 @@ func TestTenantBudgetLogsAnUnreadableBudget(t *testing.T) {
 		})
 	}
 }
+
+// The platform's currency goes to a caller that may read its own tenant's
+// billing, and to no one else.
+func TestCurrencyIsTheConfiguredOneBehindTheBillingGate(t *testing.T) {
+	ctx := ctxWithAdmin(t)
+	got, err := NewHandler(nil, nil, allowAuthorizer{}).WithCurrency("EUR").Currency(ctx)
+	if err != nil || got != "EUR" {
+		t.Errorf("Currency = %q, %v; want EUR", got, err)
+	}
+	if _, err := NewHandler(nil, nil, denyAuthorizer{}).WithCurrency("EUR").Currency(ctx); err == nil {
+		t.Error("a denied caller was told the currency")
+	}
+	if _, err := NewHandler(nil, nil, allowAuthorizer{}).Currency(context.Background()); err == nil {
+		t.Error("an unauthenticated caller was told the currency")
+	}
+}

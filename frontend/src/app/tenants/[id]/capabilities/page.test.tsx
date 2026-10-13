@@ -17,6 +17,9 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/connect/client", () => ({
+  billingClient: {
+    getBillingSettings: () => Promise.resolve({ currencyCode: "EUR" }),
+  },
   capabilityClient: {
     list: h.list,
     getUsage: h.getUsage,
@@ -123,7 +126,9 @@ describe("CapabilitiesPage", () => {
     await waitFor(() => expect(h.issue).toHaveBeenCalled());
   });
 
-  it("sends unlimited ceilings explicitly, the budget in XXX", async () => {
+  // Left alone, the budget's unit is the server's to apply: the platform's
+  // currency, which the form shows but does not send.
+  it("sends unlimited ceilings explicitly, the budget's unit left to the server", async () => {
     h.issue.mockRejectedValue(new Error("boom"));
     render(<CapabilitiesPage />);
     await userEvent.click(issueButtons()[0]);
@@ -136,7 +141,7 @@ describe("CapabilitiesPage", () => {
       value: true,
     });
     expect(caveats.budgetCeiling.case).toBe("unlimitedBudget");
-    expect(caveats.budgetCeiling.value).toMatchObject({ currencyCode: "XXX" });
+    expect(caveats.budgetCeiling.value).toMatchObject({ currencyCode: "" });
   });
 
   // 0 is a limit now, not "none": a capability can be issued frozen.
@@ -174,7 +179,7 @@ describe("CapabilitiesPage", () => {
     const budget = h.issue.mock.calls[0][0].caveats.budgetCeiling;
     expect(budget.case).toBe("maxBudget");
     expect(budget.value).toMatchObject({
-      currencyCode: "XXX",
+      currencyCode: "",
       units: 0n,
       nanos: 300_000_001,
     });

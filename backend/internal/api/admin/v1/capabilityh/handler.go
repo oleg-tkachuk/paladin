@@ -56,6 +56,17 @@ type Handler struct {
 	copies limes.BiscuitRevocationStore
 	// copyUsage serves GetBiscuitUsage; see WithCopyUsage.
 	copyUsage limes.CopyUsageReader
+
+	// currency is the platform's (capability.currency): what a root
+	// capability's budget is in when it names none. See WithCurrency.
+	currency string
+}
+
+// WithCurrency sets the platform's currency, capability.currency. Without it
+// a budget that names none is in limes.DefaultUnitCode, as limes reads one.
+func (h *Handler) WithCurrency(unit string) *Handler {
+	h.currency = unit
+	return h
 }
 
 // NewHandler builds the Handler. issuer / verifier / store / policy are
@@ -72,7 +83,7 @@ func NewHandler(
 	if issuer == nil || verifier == nil || store == nil || policy == nil {
 		panic("capabilityh: issuer / verifier / store / policy are required")
 	}
-	return &Handler{issuer: issuer, verifier: verifier, store: store, usage: usage, policy: policy}
+	return &Handler{issuer: issuer, verifier: verifier, store: store, usage: usage, policy: policy, currency: limes.DefaultUnitCode}
 }
 
 // hasOp reports whether the caveat op-set includes the requested op.
@@ -178,7 +189,7 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 	if err := requireCeilings(req.GetCaveats()); err != nil {
 		return nil, err
 	}
-	caveats, err := protoToCaveats(req.GetCaveats(), nil)
+	caveats, err := protoToCaveats(req.GetCaveats(), nil, h.currency)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +276,7 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 	inherit := req.GetCaveats() == nil
 	if !inherit {
 		// A ceiling left unset keeps the parent's, in the parent's unit.
-		if caveats, err = protoToCaveats(req.GetCaveats(), &parent.Caveats); err != nil {
+		if caveats, err = protoToCaveats(req.GetCaveats(), &parent.Caveats, h.currency); err != nil {
 			return nil, err
 		}
 	}
@@ -588,7 +599,9 @@ func (h *Handler) seal(ctx context.Context, res limes.IssueResult) (string, erro
 
 // protoToCaveats reads c. A ceiling c leaves unset is parent's, in parent's
 // unit; with no parent the caller has refused that already (requireCeilings).
-func protoToCaveats(c *adminv1.CapabilityCaveats, parent *limes.Caveats) (limes.Caveats, error) {
+// A budget that names no currency is in parent's unit — a delegate counts in
+// what it draws from — or, at the root, in currency, the platform's.
+func protoToCaveats(c *adminv1.CapabilityCaveats, parent *limes.Caveats, currency string) (limes.Caveats, error) {
 	if c == nil {
 		return limes.Caveats{}, nil
 	}
@@ -609,6 +622,12 @@ func protoToCaveats(c *adminv1.CapabilityCaveats, parent *limes.Caveats) (limes.
 	}
 	if !ok {
 		budget = budgetCeiling{ceiling: inherited.Budget, unit: inherited.UnitCode}
+	}
+	if budget.unit == "" {
+		budget.unit = currency
+		if parent != nil && parent.UnitCode != "" {
+			budget.unit = parent.UnitCode
+		}
 	}
 	out := limes.Caveats{
 		ResourcePrefixes:       c.GetResourcePrefixes(),

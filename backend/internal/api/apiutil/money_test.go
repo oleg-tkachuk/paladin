@@ -24,6 +24,10 @@ func TestMoneyRoundTripIsExact(t *testing.T) {
 	if m := MoneyOf("", limes.NanosPerUnit); m.GetCurrencyCode() != limes.DefaultUnitCode {
 		t.Errorf("MoneyOf with no unit = %v, want %s", m, limes.DefaultUnitCode)
 	}
+	// An amount that names no currency leaves the unit to the caller.
+	if n, unit, err := NanosOf("max_budget", &money.Money{Units: 3}); err != nil || n != 3*limes.NanosPerUnit || unit != "" {
+		t.Errorf("unnamed currency = %v %q %v, want 3 units, no unit", n, unit, err)
+	}
 	if n, unit, err := NanosOf("max_budget", nil); err != nil || n != 0 || unit != "" {
 		t.Errorf("an absent field = %s %q, %v; want zero and no unit", n, unit, err)
 	}

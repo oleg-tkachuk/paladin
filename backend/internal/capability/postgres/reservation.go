@@ -30,10 +30,11 @@ RETURNING reserved_usd;
 `
 
 // holdTenantQuery adds a hold to the tenant aggregate, against the ceiling on
-// the tenant's own row; a tenant with no row has no ceiling.
+// the tenant's own row; a tenant with no row has no ceiling. $3 is the hold's
+// unit, normalised by the caller.
 const holdTenantQuery = `
 INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, reserved_usd, unit_code, period_start, updated_at)
-VALUES ($1, NULL, 0, $2::numeric, COALESCE(NULLIF($3::text, ''), 'USD'), $4::timestamptz, now())
+VALUES ($1, NULL, 0, $2::numeric, $3::text, $4::timestamptz, now())
 ON CONFLICT (tenant_id) DO UPDATE
 SET reserved_usd = tenant_budgets.reserved_usd + $2::numeric,
     updated_at   = now()

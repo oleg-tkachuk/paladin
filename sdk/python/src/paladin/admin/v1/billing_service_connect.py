@@ -18,7 +18,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .billing_service_pb2 import GetTenantSummaryRequest, GetTenantSummaryResponse, GetTenantTimeSeriesRequest, GetTenantTimeSeriesResponse
+from .billing_service_pb2 import GetBillingSettingsRequest, GetBillingSettingsResponse, GetTenantSummaryRequest, GetTenantSummaryResponse, GetTenantTimeSeriesRequest, GetTenantTimeSeriesResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -58,6 +58,14 @@ class BillingService(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    async def get_billing_settings(self, request: GetBillingSettingsRequest, ctx: RequestContext[GetBillingSettingsRequest, GetBillingSettingsResponse], /) -> GetBillingSettingsResponse:
+        """
+        GetBillingSettings returns the platform's billing settings, so a client
+        can show and default to them: the currency an amount is in when it names
+        none. Gated by ReadBilling on the caller's own tenant.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
 
 class BillingServiceASGIApplication(ConnectASGIApplication[BillingService]):
     def __init__(
@@ -91,6 +99,16 @@ class BillingServiceASGIApplication(ConnectASGIApplication[BillingService]):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=svc.get_tenant_time_series,
+                ),
+                "/paladin.admin.v1.BillingService/GetBillingSettings": Endpoint.unary(
+                    method=MethodInfo(
+                        name="GetBillingSettings",
+                        service_name="paladin.admin.v1.BillingService",
+                        input=GetBillingSettingsRequest,
+                        output=GetBillingSettingsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.get_billing_settings,
                 ),
             },
             interceptors=interceptors,
@@ -191,6 +209,33 @@ class BillingServiceClient(ConnectClient):
             use_get=use_get,
         )
 
+    async def get_billing_settings(
+        self,
+        request: GetBillingSettingsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> GetBillingSettingsResponse:
+        """
+        GetBillingSettings returns the platform's billing settings, so a client
+        can show and default to them: the currency an amount is in when it names
+        none. Gated by ReadBilling on the caller's own tenant.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GetBillingSettings",
+                service_name="paladin.admin.v1.BillingService",
+                input=GetBillingSettingsRequest,
+                output=GetBillingSettingsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
 class BillingServiceSync(Protocol):
     """
     BillingService surfaces per-tenant capability spend over the
@@ -212,6 +257,14 @@ class BillingServiceSync(Protocol):
         """
         GetTenantTimeSeries returns time-bucketed spend for a chart.
         granularity ∈ {hour, day, week} — server validates.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def get_billing_settings(self, request: GetBillingSettingsRequest, ctx: RequestContext[GetBillingSettingsRequest, GetBillingSettingsResponse], /) -> GetBillingSettingsResponse:
+        """
+        GetBillingSettings returns the platform's billing settings, so a client
+        can show and default to them: the currency an amount is in when it names
+        none. Gated by ReadBilling on the caller's own tenant.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -246,6 +299,16 @@ class BillingServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=service.get_tenant_time_series,
+                ),
+                "/paladin.admin.v1.BillingService/GetBillingSettings": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="GetBillingSettings",
+                        service_name="paladin.admin.v1.BillingService",
+                        input=GetBillingSettingsRequest,
+                        output=GetBillingSettingsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.get_billing_settings,
                 ),
             },
             interceptors=interceptors,
@@ -338,6 +401,32 @@ class BillingServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.BillingService",
                 input=GetTenantTimeSeriesRequest,
                 output=GetTenantTimeSeriesResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def get_billing_settings(
+        self,
+        request: GetBillingSettingsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> GetBillingSettingsResponse:
+        """
+        GetBillingSettings returns the platform's billing settings, so a client
+        can show and default to them: the currency an amount is in when it names
+        none. Gated by ReadBilling on the caller's own tenant.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GetBillingSettings",
+                service_name="paladin.admin.v1.BillingService",
+                input=GetBillingSettingsRequest,
+                output=GetBillingSettingsResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
             ),
             headers=headers,

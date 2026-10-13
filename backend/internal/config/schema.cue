@@ -630,6 +630,10 @@ mcp: {
 
 capability: {
   enabled:                  bool   | *false
+  // The platform's ISO 4217 unit for budgets and capabilities that name
+  // none. Unstated, it is XXX — no currency — rather than a currency nobody
+  // chose; the shipped configs state it.
+  currency:                 =~"^[A-Z]{3}$" | *"XXX"
   issuer_name:              string | *""
   trusted_issuers:          [...string] | *[]
   signing_key_path:         string | *""

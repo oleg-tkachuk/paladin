@@ -14,14 +14,14 @@ import (
 const bumpCapabilityRequestCount = `-- name: BumpCapabilityRequestCount :one
 
 INSERT INTO capability_usage (capability_id, request_count, spent_usd, unit_code, updated_at)
-SELECT $1, 1, 0, 'USD', now()
-WHERE $2::bigint IS NULL OR 1 <= $2::bigint
+SELECT $1, 1, 0, $2::text, now()
+WHERE $3::bigint IS NULL OR 1 <= $3::bigint
 ON CONFLICT (capability_id) DO UPDATE
 SET request_count = capability_usage.request_count + 1,
     updated_at    = now()
 WHERE
-    $2::bigint IS NULL
-    OR capability_usage.request_count + 1 <= $2::bigint
+    $3::bigint IS NULL
+    OR capability_usage.request_count + 1 <= $3::bigint
 RETURNING request_count
 `
 
@@ -34,9 +34,10 @@ RETURNING request_count
 // currency interpretation; the Go domain types use Amount + UnitCode.
 // Increments request_count by 1 and rejects when over the supplied cap.
 // A NULL max_requests is unlimited; 0 allows no request at all, so the
-// insert path checks the cap too.
-func (q *Queries) BumpCapabilityRequestCount(ctx context.Context, capabilityID pgtype.UUID, maxRequests *int64) (int64, error) {
-	row := q.db.QueryRow(ctx, bumpCapabilityRequestCount, capabilityID, maxRequests)
+// insert path checks the cap too. A new row counts in the capability's own
+// unit, so its usage reads in the currency it was issued in.
+func (q *Queries) BumpCapabilityRequestCount(ctx context.Context, capabilityID pgtype.UUID, unitCode string, maxRequests *int64) (int64, error) {
+	row := q.db.QueryRow(ctx, bumpCapabilityRequestCount, capabilityID, unitCode, maxRequests)
 	var request_count int64
 	err := row.Scan(&request_count)
 	return request_count, err

@@ -43,8 +43,9 @@ type Querier interface {
 	// currency interpretation; the Go domain types use Amount + UnitCode.
 	// Increments request_count by 1 and rejects when over the supplied cap.
 	// A NULL max_requests is unlimited; 0 allows no request at all, so the
-	// insert path checks the cap too.
-	BumpCapabilityRequestCount(ctx context.Context, capabilityID pgtype.UUID, maxRequests *int64) (int64, error)
+	// insert path checks the cap too. A new row counts in the capability's own
+	// unit, so its usage reads in the currency it was issued in.
+	BumpCapabilityRequestCount(ctx context.Context, capabilityID pgtype.UUID, unitCode string, maxRequests *int64) (int64, error)
 	// Per-tenant request rate limiting (009_tenant_rate_buckets.sql).
 	//
 	// Shared across replicas: an in-memory bucket gave each pod its own ceiling,
@@ -74,7 +75,7 @@ type Querier interface {
 	ChargeCapability(ctx context.Context, capabilityID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string, maxBudgetUsd pgtype.Numeric) (pgtype.Numeric, error)
 	// Atomic UPSERT-and-check, same shape as ChargeCapability. When the
 	// row is missing, inserts a fresh accumulator row with no ceiling (NULL,
-	// unlimited) and the supplied unit_code (defaults to 'USD' when empty).
+	// unlimited) and the charge's unit_code, normalised by the caller.
 	// Returns the new spent_usd; pgx.ErrNoRows means "would exceed cap" —
 	// caller maps to ErrTenantBudgetExceeded.
 	ChargeTenantBudget(ctx context.Context, tenantID pgtype.UUID, amountUsd pgtype.Numeric, unitCode string, now pgtype.Timestamptz) (pgtype.Numeric, error)
@@ -913,7 +914,8 @@ type Querier interface {
 	// period_end is written as given: NULL leaves the window open-ended. now is
 	// the store's clock, which a period starts by.
 	//
-	// unit_code is written verbatim on insert; on conflict, it's
+	// unit_code is written verbatim on insert — the platform's currency
+	// (default_unit_code) when the caller names none; on conflict, it's
 	// updated only when the caller passes a non-empty value (an empty
 	// arg keeps the existing currency unchanged — operators editing
 	// the cap shouldn't accidentally reinterpret an EUR budget as USD).
@@ -928,7 +930,7 @@ type Querier interface {
 	// same cap silently overwrote each other.
 	// A missing row is version 0: the insert fires only for a caller that read
 	// none. An existing row always reaches the DO UPDATE, whose guard decides.
-	SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, now pgtype.Timestamptz, periodEnd pgtype.Timestamptz, expectedVersion int64, resetSpend bool) (SetTenantBudgetRow, error)
+	SetTenantBudget(ctx context.Context, tenantID pgtype.UUID, maxBudgetUsd pgtype.Numeric, unitCode string, defaultUnitCode string, now pgtype.Timestamptz, periodEnd pgtype.Timestamptz, expectedVersion int64, resetSpend bool) (SetTenantBudgetRow, error)
 	// Tenant default-binding queries.
 	//
 	// One row per tenant. Set at CreateTenant time; updated by future

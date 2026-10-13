@@ -50,10 +50,20 @@ type UsageStore struct {
 	log  *zap.Logger   // never nil — defaults to zap.NewNop in NewUsageStore
 	// now is the clock a reservation expires by.
 	now func() time.Time
+	// defaultUnit is what a tenant budget set with no unit is first written
+	// in: the platform's currency (capability.currency).
+	defaultUnit string
 }
 
 // UsageOption configures a UsageStore.
 type UsageOption func(*UsageStore)
+
+// WithDefaultUnit makes unit — the platform's currency, capability.currency —
+// what a tenant budget set with no unit is first written in. Without it that
+// is limes.DefaultUnitCode, the unit limes reads an unnamed one as.
+func WithDefaultUnit(unit string) UsageOption {
+	return func(s *UsageStore) { s.defaultUnit = unit }
+}
 
 // WithUsageClock expires reservations by now instead of the wall clock. For
 // tests that move time; the server runs on the wall clock.
@@ -86,7 +96,7 @@ func NewUsageStore(q *sqlc.Queries, pool *pgxpool.Pool, log *zap.Logger, opts ..
 	if log == nil {
 		log = zap.NewNop()
 	}
-	s := &UsageStore{q: q, pool: pool, log: log, now: time.Now}
+	s := &UsageStore{q: q, pool: pool, log: log, now: time.Now, defaultUnit: limes.DefaultUnitCode}
 	for _, o := range opts {
 		o(s)
 	}
@@ -104,10 +114,11 @@ var maxNanosNumeric = pgmoney.NumericFromNanos(limes.MaxNanos)
 
 // chargeTenantPastCeilingQuery adds to the tenant aggregate whatever its
 // ceiling, as ChargeTenantBudget does short of the check: a cost already
-// incurred, recorded under OverrunRecord, or a settle within its hold.
+// incurred, recorded under OverrunRecord, or a settle within its hold. $3 is
+// the charge's unit, normalised by the caller.
 const chargeTenantPastCeilingQuery = `
 INSERT INTO tenant_budgets (tenant_id, max_budget_usd, spent_usd, unit_code, period_start, updated_at)
-VALUES ($1, NULL, $2::numeric, COALESCE(NULLIF($3::text, ''), 'USD'), $4::timestamptz, now())
+VALUES ($1, NULL, $2::numeric, $3::text, $4::timestamptz, now())
 ON CONFLICT (tenant_id) DO UPDATE
 SET spent_usd  = tenant_budgets.spent_usd + $2::numeric,
     updated_at = now()
@@ -385,7 +396,7 @@ func (s *UsageStore) bump(ctx context.Context, subject limes.MeterSubject) (int6
 		return 0, err
 	}
 	count, err := qtx.BumpCapabilityRequestCount(ctx, pgtype.UUID{Bytes: capID, Valid: true},
-		requestCeilingColumn(subject.Requests()))
+		subject.UnitCode(), requestCeilingColumn(subject.Requests()))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, limes.ErrRequestLimitExceeded
@@ -393,7 +404,7 @@ func (s *UsageStore) bump(ctx context.Context, subject limes.MeterSubject) (int6
 		return 0, fmt.Errorf("capability/postgres: bump: %w", err)
 	}
 	for _, a := range ancestors {
-		if _, err := qtx.BumpCapabilityRequestCount(ctx, pgtype.UUID{Bytes: a.id, Valid: true}, a.maxRequests); err != nil {
+		if _, err := qtx.BumpCapabilityRequestCount(ctx, pgtype.UUID{Bytes: a.id, Valid: true}, subject.UnitCode(), a.maxRequests); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return 0, fmt.Errorf("%w: ancestor %s", limes.ErrRequestLimitExceeded, a.id)
 			}
@@ -925,9 +936,9 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args limes.SetTenantBu
 		return limes.TenantBudget{}, err
 	}
 	// Empty UnitCode passed through verbatim — the SQL preserves the existing
-	// row's unit_code on conflict in that case (or inserts 'USD' on first
-	// row). A non-empty one is normalised; Validate refused one that is not
-	// a unit.
+	// row's unit_code on conflict in that case, and writes the platform's
+	// currency (defaultUnit) on the first row. A non-empty one is normalised;
+	// Validate refused one that is not a unit.
 	unit := args.UnitCode
 	if unit != "" {
 		normalised, err := limes.NormalizeUnitCode(unit)
@@ -948,6 +959,7 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, args limes.SetTenantBu
 		pgtype.UUID{Bytes: args.TenantID, Valid: true},
 		pgmoney.NumericFromCeiling(args.Ceiling),
 		unit,
+		s.defaultUnit,
 		pgtype.Timestamptz{Time: s.now(), Valid: true},
 		periodEnd,
 		args.ExpectedVersion,

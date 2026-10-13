@@ -44,6 +44,29 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the platform's currency is a setting
+
+A budget or a capability that named no currency used to be in USD: limes'
+DefaultUnitCode, which no deployment chose. `capability.currency` (ISO 4217)
+now says what an unnamed unit means — a root capability's budget, a tenant's
+first budget, an empty billing summary. Unstated it is `XXX`, no currency:
+amounts are credits, shown without a symbol. A delegate that names no
+currency counts in its parent's.
+
+- The console reads the setting through the new
+  `BillingService.GetBillingSettings` and shows it in the budget and
+  capability forms. Left alone, those forms send no currency and the server
+  applies its own, instead of the `XXX` they used to send.
+- A `google.type.Money` that names no currency is no longer USD on the way
+  in; its unit is resolved as above.
+- Records written before units existed still read as USD: that is what they
+  were written in.
+- Changing the setting on a deployment with history: a tenant whose budget
+  row is in one currency refuses charges from a capability issued in
+  another — `FAILED_PRECONDITION`, counted as a unit mismatch in
+  `paladin_capability_charges_total`. Set that tenant's budget in the new
+  currency, or issue its capabilities in the old one explicitly.
+
 ## v33.0.3 — a reissued batch finishes its first run's work
 
 A permanent delete now leaves a tombstone (`erased_objects`, migration 074):
