@@ -80,8 +80,8 @@ service CapabilityService {
   }
 
   // GetUsage returns the runtime counters for a capability:
-  // request_count (vs Caveats.max_requests) and spent_micros
-  // (vs Caveats.max_budget_micros). Returns NOT_FOUND when the
+  // request_count (vs Caveats.max_requests) and spent
+  // (vs Caveats.max_budget). Returns NOT_FOUND when the
   // capability has never been used (no requests, no charges).
   rpc GetUsage(CapabilityServiceGetUsageRequest) returns (CapabilityServiceGetUsageResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -114,7 +114,10 @@ message CapabilityPrincipal {
 }
 
 // CapabilityCaveats mirrors the in-process capability.Caveats struct.
-// Empty fields = "no restriction on that axis".
+// Empty repeated fields = "no restriction on that axis". The request and
+// budget ceilings are explicit: each is a limit, where 0 allows nothing, or
+// unlimited. Issue refuses caveats that set neither; Delegate reads an unset
+// ceiling as the parent's own.
 message CapabilityCaveats {
   // ops is the set of authorised operations (get / put / list / delete /
   // presign / tag / search / embed / share / manage). Required.
@@ -122,7 +125,9 @@ message CapabilityCaveats {
 
   repeated string resource_prefixes = 2;
   repeated string resource_uris = 3;
-  int32 max_requests = 4;
+  // The int32 max_requests, where 0 set no limit; replaced by the
+  // request_ceiling oneof.
+  reserved 4;
   // The double max_budget_amount, replaced by max_budget_micros. The server
   // refuses a request that still sends it rather than issue the capability
   // without its budget.
@@ -134,14 +139,34 @@ message CapabilityCaveats {
   // unit_code and max_budget_micros, replaced by max_budget.
   reserved 9, 10;
   reserved "unit_code", "max_budget_micros";
-  // max_budget is the cost budget, exact to the nano, and its currency is
-  // the unit every charge against the capability is in. A zero amount is no
-  // budget in that unit; absent is no budget in USD. currency_code is an ISO 4217 code the server accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no currency", for metering that is not money.
-  google.type.Money max_budget = 11 [(buf.validate.field).cel = {
-    id: "money.non_negative"
-    message: "an amount is not negative, and its nanos are 0 to 999999999"
-    expression: "this.units >= 0 && this.nanos >= 0 && this.nanos <= 999999999"
-  }];
+  // request_ceiling is how many requests the capability may make.
+  oneof request_ceiling {
+    // max_requests is the limit; 0 allows none.
+    int64 max_requests = 12 [(buf.validate.field).int64.gte = 0];
+    // unlimited_requests sets no limit. Only true is meaningful.
+    bool unlimited_requests = 13 [(buf.validate.field).bool.const = true];
+  }
+  // budget_ceiling is what the capability may spend. Either arm's currency
+  // is the unit every charge against the capability is in: an ISO 4217 code
+  // the server accepts — USD, EUR, UAH, GBP — or XXX, ISO 4217's code for "no
+  // currency", for metering that is not money.
+  oneof budget_ceiling {
+    // max_budget is the limit, exact to the nano; a zero amount allows no
+    // spend.
+    google.type.Money max_budget = 11 [(buf.validate.field).cel = {
+      id: "money.non_negative"
+      message: "an amount is not negative, and its nanos are 0 to 999999999"
+      expression: "this.units >= 0 && this.nanos >= 0 && this.nanos <= 999999999"
+    }];
+    // unlimited_budget sets no limit.
+    CapabilityUnlimitedBudget unlimited_budget = 14;
+  }
+}
+
+// CapabilityUnlimitedBudget is a budget with no limit, in a currency.
+message CapabilityUnlimitedBudget {
+  // currency_code is the unit charges are in; empty is USD.
+  string currency_code = 1;
 }
 
 // Capability is the typed metadata view of an issued or stored
@@ -252,8 +277,10 @@ message CapabilityBiscuitCopyUsage {
   // max_budget, spent and reserved.
   reserved 3, 5, 6;
   reserved "max_budget_micros", "spent_micros", "reserved_micros";
-  // max_requests and max_budget are the limits; 0 sets none.
-  int64 max_requests = 2;
+  // max_requests and max_budget are the limits the block set, each absent
+  // when it set none on that axis; 0 allows nothing. A copy can only narrow,
+  // so it never sets a limit of "unlimited".
+  optional int64 max_requests = 2;
   google.type.Money max_budget = 7;
   int64 request_count = 4;
   // spent and reserved are in the capability's currency.

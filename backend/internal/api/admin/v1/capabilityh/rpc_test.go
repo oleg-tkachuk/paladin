@@ -128,7 +128,7 @@ func TestIssueMintsAToken(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
+		Caveats:    openCaveats(limes.OpGet),
 	})
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
@@ -167,7 +167,7 @@ func TestIssueKeyBoundGetsNoBiscuit(t *testing.T) {
 		},
 		Audience:        []string{"paladin-data"},
 		TtlSeconds:      300,
-		Caveats:         &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
+		Caveats:         openCaveats(limes.OpGet),
 		ConfirmationJkt: jkt,
 	})
 	if err != nil {
@@ -195,7 +195,7 @@ func TestIssueNotYetValidGetsNoBiscuit(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: int64((2 * notBeforeLead).Seconds()),
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
+		Caveats:    openCaveats(limes.OpGet),
 		NotBefore:  timestamppb.New(time.Now().Add(notBeforeLead)),
 	})
 	if err != nil {
@@ -536,7 +536,7 @@ func TestIssue_NonPlatformAdminCannotIssueForAnotherTenant(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
+		Caveats:    openCaveats(limes.OpGet),
 	})
 
 	if codeOf(err) != connect.CodePermissionDenied {
@@ -556,7 +556,7 @@ func TestIssue_TenantAdminMayIssueForItsOwnTenant(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
+		Caveats:    openCaveats(limes.OpGet),
 	})
 	if err != nil {
 		t.Fatalf("Issue for own tenant: %v", err)
@@ -576,7 +576,7 @@ func TestIssue_PlatformAdminMayIssueForAnotherTenant(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
+		Caveats:    openCaveats(limes.OpGet),
 	})
 	if err != nil {
 		t.Fatalf("Issue as platform admin: %v", err)
@@ -608,7 +608,7 @@ func TestIssue_CapabilityIssuerMayIssueForAnotherTenant(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}},
+		Caveats:    openCaveats(limes.OpGet),
 	})
 	if err != nil {
 		t.Fatalf("Issue as capability-issuer: %v", err)

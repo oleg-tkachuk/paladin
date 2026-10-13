@@ -150,8 +150,8 @@ type CapabilityServiceClient interface {
 	// List enumerates capabilities issued to a principal. Cursor-paginated.
 	List(context.Context, *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error)
 	// GetUsage returns the runtime counters for a capability:
-	// request_count (vs Caveats.max_requests) and spent_micros
-	// (vs Caveats.max_budget_micros). Returns NOT_FOUND when the
+	// request_count (vs Caveats.max_requests) and spent
+	// (vs Caveats.max_budget). Returns NOT_FOUND when the
 	// capability has never been used (no requests, no charges).
 	GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error)
 }
@@ -202,8 +202,8 @@ type CapabilityServiceHandler interface {
 	// List enumerates capabilities issued to a principal. Cursor-paginated.
 	List(context.Context, *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error)
 	// GetUsage returns the runtime counters for a capability:
-	// request_count (vs Caveats.max_requests) and spent_micros
-	// (vs Caveats.max_budget_micros). Returns NOT_FOUND when the
+	// request_count (vs Caveats.max_requests) and spent
+	// (vs Caveats.max_budget). Returns NOT_FOUND when the
 	// capability has never been used (no requests, no charges).
 	GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error)
 }

@@ -63,9 +63,17 @@ tree with itself and passes without checking anything.
   `CAPABILITY_AUTH_SCHEME_MISMATCH`. The first three replace
   `CAPABILITY_INVALID_SIGNATURE`, `CAPABILITY_INVALID_BISCUIT` and
   `CAPABILITY_SOURCE_NOT_ALLOWED`, which are no longer sent.
-- **Behaviour, ceilings.** A ceiling of 0 in the API still sets none. The
-  store now keeps "none" as `NULL` and 0 as a ceiling of nothing; migration
-  066 rewrites the rows written under the old reading.
+- **Breaking, capability ceilings.** `CapabilityCaveats` spells each ceiling
+  explicitly: `max_requests` (now `int64`, in the `request_ceiling` oneof) or
+  `unlimited_requests`, and `max_budget` (in `budget_ceiling`) or
+  `unlimited_budget`, whose `currency_code` is the unit charges are in. 0 is
+  a limit that allows nothing. `Issue` refuses caveats that set neither arm
+  of a ceiling with `INVALID_ARGUMENT`; `Delegate` keeps the parent's ceiling
+  for one left unset. A capability read back carries one arm of each.
+  `CapabilityBiscuitCopyUsage.max_requests` and `max_budget` are absent when
+  the copy set no limit on that axis, and 0 when it froze it. The store keeps
+  "none" as `NULL`; migration 066 rewrites the rows written when 0 meant none.
+  A tenant's budget still reads 0 as none.
 - **Breaking, configuration.** `capability.charge_per_request_unit` is gone:
   every charge is in its capability's own unit. `capability.verifier_leeway`
   above 5m and `worker.jobs.capability.expired_for` below 6m are refused at

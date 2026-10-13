@@ -39,17 +39,14 @@ import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
 import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
 import { BiscuitCopyUsageDialog } from "./BiscuitCopyUsageDialog";
 import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS, isExpired } from "./_constants";
+import { budgetLimit, budgetUnit, requestLimit } from "./_ceilings";
 import { capabilityClient } from "@/lib/connect/client";
 import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
-import {
-  ABSTRACT_UNIT_CODE,
-  formatMoney,
-  moneyIsPositive,
-} from "@/lib/format/money";
+import { ABSTRACT_UNIT_CODE, formatMoney } from "@/lib/format/money";
 import type { Money } from "@/gen/google/type/money_pb";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { Timestamp } from "@/components/Timestamp";
@@ -577,14 +574,14 @@ export default function CapabilitiesPage() {
                               never used
                             </span>
                           );
-                        const reqCap = c.caveats?.maxRequests ?? 0;
-                        const budgetCap = c.caveats?.maxBudget;
+                        const reqCap = requestLimit(c.caveats);
+                        const budgetCap = budgetLimit(c.caveats);
                         // Usage row → caveats → XXX fallback. A "USD"
                         // default would lie about the actual unit when
                         // both are absent (metering-only capabilities).
                         const cellUnit =
                           u.spent?.currencyCode ||
-                          budgetCap?.currencyCode ||
+                          budgetUnit(c.caveats) ||
                           ABSTRACT_UNIT_CODE;
                         return (
                           <div className="space-y-0.5">
@@ -593,7 +590,7 @@ export default function CapabilitiesPage() {
                                 req{" "}
                               </span>
                               {u.requestCount.toString()}
-                              {reqCap > 0 && (
+                              {reqCap !== null && (
                                 <span className="text-muted-foreground">
                                   {" "}
                                   / {reqCap}
@@ -605,7 +602,7 @@ export default function CapabilitiesPage() {
                                 fallbackUnit: cellUnit,
                                 fractionDigits: SPEND_DIGITS,
                               })}
-                              {moneyIsPositive(budgetCap) && (
+                              {budgetCap !== undefined && (
                                 <span className="text-muted-foreground">
                                   {" "}
                                   /{" "}

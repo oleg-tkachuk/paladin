@@ -503,7 +503,8 @@ export interface SeededCapability {
 
 /**
  * Issue a capability token via CapabilityService.Issue. Minimal
- * caveats — single op `get`, empty prefixes, finite small budget.
+ * caveats — single op `get`, empty prefixes, a finite request limit and
+ * no budget limit.
  * The actual caveat shape doesn't matter for US4's tests; we
  * only care that the row materialises in `/capabilities`.
  *
@@ -515,6 +516,9 @@ export interface SeededCapability {
  * fixes the subject, which is otherwise unique per call, so a test can
  * send the identical request twice.
  */
+/** The request limit a seeded capability carries. */
+const SEED_CAPABILITY_MAX_REQUESTS = BigInt(100);
+
 export async function seedCapability(opts: {
   tenantId: string;
   subjectPrefix?: string;
@@ -536,7 +540,11 @@ export async function seedCapability(opts: {
       ops: ["get"],
       resourcePrefixes: [],
       resourceUris: [],
-      maxRequests: 100,
+      requestCeiling: {
+        case: "maxRequests",
+        value: SEED_CAPABILITY_MAX_REQUESTS,
+      },
+      budgetCeiling: { case: "unlimitedBudget", value: {} },
       allowTaintedRead: false,
       idempotencyKeyRequired: false,
       sourceIpCidr: [],

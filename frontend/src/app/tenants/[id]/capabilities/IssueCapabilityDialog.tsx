@@ -36,14 +36,16 @@ import {
   UNIT_CODES,
   NANOS_DECIMALS,
   moneyFromDecimal,
-  moneyIsPositive,
 } from "@/lib/format/money";
+import { create } from "@bufbuild/protobuf";
+import { MoneySchema } from "@/gen/google/type/money_pb";
 import {
   PrincipalKind,
   type Capability,
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 
 import { ToggleRow, LimitInput } from "./_form-fields";
+import { budgetCeiling, requestCeiling } from "./_ceilings";
 import {
   TTL_OPTIONS,
   OP_CHOICES,
@@ -145,29 +147,24 @@ export function IssueCapabilityDialog({
     setter(next);
   };
 
-  // Unlimited toggle wins: protocol's 0 = "no cap". With it off the operator
-  // must have entered a positive number — held otherwise, so the dialog never
-  // silently sends 0 = forbid.
-  const maxRequests = issueMaxRequestsUnlimited
-    ? 0
-    : Number.parseInt(issueMaxRequests, 10);
+  // Unlimited is its own value on the wire; 0 is a limit that allows none.
+  // With Unlimited off the operator must have entered a whole number, held
+  // otherwise, so the dialog never sends a limit nobody typed.
+  const maxRequests = /^\d+$/.test(issueMaxRequests.trim())
+    ? BigInt(issueMaxRequests.trim())
+    : null;
   // Parsed straight to Money, never through a float: "0.1" is 100000000
-  // nanos. Unlimited is a zero amount, which keeps the chosen unit.
-  const maxBudget = moneyFromDecimal(
-    issueMaxBudgetUnlimited ? "0" : issueMaxBudget,
-    issueUnitCode,
-  );
+  // nanos.
+  const maxBudget = moneyFromDecimal(issueMaxBudget, issueUnitCode);
   const maxRequestsError =
     !issueMaxRequestsUnlimited &&
     issueMaxRequests !== "" &&
-    (!Number.isFinite(maxRequests) || maxRequests <= 0)
-      ? "A positive number, or Unlimited."
+    maxRequests === null
+      ? "A whole number (0 allows none), or Unlimited."
       : null;
   const maxBudgetError =
-    !issueMaxBudgetUnlimited &&
-    issueMaxBudget !== "" &&
-    !moneyIsPositive(maxBudget ?? undefined)
-      ? `A positive amount (up to ${NANOS_DECIMALS} decimals), or Unlimited.`
+    !issueMaxBudgetUnlimited && issueMaxBudget !== "" && maxBudget === null
+      ? `An amount (up to ${NANOS_DECIMALS} decimals; 0 allows no spend), or Unlimited.`
       : null;
 
   const blockedReason = !tenantId
@@ -202,8 +199,15 @@ export function IssueCapabilityDialog({
           ops: Array.from(issueOps),
           resourcePrefixes: issueResourcePrefixes,
           resourceUris: [],
-          maxRequests,
-          maxBudget: maxBudget ?? undefined,
+          requestCeiling: requestCeiling(
+            issueMaxRequestsUnlimited,
+            maxRequests ?? BigInt(0),
+          ),
+          budgetCeiling: budgetCeiling(
+            issueMaxBudgetUnlimited,
+            maxBudget ?? create(MoneySchema, { currencyCode: issueUnitCode }),
+            issueUnitCode,
+          ),
           allowTaintedRead: false,
           idempotencyKeyRequired: false,
           sourceIpCidr: issueSourceCidr,

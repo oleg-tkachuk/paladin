@@ -24,7 +24,7 @@ import {
 import { useNotification } from "@/components/ui/Notification";
 import { capabilityClient } from "@/lib/connect/client";
 import { errorMessage } from "@/hooks/errorContract";
-import { formatMoney, moneyIsPositive } from "@/lib/format/money";
+import { formatMoney } from "@/lib/format/money";
 import type {
   CapabilityBiscuitCopyUsage,
   CapabilityServiceGetBiscuitUsageResponse,
@@ -165,11 +165,11 @@ export function BiscuitCopyUsageDialog({
                       </TableCell>
                       <TableCell>
                         {c.requestCount.toString()}
-                        {c.maxRequests > 0n && ` / ${c.maxRequests}`}
+                        {c.maxRequests !== undefined && ` / ${c.maxRequests}`}
                       </TableCell>
                       <TableCell>
                         {money(c.spent, rowUnit(c))}
-                        {moneyIsPositive(c.maxBudget) &&
+                        {c.maxBudget !== undefined &&
                           ` / ${money(c.maxBudget, rowUnit(c))}`}
                       </TableCell>
                       <TableCell>{money(c.reserved, rowUnit(c))}</TableCell>

@@ -234,17 +234,17 @@ func TestDelegate_WithoutAPresentedCapabilityIsFailedPrecondition(t *testing.T) 
 	}
 }
 
-// The parent's ceilings, which a delegation's 0 keeps.
+// The parent's ceilings, which a delegation that sets none keeps.
 const (
 	parentMaxRequests = 10
 	parentBudgetUnits = 5
 	childMaxRequests  = 3
 )
 
-// The API's 0 sets no ceiling, but a delegation's 0 keeps the parent's: a
-// child set unlimited under a bounded parent would be wider than it and
-// refused. A ceiling the request does set narrows the parent's.
-func TestDelegate_ZeroCeilingKeepsTheParents(t *testing.T) {
+// A delegation that sets no request ceiling keeps the parent's; one that
+// sets a number narrows it, and 0 freezes the child. The budget, never set
+// here, stays the parent's throughout.
+func TestDelegate_UnsetCeilingKeepsTheParents(t *testing.T) {
 	m := captest.NewMinter(t)
 	parent, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{
 		Ops:      []limes.Op{limes.OpGet, limes.OpShare},
@@ -255,28 +255,50 @@ func TestDelegate_ZeroCeilingKeepsTheParents(t *testing.T) {
 	h := delegateHandler(m, &denyAuthorizer{})
 	parentBudget := &money.Money{CurrencyCode: limes.DefaultUnitCode, Units: parentBudgetUnits}
 
+	limit := func(n int64) *int64 { return &n }
 	cases := map[string]struct {
-		maxRequests  int32
-		wantRequests int32
+		maxRequests  *int64 // nil: unset
+		wantRequests int64
 	}{
-		"zero keeps the parent's": {0, parentMaxRequests},
-		"a number narrows it":     {childMaxRequests, childMaxRequests},
+		"unset keeps the parent's": {nil, parentMaxRequests},
+		"a number narrows it":      {limit(childMaxRequests), childMaxRequests},
+		"zero freezes the child":   {limit(0), 0},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			req := delegateReq(parent)
-			req.Caveats = &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}, MaxRequests: tc.maxRequests}
+			req.Caveats = &adminv1.CapabilityCaveats{Ops: []string{string(limes.OpGet)}}
+			if tc.maxRequests != nil {
+				req.Caveats.RequestCeiling = &adminv1.CapabilityCaveats_MaxRequests{MaxRequests: *tc.maxRequests}
+			}
 			resp, err := h.Delegate(auth.WithCapability(context.Background(), parent), req)
 			if err != nil {
 				t.Fatalf("delegate: %v", err)
 			}
 			got := resp.GetCapability().GetCaveats()
-			if got.GetMaxRequests() != tc.wantRequests {
-				t.Errorf("max_requests = %d, want %d", got.GetMaxRequests(), tc.wantRequests)
+			if _, ok := got.GetRequestCeiling().(*adminv1.CapabilityCaveats_MaxRequests); !ok || got.GetMaxRequests() != tc.wantRequests {
+				t.Errorf("request ceiling = %v, want max_requests %d", got.GetRequestCeiling(), tc.wantRequests)
 			}
 			if !proto.Equal(got.GetMaxBudget(), parentBudget) {
 				t.Errorf("max_budget = %v, want the parent's %v", got.GetMaxBudget(), parentBudget)
 			}
 		})
+	}
+}
+
+// A child cannot lift its bounded parent's ceiling by asking for no limit.
+func TestDelegate_UnlimitedUnderABoundedParentIsRefused(t *testing.T) {
+	m := captest.NewMinter(t)
+	parent, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{
+		Ops:      []limes.Op{limes.OpGet, limes.OpShare},
+		Requests: limes.RequestCeiling{Max: parentMaxRequests},
+		Budget:   limes.BudgetCeiling{Unlimited: true},
+		UnitCode: limes.DefaultUnitCode,
+	}})
+	h := delegateHandler(m, &denyAuthorizer{})
+	req := delegateReq(parent)
+	req.Caveats = openCaveats(limes.OpGet)
+	if _, err := h.Delegate(auth.WithCapability(context.Background(), parent), req); err == nil {
+		t.Fatal("an unlimited child of a bounded parent was delegated")
 	}
 }

@@ -23,8 +23,6 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
-
 	"github.com/jackc/pgx/v5"
 
 	"connectrpc.com/connect/v2"
@@ -176,7 +174,11 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 		return nil, connect.NewError(connect.CodePermissionDenied, "issuing a capability for another tenant requires platform.admin or platform.capability-issuer")
 	}
 
-	caveats, err := protoToCaveats(req.GetCaveats())
+	// A top-level capability has no parent whose ceilings it could keep.
+	if err := requireCeilings(req.GetCaveats()); err != nil {
+		return nil, err
+	}
+	caveats, err := protoToCaveats(req.GetCaveats(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -262,13 +264,10 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 	var caveats limes.Caveats
 	inherit := req.GetCaveats() == nil
 	if !inherit {
-		if caveats, err = protoToCaveats(req.GetCaveats()); err != nil {
+		// A ceiling left unset keeps the parent's, in the parent's unit.
+		if caveats, err = protoToCaveats(req.GetCaveats(), &parent.Caveats); err != nil {
 			return nil, err
 		}
-		// A ceiling left at 0 keeps the parent's: the child of a bounded
-		// parent cannot be unlimited, and the API's 0 sets none.
-		caveats.Requests = apiutil.DelegatedRequests(int64(req.GetCaveats().GetMaxRequests()), parent.Caveats.Requests)
-		caveats.Budget = apiutil.DelegatedBudget(apiutil.BudgetCeilingAmount(caveats.Budget), parent.Caveats.Budget)
 	}
 	audience := parent.Audience
 	if a := req.GetAudience(); len(a) > 0 {
@@ -587,27 +586,36 @@ func (h *Handler) seal(ctx context.Context, res limes.IssueResult) (string, erro
 	return b.Token, nil
 }
 
-func protoToCaveats(c *adminv1.CapabilityCaveats) (limes.Caveats, error) {
+// protoToCaveats reads c. A ceiling c leaves unset is parent's, in parent's
+// unit; with no parent the caller has refused that already (requireCeilings).
+func protoToCaveats(c *adminv1.CapabilityCaveats, parent *limes.Caveats) (limes.Caveats, error) {
 	if c == nil {
 		return limes.Caveats{}, nil
 	}
 	if err := apiutil.RefuseRemovedFields(c); err != nil {
 		return limes.Caveats{}, err
 	}
-	// An absent max_budget is no budget, in the default unit.
-	budget, unit, err := apiutil.NanosOf("max_budget", c.GetMaxBudget())
+	var inherited limes.Caveats
+	if parent != nil {
+		inherited = *parent
+	}
+	requests, ok := requestCeilingOf(c)
+	if !ok {
+		requests = inherited.Requests
+	}
+	budget, ok, err := budgetCeilingOf(c)
 	if err != nil {
 		return limes.Caveats{}, err
 	}
-	if unit == "" {
-		unit = limes.DefaultUnitCode
+	if !ok {
+		budget = budgetCeiling{ceiling: inherited.Budget, unit: inherited.UnitCode}
 	}
 	out := limes.Caveats{
 		ResourcePrefixes:       c.GetResourcePrefixes(),
 		ResourceURIs:           c.GetResourceUris(),
-		Requests:               apiutil.RequestCeilingOf(int64(c.GetMaxRequests())),
-		Budget:                 apiutil.BudgetCeilingOf(budget),
-		UnitCode:               unit,
+		Requests:               requests,
+		Budget:                 budget.ceiling,
+		UnitCode:               budget.unit,
 		AllowTaintedRead:       c.GetAllowTaintedRead(),
 		IdempotencyKeyRequired: c.GetIdempotencyKeyRequired(),
 		SourceIPCIDR:           c.GetSourceIpCidr(),
@@ -656,12 +664,12 @@ func caveatsToProto(c limes.Caveats) *adminv1.CapabilityCaveats {
 	out := &adminv1.CapabilityCaveats{
 		ResourcePrefixes:       c.ResourcePrefixes,
 		ResourceUris:           c.ResourceURIs,
-		MaxRequests:            safecast.Int32From64(apiutil.RequestCeilingNumber(c.Requests)),
-		MaxBudget:              apiutil.MoneyOf(c.UnitCode, apiutil.BudgetCeilingAmount(c.Budget)),
 		AllowTaintedRead:       c.AllowTaintedRead,
 		IdempotencyKeyRequired: c.IdempotencyKeyRequired,
 		SourceIpCidr:           c.SourceIPCIDR,
 	}
+	setRequestCeiling(out, c.Requests)
+	setBudgetCeiling(out, c.Budget, c.UnitCode)
 	for _, op := range c.Ops {
 		out.Ops = append(out.Ops, string(op))
 	}

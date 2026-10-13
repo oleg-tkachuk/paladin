@@ -26,8 +26,11 @@ const CAP = {
   subject: { kind: PrincipalKind.AGENT, subject: "agent:1", tenantId: "t-1" },
   caveats: {
     ops: ["get"],
-    maxRequests: 0,
-    maxBudget: { currencyCode: "USD", units: 0n, nanos: 0 },
+    requestCeiling: { case: "maxRequests", value: 0n },
+    budgetCeiling: {
+      case: "unlimitedBudget",
+      value: { currencyCode: "USD" },
+    },
   },
 } as unknown as Capability;
 
@@ -72,6 +75,17 @@ describe("CapabilityDetailsDialog", () => {
     });
     open();
     expect(await screen.findByText("not revoked itself")).toBeInTheDocument();
+  });
+
+  // 0 is a limit that allows nothing, distinct from no limit at all.
+  it("tells a limit of zero from an unlimited ceiling", async () => {
+    h.get.mockResolvedValue({ capability: CAP });
+    open();
+    // Each label's <dd> is the element after its <dt>.
+    const value = (label: string) =>
+      screen.getByText(label).nextElementSibling?.textContent;
+    expect(value("Max requests")).toBe("0");
+    expect(value("Max budget")).toBe("unlimited");
   });
 
   it("marks the record unavailable when the read fails", async () => {

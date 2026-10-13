@@ -9,6 +9,8 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"google.golang.org/genproto/googleapis/type/money"
+
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -76,7 +78,7 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 		out = append(out, &adminv1.CapabilityBiscuitCopyUsage{
 			RevocationId: l.RevocationID,
 			MaxRequests:  copyRequestLimit(l),
-			MaxBudget:    apiutil.MoneyOf(unit, copyBudgetLimit(l)),
+			MaxBudget:    copyBudgetLimit(l, unit),
 			RequestCount: u.RequestCount,
 			Spent:        apiutil.MoneyOf(unit, u.SpentAmount),
 			Reserved:     apiutil.MoneyOf(unit, u.ReservedAmount),
@@ -88,20 +90,21 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 	}, nil
 }
 
-// copyRequestLimit is a copy's own request limit as the API reports it: 0
-// when the copy set none.
-func copyRequestLimit(c limes.CopyCeiling) int64 {
-	if c.Requests == nil {
-		return 0
+// copyRequestLimit is a copy's own request limit, nil when the copy set
+// none. A copy only narrows, so its limit is never unlimited; one that were
+// would limit nothing, and reads as none.
+func copyRequestLimit(c limes.CopyCeiling) *int64 {
+	if c.Requests == nil || c.Requests.Unlimited {
+		return nil
 	}
-	return apiutil.RequestCeilingNumber(*c.Requests)
+	n := c.Requests.Max
+	return &n
 }
 
-// copyBudgetLimit is a copy's own budget as the API reports it: 0 when the
-// copy set none.
-func copyBudgetLimit(c limes.CopyCeiling) limes.Nanos {
-	if c.Budget == nil {
-		return 0
+// copyBudgetLimit is a copy's own budget in unit, nil when the copy set none.
+func copyBudgetLimit(c limes.CopyCeiling, unit string) *money.Money {
+	if c.Budget == nil || c.Budget.Unlimited {
+		return nil
 	}
-	return apiutil.BudgetCeilingAmount(*c.Budget)
+	return apiutil.MoneyOf(unit, c.Budget.Max)
 }
