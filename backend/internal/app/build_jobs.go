@@ -173,6 +173,16 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		Logger:   l.Named("tenant-rate-sweeper"),
 	})
 
+	// Trash-retention gauge — always on: admin.tenants.trash_retention is
+	// required to be positive, and a lapse nobody measures is one nobody
+	// learns of until they open the Trash page.
+	out = append(out, &worker.TrashRetentionGauge{
+		Store:     adapters.NewTrashRetentionCounter(reaperQ),
+		Retention: cfg.Admin.Tenants.TrashRetention,
+		Interval:  cfg.Worker.Jobs.Housekeeping.Interval,
+		Logger:    l.Named("trash-retention-gauge"),
+	})
+
 	// Idempotency-key purger — always on (the table grows on every
 	// idempotent Create regardless of other housekeeping toggles). Rows
 	// self-expire via expires_at; this reclaims them so the unique index

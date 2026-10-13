@@ -1297,3 +1297,31 @@ func TestResolveRenamedSlug(t *testing.T) {
 		}
 	})
 }
+
+// The handler hands the repo the retention and instant it judges
+// purge_eligible by, and its CEL pass keeps exactly the tenants past it.
+func TestListTenants_PurgeEligibleFilter(t *testing.T) {
+	const retention = 30 * 24 * time.Hour
+	asOf := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	lapsed := Tenant{TenantID: uuid.New(), Slug: "old", DeletedAt: asOf.Add(-retention)}
+	fresh := Tenant{TenantID: uuid.New(), Slug: "new", DeletedAt: asOf.Add(-time.Hour)}
+	fr := &fakeRepo{listFn: func(context.Context, ListTenantsArgs) ([]Tenant, string, error) {
+		return []Tenant{lapsed, fresh}, "", nil
+	}}
+	h := NewHandler(fr, allow())
+	h.SetTrashRetention(retention)
+	h.now = func() time.Time { return asOf }
+
+	rows, _, err := h.ListTenants(adminCtx(uuid.New()),
+		ListTenantsArgs{PageSize: 10, OnlyTrashed: true, Filter: "purge_eligible"}, "")
+	if err != nil {
+		t.Fatalf("ListTenants: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Slug != lapsed.Slug {
+		t.Errorf("rows = %v, want only the lapsed tenant", rows)
+	}
+	if fr.lastListArgs.TrashRetention != retention || !fr.lastListArgs.AsOf.Equal(asOf) {
+		t.Errorf("repo got retention %v as of %v, want %v as of %v",
+			fr.lastListArgs.TrashRetention, fr.lastListArgs.AsOf, retention, asOf)
+	}
+}

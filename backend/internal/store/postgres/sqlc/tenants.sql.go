@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countTenantsPastTrashRetention = `-- name: CountTenantsPastTrashRetention :one
+SELECT count(*) FROM tenants
+WHERE deleted_at IS NOT NULL
+  AND deleted_at + make_interval(secs => $1::float8)
+      <= $2::timestamptz
+`
+
+// Trashed tenants whose trash retention has lapsed as of as_of: the ones the
+// console marks "Past retention" and an operator should decide on.
+func (q *Queries) CountTenantsPastTrashRetention(ctx context.Context, trashRetentionSeconds float64, asOf pgtype.Timestamptz) (int64, error) {
+	row := q.db.QueryRow(ctx, countTenantsPastTrashRetention, trashRetentionSeconds, asOf)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createTenant = `-- name: CreateTenant :exec
 
 INSERT INTO tenants (id, slug, display_name, labels, inherited_cedar_policy, storage_layout)
@@ -216,8 +232,16 @@ WHERE ($1::uuid IS NULL OR tenants.id > $1::uuid)
        OR tenants.created_at >= $10::timestamptz)
   AND ($11::timestamptz IS NULL
        OR tenants.created_at <= $11::timestamptz)
+  -- The derived ` + "`" + `purge_eligible` + "`" + ` field: trashed, and its trash retention
+  -- lapsed as of the request's own clock. The handler projects it from the
+  -- same retention and the same instant (tenanth.tenantRow), so the two
+  -- agree on every row, the boundary one included.
+  AND ($12::bool IS NULL
+       OR (tenants.deleted_at IS NOT NULL
+           AND tenants.deleted_at + make_interval(secs => $13::float8)
+               <= $14::timestamptz) = $12::bool)
 ORDER BY tenants.id
-LIMIT $12
+LIMIT $15
 `
 
 type ListTenantsRow struct {
@@ -231,7 +255,7 @@ type ListTenantsRow struct {
 // The boolean gating is inline-CASE so sqlc emits a single prepared
 // statement; planner uses the partial idx_tenants_active index on
 // the common path.
-func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugIn []string, slugLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, storageLayoutIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error) {
+func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugIn []string, slugLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, storageLayoutIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, purgeEligible *bool, trashRetentionSeconds *float64, asOf pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error) {
 	rows, err := q.db.Query(ctx, listTenants,
 		afterID,
 		onlyTrashed,
@@ -244,6 +268,9 @@ func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTras
 		storageLayoutIn,
 		createdAtGte,
 		createdAtLte,
+		purgeEligible,
+		trashRetentionSeconds,
+		asOf,
 		pageSize,
 	)
 	if err != nil {

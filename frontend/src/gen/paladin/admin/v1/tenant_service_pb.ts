@@ -199,6 +199,8 @@ export type ListTenantsRequest =
      * CEL filter, evaluated against the TenantSchema (see internal/filter/cel).
      * Applied to each fetched page; the page cursor is unaffected, so a page
      * whose rows all fail the predicate still returns next_page_token.
+     * `purge_eligible`, with only_trashed, lists the trashed tenants past
+     * admin.tenants.trash_retention — those with purge_eligible_at passed.
      *
      * @generated from field: string filter = 2;
      */

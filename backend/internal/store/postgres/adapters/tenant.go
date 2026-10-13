@@ -477,6 +477,9 @@ func (r *TenantRepo) restoreWith(ctx context.Context, q *sqlc.Queries, tenantID 
 	return r.getWith(ctx, q, tenantID)
 }
 
+// purgeEligibleField is the derived TenantSchema field ListTenants pushes down.
+const purgeEligibleField = "purge_eligible"
+
 func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]tenanth.Tenant, string, error) {
 	pageSize := pageSizeOrDefault(args.PageSize)
 	// Pushdown: see admin_bucket.go — the handler's CEL pass over the page
@@ -489,6 +492,16 @@ func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]
 	// emits `contains`. See admin_bucket.go.
 	_, searchLike := pd.StringHint("search")
 	createdGTE, createdLTE := createdBounds(pd)
+	// purge_eligible is judged by the handler's retention and instant, the
+	// same pair its CEL pass projects every row with.
+	var purgeEligible *bool
+	var retentionSeconds *float64
+	var asOf pgtype.Timestamptz
+	if want, ok := pd.BoolEq[purgeEligibleField]; ok {
+		secs := args.TrashRetention.Seconds()
+		purgeEligible, retentionSeconds = &want, &secs
+		asOf = pgtype.Timestamptz{Time: args.AsOf, Valid: true}
+	}
 
 	rows, err := r.q.ListTenants(ctx,
 		pgUUID(args.AfterID),
@@ -496,6 +509,7 @@ func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]
 		args.IncludeTrashed,
 		slugIn, slugLike, displayIn, displayLike, searchLike, layoutIn,
 		createdGTE, createdLTE,
+		purgeEligible, retentionSeconds, asOf,
 		pageSize,
 	)
 	if err != nil {

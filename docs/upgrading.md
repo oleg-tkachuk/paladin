@@ -44,6 +44,14 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — tenants past their trash retention are surfaced
+
+- **API, additive.** The `ListTenants` filter gains `purge_eligible`: trashed,
+  with `admin.tenants.trash_retention` lapsed. It is pushed down to SQL.
+- **Metrics.** `paladin_tenants_past_trash_retention` counts those tenants,
+  sampled by the worker every housekeeping interval.
+- **Console.** The dashboard says when there are any, and links to Trash.
+
 ## Unreleased — a quota cap of 0 is a cap
 
 - **Breaking, quotas.** `Quota.max_total_bytes`, `max_object_count`,

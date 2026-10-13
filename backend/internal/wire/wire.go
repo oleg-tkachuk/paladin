@@ -123,8 +123,10 @@ func ProvideCollectionHandler(repos Repos, pe *policy.Engine, _ config.Config) *
 	return objectkey.NewHandler(repos.Collection, pe)
 }
 
-func ProvideTenantHandler(repos Repos, pe *policy.Engine, _ config.Config) *tenanth.Handler {
-	return tenanth.NewHandler(repos.Tenant, pe)
+func ProvideTenantHandler(repos Repos, pe *policy.Engine, cfg config.Config) *tenanth.Handler {
+	h := tenanth.NewHandler(repos.Tenant, pe)
+	h.SetTrashRetention(cfg.Admin.Tenants.TrashRetention)
+	return h
 }
 
 func ProvideOperationHandler(repos Repos, pe *policy.Engine) *operationh.Handler {

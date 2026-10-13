@@ -9,6 +9,10 @@
 //      placement hid red signals)
 //   3. Tenants approaching budget cap (>= 80% spend)
 //
+// Above them, only while there are any: tenants in the trash past their
+// retention, which nothing purges on its own and the Trash page alone used to
+// show.
+//
 // Each widget fetches independently and degrades silently. The home
 // page composes this as its lead row via:
 //   <DashboardWidgets />
@@ -30,6 +34,7 @@ import {
   auditClient,
   adminOperationClient,
   tenantBudgetClient,
+  tenantClient,
 } from "@/lib/connect/client";
 import type { AuditLogEntry } from "@/gen/paladin/admin/v1/types_pb";
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
@@ -55,11 +60,63 @@ import { errorMessage } from "@/hooks/errorContract";
 
 export function DashboardWidgets() {
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-      <RecentActivityWidget />
-      <FailedOpsWidget />
-      <BudgetAlertsWidget />
+    <div className="space-y-3">
+      <TrashRetentionNotice />
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <RecentActivityWidget />
+        <FailedOpsWidget />
+        <BudgetAlertsWidget />
+      </div>
     </div>
+  );
+}
+
+/**
+ * The tenants counted in one read; past it the notice says "or more". The
+ * notice asks for a decision, not a census, and one page is enough to ask.
+ */
+const TRASH_NOTICE_PAGE_SIZE = 100;
+
+/** The ListTenants filter for "in the trash past its retention". */
+const PURGE_ELIGIBLE_FILTER = "purge_eligible";
+
+function TrashRetentionNotice() {
+  const { data } = useQuery({
+    queryKey: ["dashboard", "trashPastRetention"],
+    queryFn: ({ signal }) =>
+      tenantClient
+        .listTenants(
+          {
+            onlyTrashed: true,
+            filter: PURGE_ELIGIBLE_FILTER,
+            page: { pageSize: TRASH_NOTICE_PAGE_SIZE },
+          },
+          { signal },
+        )
+        .then((res) => ({
+          count: res.tenants.length,
+          more: Boolean(res.page?.nextPageToken),
+        })),
+  });
+  // Degrades silently, as every widget here does: an unreadable trash is the
+  // Trash page's to report, and "none" is not worth a banner.
+  if (!data || data.count === 0) return null;
+  const n = `${data.count}${data.more ? "+" : ""}`;
+  return (
+    <Link
+      href="/trash"
+      role="status"
+      className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/[0.06] px-3 py-2 text-sm hover:bg-warning/10"
+    >
+      <ExclamationTriangleIcon className="size-4 shrink-0 text-warning" />
+      <span>
+        {n} {data.count === 1 && !data.more ? "tenant is" : "tenants are"} in
+        the trash past their retention — nothing purges them on its own.
+      </span>
+      <span className="ml-auto inline-flex items-center gap-1 text-muted-foreground">
+        Review in Trash <ArrowRightIcon className="size-3" />
+      </span>
+    </Link>
   );
 }
 

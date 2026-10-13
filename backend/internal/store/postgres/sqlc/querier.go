@@ -111,6 +111,9 @@ type Querier interface {
 	CountBucketsForBackend(ctx context.Context, name string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state *ObjectState) (int64, error)
 	CountPendingMultipartAborts(ctx context.Context) (int64, error)
+	// Trashed tenants whose trash retention has lapsed as of as_of: the ones the
+	// console marks "Past retention" and an operator should decide on.
+	CountTenantsPastTrashRetention(ctx context.Context, trashRetentionSeconds float64, asOf pgtype.Timestamptz) (int64, error)
 	// Bucket queries. A bucket is a physical S3 bucket inside a storage backend.
 	// Created lazily via BucketService.CreateBucket; Collection rows FK to the
 	// bucket_id foreign key.
@@ -533,7 +536,7 @@ type Querier interface {
 	// The boolean gating is inline-CASE so sqlc emits a single prepared
 	// statement; planner uses the partial idx_tenants_active index on
 	// the common path.
-	ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugIn []string, slugLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, storageLayoutIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error)
+	ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugIn []string, slugLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, storageLayoutIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, purgeEligible *bool, trashRetentionSeconds *float64, asOf pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error)
 	// Admin-side: surface configured settings across a tenant for support and
 	// compliance flows ("which users opted into the dark theme?").
 	ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, limit int32) ([]ListUserSettingsByTenantRow, error)
