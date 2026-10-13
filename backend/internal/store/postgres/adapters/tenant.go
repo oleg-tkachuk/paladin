@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/schema"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -387,9 +388,14 @@ func (r *TenantRepo) softDeleteWith(ctx context.Context, q *sqlc.Queries, tenant
 	return nil
 }
 
-// HardDeleteTx runs HardDelete on the caller's tx (ADR-0003).
+// HardDeleteTx runs HardDelete on the caller's tx (ADR-0003), and deletes the
+// tenant's capabilities, meter and charges with it: the limes schema keeps
+// no foreign key to tenants, so nothing else would.
 func (r *TenantRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, expectedVersion int64) error {
-	return r.hardDeleteWith(ctx, r.q.WithTx(tx), tenantID, expectedVersion)
+	if err := r.hardDeleteWith(ctx, r.q.WithTx(tx), tenantID, expectedVersion); err != nil {
+		return err
+	}
+	return capabilitypg.DeleteTenant(ctx, tx, tenantID)
 }
 
 func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, expectedVersion int64) error {

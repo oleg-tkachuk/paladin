@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -58,11 +59,21 @@ func countOutbox(t *testing.T, h *pgharness.Harness, tenantID uuid.UUID) int64 {
 	return n
 }
 
+// newUsageStore is the meter over pool, as the server builds it.
+func newUsageStore(t *testing.T, pool *pgxpool.Pool, opts ...capabilitypg.Option) *capabilitypg.UsageStore {
+	t.Helper()
+	store, err := capabilitypg.NewUsageStore(pool, opts...)
+	if err != nil {
+		t.Fatalf("usage store: %v", err)
+	}
+	return store
+}
+
 func countCharges(t *testing.T, h *pgharness.Harness, tenantID uuid.UUID) int64 {
 	t.Helper()
 	var n int64
 	if err := h.PoolMigrate.QueryRow(context.Background(),
-		`SELECT COUNT(*) FROM charges WHERE tenant_id = $1`, tenantID,
+		`SELECT COUNT(*) FROM limes.charges WHERE tenant_id = $1`, tenantID,
 	).Scan(&n); err != nil {
 		t.Fatalf("count charges: %v", err)
 	}
@@ -83,13 +94,6 @@ const seedCapLifetime = time.Hour
 func seedTestCapability(t *testing.T, h *pgharness.Harness, capID, tenantID uuid.UUID, subject string, budget limes.BudgetCeiling) limes.MeterSubject {
 	t.Helper()
 	return seedCapability(t, h, capID, tenantID, subject, budget, seedUnitCode)
-}
-
-// seedCapabilityInUnit puts an unlimited capID on record for tenantID, counting
-// in unit, and returns its meter subject.
-func seedCapabilityInUnit(t *testing.T, h *pgharness.Harness, capID, tenantID uuid.UUID, unit string) limes.MeterSubject {
-	t.Helper()
-	return seedCapability(t, h, capID, tenantID, "unit-test-agent", limes.BudgetCeiling{Unlimited: true}, unit)
 }
 
 func seedCapability(t *testing.T, h *pgharness.Harness, capID, tenantID uuid.UUID, subject string, budget limes.BudgetCeiling, unit string) limes.MeterSubject {
@@ -142,7 +146,7 @@ var outboxCapBudget = limes.BudgetCeiling{Max: limes.MustParseAmount("10.0")}
 func TestCharge_FanoutCommitsOnSameTx(t *testing.T) {
 	h := pgharness.Setup(t)
 	ctx := context.Background()
-	store := capabilitypg.NewUsageStore(sqlc.New(h.PoolMigrate), h.PoolMigrate, nil)
+	store := newUsageStore(t, h.PoolMigrate)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-outbox-ok")
 	capID := uuid.New()
@@ -181,7 +185,7 @@ func TestCharge_FanoutCommitsOnSameTx(t *testing.T) {
 func TestCharge_FanoutErrorRollsBackEverything(t *testing.T) {
 	h := pgharness.Setup(t)
 	ctx := context.Background()
-	store := capabilitypg.NewUsageStore(sqlc.New(h.PoolMigrate), h.PoolMigrate, nil)
+	store := newUsageStore(t, h.PoolMigrate)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-outbox-fail")
 	capID := uuid.New()

@@ -11,7 +11,7 @@ import (
 )
 
 // tenantRecordingUsage records the tenant each store call would bind to
-// paladin.tenant_id. The capability_usage, tenant budget and charges rows are
+// paladin.tenant_id. The usage, tenant budget and charges rows are
 // all RLS-isolated by the capability's tenant, so a call made on any other
 // tenant — or none — is refused by the database with 42501.
 type tenantRecordingUsage struct {

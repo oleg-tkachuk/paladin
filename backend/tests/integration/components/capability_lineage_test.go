@@ -1,10 +1,9 @@
 //go:build integration
 
-// Delegation trees against a real database. Narrowing at delegation bounds
-// each child on its own; these tests pin the two properties that bound the
-// tree as a whole: a parent's budget and request ceiling cover everything
-// delegated from it, and revoking a parent stops its descendants even
-// without CascadeChildren.
+// Delegation trees against a real database. A parent's ceilings covering its
+// subtree and a parent's revocation stopping it are limes's rules, which its
+// contract suites pin; what Paladin must keep is that they still hold under
+// the scope it puts on the application role's transactions.
 package components
 
 import (
@@ -15,17 +14,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 type lineageFixture struct {
 	pool                 *pgxpool.Pool
-	records              *capstore.Store
+	records              *pgstore.Store
 	usage                *capstore.UsageStore
 	tenant               uuid.UUID
 	root, child, sibling uuid.UUID
@@ -54,7 +52,7 @@ func newLineageFixture(t *testing.T) (context.Context, lineageFixture) {
 	f := lineageFixture{
 		pool:    pool,
 		records: newCapStore(t, pool),
-		usage:   capstore.NewUsageStore(sqlc.New(pool), pool, zap.NewNop()),
+		usage:   newUsageStore(t, pool),
 		tenant:  tenant,
 		expires: time.Now().Add(time.Hour),
 	}
@@ -96,100 +94,17 @@ func (f lineageFixture) spent(t *testing.T, ctx context.Context, id uuid.UUID) l
 	return u.SpentAmount
 }
 
-func TestChildrenCannotSpendPastTheirParentsBudget(t *testing.T) {
-	t.Parallel()
-	ctx, f := newLineageFixture(t)
-	charge := func(id uuid.UUID, amount string) (limes.ChargeReceipt, error) {
-		return f.usage.Charge(ctx, limes.ChargeRequest{
-			Subject: f.subject(t, ctx, id), Amount: limes.MustParseAmount(amount),
-		}, nil)
-	}
-
-	first, err := charge(f.child, "20")
-	if err != nil {
-		t.Fatalf("child within its own and its parent's budget: %v", err)
-	}
-	if _, err := charge(f.sibling, "20"); !errors.Is(err, limes.ErrBudgetExceeded) {
-		t.Fatalf("sibling past the parent's ceiling: err = %v, want ErrBudgetExceeded", err)
-	}
-	if got := f.spent(t, ctx, f.sibling); got != 0 {
-		t.Errorf("rejected sibling's counter = %v, want 0 (the rollback must cover it)", got)
-	}
-	if _, err := charge(f.sibling, "5"); err != nil {
-		t.Fatalf("sibling within what the parent has left: %v", err)
-	}
-	if got := f.spent(t, ctx, f.root); got != limes.MustParseAmount("25") {
-		t.Errorf("parent's subtree spend = %v, want 25", got)
-	}
-
-	// Refunding the child's charge returns the room to the parent too.
-	if _, err := f.usage.Refund(ctx, limes.RefundRequest{ChargeID: first.ChargeID, Remaining: true}); err != nil {
-		t.Fatalf("refund: %v", err)
-	}
-	if got := f.spent(t, ctx, f.root); got != limes.MustParseAmount("5") {
-		t.Errorf("parent's subtree spend after refund = %v, want 5", got)
-	}
-	if _, err := charge(f.sibling, "15"); err != nil {
-		t.Fatalf("sibling after the refund: %v", err)
-	}
-}
-
-func TestChildrenCannotExceedTheirParentsRequestCount(t *testing.T) {
-	t.Parallel()
-	ctx, f := newLineageFixture(t)
-	bump := func(id uuid.UUID) error {
-		_, err := f.usage.Bump(ctx, limes.BumpRequest{Subject: f.subject(t, ctx, id)})
-		return err
-	}
-	for i, id := range []uuid.UUID{f.child, f.child, f.sibling} {
-		if err := bump(id); err != nil {
-			t.Fatalf("request %d: %v", i+1, err)
-		}
-	}
-	if err := bump(f.sibling); !errors.Is(err, limes.ErrRequestLimitExceeded) {
-		t.Fatalf("fourth request across the subtree: err = %v, want ErrRequestLimitExceeded", err)
-	}
-	u, err := f.usage.GetUsage(ctx, f.sibling)
-	if err != nil {
-		t.Fatalf("get sibling usage: %v", err)
-	}
-	if u.RequestCount != 1 {
-		t.Errorf("rejected bump moved the sibling's counter to %d, want 1", u.RequestCount)
-	}
-}
-
-// Revoking only the root, without CascadeChildren, must still stop the child:
-// IsRevoked answers for the chain. Revoking the child leaves the root alone.
-func TestRevokingAParentRevokesItsChildrenWithoutCascade(t *testing.T) {
-	t.Parallel()
-	ctx, f := newLineageFixture(t)
-
-	if err := f.records.Revoke(ctx, limes.RevokeRequest{CapabilityID: f.child, Note: "test", Actor: "user:ops"}); err != nil {
-		t.Fatalf("revoke child: %v", err)
-	}
-	if r, err := f.records.IsRevoked(ctx, f.root); err != nil || r {
-		t.Fatalf("root after revoking a child: revoked=%v err=%v, want live", r, err)
-	}
-
-	if err := f.records.Revoke(ctx, limes.RevokeRequest{CapabilityID: f.root, Note: "test", Actor: "user:ops"}); err != nil {
-		t.Fatalf("revoke root: %v", err)
-	}
-	if r, err := f.records.IsRevoked(ctx, f.sibling); err != nil || !r {
-		t.Fatalf("sibling after revoking its parent: revoked=%v err=%v, want revoked", r, err)
-	}
-}
-
 // The same tree under row-level security, the way production runs it: the
 // app role without BYPASSRLS, the ledger write scoped to the capability's
 // tenant (what the interceptor's ledgerContext does), and the revocation
 // check made before any tenant is known. The ancestor walk reads
-// capability_records on both paths, so a policy that hid the parent would
+// limes.capabilities on both paths, so a scope that hid the parent would
 // silently turn the subtree ceiling and chain revocation off.
 func TestLineageHoldsUnderRowLevelSecurity(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
 	pool := rlsPool(t, ctx, f.pool)
-	usage := capstore.NewUsageStore(sqlc.New(pool), pool, zap.NewNop())
+	usage := newUsageStore(t, pool)
 	records := newCapStore(t, pool)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 

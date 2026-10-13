@@ -7,12 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/limes"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 )
 
@@ -24,8 +22,7 @@ const platformCurrency = "EUR"
 func TestPlatformCurrency_IsWhatAnUnnamedUnitMeans(t *testing.T) {
 	h := pgharness.Setup(t)
 	ctx := context.Background()
-	store := capabilitypg.NewUsageStore(sqlc.New(h.PoolMigrate), h.PoolMigrate, nil,
-		capabilitypg.WithDefaultUnit(platformCurrency))
+	store := newUsageStore(t, h.PoolMigrate, capabilitypg.WithDefaultUnit(platformCurrency))
 	handler := billingh.NewHandler(h.PoolMigrate, store, allowAuth{}).WithCurrency(platformCurrency)
 
 	t.Run("an empty summary", func(t *testing.T) {
@@ -57,23 +54,6 @@ func TestPlatformCurrency_IsWhatAnUnnamedUnitMeans(t *testing.T) {
 		})
 		if err != nil || b.UnitCode != platformCurrency {
 			t.Errorf("second set: unit = %q, %v; want it kept", b.UnitCode, err)
-		}
-	})
-
-	t.Run("a capability's first request", func(t *testing.T) {
-		tenant := mustCreateTenant(t, h.PoolMigrate, "cur-bump")
-		const capUnit = "JPY"
-		capID := uuid.New()
-		subject := seedCapabilityInUnit(t, h, capID, tenant, capUnit)
-		if _, err := store.Bump(ctx, limes.BumpRequest{Subject: subject}); err != nil {
-			t.Fatalf("Bump: %v", err)
-		}
-		var unit string
-		if err := h.PoolMigrate.QueryRow(ctx, `SELECT unit_code FROM capability_usage WHERE capability_id = $1`, capID).Scan(&unit); err != nil {
-			t.Fatalf("read usage: %v", err)
-		}
-		if unit != capUnit {
-			t.Errorf("usage unit = %q, want the capability's %q", unit, capUnit)
 		}
 	})
 }

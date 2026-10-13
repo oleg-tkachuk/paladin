@@ -463,6 +463,24 @@ func TestGetUsageDefaultsUnitCode(t *testing.T) {
 	}
 }
 
+// Counters that hold only requests carry no unit yet; the spend is shown in
+// the capability's own unit, not a default.
+func TestGetUsageOfRequestsOnlyIsInTheCapabilitysUnit(t *testing.T) {
+	const capabilityUnit = "JPY"
+	c := limes.Capability{ID: uuid.New(), Caveats: limes.Caveats{UnitCode: capabilityUnit}}
+	store := &fakeStore{cap: &c}
+	usage := &fakeUsage{out: limes.Usage{CapabilityID: c.ID, RequestCount: 1}}
+	h := mkHandler(t, store, usage, &allowAuthorizer{})
+
+	resp, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{Id: c.ID.String()})
+	if err != nil {
+		t.Fatalf("GetUsage: %v", err)
+	}
+	if got := resp.GetSpent().GetCurrencyCode(); got != capabilityUnit {
+		t.Errorf("unit = %q, want the capability's %q", got, capabilityUnit)
+	}
+}
+
 func TestGetUsageNotFound(t *testing.T) {
 	store := &fakeStore{}
 	usage := &fakeUsage{err: limes.ErrUsageNotFound}
@@ -620,11 +638,13 @@ func TestIssue_CapabilityIssuerMayIssueForAnotherTenant(t *testing.T) {
 // lookupStore records the context the owner lookup ran on.
 type lookupStore struct {
 	recordingStore
-	getCtx context.Context
+	// getCtxs are the contexts of every GetRecord, in order: the owner
+	// lookup first, if there is one.
+	getCtxs []context.Context
 }
 
 func (s *lookupStore) GetRecord(ctx context.Context, id uuid.UUID) (limes.Record, error) {
-	s.getCtx = ctx
+	s.getCtxs = append(s.getCtxs, ctx)
 	return s.recordingStore.GetRecord(ctx, id)
 }
 
@@ -681,11 +701,15 @@ func TestRevokeAndGetUsageActOnTheCapabilitysTenant(t *testing.T) {
 				}
 			}
 			if tc.wantActing {
-				if store.getCtx == nil || !auth.CrossTenantRead(store.getCtx) {
+				if len(store.getCtxs) == 0 || !auth.CrossTenantRead(store.getCtxs[0]) {
 					t.Error("the owner lookup must read across tenants, or RLS hides the record")
 				}
-			} else if store.getCtx != nil {
-				t.Error("a tenant-confined caller must not get a cross-tenant owner lookup")
+			} else {
+				for _, ctx := range store.getCtxs {
+					if auth.CrossTenantRead(ctx) {
+						t.Error("a tenant-confined caller must not get a cross-tenant owner lookup")
+					}
+				}
 			}
 		})
 	}

@@ -465,9 +465,8 @@ func collectQuotas(ctx context.Context, pool *pgxpool.Pool, out *QuotaCensus) er
 // Active / Expired / Revoked are mutually exclusive and sum to Total:
 // a revocation row wins over expiry (an operator who revoked a token wants
 // to see it counted as revoked, not quietly reclassified when it lapses),
-// and expiry wins over active. `capability_revocations` is deliberately
-// NOT RLS'd — the verifier on every plane consults it — so the join costs
-// nothing extra on this pool.
+// and expiry wins over active. The census runs on the BYPASSRLS pool, so
+// limes.capabilities and limes.revocations show every tenant's rows.
 type CapabilityCensus struct {
 	Total   int64 `json:"total"`
 	Active  int64 `json:"active"`
@@ -478,7 +477,7 @@ type CapabilityCensus struct {
 	// Active rows expiring within ExpiringSoonWindow — the set an agent
 	// runtime is about to lose unless something re-issues.
 	ExpiringSoon int64 `json:"expiring_soon"`
-	// principal_kind → count, over ACTIVE rows only. A census of expired
+	// principal type → count, over ACTIVE rows only. A census of expired
 	// tokens by kind is archaeology, not an operational signal.
 	ByPrincipalKind map[string]int64 `json:"by_principal_kind"`
 }
@@ -488,10 +487,11 @@ type CapabilityCensus struct {
 // so a day of warning covers any realistic re-issue loop.
 const capabilityExpiringWindow = "24 hours"
 
-// capabilityRevokedSQL and capabilityExpiringSQL read a capability_records row
-// aliased `c`; shared with the per-tenant drill-down like the quota fragments.
+// capabilityRevokedSQL and capabilityExpiringSQL read a limes.capabilities row
+// aliased `c` — limes/pgstore's table of capability records; shared with the
+// per-tenant drill-down like the quota fragments.
 const (
-	capabilityRevokedSQL  = `EXISTS (SELECT 1 FROM capability_revocations r WHERE r.id = c.id)`
+	capabilityRevokedSQL  = `EXISTS (SELECT 1 FROM limes.revocations r WHERE r.capability_id = c.id)`
 	capabilityExpiringSQL = `(NOT ` + capabilityRevokedSQL + ` AND c.expires_at > now()
 		AND c.expires_at <= now() + interval '` + capabilityExpiringWindow + `')`
 )
@@ -506,17 +506,17 @@ func collectCapabilities(ctx context.Context, pool *pgxpool.Pool, out *Capabilit
 		       count(*) FILTER (WHERE     `+revoked+`),
 		       count(*) FILTER (WHERE c.parent_id IS NOT NULL),
 		       count(*) FILTER (WHERE `+capabilityExpiringSQL+`)
-		FROM capability_records c`,
+		FROM limes.capabilities c`,
 	).Scan(&out.Total, &out.Active, &out.Expired, &out.Revoked,
 		&out.Delegated, &out.ExpiringSoon)
 	if err != nil {
 		return fmt.Errorf("census: capabilities: %w", err)
 	}
 	if err := scanCounts(ctx, pool, `
-		SELECT c.principal_kind, count(*)
-		FROM capability_records c
+		SELECT c.principal_type, count(*)
+		FROM limes.capabilities c
 		WHERE c.expires_at > now() AND NOT `+revoked+`
-		GROUP BY c.principal_kind`, out.ByPrincipalKind); err != nil {
+		GROUP BY c.principal_type`, out.ByPrincipalKind); err != nil {
 		return fmt.Errorf("census: capabilities by principal kind: %w", err)
 	}
 	return nil

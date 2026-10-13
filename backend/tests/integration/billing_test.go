@@ -20,7 +20,6 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -32,8 +31,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -60,8 +57,7 @@ type billingFixture struct {
 func setupBilling(t *testing.T) *billingFixture {
 	t.Helper()
 	h := pgharness.Setup(t)
-	q := sqlc.New(h.PoolMigrate)
-	store := capabilitypg.NewUsageStore(q, h.PoolMigrate, nil)
+	store := newUsageStore(t, h.PoolMigrate)
 	handler := billingh.NewHandler(h.PoolMigrate, store, allowAuth{})
 	return &billingFixture{h: h, store: store, handler: handler}
 }
@@ -133,20 +129,18 @@ func (f *billingFixture) charge(t *testing.T, capID uuid.UUID, amount limes.Nano
 	}
 }
 
-// chargeAt inserts a charges row directly with an explicit
-// occurred_at, bypassing UsageStore so tests can backdate charges
-// into bucketed time windows. Does NOT bump the capability_usage /
-// tenant_budgets counters — tests that mix this with summary asserts
-// should be reading totals from the charges ledger only (which the
-// summary handler does).
+// chargeAt inserts a limes.charges row directly with an explicit time,
+// bypassing UsageStore so tests can backdate charges into bucketed time
+// windows. It moves no counter and no tenant budget — tests that mix this
+// with summary asserts should be reading totals from the ledger only (which
+// the summary handler does).
 func (f *billingFixture) chargeAt(t *testing.T, capID uuid.UUID, tenant uuid.UUID, when time.Time, amount limes.Nanos, unit, op, actor string) {
 	t.Helper()
 	if _, err := f.h.PoolMigrate.Exec(context.Background(),
-		`INSERT INTO charges (id, tenant_id, tenant_slug, capability_id,
-		                      occurred_at, amount, unit_code, op, actor_subject)
-		 SELECT $1, $2, t.slug, $3, $4, $5::numeric, $6, $7, $8
-		   FROM tenants t WHERE t.id = $2`,
-		uuid.New(), tenant, capID, when, pgmoney.NumericFromNanos(amount), unit, op, actor,
+		`INSERT INTO limes.charges (id, tenant_id, capability_id, at, amount, unit_code, op, actor,
+		                            ancestors, copies, overrun, tenant_period)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '{}', '{}', false, 0)`,
+		uuid.New(), tenant, capID, when, int64(amount), unit, op, actor,
 	); err != nil {
 		t.Fatalf("seed charge at %v: %v", when, err)
 	}
@@ -173,7 +167,7 @@ func (f *billingFixture) timeSeries(t *testing.T, tenant uuid.UUID, start, end t
 // ─── tests ──────────────────────────────────────────────────────────────────
 
 // TestBilling_ChargeWritesLedgerRow: a single Charge() bumps both
-// running totals AND inserts the matching charges row.
+// running totals AND inserts the matching ledger row.
 func TestBilling_ChargeWritesLedgerRow(t *testing.T) {
 	t.Parallel()
 	f := setupBilling(t)
@@ -183,7 +177,7 @@ func TestBilling_ChargeWritesLedgerRow(t *testing.T) {
 	capID := f.seedCapability(t, tenant, "agent-1")
 	f.charge(t, capID, limes.MustParseAmount("2.50"), "USD", "presign.put", "agent-1", tenant)
 
-	// capability_usage running total
+	// the capability's running total
 	usage, err := f.store.GetUsage(context.Background(), capID)
 	if err != nil {
 		t.Fatalf("get usage: %v", err)
@@ -195,7 +189,7 @@ func TestBilling_ChargeWritesLedgerRow(t *testing.T) {
 		t.Errorf("cap unit = %q, want USD", usage.UnitCode)
 	}
 
-	// tenant_budgets running total
+	// the tenant's running total
 	tb, err := f.store.GetTenantBudget(context.Background(), tenant)
 	if err != nil {
 		t.Fatalf("get tenant: %v", err)
@@ -204,28 +198,28 @@ func TestBilling_ChargeWritesLedgerRow(t *testing.T) {
 		t.Errorf("tenant spent = %v, want 2.50", tb.SpentAmount)
 	}
 
-	// charges ledger row
+	// the ledger row
 	var (
 		count    int64
-		amount   pgtype.Numeric
+		amount   limes.Nanos
 		unitCode string
 		op       string
 		actor    string
 	)
 	if err := f.h.PoolMigrate.QueryRow(context.Background(),
-		`SELECT COUNT(*), COALESCE(SUM(amount), 0),
+		`SELECT COUNT(*), COALESCE(SUM(amount), 0)::bigint,
 		        COALESCE(MAX(unit_code), ''),
 		        COALESCE(MAX(op), ''),
-		        COALESCE(MAX(actor_subject), '')
-		   FROM charges WHERE tenant_id = $1`, tenant,
+		        COALESCE(MAX(actor), '')
+		   FROM limes.charges WHERE tenant_id = $1`, tenant,
 	).Scan(&count, &amount, &unitCode, &op, &actor); err != nil {
 		t.Fatalf("ledger scan: %v", err)
 	}
 	if count != 1 {
 		t.Errorf("ledger rows = %d, want 1", count)
 	}
-	if got, err := pgmoney.NanosFromNumeric(amount); err != nil || got != limes.MustParseAmount("2.50") {
-		t.Errorf("ledger amount = %v (%v), want 2.50", got, err)
+	if amount != limes.MustParseAmount("2.50") {
+		t.Errorf("ledger amount = %v, want 2.50", amount)
 	}
 	if unitCode != "USD" || op != "presign.put" || actor != "agent-1" {
 		t.Errorf("ledger metadata = (%q, %q, %q)", unitCode, op, actor)
@@ -552,7 +546,7 @@ func TestBilling_MoneyIsExact(t *testing.T) {
 func TestBilling_AdminReadsAnotherTenantUnderRLS(t *testing.T) {
 	t.Parallel()
 	f := setupBilling(t)
-	appStore := capabilitypg.NewUsageStore(sqlc.New(f.h.PoolApp), f.h.PoolApp, nil)
+	appStore := newUsageStore(t, f.h.PoolApp)
 	handler := billingh.NewHandler(f.h.PoolApp, appStore, allowAuth{})
 
 	home := mustCreateTenant(t, f.h.PoolMigrate, "bil-rls-home")

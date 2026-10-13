@@ -21,6 +21,7 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
 
@@ -109,8 +110,12 @@ func startShared() error {
 	}
 	shared.base = cfg
 
-	// Migrate the template through the same goose + embedded FS the app uses,
-	// then close the connection so the template can be cloned.
+	// Migrate the template the way the app does — the limes schema, then
+	// goose over the embedded FS — and close the connection so the template
+	// can be cloned.
+	if err := postgres.MigrateLimes(ctx, cfg); err != nil {
+		return err
+	}
 	sqlDB := stdlib.OpenDB(*cfg)
 	if err := goose.SetDialect("postgres"); err != nil {
 		_ = sqlDB.Close()
@@ -175,5 +180,63 @@ func startPostgres(tb testing.TB) *pgxpool.Pool {
 		tb.Fatalf("open pool: %v", err)
 	}
 	tb.Cleanup(pool.Close)
+	return pool
+}
+
+// migrateLimes creates the limes schema on the database dsn names, as the
+// migrate step does before goose: migration 076 grants and triggers on its
+// tables.
+func migrateLimes(tb testing.TB, dsn string) {
+	tb.Helper()
+	cc, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		tb.Fatalf("parse dsn: %v", err)
+	}
+	if err := postgres.MigrateLimes(context.Background(), cc); err != nil {
+		tb.Fatalf("migrate limes: %v", err)
+	}
+}
+
+// emptyTemplateDB is the template a database with no Paladin schema is created
+// from, for a test that migrates it only part of the way.
+const emptyTemplateDB = "template0"
+
+// startPostgresAt returns a pool on a database of this test's own, migrated
+// only as far as version — the limes schema first, as the migrate step does —
+// for a test of a later migration over rows an earlier schema allowed.
+// Migrating the shared template down instead cannot cross 076, which drops
+// tables its Down does not recreate.
+func startPostgresAt(tb testing.TB, version int64) *pgxpool.Pool {
+	tb.Helper()
+	shared.once.Do(func() { shared.err = startShared() })
+	if shared.err != nil {
+		tb.Fatalf("shared postgres: %v", shared.err)
+	}
+	ctx := context.Background()
+	name := fmt.Sprintf("%s%d", testDBPrefix, shared.next.Add(1))
+	ident := pgx.Identifier{name}.Sanitize()
+	if _, err := shared.maintenance.Exec(ctx,
+		"CREATE DATABASE "+ident+" TEMPLATE "+pgx.Identifier{emptyTemplateDB}.Sanitize()); err != nil {
+		tb.Fatalf("create %s: %v", name, err)
+	}
+	tb.Cleanup(func() {
+		if _, err := shared.maintenance.Exec(context.Background(),
+			"DROP DATABASE IF EXISTS "+ident+" WITH (FORCE)"); err != nil {
+			tb.Errorf("drop %s: %v", name, err)
+		}
+	})
+	pool, err := poolOn(ctx, name)
+	if err != nil {
+		tb.Fatalf("open pool: %v", err)
+	}
+	tb.Cleanup(pool.Close)
+	if err := postgres.MigrateLimes(ctx, pool.Config().ConnConfig); err != nil {
+		tb.Fatalf("migrate limes: %v", err)
+	}
+	db := stdlib.OpenDBFromPool(pool)
+	defer func() { _ = db.Close() }()
+	if err := goose.UpTo(db, ".", version); err != nil {
+		tb.Fatalf("migrate up to %d: %v", version, err)
+	}
 	return pool
 }

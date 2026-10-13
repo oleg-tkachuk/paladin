@@ -44,7 +44,7 @@ var signalQueries = map[Signal]string{
 		GROUP BY 1`,
 	SignalCapabilitiesExpiring: `
 		SELECT c.tenant_id::text, count(*)
-		FROM capability_records c
+		FROM limes.capabilities c
 		WHERE ` + capabilityExpiringSQL + `
 		GROUP BY 1`,
 	SignalAPITokensExpiring: `

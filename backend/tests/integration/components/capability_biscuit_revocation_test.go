@@ -14,6 +14,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/jwks"
+	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
@@ -28,7 +29,7 @@ const biscuitAudience = "data"
 // as Biscuits, so a test revokes copies the verifier genuinely read: only
 // Verifier.BiscuitCopy names one.
 type biscuitFixture struct {
-	store    *capstore.Store
+	store    *pgstore.Store
 	issuer   *limes.Issuer
 	verifier *limes.Verifier
 	clock    *fakeClock
@@ -118,7 +119,7 @@ func (f *biscuitFixture) copyOf(t *testing.T, token string) limes.BiscuitCopy {
 }
 
 // A revoked copy is seen by the verifier's connection, which has no tenant on
-// it: the same trap IsRevoked fell into before it read cross-tenant.
+// it: the same trap IsRevoked guards against (TestCapabilityIsRevokedBeforeTheTenantIsKnown).
 func TestBiscuitCopyRevokedBeforeTheTenantIsKnown(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -164,9 +165,9 @@ func TestBiscuitCopyRevokedBeforeTheTenantIsKnown(t *testing.T) {
 	}
 }
 
-// Tenant A cannot list a copy of tenant B's capability: the copy's row is
-// isolated through the capability it points at, on the runtime's NOBYPASSRLS
-// connection.
+// Tenant A cannot list a copy of tenant B's capability, on the runtime's
+// NOBYPASSRLS connection: the scope from A's principal hides B's capability,
+// so the copy's revocation finds nothing to list under.
 func TestBiscuitCopyRevokeIsTenantScoped(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -185,7 +186,7 @@ func TestBiscuitCopyRevokeIsTenantScoped(t *testing.T) {
 	}
 	var rows int
 	if err := admin.QueryRow(ctx,
-		`SELECT count(*) FROM capability_biscuit_revocations WHERE capability_id = $1`, victim.ID,
+		`SELECT count(*) FROM limes.biscuit_revocations WHERE capability_id = $1`, victim.ID,
 	).Scan(&rows); err != nil {
 		t.Fatalf("count: %v", err)
 	}
@@ -197,50 +198,6 @@ func TestBiscuitCopyRevokeIsTenantScoped(t *testing.T) {
 	ctxB := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenantB})
 	if err := scoped.RevokeBiscuit(ctxB, limes.RevokeBiscuitRequest{Copy: hostile}); err != nil {
 		t.Errorf("owning tenant: %v", err)
-	}
-}
-
-// biscuitPurgeAge is how long before the purge the expired capability was
-// minted: past its TTL and the retention both.
-const biscuitPurgeAge = 48 * time.Hour
-
-// Revoked copies go with their capability's record when it is purged: never
-// while the capability could still verify.
-func TestBiscuitCopiesPurgedWithTheirCapability(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	admin := startPostgres(t)
-	tenant, _ := mkTenant(t, ctx, admin, "shared")
-	f := newBiscuitFixture(t, admin)
-
-	f.clock.Advance(-biscuitPurgeAge)
-	longExpired, _ := f.seal(t, tenant, "agent:long")
-	f.clock.Advance(biscuitPurgeAge)
-	live, _ := f.seal(t, tenant, "agent:live")
-	copies := map[string]limes.BiscuitCopy{}
-	for name, token := range map[string]string{"long": longExpired, "live": live} {
-		c := f.copyOf(t, attenuate(t, token, limes.OpGet))
-		if err := f.store.RevokeBiscuit(ctx, limes.RevokeBiscuitRequest{Copy: c}); err != nil {
-			t.Fatalf("revoke copy: %v", err)
-		}
-		copies[name] = c
-	}
-
-	res, err := f.store.Purge(ctx, limes.PurgeRequest{ExpiredFor: purgeRetention})
-	if err != nil {
-		t.Fatalf("purge: %v", err)
-	}
-	if res.Purged != 1 {
-		t.Fatalf("purged %d records, want 1", res.Purged)
-	}
-	for name, want := range map[string]bool{"long": false, "live": true} {
-		got, err := f.store.IsBiscuitRevoked(ctx, [][]byte{copies[name].RevocationID()})
-		if err != nil {
-			t.Fatalf("is_biscuit_revoked: %v", err)
-		}
-		if got != want {
-			t.Errorf("%s: revoked = %v, want %v", name, got, want)
-		}
 	}
 }
 

@@ -121,8 +121,8 @@ func (s *TenantBudgetServer) Set(
 	if pe := m.GetPeriodEnd(); pe != nil {
 		args.PeriodEnd = pe.AsTime()
 	}
-	// tenant_budgets carries the standard RLS policy, whose WITH CHECK pins
-	// writes to paladin_session_tenant_id(). A platform admin setting another
+	// limes.tenant_budgets carries row-level security, whose WITH CHECK pins
+	// writes to the tenant the request acts on. A platform admin setting another
 	// tenant's cap therefore has to act AS that tenant for the write, or
 	// Postgres refuses the insert with "new row violates row-level security
 	// policy" — which is what happened: creating a budget from the console
@@ -169,7 +169,8 @@ func (s *TenantBudgetServer) Summarize(
 	if m.GetUnlimitedOnly() && m.GetThresholdPct() > 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "unlimited_only is mutually exclusive with a non-zero threshold_pct")
 	}
-	page, err := s.Usage.ListTenantBudgets(ctx, budgetListRequest(m))
+	// Every tenant's row, which the platform.admin gate above allows.
+	page, err := s.Usage.ListTenantBudgets(auth.WithCrossTenantRead(ctx), budgetListRequest(m))
 	if err != nil {
 		if errors.Is(err, limes.ErrInvalidRequest) { // a page token the store cannot read
 			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
