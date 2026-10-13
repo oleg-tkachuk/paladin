@@ -1,7 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Timestamp } from "@bufbuild/protobuf/wkt";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -17,8 +26,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Sparkline } from "@/components/ui/Sparkline";
 import { Select } from "@/components/ui/Select";
+import { SpendChart } from "@/components/features/billing/SpendChart";
+import {
+  fillSeries,
+  type Granularity,
+} from "@/components/features/billing/spendSeries";
+import { useTenants } from "@/hooks/useTenants";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 import { useNotification } from "@/components/ui/Notification";
 import { useScope } from "@/context/ScopeContext";
 import { billingClient } from "@/lib/connect/client";
@@ -42,14 +57,18 @@ import type {
   GetTenantTimeSeriesResponse,
   TopEntry,
 } from "@/gen/paladin/admin/v1/billing_service_pb";
-import { formatCompactCount } from "@/lib/format/locale";
+import { formatCompactCount, formatDate } from "@/lib/format/locale";
 import { errorMessage } from "@/hooks/errorContract";
 
 // /billing — per-tenant capability spend dashboard. Reads the
 // charges ledger (`001_initial_schema.sql`) via BillingService:
 //
+//   - Tenant picker: the ledger is per tenant, and the console's own scope
+//     is usually the platform tenant, which is billed nothing — the page used
+//     to show its empty ledger with no way to look at anyone else's. The
+//     choice lives in ?tenant= so a link opens the same view.
 //   - Summary tile row (total, count, budget remaining)
-//   - Time-series chart (Sparkline over date_trunc'd buckets)
+//   - Time-series chart (bars on an even time axis, empty buckets included)
 //   - Three top-N breakdowns (capability_id, actor_subject, op)
 //
 // Period selector defaults to 30d (matches the backend default
@@ -57,7 +76,11 @@ import { errorMessage } from "@/hooks/errorContract";
 // two date inputs — no fancy range picker primitive exists yet
 // and that's fine for an MVP surface.
 
-type Granularity = "hour" | "day" | "week";
+// The query parameter that names the tenant on view.
+const TENANT_PARAM = "tenant";
+
+// Money's whole unit in nanos — the chart works in numbers of whole units.
+const NANOS_PER_UNIT = 1e9;
 
 // Total spend is shown to four decimals so a sub-cent charge does not read
 // as nothing.
@@ -174,7 +197,10 @@ function BreakdownCard({
                 label.length > 24
                   ? `${label.slice(0, 8)}…${label.slice(-6)}`
                   : label;
-              const spend = formatMoney(e.spent, { fallbackUnit });
+              const spend = formatMoney(e.spent, {
+                fallbackUnit,
+                fractionDigits: SPEND_DIGITS,
+              });
               const cell = linkBuilder ? (
                 <Link
                   href={linkBuilder(label)}
@@ -205,8 +231,47 @@ function BreakdownCard({
 }
 
 export default function BillingPage() {
-  const { tenantId } = useScope();
+  // useSearchParams requires a Suspense boundary under the Next.js app router.
+  return (
+    <Suspense>
+      <BillingView />
+    </Suspense>
+  );
+}
+
+function BillingView() {
+  const { tenantId: scopeTenantId } = useScope();
   const { showNotification } = useNotification();
+  const router = useRouter();
+  const search = useSearchParams();
+  const tenantId = search.get(TENANT_PARAM) || scopeTenantId || undefined;
+  // fetchTenants is state-only: a failed list comes back empty and the reason
+  // is the hook's `error`.
+  const { fetchTenants, error: tenantsError } = useTenants();
+
+  // Trashed tenants too: their charges stay on the ledger.
+  const tenantsQuery = useQuery({
+    queryKey: ["billingTenants"],
+    queryFn: () =>
+      fetchTenants("", "", { includeTrashed: true }).then((r) => r.tenants),
+  });
+  const tenantOptions = useMemo(
+    () =>
+      (tenantsQuery.data ?? [])
+        .map((t) => ({
+          value: t.tenantId,
+          label: `${t.displayName || t.slug}${t.deletedAt ? " · in trash" : ""}`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [tenantsQuery.data],
+  );
+  const tenantName =
+    tenantOptions.find((o) => o.value === tenantId)?.label ?? "this tenant";
+  const selectTenant = (id: string) => {
+    const next = new URLSearchParams(search.toString());
+    next.set(TENANT_PARAM, id);
+    router.replace(`?${next.toString()}`);
+  };
 
   // ── period state ────────────────────────────────────────────────────
   const [preset, setPreset] = useState<PresetKey>("30d");
@@ -321,10 +386,33 @@ export default function BillingPage() {
   // Each bucket carries its own unit; the summary's is the fallback.
   const tsUnit =
     buckets.find((b) => b.spent?.currencyCode)?.spent?.currencyCode || unit;
-  // The chart takes numbers; exactness ends at the display edge.
-  const tsValues = useMemo(
-    () => buckets.map((b) => moneyToNumber(b.spent)),
-    [buckets],
+  // The chart takes numbers; exactness ends at the display edge. The axis
+  // covers the whole period, so a quiet day reads as a gap, not as nothing.
+  const points = useMemo(() => {
+    const raw = buckets.flatMap((b) => {
+      const start = tsToDate(b.start);
+      return start
+        ? [
+            {
+              start,
+              value: moneyToNumber(b.spent),
+              chargeCount: Number(b.chargeCount),
+              spent: b.spent,
+            },
+          ]
+        : [];
+    });
+    const period = resolvePeriod(preset, customStart, customEnd);
+    const from = tsToDate(period.start) ?? raw[0]?.start;
+    const to = tsToDate(period.end) ?? raw.at(-1)?.start ?? new Date();
+    return from ? fillSeries(raw, from, to, granularity) : raw;
+  }, [buckets, preset, customStart, customEnd, granularity]);
+  const formatAxis = useCallback(
+    (v: number) =>
+      formatMoney(
+        moneyFromNanos(BigInt(Math.round(v * NANOS_PER_UNIT)), tsUnit),
+      ),
+    [tsUnit],
   );
   const peak = useMemo(() => {
     if (buckets.length === 0) return null;
@@ -333,31 +421,47 @@ export default function BillingPage() {
       buckets[0],
     );
   }, [buckets]);
-  // Summed in exact nanos; the per-bucket mean truncates below a nano.
+  // Summed in exact nanos; the per-bucket mean truncates below a nano. Over
+  // every bucket of the period, quiet ones included — averaging only the
+  // buckets that billed something overstated the typical day.
   const avgNanos = useMemo(() => {
-    if (buckets.length === 0) return 0n;
+    if (points.length === 0) return 0n;
     const sum = buckets.reduce((acc, b) => acc + moneyToNanos(b.spent), 0n);
-    return sum / BigInt(buckets.length);
-  }, [buckets]);
+    return sum / BigInt(points.length);
+  }, [buckets, points]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Billing"
-        description="Per-tenant capability spend over the charges ledger."
+        description="Capability spend from the charges ledger, one tenant at a time."
       />
 
-      {/* Period selector */}
-      <Card className="flex flex-wrap items-center gap-3 p-4">
-        <div className={T.label}>Period</div>
-        <div className="inline-flex rounded-md border bg-background p-0.5">
+      {/* Tenant, period and refresh: one row of controls above the data. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Select
+          aria-label="Tenant"
+          value={tenantId}
+          onChange={selectTenant}
+          options={tenantOptions}
+          placeholder="Choose a tenant"
+          // A long tenant name ellipsises inside the trigger instead of
+          // running under the period control beside it.
+          className="w-64 min-w-0 [&_[data-slot=select-value]]:truncate"
+        />
+        <div
+          role="group"
+          aria-label="Period"
+          className="inline-flex rounded-md border bg-background p-0.5"
+        >
           {PRESETS.map((p) => (
             <button
               key={p.key}
               type="button"
+              aria-pressed={preset === p.key}
               onClick={() => setPreset(p.key)}
               className={cn(
-                "px-3 py-1 text-sm transition-colors rounded",
+                "rounded px-3 py-1 text-sm transition-colors",
                 preset === p.key
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -368,7 +472,7 @@ export default function BillingPage() {
           ))}
         </div>
         {preset === "custom" && (
-          <>
+          <div className="flex items-center gap-2">
             <Input
               type="date"
               value={customStart}
@@ -384,14 +488,25 @@ export default function BillingPage() {
               className="w-40"
               aria-label="Period end"
             />
-          </>
+          </div>
         )}
-        <div className="ml-auto">
-          <Button variant="outline" size="sm" onClick={() => void fetchAll()}>
-            Refresh
-          </Button>
-        </div>
-      </Card>
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto"
+          onClick={() => void fetchAll()}
+        >
+          Refresh
+        </Button>
+      </div>
+      {tenantsError && (
+        <ListLoadError
+          variant="inline"
+          what="Tenants"
+          reason={tenantsError}
+          onRetry={() => void tenantsQuery.refetch()}
+        />
+      )}
 
       {loadError !== null && !summary ? (
         <Card className="space-y-2 p-8 text-center">
@@ -483,25 +598,45 @@ export default function BillingPage() {
               </div>
             </div>
             {!timeseries ? (
-              <Skeleton className="h-32" />
+              <Skeleton className="h-48" />
             ) : buckets.length === 0 ? (
               <div className={cn(T.helper, "py-8 text-center")}>
-                No data for the selected period.
+                No spend for {tenantName} in the selected period.
               </div>
             ) : (
               <>
-                <Sparkline data={tsValues} className="h-32" />
+                <SpendChart
+                  points={points}
+                  granularity={granularity}
+                  formatValue={formatAxis}
+                  formatPoint={(p) =>
+                    formatMoney(p.spent as typeof total, {
+                      fallbackUnit: tsUnit,
+                      fractionDigits: SPEND_DIGITS,
+                    })
+                  }
+                />
                 <div className={cn(T.hint, "flex flex-wrap gap-x-6 gap-y-1")}>
                   {peak && (
                     <span>
-                      Peak: {formatMoney(peak.spent, { fallbackUnit: tsUnit })}{" "}
+                      Peak:{" "}
+                      {formatMoney(peak.spent, {
+                        fallbackUnit: tsUnit,
+                        fractionDigits: SPEND_DIGITS,
+                      })}{" "}
                       on{" "}
-                      {tsToDate(peak.start)?.toISOString().slice(0, 10) ?? "—"}
+                      {(() => {
+                        const d = tsToDate(peak.start);
+                        return d ? formatDate(d) : "—";
+                      })()}
                     </span>
                   )}
                   <span>
-                    Average: {formatMoney(moneyFromNanos(avgNanos, tsUnit))} per{" "}
-                    {granularity}
+                    Average:{" "}
+                    {formatMoney(moneyFromNanos(avgNanos, tsUnit), {
+                      fractionDigits: SPEND_DIGITS,
+                    })}{" "}
+                    per {granularity}
                   </span>
                 </div>
               </>
@@ -514,9 +649,10 @@ export default function BillingPage() {
             <Card className="space-y-2 p-8 text-center">
               <h3 className={T.cardTitleProse}>No charges in this period</h3>
               <p className={cn(T.helper, "max-w-xl mx-auto")}>
-                No charges recorded for this tenant in the selected period.
-                Charges accumulate when capability tokens are used to call
-                billable handlers (presign / upload / etc.).
+                {tenantName} was not billed in the selected period. Charges
+                accumulate when its capability tokens call billable handlers
+                (presign, upload and the like). Choose another tenant or a
+                longer period above.
               </p>
             </Card>
           ) : (

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   formatCompactCount,
   formatCount,
+  formatDate,
   formatDateTime,
   formatTime,
   setDisplayTimeZone,
@@ -21,6 +22,10 @@ describe("display locale formatters", () => {
     expect(formatDateTime(d)).toBe("1 Oct 2026, 16:18:33");
   });
 
+  it("writes a day without its time", () => {
+    expect(formatDate(new Date(2026, 9, 1, 16, 18, 33))).toBe("1 Oct 2026");
+  });
+
   it("compacts only above 9,999", () => {
     expect(formatCompactCount(9999)).toBe("9,999");
     expect(formatCompactCount(12345)).toBe("12.3k");
@@ -37,6 +42,10 @@ describe("display time zone", () => {
     expect(setDisplayTimeZone("Asia/Tokyo")).toBe(true);
     expect(formatTime(noonUtc)).toBe("21:00:00");
     expect(formatDateTime(noonUtc)).toBe("1 Oct 2026, 21:00:00");
+    // The day follows the zone too: late on the 1st in UTC is the 2nd east.
+    expect(formatDate(new Date(Date.UTC(2026, 9, 1, 20, 0, 0)))).toBe(
+      "2 Oct 2026",
+    );
     setDisplayTimeZone("UTC");
     expect(formatTime(noonUtc)).toBe("12:00:00");
   });

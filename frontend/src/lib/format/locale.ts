@@ -29,6 +29,10 @@ function dateTimeFormats(timeZone: string | undefined) {
       timeStyle: "medium",
       timeZone,
     }),
+    date: new Intl.DateTimeFormat(DISPLAY_LOCALE, {
+      dateStyle: "medium",
+      timeZone,
+    }),
     instant: new Intl.DateTimeFormat(DISPLAY_LOCALE, {
       year: "numeric",
       month: "2-digit",
@@ -73,6 +77,11 @@ export function formatCount(n: number | bigint): string {
 /** A point in time, to the second: 1 Oct 2026, 16:18:33. */
 export function formatDateTime(d: Date): string {
   return dates.dateTime.format(d);
+}
+
+/** A calendar day: 1 Oct 2026. */
+export function formatDate(d: Date): string {
+  return dates.date.format(d);
 }
 
 /** A time of day, to the second: 16:18:33. */
