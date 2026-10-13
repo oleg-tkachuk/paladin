@@ -17,15 +17,30 @@
 //   - irreversible — confirmed via AlertDialog
 //
 // Retention: the server reports purge_eligible_at = deleted_at +
-// admin.tenants.trash_retention (default 30 days). Each row shows how long
-// the tenant has been in the trash and is marked "Past retention" once that
-// moment passes. Marked, never purged — there is no unattended purge.
+// admin.tenants.trash_retention (default 30 days). Each row shows when the
+// tenant was trashed and how much of that window it has used, and is marked
+// "Past retention" once the window lapses. Marked, never purged — there is no
+// unattended purge.
+//
+// A purge the database refuses — rows still reference the tenant, a held
+// object — is reported under the tenant's own row, where the operator is
+// looking, and stays there until the next attempt.
 
-import { useMemo, useState } from "react";
+// Oldest first: the tenant nearest its retention deadline leads.
+function byDeletedAt(a: Tenant, b: Tenant): number {
+  return (
+    Number(a.deletedAt?.seconds ?? 0n) - Number(b.deletedAt?.seconds ?? 0n)
+  );
+}
+
+const COLUMN_COUNT = 4;
+
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArchiveBoxIcon,
   ArrowUturnLeftIcon,
+  ExclamationTriangleIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 
@@ -55,9 +70,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useNotification } from "@/components/ui/Notification";
-import { TrashAge } from "@/components/features/tenants/TrashAge";
-import { IdentityField } from "@/components/IdentityField";
+import {
+  TrashRetention,
+  retentionDays,
+  trashAge,
+  trashedAgo,
+} from "@/components/features/tenants/TrashAge";
+import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
+import { formatDate, formatDateTime } from "@/lib/format/locale";
 import { T } from "@/lib/ui/typography";
+import { cn } from "@/lib/utils";
 import { errorMessage } from "@/hooks/errorContract";
 
 export default function TrashPage() {
@@ -68,6 +90,10 @@ export default function TrashPage() {
   const { fetchTenants, restoreTenant, purgeTenant, error } = useTenants();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [purgeTarget, setPurgeTarget] = useState<Tenant | null>(null);
+  // Why the last purge of a tenant was refused, by tenant id.
+  const [purgeRefusals, setPurgeRefusals] = useState<Record<string, string>>(
+    {},
+  );
   const { showNotification } = useNotification();
 
   // only_trashed=true → exclusively soft-deleted rows. We read the RETURN
@@ -80,7 +106,26 @@ export default function TrashPage() {
     queryFn: () =>
       fetchTenants("", "", { onlyTrashed: true }).then((res) => res.tenants),
   });
-  const trashed = useMemo(() => trashQuery.data ?? [], [trashQuery.data]);
+  const trashed = useMemo(
+    () => [...(trashQuery.data ?? [])].sort(byDeletedAt),
+    [trashQuery.data],
+  );
+  // Ages are read against the moment the list was fetched, so a row does not
+  // change under the operator between refreshes.
+  const fetchedAt = trashQuery.dataUpdatedAt;
+  const now = useMemo(() => new Date(fetchedAt || Date.now()), [fetchedAt]);
+  const pastRetention = useMemo(
+    () =>
+      trashed.filter(
+        (t) => trashAge(t.deletedAt, t.purgeEligibleAt, now)?.pastRetention,
+      ).length,
+    [trashed, now],
+  );
+  const windowDays = useMemo(() => {
+    const first = trashed[0];
+    const info = first && trashAge(first.deletedAt, first.purgeEligibleAt, now);
+    return info ? retentionDays(info) : null;
+  }, [trashed, now]);
   const loading = trashQuery.isFetching;
   // Mutations refetch instead of optimistically splicing local state.
   const reload = () => void trashQuery.refetch();
@@ -110,21 +155,18 @@ export default function TrashPage() {
     if (!purgeTarget) return;
     const t = purgeTarget;
     setBusyId(t.tenantId);
+    setPurgeTarget(null);
     try {
       await purgeTenant(t.tenantId);
+      setPurgeRefusals(({ [t.tenantId]: _, ...rest }) => rest);
       reload();
       showNotification({
         type: "success",
         title: "Tenant purged",
         message: `${t.slug || t.tenantId} permanently removed`,
       });
-      setPurgeTarget(null);
     } catch (err) {
-      showNotification({
-        type: "error",
-        title: "Purge failed",
-        message: errorMessage(err),
-      });
+      setPurgeRefusals((r) => ({ ...r, [t.tenantId]: errorMessage(err) }));
     } finally {
       setBusyId(null);
     }
@@ -139,7 +181,7 @@ export default function TrashPage() {
     <div className="space-y-6">
       <PageHeader
         title="Trash"
-        description="Soft-deleted tenants — recoverable until purged. Past retention marks a tenant for review; nothing is purged automatically."
+        description="Deleted tenants wait here until they are restored or purged. Nothing is purged automatically."
         showDefaultActions={false}
       />
 
@@ -173,67 +215,129 @@ export default function TrashPage() {
       )}
 
       {trashed.length > 0 && (
-        <Card className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tenant</TableHead>
-                <TableHead>In trash</TableHead>
-                <TableHead className="text-right @md:w-50">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {trashed.map((t) => {
-                const busy = busyId === t.tenantId;
-                return (
-                  <TableRow key={t.tenantId}>
-                    <TableCell className="whitespace-normal break-all">
-                      <div className="space-y-1">
-                        <p className="font-medium">{t.displayName || t.slug}</p>
-                        <IdentityField
-                          label="slug"
-                          value={t.slug}
-                          immutable
-                          labelWidth="w-12"
-                          className={T.helper}
-                        />
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <TrashAge
-                        deletedAt={t.deletedAt}
-                        purgeEligibleAt={t.purgeEligibleAt}
-                      />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void handleRestore(t)}
-                          disabled={busy}
-                        >
-                          <ArrowUturnLeftIcon className="size-3.5" />
-                          {busy ? "Restoring…" : "Restore"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:bg-destructive/10"
-                          onClick={() => setPurgeTarget(t)}
-                          disabled={busy}
-                          aria-label="Purge tenant"
-                        >
-                          <TrashIcon className="size-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </Card>
+        <div className="space-y-3">
+          <p className={cn(T.helper, "tabular-nums")}>
+            {trashed.length} {trashed.length === 1 ? "tenant" : "tenants"}
+            {" · "}
+            <span className={pastRetention > 0 ? "text-chart-3" : undefined}>
+              {pastRetention} past retention
+            </span>
+            {windowDays !== null && <> · {windowDays}-day retention</>}
+          </p>
+          <Card className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tenant</TableHead>
+                  <TableHead className="@md:w-40">Deleted</TableHead>
+                  <TableHead className="@md:w-56">Retention</TableHead>
+                  <TableHead className="@md:w-44">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {trashed.map((t) => {
+                  const busy = busyId === t.tenantId;
+                  const info = trashAge(t.deletedAt, t.purgeEligibleAt, now);
+                  const refusal = purgeRefusals[t.tenantId];
+                  const name = t.displayName || t.slug;
+                  return (
+                    <Fragment key={t.tenantId}>
+                      <TableRow className={refusal ? "border-b-0" : undefined}>
+                        <TableCell className="whitespace-normal">
+                          <p className="font-medium">{name}</p>
+                          {t.displayName && (
+                            <div className="mt-0.5 flex items-center gap-1">
+                              <span
+                                className={cn(
+                                  T.codeSmall,
+                                  "text-muted-foreground",
+                                )}
+                              >
+                                {t.slug}
+                              </span>
+                              <IdentifierCopy
+                                iconOnly
+                                value={t.slug}
+                                label="Slug"
+                                className="p-1 [&_svg]:size-3"
+                              />
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {info ? (
+                            <div title={formatDateTime(info.deleted)}>
+                              <p className="text-sm tabular-nums">
+                                {formatDate(info.deleted)}
+                              </p>
+                              <p className={T.hint}>{trashedAgo(info.days)}</p>
+                            </div>
+                          ) : (
+                            <span className={T.hint}>—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <TrashRetention
+                            deletedAt={t.deletedAt}
+                            purgeEligibleAt={t.purgeEligibleAt}
+                            now={now}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void handleRestore(t)}
+                              disabled={busy}
+                            >
+                              <ArrowUturnLeftIcon className="size-3.5" />
+                              {busy ? "Restoring…" : "Restore"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:bg-destructive/10"
+                              onClick={() => setPurgeTarget(t)}
+                              disabled={busy}
+                              aria-label={`Purge ${t.slug}`}
+                              title="Purge permanently"
+                            >
+                              <TrashIcon className="size-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {refusal && (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell
+                            colSpan={COLUMN_COUNT}
+                            className="pt-0 whitespace-normal"
+                          >
+                            <p
+                              role="alert"
+                              className="flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                            >
+                              <ExclamationTriangleIcon className="mt-px size-3.5 shrink-0" />
+                              <span>
+                                <span className="font-medium">
+                                  Purge refused.
+                                </span>{" "}
+                                {refusal}
+                              </span>
+                            </p>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Card>
+        </div>
       )}
 
       <AlertDialog

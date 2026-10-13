@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
-import { TrashAge, trashAge, trashAgeLabel } from "./TrashAge";
+import {
+  TrashRetention,
+  retentionDays,
+  retentionElapsed,
+  trashAge,
+  trashedAgo,
+} from "./TrashAge";
 
 const DAY = 24 * 60 * 60 * 1000;
 const deleted = new Date("2026-09-01T12:00:00Z");
@@ -50,46 +56,72 @@ describe("trashAge", () => {
     expect(info?.daysLeft).toBeNull();
   });
 
-  it("labels the age in days", () => {
-    expect(trashAgeLabel(0)).toBe("In trash less than a day");
-    expect(trashAgeLabel(1)).toBe("In trash 1 day");
-    expect(trashAgeLabel(12)).toBe("In trash 12 days");
+  it("says how long ago, in days", () => {
+    expect(trashedAgo(0)).toBe("today");
+    expect(trashedAgo(1)).toBe("1 day ago");
+    expect(trashedAgo(12)).toBe("12 days ago");
   });
 });
 
-describe("<TrashAge>", () => {
-  it("shows the age and the days left while within retention", () => {
+describe("retention window", () => {
+  const at = (days: number) => new Date(deleted.getTime() + days * DAY);
+  const info = (now: Date) => trashAge(deletedAt, purgeEligibleAt, now)!;
+
+  it("is the share of the window used, clamped to 0..1", () => {
+    expect(retentionElapsed(info(at(0)), at(0))).toBe(0);
+    expect(retentionElapsed(info(at(12)), at(12))).toBeCloseTo(0.4);
+    expect(retentionElapsed(info(at(30)), at(30))).toBe(1);
+    expect(retentionElapsed(info(at(45)), at(45))).toBe(1);
+  });
+
+  it("is the window's length in days", () => {
+    expect(retentionDays(info(at(1)))).toBe(30);
+  });
+
+  it("is unknown when the server reported no retention", () => {
+    const none = trashAge(deletedAt, undefined, at(1))!;
+    expect(retentionElapsed(none, at(1))).toBeNull();
+    expect(retentionDays(none)).toBeNull();
+  });
+});
+
+describe("<TrashRetention>", () => {
+  it("shows the days left and how much of the window is used", () => {
     render(
-      <TrashAge
+      <TrashRetention
         deletedAt={deletedAt}
         purgeEligibleAt={purgeEligibleAt}
         now={new Date(deleted.getTime() + 12 * DAY)}
       />,
     );
-    expect(screen.getByText("In trash 12 days")).toBeInTheDocument();
-    expect(screen.getByText("Purge-eligible in 18 days")).toBeInTheDocument();
+    expect(screen.getByText("18 days left")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "40",
+    );
     expect(screen.queryByText("Past retention")).not.toBeInTheDocument();
   });
 
-  it("marks a tenant past retention", () => {
+  it("marks a tenant past retention with a full bar", () => {
     render(
-      <TrashAge
+      <TrashRetention
         deletedAt={deletedAt}
         purgeEligibleAt={purgeEligibleAt}
         now={new Date(deleted.getTime() + 45 * DAY)}
       />,
     );
-    expect(screen.getByText("In trash 45 days")).toBeInTheDocument();
-    const badge = screen.getByText("Past retention");
-    expect(badge).toHaveAttribute(
-      "title",
-      expect.stringContaining("Nothing is purged automatically"),
+    expect(screen.getByText("Past retention")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "100",
     );
-    expect(screen.queryByText(/Purge-eligible in/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/left$/)).not.toBeInTheDocument();
   });
 
-  it("renders a dash without a deletion time", () => {
-    render(<TrashAge deletedAt={undefined} purgeEligibleAt={undefined} />);
-    expect(screen.getByText("—")).toBeInTheDocument();
+  it("says so when the server reported no retention", () => {
+    render(
+      <TrashRetention deletedAt={deletedAt} purgeEligibleAt={undefined} />,
+    );
+    expect(screen.getByText("No retention reported")).toBeInTheDocument();
   });
 });
