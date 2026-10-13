@@ -7,10 +7,12 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
 // BatchRestoreExecutor implements the BatchRestoreObjects operation type.
@@ -21,9 +23,11 @@ import (
 // Restore-specific failure modes worth flagging in the per-row reason:
 //
 //   - statemachine.ErrNotFound — row is missing OR not in DELETED
-//     state (can be RESTORE-into-already-AVAILABLE if a concurrent
-//     caller raced us). The per-row failure carries the original
-//     state-machine error message; callers branch on the string.
+//     state. An object read as AVAILABLE is not sent here at all: it
+//     is counted as already restored (see applied.go), so a reissued
+//     batch does not report its first run's work as failures. The
+//     per-row failure carries the original state-machine error
+//     message; callers branch on the string.
 //   - statemachine.ErrConflict — guarded by a UNIQUE partial index
 //     on (tenant, collection, key) WHERE state <> 'DELETED': if a
 //     live row has been created at the same key since the soft-delete,
@@ -38,14 +42,21 @@ import (
 type BatchRestoreExecutor struct {
 	Objects     objecth.Repository
 	Transitions Transitioner
+
+	// Logger records items found already restored and how the batch
+	// ended. Optional.
+	Logger *zap.Logger
 }
 
 // BatchRestoreResponse mirrors the BatchDelete shape.
 type BatchRestoreResponse struct {
-	Total     int                   `json:"total"`
-	Succeeded int                   `json:"succeeded"`
-	Failed    int                   `json:"failed"`
-	Failures  []BatchRestoreFailure `json:"failures,omitempty"`
+	Total     int `json:"total"`
+	Succeeded int `json:"succeeded"`
+	// AlreadyApplied counts the succeeded items this run found available
+	// already (see applied.go).
+	AlreadyApplied int                   `json:"already_applied,omitempty"`
+	Failed         int                   `json:"failed"`
+	Failures       []BatchRestoreFailure `json:"failures,omitempty"`
 }
 
 type BatchRestoreFailure struct {
@@ -87,12 +98,19 @@ func (e *BatchRestoreExecutor) Execute(ctx context.Context, op operationh.Operat
 		}
 		ReportProgress(ctx, i, resp.Total)
 
-		if _, found := byID[objectID]; !found {
+		obj, found := byID[objectID]
+		if !found {
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchRestoreFailure{
 				ObjectID: objectID.String(),
 				Reason:   "not found",
 			})
+			continue
+		}
+		if obj.State == statemachine.StateAvailable {
+			logAlreadyApplied(e.Logger, op, objectID, reasonAlreadyRestored)
+			resp.AlreadyApplied++
+			resp.Succeeded++
 			continue
 		}
 		if err := e.Transitions.Restore(ctx, objectID); err != nil {
@@ -106,6 +124,7 @@ func (e *BatchRestoreExecutor) Execute(ctx context.Context, op operationh.Operat
 		resp.Succeeded++
 	}
 	ReportProgress(ctx, resp.Total, resp.Total)
+	logBatchOutcome(e.Logger, op, resp.Total, resp.Succeeded, resp.AlreadyApplied, resp.Failed)
 
 	body, err := json.Marshal(resp)
 	if err != nil {

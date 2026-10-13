@@ -8,12 +8,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
 
@@ -65,15 +68,26 @@ type BatchCopyExecutor struct {
 	// object, and without the check a batch copy is the way around the
 	// destination's allowlist and size cap.
 	Limits uploadpolicy.Limits
+
+	// Logger records items found already copied and how the batch ended.
+	// Optional.
+	Logger *zap.Logger
 }
 
 // BatchCopyResponse mirrors the BatchDelete shape.
 type BatchCopyResponse struct {
-	Total     int                `json:"total"`
-	Succeeded int                `json:"succeeded"`
-	Failed    int                `json:"failed"`
-	Failures  []BatchCopyFailure `json:"failures,omitempty"`
+	Total     int `json:"total"`
+	Succeeded int `json:"succeeded"`
+	// AlreadyApplied counts the succeeded items whose destination this run
+	// found holding the source's content already (see applied.go).
+	AlreadyApplied int                `json:"already_applied,omitempty"`
+	Failed         int                `json:"failed"`
+	Failures       []BatchCopyFailure `json:"failures,omitempty"`
 }
+
+// errAlreadyCopied is copyOne's report that the destination key already
+// holds the source's content: success, with nothing written.
+var errAlreadyCopied = errors.New("already copied")
 
 type BatchCopyFailure struct {
 	ObjectID string `json:"object_id"`
@@ -160,7 +174,14 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 			})
 			continue
 		}
-		if err := e.copyOne(ctx, args, src, srcBackendID, srcBucket, dstBackendID, dstBucket, presignTTL); err != nil {
+		err := e.copyOne(ctx, args, src, srcBackendID, srcBucket, dstBackendID, dstBucket, presignTTL)
+		if errors.Is(err, errAlreadyCopied) {
+			logAlreadyApplied(e.Logger, op, srcID, reasonAlreadyCopied)
+			resp.AlreadyApplied++
+			resp.Succeeded++
+			continue
+		}
+		if err != nil {
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchCopyFailure{
 				ObjectID: srcID.String(),
@@ -171,6 +192,7 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 		resp.Succeeded++
 	}
 	ReportProgress(ctx, resp.Total, resp.Total)
+	logBatchOutcome(e.Logger, op, resp.Total, resp.Succeeded, resp.AlreadyApplied, resp.Failed)
 
 	body, err := json.Marshal(resp)
 	if err != nil {
@@ -206,6 +228,9 @@ func (e *BatchCopyExecutor) copyOne(
 		ExternalRef:      src.ExternalRef,
 		PresignExpiresAt: time.Now().Add(presignTTL),
 	})
+	if pgerr.Is(err, pgerr.UniqueViolation) {
+		return e.occupiedDestination(ctx, args, src, dstKey)
+	}
 	if err != nil {
 		return fmt.Errorf("create dst row: %w", err)
 	}
@@ -234,6 +259,47 @@ func (e *BatchCopyExecutor) copyOne(
 		return fmt.Errorf("promote dst: %w", err)
 	}
 	return nil
+}
+
+// occupiedDestination explains a destination key that already has a row.
+//
+// The usual cause is an earlier run of this same batch: its copy of src
+// landed, and the batch is being reissued because its worker died. That copy
+// carries src's etag, size and checksum — PromoteToAvailable writes exactly
+// those — so a live destination matching all three is src's content and counts
+// as copied. Anything else is a real conflict, named in the caller's terms
+// rather than as the database's unique violation.
+func (e *BatchCopyExecutor) occupiedDestination(ctx context.Context, args batchh.BatchCopyArgs, src objecth.Object, dstKey string) error {
+	dst, err := e.Objects.FindByPath(ctx, args.TenantID, args.DstCollection, dstKey)
+	// FindByPath hands back the query's own pgx.ErrNoRows, unmapped — unlike
+	// FindByName, which maps it to objecth.ErrObjectNotFound. Mapping one
+	// without the other moves this branch into the lookup error below.
+	if errors.Is(err, pgx.ErrNoRows) {
+		// FindByPath skips DELETED rows, and a trashed object still holds its
+		// key.
+		return fmt.Errorf("destination key %q is held by an object in the trash", dstKey)
+	}
+	if err != nil {
+		return fmt.Errorf("look up destination key %q: %w", dstKey, err)
+	}
+	switch dst.State {
+	case statemachine.StateAvailable:
+		if sameContent(src, dst) {
+			return errAlreadyCopied
+		}
+		return fmt.Errorf("destination key %q already holds a different object", dstKey)
+	case statemachine.StatePending:
+		// Possibly this batch's own copy, cut off before its promote; the row
+		// expires with its presign deadline and the reaper clears it.
+		return fmt.Errorf("destination key %q has a write in progress; retry once it settles", dstKey)
+	default:
+		return fmt.Errorf("destination key %q is held by a %s object", dstKey, dst.State)
+	}
+}
+
+// sameContent reports whether dst is a copy of src's bytes.
+func sameContent(src, dst objecth.Object) bool {
+	return dst.ETag == src.ETag && dst.SizeBytes == src.SizeBytes && dst.Checksum == src.Checksum
 }
 
 // copyMap returns a shallow copy so the destination row doesn't share

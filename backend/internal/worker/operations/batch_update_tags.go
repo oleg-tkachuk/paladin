@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -37,6 +38,10 @@ import (
 // to touch — the opposite of what the request said it would do.
 type BatchUpdateTagsExecutor struct {
 	Objects objecth.Repository
+
+	// Logger records how the batch ended. Optional. Tags need no
+	// already-applied check: writing the same tags again is the same result.
+	Logger *zap.Logger
 }
 
 // BatchUpdateTagsResponse mirrors the BatchDelete shape.
@@ -111,6 +116,7 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operationh.Ope
 		resp.Succeeded++
 	}
 	ReportProgress(ctx, resp.Total, resp.Total)
+	logBatchOutcome(e.Logger, op, resp.Total, resp.Succeeded, 0, resp.Failed)
 
 	body, err := json.Marshal(resp)
 	if err != nil {

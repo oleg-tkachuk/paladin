@@ -7,11 +7,13 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
 // BatchDeleteExecutor implements the BatchDelete operation type.
@@ -43,6 +45,10 @@ type BatchDeleteExecutor struct {
 	// avoid — a caller told its erasure succeeded while the objects sit in
 	// the trash.
 	Permanent PermanentDeleter
+
+	// Logger records items found already deleted and how the batch ended.
+	// Optional.
+	Logger *zap.Logger
 }
 
 // PermanentDeleter is the seam onto object.Handler.PermanentDelete. It is
@@ -58,10 +64,14 @@ type PermanentDeleter interface {
 // success. Polling clients render this directly. Counts + per-failure
 // detail; no per-success row to keep payload small at scale.
 type BatchDeleteResponse struct {
-	Total     int                  `json:"total"`
-	Succeeded int                  `json:"succeeded"`
-	Failed    int                  `json:"failed"`
-	Failures  []BatchDeleteFailure `json:"failures,omitempty"`
+	Total     int `json:"total"`
+	Succeeded int `json:"succeeded"`
+	// AlreadyApplied counts the succeeded items this run found deleted
+	// already — by an earlier run of the same batch, typically one whose
+	// worker died (see applied.go).
+	AlreadyApplied int                  `json:"already_applied,omitempty"`
+	Failed         int                  `json:"failed"`
+	Failures       []BatchDeleteFailure `json:"failures,omitempty"`
 }
 
 // BatchDeleteFailure carries one per-object error so a client can
@@ -130,6 +140,11 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 		}
 		var derr error
 		switch {
+		case !args.Permanent && obj.State == statemachine.StateDeleted:
+			// A soft delete wants the object in the trash, and it is there.
+			// A permanent delete still has work to do on a trashed object.
+			logAlreadyApplied(e.Logger, op, objectID, reasonAlreadyDeleted)
+			resp.AlreadyApplied++
 		case !args.Permanent && obj.PublicURL != "":
 			// A public collection has no trash: its bytes would stay served
 			// (ADR-0027).
@@ -152,6 +167,7 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 		resp.Succeeded++
 	}
 	ReportProgress(ctx, resp.Total, resp.Total)
+	logBatchOutcome(e.Logger, op, resp.Total, resp.Succeeded, resp.AlreadyApplied, resp.Failed)
 
 	body, err := json.Marshal(resp)
 	if err != nil {
