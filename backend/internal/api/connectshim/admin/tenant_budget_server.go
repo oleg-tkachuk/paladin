@@ -209,7 +209,7 @@ func (s *TenantBudgetServer) Summarize(
 // unlimited tenants, the tenants at or past a threshold, or all of them —
 // threshold_pct 0 lists every tenant, as it always has.
 func budgetListRequest(m *pb.TenantBudgetServiceSummarizeRequest) limes.ListTenantBudgetsRequest {
-	req := limes.ListTenantBudgetsRequest{Limit: int(m.GetLimit()), Cursor: m.GetPageToken()}
+	req := limes.ListTenantBudgetsRequest{Filter: limes.TenantBudgetsAll, Limit: int(m.GetLimit()), Cursor: m.GetPageToken()}
 	switch {
 	case m.GetUnlimitedOnly():
 		req.Filter = limes.TenantBudgetsUnlimited
