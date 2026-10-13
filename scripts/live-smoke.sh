@@ -109,11 +109,17 @@ cleanup() {
         fi
         if [[ -n "$bucket" ]]; then
             name="storageBackends/$BACKEND/buckets/$bucket"
-            admin_rpc BucketService/DeleteBucket "{\"name\":\"$name\",\"skipVersionCheck\":true,\"deleteOnBackend\":true}" >/dev/null
+            note "delete bucket" "$(admin_rpc BucketService/DeleteBucket "{\"name\":\"$name\",\"skipVersionCheck\":true,\"deleteOnBackend\":true}")"
+            gone=""
             for _ in $(seq "$DELETION_POLLS"); do
-                [[ "$(code_of "$(admin_rpc BucketService/GetBucket "{\"name\":\"$name\"}")")" == "$CODE_NOT_FOUND" ]] && break
+                if [[ "$(code_of "$(admin_rpc BucketService/GetBucket "{\"name\":\"$name\"}")")" == "$CODE_NOT_FOUND" ]]; then
+                    gone=1
+                    break
+                fi
                 sleep "$POLL_SECONDS"
             done
+            # A bucket left behind holds SeaweedFS volume slots for good; say so.
+            [[ -n "$gone" ]] || echo "!!! bucket $bucket still exists after its delete" >&2
         fi
         for c in "${capabilities[@]+"${capabilities[@]}"}"; do
             admin_rpc CapabilityService/Revoke "{\"id\":\"$c\",\"reason\":\"live smoke done\"}" >/dev/null
