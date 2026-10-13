@@ -103,6 +103,13 @@ WHERE v.tenant_id = $1 AND v.object_id = $2;
 -- paladin.bypass_governance_retention='on' (HardDeleteWithBypassTx does, the plain RPC
 -- path does not). A locked row matches 0 rows here, so the caller must
 -- pre-check to distinguish "locked" from "version mismatch".
+--
+-- The same statement records the erasure in erased_objects (migration 074),
+-- so a tombstone exists exactly when the row went; the row count is the
+-- tombstones written, one per deleted row. No ON CONFLICT: an id is erased
+-- once, and a duplicate would turn a delete that happened into a count of 0 —
+-- read as a version mismatch — where a unique violation says what it is.
+WITH erased AS (
 DELETE FROM objects
 WHERE objects.tenant_id = $1 AND objects.id = $2
   AND (sqlc.arg('expected_version')::bigint = 0
@@ -120,7 +127,11 @@ WHERE objects.tenant_id = $1 AND objects.id = $2
               OR (l.mode = 'GOVERNANCE' AND l.retain_until > now()
                   AND NOT COALESCE(
                       current_setting('paladin.bypass_governance_retention', true) = 'on',
-                      false))));
+                      false))))
+RETURNING objects.tenant_id, objects.id, objects.collection_id
+)
+INSERT INTO erased_objects (tenant_id, object_id, collection_id)
+SELECT tenant_id, id, collection_id FROM erased;
 
 -- name: ListHardDeletable :many
 -- Picks DELETED objects past the cooling-off window for the

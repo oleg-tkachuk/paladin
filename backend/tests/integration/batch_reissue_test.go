@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -144,5 +145,68 @@ func TestBatchExecutor_ReissuedCopy(t *testing.T) {
 	}
 	if r := resp.Failures[0].Reason; r != `destination key "b" already holds a different object` {
 		t.Errorf("reason = %q", r)
+	}
+}
+
+// permanentNoop stands in for the S3-backed PermanentDelete: these tests
+// reach it only for objects still present, and what they pin is how the
+// executor reads the tombstones a real erasure left.
+type permanentNoop struct{ calls int }
+
+func (p *permanentNoop) PermanentDelete(context.Context, uuid.UUID, objecth.Object, int64, bool) error {
+	p.calls++
+	return nil
+}
+
+func TestBatchExecutor_ReissuedPermanentDelete(t *testing.T) {
+	h := pgharness.Setup(t)
+	ctx := context.Background()
+	tenantID := mustCreateTenant(t, h.PoolMigrate, "batch-reerase")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "docs")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "other")
+	erased := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "a")
+	elsewhere := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "other", "b")
+	ghost := uuid.New()
+
+	repo := adapters.NewObjectRepo(sqlc.New(h.PoolMigrate), h.PoolMigrate)
+	for _, id := range []uuid.UUID{erased, elsewhere} {
+		if err := repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+			return repo.HardDeleteTx(ctx, tx, tenantID, id, 0)
+		}); err != nil {
+			t.Fatalf("hard delete %s: %v", id, err)
+		}
+	}
+
+	// The tombstone is scoped to the collection the object was in.
+	got, err := repo.ErasedIDs(ctx, tenantID, "docs", []uuid.UUID{erased, elsewhere, ghost})
+	if err != nil {
+		t.Fatalf("erased ids: %v", err)
+	}
+	if !got[erased] || got[elsewhere] || got[ghost] || len(got) != 1 {
+		t.Errorf("erased in docs = %v, want only %s", got, erased)
+	}
+
+	perm := &permanentNoop{}
+	exec := &operations.BatchDeleteExecutor{
+		Objects: repo, Transitions: statemachine.New(h.PoolMigrate), Permanent: perm, Erasures: repo,
+	}
+	args := batchh.BatchDeleteArgs{
+		TenantID: tenantID, Collection: "docs", ObjectIDs: []uuid.UUID{erased, elsewhere, ghost}, Permanent: true,
+	}
+	wantCounts(t, "reissue", decodeCounts(t, runExecutor(t, exec, tenantID, args)),
+		batchCounts{Total: 3, Succeeded: 1, AlreadyApplied: 1, Failed: 2})
+	if perm.calls != 0 {
+		t.Errorf("hard deletes = %d, want 0: nothing in the batch still exists", perm.calls)
+	}
+
+	// The tombstones go with the operations reaper's cutoff.
+	if n, err := repo.PurgeErasedBefore(ctx, time.Now().Add(-time.Hour)); err != nil || n != 0 {
+		t.Errorf("purge of an hour-old cutoff = %d, %v; want 0 — the tombstones are newer", n, err)
+	}
+	if n, err := repo.PurgeErasedBefore(ctx, time.Now().Add(time.Minute)); err != nil || n != 2 {
+		t.Errorf("purge past the tombstones = %d, %v; want 2", n, err)
+	}
+	if got, _ := repo.ErasedIDs(ctx, tenantID, "docs", []uuid.UUID{erased}); len(got) != 0 {
+		t.Errorf("tombstone survived its purge: %v", got)
 	}
 }

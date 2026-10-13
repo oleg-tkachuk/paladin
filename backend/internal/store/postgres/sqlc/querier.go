@@ -315,6 +315,12 @@ type Querier interface {
 	// paladin.bypass_governance_retention='on' (HardDeleteWithBypassTx does, the plain RPC
 	// path does not). A locked row matches 0 rows here, so the caller must
 	// pre-check to distinguish "locked" from "version mismatch".
+	//
+	// The same statement records the erasure in erased_objects (migration 074),
+	// so a tombstone exists exactly when the row went; the row count is the
+	// tombstones written, one per deleted row. No ON CONFLICT: an id is erased
+	// once, and a duplicate would turn a delete that happened into a count of 0 —
+	// read as a version mismatch — where a unique violation says what it is.
 	HardDeleteObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expectedVersion int64) (int64, error)
 	// Defence-in-depth variant of HardDeleteObject for the worker path.
 	// Re-asserts state='DELETED' AND resource_version=$2 in the WHERE
@@ -412,6 +418,10 @@ type Querier interface {
 	// Backend and bucket come back by NAME: the storage adapter addresses S3 by
 	// name, and the bucket still exists even though the object row does not.
 	ListDuePurges(ctx context.Context, limit int32) ([]ListDuePurgesRow, error)
+	// Tombstones for permanently deleted objects (migration 074).
+	// HardDeleteObject writes them, in the statement that removes the row.
+	// Which of these ids were permanently deleted from this collection.
+	ListErasedObjects(ctx context.Context, tenantID pgtype.UUID, name string, objectIds []pgtype.UUID) ([]pgtype.UUID, error)
 	// Cursor pagination with optional tenant filter. The after_id branch
 	// MUST be wrapped in `IS NULL OR …` — first-page callers pass
 	// uuid.Nil, which pgUUID() maps to SQL NULL, and a bare
@@ -647,6 +657,10 @@ type Querier interface {
 	// unambiguously belongs to the inner FROM scope — but sqlc's parser
 	// treats it as ambiguous and errors out at codegen.
 	PurgeAuditOlderThan(ctx context.Context, at pgtype.Timestamptz) (int64, error)
+	// Bounded batch (10k), drained in a loop like PurgeTerminalOperations, whose
+	// cutoff it shares: a tombstone serves a reissue of an operation, and is kept
+	// exactly as long as that operation is.
+	PurgeErasedObjects(ctx context.Context, erasedAt pgtype.Timestamptz) (int64, error)
 	// Bounded batch (10k). Worker loops until result is 0.
 	PurgeExpiredIdempotencyKeys(ctx context.Context) (int64, error)
 	// Bounded batch (10k). Worker loops until result is 0.

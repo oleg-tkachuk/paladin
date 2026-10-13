@@ -123,7 +123,7 @@ func TestBatchPermanentDeleteStillErasesTrashedObjects(t *testing.T) {
 	}}
 	perm := newFakePermanentDeleter()
 	log, logs := observedLogger()
-	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions(), Permanent: perm, Logger: log}
+	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions(), Permanent: perm, Erasures: noErasures{}, Logger: log}
 
 	body, err := e.Execute(context.Background(), mkOp(t, tenant,
 		batchh.BatchDeleteArgs{TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{trashed}, Permanent: true}))
@@ -332,4 +332,86 @@ func TestBatchUpdateTagsLogsItsOutcome(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 	wantOutcome(t, logs, 2, 1, 0, 1)
+}
+
+// A permanent delete reissued after its worker died finds the first run's
+// erasures missing; the tombstones tell them from ids that never existed.
+func TestBatchPermanentDeleteCountsErasedObjectsAsDone(t *testing.T) {
+	tenant := uuid.New()
+	erased, ghost, live := uuid.New(), uuid.New(), uuid.New()
+	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: live, Collection: "k", ResourceVersion: 1}}}
+	er := &fakeErasures{erased: map[uuid.UUID]bool{erased: true}}
+	perm := newFakePermanentDeleter()
+	log, logs := observedLogger()
+	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions(), Permanent: perm, Erasures: er, Logger: log}
+
+	body, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchDeleteArgs{
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{erased, ghost, live}, Permanent: true,
+	}))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	resp := decodeDeleteResp(t, body)
+	if resp.Succeeded != 2 || resp.AlreadyApplied != 1 || resp.Failed != 1 {
+		t.Fatalf("resp = %+v, want 2 succeeded (1 already applied) and the ghost failed", resp)
+	}
+	if resp.Failures[0].ObjectID != ghost.String() || resp.Failures[0].Reason != "not found" {
+		t.Errorf("failure = %+v, want the ghost not found", resp.Failures[0])
+	}
+	if len(er.askedFor) != 2 {
+		t.Errorf("asked about %v, want only the two missing ids", er.askedFor)
+	}
+	if got := appliedLogs(t, logs); got[erased.String()] != reasonAlreadyErased || len(got) != 1 {
+		t.Errorf("already-applied logs = %v, want only %s", got, erased)
+	}
+	wantOutcome(t, logs, 3, 2, 1, 1)
+}
+
+// A soft delete never erases, so it does not ask; nor does a permanent one
+// with nothing missing.
+func TestBatchDeleteAsksForErasuresOnlyWhenItCould(t *testing.T) {
+	tenant := uuid.New()
+	id := uuid.New()
+	for name, args := range map[string]batchh.BatchDeleteArgs{
+		"soft, id missing":           {TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{uuid.New()}},
+		"permanent, nothing missing": {TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{id}, Permanent: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			er := &fakeErasures{}
+			e := &BatchDeleteExecutor{
+				Objects:     &lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 1}}},
+				Transitions: newFakeTransitions(), Permanent: newFakePermanentDeleter(), Erasures: er,
+			}
+			if _, err := e.Execute(context.Background(), mkOp(t, tenant, args)); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if er.asked {
+				t.Error("asked for erasures")
+			}
+		})
+	}
+}
+
+func TestBatchPermanentDeleteFailsOnAnErasureLookupError(t *testing.T) {
+	tenant := uuid.New()
+	e := &BatchDeleteExecutor{
+		Objects: &lookupRepo{}, Transitions: newFakeTransitions(),
+		Permanent: newFakePermanentDeleter(), Erasures: &fakeErasures{err: errors.New("db down")},
+	}
+	_, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchDeleteArgs{
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{uuid.New()}, Permanent: true,
+	}))
+	if err == nil || !strings.Contains(err.Error(), "db down") {
+		t.Fatalf("err = %v, want the lookup error", err)
+	}
+}
+
+func TestBatchPermanentDeleteNeedsAnErasureLookup(t *testing.T) {
+	tenant := uuid.New()
+	e := &BatchDeleteExecutor{Objects: &lookupRepo{}, Transitions: newFakeTransitions(), Permanent: newFakePermanentDeleter()}
+	if _, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchDeleteArgs{
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{uuid.New()}, Permanent: true,
+	})); err == nil {
+		t.Fatal("a permanent batch with no erasure lookup was accepted")
+	}
 }

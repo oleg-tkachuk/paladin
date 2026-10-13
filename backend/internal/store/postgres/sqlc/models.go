@@ -503,6 +503,13 @@ type DpopSeenProof struct {
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
+type ErasedObject struct {
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	ObjectID     pgtype.UUID        `json:"object_id"`
+	CollectionID pgtype.UUID        `json:"collection_id"`
+	ErasedAt     pgtype.Timestamptz `json:"erased_at"`
+}
+
 type EventDelivery struct {
 	ID             pgtype.UUID        `json:"id"`
 	TenantID       pgtype.UUID        `json:"tenant_id"`

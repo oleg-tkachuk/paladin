@@ -592,16 +592,13 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   "stream the audit log", which is a general capability and a different item.
   It is not a special case of tenant events, and should not be built as one.
 
-### Two gaps left in reissuing a reclaimed batch
+### A reissued batch copy does not adopt its dead run's pending copy
 
 - **Status:** Deferred.
 - **Reason:** A batch failed with `WORKER_LOST` is recovered by reissuing it,
-  and the copy, soft-delete and restore executors count what the dead run
-  already applied as succeeded (`already_applied`); tags are simply written
-  again, which is the same result. Two things stay short of that:
-  - **Permanent delete.** An object the dead run erased no longer exists, so
-    the reissue reports it as `not found` — the same answer as an id that never
-    existed. Telling them apart needs a record of what the operation erased.
+  and every executor counts what the dead run already applied as succeeded
+  (`already_applied`); a permanent delete reads the tombstones its erasures
+  left (`erased_objects`). One case stays short of that:
   - **A copy cut off before its promote.** Its destination row is left
     PENDING, and the reissue reports that key as "a write in progress" until
     the row's presign deadline (`limits.presign.put_ttl`) passes and the reaper
@@ -609,12 +606,8 @@ measures a chain that is about to change. Owner decision 2026-10-12.
     operation created it, so it cannot be told from a live upload to the same
     key.
 - **Definition of Done:**
-  - A reissued permanent delete reports the objects its earlier run erased as
-    already applied.
   - A reissued copy completes a destination its own earlier run left PENDING.
-- **Blockers:** none technical. Both need a decision on where an operation
-  records the objects it touched — per-item rows, or a column on the object —
-  which one design should answer for both.
+- **Blockers:** none technical.
 
 ---
 

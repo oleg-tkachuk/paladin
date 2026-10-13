@@ -689,6 +689,34 @@ func hardDeleteObject(ctx context.Context, q *sqlc.Queries, tenantID, objectID u
 	return nil
 }
 
+// ErasedIDs reports which of ids were permanently deleted from the tenant's
+// collection, within the tombstones' retention. Read from the primary, not through the configured
+// reader: the erasure it looks for may be seconds old.
+func (r *ObjectRepo) ErasedIDs(ctx context.Context, tenantID uuid.UUID, collection string, ids []uuid.UUID) (map[uuid.UUID]bool, error) {
+	pgIDs := make([]pgtype.UUID, len(ids))
+	for i, id := range ids {
+		pgIDs[i] = pgUUID(id)
+	}
+	rows, err := r.q.ListErasedObjects(ctx, pgUUID(tenantID), collection, pgIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list erased objects: %w", err)
+	}
+	out := make(map[uuid.UUID]bool, len(rows))
+	for _, id := range rows {
+		out[uuidFrom(id)] = true
+	}
+	return out, nil
+}
+
+// PurgeErasedBefore drops one bounded batch of tombstones older than cutoff.
+func (r *ObjectRepo) PurgeErasedBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	n, err := r.q.PurgeErasedObjects(ctx, pgTS(cutoff))
+	if err != nil {
+		return 0, fmt.Errorf("purge erased objects: %w", err)
+	}
+	return n, nil
+}
+
 // LiveCollision reports whether a non-DELETED row exists at (tenant, collection, key).
 func (r *ObjectRepo) LiveCollision(ctx context.Context, tenantID uuid.UUID, collection, key string) (bool, error) {
 	exists, err := r.q.CheckLiveCollision(ctx, pgUUID(tenantID), collection, key)

@@ -18,6 +18,7 @@ import (
 const (
 	reasonAlreadyCopied   = "destination already holds the source's content"
 	reasonAlreadyDeleted  = "object is already in the trash"
+	reasonAlreadyErased   = "object was already permanently deleted"
 	reasonAlreadyRestored = "object is already available"
 )
 

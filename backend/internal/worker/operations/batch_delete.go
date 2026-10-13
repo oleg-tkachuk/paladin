@@ -46,6 +46,12 @@ type BatchDeleteExecutor struct {
 	// the trash.
 	Permanent PermanentDeleter
 
+	// Erasures tells an object a permanent delete already erased from one
+	// that never existed — both are missing rows. Required with Permanent: a
+	// reissued permanent delete would otherwise report its first run's
+	// erasures as failures.
+	Erasures ErasureLookup
+
 	// Logger records items found already deleted and how the batch ended.
 	// Optional.
 	Logger *zap.Logger
@@ -58,6 +64,12 @@ type BatchDeleteExecutor struct {
 // one.
 type PermanentDeleter interface {
 	PermanentDelete(ctx context.Context, tenantID uuid.UUID, obj objecth.Object, rv int64, bypassGovernance bool) error
+}
+
+// ErasureLookup is the seam onto the tombstones a permanent delete leaves
+// (erased_objects).
+type ErasureLookup interface {
+	ErasedIDs(ctx context.Context, tenantID uuid.UUID, collection string, ids []uuid.UUID) (map[uuid.UUID]bool, error)
 }
 
 // BatchDeleteResponse is what we marshal into operation.Response on
@@ -103,8 +115,8 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 			args.TenantID, op.TenantID)
 	}
 
-	if args.Permanent && e.Permanent == nil {
-		return nil, errors.New("BatchDeleteExecutor: permanent delete requested but no PermanentDeleter wired")
+	if args.Permanent && (e.Permanent == nil || e.Erasures == nil) {
+		return nil, errors.New("BatchDeleteExecutor: permanent delete requested but no PermanentDeleter / ErasureLookup wired")
 	}
 
 	resp := BatchDeleteResponse{Total: len(args.ObjectIDs)}
@@ -118,6 +130,10 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 	if err != nil {
 		return nil, fmt.Errorf("batch lookup: %w", err)
 	}
+	erased, err := e.erasedAmong(ctx, args, byID)
+	if err != nil {
+		return nil, err
+	}
 
 	for i, objectID := range args.ObjectIDs {
 		if err := ctx.Err(); err != nil {
@@ -130,6 +146,12 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 		ReportProgress(ctx, i, resp.Total)
 
 		obj, found := byID[objectID]
+		if !found && erased[objectID] {
+			logAlreadyApplied(e.Logger, op, objectID, reasonAlreadyErased)
+			resp.AlreadyApplied++
+			resp.Succeeded++
+			continue
+		}
 		if !found {
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchDeleteFailure{
@@ -174,4 +196,27 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 		return nil, fmt.Errorf("encode response: %w", err)
 	}
 	return body, nil
+}
+
+// erasedAmong reads the tombstones of the batch's missing ids. Only a
+// permanent delete asks: a soft delete never erases, so for it a missing id is
+// simply not found.
+func (e *BatchDeleteExecutor) erasedAmong(ctx context.Context, args batchh.BatchDeleteArgs, byID map[uuid.UUID]objecth.Object) (map[uuid.UUID]bool, error) {
+	if !args.Permanent {
+		return nil, nil
+	}
+	var missing []uuid.UUID
+	for _, id := range args.ObjectIDs {
+		if _, found := byID[id]; !found {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return nil, nil
+	}
+	erased, err := e.Erasures.ErasedIDs(ctx, args.TenantID, args.Collection, missing)
+	if err != nil {
+		return nil, fmt.Errorf("erasure lookup: %w", err)
+	}
+	return erased, nil
 }
