@@ -22,7 +22,7 @@ counter is the only signal.
   minute, written through the RLS runtime pool.
 - `paladin_api_token_ratelimit_fail_open_total` — the per-token limiter
   (`internal/auth/api_token_interceptor.go`), for API tokens created with a
-  `rate_limit_rpm` above zero. Its buckets are `api_token_rate_buckets`.
+  `rate_limit_rpm` above zero; a cap of 0 is refused without it. Its buckets are `api_token_rate_buckets`.
 
 Both counters exist only after a fail-open has happened once; the rule reads
 an absent one as zero.

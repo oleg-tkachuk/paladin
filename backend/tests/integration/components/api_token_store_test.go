@@ -39,7 +39,7 @@ func mkToken(tenant uuid.UUID, name string, expires time.Time) api_token.Token {
 		Roles:        []string{"tenant.admin"},
 		Audience:     []string{"data", "admin"},
 		ExpiresAt:    expires,
-		RateLimitRPM: 120,
+		RateLimitRPM: new(int(120)),
 		CreatedBy:    "user:seed",
 		CreatedAt:    now,
 	}
@@ -88,8 +88,9 @@ func TestAPITokenRoundTrip(t *testing.T) {
 			if got.Name != want.Name || got.Prefix != want.Prefix || got.CreatedBy != want.CreatedBy {
 				t.Errorf("strings: got %+v", got)
 			}
-			if got.RateLimitRPM != want.RateLimitRPM {
-				t.Errorf("rate_limit_rpm: got %d want %d", got.RateLimitRPM, want.RateLimitRPM)
+			if (got.RateLimitRPM == nil) != (want.RateLimitRPM == nil) ||
+				(got.RateLimitRPM != nil && *got.RateLimitRPM != *want.RateLimitRPM) {
+				t.Errorf("rate_limit_rpm: got %v want %v", got.RateLimitRPM, want.RateLimitRPM)
 			}
 			assertStrings(t, "scopes", got.Scopes, want.Scopes)
 			assertStrings(t, "roles", got.Roles, want.Roles)

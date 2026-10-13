@@ -64,7 +64,7 @@ type IssueRequest struct {
 	Roles        []string
 	Audience     []string
 	TTL          time.Duration // 0 → MaxTTL
-	RateLimitRPM int           // 0 → unlimited
+	RateLimitRPM *int          // nil → no cap; 0 admits no request
 	CreatedBy    string
 }
 
@@ -94,7 +94,7 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Token, error) {
 		return nil, err
 	}
 
-	if req.RateLimitRPM < 0 {
+	if req.RateLimitRPM != nil && *req.RateLimitRPM < 0 {
 		return nil, errors.New("api_token: RateLimitRPM must be >= 0")
 	}
 

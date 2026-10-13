@@ -24,7 +24,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_api_token_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CihwYWxhZGluL2FkbWluL3YxL2FwaV90b2tlbl9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIqQDCghBUElUb2tlbhIRCgRuYW1lGA4gASgJQgPgQQgSDwoCaWQYASABKAlCA+BBAxIWCgl0ZW5hbnRfaWQYAiABKAlCA+BBBRIUCgxkaXNwbGF5X25hbWUYAyABKAkSEwoGcHJlZml4GAQgASgJQgPgQQMSDgoGc2NvcGVzGAUgAygJEhAKCGF1ZGllbmNlGAYgAygJEg0KBXJvbGVzGA0gAygJEjMKCmV4cGlyZXNfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKcmV2b2tlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxI1CgxsYXN0X3VzZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKY3JlYXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxISCgpjcmVhdGVkX2J5GAsgASgJEhYKDnJhdGVfbGltaXRfcnBtGAwgASgFItABChxBUElUb2tlblNlcnZpY2VDcmVhdGVSZXF1ZXN0EhcKBnBhcmVudBgBIAEoCUIHukgEcgIQARIdCgxkaXNwbGF5X25hbWUYAiABKAlCB7pIBHICEAESHAoLdHRsX3NlY29uZHMYAyABKANCB7pIBCICKAASDgoGc2NvcGVzGAQgAygJEhoKCGF1ZGllbmNlGAUgAygJQgi6SAWSAQIIARIfCg5yYXRlX2xpbWl0X3JwbRgGIAEoBUIHukgEGgIoABINCgVyb2xlcxgHIAMoCSJiCh1BUElUb2tlblNlcnZpY2VDcmVhdGVSZXNwb25zZRItCglhcGlfdG9rZW4YASABKAsyGi5wYWxhZGluLmFkbWluLnYxLkFQSVRva2VuEhIKBXRva2VuGAIgASgJQgOAAQEiNQocQVBJVG9rZW5TZXJ2aWNlUmV2b2tlUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIh8KHUFQSVRva2VuU2VydmljZVJldm9rZVJlc3BvbnNlIpcBChpBUElUb2tlblNlcnZpY2VMaXN0UmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESFwoPaW5jbHVkZV9yZXZva2VkGAIgASgIEhcKD2luY2x1ZGVfZXhwaXJlZBgDIAEoCBIaCglwYWdlX3NpemUYBCABKAVCB7pIBBoCKAASEgoKcGFnZV90b2tlbhgFIAEoCSJmChtBUElUb2tlblNlcnZpY2VMaXN0UmVzcG9uc2USLgoKYXBpX3Rva2VucxgBIAMoCzIaLnBhbGFkaW4uYWRtaW4udjEuQVBJVG9rZW4SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIh8KHUFQSVRva2VuU2VydmljZUdldFNlbGZSZXF1ZXN0Ik8KHkFQSVRva2VuU2VydmljZUdldFNlbGZSZXNwb25zZRItCglhcGlfdG9rZW4YASABKAsyGi5wYWxhZGluLmFkbWluLnYxLkFQSVRva2VuIjcKHkFQSVRva2VuU2VydmljZUdldFVzYWdlUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIv8BCh9BUElUb2tlblNlcnZpY2VHZXRVc2FnZVJlc3BvbnNlEgwKBG5hbWUYASABKAkSEQoJbGltaXRfcnBtGAIgASgFEhwKFGN1cnJlbnRfYnVja2V0X2NvdW50GAMgASgDEh0KFXByZXZpb3VzX2J1Y2tldF9jb3VudBgEIAEoAxIWCg53ZWlnaHRlZF9jb3VudBgFIAEoARI0ChB3aW5kb3dfcmVzZXRzX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3VzZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wMr8ECg9BUElUb2tlblNlcnZpY2USaQoGQ3JlYXRlEi4ucGFsYWRpbi5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VDcmVhdGVSZXF1ZXN0Gi8ucGFsYWRpbi5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VDcmVhdGVSZXNwb25zZRJuCgZSZXZva2USLi5wYWxhZGluLmFkbWluLnYxLkFQSVRva2VuU2VydmljZVJldm9rZVJlcXVlc3QaLy5wYWxhZGluLmFkbWluLnYxLkFQSVRva2VuU2VydmljZVJldm9rZVJlc3BvbnNlIgOQAgISaAoETGlzdBIsLnBhbGFkaW4uYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlTGlzdFJlcXVlc3QaLS5wYWxhZGluLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUxpc3RSZXNwb25zZSIDkAIBEnEKB0dldFNlbGYSLy5wYWxhZGluLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUdldFNlbGZSZXF1ZXN0GjAucGFsYWRpbi5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VHZXRTZWxmUmVzcG9uc2UiA5ACARJ0CghHZXRVc2FnZRIwLnBhbGFkaW4uYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlR2V0VXNhZ2VSZXF1ZXN0GjEucGFsYWRpbi5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VHZXRVc2FnZVJlc3BvbnNlIgOQAgFCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
+    "CihwYWxhZGluL2FkbWluL3YxL2FwaV90b2tlbl9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIs4DCghBUElUb2tlbhIRCgRuYW1lGA4gASgJQgPgQQgSDwoCaWQYASABKAlCA+BBAxIWCgl0ZW5hbnRfaWQYAiABKAlCA+BBBRIUCgxkaXNwbGF5X25hbWUYAyABKAkSEwoGcHJlZml4GAQgASgJQgPgQQMSDgoGc2NvcGVzGAUgAygJEhAKCGF1ZGllbmNlGAYgAygJEg0KBXJvbGVzGA0gAygJEjMKCmV4cGlyZXNfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKcmV2b2tlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxI1CgxsYXN0X3VzZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKY3JlYXRlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxISCgpjcmVhdGVkX2J5GAsgASgJEhgKDnJhdGVfbGltaXRfcnBtGAwgASgFSAASGAoOdW5saW1pdGVkX3JhdGUYDyABKAhIAEIMCgpyYXRlX2xpbWl0IoMCChxBUElUb2tlblNlcnZpY2VDcmVhdGVSZXF1ZXN0EhcKBnBhcmVudBgBIAEoCUIHukgEcgIQARIdCgxkaXNwbGF5X25hbWUYAiABKAlCB7pIBHICEAESHAoLdHRsX3NlY29uZHMYAyABKANCB7pIBCICKAASDgoGc2NvcGVzGAQgAygJEhoKCGF1ZGllbmNlGAUgAygJQgi6SAWSAQIIARIhCg5yYXRlX2xpbWl0X3JwbRgGIAEoBUIHukgEGgIoAEgAEiEKDnVubGltaXRlZF9yYXRlGAggASgIQge6SARqAggBSAASDQoFcm9sZXMYByADKAlCDAoKcmF0ZV9saW1pdCJiCh1BUElUb2tlblNlcnZpY2VDcmVhdGVSZXNwb25zZRItCglhcGlfdG9rZW4YASABKAsyGi5wYWxhZGluLmFkbWluLnYxLkFQSVRva2VuEhIKBXRva2VuGAIgASgJQgOAAQEiNQocQVBJVG9rZW5TZXJ2aWNlUmV2b2tlUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIh8KHUFQSVRva2VuU2VydmljZVJldm9rZVJlc3BvbnNlIpcBChpBUElUb2tlblNlcnZpY2VMaXN0UmVxdWVzdBIXCgZwYXJlbnQYASABKAlCB7pIBHICEAESFwoPaW5jbHVkZV9yZXZva2VkGAIgASgIEhcKD2luY2x1ZGVfZXhwaXJlZBgDIAEoCBIaCglwYWdlX3NpemUYBCABKAVCB7pIBBoCKAASEgoKcGFnZV90b2tlbhgFIAEoCSJmChtBUElUb2tlblNlcnZpY2VMaXN0UmVzcG9uc2USLgoKYXBpX3Rva2VucxgBIAMoCzIaLnBhbGFkaW4uYWRtaW4udjEuQVBJVG9rZW4SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIh8KHUFQSVRva2VuU2VydmljZUdldFNlbGZSZXF1ZXN0Ik8KHkFQSVRva2VuU2VydmljZUdldFNlbGZSZXNwb25zZRItCglhcGlfdG9rZW4YASABKAsyGi5wYWxhZGluLmFkbWluLnYxLkFQSVRva2VuIjcKHkFQSVRva2VuU2VydmljZUdldFVzYWdlUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIpICCh9BUElUb2tlblNlcnZpY2VHZXRVc2FnZVJlc3BvbnNlEgwKBG5hbWUYASABKAkSFgoJbGltaXRfcnBtGAIgASgFSACIAQESHAoUY3VycmVudF9idWNrZXRfY291bnQYAyABKAMSHQoVcHJldmlvdXNfYnVja2V0X2NvdW50GAQgASgDEhYKDndlaWdodGVkX2NvdW50GAUgASgBEjQKEHdpbmRvd19yZXNldHNfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3RfdXNlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCDAoKX2xpbWl0X3JwbTK/BAoPQVBJVG9rZW5TZXJ2aWNlEmkKBkNyZWF0ZRIuLnBhbGFkaW4uYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlQ3JlYXRlUmVxdWVzdBovLnBhbGFkaW4uYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlQ3JlYXRlUmVzcG9uc2USbgoGUmV2b2tlEi4ucGFsYWRpbi5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VSZXZva2VSZXF1ZXN0Gi8ucGFsYWRpbi5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VSZXZva2VSZXNwb25zZSIDkAICEmgKBExpc3QSLC5wYWxhZGluLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUxpc3RSZXF1ZXN0Gi0ucGFsYWRpbi5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VMaXN0UmVzcG9uc2UiA5ACARJxCgdHZXRTZWxmEi8ucGFsYWRpbi5hZG1pbi52MS5BUElUb2tlblNlcnZpY2VHZXRTZWxmUmVxdWVzdBowLnBhbGFkaW4uYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlR2V0U2VsZlJlc3BvbnNlIgOQAgESdAoIR2V0VXNhZ2USMC5wYWxhZGluLmFkbWluLnYxLkFQSVRva2VuU2VydmljZUdldFVzYWdlUmVxdWVzdBoxLnBhbGFkaW4uYWRtaW4udjEuQVBJVG9rZW5TZXJ2aWNlR2V0VXNhZ2VSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
     [
       file_buf_validate_validate,
       file_google_protobuf_timestamp,
@@ -125,13 +125,28 @@ export type APIToken = Message<"paladin.admin.v1.APIToken"> & {
   createdBy: string;
 
   /**
-   * rate_limit_rpm caps the bearer's request rate. 0 = unlimited.
-   * Enforced by APITokenInterceptor via a sliding-window counter
-   * when the value is positive.
+   * rate_limit is the bearer's request rate: a cap in requests per minute,
+   * enforced by APITokenInterceptor with a sliding-window counter, where 0
+   * admits no request; or no cap at all.
    *
-   * @generated from field: int32 rate_limit_rpm = 12;
+   * @generated from oneof paladin.admin.v1.APIToken.rate_limit
    */
-  rateLimitRpm: number;
+  rateLimit:
+    | {
+        /**
+         * @generated from field: int32 rate_limit_rpm = 12;
+         */
+        value: number;
+        case: "rateLimitRpm";
+      }
+    | {
+        /**
+         * @generated from field: bool unlimited_rate = 15;
+         */
+        value: boolean;
+        case: "unlimitedRate";
+      }
+    | { case: undefined; value?: undefined };
 };
 
 /**
@@ -183,14 +198,33 @@ export type APITokenServiceCreateRequest =
     audience: string[];
 
     /**
-     * rate_limit_rpm sets the per-token rate cap. 0 = unlimited.
-     * Recommended for any token whose blast radius matters: leaked
-     * tokens with a 60 rpm cap can do far less harm before discovery
-     * than uncapped equivalents.
+     * rate_limit is the per-token request rate. Required: a request that sets
+     * neither arm is refused. A cap is recommended for any token whose blast
+     * radius matters: a leaked token capped at 60 rpm does far less harm
+     * before discovery than an uncapped one.
      *
-     * @generated from field: int32 rate_limit_rpm = 6;
+     * @generated from oneof paladin.admin.v1.APITokenServiceCreateRequest.rate_limit
      */
-    rateLimitRpm: number;
+    rateLimit:
+      | {
+          /**
+           * rate_limit_rpm caps requests per minute; 0 admits none.
+           *
+           * @generated from field: int32 rate_limit_rpm = 6;
+           */
+          value: number;
+          case: "rateLimitRpm";
+        }
+      | {
+          /**
+           * unlimited_rate sets no cap. Only true is meaningful.
+           *
+           * @generated from field: bool unlimited_rate = 8;
+           */
+          value: boolean;
+          case: "unlimitedRate";
+        }
+      | { case: undefined; value?: undefined };
 
     /**
      * roles the token's principal carries, so a machine caller can satisfy a
@@ -416,13 +450,13 @@ export type APITokenServiceGetUsageResponse =
     name: string;
 
     /**
-     * limit_rpm mirrors api_tokens.rate_limit_rpm. 0 = unlimited; the
+     * limit_rpm mirrors the token's cap; absent when it has none, and the
      * remaining counters are still returned so UIs can render
-     * "uncapped, current rate: N rpm".
+     * "uncapped, current rate: N rpm". 0 admits no request.
      *
-     * @generated from field: int32 limit_rpm = 2;
+     * @generated from field: optional int32 limit_rpm = 2;
      */
-    limitRpm: number;
+    limitRpm?: number | undefined;
 
     /**
      * current_bucket_count is the raw counter for the in-progress

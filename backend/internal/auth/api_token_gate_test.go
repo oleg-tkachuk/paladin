@@ -198,7 +198,7 @@ func TestAPITokenGate_RateLimitDenial(t *testing.T) {
 		retryAfter = 30 * time.Second
 	)
 	f := newTokenFixture(t)
-	tok := f.issue(t, api_token.IssueRequest{RateLimitRPM: rpm})
+	tok := f.issue(t, api_token.IssueRequest{RateLimitRPM: new(int(rpm))})
 	rl := &recordingLimiter{resp: ratelimit.Decision{
 		Allowed:       false,
 		WeightedCount: overLimit,

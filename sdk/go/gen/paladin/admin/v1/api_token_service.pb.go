@@ -58,10 +58,15 @@ type APIToken struct {
 	LastUsedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
 	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	CreatedBy  string                 `protobuf:"bytes,11,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
-	// rate_limit_rpm caps the bearer's request rate. 0 = unlimited.
-	// Enforced by APITokenInterceptor via a sliding-window counter
-	// when the value is positive.
-	RateLimitRpm  int32 `protobuf:"varint,12,opt,name=rate_limit_rpm,json=rateLimitRpm,proto3" json:"rate_limit_rpm,omitempty"`
+	// rate_limit is the bearer's request rate: a cap in requests per minute,
+	// enforced by APITokenInterceptor with a sliding-window counter, where 0
+	// admits no request; or no cap at all.
+	//
+	// Types that are valid to be assigned to RateLimit:
+	//
+	//	*APIToken_RateLimitRpm
+	//	*APIToken_UnlimitedRate
+	RateLimit     isAPIToken_RateLimit `protobuf_oneof:"rate_limit"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -187,12 +192,46 @@ func (x *APIToken) GetCreatedBy() string {
 	return ""
 }
 
+func (x *APIToken) GetRateLimit() isAPIToken_RateLimit {
+	if x != nil {
+		return x.RateLimit
+	}
+	return nil
+}
+
 func (x *APIToken) GetRateLimitRpm() int32 {
 	if x != nil {
-		return x.RateLimitRpm
+		if x, ok := x.RateLimit.(*APIToken_RateLimitRpm); ok {
+			return x.RateLimitRpm
+		}
 	}
 	return 0
 }
+
+func (x *APIToken) GetUnlimitedRate() bool {
+	if x != nil {
+		if x, ok := x.RateLimit.(*APIToken_UnlimitedRate); ok {
+			return x.UnlimitedRate
+		}
+	}
+	return false
+}
+
+type isAPIToken_RateLimit interface {
+	isAPIToken_RateLimit()
+}
+
+type APIToken_RateLimitRpm struct {
+	RateLimitRpm int32 `protobuf:"varint,12,opt,name=rate_limit_rpm,json=rateLimitRpm,proto3,oneof"`
+}
+
+type APIToken_UnlimitedRate struct {
+	UnlimitedRate bool `protobuf:"varint,15,opt,name=unlimited_rate,json=unlimitedRate,proto3,oneof"`
+}
+
+func (*APIToken_RateLimitRpm) isAPIToken_RateLimit() {}
+
+func (*APIToken_UnlimitedRate) isAPIToken_RateLimit() {}
 
 type APITokenServiceCreateRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -207,11 +246,16 @@ type APITokenServiceCreateRequest struct {
 	// audience must include at least one plane the token is presented
 	// to. Subset of {data, admin, iam, mcp}.
 	Audience []string `protobuf:"bytes,5,rep,name=audience,proto3" json:"audience,omitempty"`
-	// rate_limit_rpm sets the per-token rate cap. 0 = unlimited.
-	// Recommended for any token whose blast radius matters: leaked
-	// tokens with a 60 rpm cap can do far less harm before discovery
-	// than uncapped equivalents.
-	RateLimitRpm int32 `protobuf:"varint,6,opt,name=rate_limit_rpm,json=rateLimitRpm,proto3" json:"rate_limit_rpm,omitempty"`
+	// rate_limit is the per-token request rate. Required: a request that sets
+	// neither arm is refused. A cap is recommended for any token whose blast
+	// radius matters: a leaked token capped at 60 rpm does far less harm
+	// before discovery than an uncapped one.
+	//
+	// Types that are valid to be assigned to RateLimit:
+	//
+	//	*APITokenServiceCreateRequest_RateLimitRpm
+	//	*APITokenServiceCreateRequest_UnlimitedRate
+	RateLimit isAPITokenServiceCreateRequest_RateLimit `protobuf_oneof:"rate_limit"`
 	// roles the token's principal carries, so a machine caller can satisfy a
 	// role-gated policy without logging in as a human user and managing a
 	// session.
@@ -291,11 +335,29 @@ func (x *APITokenServiceCreateRequest) GetAudience() []string {
 	return nil
 }
 
+func (x *APITokenServiceCreateRequest) GetRateLimit() isAPITokenServiceCreateRequest_RateLimit {
+	if x != nil {
+		return x.RateLimit
+	}
+	return nil
+}
+
 func (x *APITokenServiceCreateRequest) GetRateLimitRpm() int32 {
 	if x != nil {
-		return x.RateLimitRpm
+		if x, ok := x.RateLimit.(*APITokenServiceCreateRequest_RateLimitRpm); ok {
+			return x.RateLimitRpm
+		}
 	}
 	return 0
+}
+
+func (x *APITokenServiceCreateRequest) GetUnlimitedRate() bool {
+	if x != nil {
+		if x, ok := x.RateLimit.(*APITokenServiceCreateRequest_UnlimitedRate); ok {
+			return x.UnlimitedRate
+		}
+	}
+	return false
 }
 
 func (x *APITokenServiceCreateRequest) GetRoles() []string {
@@ -304,6 +366,24 @@ func (x *APITokenServiceCreateRequest) GetRoles() []string {
 	}
 	return nil
 }
+
+type isAPITokenServiceCreateRequest_RateLimit interface {
+	isAPITokenServiceCreateRequest_RateLimit()
+}
+
+type APITokenServiceCreateRequest_RateLimitRpm struct {
+	// rate_limit_rpm caps requests per minute; 0 admits none.
+	RateLimitRpm int32 `protobuf:"varint,6,opt,name=rate_limit_rpm,json=rateLimitRpm,proto3,oneof"`
+}
+
+type APITokenServiceCreateRequest_UnlimitedRate struct {
+	// unlimited_rate sets no cap. Only true is meaningful.
+	UnlimitedRate bool `protobuf:"varint,8,opt,name=unlimited_rate,json=unlimitedRate,proto3,oneof"`
+}
+
+func (*APITokenServiceCreateRequest_RateLimitRpm) isAPITokenServiceCreateRequest_RateLimit() {}
+
+func (*APITokenServiceCreateRequest_UnlimitedRate) isAPITokenServiceCreateRequest_RateLimit() {}
 
 type APITokenServiceCreateResponse struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
@@ -700,10 +780,10 @@ type APITokenServiceGetUsageResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Echoes the resource name the usage was read for.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// limit_rpm mirrors api_tokens.rate_limit_rpm. 0 = unlimited; the
+	// limit_rpm mirrors the token's cap; absent when it has none, and the
 	// remaining counters are still returned so UIs can render
-	// "uncapped, current rate: N rpm".
-	LimitRpm int32 `protobuf:"varint,2,opt,name=limit_rpm,json=limitRpm,proto3" json:"limit_rpm,omitempty"`
+	// "uncapped, current rate: N rpm". 0 admits no request.
+	LimitRpm *int32 `protobuf:"varint,2,opt,name=limit_rpm,json=limitRpm,proto3,oneof" json:"limit_rpm,omitempty"`
 	// current_bucket_count is the raw counter for the in-progress
 	// minute. previous_bucket_count is the previous full minute.
 	// weighted_count = current + previous * (1 - elapsed / 60). Mirrors
@@ -759,8 +839,8 @@ func (x *APITokenServiceGetUsageResponse) GetName() string {
 }
 
 func (x *APITokenServiceGetUsageResponse) GetLimitRpm() int32 {
-	if x != nil {
-		return x.LimitRpm
+	if x != nil && x.LimitRpm != nil {
+		return *x.LimitRpm
 	}
 	return 0
 }
@@ -804,7 +884,7 @@ var File_paladin_admin_v1_api_token_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\n" +
-	"(paladin/admin/v1/api_token_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xac\x04\n" +
+	"(paladin/admin/v1/api_token_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xe5\x04\n" +
 	"\bAPIToken\x12\x17\n" +
 	"\x04name\x18\x0e \x01(\tB\x03\xe0A\bR\x04name\x12\x13\n" +
 	"\x02id\x18\x01 \x01(\tB\x03\xe0A\x03R\x02id\x12 \n" +
@@ -824,17 +904,23 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"created_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"created_by\x18\v \x01(\tR\tcreatedBy\x12$\n" +
-	"\x0erate_limit_rpm\x18\f \x01(\x05R\frateLimitRpm\"\x98\x02\n" +
+	"created_by\x18\v \x01(\tR\tcreatedBy\x12&\n" +
+	"\x0erate_limit_rpm\x18\f \x01(\x05H\x00R\frateLimitRpm\x12'\n" +
+	"\x0eunlimited_rate\x18\x0f \x01(\bH\x00R\runlimitedRateB\f\n" +
+	"\n" +
+	"rate_limit\"\xda\x02\n" +
 	"\x1cAPITokenServiceCreateRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12*\n" +
 	"\fdisplay_name\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vdisplayName\x12(\n" +
 	"\vttl_seconds\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\n" +
 	"ttlSeconds\x12\x16\n" +
 	"\x06scopes\x18\x04 \x03(\tR\x06scopes\x12$\n" +
-	"\baudience\x18\x05 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\baudience\x12-\n" +
-	"\x0erate_limit_rpm\x18\x06 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\frateLimitRpm\x12\x14\n" +
-	"\x05roles\x18\a \x03(\tR\x05roles\"s\n" +
+	"\baudience\x18\x05 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\baudience\x12/\n" +
+	"\x0erate_limit_rpm\x18\x06 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\x00R\frateLimitRpm\x120\n" +
+	"\x0eunlimited_rate\x18\b \x01(\bB\a\xbaH\x04j\x02\b\x01H\x00R\runlimitedRate\x12\x14\n" +
+	"\x05roles\x18\a \x03(\tR\x05rolesB\f\n" +
+	"\n" +
+	"rate_limit\"s\n" +
 	"\x1dAPITokenServiceCreateResponse\x127\n" +
 	"\tapi_token\x18\x01 \x01(\v2\x1a.paladin.admin.v1.APITokenR\bapiToken\x12\x19\n" +
 	"\x05token\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05token\";\n" +
@@ -856,16 +942,18 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\x1eAPITokenServiceGetSelfResponse\x127\n" +
 	"\tapi_token\x18\x01 \x01(\v2\x1a.paladin.admin.v1.APITokenR\bapiToken\"=\n" +
 	"\x1eAPITokenServiceGetUsageRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xe3\x02\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xf6\x02\n" +
 	"\x1fAPITokenServiceGetUsageResponse\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
-	"\tlimit_rpm\x18\x02 \x01(\x05R\blimitRpm\x120\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\tlimit_rpm\x18\x02 \x01(\x05H\x00R\blimitRpm\x88\x01\x01\x120\n" +
 	"\x14current_bucket_count\x18\x03 \x01(\x03R\x12currentBucketCount\x122\n" +
 	"\x15previous_bucket_count\x18\x04 \x01(\x03R\x13previousBucketCount\x12%\n" +
 	"\x0eweighted_count\x18\x05 \x01(\x01R\rweightedCount\x12D\n" +
 	"\x10window_resets_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x0ewindowResetsAt\x12<\n" +
 	"\flast_used_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastUsedAt2\xbf\x04\n" +
+	"lastUsedAtB\f\n" +
+	"\n" +
+	"_limit_rpm2\xbf\x04\n" +
 	"\x0fAPITokenService\x12i\n" +
 	"\x06Create\x12..paladin.admin.v1.APITokenServiceCreateRequest\x1a/.paladin.admin.v1.APITokenServiceCreateResponse\x12n\n" +
 	"\x06Revoke\x12..paladin.admin.v1.APITokenServiceRevokeRequest\x1a/.paladin.admin.v1.APITokenServiceRevokeResponse\"\x03\x90\x02\x02\x12h\n" +
@@ -932,6 +1020,15 @@ func file_paladin_admin_v1_api_token_service_proto_init() {
 	if File_paladin_admin_v1_api_token_service_proto != nil {
 		return
 	}
+	file_paladin_admin_v1_api_token_service_proto_msgTypes[0].OneofWrappers = []any{
+		(*APIToken_RateLimitRpm)(nil),
+		(*APIToken_UnlimitedRate)(nil),
+	}
+	file_paladin_admin_v1_api_token_service_proto_msgTypes[1].OneofWrappers = []any{
+		(*APITokenServiceCreateRequest_RateLimitRpm)(nil),
+		(*APITokenServiceCreateRequest_UnlimitedRate)(nil),
+	}
+	file_paladin_admin_v1_api_token_service_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

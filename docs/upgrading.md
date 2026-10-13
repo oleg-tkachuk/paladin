@@ -44,6 +44,16 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — an API token rate limit of 0 is a cap
+
+- **Breaking, API tokens.** `APITokenServiceCreateRequest` and `APIToken`
+  carry the rate limit as a `rate_limit` oneof: `rate_limit_rpm`, where 0
+  admits no request, or `unlimited_rate`. `Create` refuses a request that
+  sets neither with `INVALID_ARGUMENT`. `GetUsage.limit_rpm` is absent for a
+  token with no cap.
+- **Migration 072.** `api_tokens.rate_limit_rpm` is nullable; every 0 stored
+  under the old reading becomes NULL.
+
 ## Unreleased — tenants past their trash retention are surfaced
 
 - **API, additive.** The `ListTenants` filter gains `purge_eligible`: trashed,

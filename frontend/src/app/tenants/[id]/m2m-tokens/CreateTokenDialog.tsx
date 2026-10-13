@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/Select";
+import { LimitInput } from "@/components/ui/LimitInput";
 import { useNotification } from "@/components/ui/Notification";
 import { apiTokenClient } from "@/lib/connect/client";
 import { copyToClipboard, cn } from "@/lib/utils";
@@ -64,7 +65,10 @@ export function CreateTokenDialog({
   const [scopes, setScopes] = useState("");
   const [audience, setAudience] = useState<Set<string>>(new Set(["data"]));
   const [ttl, setTtl] = useState("90d");
-  const [rateLimit, setRateLimit] = useState("0");
+  // A new token starts uncapped, as before; a typed cap of 0 admits no
+  // request, which is a cap, not "none".
+  const [rateLimit, setRateLimit] = useState("");
+  const [rateUnlimited, setRateUnlimited] = useState(true);
   const [creating, setCreating] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -80,7 +84,8 @@ export function CreateTokenDialog({
     setScopes("");
     setAudience(new Set(["data"]));
     setTtl("90d");
-    setRateLimit("0");
+    setRateLimit("");
+    setRateUnlimited(true);
     setReveal(null);
     setRevealAcknowledged(false);
     setSubmitError(null);
@@ -93,8 +98,20 @@ export function CreateTokenDialog({
     setAudience(next);
   };
 
+  // The cap to send: undefined for Unlimited, a whole number otherwise; null
+  // holds the form rather than sending a number nobody typed.
+  const rpm: number | undefined | null = rateUnlimited
+    ? undefined
+    : /^\d+$/.test(rateLimit.trim())
+      ? Number.parseInt(rateLimit.trim(), 10)
+      : null;
+  const rateLimitError =
+    rpm === null && rateLimit.trim() !== ""
+      ? "A whole number, or Unlimited."
+      : null;
+
   const handleCreate = async () => {
-    if (!tenantId || !name.trim()) return;
+    if (!tenantId || !name.trim() || rpm === null) return;
     if (audience.size === 0) {
       showNotification({
         type: "error",
@@ -113,7 +130,6 @@ export function CreateTokenDialog({
       });
       return;
     }
-    const rpm = Number.parseInt(rateLimit || "0", 10);
 
     setCreating(true);
     try {
@@ -123,7 +139,10 @@ export function CreateTokenDialog({
         ttlSeconds: BigInt(ttlSeconds ?? 0),
         scopes: scopeList,
         audience: Array.from(audience),
-        rateLimitRpm: Number.isFinite(rpm) && rpm > 0 ? rpm : 0,
+        rateLimit:
+          rpm === undefined
+            ? { case: "unlimitedRate", value: true }
+            : { case: "rateLimitRpm", value: rpm },
       });
       setReveal({
         token: res.token,
@@ -179,7 +198,9 @@ export function CreateTokenDialog({
         ? "Pick at least one plane."
         : hasInvalidScopes
           ? "Fix the scopes to continue."
-          : null;
+          : rpm === null
+            ? "Set the rate limit, or make it Unlimited."
+            : null;
 
   if (reveal) {
     return (
@@ -282,14 +303,19 @@ export function CreateTokenDialog({
               />
             )}
           </FormField>
-          <FormField label="Rate limit (rpm)" hint="0 is unlimited.">
+          <FormField
+            label="Rate limit (rpm)"
+            hint="Unlimited sets no cap; 0 admits no request."
+            error={rateLimitError}
+          >
             {(control) => (
-              <Input
+              <LimitInput
                 {...control}
-                type="number"
-                min={0}
                 value={rateLimit}
-                onChange={(e) => setRateLimit(e.target.value)}
+                onChange={setRateLimit}
+                unlimited={rateUnlimited}
+                onUnlimitedChange={setRateUnlimited}
+                placeholder="requests per minute"
               />
             )}
           </FormField>

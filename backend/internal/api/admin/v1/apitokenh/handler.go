@@ -162,6 +162,10 @@ func (h *Handler) Create(ctx context.Context, req *adminv1.APITokenServiceCreate
 	}
 
 	ttl := time.Duration(req.GetTtlSeconds()) * time.Second
+	rateLimit, err := rateLimitOf(req)
+	if err != nil {
+		return nil, err
+	}
 
 	tok, err := h.issuer.Issue(ctx, api_token.IssueRequest{
 		TenantID:     tenantID,
@@ -170,7 +174,7 @@ func (h *Handler) Create(ctx context.Context, req *adminv1.APITokenServiceCreate
 		Roles:        req.GetRoles(),
 		Audience:     req.GetAudience(),
 		TTL:          ttl,
-		RateLimitRPM: int(req.GetRateLimitRpm()),
+		RateLimitRPM: rateLimit,
 		CreatedBy:    caller.Subject,
 	})
 	if err != nil {
@@ -340,7 +344,7 @@ func (h *Handler) GetUsage(ctx context.Context, req *adminv1.APITokenServiceGetU
 	}
 	resp := &adminv1.APITokenServiceGetUsageResponse{
 		Name:                req.GetName(),
-		LimitRpm:            safecast.Int32(tok.RateLimitRPM),
+		LimitRpm:            rpmProto(tok.RateLimitRPM),
 		CurrentBucketCount:  snap.CurrentBucketCount,
 		PreviousBucketCount: snap.PreviousBucketCount,
 		WeightedCount:       snap.WeightedCount,
@@ -366,18 +370,22 @@ func tokenToProto(t api_token.Token) *adminv1.APIToken {
 		// The resource name every addressed RPC on this service now takes.
 		// Returned so a caller never has to assemble it, and never has to
 		// carry a bare id that cannot be scoped.
-		Name:         "tenants/" + t.TenantID.String() + "/apiTokens/" + t.ID.String(),
-		Id:           t.ID.String(),
-		TenantId:     t.TenantID.String(),
-		DisplayName:  t.Name,
-		Prefix:       t.Prefix,
-		Roles:        t.Roles,
-		Scopes:       t.Scopes,
-		Audience:     t.Audience,
-		ExpiresAt:    timestamppb.New(t.ExpiresAt),
-		CreatedAt:    timestamppb.New(t.CreatedAt),
-		CreatedBy:    t.CreatedBy,
-		RateLimitRpm: safecast.Int32(t.RateLimitRPM),
+		Name:        "tenants/" + t.TenantID.String() + "/apiTokens/" + t.ID.String(),
+		Id:          t.ID.String(),
+		TenantId:    t.TenantID.String(),
+		DisplayName: t.Name,
+		Prefix:      t.Prefix,
+		Roles:       t.Roles,
+		Scopes:      t.Scopes,
+		Audience:    t.Audience,
+		ExpiresAt:   timestamppb.New(t.ExpiresAt),
+		CreatedAt:   timestamppb.New(t.CreatedAt),
+		CreatedBy:   t.CreatedBy,
+	}
+	if rpm := rpmProto(t.RateLimitRPM); rpm != nil {
+		out.RateLimit = &adminv1.APIToken_RateLimitRpm{RateLimitRpm: *rpm}
+	} else {
+		out.RateLimit = &adminv1.APIToken_UnlimitedRate{UnlimitedRate: true}
 	}
 	if t.RevokedAt != nil {
 		out.RevokedAt = timestamppb.New(*t.RevokedAt)
@@ -386,4 +394,30 @@ func tokenToProto(t api_token.Token) *adminv1.APIToken {
 		out.LastUsedAt = timestamppb.New(*t.LastUsedAt)
 	}
 	return out
+}
+
+// rateLimitOf is the cap a Create request sets: nil for unlimited_rate, the
+// cap otherwise, where 0 admits no request. A request that sets neither is
+// refused: there is no default to fall back on, and either one picked silently
+// is a cap nobody chose.
+func rateLimitOf(req *adminv1.APITokenServiceCreateRequest) (*int, error) {
+	switch r := req.GetRateLimit().(type) {
+	case *adminv1.APITokenServiceCreateRequest_RateLimitRpm:
+		rpm := int(r.RateLimitRpm)
+		return &rpm, nil
+	case *adminv1.APITokenServiceCreateRequest_UnlimitedRate:
+		return nil, nil
+	default:
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			"rate_limit: set rate_limit_rpm, or unlimited_rate for no cap")
+	}
+}
+
+// rpmProto is a token's cap as the wire carries it: nil for no cap.
+func rpmProto(rpm *int) *int32 {
+	if rpm == nil {
+		return nil
+	}
+	v := safecast.Int32(*rpm)
+	return &v
 }

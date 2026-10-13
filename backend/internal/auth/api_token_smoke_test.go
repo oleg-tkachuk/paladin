@@ -162,7 +162,7 @@ func TestRetryAfter_E2E_ConnectTransport(t *testing.T) {
 		Name:         "smoke",
 		Audience:     []string{planeData},
 		TTL:          time.Hour,
-		RateLimitRPM: rpm,
+		RateLimitRPM: new(int(rpm)),
 	})
 	if err != nil {
 		t.Fatalf("issue: %v", err)

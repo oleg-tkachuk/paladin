@@ -47,7 +47,7 @@ const makeToken = (id: string, displayName: string) => ({
   displayName,
   scopes: [],
   audience: ["data"],
-  rateLimitRpm: 0,
+  rateLimit: { case: "unlimitedRate", value: true },
   revokedAt: undefined,
   expiresAt: undefined,
   lastUsedAt: undefined,
@@ -56,7 +56,7 @@ const makeToken = (id: string, displayName: string) => ({
 beforeEach(() => {
   h.list.mockResolvedValue({ apiTokens: [] });
   h.getUsage.mockResolvedValue({
-    limitRpm: 0,
+    limitRpm: undefined,
     weightedCount: 0,
     currentBucketCount: 0n,
     windowResetsAt: undefined,
