@@ -145,3 +145,57 @@ WHERE  n.nspname = 'public' AND c.relkind IN ('r','p')
 			"(it has a policy now, or the table is gone) — remove the entry", name)
 	}
 }
+
+// TestEveryPolicyIsEnforced: a policy only binds once row-level security is
+// enabled on its table, and binds the table's owner only once it is forced.
+// The coverage test above asks whether a policy exists; this asks whether it
+// does anything. A table that has a policy and RLS disabled reads as
+// protected in every listing of policies and isolates nothing — the
+// failure mode an ALTER TABLE ... DISABLE in a later migration, or a CREATE
+// POLICY without its ENABLE, produces in silence.
+func TestEveryPolicyIsEnforced(t *testing.T) {
+	ctx := context.Background()
+	pool := pgharness.Setup(t).PoolMigrate
+
+	const q = `
+SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
+FROM   pg_class c
+JOIN   pg_namespace n ON n.oid = c.relnamespace
+WHERE  n.nspname = 'public'
+  AND  c.relkind IN ('r', 'p')
+  AND  EXISTS (SELECT 1 FROM pg_policies p
+               WHERE p.schemaname = 'public' AND p.tablename = c.relname)
+ORDER  BY c.relname;
+`
+	rows, err := pool.Query(ctx, q)
+	if err != nil {
+		t.Fatalf("query tables with policies: %v", err)
+	}
+	defer rows.Close()
+
+	var withPolicies int
+	for rows.Next() {
+		var (
+			name            string
+			enabled, forced bool
+		)
+		if err := rows.Scan(&name, &enabled, &forced); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		withPolicies++
+		if !enabled {
+			t.Errorf("table %q has a policy but row-level security is not enabled — the policy binds no one", name)
+		}
+		if !forced {
+			t.Errorf("table %q has a policy but row-level security is not forced — the table's owner is exempt from it", name)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate: %v", err)
+	}
+	// An empty result would read as success; the schema has dozens.
+	const minTablesWithPolicies = 10
+	if withPolicies < minTablesWithPolicies {
+		t.Fatalf("only %d tables have a policy — the probe is broken, not the schema", withPolicies)
+	}
+}

@@ -357,10 +357,19 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// Disabled by setting interval to 0.
 	if cfg.Worker.Jobs.Operations.Interval > 0 {
 		opRepo := adapters.NewOperationRepo(reaperQ, reaperPool)
+		// The executors act for one tenant — the runner scopes each one's
+		// context to its operation's — so they read and write through the app
+		// pool, where row-level security binds them to that tenant. Only the
+		// runner and the reclaimer, which claim and reclaim across tenants,
+		// keep the reaper pool. On the reaper pool an executor's writes by
+		// object id alone were held to the tenant by nothing but the lookup
+		// that produced the ids.
+		appQ := sqlc.New(deps.Pool)
+		appObjects := adapters.NewObjectRepo(appQ, deps.Pool)
 		executors := map[string]operations.Executor{
 			"BatchDelete": &operations.BatchDeleteExecutor{
 				Objects:     deps.Repos.Object,
-				Transitions: smReaper,
+				Transitions: deps.SM,
 				// The hard-delete path, shared with the DeleteObject RPC. The
 				// handler is built with no policy engine and no CEL filter on
 				// purpose: out here there is no principal to authorize, and
@@ -370,12 +379,9 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				// permanent delete emits paladin.object.deleted and
 				// paladin.object.purged, and silence would be a regression
 				// against the RPC path.
-				Permanent: newPermanentDeleter(deps, reaperQ, reaperPool, smReaper, l),
-				// The app pool, like deps.Repos.Object: the runner scopes the
-				// executor's context to the operation's tenant, and the
-				// tombstones are tenant-isolated.
-				Erasures: adapters.NewObjectRepo(sqlc.New(deps.Pool), deps.Pool),
-				Logger:   l.Named("batch-delete"),
+				Permanent: newPermanentDeleter(deps, appQ, deps.Pool, deps.SM, l),
+				Erasures:  appObjects,
+				Logger:    l.Named("batch-delete"),
 			},
 			"BatchCopy": &operations.BatchCopyExecutor{
 				Objects: deps.Repos.Object,
@@ -383,15 +389,12 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				// and builds Locations carrying BackendID, so the router
 				// dispatches each copy to the right backend.
 				Storage:     s3adapter.NewObjectRouter(deps.Registry),
-				Transitions: smReaper,
+				Transitions: deps.SM,
 				PendingTTL:  cfg.Limits.Presign.PutTTL,
 				Limits:      cfg.Limits.UploadLimits(),
-				// Adopting a dead run's PENDING destination: the app pool,
-				// scoped to the operation's tenant like Objects, and the
-				// runner's own operation store for the creator's state.
-				Pending:    adapters.NewObjectRepo(sqlc.New(deps.Pool), deps.Pool),
-				Operations: opRepo,
-				Logger:     l.Named("batch-copy"),
+				Pending:     appObjects,
+				Operations:  adapters.NewOperationRepo(appQ, deps.Pool),
+				Logger:      l.Named("batch-copy"),
 			},
 			"BatchUpdateTags": &operations.BatchUpdateTagsExecutor{
 				Objects: deps.Repos.Object,
@@ -399,7 +402,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			},
 			"BatchRestoreObjects": &operations.BatchRestoreExecutor{
 				Objects:     deps.Repos.Object,
-				Transitions: smReaper,
+				Transitions: deps.SM,
 				Logger:      l.Named("batch-restore"),
 			},
 		}
@@ -451,8 +454,8 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 // quiet where the RPC speaks would be a regression, not a shortcut.
 func newPermanentDeleter(
 	deps *SharedDeps,
-	reaperQ *sqlc.Queries,
-	reaperPool *pgxpool.Pool,
+	q *sqlc.Queries,
+	pool *pgxpool.Pool,
 	sm *statemachine.Transitioner,
 	l *zap.Logger,
 ) *objecth.Handler {
@@ -465,8 +468,8 @@ func newPermanentDeleter(
 		objecth.PresignConfig{},
 	)
 	h.SetEventProducer(&worker.Dispatcher{
-		Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(reaperQ)),
-		Outbox:      worker.PgxOutboxWriter{Pool: reaperPool},
+		Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(q)),
+		Outbox:      worker.PgxOutboxWriter{Pool: pool},
 		Logger:      l.Named("batch-delete-events"),
 		MaxAttempts: 3,
 	})
