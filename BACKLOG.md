@@ -1390,8 +1390,9 @@ measures a chain that is about to change. Owner decision 2026-10-12.
 
 ### No scanner sets object taint flags
 
-- **Status:** Deferred — the flag, its API and its enforcement are in; the
-  automation is not.
+- **Status:** Deferred by the owner (2026-10-13) while the focus is on
+  stabilising Paladin as a control plane. The flag, its API and its
+  enforcement are in; the automation is not.
 - **Reason:** objects carry `taint` signals (prompt injection, PII, secrets),
   `SetObjectTaint` sets and clears them under their own Cedar action, and a
   capability without `AllowTaintedRead` is refused reads of a flagged object.
@@ -1401,7 +1402,22 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   once), sets the signals it detects through the same path `SetObjectTaint`
   writes, records which detector flagged what, and is tested against a corpus
   with known positives and negatives for each signal.
-- **Blockers:** choosing the detectors, and their cost per object.
+- **Design agreed so far:**
+  - A worker job, not the upload path: uploads go to the store over
+    presigned URLs and Paladin never sees the bytes, so the scanner reads
+    them back. One job covers new objects (within an interval of promote)
+    and the one-off pass over existing ones: it takes AVAILABLE versions not
+    yet scanned, in batches.
+  - Text types only (`text/*`, JSON, Markdown, CSV); the first N MB through
+    one range read, with a finding that records a partial scan; one scan per
+    version; bounded concurrency so the store and worker memory stay level.
+  - Findings — signal, detector, what matched — kept beside the flag, so an
+    operator sees why an object was flagged and can clear a false positive.
+  - Detector options: secrets through the gitleaks library's rules; PII by
+    checksum-verified patterns (Luhn for cards, IBAN, e-mail, phone); prompt
+    injection by phrase heuristics locally, or by a model call through
+    LiteLLM as a second detector (cost and a service dependency per object).
+- **Blockers:** the owner's choice of detectors, prompt injection above all.
 
 ---
 
