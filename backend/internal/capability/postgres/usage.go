@@ -490,6 +490,10 @@ func (s *UsageStore) Charge(
 		externalRef: req.ExternalRef, overrun: req.Overrun, ancestors: ancestors,
 	}, onCharged)
 	if err != nil {
+		// Give the connection back before reading the spend on another: a
+		// burst of refusals each holding one while waiting for a second would
+		// drain the pool and wait on itself.
+		_ = tx.Rollback(ctx)
 		return s.refusedReceipt(ctx, capID, tenantID, unit), err
 	}
 	if err := tx.Commit(ctx); err != nil {
