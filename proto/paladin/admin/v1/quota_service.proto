@@ -45,6 +45,9 @@ message SetQuotaRequest {
   //   itself a conflict if one does.
 
   string resource_version = 2 [(buf.validate.field).string.min_len = 1];
+  // update_mask names the caps to change: max_total_bytes, max_object_count,
+  // max_bytes_per_day, max_objects_per_day. A named cap takes quota's value,
+  // and a named cap quota leaves absent is lifted; an unnamed one keeps its.
   google.protobuf.FieldMask update_mask = 3 [(buf.validate.field).required = true];
   Quota quota = 4 [(buf.validate.field).required = true];
 }

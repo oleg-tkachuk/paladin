@@ -73,10 +73,13 @@ type SetQuotaRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // OCC, required. Checked in the upsert's DO UPDATE clause: a stored
 	ResourceVersion string                 `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	UpdateMask      *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
-	Quota           *Quota                 `protobuf:"bytes,4,opt,name=quota,proto3" json:"quota,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// update_mask names the caps to change: max_total_bytes, max_object_count,
+	// max_bytes_per_day, max_objects_per_day. A named cap takes quota's value,
+	// and a named cap quota leaves absent is lifted; an unnamed one keeps its.
+	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	Quota         *Quota                 `protobuf:"bytes,4,opt,name=quota,proto3" json:"quota,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SetQuotaRequest) Reset() {

@@ -896,10 +896,10 @@ measures a chain that is about to change. Owner decision 2026-10-12.
                usage_bytes_today, max_bytes_per_day, usage_objects_today, max_objects_per_day
           FROM bucket_quotas
     ) q
-     WHERE (max_total_bytes     > 0 AND usage_total_bytes   >= max_total_bytes)
-        OR (max_object_count    > 0 AND usage_object_count  >= max_object_count)
-        OR (max_bytes_per_day   > 0 AND usage_bytes_today   >= max_bytes_per_day)
-        OR (max_objects_per_day > 0 AND usage_objects_today >= max_objects_per_day);
+     WHERE (max_total_bytes     IS NOT NULL AND usage_total_bytes   >= max_total_bytes)
+        OR (max_object_count    IS NOT NULL AND usage_object_count  >= max_object_count)
+        OR (max_bytes_per_day   IS NOT NULL AND usage_bytes_today   >= max_bytes_per_day)
+        OR (max_objects_per_day IS NOT NULL AND usage_objects_today >= max_objects_per_day);
     ```
 
     Run it as a BYPASSRLS role — `quotas` is RLS'd.

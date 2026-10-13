@@ -58,8 +58,8 @@ func TestBucketQuota_SetReadChargeEnforceResetUnderRLS(t *testing.T) {
 	set, err := h.SetQuota(operator, admindomain.Quota{
 		BackendID:        backendID,
 		BucketName:       bucketName,
-		MaxObjectsPerDay: objectsPerDay,
-	}, nil)
+		MaxObjectsPerDay: new(int64(objectsPerDay)),
+	}, []string{quotah.CapMaxObjectsPerDay})
 	if err != nil {
 		t.Fatalf("SetQuota (bucket): %v", err)
 	}
@@ -71,8 +71,8 @@ func TestBucketQuota_SetReadChargeEnforceResetUnderRLS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBucketQuota: %v", err)
 	}
-	if got.MaxObjectsPerDay != objectsPerDay {
-		t.Errorf("max_objects_per_day = %d, want %d", got.MaxObjectsPerDay, objectsPerDay)
+	if *got.MaxObjectsPerDay != objectsPerDay {
+		t.Errorf("max_objects_per_day = %d, want %d", *got.MaxObjectsPerDay, objectsPerDay)
 	}
 
 	check := &middleware.QuotaSoftCheck{
@@ -138,14 +138,14 @@ func TestTenantQuota_StillUpsertsUnderRLS(t *testing.T) {
 		Roles:    []string{apiutil.RolePlatformAdmin},
 	})
 	const maxObjects = 7
-	if _, err := h.SetQuota(owner, admindomain.Quota{TenantID: f.tenantID, MaxObjectCount: maxObjects}, nil); err != nil {
+	if _, err := h.SetQuota(owner, admindomain.Quota{TenantID: f.tenantID, MaxObjectCount: new(int64(maxObjects))}, []string{quotah.CapMaxObjectCount}); err != nil {
 		t.Fatalf("SetQuota (tenant): %v", err)
 	}
 	got, err := h.GetTenantQuota(owner, f.tenantID)
 	if err != nil {
 		t.Fatalf("GetTenantQuota: %v", err)
 	}
-	if got.MaxObjectCount != maxObjects {
-		t.Errorf("max_object_count = %d, want %d", got.MaxObjectCount, maxObjects)
+	if *got.MaxObjectCount != maxObjects {
+		t.Errorf("max_object_count = %d, want %d", *got.MaxObjectCount, maxObjects)
 	}
 }

@@ -3,6 +3,7 @@ package quotah
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -173,16 +174,31 @@ func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []stri
 	if err != nil {
 		return nil, err
 	}
-	// Mask is informational here — upsert writes all four caps. Future:
-	// per-field UPDATE if real partial semantics needed.
-	_ = mask
-
 	tenantScope := q.TenantID != uuid.Nil
 	bucketScope := q.BackendID != "" && q.BucketName != ""
 	if tenantScope == bucketScope {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			"exactly one of tenant_id or (backend_id, bucket_name) must be set")
 	}
+	// The upsert writes all four caps, so the caps the mask does not name are
+	// taken from the stored row; with none stored they are no cap. A row that
+	// changes between this read and the write fails the version guard.
+	var current admindomain.Quota
+	var readErr error
+	if tenantScope {
+		current, readErr = h.repo.GetTenant(ctx, q.TenantID)
+	} else {
+		current, readErr = h.repo.GetBucket(ctx, q.BackendID, q.BucketName)
+	}
+	if readErr != nil && !errors.Is(readErr, admindomain.ErrNotFound) {
+		return nil, apiutil.MapError(readErr)
+	}
+	caps, err := applyCapMask(current, q, mask)
+	if err != nil {
+		return nil, err
+	}
+	q.MaxTotalBytes, q.MaxObjectCount = caps.MaxTotalBytes, caps.MaxObjectCount
+	q.MaxBytesPerDay, q.MaxObjectsPerDay = caps.MaxBytesPerDay, caps.MaxObjectsPerDay
 	if tenantScope {
 		// Upsert + paladin.quota.set in one tx (ADR-0003). The event payload is
 		// the caps we just wrote (== q), so no in-tx read-back is needed;

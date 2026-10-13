@@ -244,31 +244,35 @@ func (q *QuotaSoftCheck) bucketQuota(ctx context.Context, msg any) (admindomain.
 // row in the rejection message so a caller can tell a tenant cap from a
 // bucket cap without guessing which one stopped them.
 func checkCaps(quota admindomain.Quota, scope string, sizeHint int64, newObject bool, headroom float64) error {
-	if quota.MaxTotalBytes > 0 {
-		threshold := float64(quota.MaxTotalBytes) * (1 + maxF(headroom, 0))
+	// A nil cap is no cap; a cap of 0 refuses the first byte and the first
+	// object, headroom or not.
+	if quota.MaxTotalBytes != nil {
+		limit := *quota.MaxTotalBytes
+		threshold := float64(limit) * (1 + maxF(headroom, 0))
 		if float64(quota.UsageTotalBytes+sizeHint) > threshold {
 			return exhausted("%s quota exceeded: %d + %d > %d (max_total_bytes)",
-				scope, quota.UsageTotalBytes, sizeHint, quota.MaxTotalBytes)
+				scope, quota.UsageTotalBytes, sizeHint, limit)
 		}
 	}
-	if quota.MaxObjectCount > 0 && newObject && quota.UsageObjectCount+1 > quota.MaxObjectCount {
+	if quota.MaxObjectCount != nil && newObject && quota.UsageObjectCount+1 > *quota.MaxObjectCount {
 		return exhausted("%s quota exceeded: %d + 1 > %d (max_object_count)",
-			scope, quota.UsageObjectCount, quota.MaxObjectCount)
+			scope, quota.UsageObjectCount, *quota.MaxObjectCount)
 	}
 	// Daily caps meter admission, not storage: they count what was accepted
 	// today and are zeroed at the UTC day boundary by the quota reconciler.
 	// An upload that is later deleted still spent its budget — that is what
 	// stops a caller cycling upload/delete to bypass the cap.
-	if quota.MaxBytesPerDay > 0 {
-		threshold := float64(quota.MaxBytesPerDay) * (1 + maxF(headroom, 0))
+	if quota.MaxBytesPerDay != nil {
+		limit := *quota.MaxBytesPerDay
+		threshold := float64(limit) * (1 + maxF(headroom, 0))
 		if float64(quota.UsageBytesToday+sizeHint) > threshold {
 			return exhausted("%s daily quota exceeded: %d + %d > %d (max_bytes_per_day)",
-				scope, quota.UsageBytesToday, sizeHint, quota.MaxBytesPerDay)
+				scope, quota.UsageBytesToday, sizeHint, limit)
 		}
 	}
-	if quota.MaxObjectsPerDay > 0 && newObject && quota.UsageObjectsToday+1 > quota.MaxObjectsPerDay {
+	if quota.MaxObjectsPerDay != nil && newObject && quota.UsageObjectsToday+1 > *quota.MaxObjectsPerDay {
 		return exhausted("%s daily quota exceeded: %d + 1 > %d (max_objects_per_day)",
-			scope, quota.UsageObjectsToday, quota.MaxObjectsPerDay)
+			scope, quota.UsageObjectsToday, *quota.MaxObjectsPerDay)
 	}
 	return nil
 }

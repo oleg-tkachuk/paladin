@@ -49,12 +49,12 @@ func callSetQuota(t *testing.T, plane *quotaPlane, args map[string]any) *mcpsdk.
 	return res
 }
 
-// The tool sent no resource_version and no update_mask, both required, so it
-// never succeeded; and the plane writes all four caps, so a partial set would
-// have zeroed the caps left out.
+// The tool sends the version it read, and only the caps it was given: the
+// plane changes exactly what the update mask names, so caps left out keep
+// their values without being sent back.
 func TestSetQuotaChangesOnlyTheNamedCaps(t *testing.T) {
 	plane := &quotaPlane{current: &adminv1.Quota{
-		MaxTotalBytes: 100, MaxObjectCount: 10, MaxBytesPerDay: 5, MaxObjectsPerDay: 1,
+		MaxTotalBytes: new(int64(100)), MaxObjectCount: new(int64(10)), MaxBytesPerDay: new(int64(5)), MaxObjectsPerDay: new(int64(1)),
 		ResourceVersion: "7",
 	}}
 	res := callSetQuota(t, plane, map[string]any{"name": "tenants/acme/quota", "max_object_count": 20})
@@ -65,12 +65,11 @@ func TestSetQuotaChangesOnlyTheNamedCaps(t *testing.T) {
 	if got.GetResourceVersion() != "7" {
 		t.Errorf("resource_version = %q, want the one read", got.GetResourceVersion())
 	}
-	if !slices.Equal(got.GetUpdateMask().GetPaths(), []string{"max_object_count"}) {
+	if !slices.Equal(got.GetUpdateMask().GetPaths(), []string{quotaCapObjectCount}) {
 		t.Errorf("mask = %v", got.GetUpdateMask().GetPaths())
 	}
-	q := got.GetQuota()
-	if q.MaxObjectCount != 20 || q.MaxTotalBytes != 100 || q.MaxBytesPerDay != 5 || q.MaxObjectsPerDay != 1 {
-		t.Errorf("quota sent = %+v, want only max_object_count changed", q)
+	if q := got.GetQuota(); q.MaxObjectCount == nil || *q.MaxObjectCount != 20 {
+		t.Errorf("quota sent = %+v, want max_object_count 20", q)
 	}
 }
 
@@ -80,9 +79,42 @@ func TestSetQuotaCreatesWhenNoneExists(t *testing.T) {
 	if plane.set.GetResourceVersion() != quotaNoRowVersion {
 		t.Errorf("resource_version = %q, want %q", plane.set.GetResourceVersion(), quotaNoRowVersion)
 	}
-	// 0 is a cap (unlimited), not "left out".
-	if !slices.Equal(plane.set.GetUpdateMask().GetPaths(), []string{"max_total_bytes"}) {
+	// 0 is a cap — one that allows nothing — not "left out".
+	if !slices.Equal(plane.set.GetUpdateMask().GetPaths(), []string{quotaCapTotalBytes}) {
 		t.Errorf("mask = %v", plane.set.GetUpdateMask().GetPaths())
+	}
+	if q := plane.set.GetQuota(); q.MaxTotalBytes == nil || *q.MaxTotalBytes != 0 {
+		t.Errorf("max_total_bytes sent = %v, want a cap of 0", q.MaxTotalBytes)
+	}
+}
+
+// Lifting a cap masks it and leaves it absent; there is no number for "none".
+func TestSetQuotaLiftsACap(t *testing.T) {
+	plane := &quotaPlane{}
+	res := callSetQuota(t, plane, map[string]any{
+		"name": "tenants/acme/quota", "max_total_bytes": 10, "lift": []string{quotaCapObjectsPerDay},
+	})
+	if res.IsError {
+		t.Fatalf("tool error: %v", res.Content[0].(*mcpsdk.TextContent).Text)
+	}
+	if !slices.Equal(plane.set.GetUpdateMask().GetPaths(), []string{quotaCapTotalBytes, quotaCapObjectsPerDay}) {
+		t.Errorf("mask = %v", plane.set.GetUpdateMask().GetPaths())
+	}
+	if plane.set.GetQuota().MaxObjectsPerDay != nil {
+		t.Errorf("a lifted cap was sent with a value: %v", *plane.set.GetQuota().MaxObjectsPerDay)
+	}
+}
+
+func TestQuotaChangeRefusesAContradiction(t *testing.T) {
+	ten := int64(10)
+	for name, in := range map[string]setQuotaArgs{
+		"set and lifted": {MaxTotalBytes: &ten, Lift: []string{quotaCapTotalBytes}},
+		"not a cap":      {Lift: []string{"usage"}},
+		"nothing":        {},
+	} {
+		if _, _, err := quotaChange(in); err == nil {
+			t.Errorf("%s: no error", name)
+		}
 	}
 }
 

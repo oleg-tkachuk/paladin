@@ -250,7 +250,7 @@ RETURNING resource_version
 
 // Same OCC contract as UpsertTenantQuota. bucket_quotas has no RLS
 // (044_bucket_quotas.sql): the handler's role and Cedar checks gate the write.
-func (q *Queries) UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64, expectedVersion int64) (int64, error) {
+func (q *Queries) UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64, expectedVersion int64) (int64, error) {
 	row := q.db.QueryRow(ctx, upsertBucketQuota,
 		iD,
 		name,
@@ -287,7 +287,7 @@ RETURNING resource_version
 // a caller that passed 0 believing the row did not exist — updates nothing and
 // returns no row, which the adapter maps to Aborted. Without it this was a
 // blind last-writer-wins overwrite of another operator's limits.
-func (q *Queries) UpsertTenantQuota(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes int64, maxObjectCount int64, maxBytesPerDay int64, maxObjectsPerDay int64, expectedVersion int64) (int64, error) {
+func (q *Queries) UpsertTenantQuota(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64, expectedVersion int64) (int64, error) {
 	row := q.db.QueryRow(ctx, upsertTenantQuota,
 		iD,
 		tenantID,
