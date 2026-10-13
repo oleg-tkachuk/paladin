@@ -809,13 +809,15 @@ type deleteSubscriptionArgs struct {
 }
 
 // setQuotaArgs names only the caps to change: an omitted cap keeps its value.
-// Pointers, because 0 is a cap ("unlimited") and not "left out".
+// Pointers, because 0 is a cap — one that allows nothing — and not "left
+// out". Lifting a cap is its own list, never a number standing for "none".
 type setQuotaArgs struct {
-	Name             string `json:"name" jsonschema:"Quota resource name"`
-	MaxTotalBytes    *int64 `json:"max_total_bytes,omitempty" jsonschema:"hard cap on bytes stored; 0 = unlimited; omit to keep"`
-	MaxObjectCount   *int64 `json:"max_object_count,omitempty" jsonschema:"hard cap on number of objects; 0 = unlimited; omit to keep"`
-	MaxBytesPerDay   *int64 `json:"max_bytes_per_day,omitempty" jsonschema:"daily upload byte budget; 0 = unlimited; omit to keep"`
-	MaxObjectsPerDay *int64 `json:"max_objects_per_day,omitempty" jsonschema:"daily object-count budget; 0 = unlimited; omit to keep"`
+	Name             string   `json:"name" jsonschema:"Quota resource name"`
+	MaxTotalBytes    *int64   `json:"max_total_bytes,omitempty" jsonschema:"hard cap on bytes stored; 0 allows none; omit to keep"`
+	MaxObjectCount   *int64   `json:"max_object_count,omitempty" jsonschema:"hard cap on number of objects; 0 allows none; omit to keep"`
+	MaxBytesPerDay   *int64   `json:"max_bytes_per_day,omitempty" jsonschema:"daily upload byte budget; 0 allows none; omit to keep"`
+	MaxObjectsPerDay *int64   `json:"max_objects_per_day,omitempty" jsonschema:"daily object-count budget; 0 allows none; omit to keep"`
+	Lift             []string `json:"lift,omitempty" jsonschema:"caps to remove, leaving no limit: max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day"`
 }
 
 // quotaNoRowVersion is SetQuota's resource_version for "no quota exists yet".
@@ -971,37 +973,20 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Name:        "paladin_set_quota",
 		Description: "Change tenant or bucket usage caps. Name only the caps to change; the others keep their values.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in setQuotaArgs) (*mcpsdk.CallToolResult, any, error) {
-		// Read, change, write back under the version read. The call sent
-		// neither the resource_version nor the update_mask the RPC requires,
-		// so it could never succeed; and the plane writes all four caps, so
-		// sending only the ones named would have zeroed the rest.
-		q := &adminv1.Quota{}
+		// The version comes from a read; the caps from the call alone. The
+		// plane changes exactly the caps the mask names, so the others keep
+		// their values without being sent back.
 		version := quotaNoRowVersion
 		cur, err := c.Quota.GetQuota(ctx, &adminv1.GetQuotaRequest{Name: in.Name})
 		switch {
 		case err == nil:
-			q, version = cur, cur.GetResourceVersion()
+			version = cur.GetResourceVersion()
 		case connect.CodeOf(err) != connect.CodeNotFound:
 			return nil, nil, err
 		}
-		var paths []string
-		for _, f := range []struct {
-			path string
-			val  *int64
-			dst  *int64
-		}{
-			{"max_total_bytes", in.MaxTotalBytes, &q.MaxTotalBytes},
-			{"max_object_count", in.MaxObjectCount, &q.MaxObjectCount},
-			{"max_bytes_per_day", in.MaxBytesPerDay, &q.MaxBytesPerDay},
-			{"max_objects_per_day", in.MaxObjectsPerDay, &q.MaxObjectsPerDay},
-		} {
-			if f.val != nil {
-				*f.dst = *f.val
-				paths = append(paths, f.path)
-			}
-		}
-		if len(paths) == 0 {
-			return nil, nil, errors.New("name at least one cap to change")
+		q, paths, err := quotaChange(in)
+		if err != nil {
+			return nil, nil, err
 		}
 		return jsonResult(c.Quota.SetQuota(ctx, &adminv1.SetQuotaRequest{
 			Name:            in.Name,
@@ -1673,4 +1658,52 @@ func checksumAlgorithm(name string) commonv1.ChecksumAlgorithm {
 		return commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_MD5
 	}
 	return commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256
+}
+
+// The caps paladin_set_quota may set or lift, as SetQuotaRequest's
+// update_mask spells them.
+const (
+	quotaCapTotalBytes    = "max_total_bytes"
+	quotaCapObjectCount   = "max_object_count"
+	quotaCapBytesPerDay   = "max_bytes_per_day"
+	quotaCapObjectsPerDay = "max_objects_per_day"
+)
+
+// quotaChange is the quota and update mask paladin_set_quota sends: each cap
+// in is set to its value, and each cap in.Lift names is masked and left
+// absent, which lifts it. A cap both set and lifted, a name that is not a
+// cap, or a call that changes nothing is refused.
+func quotaChange(in setQuotaArgs) (*adminv1.Quota, []string, error) {
+	q := &adminv1.Quota{
+		MaxTotalBytes:    in.MaxTotalBytes,
+		MaxObjectCount:   in.MaxObjectCount,
+		MaxBytesPerDay:   in.MaxBytesPerDay,
+		MaxObjectsPerDay: in.MaxObjectsPerDay,
+	}
+	set := map[string]bool{
+		quotaCapTotalBytes:    in.MaxTotalBytes != nil,
+		quotaCapObjectCount:   in.MaxObjectCount != nil,
+		quotaCapBytesPerDay:   in.MaxBytesPerDay != nil,
+		quotaCapObjectsPerDay: in.MaxObjectsPerDay != nil,
+	}
+	var paths []string
+	for _, path := range []string{quotaCapTotalBytes, quotaCapObjectCount, quotaCapBytesPerDay, quotaCapObjectsPerDay} {
+		if set[path] {
+			paths = append(paths, path)
+		}
+	}
+	for _, path := range in.Lift {
+		isSet, isCap := set[path]
+		switch {
+		case !isCap:
+			return nil, nil, fmt.Errorf("lift: %q is not a quota cap", path)
+		case isSet:
+			return nil, nil, fmt.Errorf("lift: %q is also given a value", path)
+		}
+		paths = append(paths, path)
+	}
+	if len(paths) == 0 {
+		return nil, nil, errors.New("name at least one cap to set or lift")
+	}
+	return q, paths, nil
 }

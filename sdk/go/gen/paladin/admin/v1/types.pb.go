@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -2079,11 +2080,13 @@ type Quota struct {
 	// Resource name: "tenants/{tenant_id_or_slug}/quota" or
 	// "storageBackends/{backend_id}/buckets/{bucket_id}/quota".
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// Hard caps. 0 → no cap.
-	MaxTotalBytes    int64 `protobuf:"varint,2,opt,name=max_total_bytes,json=maxTotalBytes,proto3" json:"max_total_bytes,omitempty"`
-	MaxObjectCount   int64 `protobuf:"varint,3,opt,name=max_object_count,json=maxObjectCount,proto3" json:"max_object_count,omitempty"`
-	MaxBytesPerDay   int64 `protobuf:"varint,4,opt,name=max_bytes_per_day,json=maxBytesPerDay,proto3" json:"max_bytes_per_day,omitempty"`
-	MaxObjectsPerDay int64 `protobuf:"varint,5,opt,name=max_objects_per_day,json=maxObjectsPerDay,proto3" json:"max_objects_per_day,omitempty"`
+	// Hard caps. A cap that is set is a limit, where 0 allows nothing; one
+	// that is absent is no cap. SetQuota changes the caps its update_mask
+	// names: a named cap that is absent lifts it.
+	MaxTotalBytes    *int64 `protobuf:"varint,2,opt,name=max_total_bytes,json=maxTotalBytes,proto3,oneof" json:"max_total_bytes,omitempty"`
+	MaxObjectCount   *int64 `protobuf:"varint,3,opt,name=max_object_count,json=maxObjectCount,proto3,oneof" json:"max_object_count,omitempty"`
+	MaxBytesPerDay   *int64 `protobuf:"varint,4,opt,name=max_bytes_per_day,json=maxBytesPerDay,proto3,oneof" json:"max_bytes_per_day,omitempty"`
+	MaxObjectsPerDay *int64 `protobuf:"varint,5,opt,name=max_objects_per_day,json=maxObjectsPerDay,proto3,oneof" json:"max_objects_per_day,omitempty"`
 	// Current usage (read-only; updated by accounting worker).
 	Usage           *QuotaUsage            `protobuf:"bytes,6,opt,name=usage,proto3" json:"usage,omitempty"`
 	ResourceVersion string                 `protobuf:"bytes,7,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
@@ -2130,29 +2133,29 @@ func (x *Quota) GetName() string {
 }
 
 func (x *Quota) GetMaxTotalBytes() int64 {
-	if x != nil {
-		return x.MaxTotalBytes
+	if x != nil && x.MaxTotalBytes != nil {
+		return *x.MaxTotalBytes
 	}
 	return 0
 }
 
 func (x *Quota) GetMaxObjectCount() int64 {
-	if x != nil {
-		return x.MaxObjectCount
+	if x != nil && x.MaxObjectCount != nil {
+		return *x.MaxObjectCount
 	}
 	return 0
 }
 
 func (x *Quota) GetMaxBytesPerDay() int64 {
-	if x != nil {
-		return x.MaxBytesPerDay
+	if x != nil && x.MaxBytesPerDay != nil {
+		return *x.MaxBytesPerDay
 	}
 	return 0
 }
 
 func (x *Quota) GetMaxObjectsPerDay() int64 {
-	if x != nil {
-		return x.MaxObjectsPerDay
+	if x != nil && x.MaxObjectsPerDay != nil {
+		return *x.MaxObjectsPerDay
 	}
 	return 0
 }
@@ -3120,7 +3123,7 @@ var File_paladin_admin_v1_types_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x1cpaladin/admin/v1/types.proto\x12\x10paladin.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a paladin/common/v1/resource.proto\x1a\x1fgoogle/api/field_behavior.proto\"6\n" +
+	"\x1cpaladin/admin/v1/types.proto\x12\x10paladin.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a paladin/common/v1/resource.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x1bbuf/validate/validate.proto\"6\n" +
 	"\x0fUnlimitedBudget\x12#\n" +
 	"\rcurrency_code\x18\x01 \x01(\tR\fcurrencyCode\"\xa2\n" +
 	"\n" +
@@ -3280,17 +3283,21 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\x12?\n" +
 	"\x06access\x18\f \x01(\x0e2\".paladin.admin.v1.CollectionAccessB\x03\xe0A\x05R\x06access\x12(\n" +
-	"\rcache_control\x18\r \x01(\tB\x03\xe0A\x05R\fcacheControl\"\xf0\x02\n" +
+	"\rcache_control\x18\r \x01(\tB\x03\xe0A\x05R\fcacheControl\"\xff\x03\n" +
 	"\x05Quota\x12\x17\n" +
-	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12&\n" +
-	"\x0fmax_total_bytes\x18\x02 \x01(\x03R\rmaxTotalBytes\x12(\n" +
-	"\x10max_object_count\x18\x03 \x01(\x03R\x0emaxObjectCount\x12)\n" +
-	"\x11max_bytes_per_day\x18\x04 \x01(\x03R\x0emaxBytesPerDay\x12-\n" +
-	"\x13max_objects_per_day\x18\x05 \x01(\x03R\x10maxObjectsPerDay\x122\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x124\n" +
+	"\x0fmax_total_bytes\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x00H\x00R\rmaxTotalBytes\x88\x01\x01\x126\n" +
+	"\x10max_object_count\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00H\x01R\x0emaxObjectCount\x88\x01\x01\x127\n" +
+	"\x11max_bytes_per_day\x18\x04 \x01(\x03B\a\xbaH\x04\"\x02(\x00H\x02R\x0emaxBytesPerDay\x88\x01\x01\x12;\n" +
+	"\x13max_objects_per_day\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02(\x00H\x03R\x10maxObjectsPerDay\x88\x01\x01\x122\n" +
 	"\x05usage\x18\x06 \x01(\v2\x1c.paladin.admin.v1.QuotaUsageR\x05usage\x12.\n" +
 	"\x10resource_version\x18\a \x01(\tB\x03\xe0A\x03R\x0fresourceVersion\x12>\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\"\xdb\x01\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAtB\x12\n" +
+	"\x10_max_total_bytesB\x13\n" +
+	"\x11_max_object_countB\x14\n" +
+	"\x12_max_bytes_per_dayB\x16\n" +
+	"\x14_max_objects_per_day\"\xdb\x01\n" +
 	"\n" +
 	"QuotaUsage\x12\x1f\n" +
 	"\vtotal_bytes\x18\x01 \x01(\x03R\n" +
@@ -3538,6 +3545,7 @@ func file_paladin_admin_v1_types_proto_init() {
 		(*LifecycleRule_Transition)(nil),
 		(*LifecycleRule_Expiration)(nil),
 	}
+	file_paladin_admin_v1_types_proto_msgTypes[15].OneofWrappers = []any{}
 	file_paladin_admin_v1_types_proto_msgTypes[19].OneofWrappers = []any{
 		(*EventSink_Http)(nil),
 		(*EventSink_Kafka)(nil),

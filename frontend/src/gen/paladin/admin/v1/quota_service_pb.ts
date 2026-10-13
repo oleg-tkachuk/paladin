@@ -70,6 +70,10 @@ export type SetQuotaRequest = Message<"paladin.admin.v1.SetQuotaRequest"> & {
   resourceVersion: string;
 
   /**
+   * update_mask names the caps to change: max_total_bytes, max_object_count,
+   * max_bytes_per_day, max_objects_per_day. A named cap takes quota's value,
+   * and a named cap quota leaves absent is lifted; an unnamed one keeps its.
+   *
    * @generated from field: google.protobuf.FieldMask update_mask = 3;
    */
   updateMask?: FieldMask | undefined;

@@ -33,7 +33,7 @@ type fakeUploadObjectRequest struct {
 func (r *fakeUploadObjectRequest) GetSizeHintBytes() int64 { return r.sizeHint }
 
 func TestQuotaSoftCheckPassThroughOnNonUploadProc(t *testing.T) {
-	q := NewQuotaSoftCheck(&fakeQuotaReader{q: admindomain.Quota{MaxTotalBytes: 100}})
+	q := NewQuotaSoftCheck(&fakeQuotaReader{q: admindomain.Quota{MaxTotalBytes: new(int64(100))}})
 	if err := q.CheckUpload(context.Background(), "/some.other/Method", nil); err != nil {
 		t.Fatalf("expected pass-through, got %v", err)
 	}
@@ -44,7 +44,7 @@ func TestQuotaSoftCheckRejectsOverCap(t *testing.T) {
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{TenantID: tenantID})
 	q := &QuotaSoftCheck{
 		Reader: &fakeQuotaReader{q: admindomain.Quota{
-			MaxTotalBytes:   1000,
+			MaxTotalBytes:   new(int64(1000)),
 			UsageTotalBytes: 950,
 		}},
 		UploadProcedures: map[string]struct{}{"/test/Upload": {}},
@@ -65,7 +65,7 @@ func TestQuotaSoftCheckAdmitsWithinHeadroom(t *testing.T) {
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{TenantID: tenantID})
 	q := &QuotaSoftCheck{
 		Reader: &fakeQuotaReader{q: admindomain.Quota{
-			MaxTotalBytes:   1000,
+			MaxTotalBytes:   new(int64(1000)),
 			UsageTotalBytes: 950,
 		}},
 		UploadProcedures: map[string]struct{}{"/test/Upload": {}},
@@ -82,7 +82,7 @@ func TestQuotaSoftCheckObjectCountCap(t *testing.T) {
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{TenantID: tenantID})
 	q := &QuotaSoftCheck{
 		Reader: &fakeQuotaReader{q: admindomain.Quota{
-			MaxObjectCount:   5,
+			MaxObjectCount:   new(int64(5)),
 			UsageObjectCount: 5,
 		}},
 		UploadProcedures: map[string]struct{}{"/test/Upload": {}},
@@ -136,7 +136,7 @@ func gated(reader QuotaReader) *QuotaSoftCheck {
 func TestQuotaSoftCheck_DailyByteCapRejects(t *testing.T) {
 	ctx := tenantCtx(t)
 	q := gated(&fakeQuotaReader{q: admindomain.Quota{
-		MaxBytesPerDay:  1000,
+		MaxBytesPerDay:  new(int64(1000)),
 		UsageBytesToday: 900,
 	}})
 
@@ -152,7 +152,7 @@ func TestQuotaSoftCheck_DailyByteCapRejects(t *testing.T) {
 func TestQuotaSoftCheck_DailyByteCapAdmitsUnderBudget(t *testing.T) {
 	ctx := tenantCtx(t)
 	q := gated(&fakeQuotaReader{q: admindomain.Quota{
-		MaxBytesPerDay:  1000,
+		MaxBytesPerDay:  new(int64(1000)),
 		UsageBytesToday: 900,
 	}})
 	// 900 + 100 = 1000, exactly at the cap — the comparison is strict `>`,
@@ -168,7 +168,7 @@ func TestQuotaSoftCheck_DailyByteCapAdmitsUnderBudget(t *testing.T) {
 func TestQuotaSoftCheck_DailyByteCapHonoursHeadroom(t *testing.T) {
 	ctx := tenantCtx(t)
 	q := gated(&fakeQuotaReader{q: admindomain.Quota{
-		MaxBytesPerDay:  1000,
+		MaxBytesPerDay:  new(int64(1000)),
 		UsageBytesToday: 950,
 	}})
 	q.Headroom = 0.10 // threshold 1100
@@ -184,7 +184,7 @@ func TestQuotaSoftCheck_DailyByteCapHonoursHeadroom(t *testing.T) {
 func TestQuotaSoftCheck_DailyObjectCapRejects(t *testing.T) {
 	ctx := tenantCtx(t)
 	q := gated(&fakeQuotaReader{q: admindomain.Quota{
-		MaxObjectsPerDay:  5,
+		MaxObjectsPerDay:  new(int64(5)),
 		UsageObjectsToday: 5,
 	}})
 
@@ -203,7 +203,7 @@ func TestQuotaSoftCheck_DailyObjectCapRejects(t *testing.T) {
 func TestQuotaSoftCheck_DailyObjectCapIgnoresHeadroom(t *testing.T) {
 	ctx := tenantCtx(t)
 	q := gated(&fakeQuotaReader{q: admindomain.Quota{
-		MaxObjectsPerDay:  5,
+		MaxObjectsPerDay:  new(int64(5)),
 		UsageObjectsToday: 5,
 	}})
 	q.Headroom = 0.50
@@ -219,7 +219,7 @@ func TestQuotaSoftCheck_DailyObjectCapIgnoresHeadroom(t *testing.T) {
 func TestQuotaSoftCheck_UnsetDailyCapsAreUnlimited(t *testing.T) {
 	ctx := tenantCtx(t)
 	q := gated(&fakeQuotaReader{q: admindomain.Quota{
-		MaxTotalBytes:     1 << 40,
+		MaxTotalBytes:     new(int64(1 << 40)),
 		UsageBytesToday:   1 << 30,
 		UsageObjectsToday: 1_000_000,
 	}})
@@ -242,9 +242,9 @@ func TestQuotaSoftCheck_RegenerateDoesNotConsumeObjectSlots(t *testing.T) {
 	ctx := tenantCtx(t)
 	q := &QuotaSoftCheck{
 		Reader: &fakeQuotaReader{q: admindomain.Quota{
-			MaxObjectCount:    5,
+			MaxObjectCount:    new(int64(5)),
 			UsageObjectCount:  5,
-			MaxObjectsPerDay:  5,
+			MaxObjectsPerDay:  new(int64(5)),
 			UsageObjectsToday: 5,
 		}},
 		UploadProcedures: map[string]struct{}{regenerateUploadURLProc: {}},
@@ -264,7 +264,7 @@ func TestQuotaSoftCheck_RegenerateStillHonoursByteCap(t *testing.T) {
 	ctx := tenantCtx(t)
 	q := &QuotaSoftCheck{
 		Reader: &fakeQuotaReader{q: admindomain.Quota{
-			MaxTotalBytes:   1000,
+			MaxTotalBytes:   new(int64(1000)),
 			UsageTotalBytes: 2000,
 		}},
 		UploadProcedures: map[string]struct{}{regenerateUploadURLProc: {}},
@@ -327,7 +327,7 @@ func TestQuotaSoftCheck_BucketCapRejects(t *testing.T) {
 	ctx := tenantCtx(t)
 	reader := &scopedReader{
 		tenantErr: errors.New("no tenant quota"), // tenant unlimited
-		bucket:    admindomain.Quota{MaxTotalBytes: 1000, UsageTotalBytes: 950},
+		bucket:    admindomain.Quota{MaxTotalBytes: new(int64(1000)), UsageTotalBytes: 950},
 	}
 	bindings := &fakeBindings{backendID: "primary", bucket: "bkt-1"}
 	q := gated(reader)
@@ -357,8 +357,8 @@ func TestQuotaSoftCheck_BucketCapRejects(t *testing.T) {
 func TestQuotaSoftCheck_TenantScopeReportedFirst(t *testing.T) {
 	ctx := tenantCtx(t)
 	q := gated(&scopedReader{
-		tenant: admindomain.Quota{MaxTotalBytes: 10, UsageTotalBytes: 100},
-		bucket: admindomain.Quota{MaxTotalBytes: 10, UsageTotalBytes: 100},
+		tenant: admindomain.Quota{MaxTotalBytes: new(int64(10)), UsageTotalBytes: 100},
+		bucket: admindomain.Quota{MaxTotalBytes: new(int64(10)), UsageTotalBytes: 100},
 	})
 	q.WithBucketScope(&fakeBindings{backendID: "primary", bucket: "bkt-1"})
 
@@ -374,7 +374,7 @@ func TestQuotaSoftCheck_CanonicalNameSkipsBindingLookup(t *testing.T) {
 	ctx := tenantCtx(t)
 	reader := &scopedReader{
 		tenantErr: errors.New("none"),
-		bucket:    admindomain.Quota{MaxObjectCount: 1, UsageObjectCount: 5},
+		bucket:    admindomain.Quota{MaxObjectCount: new(int64(1)), UsageObjectCount: 5},
 	}
 	bindings := &fakeBindings{}
 	q := gated(reader)
@@ -397,7 +397,7 @@ func TestQuotaSoftCheck_CanonicalNameSkipsBindingLookup(t *testing.T) {
 // ResourceExhausted would tell the caller to delete data that isn't the
 // problem.
 func TestQuotaSoftCheck_BucketResolutionFailuresFailOpen(t *testing.T) {
-	overCap := admindomain.Quota{MaxTotalBytes: 1, UsageTotalBytes: 999}
+	overCap := admindomain.Quota{MaxTotalBytes: new(int64(1)), UsageTotalBytes: 999}
 
 	cases := []struct {
 		name     string
@@ -450,7 +450,7 @@ func TestQuotaSoftCheck_BucketDailyCapRejects(t *testing.T) {
 	ctx := tenantCtx(t)
 	q := gated(&scopedReader{
 		tenantErr: errors.New("none"),
-		bucket:    admindomain.Quota{MaxObjectsPerDay: 2, UsageObjectsToday: 2},
+		bucket:    admindomain.Quota{MaxObjectsPerDay: new(int64(2)), UsageObjectsToday: 2},
 	})
 	q.WithBucketScope(&fakeBindings{backendID: "primary", bucket: "bkt-1"})
 
@@ -487,7 +487,7 @@ func (r *tenantRecordingReader) GetBucket(context.Context, string, string) (admi
 // further in.
 func TestQuotaSoftCheck_CountsAnAdminUploadAgainstTheNamedTenant(t *testing.T) {
 	own, target := uuid.New(), uuid.New()
-	full := admindomain.Quota{MaxTotalBytes: 100, UsageTotalBytes: 100}
+	full := admindomain.Quota{MaxTotalBytes: new(int64(100)), UsageTotalBytes: 100}
 	upload := &fakeUploadWithParent{parent: "tenants/" + target.String() + "/collections/docs", sizeHint: 1}
 
 	for name, tc := range map[string]struct {
@@ -513,5 +513,33 @@ func TestQuotaSoftCheck_CountsAnAdminUploadAgainstTheNamedTenant(t *testing.T) {
 				t.Errorf("the target's quota was read acting on %v, want the target", reader.acting)
 			}
 		})
+	}
+}
+
+// A nil cap is no cap; a cap of 0 refuses the first byte and the first
+// object, headroom or not. 0 used to mean "no cap", which made a quota that
+// stops all writes impossible to set.
+func TestQuotaSoftCheckZeroCapRefusesAndNilAdmits(t *testing.T) {
+	const headroom = 0.5
+	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{TenantID: uuid.Must(uuid.NewV7())})
+	for name, tc := range map[string]struct {
+		quota  admindomain.Quota
+		refuse bool
+	}{
+		"no caps":              {admindomain.Quota{}, false},
+		"zero total bytes":     {admindomain.Quota{MaxTotalBytes: new(int64(0))}, true},
+		"zero object count":    {admindomain.Quota{MaxObjectCount: new(int64(0))}, true},
+		"zero bytes per day":   {admindomain.Quota{MaxBytesPerDay: new(int64(0))}, true},
+		"zero objects per day": {admindomain.Quota{MaxObjectsPerDay: new(int64(0))}, true},
+	} {
+		q := &QuotaSoftCheck{
+			Reader:           &fakeQuotaReader{q: tc.quota},
+			UploadProcedures: map[string]struct{}{"/test/Upload": {}},
+			Headroom:         headroom,
+		}
+		err := q.CheckUpload(ctx, "/test/Upload", &fakeUploadObjectRequest{sizeHint: 1})
+		if refused := connect.CodeOf(err) == connect.CodeResourceExhausted; refused != tc.refuse {
+			t.Errorf("%s: err = %v, want refused=%v", name, err, tc.refuse)
+		}
 	}
 }

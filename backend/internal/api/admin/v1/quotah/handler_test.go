@@ -41,9 +41,14 @@ type fakeQuotaRepo struct {
 	bucketQuota  admindomain.Quota
 	upsertTenant int
 	upsertBucket int
-	resetCalls   int
-	bucketResets int
-	resetErr     error
+	// upserted is the quota the last Tx upsert wrote.
+	upserted admindomain.Quota
+	// firstTenantErr fails the first GetTenant only: no row before the
+	// write, the written one after it.
+	firstTenantErr error
+	resetCalls     int
+	bucketResets   int
+	resetErr       error
 	// byID is what GetByID returns; byIDErr overrides it. byIDCtx and
 	// resetCtx keep the contexts each call ran under.
 	byID     admindomain.Quota
@@ -55,6 +60,10 @@ type fakeQuotaRepo struct {
 func (f *fakeQuotaRepo) UpsertTenant(context.Context, admindomain.Quota) error { return nil }
 func (f *fakeQuotaRepo) UpsertBucket(context.Context, admindomain.Quota) error { return nil }
 func (f *fakeQuotaRepo) GetTenant(context.Context, uuid.UUID) (admindomain.Quota, error) {
+	if err := f.firstTenantErr; err != nil {
+		f.firstTenantErr = nil
+		return admindomain.Quota{}, err
+	}
 	return f.tenantQuota, f.tenantErr
 }
 func (f *fakeQuotaRepo) GetBucket(context.Context, string, string) (admindomain.Quota, error) {
@@ -78,12 +87,14 @@ func (f *fakeQuotaRepo) GetByID(ctx context.Context, _ uuid.UUID) (admindomain.Q
 func (f *fakeQuotaRepo) RunInTx(ctx context.Context, fn func(context.Context, pgx.Tx) error) error {
 	return fn(ctx, nil)
 }
-func (f *fakeQuotaRepo) UpsertTenantTx(context.Context, pgx.Tx, admindomain.Quota) error {
+func (f *fakeQuotaRepo) UpsertTenantTx(_ context.Context, _ pgx.Tx, q admindomain.Quota) error {
 	f.upsertTenant++
+	f.upserted = q
 	return nil
 }
-func (f *fakeQuotaRepo) UpsertBucketTx(context.Context, pgx.Tx, admindomain.Quota) error {
+func (f *fakeQuotaRepo) UpsertBucketTx(_ context.Context, _ pgx.Tx, q admindomain.Quota) error {
 	f.upsertBucket++
+	f.upserted = q
 	return nil
 }
 func (f *fakeQuotaRepo) GetBucketTx(context.Context, pgx.Tx, string, string) (admindomain.Quota, error) {
@@ -126,14 +137,14 @@ func TestGetTenantQuota_CrossTenantDenied(t *testing.T) {
 
 func TestGetTenantQuota_SameTenantAllowed(t *testing.T) {
 	caller := uuid.New()
-	repo := &fakeQuotaRepo{tenantQuota: admindomain.Quota{TenantID: caller, MaxTotalBytes: 42}}
+	repo := &fakeQuotaRepo{tenantQuota: admindomain.Quota{TenantID: caller, MaxTotalBytes: new(int64(42))}}
 	h := NewHandler(repo, allowAuthorizer{})
 	got, err := h.GetTenantQuota(ctxAs(caller, apiutil.RoleTenantAdmin), caller)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got.MaxTotalBytes != 42 {
-		t.Errorf("got %d, want the repo quota (42)", got.MaxTotalBytes)
+	if *got.MaxTotalBytes != 42 {
+		t.Errorf("got %d, want the repo quota (42)", *got.MaxTotalBytes)
 	}
 }
 
@@ -220,10 +231,10 @@ func TestSetQuota_ScopeValidation(t *testing.T) {
 
 func TestSetQuota_TenantScopeUpsertsInTx(t *testing.T) {
 	tid := uuid.New()
-	repo := &fakeQuotaRepo{tenantQuota: admindomain.Quota{TenantID: tid, MaxTotalBytes: 7}}
+	repo := &fakeQuotaRepo{tenantQuota: admindomain.Quota{TenantID: tid, MaxTotalBytes: new(int64(7))}}
 	h := NewHandler(repo, allowAuthorizer{})
 	got, err := h.SetQuota(ctxAs(uuid.New(), apiutil.RolePlatformAdmin),
-		admindomain.Quota{TenantID: tid, MaxTotalBytes: 7}, nil)
+		admindomain.Quota{TenantID: tid, MaxTotalBytes: new(int64(7))}, []string{CapMaxTotalBytes})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -233,8 +244,8 @@ func TestSetQuota_TenantScopeUpsertsInTx(t *testing.T) {
 	if repo.upsertBucket != 0 {
 		t.Errorf("UpsertBucketTx should not run for tenant scope, ran %d", repo.upsertBucket)
 	}
-	if got.MaxTotalBytes != 7 {
-		t.Errorf("response = %d, want the read-back quota (7)", got.MaxTotalBytes)
+	if *got.MaxTotalBytes != 7 {
+		t.Errorf("response = %d, want the read-back quota (7)", *got.MaxTotalBytes)
 	}
 }
 
@@ -242,7 +253,7 @@ func TestSetQuota_BucketScopeUpsertsInTx(t *testing.T) {
 	repo := &fakeQuotaRepo{bucketQuota: admindomain.Quota{BackendID: "be", BucketName: "bk"}}
 	h := NewHandler(repo, allowAuthorizer{})
 	_, err := h.SetQuota(ctxAs(uuid.New(), apiutil.RoleBucketAdmin),
-		admindomain.Quota{BackendID: "be", BucketName: "bk"}, nil)
+		admindomain.Quota{BackendID: "be", BucketName: "bk"}, []string{CapMaxTotalBytes})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -284,7 +295,7 @@ func TestSetQuota_BucketScopeNotifiesTheBucketOwner(t *testing.T) {
 	h := NewHandler(repo, allowAuthorizer{})
 	h.SetEventProducer(events)
 	if _, err := h.SetQuota(ctxAs(uuid.New(), apiutil.RolePlatformAdmin),
-		admindomain.Quota{BackendID: "primary", BucketName: "dedicated"}, nil); err != nil {
+		admindomain.Quota{BackendID: "primary", BucketName: "dedicated"}, []string{CapMaxTotalBytes}); err != nil {
 		t.Fatalf("SetQuota: %v", err)
 	}
 	if len(events.tenants) != 1 || events.tenants[0] != owner.String() {
@@ -299,7 +310,7 @@ func TestSetQuota_SharedBucketNotifiesNobody(t *testing.T) {
 	h := NewHandler(repo, allowAuthorizer{})
 	h.SetEventProducer(events)
 	if _, err := h.SetQuota(ctxAs(uuid.New(), apiutil.RolePlatformAdmin),
-		admindomain.Quota{BackendID: "primary", BucketName: "shared"}, nil); err != nil {
+		admindomain.Quota{BackendID: "primary", BucketName: "shared"}, []string{CapMaxTotalBytes}); err != nil {
 		t.Fatalf("SetQuota: %v", err)
 	}
 	if len(events.tenants) != 0 {
@@ -427,3 +438,36 @@ var (
 	_ cedar.Authorizer = allowAuthorizer{}
 	_ cedar.Authorizer = denyAuthorizer{}
 )
+
+// The caps the mask leaves out keep the stored values: the upsert writes all
+// four, and a cap it took from the request instead would be lifted.
+func TestSetQuota_KeepsTheCapsTheMaskLeavesOut(t *testing.T) {
+	const storedCount, requestBytes = 9, 3
+	tid := uuid.New()
+	repo := &fakeQuotaRepo{tenantQuota: admindomain.Quota{TenantID: tid, MaxObjectCount: new(int64(storedCount))}}
+	h := NewHandler(repo, allowAuthorizer{})
+	if _, err := h.SetQuota(ctxAs(uuid.New(), apiutil.RolePlatformAdmin),
+		admindomain.Quota{TenantID: tid, MaxTotalBytes: new(int64(requestBytes))}, []string{CapMaxTotalBytes}); err != nil {
+		t.Fatalf("SetQuota: %v", err)
+	}
+	w := repo.upserted
+	if w.MaxTotalBytes == nil || *w.MaxTotalBytes != requestBytes || w.MaxObjectCount == nil || *w.MaxObjectCount != storedCount {
+		t.Errorf("upserted caps = %v / %v, want %d / %d", deref(w.MaxTotalBytes), deref(w.MaxObjectCount), requestBytes, storedCount)
+	}
+}
+
+// With no stored quota, the caps the mask leaves out are no cap.
+func TestSetQuota_FirstWriteLeavesUnnamedCapsOff(t *testing.T) {
+	tid := uuid.New()
+	repo := &fakeQuotaRepo{firstTenantErr: admindomain.ErrNotFound}
+	h := NewHandler(repo, allowAuthorizer{})
+	if _, err := h.SetQuota(ctxAs(uuid.New(), apiutil.RolePlatformAdmin),
+		admindomain.Quota{TenantID: tid, MaxTotalBytes: new(int64(0)), MaxObjectCount: new(int64(5))},
+		[]string{CapMaxTotalBytes}); err != nil {
+		t.Fatalf("SetQuota: %v", err)
+	}
+	w := repo.upserted
+	if w.MaxTotalBytes == nil || *w.MaxTotalBytes != 0 || w.MaxObjectCount != nil {
+		t.Errorf("upserted caps = %v / %v, want 0 / none", deref(w.MaxTotalBytes), deref(w.MaxObjectCount))
+	}
+}

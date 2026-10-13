@@ -15,8 +15,8 @@
 //   - Quota name format: `tenants/{tenant_id_or_slug}/quota`. Bucket
 //     quotas live under storageBackends/.../buckets/.../quota and
 //     surface in the per-bucket Quota tab (BACKLOG; not in this slice).
-//   - 0 caps mean "unlimited" per the quota contract. UI renders
-//     `∞ unlimited`.
+//   - A cap that is set is a limit, where 0 allows nothing; an absent cap
+//     is none, rendered `∞ unlimited` (_caps.ts).
 
 import { useTenantChangesBlocked } from "../tenant-context";
 import { useState } from "react";
@@ -33,7 +33,7 @@ import {
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { Input } from "@/components/ui/input";
+import { LimitInput } from "@/components/ui/LimitInput";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -49,25 +49,13 @@ import { useTenant } from "../tenant-context";
 import { formatCount } from "@/lib/format/locale";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { fieldMask } from "@/lib/connect/fieldMask";
+import { capFieldOf, capOf, capPercent, type CapField } from "./_caps";
 
-function bigIntFromInput(s: string): bigint {
-  const n = s.trim();
-  if (!n) return 0n;
-  try {
-    return BigInt(n);
-  } catch {
-    return 0n;
-  }
-}
+/** A cap with no limit: what a tenant with no quota starts from. */
+const NO_CAP: CapField = { value: "", unlimited: true };
 
-function fmtCap(n: bigint, fmt: (b: number) => string): string {
-  if (n === 0n) return "∞ unlimited";
-  return fmt(Number(n));
-}
-
-function pctOf(used: bigint, cap: bigint): number {
-  if (cap <= 0n) return 0;
-  return Math.min(100, (Number(used) / Number(cap)) * 100);
+function fmtCap(cap: bigint | undefined, fmt: (b: number) => string): string {
+  return cap === undefined ? "∞ unlimited" : fmt(Number(cap));
 }
 
 function progressColour(pct: number): string {
@@ -82,12 +70,13 @@ export default function TenantQuotasPage() {
   const quotaName = `tenants/${tenant.tenantId}/quota`;
   const { showNotification } = useNotification();
 
-  // Form state mirrors the four caps as strings (so an empty input
-  // round-trips to 0 unlimited). Hydrated from the latest snapshot.
-  const [maxTotalBytes, setMaxTotalBytes] = useState("");
-  const [maxObjectCount, setMaxObjectCount] = useState("");
-  const [maxBytesPerDay, setMaxBytesPerDay] = useState("");
-  const [maxObjectsPerDay, setMaxObjectsPerDay] = useState("");
+  // Form state: each cap's typed limit and whether it is lifted. A tenant
+  // with no quota starts with every cap Unlimited. Hydrated from the latest
+  // snapshot.
+  const [maxTotalBytes, setMaxTotalBytes] = useState(NO_CAP);
+  const [maxObjectCount, setMaxObjectCount] = useState(NO_CAP);
+  const [maxBytesPerDay, setMaxBytesPerDay] = useState(NO_CAP);
+  const [maxObjectsPerDay, setMaxObjectsPerDay] = useState(NO_CAP);
   const [submitting, setSubmitting] = useState(false);
   const [resetting, setResetting] = useState(false);
 
@@ -131,31 +120,42 @@ export default function TenantQuotasPage() {
   if (quota !== seededFrom) {
     setSeededFrom(quota);
     if (quota) {
-      setMaxTotalBytes(String(quota.maxTotalBytes));
-      setMaxObjectCount(String(quota.maxObjectCount));
-      setMaxBytesPerDay(String(quota.maxBytesPerDay));
-      setMaxObjectsPerDay(String(quota.maxObjectsPerDay));
+      setMaxTotalBytes(capFieldOf(quota.maxTotalBytes));
+      setMaxObjectCount(capFieldOf(quota.maxObjectCount));
+      setMaxBytesPerDay(capFieldOf(quota.maxBytesPerDay));
+      setMaxObjectsPerDay(capFieldOf(quota.maxObjectsPerDay));
     } else {
-      setMaxTotalBytes("");
-      setMaxObjectCount("");
-      setMaxBytesPerDay("");
-      setMaxObjectsPerDay("");
+      setMaxTotalBytes(NO_CAP);
+      setMaxObjectCount(NO_CAP);
+      setMaxBytesPerDay(NO_CAP);
+      setMaxObjectsPerDay(NO_CAP);
     }
   }
 
+  const caps = {
+    maxTotalBytes: capOf(maxTotalBytes),
+    maxObjectCount: capOf(maxObjectCount),
+    maxBytesPerDay: capOf(maxBytesPerDay),
+    maxObjectsPerDay: capOf(maxObjectsPerDay),
+  };
+  // A cap with Unlimited off and no whole number typed is held, not sent.
+  const capsInvalid = Object.values(caps).some((c) => c === null);
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
+    if (capsInvalid) return;
     setSubmitting(true);
     try {
       const next = create(QuotaSchema, {
         name: quotaName,
-        maxTotalBytes: bigIntFromInput(maxTotalBytes),
-        maxObjectCount: bigIntFromInput(maxObjectCount),
-        maxBytesPerDay: bigIntFromInput(maxBytesPerDay),
-        maxObjectsPerDay: bigIntFromInput(maxObjectsPerDay),
+        maxTotalBytes: caps.maxTotalBytes ?? undefined,
+        maxObjectCount: caps.maxObjectCount ?? undefined,
+        maxBytesPerDay: caps.maxBytesPerDay ?? undefined,
+        maxObjectsPerDay: caps.maxObjectsPerDay ?? undefined,
       });
       // FieldMask covers all four caps — usage stays untouched
-      // (server-managed). resource_version is the OCC guard and is now
+      // (server-managed). A masked cap the quota leaves absent is lifted,
+      // which is how Unlimited is sent. resource_version is the OCC guard and is now
       // required: "0" asserts "no quota row exists yet", which is what the
       // first save means. Sending "" would be rejected by validation, and
       // sending a stale version is Aborted rather than silently overwriting
@@ -210,7 +210,7 @@ export default function TenantQuotasPage() {
           <p className={cn(T.helper, "max-w-prose")}>
             Hard caps on storage and request volume for{" "}
             <span className="font-mono">{tenant.displayName}</span>. Enforced at
-            presign time; 0 means no cap.
+            presign time; a cap of 0 allows nothing.
           </p>
         </div>
         <Button
@@ -287,7 +287,8 @@ export default function TenantQuotasPage() {
           <div>
             <h3 className="text-base font-medium">Update caps</h3>
             <p className="text-sm text-muted-foreground">
-              Enter raw integers (no SI suffixes). 0 = unlimited.
+              Enter raw integers (no SI suffixes). 0 allows nothing; Unlimited
+              sets no cap.
             </p>
           </div>
 
@@ -295,7 +296,7 @@ export default function TenantQuotasPage() {
             <CapInput
               id="max-total-bytes"
               label="Max total bytes"
-              hint={`Hard cap on storage. ${formatBytes(bigIntFromInput(maxTotalBytes) ? Number(bigIntFromInput(maxTotalBytes)) : 0)}`}
+              hint={`Hard cap on storage. ${fmtCap(caps.maxTotalBytes ?? undefined, formatBytes)}`}
               value={maxTotalBytes}
               onChange={setMaxTotalBytes}
             />
@@ -309,7 +310,7 @@ export default function TenantQuotasPage() {
             <CapInput
               id="max-bytes-per-day"
               label="Max bytes / day"
-              hint={`Daily upload byte budget. ${formatBytes(bigIntFromInput(maxBytesPerDay) ? Number(bigIntFromInput(maxBytesPerDay)) : 0)}`}
+              hint={`Daily upload byte budget. ${fmtCap(caps.maxBytesPerDay ?? undefined, formatBytes)}`}
               value={maxBytesPerDay}
               onChange={setMaxBytesPerDay}
             />
@@ -341,7 +342,9 @@ export default function TenantQuotasPage() {
                 "Update failed" for a click that was simply too early. */}
             <Button
               type="submit"
-              disabled={Boolean(changesBlocked) || submitting || loading}
+              disabled={
+                Boolean(changesBlocked) || submitting || loading || capsInvalid
+              }
               title={changesBlocked ?? undefined}
             >
               {submitting ? (
@@ -378,12 +381,13 @@ function UsageRow({
   fmt,
 }: {
   label: string;
-  cap: bigint;
+  cap: bigint | undefined;
   used: bigint;
   fmt: (n: number) => string;
 }) {
-  const pct = pctOf(used, cap);
-  const overCap = cap > 0n && used >= cap;
+  const capped = cap !== undefined;
+  const pct = capped ? capPercent(used, cap) : 0;
+  const overCap = capped && used >= cap;
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between">
@@ -399,7 +403,7 @@ function UsageRow({
         {fmt(Number(used))}{" "}
         <span className="text-muted-foreground">/ {fmtCap(cap, fmt)}</span>
       </div>
-      {cap > 0n && (
+      {capped && (
         <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
           <div
             className={cn("h-full transition-all", progressColour(pct))}
@@ -421,21 +425,25 @@ function CapInput({
   id: string;
   label: string;
   hint: string;
-  value: string;
-  onChange: (v: string) => void;
+  value: CapField;
+  onChange: (v: CapField) => void;
 }) {
+  const invalid = capOf(value) === null && value.value.trim() !== "";
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
-      <Input
+      <LimitInput
         id={id}
-        type="number"
-        min={0}
-        placeholder="0 = unlimited"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={value.value}
+        onChange={(v) => onChange({ ...value, value: v })}
+        unlimited={value.unlimited}
+        onUnlimitedChange={(next) => onChange({ ...value, unlimited: next })}
+        placeholder="0 allows nothing"
+        aria-invalid={invalid || undefined}
       />
-      <p className={T.hint}>{hint}</p>
+      <p className={T.hint}>
+        {invalid ? "A whole number, or Unlimited." : hint}
+      </p>
     </div>
   );
 }
