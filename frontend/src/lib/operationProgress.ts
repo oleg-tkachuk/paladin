@@ -1,7 +1,8 @@
 // Reading the {processed, total} snapshot the worker leaves on an operation.
 //
-// The runner writes progress into operations.metadata about once a second
-// while an executor loops, and the stale-operation reclaimer copies the last
+// The runner records progress about once a second while an executor loops,
+// and the API returns it as the operation's metadata; the stale-operation
+// reclaimer copies the last
 // snapshot it finds into the failure payload as `last_progress`. Both arrive
 // here as an Any wrapping a google.protobuf.Struct, so both are read the same
 // way — the only difference is where the struct is nested.

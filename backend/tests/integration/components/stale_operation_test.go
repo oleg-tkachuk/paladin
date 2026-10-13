@@ -73,7 +73,7 @@ func TestReclaimStaleOperations(t *testing.T) {
 
 // The heartbeat is what keeps a long operation out of the reclaimer's reach,
 // so it has to actually move updated_at — and touch nothing else, because
-// metadata carries progress counters the executor writes concurrently.
+// the executor writes its progress concurrently.
 func TestTouchOperationKeepsItOutOfReclaim(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -83,9 +83,9 @@ func TestTouchOperationKeepsItOutOfReclaim(t *testing.T) {
 
 	id := uuid.New()
 	mustExec(t, ctx, pool,
-		`INSERT INTO operations (id, tenant_id, type, state, metadata, created_at, updated_at)
-		 VALUES ($1, $2, 'BatchUpdateTags', 'RUNNING', $3, now() - interval '1 hour', now() - interval '1 hour')`,
-		id, tenant, []byte(`{"processed":7,"total":9}`))
+		`INSERT INTO operations (id, tenant_id, type, state, progress, created_at, updated_at)
+		 VALUES ($1, $2, 'BatchUpdateTags', 'RUNNING', '{"processed":7,"total":9}', now() - interval '1 hour', now() - interval '1 hour')`,
+		id, tenant)
 
 	if err := repo.Touch(ctx, id); err != nil {
 		t.Fatalf("touch: %v", err)
@@ -98,12 +98,12 @@ func TestTouchOperationKeepsItOutOfReclaim(t *testing.T) {
 		t.Errorf("reclaimed %d rows after a heartbeat, want 0", n)
 	}
 
-	var meta []byte
-	if err := pool.QueryRow(ctx, `SELECT metadata FROM operations WHERE id = $1`, id).Scan(&meta); err != nil {
-		t.Fatalf("read metadata: %v", err)
+	var progress string
+	if err := pool.QueryRow(ctx, `SELECT progress::text FROM operations WHERE id = $1`, id).Scan(&progress); err != nil {
+		t.Fatalf("read progress: %v", err)
 	}
-	if string(meta) != `{"processed":7,"total":9}` {
-		t.Errorf("heartbeat rewrote metadata: %s", meta)
+	if progress != `{"total": 9, "processed": 7}` {
+		t.Errorf("heartbeat rewrote progress: %s", progress)
 	}
 }
 
@@ -137,9 +137,10 @@ func TestReclaimLeavesTerminalOperationsAlone(t *testing.T) {
 
 // "The outcome is unknown" is honest but useless to a caller deciding whether
 // to reissue a batch. The runner leaves a {processed, total} snapshot in
-// metadata as it goes, so the reclaim can say how far the work got — and must
-// survive metadata that is not a progress snapshot at all, which is what an
-// operation that died before its first report leaves behind.
+// progress as it goes, so the reclaim can say how far the work got; an
+// operation that died before its first report has none. Either way the
+// executor's arguments in metadata outlive the reclaim — they are what the
+// operation was for.
 func TestReclaimCarriesLastProgress(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -147,31 +148,40 @@ func TestReclaimCarriesLastProgress(t *testing.T) {
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
 	repo := adapters.NewOperationRepo(sqlc.New(pool), pool)
 
-	withProgress, beforeFirstReport, notJSON := uuid.New(), uuid.New(), uuid.New()
-	for id, meta := range map[uuid.UUID][]byte{
-		withProgress:      []byte(`{"processed":7,"total":9}`),
-		beforeFirstReport: []byte(`{"object_ids":["a","b"]}`),
-		notJSON:           []byte(`not json at all`),
+	const args = `{"object_ids":["a","b"]}`
+	withProgress, beforeFirstReport := uuid.New(), uuid.New()
+	for id, progress := range map[uuid.UUID]*string{
+		withProgress:      ptr(`{"processed":7,"total":9}`),
+		beforeFirstReport: nil,
 	} {
 		mustExec(t, ctx, pool,
-			`INSERT INTO operations (id, tenant_id, type, state, metadata, created_at, updated_at)
-			 VALUES ($1, $2, 'BatchUpdateTags', 'RUNNING', $3,
+			`INSERT INTO operations (id, tenant_id, type, state, metadata, progress, created_at, updated_at)
+			 VALUES ($1, $2, 'BatchUpdateTags', 'RUNNING', $3, $4::jsonb,
 			         now() - interval '1 hour', now() - interval '1 hour')`,
-			id, tenant, meta)
+			id, tenant, []byte(args), progress)
 	}
 
 	n, err := repo.ReclaimStale(ctx, 15*time.Minute)
 	if err != nil {
 		t.Fatalf("reclaim: %v", err)
 	}
-	if n != 3 {
-		t.Fatalf("reclaimed %d rows, want 3 — one bad metadata payload must not "+
-			"take the others down with it", n)
+	if n != 2 {
+		t.Fatalf("reclaimed %d rows, want 2", n)
 	}
 
-	var progressed, unknown, unparsed []byte
+	for _, id := range []uuid.UUID{withProgress, beforeFirstReport} {
+		var meta []byte
+		if err := pool.QueryRow(ctx, `SELECT metadata FROM operations WHERE id = $1`, id).Scan(&meta); err != nil {
+			t.Fatalf("read metadata: %v", err)
+		}
+		if string(meta) != args {
+			t.Errorf("reclaimed operation's metadata = %q, want its arguments %s", meta, args)
+		}
+	}
+
+	var progressed, unknown []byte
 	for id, dst := range map[uuid.UUID]*[]byte{
-		withProgress: &progressed, beforeFirstReport: &unknown, notJSON: &unparsed,
+		withProgress: &progressed, beforeFirstReport: &unknown,
 	} {
 		if err := pool.QueryRow(ctx,
 			`SELECT response FROM operations WHERE id = $1`, id).Scan(dst); err != nil {
@@ -200,17 +210,12 @@ func TestReclaimCarriesLastProgress(t *testing.T) {
 			got.LastProgress.Processed, got.LastProgress.Total)
 	}
 
-	for name, raw := range map[string][]byte{
-		"executor arguments": unknown, "unparsable metadata": unparsed,
-	} {
-		got.LastProgress = nil
-		if err := json.Unmarshal(raw, &got); err != nil {
-			t.Fatalf("%s: response is not JSON: %v (%s)", name, err, raw)
-		}
-		if got.LastProgress != nil {
-			t.Errorf("%s: reported progress %+v that was never measured",
-				name, *got.LastProgress)
-		}
+	got.LastProgress = nil
+	if err := json.Unmarshal(unknown, &got); err != nil {
+		t.Fatalf("response is not JSON: %v (%s)", err, unknown)
+	}
+	if got.LastProgress != nil {
+		t.Errorf("reported progress %+v that was never measured", *got.LastProgress)
 	}
 }
 
@@ -225,11 +230,12 @@ func TestOperationStateWritesKeepTerminalStates(t *testing.T) {
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
 	repo := adapters.NewOperationRepo(sqlc.New(pool), pool)
 
+	const args = `{"object_ids":["a"]}`
 	running := func() uuid.UUID {
 		id := uuid.New()
 		mustExec(t, ctx, pool,
-			`INSERT INTO operations (id, tenant_id, type, state) VALUES ($1, $2, 'BatchUpdateTags', 'RUNNING')`,
-			id, tenant)
+			`INSERT INTO operations (id, tenant_id, type, state, metadata) VALUES ($1, $2, 'BatchUpdateTags', 'RUNNING', $3)`,
+			id, tenant, []byte(args))
 		return id
 	}
 	stateOf := func(id uuid.UUID) string {
@@ -258,29 +264,36 @@ func TestOperationStateWritesKeepTerminalStates(t *testing.T) {
 		"cancelled": {cancelled, "CANCELLED"},
 		"reclaimed": {reclaimed, "FAILED"},
 	} {
-		for _, write := range []struct {
-			state operationh.State
-			meta  []byte
-		}{{operationh.StateRunning, progress}, {operationh.StateSucceeded, nil}} {
-			err := repo.UpdateState(ctx, tc.id, write.state, write.meta, []byte(`{}`), "", "")
-			if !errors.Is(err, operationh.ErrOperationFinished) {
-				t.Errorf("%s: writing %s returned %v, want ErrOperationFinished", name, write.state, err)
-			}
-			if got := stateOf(tc.id); got != tc.want {
-				t.Errorf("%s: a late %s write turned it into %s", name, write.state, got)
-			}
+		if err := repo.ReportProgress(ctx, tc.id, progress); !errors.Is(err, operationh.ErrOperationFinished) {
+			t.Errorf("%s: late progress returned %v, want ErrOperationFinished", name, err)
+		}
+		if err := repo.UpdateState(ctx, tc.id, operationh.StateSucceeded, []byte(`{}`), "", ""); !errors.Is(err, operationh.ErrOperationFinished) {
+			t.Errorf("%s: late result returned %v, want ErrOperationFinished", name, err)
+		}
+		if got := stateOf(tc.id); got != tc.want {
+			t.Errorf("%s: late writes turned it into %s", name, got)
 		}
 	}
 
 	live := running()
-	if err := repo.UpdateState(ctx, live, operationh.StateRunning, progress, nil, "", ""); err != nil {
+	if err := repo.ReportProgress(ctx, live, progress); err != nil {
 		t.Fatalf("progress on a running operation: %v", err)
 	}
-	if err := repo.UpdateState(ctx, live, operationh.StateSucceeded, nil, []byte(`{}`), "", ""); err != nil {
+	if err := repo.UpdateState(ctx, live, operationh.StateSucceeded, []byte(`{}`), "", ""); err != nil {
 		t.Fatalf("result on a running operation: %v", err)
 	}
 	if got := stateOf(live); got != "SUCCEEDED" {
 		t.Errorf("a running operation's result left it %s", got)
+	}
+	op, err := repo.Get(ctx, live, tenant)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if string(op.Metadata) != args {
+		t.Errorf("metadata = %q after progress and result, want the arguments %s", op.Metadata, args)
+	}
+	if string(op.Progress) != `{"total": 2, "processed": 1}` {
+		t.Errorf("progress = %q, want the last report", op.Progress)
 	}
 }
 
@@ -307,3 +320,5 @@ func TestTouchReportsAnOperationNoLongerRunning(t *testing.T) {
 		t.Errorf("touch after a cancel returned %v, want ErrOperationFinished", err)
 	}
 }
+
+func ptr(s string) *string { return &s }

@@ -598,15 +598,10 @@ measures a chain that is about to change. Owner decision 2026-10-12.
 - **Reason:** A batch failed with `WORKER_LOST` is recovered by reissuing it,
   and the copy, soft-delete and restore executors count what the dead run
   already applied as succeeded (`already_applied`); tags are simply written
-  again, which is the same result. Three things stay short of that:
+  again, which is the same result. Two things stay short of that:
   - **Permanent delete.** An object the dead run erased no longer exists, so
     the reissue reports it as `not found` — the same answer as an id that never
     existed. Telling them apart needs a record of what the operation erased.
-  - **Progress overwrites the arguments.** The runner's progress report writes
-    `{processed, total}` into `operations.metadata` — the column that holds the
-    executor's arguments — so while a batch runs, and after it is reclaimed, the
-    row no longer says which objects it was for. The terminal write restores
-    them; a reclaim does not.
   - **A copy cut off before its promote.** Its destination row is left
     PENDING, and the reissue reports that key as "a write in progress" until
     the row's presign deadline (`limits.presign.put_ttl`) passes and the reaper
@@ -617,11 +612,9 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   - A reissued permanent delete reports the objects its earlier run erased as
     already applied.
   - A reissued copy completes a destination its own earlier run left PENDING.
-  - Progress lives in its own column, and `metadata` keeps the arguments for
-    the operation's whole life, reclaim included.
-- **Blockers:** none technical. The first two need a decision on where an
-  operation records the objects it touched — per-item rows, or a column on the
-  object — which one design should answer for both.
+- **Blockers:** none technical. Both need a decision on where an operation
+  records the objects it touched — per-item rows, or a column on the object —
+  which one design should answer for both.
 
 ---
 

@@ -200,7 +200,7 @@ func (r *Runner) runOne(ctx context.Context, op operationh.Operation) {
 	writeCtx, cancel := terminalCtx(ctx)
 	defer cancel()
 	if err := r.Repo.UpdateState(writeCtx, op.OperationID,
-		operationh.StateSucceeded, op.Metadata, response, "", ""); err != nil {
+		operationh.StateSucceeded, response, "", ""); err != nil {
 		r.logTerminalWrite(logger, operationh.StateSucceeded, err)
 	}
 }
@@ -258,8 +258,9 @@ func (r *Runner) heartbeat(ctx context.Context, op operationh.Operation, stop <-
 
 // withProgress installs a throttled progress reporter on ctx. Executors call
 // operations.ReportProgress in their loops; this writes `{processed, total}`
-// to the operation row's metadata (state RUNNING) so a polling client renders
-// a live progress bar. Writes are throttled to ~1/s (the final tick always
+// to the operation row's progress column (state RUNNING) — never to metadata,
+// which keeps the executor's arguments for the operation's whole life — so a
+// polling client renders a live progress bar. Writes are throttled to ~1/s (the final tick always
 // lands) to keep the queue's DB pressure bounded on large batches. The
 // terminal success/fail write in runOne / markFailed is authoritative.
 func (r *Runner) withProgress(ctx context.Context, op operationh.Operation) context.Context {
@@ -270,12 +271,11 @@ func (r *Runner) withProgress(ctx context.Context, op operationh.Operation) cont
 			return
 		}
 		last = now
-		meta, _ := json.Marshal(struct {
+		snapshot, _ := json.Marshal(struct {
 			Processed int `json:"processed"`
 			Total     int `json:"total"`
 		}{processed, total})
-		if err := r.Repo.UpdateState(ctx, op.OperationID,
-			operationh.StateRunning, meta, nil, "", ""); err != nil {
+		if err := r.Repo.ReportProgress(ctx, op.OperationID, snapshot); err != nil {
 			r.log().Debug("progress write failed", zap.Error(err))
 		}
 	})
@@ -288,7 +288,7 @@ func (r *Runner) markFailed(ctx context.Context, op operationh.Operation, code, 
 	writeCtx, cancel := terminalCtx(ctx)
 	defer cancel()
 	if err := r.Repo.UpdateState(writeCtx, op.OperationID,
-		operationh.StateFailed, op.Metadata, resp, code, msg); err != nil {
+		operationh.StateFailed, resp, code, msg); err != nil {
 		r.logTerminalWrite(r.log().With(zap.String("operation_id", op.OperationID.String())),
 			operationh.StateFailed, err)
 	}

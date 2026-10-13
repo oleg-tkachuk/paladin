@@ -31,8 +31,11 @@ const (
 type Operation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Resource name: "operations/{operation_id}".
-	Name     string     `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Type     string     `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	// Progress of the operation: a google.protobuf.Struct of the latest
+	// {processed, total} the worker reported, absent until its first report.
+	// processed is a lower bound — reports are throttled to about one a second.
 	Metadata *anypb.Any `protobuf:"bytes,3,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	Done     bool       `protobuf:"varint,4,opt,name=done,proto3" json:"done,omitempty"`
 	// Types that are valid to be assigned to Result:

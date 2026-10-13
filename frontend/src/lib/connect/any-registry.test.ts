@@ -6,9 +6,9 @@
  * response fails to decode, so one Any in one operation takes down the entire
  * ListOperations call.
  *
- * That is exactly what happened: PlatformOperationService returns
- * operations.metadata as an Any, the server packs the executor's JSON payload
- * as a Struct, and the console's transport carried no registry. The
+ * That is exactly what happened: PlatformOperationService returns an
+ * operation's metadata (its progress) as an Any, the server packs it as a
+ * Struct, and the console's transport carried no registry. The
  * background-operations drawer and the dashboard widget worked only while no
  * operation existed; the first one to appear broke both with
  * "google.protobuf.Struct is not in the type registry".
@@ -19,8 +19,8 @@ import { StructSchema } from "@bufbuild/protobuf/wkt";
 import { ListOperationsResponseSchema } from "@/gen/paladin/admin/v1/operation_service_pb";
 import { anyRegistry } from "./any-registry";
 
-/** A ListOperations response shaped exactly as the admin plane returns it —
- *  captured from the cluster, not invented. */
+/** A ListOperations response shaped as the admin plane returns it: metadata
+ *  is the worker's latest progress snapshot. */
 const wireResponse = {
   operations: [
     {
@@ -28,13 +28,7 @@ const wireResponse = {
       type: "BatchUpdateTags",
       metadata: {
         "@type": "type.googleapis.com/google.protobuf.Struct",
-        value: {
-          Collection: "mp-probe",
-          ObjectIDs: ["01a02462-2e3d-7364-aa18-93a5d4089a6b"],
-          Replace: false,
-          Tags: { env: "staging" },
-          TenantID: "01a02416-f9f1-7c9c-90f1-b3d04aa1ea71",
-        },
+        value: { processed: 1, total: 4 },
       },
       initiatorTenantId: "01a02416-f9f1-7c9c-90f1-b3d04aa1ea71",
     },
@@ -81,8 +75,8 @@ describe("Any decoding", () => {
   });
 
   it("registers Struct, which is what the server packs", () => {
-    // connectshim's jsonToAny decodes each executor payload into a Struct and
-    // packs that. If the server ever packs something else, this is the line
+    // connectshim's jsonToAny decodes each stored JSON payload into a Struct
+    // and packs that. If the server ever packs something else, this is the line
     // that has to change with it.
     expect(anyRegistry.getMessage("google.protobuf.Struct")).toBeDefined();
     expect(

@@ -47,7 +47,7 @@ func (q *Queries) CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID 
 }
 
 const getOperation = `-- name: GetOperation :one
-SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at
+SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress
 FROM operations
 WHERE id = $1 AND tenant_id = $2
 `
@@ -71,12 +71,13 @@ func (q *Queries) GetOperation(ctx context.Context, iD pgtype.UUID, tenantID pgt
 		&i.Operation.CreatedAt,
 		&i.Operation.UpdatedAt,
 		&i.Operation.DoneAt,
+		&i.Operation.Progress,
 	)
 	return i, err
 }
 
 const listOperations = `-- name: ListOperations :many
-SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at
+SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress
 FROM operations
 WHERE tenant_id = $1
   AND ($2::operation_state IS NULL OR state = $2::operation_state)
@@ -145,6 +146,7 @@ func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, stat
 			&i.Operation.CreatedAt,
 			&i.Operation.UpdatedAt,
 			&i.Operation.DoneAt,
+			&i.Operation.Progress,
 		); err != nil {
 			return nil, err
 		}
@@ -157,7 +159,7 @@ func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, stat
 }
 
 const listOperationsDesc = `-- name: ListOperationsDesc :many
-SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at
+SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress
 FROM operations
 WHERE tenant_id = $1
   AND ($2::operation_state IS NULL OR state = $2::operation_state)
@@ -226,6 +228,7 @@ func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, 
 			&i.Operation.CreatedAt,
 			&i.Operation.UpdatedAt,
 			&i.Operation.DoneAt,
+			&i.Operation.Progress,
 		); err != nil {
 			return nil, err
 		}
@@ -271,14 +274,7 @@ SET state         = 'FAILED',
             'code', 'WORKER_LOST',
             'error', 'the worker executing this operation stopped before it finished; '
                      'the work may have been partially applied',
-            'last_progress',
-            CASE
-                WHEN metadata IS NOT NULL
-                 AND pg_input_is_valid(convert_from(metadata, 'UTF8'), 'jsonb')
-                 AND (convert_from(metadata, 'UTF8')::jsonb ? 'processed')
-                THEN convert_from(metadata, 'UTF8')::jsonb
-                ELSE NULL
-            END
+            'last_progress', progress
         )::text, 'UTF8'),
     done_at       = now(),
     updated_at    = now()
@@ -308,17 +304,33 @@ WHERE state = 'RUNNING'
 // "not found".
 //
 // For a caller that wants to know before reissuing, the runner's progress
-// reporter writes {processed, total} into metadata while an operation runs, so
+// reporter writes {processed, total} into progress while an operation runs, so
 // for anything that reported progress the last snapshot is right there — the
 // difference between "unknown" and "stopped after 7 of 9". It is a lower
 // bound, not a count: progress is throttled to about one write a second, so
-// the executor may have finished more before it died.
-//
-// metadata is not always progress — an operation that died before its first
-// report still holds the executor's arguments — hence the validity check
-// rather than a bare cast, which would fail the whole statement on one row.
+// the executor may have finished more before it died. An operation that died
+// before its first report has no progress, and last_progress is null.
 func (q *Queries) ReclaimStaleOperations(ctx context.Context, staleAfterMicros int64) (int64, error) {
 	result, err := q.db.Exec(ctx, reclaimStaleOperations, staleAfterMicros)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const reportOperationProgress = `-- name: ReportOperationProgress :execrows
+UPDATE operations
+SET progress   = $2::jsonb,
+    updated_at = now()
+WHERE id = $1 AND state = 'RUNNING'
+`
+
+// Records a RUNNING operation's latest {processed, total} snapshot. Its own
+// column, so the arguments in metadata survive the whole run — the stale
+// reclaimer used to fail an operation whose metadata had been overwritten by
+// progress, and the row no longer said what it had been for.
+func (q *Queries) ReportOperationProgress(ctx context.Context, iD pgtype.UUID, progress []byte) (int64, error) {
+	result, err := q.db.Exec(ctx, reportOperationProgress, iD, progress)
 	if err != nil {
 		return 0, err
 	}
@@ -332,8 +344,8 @@ WHERE id = $1 AND state = 'RUNNING'
 `
 
 // Heartbeat for a RUNNING operation. Bumps updated_at and nothing else — in
-// particular it must not touch metadata, which carries the progress counters
-// an executor may be writing concurrently.
+// particular it must not touch progress, which an executor may be writing
+// concurrently.
 //
 // Liveness has to be separate from progress: an executor that reports no
 // progress (a short batch, or one iterating something without a total) would
@@ -350,10 +362,9 @@ func (q *Queries) TouchOperation(ctx context.Context, id pgtype.UUID) (int64, er
 const updateOperationState = `-- name: UpdateOperationState :execrows
 UPDATE operations
 SET state         = $2::operation_state,
-    metadata      = COALESCE($3,      metadata),
-    response      = COALESCE($4,      response),
-    error_code    = COALESCE($5,    error_code),
-    error_message = COALESCE($6, error_message),
+    response      = COALESCE($3,      response),
+    error_code    = COALESCE($4,    error_code),
+    error_message = COALESCE($5, error_message),
     done_at       = CASE WHEN $2::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
                          THEN now() ELSE done_at END,
     updated_at    = now()
@@ -367,13 +378,15 @@ WHERE id = $1
 // deduced for parameter". Every terminal transition failed on that: the runner
 // logged "operation succeeded" and then "failed to mark SUCCEEDED", leaving
 // every operation RUNNING forever and its response unwritten.
+//
+// metadata is not written here: it holds the executor's arguments, set once at
+// creation. Progress has its own column and query (ReportOperationProgress).
 // A finished operation stays finished: a cancel, or the stale reclaimer's
 // FAILED, is not overwritten by the runner's late progress or result.
-func (q *Queries) UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, metadata []byte, response []byte, errorCode *string, errorMessage *string) (int64, error) {
+func (q *Queries) UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, response []byte, errorCode *string, errorMessage *string) (int64, error) {
 	result, err := q.db.Exec(ctx, updateOperationState,
 		iD,
 		state,
-		metadata,
 		response,
 		errorCode,
 		errorMessage,

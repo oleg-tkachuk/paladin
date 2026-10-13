@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { anyPack, StructSchema } from "@bufbuild/protobuf/wkt";
+import { ListOperationsResponseSchema } from "@/gen/paladin/admin/v1/operation_service_pb";
 
 // Integration tests for the BFF RPC router (browser → /api/rpc → backend).
 // The internal backend's fetch is mocked, so nothing is created; each test
@@ -48,6 +51,36 @@ function rpc(
 const BUCKET_CREATE =
   "/api/rpc/admin/paladin.admin.v1.BucketService/CreateBucket";
 const BUCKET_LIST = "/api/rpc/admin/paladin.admin.v1.BucketService/ListBuckets";
+const OPERATIONS_LIST =
+  "/api/rpc/admin/paladin.admin.v1.PlatformOperationService/ListOperations";
+
+// gRPC-web framing, which is how the BFF talks to a plane: a data frame with
+// the message, then a trailer frame carrying the status.
+const GRPC_WEB_TRAILER_FLAG = 0x80;
+const GRPC_WEB_FRAME_HEADER_BYTES = 5;
+
+function grpcWebFrame(flag: number, payload: Uint8Array): Uint8Array {
+  const out = new Uint8Array(GRPC_WEB_FRAME_HEADER_BYTES + payload.length);
+  out[0] = flag;
+  new DataView(out.buffer).setUint32(1, payload.length);
+  out.set(payload, GRPC_WEB_FRAME_HEADER_BYTES);
+  return out;
+}
+
+function grpcWebOk(message: Uint8Array): Response {
+  const data = grpcWebFrame(0, message);
+  const trailer = grpcWebFrame(
+    GRPC_WEB_TRAILER_FLAG,
+    new TextEncoder().encode("grpc-status: 0\r\n"),
+  );
+  const body = new Uint8Array(data.length + trailer.length);
+  body.set(data);
+  body.set(trailer, data.length);
+  return new Response(body, {
+    status: 200,
+    headers: { "content-type": "application/grpc-web+proto" },
+  });
+}
 
 describe("BFF /api/rpc router", () => {
   beforeEach(() => {
@@ -189,5 +222,48 @@ describe("BFF /api/rpc router", () => {
     );
     expect(res.status).toBe(404);
     expect(calls).toHaveLength(0);
+  });
+
+  // The bridge decodes the plane's answer and re-encodes it as JSON, and an
+  // Any — an operation's metadata, its progress — needs the type registry for
+  // that. Without it every ListOperations carrying one answered 500.
+  it("re-encodes an operation's Any metadata for the browser", async () => {
+    const progress = { processed: 3, total: 9 };
+    const listed = create(ListOperationsResponseSchema, {
+      operations: [
+        {
+          name: "operations/01a02e67-64c5-748c-9061-02710e299e39",
+          metadata: anyPack(
+            StructSchema,
+            create(StructSchema, {
+              fields: {
+                processed: {
+                  kind: { case: "numberValue", value: progress.processed },
+                },
+                total: { kind: { case: "numberValue", value: progress.total } },
+              },
+            }),
+          ),
+        },
+      ],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        grpcWebOk(toBinary(ListOperationsResponseSchema, listed)),
+      ),
+    );
+
+    const res = await post(
+      rpc(OPERATIONS_LIST, { authorization: `Bearer ${jwt("paladin-admin")}` }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      operations: { metadata: Record<string, unknown> }[];
+    };
+    expect(body.operations[0].metadata).toEqual({
+      "@type": "type.googleapis.com/google.protobuf.Struct",
+      value: progress,
+    });
   });
 });

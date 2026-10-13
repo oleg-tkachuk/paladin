@@ -78,10 +78,10 @@ func TestDataOperationID(t *testing.T) {
 
 func TestDataOperationToProtoCarriesItsPayloads(t *testing.T) {
 	running := dataOperationToProto(&operationh.Operation{
-		State: operationh.StateRunning, Metadata: []byte(operationJSON),
+		State: operationh.StateRunning, Progress: []byte(operationJSON),
 	})
 	if running.GetMetadata() == nil {
-		t.Error("metadata dropped")
+		t.Error("progress dropped from metadata")
 	}
 	if running.GetDone() || running.GetResult() != nil {
 		t.Errorf("a running operation reports done=%v result=%v", running.GetDone(), running.GetResult())

@@ -48,9 +48,11 @@ func (f *fakeRepo) Get(ctx context.Context, opID, tenantID uuid.UUID) (Operation
 	return f.getFn(ctx, opID, tenantID)
 }
 
-func (f *fakeRepo) UpdateState(context.Context, uuid.UUID, State, []byte, []byte, string, string) error {
+func (f *fakeRepo) UpdateState(context.Context, uuid.UUID, State, []byte, string, string) error {
 	return nil
 }
+
+func (f *fakeRepo) ReportProgress(context.Context, uuid.UUID, []byte) error { return nil }
 
 func (f *fakeRepo) Cancel(ctx context.Context, opID, tenantID uuid.UUID) error {
 	f.lastCancel.opID, f.lastCancel.tenantID = opID, tenantID

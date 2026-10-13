@@ -37,6 +37,9 @@ message Operation {
   // Resource name: "operations/{operation_id}".
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];
   string type = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // Progress of the operation: a google.protobuf.Struct of the latest
+  // {processed, total} the worker reported, absent until its first report.
+  // processed is a lower bound — reports are throttled to about one a second.
   google.protobuf.Any metadata = 3;
   bool done = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
   oneof result {

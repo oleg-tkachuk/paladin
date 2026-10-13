@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	rpccode "google.golang.org/genproto/googleapis/rpc/code"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -15,7 +17,10 @@ import (
 // What the platform-operation shim builds from the handler's answer: each
 // case fails if its condition in the shim is inverted or weakened.
 
-const operationPayloadJSON = `{"k":"v"}`
+const (
+	operationPayloadJSON = `{"k":"v"}`
+	operationArgsJSON    = `{"object_ids":["x"]}`
+)
 
 type recordingOperation struct {
 	failingOperation
@@ -73,10 +78,18 @@ func TestOperationToProto(t *testing.T) {
 	}
 
 	running := operationToProto(&operationh.Operation{
-		State: operationh.StateRunning, Metadata: []byte(operationPayloadJSON),
+		State: operationh.StateRunning, Metadata: []byte(operationArgsJSON), Progress: []byte(operationPayloadJSON),
 	})
-	if running.GetMetadata() == nil {
-		t.Error("metadata dropped")
+	if got := structOf(t, running.GetMetadata()); got["k"] != "v" {
+		t.Errorf("metadata = %v, want the progress snapshot", got)
+	}
+	// The executor's arguments are the worker's input; the API's metadata is
+	// progress (AIP-151), and an operation that has not reported has none.
+	unreported := operationToProto(&operationh.Operation{
+		State: operationh.StateRunning, Metadata: []byte(operationArgsJSON),
+	})
+	if unreported.GetMetadata() != nil {
+		t.Errorf("metadata = %v, want none before the first progress report", unreported.GetMetadata())
 	}
 	if running.GetDone() || running.GetResult() != nil {
 		t.Errorf("a running operation reports done=%v result=%v", running.GetDone(), running.GetResult())
@@ -101,4 +114,16 @@ func TestOperationToProto(t *testing.T) {
 			t.Errorf("%s: reads as cancelled = %v", state, got)
 		}
 	}
+}
+
+func structOf(t *testing.T, a *anypb.Any) map[string]any {
+	t.Helper()
+	if a == nil {
+		return nil
+	}
+	var st structpb.Struct
+	if err := a.UnmarshalTo(&st); err != nil {
+		t.Fatalf("unpack metadata: %v", err)
+	}
+	return st.AsMap()
 }

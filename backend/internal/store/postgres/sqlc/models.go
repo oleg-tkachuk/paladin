@@ -675,6 +675,7 @@ type Operation struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	DoneAt       pgtype.Timestamptz `json:"done_at"`
+	Progress     []byte             `json:"progress"`
 }
 
 type PendingMultipartAbort struct {
