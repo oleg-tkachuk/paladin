@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strconv"
 	"sync"
@@ -99,10 +100,12 @@ func (i *TenantRateLimitInterceptor) admit(ctx context.Context, tenant uuid.UUID
 	return weighted <= float64(i.capacity), retryAfter
 }
 
-// Intercept charges one token per call; a stream is charged once, at open.
-// Per-message accounting would need the limiter inside the message loop; the
-// streams here are event subscriptions, whose cost is in the subscription,
-// not the frame.
+// Intercept charges one token per call, at open. A stream the client sends
+// on — client-streaming or bidi — is charged one more for every message after
+// the first, inside the message loop: charged at open alone, a tenant could
+// hold one stream open and push messages through it at any rate without the
+// limiter noticing. A server-streaming call's frames are the server's to
+// pace, so its one client message is the one token.
 func (i *TenantRateLimitInterceptor) Intercept(next connect.ServerFunc) connect.ServerFunc {
 	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 		if i.store == nil {
@@ -124,8 +127,41 @@ func (i *TenantRateLimitInterceptor) Intercept(next connect.ServerFunc) connect.
 			return connect.NewError(connect.CodeResourceExhausted,
 				"per-tenant request rate exceeded; retry shortly")
 		}
+		if spec.StreamType&connect.StreamTypeClient != 0 {
+			stream = &meteredStream{ServerStream: stream, limiter: i, ctx: ctx, tenant: tenant}
+		}
 		return next(ctx, spec, stream)
 	}
+}
+
+// meteredStream charges the tenant's window for each message the client
+// sends after the first, which the call's admission already paid for.
+type meteredStream struct {
+	connect.ServerStream
+	limiter  *TenantRateLimitInterceptor
+	ctx      context.Context
+	tenant   uuid.UUID
+	received int
+}
+
+// Receive reads the next message and charges it. A message past the ceiling
+// ends the stream with ResourceExhausted; the response headers may already
+// be on the wire, so the wait is in the message rather than Retry-After.
+func (m *meteredStream) Receive(msg any) error {
+	if err := m.ServerStream.Receive(msg); err != nil {
+		return err
+	}
+	m.received++
+	if m.received == 1 {
+		return nil
+	}
+	allowed, retryAfter := m.limiter.admit(m.ctx, m.tenant)
+	recordTenantRateLimitDecision(m.ctx, m.tenant.String(), allowed)
+	if !allowed {
+		return connect.NewError(connect.CodeResourceExhausted, fmt.Sprintf(
+			"per-tenant request rate exceeded; retry in %ss", retryAfterHeader(retryAfter)))
+	}
+	return nil
 }
 
 // retryAfterHeader renders the seconds left in the bucket, rounded up and

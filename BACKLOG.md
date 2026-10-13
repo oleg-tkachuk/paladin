@@ -592,28 +592,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   "stream the audit log", which is a general capability and a different item.
   It is not a special case of tenant events, and should not be built as one.
 
-### Streaming RPCs are charged one rate-limit token at open
-
-- **Status:** Not reachable today, re-checked 2026-08-30. The API declares
-  ZERO server-streaming RPCs — `rpc … returns (stream …)` appears in no proto
-  — so WrapStreamingHandler never runs for a real method. Event subscriptions,
-  which the reason below cites as "the streams Paladin has", are delivered by
-  the dispatcher over webhook and NATS, not over a streaming RPC; the SSE
-  audit feed is a plain handler on the admin mux and never passes through the
-  Connect interceptor chain at all. Keep the entry: the hole is real the day a
-  streaming RPC is added, and the interceptor will still charge one token.
-- **Reason:** `TenantRateLimitInterceptor.WrapStreamingHandler` bumps the
-  tenant's window once when the stream opens and never per message. That fits the streams
-  Paladin has — event subscriptions, whose cost is the subscription rather than
-  the frame — but a tenant can hold a stream open and push messages through it
-  at any rate without the limiter noticing, so the ceiling covers unary traffic
-  only.
-- **Definition of Done:** Per-message accounting inside the message loop for
-  any stream whose per-frame cost is non-trivial, or a documented statement
-  that streams are governed by their own concurrency limit instead.
-- **Blockers:** none. No stream in the API today carries enough per-frame work
-  to be worth the accounting.
-
 ### A reclaimed operation records a count, not which items landed
 
 - **Status:** Deferred (needs per-executor progress semantics).

@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"io"
 	"sync"
 	"testing"
 
@@ -215,6 +216,80 @@ func TestRetryAfterHeader(t *testing.T) {
 	} {
 		if got := retryAfterHeader(tc.in); got != tc.want {
 			t.Errorf("retryAfterHeader(%v) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// fakeServerStream delivers msgs to Receive, then io.EOF.
+type fakeServerStream struct {
+	msgs int
+	read int
+}
+
+func (f *fakeServerStream) Receive(any) error {
+	if f.read >= f.msgs {
+		return io.EOF
+	}
+	f.read++
+	return nil
+}
+func (f *fakeServerStream) SendHeaders() error { return nil }
+func (f *fakeServerStream) Send(any) error     { return nil }
+
+// drain is a handler that reads every message the client sends and reports
+// how many it got before the stream ended.
+func drain(got *int) connect.ServerFunc {
+	return func(_ context.Context, _ connect.Spec, stream connect.ServerStream) error {
+		for {
+			if err := stream.Receive(nil); err != nil {
+				if errors.Is(err, io.EOF) {
+					return nil
+				}
+				return err
+			}
+			*got++
+		}
+	}
+}
+
+// streamRPS gives a trailing-minute ceiling of streamCapacity tokens.
+const (
+	streamCapacity = 3
+	streamRPS      = float64(streamCapacity) / 60
+)
+
+// A stream the client sends on is charged per message, not once at open:
+// open pays for the first message, each later one costs a token, and the
+// message past the ceiling ends the stream.
+func TestTenantRateLimit_ChargesEveryClientStreamMessage(t *testing.T) {
+	for _, st := range []connect.StreamType{connect.StreamTypeClient, connect.StreamTypeBidi} {
+		store := newFakeRateStore()
+		i := NewTenantRateLimitInterceptor(TenantRateLimitConfig{RPS: streamRPS, Store: store})
+		got := 0
+		err := i.Intercept(drain(&got))(rlTenantCtx(t, uuid.New()),
+			connect.Spec{StreamType: st}, &fakeServerStream{msgs: streamCapacity + 2})
+		if connect.CodeOf(err) != connect.CodeResourceExhausted {
+			t.Fatalf("stream type %v: err = %v, want ResourceExhausted", st, err)
+		}
+		if got != streamCapacity {
+			t.Errorf("stream type %v: handler got %d messages, want the %d the ceiling admits", st, got, streamCapacity)
+		}
+	}
+}
+
+// One message costs one token however the call streams; a server-streaming
+// call's frames are the server's, and never reach the limiter.
+func TestTenantRateLimit_OneClientMessageIsOneToken(t *testing.T) {
+	for _, st := range []connect.StreamType{connect.StreamTypeUnary, connect.StreamTypeClient, connect.StreamTypeServer} {
+		store := newFakeRateStore()
+		i := NewTenantRateLimitInterceptor(TenantRateLimitConfig{RPS: streamRPS, Store: store})
+		got := 0
+		if err := i.Intercept(drain(&got))(rlTenantCtx(t, uuid.New()),
+			connect.Spec{StreamType: st}, &fakeServerStream{msgs: 1}); err != nil {
+			t.Fatalf("stream type %v: %v", st, err)
+		}
+		if store.calls != 1 || got != 1 {
+			t.Errorf("stream type %v: %d charges for %d messages, want 1 for 1", st, store.calls, got)
 		}
 	}
 }
