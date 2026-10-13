@@ -19,7 +19,7 @@ func TestCreate_PlatformAdminThroughTheRealEngine(t *testing.T) {
 	h := newHandler(iss, &fakeStore{}, cedartest.Engine(""))
 	target := uuid.New()
 
-	if _, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
+	if _, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{RateLimit: unlimitedRate(),
 		Parent: "tenants/" + target.String(), DisplayName: "acme-service",
 	}); err != nil {
 		t.Fatalf("Create as platform.admin: %v", err)
@@ -41,7 +41,7 @@ func TestTokenActions_CapabilityIssuerIsRefused(t *testing.T) {
 	h := newHandler(iss, store, cedartest.Engine(""))
 	tokenName := "tenants/" + own.String() + "/apiTokens/" + uuid.NewString()
 
-	_, createErr := h.Create(ctx, &adminv1.APITokenServiceCreateRequest{
+	_, createErr := h.Create(ctx, &adminv1.APITokenServiceCreateRequest{RateLimit: unlimitedRate(),
 		Parent: "tenants/" + own.String(), DisplayName: "escalation",
 	})
 	_, revokeErr := h.Revoke(ctx, &adminv1.APITokenServiceRevokeRequest{Name: tokenName})

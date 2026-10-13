@@ -43,13 +43,16 @@ const COL_PREFIX = "hidden @md:table-cell";
 const COL_AUDIENCE = "hidden @2xl:table-cell";
 const COL_EXPIRES = "hidden @3xl:table-cell";
 const COL_RATE = "hidden @4xl:table-cell";
+// The share of its cap past which a token's usage reads as a warning.
+const NEAR_CAP_RATIO = 0.9;
 const COL_LAST_USED = "hidden @5xl:table-cell";
 const COL_USAGE = "hidden @6xl:table-cell";
 
 // Per-token sliding-window usage snapshot keyed by token.id; "never" ⇒
 // the token was never verified (GetUsage NotFound).
 type UsageSnap = {
-  limitRpm: number;
+  /** The cap in rpm; undefined when the token has none. */
+  limitRpm: number | undefined;
   weighted: number;
   currentBucket: bigint;
   resetsAtMs: number;
@@ -333,7 +336,9 @@ export default function M2MTokensPage() {
                     <TableCell
                       className={cn(COL_RATE, T.code, "text-muted-foreground")}
                     >
-                      {t.rateLimitRpm > 0 ? t.rateLimitRpm : "∞"}
+                      {t.rateLimit.case === "rateLimitRpm"
+                        ? t.rateLimit.value
+                        : "∞"}
                     </TableCell>
                     <TableCell className={cn(COL_USAGE, T.code)}>
                       {(() => {
@@ -359,14 +364,17 @@ export default function M2MTokensPage() {
                           0,
                           Math.round((u.resetsAtMs - Date.now()) / 1000),
                         );
-                        const limit = u.limitRpm > 0 ? u.limitRpm : 0;
+                        const limit = u.limitRpm;
                         const weighted = u.weighted.toFixed(1);
-                        const overCap = limit > 0 && u.weighted >= limit * 0.9;
+                        // A cap of 0 is at its limit from the start.
+                        const overCap =
+                          limit !== undefined &&
+                          u.weighted >= limit * NEAR_CAP_RATIO;
                         return (
                           <div className="space-y-0.5">
                             <div className={overCap ? "text-warning" : ""}>
                               {weighted}
-                              {limit > 0 ? (
+                              {limit !== undefined ? (
                                 <span className="text-muted-foreground">
                                   {" / "}
                                   {limit}

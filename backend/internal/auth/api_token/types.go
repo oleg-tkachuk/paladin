@@ -100,11 +100,11 @@ type Token struct {
 	CreatedBy  string
 	CreatedAt  time.Time
 
-	// RateLimitRPM caps the requests-per-minute the bearer can submit.
-	// 0 = unlimited (the Limiter short-circuits without touching its
-	// counters). Enforced by the APITokenInterceptor calling into a
-	// Limiter implementation; see internal/auth/api_token/ratelimit.
-	RateLimitRPM int
+	// RateLimitRPM caps the requests-per-minute the bearer can submit: nil
+	// is no cap, and a cap of 0 admits no request. Enforced by the
+	// APITokenInterceptor calling into a Limiter implementation; see
+	// internal/auth/api_token/ratelimit.
+	RateLimitRPM *int
 
 	// Plaintext is the full `paladin_pat_…` string. Populated by Issuer.Issue
 	// before the row is stored; cleared as soon as the caller has it.

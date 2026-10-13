@@ -90,10 +90,13 @@ message APIToken {
   google.protobuf.Timestamp last_used_at = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
   google.protobuf.Timestamp created_at = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
   string created_by = 11;
-  // rate_limit_rpm caps the bearer's request rate. 0 = unlimited.
-  // Enforced by APITokenInterceptor via a sliding-window counter
-  // when the value is positive.
-  int32 rate_limit_rpm = 12;
+  // rate_limit is the bearer's request rate: a cap in requests per minute,
+  // enforced by APITokenInterceptor with a sliding-window counter, where 0
+  // admits no request; or no cap at all.
+  oneof rate_limit {
+    int32 rate_limit_rpm = 12;
+    bool unlimited_rate = 15;
+  }
 }
 
 message APITokenServiceCreateRequest {
@@ -108,11 +111,16 @@ message APITokenServiceCreateRequest {
   // audience must include at least one plane the token is presented
   // to. Subset of {data, admin, iam, mcp}.
   repeated string audience = 5 [(buf.validate.field).repeated.min_items = 1];
-  // rate_limit_rpm sets the per-token rate cap. 0 = unlimited.
-  // Recommended for any token whose blast radius matters: leaked
-  // tokens with a 60 rpm cap can do far less harm before discovery
-  // than uncapped equivalents.
-  int32 rate_limit_rpm = 6 [(buf.validate.field).int32.gte = 0];
+  // rate_limit is the per-token request rate. Required: a request that sets
+  // neither arm is refused. A cap is recommended for any token whose blast
+  // radius matters: a leaked token capped at 60 rpm does far less harm
+  // before discovery than an uncapped one.
+  oneof rate_limit {
+    // rate_limit_rpm caps requests per minute; 0 admits none.
+    int32 rate_limit_rpm = 6 [(buf.validate.field).int32.gte = 0];
+    // unlimited_rate sets no cap. Only true is meaningful.
+    bool unlimited_rate = 8 [(buf.validate.field).bool.const = true];
+  }
   // roles the token's principal carries, so a machine caller can satisfy a
   // role-gated policy without logging in as a human user and managing a
   // session.
@@ -173,10 +181,10 @@ message APITokenServiceGetUsageRequest {
 message APITokenServiceGetUsageResponse {
   // Echoes the resource name the usage was read for.
   string name = 1;
-  // limit_rpm mirrors api_tokens.rate_limit_rpm. 0 = unlimited; the
+  // limit_rpm mirrors the token's cap; absent when it has none, and the
   // remaining counters are still returned so UIs can render
-  // "uncapped, current rate: N rpm".
-  int32 limit_rpm = 2;
+  // "uncapped, current rate: N rpm". 0 admits no request.
+  optional int32 limit_rpm = 2;
   // current_bucket_count is the raw counter for the in-progress
   // minute. previous_bucket_count is the previous full minute.
   // weighted_count = current + previous * (1 - elapsed / 60). Mirrors

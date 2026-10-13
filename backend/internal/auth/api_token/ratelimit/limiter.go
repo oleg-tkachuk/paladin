@@ -69,8 +69,8 @@ type Snapshot struct {
 type Limiter interface {
 	// Allow checks the token's bucket, counts the request if it fits, and
 	// returns the Decision. capacity is the per-minute ceiling
-	// (api_tokens.rate_limit_rpm); 0 means unlimited and the
-	// implementation must short-circuit without touching the store.
+	// (api_tokens.rate_limit_rpm), at least 1: a token with no cap, or a
+	// cap of 0, is decided by the interceptor and never reaches Allow.
 	Allow(ctx context.Context, tokenID uuid.UUID, capacity int) (Decision, error)
 
 	// Usage returns the readonly Snapshot for a token. Does NOT bump

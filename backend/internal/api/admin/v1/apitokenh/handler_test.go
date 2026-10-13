@@ -101,7 +101,8 @@ func newHandler(iss tokenIssuer, store api_token.Store, authz cedar.Authorizer) 
 func TestCreate_CedarDenied(t *testing.T) {
 	h := newHandler(&stubIssuer{}, &fakeStore{}, denyAuthorizer{})
 	_, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
-		Parent: "tenants/" + uuid.NewString(), DisplayName: "ci",
+		RateLimit: unlimitedRate(),
+		Parent:    "tenants/" + uuid.NewString(), DisplayName: "ci",
 	})
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", code(err))
@@ -111,7 +112,8 @@ func TestCreate_CedarDenied(t *testing.T) {
 func TestCreate_InvalidTenant(t *testing.T) {
 	h := newHandler(&stubIssuer{}, &fakeStore{}, allowAuthorizer{})
 	_, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
-		Parent: "not-a-tenant-name", DisplayName: "ci",
+		RateLimit: unlimitedRate(),
+		Parent:    "not-a-tenant-name", DisplayName: "ci",
 	})
 	if code(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", code(err))
@@ -126,7 +128,8 @@ func TestCreate_SuccessReturnsPlaintextOnce(t *testing.T) {
 	// pass the mint-time auth.ParseScope validation and reach the issuer verbatim.
 	scopes := []string{"bucket:ci-bucket", "collection:ci-bucket/artifacts"}
 	resp, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
-		Parent: "tenants/" + tid.String(), DisplayName: "ci-runner", Scopes: scopes,
+		RateLimit: unlimitedRate(),
+		Parent:    "tenants/" + tid.String(), DisplayName: "ci-runner", Scopes: scopes,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -165,7 +168,8 @@ func TestCreate_RejectsMalformedScope(t *testing.T) {
 	iss := &stubIssuer{}
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 	_, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
-		Parent: "tenants/" + uuid.NewString(), DisplayName: "bad", Scopes: []string{"api:read"}, // legacy vocab — no longer valid
+		RateLimit: unlimitedRate(),
+		Parent:    "tenants/" + uuid.NewString(), DisplayName: "bad", Scopes: []string{"api:read"}, // legacy vocab — no longer valid
 	})
 	if code(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", code(err))
@@ -288,7 +292,7 @@ func TestGetUsage_NotFound(t *testing.T) {
 
 func TestGetUsage_Success(t *testing.T) {
 	id, tenantID := uuid.New(), uuid.New()
-	store := &fakeStore{get: api_token.Token{ID: id, RateLimitRPM: 60}}
+	store := &fakeStore{get: api_token.Token{ID: id, RateLimitRPM: new(int(60))}}
 	h := NewHandler(&stubIssuer{}, store,
 		fakeLimiter{snap: ratelimit.Snapshot{CurrentBucketCount: 5, WeightedCount: 7}},
 		allowAuthorizer{})
@@ -331,7 +335,8 @@ func TestCreate_PlatformAdminMintsForAnotherTenant(t *testing.T) {
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 
 	_, err := h.Create(ctxAsTenant(caller, "platform.admin"), &adminv1.APITokenServiceCreateRequest{
-		Parent: "tenants/" + target.String(), DisplayName: "acme-service", Audience: []string{"data"},
+		RateLimit: unlimitedRate(),
+		Parent:    "tenants/" + target.String(), DisplayName: "acme-service", Audience: []string{"data"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -349,7 +354,8 @@ func TestCreate_NonPlatformAdminCannotMintForAnotherTenant(t *testing.T) {
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 
 	_, err := h.Create(ctxAsTenant(caller, "tenant.admin"), &adminv1.APITokenServiceCreateRequest{
-		Parent: "tenants/" + target.String(), DisplayName: "sneaky", Audience: []string{"data"},
+		RateLimit: unlimitedRate(),
+		Parent:    "tenants/" + target.String(), DisplayName: "sneaky", Audience: []string{"data"},
 	})
 
 	if code(err) != connect.CodePermissionDenied {
@@ -367,7 +373,8 @@ func TestCreate_NonPlatformAdminMintsForOwnTenant(t *testing.T) {
 	h := newHandler(&stubIssuer{}, &fakeStore{}, allowAuthorizer{})
 
 	_, err := h.Create(ctxAsTenant(own, "tenant.admin"), &adminv1.APITokenServiceCreateRequest{
-		Parent: "tenants/" + own.String(), DisplayName: "own", Audience: []string{"data"},
+		RateLimit: unlimitedRate(),
+		Parent:    "tenants/" + own.String(), DisplayName: "own", Audience: []string{"data"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -385,7 +392,8 @@ func TestCreate_GrantingRolesRequiresPlatformAdmin(t *testing.T) {
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 
 	_, err := h.Create(ctxAsTenant(own, "tenant.admin"), &adminv1.APITokenServiceCreateRequest{
-		Parent: "tenants/" + own.String(), DisplayName: "self-promotion", Audience: []string{"data"},
+		RateLimit: unlimitedRate(),
+		Parent:    "tenants/" + own.String(), DisplayName: "self-promotion", Audience: []string{"data"},
 		Roles: []string{"platform.admin"},
 	})
 
@@ -403,7 +411,8 @@ func TestCreate_PlatformAdminMayGrantTheNarrowRole(t *testing.T) {
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 
 	_, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
-		Parent: "tenants/" + uuid.NewString(), DisplayName: "acme-issuer", Audience: []string{"admin"},
+		RateLimit: unlimitedRate(),
+		Parent:    "tenants/" + uuid.NewString(), DisplayName: "acme-issuer", Audience: []string{"admin"},
 		Roles: []string{"platform.capability-issuer"},
 	})
 	if err != nil {
@@ -420,7 +429,8 @@ func TestCreate_NoRolesNeedsNoPlatformAdmin(t *testing.T) {
 	h := newHandler(&stubIssuer{}, &fakeStore{}, allowAuthorizer{})
 
 	_, err := h.Create(ctxAsTenant(own, "tenant.admin"), &adminv1.APITokenServiceCreateRequest{
-		Parent: "tenants/" + own.String(), DisplayName: "ordinary", Audience: []string{"data"},
+		RateLimit: unlimitedRate(),
+		Parent:    "tenants/" + own.String(), DisplayName: "ordinary", Audience: []string{"data"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -448,7 +458,8 @@ func TestCreate_RefusesARolelessTokenForTheAdminPlane(t *testing.T) {
 			iss := &stubIssuer{}
 			h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 			_, err := h.Create(ctxAsTenant(own, "platform.admin"), &adminv1.APITokenServiceCreateRequest{
-				Parent: "tenants/" + own.String(), DisplayName: "t", Audience: tc.audience, Roles: tc.roles,
+				RateLimit: unlimitedRate(),
+				Parent:    "tenants/" + own.String(), DisplayName: "t", Audience: tc.audience, Roles: tc.roles,
 			})
 			if !tc.refused {
 				if err != nil {
@@ -463,5 +474,50 @@ func TestCreate_RefusesARolelessTokenForTheAdminPlane(t *testing.T) {
 				t.Errorf("issuer was reached with %+v; the mint must not happen", iss.req)
 			}
 		})
+	}
+}
+
+// unlimitedRate is a Create request's explicit "no cap".
+func unlimitedRate() *adminv1.APITokenServiceCreateRequest_UnlimitedRate {
+	return &adminv1.APITokenServiceCreateRequest_UnlimitedRate{UnlimitedRate: true}
+}
+
+// Create takes the cap it is given — 0 included, which admits no request —
+// or no cap when asked for none, and refuses a request that names neither.
+func TestRateLimitOf(t *testing.T) {
+	limit := func(n int32) *adminv1.APITokenServiceCreateRequest {
+		return &adminv1.APITokenServiceCreateRequest{RateLimit: &adminv1.APITokenServiceCreateRequest_RateLimitRpm{RateLimitRpm: n}}
+	}
+	for name, tc := range map[string]struct {
+		req  *adminv1.APITokenServiceCreateRequest
+		want *int
+	}{
+		"a cap":     {limit(60), new(60)},
+		"zero":      {limit(0), new(0)},
+		"unlimited": {&adminv1.APITokenServiceCreateRequest{RateLimit: unlimitedRate()}, nil},
+	} {
+		got, err := rateLimitOf(tc.req)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
+			t.Errorf("%s: rateLimitOf = %v, want %v", name, got, tc.want)
+		}
+	}
+	if _, err := rateLimitOf(&adminv1.APITokenServiceCreateRequest{}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("neither arm: err = %v, want InvalidArgument", err)
+	}
+}
+
+// A token reads back with its cap on its own arm: no cap is unlimited_rate,
+// never a 0 that would read as "admits nothing".
+func TestTokenToProtoRateLimit(t *testing.T) {
+	open := tokenToProto(api_token.Token{})
+	if !open.GetUnlimitedRate() {
+		t.Errorf("no cap: rate_limit = %v, want unlimited_rate", open.GetRateLimit())
+	}
+	frozen := tokenToProto(api_token.Token{RateLimitRPM: new(0)})
+	if _, ok := frozen.GetRateLimit().(*adminv1.APIToken_RateLimitRpm); !ok || frozen.GetRateLimitRpm() != 0 {
+		t.Errorf("cap 0: rate_limit = %v, want rate_limit_rpm 0", frozen.GetRateLimit())
 	}
 }

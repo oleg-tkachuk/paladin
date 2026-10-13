@@ -42,25 +42,44 @@ func (r *recordingLimiter) Sweep(context.Context, time.Duration) (int64, error) 
 func TestRateLimitGate_NilLimiter(t *testing.T) {
 	t.Parallel()
 	i := &apiTokenInterceptor{verifier: nil, limiter: nil, audience: "data"}
-	tok := &api_token.Token{ID: uuid.New(), RateLimitRPM: 60}
+	tok := &api_token.Token{ID: uuid.New(), RateLimitRPM: new(int(60))}
 	if err := i.rateLimitGate(context.Background(), tok); err != nil {
 		t.Fatalf("expected nil for nil limiter, got %v", err)
 	}
 }
 
-// TestRateLimitGate_TokenUnlimited confirms the gate is skipped when
-// the token's RateLimitRPM is 0 (unlimited tokens never touch the
-// limiter even when one is configured).
+// TestRateLimitGate_TokenUnlimited confirms the gate is skipped when the
+// token has no cap: an uncapped token never touches the limiter, even when
+// one is configured.
 func TestRateLimitGate_TokenUnlimited(t *testing.T) {
 	t.Parallel()
 	rl := &recordingLimiter{}
 	i := &apiTokenInterceptor{limiter: rl, audience: "data"}
-	tok := &api_token.Token{ID: uuid.New(), RateLimitRPM: 0}
+	tok := &api_token.Token{ID: uuid.New()}
 	if err := i.rateLimitGate(context.Background(), tok); err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
 	if rl.calls.Load() != 0 {
 		t.Errorf("limiter called for unlimited token: %d times", rl.calls.Load())
+	}
+}
+
+// A cap of 0 admits no request, with or without a limiter, and counts
+// nothing: there is no window that would let a request through later.
+func TestRateLimitGate_ZeroCapAdmitsNothing(t *testing.T) {
+	t.Parallel()
+	for name, limiter := range map[string]*recordingLimiter{"with a limiter": {}, "without": nil} {
+		i := &apiTokenInterceptor{audience: "data"}
+		if limiter != nil {
+			i.limiter = limiter
+		}
+		tok := &api_token.Token{ID: uuid.New(), RateLimitRPM: new(0)}
+		if err := i.rateLimitGate(context.Background(), tok); connect.CodeOf(err) != connect.CodeResourceExhausted {
+			t.Errorf("%s: err = %v, want ResourceExhausted", name, err)
+		}
+		if limiter != nil && limiter.calls.Load() != 0 {
+			t.Errorf("%s: the limiter counted a request a cap of 0 refuses", name)
+		}
 	}
 }
 
@@ -70,7 +89,7 @@ func TestRateLimitGate_Allowed(t *testing.T) {
 	t.Parallel()
 	rl := &recordingLimiter{resp: ratelimit.Decision{Allowed: true}}
 	i := &apiTokenInterceptor{limiter: rl, audience: "data"}
-	tok := &api_token.Token{ID: uuid.New(), RateLimitRPM: 60}
+	tok := &api_token.Token{ID: uuid.New(), RateLimitRPM: new(int(60))}
 	if err := i.rateLimitGate(context.Background(), tok); err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
@@ -97,7 +116,7 @@ func TestRateLimitGate_Denied(t *testing.T) {
 		RetryAfter:    retryAfter,
 	}}
 	i := &apiTokenInterceptor{limiter: rl, audience: planeData}
-	tok := &api_token.Token{ID: uuid.New(), RateLimitRPM: rpm}
+	tok := &api_token.Token{ID: uuid.New(), RateLimitRPM: new(int(rpm))}
 	gate := func(next connect.ServerFunc) connect.ServerFunc {
 		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 			if err := i.rateLimitGate(ctx, tok); err != nil {

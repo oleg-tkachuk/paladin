@@ -12,7 +12,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class APIToken(_message.Message):
-    __slots__ = ("name", "id", "tenant_id", "display_name", "prefix", "scopes", "audience", "roles", "expires_at", "revoked_at", "last_used_at", "created_at", "created_by", "rate_limit_rpm")
+    __slots__ = ("name", "id", "tenant_id", "display_name", "prefix", "scopes", "audience", "roles", "expires_at", "revoked_at", "last_used_at", "created_at", "created_by", "rate_limit_rpm", "unlimited_rate")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
@@ -27,6 +27,7 @@ class APIToken(_message.Message):
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     CREATED_BY_FIELD_NUMBER: _ClassVar[int]
     RATE_LIMIT_RPM_FIELD_NUMBER: _ClassVar[int]
+    UNLIMITED_RATE_FIELD_NUMBER: _ClassVar[int]
     name: str
     id: str
     tenant_id: str
@@ -41,16 +42,18 @@ class APIToken(_message.Message):
     created_at: _timestamp_pb2.Timestamp
     created_by: str
     rate_limit_rpm: int
-    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., display_name: _Optional[str] = ..., prefix: _Optional[str] = ..., scopes: _Optional[_Iterable[str]] = ..., audience: _Optional[_Iterable[str]] = ..., roles: _Optional[_Iterable[str]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_used_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., created_by: _Optional[str] = ..., rate_limit_rpm: _Optional[int] = ...) -> None: ...
+    unlimited_rate: bool
+    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., display_name: _Optional[str] = ..., prefix: _Optional[str] = ..., scopes: _Optional[_Iterable[str]] = ..., audience: _Optional[_Iterable[str]] = ..., roles: _Optional[_Iterable[str]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_used_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., created_by: _Optional[str] = ..., rate_limit_rpm: _Optional[int] = ..., unlimited_rate: _Optional[bool] = ...) -> None: ...
 
 class APITokenServiceCreateRequest(_message.Message):
-    __slots__ = ("parent", "display_name", "ttl_seconds", "scopes", "audience", "rate_limit_rpm", "roles")
+    __slots__ = ("parent", "display_name", "ttl_seconds", "scopes", "audience", "rate_limit_rpm", "unlimited_rate", "roles")
     PARENT_FIELD_NUMBER: _ClassVar[int]
     DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
     TTL_SECONDS_FIELD_NUMBER: _ClassVar[int]
     SCOPES_FIELD_NUMBER: _ClassVar[int]
     AUDIENCE_FIELD_NUMBER: _ClassVar[int]
     RATE_LIMIT_RPM_FIELD_NUMBER: _ClassVar[int]
+    UNLIMITED_RATE_FIELD_NUMBER: _ClassVar[int]
     ROLES_FIELD_NUMBER: _ClassVar[int]
     parent: str
     display_name: str
@@ -58,8 +61,9 @@ class APITokenServiceCreateRequest(_message.Message):
     scopes: _containers.RepeatedScalarFieldContainer[str]
     audience: _containers.RepeatedScalarFieldContainer[str]
     rate_limit_rpm: int
+    unlimited_rate: bool
     roles: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, parent: _Optional[str] = ..., display_name: _Optional[str] = ..., ttl_seconds: _Optional[int] = ..., scopes: _Optional[_Iterable[str]] = ..., audience: _Optional[_Iterable[str]] = ..., rate_limit_rpm: _Optional[int] = ..., roles: _Optional[_Iterable[str]] = ...) -> None: ...
+    def __init__(self, parent: _Optional[str] = ..., display_name: _Optional[str] = ..., ttl_seconds: _Optional[int] = ..., scopes: _Optional[_Iterable[str]] = ..., audience: _Optional[_Iterable[str]] = ..., rate_limit_rpm: _Optional[int] = ..., unlimited_rate: _Optional[bool] = ..., roles: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class APITokenServiceCreateResponse(_message.Message):
     __slots__ = ("api_token", "token")

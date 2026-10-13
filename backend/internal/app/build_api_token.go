@@ -50,10 +50,10 @@ type APITokenBundle struct {
 	Issuer   *api_token.Issuer
 	Verifier *api_token.Verifier
 
-	// Limiter enforces the per-token rate limit when a token's
-	// RateLimitRPM > 0. Always populated when the subsystem is
-	// enabled — Postgres-backed sliding window. Tokens with
-	// RateLimitRPM = 0 are unrestricted (the limiter short-circuits).
+	// Limiter enforces the per-token rate limit when a token has a cap
+	// above 0. Always populated when the subsystem is enabled —
+	// Postgres-backed sliding window. A token with no cap never reaches
+	// it, and one capped at 0 is refused before it.
 	Limiter ratelimit.Limiter
 }
 

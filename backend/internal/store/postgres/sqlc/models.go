@@ -281,7 +281,7 @@ type ApiToken struct {
 	Scopes       []string           `json:"scopes"`
 	Roles        []string           `json:"roles"`
 	Audience     []string           `json:"audience"`
-	RateLimitRpm int32              `json:"rate_limit_rpm"`
+	RateLimitRpm *int32             `json:"rate_limit_rpm"`
 	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
 	RevokedAt    pgtype.Timestamptz `json:"revoked_at"`
 	LastUsedAt   pgtype.Timestamptz `json:"last_used_at"`

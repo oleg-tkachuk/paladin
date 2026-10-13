@@ -61,4 +61,58 @@ describe("CreateTokenDialog", () => {
     );
     expect(await screen.findByRole("alert")).toHaveTextContent("boom");
   });
+
+  // "No cap" is its own value, never a 0 the server reads as "admits no
+  // request"; a typed 0 is that cap.
+  describe("rate limit", () => {
+    const toggle = () =>
+      screen
+        .getByLabelText(/Rate limit/)
+        .parentElement!.querySelector("button[aria-pressed]") as HTMLElement;
+    const submit = () =>
+      fireEvent.submit(
+        screen.getByRole("button", { name: "Create token" }).closest("form")!,
+      );
+    const named = () =>
+      fireEvent.change(screen.getByLabelText(/Name/), {
+        target: { value: "ci" },
+      });
+
+    it("creates an uncapped token by default", () => {
+      h.create.mockReturnValue(new Promise(() => {}));
+      open();
+      named();
+      submit();
+      expect(h.create.mock.calls[0][0].rateLimit).toEqual({
+        case: "unlimitedRate",
+        value: true,
+      });
+    });
+
+    it("sends a typed 0 as a cap", () => {
+      h.create.mockReturnValue(new Promise(() => {}));
+      open();
+      named();
+      fireEvent.click(toggle());
+      fireEvent.change(screen.getByLabelText(/Rate limit/), {
+        target: { value: "0" },
+      });
+      submit();
+      expect(h.create.mock.calls[0][0].rateLimit).toEqual({
+        case: "rateLimitRpm",
+        value: 0,
+      });
+    });
+
+    it("holds the submit while the cap is on but empty", () => {
+      open();
+      named();
+      fireEvent.click(toggle());
+      expect(
+        screen.getByText("Set the rate limit, or make it Unlimited."),
+      ).toBeInTheDocument();
+      submit();
+      expect(h.create).not.toHaveBeenCalled();
+    });
+  });
 });

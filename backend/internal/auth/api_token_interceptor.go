@@ -69,8 +69,9 @@ func WithAPIToken(ctx context.Context, t *api_token.Token) context.Context {
 // When verifier is nil the returned interceptor is a passthrough, same
 // shape as CapabilityInterceptor — disabled deploys pay zero cost.
 //
-// limiter is optional: when nil OR the verified token's RateLimitRPM
-// is 0, the rate-limit gate is skipped entirely. When both are set,
+// limiter is optional: when the verified token has no cap the rate-limit
+// gate is skipped, a cap of 0 is refused without it, and with no limiter a
+// positive cap goes unenforced. When both are set,
 // the interceptor calls Allow on every successful verify; on
 // Decision.Allowed=false it returns CodeResourceExhausted with a
 // Retry-After header so well-behaved clients back off.
@@ -220,10 +221,21 @@ func (i *apiTokenInterceptor) withTokenIdentity(ctx context.Context, t *api_toke
 // fails open: a rate-limit infra outage shouldn't deny otherwise-
 // valid requests; the token already passed signature / time / audience.
 func (i *apiTokenInterceptor) rateLimitGate(ctx context.Context, tok *api_token.Token) error {
-	if i.limiter == nil || tok.RateLimitRPM <= 0 {
+	if tok.RateLimitRPM == nil {
 		return nil
 	}
-	d, err := i.limiter.Allow(ctx, tok.ID, tok.RateLimitRPM)
+	rpm := *tok.RateLimitRPM
+	// A cap of 0 admits nothing, limiter or not: there is no window to count
+	// in and no wait that would help, so nothing is counted and no
+	// Retry-After is sent.
+	if rpm == 0 {
+		recordRateLimitDecision(ctx, tok.TenantID.String(), false, 0, rpm)
+		return connect.NewError(connect.CodeResourceExhausted, "api_token: rate limit is 0 rpm; the token admits no request")
+	}
+	if i.limiter == nil {
+		return nil
+	}
+	d, err := i.limiter.Allow(ctx, tok.ID, rpm)
 	if err != nil {
 		// Fail open: a limiter outage should not deny a request whose token
 		// already passed signature, expiry and audience.
@@ -236,12 +248,12 @@ func (i *apiTokenInterceptor) rateLimitGate(ctx context.Context, tok *api_token.
 		recordRateLimitFailOpen(ctx, tok.TenantID.String())
 		return nil
 	}
-	recordRateLimitDecision(ctx, tok.TenantID.String(), d.Allowed, d.WeightedCount, tok.RateLimitRPM)
+	recordRateLimitDecision(ctx, tok.TenantID.String(), d.Allowed, d.WeightedCount, rpm)
 	if d.Allowed {
 		return nil
 	}
 	ce := connect.Errorf(connect.CodeResourceExhausted,
-		"api_token: rate limit %d rpm exceeded (weighted=%.1f)", tok.RateLimitRPM, d.WeightedCount)
+		"api_token: rate limit %d rpm exceeded (weighted=%.1f)", rpm, d.WeightedCount)
 	if d.RetryAfter > 0 {
 		unary.Info(ctx).ResponseHeader().Set(paladin.HeaderRetryAfter, strconv.Itoa(int(d.RetryAfter.Seconds())))
 	}
