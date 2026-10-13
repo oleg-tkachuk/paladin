@@ -183,7 +183,7 @@ function dataTransport() {
   });
 }
 
-function adminTransport() {
+export function adminTransport() {
   return createConnectTransport({
     baseUrl: ADMIN_URL,
     httpVersion: "1.1",
@@ -1608,55 +1608,33 @@ export async function deleteTenants(tenantIds: string[]): Promise<void> {
   const client = createClient(TenantService, adminTransport());
   const results = await Promise.allSettled(
     tenantIds.map(async (id) => {
-      // Soft-delete into the trash, then purge — the two transitions the API
-      // offers, in the only order that works: PurgeTenant wants a trashed
-      // tenant ("tenant is active; soft-delete it first"), and DeleteTenant
-      // only ever trashes.
-      //
-      // The delete is allowed to fail: a spec that trashes its own fixture
-      // (US5 does, that being the feature) leaves nothing for it to do, and
-      // the purge afterwards is still the step that matters.
-      try {
-        const current = await client.getTenant({ name: `tenants/${id}` });
-        await client.deleteTenant({
-          name: `tenants/${id}`,
-          resourceVersion: current.resourceVersion,
-        });
-      } catch {
-        // Already trashed, or gone. The purge below decides which.
-      }
-      // Walk the RESTRICT edges the way docs/deletion-semantics.md prescribes:
-      // objects, then collections, then users. Trashed was "enough" while
-      // nothing walked them, and the result was a switch-* tenant left in the
-      // trash after every run that used the membership fixture — its one
-      // users row was all it took to refuse the purge.
-      await deleteCollections(await collectionsOf(id)).catch(() => {});
-      // NOT swallowed. This is the step whose silence let the trash fill: a
-      // user left behind blocks the purge, the tenant stays trashed, and its
-      // membership keeps a copy of the operator's subject alive. The rejection
-      // is reported by the loop below, which names the tenant.
+      const name = `tenants/${id}`;
+      let current = await client.getTenant({ name });
+      // A trashed tenant takes no changes — deleting its users included — so
+      // one a spec trashed itself (US5 does, that being the feature) is
+      // restored for the walk below, then trashed again.
+      if (current.deletedAt) current = await client.restoreTenant({ name });
+      // Walk the RESTRICT edges the way docs/deletion-semantics.md prescribes,
+      // while the tenant still takes changes: collections, then users. Walked
+      // after the soft-delete, every user deletion was refused with "the
+      // tenant is in the trash", and the purge then refused on that user.
+      await deleteCollections(await collectionsOf(id));
       await deleteUsersOf(id);
-      // Purging is still not always reachable — an object under a COMPLIANCE
-      // lock cannot be removed by anyone, and that is the product rule
-      // working. Trashed is the honest fallback then.
-      try {
-        await client.purgeTenant({ name: `tenants/${id}` });
-      } catch (err) {
-        // Coupled to the server's wording, which is why it is written here
-        // rather than buried: tenant.ErrTenantHasChildren. It used to read
-        // "object keys or objects" — the internal name for collections, plus
-        // a guess — and now names the relation Postgres reported, so a purge
-        // blocked by users says users. If this regex stops matching, teardown
-        // starts throwing on the one outcome it is meant to tolerate.
-        const msg = String(err);
-        if (!/still has rows referencing it/.test(msg)) throw err;
-      }
+      current = await client.getTenant({ name });
+      await client.deleteTenant({
+        name,
+        resourceVersion: current.resourceVersion,
+      });
+      // Soft-delete, then purge: PurgeTenant wants a trashed tenant, and
+      // DeleteTenant only ever trashes. A refusal is reported by the loop
+      // below with the relation the server named — charges, kept by product
+      // rule, or an object under a COMPLIANCE lock — never swallowed: a
+      // silent refusal is how leftover tenants piled up.
+      await client.purgeTenant({ name });
     }),
   );
   // A teardown that fails silently is how the cluster filled up in the first
-  // place — the fixture reported success while the rows stayed. Say so. A
-  // tenant that could only be trashed is not reported: that is the expected
-  // outcome whenever the test wrote any data.
+  // place — the fixture reported success while the rows stayed. Say so.
   for (const [i, r] of results.entries()) {
     if (r.status === "rejected" && !alreadyGone(r.reason)) {
       console.warn(
@@ -1770,10 +1748,21 @@ export async function deleteCollections(
 }
 
 /**
- * Delete buckets by (backend, name).
+ * Delete buckets, and wait until each row is gone.
  *
- * `delete_on_backend` stays false: the physical bucket in the test stack is
- * shared and provisioning is the worker's job, which this stack does not run.
+ * A bucket the test made is removed from the backend too; an adopted one —
+ * the shared physical bucket — never is. Removing it from the backend is the
+ * worker's job, so the row stays, marked deleting, until the worker gets to
+ * it. Everything after this in teardown refuses while the row is there: the
+ * backend it sits on, and the tenant that owns it. Returning before it was
+ * gone is how purges were refused with "still has rows referencing it:
+ * buckets" and the tenants, and backends, stayed behind. Without
+ * delete_on_backend the row goes at once and the wait ends on its first read.
+ *
+ * Only a stack that runs the worker gets delete_on_backend. The compose stack
+ * runs none (R-006): there the row would stay "deleting" for good, so it goes
+ * on its own and the physical bucket goes with the stack.
+ *
  * A bucket still referenced by a collection refuses — collections->buckets is
  * RESTRICT too — so this runs after deleteCollections, never before.
  */
@@ -1786,10 +1775,12 @@ export async function deleteBuckets(items: SeededBucket[]): Promise<void> {
       await client.deleteBucket({
         name,
         resourceVersion: current.resourceVersion,
-        // A bucket the test made is removed from the backend too; an adopted
-        // one — the shared physical bucket — never is.
-        deleteOnBackend: current.createdOnBackend,
+        deleteOnBackend: current.createdOnBackend && STACK_RUNS_WORKER,
       });
+      await waitUntilGone(
+        () => client.getBucket({ name }),
+        `bucket ${b.bucketId}`,
+      );
     }),
   );
   for (const [i, r] of results.entries()) {
@@ -1803,21 +1794,89 @@ export async function deleteBuckets(items: SeededBucket[]): Promise<void> {
 }
 
 /**
+ * Whether the stack runs the worker, which removes a bucket from its backend
+ * after the API marks it deleting. scripts/e2e-cluster.sh says so for the
+ * cluster; the compose stack runs no worker.
+ */
+const STACK_RUNS_WORKER = process.env.PALADIN_E2E_STACK_RUNS_WORKER === "1";
+
+/**
+ * How long teardown waits for a row the worker removes, and how often it
+ * looks. The bucket reconciler ticks every 30s on the cluster
+ * (worker.jobs.reconciler.interval), so a delete can wait out most of one
+ * tick; a bucket still there after this is one the worker failed on, which
+ * the warning then names. The cleanup fixture's own timeout
+ * (CLEANUP_TIMEOUT_MS in resources.ts) leaves room for it.
+ */
+const ASYNC_DELETE_TIMEOUT_MS = 45_000;
+const ASYNC_DELETE_POLL_MS = 1_000;
+
+/**
+ * Resolves once `read` answers NotFound; rejects naming `what` if it still
+ * answers after ASYNC_DELETE_TIMEOUT_MS, or with any other error.
+ */
+async function waitUntilGone(
+  read: () => Promise<unknown>,
+  what: string,
+): Promise<void> {
+  const deadline = Date.now() + ASYNC_DELETE_TIMEOUT_MS;
+  for (;;) {
+    try {
+      await read();
+    } catch (err) {
+      if (alreadyGone(err)) return;
+      throw err;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `${what} still exists ${ASYNC_DELETE_TIMEOUT_MS / 1000}s after its delete`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, ASYNC_DELETE_POLL_MS));
+  }
+}
+
+/**
  * Delete storage backends by id. Best-effort per backend: one that has since
  * acquired buckets refuses deletion, and a teardown must not fail a test that
  * passed.
  */
+/** How often deleteBackends re-reads a backend whose version moved under it. */
+const BACKEND_DELETE_ATTEMPTS = 5;
+
 export async function deleteBackends(backendIds: string[]): Promise<void> {
   const client = backendAdminClient();
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     backendIds.map(async (id) => {
-      const current = await client.getBackend({
-        name: `storageBackends/${id}`,
-      });
-      await client.deleteBackend({
-        name: `storageBackends/${id}`,
-        resourceVersion: current.resourceVersion,
-      });
+      const name = `storageBackends/${id}`;
+      // The worker writes to a new backend on its own — the feature probe
+      // records what the store supports — so the version read here can be
+      // stale by the time the delete lands. Aborted is that race, not a
+      // refusal: read again and retry.
+      for (let attempt = 1; ; attempt++) {
+        const current = await client.getBackend({ name });
+        try {
+          await client.deleteBackend({
+            name,
+            resourceVersion: current.resourceVersion,
+          });
+          return;
+        } catch (err) {
+          const raced =
+            err instanceof ConnectError && err.code === Code.Aborted;
+          if (!raced || attempt >= BACKEND_DELETE_ATTEMPTS) throw err;
+        }
+      }
     }),
   );
+  // Reported, not dropped: refusals here were silent, and every one left a
+  // disabled-be-* backend on the cluster for good.
+  for (const [i, r] of results.entries()) {
+    if (r.status === "rejected" && !alreadyGone(r.reason)) {
+      console.warn(
+        `[teardown] backend ${backendIds[i]} not deleted: ` +
+          `${String(r.reason).slice(0, 200)}`,
+      );
+    }
+  }
 }

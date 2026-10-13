@@ -102,6 +102,9 @@ export PALADIN_E2E_DATA_URL="https://${API_HOST}"
 export PALADIN_E2E_ADMIN_URL="$admin_url"
 export PALADIN_E2E_ADMIN_SUBJECT="$ADMIN_SUBJECT"
 export PALADIN_E2E_ADMIN_PASSWORD="$password"
+# The cluster runs the worker, so teardown can remove a bucket from its
+# backend too and wait for it (tests/e2e/fixtures/seed.ts deleteBuckets).
+export PALADIN_E2E_STACK_RUNS_WORKER=1
 
 # Playwright's own worker count unless WORKERS says otherwise. The suite once
 # ran on one worker here because every test signs in and the cluster's login
