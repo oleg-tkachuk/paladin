@@ -157,9 +157,9 @@ WHERE id = $1 AND state = 'RUNNING';
 --
 -- Reissuing the same batch is the recovery, and it is safe: each executor
 -- counts an item the dead run already applied as succeeded (already_applied in
--- its response) rather than repeating or failing it. The one exception is a
--- permanent delete, whose finished items no longer exist and come back as
--- "not found".
+-- its response) rather than repeating or failing it — a permanent delete by
+-- the tombstones its erasures left (erased_objects) — and a copy adopts the
+-- PENDING destination a dead run left half done (objects.created_by_operation).
 --
 -- For a caller that wants to know before reissuing, the runner's progress
 -- reporter writes {processed, total} into progress while an operation runs, so
@@ -184,3 +184,11 @@ SET state         = 'FAILED',
     updated_at    = now()
 WHERE state = 'RUNNING'
   AND updated_at < now() - (sqlc.arg('stale_after_micros')::bigint || ' microseconds')::interval;
+
+-- name: OperationIsLive :one
+-- Whether an operation may still be working: PENDING or RUNNING. A purged
+-- operation is not live — only terminal ones are purged.
+SELECT EXISTS (
+    SELECT 1 FROM operations
+    WHERE id = $1 AND state IN ('PENDING', 'RUNNING')
+);

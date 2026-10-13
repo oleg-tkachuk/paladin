@@ -5,11 +5,13 @@
 INSERT INTO objects (
     id, tenant_id, collection_id, path, state,
     content_type, size_bytes, checksum_algorithm, checksum,
-    metadata, tags, external_ref, presign_expires_at, public_url
+    metadata, tags, external_ref, presign_expires_at, public_url,
+    created_by_operation
 ) VALUES (
     $1, $2, $3, $4, $5::object_state,
     $6, $7, $8, $9,
-    $10, $11, $12, $13, $14
+    $10, $11, $12, $13, $14,
+    sqlc.narg('created_by_operation')
 );
 
 -- name: ResolveCollectionID :one
@@ -322,3 +324,16 @@ UPDATE objects
 SET presign_expires_at = GREATEST(COALESCE(presign_expires_at, sqlc.arg('expires_at')), sqlc.arg('expires_at'))
 WHERE tenant_id = $1 AND id = $2
   AND state = 'PENDING';
+
+-- name: AdoptPendingObject :execrows
+-- Hands a PENDING row from the operation that created it to another, and
+-- pushes its presign deadline out so the reaper does not clear it mid-copy.
+-- Compare-and-set on the creator: of two reissues racing for one row, one
+-- adopts it and the other matches nothing.
+UPDATE objects
+SET created_by_operation = sqlc.arg('adopter'),
+    presign_expires_at   = sqlc.arg('presign_expires_at')
+WHERE tenant_id = $1
+  AND id = $2
+  AND state = 'PENDING'
+  AND created_by_operation = sqlc.arg('creator');

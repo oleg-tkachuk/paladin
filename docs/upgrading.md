@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — a reissued permanent delete counts what it erased
+## Unreleased — a reissued batch finishes its first run's work
 
 A permanent delete now leaves a tombstone (`erased_objects`, migration 074):
 the object's id and collection, written by the statement that removes the
@@ -53,6 +53,14 @@ everything its first run had erased as `not found` — the same answer as an id
 that never existed. It now counts those under `already_applied`. Tombstones
 are kept as long as terminal operations are
 (`worker.jobs.housekeeping.operations_ttl`) and purged by the same job.
+
+A reissued batch copy also finishes what its first run left half done. A copy
+cut off between creating its destination row and promoting it left that row
+PENDING, and the reissue reported the key as "a write in progress" until the
+row's presign deadline passed. Rows a batch copy creates now record the
+operation that created them (`objects.created_by_operation`, migration 075);
+a reissue adopts a PENDING row whose creator is no longer running and was made
+for an object of the same size and type, and copies into it.
 
 ## Unreleased — an operation's metadata is its progress
 

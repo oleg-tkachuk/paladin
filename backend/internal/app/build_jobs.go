@@ -386,7 +386,12 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				Transitions: smReaper,
 				PendingTTL:  cfg.Limits.Presign.PutTTL,
 				Limits:      cfg.Limits.UploadLimits(),
-				Logger:      l.Named("batch-copy"),
+				// Adopting a dead run's PENDING destination: the app pool,
+				// scoped to the operation's tenant like Objects, and the
+				// runner's own operation store for the creator's state.
+				Pending:    adapters.NewObjectRepo(sqlc.New(deps.Pool), deps.Pool),
+				Operations: opRepo,
+				Logger:     l.Named("batch-copy"),
 			},
 			"BatchUpdateTags": &operations.BatchUpdateTagsExecutor{
 				Objects: deps.Repos.Object,

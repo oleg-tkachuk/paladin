@@ -13,6 +13,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -109,8 +110,11 @@ func TestBatchExecutor_ReissuedCopy(t *testing.T) {
 	clashing := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "src", "b")
 
 	storage := &copyOnlyStorage{}
+	objects := adapters.NewObjectRepo(sqlc.New(h.PoolMigrate), h.PoolMigrate)
 	exec := &operations.BatchCopyExecutor{
-		Objects:     adapters.NewObjectRepo(sqlc.New(h.PoolMigrate), h.PoolMigrate),
+		Objects:     objects,
+		Pending:     objects,
+		Operations:  adapters.NewOperationRepo(sqlc.New(h.PoolMigrate), h.PoolMigrate),
 		Storage:     storage,
 		Transitions: statemachine.New(h.PoolMigrate),
 		PendingTTL:  time.Minute,
@@ -208,5 +212,93 @@ func TestBatchExecutor_ReissuedPermanentDelete(t *testing.T) {
 	}
 	if got, _ := repo.ErasedIDs(ctx, tenantID, "docs", []uuid.UUID{erased}); len(got) != 0 {
 		t.Errorf("tombstone survived its purge: %v", got)
+	}
+}
+
+// A copy cut off before its promote leaves its destination PENDING, stamped
+// with the operation that created it. A reissue adopts the row once that
+// operation can no longer write it, and leaves it alone while it still can.
+func TestBatchExecutor_ReissuedCopyAdoptsADeadRunsPendingRow(t *testing.T) {
+	h := pgharness.Setup(t)
+	ctx := context.Background()
+	tenantID := mustCreateTenant(t, h.PoolMigrate, "batch-adopt")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "src")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "dst")
+	fromDead := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "src", "dead")
+	fromLive := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "src", "live")
+
+	operation := func(state string) uuid.UUID {
+		id := uuid.New()
+		if _, err := h.PoolMigrate.Exec(ctx,
+			`INSERT INTO operations (id, tenant_id, type, state) VALUES ($1, $2, 'BatchCopy', $3::operation_state)`,
+			id, tenantID, state); err != nil {
+			t.Fatalf("insert operation: %v", err)
+		}
+		return id
+	}
+	deadRun, liveRun, reissue := operation("FAILED"), operation("RUNNING"), operation("RUNNING")
+	pendingCopy := func(key string, creator uuid.UUID) uuid.UUID {
+		id := uuid.New()
+		if _, err := h.PoolMigrate.Exec(ctx, `
+			INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
+			                     checksum_algorithm, size_bytes, presign_expires_at, created_by_operation)
+			SELECT $1, $2, c.id, $3, 'PENDING', 'application/octet-stream', 1, 100,
+			       now() + interval '1 minute', $4
+			  FROM collections c WHERE c.tenant_id = $2 AND c.name = 'dst'`,
+			id, tenantID, key, creator); err != nil {
+			t.Fatalf("insert pending copy: %v", err)
+		}
+		return id
+	}
+	deadRow, liveRow := pendingCopy("dead", deadRun), pendingCopy("live", liveRun)
+
+	objects := adapters.NewObjectRepo(sqlc.New(h.PoolMigrate), h.PoolMigrate)
+	storage := &copyOnlyStorage{}
+	exec := &operations.BatchCopyExecutor{
+		Objects: objects, Pending: objects, Storage: storage,
+		Operations:  adapters.NewOperationRepo(sqlc.New(h.PoolMigrate), h.PoolMigrate),
+		Transitions: statemachine.New(h.PoolMigrate),
+		PendingTTL:  time.Minute,
+		Limits: uploadpolicy.Limits{
+			MaxObjectSize: 1 << 30, MaxMultipartSize: 1 << 40,
+			MinPartSize: uploadpolicy.S3MinPartSize, MaxPartSize: uploadpolicy.S3MaxPartSize, MaxParts: uploadpolicy.S3MaxParts,
+		},
+	}
+	md, err := json.Marshal(batchh.BatchCopyArgs{
+		TenantID: tenantID, SrcCollection: "src", DstCollection: "dst", ObjectIDs: []uuid.UUID{fromDead, fromLive},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := exec.Execute(ctx, operationh.Operation{OperationID: reissue, TenantID: tenantID, Metadata: md})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var resp operations.BatchCopyResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Succeeded != 1 || resp.Failed != 1 || storage.copies != 1 {
+		t.Fatalf("resp = %+v, copies = %d; want the dead run's row finished and the live one's left", resp, storage.copies)
+	}
+
+	row := func(id uuid.UUID) (state string, creator uuid.UUID) {
+		if err := h.PoolMigrate.QueryRow(ctx,
+			`SELECT state::text, created_by_operation FROM objects WHERE id = $1`, id).Scan(&state, &creator); err != nil {
+			t.Fatalf("read %s: %v", id, err)
+		}
+		return state, creator
+	}
+	if state, creator := row(deadRow); state != "AVAILABLE" || creator != reissue {
+		t.Errorf("dead run's row = %s by %s, want AVAILABLE by the reissue %s", state, creator, reissue)
+	}
+	if state, creator := row(liveRow); state != "PENDING" || creator != liveRun {
+		t.Errorf("live run's row = %s by %s, want PENDING by %s, untouched", state, creator, liveRun)
+	}
+
+	// The handover is a compare-and-set on the creator: the loser of a race
+	// matches nothing.
+	if ok, err := objects.AdoptPending(ctx, tenantID, liveRow, deadRun, reissue, time.Now()); err != nil || ok {
+		t.Errorf("adopt with a stale creator = %v, %v; want false", ok, err)
 	}
 }

@@ -240,6 +240,22 @@ func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, 
 	return items, nil
 }
 
+const operationIsLive = `-- name: OperationIsLive :one
+SELECT EXISTS (
+    SELECT 1 FROM operations
+    WHERE id = $1 AND state IN ('PENDING', 'RUNNING')
+)
+`
+
+// Whether an operation may still be working: PENDING or RUNNING. A purged
+// operation is not live — only terminal ones are purged.
+func (q *Queries) OperationIsLive(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, operationIsLive, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const purgeTerminalOperations = `-- name: PurgeTerminalOperations :execrows
 DELETE FROM operations
 WHERE ctid IN (
@@ -299,9 +315,9 @@ WHERE state = 'RUNNING'
 //
 // Reissuing the same batch is the recovery, and it is safe: each executor
 // counts an item the dead run already applied as succeeded (already_applied in
-// its response) rather than repeating or failing it. The one exception is a
-// permanent delete, whose finished items no longer exist and come back as
-// "not found".
+// its response) rather than repeating or failing it — a permanent delete by
+// the tombstones its erasures left (erased_objects) — and a copy adopts the
+// PENDING destination a dead run left half done (objects.created_by_operation).
 //
 // For a caller that wants to know before reissuing, the runner's progress
 // reporter writes {processed, total} into progress while an operation runs, so

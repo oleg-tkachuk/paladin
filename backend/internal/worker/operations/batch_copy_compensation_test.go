@@ -123,6 +123,15 @@ func (*copyFakeTransitioner) Restore(context.Context, uuid.UUID) error          
 
 // ─── tests ───────────────────────────────────────────────────────────────
 
+// noAdoption has no live operations and adopts nothing; tests that reach
+// adoption use their own.
+type noAdoption struct{}
+
+func (noAdoption) IsLive(context.Context, uuid.UUID) (bool, error) { return false, nil }
+func (noAdoption) AdoptPending(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, time.Time) (bool, error) {
+	return false, nil
+}
+
 func availableSrc() objecth.Object {
 	return objecth.Object{ObjectID: uuid.New(), State: statemachine.StateAvailable, Key: "k"}
 }
@@ -136,7 +145,7 @@ func TestCopyOneCompensatesOnStorageFailure(t *testing.T) {
 		Storage:     &copyFakeStorage{copyErr: errors.New("s3 down")},
 		Transitions: tr,
 	}
-	err := e.copyOne(context.Background(), batchh.BatchCopyArgs{TenantID: uuid.New()}, availableSrc(), "", "src", "", "dst", time.Minute)
+	err := e.copyOne(context.Background(), copyJob{args: batchh.BatchCopyArgs{TenantID: uuid.New()}, src: availableSrc()})
 	if err == nil || !strings.Contains(err.Error(), "storage copy") {
 		t.Fatalf("want storage copy error, got %v", err)
 	}
@@ -157,7 +166,7 @@ func TestCopyOneDoubleFailureSurfacesBoth(t *testing.T) {
 		Storage:     &copyFakeStorage{copyErr: errors.New("s3 down")},
 		Transitions: tr,
 	}
-	err := e.copyOne(context.Background(), batchh.BatchCopyArgs{TenantID: uuid.New()}, availableSrc(), "", "src", "", "dst", time.Minute)
+	err := e.copyOne(context.Background(), copyJob{args: batchh.BatchCopyArgs{TenantID: uuid.New()}, src: availableSrc()})
 	if err == nil {
 		t.Fatal("want error")
 	}
@@ -174,6 +183,7 @@ func TestExecuteRefusesWithoutPendingTTL(t *testing.T) {
 		Objects:     &copyFakeRepo{},
 		Storage:     &copyFakeStorage{},
 		Transitions: &copyFakeTransitioner{},
+		Pending:     noAdoption{}, Operations: noAdoption{},
 	}
 	_, err := e.Execute(context.Background(), operationh.Operation{})
 	if err == nil || !strings.Contains(err.Error(), "PendingTTL") {

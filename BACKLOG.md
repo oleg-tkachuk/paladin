@@ -592,23 +592,6 @@ measures a chain that is about to change. Owner decision 2026-10-12.
   "stream the audit log", which is a general capability and a different item.
   It is not a special case of tenant events, and should not be built as one.
 
-### A reissued batch copy does not adopt its dead run's pending copy
-
-- **Status:** Deferred.
-- **Reason:** A batch failed with `WORKER_LOST` is recovered by reissuing it,
-  and every executor counts what the dead run already applied as succeeded
-  (`already_applied`); a permanent delete reads the tombstones its erasures
-  left (`erased_objects`). One case stays short of that:
-  - **A copy cut off before its promote.** Its destination row is left
-    PENDING, and the reissue reports that key as "a write in progress" until
-    the row's presign deadline (`limits.presign.put_ttl`) passes and the reaper
-    clears it. The row is not adopted: `objects` does not record which
-    operation created it, so it cannot be told from a live upload to the same
-    key.
-- **Definition of Done:**
-  - A reissued copy completes a destination its own earlier run left PENDING.
-- **Blockers:** none technical.
-
 ---
 
 ## Database

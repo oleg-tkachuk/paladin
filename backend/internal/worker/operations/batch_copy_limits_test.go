@@ -62,7 +62,7 @@ func TestBatchCopyEnforcesDestinationLimits(t *testing.T) {
 	}
 	e := &BatchCopyExecutor{
 		Objects: repo, Storage: &copyFakeStorage{}, Transitions: &copyFakeTransitioner{},
-		PendingTTL: time.Minute, Limits: copyLimits,
+		PendingTTL: time.Minute, Limits: copyLimits, Pending: noAdoption{}, Operations: noAdoption{},
 	}
 	meta, err := json.Marshal(batchh.BatchCopyArgs{
 		TenantID: tenant, SrcCollection: "src", DstCollection: "dst",
@@ -100,7 +100,7 @@ func TestBatchCopyEnforcesDestinationLimits(t *testing.T) {
 func TestExecuteRefusesWithoutLimits(t *testing.T) {
 	e := &BatchCopyExecutor{
 		Objects: &copyFakeRepo{}, Storage: &copyFakeStorage{}, Transitions: &copyFakeTransitioner{},
-		PendingTTL: time.Minute,
+		PendingTTL: time.Minute, Pending: noAdoption{}, Operations: noAdoption{},
 	}
 	if _, err := e.Execute(context.Background(), operationh.Operation{}); err == nil || !strings.Contains(err.Error(), "limits") {
 		t.Fatalf("err = %v, want a limits error", err)
@@ -116,7 +116,7 @@ func TestBatchCopyRefusesAPublicDestination(t *testing.T) {
 	repo := &limitsCopyRepo{sources: []objecth.Object{src}, public: true}
 	e := &BatchCopyExecutor{
 		Objects: repo, Storage: &copyFakeStorage{}, Transitions: &copyFakeTransitioner{},
-		PendingTTL: time.Minute, Limits: copyLimits,
+		PendingTTL: time.Minute, Limits: copyLimits, Pending: noAdoption{}, Operations: noAdoption{},
 	}
 	meta, err := json.Marshal(batchh.BatchCopyArgs{
 		TenantID: tenant, SrcCollection: "src", DstCollection: "photos", ObjectIDs: []uuid.UUID{src.ObjectID},

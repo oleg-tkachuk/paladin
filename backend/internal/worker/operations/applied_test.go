@@ -230,7 +230,7 @@ func TestBatchCopyOccupiedDestination(t *testing.T) {
 			log, logs := observedLogger()
 			e := &BatchCopyExecutor{
 				Objects: repo, Storage: &copyFakeStorage{}, Transitions: tr,
-				PendingTTL: time.Minute, Limits: copyLimits, Logger: log,
+				PendingTTL: time.Minute, Limits: copyLimits, Pending: noAdoption{}, Operations: noAdoption{}, Logger: log,
 			}
 			meta, err := json.Marshal(batchh.BatchCopyArgs{
 				TenantID: tenant, SrcCollection: "src", DstCollection: "dst", ObjectIDs: []uuid.UUID{src.ObjectID},
@@ -280,7 +280,7 @@ func TestBatchCopyCreateErrorIsNotAnOccupiedKey(t *testing.T) {
 	repo := &failingCreateRepo{limitsCopyRepo: limitsCopyRepo{sources: []objecth.Object{src}}}
 	e := &BatchCopyExecutor{
 		Objects: repo, Storage: &copyFakeStorage{}, Transitions: &copyFakeTransitioner{},
-		PendingTTL: time.Minute, Limits: copyLimits,
+		PendingTTL: time.Minute, Limits: copyLimits, Pending: noAdoption{}, Operations: noAdoption{},
 	}
 	meta, err := json.Marshal(batchh.BatchCopyArgs{TenantID: tenant, SrcCollection: "src", DstCollection: "dst", ObjectIDs: []uuid.UUID{src.ObjectID}})
 	if err != nil {
@@ -413,5 +413,203 @@ func TestBatchPermanentDeleteNeedsAnErasureLookup(t *testing.T) {
 		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{uuid.New()}, Permanent: true,
 	})); err == nil {
 		t.Fatal("a permanent batch with no erasure lookup was accepted")
+	}
+}
+
+// fakeAdoption answers liveness from a set and adoption with a fixed result,
+// recording what it was asked.
+type fakeAdoption struct {
+	live      map[uuid.UUID]bool
+	liveErr   error
+	adopt     bool
+	adoptErr  error
+	asked     []uuid.UUID
+	adoptions []adoptCall
+}
+
+type adoptCall struct {
+	objectID, creator, adopter uuid.UUID
+	deadline                   time.Time
+}
+
+func (f *fakeAdoption) IsLive(_ context.Context, id uuid.UUID) (bool, error) {
+	f.asked = append(f.asked, id)
+	return f.live[id], f.liveErr
+}
+
+func (f *fakeAdoption) AdoptPending(_ context.Context, _, objectID, creator, adopter uuid.UUID, deadline time.Time) (bool, error) {
+	f.adoptions = append(f.adoptions, adoptCall{objectID, creator, adopter, deadline})
+	return f.adopt, f.adoptErr
+}
+
+// countingStorage counts the copies a batch makes.
+type countingStorage struct {
+	copyFakeStorage
+	copies int
+}
+
+func (s *countingStorage) CopyObject(context.Context, objecth.Location, objecth.Location) error {
+	s.copies++
+	return nil
+}
+
+// A copy cut off before its promote leaves its destination PENDING. A reissue
+// adopts that row when — and only when — the operation that created it can no
+// longer write it and it was made for an object like src.
+func TestBatchCopyAdoptsAPendingDestinationFromADeadRun(t *testing.T) {
+	const pendingTTL = time.Minute
+	src := objecth.Object{
+		ObjectID: uuid.New(), Collection: "src", State: statemachine.StateAvailable,
+		Key: "a.png", ContentType: "image/png", SizeBytes: 10, ETag: "etag-a",
+	}
+	opID, deadRun, liveRun := uuid.New(), uuid.New(), uuid.New()
+	pending := func(mut func(*objecth.Object)) objecth.Object {
+		d := objecth.Object{
+			ObjectID: uuid.New(), Collection: "dst", State: statemachine.StatePending,
+			Key: src.Key, ContentType: src.ContentType, SizeBytes: src.SizeBytes, CreatedByOperation: deadRun,
+		}
+		mut(&d)
+		return d
+	}
+	errDB := errors.New("connection reset")
+
+	for _, tc := range []struct {
+		name        string
+		dst         objecth.Object
+		adoption    fakeAdoption
+		wantAdopted bool
+		wantAsked   bool
+		wantReason  string
+	}{
+		{name: "dead creator", dst: pending(func(*objecth.Object) {}), adoption: fakeAdoption{adopt: true},
+			wantAdopted: true, wantAsked: true},
+		{name: "an upload, not a copy", dst: pending(func(d *objecth.Object) { d.CreatedByOperation = uuid.Nil }),
+			wantReason: "write in progress"},
+		{name: "this operation's own row", dst: pending(func(d *objecth.Object) { d.CreatedByOperation = opID }),
+			wantReason: "write in progress"},
+		{name: "another size", dst: pending(func(d *objecth.Object) { d.SizeBytes = 11 }),
+			wantReason: "pending copy of a different object"},
+		{name: "another type", dst: pending(func(d *objecth.Object) { d.ContentType = "text/plain" }),
+			wantReason: "pending copy of a different object"},
+		{name: "live creator", dst: pending(func(d *objecth.Object) { d.CreatedByOperation = liveRun }),
+			adoption: fakeAdoption{live: map[uuid.UUID]bool{liveRun: true}, adopt: true}, wantAsked: true,
+			wantReason: "write in progress"},
+		{name: "liveness unknown", dst: pending(func(*objecth.Object) {}), adoption: fakeAdoption{liveErr: errDB},
+			wantAsked: true, wantReason: errDB.Error()},
+		{name: "another reissue adopted it first", dst: pending(func(*objecth.Object) {}), adoption: fakeAdoption{adopt: false},
+			wantAsked: true, wantReason: "write in progress"},
+		{name: "adoption failed", dst: pending(func(*objecth.Object) {}), adoption: fakeAdoption{adoptErr: errDB},
+			wantAsked: true, wantReason: errDB.Error()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tenant := uuid.New()
+			repo := &occupiedCopyRepo{limitsCopyRepo: limitsCopyRepo{sources: []objecth.Object{src}}, dst: tc.dst}
+			storage := &countingStorage{}
+			tr := &copyFakeTransitioner{}
+			adoption := tc.adoption
+			log, logs := observedLogger()
+			e := &BatchCopyExecutor{
+				Objects: repo, Storage: storage, Transitions: tr,
+				PendingTTL: pendingTTL, Limits: copyLimits, Pending: &adoption, Operations: &adoption, Logger: log,
+			}
+			meta, err := json.Marshal(batchh.BatchCopyArgs{
+				TenantID: tenant, SrcCollection: "src", DstCollection: "dst", ObjectIDs: []uuid.UUID{src.ObjectID},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			before := time.Now()
+			op := mkOpRaw(tenant, meta)
+			op.OperationID = opID
+			body, err := e.Execute(context.Background(), op)
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			var resp BatchCopyResponse
+			if err := json.Unmarshal(body, &resp); err != nil {
+				t.Fatal(err)
+			}
+			if asked := len(adoption.asked) > 0; asked != tc.wantAsked {
+				t.Errorf("asked for liveness = %v, want %v", asked, tc.wantAsked)
+			}
+			adopted := logs.FilterMessage("batch copy adopted a pending destination left by a stopped operation").All()
+
+			if tc.wantAdopted {
+				if resp.Succeeded != 1 || resp.AlreadyApplied != 0 || resp.Failed != 0 {
+					t.Fatalf("resp = %+v, want one copy made now", resp)
+				}
+				if storage.copies != 1 || !tr.promoteHit {
+					t.Errorf("copies = %d, promoted = %v; want the adopted row filled", storage.copies, tr.promoteHit)
+				}
+				a := adoption.adoptions[0]
+				if a.objectID != tc.dst.ObjectID || a.creator != deadRun || a.adopter != opID {
+					t.Errorf("adoption = %+v, want %s from %s to %s", a, tc.dst.ObjectID, deadRun, opID)
+				}
+				if a.deadline.Before(before.Add(pendingTTL)) {
+					t.Errorf("deadline %v is not pushed a PendingTTL out", a.deadline)
+				}
+				if len(adopted) != 1 || adopted[0].ContextMap()["creator_operation_id"] != deadRun.String() {
+					t.Errorf("adoption logs = %v, want one naming the dead run", adopted)
+				}
+				return
+			}
+			if resp.Failed != 1 || !strings.Contains(resp.Failures[0].Reason, tc.wantReason) {
+				t.Fatalf("resp = %+v, want a failure naming %q", resp, tc.wantReason)
+			}
+			if storage.copies != 0 || tr.promoteHit {
+				t.Errorf("copies = %d, promoted = %v; want the row left alone", storage.copies, tr.promoteHit)
+			}
+			if len(adopted) != 0 {
+				t.Errorf("logged an adoption that did not happen: %v", adopted)
+			}
+		})
+	}
+}
+
+// creatorRepo records the creator a batch copy stamps on its rows.
+type creatorRepo struct {
+	limitsCopyRepo
+	creators []uuid.UUID
+}
+
+func (r *creatorRepo) CreateObject(_ context.Context, a objecth.CreateObjectArgs) (objecth.Object, error) {
+	r.creators = append(r.creators, a.CreatedByOperation)
+	return objecth.Object{ObjectID: uuid.New(), Key: a.Key}, nil
+}
+
+func TestBatchCopyStampsItsOperationOnTheRowsItCreates(t *testing.T) {
+	tenant, opID := uuid.New(), uuid.New()
+	src := objecth.Object{ObjectID: uuid.New(), Collection: "src", State: statemachine.StateAvailable, Key: "a.png", ContentType: "image/png", SizeBytes: 10}
+	repo := &creatorRepo{limitsCopyRepo: limitsCopyRepo{sources: []objecth.Object{src}}}
+	e := &BatchCopyExecutor{
+		Objects: repo, Storage: &copyFakeStorage{}, Transitions: &copyFakeTransitioner{},
+		PendingTTL: time.Minute, Limits: copyLimits, Pending: noAdoption{}, Operations: noAdoption{},
+	}
+	meta, err := json.Marshal(batchh.BatchCopyArgs{TenantID: tenant, SrcCollection: "src", DstCollection: "dst", ObjectIDs: []uuid.UUID{src.ObjectID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := mkOpRaw(tenant, meta)
+	op.OperationID = opID
+	if _, err := e.Execute(context.Background(), op); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(repo.creators) != 1 || repo.creators[0] != opID {
+		t.Errorf("creators = %v, want [%s]", repo.creators, opID)
+	}
+}
+
+// Without the adoption seams a reissue would wait out every dead run's
+// PENDING row, so a copy executor wired without them refuses to run.
+func TestBatchCopyRefusesWithoutAdoptionDependencies(t *testing.T) {
+	for name, e := range map[string]*BatchCopyExecutor{
+		"no Pending":    {Objects: &copyFakeRepo{}, Storage: &copyFakeStorage{}, Transitions: &copyFakeTransitioner{}, PendingTTL: time.Minute, Limits: copyLimits, Operations: noAdoption{}},
+		"no Operations": {Objects: &copyFakeRepo{}, Storage: &copyFakeStorage{}, Transitions: &copyFakeTransitioner{}, PendingTTL: time.Minute, Limits: copyLimits, Pending: noAdoption{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := e.Execute(context.Background(), operationh.Operation{}); err == nil || !strings.Contains(err.Error(), "dependencies missing") {
+				t.Fatalf("err = %v, want a wiring error", err)
+			}
+		})
 	}
 }

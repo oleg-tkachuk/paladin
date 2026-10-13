@@ -640,6 +640,7 @@ type Object struct {
 	Taint                 []string           `json:"taint"`
 	ChecksumPartSizeBytes *int64             `json:"checksum_part_size_bytes"`
 	PublicUrl             string             `json:"public_url"`
+	CreatedByOperation    pgtype.UUID        `json:"created_by_operation"`
 }
 
 type ObjectLock struct {

@@ -107,6 +107,7 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 		strPtr(args.ExternalRef),
 		pgTS(args.PresignExpiresAt),
 		args.PublicURL,
+		pgUUID(args.CreatedByOperation),
 	); err != nil {
 		return objecth.Object{}, fmt.Errorf("create object: %w", err)
 	}
@@ -717,6 +718,17 @@ func (r *ObjectRepo) PurgeErasedBefore(ctx context.Context, cutoff time.Time) (i
 	return n, nil
 }
 
+// AdoptPending hands a PENDING row from the operation that created it to
+// adopter and moves its presign deadline to deadline. False when the row is
+// no longer PENDING, or another operation adopted it first.
+func (r *ObjectRepo) AdoptPending(ctx context.Context, tenantID, objectID, creator, adopter uuid.UUID, deadline time.Time) (bool, error) {
+	n, err := r.q.AdoptPendingObject(ctx, pgUUID(tenantID), pgUUID(objectID), pgUUID(adopter), pgTS(deadline), pgUUID(creator))
+	if err != nil {
+		return false, fmt.Errorf("adopt pending object: %w", err)
+	}
+	return n == 1, nil
+}
+
 // LiveCollision reports whether a non-DELETED row exists at (tenant, collection, key).
 func (r *ObjectRepo) LiveCollision(ctx context.Context, tenantID uuid.UUID, collection, key string) (bool, error) {
 	exists, err := r.q.CheckLiveCollision(ctx, pgUUID(tenantID), collection, key)
@@ -767,6 +779,7 @@ func objectFromSQLC(o sqlc.Object, collectionName string) objecth.Object {
 		PresignExpiresAt:      timePtr(o.PresignExpiresAt),
 		Taint:                 o.Taint,
 		PublicURL:             o.PublicUrl,
+		CreatedByOperation:    uuidFrom(o.CreatedByOperation),
 	}
 }
 

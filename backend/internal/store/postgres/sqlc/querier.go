@@ -11,6 +11,11 @@ import (
 )
 
 type Querier interface {
+	// Hands a PENDING row from the operation that created it to another, and
+	// pushes its presign deadline out so the reaper does not clear it mid-copy.
+	// Compare-and-set on the creator: of two reissues racing for one row, one
+	// adopts it and the other matches nothing.
+	AdoptPendingObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, adopter pgtype.UUID, presignExpiresAt pgtype.Timestamptz, creator pgtype.UUID) (int64, error)
 	// Records copy progress + the resume cursor after a batch. Progress only moves
 	// forward: a stale batch reporting less than is recorded changes nothing.
 	AdvanceStorageMigrationCopy(ctx context.Context, objectsCopied int64, cursorCollection string, cursorPath string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
@@ -138,7 +143,7 @@ type Querier interface {
 	CreateMultipartUpload(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, storageUploadID string, partSizeBytes int64, totalParts int32, name string, name_2 string, initiatedBySubject string, initiatedByKind string, collectionName string, path string) error
 	// Object queries.
 	// collection_id is resolved by the caller via ResolveCollectionID.
-	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz, publicUrl string) error
+	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz, publicUrl string, createdByOperation pgtype.UUID) error
 	// Long-running operation queries.
 	CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
 	// v2 storage_backends queries — full CRUD over the now-first-class entity.
@@ -647,6 +652,9 @@ type Querier interface {
 	// The taint of the live object at a path, for the capability read gate. No
 	// row means no live object, which the handler reports on its own.
 	ObjectTaintAtPath(ctx context.Context, tenantID pgtype.UUID, name string, path string) ([]string, error)
+	// Whether an operation may still be working: PENDING or RUNNING. A purged
+	// operation is not live — only terminal ones are purged.
+	OperationIsLive(ctx context.Context, id pgtype.UUID) (bool, error)
 	// Deletes audit_log rows older than the cutoff in batches of 10k. The
 	// worker calls this in a loop until it returns 0 — keeps each statement
 	// bounded so a long-overdue first-run doesn't lock the table for minutes
@@ -712,9 +720,9 @@ type Querier interface {
 	//
 	// Reissuing the same batch is the recovery, and it is safe: each executor
 	// counts an item the dead run already applied as succeeded (already_applied in
-	// its response) rather than repeating or failing it. The one exception is a
-	// permanent delete, whose finished items no longer exist and come back as
-	// "not found".
+	// its response) rather than repeating or failing it — a permanent delete by
+	// the tombstones its erasures left (erased_objects) — and a copy adopts the
+	// PENDING destination a dead run left half done (objects.created_by_operation).
 	//
 	// For a caller that wants to know before reissuing, the runner's progress
 	// reporter writes {processed, total} into progress while an operation runs, so
