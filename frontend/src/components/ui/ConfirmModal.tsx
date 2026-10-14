@@ -56,7 +56,12 @@ export function ConfirmModal({
 
   return (
     <AlertDialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
-      <AlertDialogContent className="max-w-sm rounded-[2rem] border border-border bg-popover shadow-2xl p-8 gap-6">
+      {/* Above every panel, the object inspector (z-60) included: a
+          confirmation opened from a panel must not open behind it. */}
+      <AlertDialogContent
+        overlayClassName="z-70"
+        className="z-70 max-w-sm rounded-[2rem] border border-border bg-popover shadow-2xl p-8 gap-6"
+      >
         <div className="flex flex-col items-center text-center space-y-4">
           <div
             className={cn(

@@ -101,4 +101,20 @@ describe("ConfirmModal", () => {
     );
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });
+
+  // The object inspector is a z-60 panel; a confirmation it opens must not
+  // render behind it.
+  it("stacks above the inspector panel", () => {
+    render(
+      <ConfirmModal {...baseProps} onClose={vi.fn()} onConfirm={vi.fn()} />,
+    );
+    const content = screen.getByRole("alertdialog");
+    expect(content).toHaveClass("z-70");
+    expect(content).not.toHaveClass("z-50");
+    const overlay = document.querySelector(
+      '[data-slot="alert-dialog-overlay"]',
+    );
+    expect(overlay).toHaveClass("z-70");
+    expect(overlay).not.toHaveClass("z-50");
+  });
 });

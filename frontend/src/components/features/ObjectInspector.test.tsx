@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@/test/utils";
+import { render, screen, waitFor, within } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
@@ -140,5 +140,73 @@ describe("ObjectInspector on a trashed tenant", () => {
     expect(trash).toBeDisabled();
     expect(trash).toHaveAttribute("title", TRASHED_TENANT_BLOCK);
     expect(screen.getByRole("button", { name: "Full Details" })).toBeEnabled();
+  });
+});
+
+// Trash and restore from the drawer are confirmed first, and the drawer only
+// closes once the trash has gone through.
+describe("ObjectInspector confirmations", () => {
+  function renderWith(onClose = vi.fn()) {
+    render(
+      <TenantProvider value={TENANT}>
+        <ObjectInspector
+          collection="report.pdf"
+          parentCollection="docs"
+          onClose={onClose}
+        />
+      </TenantProvider>,
+    );
+    return onClose;
+  }
+
+  it("asks before trashing and closes only after the trash lands", async () => {
+    const onClose = renderWith();
+    await userEvent.click(screen.getByRole("button", { name: "Trash" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("report.pdf");
+    expect(within(dialog).getByRole("note")).toHaveTextContent(/restorable/);
+    expect(h.softDeleteObject).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Move to Trash" }),
+    );
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(h.softDeleteObject).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the drawer open when the trash is refused", async () => {
+    h.softDeleteObject.mockRejectedValueOnce(new Error("locked"));
+    const onClose = renderWith();
+    await userEvent.click(screen.getByRole("button", { name: "Trash" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Move to Trash" }),
+    );
+    await waitFor(() => expect(h.softDeleteObject).toHaveBeenCalledOnce());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the trash is cancelled", async () => {
+    const onClose = renderWith();
+    await userEvent.click(screen.getByRole("button", { name: "Trash" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Cancel" }),
+    );
+    expect(h.softDeleteObject).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("asks before restoring a trashed object", async () => {
+    h.object = { ...h.object, state: ObjectState.DELETED };
+    renderWith();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Restore Object/ }),
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    expect(h.restoreObject).not.toHaveBeenCalled();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Restore object" }),
+    );
+    await waitFor(() => expect(h.restoreObject).toHaveBeenCalledOnce());
   });
 });

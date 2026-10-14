@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useObject } from "@/hooks/useObject";
 import { useScope } from "@/context/ScopeContext";
 import {
@@ -19,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { cn, formatBytes } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { formatDateTime } from "@/lib/format/locale";
@@ -49,8 +51,30 @@ export function ObjectInspector({
   const effectiveParent = parentCollection || scopedCollection;
   const { object, downloadUrl, loading, softDeleteObject, restoreObject } =
     useObject(collection || undefined, effectiveParent);
+  // Trash and restore are both confirmed before they run.
+  const [pending, setPending] = useState<"trash" | "restore" | null>(null);
+  const [busy, setBusy] = useState(false);
 
   if (!collection) return null;
+
+  // The panel closes only once the trash has gone through: closing it first
+  // would unmount the confirmation along with it. A failure is reported by
+  // the hook and leaves the panel open.
+  const runPending = async () => {
+    setBusy(true);
+    try {
+      if (pending === "trash") {
+        await softDeleteObject();
+        onClose();
+      } else if (pending === "restore") {
+        await restoreObject();
+      }
+    } catch {
+      // Reported by useObject.
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const isImage = object?.contentType?.startsWith("image/");
   const publicObject = Boolean(object?.publicUrl);
@@ -253,7 +277,7 @@ export function ObjectInspector({
                 className="w-full"
                 disabled={Boolean(changesBlocked)}
                 title={changesBlocked ?? undefined}
-                onClick={() => restoreObject()}
+                onClick={() => setPending("restore")}
               >
                 <ArrowPathIcon className="size-4" />
                 Restore Object
@@ -291,10 +315,7 @@ export function ObjectInspector({
                     size="sm"
                     disabled={Boolean(changesBlocked)}
                     title={changesBlocked ?? undefined}
-                    onClick={() => {
-                      softDeleteObject();
-                      onClose();
-                    }}
+                    onClick={() => setPending("trash")}
                   >
                     <TrashIcon className="size-4" />
                     Trash
@@ -305,6 +326,44 @@ export function ObjectInspector({
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={pending === "trash"}
+        onClose={() => setPending(null)}
+        onConfirm={runPending}
+        loading={busy}
+        type="warning"
+        title="Move to Trash?"
+        message={
+          <p>
+            <span className="font-mono text-foreground break-all">
+              {object?.key}
+            </span>{" "}
+            moves to the collection&apos;s trash and can no longer be read.
+          </p>
+        }
+        warning="It stays restorable from the Trash tab until it is purged."
+        confirmText="Move to Trash"
+      />
+      <ConfirmModal
+        isOpen={pending === "restore"}
+        onClose={() => setPending(null)}
+        onConfirm={runPending}
+        loading={busy}
+        type="warning"
+        title="Restore this object?"
+        message={
+          <p>
+            <span className="font-mono text-foreground break-all">
+              {object?.key}
+            </span>{" "}
+            returns to the collection&apos;s active objects and can be read
+            again.
+          </p>
+        }
+        warning="A restore is refused for an object that changed since it was loaded; refresh and try again."
+        confirmText="Restore object"
+      />
     </>
   );
 }
