@@ -40,22 +40,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { T } from "@/lib/ui/typography";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
+import { CollectionDeleteDialog } from "@/components/features/collections/CollectionDeleteDialog";
 import { SortableHead } from "@/components/ui/SortHeader";
 
 type SortColumn = "name" | "displayName" | "backendId";
@@ -360,34 +351,11 @@ export default function CollectionsPage() {
         onCreated={() => void fetchCollections(searchFilter(debouncedSearch))}
       />
 
-      {/* Delete */}
-      <AlertDialog
-        open={!!deleteTarget}
-        onOpenChange={(o) => !o && setDeleteTarget(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this Collection?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Removing{" "}
-              <span className="font-mono text-foreground">
-                {deleteTarget?.collection}
-              </span>
-              . The Collection must be empty of all live objects before this can
-              succeed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete Collection
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CollectionDeleteDialog
+        target={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

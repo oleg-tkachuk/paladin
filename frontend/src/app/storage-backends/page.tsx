@@ -11,7 +11,7 @@
 // state it is in, what the last probe found. Every state change sits behind
 // the row's menu or the bulk bar, and disabling asks first.
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowPathIcon,
@@ -34,6 +34,8 @@ import { STORAGE_KIND_LABELS } from "@/lib/storageKind";
 import { useNotification } from "@/components/ui/Notification";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { SelectionBar } from "@/components/ui/SelectionBar";
+import { Separator } from "@/components/ui/separator";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -371,43 +373,25 @@ export default function StorageBackendsPage() {
         </Button>
       </div>
 
-      {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
-          <span className="font-medium">{selected.size} selected</span>
-          {BULK_GROUPS.map((group) => (
-            <div
-              key={group[0]}
-              className="flex items-center overflow-hidden rounded-md border border-border bg-background"
-            >
-              {group.map((action, i) => (
-                <Button
-                  key={action}
-                  size="sm"
-                  variant="ghost"
-                  className={cn(
-                    "rounded-none",
-                    i > 0 && "border-l border-border",
-                  )}
-                  aria-label={ACTION_TEXT[action].bulkLabel}
-                  disabled={bulkBusy}
-                  onClick={() => startBulk(action)}
-                >
-                  {ACTION_TEXT[action].button}
-                </Button>
-              ))}
-            </div>
-          ))}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="ml-auto"
-            disabled={bulkBusy}
-            onClick={clearSelection}
-          >
-            Clear selection
-          </Button>
-        </div>
-      )}
+      <SelectionBar count={selected.size} onClear={clearSelection}>
+        {BULK_GROUPS.map((group, g) => (
+          <Fragment key={group[0]}>
+            {g > 0 && <Separator orientation="vertical" className="my-1" />}
+            {group.map((action) => (
+              <Button
+                key={action}
+                size="sm"
+                variant="ghost"
+                aria-label={ACTION_TEXT[action].bulkLabel}
+                disabled={bulkBusy}
+                onClick={() => startBulk(action)}
+              >
+                {ACTION_TEXT[action].button}
+              </Button>
+            ))}
+          </Fragment>
+        ))}
+      </SelectionBar>
 
       <Card className="p-0">
         <Table>

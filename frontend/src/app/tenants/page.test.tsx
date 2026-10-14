@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Protective net for decomposing tenants/page: asserts the list branches +
@@ -154,7 +160,14 @@ describe("TenantsPage", () => {
       screen.getByRole("button", { name: /Actions for t-1/i }),
     );
     await userEvent.click(screen.getByText("Delete tenant"));
-    // The confirmation alertdialog is now open; its action button confirms.
+    // The confirmation says what DeleteTenant does — a move to the trash —
+    // and warns what that means; it used to describe a cascade only purge
+    // performs and call the delete unrecoverable.
+    const confirm = screen.getByRole("alertdialog");
+    expect(confirm).toHaveTextContent(/moves to the trash/);
+    expect(within(confirm).getByRole("note")).toHaveTextContent(/frozen/);
+    expect(confirm).not.toHaveTextContent(/database intervention|cascade/i);
+    expect(h.deleteTenant).not.toHaveBeenCalled();
     await userEvent.click(
       screen.getByRole("button", { name: "Delete tenant" }),
     );
