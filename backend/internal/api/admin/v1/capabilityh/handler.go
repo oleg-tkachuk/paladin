@@ -32,7 +32,6 @@ import (
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -136,8 +135,8 @@ func spansTenants(caller *auth.Principal) bool {
 // alone, and its rows are RLS-isolated by its own tenant, so on the caller's
 // connection a platform admin saw nothing and every call answered NotFound.
 //
-// The owner is read across tenants, read-only (capabilitypg.ReadAllTenants):
-// that one read widens, and nothing may write under it. A caller confined to its own tenant gets ctx back
+// The owner is read under the cross-tenant flag, which widens that one read
+// and lets nothing write. A caller confined to its own tenant gets ctx back
 // unchanged: RLS keeps scoping it, and another tenant's id stays NotFound
 // rather than becoming an oracle. An id nobody owns is left to the store call,
 // which answers NotFound the same way.
@@ -145,7 +144,7 @@ func (h *Handler) actOnCapabilitysTenant(ctx context.Context, caller *auth.Princ
 	if !spansTenants(caller) {
 		return ctx, nil
 	}
-	rec, err := h.store.GetRecord(capabilitypg.ReadAllTenants(ctx), id)
+	rec, err := h.store.GetRecord(auth.WithCrossTenantRead(ctx), id)
 	switch {
 	case errors.Is(err, limes.ErrNotFound):
 		return ctx, nil

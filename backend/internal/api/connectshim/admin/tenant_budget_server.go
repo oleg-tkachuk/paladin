@@ -16,7 +16,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -172,7 +171,7 @@ func (s *TenantBudgetServer) Summarize(
 	}
 	// Every tenant's row, which the platform.admin gate above allows, read
 	// with no write allowed.
-	page, err := s.Usage.ListTenantBudgets(capabilitypg.ReadAllTenants(ctx), budgetListRequest(m))
+	page, err := s.Usage.ListTenantBudgets(auth.WithCrossTenantRead(ctx), budgetListRequest(m))
 	if err != nil {
 		if errors.Is(err, limes.ErrInvalidRequest) { // a page token the store cannot read
 			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)

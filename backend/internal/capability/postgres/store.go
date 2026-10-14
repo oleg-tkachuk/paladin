@@ -121,7 +121,8 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, req limes.SetTenantBud
 // It sets the schema's own settings, so the stores check every call whose
 // request names a tenant against them (pgstore.CheckSchemaScope): a call
 // scoped to another tenant fails as limes.ErrScopeMismatch rather than as
-// rows that are not there.
+// rows that are not there. pgstore refuses a write under a platform-wide
+// read the same way, before it writes.
 func Scope(ctx context.Context, tx pgx.Tx) error {
 	if auth.CrossTenantRead(ctx) {
 		return pgstore.ScopeFromContext(pgstore.WithAllTenantsReadOnly(ctx), tx)
@@ -130,14 +131,6 @@ func Scope(ctx context.Context, tx pgx.Tx) error {
 		return pgstore.ScopeFromContext(pgstore.WithTenant(ctx, tenant), tx)
 	}
 	return pgstore.ScopeFromContext(ctx, tx)
-}
-
-// ReadAllTenants is ctx for a platform-wide read of the stores — a lookup of
-// a capability's tenant, the budget summary: every tenant's rows to read and
-// none to write. The stores refuse a call that writes under it with
-// limes.ErrScopeMismatch before it begins.
-func ReadAllTenants(ctx context.Context) context.Context {
-	return pgstore.WithAllTenantsReadOnly(auth.WithCrossTenantRead(ctx))
 }
 
 // checkTenant refuses a capability for a tenant Paladin does not hold or holds

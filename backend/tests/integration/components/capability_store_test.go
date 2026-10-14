@@ -259,7 +259,7 @@ func TestPurgeRunsWithoutARequestPrincipal(t *testing.T) {
 		t.Fatalf("purged %d records on a bare context — the scope is not engaging", res.Purged)
 	}
 	// A platform-wide read writes nothing: it is refused before it begins.
-	if _, err := purger.Purge(capstore.ReadAllTenants(ctx), limes.PurgeRequest{ExpiredFor: purgeRetention}); !errors.Is(err, limes.ErrScopeMismatch) {
+	if _, err := purger.Purge(auth.WithCrossTenantRead(ctx), limes.PurgeRequest{ExpiredFor: purgeRetention}); !errors.Is(err, limes.ErrScopeMismatch) {
 		t.Fatalf("purge under a read-only scope: err = %v, want ErrScopeMismatch", err)
 	}
 	// Housekeeping, as the purger scopes it.
