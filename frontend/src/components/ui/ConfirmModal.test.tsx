@@ -74,4 +74,31 @@ describe("ConfirmModal", () => {
       screen.getByRole("button", { name: "Processing..." }),
     ).toBeDisabled();
   });
+
+  it("renders a rich message and sets the warning apart as a note", () => {
+    render(
+      <ConfirmModal
+        {...baseProps}
+        message={
+          <p>
+            Restores <code>acme</code>.
+          </p>
+        }
+        warning="Its slug may have been taken."
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("acme").tagName).toBe("CODE");
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "Its slug may have been taken.",
+    );
+  });
+
+  it("has no warning note unless one is given", () => {
+    render(
+      <ConfirmModal {...baseProps} onClose={vi.fn()} onConfirm={vi.fn()} />,
+    );
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+  });
 });

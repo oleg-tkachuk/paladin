@@ -14,7 +14,7 @@
 //
 // Purge semantics:
 //   - hard-deletes the trashed row (FAILED_PRECONDITION if active)
-//   - irreversible — confirmed via AlertDialog
+//   - irreversible — confirmed first, as restore is
 //
 // Retention: the server reports purge_eligible_at = deleted_at +
 // admin.tenants.trash_retention (default 30 days). Each row shows when the
@@ -59,16 +59,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useNotification } from "@/components/ui/Notification";
 import {
   TrashRetention,
@@ -89,7 +80,12 @@ export default function TrashPage() {
   // surface via toasts below.
   const { fetchTenants, restoreTenant, purgeTenant, error } = useTenants();
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [purgeTarget, setPurgeTarget] = useState<Tenant | null>(null);
+  // The action awaiting the operator's confirmation. Both restore and purge
+  // are asked first: either one changes which tenants exist.
+  const [pending, setPending] = useState<{
+    kind: "restore" | "purge";
+    tenant: Tenant;
+  } | null>(null);
   // Why the last purge of a tenant was refused, by tenant id.
   const [purgeRefusals, setPurgeRefusals] = useState<Record<string, string>>(
     {},
@@ -151,11 +147,8 @@ export default function TrashPage() {
     }
   };
 
-  const handlePurge = async () => {
-    if (!purgeTarget) return;
-    const t = purgeTarget;
+  const handlePurge = async (t: Tenant) => {
     setBusyId(t.tenantId);
-    setPurgeTarget(null);
     try {
       await purgeTenant(t.tenantId);
       setPurgeRefusals(({ [t.tenantId]: _, ...rest }) => rest);
@@ -290,7 +283,9 @@ export default function TrashPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => void handleRestore(t)}
+                              onClick={() =>
+                                setPending({ kind: "restore", tenant: t })
+                              }
                               disabled={busy}
                             >
                               <ArrowUturnLeftIcon className="size-3.5" />
@@ -300,7 +295,9 @@ export default function TrashPage() {
                               size="sm"
                               variant="ghost"
                               className="text-destructive hover:bg-destructive/10"
-                              onClick={() => setPurgeTarget(t)}
+                              onClick={() =>
+                                setPending({ kind: "purge", tenant: t })
+                              }
                               disabled={busy}
                               aria-label={`Purge ${t.slug}`}
                               title="Purge permanently"
@@ -340,41 +337,50 @@ export default function TrashPage() {
         </div>
       )}
 
-      <AlertDialog
-        open={!!purgeTarget}
-        onOpenChange={(o) => !o && setPurgeTarget(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Purge this tenant?</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2">
-                <p>
-                  This permanently deletes{" "}
-                  <span className="font-mono text-foreground">
-                    {purgeTarget?.slug || purgeTarget?.tenantId}
-                  </span>{" "}
-                  from the database. The action cannot be undone.
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Physical S3 objects under{" "}
-                  <span className={T.code}>{"<bucket>/<tenant_id>/…"}</span> are
-                  NOT removed — clean them up separately if needed.
-                </p>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handlePurge}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Purge permanently
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmModal
+        isOpen={pending?.kind === "restore"}
+        onClose={() => setPending(null)}
+        onConfirm={() => (pending ? handleRestore(pending.tenant) : undefined)}
+        loading={busyId !== null}
+        type="warning"
+        title="Restore this tenant?"
+        message={
+          <p>
+            <span className="font-mono text-foreground">
+              {pending?.tenant.slug || pending?.tenant.tenantId}
+            </span>{" "}
+            returns to the active tenants and leaves the trash.
+          </p>
+        }
+        warning="If another tenant has taken this slug since, the restore is refused: rename one of them first."
+        confirmText="Restore tenant"
+      />
+
+      <ConfirmModal
+        isOpen={pending?.kind === "purge"}
+        onClose={() => setPending(null)}
+        onConfirm={() => (pending ? handlePurge(pending.tenant) : undefined)}
+        loading={busyId !== null}
+        type="danger"
+        title="Purge this tenant?"
+        message={
+          <p>
+            This permanently deletes{" "}
+            <span className="font-mono text-foreground">
+              {pending?.tenant.slug || pending?.tenant.tenantId}
+            </span>{" "}
+            from the database. The action cannot be undone.
+          </p>
+        }
+        warning={
+          <>
+            Physical S3 objects under{" "}
+            <span className={T.code}>{"<bucket>/<tenant_id>/…"}</span> are not
+            removed — clean them up separately if needed.
+          </>
+        }
+        confirmText="Purge permanently"
+      />
     </div>
   );
 }

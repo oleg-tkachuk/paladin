@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import type { ReactNode } from "react";
 import {
   ExclamationTriangleIcon,
   TrashIcon,
@@ -18,7 +18,10 @@ interface ConfirmModalProps {
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
   title: string;
-  message: string;
+  message: ReactNode;
+  // What the action does that the operator might not expect, shown apart from
+  // the message so it is not skimmed past.
+  warning?: ReactNode;
   type?: "danger" | "warning";
   confirmText?: string;
   cancelText?: string;
@@ -38,6 +41,7 @@ export function ConfirmModal({
   onConfirm,
   title,
   message,
+  warning,
   type = "warning",
   confirmText = "Confirm",
   cancelText = "Cancel",
@@ -72,11 +76,27 @@ export function ConfirmModal({
             <AlertDialogTitle className="text-lg font-bold text-popover-foreground">
               {title}
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-sm text-muted-foreground mt-2 leading-relaxed">
-              {message}
+            <AlertDialogDescription asChild>
+              <div className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                {message}
+              </div>
             </AlertDialogDescription>
           </div>
         </div>
+        {warning && (
+          <div
+            role="note"
+            className={cn(
+              "flex items-start gap-2 rounded-xl px-3 py-2.5 text-left text-xs leading-relaxed",
+              isDanger
+                ? "bg-destructive/10 text-destructive"
+                : "bg-warning/10 text-warning",
+            )}
+          >
+            <ExclamationTriangleIcon className="mt-px size-4 shrink-0" />
+            <div>{warning}</div>
+          </div>
+        )}
         <div className="flex gap-3">
           <button
             onClick={onClose}
