@@ -60,7 +60,7 @@ them, so they must exist before it runs.
 | `029` | `search_object_ids`, the `SECURITY DEFINER` search that lets those indexes work under RLS |
 | `030`, `031` | `idx_objects_keyset_state` (keyset with `state` included) replaces `idx_objects_keyset` |
 | `032` | `charge_refunds` |
-| `033` | NOTIFY `capability_revoked` on every revocation |
+| `033` | NOTIFY `capability_revoked` on every revocation (dropped by `077`) |
 | `034` | `capability_reservations` and the `reserved_usd` counters |
 | `035` | `objects.taint` |
 | `036` | `capability_records.confirmation_jkt` — the DPoP key binding |
@@ -71,6 +71,7 @@ them, so they must exist before it runs.
 | `043` | `rabbitmq` in the `event_sink_kind` enum |
 | `044` | `bucket_quotas`: bucket caps move out of `quotas`, outside RLS ([ADR-0025](../../docs/adr/0025-bucket-quotas-are-platform-configuration.md)) |
 | `076` | the capability tables are dropped, their rows with them; capabilities move to the `limes` schema |
+| `077` | the `capability_revoked` triggers on the `limes` schema go; pgstore notifies revocations itself |
 
 Each file's header comment says why it exists.
 
@@ -126,9 +127,16 @@ max_x`). Nullable caps would poison those comparisons three-valued.
 Biscuit, by block revocation id), `usage`, `copy_usage` (the counters of
 Biscuit copies with limits of their own), `reservations` (open budget holds),
 `charges` (the ledger billing reads), `tenant_budgets`. Every table carries
-its tenant and none refers to `tenants`: purging a tenant deletes its rows
-there explicitly (`capability/postgres.DeleteTenant`). The ledger and the
-counters outlive a purged capability record.
+its tenant and none refers to `tenants`: purging a tenant erases its rows
+there through pgstore (`EraseTenant`), in the transaction that removes the
+tenant row. Its capabilities are revoked, and those not yet past
+`limes.MinPurgeRetention` stay on record, revoked, until the capability purger
+takes them; its counters, holds, charges and budget go at once. The ledger
+and the counters outlive a purged capability record.
+
+pgstore migrates the schema itself (`pgstore.Migrate`, version table
+`limes.schema_version`), before Goose — `076` refers to its tables — and grants
+it to `paladin_app` and `paladin_reaper` after, once `002` has created them.
 
 **Events** — `event_subscriptions`, `event_deliveries`, `ingested_events`.
 `event_deliveries` is the transactional outbox ([ADR-0003](../../docs/adr/0003-transactional-outbox.md)):
@@ -181,9 +189,11 @@ stays pinned to one.
 The `limes` schema has policies of its own, on settings pgstore sets per
 transaction (`limes.tenant_id`, `limes.all_tenants`).
 `capability/postgres.Scope` sets them from the same request context the
-`paladin.*` settings come from: the acting tenant, or every tenant for a
-platform-wide call. Unlike `paladin.cross_tenant`, `limes.all_tenants` widens
-writes too, so only housekeeping and the platform-wide reads set it. The
+`paladin.*` settings come from: the acting tenant, or every tenant to read and
+none to write for a platform-wide read, as `paladin.cross_tenant` does. Only
+the capability purger scopes itself to write every tenant. Every store call
+whose request names a tenant is checked against the scope, and one scoped to
+another tenant fails as `limes.ErrScopeMismatch`. The
 revocation checks the verifier makes before it knows a token's tenant are
 `SECURITY DEFINER` functions of the schema, which read every tenant.
 
@@ -234,7 +244,7 @@ See [db-roles.md](db-roles.md) for the role split.
 | `*_notify_policy_changed` | `tenants`, `collections`, `buckets` | `pg_notify('policy_changed', …)` so the Cedar engine invalidates its cache |
 | `multipart_uploads_abort_debt` | `multipart_uploads` | A cascade delete records the S3 abort it still owes in `pending_multipart_aborts` |
 | `audit_log_notify` | `audit_log` | `pg_notify('paladin_audit', …)` for the live audit stream |
-| `revocations_notify`, `biscuit_revocations_notify` | `limes.revocations`, `limes.biscuit_revocations` | `pg_notify('capability_revoked', '*')` so every replica clears its revocation cache |
+| `notify_revocation` (pgstore's) | `limes.revocations`, `limes.biscuit_revocations` | `pg_notify('limes_revocations', '')` so every replica clears its revocation caches (`pgstore.RevocationWatcher`) |
 
 The policy-invalidation payload is a contract with
 `internal/policy/cedar/store.go`: `"<tenant_uuid>"` for a tenant,
