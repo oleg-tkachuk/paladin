@@ -168,8 +168,12 @@ type Repository interface {
 	CreateTx(ctx context.Context, tx pgx.Tx, args CreateTenantArgs) error
 	UpdateTx(ctx context.Context, tx pgx.Tx, args UpdateTenantArgs) (Tenant, error)
 	SoftDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, expectedVersion int64) error
-	HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, expectedVersion int64) error
 	RestoreTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) (Tenant, error)
+	// Purge removes a trashed tenant for good, in one transaction: its
+	// capabilities are revoked and its meter, charges and budget erased with
+	// the tenant row and everything that cascades from it. A refusal by a
+	// locked object is ErrTenantHoldsLockedObjects.
+	Purge(ctx context.Context, args PurgeTenantArgs) error
 
 	// StartStorageMigration provisions the tenant's dedicated bucket
 	// (provision_state='pending', owned by the tenant) and inserts the
@@ -1070,7 +1074,7 @@ func (h *Handler) PurgeTenant(ctx context.Context, tenantID uuid.UUID) error {
 		return connect.NewError(connect.CodeFailedPrecondition,
 			errPurgeActiveTenant.Error()).WithCause(errPurgeActiveTenant)
 	}
-	// expectedVersion=0 — the row is already trashed and OCC was
+	// No expected version — the row is already trashed and OCC was
 	// enforced at SoftDelete time. Purge is monotonically destructive.
 	//
 	// No paladin.tenant.purged fan-out, and not by omission. The outbox pattern
@@ -1097,12 +1101,21 @@ func (h *Handler) PurgeTenant(ctx context.Context, tenantID uuid.UUID) error {
 	//
 	// If a terminal tenant event is wanted, it belongs on a platform-level
 	// path that outlives the tenant. BACKLOG carries that as its own item.
-	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		return h.repo.HardDeleteTx(ctx, tx, tenantID, 0)
-	}); err != nil {
+	caller, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
+	}
+	if err := h.repo.Purge(ctx, PurgeTenantArgs{TenantID: tenantID, Actor: caller.Subject}); err != nil {
 		return apiutil.MapError(err)
 	}
 	return nil
+}
+
+// PurgeTenantArgs names the tenant Repository.Purge removes, and who asked:
+// each of its capabilities is revoked in that name.
+type PurgeTenantArgs struct {
+	TenantID uuid.UUID
+	Actor    string
 }
 
 // RenameTenantSlug rewrites the tenant's slug AND rewrites every

@@ -162,30 +162,3 @@ func checkTenant(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error {
 	}
 	return nil
 }
-
-// tenantTables are the limes schema's tables that hold a tenant's rows, the
-// referring before the referred: revocations and Biscuit revocations refer
-// to the capabilities, which refer to their parents in the same tenant.
-var tenantTables = []string{
-	"reservations", "charges", "copy_usage", "usage", "tenant_budgets",
-	"biscuit_revocations", "revocations", "capabilities",
-}
-
-// DeleteTenant deletes every row of tenantID in the limes schema on tx: its
-// capabilities, their revocations and counters, its holds, its charges and
-// its budget. A tenant is purged with all of it.
-func DeleteTenant(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error {
-	if err := pgstore.ScopeFromContext(pgstore.WithTenant(ctx, tenantID), tx); err != nil {
-		return fmt.Errorf("capability/postgres: scope to tenant: %w", err)
-	}
-	for _, table := range tenantTables {
-		stmt := `DELETE FROM ` + pgx.Identifier{limesSchema, table}.Sanitize() + ` WHERE tenant_id = $1`
-		if _, err := tx.Exec(ctx, stmt, tenantID); err != nil {
-			return fmt.Errorf("capability/postgres: delete tenant's %s: %w", table, err)
-		}
-	}
-	return nil
-}
-
-// limesSchema is the schema pgstore keeps its tables in.
-const limesSchema = "limes"

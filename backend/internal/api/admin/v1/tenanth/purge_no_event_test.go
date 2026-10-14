@@ -61,8 +61,8 @@ func TestPurgeTenantDoesNotFanOutItsOwnEvent(t *testing.T) {
 			"delete, so the only thing a dispatch can do here is abort the purge",
 			producer.calls)
 	}
-	if repo.lastHardDelete.tenantID != tid {
-		t.Errorf("hard delete forwarded %+v, want tenant %v", repo.lastHardDelete, tid)
+	if repo.lastPurge.TenantID != tid {
+		t.Errorf("purge forwarded %+v, want tenant %v", repo.lastPurge, tid)
 	}
 }
 
@@ -84,7 +84,7 @@ func TestPurgeActiveTenantPointsAtDeleteTenant(t *testing.T) {
 	if strings.Contains(err.Error(), "force") {
 		t.Errorf("message still points at a flag that is gone: %v", err)
 	}
-	if repo.lastHardDelete.tenantID != uuid.Nil {
-		t.Errorf("an active tenant was hard-deleted: %+v", repo.lastHardDelete)
+	if repo.lastPurge.TenantID != uuid.Nil {
+		t.Errorf("an active tenant was purged: %+v", repo.lastPurge)
 	}
 }
