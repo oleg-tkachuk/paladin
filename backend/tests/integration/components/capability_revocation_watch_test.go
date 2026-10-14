@@ -7,9 +7,33 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/pgstore"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
+
+// watchRevocations runs the server's revocation watcher over pool, clearing
+// caches, until ctx ends or the test does; a failure it reconnects after
+// fails the test.
+func watchRevocations(t *testing.T, ctx context.Context, pool *pgxpool.Pool, caches ...pgstore.Clearer) {
+	t.Helper()
+	ctx, stop := context.WithCancel(ctx)
+	w := capstore.NewRevocationWatcher(pool, func(err error) {
+		if ctx.Err() == nil {
+			t.Errorf("revocation watch: %v", err)
+		}
+	}, caches...)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = w.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		stop()
+		<-done
+	})
+}
 
 // A revocation committed anywhere must reach a replica's cache by
 // notification, not by waiting out the TTL. The cache here holds answers for
@@ -27,10 +51,7 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 	}
 	watchCtx, stop := context.WithCancel(ctx)
 	t.Cleanup(stop)
-	watcher := capstore.NewRevocationWatcher(f.pool, cache.Clear)
-	if err := watcher.Start(watchCtx); err != nil {
-		t.Fatalf("start watcher: %v", err)
-	}
+	watchRevocations(t, watchCtx, f.pool, cache)
 
 	if r, err := cache.IsRevoked(ctx, f.child); err != nil || r {
 		t.Fatalf("child before revoke: revoked=%v err=%v", r, err)

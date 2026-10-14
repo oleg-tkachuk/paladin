@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/pressly/goose/v3"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
@@ -120,5 +121,54 @@ func TestSchemaWantedIsTheNewestEmbeddedMigration(t *testing.T) {
 	want := health.Detail{Name: detailSchemaWanted, Value: strconv.FormatInt(newest, 10)}
 	if got := c.Describe(context.Background()); len(got) != 1 || got[0] != want {
 		t.Errorf("details before a check = %v, want only %v", got, want)
+	}
+}
+
+// The limes schema behind this build's pgstore is the migrate Job not having
+// run; ahead is a rollout in progress, as for goose's.
+func TestLimesSchemaComponent(t *testing.T) {
+	unreadable := errors.New("permission denied")
+	cases := []struct {
+		name        string
+		v           pgstore.SchemaVersion
+		err         error
+		want        health.ComponentStatus
+		wantMessage string
+		details     []health.Detail
+	}{
+		{"current", pgstore.SchemaVersion{Applied: 6, Expected: 6}, nil, health.StatusHealthy, "",
+			[]health.Detail{{Name: detailSchemaApplied, Value: "6"}, {Name: detailSchemaWanted, Value: "6"}}},
+		{"ahead, mid-rollout", pgstore.SchemaVersion{Applied: 7, Expected: 6}, nil, health.StatusHealthy, "",
+			[]health.Detail{{Name: detailSchemaApplied, Value: "7"}, {Name: detailSchemaWanted, Value: "6"}}},
+		{"behind", pgstore.SchemaVersion{Applied: 4, Expected: 6}, nil, health.StatusUnhealthy, "limes schema at 4, this build needs 6",
+			[]health.Detail{{Name: detailSchemaApplied, Value: "4"}, {Name: detailSchemaWanted, Value: "6"}}},
+		{"unreadable", pgstore.SchemaVersion{}, unreadable, health.StatusUnhealthy, "permission denied", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := limesSchemaCheck(func(context.Context) (pgstore.SchemaVersion, error) { return tc.v, tc.err })
+			if !c.Critical {
+				t.Error("the limes schema component is not critical")
+			}
+			h := &health.Handler{Ready: []health.Probe{c}}
+			comp := h.Snapshot(context.Background(), "api").Components[0]
+			if comp.Status != tc.want || !strings.Contains(comp.Message, tc.wantMessage) {
+				t.Errorf("component = %+v, want %s with %q", comp, tc.want, tc.wantMessage)
+			}
+			if !reflect.DeepEqual(comp.Details, tc.details) {
+				t.Errorf("details = %v, want %v", comp.Details, tc.details)
+			}
+		})
+	}
+}
+
+// A behind schema matches pgstore's own sentinel, so a reader can tell it
+// from a failure to read the version.
+func TestLimesSchemaBehindIsSchemaMismatch(t *testing.T) {
+	c := limesSchemaCheck(func(context.Context) (pgstore.SchemaVersion, error) {
+		return pgstore.SchemaVersion{Applied: 1, Expected: 2}, nil
+	})
+	if err := c.Check(context.Background()); !errors.Is(err, pgstore.ErrSchemaMismatch) {
+		t.Errorf("err = %v, want ErrSchemaMismatch", err)
 	}
 }

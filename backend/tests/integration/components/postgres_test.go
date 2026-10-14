@@ -184,15 +184,15 @@ func startPostgres(tb testing.TB) *pgxpool.Pool {
 }
 
 // migrateLimes creates the limes schema on the database dsn names, as the
-// migrate step does before goose: migration 076 grants and triggers on its
-// tables.
-func migrateLimes(tb testing.TB, dsn string) {
+// migrate step does before goose (076 refers to its tables), and grants it to
+// roles, as the step does after.
+func migrateLimes(tb testing.TB, dsn string, roles ...string) {
 	tb.Helper()
 	cc, err := pgx.ParseConfig(dsn)
 	if err != nil {
 		tb.Fatalf("parse dsn: %v", err)
 	}
-	if err := postgres.MigrateLimes(context.Background(), cc); err != nil {
+	if err := postgres.MigrateLimes(context.Background(), cc, roles...); err != nil {
 		tb.Fatalf("migrate limes: %v", err)
 	}
 }

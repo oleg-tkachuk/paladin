@@ -44,7 +44,27 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — capabilities are stored by limes/pgstore
+## Unreleased — capabilities run on limes v0.61.0 and pgstore v0.7.0
+
+- **Behaviour, tenants.** `PurgeTenant` erases the tenant through pgstore
+  (`EraseTenant`), in the transaction that removes the tenant row: every
+  capability of the tenant is revoked, and its counters, holds, charges and
+  budget are deleted. A capability that has not been expired for
+  `limes.MinPurgeRetention` stays on record, revoked, until the capability
+  purger removes it, so its token is refused rather than unknown.
+- **Behaviour, admin.** A platform-wide read of the capability stores reads
+  only; the capability purger alone writes across tenants. A capability store
+  call scoped to another tenant than the one its request names fails with
+  `CodeInternal` — a wiring fault in the server — where it used to read as
+  `NotFound` or `InvalidArgument`.
+- **Deploy.** The migrate step grants the `limes` schema to `paladin_app` and
+  `paladin_reaper` after Goose has run, through pgstore. Migration `077` drops
+  the `capability_revoked` triggers; revocations now reach every replica on
+  pgstore's `limes_revocations` channel. Readiness gains a critical
+  `postgres-limes-schema` component, which fails while the `limes` schema is
+  behind the one the build queries.
+
+## v34.0.0 — capabilities are stored by limes/pgstore
 
 - **Breaking, data.** Capabilities, their revocations and counters, budget
   holds, the charges ledger and tenant budgets move to the `limes` schema,

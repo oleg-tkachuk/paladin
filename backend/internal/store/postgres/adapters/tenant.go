@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oleg-tkachuk/limes"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
@@ -388,14 +389,37 @@ func (r *TenantRepo) softDeleteWith(ctx context.Context, q *sqlc.Queries, tenant
 	return nil
 }
 
-// HardDeleteTx runs HardDelete on the caller's tx (ADR-0003), and deletes the
-// tenant's capabilities, meter and charges with it: the limes schema keeps
-// no foreign key to tenants, so nothing else would.
+// HardDeleteTx runs HardDelete on the caller's tx (ADR-0003): the tenant row
+// and what cascades from it. The limes schema keeps no foreign key to
+// tenants, so its rows stay; Purge erases them with the tenant.
 func (r *TenantRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, expectedVersion int64) error {
-	if err := r.hardDeleteWith(ctx, r.q.WithTx(tx), tenantID, expectedVersion); err != nil {
-		return err
+	return r.hardDeleteWith(ctx, r.q.WithTx(tx), tenantID, expectedVersion)
+}
+
+// purgeNote is the note each capability of a purged tenant is revoked with.
+const purgeNote = "tenant purged"
+
+// Purge implements tenanth.Repository: pgstore erases the tenant's
+// capabilities and meter, and the tenant row goes in the same transaction
+// (onErased), so both go or neither does. A capability not yet past
+// limes.MinPurgeRetention stays on record, revoked, until the purger takes
+// it: an id no longer on record is not revoked, and its token would verify
+// again.
+//
+// The erase is scoped to the tenant it removes, whoever asks: the platform
+// admin who purges it acts from another tenant. PurgeTenant authorises the
+// call before it gets here.
+func (r *TenantRepo) Purge(ctx context.Context, args tenanth.PurgeTenantArgs) error {
+	records, err := capabilitypg.New(r.pool)
+	if err != nil {
+		return fmt.Errorf("purge tenant: %w", err)
 	}
-	return capabilitypg.DeleteTenant(ctx, tx, tenantID)
+	ctx = auth.WithActingTenant(ctx, args.TenantID)
+	_, err = records.EraseTenant(ctx, limes.EraseTenantRequest{TenantID: args.TenantID, Note: purgeNote, Actor: args.Actor},
+		func(ctx context.Context, tx pgx.Tx) error {
+			return r.hardDeleteWith(ctx, r.q.WithTx(tx), args.TenantID, 0)
+		})
+	return err
 }
 
 func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, expectedVersion int64) error {

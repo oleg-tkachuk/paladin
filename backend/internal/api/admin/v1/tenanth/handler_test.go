@@ -59,7 +59,7 @@ type fakeRepo struct {
 	createTxFn       func(context.Context, pgx.Tx, CreateTenantArgs) error
 	updateTxFn       func(context.Context, pgx.Tx, UpdateTenantArgs) (Tenant, error)
 	softDeleteTxFn   func(context.Context, pgx.Tx, uuid.UUID, int64) error
-	hardDeleteTxFn   func(context.Context, pgx.Tx, uuid.UUID, int64) error
+	purgeFn          func(context.Context, PurgeTenantArgs) error
 	restoreTxFn      func(context.Context, pgx.Tx, uuid.UUID) (Tenant, error)
 	startMigrationFn func(context.Context, StartStorageMigrationArgs) (StorageMigration, error)
 	getMigrationFn   func(context.Context, uuid.UUID) (StorageMigration, error)
@@ -81,10 +81,7 @@ type fakeRepo struct {
 		tenantID uuid.UUID
 		version  int64
 	}
-	lastHardDelete struct {
-		tenantID uuid.UUID
-		version  int64
-	}
+	lastPurge        PurgeTenantArgs
 	lastClearBinding uuid.UUID
 }
 
@@ -198,11 +195,10 @@ func (f *fakeRepo) SoftDeleteTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, v 
 	return nil
 }
 
-func (f *fakeRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, v int64) error {
-	f.lastHardDelete.tenantID = id
-	f.lastHardDelete.version = v
-	if f.hardDeleteTxFn != nil {
-		return f.hardDeleteTxFn(ctx, tx, id, v)
+func (f *fakeRepo) Purge(ctx context.Context, args PurgeTenantArgs) error {
+	f.lastPurge = args
+	if f.purgeFn != nil {
+		return f.purgeFn(ctx, args)
 	}
 	return nil
 }
@@ -714,14 +710,14 @@ func TestDeleteTenant(t *testing.T) {
 
 	// DeleteTenant no longer hard-deletes under any argument: the flag that
 	// used to switch it is gone, and PurgeTenant owns that transition. A
-	// delete that reached HardDeleteTx would be the old behaviour returning.
+	// delete that reached Purge would be the old behaviour returning.
 	t.Run("never hard-deletes", func(t *testing.T) {
 		fr := &fakeRepo{}
 		if err := NewHandler(fr, allow()).DeleteTenant(adminCtx(tid), tid, 3); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if fr.lastHardDelete.tenantID != uuid.Nil {
-			t.Fatalf("hard-delete was called: %+v", fr.lastHardDelete)
+		if fr.lastPurge.TenantID != uuid.Nil {
+			t.Fatalf("purge was called: %+v", fr.lastPurge)
 		}
 		if fr.lastSoftDelete.version != 3 {
 			t.Fatalf("soft-delete forwarded %+v", fr.lastSoftDelete)
@@ -787,15 +783,21 @@ func TestPurgeTenant(t *testing.T) {
 		wantCode(t, err, connect.CodeFailedPrecondition)
 	})
 
-	t.Run("ok purges trashed tenant with version 0", func(t *testing.T) {
+	// Each capability of the tenant is revoked in the name of whoever purged it.
+	t.Run("ok purges trashed tenant as the caller", func(t *testing.T) {
 		fr := &fakeRepo{getFn: func(_ context.Context, id uuid.UUID) (Tenant, error) {
 			return Tenant{TenantID: id, DeletedAt: time.Now()}, nil
 		}}
-		if err := NewHandler(fr, allow()).PurgeTenant(adminCtx(tid), tid); err != nil {
+		ctx := adminCtx(tid)
+		caller, err := auth.PrincipalFromContext(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := NewHandler(fr, allow()).PurgeTenant(ctx, tid); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if fr.lastHardDelete.tenantID != tid || fr.lastHardDelete.version != 0 {
-			t.Fatalf("purge hard-delete forwarded %+v", fr.lastHardDelete)
+		if want := (PurgeTenantArgs{TenantID: tid, Actor: caller.Subject}); fr.lastPurge != want {
+			t.Fatalf("purge forwarded %+v, want %+v", fr.lastPurge, want)
 		}
 	})
 
@@ -808,7 +810,7 @@ func TestPurgeTenant(t *testing.T) {
 			getFn: func(_ context.Context, id uuid.UUID) (Tenant, error) {
 				return Tenant{TenantID: id, DeletedAt: time.Now()}, nil
 			},
-			hardDeleteTxFn: func(context.Context, pgx.Tx, uuid.UUID, int64) error {
+			purgeFn: func(context.Context, PurgeTenantArgs) error {
 				return fmt.Errorf("%w: object version x is under legal hold", ErrTenantHoldsLockedObjects)
 			},
 		}

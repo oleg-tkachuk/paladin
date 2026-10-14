@@ -4,9 +4,11 @@ package components
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/pgstore"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -94,13 +97,23 @@ func limesRows(t *testing.T, ctx context.Context, admin *pgxpool.Pool, tenant uu
 	return rows
 }
 
-// The limes schema keeps no foreign key to tenants, so purging a tenant takes
-// its capabilities, meter and budget only because HardDeleteTx deletes them
-// by name. This holds that list to the schema pgstore actually migrates: every
-// table with a tenant_id is seeded, the purged tenant leaves none of its rows
-// in any, and another tenant's stay. It runs on the application role, so the
-// purge must scope itself to the tenant it deletes whoever asks.
-func TestPurgingATenantDeletesItsCapabilityRows(t *testing.T) {
+// limesMeterTables are the tables of limesTenantTables that keep a tenant's
+// meter: Purge erases all of them. The rest keep its records and their
+// revocations, which stay, revoked, until the purger takes them.
+var limesMeterTables = []string{"charges", "copy_usage", "reservations", "tenant_budgets", "usage"}
+
+// expiredLongAgo is when the purged tenant's expired capability lapsed:
+// further back than limes.MinPurgeRetention, so the erase removes it.
+const expiredLongAgo = -2 * limes.MinPurgeRetention
+
+// The limes schema keeps no foreign key to tenants, so purging a tenant
+// erases its rows there through pgstore (EraseTenant), with the tenant row in
+// the same transaction. Every table with a tenant_id is seeded; the purged
+// tenant keeps no meter row, every capability of it is revoked — a live one
+// stays on record so its token is refused, an expired one goes — and another
+// tenant's rows stay. It runs on the application role, so the purge must
+// scope itself to the tenant it deletes whoever asks.
+func TestPurgingATenantErasesItsCapabilityRows(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
@@ -116,7 +129,7 @@ func TestPurgingATenantDeletesItsCapabilityRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !slices.Equal(tables, limesTenantTables) {
-		t.Fatalf("the limes schema keeps tenants' rows in %v; this test seeds %v — seed the new table and check DeleteTenant clears it", tables, limesTenantTables)
+		t.Fatalf("the limes schema keeps tenants' rows in %v; this test seeds %v — seed the new table and check Purge erases it", tables, limesTenantTables)
 	}
 
 	f := newBiscuitFixture(t, admin)
@@ -128,6 +141,13 @@ func TestPurgingATenantDeletesItsCapabilityRows(t *testing.T) {
 	platform, _ := mkTenant(t, ctx, admin, "shared")
 	for _, tenant := range []uuid.UUID{purged, bystander} {
 		seedEveryLimesTable(t, ctx, f, records, usage, tenant)
+	}
+	live := mkCap(purged, "agent:live", time.Now().Add(time.Hour))
+	expired := mkCap(purged, "agent:expired", time.Now().Add(expiredLongAgo))
+	for _, c := range []limes.Capability{live, expired} {
+		if err := records.Insert(auth.WithActingTenant(ctx, purged), limes.InsertRequest{Capability: c, IssuedBy: seedIssuer}); err != nil {
+			t.Fatalf("insert %s: %v", c.Subject.Subject, err)
+		}
 	}
 	for table, n := range limesRows(t, ctx, admin, purged) {
 		if n == 0 {
@@ -141,18 +161,73 @@ func TestPurgingATenantDeletesItsCapabilityRows(t *testing.T) {
 	mustExec(t, ctx, admin, `UPDATE tenants SET deleted_at = now() WHERE id = $1`, purged)
 	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 	adminCtx := auth.WithPrincipal(ctx, &auth.Principal{TenantID: platform})
-	if err := repo.RunInTx(adminCtx, func(ctx context.Context, tx pgx.Tx) error {
-		return repo.HardDeleteTx(ctx, tx, purged, 0)
-	}); err != nil {
+	if err := repo.Purge(adminCtx, tenanth.PurgeTenantArgs{TenantID: purged, Actor: "admin"}); err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 
-	for table, n := range limesRows(t, ctx, admin, purged) {
-		if n != 0 {
-			t.Errorf("limes.%s keeps %d rows of the purged tenant", table, n)
+	var tenants int
+	if err := admin.QueryRow(ctx, `SELECT count(*) FROM tenants WHERE id = $1`, purged).Scan(&tenants); err != nil {
+		t.Fatal(err)
+	}
+	if tenants != 0 {
+		t.Error("the tenant row outlived its purge")
+	}
+	after := limesRows(t, ctx, admin, purged)
+	for _, table := range limesMeterTables {
+		if after[table] != 0 {
+			t.Errorf("limes.%s keeps %d rows of the purged tenant", table, after[table])
 		}
+	}
+	var unrevoked int
+	if err := admin.QueryRow(ctx, `
+		SELECT count(*) FROM limes.capabilities c
+		WHERE c.tenant_id = $1 AND NOT EXISTS (SELECT 1 FROM limes.revocations r WHERE r.capability_id = c.id)`,
+		purged).Scan(&unrevoked); err != nil {
+		t.Fatal(err)
+	}
+	if unrevoked != 0 {
+		t.Errorf("%d capabilities of the purged tenant are not revoked", unrevoked)
+	}
+	if revoked, err := records.IsRevoked(ctx, live.ID); err != nil || !revoked {
+		t.Errorf("the live capability of the purged tenant: revoked = %v, %v; want its token refused", revoked, err)
+	}
+	if _, err := records.GetRecord(capstore.ReadAllTenants(ctx), expired.ID); !errors.Is(err, limes.ErrNotFound) {
+		t.Errorf("the expired capability of the purged tenant reads back (%v); the erase removes what Purge would", err)
 	}
 	if after := limesRows(t, ctx, admin, bystander); !maps.Equal(after, kept) {
 		t.Errorf("another tenant's rows moved: %v, were %v", after, kept)
+	}
+}
+
+// A purge the database refuses — the tenant still has a user, which the
+// users foreign key restricts — erases nothing: its capabilities stay
+// unrevoked and its meter whole, since the erase and the tenant row share
+// one transaction.
+func TestARefusedPurgeErasesNothing(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	admin := startPostgres(t)
+	f := newBiscuitFixture(t, admin)
+	pool := rlsPool(t, ctx, admin)
+	tenant, _ := mkTenant(t, ctx, admin, "shared")
+	seedEveryLimesTable(t, ctx, f, newCapStore(t, pool), newUsageStore(t, pool), tenant)
+	live := mkCap(tenant, "agent:live", time.Now().Add(time.Hour))
+	records := newCapStore(t, pool)
+	if err := records.Insert(auth.WithActingTenant(ctx, tenant), limes.InsertRequest{Capability: live, IssuedBy: seedIssuer}); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	mustExec(t, ctx, admin,
+		`INSERT INTO users (tenant_id, subject, password_hash, roles) VALUES ($1, 'holder', 'x', '{}')`, tenant)
+	before := limesRows(t, ctx, admin, tenant)
+
+	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
+	if err := repo.Purge(ctx, tenanth.PurgeTenantArgs{TenantID: tenant, Actor: "admin"}); !errors.Is(err, tenanth.ErrTenantHasChildren) {
+		t.Fatalf("purge of a tenant with a user: err = %v, want ErrTenantHasChildren", err)
+	}
+	if after := limesRows(t, ctx, admin, tenant); !maps.Equal(after, before) {
+		t.Errorf("a refused purge moved the tenant's rows: %v, were %v", after, before)
+	}
+	if revoked, err := records.IsRevoked(ctx, live.ID); err != nil || revoked {
+		t.Errorf("a refused purge revoked a capability: revoked = %v, %v", revoked, err)
 	}
 }

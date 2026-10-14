@@ -34,9 +34,12 @@ is an operator erasing a tenant's storage with one call.
 
 **Capabilities go with their tenant, charges included.** The `limes` schema
 keeps no foreign key to `tenants`, so no row of it appears in the table above:
-the purge deletes the tenant's capabilities, revocations, counters, holds,
-budget and charges itself, in the same transaction as the tenant row. Billing
-history does not outlive the tenant it belongs to.
+the purge erases them through pgstore, in the same transaction as the tenant
+row. Every capability of the tenant is revoked; its counters, holds, budget
+and charges are deleted. A capability not yet expired for
+`limes.MinPurgeRetention` stays on record, revoked, until the capability
+purger removes it — an id no longer on record is not revoked, and its token
+would verify again. Billing history does not outlive the tenant it belongs to.
 
 ## Tenant
 

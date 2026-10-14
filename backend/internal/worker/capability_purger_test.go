@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/limes"
+	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
 // fullBatch is a housekeeping batch that filled the limit, which tells the
@@ -47,9 +49,11 @@ type purgingStore struct {
 	limes.Store
 	purged   batches
 	requests []limes.PurgeRequest
+	ctx      context.Context
 }
 
-func (s *purgingStore) Purge(_ context.Context, req limes.PurgeRequest) (limes.PurgeResult, error) {
+func (s *purgingStore) Purge(ctx context.Context, req limes.PurgeRequest) (limes.PurgeResult, error) {
+	s.ctx = ctx
 	s.requests = append(s.requests, req)
 	n, err := s.purged.next()
 	return limes.PurgeResult{Purged: n}, err
@@ -236,5 +240,42 @@ func TestCapabilityPurgerDefaultsItsRetention(t *testing.T) {
 	_ = p.Run(ctx)
 	if p.ExpiredFor != DefaultCapabilityExpiredFor {
 		t.Errorf("ExpiredFor = %v, want %v", p.ExpiredFor, DefaultCapabilityExpiredFor)
+	}
+}
+
+// allTenantsSetting is pgstore's setting for a transaction scoped to every
+// tenant, and allTenantsWrite its value for reading and writing them.
+const (
+	allTenantsSetting = "limes.all_tenants"
+	allTenantsWrite   = "on"
+)
+
+// settingsTx records the settings a scope sets; any other Tx method panics
+// through the nil embedded interface.
+type settingsTx struct {
+	pgx.Tx
+	set map[string]string
+}
+
+func (s *settingsTx) Exec(_ context.Context, _ string, args ...any) (pgconn.CommandTag, error) {
+	s.set[args[0].(string)] = args[1].(string)
+	return pgconn.CommandTag{}, nil
+}
+
+// Purging removes rows of every tenant, so the purger's calls are scoped to
+// write every tenant: a platform-wide read would remove nothing and report
+// success.
+func TestCapabilityPurgerWritesEveryTenant(t *testing.T) {
+	store := &purgingStore{}
+	p := &CapabilityPurger{Store: store}
+	if err := p.tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	tx := &settingsTx{set: map[string]string{}}
+	if err := capabilitypg.Scope(store.ctx, tx); err != nil {
+		t.Fatal(err)
+	}
+	if got := tx.set[allTenantsSetting]; got != allTenantsWrite {
+		t.Errorf("%s = %q, want %q", allTenantsSetting, got, allTenantsWrite)
 	}
 }

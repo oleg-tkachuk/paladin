@@ -147,7 +147,7 @@ func NewHealthHandler(db *postgres.DB, cfg config.Runtime, l *zap.Logger) *healt
 		Logger:        l.Named("health"),
 		LogSuccesses:  cfg.LogProbes,
 		SnapshotToken: cfg.HealthSnapshotToken,
-		Ready:         []health.Probe{dbPing, schemaComponent(db), replicaCheck(db)},
+		Ready:         []health.Probe{dbPing, schemaComponent(db), limesSchemaComponent(db), replicaCheck(db)},
 		Startup:       []health.Probe{dbPing},
 	}
 }

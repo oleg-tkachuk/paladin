@@ -146,17 +146,18 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability Biscuit revocation cache: %w", err)
 	}
 
-	// Revocations made on any replica clear this one's cache at once; the
+	// Revocations made on any replica clear this one's caches at once; the
 	// TTL above is only the fallback for while the LISTEN connection is
-	// down. The watcher holds a pooled connection for the process lifetime,
-	// so it runs on its own context, which StopWatchers cancels before the
-	// pool is closed — the same arrangement as the Cedar watcher.
+	// down. The watcher holds a connection for the process lifetime, so it
+	// runs on its own context, which StopWatchers cancels before the pool is
+	// closed — the same arrangement as the Cedar watcher. It reconnects on
+	// its own, clearing the caches each time.
 	watchCtx, stopWatch := context.WithCancel(context.Background())
-	clearCaches := func() { cache.Clear(); copies.Clear() }
-	if err := capabilitypg.NewRevocationWatcher(deps.Pool, clearCaches).Start(watchCtx); err != nil {
-		stopWatch()
-		return nil, fmt.Errorf("app: capability revocation watch: %w", err)
-	}
+	watchLog := deps.Logger.Named("capability-revocation-watch")
+	watcher := capabilitypg.NewRevocationWatcher(deps.Pool, func(err error) {
+		watchLog.Warn("revocation watch reconnecting; caches clear on reconnect", zap.Error(err))
+	}, cache, copies)
+	go func() { _ = watcher.Run(watchCtx) }()
 	deps.RegisterWatcherStop(stopWatch)
 	replay, err := capabilitypg.NewReplayCache(capabilitypg.ReplayCacheConfig{
 		Pool: deps.Pool, Log: deps.Logger.Named("dpop-replay"),
