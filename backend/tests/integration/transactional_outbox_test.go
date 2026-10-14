@@ -79,13 +79,26 @@ func newLedger(t *testing.T, pool *pgxpool.Pool) limes.LedgerReader {
 	return l
 }
 
+// ledgerSums is the tenant's charges as pgstore's Ledger sums them, by
+// operation and actor, over every time a test charges at.
+func ledgerSums(t *testing.T, h *pgharness.Harness, tenantID uuid.UUID) []limes.ChargeSum {
+	t.Helper()
+	page, err := newLedger(t, h.PoolMigrate).SumCharges(context.Background(), limes.SumChargesRequest{
+		TenantID: tenantID, From: time.Unix(0, 0), To: time.Now().Add(time.Hour),
+		ByOp: true, ByActor: true, Limit: limes.MaxListLimit,
+	})
+	if err != nil {
+		t.Fatalf("sum charges: %v", err)
+	}
+	return page.Items
+}
+
+// countCharges is how many charges the tenant's ledger holds.
 func countCharges(t *testing.T, h *pgharness.Harness, tenantID uuid.UUID) int64 {
 	t.Helper()
 	var n int64
-	if err := h.PoolMigrate.QueryRow(context.Background(),
-		`SELECT COUNT(*) FROM limes.charges WHERE tenant_id = $1`, tenantID,
-	).Scan(&n); err != nil {
-		t.Fatalf("count charges: %v", err)
+	for _, s := range ledgerSums(t, h, tenantID) {
+		n += s.Charges
 	}
 	return n
 }

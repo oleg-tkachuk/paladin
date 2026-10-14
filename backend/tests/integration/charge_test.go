@@ -201,31 +201,15 @@ func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {
 		t.Fatalf("charge: %v", err)
 	}
 
-	var (
-		count    int64
-		amount   limes.Nanos
-		unitCode string
-		op       string
-		actor    string
-	)
-	if err := h.PoolMigrate.QueryRow(ctx,
-		`SELECT COUNT(*), COALESCE(SUM(amount), 0)::bigint,
-		        COALESCE((SELECT unit_code FROM limes.charges WHERE tenant_id = $1 LIMIT 1), ''),
-		        COALESCE((SELECT op FROM limes.charges WHERE tenant_id = $1 LIMIT 1), ''),
-		        COALESCE((SELECT actor FROM limes.charges WHERE tenant_id = $1 LIMIT 1), '')
-		 FROM limes.charges WHERE tenant_id = $1`, tenantID,
-	).Scan(&count, &amount, &unitCode, &op, &actor); err != nil {
-		t.Fatalf("ledger probe: %v", err)
+	sums := ledgerSums(t, h, tenantID)
+	if len(sums) != 1 || sums[0].Charges != 1 {
+		t.Fatalf("ledger = %+v, want one charge", sums)
 	}
-	if count != 1 {
-		t.Errorf("ledger rows = %d, want 1", count)
+	if got := sums[0].Charged; got != limes.MustParseAmount("2.5") {
+		t.Errorf("ledger amount = %v, want 2.5", got)
 	}
-	if amount != limes.MustParseAmount("2.5") {
-		t.Errorf("ledger amount = %v, want 2.50", amount)
-	}
-	if unitCode != "USD" || op != "presign.put" || actor != "agent-1" {
-		t.Errorf("ledger metadata = (%q, %q, %q), want (USD, presign.put, agent-1)",
-			unitCode, op, actor)
+	if s := sums[0]; s.UnitCode != "USD" || s.Op != "presign.put" || s.Actor != "agent-1" {
+		t.Errorf("ledger metadata = (%q, %q, %q), want (USD, presign.put, agent-1)", s.UnitCode, s.Op, s.Actor)
 	}
 }
 
