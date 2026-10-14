@@ -52,7 +52,6 @@ const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
       { keys: ["x"], desc: "Toggle row selection" },
       { keys: ["⇧", "X"], desc: "Range-select" },
       { keys: ["u"], desc: "Upload (file picker)" },
-      { keys: ["Delete"], desc: "Delete selected" },
     ],
   },
 ];
