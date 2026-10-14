@@ -8,7 +8,10 @@
 # that an event reaches the dispatcher and can be sent again; and the
 # capability paths the store's tenant scoping decides: a request ceiling,
 # delegation from the admin plane, the Biscuit form, a revoked chain and the
-# platform-wide budget summary.
+# platform-wide budget summary; and the limes store under it: a revocation
+# reaching every api replica before its cache would lapse, the capability
+# census and its drill-down, billing by each granularity, a purged tenant's
+# token refused as revoked, and the readiness of the limes schema.
 #
 # It creates its own tenant, bucket, collection, subscription and two
 # capabilities, and removes them on exit, the tenant purged with its charges.
@@ -48,6 +51,21 @@ readonly CAPABILITY_MAX_REQUESTS=50
 readonly CEILING_REQUESTS=3
 readonly CHILD_MAX_REQUESTS=2
 readonly CHILD_TTL_SECONDS=600
+# The data port of an api pod, and the first local port the pods are forwarded
+# to, one each, so a check can reach every replica rather than one the
+# Service picks.
+readonly API_POD_PORT=8080
+readonly API_POD_LOCAL_PORT_BASE="${API_POD_LOCAL_PORT_BASE:-28300}"
+# The pods of the api plane, by the chart's component label.
+readonly API_POD_SELECTOR=app.kubernetes.io/component=api
+# The billing granularities the time series takes, and how far back it reads.
+readonly BILLING_GRANULARITIES=(hour day week)
+readonly BILLING_LOOKBACK_DAYS=20
+# The health snapshot's token, and the component that reports the limes
+# schema's version against the build's.
+readonly HEALTH_TOKEN_SECRET=paladin-health-token
+readonly LIMES_SCHEMA_COMPONENT=postgres-limes-schema
+readonly STATUS_HEALTHY=healthy
 # A threshold the budget summary filters at, in percent.
 readonly SUMMARY_THRESHOLD_PCT=80
 # The object every check that needs one uses.
@@ -80,6 +98,7 @@ admin="http://localhost:${ADMIN_LOCAL_PORT}"
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/live-smoke.XXXXXX")
 forward_pid=""
+pod_forwards=()
 pass=0
 fail=0
 ok() { echo "PASS $1"; pass=$((pass + 1)); }
@@ -154,7 +173,13 @@ cleanup() {
             fi
         fi
     fi
+    if [[ -n "${token:-}" && -n "${purged_slug:-}" ]]; then
+        rv=$(admin_rpc TenantService/GetTenant "{\"name\":\"tenants/$purged_slug\"}" | jq -r '.resourceVersion // empty')
+        [[ -n "$rv" ]] && admin_rpc TenantService/DeleteTenant "{\"name\":\"tenants/$purged_slug\",\"resourceVersion\":\"$rv\"}" >/dev/null &&
+            admin_rpc TenantService/PurgeTenant "{\"name\":\"tenants/$purged_slug\"}" >/dev/null
+    fi
     [[ -n "$forward_pid" ]] && kill "$forward_pid" 2>/dev/null
+    for p in "${pod_forwards[@]+"${pod_forwards[@]}"}"; do kill "$p" 2>/dev/null; done
     rm -rf "$work"
 }
 trap cleanup EXIT
@@ -348,6 +373,104 @@ for body in '{}' '{"unlimitedOnly":true}' "{\"thresholdPct\":$SUMMARY_THRESHOLD_
     r=$(admin_rpc TenantBudgetService/Summarize "$body")
     expect "budget summary $body" "$r" test "$(code_of "$r")" = ok
 done
+
+# ── a revocation reaches every api replica at once ──────────────────────────
+# Each pod caches revocation answers; a revocation clears every replica's
+# cache through pgstore's notification, so the token is refused on each right
+# after it, not once the cache lapses.
+pods=()
+while IFS= read -r p; do [[ -n "$p" ]] && pods+=("$p"); done < <("${kube[@]}" get pods -l "$API_POD_SELECTOR" \
+    --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+pod_ports=()
+port=$API_POD_LOCAL_PORT_BASE
+for p in "${pods[@]+"${pods[@]}"}"; do
+    "${kube[@]}" port-forward "pod/$p" "$port:$API_POD_PORT" >/dev/null 2>&1 &
+    pod_forwards+=($!)
+    pod_ports+=("$port")
+    port=$((port + 1))
+done
+for pp in "${pod_ports[@]+"${pod_ports[@]}"}"; do
+    for _ in $(seq "$FORWARD_WAIT_SECONDS"); do
+        curl -s -o /dev/null --max-time 1 "http://localhost:$pp/readyz" && break
+        sleep 1
+    done
+done
+expect "${#pod_ports[@]} api replicas reachable" "pods=${pods[*]-}" test "${#pod_ports[@]}" -ge 1
+list_on() { curl -s "http://localhost:$1/paladin.data.v1.ObjectService/ListObjects" -H 'Content-Type: application/json' \
+    -H "X-Paladin-Capability: $2" -H "Idempotency-Key: $(uuidgen)" -d "{\"parent\":\"tenants/$tenant/collections/$COLLECTION\"}"; }
+r=$(issue_for live-smoke-replicas '["list"]' "$CAPABILITY_MAX_REQUESTS")
+spread=$(printf %s "$r" | jq -r '.token // empty')
+spread_id=$(printf %s "$r" | jq -r '.capability.id // empty')
+capabilities+=("$spread_id")
+for pp in "${pod_ports[@]+"${pod_ports[@]}"}"; do
+    r=$(list_on "$pp" "$spread")
+    expect "replica :$pp admits the live token" "$r" test "$(code_of "$r")" = ok
+done
+admin_rpc CapabilityService/Revoke "{\"id\":\"$spread_id\",\"reason\":\"live smoke\"}" >/dev/null
+for pp in "${pod_ports[@]+"${pod_ports[@]}"}"; do
+    r=$(list_on "$pp" "$spread")
+    expect "replica :$pp refuses it right after the revocation" "$r" test "$(reason_of "$r")" = "$REASON_CAPABILITY_REVOKED"
+done
+
+# ── the capability census counts a revoked lineage ──────────────────────────
+stat_of() { admin_rpc SystemService/GetPlatformStats '{}' | jq -r ".rls.capabilities.$1 // \"0\" | tonumber"; }
+r=$(issue_for live-smoke-census-parent '["get","list","share"]' "$CAPABILITY_MAX_REQUESTS")
+census_parent=$(printf %s "$r" | jq -r '.token // empty')
+census_parent_id=$(printf %s "$r" | jq -r '.capability.id // empty')
+capabilities+=("$census_parent_id")
+r=$(delegate "$census_parent" "$census_parent_id")
+expect "delegate a child to count" "$r" test -n "$(printf %s "$r" | jq -r '.token // empty')"
+before=$(stat_of revoked)
+admin_rpc CapabilityService/Revoke "{\"id\":\"$census_parent_id\",\"reason\":\"live smoke\"}" >/dev/null
+after=$(stat_of revoked)
+expect "revoking a parent counts it and its child as revoked ($before → $after)" "before=$before after=$after" \
+    test "$((after - before))" -eq 2
+r=$(admin_rpc SystemService/ListPlatformStatsTenants '{"signal":"PLATFORM_STATS_SIGNAL_CAPABILITIES_EXPIRING"}')
+expect "the expiring drill-down names the smoke tenant" "$r" \
+    test "$(printf %s "$r" | jq -r --arg t "$tenant" '[.tenants[]? | select(.tenantId == $t)] | length')" -ge 1
+r=$(admin_rpc CapabilityService/Get "{\"id\":\"$capped_id\"}")
+expect "the admin reads a capability of another tenant" "$r" test "$(code_of "$r")" = ok
+
+# ── billing reads the ledger by each granularity ────────────────────────────
+r=$(admin_rpc BillingService/GetTenantSummary "{\"tenantId\":\"$tenant\"}")
+expect "billing summary" "$r" test "$(code_of "$r")" = ok
+to=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+from=$(date -u -v-"${BILLING_LOOKBACK_DAYS}"d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null ||
+    date -u -d "-${BILLING_LOOKBACK_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)
+for g in "${BILLING_GRANULARITIES[@]}"; do
+    r=$(admin_rpc BillingService/GetTenantTimeSeries \
+        "{\"tenantId\":\"$tenant\",\"periodStart\":\"$from\",\"periodEnd\":\"$to\",\"granularity\":\"$g\"}")
+    expect "billing series by $g" "$r" test "$(code_of "$r")" = ok
+done
+
+# ── a purged tenant's token is refused as revoked ───────────────────────────
+# A tenant of its own, with nothing that would hold its purge back.
+purged_new=smoke-p$RANDOM
+r=$(admin_rpc TenantService/CreateTenant "{\"tenant\":{\"displayName\":\"Live smoke $purged_new\",\"slug\":\"$purged_new\"}}")
+purged_tenant=$(printf %s "$r" | jq -r '.id // .tenantId // (.name // "" | sub("tenants/";""))')
+purged_slug=$purged_new
+r=$(admin_rpc CapabilityService/Issue "$(jq -cn --arg t "$purged_tenant" --argjson ttl "$CAPABILITY_TTL_SECONDS" \
+    '{subject:{kind:"PRINCIPAL_KIND_AGENT",tenantId:$t,subject:"live-smoke-purged",agentType:"live-smoke"},audience:["data"],caveats:{ops:["list"],maxRequests:1000,unlimitedBudget:{}},ttlSeconds:$ttl}')")
+doomed=$(printf %s "$r" | jq -r '.token // empty')
+list_purged() { cap_rpc "$1" ObjectService/ListObjects "{\"parent\":\"tenants/$purged_tenant/collections/$COLLECTION\"}"; }
+r=$(list_purged "$doomed")
+expect "the tenant's token works before the purge" "$r" test "$(code_of "$r")" = ok
+rv=$(admin_rpc TenantService/GetTenant "{\"name\":\"tenants/$purged_slug\"}" | jq -r '.resourceVersion // empty')
+admin_rpc TenantService/DeleteTenant "{\"name\":\"tenants/$purged_slug\",\"resourceVersion\":\"$rv\"}" >/dev/null
+r=$(admin_rpc TenantService/PurgeTenant "{\"name\":\"tenants/$purged_slug\"}")
+expect "purge the tenant" "$r" test "$(code_of "$r")" = ok
+[[ "$(code_of "$r")" == ok ]] && purged_slug=""
+r=$(list_purged "$doomed")
+expect "the purged tenant's token is refused as revoked" "$r" test "$(reason_of "$r")" = "$REASON_CAPABILITY_REVOKED"
+
+# ── every api replica is ready on the limes schema ──────────────────────────
+health_token=$("${kube[@]}" get secret "$HEALTH_TOKEN_SECRET" -o jsonpath='{.data.token}' | base64 -d)
+for pp in "${pod_ports[@]+"${pod_ports[@]}"}"; do
+    r=$(curl -s "http://localhost:$pp/system/health.json" -H "X-Health-Token: $health_token")
+    st=$(printf %s "$r" | jq -r --arg c "$LIMES_SCHEMA_COMPONENT" '[.. | objects | select(.name? == $c) | .status][0] // "absent"')
+    expect "replica :$pp $LIMES_SCHEMA_COMPONENT is $st" "$r" test "$st" = "$STATUS_HEALTHY"
+done
+unset health_token
 
 echo "== $pass passed, $fail failed"
 [[ "$fail" -eq 0 ]]
