@@ -142,4 +142,30 @@ describe("ConfirmModal", () => {
     await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
     expect(onConfirm).toHaveBeenCalledOnce();
   });
+
+  it("renders a control it is given between the warning and the buttons", () => {
+    render(
+      <ConfirmModal
+        {...baseProps}
+        warning="No trash."
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+      >
+        <label>
+          <input type="checkbox" /> Also delete the S3 bucket
+        </label>
+      </ConfirmModal>,
+    );
+    const box = screen.getByRole("checkbox", {
+      name: "Also delete the S3 bucket",
+    });
+    expect(screen.getByRole("note").compareDocumentPosition(box)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(
+      box.compareDocumentPosition(
+        screen.getByRole("button", { name: "Cancel" }),
+      ),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
 });

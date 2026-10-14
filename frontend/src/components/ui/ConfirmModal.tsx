@@ -22,6 +22,9 @@ interface ConfirmModalProps {
   // What the action does that the operator might not expect, shown apart from
   // the message so it is not skimmed past.
   warning?: ReactNode;
+  // A control the action takes an option from, such as a checkbox; shown
+  // between the warning and the buttons.
+  children?: ReactNode;
   type?: "danger" | "warning";
   confirmText?: string;
   cancelText?: string;
@@ -42,6 +45,7 @@ export function ConfirmModal({
   title,
   message,
   warning,
+  children,
   type = "warning",
   confirmText = "Confirm",
   cancelText = "Cancel",
@@ -113,6 +117,7 @@ export function ConfirmModal({
             <div>{warning}</div>
           </div>
         )}
+        {children}
         <div className="flex gap-3">
           <button
             onClick={onClose}

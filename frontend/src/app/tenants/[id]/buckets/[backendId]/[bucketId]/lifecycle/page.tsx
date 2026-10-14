@@ -51,22 +51,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   SelectRoot,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useNotification } from "@/components/ui/Notification";
 
 import { bucketClient } from "@/lib/connect/client";
@@ -407,35 +398,24 @@ export default function BucketLifecyclePage() {
         onSubmit={handleSave}
       />
 
-      <AlertDialog
-        open={!!deleteTarget}
-        onOpenChange={(o) => {
-          if (!o) setDeleteTarget(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this rule?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Removing rule{" "}
-              <span className="font-mono text-foreground">
-                {deleteTarget?.id}
-              </span>
-              . Objects already affected by previous evaluations are not
-              reverted; only future evaluations are skipped.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete rule
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        type="danger"
+        title="Delete this rule?"
+        message={
+          <p>
+            Removes rule{" "}
+            <span className="font-mono text-foreground">
+              {deleteTarget?.id}
+            </span>{" "}
+            from this bucket&apos;s lifecycle.
+          </p>
+        }
+        warning="Objects it already expired stay expired; only future evaluations skip it. To bring it back, add the rule again."
+        confirmText="Delete rule"
+      />
     </div>
   );
 }

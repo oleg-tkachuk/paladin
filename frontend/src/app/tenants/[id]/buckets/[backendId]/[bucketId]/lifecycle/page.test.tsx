@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@/test/utils";
+import { render, screen, waitFor, within } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 
@@ -124,6 +124,10 @@ describe("BucketLifecyclePage", () => {
     );
 
     await userEvent.click(screen.getByRole("menuitem", { name: /delete/i }));
+    const confirm = await screen.findByRole("alertdialog");
+    expect(confirm).toHaveTextContent("archive");
+    expect(within(confirm).getByRole("note")).toHaveTextContent(/stay expired/);
+    expect(h.setRules).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: /delete rule/i }));
     await waitFor(() => expect(h.setRules).toHaveBeenCalledTimes(1));
     const sent = h.setRules.mock.calls[0][0].rules as LifecycleRule[];

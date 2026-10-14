@@ -104,4 +104,12 @@ describe("BucketDeleteDialog", () => {
       false,
     );
   });
+
+  it("warns that a bucket has no trash, and deletes nothing on cancel", async () => {
+    const { deleteBucket, onClose } = dialog();
+    expect(screen.getByRole("note")).toHaveTextContent(/no trash/);
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onClose).toHaveBeenCalled();
+    expect(deleteBucket).not.toHaveBeenCalled();
+  });
 });
