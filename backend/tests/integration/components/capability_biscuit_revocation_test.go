@@ -226,9 +226,7 @@ func TestBiscuitCopyRevocationNotifies(t *testing.T) {
 	}
 	watchCtx, stop := context.WithCancel(ctx)
 	t.Cleanup(stop)
-	if err := capstore.NewRevocationWatcher(admin, cache.Clear).Start(watchCtx); err != nil {
-		t.Fatalf("start watcher: %v", err)
-	}
+	watchRevocations(t, watchCtx, admin, cache)
 	ids := [][]byte{copied.RevocationID()}
 	if r, err := cache.IsBiscuitRevoked(ctx, ids); err != nil || r {
 		t.Fatalf("before revoke: revoked=%v err=%v", r, err)

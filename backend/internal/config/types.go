@@ -1202,7 +1202,7 @@ type Capability struct {
 
 	// RevocationCacheTTL is how long the verifier caches IsRevoked
 	// answers. Revocations normally clear every replica's cache at once
-	// through the capability_revoked notification; the TTL bounds how
+	// through pgstore's limes_revocations notification; the TTL bounds how
 	// stale an answer can get while that LISTEN connection is down.
 	// Default 2s. Set <0 to disable caching (every check hits the DB).
 	RevocationCacheTTL time.Duration `yaml:"revocation_cache_ttl" json:"revocation_cache_ttl"`
