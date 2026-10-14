@@ -4,14 +4,13 @@
 // legacy flat /trash route. Collection scope is fixed by URL via
 // the parent layout's context, so the picker is gone; everything
 // else (search, bulk restore, bulk purge, single purge) carries
-// over verbatim.
+// over verbatim. Every restore and purge is confirmed first.
 
 import React, { useMemo, useState } from "react";
 import {
   ArrowUturnLeftIcon,
   ClockIcon,
   DocumentIcon,
-  ExclamationTriangleIcon,
   MagnifyingGlassIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
@@ -40,16 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 import { useCollection } from "../collection-context";
@@ -77,8 +67,14 @@ export default function CollectionTrashPage() {
   const [search, setSearch] = useState("");
   const [useRelativeTime, setUseRelativeTime] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  // The action awaiting the operator's confirmation: restore and purge, of one
+  // row or of the selection, are all asked first.
+  const [pending, setPending] = useState<{
+    kind: "restore" | "purge";
+    ids: string[];
+    // A selection goes through the batch calls, even when it holds one row.
+    selection: boolean;
+  } | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -109,56 +105,50 @@ export default function CollectionTrashPage() {
     setSelected(next);
   };
 
-  const handleRestore = async (id: string) => {
-    const obj = objects.find((o) => o.objectId === id);
-    if (!obj) return;
-    setBusyId(id);
-    try {
-      await restoreObject(obj);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const handlePurge = async () => {
-    if (!confirmDelete) return;
-    const obj = objects.find((o) => o.objectId === confirmDelete);
-    if (!obj) return;
-    setBusyId(confirmDelete);
-    try {
-      await purgeObject(obj);
-      setConfirmDelete(null);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const itemsForBulk = () =>
-    Array.from(selected)
+  const itemsFor = (ids: string[]) =>
+    ids
       .map((id) => objects.find((o) => o.objectId === id))
-      .filter((o): o is NonNullable<typeof o> => !!o)
-      .map((o) => ({ name: o.name, collection: o.collection }));
+      .filter((o): o is NonNullable<typeof o> => !!o);
 
-  const handleBulkRestore = async () => {
-    setBulkBusy(true);
+  const runPending = async () => {
+    if (!pending) return;
+    const { kind, ids, selection } = pending;
+    const items = itemsFor(ids);
+    if (items.length === 0) return;
+    const single = !selection;
+    if (single) setBusyId(ids[0]);
+    else setBulkBusy(true);
     try {
-      await bulkRestoreObjects(itemsForBulk());
-      setSelected(new Set());
+      if (single) {
+        if (kind === "restore") await restoreObject(items[0]);
+        else await purgeObject(items[0]);
+      } else {
+        const refs = items.map((o) => ({
+          name: o.name,
+          collection: o.collection,
+        }));
+        if (kind === "restore") await bulkRestoreObjects(refs);
+        else await bulkDeleteObjects(refs, { permanent: true });
+        setSelected(new Set());
+      }
     } finally {
+      setBusyId(null);
       setBulkBusy(false);
     }
   };
 
-  const handleBulkDelete = async () => {
-    setBulkBusy(true);
-    setConfirmBulkDelete(false);
-    try {
-      await bulkDeleteObjects(itemsForBulk(), { permanent: true });
-      setSelected(new Set());
-    } finally {
-      setBulkBusy(false);
-    }
-  };
+  const pendingCount = pending?.ids.length ?? 0;
+  const pendingName =
+    pendingCount === 1
+      ? (itemsFor(pending!.ids)[0]?.key ?? pending!.ids[0])
+      : null;
+  const pendingSubject = pendingName ? (
+    <span className="font-mono text-foreground break-all">{pendingName}</span>
+  ) : (
+    <>
+      {pendingCount} {pendingCount === 1 ? "object" : "objects"}
+    </>
+  );
 
   return (
     <div className="space-y-4">
@@ -325,7 +315,13 @@ export default function CollectionTrashPage() {
                             variant="outline"
                             disabled={Boolean(changesBlocked) || !!busyId}
                             title={changesBlocked ?? undefined}
-                            onClick={() => handleRestore(obj.objectId)}
+                            onClick={() =>
+                              setPending({
+                                kind: "restore",
+                                ids: [obj.objectId],
+                                selection: false,
+                              })
+                            }
                           >
                             <ArrowUturnLeftIcon className="size-3.5" />
                             Restore
@@ -343,7 +339,13 @@ export default function CollectionTrashPage() {
                             className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                             disabled={Boolean(changesBlocked) || !!busyId}
                             title={changesBlocked ?? undefined}
-                            onClick={() => setConfirmDelete(obj.objectId)}
+                            onClick={() =>
+                              setPending({
+                                kind: "purge",
+                                ids: [obj.objectId],
+                                selection: false,
+                              })
+                            }
                             aria-label={`Purge ${obj.key} from storage`}
                           >
                             <TrashIcon className="size-4" />
@@ -374,7 +376,13 @@ export default function CollectionTrashPage() {
               variant="outline"
               disabled={Boolean(changesBlocked) || bulkBusy}
               title={changesBlocked ?? undefined}
-              onClick={handleBulkRestore}
+              onClick={() =>
+                setPending({
+                  kind: "restore",
+                  ids: Array.from(selected),
+                  selection: true,
+                })
+              }
             >
               <ArrowUturnLeftIcon className="size-4" />
               Restore all
@@ -384,7 +392,13 @@ export default function CollectionTrashPage() {
               variant="destructive"
               disabled={Boolean(changesBlocked) || bulkBusy}
               title={changesBlocked ?? undefined}
-              onClick={() => setConfirmBulkDelete(true)}
+              onClick={() =>
+                setPending({
+                  kind: "purge",
+                  ids: Array.from(selected),
+                  selection: true,
+                })
+              }
             >
               <TrashIcon className="size-4" />
               Purge all
@@ -393,59 +407,55 @@ export default function CollectionTrashPage() {
         </div>
       )}
 
-      {/* Single permanent delete */}
-      <AlertDialog
-        open={!!confirmDelete}
-        onOpenChange={(o) => !o && setConfirmDelete(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <ExclamationTriangleIcon className="size-5 text-destructive" />
-              Permanently purge this object?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Removes object{" "}
-              <span className="font-mono text-foreground">{confirmDelete}</span>{" "}
-              from the storage backend. The action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handlePurge}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Purge permanently
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmModal
+        isOpen={pending?.kind === "restore"}
+        onClose={() => setPending(null)}
+        onConfirm={runPending}
+        loading={!!busyId || bulkBusy}
+        type="warning"
+        title={
+          pendingCount === 1
+            ? "Restore this object?"
+            : `Restore ${pendingCount} objects?`
+        }
+        message={
+          <p>
+            {pendingSubject} {pendingCount === 1 ? "returns" : "return"} to the
+            collection&apos;s active objects and can be read again.
+          </p>
+        }
+        warning="A restore is refused for an object that changed after this list loaded; refresh and try again."
+        confirmText={
+          pendingCount === 1
+            ? "Restore object"
+            : `Restore ${pendingCount} objects`
+        }
+      />
 
-      {/* Bulk permanent delete */}
-      <AlertDialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <ExclamationTriangleIcon className="size-5 text-destructive" />
-              Permanently purge {selected.size} objects?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Each selected row will be removed from the storage backend. This
-              action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleBulkDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Purge {selected.size} objects
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmModal
+        isOpen={pending?.kind === "purge"}
+        onClose={() => setPending(null)}
+        onConfirm={runPending}
+        loading={!!busyId || bulkBusy}
+        type="danger"
+        title={
+          pendingCount === 1
+            ? "Permanently purge this object?"
+            : `Permanently purge ${pendingCount} objects?`
+        }
+        message={
+          <p>
+            {pendingSubject} {pendingCount === 1 ? "is" : "are"} removed from
+            the storage backend.
+          </p>
+        }
+        warning="This cannot be undone: a purged object cannot be restored."
+        confirmText={
+          pendingCount === 1
+            ? "Purge permanently"
+            : `Purge ${pendingCount} objects`
+        }
+      />
     </div>
   );
 }

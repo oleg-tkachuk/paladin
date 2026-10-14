@@ -74,6 +74,8 @@ test.describe("Object trash — version + restore", () => {
     await expect(row).toBeVisible({ timeout: 10_000 });
 
     await row.getByRole("button", { name: /Restore/ }).click();
+    // Restore is confirmed first, like every delete and restore.
+    await page.getByRole("button", { name: /^Restore object$/ }).click();
 
     // The row leaving the trash is the observable effect of a restore the
     // server accepted. If the OCC guard were missing or stale the call would

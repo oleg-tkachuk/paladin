@@ -124,6 +124,11 @@ test.describe("US5 — Tenant restore from trash", () => {
       .getByRole("row", { name: new RegExp(tenant.slug) })
       .getByRole("button", { name: /^Restore$/ });
     await restoreRow.click();
+    // Restore is confirmed first, like every delete and restore.
+    await page.getByRole("button", { name: /^Restore tenant$/ }).click();
+    await expect(page.getByText("Tenant restored")).toBeVisible({
+      timeout: 10_000,
+    });
 
     // Reload /tenants and verify the tenant is back. The
     // restore flow flips deleted_at = NULL; the list should

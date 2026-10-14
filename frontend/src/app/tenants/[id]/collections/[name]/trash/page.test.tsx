@@ -1,10 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@/test/utils";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@/test/utils";
 
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 
-const h = vi.hoisted(() => ({ blocked: null as string | null }));
+const h = vi.hoisted(() => ({
+  blocked: null as string | null,
+  restoreObject: vi.fn(),
+  purgeObject: vi.fn(),
+  bulkDeleteObjects: vi.fn(),
+  bulkRestoreObjects: vi.fn(),
+}));
 
 vi.mock("@/hooks/useObjects", () => ({
   useObjects: () => ({
@@ -20,10 +26,10 @@ vi.mock("@/hooks/useObjects", () => ({
       },
     ],
     loading: false,
-    restoreObject: vi.fn(),
-    purgeObject: vi.fn(),
-    bulkDeleteObjects: vi.fn(),
-    bulkRestoreObjects: vi.fn(),
+    restoreObject: h.restoreObject,
+    purgeObject: h.purgeObject,
+    bulkDeleteObjects: h.bulkDeleteObjects,
+    bulkRestoreObjects: h.bulkRestoreObjects,
   }),
 }));
 vi.mock("../collection-context", () => ({
@@ -61,5 +67,100 @@ describe("CollectionTrashPage on a trashed tenant", () => {
       </TooltipProvider>,
     );
     expect(screen.getByRole("button", { name: /Restore/ })).toBeEnabled();
+  });
+});
+
+function renderPage() {
+  render(
+    <TooltipProvider>
+      <CollectionTrashPage />
+    </TooltipProvider>,
+  );
+}
+
+// Every restore and purge is confirmed first, with a warning; cancelling
+// leaves the object where it was.
+describe("CollectionTrashPage confirmations", () => {
+  beforeEach(() => {
+    h.blocked = null;
+    for (const fn of [
+      h.restoreObject,
+      h.purgeObject,
+      h.bulkDeleteObjects,
+      h.bulkRestoreObjects,
+    ])
+      fn.mockReset();
+  });
+
+  async function openDialog(button: RegExp | string) {
+    fireEvent.click(screen.getByRole("button", { name: button }));
+    return screen.findByRole("alertdialog");
+  }
+
+  it("restores a row only once confirmed", async () => {
+    renderPage();
+    const dialog = await openDialog(/^Restore$/);
+    expect(dialog).toHaveTextContent("old.pdf");
+    expect(within(dialog).getByRole("note")).toHaveTextContent(/refused/);
+    expect(h.restoreObject).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(h.restoreObject).not.toHaveBeenCalled();
+
+    const again = await openDialog(/^Restore$/);
+    fireEvent.click(
+      within(again).getByRole("button", { name: "Restore object" }),
+    );
+    await waitFor(() =>
+      expect(h.restoreObject).toHaveBeenCalledWith(
+        expect.objectContaining({ objectId: "o1" }),
+      ),
+    );
+    expect(h.bulkRestoreObjects).not.toHaveBeenCalled();
+  });
+
+  it("purges a row only once confirmed, warning it is final", async () => {
+    renderPage();
+    const dialog = await openDialog("Purge old.pdf from storage");
+    expect(within(dialog).getByRole("note")).toHaveTextContent(
+      /cannot be undone/,
+    );
+    expect(h.purgeObject).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Purge permanently" }),
+    );
+    await waitFor(() => expect(h.purgeObject).toHaveBeenCalledOnce());
+  });
+
+  it("confirms restoring and purging the selection through the batch calls", async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select old.pdf" }));
+
+    const restore = await openDialog(/Restore all/);
+    expect(restore).toHaveTextContent("Restore this object?");
+    expect(h.bulkRestoreObjects).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(restore).getByRole("button", { name: "Restore object" }),
+    );
+    await waitFor(() =>
+      expect(h.bulkRestoreObjects).toHaveBeenCalledWith([
+        expect.objectContaining({ collection: "docs" }),
+      ]),
+    );
+    expect(h.restoreObject).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select old.pdf" }));
+    const purge = await openDialog(/Purge all/);
+    fireEvent.click(
+      within(purge).getByRole("button", { name: "Purge permanently" }),
+    );
+    await waitFor(() =>
+      expect(h.bulkDeleteObjects).toHaveBeenCalledWith(expect.any(Array), {
+        permanent: true,
+      }),
+    );
   });
 });

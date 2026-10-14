@@ -74,4 +74,72 @@ describe("ConfirmModal", () => {
       screen.getByRole("button", { name: "Processing..." }),
     ).toBeDisabled();
   });
+
+  it("renders a rich message and sets the warning apart as a note", () => {
+    render(
+      <ConfirmModal
+        {...baseProps}
+        message={
+          <p>
+            Restores <code>acme</code>.
+          </p>
+        }
+        warning="Its slug may have been taken."
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("acme").tagName).toBe("CODE");
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "Its slug may have been taken.",
+    );
+  });
+
+  it("has no warning note unless one is given", () => {
+    render(
+      <ConfirmModal {...baseProps} onClose={vi.fn()} onConfirm={vi.fn()} />,
+    );
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+  });
+
+  // The object inspector (z-60) and the bulk-actions bar (z-80) open
+  // confirmations; neither may cover one.
+  it("stacks above the inspector panel and the bulk-actions bar", () => {
+    render(
+      <ConfirmModal {...baseProps} onClose={vi.fn()} onConfirm={vi.fn()} />,
+    );
+    const content = screen.getByRole("alertdialog");
+    expect(content).toHaveClass("z-100");
+    expect(content).not.toHaveClass("z-50");
+    const overlay = document.querySelector(
+      '[data-slot="alert-dialog-overlay"]',
+    );
+    expect(overlay).toHaveClass("z-100");
+    expect(overlay).not.toHaveClass("z-50");
+  });
+
+  it("holds both buttons while the action runs", async () => {
+    let finish!: () => void;
+    const onConfirm = vi.fn(
+      () => new Promise<void>((resolve) => (finish = resolve)),
+    );
+    const onClose = vi.fn();
+    render(
+      <ConfirmModal
+        {...baseProps}
+        confirmText="Delete"
+        onConfirm={onConfirm}
+        onClose={onClose}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(
+      screen.getByRole("button", { name: "Processing..." }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    expect(onClose).not.toHaveBeenCalled();
+    finish();
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(onConfirm).toHaveBeenCalledOnce();
+  });
 });

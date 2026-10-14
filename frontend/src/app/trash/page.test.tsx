@@ -131,6 +131,45 @@ describe("TrashPage", () => {
     );
   });
 
+  it("asks before restoring, and restores only once confirmed", async () => {
+    h.restoreTenant.mockResolvedValue({ tenantId: "t-old", slug: "smoke-old" });
+    render(<TrashPage />);
+    await screen.findByText("Older");
+    const row = screen
+      .getAllByRole("row")
+      .find((r) => within(r).queryByText("Older"))!;
+    fireEvent.click(within(row).getByRole("button", { name: /Restore/ }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("smoke-old");
+    expect(within(dialog).getByRole("note")).toHaveTextContent(/slug/);
+    expect(h.restoreTenant).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(h.restoreTenant).not.toHaveBeenCalled();
+
+    fireEvent.click(within(row).getByRole("button", { name: /Restore/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Restore tenant" }),
+    );
+    await waitFor(() => expect(h.restoreTenant).toHaveBeenCalledWith("t-old"));
+    expect(h.restoreTenant).toHaveBeenCalledOnce();
+  });
+
+  it("does not purge when the confirmation is cancelled", async () => {
+    render(<TrashPage />);
+    await screen.findByText("Older");
+    fireEvent.click(screen.getByRole("button", { name: "Purge smoke-old" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    expect(h.purgeTenant).not.toHaveBeenCalled();
+  });
+
   it("says the trash is empty", async () => {
     h.tenants = [];
     render(<TrashPage />);

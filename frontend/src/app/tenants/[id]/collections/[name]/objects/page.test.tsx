@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Protective net for decomposing the Collection objects page. The page is
@@ -21,6 +21,7 @@ const h = vi.hoisted(() => ({
   genUrl: vi.fn(() => Promise.resolve(undefined)),
   replace: vi.fn(),
   showNotification: vi.fn(),
+  registerAction: vi.fn(),
   // The collection's access: 2 is COLLECTION_ACCESS_PUBLIC_READ.
   access: 0,
   objects: [] as Array<Record<string, unknown>>,
@@ -62,7 +63,7 @@ vi.mock("@/hooks/useObjects", () => ({
 vi.mock("@/hooks/useDistinctTags", () => ({ useDistinctTags: () => [] }));
 vi.mock("@/context/ActionsContext", () => ({
   useActions: () => ({
-    registerAction: vi.fn(),
+    registerAction: h.registerAction,
     unregisterAction: vi.fn(),
     executeAction: vi.fn(),
   }),
@@ -226,6 +227,7 @@ beforeEach(() => {
     "genUrl",
     "replace",
     "showNotification",
+    "registerAction",
   ] as const) {
     h[k].mockClear();
   }
@@ -338,6 +340,56 @@ describe("CollectionObjectsPage", () => {
       () => expect(h.lastOpts?.filter).toContain('key.contains("hello")'),
       { timeout: 1500 },
     );
+  });
+});
+
+// Trashing a selection is confirmed first, and so is its Undo: that is a
+// restore, which is never run on a click.
+describe("CollectionObjectsPage bulk trash", () => {
+  it("asks before trashing the selection", async () => {
+    render(<CollectionObjectsPage />);
+    await userEvent.click(screen.getByText("bulk delete"));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByRole("note")).toHaveTextContent(/restorable/);
+    expect(h.bulkDelete).not.toHaveBeenCalled();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: /Move 0 to Trash/ }),
+    );
+    await waitFor(() => expect(h.bulkDelete).toHaveBeenCalledWith([]));
+  });
+
+  it("does not trash when cancelled", async () => {
+    render(<CollectionObjectsPage />);
+    await userEvent.click(screen.getByText("bulk delete"));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Cancel" }),
+    );
+    expect(h.bulkDelete).not.toHaveBeenCalled();
+  });
+
+  it("confirms the Undo before restoring", async () => {
+    render(<CollectionObjectsPage />);
+    await userEvent.click(screen.getByText("bulk delete"));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Move 0 to Trash/ }),
+    );
+    await waitFor(() => expect(h.bulkDelete).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+    const undo = h.registerAction.mock.calls
+      .map(([a]) => a as { id: string; perform: () => unknown })
+      .find((a) => a.id === "objects.bulk_restore_last");
+    expect(undo).toBeDefined();
+
+    act(() => void undo!.perform());
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Restore 0 objects?");
+    expect(h.bulkRestore).not.toHaveBeenCalled();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Restore 0 objects" }),
+    );
+    await waitFor(() => expect(h.bulkRestore).toHaveBeenCalledWith([]));
   });
 });
 
